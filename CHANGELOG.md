@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-19
+
+### Added
+
+- Tier 0 Camlann bootstrap: a typed `WorldModel` marker, launcher-owned
+  one-time world reset with a timestamped database backup, and synthetic reset
+  fixtures covering rollback, idempotency, and server-running refusal.
+
+### Changed
+
+- New server configurations default to PvP, and startup now fails closed unless
+  the database carries the completed `Camlann-1` world marker.
+
+### Fixed
+
+- Keep and relic state is reset to neutral/homed values as part of the new-world
+  transaction without changing world definitions, item templates, or meshes.
+- Reset cleanup includes backup-character inventory rows and safely handles
+  empty stopped-state SQLite sidecars while still rejecting an uncheckpointed WAL.
+
+### Removed
+
+- The launcher no longer exposes the legacy realm-owned keep/relic reset panel
+  while the Camlann guild-claim implementation is still pending.
+
 ## [0.4.5] - 2026-09-19
 
 ### Changed

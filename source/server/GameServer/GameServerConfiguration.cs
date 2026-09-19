@@ -153,7 +153,7 @@ namespace DOL.GS
             m_enableCompilation = root["Server"]["EnableCompilation"].GetBoolean(true);
             m_autoAccountCreation = root["Server"]["AutoAccountCreation"].GetBoolean(m_autoAccountCreation);
 
-            string serverType = root["Server"]["GameType"].GetString("Normal");
+            string serverType = root["Server"]["GameType"].GetString("PvP");
             switch (serverType.ToLower())
             {
                 case "normal":
@@ -175,7 +175,7 @@ namespace DOL.GS
                     m_serverType = EGameServerType.GST_Test;
                     break;
                 default:
-                    m_serverType = EGameServerType.GST_Normal;
+                    m_serverType = EGameServerType.GST_PvP;
                     break;
             }
 
@@ -282,7 +282,7 @@ namespace DOL.GS
 			root["Server"]["EnableCompilation"].Set(m_enableCompilation);
 			root["Server"]["AutoAccountCreation"].Set(m_autoAccountCreation);
 
-			string serverType = "Normal";
+			string serverType = "PvP";
 
 			switch (m_serverType)
 			{
@@ -305,7 +305,7 @@ namespace DOL.GS
 					serverType = "Test";
 					break;
 				default:
-					serverType = "Normal";
+					serverType = "PvP";
 					break;
 			}
 			root["Server"]["GameType"].Set(serverType);
@@ -374,7 +374,7 @@ namespace DOL.GS
 			m_scriptAssemblies = " ";
 			m_enableCompilation = true;
 			m_autoAccountCreation = true;
-			m_serverType = EGameServerType.GST_Normal;
+			m_serverType = EGameServerType.GST_PvP;
 
 			m_cheatLoggerName = "cheats";
 			m_dualIPLoggerName = "dualip";

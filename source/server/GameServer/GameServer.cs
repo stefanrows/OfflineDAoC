@@ -329,6 +329,12 @@ namespace DOL.GS
 					return false;
 
 				//---------------------------------------------------------------
+				// This fork does not load a Normal save. The launcher writes the
+				// marker only after the one-time Camlann world reset completes.
+				if (!ValidateWorldModel())
+					return false;
+
+				//---------------------------------------------------------------
 				//Check and update the database if needed
 				if (!UpdateDatabase())
 					return false;
@@ -928,6 +934,25 @@ namespace DOL.GS
 				log.Info("Database update complete.");
 
 			return result;
+		}
+
+		private bool ValidateWorldModel()
+		{
+			DbOfflineLocalOption marker = Database.FindObjectByKey<DbOfflineLocalOption>(CamlannWorldModel.MarkerKey);
+			if (CamlannWorldModel.IsSupported(Configuration.ServerType, marker))
+				return true;
+
+			if (Configuration.ServerType != EGameServerType.GST_PvP)
+			{
+				log.Error($"Refusing to start: this fork requires GameType=PvP, found {Configuration.ServerType}.");
+			}
+			else
+			{
+				string markerValue = marker?.Value ?? "missing";
+				log.Error($"Refusing to start: database WorldModel marker must be {CamlannWorldModel.MarkerValue}, found {markerValue}. Run the launcher world reset first.");
+			}
+
+			return false;
 		}
 
 		/// <summary>
