@@ -12,6 +12,20 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-19
+
+### Fixed
+
+- Realm-point value of victims below level 20 is floored at `1 + RealmLevel`.
+  The pre-1.81 `(level - 20)^2` formula grew again below 20, so a level-1
+  kill paid 361 RP (more than a level-35 victim), for both player and bot
+  victims.
+
+### Changed
+
+- `docs/CAMLANN.md` records the passed Tier 1 real-client spike and marks
+  Tier 1 complete; `AGENTS.md` no longer calls the conversion unimplemented.
+
 ## [0.6.0] - 2026-09-19
 
 ### Added

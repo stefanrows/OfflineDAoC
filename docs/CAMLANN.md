@@ -8,11 +8,13 @@ over a running install unless the owner asks.
 ## Current implementation status (2026-09-19)
 
 - Tier 0 world bootstrap/reset is complete in [PR #7](https://github.com/stefanrows/OfflineDAoC/pull/7), merged as `40476dc`.
-- Tier 1 rules core is implemented on the current branch: player-shaped
-  ownership/alliance resolution, bot immunity, safe-area and `/safety` rules,
-  and grouped-bot client guild-ID presentation.
-- The real-client presentation spike and the final client-facing Tier 1 gate
-  are still pending; they must pass before Tier 1 is considered gated.
+- Tier 1 rules core is complete in [PR #8](https://github.com/stefanrows/OfflineDAoC/pull/8), merged as `4644914`:
+  player-shaped ownership/alliance resolution, bot immunity, safe-area and
+  `/safety` rules, and grouped-bot client guild-ID presentation.
+- Tier 1 real-client spike **passed** (2026-09-19, see "Tier 1 client spike
+  record" below). The other-realm companion check is deferred to Tier 2,
+  because `/spawn` is still own-realm only until then.
+- Next: Tier 2.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -317,6 +319,30 @@ layer also marks all realm NPCs as guildmates.
 - `/safety` sub-10 is protected in a home zone and not in an OF frontier zone.
 - **Gate:** `IsAllowedToAttack` and `IsSameRealm` match Camlann for
   player/companion/gamebot/pet combinations, **and** the client spike passed.
+
+### Tier 1 client spike record (2026-09-19)
+
+Deployed `main` at `4644914` (backup `deploy-20260919-215118`) over the
+Tier 0 reset save. The owner played a new Midgard character in Mularn; the
+results come from the owner's real client:
+
+- ✅ Same-realm autonomous bot (not grouped, no guild) is targetable, shows a
+  con color, and takes melee damage after `/safety off`. **No
+  `GetLivingRealm` spoofing is needed.**
+- ✅ Own-realm `/spawn` companion shows as a friendly group member and joins
+  the attack on the hostile bot.
+- ✅ The kill awarded XP and realm points. The first run showed 361 RP for a
+  level-1 victim: the pre-1.81 value `(level - 20)^2` was not floored below
+  level 20. Fixed in 0.7.0 (victims below 20 are worth `1 + RealmLevel`).
+- ✅ `/safety` starts on for new characters (`DbCoreCharacter` default), and
+  `/safety off` persists.
+- ⏭ Capital safe area was not exercised in client: bots do not visit
+  capitals. It is a fixed region list covered by unit tests. Portal-keep
+  safety (area based) is still worth a client check once bots roam (Tier 3).
+- ⏭ Other-realm companion (friendly heals, buffs, `/assist`) is deferred to
+  Tier 2, which enables cross-realm `/spawn`.
+- Known gap for Tier 6: the sub-10 safety flag protects everywhere, not only
+  outside Old Frontiers zones.
 
 ---
 

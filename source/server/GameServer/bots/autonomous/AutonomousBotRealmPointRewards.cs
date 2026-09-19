@@ -25,7 +25,8 @@ public static class AutonomousBotRealmPointRewards
     public static int GetPlayerEquivalentRealmPointValue(byte level, int realmLevel)
     {
         // This is the pre-1.81 player formula used by GamePlayer.RealmPointsValue.
-        int modifiedLevel = level - 20;
+        // Victims below level 20 are floored so (level - 20)^2 cannot grow again.
+        int modifiedLevel = Math.Max(0, level - 20);
         return Math.Max(1, modifiedLevel * modifiedLevel) + realmLevel;
     }
 

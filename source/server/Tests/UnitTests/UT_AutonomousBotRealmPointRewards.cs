@@ -85,6 +85,11 @@ public class UT_AutonomousBotRealmPointRewards
     [TestCase(35, 20, 245)]
     [TestCase(50, 0, 900)]
     [TestCase(50, 90, 990)]
+    [TestCase(1, 0, 1)]
+    [TestCase(2, 0, 1)]
+    [TestCase(19, 3, 4)]
+    [TestCase(20, 0, 1)]
+    [TestCase(21, 0, 1)]
     public void VictimValueMatchesPre181PlayerFormula(int level, int realmLevel, int expected)
     {
         Assert.That(AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(
