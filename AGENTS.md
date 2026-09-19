@@ -35,6 +35,22 @@ Every completed change set must:
 Do not jump to a bare `0.4` label. Three-part versions keep this fork
 distinct from the original author's private 0.4 launcher.
 
+## Git and GitHub: fork only, PRs only
+
+This checkout is the fork `stefanrows/OfflineDAoC`. The upstream project
+`shadowofze/OfflineDAoC` is read-only for agents.
+
+- Target **only the fork** for every GitHub action: pushes, branches, PRs,
+  issues, comments, releases. Never open, comment on, or push to anything in
+  `shadowofze/OfflineDAoC`.
+- Always pass `--repo stefanrows/OfflineDAoC` to `gh` commands that create or
+  change something (`gh pr create`, `gh pr merge`, `gh issue create`, ...).
+  `gh` otherwise defaults to the fork's parent. Check with
+  `gh repo set-default --view` before the first write in a session.
+- All changes land through a **pull request** into the fork's `main`. Never
+  push directly to `main`, and never fast-forward or merge locally into
+  `main`, even when a workflow skill offers it.
+
 ## Safety defaults
 
 - Resolve paths from this checkout, never from the original author's Windows username.
