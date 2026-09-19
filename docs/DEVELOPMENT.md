@@ -23,6 +23,42 @@ Python runtime. A GitHub source ZIP alone is not the complete runtime download.
 For the owner's WSL2 + Windows setup (install location, SDKs, baseline,
 deploy/restore scripts), follow the tiered plan in `docs/DEV-SETUP.md`.
 
+### WSL2 + Windows loop
+
+Build, tests, self-check, and deploy dry run are verified. `-Apply` and
+Restore against the real install are pending the owner-present Tier 5 run.
+
+Repo: `/home/stefan/Development/Games/OfflineDAoC`. Install:
+`D:\Games\OfflineDAoC` (`OFFLINE_DAOC_ROOT`, default `/mnt/d/Games/OfflineDAoC`).
+Dev state: `D:\Games\OfflineDAoC-dev` (SDK caches / NuGet; not in the repo).
+
+```bash
+# Server build + tests on WSL
+export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"
+dotnet restore 'source/server/Dawn of Light.sln' -p:Configuration=Release
+dotnet build 'source/server/Dawn of Light.sln' -c Release --no-restore
+dotnet test source/server/Tests/Tests.csproj -c Release --no-build --no-restore
+
+# Launcher tests via the install's Windows SDK
+tools/dev/winnet.sh restore \
+  source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj \
+  --configfile /mnt/d/Games/OfflineDAoC/NuGet.Config
+tools/dev/winnet.sh test \
+  source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj \
+  -c Release --no-restore
+
+# Deploy dry-run (default) / apply (owner permission; server must be stopped)
+tools/dev/deploy.sh -InstallRoot /mnt/d/Games/OfflineDAoC \
+  -ServerBuild source/server/Release
+# tools/dev/deploy.sh ... -Apply
+# Changed third-party DLLs are skipped unless the owner adds -IncludeThirdParty.
+# powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/dev/Restore-OfflineDAoC.ps1 \
+#   -InstallRoot 'D:\Games\OfflineDAoC' -Backup 'D:\Games\OfflineDAoC-backups\deploy-<stamp>'
+```
+
+Self-check (never targets the real install):
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/dev/Test-DeployOfflineDAoC.ps1`
+
 Use a .NET 10 SDK on Windows, or the SDK in the complete release. From the root:
 
 ```powershell

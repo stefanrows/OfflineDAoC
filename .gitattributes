@@ -1,0 +1,2 @@
+# Preserve line endings exactly as committed (tree is mixed; see docs/DEV-SETUP.md).
+* -text

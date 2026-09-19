@@ -65,7 +65,7 @@ verifies.
 
 ---
 
-## Tier 1 — Toolchains  (WSL SDK ✅, remaining checks open)
+## Tier 1 — Toolchains  ✅ done 2026-09-19
 
 ### Done
 
@@ -99,27 +99,32 @@ verifies.
    Use the bundled Python in the install when running those. Do not install
    anything extra now.
 
-**Gate:** Both `dotnet --list-sdks` (WSL) and `tools/dev/winnet.sh
---list-sdks` report 10.0.400.
+**Gate:** ✅ Both `dotnet --list-sdks` (WSL) and `tools/dev/winnet.sh
+--list-sdks` report 10.0.400. Wrapper: `tools/dev/winnet.sh`.
+
+WSL passes environment variables to Windows programs only when `WSLENV`
+lists them. The first wrapper version did not, so `dotnet.exe` silently used
+`C:\Users\<you>\.nuget\packages`. The wrapper now exports `WSLENV`. Check with
+`tools/dev/winnet.sh nuget locals all --list`: `global-packages` and
+`http-cache` must be under `D:\Games\OfflineDAoC-dev\state`.
 
 ---
 
-## Tier 2 — Baseline build and tests
+## Tier 2 — Baseline build and tests  ✅ done 2026-09-19
 
 Record the state **before** any change, so later failures are attributable.
 
 ### Server (WSL)
 
-Build into an output tree outside the source dirs (`artifacts/` is already
-git-ignored):
+The projects hard-code their `OutputPath`, so output goes to the git-ignored
+`source/server/Release/` (and `source/server/build/`); `--artifacts-path`
+does not redirect it (see Baseline). Test results go to `artifacts/`:
 
 ```bash
 cd /home/stefan/Development/Games/OfflineDAoC
 dotnet restore 'source/server/Dawn of Light.sln' -p:Configuration=Release
-dotnet build 'source/server/Dawn of Light.sln' -c Release --no-restore \
-  --artifacts-path artifacts/server
+dotnet build 'source/server/Dawn of Light.sln' -c Release --no-restore
 dotnet test source/server/Tests/Tests.csproj -c Release --no-build --no-restore \
-  --artifacts-path artifacts/server \
   --logger "trx;LogFileName=baseline.trx" --results-directory artifacts/test-results
 ```
 
@@ -162,12 +167,13 @@ Add a "Baseline" section at the end of this file with: date, commit, server
 passed/failed/skipped counts and the names of any failures, and launcher
 counts. Do **not** fix failures here; list them.
 
-**Gate:** Both suites have run to completion, and the results are recorded.
-The server solution builds with 0 errors on WSL.
+**Gate:** ✅ Both suites completed. Server solution built with 0 errors on WSL
+(Release outputs under `source/server/Release/`). Results are in the Baseline
+section at the end of this file.
 
 ---
 
-## Tier 3 — Line-ending guard
+## Tier 3 — Line-ending guard  ✅ done 2026-09-19
 
 Current state (`git ls-files --eol`): 2549 CRLF, 351 LF, and 195 **mixed**
 `.cs` files. `.editorconfig` asks for CRLF, but the tree is not uniform.
@@ -190,11 +196,12 @@ Forcing `eol=crlf` would rewrite about 550 files and bury real diffs.
 4. Check that WSL tools preserve CRLF: edit a CRLF `.cs` file with the agent's
    edit tool, then `git diff` shows only the intended lines (no `^M` churn).
 
-**Gate:** A round-trip edit of a CRLF file produces a minimal diff.
+**Gate:** ✅ Round-trip edit of a CRLF `.cs` file produced a 1-line diff
+(no whole-file rewrite). `.gitattributes` and the AGENTS.md rule are in place.
 
 ---
 
-## Tier 4 — Parameterized deploy and restore scripts
+## Tier 4 — Parameterized deploy and restore scripts  ✅ done 2026-09-19
 
 Replace the historical `source/server/tools/deploy_*.ps1` pattern (hard-coded
 `C:\Users\thedo\...`, fixed hashes) with one reviewed script. **Do not run
@@ -253,8 +260,28 @@ Converts paths with `wslpath -w` and calls
   path is refused; `-Apply` then Restore returns the original hashes; the
   protected files are untouched.
 
-**Gate:** Self-checks pass on a fake tree. A dry run against the real install
-lists only the expected server DLLs and changes nothing.
+Additions from review:
+
+- `-IncludeThirdParty` is the owner's approval switch for changed
+  third-party DLLs. Native interop/pathing DLLs are never copied.
+- DLLs in the build that the install lacks are listed as
+  `missing-in-install` with a warning. They are never added automatically.
+- If any step fails after backup, every file already copied is restored from
+  its verified backup before the error is raised. The error says whether the
+  rollback was complete. Restore skips files already at their backed-up
+  hash, so an interrupted restore can be re-run.
+- The self-check only deletes a `-ScratchRoot` that carries its
+  `.offline-daoc-selfcheck` marker.
+
+**Gate:** ✅ `tools/dev/Test-DeployOfflineDAoC.ps1`: 34 passed, 0 failed on
+a fake tree under `artifacts/deploy-selfcheck` (default), on two consecutive
+runs. Covered: rollback after a failure part-way through the copy loop,
+`-IncludeThirdParty`, build-only DLLs, and repeated restore. Dry run against
+`D:\Games\OfflineDAoC` with `-ServerBuild source/server/Release` (before
+these additions) listed the expected server DLL/PDB replaces and third-party
+as unchanged, exit 0, and left `runtime\server\lib\GameServer.dll` hash
+unchanged. `-Apply` and Restore have not yet run against the real install
+(Tier 5).
 
 ---
 
@@ -306,3 +333,27 @@ start.
 - Never commit anything from `D:\Games\OfflineDAoC*`, `artifacts/`, or
   developer-state folders.
 - If a step needs sudo, admin rights, or a Windows feature change, ask first.
+
+---
+
+## Baseline (Tier 2)
+
+Recorded 2026-09-19 against commit `c085510` (merge of docs/dev-setup-plan)
+on branch `tools/dev-setup-loop`, before the Tier 1–4 tooling commit.
+
+### Server (WSL, SDK 10.0.400)
+
+- `dotnet restore` + `dotnet build 'source/server/Dawn of Light.sln' -c Release
+  --artifacts-path artifacts/server`: **0 errors**, 620 warnings.
+  Custom `OutputPath` still wrote under `source/server/Release/` (and
+  `source/server/build/`); `--artifacts-path` did not redirect those outputs.
+- `dotnet test source/server/Tests/Tests.csproj -c Release --no-build`:
+  **1886 passed, 0 failed**. TRX also lists **45** navigation/install-dependent
+  results as skipped/NotExecuted (native mesh / installed-runtime probes). Do
+  not treat those as regressions in this tier.
+- TRX: `artifacts/test-results/baseline.trx` (git-ignored).
+
+### Launcher (bundled Windows SDK via `tools/dev/winnet.sh`)
+
+- Offline restore with `D:\Games\OfflineDAoC\NuGet.Config`.
+- **109 passed, 0 failed, 0 skipped**.

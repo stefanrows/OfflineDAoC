@@ -54,6 +54,7 @@ This checkout is the fork `stefanrows/OfflineDAoC`. The upstream project
 ## Safety defaults
 
 - Resolve paths from this checkout, never from the original author's Windows username.
+- Preserve each file's existing line endings. Do not convert whole files between LF and CRLF.
 - Distinguish real players, companion bots, and autonomous gamebots before changing AI.
 - Preserve saves, real inventories/loot/coins, equipment upgrades, realm exchange,
   and existing travel behavior unless the owner explicitly asks to change them.
