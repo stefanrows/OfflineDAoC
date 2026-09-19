@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Run the complete-install bundled Windows SDK from WSL.
 # Install root: OFFLINE_DAOC_ROOT (WSL path), default /mnt/d/Games/OfflineDAoC.
-# CLI home and NuGet packages: ${OFFLINE_DAOC_DEV:-${OFFLINE_DAOC_ROOT}-dev}/state
-# (not in the repo, not on C:). Paths passed through to dotnet.exe are converted
-# with wslpath -w when they exist on the WSL side.
+# CLI home, NuGet packages and HTTP cache: ${OFFLINE_DAOC_DEV:-${OFFLINE_DAOC_ROOT}-dev}/state
+# (not in the repo, not on C:). Arguments that contain a '/' and exist on the
+# WSL side are converted with wslpath -w; bare words (Release, test) are not.
 set -euo pipefail
 
 to_windows() {
@@ -30,7 +30,7 @@ convert_arg() {
     printf '%s' "$arg"
     return
   fi
-  if [[ -e "$arg" ]]; then
+  if [[ "$arg" == */* && -e "$arg" ]]; then
     to_windows "$arg"
     return
   fi
@@ -63,8 +63,12 @@ export DOTNET_ROOT_X64="$DOTNET_ROOT"
 export DOTNET_MULTILEVEL_LOOKUP=0
 export DOTNET_CLI_HOME="$WIN_STATE"
 export NUGET_PACKAGES="${WIN_STATE}\\packages"
+export NUGET_HTTP_CACHE_PATH="${WIN_STATE}\\http-cache"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_GENERATE_ASPNET_CERTIFICATE=false
+# WSL passes environment variables to Windows programs only when WSLENV lists
+# them. Values above are already Windows paths, so no /p conversion flag.
+export WSLENV="${WSLENV:+${WSLENV}:}DOTNET_ROOT:DOTNET_ROOT_X64:DOTNET_MULTILEVEL_LOOKUP:DOTNET_CLI_HOME:NUGET_PACKAGES:NUGET_HTTP_CACHE_PATH:DOTNET_CLI_TELEMETRY_OPTOUT:DOTNET_GENERATE_ASPNET_CERTIFICATE"
 
 converted=()
 for arg in "$@"; do

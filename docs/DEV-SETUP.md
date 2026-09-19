@@ -102,6 +102,12 @@ verifies.
 **Gate:** ✅ Both `dotnet --list-sdks` (WSL) and `tools/dev/winnet.sh
 --list-sdks` report 10.0.400. Wrapper: `tools/dev/winnet.sh`.
 
+WSL passes environment variables to Windows programs only when `WSLENV`
+lists them. The first wrapper version did not, so `dotnet.exe` silently used
+`C:\Users\<you>\.nuget\packages`. The wrapper now exports `WSLENV`. Check with
+`tools/dev/winnet.sh nuget locals all --list`: `global-packages` and
+`http-cache` must be under `D:\Games\OfflineDAoC-dev\state`.
+
 ---
 
 ## Tier 2 — Baseline build and tests  ✅ done 2026-09-19
@@ -110,16 +116,15 @@ Record the state **before** any change, so later failures are attributable.
 
 ### Server (WSL)
 
-Build into an output tree outside the source dirs (`artifacts/` is already
-git-ignored):
+The projects hard-code their `OutputPath`, so output goes to the git-ignored
+`source/server/Release/` (and `source/server/build/`); `--artifacts-path`
+does not redirect it (see Baseline). Test results go to `artifacts/`:
 
 ```bash
 cd /home/stefan/Development/Games/OfflineDAoC
 dotnet restore 'source/server/Dawn of Light.sln' -p:Configuration=Release
-dotnet build 'source/server/Dawn of Light.sln' -c Release --no-restore \
-  --artifacts-path artifacts/server
+dotnet build 'source/server/Dawn of Light.sln' -c Release --no-restore
 dotnet test source/server/Tests/Tests.csproj -c Release --no-build --no-restore \
-  --artifacts-path artifacts/server \
   --logger "trx;LogFileName=baseline.trx" --results-directory artifacts/test-results
 ```
 
@@ -255,11 +260,28 @@ Converts paths with `wslpath -w` and calls
   path is refused; `-Apply` then Restore returns the original hashes; the
   protected files are untouched.
 
-**Gate:** ✅ `tools/dev/Test-DeployOfflineDAoC.ps1` — 23 passed, 0 failed on a
-fake tree under `D:\Games\OfflineDAoC-dev\deploy-selfcheck`. Dry run against
-`D:\Games\OfflineDAoC` with `-ServerBuild source/server/Release` listed the
-expected server DLL/PDB replaces (and third-party as unchanged/skip), exit 0,
-and left `runtime\server\lib\GameServer.dll` hash unchanged.
+Additions from review:
+
+- `-IncludeThirdParty` is the owner's approval switch for changed
+  third-party DLLs. Native interop/pathing DLLs are never copied.
+- DLLs in the build that the install lacks are listed as
+  `missing-in-install` with a warning. They are never added automatically.
+- If any step fails after backup, every file already copied is restored from
+  its verified backup before the error is raised. The error says whether the
+  rollback was complete. Restore skips files already at their backed-up
+  hash, so an interrupted restore can be re-run.
+- The self-check only deletes a `-ScratchRoot` that carries its
+  `.offline-daoc-selfcheck` marker.
+
+**Gate:** ✅ `tools/dev/Test-DeployOfflineDAoC.ps1`: 34 passed, 0 failed on
+a fake tree under `artifacts/deploy-selfcheck` (default), on two consecutive
+runs. Covered: rollback after a failure part-way through the copy loop,
+`-IncludeThirdParty`, build-only DLLs, and repeated restore. Dry run against
+`D:\Games\OfflineDAoC` with `-ServerBuild source/server/Release` (before
+these additions) listed the expected server DLL/PDB replaces and third-party
+as unchanged, exit 0, and left `runtime\server\lib\GameServer.dll` hash
+unchanged. `-Apply` and Restore have not yet run against the real install
+(Tier 5).
 
 ---
 

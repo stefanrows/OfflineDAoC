@@ -23,7 +23,10 @@ Python runtime. A GitHub source ZIP alone is not the complete runtime download.
 For the owner's WSL2 + Windows setup (install location, SDKs, baseline,
 deploy/restore scripts), follow the tiered plan in `docs/DEV-SETUP.md`.
 
-### WSL2 + Windows loop (verified commands)
+### WSL2 + Windows loop
+
+Build, tests, self-check, and deploy dry run are verified. `-Apply` and
+Restore against the real install are pending the owner-present Tier 5 run.
 
 Repo: `/home/stefan/Development/Games/OfflineDAoC`. Install:
 `D:\Games\OfflineDAoC` (`OFFLINE_DAOC_ROOT`, default `/mnt/d/Games/OfflineDAoC`).
@@ -48,6 +51,7 @@ tools/dev/winnet.sh test \
 tools/dev/deploy.sh -InstallRoot /mnt/d/Games/OfflineDAoC \
   -ServerBuild source/server/Release
 # tools/dev/deploy.sh ... -Apply
+# Changed third-party DLLs are skipped unless the owner adds -IncludeThirdParty.
 # powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/dev/Restore-OfflineDAoC.ps1 \
 #   -InstallRoot 'D:\Games\OfflineDAoC' -Backup 'D:\Games\OfflineDAoC-backups\deploy-<stamp>'
 ```

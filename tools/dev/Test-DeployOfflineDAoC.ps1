@@ -32,10 +32,26 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if (-not $ScratchRoot) {
     $ScratchRoot = Join-Path $repoRoot 'artifacts\deploy-selfcheck'
 }
+# Only ever delete a folder this script created (it carries the marker file).
+$marker = '.offline-daoc-selfcheck'
 if (Test-Path -LiteralPath $ScratchRoot) {
-    Remove-Item -LiteralPath $ScratchRoot -Recurse -Force
+    if (-not (Test-Path -LiteralPath (Join-Path $ScratchRoot $marker))) {
+        throw "Refusing to delete $ScratchRoot : it has no $marker marker. Pass an empty or new -ScratchRoot."
+    }
+    # Recursive delete over \\wsl.localhost can transiently report "not empty"; retry.
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $ScratchRoot -Recurse -Force
+            break
+        }
+        catch {
+            if ($attempt -ge 5) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
 }
 New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $ScratchRoot $marker) -Value 'Deploy self-check scratch; safe to delete.' -Encoding ASCII
 
 $install = Join-Path $ScratchRoot 'install'
 $build = Join-Path $ScratchRoot 'build'
@@ -70,6 +86,7 @@ New-FakeFile (Join-Path $install 'runtime\server\lib\Newtonsoft.Json.dll') 'inst
 New-FakeFile (Join-Path $build 'lib\Newtonsoft.Json.dll') 'built-json'
 New-FakeFile (Join-Path $install 'runtime\server\lib\SQLite.Interop.dll') 'installed-sqlite-native'
 New-FakeFile (Join-Path $build 'lib\SQLite.Interop.dll') 'built-sqlite-native'
+New-FakeFile (Join-Path $build 'lib\Extra.Dependency.dll') 'built-only-dependency'
 
 New-FakeFile (Join-Path $install 'runtime\account.txt') 'account-secret'
 New-FakeFile (Join-Path $install 'runtime\data\opendaoc.sqlite3.db') 'save-db'
@@ -106,6 +123,16 @@ Write-Check ($replace.Count -gt 0) 'dry-run lists server replacements' "count=$(
 Write-Check ($third.Count -ge 1) 'dry-run lists third-party skip' "count=$($third.Count)"
 Write-Check ($native.Count -ge 1) 'dry-run lists native skip' "count=$($native.Count)"
 Write-Check (@($replace | Where-Object { $_.Relative -match 'Newtonsoft|SQLite.Interop' }).Count -eq 0) 'third-party and native are not in the replace set'
+Write-Check (@($plan | Where-Object { $_.Action -eq 'missing-in-install' -and $_.Relative -match 'Extra\.Dependency' }).Count -eq 1) 'dry-run reports a build-only DLL as missing-in-install'
+
+$siblingThrown = $false
+try {
+    Assert-OfflineDaocPathUnderRoot -InstallRoot $install -Path ($install + '-evil\runtime\x.dll') | Out-Null
+}
+catch {
+    $siblingThrown = $_.Exception.Message -match 'outside install root'
+}
+Write-Check $siblingThrown 'sibling folder sharing the root prefix is refused'
 
 $outsideThrown = $false
 try {
@@ -121,13 +148,13 @@ if ($running.Count -gt 0) {
     Write-Check $false 'running-process refuse (close the game first)' (($running | ForEach-Object { $_.Name }) -join ', ')
 }
 else {
-    $stubDir = Join-Path $ScratchRoot 'proc-stub'
-    New-Item -ItemType Directory -Path $stubDir -Force | Out-Null
-    $stub = Join-Path $stubDir 'CoreServer.exe'
-    Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32\cmd.exe') -Destination $stub
-    $proc = Start-Process -FilePath $stub -ArgumentList '/c ping -n 20 127.0.0.1 >nul' -WindowStyle Hidden -PassThru
+    # Temporarily block this PowerShell's own process name: no stub exe to
+    # start, kill, or (on \\wsl.localhost) fail to delete afterwards.
+    $module = Get-Module OfflineDAoC.Deploy
+    $self = (Get-Process -Id $PID).ProcessName
+    $saved = & $module { $script:BlockedProcessNames }
+    & $module { param($names) $script:BlockedProcessNames = $names } @($self)
     try {
-        Start-Sleep -Milliseconds 400
         $refused = $false
         try {
             Invoke-OfflineDaocDeploy -InstallRoot $install -ServerBuild $build | Out-Null
@@ -138,11 +165,7 @@ else {
         Write-Check $refused 'running process is refused'
     }
     finally {
-        if ($proc -and -not $proc.HasExited) {
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-        }
-        Get-Process -Name 'CoreServer' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 200
+        & $module { param($names) $script:BlockedProcessNames = $names } $saved
     }
 }
 
@@ -159,6 +182,7 @@ Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\account.txt')
 Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\data\opendaoc.sqlite3.db')) -eq $dbBefore) 'apply leaves the save database untouched'
 Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\config\serverconfig.xml')) -eq $configBefore) 'apply leaves serverconfig.xml untouched'
 Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\OfflineDAoC.dll')) -eq $launcherBuilt) 'apply deploys the optional launcher when asked'
+Write-Check (-not (Test-Path -LiteralPath (Join-Path $install 'runtime\server\lib\Extra.Dependency.dll'))) 'apply does not add build-only DLLs'
 
 $backupParent = $install + '-backups'
 $backupRoot = Get-ChildItem -LiteralPath $backupParent -Directory | Sort-Object Name -Descending | Select-Object -First 1
@@ -169,7 +193,42 @@ if ($backupRoot) {
     Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\lib\GameServer.dll')) -eq $gsLibBefore) 'restore returns original GameServer.dll hash'
     Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\OfflineDAoC.dll')) -eq $launcherInstalled) 'restore returns original launcher hash'
     Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\account.txt')) -eq $accountBefore) 'restore leaves protected files untouched'
+
+    $again = $true
+    try {
+        Invoke-OfflineDaocRestore -InstallRoot $install -Backup $backupRoot.FullName | Out-Null
+    }
+    catch {
+        $again = $false
+    }
+    Write-Check $again 'a second restore of the same backup is a safe no-op'
 }
+
+# A failure part-way through the copy loop must roll back what was already copied.
+# A leftover staging file on a late entry makes Copy-OfflineDaocVerified throw.
+Start-Sleep -Milliseconds 1100
+$trap = (Join-Path $install 'runtime\server\lib\CoreServer.pdb') + '.offline-daoc-new'
+New-FakeFile $trap 'stale-staging'
+$rollbackMessage = ''
+try {
+    Invoke-OfflineDaocDeploy -InstallRoot $install -ServerBuild $build -Apply | Out-Null
+}
+catch {
+    $rollbackMessage = $_.Exception.Message
+}
+Write-Check ($rollbackMessage -match 'rolled back') 'mid-deploy failure reports a rollback' $rollbackMessage
+Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\lib\GameServer.dll')) -eq $gsLibBefore) 'mid-deploy failure restores already-copied files'
+Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\GameServer.dll')) -ne $gsLibBuilt) 'mid-deploy failure leaves no new server DLL behind'
+Write-Check (-not (Test-Path -LiteralPath $trap)) 'rollback clears the leftover staging file'
+
+# -IncludeThirdParty deploys changed third-party DLLs (still never natives).
+Start-Sleep -Milliseconds 1100
+Invoke-OfflineDaocDeploy -InstallRoot $install -ServerBuild $build -IncludeThirdParty -Apply | Out-Null
+Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\lib\Newtonsoft.Json.dll')) -eq $jsonBuilt) '-IncludeThirdParty replaces a changed third-party DLL'
+Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\lib\SQLite.Interop.dll')) -eq $nativeInstalled) '-IncludeThirdParty still skips native interop'
+$latest = Get-ChildItem -LiteralPath $backupParent -Directory | Sort-Object Name -Descending | Select-Object -First 1
+Invoke-OfflineDaocRestore -InstallRoot $install -Backup $latest.FullName | Out-Null
+Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\lib\Newtonsoft.Json.dll')) -eq $jsonInstalled) 'restore returns the original third-party DLL'
 
 Write-Output ''
 Write-Output ("Self-check: {0} passed, {1} failed." -f $passed, $failed)

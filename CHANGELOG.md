@@ -17,11 +17,15 @@ package, not this fork's version.
 ### Added
 
 - `tools/dev/winnet.sh`: WSL wrapper for the complete-install bundled Windows
-  SDK (CLI home and NuGet packages under `OfflineDAoC-dev\state`).
+  SDK (CLI home, NuGet packages and HTTP cache under `OfflineDAoC-dev\state`,
+  passed to `dotnet.exe` through `WSLENV`).
 - `tools/dev/Deploy-OfflineDAoC.ps1`, `Restore-OfflineDAoC.ps1`,
   `OfflineDAoC.Deploy.psm1`, `deploy.sh`, and `Test-DeployOfflineDAoC.ps1`:
   parameterized dry-run/apply deploy and restore with process checks, path
-  guards, protected-save hashing, and a fake-tree self-check.
+  guards, protected-save hashing, verified rollback on any failure,
+  resumable restore, an owner-approval `-IncludeThirdParty` switch,
+  warnings for build-only DLLs and missing PDBs, and a fake-tree self-check
+  that only deletes its own marked scratch folder.
 - Root `.gitattributes` (`* -text`) so Git does not rewrite the mixed
   LF/CRLF tree.
 

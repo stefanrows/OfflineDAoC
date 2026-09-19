@@ -19,9 +19,24 @@ install_root=""
 server_build=""
 launcher_build=""
 apply=0
+include_third_party=0
+
+need_value() {
+  if [[ $# -lt 2 || -z "$2" ]]; then
+    echo "deploy.sh: $1 needs a path." >&2
+    exit 1
+  fi
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -InstallRoot|--install-root|-ServerBuild|--server-build|-LauncherBuild|--launcher-build)
+      need_value "$@"
+      ;;&
+    -IncludeThirdParty|--include-third-party)
+      include_third_party=1
+      shift
+      ;;
     -InstallRoot|--install-root)
       install_root="$(to_windows "$2")"
       shift 2
@@ -40,7 +55,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "deploy.sh: unknown argument: $1" >&2
-      echo "usage: deploy.sh -InstallRoot <path> -ServerBuild <path> [-LauncherBuild <path>] [-Apply]" >&2
+      echo "usage: deploy.sh -InstallRoot <path> -ServerBuild <path> [-LauncherBuild <path>] [-IncludeThirdParty] [-Apply]" >&2
       exit 1
       ;;
   esac
@@ -54,6 +69,9 @@ fi
 args=(-NoProfile -ExecutionPolicy Bypass -File "$PS1" -InstallRoot "$install_root" -ServerBuild "$server_build")
 if [[ -n "$launcher_build" ]]; then
   args+=(-LauncherBuild "$launcher_build")
+fi
+if [[ $include_third_party -eq 1 ]]; then
+  args+=(-IncludeThirdParty)
 fi
 if [[ $apply -eq 1 ]]; then
   args+=(-Apply)

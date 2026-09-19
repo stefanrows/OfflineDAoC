@@ -144,15 +144,25 @@ function New-OfflineDaocDeployEntry {
         [string]$Source,
         [string]$Kind,
         [string]$InstalledHash,
-        [string]$NewHash
+        [string]$NewHash,
+        [switch]$IncludeThirdParty
     )
     $action = 'unchanged'
     if ($Kind -eq 'native') {
         $action = 'skip-native'
     }
+    elseif ($Kind -eq 'third-party-new') {
+        # Present in the build but in neither install folder; never added automatically.
+        $action = 'missing-in-install'
+    }
     elseif ($Kind -eq 'third-party') {
         if ($InstalledHash -and $NewHash -and $InstalledHash -ne $NewHash) {
-            $action = 'skip-third-party'
+            if ($IncludeThirdParty) {
+                $action = 'replace'
+            }
+            else {
+                $action = 'skip-third-party'
+            }
         }
         else {
             $action = 'unchanged'
@@ -179,7 +189,8 @@ function Get-OfflineDaocDeployPlan {
     param(
         [Parameter(Mandatory = $true)][string]$InstallRoot,
         [Parameter(Mandatory = $true)][string]$ServerBuild,
-        [string]$LauncherBuild
+        [string]$LauncherBuild,
+        [switch]$IncludeThirdParty
     )
     $root = Resolve-OfflineDaocInstallRoot -InstallRoot $InstallRoot
     $buildRoot = [IO.Path]::GetFullPath($ServerBuild)
@@ -203,6 +214,7 @@ function Get-OfflineDaocDeployPlan {
                     throw "Build is missing $fileName required for $relative"
                 }
                 if (-not $source) {
+                    Write-Warning "Build has no $fileName; installed $relative will not match the deployed DLL."
                     continue
                 }
                 $entries += New-OfflineDaocDeployEntry -Relative $relative -Target $target -Source $source `
@@ -232,6 +244,7 @@ function Get-OfflineDaocDeployPlan {
             if ($script:NativeFileNames -contains $fileName) {
                 $kind = 'native'
             }
+            $found = $false
             foreach ($dir in $script:InstallTargetDirs) {
                 $relative = Join-Path $dir $fileName
                 $target = Join-Path $root $relative
@@ -239,8 +252,14 @@ function Get-OfflineDaocDeployPlan {
                 if (-not (Test-Path -LiteralPath $target)) {
                     continue
                 }
+                $found = $true
                 $entries += New-OfflineDaocDeployEntry -Relative $relative -Target $target -Source $_.FullName `
-                    -Kind $kind -InstalledHash (Get-OfflineDaocFileHash $target) -NewHash (Get-OfflineDaocFileHash $_.FullName)
+                    -Kind $kind -InstalledHash (Get-OfflineDaocFileHash $target) -NewHash (Get-OfflineDaocFileHash $_.FullName) `
+                    -IncludeThirdParty:$IncludeThirdParty
+            }
+            if (-not $found -and $kind -eq 'third-party') {
+                $entries += New-OfflineDaocDeployEntry -Relative (Join-Path 'runtime\server' $fileName) -Target $null `
+                    -Source $_.FullName -Kind 'third-party-new' -InstalledHash $null -NewHash (Get-OfflineDaocFileHash $_.FullName)
             }
         }
     }
@@ -303,16 +322,36 @@ function Copy-OfflineDaocVerified {
 }
 
 function Restore-OfflineDaocEntriesFromBackup {
+    # Rolls back only entries whose backup copy was verified. Returns the
+    # relative paths that could not be put back to their original hash.
     param(
         [Parameter(Mandatory = $true)][string]$BackupRoot,
-        [Parameter(Mandatory = $true)]$Entries
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()]$Entries
     )
+    $failures = @()
     foreach ($entry in $Entries) {
-        $copy = Join-Path $BackupRoot $entry.Relative
-        if (Test-Path -LiteralPath $copy) {
+        try {
+            $temporary = $entry.Target + '.offline-daoc-new'
+            if (Test-Path -LiteralPath $temporary) {
+                Remove-Item -LiteralPath $temporary -Force
+            }
+            if ((Get-OfflineDaocFileHash $entry.Target) -eq $entry.InstalledHash) {
+                continue
+            }
+            $copy = Join-Path $BackupRoot $entry.Relative
+            if ((Get-OfflineDaocFileHash $copy) -ne $entry.InstalledHash) {
+                throw 'backup copy does not match the original hash'
+            }
             Copy-Item -LiteralPath $copy -Destination $entry.Target -Force
+            if ((Get-OfflineDaocFileHash $entry.Target) -ne $entry.InstalledHash) {
+                throw 'restored file does not match the original hash'
+            }
+        }
+        catch {
+            $failures += ('{0} ({1})' -f $entry.Relative, $_.Exception.Message)
         }
     }
+    return $failures
 }
 
 function Invoke-OfflineDaocDeploy {
@@ -321,17 +360,32 @@ function Invoke-OfflineDaocDeploy {
         [Parameter(Mandatory = $true)][string]$InstallRoot,
         [Parameter(Mandatory = $true)][string]$ServerBuild,
         [string]$LauncherBuild,
+        [switch]$IncludeThirdParty,
         [switch]$Apply,
         [switch]$PassThru
     )
     Assert-OfflineDaocStopped
     $root = Resolve-OfflineDaocInstallRoot -InstallRoot $InstallRoot
-    $entries = @(Get-OfflineDaocDeployPlan -InstallRoot $root -ServerBuild $ServerBuild -LauncherBuild $LauncherBuild)
-    Write-Host ($entries | Format-Table Relative, InstalledHash, NewHash, Action -AutoSize | Out-String -Width 4096)
+    $entries = @(Get-OfflineDaocDeployPlan -InstallRoot $root -ServerBuild $ServerBuild -LauncherBuild $LauncherBuild `
+            -IncludeThirdParty:$IncludeThirdParty)
+    # Short hash prefixes keep each row on one line; manifest.json keeps full hashes.
+    $shortHash = { param($hash) if ($hash) { $hash.Substring(0, 12) } else { '-' } }
+    Write-Host ($entries | Format-Table Action, Relative,
+        @{ Label = 'Installed'; Expression = { & $shortHash $_.InstalledHash } },
+        @{ Label = 'New'; Expression = { & $shortHash $_.NewHash } } -AutoSize | Out-String -Width 4096)
 
     $missing = @($entries | Where-Object { $_.Action -eq 'error-missing-source' })
     if ($missing.Count -gt 0) {
         throw ("Build is missing files: " + (($missing | ForEach-Object { $_.Relative }) -join ', '))
+    }
+    $newThirdParty = @($entries | Where-Object { $_.Action -eq 'missing-in-install' })
+    if ($newThirdParty.Count -gt 0) {
+        Write-Warning ("Build has DLLs the install lacks (not deployed; the server may fail to load without them): " +
+            (($newThirdParty | ForEach-Object { [IO.Path]::GetFileName($_.Relative) }) -join ', '))
+    }
+    $skippedThirdParty = @($entries | Where-Object { $_.Action -eq 'skip-third-party' })
+    if ($skippedThirdParty.Count -gt 0) {
+        Write-Warning 'Changed third-party DLLs are skipped. Pass -IncludeThirdParty to deploy them.'
     }
 
     if (-not $Apply) {
@@ -349,7 +403,11 @@ function Invoke-OfflineDaocDeploy {
     $protected = @(Get-OfflineDaocProtectedHashes -InstallRoot $root)
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $backupRoot = '{0}-backups\deploy-{1}' -f $root, $stamp
+    if (Test-Path -LiteralPath $backupRoot) {
+        throw "Backup folder already exists: $backupRoot. Wait a second and retry."
+    }
     New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+    $backedUp = @()
 
     try {
         foreach ($entry in $replace) {
@@ -359,8 +417,10 @@ function Invoke-OfflineDaocDeploy {
             New-Item -ItemType Directory -Path (Split-Path -Parent $copy) -Force | Out-Null
             Copy-Item -LiteralPath $entry.Target -Destination $copy
             if ((Get-OfflineDaocFileHash $copy) -ne $entry.InstalledHash) {
+                Remove-Item -LiteralPath $copy -Force -ErrorAction SilentlyContinue
                 throw "Backup verification failed for $($entry.Relative)"
             }
+            $backedUp += $entry
         }
 
         $manifest = [pscustomobject]@{
@@ -400,9 +460,16 @@ function Invoke-OfflineDaocDeploy {
         if ($PassThru) { return $entries }
     }
     catch {
-        Assert-OfflineDaocStopped
-        Restore-OfflineDaocEntriesFromBackup -BackupRoot $backupRoot -Entries $replace
-        throw
+        # Roll back before anything else can throw: a process that started
+        # mid-deploy is the usual reason we are here.
+        $reason = $_.Exception.Message
+        $failures = @(Restore-OfflineDaocEntriesFromBackup -BackupRoot $backupRoot -Entries $backedUp)
+        if ($failures.Count -gt 0) {
+            $message = ("Deploy failed ({0}) and rollback is INCOMPLETE; the install may be partially deployed. " +
+                "Close the game and copy these back from {1}: {2}") -f $reason, $backupRoot, ($failures -join '; ')
+            throw $message
+        }
+        throw "Deploy failed and was rolled back; install unchanged. Reason: $reason"
     }
 }
 
@@ -425,35 +492,35 @@ function Invoke-OfflineDaocRestore {
         throw "Backup install root $($manifest.InstallRoot) does not match $root"
     }
 
+    $pending = @()
     foreach ($entry in @($manifest.Entries)) {
         $target = Assert-OfflineDaocPathUnderRoot -InstallRoot $root -Path (Join-Path $root $entry.Relative)
         if ($entry.Target -and ([IO.Path]::GetFullPath($entry.Target) -ne $target)) {
             throw "Invalid restore target: $($entry.Target)"
         }
-        $current = Get-OfflineDaocFileHash $target
-        $expectedNew = $entry.NewHash
-        if ($current -ne $expectedNew) {
-            throw "Installed hash for $($entry.Relative) is not the deployed hash; restore refused."
-        }
-        $copy = Join-Path $backupRoot $entry.Relative
-        $backupHash = Get-OfflineDaocFileHash $copy
         $oldHash = $entry.OldHash
         if (-not $oldHash) { $oldHash = $entry.InstalledHash }
-        if ($backupHash -ne $oldHash) {
+        $current = Get-OfflineDaocFileHash $target
+        if ($current -eq $oldHash) {
+            # Already restored (e.g. an interrupted earlier restore); nothing to do.
+            continue
+        }
+        if ($current -ne $entry.NewHash) {
+            throw "Installed hash for $($entry.Relative) is neither the deployed nor the backed-up hash; restore refused."
+        }
+        $copy = Join-Path $backupRoot $entry.Relative
+        if ((Get-OfflineDaocFileHash $copy) -ne $oldHash) {
             throw "Backup file hash mismatch for $($entry.Relative)"
         }
+        $pending += [pscustomobject]@{ Target = $target; Copy = $copy; OldHash = $oldHash }
     }
 
-    foreach ($entry in @($manifest.Entries)) {
+    foreach ($item in $pending) {
         Assert-OfflineDaocStopped
-        $target = Join-Path $root $entry.Relative
-        $copy = Join-Path $backupRoot $entry.Relative
-        $oldHash = $entry.OldHash
-        if (-not $oldHash) { $oldHash = $entry.InstalledHash }
-        Copy-OfflineDaocVerified -Source $copy -Destination $target -ExpectedHash $oldHash
+        Copy-OfflineDaocVerified -Source $item.Copy -Destination $item.Target -ExpectedHash $item.OldHash
     }
 
-    Write-Host ("Restored {0} file(s) from {1}. Saves and settings were not rolled back." -f @($manifest.Entries).Count, $backupRoot)
+    Write-Host ("Restored {0} of {1} file(s) from {2}. Saves and settings were not rolled back." -f $pending.Count, @($manifest.Entries).Count, $backupRoot)
     if ($PassThru) { return $manifest }
 }
 
