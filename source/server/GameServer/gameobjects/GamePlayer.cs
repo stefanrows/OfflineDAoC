@@ -4031,7 +4031,8 @@ namespace DOL.GS
                 // 25 at RR1, level 25.
                 // 225 at RR1, level 35, 245 at RR3, level 35.
                 // 900 at RR1, level 50. 990 at RR10, level 50.
-                int modifiedLevel = Level - 20;
+                // Below level 20 the value is floored at 1 + RealmLevel.
+                int modifiedLevel = Math.Max(0, Level - 20);
                 return Math.Max(1, modifiedLevel * modifiedLevel) + RealmLevel;
             }
         }
