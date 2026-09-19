@@ -8,7 +8,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.4.5";
+    internal const string DisplayVersion = "0.5.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -127,6 +127,7 @@ internal sealed partial class MainForm : Form
     private Process? _serverProcess;
     private RollingServerLog? _serverLog;
     private bool _stoppingServer;
+    private bool _worldReady;
     private bool _refreshing;
     private bool _refreshingExchange;
     private bool _loadingXpRates;
@@ -218,6 +219,22 @@ internal sealed partial class MainForm : Form
         _serverReadinessPoll.Tick += async (_, _) => await RefreshWhenServerReadyAsync();
         Shown += async (_, _) =>
         {
+            if (!File.Exists(_database))
+            {
+                _worldReady = false;
+                _startButton.Enabled = false;
+                _playButton.Enabled = false;
+                _footer.Text = "The world database is missing; install the server data before starting.";
+                return;
+            }
+            _worldReady = await EnsureCamlannWorldAsync();
+            if (!_worldReady)
+            {
+                _startButton.Enabled = false;
+                _playButton.Enabled = false;
+                _footer.Text = "The one-time world reset must complete before the server can start.";
+                return;
+            }
             await RefreshDashboardAsync();
             await RefreshRealmExchangeAsync();
             _displayClock.Start();
@@ -483,13 +500,12 @@ internal sealed partial class MainForm : Form
         auction.Controls.Add(BuildAuctionPanel());
         var groups = new TabPage("Active Groups") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         groups.Controls.Add(BuildActiveGroupsPanel());
-        var rvr = new TabPage("Active RvR") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
-        rvr.Controls.Add(BuildActiveRvrPanel());
         var xpSettings = new TabPage("XP Settings") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         xpSettings.Controls.Add(BuildXpSettingsPanel());
         tabs.TabPages.Add(population);
         tabs.TabPages.Add(groups);
-        tabs.TabPages.Add(rvr);
+        // The old realm-owned keep/relic panel stays hidden until its Tier 5
+        // guild-claim implementation replaces the Normal-world reset action.
         var events = new TabPage("Realm Events") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         events.Controls.Add(BuildRealmEventsPanel());
         tabs.TabPages.Add(events);
@@ -732,6 +748,26 @@ internal sealed partial class MainForm : Form
             RenderActiveRvr();
         };
 
+        ConfigureRvrObjectiveGrid();
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        _rvrRealm.Items.AddRange(["All realms", "Albion", "Midgard", "Hibernia"]);
+        _rvrRealm.SelectedIndex = 0;
+        _rvrRealm.SelectedIndexChanged += (_, _) => RenderActiveRvr();
+        _rvrSearch.TextChanged += (_, _) => RenderActiveRvr();
+        filters.Controls.Add(new Label { AutoSize = true, Text = "Filter:", ForeColor = DaocTheme.GoldLight, Padding = new Padding(0, 5, 0, 0) });
+        filters.Controls.Add(_rvrRealm);
+        filters.Controls.Add(_rvrSearch);
+        filters.Controls.Add(new Label { AutoSize = true, Text = "Click column headings to sort · uses the main Refresh", ForeColor = DaocTheme.GoldLight, Padding = new Padding(5, 5, 0, 0) });
+        layout.Controls.Add(filters, 0, 2);
+        layout.Controls.Add(_rvrGrid, 0, 3);
+        return layout;
+    }
+
+    private void ConfigureRvrObjectiveGrid()
+    {
+        if (_rvrObjectivesGrid.Columns.Count > 0)
+            return;
+
         _rvrObjectivesGrid.Dock = DockStyle.Fill;
         _rvrObjectivesGrid.ReadOnly = true;
         _rvrObjectivesGrid.AllowUserToAddRows = false;
@@ -758,18 +794,6 @@ internal sealed partial class MainForm : Form
             if (e.RowIndex < 0 || _rvrObjectivesGrid.Rows[e.RowIndex].DataBoundItem is not RvrObjective row) return;
             ApplyRvrStatusStyle(e.CellStyle, row.State);
         };
-        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        _rvrRealm.Items.AddRange(["All realms", "Albion", "Midgard", "Hibernia"]);
-        _rvrRealm.SelectedIndex = 0;
-        _rvrRealm.SelectedIndexChanged += (_, _) => RenderActiveRvr();
-        _rvrSearch.TextChanged += (_, _) => RenderActiveRvr();
-        filters.Controls.Add(new Label { AutoSize = true, Text = "Filter:", ForeColor = DaocTheme.GoldLight, Padding = new Padding(0, 5, 0, 0) });
-        filters.Controls.Add(_rvrRealm);
-        filters.Controls.Add(_rvrSearch);
-        filters.Controls.Add(new Label { AutoSize = true, Text = "Click column headings to sort · uses the main Refresh", ForeColor = DaocTheme.GoldLight, Padding = new Padding(5, 5, 0, 0) });
-        layout.Controls.Add(filters, 0, 2);
-        layout.Controls.Add(_rvrGrid, 0, 3);
-        return layout;
     }
 
     private void RenderActiveGroups()
@@ -1256,8 +1280,9 @@ internal sealed partial class MainForm : Form
             _midgardValue.Text = RealmRosterValue(snapshot.Bots, "Midgard");
             _hiberniaValue.Text = RealmRosterValue(snapshot.Bots, "Hibernia");
             _performanceValue.Text = $"{snapshot.TickP95Ms:0.0} ms";
-            _startButton.Enabled = !_resettingKeepsRelics && !_savingXpRates && !_stoppingServer && snapshot.ServerState == "Stopped" && File.Exists(_serverExecutable);
-            _resetKeepsRelics.Enabled = !_resettingKeepsRelics && !_savingXpRates && snapshot.ServerState == "Stopped" && BotGoalsServerStopped();
+            _startButton.Enabled = _worldReady && !_resettingKeepsRelics && !_savingXpRates && !_stoppingServer && snapshot.ServerState == "Stopped" && File.Exists(_serverExecutable);
+            if (_resetKeepsRelics is not null)
+                _resetKeepsRelics.Enabled = !_resettingKeepsRelics && !_savingXpRates && snapshot.ServerState == "Stopped" && BotGoalsServerStopped();
             _stopButton.Enabled = !_stoppingServer && snapshot.ServerState is "Running" or "Starting";
             _playButton.Enabled = !_stoppingServer && snapshot.ServerState == "Running" && File.Exists(_clientConnector);
             UpdateXpRateControls(snapshot);
@@ -2476,8 +2501,86 @@ internal sealed partial class MainForm : Form
         return process is null;
     }
 
+    private async Task<bool> EnsureCamlannWorldAsync()
+    {
+        try
+        {
+            CamlannServerConfig.EnsurePvP(Path.Combine(_serverDirectory, "config", "serverconfig.xml"));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Cannot prepare server configuration", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+
+        string? worldModel;
+        try
+        {
+            worldModel = await Task.Run(() => CamlannWorldReset.ReadWorldModel(_database));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Cannot read world state", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+
+        if (string.Equals(worldModel, CamlannWorldReset.WorldModelValue, StringComparison.Ordinal))
+            return true;
+        if (!File.Exists(_database))
+        {
+            MessageBox.Show(this, "The world database is missing.", "World reset unavailable", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+        if (worldModel is not null && !string.Equals(worldModel, "Normal", StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show(this, $"This installation has an unsupported world marker: {worldModel}.", "World reset unavailable", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+        if (!BotGoalsServerStopped())
+        {
+            MessageBox.Show(this, "Stop the server completely before creating the new world.", "Server must be stopped", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        DialogResult confirmation = MessageBox.Show(this,
+            "This installation needs a one-time world reset before the server can start.\n\n" +
+            "The reset discards characters, inventories, coins, bot profiles, bot settings, guilds, keep claims, relic state, Realm Exchange listings and event history.\n" +
+            "World definitions, item templates, spawns and navigation meshes are kept.\n\n" +
+            "A complete database backup will be written beside the save before anything is changed. Continue?",
+            "Create the new world", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (confirmation != DialogResult.Yes)
+            return false;
+
+        _startButton.Enabled = _playButton.Enabled = false;
+        try
+        {
+            var credentials = ReadCredentials();
+            var result = await Task.Run(() => CamlannWorldReset.Apply(
+                _database,
+                Path.Combine(Path.GetDirectoryName(_database)!, "camlann-world-reset-backups"),
+                credentials.Account,
+                Path.Combine(_serverDirectory, "realm-event-records.sqlite3"),
+                BotGoalsServerStopped));
+            MessageBox.Show(this,
+                $"World reset complete.\n\nCharacters: {result.Characters}\nBots: {result.Bots}\nGuilds: {result.Guilds}\nKeeps returned to neutral: {result.Keeps}\nRelics homed: {result.Relics}\nEvent records cleared: {result.EventRecords}\n\nBackup: {result.Backup}",
+                "New world ready", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "World reset failed — no partial reset", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+    }
+
     private void StartServer()
     {
+        if (!_worldReady)
+        {
+            MessageBox.Show(this, "Complete the one-time world reset before starting the server.", "World reset required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         // The owned process check closes the small window between Process.Start
         // and the TCP listener coming online.  Without it, a second click can
         // start another CoreServer while the first one is still loading the

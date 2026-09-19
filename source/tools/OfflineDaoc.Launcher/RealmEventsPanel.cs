@@ -39,6 +39,7 @@ internal sealed partial class MainForm
         _eventSearch.TextChanged += (_, _) => RenderRealmEvents();
         _eventActiveOnly.CheckedChanged += (_, _) => RenderRealmEvents();
         panel.Controls.Add(filters, 0, 1);
+        ConfigureRvrObjectiveGrid();
         _rvrObjectivesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _rvrObjectivesGrid.MultiSelect = false;
         _rvrObjectivesGrid.Columns[1].HeaderText = "Objective";
