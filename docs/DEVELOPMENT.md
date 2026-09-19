@@ -25,8 +25,10 @@ deploy/restore scripts), follow the tiered plan in `docs/DEV-SETUP.md`.
 
 ### WSL2 + Windows loop
 
-Build, tests, self-check, and deploy dry run are verified. `-Apply` and
-Restore against the real install are pending the owner-present Tier 5 run.
+Verified end to end on 2026-09-19: build, tests, self-check, dry run,
+`-Apply`, in-game smoke test, Restore, and redeploy against the real install.
+Before Camlann Tier 0, make a fresh named save backup (`docs/DEV-SETUP.md`
+Tier 6).
 
 Repo: `/home/stefan/Development/Games/OfflineDAoC`. Install:
 `D:\Games\OfflineDAoC` (`OFFLINE_DAOC_ROOT`, default `/mnt/d/Games/OfflineDAoC`).

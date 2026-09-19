@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-09-19
+
+### Changed
+
+- `docs/DEV-SETUP.md`: Tier 5 (first real deploy, in-game smoke test,
+  restore, redeploy) and Tier 6 (hand-off to Camlann) recorded as done. The
+  pre-Camlann save backup is deferred to the start of Camlann Tier 0.
+- `docs/DEVELOPMENT.md`: the WSL2 + Windows loop is marked verified end to
+  end against the real install.
+
 ## [0.4.4] - 2026-09-19
 
 ### Added
