@@ -285,7 +285,7 @@ unchanged. `-Apply` and Restore have not yet run against the real install
 
 ---
 
-## Tier 5 — First real deploy and client smoke test  (owner present)
+## Tier 5 — First real deploy and client smoke test  ✅ done 2026-09-19
 
 Needs the owner's explicit permission to start the server and client.
 
@@ -301,25 +301,52 @@ Needs the owner's explicit permission to start the server and client.
 Report static results (hashes, dry-run output) separately from the owner's
 in-game observations.
 
-**Gate:** An unchanged-code build deploys, runs, and restores without touching
-the save.
+**Gate:** ✅ An unchanged-code build deploys, runs, and restores without
+touching the save.
+
+### Record (2026-09-19, `main` at `637334b`)
+
+Static checks:
+
+- Server built on WSL: 0 errors, 620 warnings (same as the baseline). The
+  build has no `CoreBase.pdb` or `CoreDatabase.pdb`, so the deploy warns that
+  the installed PDBs for those two will not match. This only affects debugging.
+- Dry run: 10 replaces (`GameServer`, `CoreBase`, `CoreDatabase` in both
+  `runtime\server\` and `runtime\server\lib\`; `CoreServer.dll/.pdb` in
+  `runtime\server\` only). No third-party DLLs, nothing `missing-in-install`.
+- `-Apply` backup: `deploy-20260919-171843`. Installed hashes matched the
+  manifest's new hashes. Protected save files unchanged.
+- Restore: 10 of 10 files back to the manifest's old hashes, checked
+  independently.
+- Redeploy backup: `deploy-20260919-172601`. 10 of 10 installed files match
+  the build. The install now runs the WSL-built server.
+
+Owner in-game (on the WSL build): launcher, server start, login with an
+existing character, walking, and combat all worked; clean stop.
+
+Logs compared with the previous session: server `ERR` lines were the same
+449 with the same distinct messages. The only exception at startup is the
+existing duplicate `&tc` command key in `ScriptMgr.LoadCommands`, which is
+also logged under the original build. The client's exit code `0x80000000`
+("abnormal-or-client-defined-exit") matches every earlier client session.
 
 ---
 
-## Tier 6 — Hand-off to Camlann
+## Tier 6 — Hand-off to Camlann  ✅ done 2026-09-19
 
-1. Commit the Tier 1–4 files (`tools/dev/*`, `.gitattributes`, doc updates)
-   on a branch with a PATCH bump per `AGENTS.md`, and open a PR.
-2. Add the verified dev-loop commands to `docs/DEVELOPMENT.md` (a short
+1. ✅ Commit the Tier 1–4 files (`tools/dev/*`, `.gitattributes`, doc
+   updates) on a branch with a PATCH bump per `AGENTS.md`, and open a PR
+   (0.4.4, PR #5).
+2. ✅ Add the verified dev-loop commands to `docs/DEVELOPMENT.md` (a short
    "WSL2 + Windows" section pointing here).
-3. Before Camlann Tier 0 (which **wipes the save**): make a fresh named backup
-   of the save the owner wants to keep, for example
+3. **Deferred to the start of Camlann Tier 0** (which **wipes the save**):
+   make a fresh named backup of the save the owner wants to keep, for example
    `D:\Games\OfflineDAoC-backups\pre-camlann-<date>\`, and confirm with the
-   owner.
+   owner. A backup made earlier would miss later play.
 
-**Gate:** The dev loop (build on WSL → dry run → deploy → play → restore) is
-documented, committed, and has been run once end to end. Camlann Tier 0 can
-start.
+**Gate:** ✅ The dev loop (build on WSL → dry run → deploy → play → restore)
+is documented, committed, and has been run once end to end. Camlann Tier 0 can
+start once step 3 is done.
 
 ---
 
