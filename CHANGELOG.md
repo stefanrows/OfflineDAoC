@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-19
+
+### Added
+
+- `tools/dev/winnet.sh`: WSL wrapper for the complete-install bundled Windows
+  SDK (CLI home and NuGet packages under `OfflineDAoC-dev\state`).
+- `tools/dev/Deploy-OfflineDAoC.ps1`, `Restore-OfflineDAoC.ps1`,
+  `OfflineDAoC.Deploy.psm1`, `deploy.sh`, and `Test-DeployOfflineDAoC.ps1`:
+  parameterized dry-run/apply deploy and restore with process checks, path
+  guards, protected-save hashing, and a fake-tree self-check.
+- Root `.gitattributes` (`* -text`) so Git does not rewrite the mixed
+  LF/CRLF tree.
+
+### Changed
+
+- `docs/DEV-SETUP.md`: Tier 1–4 gates recorded; Tier 2 baseline counts added.
+- `docs/DEVELOPMENT.md`: short WSL2 + Windows loop commands pointing at the
+  new wrappers.
+- `AGENTS.md`: preserve each file's existing line endings.
+
 ## [0.4.3] - 2026-09-19
 
 ### Added
