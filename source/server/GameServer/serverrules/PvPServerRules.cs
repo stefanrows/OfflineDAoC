@@ -98,55 +98,34 @@ namespace DOL.GS.ServerRules
 		}
 
 
-		/// <summary>
-		/// Regions where players can't be attacked
-		/// </summary>
-		protected int[] m_safeRegions =
-		{
-			10,  //City of Camelot
-			101, //Jordheim
-			201, //Tir Na Nog
-
-			2,   //Albion Housing
-			102, //Midgard Housing
-			202, //Hibernia Housing
-
-			//No PVP Dungeons: http://support.darkageofcamelot.com/cgi-bin/support.cfg/php/enduser/std_adp.php?p_sid=frxnPUjg&p_lva=&p_refno=020709-000000&p_created=1026248996&p_sp=cF9ncmlkc29ydD0mcF9yb3dfY250PTE0JnBfc2VhcmNoX3RleHQ9JnBfc2VhcmNoX3R5cGU9MyZwX2NhdF9sdmwxPTI2JnBfY2F0X2x2bDI9fmFueX4mcF9zb3J0X2J5PWRmbHQmcF9wYWdlPTE*&p_li
-			21,  //Tomb of Mithra
-			129, //Nisse�s Lair (Nisee's Lair in regions.ini)
-			221, //Muire Tomb (Undead in regions.ini)
-
-		};
-
-		/// <summary>
-		/// Regions unsafe for players with safety flag
-		/// </summary>
-		protected int[] m_unsafeRegions =
-		{
-			163, // new frontiers
-		};
-
 		public override bool IsAllowedToAttack(GameLiving attacker, GameLiving defender, bool quiet)
 		{
+			if (BotPvpCrowdControl.Protected(attacker, defender))
+				return false;
+
+			// Stable-ticket travel is a real, uninterrupted horse route. Neither
+			// the rider nor nearby mobs may start combat until the route ends.
+			if (attacker is GameBot { IsOnStableMasterRoute: true } ||
+				defender is GameBot { IsOnStableMasterRoute: true })
+				return false;
+
 			if (!base.IsAllowedToAttack(attacker, defender, quiet))
 				return false;
 
-			// if controlled NPC - do checks for owner instead
-			if (attacker is GameNPC)
+			// PvP decisions use the player-shaped owner. GetLivingOwner is
+			// required here because GetPlayerOwner intentionally returns null for
+			// pets controlled by a GameBot.
+			GameLiving resolvedAttacker = PvpCombatant.Resolve(attacker);
+			if (resolvedAttacker != null)
 			{
-				IControlledBrain controlled = ((GameNPC)attacker).Brain as IControlledBrain;
-				if (controlled != null)
-				{
-					attacker = controlled.GetLivingOwner();
-					quiet = true; // silence all attacks by controlled npc
-				}
+				if (resolvedAttacker != attacker)
+					quiet = true;
+				attacker = resolvedAttacker;
 			}
-			if (defender is GameNPC)
-			{
-				IControlledBrain controlled = ((GameNPC)defender).Brain as IControlledBrain;
-				if (controlled != null)
-                    defender = controlled.GetLivingOwner();
-			}
+
+			GameLiving resolvedDefender = PvpCombatant.Resolve(defender);
+			if (resolvedDefender != null)
+				defender = resolvedDefender;
 
 			// can't attack self
 			if (attacker == defender)
@@ -155,68 +134,38 @@ namespace DOL.GS.ServerRules
 				return false;
 			}
 
-			//ogre: sometimes other players shouldn't be attackable
-			GamePlayer playerAttacker = attacker as GamePlayer;
-			GamePlayer playerDefender = defender as GamePlayer;
-			if (playerAttacker != null && playerDefender != null)
+			// Anyone outside the group, guild, or battlegroup is hostile. This
+			// deliberately ignores realm, including for same-realm GameBots.
+			if (PvpCombatant.IsPlayerShaped(attacker) && PvpCombatant.IsPlayerShaped(defender))
 			{
-				//check group
-				if (playerAttacker.Group != null && playerAttacker.Group.IsInTheGroup(playerDefender))
+				bool duel = attacker is GamePlayer playerAttacker && playerAttacker.IsDuelPartner(defender);
+				if (!duel && PvpCombatant.AreAllied(attacker, defender))
 				{
-					if (!quiet) MessageToLiving(playerAttacker, "You can't attack your group members.");
+					if (!quiet) MessageToLiving(attacker, "You can't attack an allied player.");
 					return false;
 				}
 
-				if (!playerAttacker.IsDuelPartner(defender))
+				if (!duel)
 				{
-					//check guild
-					if (playerAttacker.Guild != null && playerAttacker.Guild == playerDefender.Guild)
-					{
-						if (!quiet) MessageToLiving(playerAttacker, "You can't attack your guild members.");
-						return false;
-					}
-
-				    // Player can't hit other members of the same BattleGroup
-				    BattleGroup mybattlegroup = playerAttacker.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
-
-				    if (mybattlegroup != null && mybattlegroup.IsInTheBattleGroup(playerDefender))
-				    {
-				       if (!quiet) MessageToLiving(playerAttacker, "You can't attack a member of your battlegroup.");
-				       return false;
-				    }
-
 					// Safe regions
-					if (m_safeRegions != null)
+					if (PvpCombatant.IsSafeArea(attacker))
 					{
-						foreach (int reg in m_safeRegions)
-							if (playerAttacker.CurrentRegionID == reg)
-							{
-								if (quiet == false) MessageToLiving(playerAttacker, "You're currently in a safe zone, you can't attack other players here.");
-								return false;
-							}
+						if (quiet == false) MessageToLiving(attacker, "You're currently in a safe zone, you can't attack other players here.");
+						return false;
 					}
 
 
 					// Players with safety flag can not attack other players
-					if (playerAttacker.Level < m_safetyLevel && playerAttacker.SafetyFlag)
+					if (attacker is GamePlayer player && player.Level < m_safetyLevel && player.SafetyFlag)
 					{
 						if (quiet == false) MessageToLiving(attacker, "Your PvP safety flag is ON.");
 						return false;
 					}
 
 					// Players with safety flag can not be attacked in safe regions
-					if (playerDefender.Level < m_safetyLevel && playerDefender.SafetyFlag)
+					if (defender is GamePlayer playerDefender && playerDefender.Level < m_safetyLevel && playerDefender.SafetyFlag)
 					{
-						bool unsafeRegion = false;
-						foreach (int regionID in m_unsafeRegions)
-						{
-							if (regionID == playerDefender.CurrentRegionID)
-							{
-								unsafeRegion = true;
-								break;
-							}
-						}
-						if (unsafeRegion == false)
+						if (!PvpCombatant.IsOldFrontier(playerDefender))
 						{
 							//"PLAYER has his safety flag on and is in a safe area, you can't attack him here."
 							if (quiet == false) MessageToLiving(attacker, playerDefender.Name + " has " + playerDefender.GetPronoun(1, false) + " safety flag on and is in a safe area, you can't attack " + playerDefender.GetPronoun(2, false) + " here.");
@@ -236,13 +185,13 @@ namespace DOL.GS.ServerRules
 				return true;
 
 			// "friendly" NPCs can't attack "friendly" players
-			if (defender is GameNPC && defender.Realm != 0 && attacker.Realm != 0 && defender is GameKeepGuard == false && defender is GameFont == false)
+			if (defender is GameNPC && !PvpCombatant.IsPlayerShaped(defender) && defender.Realm != 0 && attacker.Realm != 0 && defender is GameKeepGuard == false && defender is GameFont == false)
 			{
 				if (quiet == false) MessageToLiving(attacker, "You can't attack a friendly NPC!");
 				return false;
 			}
 			// "friendly" NPCs can't be attacked by "friendly" players
-			if (attacker is GameNPC && attacker.Realm != 0 && defender.Realm != 0 && attacker is GameKeepGuard == false)
+			if (attacker is GameNPC && !PvpCombatant.IsPlayerShaped(attacker) && attacker.Realm != 0 && defender.Realm != 0 && attacker is GameKeepGuard == false)
 			{
 				return false;
 			}
@@ -282,22 +231,17 @@ namespace DOL.GS.ServerRules
 			if (source == null || target == null) 
 				return false;
 
-			// if controlled NPC - do checks for owner instead
-			if (source is GameNPC)
+			GameLiving resolvedSource = PvpCombatant.Resolve(source);
+			if (resolvedSource != null)
 			{
-				IControlledBrain controlled = ((GameNPC)source).Brain as IControlledBrain;
-				if (controlled != null)
-				{
-                    source = controlled.GetLivingOwner();
-					quiet = true; // silence all attacks by controlled npc
-				}
+				if (resolvedSource != source)
+					quiet = true;
+				source = resolvedSource;
 			}
-			if (target is GameNPC)
-			{
-				IControlledBrain controlled = ((GameNPC)target).Brain as IControlledBrain;
-				if (controlled != null)
-                    target = controlled.GetLivingOwner();
-			}
+
+			GameLiving resolvedTarget = PvpCombatant.Resolve(target);
+			if (resolvedTarget != null)
+				target = resolvedTarget;
 
 			if (source == target)
 				return true;
@@ -307,8 +251,13 @@ namespace DOL.GS.ServerRules
 			// checking as a gm, targets are considered friendly
 			if (source is GamePlayer && ((GamePlayer)source).Client.Account.PrivLevel > 1) return true;
 
-			// mobs can heal mobs, players heal players/NPC
+			// Neutral mobs can heal neutral mobs.
 			if (source.Realm == 0 && target.Realm == 0) return true;
+
+			// Same-realm player-shaped actors are hostile unless they are allied by
+			// group, guild, or battlegroup.
+			if (PvpCombatant.IsPlayerShaped(source) && PvpCombatant.IsPlayerShaped(target))
+				return PvpCombatant.AreAllied(source, target);
 
 			//keep guards
 			if (source is GameKeepGuard && target is GamePlayer)
@@ -342,9 +291,6 @@ namespace DOL.GS.ServerRules
 			if (source is GameNPC)
 				if ((((GameNPC)source).Flags & GameNPC.eFlags.PEACE) != 0)
 					return true;
-
-			if (source is GamePlayer && target is GamePlayer)
-				return true;
 
 			if (source is GamePlayer && target is GameNPC && target.Realm != 0)
 				return true;
@@ -393,6 +339,31 @@ namespace DOL.GS.ServerRules
 		public override byte GetColorHandling(GameClient client)
 		{
 			return 1;
+		}
+
+		/// <summary>
+		/// The client receives GameBots as NPCs. Give allied player-shaped
+		/// actors the viewer's realm and spoof a different realm for same-realm
+		/// hostiles so the client can present and target them as enemies.
+		/// </summary>
+		public override byte GetLivingRealm(GamePlayer player, GameLiving target)
+		{
+			if (player == null || target == null)
+				return 0;
+
+			if (target is GamePlayer playerTarget && playerTarget.Client.Account.PrivLevel > 1)
+				return (byte)player.Realm;
+
+			if (PvpCombatant.IsPlayerShaped(target))
+			{
+				if (PvpCombatant.AreAllied(player, target))
+					return (byte)player.Realm;
+
+				if (target.Realm == player.Realm)
+					return (byte)(player.Realm == eRealm.Albion ? eRealm.Midgard : eRealm.Albion);
+			}
+
+			return (byte)target.Realm;
 		}
 
 		/// <summary>

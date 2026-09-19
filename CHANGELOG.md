@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-19
+
+### Added
+
+- Tier 1 Camlann player-shaped combatant resolution, bot PvP immunity, and
+  focused hostility/safe-zone coverage.
+
+### Changed
+
+- PvP attack, heal, alliance, safety, and client presentation decisions now
+  treat humans, GameBots, and their controlled pets as player-shaped actors.
+- Grouped GameBots and their pets receive the friendly client guild-ID update;
+  temporary companions retain protection for the group they joined.
+- Player-shaped PvP kills now use non-allied participation for XP/RP, including
+  autonomous bot killers and bot-victim constitution-loss bookkeeping; `/assist`
+  and `/who` use the same PvP alliance decision.
+
+### Fixed
+
+- Same-realm strangers and hostile GameBots are no longer treated as friendly
+  NPCs or granted the dummy-guild packet hack, and bot-owned pets resolve to
+  their living bot owner.
+
+### Removed
+
+- The obsolete region-163-only safety exception from PvP hostility decisions.
+
 ## [0.5.0] - 2026-09-19
 
 ### Added

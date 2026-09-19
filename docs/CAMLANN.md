@@ -1,9 +1,18 @@
 # Camlann conversion
 
 This is the implementation plan for replacing Offline DAoC's three-realm RvR
-world with a **single Camlann/Mordred-style full-PvP world**. It is a plan, not
-a completed change. Do not start this work, start the game server, or deploy
+world with a **single Camlann/Mordred-style full-PvP world**. The owner has
+authorized the tiered implementation; do not start the game server or deploy
 over a running install unless the owner asks.
+
+## Current implementation status (2026-09-19)
+
+- Tier 0 world bootstrap/reset is complete in [PR #7](https://github.com/stefanrows/OfflineDAoC/pull/7), merged as `40476dc`.
+- Tier 1 rules core is implemented on the current branch: player-shaped
+  ownership/alliance resolution, bot immunity, safe-area and `/safety` rules,
+  and grouped-bot client guild-ID presentation.
+- The real-client presentation spike and the final client-facing Tier 1 gate
+  are still pending; they must pass before Tier 1 is considered gated.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots

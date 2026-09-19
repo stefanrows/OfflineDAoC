@@ -8,6 +8,7 @@ using DOL.Database;
 using DOL.GS.Keeps;
 using DOL.GS.PlayerClass;
 using DOL.GS.Quests;
+using DOL.GS.ServerRules;
 using DOL.Language;
 
 namespace DOL.GS.PacketHandler
@@ -298,30 +299,32 @@ namespace DOL.GS.PacketHandler
 			// Relies on 'SendObjectGuildID' not to be called after this.
 			if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
 			{
-				if (npc.Brain is IControlledBrain npcBrain)
+				if (npc.Brain is IControlledBrain)
 				{
-					GamePlayer playerOwner = npcBrain.GetPlayerOwner();
 					GamePlayer player = m_gameClient.Player;
 					Guild playerGuild = player.Guild;
+					GameLiving playerShaped = PvpCombatant.Resolve(npc);
 
-					// Leave if the player we send this packet to isn't the pet's owner and isn't in the same guild or group.
-					if (playerOwner != player)
+					// A hostile GameBot must retain its real guild/realm identity.
+					// Only allied player-shaped actors get the legacy friendly-pet
+					// guild-ID treatment. Ordinary player pets remain hidden from TAB
+					// unless their owner is allied, as before.
+					if (playerShaped is GameBot)
 					{
-						Guild playerOwnerGuild = playerOwner.Guild;
-
-						if (playerOwnerGuild == null || playerGuild == null || playerOwnerGuild != playerGuild)
+						if (PvpCombatant.AreAllied(player, npc))
 						{
-							Group playerOwnerGroup = playerOwner.Group;
-
-							if (playerOwnerGroup == null || !playerOwnerGroup.GetMembersInTheGroup().Contains(player))
-								return;
+							SendObjectGuildID(npc, playerGuild ?? Guild.DummyGuild);
+							SendObjectGuildID(player, playerGuild ?? Guild.DummyGuild);
 						}
 					}
+					else
+					{
+						if (playerShaped == null || !PvpCombatant.AreAllied(player, npc))
+							return;
 
-					// Make the client believe the pet is in the same guild as them.
-					// Use a dummy guild for guildless players.
-					SendObjectGuildID(npc, playerGuild ?? Guild.DummyGuild);
-					SendObjectGuildID(player, playerGuild ?? Guild.DummyGuild);
+						SendObjectGuildID(npc, playerGuild ?? Guild.DummyGuild);
+						SendObjectGuildID(player, playerGuild ?? Guild.DummyGuild);
+					}
 				}
 				else if ((npc.Flags & GameNPC.eFlags.PEACE) != 0 || npc.Realm is not eRealm.None)
 				{

@@ -37,7 +37,27 @@ namespace DOL.GS
 
         public GamePlayer Owner { get; private set; }
         public GamePlayer PlayerGroupLeader { get; private set; }
+        private readonly HashSet<GameLiving> _temporaryCompanionProtectedMembers = new();
         public bool IsPlayerLedGroup => PlayerGroupLeader != null;
+        internal void RememberTemporaryCompanionGroup(IEnumerable<GameLiving> members)
+        {
+            if (!IsTemporaryGroupHelper || members == null)
+                return;
+
+            foreach (GameLiving member in members)
+            {
+                if (member != null && member != this)
+                    _temporaryCompanionProtectedMembers.Add(member);
+            }
+        }
+
+        internal bool ProtectsTemporaryCompanionMember(GameLiving target)
+        {
+            if (!IsTemporaryGroupHelper || target == null)
+                return false;
+
+            return _temporaryCompanionProtectedMembers?.Contains(target) == true;
+        }
         public string ClassName { get; private set; }
         public new string InternalID { get; set; }
         public byte ClassId { get; set; }
@@ -104,6 +124,24 @@ namespace DOL.GS
 
         private bool EndIntentionalWorldMove() => Interlocked.Decrement(ref _intentionalWorldMoveDepth) == 0;
         public bool IsReturningAfterRelease { get; private set; }
+        private long _pvpInvulnerabilityTick;
+
+        /// <summary>
+        /// PvP release/zone immunity for a bot. Bots do not have a real client
+        /// timer, so the expiry is kept on the player-shaped bot itself.
+        /// </summary>
+        public bool IsInvulnerableToAttack =>
+            _pvpInvulnerabilityTick > 0 && _pvpInvulnerabilityTick > (CurrentRegion?.Time ?? 0);
+
+        public void StartPvpInvulnerability(int duration)
+        {
+            if (duration <= 0)
+                return;
+
+            long now = CurrentRegion?.Time ?? 0;
+            _pvpInvulnerabilityTick = Math.Max(_pvpInvulnerabilityTick, now + duration);
+        }
+
         public BotSpec BotSpec { get; private set; }
         public eBotStance Stance { get; set; } = eBotStance.Auto;
         private int m_leftOverSpecPoints;
@@ -1020,6 +1058,8 @@ namespace DOL.GS
                     (int)Math.Round(destination.Y), (int)Math.Round(destination.Z), Owner.Heading))
                     return;
 
+                if (CurrentRegion != null && GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules companionRules)
+                    companionRules.StartImmunityTimer(this, ServerProperties.Properties.TIMER_KILLED_BY_MOB * 1000);
                 Health = Math.Max(1, MaxHealth);
                 Mana = Math.Max(0, MaxMana);
                 Endurance = Math.Max(0, MaxEndurance);
@@ -1050,6 +1090,8 @@ namespace DOL.GS
             // at its killer or cause HandleDeathRecovery to discard its timer.
             if (!MoveTo(releaseRegion, release.X, release.Y, release.Z, Heading))
                 return;
+            if (CurrentRegion != null && GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules releaseRules)
+                releaseRules.StartImmunityTimer(this, ServerProperties.Properties.TIMER_KILLED_BY_MOB * 1000);
             Health = Math.Max(1, MaxHealth / 3);
             Mana = Math.Max(0, MaxMana / 3);
             Endurance = Math.Max(0, MaxEndurance / 3);
@@ -2527,6 +2569,8 @@ namespace DOL.GS
                 return false;
 
             RandomNumberDeck = new PlayerDeck();
+            if (!IsIntentionalWorldMove && GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules rules)
+                rules.StartImmunityTimer(this, ServerProperties.Properties.TIMER_GAME_ENTERED * 1000);
             // An intentional MoveTo keeps both registrations alive across the
             // brief remove/add cycle. Re-registering here reset watchdog clocks
             // and dirtied the persistent record on every region transition.
@@ -2549,8 +2593,14 @@ namespace DOL.GS
         /// </summary>
         public override bool MoveTo(ushort regionID, int x, int y, int z, ushort heading)
         {
+            ushort previousRegion = CurrentRegionID;
             if (!IsAutonomousWorldBot)
-                return base.MoveTo(regionID, x, y, z, heading);
+            {
+                bool movedDirect = base.MoveTo(regionID, x, y, z, heading);
+                if (movedDirect && regionID != previousRegion && GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules rules)
+                    rules.StartImmunityTimer(this, ServerProperties.Properties.TIMER_REGION_CHANGED * 1000);
+                return movedDirect;
+            }
 
             if (regionID != CurrentRegionID)
             {
@@ -2563,6 +2613,8 @@ namespace DOL.GS
             try
             {
                 moved = base.MoveTo(regionID, x, y, z, heading);
+                if (moved && regionID != previousRegion && GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules rules)
+                    rules.StartImmunityTimer(this, ServerProperties.Properties.TIMER_REGION_CHANGED * 1000);
                 return moved;
             }
             finally
