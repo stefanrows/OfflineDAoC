@@ -8,6 +8,7 @@ using DOL.Database;
 using DOL.Events;
 using DOL.GS.PacketHandler;
 using DOL.GS.Quests;
+using DOL.GS.ServerRules;
 using DOL.GS.ServerProperties;
 using DOL.Language;
 using static DOL.GS.GameObject;
@@ -188,6 +189,23 @@ namespace DOL.GS
                 }
             }
 
+            // GameBots are NPC-backed player-shaped actors. Refresh their
+            // guild IDs for each human viewer when grouping makes them
+            // allied, including the bot's controlled pets.
+            if (living is GameBot && GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+            {
+                foreach (GamePlayer viewer in GetPlayersInTheGroup())
+                {
+                    if (PvpCombatant.AreAllied(viewer, living))
+                        SendPvpFriendlyGuildIDs(viewer, living);
+                }
+            }
+
+            List<GameLiving> membersForCompanionProtection = GetMembersInTheGroup();
+            foreach (GameBot companion in membersForCompanionProtection.OfType<GameBot>()
+                         .Where(bot => bot.IsTemporaryGroupHelper))
+                companion.RememberTemporaryCompanionGroup(membersForCompanionProtection);
+
             UpdateMember(living, true, true);
             UpdateGroupWindow();
             GameEventMgr.Notify(GroupEvent.MemberJoined, this, new MemberJoinedEventArgs(living));
@@ -221,6 +239,12 @@ namespace DOL.GS
                 removedBot.LeavePlayerLedGroup();
                 if (removedBot.Brain is DOL.AI.Brain.BotBrain removedBrain)
                     removedBrain.FSM.SetCurrentState(eFSMStateType.IDLE);
+
+                if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+                {
+                    foreach (GamePlayer viewer in GetPlayersInTheGroup())
+                        viewer.Out.SendObjectGuildID(removedBot, removedBot.Guild);
+                }
             }
 
             AutonomousBotGroupCoordinator.OnMemberRemoved(this, living);
@@ -382,6 +406,17 @@ namespace DOL.GS
             }
 
             player.Out.SendObjectGuildID(controlledBody, playerGuild ?? Guild.DummyGuild);
+        }
+
+        private static void SendPvpFriendlyGuildIDs(GamePlayer viewer, GameLiving living)
+        {
+            Guild viewerGuild = viewer.Guild;
+            if (living is GameNPC npc)
+                SendControlledBodyGuildID(viewer, viewerGuild, npc);
+            else
+                viewer.Out.SendObjectGuildID(living, viewerGuild ?? Guild.DummyGuild);
+
+            viewer.Out.SendObjectGuildID(viewer, viewerGuild ?? Guild.DummyGuild);
         }
 
         public void DisbandGroup()

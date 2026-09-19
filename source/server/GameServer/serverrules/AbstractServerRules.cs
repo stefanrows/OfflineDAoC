@@ -285,6 +285,12 @@ namespace DOL.GS.ServerRules
             }
         }
 
+        public virtual void StartImmunityTimer(GameBot bot, int duration)
+        {
+            if (duration > 0)
+                bot.StartPvpInvulnerability(duration);
+        }
+
         /// <summary>
         /// Holds the delegate called when PvP invulnerability is expired
         /// </summary>
@@ -339,36 +345,31 @@ namespace DOL.GS.ServerRules
             if (!defender.IsAlive || !attacker.IsAlive)
                 return false;
 
-            GamePlayer playerAttacker = attacker as GamePlayer;
-            GamePlayer playerDefender = defender as GamePlayer;
+            // GameBot is represented by GameNPC, but it participates in PvP
+            // as a player. Resolve controlled pets through GetLivingOwner so
+            // bot-owned pets receive the same immunity checks as human pets.
+            GameLiving playerShapedAttacker = PvpCombatant.Resolve(attacker);
+            GameLiving playerShapedDefender = PvpCombatant.Resolve(defender);
 
-            // if Pet, let's define the controller once
-            if (defender is GameNPC)
-                if ((defender as GameNPC).Brain is IControlledBrain)
-                    playerDefender = ((defender as GameNPC).Brain as IControlledBrain).GetPlayerOwner();
-
-            if (attacker is GameNPC)
-                if ((attacker as GameNPC).Brain is IControlledBrain)
-                    playerAttacker = ((attacker as GameNPC).Brain as IControlledBrain).GetPlayerOwner();
-
-            if (playerDefender != null && (playerDefender.Client.ClientState == GameClient.eClientState.WorldEnter || playerDefender.IsInvulnerableToAttack))
+            if (playerShapedDefender != null &&
+                (PvpCombatant.IsEnteringWorld(playerShapedDefender) || PvpCombatant.IsInvulnerableToAttack(playerShapedDefender)))
             {
                 if (!quiet)
                     MessageToLiving(attacker, defender.Name + " is entering the game and is temporarily immune to PvP attacks!");
                 return false;
             }
 
-            if (playerAttacker != null && playerDefender != null)
+            if (playerShapedAttacker != null && playerShapedDefender != null)
             {
                 // Attacker immunity
-                if (playerAttacker.IsInvulnerableToAttack)
+                if (PvpCombatant.IsInvulnerableToAttack(playerShapedAttacker))
                 {
                     if (quiet == false) MessageToLiving(attacker, "You can't attack players until your PvP invulnerability timer wears off!");
                     return false;
                 }
 
                 // Defender immunity
-                if (playerDefender.IsInvulnerableToAttack)
+                if (PvpCombatant.IsInvulnerableToAttack(playerShapedDefender))
                 {
                     if (quiet == false) MessageToLiving(attacker, defender.Name + " is temporarily immune to PvP attacks!");
                     return false;
@@ -383,9 +384,9 @@ namespace DOL.GS.ServerRules
                 if ((((GameNPC)defender).Flags & GameNPC.eFlags.PEACE) != 0)
                     return false;
             // Players can't attack mobs while they have immunity
-            if (playerAttacker != null && defender != null)
+            if (playerShapedAttacker != null && defender != null)
             {
-                if ((defender is GameNPC) && (playerAttacker.IsInvulnerableToAttack))
+                if ((defender is GameNPC) && PvpCombatant.IsInvulnerableToAttack(playerShapedAttacker))
                 {
                     if (quiet == false) MessageToLiving(attacker, "You can't attack until your PvP invulnerability timer wears off!");
                     return false;
@@ -393,7 +394,7 @@ namespace DOL.GS.ServerRules
             }
 
             // GMs can't be attacked
-            if (playerDefender != null && playerDefender.Client.Account.PrivLevel > 1)
+            if (playerShapedDefender is GamePlayer playerDefender && playerDefender.Client.Account.PrivLevel > 1)
                 return false;
 
             //flame - Commenting out Safe Area check as it was causing lots of lock contention in the GetAreasOfSpot() code. We currently dont have safe-areas so this doesnt affect anything
@@ -1908,11 +1909,11 @@ namespace DOL.GS.ServerRules
             ProcessXpGainers(killedPlayer,
                 out double totalDamage,
                 out Dictionary<GamePlayer, EntityCountTotalDamagePair> playerCountAndDamage,
-                out _,
+                out Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage,
                 out Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
                 out _);
 
-            if (playerCountAndDamage.Count == 0)
+            if (playerCountAndDamage.Count == 0 && botCountAndDamage.Count == 0)
                 return;
 
             bool isWorthAnything = false;
@@ -1928,6 +1929,10 @@ namespace DOL.GS.ServerRules
                 }
             }
 
+            foreach (var pair in botCountAndDamage)
+                AwardBotOnPlayerKill(pair.Key, killer, totalDamage, killedPlayer,
+                    botCountAndDamage, groupCountAndDamage, out isWorthAnything);
+
             killedPlayer.DeathsPvP++;
 
             if (isWorthAnything)
@@ -1936,14 +1941,14 @@ namespace DOL.GS.ServerRules
             static void ProcessXpGainers(GamePlayer killedPlayer,
                 out double totalDamage,
                 out Dictionary<GamePlayer, EntityCountTotalDamagePair> playerCountAndDamage,
-                out ItemOwnerTotalDamagePair mostDamagingPlayer,
+                out Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage,
                 out Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
                 out ItemOwnerTotalDamagePair mostDamagingGroup)
             {
                 totalDamage = 0;
 
                 playerCountAndDamage = new();
-                mostDamagingPlayer = new();
+                botCountAndDamage = new();
 
                 groupCountAndDamage = null;
                 mostDamagingGroup = null;
@@ -1952,51 +1957,103 @@ namespace DOL.GS.ServerRules
                 {
                     totalDamage += pair.Value; // Should be done before excluding players.
 
-                    // We only care about players in range.
-                    if (pair.Key is not GamePlayer player || player.ObjectState is not GameObject.eObjectState.Active || !player.IsWithinRadius(killedPlayer, WorldMgr.MAX_EXPFORKILL_DISTANCE))
+                    GameLiving combatant = PvpCombatant.Resolve(pair.Key);
+                    if (combatant is not (GamePlayer or GameBot) ||
+                        combatant.ObjectState is not GameObject.eObjectState.Active ||
+                        !combatant.IsWithinRadius(killedPlayer, WorldMgr.MAX_EXPFORKILL_DISTANCE) ||
+                        PvpCombatant.AreAllied(combatant, killedPlayer))
                         continue;
 
-                    ProcessDamage(player, pair.Value, player, mostDamagingPlayer, playerCountAndDamage);
+                    if (combatant is GamePlayer player)
+                        AddContribution(player, pair.Value, player, playerCountAndDamage);
+                    else if (combatant is GameBot bot && bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper)
+                        AddContribution(bot, pair.Value, bot, botCountAndDamage);
+                    else
+                        continue;
 
-                    Group group = player.Group;
+                    Group group = combatant.Group;
 
                     if (group != null)
                     {
                         groupCountAndDamage ??= new();
                         mostDamagingGroup ??= new();
-                        ProcessDamage(player, pair.Value, group, mostDamagingGroup, groupCountAndDamage);
+                        AddContribution(combatant, pair.Value, group, groupCountAndDamage);
                     }
                 }
 
-                static void ProcessDamage<T>(GamePlayer player, double damage, T entity, ItemOwnerTotalDamagePair mostDamagingEntity, Dictionary<T, EntityCountTotalDamagePair> entityDamage) where T : class, IGameStaticItemOwner
+                static void AddContribution<T>(GameLiving participant, double damage, T entity,
+                    Dictionary<T, EntityCountTotalDamagePair> entityDamage)
+                    where T : class, IGameStaticItemOwner
                 {
-                    double totalDamage;
-
                     if (entityDamage.TryGetValue(entity, out EntityCountTotalDamagePair value))
                     {
                         value.Count++;
                         value.Damage += damage;
-                        totalDamage = value.Damage;
-                        int level = player.Level;
+                        int level = participant.Level;
 
                         if (value.HighestLevelPlayer.Level < level)
-                            value.HighestLevelPlayer = player;
+                            value.HighestLevelPlayer = participant;
                     }
                     else
-                    {
-                        totalDamage = damage;
-                        entityDamage[entity] = new(1, totalDamage, player);
-                    }
-
-                    if (mostDamagingEntity.Damage == 0 || totalDamage > mostDamagingEntity.Damage)
-                    {
-                        if (entity != mostDamagingEntity.Owner)
-                            mostDamagingEntity.Owner = entity;
-
-                        mostDamagingEntity.Damage = totalDamage;
-                    }
+                        entityDamage[entity] = new(1, damage, participant);
                 }
             }
+        }
+
+        private static void AwardBotOnPlayerKill(GameBot botToAward,
+            GameObject killer,
+            double playerTotalDamageReceived,
+            GamePlayer killedPlayer,
+            Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage,
+            Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
+            out bool isWorthAnything)
+        {
+            isWorthAnything = false;
+            if (botToAward?.IsAutonomousWorldBot != true || botToAward.IsTemporaryGroupHelper ||
+                playerTotalDamageReceived <= 0)
+                return;
+
+            EntityCountTotalDamagePair contribution;
+            if (botToAward.Group != null)
+            {
+                if (groupCountAndDamage == null ||
+                    !groupCountAndDamage.TryGetValue(botToAward.Group, out contribution))
+                    return;
+            }
+            else if (!botCountAndDamage.TryGetValue(botToAward, out contribution))
+            {
+                return;
+            }
+
+            isWorthAnything = killedPlayer.DeathTime + Properties.RP_WORTH_SECONDS <= killedPlayer.PlayedTime;
+            if (!isWorthAnything)
+                return;
+
+            double damagePercent = Math.Min(1.0, contribution.Damage / playerTotalDamageReceived);
+            int contributorCount = Math.Max(1, contribution.Count);
+
+            long baseXpReward = killedPlayer.ExperienceValue / contributorCount;
+            long xpCap = botToAward.GetExperienceValueForLevel(botToAward.Level) * 4 *
+                Properties.XP_PVP_CAP_PERCENT / 100;
+            long experience = (long)(Math.Min(baseXpReward, xpCap) * damagePercent);
+            if (experience > 0)
+                botToAward.GainExperience(eXPSource.Player, experience);
+
+            int botRealmPointValue = AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(
+                botToAward.Level, botToAward.RealmLevel);
+            int realmPoints = Math.Min(killedPlayer.RealmPointsValue / contributorCount,
+                botRealmPointValue * 2);
+            realmPoints = (int)(realmPoints * damagePercent);
+            DbBattleground battleground = GameServer.KeepManager.GetBattleground(botToAward.CurrentRegionID);
+            if (battleground == null || botToAward.RealmLevel < battleground.MaxRealmLevel)
+                realmPoints = (int)(realmPoints *
+                    (1.0 + 2.0 * (killedPlayer.RealmLevel - botToAward.RealmLevel) / 900.0));
+
+            if (botToAward.Group != null)
+                realmPoints += (int)(realmPoints * (contributorCount - 1) * 0.125);
+
+            if (realmPoints > 0)
+                botToAward.GainRealmPoints(realmPoints, true);
         }
 
         private static void AwardPlayerOnPlayerKill(GamePlayer playerToAward,

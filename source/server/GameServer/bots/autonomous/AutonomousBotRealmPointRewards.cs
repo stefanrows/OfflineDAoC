@@ -4,6 +4,7 @@ using System.Linq;
 using DOL.AI.Brain;
 using DOL.Database;
 using DOL.GS.PacketHandler;
+using DOL.GS.ServerRules;
 using DOL.GS.ServerProperties;
 using static DOL.GS.ServerRules.IServerRules;
 
@@ -77,7 +78,7 @@ public static class AutonomousBotRealmPointRewards
         foreach (KeyValuePair<GameLiving, double> pair in rawContributors)
         {
             GameLiving credited = ResolveRootRewardOwner(pair.Key);
-            if (credited == null || credited.Realm == eRealm.None || credited.Realm == killedBot.Realm)
+            if (credited == null || credited.Realm == eRealm.None || PvpCombatant.AreAllied(credited, killedBot))
                 continue;
 
             hostileContributors[credited] = hostileContributors.TryGetValue(credited, out double existing)
@@ -89,7 +90,11 @@ public static class AutonomousBotRealmPointRewards
         if (totalDamage <= 0)
             return;
 
+        if (Properties.PVP_DEATH_CON_LOSS)
+            killedBot.TotalConstitutionLostAtDeath += 3;
+
         Dictionary<GamePlayer, EntityCountTotalDamagePair> playerContributions = new();
+        Dictionary<GameBot, EntityCountTotalDamagePair> botContributions = new();
         Dictionary<Group, EntityCountTotalDamagePair> groupContributions = new();
 
         foreach (KeyValuePair<GameLiving, double> pair in hostileContributors)
@@ -97,9 +102,24 @@ public static class AutonomousBotRealmPointRewards
             // Persistent gamebots remain part of the damage denominator, just
             // like another real participant, but this path only pays connected
             // players. Temporary companions have already resolved to the owner.
+            if (pair.Key is GameBot bot)
+            {
+                if (!bot.IsAutonomousWorldBot || bot.IsTemporaryGroupHelper ||
+                    bot.ObjectState is not GameObject.eObjectState.Active ||
+                    !bot.IsWithinRadius(killedBot, WorldMgr.MAX_EXPFORKILL_DISTANCE) ||
+                    bot.IsObjectGreyCon(killedBot))
+                    continue;
+
+                AddContribution(bot, pair.Value, bot, botContributions);
+                if (bot.Group != null)
+                    AddContribution(bot, pair.Value, bot.Group, groupContributions);
+                continue;
+            }
+
             if (pair.Key is not GamePlayer player ||
                 player.ObjectState is not GameObject.eObjectState.Active ||
-                !player.IsWithinRadius(killedBot, WorldMgr.MAX_EXPFORKILL_DISTANCE))
+                !player.IsWithinRadius(killedBot, WorldMgr.MAX_EXPFORKILL_DISTANCE) ||
+                player.IsObjectGreyCon(killedBot))
             {
                 continue;
             }
@@ -109,7 +129,7 @@ public static class AutonomousBotRealmPointRewards
                 AddContribution(player, pair.Value, player.Group, groupContributions);
         }
 
-        if (playerContributions.Count == 0)
+        if (playerContributions.Count == 0 && botContributions.Count == 0)
             return;
 
         GameLiving creditedKiller = ResolveRootRewardOwner(killer as GameLiving);
@@ -139,6 +159,11 @@ public static class AutonomousBotRealmPointRewards
 
                     if (realmPointsEarned > 0)
                         player.GainRealmPoints(realmPointsEarned, true);
+
+                    long experience = CalculatePlayerKillExperience(killedBot, player, contribution,
+                        totalDamage, damagePercent);
+                    if (experience > 0)
+                        player.GainExperience(eXPSource.Player, experience);
                 }
                 else
                 {
@@ -150,6 +175,31 @@ public static class AutonomousBotRealmPointRewards
                 bool soloKill = damagePercent >= 1.0 && contributorCount == 1;
                 player.UpdateKillStatsOnPlayerKill(killedBot.Realm, deathBlow, soloKill, realmPointsEarned);
             }
+        }
+
+        foreach (KeyValuePair<GameBot, EntityCountTotalDamagePair> pair in botContributions)
+        {
+            GameBot bot = pair.Key;
+            EntityCountTotalDamagePair contribution = pair.Value;
+            if (bot.Group != null && groupContributions.TryGetValue(bot.Group, out EntityCountTotalDamagePair group))
+                contribution = group;
+
+            double damagePercent = Math.Min(1.0, contribution.Damage / totalDamage);
+            if (!isWorthRealmPoints)
+                continue;
+
+            int contributorCount = Math.Max(1, contribution.Count);
+            int botVictimValue = GetPlayerEquivalentRealmPointValue(killedBot.Level, killedBot.RealmLevel);
+            int botValue = GetPlayerEquivalentRealmPointValue(bot.Level, bot.RealmLevel);
+            int realmPoints = CalculateRealmPointReward(botVictimValue, killedBot.RealmLevel,
+                botValue, bot.RealmLevel, contributorCount, contributorCount, damagePercent, true);
+            if (realmPoints > 0)
+                bot.GainRealmPoints(realmPoints, true);
+
+            long experience = CalculatePlayerKillExperience(killedBot, bot, contribution,
+                totalDamage, damagePercent);
+            if (experience > 0)
+                bot.GainExperience(eXPSource.Player, experience);
         }
     }
 
@@ -180,5 +230,19 @@ public static class AutonomousBotRealmPointRewards
         {
             contributions[entity] = new EntityCountTotalDamagePair(1, damage, participant);
         }
+    }
+
+    private static long CalculatePlayerKillExperience(GameBot killedBot, GameLiving awarder,
+        EntityCountTotalDamagePair contribution, double totalDamage, double damagePercent)
+    {
+        if (contribution == null || totalDamage <= 0 || damagePercent <= 0)
+            return 0;
+
+        int contributorCount = Math.Max(1, contribution.Count);
+        long baseExperience = killedBot.GetExperienceValueForLevel(killedBot.Level) * 4 / contributorCount;
+        long experienceCap = awarder.GetExperienceValueForLevel(awarder.Level) * 4 *
+            Properties.XP_PVP_CAP_PERCENT / 100;
+        baseExperience = Math.Min(baseExperience, experienceCap);
+        return (long)(baseExperience * damagePercent);
     }
 }

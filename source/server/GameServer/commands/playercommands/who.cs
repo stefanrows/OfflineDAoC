@@ -48,7 +48,8 @@ namespace DOL.GS.Commands
 			GameBot[] worldBots = AutonomousBotRegistry.Snapshot()
 				.Where(bot => bot?.IsAutonomousWorldBot == true && !bot.IsTemporaryGroupHelper &&
 					bot.ObjectState == GameObject.eObjectState.Active &&
-					(client.Account.PrivLevel > (uint)ePrivLevel.Player || bot.Realm == client.Player.Realm))
+					(client.Account.PrivLevel > (uint)ePrivLevel.Player ||
+					 GameServer.ServerRules.IsSameRealm(client.Player, bot, true)))
 				.OrderBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase)
 				.ToArray();
 

@@ -21,6 +21,7 @@ using DOL.GS.PlayerClass;
 using DOL.GS.PlayerTitles;
 using DOL.GS.Quests;
 using DOL.GS.RealmAbilities;
+using DOL.GS.ServerRules;
 using DOL.GS.ServerProperties;
 using DOL.GS.SkillHandler;
 using DOL.GS.Spells;
@@ -5771,9 +5772,12 @@ namespace DOL.GS
 
         public override void AddXPGainer(GameLiving xpGainer, double damageAmount)
         {
-            // In case a player is attacked by a player of the same realm (e.g. in a duel, due to a confusion spell, a bug, etc.).
-            // This also means the amount of damage dealt by the xp gainer won't be taken into account when awarding XP, RPs, BPs.
-            if (xpGainer.Realm == Realm)
+            // Normal RvR excludes same-realm damage. Camlann only excludes an
+            // allied player-shaped attacker; same-realm strangers are valid PvP
+            // opponents and must remain in the reward denominator.
+            if (GameServer.ServerRules is PvPServerRules
+                ? PvpCombatant.AreAllied(this, xpGainer)
+                : xpGainer.Realm == Realm)
                 return;
 
             base.AddXPGainer(xpGainer, damageAmount);
