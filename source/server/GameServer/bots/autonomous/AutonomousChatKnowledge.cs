@@ -54,7 +54,7 @@ public static class AutonomousChatKnowledge
         {
             foreach (GameStableMaster master in region.Objects.OfType<GameStableMaster>()
                          .Where(master => master.ObjectState is GameObject.eObjectState.Active &&
-                                          (master.Realm == realm || master.Realm == eRealm.None) && master.TradeItems != null))
+                                          master.TradeItems != null))
             {
                 foreach (DictionaryEntry entry in master.TradeItems.GetAllItems())
                 {
@@ -146,7 +146,7 @@ public static class AutonomousChatKnowledge
         if (place.IsDungeon)
         {
             DbZonePoint entrance = DOLDB<DbZonePoint>.SelectObjects(DB.Column("TargetRegion").IsEqualTo(place.RegionId))
-                .Where(point => point.SourceRegion != 0 && (point.Realm == 0 || point.Realm == (ushort)realm))
+                .Where(point => point.SourceRegion != 0)
                 .FirstOrDefault(point => RegionIsAccessible(realm, point.SourceRegion));
             if (entrance != null)
             {
@@ -154,11 +154,11 @@ public static class AutonomousChatKnowledge
                 string sourceArea = source?.GetZone(entrance.SourceX, entrance.SourceY)?.Description ?? source?.Description;
                 if (!string.IsNullOrWhiteSpace(sourceArea))
                 {
-                    answer = $"The {realm} entrance to {place.Name} is in {sourceArea}. Travel together and clear the approach carefully.";
+                    answer = $"The entrance to {place.Name} is in {sourceArea}. Travel together and clear the approach carefully.";
                     return true;
                 }
             }
-            answer = $"{place.Name} is a dungeon reached from your realm side. Find the marked entrance and bring a suitable group.";
+            answer = $"{place.Name} is a dungeon reached from the marked entrance. Bring a suitable group.";
             return true;
         }
 
@@ -242,15 +242,8 @@ public static class AutonomousChatKnowledge
         return marker >= 0 ? value[(marker + "ticket to".Length)..].Trim() : value;
     }
 
-    // Matches the authoritative Classic/SI homeland ownership used by /mobs and player travel.
-    private static bool RegionIsAccessible(eRealm realm, ushort regionId)
-    {
-        if (regionId is 1 or 10 or 20 or 21 or 22 or 23 or 24 or 50 or 51 or 60 or 61 or 62)
-            return realm == eRealm.Albion;
-        if (regionId is 100 or 101 or 125 or 126 or 127 or 128 or 129 or 150 or 151 or 160 or 161)
-            return realm == eRealm.Midgard;
-        if (regionId is 180 or 181 or 190 or 191 or 192 or 193 or 194 or 200 or 201 or 220 or 221 or 222 or 223 or 224)
-            return realm == eRealm.Hibernia;
-        return true;
-    }
+        // Camlann keeps classic/SI travel and town knowledge realm-open. The
+        // only regions excluded here are battlegrounds, which are disabled.
+        private static bool RegionIsAccessible(eRealm realm, ushort regionId)
+            => !AutonomousRealmBoundary.IsBattlegroundRegion(regionId);
 }

@@ -101,7 +101,7 @@ namespace DOL.GS
                 return FinishTownIdle(bot, "Less than fifteen minutes remain after maintenance/travel");
             if (_townIdleDestination == null)
             {
-                _townCandidates ??= IdleTownCatalog().Where(town => town.Realm == bot.Realm &&
+                _townCandidates ??= IdleTownCatalog().Where(town =>
                     IsIdleTownLevelAppropriate(bot.Level, town.Capital, town.MinimumLevel, town.MaximumLevel))
                     .OrderBy(_ => Random.Shared.Next()).ToArray();
                 if (_townCandidateIndex >= Math.Min(12, _townCandidates.Length))
@@ -112,7 +112,7 @@ namespace DOL.GS
                 long tick = GameLoop.GameLoopTime;
                 long next = Volatile.Read(ref _nextTownRouteValidation);
                 SetStatus(bot, "Choosing a reachable town", "Take an optional 15-30 minute town break",
-                    "Validating a same-realm town route within the original maintenance deadline");
+                    "Validating an open town route within the original maintenance deadline");
                 if (tick < next || Interlocked.CompareExchange(ref _nextTownRouteValidation, tick + 500, next) != next)
                     return true;
                 IdleTown town = _townCandidates[_townCandidateIndex++];

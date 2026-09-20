@@ -12,7 +12,6 @@ namespace DOL.GS
             ushort capitalId = AutonomousStuckWatchdog.CapitalFor(bot.Realm).RegionId;
             if (capitalId == 0 || capitalId == bot.CurrentRegionID) return false;
             DbZonePoint[] points = ZonePoints().Where(point =>
-                (point.Realm == 0 || point.Realm == (ushort)bot.Realm) &&
                 !IsZonePointQuarantined(bot, point) &&
                 (point.SourceRegion == capitalId || point.TargetRegion == capitalId) &&
                 IsRegionEdgeAccessible(bot.Realm, point.SourceRegion, point.TargetRegion) &&
@@ -144,7 +143,6 @@ namespace DOL.GS
         private static bool IsUsableCapitalRecoveryEdge(GameBot bot, DbZonePoint edge) =>
             edge != null && IsAuthoritativeZonePointEdge(edge) &&
             edge.SourceRegion == bot.CurrentRegionID && edge.TargetRegion != bot.CurrentRegionID &&
-            (edge.Realm == 0 || edge.Realm == (ushort)bot.Realm) &&
             IsRegionEdgeAccessible(bot.Realm, edge.SourceRegion, edge.TargetRegion) &&
             IsRegionPointAccessible(bot.Realm, edge.TargetRegion, edge.TargetX, edge.TargetY);
     }

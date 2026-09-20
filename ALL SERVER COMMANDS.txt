@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.7.0 - SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.8.0 - SERVER COMMAND REFERENCE
 
 285 command registrations read from the shipped server assemblies.
 Normal commands can still have level, realm, cooldown or state requirements.
@@ -6,7 +6,7 @@ GM/admin commands can change or delete game data. Back up before using them.
 Descriptions containing a localization key have no matching shipped English text.
 
 COMMON COMPANION COMMANDS
-/spawn opens the companion class picker; /spawn <class> creates that class.
+/spawn opens the all-realm companion class picker; /spawn <class> uses your realm, and /spawn <realm> <class> creates a foreign-realm class.
 /raid 40 or /raid 80 enables a level-50 companion raid (total includes you).
 There is no /spawn 40 or /spawn 80 raid-size command.
 /aggressive and /defensive control companion engagement.
@@ -216,7 +216,7 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.EmoteCommandHandler
 
 /classes
-  Lists your realm's Classic + SI classes and party roles
+  Lists every realm's Classic + SI classes and party roles
   /classes
   Handler: DOL.GS.Commands.ClassesCommandHandler
 

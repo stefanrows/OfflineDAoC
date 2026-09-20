@@ -17,39 +17,33 @@ namespace DOL.GS
 	/// <author>Aredhel</author>
 	public class AllRealmsTeleporter : GameTeleporter
 	{
-		private static new readonly Logging.Logger log = Logging.LoggerManager.Create(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-		
 		/// <summary>
 		/// Display teleport destinations for passed realm
 		/// </summary>
-		/// <param name="destRealm">Realm to display destinations for</param>
+		/// <param name="destRealm">Player realm; retained for the shared teleporter API</param>
 		public String DisplayTeleportDestinations(eRealm destRealm)
 		{
-			StringBuilder sRet = new StringBuilder("");
+			return BuildTravelMenu();
+		}
 
-			switch (destRealm)
-			{
-				case eRealm.Albion:
-					sRet.Append("Would you like to teleport to?\n[Camelot]\n[Albion Frontiers] or [Battlegrounds]\n[Albion Darkness Falls]\n");
-					sRet.Append("[Albion Mainland]\n[Albion Dungeons]\n[Albion Shrouded Isles]\n[Albion Oceanus]\n");
-					sRet.Append("[Housing]\n[Hibernia] or [Midgard]");
-					break;
-				case eRealm.Midgard:
-					sRet.Append("Would you like to teleport to?\n[Jordheim]\n[Midgard Frontiers] or [Battlegrounds]\n[Midgard Darkness Falls]\n");
-					sRet.Append("[Midgard Mainland]\n[Midgard Dungeons]\n[Midgard Shrouded Isles]\n[Midgard Oceanus]\n");
-					sRet.Append("[Housing]\n[Albion] or [Hibernia]");
-					break;
-				case eRealm.Hibernia:
-					sRet.Append("Would you like to teleport to?\n[Tir na Nog]\n[Hibernia Frontiers] or [Battlegrounds]\n[Hibernia Darkness Falls]\n");
-					sRet.Append("[Hibernia Mainland]\n[Hibernia Dungeons]\n[Hibernia Shrouded Isles]\n[Hibernia Oceanus]\n");
-					sRet.Append("[Housing]\n[Albion] or [Midgard]");
-					break;
-				default:
-					log.Warn(String.Format("DisplayTeleportDestinations does not handle player realm [{0}]", destRealm.ToString()));
-					break;
-			}
-
-			return sRet.ToString();
+		/// <summary>
+		/// Builds the realm-open travel menu without requiring a live NPC instance.
+		/// </summary>
+		public static String BuildTravelMenu()
+		{
+			// Camlann travel is deliberately realm-open. Keep every capital and
+			// every realm's leveling-town menu visible to every player; the town
+			// itself remains a normal PvP destination. Battlegrounds are omitted
+			// because they are disabled in this ruleset.
+			return "Would you like to teleport to?\n" +
+				"[Camelot] [Jordheim] [Tir na Nog]\n" +
+				"[Albion Frontiers] [Midgard Frontiers] [Hibernia Frontiers]\n" +
+				"[Albion Darkness Falls] [Midgard Darkness Falls] [Hibernia Darkness Falls]\n" +
+				"[Albion Mainland] [Midgard Mainland] [Hibernia Mainland]\n" +
+				"[Albion Dungeons] [Midgard Dungeons] [Hibernia Dungeons]\n" +
+				"[Albion Shrouded Isles] [Midgard Shrouded Isles] [Hibernia Shrouded Isles]\n" +
+				"[Albion Oceanus] [Midgard Oceanus] [Hibernia Oceanus]\n" +
+				"[Housing]";
 		}
 
 		/// <summary>

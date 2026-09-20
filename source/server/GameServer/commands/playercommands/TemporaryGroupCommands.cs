@@ -11,22 +11,50 @@ namespace DOL.GS.Commands
     public static class TemporaryGroupClassCatalog
     {
 
+        private static readonly eRealm[] PlayableRealms =
+        [
+            eRealm.Albion,
+            eRealm.Midgard,
+            eRealm.Hibernia,
+        ];
+
         public static IEnumerable<(eCharacterClass CharacterClass, string Role)> ForRealm(eRealm realm) =>
             AutonomousBotIdentityGenerator.GetEraClasses(realm)
                 .Select(characterClass => (characterClass, BotPartyRoles.Label(characterClass)));
 
+        public static IEnumerable<(eRealm Realm, eCharacterClass CharacterClass, string Role)> All() =>
+            PlayableRealms.SelectMany(realm => ForRealm(realm)
+                .Select(entry => (realm, entry.CharacterClass, entry.Role)));
+
         public static bool TryResolve(eRealm realm, string input, out eCharacterClass characterClass)
         {
+            if (TryResolve(realm, input, out _, out characterClass))
+                return true;
+
+            characterClass = default;
+            return false;
+        }
+
+        public static bool TryResolve(
+            eRealm defaultRealm,
+            string input,
+            out eRealm realm,
+            out eCharacterClass characterClass)
+        {
             string wanted = Normalize(input);
-            foreach ((eCharacterClass candidate, _) in ForRealm(realm))
+            foreach ((eRealm candidateRealm, eCharacterClass candidate, _) in All())
             {
-                if (Normalize(candidate.ToString()) == wanted)
-                {
-                    characterClass = candidate;
-                    return true;
-                }
+                bool explicitRealm = Normalize(candidateRealm.ToString() + candidate) == wanted;
+                bool defaultRealmClass = candidateRealm == defaultRealm && Normalize(candidate.ToString()) == wanted;
+                if (!explicitRealm && !defaultRealmClass)
+                    continue;
+
+                realm = candidateRealm;
+                characterClass = candidate;
+                return true;
             }
 
+            realm = eRealm.None;
             characterClass = default;
             return false;
         }
@@ -71,11 +99,12 @@ namespace DOL.GS.Commands
 
         public static string BuildMenuText(eRealm realm)
         {
-            string[] choices = TemporaryGroupClassCatalog.ForRealm(realm)
-                .Select(entry => $"[{entry.CharacterClass}]")
-                .ToArray();
-            string links = string.Join('\n', choices.Chunk(4).Select(chunk => string.Join("   ", chunk)));
-            return $"Choose a {realm} companion to add to your group:\n\n{links}\n\nClick one class name.";
+            string links = string.Join('\n', TemporaryGroupClassCatalog.All()
+                .GroupBy(entry => entry.Realm)
+                .SelectMany(group => new[] { $"{group.Key}:" }
+                    .Concat(group.Select(entry => $"[{entry.Realm}: {entry.CharacterClass}]")
+                        .Chunk(4).Select(chunk => string.Join("   ", chunk)))));
+            return $"Choose a companion from any realm to add to your group:\n\n{links}\n\nClick one class name.";
         }
 
         internal static bool Open(GamePlayer player)
@@ -109,10 +138,10 @@ namespace DOL.GS.Commands
             if (!ReferenceEquals(source, _owner) || string.IsNullOrWhiteSpace(text))
                 return false;
 
-            if (!TemporaryGroupClassCatalog.TryResolve(_owner.Realm, text, out eCharacterClass characterClass))
+            if (!TemporaryGroupClassCatalog.TryResolve(_owner.Realm, text, out eRealm realm, out eCharacterClass characterClass))
                 return false;
 
-            SpawnTemporaryGroupBotCommandHandler.Spawn(_owner.Client, characterClass);
+            SpawnTemporaryGroupBotCommandHandler.Spawn(_owner.Client, realm, characterClass);
 
             // A class can be clicked repeatedly and other classes can be added
             // without typing /spawn again. Reassert the invisible conversation
@@ -154,18 +183,18 @@ namespace DOL.GS.Commands
         }
     }
 
-    [CmdAttribute("&classes", ePrivLevel.Player, "Lists your realm's Classic + SI classes and party roles", "/classes")]
+    [CmdAttribute("&classes", ePrivLevel.Player, "Lists every realm's Classic + SI classes and party roles", "/classes")]
     public sealed class ClassesCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         public void OnCommand(GameClient client, string[] args)
         {
-            var entries = TemporaryGroupClassCatalog.ForRealm(client.Player.Realm)
-                .Select(entry => $"{entry.CharacterClass} ({entry.Role})")
+            var entries = TemporaryGroupClassCatalog.All()
+                .Select(entry => $"{entry.Realm}: {entry.CharacterClass} ({entry.Role})")
                 .ToArray();
-            DisplayMessage(client, $"{client.Player.Realm} Classic + SI classes:");
+            DisplayMessage(client, "All realms' Classic + SI classes:");
             foreach (string line in entries.Chunk(4).Select(chunk => string.Join("  |  ", chunk)))
                 DisplayMessage(client, line);
-            DisplayMessage(client, "Use /spawn <class name> to create a temporary same-level party helper.");
+            DisplayMessage(client, "Use /spawn <class name> for your realm, or /spawn <realm> <class name> for a cross-realm helper.");
         }
     }
 
@@ -189,19 +218,25 @@ namespace DOL.GS.Commands
             }
 
             string requestedClass = string.Join(' ', args.Skip(1));
-            if (!TemporaryGroupClassCatalog.TryResolve(player.Realm, requestedClass, out eCharacterClass characterClass))
+            if (!TemporaryGroupClassCatalog.TryResolve(player.Realm, requestedClass, out eRealm realm, out eCharacterClass characterClass))
             {
-                DisplayMessage(client, $"'{requestedClass}' is not a Classic + SI {player.Realm} class. Type /classes.");
+                DisplayMessage(client, $"'{requestedClass}' is not a Classic + SI class from any realm. Type /classes.");
                 return;
             }
 
-            Spawn(client, characterClass);
+            Spawn(client, realm, characterClass);
         }
 
         internal static void Spawn(GameClient client, eCharacterClass characterClass)
         {
+            if (client?.Player != null)
+                Spawn(client, client.Player.Realm, characterClass);
+        }
+
+        internal static void Spawn(GameClient client, eRealm realm, eCharacterClass characterClass)
+        {
             GamePlayer player = client?.Player;
-            if (player == null || !TemporaryGroupClassCatalog.ForRealm(player.Realm)
+            if (player == null || !TemporaryGroupClassCatalog.ForRealm(realm)
                     .Any(entry => entry.CharacterClass == characterClass))
                 return;
 
@@ -213,7 +248,7 @@ namespace DOL.GS.Commands
 
             eGender gender = Random.Shared.Next(2) == 0 ? eGender.Male : eGender.Female;
             AutonomousBotIdentityGenerator.Identity identity =
-                AutonomousBotIdentityGenerator.GenerateForClass(player.Realm, gender, characterClass);
+                AutonomousBotIdentityGenerator.GenerateForClass(realm, gender, characterClass);
             byte gearLevel = player.Level == 50 ? (byte)50 :
                 (byte)Random.Shared.Next(Math.Max(1, player.Level - 10), player.Level + 1);
             GameBot helper;

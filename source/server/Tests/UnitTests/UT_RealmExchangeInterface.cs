@@ -139,6 +139,7 @@ public sealed class UT_RealmExchangeInterface
         broker.Realm = eRealm.Hibernia;
         GamePlayer player = (GamePlayer)RuntimeHelpers.GetUninitializedObject(typeof(GamePlayer));
         player.InternalID = "human-page-test";
+        player.Realm = eRealm.Hibernia;
         SetTempProperties(player);
         player.TempProperties.SetProperty("OfflineRealmExchange.ListingsPage", 1);
 
@@ -158,6 +159,27 @@ public sealed class UT_RealmExchangeInterface
             Is.EqualTo((int)eInventorySlot.Consignment_First + 100));
         Assert.That(page[(int)eInventorySlot.HousingInventory_Last].SlotPosition,
             Is.EqualTo((int)eInventorySlot.Consignment_Last + 100));
+    }
+
+    [Test]
+    public void HumanListingsUseThePlayersRealmAtAForeignCapitalBroker()
+    {
+        RealmExchangeBroker broker = (RealmExchangeBroker)RuntimeHelpers.GetUninitializedObject(typeof(RealmExchangeBroker));
+        typeof(GameNPC).GetField("m_brains", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(broker, new ArrayList());
+        broker.Realm = eRealm.Albion;
+        GamePlayer player = (GamePlayer)RuntimeHelpers.GetUninitializedObject(typeof(GamePlayer));
+        player.InternalID = "foreign-capital-seller";
+        player.Realm = eRealm.Hibernia;
+        SetTempProperties(player);
+
+        DbInventoryItem foreignRealmListing = Listing("Hibernia listing", RealmExchangeBroker.HiberniaOwnerLot, eObjectType.Cloth, 10);
+        foreignRealmListing.OwnerID = player.InternalID;
+        DbInventoryItem brokerRealmListing = Listing("Albion listing", RealmExchangeBroker.AlbionOwnerLot, eObjectType.Cloth, 10);
+        brokerRealmListing.OwnerID = player.InternalID;
+        Add(foreignRealmListing);
+        Add(brokerRealmListing);
+
+        Assert.That(broker.GetDbItems(player), Is.EquivalentTo(new[] { foreignRealmListing }));
     }
 
     private static DbInventoryItem Listing(string name, ushort ownerLot, eObjectType objectType, int level)

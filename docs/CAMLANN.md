@@ -12,9 +12,13 @@ over a running install unless the owner asks.
   player-shaped ownership/alliance resolution, bot immunity, safe-area and
   `/safety` rules, and grouped-bot client guild-ID presentation.
 - Tier 1 real-client spike **passed** (2026-09-19, see "Tier 1 client spike
-  record" below). The other-realm companion check is deferred to Tier 2,
-  because `/spawn` is still own-realm only until then.
-- Next: Tier 2.
+  record" below). The other-realm companion check is now covered by the Tier 2
+  server gate; a separate live-client check remains for the next client spike.
+- Tier 2 implementation is complete on the current branch: cross-realm
+  companions, open capital/town travel, foreign-capital exchange, and closed
+  battleground routing are covered by the server suite (1,902 passed on
+  2026-09-19). No live server or client was started for this offline gate.
+- Next: Tier 3.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -82,6 +86,10 @@ These are settled. Do not reopen them without the owner.
    **neutral safe hubs**, like the capitals.
 8. **Kill reward:** XP + RP for player-shaped kills, con loss on PvP death, no
    coin or item drop.
+9. **Teleporter travel:** every realm can use every capital, portal-keep
+   teleporter, and the existing Albion, Midgard, and Hibernian leveling-town
+   destinations. Leveling towns remain dangerous PvP territory; capitals and
+   portal keeps remain safe hubs. Battlegrounds stay closed.
 
 ## Contract
 
@@ -353,41 +361,49 @@ and travel. Companions can be any realm. Battlegrounds are not part of play.
 
 ### Steps
 
-1. Confirm `PvPServerRules.IsAllowedToGroup / JoinGuild / Trade / Understand`
+1. ✅ `PvPServerRules.IsAllowedToGroup / JoinGuild / Trade / Understand`
    return true. Keep them that way.
-2. City guards and `PEACE` NPCs stay unattackable. Keep guards follow
+2. ✅ City guards and `PEACE` NPCs stay unattackable. Keep guards follow
    Tier 5.
-3. **Cross-realm companions (decision 5):**
-   - `/spawn` picker lists all three realms' classes and races.
-   - Remove same-realm requirements in `BotGroupInvite` (`player.Realm !=
+3. ✅ **Cross-realm companions (decision 5):**
+   - `/spawn` picker and `/classes` list all three realms' classes and races;
+     explicit `Realm: Class` choices create the selected identity.
+   - Same-realm requirements were removed in `BotGroupInvite` (`player.Realm !=
      bot.Realm`), `GameBot` leader matching (~L113, ~L2354),
-     `PlayerLedPullCoordinator` (~L184), and `BotBrain` heal/buff/carrier
-     filters (~L4111, ~L4150), plus `BotGroupPetBuffTargets`. Use "allied"
-     instead.
+     `PlayerLedPullCoordinator` (~L184), the player-led `BotBrain` carrier
+     path (~L4111), plus `BotGroupPetBuffTargets`. Use "allied" instead. The
+     autonomous RvR guard-support filter (~L4150) remains realm-owned until
+     the Tier 3/5 RvR rewrites.
    - Equipment and weapon choice stays by the bot's **own** realm
      (`BotEquipment`, `BotRangedCombat`, `GameBot` armor selection).
-4. Stop realm-locking bot movement:
+4. ✅ Stop realm-locking bot movement:
    - `AutonomousRealmBoundary`
    - `AutonomousWorldBotController.ProtectedRealm`
    - `AutonomousTownIdleRouting`, `AutonomousWorldBotCapitalRouting` filters
    - `AutonomousFrontierTransport` (necklace/portal pairs are keyed by realm;
      let any realm use any portal-keep teleporter)
-5. Realm Exchange: use the **local** broker (`BotBrain` ~L1505 matches
-   `candidate.Realm == bot.Realm`). Keep real items and coin.
-6. Darkness Falls: `DFEnterJumpPoint` is already open when not Normal.
-   `AutonomousDarknessFallsPolicy` must stop assuming one owning realm.
-7. Housing is already realm-open on PvP. Keep.
-8. Battlegrounds: teleporters, frontier stones, and bot travel must not pick
+5. ✅ Realm Exchange: use the **local** broker (`BotBrain` ~L1505 now matches
+   the current capital, while each player's market remains realm-partitioned).
+   Keep real items and coin.
+6. ✅ Darkness Falls: `DFEnterJumpPoint` and
+   `AutonomousDarknessFallsPolicy` are already open when not Normal; the
+   owner/grace-period branch remains only for unused Normal-policy tests.
+7. ✅ Housing is already realm-open on PvP. Keep.
+8. ✅ Battlegrounds: teleporters, frontier stones, and bot travel must not pick
    BG regions. Set `bg_zones_open` false.
-9. `BotManager` name lookup (~L274) is realm-scoped; make it realm-agnostic or
-   explicitly allow duplicate names across realms.
+9. ✅ `BotManager` name lookup (~L274) is now realm-agnostic.
+10. ✅ All-realm teleporter menus expose the three capitals and every existing
+    Classic/SI leveling-town destination. The towns are open PvP zones; only
+    the capital and portal-keep safe hubs retain sanctuary behavior.
 
 ### Tests and gate
 
-- An Albion character (or bot) can path into Jordheim and use a merchant.
-- An Albion player can `/spawn` a Midgard healer that heals and buffs them.
-- Realm Exchange list/buy works from a foreign capital.
-- No autonomous goal selects a battleground region.
+- ✅ An Albion character (or bot) can path into Jordheim and use a merchant.
+- ✅ An Albion player can `/spawn` a Midgard healer that heals and buffs them.
+- ✅ Realm Exchange list/buy works from a foreign capital.
+- ✅ No autonomous goal selects a battleground region.
+- ✅ All three realms' leveling-town teleporter menus are available to every
+  realm.
 - **Gate:** Open travel and city services work; mixed-realm groups function.
 
 ---

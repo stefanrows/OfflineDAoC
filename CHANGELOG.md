@@ -12,6 +12,43 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-19
+
+### Added
+
+- Camlann Tier 2 cross-realm `/spawn` and `/classes` choices, including
+  realm-correct companion identities and equipment.
+- All-realm capital and Classic/SI leveling-town teleporter menus, with
+  battleground destinations excluded.
+- Offline tests for foreign-capital Realm Exchange listings and all-realm
+  teleporter coverage.
+
+### Changed
+
+- Mixed-realm companions, group pulls, healing/buffs, autonomous town routes,
+  stable travel, frontier portal travel, and service-NPC routing no longer use
+  realm as an access boundary; PvP alliance rules still govern hostility and
+  support.
+- Realm Exchange access is available at any capital broker while each
+  character's market remains partitioned by their own realm, preserving real
+  items, coin, and proceeds.
+- Bot name lookup is realm-agnostic, and autonomous chat knowledge covers
+  open Classic/SI travel services.
+
+### Fixed
+
+- Battleground travel is closed by default across teleporters, medallions, and
+  autonomous movement.
+- Foreign-realm portal-keep teleporters can board autonomous bots carrying the
+  correct ticket for their own identity.
+- Server-owned dummy guild creation is restart-safe, so an existing save with
+  duplicate legacy dummy-guild rows no longer prevents startup.
+
+### Removed
+
+- Same-realm restrictions from player-led companion grouping and temporary
+  companion class selection.
+
 ## [0.7.0] - 2026-09-19
 
 ### Fixed

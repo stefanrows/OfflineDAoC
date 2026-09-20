@@ -14,7 +14,7 @@ public static class AutonomousFrontierTransport
     public static void Register(OFTeleporter porter) => Porters[porter] = 0;
     public static void Unregister(OFTeleporter porter) => Porters.TryRemove(porter, out _);
     public static OFTeleporter NearestPorter(GameBot bot) => Porters.Keys
-        .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegion == bot.CurrentRegion && p.Realm == bot.Realm)
+        .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegion == bot.CurrentRegion)
         .OrderBy(bot.GetDistanceTo).FirstOrDefault();
 
     public static GameBot[] BoardingParty(GameBot bot, Passage passage) =>
@@ -113,7 +113,7 @@ public static class AutonomousFrontierTransport
             item.SlotPosition <= (int)eInventorySlot.LastBackpack && item.Count > 0 && item.Id_nb == passage.Medallion);
 
     public static bool Ready(GameBot bot, OFTeleporter porter, Request request) =>
-        bot is { IsAutonomousWorldBot: true, IsAlive: true } && bot.Realm == porter.Realm &&
+        bot is { IsAutonomousWorldBot: true, IsAlive: true } &&
         !bot.IsPlayerLedGroup && !bot.IsTemporaryGroupHelper && !bot.IsStunned && !bot.IsMezzed &&
         bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
         bot.IsWithinRadius(porter, BoardingRadius) && !bot.InCombat && !bot.IsAttacking &&

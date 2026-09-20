@@ -6,9 +6,10 @@ common='''OFFLINE DAOC 0.2 — SLASH COMMANDS
 
 COMMON PLAYER COMMANDS (NO GM REQUIRED)
 
-/classes                 List your realm's classes and companion roles.
+/classes                 List all realms' classes and companion roles.
 /spawn                   Open the companion class-selection menu.
-/spawn <class name>      Add a level-scaled temporary companion to your party.
+/spawn <class name>      Add your realm's level-scaled temporary companion.
+/spawn <realm> <class>   Add a level-scaled companion from another realm.
 /pull                    Tell party bots and pets to engage your selected target.
 /grind                   Start stationary automatic pulling with your companions.
 /grind stop              Stop automatic grind pulling.

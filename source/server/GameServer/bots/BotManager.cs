@@ -271,7 +271,7 @@ namespace DOL.GS
         {
             if (string.IsNullOrWhiteSpace(botName))
                 return null;
-            return ActiveBots.Values.FirstOrDefault(bot => bot.Realm == realm && string.Equals(bot.Name, botName, StringComparison.OrdinalIgnoreCase));
+            return ActiveBots.Values.FirstOrDefault(bot => string.Equals(bot.Name, botName, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

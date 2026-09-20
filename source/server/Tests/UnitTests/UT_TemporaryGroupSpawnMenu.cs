@@ -12,10 +12,10 @@ namespace DOL.UnitTests
         [TestCase(eRealm.Albion)]
         [TestCase(eRealm.Midgard)]
         [TestCase(eRealm.Hibernia)]
-        public void MenuContainsEveryAndOnlyCurrentRealmClass(eRealm realm)
+        public void MenuContainsEveryClassFromEveryRealm(eRealm realm)
         {
-            string[] expected = TemporaryGroupClassCatalog.ForRealm(realm)
-                .Select(entry => entry.CharacterClass.ToString())
+            string[] expected = TemporaryGroupClassCatalog.All()
+                .Select(entry => $"{entry.Realm}: {entry.CharacterClass}")
                 .ToArray();
             string[] links = Regex.Matches(TemporaryGroupSpawnMenu.BuildMenuText(realm), @"\[([^\]]+)\]")
                 .Select(match => match.Groups[1].Value)
@@ -30,12 +30,23 @@ namespace DOL.UnitTests
         [TestCase(eRealm.Hibernia)]
         public void EveryClickableLabelResolvesToItsClass(eRealm realm)
         {
-            foreach ((eCharacterClass expected, _) in TemporaryGroupClassCatalog.ForRealm(realm))
+            foreach ((eRealm expectedRealm, eCharacterClass expected, _) in TemporaryGroupClassCatalog.All())
             {
-                Assert.That(TemporaryGroupClassCatalog.TryResolve(realm, expected.ToString(), out eCharacterClass actual),
+                string label = $"{expectedRealm}: {expected}";
+                Assert.That(TemporaryGroupClassCatalog.TryResolve(realm, label, out eRealm actualRealm, out eCharacterClass actual),
                     Is.True);
+                Assert.That(actualRealm, Is.EqualTo(expectedRealm));
                 Assert.That(actual, Is.EqualTo(expected));
             }
+        }
+
+        [Test]
+        public void BareClassNameUsesThePlayerRealm()
+        {
+            Assert.That(TemporaryGroupClassCatalog.TryResolve(eRealm.Midgard, "Healer", out eRealm realm, out eCharacterClass characterClass),
+                Is.True);
+            Assert.That(realm, Is.EqualTo(eRealm.Midgard));
+            Assert.That(characterClass, Is.EqualTo(eCharacterClass.Healer));
         }
     }
 }

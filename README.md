@@ -54,8 +54,9 @@ not included. Each installation creates its own local account and saves.
 - `source/reference`: additional launcher/portal source snapshots. These are
   reference material, not substitutes for the current launcher.
 - `docs/DEVELOPMENT.md`: build, safety, portability, and dependency notes.
-- `docs/CAMLANN.md`: planned replacement of Normal RvR with a single Camlann
-  full-PvP world. Not implemented; do not start it unless asked.
+- `docs/CAMLANN.md`: the tiered Camlann full-PvP conversion plan and current
+  implementation status. Tier 2 is implemented on the development branch;
+  do not deploy it over a running install without an explicit request.
 
 No gameplay features have intentionally been removed for sharing. However, the
 original game executable is a binary dependency: the material found here includes

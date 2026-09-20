@@ -1502,8 +1502,8 @@ namespace DOL.AI.Brain
             }
 
             RealmExchangeBroker broker = arrivedBroker ?? bot.GetNPCsInRadius((ushort)Math.Clamp(GS.ServerProperties.Properties.WORLD_PICKUP_DISTANCE, 1, ushort.MaxValue))
-                .OfType<RealmExchangeBroker>().FirstOrDefault(candidate => candidate.Realm == bot.Realm);
-            if (broker == null || broker.Realm != bot.Realm ||
+                .OfType<RealmExchangeBroker>().FirstOrDefault(candidate => candidate.CurrentRegion == bot.CurrentRegion);
+            if (broker == null || broker.CurrentRegion != bot.CurrentRegion ||
                 !bot.IsWithinRadius(broker, GS.ServerProperties.Properties.WORLD_PICKUP_DISTANCE))
                 return false;
 
@@ -4108,7 +4108,7 @@ namespace DOL.AI.Brain
                 // ordinary group triage.
                 GameLiving relicCarrier = RelicMgr.GetRelics()
                     .Select(relic => relic?.CurrentCarrier)
-                    .FirstOrDefault(carrier => carrier?.IsAlive == true && carrier.Realm == BotBody.Realm &&
+                    .FirstOrDefault(carrier => carrier?.IsAlive == true &&
                                                (Body.Group.IsInTheGroup(carrier) || BotBody.IsAutonomousWorldBot &&
                                                 AutonomousObjectiveAssignments.Is(BotBody, eAutonomousObjectiveKind.RvR)) && CanHealRelicCarrier(carrier));
                 if (relicCarrier != null && relicCarrier.HealthPercent < 100 &&
