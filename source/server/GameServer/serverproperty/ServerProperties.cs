@@ -1352,6 +1352,13 @@ namespace DOL.GS.ServerProperties
 		public static int PVP_REALM_TIMER_MINUTES;
 
 		/// <summary>
+		/// Chance for an autonomous Camlann bot to opportunistically engage a grey
+		/// player-shaped target when that target has not attacked its crew.
+		/// </summary>
+		[ServerProperty("pvp", "camlann_bot_grey_engage_chance", "Chance in percent for an autonomous Camlann bot to start an opportunistic grey-target fight", 3)]
+		public static int CAMLANN_BOT_GREY_ENGAGE_CHANCE;
+
+		/// <summary>
 		/// Whether releasing in a battleground should teleport the player to the portal keep
 		/// </summary>
 		[ServerProperty("pvp", "bg_release_to_portal_keep", "Whether releasing in a battleground should teleport the player to the portal keep", false)]

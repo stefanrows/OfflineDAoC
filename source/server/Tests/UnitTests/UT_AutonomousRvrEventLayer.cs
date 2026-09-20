@@ -38,13 +38,13 @@ public sealed class UT_AutonomousRvrEventLayer
     [Test]
     public void OpposingFrontierBotsAreEligibleOnlyWhenNormalServerCombatAllowsIt()
     {
-        Assert.That(AutonomousRvrTargetPolicy.IsEligible(eRealm.Albion, eRealm.Midgard,
+        Assert.That(AutonomousRvrTargetPolicy.IsEligible(true,
             true, true, true, false, true), Is.True);
-        Assert.That(AutonomousRvrTargetPolicy.IsEligible(eRealm.Albion, eRealm.Albion,
+        Assert.That(AutonomousRvrTargetPolicy.IsEligible(false,
             true, true, true, false, true), Is.False);
-        Assert.That(AutonomousRvrTargetPolicy.IsEligible(eRealm.Albion, eRealm.Midgard,
+        Assert.That(AutonomousRvrTargetPolicy.IsEligible(true,
             true, true, true, true, true), Is.False);
-        Assert.That(AutonomousRvrTargetPolicy.IsEligible(eRealm.Albion, eRealm.Midgard,
+        Assert.That(AutonomousRvrTargetPolicy.IsEligible(true,
             true, true, true, false, false), Is.False);
     }
 

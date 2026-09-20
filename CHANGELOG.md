@@ -12,6 +12,36 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-20
+
+### Added
+
+- Camlann Tier 3 hostility resolution through the player-shaped combatant
+  helper, including same-realm stranger targeting across frontier and dungeon
+  autonomous behavior.
+- A tunable `camlann_bot_grey_engage_chance` property, with retaliation and
+  crew-defense exceptions for grey player-shaped targets.
+
+### Changed
+
+- Companion engagement, stealth ambushes, crowd-control reservations, siege
+  legality, shared-dungeon scans, and autonomous frontier target selection now
+  use group/guild/battlegroup alliance instead of realm as the combat boundary.
+- Autonomous target tests and bind recovery no longer treat foreign realm
+  identity as an enemy-combat rule.
+
+### Fixed
+
+- Same-realm ungrouped bots are no longer filtered out of Camlann autonomous
+  combat, while allied mixed-realm crews remain protected from friendly fire.
+- Grey-target restraint now applies through the shared bot aggro gate instead
+  of only the specialized frontier and dungeon scans.
+
+### Removed
+
+- Realm-inequality hostility filters from the Tier 3 autonomous combat paths.
+- The obsolete relocation of autonomous bots saved at a foreign-realm bindstone.
+
 ## [0.8.0] - 2026-09-19
 
 ### Added

@@ -42,10 +42,10 @@ public class UT_AutonomousDarknessFallsPolicy
     {
         Assert.Multiple(() =>
         {
-            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(eRealm.Albion, eRealm.Midgard, 249, 249, true, true), Is.True);
-            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(eRealm.Albion, eRealm.Albion, 249, 249, true, true), Is.False);
-            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(eRealm.Albion, eRealm.Midgard, 249, 1, true, true), Is.False);
-            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(eRealm.Albion, eRealm.Midgard, 249, 249, false, true), Is.False);
+            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(true, 249, 249, true, true), Is.True);
+            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(false, 249, 249, true, true), Is.False);
+            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(true, 249, 1, true, true), Is.False);
+            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(true, 249, 249, false, true), Is.False);
         });
     }
 

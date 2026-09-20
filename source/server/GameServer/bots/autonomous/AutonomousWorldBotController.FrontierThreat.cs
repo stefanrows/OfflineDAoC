@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using DOL.AI.Brain;
+using DOL.GS.Keeps;
+using DOL.GS.ServerRules;
 
 namespace DOL.GS;
 
@@ -28,9 +30,15 @@ public sealed partial class AutonomousWorldBotController
         if (!nav.IsAvailable || !nav.HasNavmesh(bot.CurrentZone)) return false;
         bool Eligible(GameLiving target) => target != bot && !target.IsStealthed &&
             target.ObjectState == GameObject.eObjectState.Active &&
-            AutonomousRvrTargetPolicy.IsEligible(bot.Realm, target.Realm, target.IsAlive,
+            AutonomousRvrTargetPolicy.IsEligible(
+                AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, target) || target is GameSiegeWeapon or GameKeepGuard,
+                target.IsAlive,
                 target.CurrentRegionID == bot.CurrentRegionID, IsInFrontier(target), IsSafeArea(target),
-                GameServer.ServerRules.IsAllowedToAttack(bot, target, true));
+                GameServer.ServerRules.IsAllowedToAttack(bot, target, true)) &&
+            AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, target);
+        bool IsHeldByAlliedOperator(GameLiving target) => target.TargetObject is GameBot friendly &&
+            PvpCombatant.AreAllied(bot, friendly) && bot.IsWithinRadius(friendly, 1000) &&
+            BotSiegeRuntime.HoldingPosition(friendly);
 
         GameLiving[] nearby = bot.GetPlayersInRadius(TargetSearchRadius).Where(Eligible).Cast<GameLiving>()
             .Concat(bot.GetNPCsInRadius(TargetSearchRadius)
@@ -39,8 +47,7 @@ public sealed partial class AutonomousWorldBotController
                         npc.Brain is IControlledBrain pet && pet.GetLivingOwner() is IGamePlayer)) && Eligible(npc)))
             .Where(target => bot.GetDistanceTo(target) <= TargetSearchRadius)
             .Where(target => defending || !BotSiegeRuntime.Assigned(bot) || bot.IsWithinRadius(target, 450) && target is not GameSiegeWeapon)
-            .OrderBy(target => target.TargetObject is GameBot friendly && friendly.Realm == bot.Realm &&
-                bot.IsWithinRadius(friendly, 1000) && BotSiegeRuntime.HoldingPosition(friendly) ? 0 : 1)
+            .OrderBy(target => IsHeldByAlliedOperator(target) ? 0 : 1)
             .ThenBy(bot.GetDistanceTo).ToArray();
         bool Visible(GameLiving target) => nav.HasLineOfSight(bot.CurrentZone,
             new(bot.X, bot.Y, bot.Z + 48), new(target.X, target.Y, target.Z + 48), nav.BlockingDoorAvoidanceFilters);
@@ -50,8 +57,7 @@ public sealed partial class AutonomousWorldBotController
             : _frontierThreat.Visible(nearby, target => nav.HasLineOfSight(bot.CurrentZone,
                 new(bot.X, bot.Y, bot.Z), new(target.X, target.Y, target.Z), nav.DefaultFilters));
         var visibleTargets=visible.ToArray();
-        var operatorThreats=visibleTargets.Where(target=>target.IsAttacking && target.TargetObject is GameBot friendly &&
-            friendly.Realm==bot.Realm && bot.IsWithinRadius(friendly,1000) && BotSiegeRuntime.HoldingPosition(friendly)).ToArray();
+        var operatorThreats=visibleTargets.Where(target=>target.IsAttacking && IsHeldByAlliedOperator(target)).ToArray();
         GameLiving enemy = SelectDistributedRvrTarget(bot, operatorThreats.Length>0 ? operatorThreats : visibleTargets);
         if (enemy == null || !Eligible(enemy)) return false;
         if (previousEngine != null && enemy is GameSiegeWeapon) return false;

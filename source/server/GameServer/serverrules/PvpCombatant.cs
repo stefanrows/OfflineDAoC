@@ -69,8 +69,8 @@ namespace DOL.GS.ServerRules
 			if (IsRealGuild(firstGuild) && firstGuild == secondGuild)
 				return true;
 
-			BattleGroup firstBattleGroup = a.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
-			BattleGroup secondBattleGroup = b.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
+			BattleGroup firstBattleGroup = a.TempProperties?.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
+			BattleGroup secondBattleGroup = b.TempProperties?.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
 			if (firstBattleGroup != null && firstBattleGroup == secondBattleGroup)
 				return true;
 

@@ -3,6 +3,7 @@ using System.Linq;
 using DOL.Database;
 using DOL.Events;
 using DOL.GS.Keeps;
+using DOL.GS.ServerRules;
 
 namespace DOL.GS
 {
@@ -103,7 +104,8 @@ namespace DOL.GS
 
         public static bool LegalEnemy(GameLiving owner, GameLiving target) => owner?.IsAlive == true && target?.IsAlive == true &&
             target.ObjectState == GameObject.eObjectState.Active && owner.CurrentRegion == target.CurrentRegion &&
-            target.Realm != eRealm.None && target.Realm != owner.Realm && GameServer.ServerRules.IsAllowedToAttack(owner, target, true);
+            (PvpCombatant.IsPlayerShaped(target) || target is GameSiegeWeapon || target is GameKeepGuard || target is GameKeepDoor) &&
+            GameServer.ServerRules.IsAllowedToAttack(owner, target, true);
 
         public static bool CanDamage(GameSiegeWeapon weapon, GameLiving target)
         {

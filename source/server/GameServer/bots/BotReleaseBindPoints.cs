@@ -31,12 +31,6 @@ namespace DOL.GS
         public static eRealm Owner(ushort region, eRealm declaredRealm) => declaredRealm != eRealm.None
             ? declaredRealm : AutonomousWorldBotController.ProtectedRealm(region, ushort.MaxValue);
 
-        public static bool IsEnemyBindPosition(ushort region, int x, int y, int z, eRealm realm) =>
-            realm != eRealm.None && Regions.TryGetValue(region, out Bind[] points) &&
-            points.Any(bind => bind.Realm != eRealm.None && bind.Realm != realm &&
-                System.Math.Abs((long)z - bind.Point.Z) <= 128 &&
-                System.Math.Pow((double)x - bind.Point.X, 2) + System.Math.Pow((double)y - bind.Point.Y, 2) <= 96 * 96);
-
         public static Point3D? Resolve(IPathfindingMgr nav, Zone zone, Vector3 anchor)
         {
             if (zone == null) return null;
