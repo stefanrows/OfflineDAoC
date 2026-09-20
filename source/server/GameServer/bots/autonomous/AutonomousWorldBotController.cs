@@ -1462,8 +1462,9 @@ namespace DOL.GS
                 if (carrier?.IsAlive == true)
                 {
                     _rvrDestination = _rvrDestination with { RegionId = carrier.CurrentRegionID, X = carrier.X, Y = carrier.Y, Z = carrier.Z };
-                    SetRvrStatus(bot, carrier.Realm == bot.Realm ? "Escorting relic" : "Intercepting relic", escorted.Name, carrier.Name);
-                    if (carrier.Realm == bot.Realm && bot.IsWithinRadius(carrier, 450))
+                    bool alliedCarrier = PvpCombatant.AreAllied(bot, carrier);
+                    SetRvrStatus(bot, alliedCarrier ? "Escorting relic" : "Intercepting relic", escorted.Name, carrier.Name);
+                    if (alliedCarrier && bot.IsWithinRadius(carrier, 450))
                     {
                         bot.StopMovingOnPath();
                         bot.StopMoving();
@@ -1609,7 +1610,7 @@ namespace DOL.GS
             // only mechanism that can capture/reset a keep.
             GameKeepGuard[] guards = bot.GetNPCsInRadius(TargetSearchRadius)
                 .OfType<GameKeepGuard>()
-                .Where(guard => guard.IsAlive && guard.Realm != eRealm.None && guard.Realm != bot.Realm)
+                .Where(guard => guard.IsAlive)
                 .Where(guard => guard.Component?.Keep != null && $"rvr-keep-{guard.Component.Keep.KeepID}" == _rvrDestination?.Id)
                 .Where(guard => !guard.IsPortalKeepGuard && AutonomousRvrKeepPolicy.IsSiegeObjective(guard.Component?.Keep))
                 .Where(guard => !closedDoor || guard is not GuardLord)
@@ -1697,8 +1698,9 @@ namespace DOL.GS
             GameLiving opponent = humans.Concat(worldBots)
                 .Where(candidate => candidate != null && !IsSafeArea(candidate))
                 .Where(candidate => !candidate.IsStealthed && AutonomousDungeonPolicy.CanEngageLocalOpponent(
-                    bot.Realm, candidate.Realm, bot.CurrentRegionID, candidate.CurrentRegionID,
+                    AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, candidate), bot.CurrentRegionID, candidate.CurrentRegionID,
                     candidate.IsAlive, GameServer.ServerRules.IsAllowedToAttack(bot, candidate, true)))
+                .Where(candidate => AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, candidate))
                 .OrderBy(candidate => bot.GetDistanceTo(candidate))
                 .Where(candidate => PathfindingProvider.Instance.HasLineOfSight(bot.CurrentZone,
                     new(bot.X, bot.Y, bot.Z), new(candidate.X, candidate.Y, candidate.Z), PathfindingProvider.Instance.DefaultFilters))
@@ -1838,7 +1840,8 @@ namespace DOL.GS
             var objectives = new List<AutonomousRvrEventLayer.LiveObjective>();
             RvrPlanningView planning = GetRvrPlanningView();
             foreach (GameBot enemy in planning.Candidates
-                         .Where(candidate => candidate.IsAlive && candidate.Realm != eRealm.None && candidate.Realm != bot.Realm &&
+                         .Where(candidate => candidate.IsAlive && AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, candidate) &&
+                                             AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, candidate) &&
                                              AutonomousObjectiveAssignments.Is(candidate, eAutonomousObjectiveKind.RvR) &&
                                              reachable.Contains(candidate.CurrentRegionID) && IsInFrontier(candidate))
                          .OrderBy(candidate => unchecked((ulong)(candidate.DatabaseID ^ bot.DatabaseID * 397) * 11400714819323198485UL))

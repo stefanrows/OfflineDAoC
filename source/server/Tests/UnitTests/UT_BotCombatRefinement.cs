@@ -339,7 +339,7 @@ namespace DOL.UnitTests
             bot.CurrentRegionID = opponent.CurrentRegionID = 100;
             Assert.That(BotRvrAmbush.IsEnemyCombatant(bot, opponent), Is.True);
             opponent.Realm = eRealm.Midgard;
-            Assert.That(BotRvrAmbush.IsEnemyCombatant(bot, opponent), Is.False);
+            Assert.That(BotRvrAmbush.IsEnemyCombatant(bot, opponent), Is.True);
             Assert.That(BotRvrAmbush.IsEnemyCombatant(bot, (GameNPC)RuntimeHelpers.GetUninitializedObject(typeof(GameNPC))), Is.False);
             opponent.Realm = eRealm.Albion; opponent.CurrentRegionID = 200;
             Assert.That(BotRvrAmbush.IsEnemyCombatant(bot, opponent), Is.False);

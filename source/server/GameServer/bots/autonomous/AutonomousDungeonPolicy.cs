@@ -85,10 +85,10 @@ namespace DOL.GS
                     new(staging.X, staging.Y)) <= radiusSquared);
         }
 
-        public static bool CanEngageLocalOpponent(eRealm attacker, eRealm target,
+        public static bool CanEngageLocalOpponent(bool enemyCombatant,
             ushort attackerRegion, ushort targetRegion, bool alive, bool allowed) =>
             IsSharedCombatDungeon(attackerRegion) && attackerRegion == targetRegion &&
-            attacker != eRealm.None && target != eRealm.None && attacker != target && alive && allowed;
+            enemyCombatant && alive && allowed;
 
         // A follower that was already separated by a death, reconnect, or old
         // transient-leader handoff must be able to clear a legal blocker while

@@ -55,7 +55,7 @@ not included. Each installation creates its own local account and saves.
   reference material, not substitutes for the current launcher.
 - `docs/DEVELOPMENT.md`: build, safety, portability, and dependency notes.
 - `docs/CAMLANN.md`: the tiered Camlann full-PvP conversion plan and current
-  implementation status. Tier 2 is implemented on the development branch;
+  implementation status. Tier 3 is implemented on the development branch;
   do not deploy it over a running install without an explicit request.
 
 No gameplay features have intentionally been removed for sharing. However, the

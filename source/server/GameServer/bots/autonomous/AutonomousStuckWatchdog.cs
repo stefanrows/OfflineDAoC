@@ -105,9 +105,6 @@ public static class AutonomousStuckWatchdog
     /// </summary>
     public static bool RepairInvalidLoginPosition(GameBot bot)
     {
-        if (bot.IsAutonomousWorldBot && BotReleaseBindPoints.IsEnemyBindPosition(
-                bot.CurrentRegionID, bot.X, bot.Y, bot.Z, bot.Realm))
-            return RelocateToSafeCapital(bot, DateTime.UtcNow, "saved at an enemy realm bindstone", false);
         if (!TryDescribeInvalidPosition(bot, out string reason))
         {
             Zone zone = WorldMgr.GetRegion(bot.CurrentRegionID)?.GetZone(bot.X, bot.Y);

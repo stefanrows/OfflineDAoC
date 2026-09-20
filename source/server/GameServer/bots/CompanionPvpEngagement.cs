@@ -41,7 +41,7 @@ namespace DOL.GS
         }
 
         public static bool Enemy(GamePlayer player, GameLiving target) => player != null &&
-            Character(target) is GameBot bot && bot.Realm != eRealm.None &&
+            Character(target) is GameBot bot &&
             GameServer.ServerRules.IsAllowedToAttack(player, bot, true);
 
         private static bool Live(GamePlayer player, GameLiving target) => Enemy(player, target) && target.IsAlive &&

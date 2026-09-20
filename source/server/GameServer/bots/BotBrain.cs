@@ -12,6 +12,7 @@ using DOL.GS.Effects;
 using DOL.GS.PacketHandler;
 using DOL.GS.RealmAbilities;
 using DOL.GS.SkillHandler;
+using DOL.GS.ServerRules;
 using DOL.GS.Spells;
 using DOL.GS.Styles;
 using DOL.Logging;
@@ -373,8 +374,8 @@ namespace DOL.AI.Brain
                 realTarget = livingOwner;
             }
 
-            if (realTarget is IGamePlayer && realTarget.Realm != Body.Realm)
-                return true;
+            if (PvpCombatant.IsPlayerShaped(realTarget) && !PvpCombatant.AreAllied(Body, realTarget))
+                return BotBody?.IsAutonomousWorldBot != true || AutonomousRvrTargetPolicy.ShouldEngageGrey(Body, realTarget);
 
             // Evaluate the monster from the character's perspective, not the
             // reverse. The native NPC check rejected purple pulls because the
@@ -4147,7 +4148,10 @@ namespace DOL.AI.Brain
             {
                 GameLiving support = RelicMgr.GetRelics().Select(relic => relic.CurrentCarrier)
                     .Concat(Body.GetNPCsInRadius(2000).OfType<DOL.GS.Keeps.GameKeepGuard>().Cast<GameLiving>())
-                    .Where(living => living?.IsAlive == true && living.Realm == Body.Realm && living.HealthPercent < 85 &&
+                    .Where(living => living?.IsAlive == true &&
+                        (living is DOL.GS.Keeps.GameKeepGuard
+                            ? living.Realm == Body.Realm
+                            : PvpCombatant.AreAllied(Body, living)) && living.HealthPercent < 85 &&
                         living.CurrentRegion == Body.CurrentRegion && CanHealRelicCarrier(living) &&
                         PathfindingProvider.Instance.HasLineOfSight(Body.CurrentZone, new(Body.X, Body.Y, Body.Z),
                             new(living.X, living.Y, living.Z), PathfindingProvider.Instance.DefaultFilters))

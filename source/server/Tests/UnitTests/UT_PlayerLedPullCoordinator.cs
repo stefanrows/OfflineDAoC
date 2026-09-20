@@ -24,7 +24,8 @@ namespace DOL.UnitTests
         private sealed class Rules : NormalServerRules
         {
             public override bool IsAllowedToAttack(GameLiving attacker, GameLiving defender, bool quiet) =>
-                attacker.Realm != defender.Realm && !BotPvpCrowdControl.Protected(attacker, defender);
+                attacker != defender && !PvpCombatant.AreAllied(attacker, defender) &&
+                !BotPvpCrowdControl.Protected(attacker, defender);
         }
         private sealed class Server : GameServer
         {
@@ -178,13 +179,13 @@ namespace DOL.UnitTests
             Assert.That(B(bot).CanAggroTarget(target), Is.EqualTo(allowed));
         }
 
-        [Test] public void HigherTargetStillMustPassNativeHostilityRules()
+        [Test] public void SameRealmStrangerStillPassesCamlannHostilityRules()
         {
             Bot bot = MakeBot(new ClassPaladin());
             bot.Level = 10;
             Bot ally = MakeBot(new ClassPaladin());
             ally.Level = 30;
-            Assert.That(B(bot).CanAggroTarget(ally), Is.False);
+            Assert.That(B(bot).CanAggroTarget(ally), Is.True);
         }
 
         [Test] public void OldHitDoesNotForceMeleeOrCancelCastWhenInterruptHasExpired()
@@ -676,7 +677,8 @@ namespace DOL.UnitTests
             Assert.That(B(damage).HasAggro, Is.True);
             Bot autonomous = MakeBot(new ClassMercenary());
             Field(typeof(GameBot), autonomous, "<IsAutonomousWorldBot>k__BackingField", true);
-            Assert.That(BotPvpCrowdControl.Protected(autonomous, target), Is.True, "Autonomous CC guard is unchanged.");
+            Assert.That(BotPvpCrowdControl.Protected(autonomous, target), Is.False,
+                "Unallied autonomous bots may contest a target in Camlann.");
         }
 
         [Test] public void HumanPetOrderOverridesPvpReservationWithoutHumanSwing()

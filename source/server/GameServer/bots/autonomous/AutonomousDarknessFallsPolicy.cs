@@ -38,12 +38,11 @@ public static class AutonomousDarknessFallsPolicy
     }
 
     public static bool CanEngageLocalOpponent(
-        eRealm attackerRealm,
-        eRealm targetRealm,
+        bool enemyCombatant,
         ushort attackerRegion,
         ushort targetRegion,
         bool targetAlive,
         bool allowedByServerRules) =>
         attackerRegion == RegionId && targetRegion == RegionId && targetAlive && allowedByServerRules &&
-        attackerRealm != eRealm.None && targetRealm != eRealm.None && attackerRealm != targetRealm;
+        enemyCombatant;
 }

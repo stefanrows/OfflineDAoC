@@ -5,7 +5,7 @@ world with a **single Camlann/Mordred-style full-PvP world**. The owner has
 authorized the tiered implementation; do not start the game server or deploy
 over a running install unless the owner asks.
 
-## Current implementation status (2026-09-19)
+## Current implementation status (2026-09-20)
 
 - Tier 0 world bootstrap/reset is complete in [PR #7](https://github.com/stefanrows/OfflineDAoC/pull/7), merged as `40476dc`.
 - Tier 1 rules core is complete in [PR #8](https://github.com/stefanrows/OfflineDAoC/pull/8), merged as `4644914`:
@@ -18,7 +18,13 @@ over a running install unless the owner asks.
   companions, open capital/town travel, foreign-capital exchange, and closed
   battleground routing are covered by the server suite (1,902 passed on
   2026-09-19). No live server or client was started for this offline gate.
-- Next: Tier 3.
+- Tier 3 implementation is complete on the current branch: bot combat target
+  selection uses player-shaped alliance, same-realm strangers are legal
+  targets, allied crowd-control claims are shared, and grey-target restraint
+  is applied through autonomous combat gates. The isolated server suite passed
+  1,909 tests on 2026-09-20. No live server or client was started for this
+  offline gate.
+- Next: Tier 4.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -373,7 +379,7 @@ and travel. Companions can be any realm. Battlegrounds are not part of play.
      `PlayerLedPullCoordinator` (~L184), the player-led `BotBrain` carrier
      path (~L4111), plus `BotGroupPetBuffTargets`. Use "allied" instead. The
      autonomous RvR guard-support filter (~L4150) remains realm-owned until
-     the Tier 3/5 RvR rewrites.
+     the Tier 4/5 RvR ownership rewrites.
    - Equipment and weapon choice stays by the bot's **own** realm
      (`BotEquipment`, `BotRangedCombat`, `GameBot` armor selection).
 4. ✅ Stop realm-locking bot movement:
@@ -408,7 +414,7 @@ and travel. Companions can be any realm. Battlegrounds are not part of play.
 
 ---
 
-## Tier 3 — Hostility rewrite
+## Tier 3 — Hostility rewrite ✅
 
 **Goal:** Every "is this an enemy?" check uses the Tier 1 helper, not
 `actor.Realm != target.Realm`.
@@ -432,13 +438,24 @@ siege kit), or **ownership** (Tier 5). Known hostility sites:
 - `BotReleaseBindPoints.IsEnemyBindPosition`
 - Companion defensive scan and `/pull` target validation
 
+### Completed implementation
+
+- ✅ The listed player-shaped combat paths now resolve alliance through
+  `PvpCombatant`; realm remains available only for identity, equipment, route,
+  and future keep-ownership decisions.
+- ✅ Autonomous frontier, shared-dungeon, generic aggro, and stealth-ambush
+  selection accept same-realm strangers while rejecting allied targets through
+  the server rules.
+- ✅ Crowd-control reservations are shared only by allied bots, not by every
+  bot with the same realm byte.
+
 Keep `ServerRules.IsAllowedToAttack` as the last word. Do not invent a
 second hostility matrix.
 
 ### Grey-target policy (decision 6)
 
-Add one tunable property (e.g. `camlann_bot_grey_engage_chance`, default low)
-in the autonomous target policy:
+The `camlann_bot_grey_engage_chance` property defaults to 3 percent in the
+autonomous target policy:
 
 - Prefer targets that con blue or higher to the bot.
 - Grey targets: engage only if the grey target attacked the bot or its crew,
@@ -459,9 +476,9 @@ in the autonomous target policy:
 - Stealth ambush can pick a same-realm target.
 - Grey policy: a level-50 bot does not start on a level-5 in a starter zone
   unless the level-5 hit it (or the tunable forces it).
-- **Gate:** No remaining bot *combat* filter uses realm inequality as the
-  definition of enemy (enforced by a test that greps or reflects the known
-  sites).
+- ✅ **Gate:** No remaining bot *combat* filter uses realm inequality as the
+  definition of enemy (enforced by a regression test over the public combat
+  policy seams).
 
 ---
 

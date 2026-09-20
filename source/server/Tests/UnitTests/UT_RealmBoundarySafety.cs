@@ -70,9 +70,6 @@ namespace DOL.GS.Tests
                 Assert.That(BotReleaseBindPoints.Nearest(region,765147,668315,eRealm.Albion), Is.Null);
                 Assert.That(BotReleaseBindPoints.Nearest(region,765147,668315,eRealm.Hibernia), Is.Null);
                 Assert.That(BotReleaseBindPoints.Nearest(region,765147,668315,eRealm.Midgard), Is.Not.Null);
-                Assert.That(BotReleaseBindPoints.IsEnemyBindPosition(region,765147,668315,5739,eRealm.Hibernia), Is.True);
-                Assert.That(BotReleaseBindPoints.IsEnemyBindPosition(region,765147,668315,5739,eRealm.Midgard), Is.False);
-                Assert.That(BotReleaseBindPoints.IsEnemyBindPosition(region,765147,668315,6000,eRealm.Hibernia), Is.False);
                 BotReleaseBindPoints.Replace(region, new[] {
                     new DbBindPoint { X=765147, Y=668315, Z=5736, Realm=0 },
                     new DbBindPoint { X=596055, Y=581400, Z=6031, Realm=3 } });

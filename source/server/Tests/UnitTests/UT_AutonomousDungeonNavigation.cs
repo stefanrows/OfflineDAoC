@@ -11,7 +11,7 @@ namespace DOL.UnitTests
         public void OldFrontierBranchesAreSharedCombatAreas(int region)
         {
             Assert.That(AutonomousDungeonPolicy.IsSharedFrontierDungeon((ushort)region), Is.True);
-            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(eRealm.Albion, eRealm.Hibernia,
+            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(true,
                 (ushort)region, (ushort)region, true, true), Is.True);
         }
 
@@ -24,10 +24,10 @@ namespace DOL.UnitTests
         [Test]
         public void OpponentsMustBeLocalAliveLegalAndEnemyRealm()
         {
-            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(eRealm.Albion,eRealm.Albion,248,248,true,true),Is.False);
-            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(eRealm.Albion,eRealm.Midgard,248,246,true,true),Is.False);
-            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(eRealm.Albion,eRealm.Midgard,248,248,false,true),Is.False);
-            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(eRealm.Albion,eRealm.Midgard,248,248,true,false),Is.False);
+            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(false,248,248,true,true),Is.False);
+            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(true,248,246,true,true),Is.False);
+            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(true,248,248,false,true),Is.False);
+            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(true,248,248,true,false),Is.False);
         }
 
         [Test]

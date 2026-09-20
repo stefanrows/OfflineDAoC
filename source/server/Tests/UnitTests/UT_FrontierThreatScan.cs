@@ -89,14 +89,11 @@ public class UT_FrontierThreatScan
         Assert.That(scan.Visible(new[] { 43 }, _ => true), Is.EqualTo(new[] { 43 }));
     }
 
-    [TestCase(eRealm.Albion, eRealm.Midgard, true)]
-    [TestCase(eRealm.Midgard, eRealm.Hibernia, true)]
-    [TestCase(eRealm.Hibernia, eRealm.Albion, true)]
-    [TestCase(eRealm.Albion, eRealm.Albion, false)]
-    [TestCase(eRealm.Albion, eRealm.None, false)]
-    public void RealmRulesAreIndependentOfPveAssignmentOrTargetLevel(eRealm actor, eRealm enemy, bool expected)
+    [TestCase(true, true)]
+    [TestCase(false, false)]
+    public void CamlannHostilityIsIndependentOfCharacterRealm(bool enemy, bool expected)
     {
-        Assert.That(AutonomousRvrTargetPolicy.IsEligible(actor, enemy, true, true, true, false, true), Is.EqualTo(expected));
+        Assert.That(AutonomousRvrTargetPolicy.IsEligible(enemy, true, true, true, false, true), Is.EqualTo(expected));
     }
 
     [TestCase(false, true, false, true)]
@@ -105,7 +102,17 @@ public class UT_FrontierThreatScan
     [TestCase(true, true, false, false)]
     public void DeathRegionSafeAreaAndNativeAttackProtectionAreNotBypassed(bool alive, bool sameRegion, bool safe, bool legal)
     {
-        Assert.That(AutonomousRvrTargetPolicy.IsEligible(eRealm.Albion, eRealm.Midgard, alive, sameRegion, true, safe, legal), Is.False);
+        Assert.That(AutonomousRvrTargetPolicy.IsEligible(true, alive, sameRegion, true, safe, legal), Is.False);
+    }
+
+    [TestCase(true, false, 0, 1, false)]
+    [TestCase(true, false, 100, 100, true)]
+    [TestCase(true, true, 0, 100, true)]
+    [TestCase(false, false, 0, 1, true)]
+    public void GreyTargetPolicyIsRareUnlessTheCrewWasAttacked(bool grey, bool attacked,
+        int chance, int roll, bool expected)
+    {
+        Assert.That(AutonomousRvrTargetPolicy.ShouldEngageGrey(grey, attacked, chance, roll), Is.EqualTo(expected));
     }
 
     [Test]
