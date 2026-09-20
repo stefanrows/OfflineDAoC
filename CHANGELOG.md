@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-09-20
+
+### Added
+
+- CoreServer builds now use the tracked example server configuration as their
+  output config when a clean checkout has no local runtime configuration.
+
+### Changed
+
+- Development documentation records the local server configuration fallback
+  and preserves the launcher, command reference, and changelog version pin at
+  `0.13.1`.
+
+### Fixed
+
+- A fresh checkout can build the server solution without an ignored
+  `serverconfig.xml` copied from another installation.
+
+### Removed
+
+- None.
+
 ## [0.13.0] - 2026-09-20
 
 ### Added

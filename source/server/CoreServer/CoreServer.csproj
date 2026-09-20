@@ -47,10 +47,13 @@
         <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="10.0.3" />
         <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.3" />
         <ProjectReference Include="..\GameServer\GameServer.csproj" Name="GameServer" />
-        <Content Include=".\config\serverconfig.xml">
+        <Content Include="config\serverconfig.xml" Condition="Exists('$(MSBuildProjectDirectory)\config\serverconfig.xml')">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </Content>
-        <Content Include="config\serverconfig.example.xml" />
+        <Content Include="config\serverconfig.example.xml" Condition="!Exists('$(MSBuildProjectDirectory)\config\serverconfig.xml')">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+            <TargetPath>config\serverconfig.xml</TargetPath>
+        </Content>
     </ItemGroup>
     <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>
