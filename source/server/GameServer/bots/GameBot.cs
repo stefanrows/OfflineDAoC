@@ -2393,7 +2393,7 @@ namespace DOL.GS
 
         public bool EnterPlayerLedGroup(GamePlayer leader)
         {
-            if (leader == null || leader.Realm != Realm)
+            if (leader == null)
                 return false;
 
             PlayerGroupLeader = leader;

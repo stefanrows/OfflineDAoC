@@ -17,7 +17,7 @@ modifier, create one bot. Start small and increase population for your PC's capa
 | `/tele X` | Teleport to a gamebot; replace X with its name. You can also right-click bot names in the launcher to teleport. |
 | `/mobs X` | List mob names at a level; replace X with the level number. |
 | `/tele mob X` | Teleport to a mob spawn; use the mob's exact name for X. Dungeon targets use the configured entrance approach where applicable. |
-| `/tc` | Teleport to your realm's Realm Exchange NPC. |
+| `/tc` | Teleport to your realm's Realm Exchange NPC; any realm can use the local broker once there. |
 
 ## Companion groups, grinding, and raids
 
@@ -27,7 +27,8 @@ modifier, create one bot. Start small and increase population for your PC's capa
 | `/pull` | Order your companion group and pets to engage your selected enemy. When possible, a tank makes first contact before the rest of the group joins the fight. |
 | `/train <line> <level>` | Train a specialization to the chosen level using your available specialization points. Select a valid trainer for your class first. |
 | `/spawn` | Open the menu of valid companion bots to summon. |
-| `/spawn X` | Summon a companion by class name instead of using the menu; useful for macros. |
+| `/spawn X` | Summon a companion by class name from your realm instead of using the menu; useful for macros. |
+| `/spawn Realm X` | Summon a named class from another realm, such as `/spawn Midgard Healer`. |
 | `/raid 40` | Enable a 40-member companion raid. Use **before** `/spawn`. Requires level 50; the total includes you. |
 | `/raid 80` | Enable an 80-member companion raid. Use **before** `/spawn`. Requires level 50; the total includes you. |
 | `/aggressive` | Companions automatically engage what you attack, while retaining defensive reactions. |

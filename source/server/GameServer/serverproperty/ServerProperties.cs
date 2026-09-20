@@ -1312,7 +1312,7 @@ namespace DOL.GS.ServerProperties
 		/// <summary>
 		/// This if the server battleground zones are open to players
 		/// </summary>
-		[ServerProperty("pvp", "bg_zones_open", "Can the players teleport to battleground", true)]
+        [ServerProperty("pvp", "bg_zones_open", "Can the players teleport to battleground", false)]
 		public static bool BG_ZONES_OPENED;
 
 		/// <summary>

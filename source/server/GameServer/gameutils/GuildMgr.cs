@@ -83,6 +83,14 @@ namespace DOL.GS
                     return null;
                 }
 
+                // Some server-owned guilds can be requested before the in-memory
+                // guild cache has loaded. Reuse a persisted guild in that case;
+                // otherwise each restart would insert another row with the same
+                // name before LoadAllGuilds runs.
+                DbGuild existingDbGuild = DOLDB<DbGuild>.SelectObject(DB.Column("GuildName").IsEqualTo(guildName));
+                if (existingDbGuild != null)
+                    return new Guild(existingDbGuild);
+
                 DbGuild dbGuild = new()
                 {
                     GuildName = guildName,
@@ -336,6 +344,14 @@ namespace DOL.GS
 
                         // Reload the guild to fix the relations.
                         guild = new Guild(DOLDB<DbGuild>.SelectObjects(DB.Column("GuildID").IsEqualTo(dbGuild.GuildID)).FirstOrDefault());
+                    }
+
+                    if (_nameToGuilds.ContainsKey(guild.Name))
+                    {
+                        if (log.IsWarnEnabled)
+                            log.Warn($"GuildMgr: duplicate guild name '{guild.Name}' for ID {guild.GuildID}; keeping the first record.");
+
+                        continue;
                     }
 
                     AddGuild(guild);

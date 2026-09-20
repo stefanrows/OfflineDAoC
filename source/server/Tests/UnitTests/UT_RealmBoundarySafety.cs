@@ -10,7 +10,7 @@ namespace DOL.GS.Tests
     public class UT_RealmBoundarySafety
     {
         [Test]
-        public void EveryRealmCanUseEveryFrontierButOnlyItsOwnHomeland()
+        public void EveryRealmCanUseEveryClassicHomelandAndFrontierButNotBattlegrounds()
         {
             foreach (eRealm traveler in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
             foreach (var territory in new[] {
@@ -18,10 +18,14 @@ namespace DOL.GS.Tests
                 (Region:(ushort)100, Home:(ushort)100, Owner:eRealm.Midgard, Frontiers:new ushort[]{111,112,113,115}),
                 (Region:(ushort)200, Home:(ushort)200, Owner:eRealm.Hibernia, Frontiers:new ushort[]{210,211,212,214}) })
             {
-                Assert.That(AutonomousRealmBoundary.Allows(traveler, territory.Region, territory.Home), Is.EqualTo(traveler == territory.Owner));
+                Assert.That(AutonomousRealmBoundary.Allows(traveler, territory.Region, territory.Home), Is.True);
                 foreach (ushort zone in territory.Frontiers)
                     Assert.That(AutonomousRealmBoundary.Allows(traveler, territory.Region, zone), Is.True);
             }
+
+            foreach (eRealm traveler in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
+                foreach (ushort battleground in new ushort[] { 165, 250, 251, 252, 253 })
+                    Assert.That(AutonomousRealmBoundary.Allows(traveler, battleground, 0), Is.False);
         }
 
         [Test]

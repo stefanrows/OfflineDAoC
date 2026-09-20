@@ -821,13 +821,12 @@ namespace DOL.GS
             if (kind == eWorldServiceKind.RealmExchange)
             {
                 return candidates.OfType<RealmExchangeBroker>()
-                    .Where(broker => broker.CurrentRegion?.IsCapitalCity == true && (broker.Realm == eRealm.None || broker.Realm == bot.Realm))
+                    .Where(broker => broker.CurrentRegion?.IsCapitalCity == true)
                     .OrderBy(broker => EstimateTravelMinutes(bot, broker.CurrentRegionID, broker.X, broker.Y))
                     .Cast<GameNPC>()
                     .FirstOrDefault();
             }
             return candidates.OfType<GameMerchant>()
-                .Where(merchant => merchant.Realm == eRealm.None || merchant.Realm == bot.Realm)
                 .OrderBy(merchant => EstimateTravelMinutes(bot, merchant.CurrentRegionID, merchant.X, merchant.Y))
                 .Cast<GameNPC>()
                 .FirstOrDefault();
@@ -964,8 +963,7 @@ namespace DOL.GS
                                  AutonomousCapnBryGoalCatalog.IsClassicOrShroudedIslesExpansion(region.Expansion) &&
                                  reachable.Contains(region.ID))
                 .SelectMany(region => region.Objects.OfType<GameTrainer>())
-                .Where(trainer => trainer.ObjectState is GameObject.eObjectState.Active &&
-                                  (trainer.Realm is eRealm.None || trainer.Realm == bot.Realm))
+                .Where(trainer => trainer.ObjectState is GameObject.eObjectState.Active)
                 .Where(trainer => !_failedTrainerAnchors.ContainsKey(trainer))
                 .Where(trainer => trainer.TrainedClass == characterClass || trainer.TrainedClass == eCharacterClass.Unknown)
                 .Where(trainer => trainer.CurrentZone == null || IsZoneAccessible(bot.Realm, trainer.CurrentZone))
@@ -3590,8 +3588,7 @@ namespace DOL.GS
                 return false;
             if (zone.ZoneRegion.ID == AutonomousDarknessFallsPolicy.RegionId)
                 return false; // Temporarily disabled as an autonomous goal, not as player content.
-            eRealm owner = ProtectedRealm(zone.ZoneRegion.ID, zone.ID);
-            return owner == eRealm.None || owner == realm;
+            return AutonomousRealmBoundary.Allows(realm, zone.ZoneRegion.ID, zone.ID);
         }
 
         private static bool IsZoneAccessible(eRealm realm, Zone zone, ushort currentRegion) =>
@@ -3666,7 +3663,6 @@ namespace DOL.GS
             {
                 ushort region = queue.Dequeue();
                 foreach (DbZonePoint point in points.Where(point => point.SourceRegion == region &&
-                                                                    (point.Realm == 0 || point.Realm == (ushort)realm) &&
                                                                     IsRegionEdgeAccessible(realm, point.SourceRegion, point.TargetRegion) &&
                                                                     IsRegionPointAccessible(realm, point.SourceRegion, point.SourceX, point.SourceY) &&
                                                                     IsRegionPointAccessible(realm, point.TargetRegion, point.TargetX, point.TargetY)))
@@ -3692,7 +3688,6 @@ namespace DOL.GS
             DbZonePoint[] points = ZonePoints()
                 .Where(point => IsAuthoritativeZonePointEdge(point) &&
                                 AutonomousDungeonGoalCatalog.CanUseEntrance(point, targetRegion, targetX, targetY) &&
-                                (point.Realm == 0 || point.Realm == (ushort)realm) &&
                                 IsRegionEdgeAccessible(realm, point.SourceRegion, point.TargetRegion) &&
                                 IsRegionPointAccessible(realm, point.SourceRegion, point.SourceX, point.SourceY) &&
                                 IsRegionPointAccessible(realm, point.TargetRegion, point.TargetX, point.TargetY))

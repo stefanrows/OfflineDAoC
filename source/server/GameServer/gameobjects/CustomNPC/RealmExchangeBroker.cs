@@ -37,8 +37,6 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
     public int FirstDbSlot => (int)eInventorySlot.Consignment_First;
     public int LastDbSlot => (int)eInventorySlot.Consignment_Last;
 
-    private ushort ExchangeOwnerLot => GetOwnerLot(Realm);
-
     internal static ushort GetOwnerLot(eRealm realm) => realm switch
     {
         eRealm.Albion => AlbionOwnerLot,
@@ -53,10 +51,8 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
             return false;
 
         TurnTo(player, 5000);
-        if (player.Realm != Realm)
-            return false;
         player.TargetObject = this;
-        long pendingProceeds = GetPendingPlayerProceeds(player.InternalID, Realm);
+        long pendingProceeds = GetPendingPlayerProceeds(player.InternalID, player.Realm);
         // DetailWindow text has no clickable NPC links. The native NPC speech
         // popup routes bracketed choices back through WhisperReceive.
         player.Out.SendMessage(BuildGreeting(pendingProceeds), eChatType.CT_Say, eChatLoc.CL_PopupWindow);
@@ -99,7 +95,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
 
         if (command.Contains("claim") || command.Contains("proceeds"))
         {
-            if (TryClaimPlayerProceeds(player, Realm, out long claimed))
+            if (TryClaimPlayerProceeds(player, player.Realm, out long claimed))
                 player.Out.SendMessage($"You claimed {Money.GetString(claimed)} from Realm Exchange sales.", eChatType.CT_Merchant, eChatLoc.CL_ChatWindow);
             else
                 player.Out.SendMessage("You have no Realm Exchange sale proceeds waiting in this realm.", eChatType.CT_Merchant, eChatLoc.CL_ChatWindow);
@@ -159,7 +155,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
             return Array.Empty<DbInventoryItem>();
 
         ItemQuery query = new() { Owner = player.InternalID };
-        return MarketCache.SearchItems(query).Where(IsThisRealmExchangeItem).ToArray();
+        return MarketCache.SearchItems(query).Where(item => IsThisRealmExchangeItem(item, player.Realm)).ToArray();
     }
 
     public Dictionary<int, DbInventoryItem> GetClientInventory(GamePlayer player)
@@ -176,7 +172,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
     {
         if (!CanUseExchange(player) || player.ActiveInventoryObject != this)
             return false;
-        List<DbInventoryItem> all = new MarketSearch(player).FindExchangeItems(searchData, ExchangeOwnerLot);
+        List<DbInventoryItem> all = new MarketSearch(player).FindExchangeItems(searchData, GetOwnerLot(player.Realm));
 
         // The legacy protocol has one-byte page numbers; never wrap page 256
         // back to zero. Narrower filters expose any matching listing.
@@ -251,10 +247,11 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
 
     public bool OnAddItem(GamePlayer player, DbInventoryItem item, int previousSlot)
     {
-        if (item == null || !item.IsTradable || ExchangeOwnerLot == 0)
+        ushort ownerLot = GetOwnerLot(player?.Realm ?? eRealm.None);
+        if (item == null || !item.IsTradable || ownerLot == 0)
             return false;
 
-        item.OwnerLot = ExchangeOwnerLot;
+        item.OwnerLot = ownerLot;
         item.OwnerID = player.InternalID;
         item.SellPrice = 0;
         MarketCache.AddItem(item);
@@ -309,7 +306,9 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
         lock (typeof(AutonomousBotEconomy))
         lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
         {
-            if (!CanUseExchange(buyer) || !IsAvailableListing(item, Realm))
+            eRealm saleRealm = buyer?.Realm ?? eRealm.None;
+            ushort ownerLot = GetOwnerLot(saleRealm);
+            if (!CanUseExchange(buyer) || ownerLot == 0 || !IsAvailableListing(item, saleRealm))
             {
                 ChatUtil.SendErrorMessage(buyer, "That listing is no longer available.");
                 return;
@@ -331,7 +330,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
             int price = item.SellPrice;
             string sellerId = item.OwnerID;
             int sellerSlot = item.SlotPosition;
-            SellerPayment payment = PrepareSellerPayment(sellerId, price, Realm);
+            SellerPayment payment = PrepareSellerPayment(sellerId, price, saleRealm);
             DbAccountXMoney wallet = PlayerWallet(buyer);
             if (payment == null || wallet == null)
             {
@@ -352,7 +351,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
             {
                 item.OwnerID = sellerId;
                 item.SlotPosition = sellerSlot;
-                item.OwnerLot = ExchangeOwnerLot;
+                item.OwnerLot = ownerLot;
                 item.SellPrice = price;
                 MarketCache.AddItem(item);
                 buyer.AddMoney(price);
@@ -362,7 +361,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
 
             payment.Apply();
             SetWallet(wallet, buyer.GetCurrentMoney());
-            var sale = new RealmExchangeSaleLedger.Sale((int)Realm, item.Name, item.Count, price,
+            var sale = new RealmExchangeSaleLedger.Sale((int)saleRealm, item.Name, item.Count, price,
                 sellerId, payment.SellerName, buyer.InternalID, buyer.Name, DateTime.UtcNow);
             if (!RealmExchangeSaleLedger.CommitSale(GameServer.Database, sale, item, buyer.DBCharacter, wallet, payment.Row))
             {
@@ -370,7 +369,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
                 buyer.Inventory.RemoveItemWithoutDbDeletion(item);
                 item.OwnerID = sellerId;
                 item.SlotPosition = sellerSlot;
-                item.OwnerLot = ExchangeOwnerLot;
+                item.OwnerLot = ownerLot;
                 item.SellPrice = price;
                 MarketCache.AddItem(item);
                 buyer.AddMoney(price);
@@ -517,9 +516,9 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
         }
     }
 
-    private bool IsThisRealmExchangeItem(DbInventoryItem item) => item != null && item.OwnerLot == ExchangeOwnerLot;
+    private bool IsThisRealmExchangeItem(DbInventoryItem item, eRealm realm) => item != null && item.OwnerLot == GetOwnerLot(realm);
 
-    private bool CanUseExchange(GamePlayer player) => player != null && player.Realm == Realm &&
+    private bool CanUseExchange(GamePlayer player) => player != null && GetOwnerLot(player.Realm) != 0 &&
         player.IsAlive && ObjectState == eObjectState.Active && player.IsWithinRadius(this, WorldMgr.INTERACT_DISTANCE);
 
     internal static bool IsExchangeOwnerLot(ushort ownerLot) => ownerLot is AlbionOwnerLot or MidgardOwnerLot or HiberniaOwnerLot;

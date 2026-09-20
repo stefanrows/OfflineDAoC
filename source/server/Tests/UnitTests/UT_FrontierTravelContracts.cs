@@ -150,17 +150,30 @@ public class UT_FrontierTravelContracts
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,request),Is.False);
         bot.Fighting=false;bot.PositionX=1000;
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,request),Is.False);
-        bot.PositionX=0;bot.Realm=realm==eRealm.Hibernia?eRealm.Albion:eRealm.Hibernia;
-        Assert.That(AutonomousFrontierTransport.Ready(bot,porter,request),Is.False);
+        bot.PositionX=0;
+        eRealm foreignRealm=realm==eRealm.Hibernia?eRealm.Albion:eRealm.Hibernia;
+        bot.Realm=foreignRealm;
+        var foreignPassage=AutonomousFrontierTransport.Destination(foreignRealm,passage.Region);
+        var foreignRequest=new AutonomousFrontierTransport.Request(porter,foreignPassage,"rvr-0");
+        if (AutonomousFrontierTransport.Ticket(bot,foreignPassage) == null)
+            Assert.That(bot.Inventory.AddItem(eInventorySlot.FirstBackpack+1,
+                GameInventoryItem.Create(new DbItemTemplate{Id_nb=foreignPassage.Medallion,PackSize=1,MaxCount=1})),Is.True);
+        DbInventoryItem foreignTicket=AutonomousFrontierTransport.Ticket(bot,foreignPassage);
+        Assert.That(AutonomousFrontierTransport.Ready(bot,porter,foreignRequest),Is.True,
+            "Camlann bots may use a foreign realm's portal-keep teleporter with their own realm ticket");
+        Assert.That(AutonomousFrontierTransport.WakeBoardingPorter(bot,foreignRequest),Is.True);
         Assert.That(ticket.Count,Is.EqualTo(1),"Rejected boarding must preserve the real ticket");
+        if (!ReferenceEquals(foreignTicket,ticket))
+            bot.Inventory.RemoveItem(foreignTicket);
         bot.Realm=realm;bot.PersistentRecord.ObjectiveKind="SoloPve";
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,request),Is.False);
         ushort home=realm==eRealm.Albion?(ushort)1:realm==eRealm.Midgard?(ushort)100:(ushort)200;
         var homePassage=AutonomousFrontierTransport.Destination(realm,home);
         var homeRequest=new AutonomousFrontierTransport.Request(porter,homePassage,"rvr-0");
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,homeRequest),Is.False,"No free home passage");
-        Assert.That(bot.Inventory.AddItem(eInventorySlot.FirstBackpack+1,
-            GameInventoryItem.Create(new DbItemTemplate{Id_nb=homePassage.Medallion,PackSize=1,MaxCount=1})),Is.True);
+        if (AutonomousFrontierTransport.Ticket(bot,homePassage) == null)
+            Assert.That(bot.Inventory.AddItem(eInventorySlot.FirstBackpack+1,
+                GameInventoryItem.Create(new DbItemTemplate{Id_nb=homePassage.Medallion,PackSize=1,MaxCount=1})),Is.True);
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,homeRequest),Is.True);
         bot.Fighting=true;
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,homeRequest),Is.False,"Returners cannot escape active combat");

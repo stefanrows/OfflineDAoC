@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DOL.AI.Brain;
+using DOL.GS.ServerRules;
 
 namespace DOL.GS
 {
@@ -38,7 +39,8 @@ namespace DOL.GS
                              spell.Target == eSpellTarget.GROUP ? 2 : 16))
                 {
                     if (pet.IsAlive && pet.ObjectState == GameObject.eObjectState.Active &&
-                        pet.CurrentRegionID == caster.CurrentRegionID && pet.Realm == caster.Realm &&
+                        pet.CurrentRegionID == caster.CurrentRegionID &&
+                        PvpCombatant.AreAllied(caster, pet) &&
                         caster.IsWithinRadius(pet, range))
                         yield return pet;
                 }

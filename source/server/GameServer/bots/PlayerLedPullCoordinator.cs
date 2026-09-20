@@ -181,7 +181,7 @@ namespace DOL.GS
         }
 
         public static bool Available(GameBot bot, GamePlayer player) => bot != null && player?.IsAlive == true &&
-            bot.IsAlive && bot.ObjectState == GameObject.eObjectState.Active && bot.Realm == player.Realm &&
+            bot.IsAlive && bot.ObjectState == GameObject.eObjectState.Active &&
             bot.Group == player.Group && bot.Group?.IsInTheGroup(bot) == true &&
             bot.CurrentRegionID == player.CurrentRegionID && bot.IsWithinRadius(player, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) &&
             !bot.IsOnStableMasterRoute && !bot.IsReturningAfterRelease;

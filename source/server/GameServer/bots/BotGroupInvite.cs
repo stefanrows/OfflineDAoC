@@ -4,10 +4,10 @@ public static class BotGroupInvite
 {
     public static bool TryInvite(GamePlayer player, GameBot bot)
     {
-        if (player == null || bot == null || player.Realm != bot.Realm)
+        if (player == null || bot == null)
         {
             if (player != null)
-                ChatUtil.SendSystemMessage(player, "Only a bot of your realm will accept the invitation.");
+                ChatUtil.SendSystemMessage(player, "That bot cannot accept the invitation.");
             return false;
         }
 

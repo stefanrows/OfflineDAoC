@@ -63,7 +63,7 @@ public sealed partial class AutonomousWorldBotController
             if (_medallionMerchant?.ObjectState != GameObject.eObjectState.Active ||
                 !_medallionMerchant.TradeItems.GetAllItems().Values.OfType<DbItemTemplate>().Any(item=>item.Id_nb==passage.Medallion))
                 _medallionMerchant = _frontierPorter.GetNPCsInRadius(3000).OfType<GameMerchant>()
-                    .Where(npc => (npc.Realm==bot.Realm || npc.Realm==eRealm.None) && npc.TradeItems?.GetAllItems().Values.OfType<DbItemTemplate>().Any(item=>item.Id_nb==passage.Medallion)==true)
+                    .Where(npc => npc.TradeItems?.GetAllItems().Values.OfType<DbItemTemplate>().Any(item=>item.Id_nb==passage.Medallion)==true)
                     .OrderBy(_frontierPorter.GetDistanceTo).FirstOrDefault();
             if (_medallionMerchant == null) return false;
             if (!ApproachSupplyMerchant(bot, _medallionMerchant))
