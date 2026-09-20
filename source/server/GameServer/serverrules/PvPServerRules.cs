@@ -38,7 +38,7 @@ namespace DOL.GS.ServerRules
 			if (player.ObjectState != GameObject.eObjectState.Active) return;
 			if (player.Client.IsPlaying == false) return;
 
-			if (player.Level < m_safetyLevel && player.SafetyFlag)
+			if (PvpCombatant.IsSafetyProtected(player, m_safetyLevel))
 				player.Out.SendMessage("Your temporary invulnerability timer has expired, but your /safety flag is still on.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 			else
 				player.Out.SendMessage("Your temporary invulnerability timer has expired.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
@@ -60,7 +60,7 @@ namespace DOL.GS.ServerRules
 		public override void OnPlayerKilled(GamePlayer killedPlayer, GameObject killer)
 		{
 			base.OnPlayerKilled(killedPlayer, killer);
-			if (killer == null || killer is GamePlayer)
+			if (PvpCombatant.Resolve(killer as GameLiving) != null)
 				killedPlayer.TempProperties.SetProperty(KILLED_BY_PLAYER_PROP, KILLED_BY_PLAYER_PROP);
 			else
 				killedPlayer.TempProperties.RemoveProperty(KILLED_BY_PLAYER_PROP);
@@ -156,21 +156,18 @@ namespace DOL.GS.ServerRules
 
 
 					// Players with safety flag can not attack other players
-					if (attacker is GamePlayer player && player.Level < m_safetyLevel && player.SafetyFlag)
+					if (attacker is GamePlayer player && PvpCombatant.IsSafetyProtected(player, m_safetyLevel))
 					{
 						if (quiet == false) MessageToLiving(attacker, "Your PvP safety flag is ON.");
 						return false;
 					}
 
 					// Players with safety flag can not be attacked in safe regions
-					if (defender is GamePlayer playerDefender && playerDefender.Level < m_safetyLevel && playerDefender.SafetyFlag)
+					if (defender is GamePlayer playerDefender && PvpCombatant.IsSafetyProtected(playerDefender, m_safetyLevel))
 					{
-						if (!PvpCombatant.IsOldFrontier(playerDefender))
-						{
-							//"PLAYER has his safety flag on and is in a safe area, you can't attack him here."
-							if (quiet == false) MessageToLiving(attacker, playerDefender.Name + " has " + playerDefender.GetPronoun(1, false) + " safety flag on and is in a safe area, you can't attack " + playerDefender.GetPronoun(2, false) + " here.");
-							return false;
-						}
+						//"PLAYER has his safety flag on and is in a safe area, you can't attack him here."
+						if (quiet == false) MessageToLiving(attacker, playerDefender.Name + " has " + playerDefender.GetPronoun(1, false) + " safety flag on and is in a safe area, you can't attack " + playerDefender.GetPronoun(2, false) + " here.");
+						return false;
 					}
 				}
 			}

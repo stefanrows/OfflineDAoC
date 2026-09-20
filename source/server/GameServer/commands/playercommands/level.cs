@@ -4,11 +4,17 @@ namespace DOL.GS.Commands
 {
     [CmdAttribute("&level",
     ePrivLevel.Player,
-    "Allows you to level 20 instantly if you have a level 50", "/level")]
+    "Disabled on the Camlann PvP server", "/level")]
     public class LevelCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         public void OnCommand(GameClient client, string[] args)
         {
+            if (GameServer.Instance?.Configuration?.ServerType == EGameServerType.GST_PvP)
+            {
+                DisplayMessage(client, "/level is disabled on the Camlann PvP server.");
+                return;
+            }
+
             if (ServerProperties.Properties.SLASH_LEVEL_TARGET <= 1)
             {
                 DisplayMessage(client, "/level is disabled on this server.");

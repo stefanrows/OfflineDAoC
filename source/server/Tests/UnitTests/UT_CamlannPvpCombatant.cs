@@ -32,6 +32,7 @@ public sealed class UT_CamlannPvpCombatant
         public override GameClient Client { get; } = new BotDummyClient();
         public override bool IsInvulnerableToAttack => false;
         public override ushort CurrentRegionID { get; set; }
+        public override bool SafetyFlag { get; set; }
     }
 
     private sealed class TestBot : GameBot
@@ -88,6 +89,27 @@ public sealed class UT_CamlannPvpCombatant
         bot.StartPvpInvulnerability(5_000);
 
         Assert.That(bot.IsInvulnerableToAttack, Is.True);
+        Assert.That(new PvPServerRules().IsAllowedToAttack(human, bot, true), Is.False);
+    }
+
+    [Test]
+    public void SubTenSafetyOnlyProtectsOutsideOldFrontiers()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.IsSafetyProtected(9, true, false), Is.True);
+            Assert.That(PvpCombatant.IsSafetyProtected(9, true, true), Is.False);
+            Assert.That(PvpCombatant.IsSafetyProtected(10, true, false), Is.False);
+            Assert.That(PvpCombatant.IsSafetyProtected(9, false, false), Is.False);
+        });
+    }
+
+    [Test]
+    public void FlaggedSubTenHumanCannotStartOpenWorldPvp()
+    {
+        var human = new TestPlayer { Realm = eRealm.Albion, Level = 9, SafetyFlag = true, CurrentRegionID = 1 };
+        var bot = Bot(eRealm.Midgard);
+
         Assert.That(new PvPServerRules().IsAllowedToAttack(human, bot, true), Is.False);
     }
 

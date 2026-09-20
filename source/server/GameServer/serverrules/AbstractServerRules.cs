@@ -2108,9 +2108,12 @@ namespace DOL.GS.ServerRules
                 baseMoneyReward = Math.Min(baseMoneyReward, CalculateMoneyCap());
 
                 RewardRealmPoints(out realmPointsEarned);
-                RewardBountyPoints();
                 RewardExperience();
-                RewardMoney();
+                if (GameServer.Instance?.Configuration?.ServerType != EGameServerType.GST_PvP)
+                {
+                    RewardBountyPoints();
+                    RewardMoney();
+                }
             }
             else
                 SendNotWorthRewardMessage();
