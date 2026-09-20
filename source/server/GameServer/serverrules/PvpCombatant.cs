@@ -115,6 +115,12 @@ namespace DOL.GS.ServerRules
 		public static bool IsOldFrontier(GameLiving living) =>
 			living?.CurrentZone?.IsOF == true;
 
+		public static bool IsSafetyProtected(GamePlayer player, int safetyLevel = 10) =>
+			player != null && IsSafetyProtected(player.Level, player.SafetyFlag, IsOldFrontier(player), safetyLevel);
+
+		public static bool IsSafetyProtected(int level, bool safetyFlag, bool isOldFrontier, int safetyLevel = 10) =>
+			safetyFlag && level < safetyLevel && !isOldFrontier;
+
 		public static bool IsRealGuild(Guild guild) =>
 			guild != null && guild.Name != DummyGuildName;
 

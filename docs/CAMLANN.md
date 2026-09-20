@@ -37,7 +37,15 @@ over a running install unless the owner asks.
   tests and the launcher build passed on 2026-09-20; launcher tests require
   the Windows desktop runtime and were not executable on Linux. No live server
   or client was started.
-- Next: Tier 6.
+- Tier 6 implementation is complete on the current branch: Camlann PvP
+  player kills award only XP and realm points, constitution loss is enabled,
+  human and bot release/zone/teleport immunity is preserved, Old Frontiers
+  safety scope is enforced, Atlas bounty rewards are disabled, and `/level`
+  remains unavailable. The isolated server suite passed 1,918 tests and the
+  launcher build passed on 2026-09-20; launcher tests require the Windows
+  desktop runtime and were not executable on Linux. No live server or client
+  was started.
+- Next: Tier 7.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -368,8 +376,8 @@ results come from the owner's real client:
   safety (area based) is still worth a client check once bots roam (Tier 3).
 - ⏭ Other-realm companion (friendly heals, buffs, `/assist`) is deferred to
   Tier 2, which enables cross-realm `/spawn`.
-- Known gap for Tier 6: the sub-10 safety flag protects everywhere, not only
-  outside Old Frontiers zones.
+- Resolved in Tier 6: sub-10 safety is not protection inside Old Frontiers
+  zones.
 
 ---
 
@@ -646,7 +654,7 @@ Rewrite `KeepRelicReset` / `KeepRelicResetPanel` so they no longer run
 
 ---
 
-## Tier 6 — Full PvP consequences
+## Tier 6 — Full PvP consequences ✅
 
 **Goal:** Original Camlann lethality, with the owner's grey-target mercy.
 
@@ -683,8 +691,9 @@ Do not add more switches unless the owner asks after playtesting.
 - A flagged sub-10 is protected in Cotswold and not in Emain.
 - An autonomous level-50 bot *can* legally attack a same-realm level-5 in a
   starter zone, and by default mostly doesn't.
-- **Gate:** A fresh character leaving a capital is at risk. Cities and hubs
-  remain sanctuaries.
+- ✅ **Gate:** A fresh character leaving a capital is at risk. Cities and hubs
+  remain sanctuaries. The offline implementation gate passed; no live server
+  or client was started for this tier.
 
 ---
 

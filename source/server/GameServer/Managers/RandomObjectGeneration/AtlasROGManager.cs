@@ -112,24 +112,9 @@ namespace DOL.GS
 
         public static void GenerateReward(GameLiving living, int amount)
         {
-            if (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvP)
-                GenerateBPs(living, amount);
-        }
-
-        private static void GenerateBPs(GameLiving living, int amount)
-        {
-            if (amount == 0) return;
-
-            if (living != null && living is GamePlayer)
-            {
-                var player = living as GamePlayer;
-                double relicBonus = amount * (0.025 * RelicMgr.GetRelicCount(player.Realm));
-                var totBPs = amount + Convert.ToInt32(relicBonus);
-                player.GainBountyPoints(totBPs, false);
-
-                if (relicBonus > 0)
-                    player.Out.SendMessage($"You gained an additional {Convert.ToInt32(relicBonus)} BPs due to your realm's relic ownership!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
-            }
+            // Atlas bounty rewards are not part of the 1.65 Camlann ruleset.
+            // Keep this compatibility entry point for legacy quest scripts, but
+            // never mint realm-wide bounty currency in the shipped PvP world.
         }
 
         public static void GenerateBattlegroundToken(GameLiving living, int amount)

@@ -16,6 +16,7 @@ using DOL.GS.PacketHandler;
 using DOL.GS.PropertyCalc;
 using DOL.GS.Realm;
 using DOL.GS.RealmAbilities;
+using DOL.GS.ServerRules;
 using DOL.GS.Styles;
 using static DOL.GS.GamePlayer;
 
@@ -125,6 +126,7 @@ namespace DOL.GS
         private bool EndIntentionalWorldMove() => Interlocked.Decrement(ref _intentionalWorldMoveDepth) == 0;
         public bool IsReturningAfterRelease { get; private set; }
         private long _pvpInvulnerabilityTick;
+        private bool _lastDeathWasPvp;
 
         /// <summary>
         /// PvP release/zone immunity for a bot. Bots do not have a real client
@@ -959,6 +961,7 @@ namespace DOL.GS
 
         public override void ProcessDeath(GameObject killer)
         {
+            _lastDeathWasPvp = PvpCombatant.Resolve(killer as GameLiving) != null;
             AutonomousPetSupport.CancelPendingCharm(this);
             _deathTick = GameLoop.GameLoopTime;
             _deathRegionId = CurrentRegionID;
@@ -1081,8 +1084,8 @@ namespace DOL.GS
                     (int)Math.Round(destination.Y), (int)Math.Round(destination.Z), Owner.Heading))
                     return;
 
-                if (CurrentRegion != null && GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules companionRules)
-                    companionRules.StartImmunityTimer(this, ServerProperties.Properties.TIMER_KILLED_BY_MOB * 1000);
+                if (CurrentRegion != null && GameServer.ServerRules is PvPServerRules companionRules)
+                    companionRules.StartImmunityTimer(this, DeathImmunityDurationMilliseconds());
                 Health = Math.Max(1, MaxHealth);
                 Mana = Math.Max(0, MaxMana);
                 Endurance = Math.Max(0, MaxEndurance);
@@ -1113,8 +1116,8 @@ namespace DOL.GS
             // at its killer or cause HandleDeathRecovery to discard its timer.
             if (!MoveTo(releaseRegion, release.X, release.Y, release.Z, Heading))
                 return;
-            if (CurrentRegion != null && GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules releaseRules)
-                releaseRules.StartImmunityTimer(this, ServerProperties.Properties.TIMER_KILLED_BY_MOB * 1000);
+            if (CurrentRegion != null && GameServer.ServerRules is PvPServerRules releaseRules)
+                releaseRules.StartImmunityTimer(this, DeathImmunityDurationMilliseconds());
             Health = Math.Max(1, MaxHealth / 3);
             Mana = Math.Max(0, MaxMana / 3);
             Endurance = Math.Max(0, MaxEndurance / 3);
@@ -1141,11 +1144,16 @@ namespace DOL.GS
             return BotReleaseBindPoints.Nearest(_deathRegionId, X, Y, IsAutonomousWorldBot ? Realm : eRealm.None);
         }
 
+        private int DeathImmunityDurationMilliseconds() =>
+            (_lastDeathWasPvp ? ServerProperties.Properties.TIMER_KILLED_BY_PLAYER : ServerProperties.Properties.TIMER_KILLED_BY_MOB) * 1000;
+
         public void OnResurrectedBy(GameLiving caster)
         {
             AutonomousRealmRaid.ClearCorpseWait(this);
             _deathRecoveryTimer?.Stop();
             _deathRecoveryTimer = null;
+            if (GameServer.ServerRules is PvPServerRules rules)
+                rules.StartImmunityTimer(this, DeathImmunityDurationMilliseconds());
             IsReturningAfterRelease = false;
             _stableReturnPlan = null;
             CompleteStableMasterRoute();

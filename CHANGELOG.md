@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-20
+
+### Added
+
+- Full Camlann PvP consequence coverage for Old Frontiers safety scope,
+  player-shaped death immunity, constitution loss, and XP/realm-point kills.
+
+### Changed
+
+- PvP player kills no longer award legacy bounty points or coin, and autonomous
+  bots retain the player-kill immunity timer after release or resurrection.
+- `/level` is disabled on the shipped Camlann PvP server regardless of mutable
+  slash-level settings.
+
+### Fixed
+
+- Autonomous GameBot kills now classify human deaths as PvP for release
+  immunity, and sub-10 `/safety` no longer protects actors inside Old Frontiers.
+
+### Removed
+
+- Atlas bounty-point generation from the PvP quest reward compatibility path.
+
 ## [0.12.0] - 2026-09-20
 
 ### Added
