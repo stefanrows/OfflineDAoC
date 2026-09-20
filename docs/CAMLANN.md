@@ -24,7 +24,13 @@ over a running install unless the owner asks.
   is applied through autonomous combat gates. The isolated server suite passed
   1,909 tests on 2026-09-20. No live server or client was started for this
   offline gate.
-- Next: Tier 4.
+- Tier 4 implementation is complete on the current branch: autonomous bots
+  receive persisted real crew guilds, login/group formation balances crews
+  rather than realms, player invitations accept level-compatible bots, and
+  autonomous frontier planning is roam/hunt focused until Tier 5 keep/relic
+  work. The isolated server suite passed 1,913 tests on 2026-09-20. No live
+  server or client was started for this offline gate.
+- Next: Tier 5.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -536,11 +542,16 @@ three realm factions.
 
 ### Tests and gate
 
-- A guild roster can contain all three realms and survives a server restart.
-- Login balancer does not force 1:1:1 realm counts as teams.
-- No event layer starts a battle because `attacker.Realm != keep.Realm` alone.
-- The player can form a guild alone and invite a bot.
-- **Gate:** Dumping the live population shows crews, not three armies.
+- ✅ A real crew guild can persist autonomous `GuildId`/`GuildRank` identity;
+  startup reconciliation rebinds the guild after the guild cache reloads.
+- ✅ Login balancing consumes crew load and has no realm input.
+- ✅ Active Tier 4 frontier planning contains no keep/relic siege objectives;
+  keep/relic contesting is deferred to Tier 5.
+- ✅ The player can form a guild alone and `/gc invite` a level-compatible live
+  autonomous bot.
+- **Gate:** The offline implementation gate passes; live population dumping
+  and real-client guild UI remain explicitly unverified until a permitted
+  server/client spike.
 
 ---
 

@@ -85,6 +85,7 @@ namespace DOL.GS
 		/// This holds all players inside the guild (InternalID, GamePlayer)
 		/// </summary>
 		protected readonly Dictionary<string, GamePlayer> m_onlineGuildPlayers = new Dictionary<string, GamePlayer>();
+		protected readonly Dictionary<string, GameBot> m_onlineGuildBots = new Dictionary<string, GameBot>();
 
 		/// <summary>
 		/// Use this object to lock the guild member list
@@ -532,7 +533,8 @@ namespace DOL.GS
 		{
 			get
 			{
-				return m_onlineGuildPlayers.Count;
+				lock (m_memberListLock)
+					return m_onlineGuildPlayers.Count + m_onlineGuildBots.Count;
 			}
 		}
 
@@ -559,6 +561,46 @@ namespace DOL.GS
 				GuildMgr.RefreshPersonalHouseEmblem(player, this);
 			}
 
+			return true;
+		}
+
+		public bool AddBotMember(GameBot bot, DbGuildRank rank)
+		{
+			if (bot == null || rank == null || (bot.Guild != null && bot.Guild != this))
+				return false;
+
+			string memberId = bot.InternalID ?? bot.DatabaseID.ToString();
+			lock (m_memberListLock)
+			{
+				if (!m_onlineGuildBots.TryAdd(memberId, bot))
+					return false;
+			}
+
+			bot.Guild = this;
+			bot.GuildName = Name;
+			bot.GuildID = GuildID;
+			bot.GuildRank = rank;
+			return true;
+		}
+
+		public bool RemoveBotMember(GameBot bot)
+		{
+			if (bot == null)
+				return false;
+
+			string memberId = bot.InternalID ?? bot.DatabaseID.ToString();
+			lock (m_memberListLock)
+			{
+				if (!m_onlineGuildBots.Remove(memberId))
+					return false;
+			}
+
+			if (bot.Guild == this)
+			{
+				bot.Guild = null;
+				bot.GuildRank = null;
+				bot.GuildName = string.Empty;
+			}
 			return true;
 		}
 
@@ -604,6 +646,7 @@ namespace DOL.GS
 			lock (m_memberListLock)
 			{
 				m_onlineGuildPlayers.Clear();
+				m_onlineGuildBots.Clear();
 			}
 		}
 
@@ -643,7 +686,10 @@ namespace DOL.GS
 			if (log.IsDebugEnabled)
 				log.Debug("Adding player to the guild, guild name=\"" + Name + "\"; player name=" + addPlayer.Name);
 
-			if (addPlayer.Realm != this.Realm) return false;
+			if (addPlayer.Realm != this.Realm &&
+				GameServer.Instance.Configuration.ServerType != EGameServerType.GST_PvP &&
+				!ServerProperties.Properties.ALLOW_CROSS_REALM_GUILDS)
+				return false;
 
 			try
 			{
@@ -830,6 +876,36 @@ namespace DOL.GS
 					log.Error("GotAccess", e);
 				return false;
 			}
+		}
+
+		public bool HasRank(GameBot member, Guild.eRank rankNeeded)
+		{
+			if (member == null || member.Guild != this || member.GuildRank == null)
+				return false;
+
+			return rankNeeded switch
+			{
+				eRank.Emblem => member.GuildRank.Emblem,
+				eRank.AcHear => member.GuildRank.AcHear,
+				eRank.AcSpeak => member.GuildRank.AcSpeak,
+				eRank.Demote or eRank.Promote => member.GuildRank.Promote,
+				eRank.GcHear => member.GuildRank.GcHear,
+				eRank.GcSpeak => member.GuildRank.GcSpeak,
+				eRank.Invite => member.GuildRank.Invite,
+				eRank.OcHear => member.GuildRank.OcHear,
+				eRank.OcSpeak => member.GuildRank.OcSpeak,
+				eRank.Remove => member.GuildRank.Remove,
+				eRank.Alli => member.GuildRank.Alli,
+				eRank.View => member.GuildRank.View,
+				eRank.Claim => member.GuildRank.Claim,
+				eRank.Release => member.GuildRank.Release,
+				eRank.Upgrade => member.GuildRank.Upgrade,
+				eRank.Dues => member.GuildRank.Dues,
+				eRank.Withdraw => member.GuildRank.Withdraw,
+				eRank.Leader => member.GuildRank.RankLevel == 0,
+				eRank.Buff => member.GuildRank.Buff,
+				_ => false,
+			};
 		}
 
 		/// <summary>

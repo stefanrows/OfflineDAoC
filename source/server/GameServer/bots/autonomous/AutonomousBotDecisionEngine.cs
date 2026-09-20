@@ -449,9 +449,9 @@ public static class AutonomousGroupLifecycle
         bool InDungeon,
         bool InCombat);
 
-    public static bool ShouldInvite(int currentSize, bool sameRealm, bool levelsCompatible, bool nearby, Random random = null)
+    public static bool ShouldInvite(int currentSize, bool sameCrew, bool levelsCompatible, bool nearby, Random random = null)
     {
-        if (!sameRealm || !levelsCompatible || !nearby || currentSize < 1 || currentSize >= 5)
+        if (!sameCrew || !levelsCompatible || !nearby || currentSize < 1 || currentSize >= 5)
             return false;
         random ??= Random.Shared;
         return random.NextDouble() < 0.10;

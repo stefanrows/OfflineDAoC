@@ -28,6 +28,8 @@ internal static class Program
                 EnsureColumn(migrationConnection, "offline_world_bots", "ObjectivePveMode", "TEXT NOT NULL DEFAULT ''");
                 EnsureColumn(migrationConnection, "offline_world_bots", "ObjectivePveKillTarget", "INTEGER NOT NULL DEFAULT 0");
                 EnsureColumn(migrationConnection, "offline_world_bots", "ObjectivePveKills", "INTEGER NOT NULL DEFAULT 0");
+                EnsureColumn(migrationConnection, "offline_world_bots", "GuildId", "TEXT NOT NULL DEFAULT ''");
+                EnsureColumn(migrationConnection, "offline_world_bots", "GuildRank", "INTEGER NOT NULL DEFAULT 9");
                 ApplyClassic165SpawnProfile(migrationConnection);
                 RestoreClassic165ShroudedIslesAndDarknessFallsSpawns(migrationConnection);
                 RestoreConservativeClassic165FrontierAndAlbionSpawns(migrationConnection);
@@ -192,6 +194,8 @@ internal static class Program
                 ObjectivePveMode TEXT NOT NULL DEFAULT '',
                 ObjectivePveKillTarget INTEGER NOT NULL DEFAULT 0,
                 ObjectivePveKills INTEGER NOT NULL DEFAULT 0,
+                GuildId TEXT NOT NULL DEFAULT '',
+                GuildRank INTEGER NOT NULL DEFAULT 9,
                 X INTEGER,
                 Y INTEGER,
                 Z INTEGER
@@ -321,6 +325,8 @@ internal static class Program
         EnsureColumn(connection, "offline_world_bots", "ObjectivePveMode", "TEXT NOT NULL DEFAULT ''");
         EnsureColumn(connection, "offline_world_bots", "ObjectivePveKillTarget", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "offline_world_bots", "ObjectivePveKills", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn(connection, "offline_world_bots", "GuildId", "TEXT NOT NULL DEFAULT ''");
+        EnsureColumn(connection, "offline_world_bots", "GuildRank", "INTEGER NOT NULL DEFAULT 9");
         EnsureColumn(connection, "offline_runtime_status", "ServerMemoryMb", "REAL NOT NULL DEFAULT 0");
         EnsureColumn(connection, "offline_runtime_status", "TickP95Ms", "REAL NOT NULL DEFAULT 0");
         EnsureColumn(connection, "offline_runtime_status", "AiWorkQueue", "INTEGER NOT NULL DEFAULT 0");

@@ -325,11 +325,27 @@ namespace DOL.GS.Commands
 							return;
 						}
 
-						GamePlayer obj = client.Player.TargetObject as GamePlayer;
+						GameBot bot = client.Player.TargetObject as GameBot;
 						if (args.Length > 2)
 						{
-							obj = ClientService.Instance.GetPlayerByExactName(args[2]);
+							AutonomousBotRegistry.TryGetByName(args[2], out bot);
 						}
+
+						if (bot != null)
+						{
+							if (!AutonomousCrewManager.TryAcceptGuildInvite(client.Player, bot))
+							{
+								client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.InviteNotThis"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+								return;
+							}
+
+							client.Out.SendMessage($"{bot.Name} joined {client.Player.Guild.Name}.", eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						GamePlayer obj = client.Player.TargetObject as GamePlayer;
+						if (args.Length > 2)
+							obj = ClientService.Instance.GetPlayerByExactName(args[2]);
 
 						if (obj == null)
 						{

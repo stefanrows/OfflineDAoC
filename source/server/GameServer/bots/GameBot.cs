@@ -525,11 +525,34 @@ namespace DOL.GS
         #region IGamePlayer — Guild
 
         private Guild _guild;
+        private DbGuildRank _guildRank;
 
         public Guild Guild
         {
             get => _guild;
             set => _guild = value;
+        }
+
+        public DbGuildRank GuildRank
+        {
+            get => _guildRank;
+            set => _guildRank = value;
+        }
+
+        public string GuildID
+        {
+            get => PersistentRecord?.GuildId ?? Guild?.GuildID ?? string.Empty;
+            set
+            {
+                if (PersistentRecord != null)
+                    PersistentRecord.GuildId = value ?? string.Empty;
+            }
+        }
+
+        public override string GuildName
+        {
+            get => Guild?.Name ?? base.GuildName;
+            set => base.GuildName = value;
         }
 
         #endregion
@@ -2311,6 +2334,8 @@ namespace DOL.GS
             if ((eRealm)record.Realm != eRealm.None)
                 Realm = (eRealm)record.Realm;
             Name = record.Name;
+            if (!string.IsNullOrWhiteSpace(record.GuildId))
+                AutonomousCrewManager.Bind(this);
             MaxSpeedBase = PLAYER_BASE_SPEED;
 
             InitializeBotStats();
@@ -2679,6 +2704,7 @@ namespace DOL.GS
                 if (IsTemporaryGroupHelper)
                     GameEventMgr.RemoveHandler(Owner, GamePlayerEvent.RegionChanged, new DOLEventHandler(OnOwnerRegionChanged));
             }
+            Guild?.RemoveBotMember(this);
             base.Delete();
         }
 

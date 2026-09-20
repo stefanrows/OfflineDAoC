@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-20
+
+### Added
+
+- Camlann Tier 4 autonomous crews with real `DbGuild` identity, persisted bot
+  membership/rank, mixed-realm guild rosters, and player invitations for live
+  autonomous bots.
+- Crew-based login balancing, mixed-realm group formation, and guild-aware
+  roster/rank handling for autonomous actors.
+
+### Changed
+
+- Autonomous frontier behavior now roams and hunts unallied actors; keep and
+  relic contesting remains deferred to Tier 5.
+- Cross-realm guild membership is enabled for the PvP ruleset while character
+  realm identity remains unchanged.
+
+### Fixed
+
+- Existing `offline_world_bots` databases receive additive `GuildId` and
+  `GuildRank` columns with safe defaults during setup/migration.
+
+### Removed
+
+- Realm-quota login and realm-local autonomous RvR group formation from the
+  active Camlann population path.
+
 ## [0.9.0] - 2026-09-20
 
 ### Added
