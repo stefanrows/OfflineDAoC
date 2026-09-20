@@ -12,6 +12,47 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-09-20
+
+### Added
+
+- Dedicated documentation for `/spawn` companion-bot XP, attribution,
+  progression, persistence, and future tuning points.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.11.0] - 2026-09-20
+
+### Added
+
+- `/spawn` companion bots now earn PvE experience from their own combat
+  contribution while they are active.
+
+### Changed
+
+- Temporary companions use the normal player XP rate and can level and train
+  their temporary in-memory class progression without changing the owner's
+  existing XP or loot treatment.
+
+### Fixed
+
+- `/spawn` helpers no longer discard their valid XP contribution while still
+  remaining excluded from realm-point rewards and real-party XP divisors.
+
+### Removed
+
+- None.
+
 ## [0.10.0] - 2026-09-20
 
 ### Added

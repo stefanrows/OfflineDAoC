@@ -347,7 +347,7 @@ namespace DOL.UnitTests
 
         [TestCase(1, 0, 10)] [TestCase(7, 0, 14)]
         [TestCase(7, 1, 18)] [TestCase(7, 2, 18)]
-        public void CompanionOnlyDamageGivesHumanFullCreditWithoutHelperXpSplit(int count, int petDepth, int mobLevel)
+        public void CompanionOnlyDamageGivesHumanFullCreditAndCompanionXpCredit(int count, int petDepth, int mobLevel)
         {
             LootPlayer player = Inert<LootPlayer>(); player.Level = 10;
             player.ObjectState = GameObject.eObjectState.Active;
@@ -369,7 +369,7 @@ namespace DOL.UnitTests
             Assert.That((double)result[1], Is.EqualTo(100).Within(0.00001));
             IDictionary humans = (IDictionary)result[2], bots = (IDictionary)result[3], groups = (IDictionary)result[6];
             Assert.That(humans.Count, Is.EqualTo(1)); Assert.That(humans.Contains(player), Is.True);
-            Assert.That(bots.Count, Is.Zero);
+            Assert.That(bots.Count, Is.EqualTo(petDepth == 0 ? count : 0));
             Assert.That(CreditField(groups[group], "Count"), Is.EqualTo(1));
             Assert.That((double)CreditField(groups[group], "Damage"), Is.EqualTo(100).Within(0.00001));
             Assert.That(CreditField(result[4], "Owner"), Is.SameAs(player), "Human also owns the loot; helper never takes it.");

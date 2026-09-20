@@ -319,7 +319,7 @@ namespace DOL.GS.Commands
 
             client.Out.SendMessage(
                 $"{helper.Name}, level {helper.Level} {characterClass}, joined fully equipped: armor/accessories level {Math.Max(1, helper.Level - 10)}–{helper.Level}, weapons/offhand level {Math.Max(1, helper.Level - 2)}–{helper.Level}. " +
-                "This helper takes no loot, is never saved, and vanishes when removed from the group.",
+                "This helper earns normal XP while active, takes no loot, is never saved, and vanishes when removed from the group.",
                 eChatType.CT_System, eChatLoc.CL_SystemWindow);
         }
     }

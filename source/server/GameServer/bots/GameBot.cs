@@ -1605,7 +1605,8 @@ namespace DOL.GS
 
         public override void GainExperience(GainedExperienceEventArgs arguments, bool notify = true)
         {
-            if (!IsAutonomousWorldBot || arguments == null || arguments.ExpTotal <= 0 || Level >= MaxLevel)
+            if ((!IsAutonomousWorldBot && !IsTemporaryGroupHelper) || arguments == null ||
+                arguments.ExpTotal <= 0 || Level >= MaxLevel)
                 return;
 
             long experienceGained = arguments.ExpTotal;
@@ -1618,10 +1619,10 @@ namespace DOL.GS
                 {
                     long zoneBonus = baseExperience * CurrentZone.BonusExperience / 100;
                     if (zoneBonus > 0)
-                        experienceGained += ScaleAutonomousExperience(zoneBonus, false);
+                        experienceGained += ScaleExperience(zoneBonus, false);
                 }
 
-                baseExperience = ScaleAutonomousExperience(baseExperience,
+                baseExperience = ScaleExperience(baseExperience,
                     CurrentRegion?.IsRvR == true || CurrentZone?.IsRvR == true);
 
                 long itemExperienceBonus = GetModified(eProperty.XpPoints);
@@ -1648,8 +1649,11 @@ namespace DOL.GS
 
             if (leveled)
             {
-                // New specialization points remain unspent until the bot chooses
-                // to reach and interact with its real class trainer.
+                if (IsTemporaryGroupHelper)
+                    SpendSpecPoints(Level, previousLevel);
+
+                // New specialization points remain unspent until an autonomous
+                // bot chooses to reach and interact with its real class trainer.
                 RefreshSpecDependantSkills(false);
                 SetBotSpells();
                 SortStyles();
@@ -1657,20 +1661,35 @@ namespace DOL.GS
                 Health = MaxHealth;
                 Mana = MaxMana;
                 Endurance = MaxEndurance;
-                AutonomousBotStatusPersistence.Queue(this, true);
+                if (IsAutonomousWorldBot)
+                    AutonomousBotStatusPersistence.Queue(this, true);
             }
             else
             {
-                MarkAutonomousStateDirty();
-                // XP is a real progression event, so coalesce it into the next
-                // status batch instead of waiting for a server-wide save.
-                AutonomousBotStatusPersistence.Queue(this);
+                if (IsAutonomousWorldBot)
+                {
+                    MarkAutonomousStateDirty();
+                    // XP is a real progression event, so coalesce it into the
+                    // next status batch instead of waiting for a server-wide save.
+                    AutonomousBotStatusPersistence.Queue(this);
+                }
             }
             if (previousExperience == 0 || previousLevel != Level)
             {
-                log.Info($"AUTONOMOUS_XP_PROGRESS bot=\"{Name}\" id={DatabaseID} class=\"{ClassName}\" " +
+                string progressMarker = IsAutonomousWorldBot ? "AUTONOMOUS_XP_PROGRESS" : "COMPANION_XP_PROGRESS";
+                log.Info($"{progressMarker} bot=\"{Name}\" id={DatabaseID} class=\"{ClassName}\" " +
                          $"amount={experienceGained} xp={previousExperience}->{Experience} level={previousLevel}->{Level}");
             }
+        }
+
+        private long ScaleExperience(long experience, bool isRvR)
+        {
+            double rate = IsTemporaryGroupHelper
+                ? ServerProperties.Properties.XP_RATE
+                : ServerProperties.Properties.BOT_XP_RATE;
+            if (isRvR)
+                rate *= ServerProperties.Properties.RvR_XP_RATE;
+            return (long)(experience * rate);
         }
 
         private static long ScaleAutonomousExperience(long experience, bool isRvR)
@@ -2257,6 +2276,8 @@ namespace DOL.GS
                 throw new InvalidOperationException($"Failed to set character class for class ID {ClassId}. Ensure the class ID is valid.");
             SetRaceAndRealm(owner);
             Level = BotAttributeProgression.InitialLevel(owner.Level, botLevel, IsTemporaryGroupHelper);
+            if (IsTemporaryGroupHelper)
+                Experience = GamePlayer.GetExperienceAmountForLevel(Math.Max(0, Level - 1));
             _creationModel = Model;
 
             Name = string.IsNullOrEmpty(name) ? $"{owner.Name}'s {ClassName} Bot" : name;
