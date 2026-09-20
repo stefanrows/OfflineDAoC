@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DOL.Database;
+using DOL.Events;
 using DOL.GS;
 using DOL.GS.Database;
 using DOL.GS.PlayerClass;
@@ -253,6 +254,34 @@ namespace DOL.UnitTests
             Assert.That(bot.Level, Is.EqualTo(expected));
             Assert.That(bot.Intelligence, Is.EqualTo(70 + Math.Max(0, expected - 5)));
             Assert.That(bot.GetSpecList().All(spec => spec.Level <= expected), Is.True);
+        }
+
+        [Test]
+        public void TemporaryCompanionUsesPlayerXpRateAndStartsWithCurrentLevelProgress()
+        {
+            double playerRate = Properties.XP_RATE;
+            double botRate = Properties.BOT_XP_RATE;
+            try
+            {
+                Properties.XP_RATE = 2;
+                Properties.BOT_XP_RATE = 9;
+                var owner = (Owner)RuntimeHelpers.GetUninitializedObject(typeof(Owner)); owner.Level = 20;
+                var bot = new GameBot(owner, (byte)eCharacterClass.Wizard, "XpTester", (byte)eRace.Briton,
+                    temporaryGroupHelper: true);
+                _constructed.Add(bot);
+
+                long startingExperience = GamePlayer.GetExperienceAmountForLevel(owner.Level - 1);
+                bot.GainExperience(new GainedExperienceEventArgs(
+                    100, 0, 0, 0, 0, 0, false, true, eXPSource.NPC));
+
+                Assert.That(bot.Experience, Is.EqualTo(startingExperience + 200));
+                Assert.That(bot.Level, Is.EqualTo(owner.Level));
+            }
+            finally
+            {
+                Properties.XP_RATE = playerRate;
+                Properties.BOT_XP_RATE = botRate;
+            }
         }
 
         [Test]

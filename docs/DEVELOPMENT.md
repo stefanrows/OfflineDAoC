@@ -10,6 +10,9 @@ original author's private 0.4 launcher label. Portable account bootstrap and
 default settings are release-specific differences. Planned Camlann full-PvP
 conversion: `docs/CAMLANN.md`. Do not implement it unless asked.
 
+Companion-bot reward and progression rules are documented in
+`docs/COMPANION_BOTS.md`.
+
 The release's runtime/server contains the reference installed binaries and 99
 navigation meshes. Runtime/data contains a cleaned world database. Runtime/client-opendaoc/app
 contains the compatible game installation. Never use the author's old absolute paths.

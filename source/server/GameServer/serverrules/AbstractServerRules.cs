@@ -1256,9 +1256,13 @@ namespace DOL.GS.ServerRules
                         continue;
                     }
 
-                    // /spawn helpers never receive XP and never increase the
-                    // divisor. Their legitimate combat damage belongs to the
+                    // /spawn helpers receive their own XP award, but never
+                    // increase the real-party divisor or become loot owners.
+                    // Their legitimate combat damage also belongs to the
                     // human owner for reward-percentage purposes.
+                    ProcessBotDamage(helper, pair.Value, botCountAndDamage,
+                        mostDamagingBot, trackLootOwner: false);
+
                     ProcessDamage(owner, pair.Value, owner, mostDamagingPlayer,
                         playerCountAndDamage, false);
 
@@ -1276,10 +1280,16 @@ namespace DOL.GS.ServerRules
 
                 static GameLiving ResolveRootRewardOwner(GameLiving source)
                 {
+                    if (source is GameBot { IsTemporaryGroupHelper: true })
+                        return source;
+
                     GameLiving current = source;
                     for (int depth = 0; depth < 16 && current is GameNPC npc &&
                          npc.Brain is IControlledBrain controlled && controlled.Owner is GameLiving owner; depth++)
                     {
+                        if (current is GameBot { IsTemporaryGroupHelper: true })
+                            return owner;
+
                         current = owner;
                     }
                     return current;
@@ -1287,7 +1297,7 @@ namespace DOL.GS.ServerRules
 
                 static void ProcessBotDamage(GameBot bot, double damage,
                     Dictionary<GameBot, EntityCountTotalDamagePair> entityDamage,
-                    ItemOwnerTotalDamagePair mostDamagingBot)
+                    ItemOwnerTotalDamagePair mostDamagingBot, bool trackLootOwner = true)
                 {
                     double total;
                     if (entityDamage.TryGetValue(bot, out EntityCountTotalDamagePair value))
@@ -1301,7 +1311,7 @@ namespace DOL.GS.ServerRules
                         total = damage;
                     }
 
-                    if (mostDamagingBot.Damage == 0 || total > mostDamagingBot.Damage)
+                    if (trackLootOwner && (mostDamagingBot.Damage == 0 || total > mostDamagingBot.Damage))
                     {
                         mostDamagingBot.Owner = bot;
                         mostDamagingBot.Damage = total;
@@ -1757,7 +1767,7 @@ namespace DOL.GS.ServerRules
             Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage,
             Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage, bool recordKillCredit = true)
         {
-            if (botToAward?.IsAutonomousWorldBot != true || botToAward.IsTemporaryGroupHelper ||
+            if (botToAward == null || (!botToAward.IsAutonomousWorldBot && !botToAward.IsTemporaryGroupHelper) ||
                 npcTotalDamageReceived <= 0)
             {
                 return;
@@ -1832,9 +1842,10 @@ namespace DOL.GS.ServerRules
                 true,
                 eXPSource.NPC));
             // This award path already resolves pets, sub-pets, Animist
-            // turrets, Theurgist elementals, and ordinary group contributors
-            // to the persistent bot that legitimately earned the XP.
-            if (recordKillCredit)
+            // turrets, and Theurgist elementals to the bot that legitimately
+            // earned the XP. Temporary helpers are session-only and do not
+            // participate in autonomous objective accounting.
+            if (recordKillCredit && botToAward.IsAutonomousWorldBot)
             {
                 AutonomousObjectiveAssignments.RecordPveKill(botToAward);
                 AutonomousGoalDiagnostics.Reward(botToAward, killedNpc, botToAward.Experience - diagnosticXpBefore);
