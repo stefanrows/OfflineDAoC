@@ -74,6 +74,12 @@ dotnet restore source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Test
 dotnet test source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj -c Release --no-restore
 ```
 
+`source/server/CoreServer/config/serverconfig.xml` is a local, ignored runtime
+configuration. A clean checkout has only `serverconfig.example.xml`; the
+CoreServer project automatically uses that example as the build output config
+when the local file is absent. A real local `serverconfig.xml`, when present,
+remains authoritative and is never replaced by the build or deploy scripts.
+
 For offline restore, use the release's NuGet.Config and set NUGET_PACKAGES to a
 local developer-state directory. Some launcher tests require that no DAoC server
 is listening locally; a running server can correctly trigger the save lock.
