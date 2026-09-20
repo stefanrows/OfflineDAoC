@@ -184,6 +184,16 @@ namespace DOL.GS.Keeps
 		public Guild Guild { get; set; } = null;
 
 		/// <summary>
+		/// UTC time at which the current guild claimed this keep.
+		/// </summary>
+		public DateTime ClaimedAt { get; private set; } = DateTime.MinValue;
+
+		/// <summary>
+		/// Dynamic relic mount belonging to the current guild claim.
+		/// </summary>
+		public GameKeepRelicPad RelicPad { get; private set; }
+
+		/// <summary>
 		/// Difficulty level of keep for each realm
 		/// the keep is more difficult the guild which have claimed gain more bonus
 		/// </summary>
@@ -197,7 +207,7 @@ namespace DOL.GS.Keeps
 		{
 			get
 			{
-				return m_difficultyLevel[(int)Realm - 1];
+				return Realm == eRealm.None ? 0 : m_difficultyLevel[(int)Realm - 1];
 			}
 		}
 
@@ -234,16 +244,6 @@ namespace DOL.GS.Keeps
 		{
 			get
             {
-				if (this.Realm == eRealm.None && (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvE ||
-					GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvP))
-				{
-					// In PvE & PvP servers, lords are really just mobs farmed for seals.
-					int iVariance = 1000 * Math.Abs(ServerProperties.Properties.GUARD_RESPAWN_VARIANCE);
-					int iRespawn = 60 * ((Math.Abs(ServerProperties.Properties.GUARD_RESPAWN) * 1000) +
-						(Util.Random(-iVariance, iVariance)));
-
-					return (iRespawn > 1000) ? iRespawn : 1000; // Make sure we don't end up with an impossibly low respawn interval.
-				}
 				return 1000;
             }
 		}
@@ -528,7 +528,9 @@ namespace DOL.GS.Keeps
 				if (myguild != null)
 				{
 					Guild = myguild;
-					Guild.ClaimedKeeps.Add(this);
+					ClaimedAt = DBKeep.ClaimedAt;
+					if (!Guild.ClaimedKeeps.Contains(this))
+						Guild.ClaimedKeeps.Add(this);
 					StartDeductionTimer();
 				}
 			}
@@ -553,9 +555,15 @@ namespace DOL.GS.Keeps
 		public virtual void SaveIntoDatabase()
 		{
 			if (Guild != null)
+			{
 				DBKeep.ClaimedGuildName = Guild.Name;
+				DBKeep.ClaimedAt = ClaimedAt;
+			}
 			else
+			{
 				DBKeep.ClaimedGuildName = string.Empty;
+				DBKeep.ClaimedAt = DateTime.MinValue;
+			}
 			if(InternalID == null)
 			{
 				GameServer.Database.AddObject(DBKeep);
@@ -573,90 +581,115 @@ namespace DOL.GS.Keeps
 
 		#region Claim
 
-		public virtual bool CheckForClaim(GamePlayer player)
+		public virtual void EnsureRelicPad()
 		{
+			if (IsPortalKeep || Guild == null || RelicPad != null)
+				return;
+
+			RelicPad = new GameKeepRelicPad(this);
+			RelicPad.AddToWorld();
+		}
+
+		public virtual void RemoveRelicPad()
+		{
+			if (RelicPad == null)
+				return;
+
+			RelicMgr.HomeRelicsFromKeep(this);
+			RelicPad.RemoveFromWorld();
+			RelicPad = null;
+		}
+
+		public virtual bool CheckForClaim(GameLiving player)
+		{
+			IGamePlayer playerLike = player as IGamePlayer;
+			Guild playerGuild = ServerRules.PvpCombatant.GuildOf(player);
+			if (playerLike == null || playerLike.Out == null || playerGuild == null)
+				return false;
+
 			if (InCombat)
 			{
-				player.Out.SendMessage(Name + " is under attack and can't be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+				playerLike.Out.SendMessage(Name + " is under attack and can't be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				log.DebugFormat("KEEPWARNING: {0} attempted to claim {1} while in combat.", player.Name, Name);
 				return false;
 			}
 
-			if(player.Realm != this.Realm)
+			if (IsPortalKeep)
 			{
-				player.Out.SendMessage("The keep is not owned by your realm.",eChatType.CT_System,eChatLoc.CL_SystemWindow);
+				playerLike.Out.SendMessage("Portal keeps cannot be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				return false;
 			}
 			
 			// Disabled check on DBKeep.BaseLevel to allow claiming of BG keeps
 			if (this.DBKeep.BaseLevel != 50 && !ServerProperties.Properties.ALLOW_BG_CLAIM)
 			{
-			 	player.Out.SendMessage("This keep is not able to be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-			 	return false;
-			}
-
-			if (player.Guild == null)
-			{
-				player.Out.SendMessage("You must be in a guild to claim a keep.",eChatType.CT_System,eChatLoc.CL_SystemWindow);
+				playerLike.Out.SendMessage("This keep is not able to be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				return false;
 			}
-			if (!player.Guild.HasRank(player, Guild.eRank.Claim))
+
+			bool hasClaimRank = player switch
 			{
-				player.Out.SendMessage("You do not have permission to claim for your guild.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+				GamePlayer human => playerGuild.HasRank(human, Guild.eRank.Claim),
+				GameBot bot => playerGuild.HasRank(bot, Guild.eRank.Claim),
+				_ => false,
+			};
+			if (!hasClaimRank)
+			{
+				playerLike.Out.SendMessage("You do not have permission to claim for your guild.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				return false;
 			}
 			if (this.Guild != null)
 			{
-				player.Out.SendMessage("The keep is already claimed.",eChatType.CT_System,eChatLoc.CL_SystemWindow);
+				playerLike.Out.SendMessage("The keep is already claimed.",eChatType.CT_System,eChatLoc.CL_SystemWindow);
 				return false;
 			}
 			switch (ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
 			{
 				case 0:
 					{
-						player.Out.SendMessage("Keep claiming is disabled!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+						playerLike.Out.SendMessage("Keep claiming is disabled!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 						return false;
 					}
 				case 1:
 					{
-						if (player.Guild.ClaimedKeeps.Count == 1)
+						if (playerGuild.ClaimedKeeps.Count == 1)
 						{
-							player.Out.SendMessage("Your guild already owns a keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							playerLike.Out.SendMessage("Your guild already owns a keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 							return false;
 						}
 						break;
 					}
 				default:
 					{
-						if (player.Guild.ClaimedKeeps.Count >= ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
+						if (playerGuild.ClaimedKeeps.Count >= ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
 						{
-							player.Out.SendMessage("Your guild already owns the limit of keeps (" + ServerProperties.Properties.GUILDS_CLAIM_LIMIT + ")", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							playerLike.Out.SendMessage("Your guild already owns the limit of keeps (" + ServerProperties.Properties.GUILDS_CLAIM_LIMIT + ")", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 							return false;
 						}
 						break;
 					}
 			}
 
+			int needed = ServerProperties.Properties.CLAIM_NUM;
+			if (this is GameKeepTower)
+				needed /= 2;
+			if (player is GamePlayer privilegedPlayer && privilegedPlayer.Client.Account.PrivLevel > 1)
+				needed = 0;
+
+			int count = 0;
 			if (player.Group != null)
 			{
-				int count = 0;
-				foreach (GamePlayer p in player.Group.GetPlayersInTheGroup())
+				foreach (GameLiving member in player.Group.GetMembersInTheGroup())
 				{
-					// if (GameServer.KeepManager.GetKeepCloseToSpot(p.CurrentRegionID, p, 1000) == this)
-					if (p.CurrentAreas.Contains(this.Area)) //Check if player is in keep area
+					if (member.CurrentAreas.Contains(this.Area))
 						count++;
 				}
+			}
 
-				int needed = ServerProperties.Properties.CLAIM_NUM;
-				if (this is GameKeepTower)
-					needed = needed / 2;
-				if (player.Client.Account.PrivLevel > 1)
-					needed = 0;
-				if (count < needed)
-				{
-					player.Out.SendMessage("Not enough group members are near the keep. You have " + count + "/" + needed + ".", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-					return false;
-				}
+			if (count < needed)
+			{
+				playerLike.Out.SendMessage("Not enough group members are near the keep. You have " + count + "/" + needed + ".", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+				return false;
 			}
 			return true;
 		}
@@ -665,12 +698,18 @@ namespace DOL.GS.Keeps
 		/// claim the keep to a guild
 		/// </summary>
 		/// <param name="player">the player who have claim the keep</param>
-		public virtual void Claim(GamePlayer player)
+		public virtual void Claim(GameLiving player)
 		{
-			Guild = player.Guild;
+			Guild = player switch
+			{
+				GamePlayer human => human.Guild,
+				GameBot bot => bot.Guild,
+				_ => null,
+			};
+			ClaimedAt = DateTime.UtcNow;
 			
 			if (ServerProperties.Properties.GUILDS_CLAIM_LIMIT > 1)
-				player.Guild.SendMessageToGuildMembers("Your guild has currently claimed " + player.Guild.ClaimedKeeps.Count + " keeps of a maximum of " + ServerProperties.Properties.GUILDS_CLAIM_LIMIT, eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
+				Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps of a maximum of " + ServerProperties.Properties.GUILDS_CLAIM_LIMIT, eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
 
 			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_CLAIM_LEVEL);
 
@@ -687,8 +726,9 @@ namespace DOL.GS.Keeps
 			}
 
 			// GameKeepDoor door = new GameKeepDoor();
-    		this.SaveIntoDatabase();
+			this.SaveIntoDatabase();
             LoadFromDatabase(DBKeep);
+            EnsureRelicPad();
             // door.BroadcastDoorStatus();
             StartDeductionTimer();
             GameEventMgr.Notify(KeepEvent.KeepClaimed, this, new KeepEventArgs(this));
@@ -771,9 +811,11 @@ namespace DOL.GS.Keeps
 		/// </summary>
 		public virtual void Release()
 		{
+			RemoveRelicPad();
 			Guild.ClaimedKeeps.Remove(this);
 			PlayerMgr.BroadcastRelease(this);
 			Guild = null;
+			ClaimedAt = DateTime.MinValue;
 			StopDeductionTimer();
 			StopChangeLevelTimer();
 			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_LEVEL);

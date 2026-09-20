@@ -1298,6 +1298,12 @@ namespace DOL.GS.ServerProperties
 		public static int RELIC_RETURN_TIME;
 
 		/// <summary>
+		/// Delay after a guild claims a keep before it can receive a relic.
+		/// </summary>
+		[ServerProperty("pvp", "Relic_Keep_Claim_Delay", "A claimed keep must be held for this many seconds before it can mount a relic.", 5 * 60)]
+		public static int RELIC_KEEP_CLAIM_DELAY;
+
+		/// <summary>
 		/// Allow all realms access to DF
 		/// </summary>
 		[ServerProperty("pvp", "allow_all_realms_df", "Should we allow all realms access to DF", false)]
@@ -1606,7 +1612,7 @@ namespace DOL.GS.ServerProperties
 		/// <summary>
 		/// Are unclaimed keeps considered the enemy in PvP mode?
 		/// </summary>
-		[ServerProperty("keeps", "pvp_unclaimed_keeps_enemy", "Are unclaimed keeps considered the enemy in PvP mode?", false)]
+		[ServerProperty("keeps", "pvp_unclaimed_keeps_enemy", "Are unclaimed keeps considered the enemy in PvP mode?", true)]
 		public static bool PVP_UNCLAIMED_KEEPS_ENEMY;
 
 		/// <summary>
@@ -2272,7 +2278,7 @@ namespace DOL.GS.ServerProperties
 		/// <summary>
 		/// How many things do we allow guilds to claim?
 		/// </summary>
-		[ServerProperty("guild", "guilds_claim_limit", "How many things do we allow guilds to claim?", 1)]
+		[ServerProperty("guild", "guilds_claim_limit", "How many keeps do we allow a guild to claim?", 3)]
 		public static int GUILDS_CLAIM_LIMIT;
 
 		/// <summary>

@@ -1,3 +1,4 @@
+using System;
 using DOL.Database.Attributes;
 
 namespace DOL.Database
@@ -22,6 +23,7 @@ namespace DOL.Database
 		private int m_midgardDifficultyLevel;
 		private int m_hiberniaDifficultyLevel;
 		private int m_originalRealm;
+		private DateTime m_claimedAt;
 		private int m_type;
 		private byte m_baseLevel;
 		private string m_createInfo;
@@ -218,6 +220,23 @@ namespace DOL.Database
 			{
 				Dirty = true;
 				m_guildName = value;
+			}
+		}
+
+		/// <summary>
+		/// UTC time at which the current guild claimed this keep.
+		/// </summary>
+		[DataElement(AllowDbNull = false)]
+		public DateTime ClaimedAt
+		{
+			get
+			{
+				return m_claimedAt;
+			}
+			set
+			{
+				Dirty = true;
+				m_claimedAt = value;
 			}
 		}
 

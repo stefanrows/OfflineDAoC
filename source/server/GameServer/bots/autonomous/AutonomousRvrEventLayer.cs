@@ -26,10 +26,11 @@ public static partial class AutonomousRvrEventLayer
     public enum Intent { Roam, HuntEnemy, AssaultKeep, AssaultRelicKeep, DefendEvent }
 
     public sealed record Force(string GroupId, eRealm Realm, int MemberCount, int AverageLevel, int HealerCount,
-        bool CanSupplySiege = true, bool RoamingReserve = false, long[] MemberIds = null, int MinimumMemberLevel = 50);
+        bool CanSupplySiege = true, bool RoamingReserve = false, long[] MemberIds = null, int MinimumMemberLevel = 50,
+        string GuildName = null);
     public sealed record LiveObjective(string Id, string Name, Intent Kind, eRealm OwningRealm, ushort RegionId,
         int X, int Y, int Z, bool IsRelicKeep, int EnemyCount, int FriendlyCount, int GuardStrength, int ClosedDoors,
-        bool IsRelicCarrier = false, bool IsPortalKeep = false, bool UnderAttack = false);
+        bool IsRelicCarrier = false, bool IsPortalKeep = false, bool UnderAttack = false, string OwningGuild = null);
     public sealed record Plan(Intent Intent, string TargetId, string Name, ushort RegionId, int X, int Y, int Z,
         bool IsSharedEvent, string Reason);
 
@@ -72,7 +73,7 @@ public static partial class AutonomousRvrEventLayer
         {
             if (target == null || target.IsPortalKeep || target.IsRelicCarrier ||
                 attacker is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia) ||
-                target.OwningRealm == attacker)
+                target.OwningRealm == attacker && string.IsNullOrEmpty(target.OwningGuild))
             { reason = "Choose an enemy capturable keep and an attacking realm."; return false; }
             if (Events.ContainsKey(target.Id) || OnCooldown(target.Id, now))
             { reason = "This objective already has an event or an active cooldown."; return false; }
@@ -248,11 +249,14 @@ public static partial class AutonomousRvrEventLayer
                 if (target.UnderAttack) active.AttackObserved = true;
                 // The attacking commitment raises the alarm before combat. Defenders
                 // form next; the third realm joins after both primary forces exist.
-                if (force.Realm != active.AttackerRealm && !RealmEventPolicy.CanRecruitRealm(
-                    force.Realm == active.DefenderRealm, active.AttackObserved || active.BattleStarted,
+                bool ownsTarget = OwnsObjective(force, target);
+                bool attacksTarget = !ownsTarget && force.Realm == active.AttackerRealm;
+                bool defendsTarget = ownsTarget || (!string.IsNullOrEmpty(target.OwningGuild) && force.Realm == active.DefenderRealm);
+                if (!attacksTarget && !defendsTarget && !RealmEventPolicy.CanRecruitRealm(
+                    defendsTarget, active.AttackObserved || active.BattleStarted,
                     active.Attackers.Values.Sum(), active.Defenders.Values.Sum(), Capacity(active)))
                     continue;
-                if (force.Realm == active.AttackerRealm)
+                if (attacksTarget)
                 {
                     if (force.AverageLevel >= 35 && (!active.BattleStarted || active.Attackers.ContainsKey(force.GroupId) ||
                         ShouldJoinActiveEvent(force, active.Attackers.Values.Sum(), Capacity(active), active.RelicKeep, false, roll)) &&
@@ -261,7 +265,7 @@ public static partial class AutonomousRvrEventLayer
                             $"Choosing to rally to the active {(active.RelicKeep ? "relic-keep" : "keep")} assault; participation is capped.");
                     continue;
                 }
-                if (force.Realm == active.DefenderRealm)
+                if (defendsTarget)
                 {
                     if (force.AverageLevel >= 35 && (!active.BattleStarted || active.Defenders.ContainsKey(force.GroupId) ||
                         ShouldJoinActiveEvent(force, active.Defenders.Values.Sum(), Capacity(active), active.RelicKeep, true, roll)) &&
@@ -286,10 +290,10 @@ public static partial class AutonomousRvrEventLayer
 
             bool hasEnemy = objectives.Any(objective => objective.Kind == Intent.HuntEnemy && objective.EnemyCount > 0);
             LiveObjective relic = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultRelicKeep && objective.IsRelicKeep &&
-                                                               objective.OwningRealm != force.Realm && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick))
+                                                               !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick))
                 , SelectedRelics);
             LiveObjective keep = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultKeep && !objective.IsRelicKeep &&
-                                                              objective.OwningRealm != force.Realm && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick))
+                                                              !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick))
                 , SelectedKeeps);
             Intent intent = ChooseIntent(force, hasEnemy, keep != null, relic != null, roll);
             LiveObjective selected = intent switch
@@ -335,6 +339,11 @@ public static partial class AutonomousRvrEventLayer
 
     private static Plan ToPlan(Intent Intent, LiveObjective target, bool shared, string reason) =>
         new(Intent, target.Id, target.Name, target.RegionId, target.X, target.Y, target.Z, shared, reason);
+
+    private static bool OwnsObjective(Force force, LiveObjective objective) =>
+        objective != null && (string.IsNullOrEmpty(objective.OwningGuild)
+            ? objective.OwningRealm != eRealm.None && objective.OwningRealm == force.Realm
+            : string.Equals(objective.OwningGuild, force.GuildName, StringComparison.Ordinal));
 
     private static Plan ReservePlan(Force force, IReadOnlyCollection<LiveObjective> objectives)
     {

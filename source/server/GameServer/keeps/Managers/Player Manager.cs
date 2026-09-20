@@ -94,7 +94,7 @@ namespace DOL.GS.Keeps
 			string claimMessage = string.Format(LanguageMgr.GetTranslation(ServerProperties.Properties.SERV_LANGUAGE,
 				"PlayerManager.BroadcastClaim.Claimed", keep.Guild.Name, keep.Name));
 			
-			BroadcastMessage(claimMessage, (eRealm)keep.Realm);
+			BroadcastMessage(claimMessage, eRealm.None);
 			
 			// if (ServerProperties.Properties.DISCORD_ACTIVE && (!string.IsNullOrEmpty(ServerProperties.Properties.DISCORD_WEBHOOK_ID)))
 			// {
@@ -112,7 +112,7 @@ namespace DOL.GS.Keeps
 				ServerProperties.Properties.SERV_LANGUAGE, "PlayerManager.BroadcastRelease.LostControl",
 				keep.Guild.Name, keep.Name));
 			
-			BroadcastMessage(lostClaimMessage, (eRealm)keep.Realm);
+			BroadcastMessage(lostClaimMessage, eRealm.None);
 			
 			// if (ServerProperties.Properties.DISCORD_ACTIVE && (!string.IsNullOrEmpty(ServerProperties.Properties.DISCORD_WEBHOOK_ID)))
 			// {

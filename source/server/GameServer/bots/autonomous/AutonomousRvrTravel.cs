@@ -13,7 +13,7 @@ public static class AutonomousRvrTravel
         if (!AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
             bot.TempProperties.GetProperty<long>("RvrDoorPassUntil") > GameLoop.GameLoopTime) return false;
         foreach (GameKeepDoor door in GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID)
-                     .Where(keep => keep.Realm == bot.Realm).SelectMany(keep => keep.Doors.Values))
+                     .Where(keep => bot.Guild != null && keep.Guild == bot.Guild).SelectMany(keep => keep.Doors.Values))
         {
             if (!bot.IsWithinRadius(door, WorldMgr.INTERACT_DISTANCE) || Math.Abs(door.Z - bot.Z) > 160) continue;
             Vector2 toDoor = new(door.X - bot.X, door.Y - bot.Y);

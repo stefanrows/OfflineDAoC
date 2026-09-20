@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-20
+
+### Added
+
+- Camlann guild-owned keep claims with bot-aware ranks, companion-aware claim
+  counts, a three-keep guild limit, claim timestamps, and dynamic relic mounts.
+- Relic keep persistence through `Relic.KeepID`, guild-only uncapped bonuses,
+  claim-delay enforcement, and guild-aware autonomous keep/relic objectives.
+
+### Changed
+
+- Fresh and launcher-reset frontier keeps now use `Realm=0` until claimed;
+  unclaimed keeps are hostile to every guild and portal keeps remain safe.
+- Keep capture/reset, guard ownership, broadcasts, and relic pickup/mounting
+  use guild ownership while realm remains only a cosmetic client display.
+
+### Fixed
+
+- GameBot and bot-owned pet keep kills now reset and display keeps correctly.
+- Relics dropped from a keep return to their temple shrine, and the launcher
+  clears old mounted-keep and claim-timestamp state without touching characters.
+
+### Removed
+
+- Realm-owned relic bonus gating and the PvP seal-mob lord respawn branch for
+  Camlann keeps.
+
 ## [0.11.1] - 2026-09-20
 
 ### Added

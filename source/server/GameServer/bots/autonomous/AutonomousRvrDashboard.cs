@@ -79,7 +79,8 @@ public static class AutonomousRvrDashboard
                         keep.CurrentRegion.Time - keep.LastAttackedByEnemyTick < 120_000) ||
                         keep.Guards.Values.Any(guard => guard.IsAlive && guard.LastAttackedByEnemyTick > 0 && guard.InCombat);
                     string forces = FormatForces(battle);
-                    return new Objective(keep.IsRelic ? "Relic keep" : "Keep", keep.Name, GlobalConstants.RealmToName(keep.Realm),
+                    string owner = keep.Guild?.Name ?? (keep.Realm == eRealm.None ? "Unclaimed" : GlobalConstants.RealmToName(keep.Realm));
+                    return new Objective(keep.IsRelic ? "Relic keep" : "Keep", keep.Name, owner,
                         battle?.Kind ?? (attacked ? "Under attack — no organized siege" : "Secure"), keep.CurrentRegion.Description,
                         "", forces, $"rvr-keep-{keep.KeepID}",
                         AutonomousRvrEventLayer.CooldownRemaining($"rvr-keep-{keep.KeepID}", GameLoop.GameLoopTime),

@@ -33,7 +33,7 @@ public static class AutonomousRvrDefense
             !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
             bot.IsWithinRadius(target, bot.MeleeAttackRange + 100)) return false;
         return GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).Any(keep =>
-            keep.Realm == bot.Realm && bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z)) < 1800 &&
+            bot.Guild != null && keep.Guild == bot.Guild && bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z)) < 1800 &&
             keep.Doors.Values.Any(door => door.IsAttackableDoor) &&
             keep.Doors.Values.Where(door => door.IsAttackableDoor).All(door => door.IsAlive && door.State == eDoorState.Closed) &&
             bot.Z > keep.Doors.Values.Min(door => door.Z) + 100);
@@ -42,7 +42,7 @@ public static class AutonomousRvrDefense
     public static Vector3 Position(GameBot bot, AbstractGameKeep keep)
     {
         var nav = AutonomousKeepApproachNavigation.ForRealm(PathfindingProvider.Instance,bot.CurrentRegion,bot.Realm);
-        var guards = keep.Guards.Values.Where(guard => guard.IsAlive && guard.Realm == bot.Realm)
+        var guards = keep.Guards.Values.Where(guard => guard.IsAlive && bot.Guild != null && keep.Guild == bot.Guild)
             .OrderBy(guard => IsRangedDefender(bot) ? guard is GuardArcher ? 0 : 1 : guard is GuardLord ? 0 : 1)
             .ThenBy(guard => (unchecked((ulong)(guard.ObjectID + bot.DatabaseID)) * 2654435761UL) % 100);
         foreach (var guard in guards.Take(12))

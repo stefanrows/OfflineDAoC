@@ -112,7 +112,8 @@ namespace DOL.GS
                 var target = new AutonomousRvrEventLayer.LiveObjective(request.TargetId, keep.Name,
                     keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,
                     keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0,
-                    keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed));
+                    keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed),
+                    OwningGuild: keep.Guild?.Name);
                 bool accepted = AutonomousRvrEventLayer.ForceStart(target, (eRealm)request.Realm, GameLoop.GameLoopTime, out string reason);
                 Complete(request, accepted, reason);
             }

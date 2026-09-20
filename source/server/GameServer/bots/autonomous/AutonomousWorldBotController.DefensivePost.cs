@@ -15,7 +15,7 @@ namespace DOL.GS
 
         private bool HoldDefensiveKeepPost(GameBot bot, AbstractGameKeep keep)
         {
-            if (keep.Realm != bot.Realm || bot.CurrentRegionID != keep.Region) return false;
+            if (bot.Guild == null || keep.Guild != bot.Guild || bot.CurrentRegionID != keep.Region) return false;
             long now = GameLoop.GameLoopTime;
             Vector3 current = new(bot.X, bot.Y, bot.Z);
             string target = $"rvr-keep-{keep.KeepID}";
