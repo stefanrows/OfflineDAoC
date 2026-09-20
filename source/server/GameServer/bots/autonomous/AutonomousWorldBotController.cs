@@ -1384,9 +1384,6 @@ namespace DOL.GS
                     .GetProperty<int>("RvrWarbandIntent", (int)AutonomousRvrEventLayer.Intent.Roam);
             if (!battleActive && !(dynamicWarband && _groupDirective.GroupCombatActive) && HoldBeforeNewGroupPull(brain, bot))
                 return true;
-            if (!battleActive && !dynamicWarband && !GameRelic.IsPlayerCarryingRelic(bot) && !StageSoloRvrAtBorderKeep(bot))
-                return true;
-
             // Native keep/relic events remove resolved objectives immediately.
             // Release this controller's stale destination on its next AI pulse,
             // rather than letting it march toward a captured or timed-out site.
@@ -1399,9 +1396,8 @@ namespace DOL.GS
                 _nextRvrPlanReview = 0;
             }
 
-            // RvR has no PvE puller. Every cohesive member can acquire a local
-            // target, with pressure spread over the closest visible enemies.
-            if (TryRunSiegeJob(bot)) return true;
+            // Tier 4 crews roam and hunt living unallied actors. Keep and relic
+            // contesting, including siege-kit work, begins in Tier 5.
             GameLiving enemy = FindRvrTarget(bot);
             if (enemy != null)
             {
@@ -1881,36 +1877,8 @@ namespace DOL.GS
                     carrier.CurrentRegionID, carrier.X, carrier.Y, carrier.Z, false, 1, 0, 0, 0, true));
             }
 
-            // Keep/relic locations are live server objectives, not synthesized
-            // camps. All legal reachable frontier keeps get equal selection weight.
-            foreach (Region region in WorldMgr.GetAllRegions().Where(region => region != null && reachable.Contains(region.ID)))
-            {
-                foreach (AbstractGameKeep keep in GameServer.KeepManager.GetKeepsOfRegion(region.ID)
-                             .Where(keep => AutonomousRvrKeepPolicy.IsSiegeObjective(keep) && IsFrontierRegionPoint(keep.Region, keep.X, keep.Y)))
-                {
-                    string id = $"rvr-keep-{keep.KeepID}";
-                    string label = keep.IsRelic ? $"relic keep {keep.Name}" : $"keep {keep.Name}";
-                    CampDestination destination = new(id, label, keep.Name, keep.Region, keep.X, keep.Y, keep.Z, 1, false, true);
-                    choices.Add(destination);
-                    int closedDoors = keep.Doors.Values.Count(door => door.IsAlive && door.State == eDoorState.Closed);
-                    int guards = keep.Guards.Values.Count(guard => guard.IsAlive);
-                    objectives.Add(new(id, label,
-                        keep.Realm == bot.Realm ? AutonomousRvrEventLayer.Intent.Roam :
-                        keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,
-                        keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic,
-                        planning.Count(keep.Region, bot.Realm).Enemies,
-                        planning.Count(keep.Region, bot.Realm).Allies,
-                        guards, closedDoors, UnderAttack:
-                        keep.LastAttackedByEnemyTick > 0 && keep.CurrentRegion.Time - keep.LastAttackedByEnemyTick < 120_000 ||
-                        keep.Guards.Values.Any(guard => guard.IsAlive && guard.InCombat)));
-                    // Every live frontier keep also supplies a patrol anchor;
-                    // small warbands can roam there without declaring a siege.
-                    string roamId = $"rvr-roam-{keep.KeepID}";
-                    choices.Add(new(roamId, $"frontier near {keep.Name}", keep.Name, keep.Region, keep.X, keep.Y, keep.Z, 1, false, true));
-                    objectives.Add(new(roamId, $"frontier near {keep.Name}", AutonomousRvrEventLayer.Intent.Roam,
-                        keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0, guards, closedDoors));
-                }
-            }
+            // Keep and relic contesting is deliberately deferred to Camlann
+            // Tier 5. Tier 4 crews roam and hunt unallied actors only.
 
             // Roaming is not limited to the road between keeps. Reuse the
             // already-built live camp catalog and sample a bounded set of

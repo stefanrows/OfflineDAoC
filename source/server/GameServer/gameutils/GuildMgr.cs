@@ -66,7 +66,26 @@ namespace DOL.GS
 
             lock (_lock)
             {
-                return !_guildMemberViews.TryGetValue(guild, out Dictionary<string, GuildMemberView> value) ?  null : new(value);
+                if (!_guildMemberViews.TryGetValue(guild, out Dictionary<string, GuildMemberView> value))
+                    return null;
+
+                Dictionary<string, GuildMemberView> result = new(value);
+                foreach (OfflineWorldBotRecord bot in DOLDB<OfflineWorldBotRecord>
+                             .SelectObjects(DB.Column("GuildId").IsEqualTo(guild.GuildID)))
+                {
+                    result[AutonomousBotEconomy.GetOwnerId(bot.BotId)] = new GuildMemberView(
+                        AutonomousBotEconomy.GetOwnerId(bot.BotId),
+                        bot.Name,
+                        bot.Level.ToString(),
+                        bot.ClassId.ToString(),
+                        bot.GuildRank.ToString(),
+                        "1",
+                        bot.IsOnline ? bot.ZoneName ?? "Online" : "Offline",
+                        string.Empty,
+                        guild.Name);
+                }
+
+                return result;
             }
         }
 

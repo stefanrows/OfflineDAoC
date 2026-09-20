@@ -58,6 +58,7 @@ public static class AutonomousPopulationController
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                 GameServer.Database.SaveObject(previouslyOnline.Cast<DataObject>());
         }
+        AutonomousCrewManager.Reconcile();
         RefreshControlPlane(force: true);
         _nextCommandPollUtc = DateTime.MinValue;
         _nextOrphanRepairUtc = DateTime.MinValue;
@@ -103,11 +104,14 @@ public static class AutonomousPopulationController
             if (missing <= 0)
                 return;
 
-            var realmLoad = new Dictionary<eRealm, int>(AutonomousBotRegistry.CountByRealm());
+            var crewLoad = AutonomousBotRegistry.Snapshot()
+                .Where(bot => !string.IsNullOrWhiteSpace(bot.PersistentRecord?.GuildId))
+                .GroupBy(bot => bot.PersistentRecord.GuildId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
             foreach (OfflineWorldBotRecord pending in roster.Where(record => PendingSpawns.ContainsKey(record.BotId)))
             {
-                eRealm realm = (eRealm)pending.Realm;
-                realmLoad[realm] = realmLoad.TryGetValue(realm, out int count) ? count + 1 : 1;
+                string guildId = pending.GuildId ?? string.Empty;
+                crewLoad[guildId] = crewLoad.TryGetValue(guildId, out int count) ? count + 1 : 1;
             }
 
             List<OfflineWorldBotRecord> available = roster
@@ -120,9 +124,9 @@ public static class AutonomousPopulationController
             int enqueueCount = Math.Min(Math.Min(missing, available.Count), MaximumSpawnEnqueuePerPoll);
             for (int i = 0; i < enqueueCount; i++)
             {
-                long? nextId = AutonomousRealmLoginBalancer.SelectNext(
-                    available.Select(record => new AutonomousRealmLoginBalancer.Candidate(record.BotId, (eRealm)record.Realm)),
-                    realmLoad);
+                long? nextId = AutonomousCrewLoginBalancer.SelectNext(
+                    available.Select(record => new AutonomousCrewLoginBalancer.Candidate(record.BotId, record.GuildId)),
+                    crewLoad);
                 OfflineWorldBotRecord next = nextId.HasValue
                     ? available.FirstOrDefault(record => record.BotId == nextId.Value)
                     : null;
@@ -132,8 +136,8 @@ public static class AutonomousPopulationController
                 if (!PendingSpawns.TryAdd(next.BotId, 0))
                     continue;
 
-                eRealm realm = (eRealm)next.Realm;
-                realmLoad[realm] = realmLoad.TryGetValue(realm, out int count) ? count + 1 : 1;
+                string guildId = next.GuildId ?? string.Empty;
+                crewLoad[guildId] = crewLoad.TryGetValue(guildId, out int count) ? count + 1 : 1;
                 try
                 {
                     // Fetch the exact real inventory on this existing background

@@ -768,4 +768,6 @@ public sealed class OfflineWorldBotRecord : DataObject
     [DataElement(AllowDbNull = false)] public string ObjectivePveMode { get; set; } = string.Empty;
     [DataElement(AllowDbNull = false)] public int ObjectivePveKillTarget { get; set; }
     [DataElement(AllowDbNull = false)] public int ObjectivePveKills { get; set; }
+    [DataElement(AllowDbNull = false)] public string GuildId { get; set; } = string.Empty;
+    [DataElement(AllowDbNull = false)] public int GuildRank { get; set; } = 9;
 }

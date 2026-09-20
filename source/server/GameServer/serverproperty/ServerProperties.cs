@@ -2266,7 +2266,7 @@ namespace DOL.GS.ServerProperties
 		/// <summary>
 		/// Do we allow guild members from other realms
 		/// </summary>
-		[ServerProperty("guild", "allow_cross_realm_guilds", "Do we allow guild members from other realms?", false)]
+		[ServerProperty("guild", "allow_cross_realm_guilds", "Do we allow guild members from other realms?", true)]
 		public static bool ALLOW_CROSS_REALM_GUILDS;
 
 		/// <summary>

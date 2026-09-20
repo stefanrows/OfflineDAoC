@@ -146,8 +146,8 @@ public static partial class AutonomousBotGroupCoordinator
             RealmEventControls.Pulse();
             AutonomousRealmRaid.Pulse(now);
             AutonomousRealmRaid.RecruitForcedParty(now);
-            AutonomousRvrEventLayer.PulseDefense(now);
-            RealmWarbandSupport.Pulse(now);
+            // Tier 4 has no realm-wide keep defense or RvR rally pulse. Realm
+            // PvE expeditions remain owned by AutonomousRealmRaid until Tier 7.
             AutonomousObjectiveAssignments.ReconcileIfDue();
             lock (Sync)
             {
@@ -1171,11 +1171,6 @@ public static partial class AutonomousBotGroupCoordinator
         int availableGroupSlots = maximumGrouped - groupedCount;
         if (objectiveKind != eAutonomousObjectiveKind.RvR && availableGroupSlots < 2)
             return;
-        Dictionary<eRealm, int> initiallyGroupedByRealm = activeRoster
-            .Where(bot => bot.Group != null)
-            .GroupBy(bot => bot.Realm)
-            .ToDictionary(group => group.Key, group => group.Count());
-
         GameBot[] available = activeRoster
             .Where(bot => bot.IsAlive && !bot.IsTemporaryGroupHelper && !bot.IsPlayerLedGroup && bot.Group == null && bot.CurrentRegion != null &&
                           !AutonomousRealmRaid.IsReserved(bot) &&
@@ -1192,29 +1187,19 @@ public static partial class AutonomousBotGroupCoordinator
             if (rendezvousChecks >= 4) break;
             if (claimed.Contains(leader) || Random.Shared.NextDouble() >= 0.35)
                 continue;
-            // RvR reserves are realm-local: Albion grouping cannot consume the
-            // independent Midgard/Hibernia roamer reserve, and vice versa.
-            int leaderSlots = objectiveKind == eAutonomousObjectiveKind.RvR
-                ? AvailableGroupSlotsForObjective(objectiveKind,
-                    activeRoster.Count(candidate => candidate.Realm == leader.Realm),
-                    initiallyGroupedByRealm.GetValueOrDefault(leader.Realm))
-                : availableGroupSlots - claimed.Count;
-            int largestAllowed = Math.Min(8, leaderSlots - (objectiveKind == eAutonomousObjectiveKind.RvR
-                ? claimed.Count(candidate => candidate.Realm == leader.Realm)
-                : 0));
+            // A crew is the matchmaking boundary. Realm is an identity and
+            // combat attribute, not a reason to split one mixed-realm guild.
+            int leaderSlots = availableGroupSlots - claimed.Count;
+            int largestAllowed = Math.Min(8, leaderSlots);
             int minimumRequired = objectiveKind == eAutonomousObjectiveKind.GroupPve ? 8 : 2;
             if (largestAllowed < minimumRequired)
             {
-                // One realm's full reserve must not prevent a later realm from
-                // creating its own compatible RvR roaming party.
                 if (ShouldContinueFormationSearch(objectiveKind, largestAllowed))
                     continue;
                 break;
             }
             // A one means this actor remains an independent roamer; two
-            // through eight create an actual warband. The realm-local reserve
-            // below still guarantees that grouping pressure cannot consume
-            // every solo RvR character.
+            // through eight create an actual crew.
             int rolledSize = objectiveKind == eAutonomousObjectiveKind.RvR
                 ? AutonomousRvrStaging.RollWarbandSize(largestAllowed, Random.Shared.NextDouble())
                 : 8;
@@ -1223,7 +1208,8 @@ public static partial class AutonomousBotGroupCoordinator
             GameBot[] compatiblePool = available
                 .Where(candidate => candidate != leader && !claimed.Contains(candidate) && candidate.Group == null &&
                                      AutonomousObjectiveAssignments.Is(candidate, objectiveKind) &&
-                                     candidate.Realm == leader.Realm && candidate.CurrentRegionID == leader.CurrentRegionID &&
+                                     AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
+                                     candidate.CurrentRegionID == leader.CurrentRegionID &&
                                      LevelsCompatible(leader.Level, candidate.Level))
                 .OrderBy(candidate => Math.Abs(candidate.Level - leader.Level))
                 .ThenBy(candidate => candidate.GetDistanceTo(leader))
@@ -1279,7 +1265,7 @@ public static partial class AutonomousBotGroupCoordinator
             Sessions[group] = session;
             GameBot[] formedMembers = BotMembers(group);
             WriteSessionMetadata(session, formedMembers);
-            Log.Info($"AUTONOMOUS_GROUP_FORMED group={session.Id} realm={leader.Realm} " +
+            Log.Info($"AUTONOMOUS_GROUP_FORMED group={session.Id} crew={leader.Guild?.Name ?? "unassigned"} realm={leader.Realm} " +
                      $"size={formedMembers.Length} lockedSize={session.LockedSize} objective={objectiveKind} " +
                      $"members=\"{string.Join(",", formedMembers.Select(member => member.Name))}\" " +
                      $"rendezvous={session.RendezvousRegion}:{(int)session.Rendezvous.X},{(int)session.Rendezvous.Y},{(int)session.Rendezvous.Z}");
@@ -1304,7 +1290,7 @@ public static partial class AutonomousBotGroupCoordinator
         {
             Group = group,
             Leader = leader,
-            Id = $"{leader.Realm.ToString().ToLowerInvariant()}-{RuntimeGroupToken}-{++_nextGroupNumber:000}",
+            Id = $"{leader.Guild?.GuildID ?? "unassigned"}-{RuntimeGroupToken}-{++_nextGroupNumber:000}",
             Rendezvous = center,
             RendezvousName = rendezvousName,
             TaskClock = new AutonomousGroupTaskClock(objectiveKind),
@@ -1850,23 +1836,6 @@ public static partial class AutonomousBotGroupCoordinator
             return true;
         }
 
-        if (objectiveKind == eAutonomousObjectiveKind.RvR &&
-            AutonomousRvrStaging.TryGetBorderKeep(leader.Realm, out AutonomousRvrStaging.BorderKeep borderKeep))
-        {
-            Region borderRegion = WorldMgr.GetRegion(borderKeep.RegionId);
-            foreach (Vector3 anchor in AutonomousRvrStaging.CandidateAnchors(borderKeep, leader.DatabaseID))
-            {
-                if (!TryPoint(borderRegion, anchor, out point))
-                    continue;
-                rendezvousName = borderKeep.Name;
-                rendezvousRegion = borderKeep.RegionId;
-                return true;
-            }
-            // Never silently turn a failed RvR border-keep projection into a
-            // random PvE-town meetup. Formation will retry on a later pass.
-            return false;
-        }
-
         // Never anchor a new Jordheim party to a leader waiting on the bank's
         // shelf. Keep the same floor/local-exit/member-corridor validation.
         if (leader.Realm == eRealm.Midgard && leader.CurrentRegionID == 101 &&
@@ -1885,7 +1854,7 @@ public static partial class AutonomousBotGroupCoordinator
         GameNPC[] safeTownNpcs = leader.CurrentRegion?.Objects.OfType<GameNPC>()
             .Where(npc => npc.ObjectState == GameObject.eObjectState.Active &&
                           npc is GameMerchant or GameTrainer or GameStableMaster &&
-                          (npc.Realm == leader.Realm || npc.Realm == eRealm.None) && IsTownArea(npc))
+                          IsTownArea(npc))
             .Where(npc => Vector3.DistanceSquared(current, new(npc.X, npc.Y, npc.Z)) <= 30_000L * 30_000L)
             .OrderBy(npc => Vector3.DistanceSquared(current, new(npc.X, npc.Y, npc.Z)))
             .Take(4).ToArray() ?? [];
