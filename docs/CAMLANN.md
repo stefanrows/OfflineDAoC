@@ -26,11 +26,18 @@ over a running install unless the owner asks.
   offline gate.
 - Tier 4 implementation is complete on the current branch: autonomous bots
   receive persisted real crew guilds, login/group formation balances crews
-  rather than realms, player invitations accept level-compatible bots, and
-  autonomous frontier planning is roam/hunt focused until Tier 5 keep/relic
-  work. The isolated server suite passed 1,913 tests on 2026-09-20. No live
-  server or client was started for this offline gate.
-- Next: Tier 5.
+  rather than realms, and player invitations accept level-compatible bots. The
+  isolated server suite passed 1,913 tests on 2026-09-20. No live server or
+  client was started for this offline gate.
+- Tier 5 implementation is complete on the current branch: frontier keeps are
+  guild-owned, unclaimed keeps are hostile to all, dynamic keep relic pads
+  persist mounted keep IDs, autonomous keep/relic behavior uses guild
+  ownership, and the launcher reset preserves guilds and characters while
+  clearing claims and relic mounts. The isolated server suite passed 1,915
+  tests and the launcher build passed on 2026-09-20; launcher tests require
+  the Windows desktop runtime and were not executable on Linux. No live server
+  or client was started.
+- Next: Tier 6.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -572,8 +579,7 @@ relic bonuses apply to that guild only; stacking is uncapped (decision 3).
    claimer (bot-aware rank); count grouped `GameBot`s toward `claim_num` (8,
    towers 4). The player's companions count.
 5. `guilds_claim_limit`: raise it above 1 so a guild can hold a keep plus
-   relic keeps. Pick a default (for example 3) in this tier and document it in
-   the changelog.
+   relic keeps. The Tier 5 default is 3.
 6. `PvPServerRules.ResetKeep` must accept a `GameBot` killer and a bot-owned
    pet killer, not only `GamePlayer`. Its "leader realm" display realm is
    cosmetic.
@@ -601,7 +607,7 @@ The world has six `GameRelicPad`s in the realm relic temples, keyed by emblem
      or the shrine guards first).
    - The carrier's guild must already own a keep.
    - Mount only in your own guild's keep, and only after it has been claimed
-     for a delay (live used two hours; pick an offline value and document it).
+     for the offline five-minute `Relic_Keep_Claim_Delay`.
    - Cannot take your own guild's mounted relic.
    - Dropped or abandoned relics return to their temple shrine after
      `Relic_Return_Time` (20 min default).
@@ -634,8 +640,9 @@ Rewrite `KeepRelicReset` / `KeepRelicResetPanel` so they no longer run
 - The relic bonus reaches guild members and no one else (not same-realm
   strangers).
 - One guild can hold all six relics.
-- **Gate:** A crew (and the player's guild) can take a keep, move a relic to
-  it, and only that guild receives the bonus.
+- **Gate:** The offline implementation is complete and the isolated server and
+  launcher builds pass. A live keep/relic spike remains unverified until a
+  permitted server/client playtest.
 
 ---
 

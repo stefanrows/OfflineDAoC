@@ -40,7 +40,7 @@ namespace DOL.GS
                 .FirstOrDefault(k => _rvrDestination.Id == $"rvr-keep-{k.KeepID}" && AutonomousRvrKeepPolicy.IsSiegeObjective(k));
             if (keep == null) return false;
             if (_siegeJobKeep != null && _siegeJobKeep != _rvrDestination.Id) ReleaseSiegeJob(bot);
-            if (!AutonomousSiegeJobs.TryAcquire(bot, _rvrDestination.Id, 64, keep.Realm != bot.Realm, true,
+            if (!AutonomousSiegeJobs.TryAcquire(bot, _rvrDestination.Id, 64, keep.Guild == null || keep.Guild != bot.Guild, true,
                 out var kind, out var slot, _rvrDestination.RegionId))
             { _siegeNextAttempt = now + 10_000; return false; }
             _siegeJobKeep = _siegePreSupplyKeep = _rvrDestination.Id;
@@ -82,7 +82,7 @@ namespace DOL.GS
             var keep = GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).FirstOrDefault(k =>
                 _rvrDestination.Id == $"rvr-keep-{k.KeepID}" && AutonomousRvrKeepPolicy.IsSiegeObjective(k));
             if (keep == null || bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z)) > 6000) return false;
-            bool attacking = keep.Realm != bot.Realm;
+            bool attacking = keep.Guild == null || keep.Guild != bot.Guild;
             GameKeepDoor door = attacking ? keep.Doors.Values.Where(d=>d.IsAlive && d.IsAttackableDoor && d.State==eDoorState.Closed)
                 .OrderByDescending(d=>Vector2.DistanceSquared(new(d.X,d.Y),new(keep.X,keep.Y)))
                 .ThenBy(bot.GetDistanceTo).FirstOrDefault() : null;

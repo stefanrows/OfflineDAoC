@@ -12,16 +12,16 @@ public class KeepRelicResetTests
         _folder = Path.Combine(Path.GetTempPath(), "keep-reset-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_folder);
         _database = Path.Combine(_folder, "world.db");
-        Sql("CREATE TABLE [Keep](KeepID INTEGER PRIMARY KEY,Realm INT,OriginalRealm INT,ClaimedGuildName TEXT,Level INT);" +
-            "INSERT INTO [Keep] VALUES(1,2,1,'Enemy guild',5),(2,1,0,'BG guild',3);" +
-            "CREATE TABLE Relic(RelicID INT PRIMARY KEY,Realm INT,OriginalRealm INT,LastRealm INT,relicType INT,Region INT,X INT,Y INT,Z INT,Heading INT);" +
+        Sql("CREATE TABLE [Keep](KeepID INTEGER PRIMARY KEY,Realm INT,OriginalRealm INT,ClaimedGuildName TEXT,ClaimedAt TEXT,Level INT);" +
+            "INSERT INTO [Keep] VALUES(1,2,1,'Enemy guild','2026-01-01T00:00:00.0000000Z',5),(2,1,0,'BG guild','2026-01-01T00:00:00.0000000Z',3);" +
+            "CREATE TABLE Relic(RelicID INT PRIMARY KEY,Realm INT,OriginalRealm INT,LastRealm INT,relicType INT,KeepID INT,Region INT,X INT,Y INT,Z INT,Heading INT);" +
             "CREATE TABLE WorldObject(ClassType TEXT,Emblem INT,Region INT,X INT,Y INT,Z INT,Heading INT);" +
             "CREATE TABLE PlayerProgress(Name TEXT,Coins INT,Inventory TEXT); INSERT INTO PlayerProgress VALUES('Player',12345,'Original gear');" +
             "CREATE TABLE offline_local_options(Key TEXT PRIMARY KEY,Value TEXT); INSERT INTO offline_local_options VALUES('MakeMeGM','false');");
         for (int realm = 1; realm <= 3; realm++) for (int type = 0; type <= 1; type++)
         {
             int emblem = realm + 10 * type;
-            Sql($"INSERT INTO Relic VALUES({emblem},0,{realm},2,{type},999,5,5,5,5); INSERT INTO WorldObject VALUES('DOL.GS.GameRelicPad',{emblem},{realm},{emblem * 100},200,300,400);");
+            Sql($"INSERT INTO Relic VALUES({emblem},0,{realm},2,{type},42,999,5,5,5,5); INSERT INTO WorldObject VALUES('DOL.GS.GameRelicPad',{emblem},{realm},{emblem * 100},200,300,400);");
         }
     }
     [TearDown] public void Cleanup() { SQLiteConnection.ClearAllPools(); Directory.Delete(_folder, true); }
@@ -37,9 +37,9 @@ public class KeepRelicResetTests
         var result = Apply();
         Assert.That(result.Keeps, Is.EqualTo(2)); Assert.That(result.Relics, Is.EqualTo(6));
         Assert.That(File.ReadAllText(result.Backup), Does.Contain("Enemy guild"));
-        Assert.That(Sql("SELECT count(*) FROM [Keep] WHERE Realm<>OriginalRealm OR ClaimedGuildName<>''"), Is.EqualTo(0L));
+        Assert.That(Sql("SELECT count(*) FROM [Keep] WHERE Realm<>0 OR ClaimedGuildName<>'' OR ClaimedAt<>'0001-01-01T00:00:00.0000000Z'"), Is.EqualTo(0L));
         Assert.That(Sql("SELECT sum(Level) FROM [Keep]"), Is.EqualTo(8L));
-        Assert.That(Sql("SELECT count(*) FROM Relic WHERE Realm<>OriginalRealm OR LastRealm<>OriginalRealm OR Region<>OriginalRealm OR X<>RelicID*100"), Is.EqualTo(0L));
+        Assert.That(Sql("SELECT count(*) FROM Relic WHERE Realm<>OriginalRealm OR LastRealm<>OriginalRealm OR KeepID<>0 OR Region<>OriginalRealm OR X<>RelicID*100"), Is.EqualTo(0L));
         Assert.That(Sql("SELECT Coins FROM PlayerProgress"), Is.EqualTo(12345L));
         Assert.That(Sql("SELECT Inventory FROM PlayerProgress"), Is.EqualTo("Original gear"));
         Assert.That(Sql("SELECT Value FROM offline_local_options WHERE Key='MakeMeGM'"), Is.EqualTo("false"));

@@ -1420,7 +1420,7 @@ namespace DOL.GS
                 int defendingId = _groupDirective.Leader?.TempProperties.GetProperty<int>("RvrDefendingKeep", -1) ?? -1;
                 AbstractGameKeep wallKeep = defendingId >= 0
                     ? GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).FirstOrDefault(keep =>
-                        keep.KeepID == defendingId && keep.Realm == bot.Realm &&
+                        keep.KeepID == defendingId && bot.Guild != null && keep.Guild == bot.Guild &&
                         bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z)) <= 2500) : null;
                 if (wallKeep != null)
                 {
@@ -1433,7 +1433,9 @@ namespace DOL.GS
             if (carriedRelic?.CurrentCarrier == bot)
             {
                 GameRelicPad home = RelicMgr.GetPadsSnapshot().FirstOrDefault(pad =>
-                    pad.Realm == bot.Realm && pad.PadType == carriedRelic.RelicType && pad.MountedRelics.Count < 3);
+                    pad is GameKeepRelicPad keepPad && bot.Guild != null && keepPad.Guild == bot.Guild &&
+                    pad.AcceptsRelicType(carriedRelic.RelicType) && pad.MountedRelics.Count < 3 &&
+                    pad.CanReceiveRelic(bot, carriedRelic));
                 if (home == null)
                 {
                     SetRvrStatus(bot, "Relic return blocked", "Protect the carried relic", "No matching home shrine is available");
@@ -1445,7 +1447,7 @@ namespace DOL.GS
                     SetRvrStatus(bot, "Relic captured", "Relic delivered to the home shrine", carriedRelic.Name);
                     return true;
                 }
-                SetRvrStatus(bot, "Returning relic", "Escort the real relic to its home shrine", home.Name);
+                SetRvrStatus(bot, "Returning relic", "Escort the relic to your guild keep", home.Name);
                 return TravelRvrObjective(bot, new("relic-home", home.Name, home.CurrentZone?.Description ?? "home shrine",
                     home.CurrentRegionID, home.X, home.Y, home.Z, 50, false, true));
             }
@@ -1535,7 +1537,7 @@ namespace DOL.GS
             Zone keepZone = bot.CurrentRegion?.GetZone(_rvrDestination.X, _rvrDestination.Y);
             AbstractGameKeep defendedKeep = _rvrIntent == AutonomousRvrEventLayer.Intent.DefendEvent
                 ? GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).FirstOrDefault(keep =>
-                    $"rvr-keep-{keep.KeepID}" == _rvrDestination.Id && keep.Realm == bot.Realm) : null;
+                    $"rvr-keep-{keep.KeepID}" == _rvrDestination.Id && bot.Guild != null && keep.Guild == bot.Guild) : null;
             if (defendedKeep != null)
             {
                 if (Vector2.DistanceSquared(new(bot.X,bot.Y),new(defendedKeep.X,defendedKeep.Y))>3500*3500)
@@ -1716,7 +1718,7 @@ namespace DOL.GS
         private static GameKeepDoor FindClosedEnemyDoor(GameBot bot, string objectiveId = null) =>
             GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID)
                 .Where(AutonomousRvrKeepPolicy.IsSiegeObjective)
-                .Where(keep => keep.Realm != eRealm.None && keep.Realm != bot.Realm)
+                .Where(keep => keep.Guild == null || keep.Guild != bot.Guild)
                 .Where(keep => objectiveId == null || objectiveId == $"rvr-keep-{keep.KeepID}")
                 .SelectMany(keep => keep.Doors.Values)
                 .Where(door => door.IsAlive && door.IsAttackableDoor && door.State == eDoorState.Closed)
@@ -1757,7 +1759,9 @@ namespace DOL.GS
             RelicMgr.GetRelics()
                 .Where(relic => relic.ObjectState is GameObject.eObjectState.Active && relic.CurrentRegionID == bot.CurrentRegionID)
                 .Where(relic => Distance(bot.X, bot.Y, relic.X, relic.Y) <= 600)
-                .Where(relic => !relic.IsMounted || relic.Realm != bot.Realm && RelicMgr.CanPickupRelicFromShrine(bot, relic))
+                .Where(relic => !relic.IsMounted ||
+                    (relic.CurrentRelicPad is not GameKeepRelicPad keepPad || keepPad.Guild == null || keepPad.Guild != bot.Guild) &&
+                    RelicMgr.CanPickupRelicFromShrine(bot, relic))
                 // A nearby shrine is not reachable through an intact gate.
                 // Once breached this is checked again on the next AI turn.
                 .Where(relic => !relic.IsMounted || FindClosedEnemyDoor(bot, _rvrDestination?.Id) == null)
@@ -1785,7 +1789,7 @@ namespace DOL.GS
         {
             Vector3 center=new(destination.X,destination.Y,destination.Z);
             var keep=GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).FirstOrDefault(k=>$"rvr-keep-{k.KeepID}"==destination.Id);
-            if(keep!=null && keep.Realm!=bot.Realm)
+            if(keep!=null && (keep.Guild == null || keep.Guild!=bot.Guild))
             {
                 var gates=keep.Doors.Values.Where(d=>d.IsAlive && d.IsAttackableDoor && d.State==eDoorState.Closed)
                     .Select(d=>new Vector3(d.X,d.Y,d.Z)).ToArray();
@@ -1877,8 +1881,20 @@ namespace DOL.GS
                     carrier.CurrentRegionID, carrier.X, carrier.Y, carrier.Z, false, 1, 0, 0, 0, true));
             }
 
-            // Keep and relic contesting is deliberately deferred to Camlann
-            // Tier 5. Tier 4 crews roam and hunt unallied actors only.
+            foreach (AbstractGameKeep keep in GameServer.KeepManager.GetAllKeeps()
+                         .Where(AutonomousRvrKeepPolicy.IsSiegeObjective)
+                         .Where(keep => reachable.Contains(keep.Region) && (keep.Guild == null || keep.Guild != bot.Guild))
+                         .OrderBy(keep => bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z))).Take(24))
+            {
+                string id = $"rvr-keep-{keep.KeepID}";
+                choices.Add(new(id, keep.Name, keep.CurrentRegion?.Description ?? "frontier keep",
+                    keep.Region, keep.X, keep.Y, keep.Z, 1, false, true));
+                objectives.Add(new(id, keep.Name,
+                    keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,
+                    keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0,
+                    keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed),
+                    OwningGuild: keep.Guild?.Name));
+            }
 
             // Roaming is not limited to the road between keeps. Reuse the
             // already-built live camp catalog and sample a bounded set of
@@ -1922,7 +1938,8 @@ namespace DOL.GS
                 new AutonomousRvrEventLayer.Force(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}", bot.Realm,
                     warband.Length, averageLevel, healers, siegeReady,
                     (unchecked((ulong)(_groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID)) * 2654435761UL % 100) < 30,
-                    warband.Select(member => member.DatabaseID).ToArray(), warband.Min(member => member.Level)),
+                    warband.Select(member => member.DatabaseID).ToArray(), warband.Min(member => member.Level),
+                    bot.Guild?.Name),
                 objectives, GameLoop.GameLoopTime, Random.Shared.NextDouble());
             _rvrSharedEvent = plan?.IsSharedEvent == true;
             _rvrIntent = plan?.Intent ?? AutonomousRvrEventLayer.Intent.Roam;

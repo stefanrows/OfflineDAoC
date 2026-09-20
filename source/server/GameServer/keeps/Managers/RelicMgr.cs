@@ -4,6 +4,8 @@ using System.Reflection;
 using System.Threading;
 using DOL.Database;
 using DOL.Events;
+using DOL.GS.Keeps;
+using DOL.GS.ServerRules;
 using DOL.Logging;
 
 namespace DOL.GS
@@ -62,15 +64,22 @@ namespace DOL.GS
                     relic.AddToWorld();
                     GameRelicPad pad = null;
 
+                    if (relic.MountedKeepID > 0)
+                    {
+                        AbstractGameKeep mountedKeep = GameServer.KeepManager.GetKeepByID(relic.MountedKeepID);
+                        mountedKeep?.EnsureRelicPad();
+                        pad = mountedKeep?.RelicPad;
+                    }
+
                     foreach (GameRelicPad relicPad in _relicPads)
                     {
-                        if (relic.IsWithinRadius(relicPad, 200))
+                        if (pad == null && relic.IsWithinRadius(relicPad, 200))
                             pad = relicPad;
                     }
 
                     if (pad != null)
                     {
-                        if (relic.RelicType == pad.PadType)
+                        if (pad.AcceptsRelicType(relic.RelicType))
                         {
                             relic.RelicPadTakesOver(pad, true);
 
@@ -91,7 +100,7 @@ namespace DOL.GS
 
                     foreach (GameRelicPad pad in _relicPads)
                     {
-                        if (pad.Realm == returnRealm && pad.PadType == lostRelic.RelicType && lostRelic.RelicPadTakesOver(pad, true))
+                        if (pad is not GameKeepRelicPad && pad.Realm == returnRealm && pad.PadType == lostRelic.RelicType && lostRelic.RelicPadTakesOver(pad, true))
                         {
                             if (log.IsDebugEnabled)
                                 log.Debug($"Lost relic '{lostRelic.Name}' has returned to last pad '{pad.Name}'");
@@ -105,7 +114,7 @@ namespace DOL.GS
                     {
                         foreach (GameRelicPad pad in _relicPads)
                         {
-                            if (pad.PadType == lostRelic.RelicType && lostRelic.RelicPadTakesOver(pad, true))
+                            if (pad is not GameKeepRelicPad && pad.PadType == lostRelic.RelicType && lostRelic.RelicPadTakesOver(pad, true))
                             {
                                 if (log.IsDebugEnabled)
                                     log.Debug($"Lost relic '{lostRelic.Name}' auto assigned to pad '{pad.Name}'");
@@ -199,30 +208,21 @@ namespace DOL.GS
 
         public static double GetRelicBonusModifier(GameLiving living, eRelicType type)
         {
-            double modifier = 1.0;
+            if (living == null || !living.BenefitsFromRelics)
+                return 1.0;
 
-            if (!living.BenefitsFromRelics)
-                return modifier;
+            Guild guild = ServerRules.PvpCombatant.GuildOf(living);
+            if (!ServerRules.PvpCombatant.IsRealGuild(guild))
+                return 1.0;
 
-            bool owningSelf = false;
-            eRealm realm = living.Realm;
-            GameRelic[] snapshot = _relicsArray;
-
-            for (int i = 0; i < snapshot.Length; i++)
+            int mountedCount = 0;
+            foreach (GameRelic relic in _relicsArray)
             {
-                GameRelic relic = snapshot[i];
-
-                if (relic.Realm == realm && relic.RelicType == type && relic.IsMounted)
-                {
-                    if (relic.Realm == relic.OriginalRealm)
-                        owningSelf = true;
-                    else
-                        modifier += ServerProperties.Properties.RELIC_OWNING_BONUS * 0.01;
-                }
+                if (relic.RelicType == type && relic.CurrentRelicPad is GameKeepRelicPad pad && pad.Guild == guild)
+                    mountedCount++;
             }
 
-            // Bonus applies only if owning original relic.
-            return owningSelf ? modifier : 1.0;
+            return 1.0 + mountedCount * ServerProperties.Properties.RELIC_OWNING_BONUS * 0.01;
         }
 
         public static bool CanPickupRelicFromShrine(GameLiving player, GameRelic relic)
@@ -230,29 +230,53 @@ namespace DOL.GS
             if (player == null || relic == null)
                 return false;
 
-            // A player can always pick up their own realm's original relic.
-            if (player.Realm == relic.OriginalRealm)
-                return true;
-
-            eRealm playerRealm = player.Realm;
-            eRelicType type = relic.RelicType;
-            GameRelic[] snapshot = _relicsArray;
-
-            // Ensure the player's realm possesses its original relic of the same type.
-            for (int i = 0; i < snapshot.Length; i++)
+            if (GameServer.Instance == null || GameServer.ServerRules is not PvPServerRules)
             {
-                GameRelic otherRelic = snapshot[i];
-
-                if (otherRelic.Realm == playerRealm &&
-                    otherRelic.OriginalRealm == playerRealm &&
-                    otherRelic.RelicType == type &&
-                    otherRelic.IsMounted)
-                {
+                if (!relic.IsMounted)
                     return true;
+
+                if (player.Realm == relic.OriginalRealm)
+                    return true;
+
+                foreach (GameRelic otherRelic in _relicsArray)
+                {
+                    if (otherRelic.Realm == player.Realm && otherRelic.OriginalRealm == player.Realm &&
+                        otherRelic.RelicType == relic.RelicType && otherRelic.IsMounted)
+                        return true;
                 }
+
+                return false;
             }
 
-            return false;
+            Guild guild = ServerRules.PvpCombatant.GuildOf(player);
+            return ServerRules.PvpCombatant.IsRealGuild(guild) && guild.ClaimedKeeps.Count > 0;
+        }
+
+        public static GameRelicPad GetHomePad(GameRelic relic)
+        {
+            if (relic == null)
+                return null;
+
+            foreach (GameRelicPad pad in GetPadsSnapshot())
+            {
+                if (pad is not GameKeepRelicPad && pad.Realm == relic.OriginalRealm && pad.PadType == relic.RelicType)
+                    return pad;
+            }
+
+            return null;
+        }
+
+        public static void HomeRelicsFromKeep(AbstractGameKeep keep)
+        {
+            if (keep?.RelicPad == null)
+                return;
+
+            foreach (GameRelic relic in keep.RelicPad.MountedRelics)
+            {
+                GameRelicPad homePad = GetHomePad(relic);
+                if (homePad != null)
+                    relic.ReturnToShrine(homePad);
+            }
         }
 
         [ScriptLoadedEvent]

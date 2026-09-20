@@ -5,6 +5,7 @@ using DOL.Events;
 using DOL.GS.PacketHandler;
 using DOL.GS.ServerProperties;
 using DOL.Logging;
+using DOL.GS.Keeps;
 
 namespace DOL.GS
 {
@@ -35,6 +36,7 @@ namespace DOL.GS
         public eRealm LastRealm { get; private set; } = eRealm.None;
         public GameRelicPad CurrentRelicPad { get; private set; }
         public GameLiving CurrentCarrier { get; private set; }
+        public int MountedKeepID { get; private set; }
         private readonly object _custodyLock = new();
         private static IGameInventory InventoryOf(GameLiving living) => (living as IGamePlayer)?.Inventory;
         private static IPacketLib OutputOf(GameLiving living) => (living as IGamePlayer)?.Out;
@@ -91,17 +93,17 @@ namespace DOL.GS
 
             if (IsMounted)
             {
-                if (player.Realm == Realm)
+                if (CurrentRelicPad is GameKeepRelicPad keepPad && ServerRules.PvpCombatant.GuildOf(player) == keepPad.Guild)
                 {
-                    OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. It is owned by your realm.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                    OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. It is mounted in your guild's keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
                     return false;
                 }
+            }
 
-                if (!RelicMgr.CanPickupRelicFromShrine(player, this))
-                {
-                    OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. You need to capture your realm's {Enum.GetName(RelicType)} relic first.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-                    return false;
-                }
+            if (!RelicMgr.CanPickupRelicFromShrine(player, this))
+            {
+                OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. Your guild must own a keep first.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                return false;
             }
 
             if (player is not GamePlayer human || (ePrivLevel)human.Client.Account.PrivLevel == ePrivLevel.Player)
@@ -126,10 +128,12 @@ namespace DOL.GS
 
             if (IsMounted)
             {
-                CurrentRelicPad.RemoveRelic(this);
-                _returnRelicPad = CurrentRelicPad;
-                LastRealm = CurrentRelicPad.Realm;
+                GameRelicPad mountedPad = CurrentRelicPad;
+                mountedPad.RemoveRelic(this);
+                _returnRelicPad = mountedPad is GameKeepRelicPad ? RelicMgr.GetHomePad(this) : mountedPad;
+                LastRealm = mountedPad.Realm;
                 CurrentRelicPad = null;
+                MountedKeepID = 0;
             }
 
             RemoveFromWorld();
@@ -156,18 +160,43 @@ namespace DOL.GS
         private bool MountCore(GameRelicPad pad, bool returning)
         {
             if (pad == null || (!returning && (CurrentCarrier == null || !CurrentCarrier.IsAlive ||
-                CurrentCarrier.Realm != pad.Realm || RelicType != pad.PadType ||
-                !CurrentCarrier.IsWithinRadius(pad, 250))))
+                !pad.CanReceiveRelic(CurrentCarrier, this) || !CurrentCarrier.IsWithinRadius(pad, 250))))
                 return false;
             if (!pad.MountRelic(this, returning))
                 return false;
 
             LastRealm = pad.Realm;
             CurrentRelicPad = pad;
+            MountedKeepID = pad is GameKeepRelicPad keepPad ? keepPad.Keep.KeepID : 0;
             PlayerLoosesRelic(true);
             SaveIntoDatabase();
             AddToWorld();
             return true;
+        }
+
+        public bool ReturnToShrine(GameRelicPad shrine)
+        {
+            lock (_custodyLock)
+            {
+                if (shrine == null || CurrentCarrier != null)
+                    return false;
+
+                CurrentRelicPad?.RemoveRelic(this);
+                CurrentRelicPad = null;
+                MountedKeepID = 0;
+                _returnRelicPad = null;
+                Realm = shrine.Realm;
+                LastRealm = shrine.Realm;
+
+                if (!shrine.MountRelic(this, true))
+                    return false;
+
+                CurrentRelicPad = shrine;
+                CurrentRegionID = shrine.CurrentRegionID;
+                SaveIntoDatabase();
+                AddToWorld();
+                return true;
+            }
         }
 
         public override IList GetExamineMessages(GamePlayer player)
@@ -190,6 +219,7 @@ namespace DOL.GS
             Realm = (eRealm) _dbRelic.Realm;
             OriginalRealm = (eRealm) _dbRelic.OriginalRealm;
             LastRealm = (eRealm) _dbRelic.LastRealm;
+            MountedKeepID = _dbRelic.KeepID;
             LastCaptureDate = _dbRelic.LastCaptureDate;
             Emblem = 0;
             Level = 99;
@@ -224,6 +254,7 @@ namespace DOL.GS
             _dbRelic.Realm = (int) Realm;
             _dbRelic.OriginalRealm = (int) OriginalRealm;
             _dbRelic.LastRealm = (int) LastRealm;
+            _dbRelic.KeepID = CurrentRelicPad is GameKeepRelicPad keepPad ? keepPad.Keep.KeepID : 0;
             _dbRelic.Heading = Heading;
             _dbRelic.Region = CurrentRegionID;
             _dbRelic.relicType = (int) RelicType;

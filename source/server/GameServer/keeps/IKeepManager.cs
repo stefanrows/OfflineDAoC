@@ -46,10 +46,16 @@ namespace DOL.GS.Keeps
 		ICollection<AbstractGameKeep> GetAllKeeps();
 		bool IsEnemy(AbstractGameKeep keep, GamePlayer target, bool checkGroup);
 		bool IsEnemy(AbstractGameKeep keep, GamePlayer target);
+		bool IsEnemy(AbstractGameKeep keep, GameLiving target, bool checkGroup);
+		bool IsEnemy(AbstractGameKeep keep, GameLiving target);
 		bool IsEnemy(GameKeepGuard checker, GamePlayer target);
 		bool IsEnemy(GameKeepGuard checker, GamePlayer target, bool checkGroup);
+		bool IsEnemy(GameKeepGuard checker, GameLiving target);
+		bool IsEnemy(GameKeepGuard checker, GameLiving target, bool checkGroup);
 		bool IsEnemy(GameKeepDoor checker, GamePlayer target);
+		bool IsEnemy(GameKeepDoor checker, GameLiving target);
 		bool IsEnemy(GameKeepComponent checker, GamePlayer target);
+		bool IsEnemy(GameKeepComponent checker, GameLiving target);
 		byte GetHeightFromLevel(byte level);
 		bool GetBorderKeepLocation(int keepid, out int x, out int y, out int z, out ushort heading);
 		int GetRealmKeepBonusLevel(eRealm realm);

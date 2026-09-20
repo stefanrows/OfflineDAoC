@@ -1,4 +1,5 @@
 using System.Data.SQLite;
+using System.Linq;
 using System.Text.Json;
 
 namespace OfflineDaoc.Launcher;
@@ -38,6 +39,10 @@ public static class KeepRelicReset
         var keeps = Read("SELECT * FROM [Keep]");
         var relics = Read("SELECT * FROM Relic");
         var pads = Read("SELECT Region,X,Y,Z,Heading,Emblem FROM WorldObject WHERE ClassType='DOL.GS.GameRelicPad'");
+        bool HasColumn(string table, string column) => Read($"PRAGMA table_info([{table}])")
+            .Any(row => string.Equals(row["name"]?.ToString(), column, StringComparison.OrdinalIgnoreCase));
+        bool hasClaimedAt = HasColumn("Keep", "ClaimedAt");
+        bool hasKeepID = HasColumn("Relic", "KeepID");
         int Number(Dictionary<string, object?> row, string key) => Convert.ToInt32(row[key]);
         if (keeps.Count == 0 || keeps.Any(k => Number(k, "OriginalRealm") is < 0 or > 3))
             throw new InvalidOperationException("Keep defaults are missing or invalid. Nothing was reset.");
@@ -58,12 +63,16 @@ public static class KeepRelicReset
         string backup = Path.Combine(backupDirectory, $"keeps-relics-{now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
         // A small, exact row backup, never a copy of accounts or the whole installation.
         File.WriteAllText(backup, JsonSerializer.Serialize(new { UpdatedUtc = now, Keeps = keeps, Relics = relics }, new JsonSerializerOptions { WriteIndented = true }));
-        command.CommandText = "UPDATE [Keep] SET Realm=OriginalRealm, ClaimedGuildName=''";
+        command.CommandText = hasClaimedAt
+            ? "UPDATE [Keep] SET Realm=0, ClaimedGuildName='', ClaimedAt='0001-01-01T00:00:00.0000000Z'"
+            : "UPDATE [Keep] SET Realm=0, ClaimedGuildName=''";
         int count = command.ExecuteNonQuery();
         foreach (var relic in relics)
         {
             var home = pads.Single(p => Number(p, "Emblem") == Number(relic, "OriginalRealm") + 10 * Number(relic, "relicType"));
-            command.CommandText = "UPDATE Relic SET Realm=OriginalRealm,LastRealm=OriginalRealm,Region=@region,X=@x,Y=@y,Z=@z,Heading=@heading WHERE RelicID=@id";
+            command.CommandText = hasKeepID
+                ? "UPDATE Relic SET Realm=OriginalRealm,LastRealm=OriginalRealm,KeepID=0,Region=@region,X=@x,Y=@y,Z=@z,Heading=@heading WHERE RelicID=@id"
+                : "UPDATE Relic SET Realm=OriginalRealm,LastRealm=OriginalRealm,Region=@region,X=@x,Y=@y,Z=@z,Heading=@heading WHERE RelicID=@id";
             command.Parameters.Clear();
             foreach (string column in new[] { "Region", "X", "Y", "Z", "Heading" }) command.Parameters.AddWithValue("@" + column.ToLowerInvariant(), home[column]);
             command.Parameters.AddWithValue("@id", relic["RelicID"]);

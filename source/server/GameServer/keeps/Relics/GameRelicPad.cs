@@ -43,6 +43,13 @@ namespace DOL.GS
             _ => eRelicType.Invalid,
         };
 
+        public virtual bool AcceptsRelicType(eRelicType type) => type == PadType;
+
+        public virtual bool CanReceiveRelic(GameLiving player, GameRelic relic)
+        {
+            return player != null && relic != null && player.Realm == Realm && AcceptsRelicType(relic.RelicType);
+        }
+
         private readonly object _mountLock = new();
         private readonly HashSet<GameRelic> _mountedRelics = new(3);
         public HashSet<GameRelic> MountedRelics { get { lock (_mountLock) return new(_mountedRelics); } }
@@ -156,11 +163,17 @@ namespace DOL.GS
 
             if (relic.CurrentCarrier != null && !returning)
             {
-                string message = LanguageMgr.GetTranslation(ServerProperties.Properties.SERV_LANGUAGE, "GameRelicPad.MountRelic.Stored", relic.CurrentCarrier.Name, GlobalConstants.RealmToName(relic.CurrentCarrier.Realm), relic.Name, Name);
+                string guildName = ServerRules.PvpCombatant.GuildOf(relic.CurrentCarrier)?.Name;
+                string message = this is Keeps.GameKeepRelicPad && !string.IsNullOrEmpty(guildName)
+                    ? $"{guildName} mounted {relic.Name} at {Name}."
+                    : LanguageMgr.GetTranslation(ServerProperties.Properties.SERV_LANGUAGE, "GameRelicPad.MountRelic.Stored", relic.CurrentCarrier.Name, GlobalConstants.RealmToName(relic.CurrentCarrier.Realm), relic.Name, Name);
+                string captureMessage = this is Keeps.GameKeepRelicPad && !string.IsNullOrEmpty(guildName)
+                    ? message
+                    : LanguageMgr.GetTranslation(ServerProperties.Properties.SERV_LANGUAGE, "GameRelicPad.MountRelic.Captured", GlobalConstants.RealmToName(relic.CurrentCarrier.Realm), relic.Name);
 
                 foreach (GamePlayer otherPlayer in ClientService.Instance.GetPlayers())
                 {
-                    otherPlayer.Out.SendMessage(LanguageMgr.GetTranslation(otherPlayer.Client.Account.Language, "GameRelicPad.MountRelic.Captured", GlobalConstants.RealmToName(relic.CurrentCarrier.Realm), relic.Name), eChatType.CT_ScreenCenterSmaller, eChatLoc.CL_SystemWindow);
+                    otherPlayer.Out.SendMessage(captureMessage, eChatType.CT_ScreenCenterSmaller, eChatLoc.CL_SystemWindow);
                     otherPlayer.Out.SendMessage($"{message}\n{message}\n{message}", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
                 }
 
@@ -232,15 +245,21 @@ namespace DOL.GS
 
             foreach (GamePlayer player in players)
             {
-                if (player.Realm == Realm || !player.IsAlive || player.IsStealthed)
+                bool allied = this is Keeps.GameKeepRelicPad keepPad
+                    ? ServerRules.PvpCombatant.GuildOf(player) == keepPad.Guild
+                    : player.Realm == Realm;
+                if (allied || !player.IsAlive || player.IsStealthed)
                     continue;
 
                 enemyNearby++;
             }
 
             enemyNearby += GetNPCsInRadius(500).OfType<GameBot>().Count(bot =>
-                bot.IsAutonomousWorldBot && bot.IsAlive && !bot.IsStealthed && bot.Realm != Realm &&
-                bot.Realm != eRealm.None && bot.ObjectState == eObjectState.Active);
+                bot.IsAutonomousWorldBot && bot.IsAlive && !bot.IsStealthed &&
+                (this is Keeps.GameKeepRelicPad keepPad
+                    ? ServerRules.PvpCombatant.GuildOf(bot) != keepPad.Guild
+                    : bot.Realm != Realm && bot.Realm != eRealm.None) &&
+                bot.ObjectState == eObjectState.Active);
 
             return enemyNearby;
         }
@@ -301,7 +320,7 @@ namespace DOL.GS
                 if (relicOnPlayer == null)
                     return;
 
-                if (relicOnPlayer.RelicType != _parent.PadType)
+                if (!_parent.AcceptsRelicType(relicOnPlayer.RelicType))
                 {
                     player.Client.Out.SendMessage(string.Format(LanguageMgr.GetTranslation(player.Client.Account.Language, "GameRelicPad.OnPlayerEnter.EmptyRelicPad"), relicOnPlayer.RelicType), eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 
@@ -311,7 +330,7 @@ namespace DOL.GS
                     return;
                 }
 
-                if (player.Realm == _parent.Realm)
+                if (_parent.CanReceiveRelic(player, relicOnPlayer))
                 {
                     if (log.IsDebugEnabled)
                         log.Debug($"Player {player.Name} captured relic {relicOnPlayer.Name}");
@@ -321,7 +340,7 @@ namespace DOL.GS
                 else
                 {
                     if (log.IsDebugEnabled)
-                        log.Debug($"Player realm {GlobalConstants.RealmToName(player.Realm)} wrong realm on attempt to capture relic {relicOnPlayer.Name} of realm {GlobalConstants.RealmToName(relicOnPlayer.Realm)} on pad of realm {GlobalConstants.RealmToName(_parent.Realm)}");
+                        log.Debug($"Player {player.Name} is not allowed to mount relic {relicOnPlayer.Name} on pad {_parent.Name}.");
                 }
             }
         }

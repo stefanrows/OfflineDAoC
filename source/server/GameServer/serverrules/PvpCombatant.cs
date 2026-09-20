@@ -115,10 +115,10 @@ namespace DOL.GS.ServerRules
 		public static bool IsOldFrontier(GameLiving living) =>
 			living?.CurrentZone?.IsOF == true;
 
-		private static bool IsRealGuild(Guild guild) =>
+		public static bool IsRealGuild(Guild guild) =>
 			guild != null && guild.Name != DummyGuildName;
 
-		private static Guild GuildOf(GameLiving living) => living switch
+		public static Guild GuildOf(GameLiving living) => living switch
 		{
 			GamePlayer player => player.Guild,
 			GameBot bot => bot.Guild,

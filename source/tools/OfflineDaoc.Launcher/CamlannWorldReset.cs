@@ -181,6 +181,18 @@ public static class CamlannWorldReset
         return command.ExecuteScalar() is not null;
     }
 
+    private static bool ColumnExists(SQLiteConnection connection, SQLiteTransaction transaction, string table, string column)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"PRAGMA table_info([{table}])";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            if (string.Equals(reader[1]?.ToString(), column, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
     private static int Count(SQLiteConnection connection, SQLiteTransaction transaction, string table, string? predicate = null, params (string Name, object Value)[] parameters)
     {
         if (!TableExists(connection, table))
@@ -283,7 +295,9 @@ public static class CamlannWorldReset
             throw new InvalidOperationException("Keep data is missing; the new world was not created.");
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "UPDATE [Keep] SET Realm=0, ClaimedGuildName=''";
+        command.CommandText = ColumnExists(connection, transaction, "Keep", "ClaimedAt")
+            ? "UPDATE [Keep] SET Realm=0, ClaimedGuildName='', ClaimedAt='0001-01-01T00:00:00.0000000Z'"
+            : "UPDATE [Keep] SET Realm=0, ClaimedGuildName=''";
         command.ExecuteNonQuery();
     }
 
@@ -330,7 +344,9 @@ public static class CamlannWorldReset
         {
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = "UPDATE Relic SET Realm=@realm,LastRealm=@realm,LastCaptureDate=NULL,Region=@region,X=@x,Y=@y,Z=@z,Heading=@heading WHERE RelicID=@id";
+            command.CommandText = ColumnExists(connection, transaction, "Relic", "KeepID")
+                ? "UPDATE Relic SET Realm=@realm,LastRealm=@realm,KeepID=0,LastCaptureDate=NULL,Region=@region,X=@x,Y=@y,Z=@z,Heading=@heading WHERE RelicID=@id"
+                : "UPDATE Relic SET Realm=@realm,LastRealm=@realm,LastCaptureDate=NULL,Region=@region,X=@x,Y=@y,Z=@z,Heading=@heading WHERE RelicID=@id";
             command.Parameters.AddWithValue("@realm", relic.OriginalRealm);
             command.Parameters.AddWithValue("@region", relic.Region);
             command.Parameters.AddWithValue("@x", relic.X);

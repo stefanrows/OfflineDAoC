@@ -28,10 +28,10 @@ namespace DOL.GS
             if (!AutonomousRvrKeepPolicy.IsSiegeObjective(keep)) return;
             string id = $"rvr-keep-{keep.KeepID}";
             long now = GameLoop.GameLoopTime;
-            if (source != null && source.Realm != eRealm.None && source.Realm != keep.Realm)
-                KeepCombatPressure[id] = now;
             GamePlayer player = PlayerInstigator(source);
-            if (player == null || player.Realm == eRealm.None || player.Realm == keep.Realm) return;
+            if (source != null && player != null && keep.Guild != ServerRules.PvpCombatant.GuildOf(player))
+                KeepCombatPressure[id] = now;
+            if (player == null || keep.Guild == ServerRules.PvpCombatant.GuildOf(player)) return;
             if (DefenseAlarms.TryGetValue(id, out var previous) && now - previous.Tick < 1000) return;
             DefenseAlarms[id] = new(keep, player, now);
         }
@@ -68,8 +68,9 @@ namespace DOL.GS
 
         public static bool BeginDefenseResponse(LiveObjective target, eRealm attacker, string playerAccount, long now)
         {
-            if (target == null || target.IsPortalKeep || target.IsRelicCarrier || target.OwningRealm == eRealm.None ||
-                attacker is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia) || attacker == target.OwningRealm) return false;
+            if (target == null || target.IsPortalKeep || target.IsRelicCarrier ||
+                attacker is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia) ||
+                target.OwningRealm != eRealm.None && attacker == target.OwningRealm) return false;
             lock (Sync)
             {
                 if (!Events.TryGetValue(target.Id, out var active))
@@ -105,10 +106,11 @@ namespace DOL.GS
                         continue;
                     }
                     var alarm = pair.Value;
-                    if (alarm.Keep.Realm == alarm.Player.Realm) continue;
+                    if (alarm.Keep.Guild == alarm.Player.Guild) continue;
                     var keep = alarm.Keep;
                     var target = new LiveObjective(pair.Key, keep.Name, keep.IsRelic ? Intent.AssaultRelicKeep : Intent.AssaultKeep,
-                        keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0, 0, 0, UnderAttack: true);
+                        keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0, 0, 0, UnderAttack: true,
+                        OwningGuild: keep.Guild?.Name);
                     bool firstAlarm = BeginDefenseResponse(target, alarm.Player.Realm,
                         alarm.Player.Client?.Account?.Name ?? alarm.Player.Name, alarm.Tick);
                     var active = Events.GetValueOrDefault(pair.Key);
@@ -148,7 +150,7 @@ namespace DOL.GS
                     AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.RvR))
                 .GroupBy(AutonomousBotGroupCoordinator.RvrForceId)
                 .Select(g => new ResponseForce(new Force(g.Key, g.First().Realm, g.First().Group?.MemberCount ?? g.Count(), 50, 0,
-                    MemberIds: g.Select(b => b.DatabaseID).ToArray()), g.ToArray())).ToArray();
+                    MemberIds: g.Select(b => b.DatabaseID).ToArray(), GuildName: g.First().Guild?.Name), g.ToArray())).ToArray();
             lock (Sync)
             {
                 foreach (var candidate in forces)

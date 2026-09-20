@@ -208,16 +208,16 @@ namespace DOL.GS.ServerRules
 			}
 
 			//player vs guard
-			if (defender is GameKeepGuard && attacker is GamePlayer
-				&& GameServer.KeepManager.IsEnemy(defender as GameKeepGuard, attacker as GamePlayer) == false)
+			if (defender is GameKeepGuard && PvpCombatant.IsPlayerShaped(attacker)
+				&& GameServer.KeepManager.IsEnemy(defender as GameKeepGuard, attacker) == false)
 			{
 				if (quiet == false) MessageToLiving(attacker, "You can't attack a friendly NPC!");
 				return false;
 			}
 
 			//guard vs player
-			if (attacker is GameKeepGuard && defender is GamePlayer
-				&& GameServer.KeepManager.IsEnemy(attacker as GameKeepGuard, defender as GamePlayer) == false)
+			if (attacker is GameKeepGuard && PvpCombatant.IsPlayerShaped(defender)
+				&& GameServer.KeepManager.IsEnemy(attacker as GameKeepGuard, defender) == false)
 			{
 				return false;
 			}
@@ -260,28 +260,28 @@ namespace DOL.GS.ServerRules
 				return PvpCombatant.AreAllied(source, target);
 
 			//keep guards
-			if (source is GameKeepGuard && target is GamePlayer)
+			if (source is GameKeepGuard && PvpCombatant.IsPlayerShaped(target))
 			{
-				if (!GameServer.KeepManager.IsEnemy(source as GameKeepGuard, target as GamePlayer))
+				if (!GameServer.KeepManager.IsEnemy(source as GameKeepGuard, target))
 					return true;
 			}
 
-			if (target is GameKeepGuard && source is GamePlayer)
+			if (target is GameKeepGuard && PvpCombatant.IsPlayerShaped(source))
 			{
-				if (!GameServer.KeepManager.IsEnemy(target as GameKeepGuard, source as GamePlayer))
+				if (!GameServer.KeepManager.IsEnemy(target as GameKeepGuard, source))
 					return true;
 			}
 
 			//doors need special handling
-			if (target is GameKeepDoor && source is GamePlayer)
-				return GameServer.KeepManager.IsEnemy(target as GameKeepDoor, source as GamePlayer);
+			if (target is GameKeepDoor && PvpCombatant.IsPlayerShaped(source))
+				return GameServer.KeepManager.IsEnemy(target as GameKeepDoor, source);
 
-			if (source is GameKeepDoor && target is GamePlayer)
-				return GameServer.KeepManager.IsEnemy(source as GameKeepDoor, target as GamePlayer);
+			if (source is GameKeepDoor && PvpCombatant.IsPlayerShaped(target))
+				return GameServer.KeepManager.IsEnemy(source as GameKeepDoor, target);
 
 			//components need special handling
-			if (target is GameKeepComponent && source is GamePlayer)
-				return GameServer.KeepManager.IsEnemy(target as GameKeepComponent, source as GamePlayer);
+			if (target is GameKeepComponent && PvpCombatant.IsPlayerShaped(source))
+				return GameServer.KeepManager.IsEnemy(target as GameKeepComponent, source);
 
 			//Peace flag NPCs are same realm
 			if (target is GameNPC)
@@ -462,24 +462,12 @@ namespace DOL.GS.ServerRules
 			base.ResetKeep(lord, killer);
 			eRealm realm = eRealm.None;
 
-			//pvp servers, the realm changes to the group leaders realm
-			if (killer is GamePlayer)
-			{
-				Group group = ((killer as GamePlayer).Group);
-				if (group != null)
-					realm = (eRealm)group.Leader.Realm;
-				else realm = (eRealm)killer.Realm;
-			}
-			else if (killer is GameNPC && (killer as GameNPC).Brain is IControlledBrain)
-			{
-				GamePlayer player = ((killer as GameNPC).Brain as IControlledBrain).GetPlayerOwner();
-				Group group = null;
-				if (player != null)
-					group = player.Group;
-				if (group != null)
-					realm = (eRealm)group.Leader.Realm;
-				else realm = (eRealm)killer.Realm;
-			}
+			// The realm shown by the legacy client is only cosmetic in Camlann.
+			// Resolve GameBots and bot-owned pets to their player-shaped owner first.
+			GameLiving combatant = PvpCombatant.Resolve(killer as GameLiving);
+			if (combatant != null)
+				realm = (eRealm)(combatant.Group?.LivingLeader?.Realm ?? combatant.Realm);
+
 			lord.Component.Keep.Reset(realm);
 		}
 	}

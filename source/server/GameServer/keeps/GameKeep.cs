@@ -90,25 +90,7 @@ namespace DOL.GS.Keeps
 		/// </summary>
 		/// <param name="player"></param>
 		/// <returns></returns>
-		public override bool CheckForClaim(GamePlayer player)
-		{
-			//let gms do everything
-			if (player.Client.Account.PrivLevel > 1)
-				return true;
-
-			if (player.Group == null)
-			{
-				player.Out.SendMessage("You must be in a group to claim.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-				return false;
-			}
-			if (player.Group.MemberCount < ServerProperties.Properties.CLAIM_NUM)
-			{
-				player.Out.SendMessage("You need " + ServerProperties.Properties.CLAIM_NUM + " players to claim.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-				return false;
-			}
-
-			return base.CheckForClaim(player);
-		}
+		public override bool CheckForClaim(GameLiving player) => base.CheckForClaim(player);
 
 		/// <summary>
 		/// The RP reward for claiming based on difficulty level

@@ -160,6 +160,9 @@ namespace DOL.GS.Keeps
 			}
 			LoadHookPoints();
 
+			foreach (AbstractGameKeep keep in m_keepList.Values)
+				keep.EnsureRelicPad();
+
 			log.Info("Loaded " + m_keepList.Count + " keeps successfully");
 
 			if (ServerProperties.Properties.USE_KEEP_BALANCING)
@@ -549,32 +552,41 @@ namespace DOL.GS.Keeps
 		/// <returns>true if the player is an enemy of the keep</returns>
 		public virtual bool IsEnemy(AbstractGameKeep keep, GamePlayer target, bool checkGroup)
 		{
-			if (target.Client.Account.PrivLevel != 1)
+			return IsEnemy(keep, (GameLiving)target, checkGroup);
+		}
+
+		public virtual bool IsEnemy(AbstractGameKeep keep, GameLiving target, bool checkGroup)
+		{
+			if (keep == null || target is not IGamePlayer playerLike || playerLike.Client?.Account?.PrivLevel != 1)
 				return false;
 
 			if (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvP)
 			{
+				if (keep.IsPortalKeep)
+					return false;
+
 				if (keep.Guild == null)
 					return ServerProperties.Properties.PVP_UNCLAIMED_KEEPS_ENEMY;
 
 				//friendly player in group
 				if (checkGroup && target.Group != null)
 				{
-					foreach (GamePlayer player in target.Group.GetPlayersInTheGroup())
+					foreach (GameLiving player in target.Group.GetMembersInTheGroup())
 					{
-						if (!IsEnemy(keep, target, false))
+						if (!IsEnemy(keep, player, false))
 							return false;
 					}
 				}
 
 				//guild alliance
+				Guild targetGuild = ServerRules.PvpCombatant.GuildOf(target);
 				if (keep.Guild != null && keep.Guild.alliance != null)
 				{
-					if (keep.Guild.alliance.Guilds.Contains(target.Guild))
+					if (keep.Guild.alliance.Guilds.Contains(targetGuild))
 						return false;
 				}
 
-				return keep.Guild != target.Guild;
+				return keep.Guild != targetGuild;
 			}
 			
 			return keep.Realm != target.Realm;
@@ -592,6 +604,11 @@ namespace DOL.GS.Keeps
 			return IsEnemy(keep, target, true);
 		}
 
+		public virtual bool IsEnemy(AbstractGameKeep keep, GameLiving target)
+		{
+			return IsEnemy(keep, target, true);
+		}
+
 		/// <summary>
 		/// Checks if a keep guard is an enemy of the player
 		/// </summary>
@@ -600,12 +617,22 @@ namespace DOL.GS.Keeps
 		/// <returns>true if the player is an enemy of the guard</returns>
 		public virtual bool IsEnemy(GameKeepGuard checker, GamePlayer target)
 		{
+			return IsEnemy(checker, (GameLiving)target);
+		}
+
+		public virtual bool IsEnemy(GameKeepGuard checker, GameLiving target)
+		{
 			if (checker.Component == null || checker.Component.Keep == null)
 				return GameServer.ServerRules.IsAllowedToAttack(checker, target, true);
 			return IsEnemy(checker.Component.Keep, target);
 		}
 
 		public virtual bool IsEnemy(GameKeepGuard checker, GamePlayer target, bool checkGroup)
+		{
+			return IsEnemy(checker, (GameLiving)target, checkGroup);
+		}
+
+		public virtual bool IsEnemy(GameKeepGuard checker, GameLiving target, bool checkGroup)
 		{
 			if (checker.Component == null || checker.Component.Keep == null)
 				return GameServer.ServerRules.IsAllowedToAttack(checker, target, true);
@@ -623,6 +650,11 @@ namespace DOL.GS.Keeps
 			return IsEnemy(checker.Component?.Keep, target);
 		}
 
+		public virtual bool IsEnemy(GameKeepDoor checker, GameLiving target)
+		{
+			return IsEnemy(checker.Component?.Keep, target);
+		}
+
 		/// <summary>
 		/// Checks if a keep component is an enemy of the player
 		/// </summary>
@@ -630,6 +662,11 @@ namespace DOL.GS.Keeps
 		/// <param name="target">The player target</param>
 		/// <returns>true if the player is an enemy of the component</returns>
 		public virtual bool IsEnemy(GameKeepComponent checker, GamePlayer target)
+		{
+			return IsEnemy(checker.Keep, target);
+		}
+
+		public virtual bool IsEnemy(GameKeepComponent checker, GameLiving target)
 		{
 			return IsEnemy(checker.Keep, target);
 		}

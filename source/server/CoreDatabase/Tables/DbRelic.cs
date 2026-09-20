@@ -19,6 +19,7 @@ namespace DOL.Database
 		private int m_originalRealm;
 		private int m_lastRealm;
 		private int m_type;
+		private int m_keepID;
 		private DateTime m_lastCaptureDate;
 
 
@@ -196,6 +197,23 @@ namespace DOL.Database
 			{
 				Dirty = true;
 				m_type = value;
+			}
+		}
+
+		/// <summary>
+		/// Keep currently mounting this relic, or zero when the relic is at a temple shrine.
+		/// </summary>
+		[DataElement(AllowDbNull = false)]
+		public int KeepID
+		{
+			get
+			{
+				return m_keepID;
+			}
+			set
+			{
+				Dirty = true;
+				m_keepID = value;
 			}
 		}
 		

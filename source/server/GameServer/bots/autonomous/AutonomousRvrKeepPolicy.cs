@@ -9,7 +9,7 @@ namespace DOL.GS
     {
         public static bool IsSiegeObjective(AbstractGameKeep keep)
         {
-            return keep != null && !keep.IsPortalKeep && keep.Realm != eRealm.None;
+            return keep != null && !keep.IsPortalKeep;
         }
     }
 }
