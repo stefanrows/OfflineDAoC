@@ -23,8 +23,8 @@ public class UT_BotGoalSettings
         AutonomousBotGoalPolicy.Initialize(_directory);
     }
 
-    [TestCase(1, 60, 40, 0)] [TestCase(19, 60, 40, 0)]
-    [TestCase(20, 40, 40, 20)] [TestCase(49, 40, 40, 20)] [TestCase(50, 20, 40, 40)]
+    [TestCase(1, 55, 45, 0)] [TestCase(19, 55, 45, 0)]
+    [TestCase(20, 30, 45, 25)] [TestCase(49, 30, 45, 25)] [TestCase(50, 15, 35, 50)]
     public void DefaultsAndBrackets(int level, int solo, int group, int rvr) =>
         Assert.That(BotGoalSettings.Defaults.ForLevel(level), Is.EqualTo(new BotGoalWeights(solo, group, rvr)));
 

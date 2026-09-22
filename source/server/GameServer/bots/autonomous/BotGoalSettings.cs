@@ -32,7 +32,9 @@ public sealed record BotGoalSettings
     public required BotGoalWeights Level50 { get; init; }
     public static BotGoalSettings Defaults => new()
     {
-        Levels1To19 = new(60, 40, 0), Levels20To49 = new(40, 40, 20), Level50 = new(20, 40, 40),
+        // Camlann Tier 8 baseline: keep leveling PvE dominant while moving
+        // mature crews into frontier activity instead of realm armies.
+        Levels1To19 = new(55, 45, 0), Levels20To49 = new(30, 45, 25), Level50 = new(15, 35, 50),
     };
     public BotGoalWeights ForLevel(int level) => level >= 50 ? Level50 : level >= 20 ? Levels20To49 : Levels1To19;
 

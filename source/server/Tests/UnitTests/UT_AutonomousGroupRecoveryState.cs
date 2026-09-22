@@ -143,11 +143,11 @@ public sealed class UT_AutonomousGroupRecoveryState
     }
 
     [TestCase(0, eAutonomousObjectiveKind.SoloPve)]
-    [TestCase(.199999, eAutonomousObjectiveKind.SoloPve)]
-    [TestCase(.20, eAutonomousObjectiveKind.GroupPve)]
-    [TestCase(.599999, eAutonomousObjectiveKind.GroupPve)]
-    [TestCase(.60, eAutonomousObjectiveKind.RvR)]
+    [TestCase(.149999, eAutonomousObjectiveKind.SoloPve)]
+    [TestCase(.15, eAutonomousObjectiveKind.GroupPve)]
+    [TestCase(.499999, eAutonomousObjectiveKind.GroupPve)]
+    [TestCase(.50, eAutonomousObjectiveKind.RvR)]
     [TestCase(.999999, eAutonomousObjectiveKind.RvR)]
-    public void LevelFiftyRollUsesTwentyFortyForty(double roll, eAutonomousObjectiveKind expected) =>
+    public void LevelFiftyRollUsesTierEightActivityMix(double roll, eAutonomousObjectiveKind expected) =>
         Assert.That(AutonomousObjectiveAssignments.RollLevelFiftyObjective(new FixedRoll(roll)), Is.EqualTo(expected));
 }

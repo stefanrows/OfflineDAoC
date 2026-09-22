@@ -146,14 +146,14 @@ public class UT_PhysicalSiegeRally
     }
     private sealed class FixedRoll(double value) : Random { public override double NextDouble() => value; }
     [Test]
-    public void RelicsRemainRarerAndLevelFiftyTaskSplitIsUnchanged()
+    public void RelicsRemainRarerAndLevelFiftyTaskUsesTierEightMix()
     {
         var force = new AutonomousRvrEventLayer.Force("weight", eRealm.Albion, 8, 50, 2);
         Assert.That(Enumerable.Range(0, 100).Count(i => AutonomousRvrEventLayer.ChooseIntent(force, false, true, true, i / 100d) == AutonomousRvrEventLayer.Intent.AssaultRelicKeep), Is.EqualTo(15));
         var rolls = Enumerable.Range(0, 100).Select(i => AutonomousObjectiveAssignments.RollLevelFiftyObjective(new FixedRoll(i / 100d))).ToArray();
-        Assert.That(rolls.Count(k => k == eAutonomousObjectiveKind.RvR), Is.EqualTo(40));
-        Assert.That(rolls.Count(k => k == eAutonomousObjectiveKind.GroupPve), Is.EqualTo(40));
-        Assert.That(rolls.Count(k => k == eAutonomousObjectiveKind.SoloPve), Is.EqualTo(20));
+        Assert.That(rolls.Count(k => k == eAutonomousObjectiveKind.RvR), Is.EqualTo(50));
+        Assert.That(rolls.Count(k => k == eAutonomousObjectiveKind.GroupPve), Is.EqualTo(35));
+        Assert.That(rolls.Count(k => k == eAutonomousObjectiveKind.SoloPve), Is.EqualTo(15));
         var record = new OfflineWorldBotRecord { Level = 50, ObjectiveRvrEligibleUtc = AutonomousObjectiveAssignments.PveCompletionRequired };
         Assert.That(AutonomousObjectiveAssignments.IsRvrEligible(record, DateTime.UtcNow), Is.False);
     }

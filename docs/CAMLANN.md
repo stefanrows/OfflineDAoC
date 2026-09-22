@@ -5,7 +5,7 @@ world with a **single Camlann/Mordred-style full-PvP world**. The owner has
 authorized the tiered implementation; do not start the game server or deploy
 over a running install unless the owner asks.
 
-## Current implementation status (2026-09-20)
+## Current implementation status (2026-09-22)
 
 - Tier 0 world bootstrap/reset is complete in [PR #7](https://github.com/stefanrows/OfflineDAoC/pull/7), merged as `40476dc`.
 - Tier 1 rules core is complete in [PR #8](https://github.com/stefanrows/OfflineDAoC/pull/8), merged as `4644914`:
@@ -52,7 +52,14 @@ over a running install unless the owner asks.
   1,924 tests and the launcher build passed on 2026-09-20; launcher tests
   require the Windows desktop runtime and were not executable on Linux. No
   live server or client was started.
-- Next: Tier 8.
+- Tier 8 offline population tuning is complete on the current branch: mature
+  goal weights favor frontier activity, RvR formation planning keeps a 25%
+  independent-roamer reserve, formation sizes favor pairs, small crews, and
+  eight-man roams, and keep/relic objective reuse waits 30 minutes. The
+  isolated server suite passed 1,935 tests and the launcher build passed on
+  2026-09-22; launcher tests were blocked by the WSL path mapping used by the
+  Windows test runner. No live server or client was started.
+- Next: Tier 9.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -765,6 +772,19 @@ Do this **after** Tiers 1–7 are honest.
 
 Owner playtest with a real client (Tier 9). Offline tests cannot certify feel.
 Change numbers; do not reintroduce realm teams to "balance" the frontier.
+
+### Tier 8 implementation record
+
+- The default activity profile is 55/45 PvE below level 20, 30/45/25
+  PvE/RvR from levels 20–49, and 15/35/50 at level 50.
+- Mature RvR populations retain a 25% independent-roamer reserve. Formation
+  rolls produce scouts, gank pairs, small roaming crews, and full eight-man
+  roams while respecting the available crew slots.
+- Keep and relic objective cooldown is 30 minutes. Relic return remains the
+  existing 20-minute PvP rule until the real-client playtest provides evidence
+  for changing dropped-relic recovery.
+- No world definitions, navmeshes, native client hash guards, loot rules, or
+  PvE encounter locations changed.
 
 ---
 

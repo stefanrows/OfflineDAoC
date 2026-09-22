@@ -53,11 +53,7 @@ public static class AutonomousRvrStaging
         objectiveKind == eAutonomousObjectiveKind.RvR;
 
     public static int RollWarbandSize(int maximumSize, double roll)
-    {
-        int maximum = Math.Clamp(maximumSize, 1, 8);
-        double bounded = Math.Clamp(roll, 0d, Math.BitDecrement(1d));
-        return 1 + (int)(bounded * maximum);
-    }
+        => CamlannPopulationTuning.RollWarbandSize(maximumSize, roll);
 
     /// <summary>
     /// Spreads a warband deterministically across the closest visible enemies.
