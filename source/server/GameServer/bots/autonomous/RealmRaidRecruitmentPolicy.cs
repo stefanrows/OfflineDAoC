@@ -19,8 +19,8 @@ public static class RealmRaidRecruitmentPolicy
     public static bool Eligible(int level, bool autonomous, bool temporary, bool playerLed) =>
         level == 50 && autonomous && !temporary && !playerLed;
 
-    public static bool CanOpenEvent(bool forced, bool sameRealmEvent, bool sameEncounterEvent) =>
-        !sameEncounterEvent && (forced || !sameRealmEvent);
+    public static bool CanOpenEvent(bool forced, bool activePveEvent, bool sameEncounterEvent) =>
+        !sameEncounterEvent && (forced || !activePveEvent);
 
     public static bool Ready(bool forced, long elapsed, int present, bool landed) =>
         elapsed >= (forced ? ForcedStagingMilliseconds : AutonomousMinimumStagingMilliseconds) &&

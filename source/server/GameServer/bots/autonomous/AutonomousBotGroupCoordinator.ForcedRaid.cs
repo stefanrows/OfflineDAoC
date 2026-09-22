@@ -8,10 +8,10 @@ public static partial class AutonomousBotGroupCoordinator
 {
     // Automatic expeditions may recruit waiting level-50 Group PvE applicants,
     // never interrupt an existing ordinary party, solo goal or RvR assignment.
-    public static GameBot[] PlanWaitingRaidParty(eRealm realm, int size)
+    public static GameBot[] PlanWaitingRaidParty(int size)
     {
         var candidates = AutonomousBotRegistry.Snapshot().Where(b => AutonomousRealmRaid.IsEligible(b) &&
-            b.Realm == realm && b.Group == null && b.IsAlive && b.PersistentRecord != null &&
+            b.Group == null && b.IsAlive && b.PersistentRecord != null &&
             b.CurrentRegion != null && !b.InCombat && !b.IsAttacking && !b.IsOnStableMasterRoute &&
             !AutonomousRealmRaid.IsReserved(b) &&
             AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.GroupPve))
@@ -24,12 +24,16 @@ public static partial class AutonomousBotGroupCoordinator
         return null;
     }
 
+    // Retain the old call shape for local tools and older test helpers. PvE
+    // expedition recruitment is intentionally no longer partitioned by realm.
+    public static GameBot[] PlanWaitingRaidParty(eRealm _, int size) => PlanWaitingRaidParty(size);
+
     // Pure roster planning: no objective, group or position is changed here.
     // Never break a player-led or mixed-level party to obtain a level-50 member.
-    public static GameBot[][] PlanForcedRaid(eRealm realm)
+    public static GameBot[][] PlanForcedRaid()
     {
         var candidates = AutonomousBotRegistry.Snapshot().Where(b => AutonomousRealmRaid.IsEligible(b) &&
-            b.Realm == realm && b.PersistentRecord != null && b.CurrentRegion != null &&
+            b.PersistentRecord != null && b.CurrentRegion != null &&
             !AutonomousRealmRaid.IsReserved(b) && AutonomousRealmRaid.GetView(b.Group) == null &&
             !AutonomousRvrEventLayer.IsForceCommitted(RvrForceId(b), GameLoop.GameLoopTime) &&
             (b.Group == null || b.Group.GetMembersInTheGroup().All(m => m is GameBot other && AutonomousRealmRaid.IsEligible(other))))
@@ -49,6 +53,10 @@ public static partial class AutonomousBotGroupCoordinator
         if (remaining == 4 && candidates.Count >= 4) parties.Add(candidates.Take(4).ToArray());
         return parties.ToArray();
     }
+
+    // Retain the old call shape for local tools and older test helpers. The
+    // requested realm is an encounter identity, not a raid recruitment team.
+    public static GameBot[][] PlanForcedRaid(eRealm _) => PlanForcedRaid();
 
     private static bool TryAssignExpeditionRoles(GameBot[] members, GameBot leader, out Dictionary<long, BotPveGroupRole> roles)
     {
@@ -85,7 +93,7 @@ public static partial class AutonomousBotGroupCoordinator
             }
             foreach (Group previous in members.Select(b => b.Group).Where(g => g != null).Distinct().ToArray())
             {
-                if (Sessions.TryGetValue(previous, out var old)) FinishGroupTask(old, "Reassigned by a forced realm expedition");
+                if (Sessions.TryGetValue(previous, out var old)) FinishGroupTask(old, "Reassigned by a forced PvE expedition");
                 else previous.DisbandGroup();
             }
             var group = new Group(members[0]);

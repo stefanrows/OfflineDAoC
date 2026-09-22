@@ -33,7 +33,7 @@ namespace DOL.UnitTests
         private sealed class DecisionServer : GameServer
         {
             protected override IObjectDatabase DataBaseImpl => EmptyDatabase;
-            protected override IServerRules ServerRulesImpl => new NormalServerRules();
+            protected override IServerRules ServerRulesImpl => new PvPServerRules();
         }
 
         // Test candidates and cache-only listings must never cause a query or

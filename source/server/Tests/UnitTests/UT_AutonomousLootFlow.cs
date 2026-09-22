@@ -63,7 +63,7 @@ namespace DOL.UnitTests
         private sealed class LootServer : GameServer
         {
             public IObjectDatabase TestDatabase;
-            protected override IServerRules ServerRulesImpl => new NormalServerRules();
+            protected override IServerRules ServerRulesImpl => new PvPServerRules();
             protected override IObjectDatabase DataBaseImpl => TestDatabase ?? EmptyDatabase;
         }
 
@@ -691,8 +691,11 @@ namespace DOL.UnitTests
             LootBot helper = Bot(true);
             try
             {
-                foreach (LootBot bot in bots)
+                eRealm[] realms = [eRealm.Albion, eRealm.Midgard, eRealm.Hibernia];
+                for (int index = 0; index < bots.Length; index++)
                 {
+                    LootBot bot = bots[index];
+                    bot.Realm = realms[index % realms.Length];
                     bot.ObjectState = GameObject.eObjectState.Active;
                     AutonomousBotRegistry.Register(bot);
                 }

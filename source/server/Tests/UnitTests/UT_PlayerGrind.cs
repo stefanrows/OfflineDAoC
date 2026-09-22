@@ -25,7 +25,7 @@ namespace DOL.UnitTests
         private sealed class Server : GameServer
         {
             protected override IObjectDatabase DataBaseImpl => EmptyDatabase;
-            protected override IServerRules ServerRulesImpl => new NormalServerRules();
+            protected override IServerRules ServerRulesImpl => new PvPServerRules();
         }
         public class Packets : DispatchProxy
         {

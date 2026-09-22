@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using DOL.AI.Brain;
+using DOL.GS.ServerRules;
 
 namespace DOL.GS
 {
@@ -181,21 +182,21 @@ namespace DOL.GS
             if (leader?.Group == null || leader.Group.LivingLeader != leader) return false;
             GameBot[] members = leader.Group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
             if (members.Length != 8 || members.Any(b => !IsEligible(b) || IsReserved(b) ||
-                b.Realm != leader.Realm || !AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.GroupPve))) return false;
+                !AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.GroupPve))) return false;
             lock (Sync)
             {
                 if (Membership.TryGetValue(leader.Group, out Raid joined)) { view = joined.Parties[leader.Group].View; return true; }
-                Raid raid = Raids.Values.FirstOrDefault(r => r.Definition.Realm == leader.Realm && !r.Forced && r.Parties.Count < RealmRaidRecruitmentPolicy.MaximumParties);
-                if (raid == null && Raids.Values.Any(r => r.Definition.Realm == leader.Realm)) return false;
+                Raid raid = Raids.Values.FirstOrDefault(r => !r.Forced && r.Parties.Count < RealmRaidRecruitmentPolicy.MaximumParties);
+                if (raid == null && Raids.Values.Any(r => !r.Forced)) return false;
                 if (raid == null)
                 {
                     // Decisions occur once when a party chooses a new task, not
                     // once per member or AI tick; keep ordinary PvE populated.
                     if (Random.Shared.NextDouble() >= RealmRaidRecruitmentPolicy.NewEventChance) return false;
-                    if (AutonomousBotRegistry.Snapshot().Count(b => IsEligible(b) && b.Realm == leader.Realm &&
+                    if (AutonomousBotRegistry.Snapshot().Count(b => IsEligible(b) &&
                         AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.GroupPve)) < RealmRaidRecruitmentPolicy.AutonomousMinimumPresent) return false;
-                    var definition = Definitions.Where(d => d.Realm == leader.Realm && Available(d.Id)).OrderBy(_ => Random.Shared.Next()).FirstOrDefault();
-                    if (definition == null || !Start(definition.Id, leader.Realm, out _)) return false;
+                    var definition = Definitions.Where(d => Available(d.Id)).OrderBy(_ => Random.Shared.Next()).FirstOrDefault();
+                    if (definition == null || !Start(definition.Id, definition.Realm, out _)) return false;
                     raid = Raids[definition.Id];
                 }
                 else if (Random.Shared.NextDouble() >= RealmRaidRecruitmentPolicy.JoinExistingChance) return false;
@@ -216,9 +217,9 @@ namespace DOL.GS
             }
         }
 
-        public static bool Start(string id, eRealm realm, out string reason, bool forced = false)
+        public static bool Start(string id, eRealm _, out string reason, bool forced = false)
         {
-            GameBot[][] recruits = forced ? AutonomousBotGroupCoordinator.PlanForcedRaid(realm) : [];
+            GameBot[][] recruits = forced ? AutonomousBotGroupCoordinator.PlanForcedRaid() : [];
             if (forced && recruits.Sum(p => p.Length) < RealmRaidRecruitmentPolicy.MaximumBots)
             {
                 reason = $"Not started: only {recruits.Sum(p => p.Length)}/300 eligible level-50 bots could be reserved. No tasks were cancelled.";
@@ -226,10 +227,13 @@ namespace DOL.GS
             }
             lock (Sync)
             {
-                Definition definition = Definitions.FirstOrDefault(d => d.Id == id && d.Realm == realm);
+                // The realm remains the encounter's home-world identity for
+                // spawn, route, and client presentation. It is not a faction
+                // selector for a Camlann PvE expedition.
+                Definition definition = Definitions.FirstOrDefault(d => d.Id == id);
                 if (definition == null || !Available(id)) { reason = "The encounter is not alive/available, or this event is on cooldown."; return false; }
-                if (!RealmRaidRecruitmentPolicy.CanOpenEvent(forced, Raids.Values.Any(r => r.Definition.Realm == realm), Raids.ContainsKey(id)))
-                { reason = "This realm already has an autonomous PvE expedition, or this encounter is already assigned."; return false; }
+                if (!RealmRaidRecruitmentPolicy.CanOpenEvent(forced, Raids.Values.Any(r => !r.Forced), Raids.ContainsKey(id)))
+                { reason = "An autonomous PvE expedition is already active, or this encounter is already assigned."; return false; }
                 if (forced && recruits.SelectMany(p => p).Any(b => IsReserved(b) || GetView(b.Group) != null))
                 { reason = "A planned recruit joined another expedition. Nothing was reassigned; please retry."; return false; }
                 long now = GameLoop.GameLoopTime;
@@ -242,15 +246,15 @@ namespace DOL.GS
                     raid.DungeonRoute = route;
                 }
                 if (!TryStaging(raid, 0, out var destination) || !TryHubPost(raid, 0, out var origin) ||
-                    !RealmRaidMuster.TryRoute(WorldMgr.GetRegion(raid.Hub.Region), PathfindingProvider.Instance, realm,
+                    !RealmRaidMuster.TryRoute(WorldMgr.GetRegion(raid.Hub.Region), PathfindingProvider.Instance, definition.Realm,
                         origin, destination, out raid.OutboundSeams, raid.Hub.Via))
                 { reason = "No complete connected hub-to-encounter route was found. No party was assigned."; return false; }
                 Raids[id] = raid;
                 RealmEventRecords.Begin(id, definition.Name, definition.IsDungeon ? "Epic dungeon" : "Dragon",
-                    GlobalConstants.RealmToName(realm), (forced ? "Forced" : "Automatic") + " rally via " + raid.Hub.Name);
+                    GlobalConstants.RealmToName(definition.Realm), (forced ? "Forced" : "Automatic") + " rally via " + raid.Hub.Name);
                 raid.ForcedParties.AddRange(recruits);
                 foreach (GameBot bot in recruits.SelectMany(p => p)) Reservations[bot.DatabaseID] = id;
-                RealmEventNotices.Queue(id, realm, forced
+                RealmEventNotices.Queue(id, definition.Realm, forced
                     ? $"{definition.Name}: {recruits.Sum(p => p.Length)} level-50 adventurers reserved; 45-minute preparation begins at {raid.Hub.Name}. At least 200 must arrive and the dragon must land."
                     : $"{definition.Name}: recruiting up to 300 level-50 adventurers via {raid.Hub.Name}; at least 200 must arrive before assault.");
                 reason = forced ? $"Reserved {recruits.Sum(p => p.Length)} level-50 bots. Everyone travels to {raid.Hub.Name}; 45-minute preparation countdown started. At least 200 must arrive and the dragon must land." :
@@ -346,7 +350,7 @@ namespace DOL.GS
                     if (!raid.Forced && raid.Support.Length < RealmRaidRecruitmentPolicy.MaximumBots && raid.ForcedParties.Count == 0)
                     {
                         int size = Math.Min(8, RealmRaidRecruitmentPolicy.MaximumBots - raid.Support.Length);
-                        var waiting = AutonomousBotGroupCoordinator.PlanWaitingRaidParty(raid.Definition.Realm, size);
+                        var waiting = AutonomousBotGroupCoordinator.PlanWaitingRaidParty(size);
                         if (waiting != null)
                         {
                             raid.ForcedParties.Add(waiting);
@@ -395,7 +399,7 @@ namespace DOL.GS
                     raid.Parties.Count >= RealmRaidRecruitmentPolicy.MaximumParties || Membership.ContainsKey(group)) return false;
                 var members = group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
                 if (members.Length is not (4 or 8) || raid.Support.Length + members.Length > RealmRaidRecruitmentPolicy.MaximumBots ||
-                    members.Any(b => !IsEligible(b) || b.Realm != raid.Definition.Realm ||
+                    members.Any(b => !IsEligible(b) ||
                     Reservations.GetValueOrDefault(b.DatabaseID) != id)) return false;
                 int slot = Enumerable.Range(0, RealmRaidRecruitmentPolicy.MaximumParties).First(i => raid.Parties.Values.All(p => p.FormationSlot != i));
                 if (!TryStaging(raid, slot, out var staging) || !TryHubPost(raid, slot, out var hubPost)) return false;
@@ -695,7 +699,9 @@ namespace DOL.GS
             var visited = new HashSet<IControlledBrain>();
             foreach (GameLiving owner in SupportMembers(bot))
                 foreach (GameNPC pet in BotGroupPetBuffTargets.AttachedTree(owner.ControlledBrain, owner, visited))
-                    if (pet.IsAlive && pet.Realm == bot.Realm && pet.CurrentRegionID == bot.CurrentRegionID && bot.IsWithinRadius(pet, range))
+                    if (pet.IsAlive && PvpCombatant.Resolve(pet) is GameLiving petOwner &&
+                        SupportMembers(bot).Contains(petOwner) && pet.CurrentRegionID == bot.CurrentRegionID &&
+                        bot.IsWithinRadius(pet, range))
                         yield return pet;
         }
 

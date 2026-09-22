@@ -126,6 +126,23 @@ public sealed class UT_CamlannPvpCombatant
     }
 
     [Test]
+    public void MixedRealmGroupCanAttackNeutralMobWithoutFriendlyFire()
+    {
+        var human = new TestPlayer { Realm = eRealm.Albion, CurrentRegionID = 1 };
+        var bot = Bot(eRealm.Hibernia);
+        PutInGroup(human, bot);
+        var mob = (TestPet)RuntimeHelpers.GetUninitializedObject(typeof(TestPet));
+        typeof(GameNPC).GetField("m_brains", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(mob, new ArrayList());
+        mob.Realm = eRealm.None;
+        var rules = new PvPServerRules();
+
+        Assert.That(rules.IsAllowedToAttack(human, mob, true), Is.True);
+        Assert.That(rules.IsAllowedToAttack(bot, mob, true), Is.True);
+        Assert.That(rules.IsAllowedToAttack(human, bot, true), Is.False);
+    }
+
+    [Test]
     public void BotOwnedPetResolvesToTheBotNotAPlayerOwner()
     {
         var bot = Bot(eRealm.Midgard);

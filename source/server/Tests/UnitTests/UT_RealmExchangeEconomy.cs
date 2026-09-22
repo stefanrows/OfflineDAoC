@@ -48,7 +48,7 @@ namespace DOL.UnitTests
         {
             public IObjectDatabase TestDatabase;
             protected override IObjectDatabase DataBaseImpl => TestDatabase;
-            protected override IServerRules ServerRulesImpl => new NormalServerRules();
+            protected override IServerRules ServerRulesImpl => new PvPServerRules();
         }
 
         public class MemoryDatabase : DispatchProxy

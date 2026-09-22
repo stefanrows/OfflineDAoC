@@ -45,7 +45,14 @@ over a running install unless the owner asks.
   launcher build passed on 2026-09-20; launcher tests require the Windows
   desktop runtime and were not executable on Linux. No live server or client
   was started.
-- Next: Tier 7.
+- Tier 7 implementation is complete on the current branch: autonomous PvE
+  expeditions recruit by class, level, and crew across realms while retaining
+  encounter locations, real loot/currency, Realm Exchange access, existing
+  navmeshes, and native client patch guards. The isolated server suite passed
+  1,924 tests and the launcher build passed on 2026-09-20; launcher tests
+  require the Windows desktop runtime and were not executable on Linux. No
+  live server or client was started.
+- Next: Tier 8.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -532,7 +539,7 @@ three realm factions.
 - `AutonomousRvrDirector` / `AutonomousRvrPlanningView` / `AutonomousRvrDashboard`
   ally/enemy counts by realm
 - `AutonomousRvrRally` / `RealmWarbandSupport` as realm-wide PvP rallies
-- `RealmRaidMuster` as a realm PvP rally (realm PvE raids stay; Tier 7)
+- `RealmRaidMuster` as a realm PvP rally (it remains a PvE route service)
 - Chat/banter (`RealmEventBanter`, `AutonomousChatKnowledge`,
   `RealmEventNotices`) that treats realms as sides
 
@@ -726,6 +733,16 @@ they just happen in a PvP world.
 - Realm Exchange tests use local-broker rules.
 - **Gate:** A player can level in PvE with companions while remaining
   attackable in the open world.
+
+### Tier 7 implementation record
+
+- Autonomous raid recruitment no longer partitions eligible members by realm;
+  the encounter realm remains only the world-location identity for routes,
+  notices, and client presentation.
+- PvE, loot, and Realm Exchange regression coverage runs with
+  `PvPServerRules`, including a mixed-realm group attacking a neutral mob
+  without friendly fire and a mixed-realm expedition sharing real drops.
+- No navmesh, native client hash guard, or raid UI patch was changed.
 
 ---
 
