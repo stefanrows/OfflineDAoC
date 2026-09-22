@@ -20,7 +20,7 @@ public sealed class UT_RealmExchangeExpiry
     private sealed class InertServer : GameServer
     {
         public IObjectDatabase TestDatabase;
-        protected override IServerRules ServerRulesImpl => new NormalServerRules();
+        protected override IServerRules ServerRulesImpl => new PvPServerRules();
         protected override IObjectDatabase DataBaseImpl => TestDatabase;
     }
 

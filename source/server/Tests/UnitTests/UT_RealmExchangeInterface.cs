@@ -22,7 +22,7 @@ public sealed class UT_RealmExchangeInterface
 
     private sealed class InertServer : GameServer
     {
-        protected override IServerRules ServerRulesImpl => new NormalServerRules();
+        protected override IServerRules ServerRulesImpl => new PvPServerRules();
         protected override IObjectDatabase DataBaseImpl => EmptyDatabase;
     }
 

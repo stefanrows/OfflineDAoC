@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-20
+
+### Added
+
+- Tier 7 mixed-realm PvE expedition recruitment and PvP-context regression
+  coverage for grinding, loot, and Realm Exchange behavior.
+
+### Changed
+
+- Autonomous dragon and epic-dungeon expeditions use their encounter realm
+  for world location and presentation only; class-, level-, and crew-eligible
+  adventurers may form a shared PvE expedition across realms.
+- PvE loot, currency sharing, equipment rules, Realm Exchange access, and
+  existing navigation/client patch boundaries remain unchanged.
+
+### Fixed
+
+- Raid recruitment and expedition pet support no longer reject eligible
+  cross-realm members or their controlled pets under Camlann PvP rules.
+- PvE, economy, and Exchange regression tests now exercise `PvPServerRules`.
+
+### Removed
+
+- None.
+
 ## [0.13.1] - 2026-09-20
 
 ### Added

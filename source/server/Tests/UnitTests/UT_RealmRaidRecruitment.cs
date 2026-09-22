@@ -24,6 +24,15 @@ public class UT_RealmRaidRecruitment
         Assert.That(RealmRaidRecruitmentPolicy.Ready(false,15 * 60_000L,200,true),Is.True);
         Assert.That(RealmRaidRecruitmentPolicy.MaximumBots,Is.EqualTo(300));
     }
+
+    [TestCase(false, false, false, true)]
+    [TestCase(false, true, false, false)]
+    [TestCase(false, false, true, false)]
+    [TestCase(true, true, false, true)]
+    [TestCase(true, false, true, false)]
+    public void PvEExpeditionsUseOneAutomaticSlotButForcedEventsMayCoexist(
+        bool forced, bool activePveEvent, bool sameEncounter, bool expected) =>
+        Assert.That(RealmRaidRecruitmentPolicy.CanOpenEvent(forced, activePveEvent, sameEncounter), Is.EqualTo(expected));
     [TestCase(49, true, false, false, false)] [TestCase(50, true, false, false, true)]
     [TestCase(50, false, false, false, false)] [TestCase(50, true, true, false, false)]
     [TestCase(50, true, false, true, false)] [TestCase(1, true, false, false, false)]
