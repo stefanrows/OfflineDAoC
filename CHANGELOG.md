@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-22
+
+### Added
+
+- Camlann Tier 8 population tuning for level-band activity mixes and
+  deterministic autonomous crew-size distribution.
+- Regression coverage for Camlann roamer reserves, pair/small-crew/eight-man
+  formation bands, and the keep/relic objective cooldown.
+
+### Changed
+
+- Autonomous bots now default to 55/45 PvE activity below level 20,
+  30/45/25 PvE/RvR activity from levels 20–49, and 15/35/50 at level 50.
+- RvR formation planning reserves 25% of mature actors as independent roamers,
+  favors gank pairs and full eight-man crews, and waits 30 minutes before
+  selecting the same keep or relic objective again.
+
+### Fixed
+
+- Small autonomous populations no longer lose all independent frontier actors
+  when the RvR grouping pass forms crews.
+
+### Removed
+
+- None.
+
 ## [0.14.0] - 2026-09-20
 
 ### Added

@@ -18,7 +18,7 @@ public static partial class AutonomousRvrEventLayer
     public const long BattleLifetimeMilliseconds = 4 * 60 * 60_000L;
     public const long AttendanceFreshnessMilliseconds = 15_000;
     public const long StragglerTimeoutMilliseconds = 8 * 60_000L;
-    public const long TargetCooldownMilliseconds = 12 * 60_000;
+    public const long TargetCooldownMilliseconds = CamlannPopulationTuning.TargetCooldownMilliseconds;
     public const int OrdinaryAssaultCap = 128;
     public const int RelicAssaultCap = 192;
     public const int RelicCarrierRealmCap = 192;

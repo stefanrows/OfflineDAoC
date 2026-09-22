@@ -257,9 +257,8 @@ public static partial class AutonomousBotGroupCoordinator
             ? Math.Max(0, rosterCount - MinimumSoloRvrReserve(rosterCount))
             : Math.Max(0, rosterCount);
 
-    public static int MinimumSoloRvrReserve(int rosterCount) => rosterCount < 4
-        ? Math.Max(0, rosterCount - 2)
-        : Math.Max(2, (int)Math.Ceiling(rosterCount * 0.35d));
+    public static int MinimumSoloRvrReserve(int rosterCount) =>
+        CamlannPopulationTuning.MinimumSoloRvrReserve(rosterCount);
 
     public static int AvailableGroupSlotsForObjective(eAutonomousObjectiveKind objectiveKind, int realmRosterCount, int realmGroupedCount) =>
         Math.Max(0, MaximumGroupedForObjective(objectiveKind, realmRosterCount) - realmGroupedCount);

@@ -162,10 +162,10 @@ public class UT_AutonomousBotDecisionEngine
     {
         Assert.That(AutonomousBotGroupCoordinator.MaximumAutonomousGrouped(180), Is.EqualTo(72));
         Assert.That(AutonomousBotGroupCoordinator.MaximumAutonomousGrouped(9), Is.EqualTo(3));
-        Assert.That(AutonomousBotGroupCoordinator.MinimumSoloRvrReserve(10), Is.EqualTo(4));
-        Assert.That(AutonomousBotGroupCoordinator.MaximumGroupedForObjective(eAutonomousObjectiveKind.RvR, 10), Is.EqualTo(6));
-        Assert.That(AutonomousBotGroupCoordinator.AvailableGroupSlotsForObjective(eAutonomousObjectiveKind.RvR, 10, 4), Is.EqualTo(2));
-        Assert.That(AutonomousBotGroupCoordinator.AvailableGroupSlotsForObjective(eAutonomousObjectiveKind.RvR, 10, 6), Is.Zero);
+        Assert.That(AutonomousBotGroupCoordinator.MinimumSoloRvrReserve(10), Is.EqualTo(3));
+        Assert.That(AutonomousBotGroupCoordinator.MaximumGroupedForObjective(eAutonomousObjectiveKind.RvR, 10), Is.EqualTo(7));
+        Assert.That(AutonomousBotGroupCoordinator.AvailableGroupSlotsForObjective(eAutonomousObjectiveKind.RvR, 10, 4), Is.EqualTo(3));
+        Assert.That(AutonomousBotGroupCoordinator.AvailableGroupSlotsForObjective(eAutonomousObjectiveKind.RvR, 10, 7), Is.Zero);
         Assert.That(AutonomousBotGroupCoordinator.ShouldContinueFormationSearch(eAutonomousObjectiveKind.RvR, 0), Is.True);
         Assert.That(AutonomousBotGroupCoordinator.ShouldContinueFormationSearch(eAutonomousObjectiveKind.GroupPve, 0), Is.False);
         Assert.That(AutonomousBotGroupCoordinator.MaximumGroupedForObjective(eAutonomousObjectiveKind.GroupPve, 10), Is.EqualTo(10));
@@ -260,8 +260,8 @@ public class UT_AutonomousBotDecisionEngine
 
         Assert.Multiple(() =>
         {
-            Assert.That(level20To49, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(4, 4, 2)));
-            Assert.That(level50, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(2, 4, 4)));
+            Assert.That(level20To49, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(3, 5, 2)));
+            Assert.That(level50, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(2, 3, 5)));
             Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(10), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(6, 4, 0)));
             Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(3), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(2, 1, 0)));
             Assert.That(AutonomousObjectiveAssignments.TargetForPopulation(2, false), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(1, 1, 0)));
