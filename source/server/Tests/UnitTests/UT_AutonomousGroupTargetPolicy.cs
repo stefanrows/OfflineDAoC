@@ -15,7 +15,18 @@ namespace DOL.UnitTests
             Assert.That(AutonomousGroupTargetPolicy.PreferredBonus(size), Is.EqualTo(bonus));
             Assert.That(AutonomousGroupTargetPolicy.SelectAvailableLevel(Enumerable.Range(1, 58), 10, size), Is.EqualTo(10 + bonus));
             foreach (int seed in Enumerable.Range(0, 20))
-                Assert.That(AutonomousBotGroupCoordinator.RollPreferredLevelBonus(size, new Random(seed)), Is.InRange(3, 10));
+                Assert.That(AutonomousBotGroupCoordinator.RollPreferredLevelBonus(size, new Random(seed)), Is.EqualTo(bonus));
+            Assert.That(AutonomousBotGroupCoordinator.IsOrdinaryPvePartySize(size), Is.True);
+        }
+
+        [TestCase(0)] [TestCase(1)] [TestCase(9)]
+        public void OrdinaryPveRejectsSizesOutsideTwoThroughEight(int size) =>
+            Assert.That(AutonomousBotGroupCoordinator.IsOrdinaryPvePartySize(size), Is.False);
+
+        [Test] public void MatchmakingCadenceAndNavigationWorkAreBounded()
+        {
+            Assert.That(AutonomousBotGroupCoordinator.MatchmakingIntervalMilliseconds, Is.EqualTo(5_000));
+            Assert.That(AutonomousBotGroupCoordinator.MaximumRendezvousChecksPerPass, Is.EqualTo(4));
         }
 
         [Test] public void FixedEightManTargetsStayBetweenPlusThreeAndPlusTen()

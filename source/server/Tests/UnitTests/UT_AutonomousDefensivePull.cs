@@ -121,11 +121,14 @@ namespace DOL.UnitTests
             }
         }
 
+        [TestCase(true, 2, true, true)]
+        [TestCase(true, 7, true, true)]
         [TestCase(true, 8, true, true)]
         [TestCase(false, 8, true, false)]
-        [TestCase(true, 7, true, false)]
+        [TestCase(true, 1, true, false)]
+        [TestCase(true, 9, true, false)]
         [TestCase(true, 8, false, false)]
-        public void OnlyFullLevelFiftyPvePartiesChange(bool pve, int size, bool fifty, bool expected) =>
+        public void EveryOrdinaryLevelFiftyPvePartyCanUseDefensivePulls(bool pve, int size, bool fifty, bool expected) =>
             Assert.That(AutonomousDefensivePull.UsesDefensivePull(pve, size, fifty), Is.EqualTo(expected));
 
         [TestCase("DirectDamage", 0, 1500, 50, true)]

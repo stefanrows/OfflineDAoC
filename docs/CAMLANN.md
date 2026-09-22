@@ -52,18 +52,16 @@ over a running install unless the owner asks.
   1,924 tests and the launcher build passed on 2026-09-20; launcher tests
   require the Windows desktop runtime and were not executable on Linux. No
   live server or client was started.
-- Tier 8 offline population tuning is complete on the current branch: mature
-  goal weights favor frontier activity, RvR formation planning keeps a 25%
-  independent-roamer reserve, formation sizes favor pairs, small crews, and
-  eight-man roams, and keep/relic objective reuse waits 30 minutes. The
-  isolated server suite passed 1,935 tests and the launcher build passed on
-  2026-09-22; launcher tests were blocked by the WSL path mapping used by the
-  Windows test runner. No live server or client was started.
-- Tier 9 product-surface work is in progress on the current branch: launcher
-  copy, crew-generation controls, Camlann command/player guidance, and the
-  Normal-save import refusal now agree with the one-mode world. This is an
+- Tier 8 population tuning now includes the 0.17 refinement: at most fifteen
+  weighted mixed-realm guilds, five-second same-guild matchmaking, ordinary
+  2–8 member PvE parties, 45/40/15 low-level goals, and local level-appropriate
+  PvP hunts. Generated-guild consolidation is persisted and completes before
+  autonomous login; human memberships and player guilds are protected.
+- Tier 9 product-surface work is complete offline: launcher copy,
+  crew-generation controls, Camlann command/player guidance, and the
+  Normal-save import refusal agree with the one-mode world. This remains an
   internal 0.x checkpoint; the real-client gate and final release decision
-  remain open.
+  remain open. No live server or client was started for the 0.17 work.
 - Next: Tier 9 real-client verification.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
@@ -780,7 +778,8 @@ Change numbers; do not reintroduce realm teams to "balance" the frontier.
 
 ### Tier 8 implementation record
 
-- The default activity profile is 55/45 PvE below level 20, 30/45/25
+- The default activity profile is 45/40/15 solo-PvE/group-PvE/PvP below level
+  20, 30/45/25
   PvE/RvR from levels 20–49, and 15/35/50 at level 50.
 - Mature RvR populations retain a 25% independent-roamer reserve. Formation
   rolls produce scouts, gank pairs, small roaming crews, and full eight-man
@@ -790,6 +789,24 @@ Change numbers; do not reintroduce realm teams to "balance" the frontier.
   for changing dropped-relic recovery.
 - No world definitions, navmeshes, native client hash guards, loot rules, or
   PvE encounter locations changed.
+- The managed autonomous population is consolidated into one 1:2:4
+  small/medium/large guild triplet per 56 bots (up to five triplets). Existing
+  survivor assignments stay fixed, while new bots deterministically fill size,
+  realm, level-band, and role deficits. Generated guilds with human members are
+  protected exceptions. The isolated server suite passed 1,965 tests and the
+  Windows launcher suite passed 114 tests on 2026-09-22.
+- Ordinary same-guild PvE parties form with 2–8 available members every five
+  seconds. Actual party size drives target difficulty; missing healing or
+  frontline capability caps new targets at the party's average level. Dedicated
+  raid parties retain their exact-size requirements.
+- Low-level PvP uses local reachable non-safe leveling areas, prefers pairs,
+  and never grows past four. PvE parties may retaliate or take visible legal
+  opportunities, but do not start extra fights during combat or recovery and
+  avoid visibly stronger parties.
+- Companion PvP uses the same human/bot/pet legality checks, explicit orders
+  remain first, missed and blocked attacks are remembered as threats, and the
+  existing leader-centered pursuit, crowd-control, support, reward, and lifetime
+  rules remain intact.
 
 ---
 

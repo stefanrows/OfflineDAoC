@@ -20,10 +20,10 @@ public class BotGoalsSettingsTests
     }
     [TearDown] public void Cleanup() { _panel.Dispose(); if (Directory.Exists(_folder)) Directory.Delete(_folder, true); }
 
-    [Test] public void TotalsAndServerStateGateSavingAndKeepLowLevelRvrDisabled()
+    [Test] public void TotalsAndServerStateGateSavingAndAllowLowLevelRvr()
     {
         var values = Field<NumericUpDown[,]>("_values");
-        Assert.That(values[0, 2].Enabled, Is.False);
+        Assert.That(values[0, 2].Enabled, Is.True);
         values[2, 0].Value = 0;
         Assert.That(Field<Button>("_save").Enabled, Is.False);
         values[2, 1].Value = 0;
@@ -46,7 +46,7 @@ public class BotGoalsSettingsTests
         Call("SaveSettings");
         Field<NumericUpDown[,]>("_values")[1, 0].Value = 99;
         Call("LoadSettings");
-        Assert.That(Field<NumericUpDown[,]>("_values")[1, 0].Value, Is.EqualTo(40));
+        Assert.That(Field<NumericUpDown[,]>("_values")[1, 0].Value, Is.EqualTo(30));
         Assert.That(_panel.GetType().GetProperty("HasUnsavedChanges")!.GetValue(_panel), Is.False);
     }
 

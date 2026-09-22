@@ -23,7 +23,7 @@ public class UT_BotGoalSettings
         AutonomousBotGoalPolicy.Initialize(_directory);
     }
 
-    [TestCase(1, 55, 45, 0)] [TestCase(19, 55, 45, 0)]
+    [TestCase(1, 45, 40, 15)] [TestCase(19, 45, 40, 15)]
     [TestCase(20, 30, 45, 25)] [TestCase(49, 30, 45, 25)] [TestCase(50, 15, 35, 50)]
     public void DefaultsAndBrackets(int level, int solo, int group, int rvr) =>
         Assert.That(BotGoalSettings.Defaults.ForLevel(level), Is.EqualTo(new BotGoalWeights(solo, group, rvr)));
@@ -101,16 +101,17 @@ public class UT_BotGoalSettings
     [Test]
     public void LowLevelExclusivePoliciesAndRoundingRemainLegal()
     {
-        foreach (var weights in new[] { new BotGoalWeights(100, 0, 0), new BotGoalWeights(0, 100, 0), new BotGoalWeights(1, 99, 0) })
+        foreach (var weights in new[] { new BotGoalWeights(100, 0, 0), new BotGoalWeights(0, 100, 0), new BotGoalWeights(0, 0, 100) })
         {
             (BotGoalSettings.Defaults with { Levels1To19 = weights }).Save(PathName, () => true);
             AutonomousBotGoalPolicy.Initialize(_directory);
             for (int count = 1; count < 100; count++)
             {
                 var target = AutonomousObjectiveAssignments.TargetForLowLevelPopulation(count);
-                Assert.That(target.RvR, Is.Zero);
-                Assert.That(target.SoloPve + target.GroupPve, Is.EqualTo(count));
-                Assert.That(AutonomousBotGoalPolicy.Choose(19), Is.Not.EqualTo(eAutonomousObjectiveKind.RvR));
+                Assert.That(target.SoloPve + target.GroupPve + target.RvR, Is.EqualTo(count));
+                Assert.That(target.SoloPve, Is.EqualTo(weights.SoloPve > 0 ? count : 0));
+                Assert.That(target.GroupPve, Is.EqualTo(weights.GroupPve > 0 ? count : 0));
+                Assert.That(target.RvR, Is.EqualTo(weights.RvR > 0 ? count : 0));
             }
         }
     }
@@ -120,7 +121,7 @@ public class UT_BotGoalSettings
     {
         BotGoalSettings.Defaults.Save(PathName, () => true);
         string original = File.ReadAllText(PathName);
-        foreach (var bad in new[] { new BotGoalWeights(-1, 101, 0), new(1, 1, 1), new(0, 0, 0), new(0, 0, 100) })
+        foreach (var bad in new[] { new BotGoalWeights(-1, 101, 0), new(1, 1, 1), new(0, 0, 0) })
             Assert.Throws<InvalidDataException>(() => (BotGoalSettings.Defaults with { Levels1To19 = bad }).Save(PathName, () => true));
         Assert.Throws<InvalidOperationException>(() => BotGoalSettings.Defaults.Save(PathName, () => false));
         int calls = 0;

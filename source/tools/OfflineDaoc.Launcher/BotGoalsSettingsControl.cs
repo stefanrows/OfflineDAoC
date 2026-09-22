@@ -56,9 +56,9 @@ internal sealed class BotGoalsSettingsControl : UserControl
         }
         body.Controls.Add(table);
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(850, 0),
-            Text = "Levels 1–19 cannot do RvR. Saved settings replace forced PvE after RvR, allowing back-to-back RvR.\n" +
+            Text = "Levels 1–19 may hunt nearby rivals in reachable leveling areas; mature frontier and keep eligibility is unchanged.\n" +
                 "Percentages are population targets, not exact head counts at every moment. Existing allowed tasks finish normally.\n" +
-                "Group-only bots wait for a complete eight-member role roster; they never fall back to a 0% goal.\n" +
+                "Ordinary group-PvE parties form with 2–8 compatible guildmates; dedicated raids keep their existing requirements.\n" +
                 "Normal training, selling, recovery and town breaks remain. Player characters and /spawn companions are unchanged." });
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 14, 0, 10) };
         buttons.Controls.AddRange([_save, _undo, _defaults]);
@@ -136,7 +136,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
             valid &= total == 100;
             _totals[row].Text = total == 100 ? "100% — ready" : $"{total}% — needs 100%";
             _totals[row].ForeColor = total == 100 ? Color.LightGreen : Color.Salmon;
-            for (int col = 0; col < 3; col++) _values[row, col].Enabled = stopped && !(row == 0 && col == 2);
+            for (int col = 0; col < 3; col++) _values[row, col].Enabled = stopped;
         }
         _save.Enabled = stopped && valid;
         _defaults.Enabled = _undo.Enabled = stopped;

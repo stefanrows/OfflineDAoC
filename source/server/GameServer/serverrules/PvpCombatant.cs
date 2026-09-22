@@ -14,6 +14,7 @@ namespace DOL.GS.ServerRules
 	public static class PvpCombatant
 	{
 		private const string DummyGuildName = "DummyGuildToMakePetsUntargetable";
+		private const string OptionalSafetyRelinquished = "Autonomous PvP safety relinquished";
 
 		private static readonly HashSet<ushort> SafeRegions = new()
 		{
@@ -66,7 +67,7 @@ namespace DOL.GS.ServerRules
 
 			Guild firstGuild = GuildOf(a);
 			Guild secondGuild = GuildOf(b);
-			if (IsRealGuild(firstGuild) && firstGuild == secondGuild)
+			if (AreGuildIdsAllied(firstGuild?.GuildID, firstGuild?.Name, secondGuild?.GuildID, secondGuild?.Name))
 				return true;
 
 			BattleGroup firstBattleGroup = a.TempProperties?.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
@@ -112,6 +113,8 @@ namespace DOL.GS.ServerRules
 			return false;
 		}
 
+		public static bool IsSafeRegion(ushort regionId) => SafeRegions.Contains(regionId);
+
 		public static bool IsOldFrontier(GameLiving living) =>
 			living?.CurrentZone?.IsOF == true;
 
@@ -121,8 +124,34 @@ namespace DOL.GS.ServerRules
 		public static bool IsSafetyProtected(int level, bool safetyFlag, bool isOldFrontier, int safetyLevel = 10) =>
 			safetyFlag && level < safetyLevel && !isOldFrontier;
 
+		/// <summary>Uses the native player flag and records the equivalent explicit
+		/// opt-in for autonomous actors, which otherwise never own a /safety flag.</summary>
+		public static void RelinquishOptionalSafety(GameLiving living)
+		{
+			switch (Resolve(living))
+			{
+				case GamePlayer player:
+					player.SafetyFlag = false;
+					break;
+				case GameBot bot:
+					bot.TempProperties?.SetProperty(OptionalSafetyRelinquished, true);
+					break;
+			}
+		}
+
+		public static bool HasRelinquishedOptionalSafety(GameLiving living) => Resolve(living) switch
+		{
+			GamePlayer player => !player.SafetyFlag,
+			GameBot bot => bot.TempProperties?.GetProperty<bool>(OptionalSafetyRelinquished, false) == true,
+			_ => false
+		};
+
 		public static bool IsRealGuild(Guild guild) =>
 			guild != null && guild.Name != DummyGuildName;
+
+		public static bool AreGuildIdsAllied(string firstId, string firstName, string secondId, string secondName) =>
+			!string.IsNullOrWhiteSpace(firstId) && !string.IsNullOrWhiteSpace(secondId) &&
+			firstName != DummyGuildName && secondName != DummyGuildName && firstId == secondId;
 
 		public static Guild GuildOf(GameLiving living) => living switch
 		{

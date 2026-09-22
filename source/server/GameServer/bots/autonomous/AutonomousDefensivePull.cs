@@ -8,7 +8,7 @@ using DOL.Logging;
 
 namespace DOL.GS
 {
-    /// <summary>One bounded, real ranged pull per level-50 PvE party. No new timers or world scans.</summary>
+    /// <summary>One bounded, real ranged pull per ordinary level-50 PvE party. No new timers or world scans.</summary>
     public static class AutonomousDefensivePull
     {
         public const int ContactRadius = 400;
@@ -29,7 +29,7 @@ namespace DOL.GS
         private static readonly ConditionalWeakTable<GameBot, State> Holding = new();
 
         public static bool UsesDefensivePull(bool groupPve, int memberCount, bool allLevelFifty) =>
-            groupPve && memberCount == 8 && allLevelFifty;
+            groupPve && AutonomousBotGroupCoordinator.IsOrdinaryPvePartySize(memberCount) && allLevelFifty;
 
         public static bool IsPullSpell(Spell spell, int level) => spell != null && spell.Level <= level &&
             spell.Target == eSpellTarget.ENEMY && spell.Range >= 1000 && spell.Radius == 0 && spell.Damage > 0 && !spell.NeedInstrument &&
@@ -57,7 +57,8 @@ namespace DOL.GS
             {
                 if (state.Active || GameLoop.GameLoopTime < state.RetryAfter) return true;
                 GameBot[] members = shooter.Group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
-                if (members.Length != 8 || target?.IsAlive != true || shooter.CurrentRegion != target.CurrentRegion)
+                if (!AutonomousBotGroupCoordinator.IsOrdinaryPvePartySize(members.Length) ||
+                    target?.IsAlive != true || shooter.CurrentRegion != target.CurrentRegion)
                     return true;
                 // An enemy already in the party is a real defensive fight, not a ranged pull.
                 if (members.Any(member => member.IsWithinRadius(target, ContactRadius))) return false;

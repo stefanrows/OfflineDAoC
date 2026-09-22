@@ -12,6 +12,49 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-22
+
+### Added
+
+- Restart-safe generated-guild consolidation with persisted source-to-survivor
+  mappings, weighted 1:2:4 guild targets, protected human memberships, and
+  keep/alliance reference reconciliation before autonomous login.
+- Local low-level PvP hunts, opportunistic legal rival engagement for PvE
+  parties, explicit autonomous PvP safety opt-in, and stronger-party avoidance.
+- Regression coverage for guild caps and weighting, login cohorts, every
+  ordinary party size, matchmaking cadence and navigation budgets, low-level
+  PvP policy, Camlann alliances, and companion threat handling.
+- A maintained `FEATURES.md` guide covering the fork's playable world,
+  autonomous population, party, PvP, companion, launcher, and safety behavior.
+
+### Changed
+
+- Autonomous populations now use at most fifteen managed mixed-realm guilds,
+  with deterministic realm, level-band, and class-role balancing; player guilds
+  and generated guilds containing humans remain untouched.
+- Matchmaking now runs every five seconds, rotates longest-waiting candidates,
+  forms ordinary PvE parties with 2–8 compatible guildmates, and reassesses
+  roles and content after permanent losses without changing exact raid sizes.
+- Level 1–19 activity defaults are now 45% solo PvE, 40% group PvE, and 15%
+  PvP; low-level PvP parties prefer pairs and are capped at four members.
+- Temporary companions can focus legal human, autonomous-bot, and controlled-
+  pet targets and remember hostile attempts that miss or are blocked.
+- Launcher, command-reference, and test version pins now identify `0.17.0`.
+
+### Fixed
+
+- Guild consolidation failures now block autonomous login with an actionable
+  error instead of allowing a partially reconciled population to enter.
+- PvE content selection now uses the live party size and will not target above
+  the party average when either healing or frontline capability is absent.
+- Autonomous PvP acquisition now revalidates shared Camlann legality, safe
+  areas, release immunity, grey restraint, visibility, and party strength.
+
+### Removed
+
+- Random matchmaking leader rejection, the low-level PvP allocation ban, and
+  ordinary-PvE assumptions that every party must contain exactly eight bots.
+
 ## [0.16.1] - 2026-09-22
 
 ### Added

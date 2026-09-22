@@ -174,8 +174,7 @@ public class UT_AutonomousBotDecisionEngine
         Assert.That(lifetime, Is.InRange(45 * 60_000L, 120 * 60_000L));
         int[] bonuses = Enumerable.Range(0, 200)
             .Select(seed => AutonomousBotGroupCoordinator.RollPreferredLevelBonus(8, new Random(seed))).ToArray();
-        Assert.That(bonuses, Has.All.InRange(3, 10));
-        Assert.That(bonuses.Distinct().Count(), Is.GreaterThan(1));
+        Assert.That(bonuses, Has.All.EqualTo(3));
         Assert.That(AutonomousBotGroupCoordinator.LevelsCompatible(49, 50), Is.False);
         Assert.That(AutonomousBotGroupCoordinator.LevelsCompatible(50, 50), Is.True);
     }
@@ -262,8 +261,8 @@ public class UT_AutonomousBotDecisionEngine
         {
             Assert.That(level20To49, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(3, 5, 2)));
             Assert.That(level50, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(2, 3, 5)));
-            Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(10), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(6, 4, 0)));
-            Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(3), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(2, 1, 0)));
+            Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(10), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(5, 4, 1)));
+            Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(3), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(1, 1, 1)));
             Assert.That(AutonomousObjectiveAssignments.TargetForPopulation(2, false), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(1, 1, 0)));
             Assert.That(AutonomousObjectiveAssignments.TargetForPopulation(2, true), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(0, 1, 1)));
             Assert.That(AutonomousObjectiveAssignments.Parse("RvR"), Is.EqualTo(eAutonomousObjectiveKind.RvR));

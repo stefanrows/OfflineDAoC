@@ -726,6 +726,18 @@ namespace DOL.UnitTests
             Assert.That(threats[enemy], Is.EqualTo(until), "A subsequent normal hit must not erase the longer CC memory.");
         }
 
+        [TestCase(eAttackResult.Missed)] [TestCase(eAttackResult.Blocked)]
+        public void UnsuccessfulHostileAttemptStillBecomesAPartyThreat(eAttackResult result)
+        {
+            var (player, _, damage, _, enemy) = PvpParty(true);
+            enemy.TestX = 1000;
+            AttackData miss = Hit(enemy, player);
+            miss.AttackResult = result;
+            miss.Damage = 0;
+            Assert.That(CompanionPvpEngagement.RecordThreat(damage, player, miss), Is.True);
+            Assert.That(CompanionPvpEngagement.Defending(damage, enemy), Is.True);
+        }
+
         [Test] public void SwitchingToPveTargetClearsOldExplicitPvpFocus()
         {
             var (player, _, damage, _, enemy) = PvpParty(false);
@@ -759,6 +771,15 @@ namespace DOL.UnitTests
             Assert.That(CompanionPvpEngagement.SelectNearby(damage, new[] { enemyPet.Body }, (_, _) => true), Is.SameAs(enemyPet.Body));
             CompanionEngagementMode.Set(player, false);
             Assert.That(CompanionPvpEngagement.SelectNearby(damage, new[] { enemyPet.Body }, (_, _) => true), Is.Null, "Aggressive is assist, not automatic nearby acquisition.");
+        }
+
+        [Test] public void DefensiveAcquisitionAcceptsALegalHumanTarget()
+        {
+            var (player, _, damage, _, _) = PvpParty(true);
+            Player rival = Actor<Player>();
+            Assert.That(CompanionPvpEngagement.Enemy(player, rival), Is.True);
+            Assert.That(CompanionPvpEngagement.SelectNearby(damage, new GameLiving[] { rival }, (_, _) => true),
+                Is.SameAs(rival));
         }
 
         [TestCase(false, 0)] [TestCase(true, 0)]

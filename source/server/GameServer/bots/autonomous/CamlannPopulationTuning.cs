@@ -52,4 +52,18 @@ public static class CamlannPopulationTuning
 
         return Math.Min(maximum, AutonomousCrewManager.MaximumCrewSize);
     }
+
+    /// <summary>Low-level hunts prefer pairs and never exceed four members.</summary>
+    public static int RollLowLevelPvpPartySize(int maximumSize, double roll)
+    {
+        int maximum = Math.Clamp(maximumSize, 1, 4);
+        if (maximum == 1)
+            return 1;
+        double bounded = Math.Clamp(roll, 0d, Math.BitDecrement(1d));
+        if (bounded < 0.70d)
+            return 2;
+        if (bounded < 0.90d)
+            return Math.Min(3, maximum);
+        return maximum;
+    }
 }
