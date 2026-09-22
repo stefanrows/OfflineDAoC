@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-09-22
+
+### Added
+
+- None.
+
+### Changed
+
+- Repository Git guidance now permits intentional direct synchronization and
+  local integration of the fork's `main` branch.
+- Launcher, command-reference, and test version pins now identify this patch
+  release as `0.16.1`.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- PR-only and no-local-fast-forward restrictions from the repository agent
+  instructions.
+
 ## [0.16.0] - 2026-09-22
 
 ### Added
