@@ -34,7 +34,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
         body.Controls.Add(new Label { Text = "Bot Goals Setting", AutoSize = true,
             Font = new Font(Font.FontFamily, 15, FontStyle.Bold), ForeColor = DaocTheme.GoldLight });
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(850, 0), Margin = new Padding(3, 10, 3, 15),
-            Text = "Choose the goal mix for each level bracket. Each row must total 100%.\n0% disables a goal; 100% selects only that goal. Applies to autonomous gamebots in all three realms." });
+            Text = "Choose the Camlann goal mix for each level bracket. Each row must total 100%.\n0% disables a goal; 100% selects only that goal. Applies to autonomous crews; realm remains identity, not alliance." });
         var table = new TableLayoutPanel { AutoSize = true, ColumnCount = 5, RowCount = 4, Margin = new Padding(3, 3, 3, 15) };
         foreach (int width in new[] { 150, 135, 135, 135, 190 }) table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
         string[] headings = ["Level bracket", "Solo PvE %", "Group PvE %", "RvR %", "Row total"];

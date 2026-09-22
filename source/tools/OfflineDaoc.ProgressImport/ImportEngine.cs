@@ -1,6 +1,7 @@
 using System.Data.SQLite;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace OfflineDaoc.ProgressImport;
 
@@ -9,6 +10,9 @@ public sealed record ImportSummary(long Accounts, long Characters, long Bots, lo
 
 public static class ImportEngine
 {
+    private static readonly Regex CamlannGameType = new(
+        @"<GameType\b[^>]*>\s*PvP\s*</GameType>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
     public static readonly Policy Rules = JsonSerializer.Deserialize<Policy>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"progress-policy.json")))!;
     public static string LocateRuntime(string folder)
     {
@@ -70,8 +74,21 @@ public static class ImportEngine
         using var q=c.CreateCommand();q.CommandText="PRAGMA quick_check";
         if(!string.Equals(Convert.ToString(q.ExecuteScalar()),"ok",StringComparison.Ordinal))throw new InvalidDataException("Database integrity check failed.");
     }
+    public static bool IsCamlannRuntime(string folder)
+    {
+        string runtime=LocateRuntime(folder);
+        string config=Path.Combine(runtime,"config","serverconfig.xml");
+        if(File.Exists(config) && CamlannGameType.IsMatch(File.ReadAllText(config)))return true;
+
+        using var c=Open(Path.Combine(runtime,"data","opendaoc.sqlite3.db"),true);
+        if(!Tables(c).Contains("offline_local_options"))return false;
+        using var q=c.CreateCommand();q.CommandText="SELECT Value FROM offline_local_options WHERE Key='WorldModel'";
+        return string.Equals(Convert.ToString(q.ExecuteScalar()),"Camlann-1",StringComparison.OrdinalIgnoreCase);
+    }
     public static ImportSummary Inspect(string folder)
     {
+        if(IsCamlannRuntime(folder))
+            throw new InvalidOperationException("Progress import is disabled for the Camlann full-PvP world. Start this installation normally so its one-time world reset can create a fresh save; Normal saves and accounts cannot be imported.");
         using var c=Open(Path.Combine(LocateRuntime(folder),"data","opendaoc.sqlite3.db"),true);
         var tables=Tables(c);
         foreach(var t in new[]{"Account","DOLCharacters","offline_world_bots","Inventory","ItemUnique","ItemTemplate"})
@@ -83,6 +100,8 @@ public static class ImportEngine
     {
         string old=LocateRuntime(oldFolder),current=LocateRuntime(newFolder);
         if(string.Equals(old,current,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Old and new folders must be different.");
+        if(IsCamlannRuntime(old) || IsCamlannRuntime(current))
+            throw new InvalidOperationException("Progress import is disabled for the Camlann full-PvP world. Its one-time world reset creates a fresh save; Normal saves and accounts cannot be imported.");
         CheckClosed(old,current);
         string oldDb=Path.Combine(old,"data","opendaoc.sqlite3.db"),newDb=Path.Combine(current,"data","opendaoc.sqlite3.db");
         string credentials=Path.Combine(old,"account.txt");

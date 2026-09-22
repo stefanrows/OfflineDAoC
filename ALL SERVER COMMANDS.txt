@@ -1,6 +1,8 @@
-OFFLINE DAOC 0.15.0 - SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.16.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 285 command registrations read from the shipped server assemblies.
+This installation runs one Camlann full-PvP world. Realm remains character identity,
+not an RvR team; ungrouped, unguilded or unallied player-shaped actors can be hostile.
 Normal commands can still have level, realm, cooldown or state requirements.
 GM/admin commands can change or delete game data. Back up before using them.
 Descriptions containing a localization key have no matching shipped English text.
@@ -12,6 +14,8 @@ There is no /spawn 40 or /spawn 80 raid-size command.
 /aggressive and /defensive control companion engagement.
 /grind, /tc and /disband are documented in their registrations below.
 Fresh accounts are normal players; the launcher GM option is OFF by default.
+There is no Normal RvR mode, `/level` is disabled, and Normal-save progress import
+into Camlann is refused. The first launcher run creates a fresh Camlann world backup.
 
 NORMAL PLAYER COMMANDS
 ======================
@@ -383,7 +387,7 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.FriendCommandHandler
 
 /gc (aliases: /guildcommand)
-  Guild command (use /gc help for options)
+  Guild command; use /gc help for options. Camlann players can form guilds with /gc form.
   /gc <option>
   Handler: DOL.GS.Commands.GuildCommandHandler
 
@@ -761,7 +765,7 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.EmoteCommandHandler
 
 /safety
-  Turns off PvP safety flag.
+  Permanently turns off the under-level-10 PvP safety flag; it never protects a player in Old Frontiers.
   /safety off
   Handler: DOL.GS.Commands.SafetyCommandHandler
 
@@ -862,8 +866,8 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.SpacingHandler
 
 /spawn
-  Opens the companion class menu or creates a temporary helper
-  /spawn [class name]
+  Opens the all-realm companion class menu or creates a temporary helper
+  /spawn [class name] or /spawn <realm> <class name>
   Handler: DOL.GS.Commands.SpawnTemporaryGroupBotCommandHandler
 
 /sprint

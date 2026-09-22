@@ -59,7 +59,12 @@ over a running install unless the owner asks.
   isolated server suite passed 1,935 tests and the launcher build passed on
   2026-09-22; launcher tests were blocked by the WSL path mapping used by the
   Windows test runner. No live server or client was started.
-- Next: Tier 9.
+- Tier 9 product-surface work is in progress on the current branch: launcher
+  copy, crew-generation controls, Camlann command/player guidance, and the
+  Normal-save import refusal now agree with the one-mode world. This is an
+  internal 0.x checkpoint; the real-client gate and final release decision
+  remain open.
+- Next: Tier 9 real-client verification.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -145,12 +150,12 @@ These are settled. Do not reopen them without the owner.
   capital, starter zone, armor/weapon types). Realm no longer means ally.
 - **Companions never attack their leader.** That is Camlann grouping, not a
   second PvP mode.
-- **Versioning.** Planning edits are PATCH. Implementing the conversion is
-  **MAJOR** (new world/save). Do not bump MAJOR until a tier that actually
-  changes the running game is finished. Completing the conversion is `1.0.0`
-  unless the owner picks another MAJOR label. Internal slices before that can
-  stay on `0.x` MINOR bumps only if they do not ship a playable half-state;
-  otherwise hold them on a branch.
+- **Versioning.** Planning edits are PATCH. Implementing the conversion can be
+  a major-scope change because it creates a new world/save, but tier completion
+  does not automatically mean `1.0.0`. Until the owner explicitly says to
+  release 1.0, keep landing the current three-part `0.x` version line and use
+  the next appropriate bump. The owner will decide when the stable fork release
+  is ready.
 - **Upstream download.** GitHub v0.3 remains the playable runtime package.
   Do not rewrite `Get-OfflineDAoC.ps1` or the `docs/PLAY.md` download steps
   when bumping this fork.
@@ -788,7 +793,7 @@ Change numbers; do not reintroduce realm teams to "balance" the frontier.
 
 ---
 
-## Tier 9 — Ship one mode
+## Tier 9 — Verify one mode and keep the 0.x line moving
 
 **Goal:** Everything the player can see agrees this is Camlann, and a real
 client has run the main loops.
@@ -796,11 +801,31 @@ client has run the main loops.
 ### Product text
 
 - Launcher name/help, the reset prompt, keep/relic panel, Active Population
-  copy, and the per-realm "+ Lv.1 / + Lv.50" buttons (now "add to crews")
+  copy, and the per-realm **ADD LV.1 CREW / ADD LV.50 CREW** buttons
 - `docs/PLAY.md`, `docs/QUICK-COMMANDS.md`, `docs/LLM-QUICKSTART.md`
 - `ALL SERVER COMMANDS.txt` for PvP commands (`/safety`, `/gc form`, etc.)
-- Changelog MAJOR with Added/Changed/Removed. Removed: Normal RvR as the world
-  model, home-realm keep reset, realm-as-team bot war, Normal save import.
+- The eventual stable release changelog will use MAJOR with Added/Changed/
+  Removed. Removed: Normal RvR as the world model, home-realm keep reset,
+  realm-as-team bot war, Normal save import. Tier 9 does not trigger that
+  release automatically: until the owner explicitly says to release 1.0,
+  continue with the current three-part 0.x versioning scheme.
+
+### Tier 9 internal checkpoint
+
+- Launcher title, header, Active Population copy, realm-card generation labels,
+  and keep/relic reset language now identify Camlann 1.65 Old Frontiers as one
+  full-PvP world. Realm cards remain identity selectors and no longer read as
+  three RvR teams.
+- `docs/PLAY.md`, `docs/QUICK-COMMANDS.md`, `docs/LLM-QUICKSTART.md`, and
+  `ALL SERVER COMMANDS.txt` describe cross-realm crews, `/safety off`,
+  `/gc form`, guild-only relics, safe hubs, and the closed `/level` path.
+- The standalone progress importer refuses Camlann destinations and sources;
+  the launcher-owned fresh-world reset remains the supported conversion path.
+- Offline/static verification is still being run separately from the real-client
+  checklist below. This checkpoint does not claim a client pass or `1.0.0`.
+- Tier 9 is the last numbered roadmap tier. Remaining issues, real-client
+  verification, and follow-up fixes continue as 0.x work until the owner calls
+  for the stable release.
 
 ### Verification (split the report)
 
@@ -835,8 +860,9 @@ Do not present unit-test totals as that client pass.
 
 ## Suggested landing slices
 
-Land **in order** as internal checkpoints toward `1.0.0`. Do not ship a
-playable Normal world between slices.
+Land **in order** as internal checkpoints on the current `0.x` version line.
+Do not ship a playable Normal world between slices. Tier 9 is the last numbered
+tier; it does not imply a stable release or close the remaining issue list.
 
 | Slice | Tiers | Playable? |
 |---|---|---|
@@ -844,7 +870,7 @@ playable Normal world between slices.
 | B | 2–3 | Dangerous open world; cities and mixed groups work. |
 | C | 4–5 | Crews, guild keeps, relics. Camlann structurally. |
 | D | 6–8 | Full lethality and feel. |
-| E | 9 | Documented, verified, MAJOR shipped. |
+| E | 9 | Documented, real-client verification, and continued 0.x work. |
 
 ## File map (starting points)
 

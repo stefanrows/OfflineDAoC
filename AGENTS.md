@@ -22,9 +22,12 @@ Every completed change set must:
     tooling that does not change gameplay.
   - MINOR (0.3.1 → 0.4.0): new or changed gameplay or launcher behavior that
     still loads the existing save.
-  - MAJOR (0.4.0 → 1.0.0): save/schema incompatibility, required progress
-    import, a native client patch, or a new playable package. Also use 1.0.0
-    if the owner explicitly declares a stable fork release.
+  - Pre-1.0.0 major-scope changes: save/schema incompatibility, required
+    progress import, a native client patch, or a new playable package. Until
+    the owner explicitly declares the stable fork release, keep using the
+    current three-part 0.x versioning scheme; do not promote a task or tier to
+    1.0.0 automatically. Use 1.0.0 only when the owner explicitly says to
+    release 1.0.
 - Keep these in lockstep with the changelog heading:
   - `source/tools/OfflineDaoc.Launcher/MainForm.cs` (`DisplayVersion`)
   - `source/tools/OfflineDaoc.Launcher.Tests/LauncherPresentationTests.cs`

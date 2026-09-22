@@ -8,7 +8,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.15.0";
+    internal const string DisplayVersion = "0.16.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -78,7 +78,7 @@ internal sealed partial class MainForm : Form
     };
     private readonly TextBox _auctionSearch = new() { PlaceholderText = "Search item, seller or state", Width = 300 };
     private readonly TabControl _auctionRealmTabs = new() { Width = 280, Height = 29, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(87, 22) };
-    private readonly TextBox _groupSearch = new() { PlaceholderText = "Search bot, zone or faction", Width = 340 };
+    private readonly TextBox _groupSearch = new() { PlaceholderText = "Search bot, zone or crew", Width = 340 };
     private readonly ComboBox _playerXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly ComboBox _botXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly CheckBox _makeMeGm = new() { Text = "Make Me a GM", AutoSize = true, ForeColor = DaocTheme.Parchment, Font = new Font("Georgia", 9f, FontStyle.Bold) };
@@ -110,7 +110,7 @@ internal sealed partial class MainForm : Form
     private readonly DataGridView _rvrObjectivesGrid = new();
     private readonly Label _rvrUpdated = new();
     private readonly ComboBox _rvrRealm = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-    private readonly TextBox _rvrSearch = new() { Width = 240, PlaceholderText = "Search RvR name, zone or task" };
+    private readonly TextBox _rvrSearch = new() { Width = 240, PlaceholderText = "Search Camlann frontier name, zone or task" };
     private RvrWorldSnapshot? _rvrWorld;
     private bool _rvrServerRunning;
     private string _rvrSortProperty = "Name";
@@ -154,7 +154,7 @@ internal sealed partial class MainForm : Form
         _clientConnector = Path.Combine(_clientDirectory, "connect.exe");
         _logsDirectory = Path.Combine(_root, "logs");
 
-        Text = "Offline DAoC — Classic + Shrouded Isles";
+        Text = "Offline DAoC — Camlann 1.65 Old Frontiers";
         MinimumSize = new Size(960, 620);
         Size = new Size(1100, 700);
         StartPosition = FormStartPosition.CenterScreen;
@@ -349,7 +349,7 @@ internal sealed partial class MainForm : Form
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
-            Text = "OFFLINE DAoC",
+            Text = "OFFLINE DAoC — CAMLANN",
             Font = new Font("Georgia", 28f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
             Location = new Point(52, 5),
@@ -357,7 +357,7 @@ internal sealed partial class MainForm : Form
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
-            Text = "CLASSIC + SHROUDED ISLES  •  PLAY ALONE OR ADVENTURE WITH LIVING PLAYER BOTS",
+            Text = "CAMLANN 1.65  •  OLD FRONTIERS FULL-PVP  •  LIVING PLAYER BOTS",
             Font = new Font("Georgia", 9f),
             ForeColor = Color.FromArgb(196, 145, 70),
             Location = new Point(55, 57),
@@ -397,9 +397,9 @@ internal sealed partial class MainForm : Form
         cards.Controls.Add(Card("SERVER", _serverState, DaocTheme.Iron), 0, 0);
         _serverState.Font = new Font("Georgia", 12f, FontStyle.Bold);
         cards.Controls.Add(Card("ONLINE BOTS", _onlineValue, DaocTheme.Gold), 1, 0);
-        cards.Controls.Add(Card("ALBION", _albionValue, DaocTheme.Albion, RealmGenerateButton(1, "ALBION", DaocTheme.Albion)), 2, 0);
-        cards.Controls.Add(Card("MIDGARD", _midgardValue, DaocTheme.Midgard, RealmGenerateButton(2, "MIDGARD", DaocTheme.Midgard)), 3, 0);
-        cards.Controls.Add(Card("HIBERNIA", _hiberniaValue, DaocTheme.Hibernia, RealmGenerateButton(3, "HIBERNIA", DaocTheme.Hibernia)), 4, 0);
+        cards.Controls.Add(Card("ALBION CREW", _albionValue, DaocTheme.Albion, RealmGenerateButton(1, "ALBION", DaocTheme.Albion)), 2, 0);
+        cards.Controls.Add(Card("MIDGARD CREW", _midgardValue, DaocTheme.Midgard, RealmGenerateButton(2, "MIDGARD", DaocTheme.Midgard)), 3, 0);
+        cards.Controls.Add(Card("HIBERNIA CREW", _hiberniaValue, DaocTheme.Hibernia, RealmGenerateButton(3, "HIBERNIA", DaocTheme.Hibernia)), 4, 0);
         Panel performanceCard = Card("BOT AI DELAY", _performanceValue, DaocTheme.Gold);
         const string performanceHelp = "How long bot AI updates take. 95 out of 100 updates finish within this time. Lower is better. ms means milliseconds; 1,000 ms equals one second.";
         SetToolTip(performanceCard, performanceHelp);
@@ -427,7 +427,7 @@ internal sealed partial class MainForm : Form
 
     private Button RealmGenerateLevelButton(int realm, string realmName, Color accent, int level)
     {
-        Button button = ActionButton($"+ Lv.{level}", accent);
+        Button button = ActionButton($"ADD LV.{level} CREW", accent);
         if (button is RuneButton rune) rune.ShowOrnaments = false;
         button.Margin = new Padding(1, 0, 1, 0);
         button.Font = new Font("Georgia", 8f, FontStyle.Bold);
@@ -443,8 +443,8 @@ internal sealed partial class MainForm : Form
             _generatingBot = true;
             SetRealmGenerationEnabled(false);
             _footer.Text = batchSize == 1
-                ? $"Rolling a new level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} character…"
-                : $"Creating {batchSize} level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} characters as one protected batch…";
+                ? $"Adding a level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} bot to the Camlann crew roster…"
+                : $"Adding {batchSize} level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} bots to the Camlann crew roster as one protected batch…";
             try
             {
                 IReadOnlyList<BotCharacterGenerator.Identity> identities =
@@ -454,8 +454,8 @@ internal sealed partial class MainForm : Form
                 BotCharacterGenerator.Identity last = identities[^1];
                 SelectBot(last.Name);
                 _footer.Text = batchSize == 1
-                    ? $"Created {last.Name}, a level {level} {last.RaceName} {last.ClassName}. Queued for staggered login."
-                    : $"Created all {batchSize} level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} characters. All are queued for staggered login.";
+                    ? $"Added {last.Name}, a level {level} {last.RaceName} {last.ClassName}, to the Camlann crew roster. Queued for staggered login."
+                    : $"Added all {batchSize} level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} bots to the Camlann crew roster. All are queued for staggered login.";
             }
             catch (Exception exception)
             {
@@ -489,11 +489,22 @@ internal sealed partial class MainForm : Form
     {
         var tabs = new DaocTabControl { Dock = DockStyle.Fill };
         var population = new TabPage("Active Population") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
-        var populationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+        var populationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
+        populationLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         populationLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         populationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        populationLayout.Controls.Add(BuildFilters(), 0, 0);
-        populationLayout.Controls.Add(BuildGrid(), 0, 1);
+        populationLayout.Controls.Add(new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = "CAMLANN POPULATION  •  autonomous crews and solo roamers  •  realms are identity, not teams",
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = DaocTheme.GoldLight,
+            BackColor = DaocTheme.StoneDark,
+            Padding = new Padding(9, 0, 0, 0),
+            Font = new Font("Georgia", 8.25f, FontStyle.Bold),
+        }, 0, 0);
+        populationLayout.Controls.Add(BuildFilters(), 0, 1);
+        populationLayout.Controls.Add(BuildGrid(), 0, 2);
         population.Controls.Add(populationLayout);
 
         var auction = new TabPage("Realm Exchange") { BackColor = Color.FromArgb(48, 38, 26), ForeColor = DaocTheme.Parchment };
@@ -861,7 +872,7 @@ internal sealed partial class MainForm : Form
             label.ForeColor = hit ? DaocTheme.GoldLight : DaocTheme.Text;
         }
         _groupSearchStatus.Text = query.Length == 0 ? $"{matches} groups" : matches == 0
-            ? "No group matches that bot, zone or faction in the snapshot."
+            ? "No group matches that bot, zone or crew in the snapshot."
             : $"{matches} matching group{(matches == 1 ? string.Empty : "s")}";
         _groupsPanel.ResumeLayout(true);
         if (query.Length > 0 && (exact ?? first) is Control target)
@@ -1868,8 +1879,8 @@ internal sealed partial class MainForm : Form
             column.HeaderCell.SortGlyphDirection = column.DataPropertyName == _rvrSortProperty
                 ? _rvrSortAscending ? SortOrder.Ascending : SortOrder.Descending : SortOrder.None;
         RenderRealmEvents();
-        _rvrUpdated.Text = _rvrWorld == null ? "REALM EVENTS — awaiting the server's first snapshot"
-            : $"REALM EVENTS  ·  {(_rvrServerRunning ? DateTime.UtcNow - _rvrWorld.UpdatedUtc > TimeSpan.FromMinutes(6) ? "Old snapshot" : "Snapshot" : "Server stopped — last known state")} {_rvrWorld.UpdatedUtc.ToLocalTime():g}  ·  Red: battle/drop  ·  Purple: relic carrier  ·  Gold: rally";
+        _rvrUpdated.Text = _rvrWorld == null ? "CAMLANN FRONTIER EVENTS — awaiting the server's first snapshot"
+            : $"CAMLANN FRONTIER EVENTS  ·  {(_rvrServerRunning ? DateTime.UtcNow - _rvrWorld.UpdatedUtc > TimeSpan.FromMinutes(6) ? "Old snapshot" : "Snapshot" : "Server stopped — last known state")} {_rvrWorld.UpdatedUtc.ToLocalTime():g}  ·  Red: battle/drop  ·  Purple: relic carrier  ·  Gold: rally";
     }
 
     private RvrWorldSnapshot? ReadRvrWorld()

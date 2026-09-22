@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>OfflineDAoC</AssemblyName>
-    <Product>Offline DAoC: Classic + Shrouded Isles</Product>
+    <Product>Offline DAoC: Camlann 1.65 Old Frontiers</Product>
     <AssemblyTitle>Offline DAoC Launcher and Population Monitor</AssemblyTitle>
   </PropertyGroup>
   <ItemGroup>

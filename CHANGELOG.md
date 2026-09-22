@@ -12,6 +12,35 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-22
+
+### Added
+
+- Camlann Tier 9 player-facing launcher copy for the single full-PvP world,
+  autonomous crew generation, Active Population, guild-owned keeps, and
+  guild-only relics.
+- Focused command and play guidance for `/safety off`, `/gc form`, cross-realm
+  companions, dangerous leveling zones, and safe Camlann hubs.
+
+### Changed
+
+- The launcher now identifies the Old Frontiers Camlann world directly and
+  labels realm generation controls as adding bots to crews.
+- The progress importer now refuses Camlann destinations and Camlann sources;
+  the existing one-time fresh-world reset remains the only supported conversion.
+- The roadmap now treats Tier 9 as the last numbered tier without making it an
+  automatic `1.0.0` release; versioning stays on the current 0.x line until the
+  owner explicitly calls for release 1.0.
+
+### Fixed
+
+- Removed stale player documentation that described realm cards as factions or
+  suggested importing Normal progress into the Camlann world.
+
+### Removed
+
+- Normal-save progress import into the Camlann world.
+
 ## [0.15.0] - 2026-09-22
 
 ### Added

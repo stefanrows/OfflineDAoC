@@ -22,7 +22,7 @@
 
 | Change | Starting point |
 |---|---|
-| Camlann full-PvP conversion (plan only) | `docs/CAMLANN.md` |
+| Camlann full-PvP conversion (Tier 9 checkpoint; client gate pending) | `docs/CAMLANN.md` |
 | Autonomous bot goals, events, travel | `source/server/GameServer/bots/autonomous` |
 | Companion bots and class AI | `source/server/GameServer/bots` |
 | Commands, combat, pets, spells | `source/server/GameServer` |
