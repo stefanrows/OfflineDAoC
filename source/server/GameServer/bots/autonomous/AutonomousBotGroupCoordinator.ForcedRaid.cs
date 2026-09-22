@@ -60,10 +60,10 @@ public static partial class AutonomousBotGroupCoordinator
 
     private static bool TryAssignExpeditionRoles(GameBot[] members, GameBot leader, out Dictionary<long, BotPveGroupRole> roles)
     {
-        if (TryAssignExactPveRoles(members, leader, out roles)) return true;
+        if (members.Length == 8 && TryAssignPveRoles(members, leader, out roles)) return true;
         roles = new();
-        // Only the final four reinforcement slots use a smaller party, with
-        // cross-party support. Ordinary PvE still requires all eight roles.
+        // Only the final four raid reinforcement slots use a smaller party,
+        // with cross-party support; raid parties retain their exact sizes.
         if (members.Length != 4 || members.Any(b => !AutonomousRealmRaid.IsEligible(b))) return false;
         foreach (var b in members)
             roles[MemberKey(b)] = Enum.GetValues<BotPveGroupRole>().First(r => BotPartyRoles.CanFill((eCharacterClass)b.CharacterClass.ID, r));

@@ -164,11 +164,11 @@ public static class AutonomousObjectiveAssignments
         return Allocate(count, weights.SoloPve / 100d, weights.GroupPve / 100d, weights.RvR / 100d);
     }
 
-    /// <summary>Below level 20 only the configured solo/group weights are used.</summary>
+    /// <summary>Below level 20 honors the full configured PvE/PvP mix.</summary>
     public static Allocation TargetForLowLevelPopulation(int count)
     {
         var weights = AutonomousBotGoalPolicy.Settings.Levels1To19;
-        return Allocate(count, weights.SoloPve / 100d, weights.GroupPve / 100d, 0);
+        return Allocate(count, weights.SoloPve / 100d, weights.GroupPve / 100d, weights.RvR / 100d);
     }
 
     private static Allocation Allocate(int count, double soloWeight, double groupWeight, double rvrWeight)
@@ -296,7 +296,7 @@ public static class AutonomousObjectiveAssignments
                     bot.PersistentRecord.ObjectivePhase =
                         fallback == eAutonomousObjectiveKind.GroupPve
                             ? "Group-only setting: no complete role roster yet; restarting the 20-minute queue"
-                            : $"No complete eight-member role roster formed within 20 minutes; assigned {fallback}";
+                            : $"No compatible guild party formed within 20 minutes; assigned {fallback}";
                     bot.MarkAutonomousStateDirty();
                     AutonomousBotStatusPersistence.Queue(bot);
                 }
@@ -412,8 +412,8 @@ public static class AutonomousObjectiveAssignments
     }
 
     /// <summary>
-    /// Matchmaking owns an ungrouped GroupPvE bot until it assigns the complete
-    /// eight-member roster or performs the twenty-minute fallback.  The generic
+    /// Matchmaking owns an ungrouped GroupPvE bot until it assigns a compatible
+    /// party or performs the twenty-minute fallback.  The generic
     /// fifteen-minute no-movement watchdog must not race that authoritative
     /// deadline and turn a valid queue wait into a capital recovery.
     /// </summary>

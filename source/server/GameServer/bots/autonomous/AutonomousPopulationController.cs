@@ -58,7 +58,14 @@ public static class AutonomousPopulationController
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                 GameServer.Database.SaveObject(previouslyOnline.Cast<DataObject>());
         }
-        AutonomousCrewManager.Reconcile();
+        AutonomousCrewManager.ReconcileResult guilds = AutonomousCrewManager.Reconcile();
+        if (!guilds.Succeeded)
+        {
+            Log.Error(guilds.Error);
+            _cachedEnabled = false;
+            _cachedRoster = Array.Empty<OfflineWorldBotRecord>();
+            return;
+        }
         RefreshControlPlane(force: true);
         _nextCommandPollUtc = DateTime.MinValue;
         _nextOrphanRepairUtc = DateTime.MinValue;
@@ -108,10 +115,18 @@ public static class AutonomousPopulationController
                 .Where(bot => !string.IsNullOrWhiteSpace(bot.PersistentRecord?.GuildId))
                 .GroupBy(bot => bot.PersistentRecord.GuildId, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+            var activeCohorts = AutonomousBotRegistry.Snapshot()
+                .Where(bot => !bot.IsTemporaryGroupHelper && bot.PersistentRecord != null)
+                .Select(bot => new AutonomousCrewLoginBalancer.Candidate(bot.DatabaseID,
+                    bot.PersistentRecord.GuildId, bot.Level, bot.CurrentRegionID,
+                    (eCharacterClass)bot.PersistentRecord.ClassId))
+                .ToList();
             foreach (OfflineWorldBotRecord pending in roster.Where(record => PendingSpawns.ContainsKey(record.BotId)))
             {
                 string guildId = pending.GuildId ?? string.Empty;
                 crewLoad[guildId] = crewLoad.TryGetValue(guildId, out int count) ? count + 1 : 1;
+                activeCohorts.Add(new AutonomousCrewLoginBalancer.Candidate(pending.BotId, guildId,
+                    pending.Level, pending.RegionId, (eCharacterClass)pending.ClassId));
             }
 
             List<OfflineWorldBotRecord> available = roster
@@ -125,8 +140,9 @@ public static class AutonomousPopulationController
             for (int i = 0; i < enqueueCount; i++)
             {
                 long? nextId = AutonomousCrewLoginBalancer.SelectNext(
-                    available.Select(record => new AutonomousCrewLoginBalancer.Candidate(record.BotId, record.GuildId)),
-                    crewLoad);
+                    available.Select(record => new AutonomousCrewLoginBalancer.Candidate(record.BotId, record.GuildId,
+                        record.Level, record.RegionId, (eCharacterClass)record.ClassId)),
+                    crewLoad, activeCohorts);
                 OfflineWorldBotRecord next = nextId.HasValue
                     ? available.FirstOrDefault(record => record.BotId == nextId.Value)
                     : null;
@@ -138,6 +154,8 @@ public static class AutonomousPopulationController
 
                 string guildId = next.GuildId ?? string.Empty;
                 crewLoad[guildId] = crewLoad.TryGetValue(guildId, out int count) ? count + 1 : 1;
+                activeCohorts.Add(new AutonomousCrewLoginBalancer.Candidate(next.BotId, guildId,
+                    next.Level, next.RegionId, (eCharacterClass)next.ClassId));
                 try
                 {
                     // Fetch the exact real inventory on this existing background

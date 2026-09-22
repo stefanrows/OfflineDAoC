@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using DOL.AI.Brain;
+using DOL.GS.ServerRules;
 
 namespace DOL.GS
 {
@@ -41,8 +42,8 @@ namespace DOL.GS
         }
 
         public static bool Enemy(GamePlayer player, GameLiving target) => player != null &&
-            Character(target) is GameBot bot &&
-            GameServer.ServerRules.IsAllowedToAttack(player, bot, true);
+            PvpCombatant.IsPlayerShaped(target) &&
+            GameServer.ServerRules.IsAllowedToAttack(player, target, true);
 
         private static bool Live(GamePlayer player, GameLiving target) => Enemy(player, target) && target.IsAlive &&
             target.ObjectState == GameObject.eObjectState.Active && target.CurrentRegionID == player.CurrentRegionID &&
@@ -90,7 +91,7 @@ namespace DOL.GS
             GameLiving enemy = attack?.Attacker;
             if (leader == null || member?.Group != helper.Group || !helper.Group.IsInTheGroup(member) ||
                 victim.CurrentRegionID != helper.CurrentRegionID || !helper.IsWithinRadius(victim, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) ||
-                attack?.CausesCombat != true || !attack.IsHit || !Live(leader, enemy) ||
+                attack == null || !Live(leader, enemy) ||
                 !GameServer.ServerRules.IsAllowedToAttack(leader, enemy, true)) return false;
             State state = States.GetOrCreateValue(leader);
             lock (state)
@@ -132,7 +133,11 @@ namespace DOL.GS
             bool defensive = CompanionEngagementMode.DefensiveLeader(helper) != null;
             if (focus != null && !CompanionEngagementMode.Allows(helper, focus)) focus = null;
             if (focus == null && defensive)
-                focus = SelectNearby(helper, leader.GetNPCsInRadius(CompanionEngagementMode.DefensiveRadius), BotSiegeRuntime.Visible);
+            {
+                IEnumerable<GameLiving> nearby = leader.GetPlayersInRadius(CompanionEngagementMode.DefensiveRadius).Cast<GameLiving>()
+                    .Concat(leader.GetNPCsInRadius(CompanionEngagementMode.DefensiveRadius).Cast<GameLiving>());
+                focus = SelectNearby(helper, nearby, BotSiegeRuntime.Visible);
+            }
             if (focus == null) return;
             foreach (GameLiving member in leader.Group.GetMembersInTheGroup())
                 if (member is GameBot bot && Leader(bot) == leader && PlayerLedPullCoordinator.Available(bot, leader) &&
@@ -140,7 +145,7 @@ namespace DOL.GS
                     brain.AssistPlayerAttack(focus);
         }
 
-        public static GameLiving SelectNearby(GameBot helper, IEnumerable<GameNPC> candidates, Func<GameLiving, GameLiving, bool> visible)
+        public static GameLiving SelectNearby(GameBot helper, IEnumerable<GameLiving> candidates, Func<GameLiving, GameLiving, bool> visible)
         {
             GamePlayer leader = Leader(helper);
             if (leader == null || CompanionEngagementMode.DefensiveLeader(helper) == null) return null;

@@ -114,6 +114,32 @@ public sealed class UT_CamlannPvpCombatant
     }
 
     [Test]
+    public void PvpAssignmentExplicitlyRelinquishesOptionalSafetyWithoutWeakeningImmunity()
+    {
+        var human = new TestPlayer { Level = 5, SafetyFlag = true };
+        var bot = Bot(eRealm.Midgard);
+        bot.StartPvpInvulnerability(5_000);
+
+        PvpCombatant.RelinquishOptionalSafety(human);
+        PvpCombatant.RelinquishOptionalSafety(bot);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(human.SafetyFlag, Is.False);
+            Assert.That(PvpCombatant.HasRelinquishedOptionalSafety(human), Is.True);
+            Assert.That(PvpCombatant.HasRelinquishedOptionalSafety(bot), Is.True);
+            Assert.That(bot.IsInvulnerableToAttack, Is.True);
+        });
+    }
+
+    [Test]
+    public void GuildIdentityIsRealmAgnosticAndDifferentGuildsRemainHostile()
+    {
+        Assert.That(PvpCombatant.AreGuildIdsAllied("shared", "Camlann Crew A", "shared", "Camlann Crew A"), Is.True);
+        Assert.That(PvpCombatant.AreGuildIdsAllied("shared", "Camlann Crew A", "rival", "Camlann Crew B"), Is.False);
+    }
+
+    [Test]
     public void GroupedHumanAndBotAreAlliedAcrossRealms()
     {
         var human = new TestPlayer { Realm = eRealm.Albion };

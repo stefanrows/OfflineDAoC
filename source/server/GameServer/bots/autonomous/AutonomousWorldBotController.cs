@@ -93,6 +93,7 @@ namespace DOL.GS
         private AutonomousBotGroupCoordinator.Directive _groupDirective;
         private Group _observedGroup;
         private long _nextGroupPulseTick;
+        private long _nextPvpOpportunityScan;
         private string _activeDynamicGroupId = string.Empty;
         private bool _regroupRouteCleared;
         private GameTrainer _trainingTrainer;
@@ -248,6 +249,8 @@ namespace DOL.GS
                 // or enemy bot is selected through global knowledge.
                 if (TryEngageSharedDungeonOpponent(brain, bot))
                     return false;
+                if (TryEngageOpenWorldPvpOpportunity(brain, bot))
+                    return false;
 
                 // Native siege damage sets the operator's combat timer. That
                 // alone must not hand control back to the ordinary melee FSM
@@ -385,7 +388,7 @@ namespace DOL.GS
                         return LeaveDungeonForGroupMatchmaking(bot);
                     bot.StopMovingOnPath();
                     bot.StopMoving();
-                    SetStatus(bot, "Awaiting group PvE matchmaking", "Join a same-realm group-PvE party",
+                    SetStatus(bot, "Awaiting group PvE matchmaking", "Join a same-guild group-PvE party",
                         "This bot is assigned group PvE and will not silently substitute a solo grind");
                     return true;
                 }
@@ -624,7 +627,7 @@ namespace DOL.GS
                     bot.StopMovingOnPath();
                     bot.StopMoving();
                     SetStatus(bot, "Staged outside dungeon", GoalText(),
-                        "Holding a clear formation slot until all eight members are ready to enter",
+                        "Holding a clear formation slot until every party member is ready to enter",
                         camp.MonsterName, camp.ZoneName);
                 }
                 return true;
@@ -991,7 +994,7 @@ namespace DOL.GS
             bool handled = TravelAcrossRegions(bot);
             _camp = previous;
             if (bot.CurrentZone?.IsDungeon == true)
-                SetStatus(bot, "Leaving dungeon for group meetup", "Join a same-realm group-PvE party",
+                SetStatus(bot, "Leaving dungeon for group meetup", "Join a same-guild group-PvE party",
                     "Using the real dungeon exit before waiting for matchmaking; no watchdog relocation is needed");
             return handled;
         }
@@ -1358,6 +1361,7 @@ namespace DOL.GS
 
         private bool ExecuteRvr(BotBrain brain, GameBot bot)
         {
+            PvpCombatant.RelinquishOptionalSafety(bot);
             bool dynamicWarband = _groupDirective?.IsDynamic == true &&
                                   _groupDirective.ObjectiveKind == eAutonomousObjectiveKind.RvR;
             string forceId = dynamicWarband ? _groupDirective.GroupId : $"rvr-{bot.DatabaseID}";
@@ -1715,6 +1719,37 @@ namespace DOL.GS
             return true;
         }
 
+        private bool TryEngageOpenWorldPvpOpportunity(BotBrain brain, GameBot bot)
+        {
+            if (brain == null || bot?.Group == null || bot.Group.MemberCount < 2 ||
+                !(AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.GroupPve) ||
+                  AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) ||
+                brain.HasAggro || bot.InCombat || bot.IsAttacking || bot.IsRecoveryResting ||
+                _groupDirective?.RecoveringBetweenPulls == true || _groupDirective?.GroupCombatActive == true ||
+                IsSafeArea(bot) || !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
+                return false;
+            if (GameLoop.GameLoopTime < _nextPvpOpportunityScan)
+                return false;
+            _nextPvpOpportunityScan = GameLoop.GameLoopTime + 1_500 + bot.ObjectID % 500;
+            if (AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
+                PvpCombatant.RelinquishOptionalSafety(bot);
+
+            IEnumerable<GameLiving> candidates = bot.GetPlayersInRadius(ImmediateTargetSearchRadius).Cast<GameLiving>()
+                .Concat(bot.GetNPCsInRadius(ImmediateTargetSearchRadius)
+                    .Where(PvpCombatant.IsPlayerShaped).Cast<GameLiving>());
+            GameLiving opponent = AutonomousPvpOpportunityPolicy.Select(bot, candidates, BotSiegeRuntime.Visible);
+            if (opponent == null)
+                return false;
+
+            bot.StopMovingOnPath();
+            bot.StopMoving();
+            bot.TargetObject = opponent;
+            AutonomousBotGroupCoordinator.MarkCombatObserved(bot.Group);
+            brain.AddToAggroList(opponent, Math.Max(100, opponent.EffectiveLevel * 12));
+            brain.FSM.SetCurrentState(eFSMStateType.AGGRO);
+            return true;
+        }
+
         private static GameKeepDoor FindClosedEnemyDoor(GameBot bot, string objectiveId = null) =>
             GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID)
                 .Where(AutonomousRvrKeepPolicy.IsSiegeObjective)
@@ -1835,6 +1870,9 @@ namespace DOL.GS
 
         private CampDestination ChooseRvrDestination(GameBot bot)
         {
+            if (bot.Level < 20)
+                return ChooseLowLevelPvpDestination(bot);
+
             HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
             var choices = new List<CampDestination>();
             var objectives = new List<AutonomousRvrEventLayer.LiveObjective>();
@@ -1950,6 +1988,47 @@ namespace DOL.GS
             return choices.FirstOrDefault(destination => destination.Id == plan?.TargetId) ??
                 (plan == null ? null : new CampDestination(plan.TargetId, plan.Name, plan.Name,
                     plan.RegionId, plan.X, plan.Y, plan.Z, 1, false, true));
+        }
+
+        private CampDestination ChooseLowLevelPvpDestination(GameBot bot)
+        {
+            HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
+            GameBot[] party = bot.Group?.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(member => member.IsAlive).ToArray() ?? [bot];
+            int level = (int)Math.Round(party.Average(member => member.Level));
+            var nav = PathfindingProvider.Instance;
+            CampDestination[] choices = CampCatalogSnapshot()
+                .Where(cell => cell.LiveMobCount > 0 && AutonomousPvpOpportunityPolicy.IsLocalHuntArea(
+                    level, cell.Levels, cell.IsDungeon, cell.IsFrontier, PvpCombatant.IsSafeRegion(cell.RegionId),
+                    reachable.Contains(cell.RegionId)) &&
+                    IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID) &&
+                    cell.Levels.Length > 0)
+                .Select(cell =>
+                {
+                    Vector3 point = new(cell.X, cell.Y, cell.Z);
+                    if (nav.IsAvailable && nav.HasNavmesh(cell.Zone))
+                    {
+                        Vector3? floor = nav.GetClosestPoint(cell.Zone, point, 64, 64, 96, nav.DefaultFilters);
+                        if (!floor.HasValue || !AutonomousRendezvousNavigation.HasLocalExit(nav, cell.Zone, floor.Value))
+                            return null;
+                        point = floor.Value;
+                    }
+                    int targetLevel = cell.Levels.OrderBy(candidate => Math.Abs(candidate - level)).First();
+                    return new CampDestination("local-pvp-" + cell.Id,
+                        "local rival hunt near " + cell.MonsterName, cell.ZoneName, cell.RegionId,
+                        (int)point.X, (int)point.Y, (int)point.Z, cell.LiveMobCount, false, false,
+                        TargetLevel: targetLevel);
+                })
+                .Where(destination => destination != null)
+                .ToArray();
+            if (choices.Length == 0)
+                return null;
+
+            long key = _groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID;
+            _rvrSharedEvent = false;
+            _rvrIntent = AutonomousRvrEventLayer.Intent.Roam;
+            bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
+            return choices[(int)(unchecked((ulong)key * 11400714819323198485UL) % (ulong)choices.Length)];
         }
 
         private AutonomousRvrEventLayer.Intent _rvrIntent;
@@ -2321,6 +2400,15 @@ namespace DOL.GS
             int groupSize = Math.Max(1, (int)(bot.Group?.MemberCount ?? 1));
             bool sharedGroup = _groupDirective?.IsDynamic == true;
             int planningLevel = sharedGroup ? _groupDirective.AverageLevel : bot.Level;
+            GameBot[] planningMembers = sharedGroup
+                ? bot.Group.GetMembersInTheGroup().OfType<GameBot>().Where(member => member.IsAlive).ToArray()
+                : [bot];
+            bool hasHealing = planningMembers.Any(member => member.CharacterClass != null &&
+                BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID));
+            bool hasFrontline = planningMembers.Any(member => member.CharacterClass != null &&
+                BotPartyRoles.For((eCharacterClass)member.CharacterClass.ID) == BotPartyRole.Tank);
+            int groupTargetBonus = sharedGroup && hasHealing && hasFrontline
+                ? _groupDirective.PreferredLevelBonus : 0;
             int highestMemberLevel = sharedGroup
                 ? bot.Group.GetMembersInTheGroup().Max(member => member.EffectiveLevel) : bot.EffectiveLevel;
             ConColor maximumTargetCon = MaximumTargetCon(groupSize);
@@ -2351,8 +2439,7 @@ namespace DOL.GS
                 int[] validLevels = cell.Levels.Where(level =>
                     {
                         if (sharedGroup)
-                            return level >= planningLevel + 3 &&
-                                level <= planningLevel + _groupDirective.PreferredLevelBonus &&
+                            return level <= planningLevel + groupTargetBonus &&
                                 ConLevels.GetConColor(ConLevels.GetConLevel(highestMemberLevel, level)) > ConColor.GREY;
                         ConColor con = ConLevels.GetConColor(ConLevels.GetConLevel(bot.EffectiveLevel, level));
                         // Retain every naturally valid non-grey option in the
@@ -2370,8 +2457,8 @@ namespace DOL.GS
                     .OrderBy(con => con)
                     .ToArray();
                 int averageLevel = sharedGroup
-                    ? AutonomousGroupTargetPolicy.SelectFixedEightManLevel(validLevels, planningLevel,
-                        _groupDirective.PreferredLevelBonus)
+                    ? AutonomousGroupTargetPolicy.SelectAvailableLevel(validLevels, planningLevel,
+                        groupSize, Math.Max(0, AutonomousGroupTargetPolicy.PreferredBonus(groupSize) - groupTargetBonus))
                     : (int)Math.Round(validLevels.Average());
 
                 destinations[cell.Id] = new(cell.Id, cell.MonsterName, cell.ZoneName, cell.RegionId,
@@ -2412,9 +2499,9 @@ namespace DOL.GS
                     categoryCandidates, groupSize, planningLevel, Random.Shared);
                 legal = categoryCandidates.Where(camp => environment == AutonomousBotDecisionEngine.PveEnvironment.Dungeon
                     ? camp.IsDungeon : !camp.IsDungeon);
-                int selectedLevel = AutonomousGroupTargetPolicy.SelectFixedEightManLevel(
-                    legal.Select(camp => camp.AverageMobLevel), planningLevel,
-                    _groupDirective.PreferredLevelBonus);
+                int selectedLevel = AutonomousGroupTargetPolicy.SelectAvailableLevel(
+                    legal.Select(camp => camp.AverageMobLevel), planningLevel, groupSize,
+                    Math.Max(0, AutonomousGroupTargetPolicy.PreferredBonus(groupSize) - groupTargetBonus));
                 legal = legal.Where(camp => camp.AverageMobLevel == selectedLevel);
             }
             else

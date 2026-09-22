@@ -34,7 +34,7 @@ public sealed record BotGoalSettings
     {
         // Camlann Tier 8 baseline: keep leveling PvE dominant while moving
         // mature crews into frontier activity instead of realm armies.
-        Levels1To19 = new(55, 45, 0), Levels20To49 = new(30, 45, 25), Level50 = new(15, 35, 50),
+        Levels1To19 = new(45, 40, 15), Levels20To49 = new(30, 45, 25), Level50 = new(15, 35, 50),
     };
     public BotGoalWeights ForLevel(int level) => level >= 50 ? Level50 : level >= 20 ? Levels20To49 : Levels1To19;
 
@@ -44,7 +44,6 @@ public sealed record BotGoalSettings
         ValidateRow(Levels1To19, "Levels 1–19");
         ValidateRow(Levels20To49, "Levels 20–49");
         ValidateRow(Level50, "Level 50");
-        if (Levels1To19.RvR != 0) throw new InvalidDataException("Levels 1–19 cannot have RvR goals.");
     }
 
     private static void ValidateRow(BotGoalWeights row, string name)
