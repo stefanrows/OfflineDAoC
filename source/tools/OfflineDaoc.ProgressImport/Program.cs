@@ -27,25 +27,35 @@ public sealed class ImportForm : Form
     readonly TextBox source=new(){Dock=DockStyle.Fill,ReadOnly=true};
     readonly Button browse=new(){Text="Choose OLD folder…",AutoSize=true};
     readonly Button transfer=new(){Text="IMPORT PROGRESS",AutoSize=true,Enabled=false};
-    readonly Label summary=new(){AutoSize=true,Text="Choose your old Offline DAoC folder to inspect its saved progress."};
+    readonly Label summary=new(){AutoSize=true,Text="Camlann is a fresh world. Legacy progress cannot be imported into it."};
     readonly Label status=new(){AutoSize=true,Text="Nothing has been changed."};
     readonly ProgressBar bar=new(){Dock=DockStyle.Fill,Style=ProgressBarStyle.Continuous};
     readonly string destination;
     public ImportForm(string root)
     {
-        destination=root;Text="Offline DAoC 0.3 — Transfer saved progress";ClientSize=new(820,510);MinimumSize=new(820,550);
+        destination=root;Text="Offline DAoC — Camlann save policy";ClientSize=new(820,510);MinimumSize=new(820,550);
         StartPosition=FormStartPosition.CenterScreen;BackColor=Color.FromArgb(31,29,24);ForeColor=Color.Wheat;
         Font=new Font("Segoe UI",10);AutoScaleMode=AutoScaleMode.Dpi;
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(22),ColumnCount=1,RowCount=9};
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         foreach(int height in new[]{42,55,48,60,55,26,45,28,30})layout.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
-        layout.Controls.Add(new Label{Text="BRING YOUR ADVENTURE WITH YOU",AutoSize=true,Font=new Font("Georgia",16,FontStyle.Bold)});
+        layout.Controls.Add(new Label{Text="CAMLANN IS A FRESH WORLD",AutoSize=true,Font=new Font("Georgia",16,FontStyle.Bold)});
         layout.Controls.Add(new Label{Text="Close both launchers, both game clients, and stop the server first.\nYour OLD folder is read only. The NEW folder keeps its updated game/world files.",AutoSize=true});
         var pick=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2};pick.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));pick.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));pick.Controls.Add(source);pick.Controls.Add(browse);layout.Controls.Add(pick);
         layout.Controls.Add(summary);
         layout.Controls.Add(new Label{Text="Destination (this new copy):\n"+root,AutoSize=true,MaximumSize=new Size(725,0)});
-        layout.Controls.Add(new Label{Text="XP stays at 1×. GM stays OFF. This replaces saved progress; it does not merge rosters.",AutoSize=true});
+        layout.Controls.Add(new Label{Text="The launcher reset creates a backup, keeps the local account, and discards old progress; it does not merge rosters.",AutoSize=true});
         layout.Controls.Add(transfer);layout.Controls.Add(bar);layout.Controls.Add(status);Controls.Add(layout);
+        try
+        {
+            if (ImportEngine.IsCamlannRuntime(destination))
+            {
+                browse.Enabled = false;
+                summary.Text = "This is the Camlann full-PvP world. Progress import from Normal or legacy saves is disabled.";
+                status.Text = "Nothing has been changed. Start the launcher normally to perform the one-time fresh-world reset.";
+            }
+        }
+        catch { }
         foreach(var button in new[]{browse,transfer}){button.BackColor=Color.FromArgb(78,57,32);button.ForeColor=Color.Wheat;button.FlatStyle=FlatStyle.Flat;button.Padding=new Padding(7);}
         browse.Click+=(_,_)=>
         {

@@ -22,10 +22,12 @@ The bundled modern .NET runtime does not replace this legacy connector requireme
    this can take several seconds. Click **ENTER REALM** and let loading finish.
 6. Do **not** launch CoreServer.exe, connect.exe, or OpenDAoC separately. Do not
    manually enter an account or register: the game creates and uses its local account.
-7. Choose a realm, create a character, select it, and enter the realm. Characters
-   and progress save inside your extracted game folder.
-8. This version starts with an empty bot roster. Use the launcher's **+ Lv.1** or
-   **+ Lv.50** buttons under each faction to generate playerbots.
+7. Choose a starting realm identity, create a character, select it, and enter the
+   realm. This fork uses one Camlann-style full-PvP world: realm still controls
+   race, class, capital and starting zone, but it is not an alliance boundary.
+8. This version starts with an empty autonomous population. Use the launcher's
+   **ADD LV.1 CREW** or **ADD LV.50 CREW** buttons under a realm identity to add
+   playerbots. They form mixed-realm crews rather than three realm armies.
 
 The downloader assembles and extracts the ZIP for you. If you handle the assembled
 ZIP yourself, extract the **entire** archive into a normal folder; never run files
@@ -54,7 +56,9 @@ do not disable antivirus: inspect/report the warning and verify the download.
 ## Where are the bots?
 
 The release contains **no saved bots from the author**. Create your own using the
-realm cards' **+ Lv.1** / **+ Lv.50** controls, and configure **Active Population**.
+realm cards' **ADD LV.1 CREW** / **ADD LV.50 CREW** controls, and configure
+**Active Population**. The cards are realm identity selectors, not faction-war
+controls.
 Hold **Ctrl** while clicking to create **100 bots**, or **Shift** for **10 bots**.
 Without either key, the button creates one. For companions, `/spawn` opens the in-game picker. Level-50 characters can use
 `/raid 40` or `/raid 80` (the total includes your character). See
@@ -62,32 +66,23 @@ Without either key, the button creates one. For companions, `/spawn` opens the i
 
 ## Saves and old versions
 
-Your accounts, characters, inventories and bot progress stay in your own
-`runtime/data/opendaoc.sqlite3.db`; your login credentials stay in `runtime/account.txt`.
-Back up both while the server and launcher are stopped. Never upload either file.
-See the optional transfer procedure below. Do not replace the new world database
-manually with an old database.
+Your account, characters, inventories and bot progress stay in your own
+`runtime/data/opendaoc.sqlite3.db`; your login credentials stay in
+`runtime/account.txt`. Back up both while the server and launcher are stopped.
+Never upload either file. On the first launch of a Camlann installation, the
+launcher requires a one-time world reset: it creates a complete backup, keeps
+the local account, and discards old characters, inventories, bot rosters, guilds,
+keep claims, relic state and Realm Exchange progress. Do not replace the new
+world database manually with an old database.
 
-### Optional: transfer progress from an older version
+### Normal-save progress import is not supported
 
-Skip this if you want to start fresh. You can transfer before your first launch.
-
-1. Keep your old folder intact. Extract/download the new version into a different folder.
-2. Stop the server and close the game and launcher for **both** versions.
-3. Inside the **NEW game folder**, double-click **IMPORT PROGRESS FROM OLD OFFLINE DAOC.cmd**.
-4. Click **Choose OLD folder...** and select your old portable Offline DAoC folder.
-5. Check the displayed account, character, bot, and inventory counts.
-6. Click **IMPORT PROGRESS** and confirm. This **replaces existing progress in the
-   NEW version**; it does not combine two saves.
-7. Wait for the completion message before closing the transfer window.
-8. Launch the NEW version using **START OFFLINE DAOC.cmd**, start the server, and
-   click **ENTER REALM**. Imported credentials are used automatically.
-
-The importer makes a recovery backup. Keep your old installation until you have
-checked your characters and progress in the new one.
+The old progress importer refuses Camlann destinations and Camlann sources. Keep an
+older installation intact if you want to return to the old three-realm world;
+the Camlann launcher backup is for recovery, not a supported progress import.
 
 Only run one local DAoC server at a time. Stop it normally and wait for saves to
-finish before moving folders, importing progress, or installing a changed build.
+finish before moving folders or installing a changed build.
 There is no automatic update that overwrites somebody's installation or custom fork.
 
 ## Interrupted download / errors

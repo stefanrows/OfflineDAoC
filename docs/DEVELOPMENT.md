@@ -7,8 +7,9 @@ This fork's launcher displays `DisplayVersion` from
 playable download remains GitHub v0.3; that package is the runtime, world data,
 and navigation baseline. Do not confuse this fork's three-part version with the
 original author's private 0.4 launcher label. Portable account bootstrap and
-default settings are release-specific differences. Planned Camlann full-PvP
-conversion: `docs/CAMLANN.md`. Do not implement it unless asked.
+default settings are release-specific differences. The active Camlann full-PvP
+conversion and its current Tier 9 checkpoint are documented in `docs/CAMLANN.md`.
+Work only on the tier the owner requests; do not deploy it over a running install.
 
 Companion-bot reward and progression rules are documented in
 `docs/COMPANION_BOTS.md`.
