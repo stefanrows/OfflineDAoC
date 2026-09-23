@@ -50,6 +50,48 @@ This checkout is the fork `stefanrows/OfflineDAoC`. The upstream project
   change something (`gh pr create`, `gh pr merge`, `gh issue create`, ...).
   `gh` otherwise defaults to the fork's parent. Check with
   `gh repo set-default --view` before the first write in a session.
+## Fast local R&D shipping
+
+This project workflow overrides the generic merge-to-main skill for this fork
+until the owner replaces it. Leave the shared skill unchanged.
+
+- "ship now" and "merge to main" authorize the entire workflow below without
+  another confirmation: build, merge directly to `main`, push to
+  `stefanrows/OfflineDAoC`, stop this installation's running components, and
+  deploy to `D:\Games\OfflineDAoC`. Ordinary development requests do not ship.
+- Skip PR creation, CI checks/waits, Docker checks/builds, automated test suites,
+  and post-deploy monitoring. Run tests only when explicitly requested. The
+  upstream Docker files are not part of this Windows local workflow; Docker
+  availability is not a blocker. Gameplay verification belongs to the owner.
+- Review the scoped diff, conflict markers, and version pins once. Preserve
+  unrelated work; never force-push, discard changes, or bypass actual conflicts.
+  Fetch the fork's `main` and integrate it before building so the artifacts
+  represent the revision being shipped. Reuse the current task branch; do not
+  create a branch or PR just to ship. A rejected push requires reconciliation
+  and rebuilding if the source changes, not a force-push.
+- Build both the server entry project and Windows launcher in Release on every
+  shipping invocation, including docs-only tasks. Use incremental builds and
+  cached dependencies; restore only when missing/stale assets require it.
+  Use the commands in `docs/DEVELOPMENT.md`; keep build output outside the game
+  installation. Successful builds are required before merging/pushing.
+- Commit only the intended task changes with the required version/docs updates,
+  merge locally into `main` (fast-forward when possible), and push to the fork.
+  Do not add another version bump if this task already has its finished bump.
+- After a successful push, stop only processes verified by executable path
+  (or the hosted server's command line) as belonging to `D:\Games\OfflineDAoC`.
+  Prefer graceful shutdown where available; stopping those components, including
+  termination if needed, is pre-authorized. Never kill by process name alone.
+  If identity cannot be verified or shutdown fails, report the blocker rather
+  than terminating unrelated processes or deploying over running files.
+- Deploy those same server and launcher outputs with `tools/dev/deploy.sh`, both
+  `-ServerBuild` and `-LauncherBuild`, and `-Apply`. Keep the existing backups,
+  hash verification, rollback, and protected save/configuration checks. Do not
+  use `-IncludeThirdParty` without a separate request. Leave the game stopped.
+- Report merge/push and local deployment separately, including the deployed
+  version and backup path (or no changed files). Never call a failed deployment
+  successful shipping. State that automated tests were skipped and real-client
+  verification is left to the owner; do not wait for CI or gameplay acceptance.
+
 ## Safety defaults
 
 - Resolve paths from this checkout, never from the original author's Windows username.
@@ -60,7 +102,9 @@ This checkout is the fork `stefanrows/OfflineDAoC`. The upstream project
 - Historical scripts in source/server/tools may contain absolute deployment paths
   and destructive migration operations. Read and parameterize them before use.
   Do not execute them just because they are present. They are not the bootstrap.
-- Never start a game server or deploy over a running installation without permission.
+- Never start a game server without permission or deploy over a running installation.
+  Shipping authorization above covers stopping this installation and deploying
+  after it has stopped; it does not authorize starting it again.
 - Build/test in a separate output tree. Never publish a live SQLite database,
   account.txt, bot profiles, credentials, logs, dumps, or previous Git history.
 - Keep native client patch hash guards. Never apply a binary patch to an unverified

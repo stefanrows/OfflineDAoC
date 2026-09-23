@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.24.1"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.24.2"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -147,8 +147,8 @@ public sealed class LauncherPresentationTests
         Assert.That(form.Text, Is.EqualTo("Offline DAoC — Camlann 1.65 Old Frontiers"));
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("OFFLINE DAoC — CAMLANN", StringComparison.Ordinal)), Is.True);
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("CAMLANN POPULATION", StringComparison.Ordinal)), Is.True);
-        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("VERSION 0.24.1", StringComparison.Ordinal)), Is.True);
-        Label version = controls.OfType<Label>().Single(label => label.Text == "VERSION 0.24.1");
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("VERSION 0.24.2", StringComparison.Ordinal)), Is.True);
+        Label version = controls.OfType<Label>().Single(label => label.Text == "VERSION 0.24.2");
         Assert.That(version.Font.Bold, Is.True);
         Assert.That(version.Font.Size, Is.GreaterThanOrEqualTo(12));
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("1× PROGRESSION", StringComparison.Ordinal)), Is.False);

@@ -22,6 +22,46 @@ The runnable release also bundles tools/dotnet and tools/nuget-feed for offline 
 development, the navigation builder/native dependencies, and the texture tool's
 Python runtime. A GitHub source ZIP alone is not the complete runtime download.
 
+## Fast local R&D shipping
+
+The root `AGENTS.md` shipping policy overrides the generic merge workflow.
+"ship now" and "merge to main" authorize direct merge/push to the fork and a
+fresh local server/launcher build deployed to `D:\Games\OfflineDAoC`, without
+another confirmation. No PR, CI wait, Docker check, automatic test suite, or
+post-deploy monitoring is required. Upstream Docker files do not participate in
+this Windows workflow. Git remains the source backup; the owner tests gameplay.
+
+Fetch/integrate fork main before building. Build both entry projects, including
+for documentation changes, then commit/merge/push and deploy those same outputs.
+Incremental Release builds use cached dependencies; restore only if assets are
+missing or stale. These output trees are separate from the installed game:
+
+```bash
+# Server and its dependencies; does not build the test project.
+export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"
+dotnet build source/server/CoreServer/CoreServer.csproj -c Release --no-restore
+
+# Windows launcher; output defaults to bin/Release/net10.0-windows.
+tools/dev/winnet.sh build source/tools/OfflineDaoc.Launcher/OfflineDaoc.Launcher.csproj \
+  -c Release --no-restore
+# If restore is needed, restore the corresponding project first; for the
+# launcher use winnet.sh restore with --configfile /mnt/d/Games/OfflineDAoC/NuGet.Config.
+
+# After merge/push and stopping this installation's verified processes:
+tools/dev/deploy.sh -InstallRoot /mnt/d/Games/OfflineDAoC \
+  -ServerBuild source/server/Release \
+  -LauncherBuild source/tools/OfflineDaoc.Launcher/bin/Release/net10.0-windows \
+  -Apply
+```
+
+Stopping this installation's components is pre-authorized for shipping; prefer
+graceful shutdown and verify process paths before terminating anything. The
+deploy tool still requires stopped processes and preserves backups, rollback,
+and save/configuration protections. Leave the game stopped for owner testing.
+Report build, merge/push, and deployment outcomes separately. Ordinary development
+requests do not deploy. The full test and setup commands below are reference
+instructions for explicitly requested validation, not shipping gates.
+
 ## Build (does not deploy or start the server)
 
 For the owner's WSL2 + Windows setup (install location, SDKs, baseline,
@@ -53,7 +93,7 @@ tools/dev/winnet.sh test \
   source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj \
   -c Release --no-restore
 
-# Deploy dry-run (default) / apply (owner permission; server must be stopped)
+# Deploy dry-run (default) / apply (shipping is pre-authorized; server must be stopped)
 tools/dev/deploy.sh -InstallRoot /mnt/d/Games/OfflineDAoC \
   -ServerBuild source/server/Release
 # tools/dev/deploy.sh ... -Apply

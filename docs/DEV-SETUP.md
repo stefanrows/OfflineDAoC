@@ -352,9 +352,16 @@ start once step 3 is done.
 
 ## Agent rules for this plan
 
+For routine R&D shipping, the root `AGENTS.md` policy and
+`docs/DEVELOPMENT.md` shipping commands take precedence over this historical
+setup checklist. Do not repeat setup gates, test suites, Docker checks, CI waits,
+or monitoring on each ship.
+
 - Work tier by tier; report each gate result before moving on.
-- Never start or stop the server/launcher/client without owner permission. If
-  a process is running, stop and ask.
+- Starting the server/launcher/client requires owner permission. Shipping
+  invocations pre-authorize stopping verified processes belonging to the target
+  installation and deploying after they exit, without another confirmation.
+  Outside shipping, stopping processes still requires owner permission.
 - Never write build output, caches, or NuGet packages to C: or into
   `D:\Games\OfflineDAoC` (except deploys through the Tier 4 script).
 - Never commit anything from `D:\Games\OfflineDAoC*`, `artifacts/`, or

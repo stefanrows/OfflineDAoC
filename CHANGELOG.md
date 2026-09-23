@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-09-23
+
+### Added
+
+- Project-specific fast local R&D shipping rules: direct fork merge/push and
+  server/launcher deployment to the owner's local game installation.
+
+### Changed
+
+- Shipping builds both components and pre-authorizes stopping the target
+  installation before deployment, retaining backups and save protections.
+- Development guidance skips PR, CI, Docker, automated test, and monitoring
+  gates during R&D; gameplay verification remains local and owner-driven.
+- Launcher, command-reference, and launcher-test version pins identify 0.24.2.
+
+### Fixed
+
+- Generic merge guidance no longer makes unused upstream Docker tooling a
+  prerequisite for this project's Windows development loop.
+
+### Removed
+
+- None.
+
 ## [0.24.1] - 2026-09-23
 
 ### Added
