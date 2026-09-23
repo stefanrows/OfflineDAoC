@@ -147,12 +147,13 @@ namespace DOL.GS
 
         public static short SpeedLimit(GameBot bot, short normal)
         {
+            bool regrouping = CompanionEngagementMode.ShouldRegroup(bot);
             if (!Applies(bot) || !States.TryGetValue(bot, out State state) ||
                 GameLoop.GameLoopTime >= state.FormationUntil || normal <= 0 || !bot.IsAlive ||
-                bot.IsOnStableMasterRoute || bot.IsRecoveryResting || bot.InCombat || bot.IsAttacking ||
+                bot.IsOnStableMasterRoute || bot.IsRecoveryResting || !regrouping && bot.InCombat || bot.IsAttacking ||
                 bot.IsCrowdControlled || bot.IsDiseased || bot.HealthPercent < 33 ||
-                bot.Brain is BotBrain { HasAggro: true } || bot.PlayerGroupLeader.InCombat ||
-                bot.PlayerGroupLeader.IsAttacking || bot.PlayerGroupLeader.IsOnHorse ||
+                bot.Brain is BotBrain { HasAggro: true } || !regrouping && bot.PlayerGroupLeader.InCombat ||
+                !regrouping && bot.PlayerGroupLeader.IsAttacking || bot.PlayerGroupLeader.IsOnHorse ||
                 bot.IsStealthed || bot.PlayerGroupLeader.IsStealthed ||
                 GameRelic.IsPlayerCarryingRelic(bot) || GameRelic.IsPlayerCarryingRelic(bot.PlayerGroupLeader) ||
                 bot.effectListComponent?.ContainsEffectForEffectType(eEffect.MovementSpeedDebuff) == true ||

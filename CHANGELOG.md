@@ -12,6 +12,48 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-09-23
+
+### Added
+
+- A passive companion group order and saved individual stance to drop combat,
+  recall pets, and regroup without attacking.
+
+### Changed
+
+- Aggressive and defensive companions break pursuit when more than 2100 units
+  from their leader and return within 650 units before fighting again.
+- Bare `/companions` now gives concise command guidance while the native
+  window action and search controls remain unresolved.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- Companions no longer keep pursuing distant fights after their leader leaves.
+
+### Removed
+
+- None.
+
+## [0.30.1] - 2026-09-23
+
+### Added
+
+- A hash-guarded, staged Custom8 client-control probe and offline x86 hook
+  checks, with a review brief for the required in-client gate.
+
+### Changed
+
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.30.0] - 2026-09-23
 
 ### Added

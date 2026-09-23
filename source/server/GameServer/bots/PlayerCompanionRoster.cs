@@ -514,9 +514,9 @@ namespace DOL.GS
                 }
                 else if (kind == "stance")
                 {
-                    if (normalized is not ("aggressive" or "defensive"))
+                    if (normalized is not ("aggressive" or "defensive" or "passive"))
                     {
-                        message = "Choose aggressive or defensive stance.";
+                        message = "Choose aggressive, defensive, or passive stance.";
                         return false;
                     }
                     previous = record.EngagementPreference;
@@ -537,7 +537,10 @@ namespace DOL.GS
                 }
                 if (kind == "stance") CompanionPvpEngagement.Reset(owner);
                 if (active?.Brain is DOL.AI.Brain.BotBrain brain)
+                {
                     brain.EnforceCompanionEngagementRange();
+                    brain.RegroupWithLeader();
+                }
                 message = $"{record.Name}: {kind} set to {normalized}.";
                 return true;
             }

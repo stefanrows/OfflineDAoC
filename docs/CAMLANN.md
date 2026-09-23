@@ -512,6 +512,9 @@ autonomous target policy:
 
 - Aggressive: assist what the leader attacks, if legal.
 - Defensive: hold near the leader; engage nearby legal threats.
+- Passive: break combat and return to the leader without attacking.
+- In every mode, companions more than 2100 units from the leader break pursuit
+  and regroup within 650 units before re-engaging. This also recalls their pets.
 - Never acquire the leader, other companions, grouped gamebots, or guildmates.
 - A same-realm autonomous bot in the open world **is** a legal threat.
 

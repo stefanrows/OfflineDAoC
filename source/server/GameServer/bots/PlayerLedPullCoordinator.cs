@@ -43,6 +43,16 @@ namespace DOL.GS
                 .Where(bot => Available(bot, player) && bot.IsWithinRadius(target, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) &&
                     bot.Brain is BotBrain).ToArray();
             foreach (GameBot bot in helpers) bot.EnterPlayerLedGroup(player);
+            helpers = helpers.Where(bot => !CompanionEngagementMode.ShouldRegroup(bot)).ToArray();
+            if (helpers.Length == 0)
+            {
+                if (player.ControlledBrain != null)
+                {
+                    player.ControlledBrain.Attack(target);
+                    return "No companions available to pull; your pet was ordered instead.";
+                }
+                return "No companions available to pull. Passive companions will not attack; wait for returning companions or choose another mode.";
+            }
             if (CompanionPvpEngagement.Enemy(player, target) && helpers.Any(bot => CompanionPvpEngagement.Leader(bot) == player))
             {
                 // RvR is not a PvE tank-contact pull. A resting companion or an
@@ -55,7 +65,7 @@ namespace DOL.GS
                 if (engaging) player.ControlledBrain?.Attack(target);
                 return engaging
                     ? "Raid PvP target ordered: attackers and pets engage; healers support."
-                    : "Defensive mode: target remembered. Bring it within 350 units, or use /aggressive to engage at range.";
+                    : "Defensive mode: companions wait for the target near you; passive companions will not attack. Use /aggressive to engage at range.";
             }
             if (helpers.Any(bot => bot.IsTemporaryCompanionRestLocked))
                 return "Party is resting; the pull will be available when everyone has recovered.";
@@ -88,6 +98,7 @@ namespace DOL.GS
             if (order == null || Volatile.Read(ref order.Finished) != 0) return false;
             if (order.Leader.Group != order.Group || !order.Group.IsInTheGroup(order.Leader) ||
                 !ValidEnemy(order.Leader, order.Target) || !Available(order.Tank, order.Leader) ||
+                CompanionEngagementMode.ShouldRegroup(order.Tank) ||
                 order.Tank.Group != order.Group || !order.Group.IsInTheGroup(order.Tank) ||
                 GameLoop.GameLoopTime >= order.Deadline)
             {
@@ -130,7 +141,8 @@ namespace DOL.GS
             if (actor is not GameBot tank || tank.Group == null || !attack.IsMeleeAttack ||
                 !States.TryGetValue(tank.Group, out GroupState state)) return;
             Order order = Volatile.Read(ref state.Pending);
-            if (order?.Tank != tank || order.Target != target || order.Leader.Group != order.Group ||
+            if (order?.Tank != tank || order.Target != target || CompanionEngagementMode.ShouldRegroup(tank) ||
+                order.Leader.Group != order.Group ||
                 !order.Group.IsInTheGroup(order.Leader) || !Available(tank, order.Leader) || !IsContact(attack.AttackResult) ||
                 Interlocked.CompareExchange(ref order.Finished, 1, 0) != 0) return;
             Engage(order.Leader, target, true);
@@ -149,6 +161,13 @@ namespace DOL.GS
                 if (order != null && Interlocked.CompareExchange(ref order.Finished, 1, 0) == 0)
                     (order.Tank.Brain as BotBrain)?.CancelOrderedPull(order.Target);
             }
+        }
+
+        public static void CancelForLeader(GamePlayer player)
+        {
+            if (player?.Group == null || !States.TryGetValue(player.Group, out GroupState state)) return;
+            Order order = Volatile.Read(ref state.Pending);
+            if (order?.Leader == player) Cancel(order, false);
         }
 
         public static GameLiving FindLeaderTarget(GamePlayer player)

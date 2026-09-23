@@ -316,6 +316,15 @@ details have not yet been recorded in the acceptance brief.
   written individuals available once per owner, while generated recruits have
   newly created identities.
 
+**Custom8 gate (2026-09-23):** The normal game rendered Custom8, accepted
+server label updates, and returned a button click through target selection.
+The dedicated action packet did not reach the server, and the visible search
+field would not accept focus or text. The failed probe was removed and the
+verified raid-patched client restored. Bare `/companions` gives command
+guidance; subcommands remain available. See
+[COMPANION_CUSTOM8_PROBE.md](COMPANION_CUSTOM8_PROBE.md). Step 2 stays open
+until client actions and typed search pass in the real game.
+
 The owner supplied four screenshots for Step 2. They show speech pages
 accumulating in one popup, raw choice tokens, and an equipment page filled
 with per-slot actions. The menu changes addressing these findings require a

@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the companion menu or manage your roster, character, tactics, training, and equipment", "/companions [list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
+        "Manage your companion roster, cast, tactics, training, and equipment", "/companions [list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -20,8 +20,7 @@ namespace DOL.GS.Commands
 
             if (args.Length == 1)
             {
-                if (!PersistentCompanionMenu.Open(player))
-                    ShowRoster(client, player);
+                DisplayMessage(client, "Companion window controls are under repair. Use /companions list, /companions cast, or /companions recruit <class>; type /companions help for all commands.");
                 return;
             }
 
@@ -428,8 +427,8 @@ namespace DOL.GS.Commands
 
         private void ShowUsage(GameClient client)
         {
-            DisplayMessage(client, "Bare /companions opens the private clickable roster, cast, character, tactics, training, equipment, and inventory menu.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>.");
+            DisplayMessage(client, "Bare /companions shows command guidance while the native companion window is under repair.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }

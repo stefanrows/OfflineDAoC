@@ -259,6 +259,7 @@ namespace DOL.GS.Commands
                     lines.Add(Link($"Role: {role}", () => SetTactics(companionId, "role", role.ToString())));
             lines.Add(Link("Stance: aggressive", () => SetTactics(companionId, "stance", "aggressive")));
             lines.Add(Link("Stance: defensive", () => SetTactics(companionId, "stance", "defensive")));
+            lines.Add(Link("Stance: passive", () => SetTactics(companionId, "stance", "passive")));
             lines.Add(Link("Back", () => ShowDetails(companionId)));
             Render(string.Join('\n', lines));
         }

@@ -789,8 +789,54 @@ namespace DOL.UnitTests
             Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.True);
         }
 
+        [Test]
+        public void CompanionRecallHasHysteresisAndPassiveBlocksCompanionPets()
+        {
+            Bot bot = NewBot(typeof(ClassCabalist));
+            Player player = Actor<Player>(); player.PositionX = 0;
+            Field(typeof(GameBot), bot, "<IsTemporaryGroupHelper>k__BackingField", true);
+            Field(typeof(GameBot), bot, "<PlayerGroupLeader>k__BackingField", player);
+            var group = new Group(player);
+            Field(typeof(Group), group, "_groupMembers", new List<GameLiving> { player, bot });
+            player.Group = bot.Group = group;
+            BuffPet enemy = Actor<BuffPet>(); enemy.PositionX = 100;
+            BuffPet pet = Actor<BuffPet>();
+            pet.SetOwnBrain(new ControlledMobBrain(bot) { Body = pet });
+
+            Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.True);
+            Assert.That(CompanionEngagementMode.RecallDistance, Is.EqualTo(2100));
+            player.PositionX = CompanionEngagementMode.RecallDistance;
+            Assert.That(CompanionEngagementMode.ShouldRegroup(bot), Is.False);
+            player.PositionX = CompanionEngagementMode.RecallDistance + 1;
+            Assert.That(CompanionEngagementMode.ShouldRegroup(bot), Is.True);
+            Assert.That(CompanionEngagementMode.Allows(pet, enemy), Is.False);
+            player.PositionX = CompanionEngagementMode.RegroupDistance + 1;
+            Assert.That(CompanionEngagementMode.ShouldRegroup(bot), Is.True);
+            player.PositionX = CompanionEngagementMode.RegroupDistance;
+            Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.True);
+
+            CompanionEngagementMode.Set(player, eCompanionEngagementMode.Passive);
+            Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.False);
+            Assert.That(CompanionEngagementMode.Allows(pet, enemy), Is.False);
+            CompanionEngagementMode.Set(player, eCompanionEngagementMode.Aggressive);
+            Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.True);
+            var record = new PlayerCompanionRecord { EngagementPreference = "passive" };
+            Field(typeof(GameBot), bot, "<PlayerCompanionRecord>k__BackingField", record);
+            CompanionEngagementMode.ClearGroupOrder(player);
+            Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.False,
+                "clearing the group order restores the saved individual stance");
+            record.EngagementPreference = "aggressive";
+            player.PositionX = 0;
+            enemy.PositionX = CompanionEngagementMode.RecallDistance;
+            Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.True);
+            enemy.PositionX = CompanionEngagementMode.RecallDistance + 1;
+            Assert.That(CompanionEngagementMode.Allows(bot, enemy), Is.False,
+                "a distant target must not restart the same chase after regrouping");
+        }
+
         [TestCase("&defensive")]
         [TestCase("&aggressive")]
+        [TestCase("&passive")]
         public void CompanionModeCommandsAreUniqueAndPlayerAccessible(string name)
         {
             var matches = new List<CmdAttribute>();

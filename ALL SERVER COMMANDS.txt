@@ -1,6 +1,6 @@
-OFFLINE DAOC 0.30.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.31.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
-286 command registrations read from the shipped server assemblies.
+287 command registrations read from the shipped server assemblies.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
 not an RvR team; ungrouped, unguilded or unallied player-shaped actors can be hostile.
 Normal commands can still have level, realm, cooldown or state requirements.
@@ -12,7 +12,7 @@ COMMON COMPANION COMMANDS
 /spawn opens the all-realm companion class picker; /spawn <class> uses your realm, and /spawn <realm> <class> creates a foreign-realm class.
 /raid 40 or /raid 80 enables a level-50 companion raid (total includes you).
 There is no /spawn 40 or /spawn 80 raid-size command.
-/aggressive and /defensive control companion engagement.
+/aggressive, /defensive, and /passive control companion engagement.
 /grind, /tc and /disband are documented in their registrations below.
 Fresh accounts are normal players; the launcher GM option is OFF by default.
 There is no Normal RvR mode, `/level` is disabled, and Normal-save progress import
@@ -248,9 +248,9 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.CombatStatsCommandHandler
 
 /companions
-  Open the private menu or manage your roster, cast, tactics, training, and equipment.
-  /companions [list | cast [realm] [page] | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> <role> | stance <name> aggressive|defensive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]
-  Bare /companions opens a temporary private clickable roster, cast, character, tactics, training, equipment, and inventory menu. Authored individuals are once per owner. Generated recruitment remains free at level 1. Group orders override saved individual stance until /companions group default.
+  Manage your roster, cast, tactics, training, and equipment.
+  /companions [list | cast [realm] [page] | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> <role> | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]
+  Bare /companions shows command guidance while the native window is under repair. Authored individuals are once per owner. Generated recruitment remains free at level 1. Group orders override saved individual stance until /companions group default.
   Handler: DOL.GS.Commands.PlayerCompanionCommandHandler
 
 /confuse
@@ -607,6 +607,11 @@ NORMAL PLAYER COMMANDS
   Shows all Players that are currently online
   Usage: /online
   Handler: DOL.GS.Commands.OnlineCommandHandler
+
+/passive
+  Recall companions and hold combat until another mode is chosen
+  /passive
+  Handler: DOL.GS.Commands.CompanionPassiveCommand
 
 /password
   Changes your account password

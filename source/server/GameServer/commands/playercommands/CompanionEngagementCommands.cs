@@ -11,9 +11,9 @@ namespace DOL.GS.Commands
             CompanionEngagementMode.Set(client.Player, true);
             if (client.Player.Group != null)
                 foreach (GameBot bot in client.Player.Group.GetMembersInTheGroup().OfType<GameBot>())
-                    if (CompanionEngagementMode.DefensiveLeader(bot) == client.Player && bot.Brain is BotBrain brain)
+                    if (bot.PlayerGroupLeader == client.Player && bot.Brain is BotBrain brain)
                         brain.EnforceCompanionEngagementRange();
-            DisplayMessage(client, "Companions: DEFENSIVE group order. Helpers and persistent companions hold near you; direct /pull and your attacks still take precedence. Use /companions group default for individual preferences.");
+            DisplayMessage(client, "Companions: DEFENSIVE. They engage threats near you and return when left far behind. Use /passive to regroup or /companions group default for saved preferences.");
         }
     }
     [CmdAttribute("&aggressive", ePrivLevel.Player, "Restore normal companion assisting (default)", "/aggressive")]
@@ -22,7 +22,22 @@ namespace DOL.GS.Commands
         public void OnCommand(GameClient client, string[] args)
         {
             CompanionEngagementMode.Set(client.Player, false);
-            DisplayMessage(client, "Companions: AGGRESSIVE group order. Helpers and persistent companions assist normally. Use /companions group default for individual preferences.");
+            DisplayMessage(client, "Companions: AGGRESSIVE. They assist your attacks but return when left far behind. Use /passive to regroup or /companions group default for saved preferences.");
+        }
+    }
+
+    [CmdAttribute("&passive", ePrivLevel.Player, "Recall companions and hold combat until another mode is chosen", "/passive")]
+    public class CompanionPassiveCommand : AbstractCommandHandler, ICommandHandler
+    {
+        public void OnCommand(GameClient client, string[] args)
+        {
+            CompanionEngagementMode.Set(client.Player, eCompanionEngagementMode.Passive);
+            PlayerLedPullCoordinator.CancelForLeader(client.Player);
+            if (client.Player.Group != null)
+                foreach (GameBot bot in client.Player.Group.GetMembersInTheGroup().OfType<GameBot>())
+                    if (bot.PlayerGroupLeader == client.Player && bot.Brain is BotBrain brain)
+                        brain.RegroupWithLeader();
+            DisplayMessage(client, "Companions: PASSIVE. They drop combat and return to you; they will not attack until you choose /defensive, /aggressive, or /companions group default.");
         }
     }
 }

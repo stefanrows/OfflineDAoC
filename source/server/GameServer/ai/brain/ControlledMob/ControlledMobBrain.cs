@@ -845,7 +845,8 @@ namespace DOL.AI.Brain
 		/// </summary>
 		public override void AttackMostWanted()
 		{
-            if (CompanionEngagementMode.DefensiveLeader(Body) != null)
+            if (CompanionEngagementMode.DefensiveLeader(Body) != null ||
+                CompanionEngagementMode.ShouldRegroup(Body))
             {
                 foreach (GameLiving enemy in AggroList.Keys)
                     if (!CompanionEngagementMode.Allows(Body, enemy)) RemoveFromAggroList(enemy);

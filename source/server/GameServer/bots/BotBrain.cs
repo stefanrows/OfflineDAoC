@@ -883,7 +883,7 @@ namespace DOL.AI.Brain
 
         public void EnforceCompanionEngagementRange()
         {
-            if (CompanionEngagementMode.DefensiveLeader(Body) == null) return;
+            if (!BotBody.IsTemporaryGroupHelper && !BotBody.IsPersistentPlayerCompanion) return;
             foreach (GameLiving target in AggroList.Keys)
                 if (!CompanionEngagementMode.Allows(Body, target)) RemoveFromAggroList(target);
             if (ActiveOrderedPullTarget is GameLiving order && !CompanionEngagementMode.Allows(Body, order))
@@ -895,6 +895,34 @@ namespace DOL.AI.Brain
                 if (Body.castingComponent?.SpellHandler?.Spell?.IsHarmful == true) Body.StopCurrentSpellcast();
                 Body.TargetObject = null;
             }
+        }
+
+        public bool RegroupWithLeader()
+        {
+            if (!CompanionEngagementMode.ShouldRegroup(Body)) return false;
+            _orderedPullTarget = null;
+            _returnToFormationAfterPull = false;
+            ClearAggroList();
+            Body.StopAttack();
+            Body.TargetObject = null;
+            if (Body.IsCasting) Body.StopCurrentSpellcast();
+            RecallCompanionPetTree(Body.ControlledBrain, Body, 0);
+            BotBody.WakeRecoveryRest();
+            _ambientWanderMovement = false;
+            if (FSM.GetCurrentState()?.StateType != eFSMStateType.FOLLOW)
+                FSM.SetCurrentState(eFSMStateType.FOLLOW);
+            else
+                FollowFormation();
+            return true;
+        }
+
+        private static void RecallCompanionPetTree(IControlledBrain brain, GameObject owner, int depth)
+        {
+            if (brain?.Body == null || depth > 3) return;
+            brain.Disengage();
+            brain.Follow(owner);
+            foreach (IControlledBrain child in brain.Body.ControlledNpcList ?? Array.Empty<IControlledBrain>())
+                RecallCompanionPetTree(child, brain.Body, depth + 1);
         }
 
         private bool TryMaintainTemporaryCompanionRest()
@@ -1125,6 +1153,10 @@ namespace DOL.AI.Brain
                 BotBody.TryCompleteStableMasterRouteAfterArrival();
                 return;
             }
+
+            // Regroup before PvP scans, pull coordination, pet upkeep and casts
+            // can claim another turn. The distance leash applies in every mode.
+            if (RegroupWithLeader()) return;
 
             CompanionPvpEngagement.Observe(BotBody);
 

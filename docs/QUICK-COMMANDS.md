@@ -30,20 +30,21 @@ capacity. The Active Population tab shows autonomous crews and solo roamers.
 | `/pull` | Order your companion group and pets to engage your selected enemy. When possible, a tank makes first contact before the rest of the group joins the fight. |
 | `/train <line> <level>` | Train a specialization to the chosen level using your available specialization points. Select a valid trainer for your class first. |
 | `/companions list` | List companion names grouped by realm. Recruit generated people with `/companions recruit Warden` or another class; use an explicit realm if needed. Recruits are free, start at level 1, and the roster holds 78 companions. |
-| `/companions cast` | Browse the 78 authored people, eight at a time. Use `/companions cast <realm> <page>` or the private menu for biographies, then `/companions recruit authored <name>`. Each authored individual can join your roster once. |
+| `/companions cast` | Browse the 78 authored people, eight at a time. Use `/companions cast <realm> <page>` to browse, then `/companions recruit authored <name>`. Each authored individual can join your roster once. |
 | `/companions profile <name>` | Show a saved companion's identity, background, preferred build, role, stance, and dialogue. |
 | `/companions role <name> <role>` | Set a class-legal tank, healer, buffer, or attacker job. |
-| `/companions stance <name> aggressive|defensive` | Set an individual's saved engagement preference. `/aggressive` and `/defensive` override the group until `/companions group default`. |
+| `/companions stance <name> aggressive|defensive|passive` | Set an individual's saved engagement preference. Group commands override it until `/companions group default`. |
 | `/spawn` | Open the menu of valid companion bots to summon. |
 | `/spawn X` | Summon a companion by class name from your realm instead of using the menu; useful for macros. |
 | `/spawn Realm X` | Summon a named class from another realm, such as `/spawn Midgard Healer`. |
 | `/raid 40` | Enable a 40-member companion raid. Use **before** `/spawn`. Requires level 50; the total includes you. |
 | `/raid 80` | Enable an 80-member companion raid. Use **before** `/spawn`. Requires level 50; the total includes you. |
-| `/aggressive` | Companions automatically engage what you attack, while retaining defensive reactions. |
-| `/defensive` | Companions stay near you and engage nearby threats, letting you pull mobs back to the group; useful for harder content. |
+| `/aggressive` | Companions assist your attacks and defend the party. They break off and return if left far behind. |
+| `/defensive` | Companions engage threats near you and return if left far behind. |
+| `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Choose another mode to resume fighting. |
 
 `/spawn 40` and `/spawn 80` are **not** the raid-size commands. Use `/raid` first.
-The aggressive/defensive commands control your companions, not autonomous gamebots.
+These modes control your companions, not autonomous gamebots. All three modes recall a companion beyond 2100 units until it reaches 650 units from you.
 
 ## Camlann PvP commands
 
