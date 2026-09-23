@@ -39,13 +39,15 @@ space is available. Removing a companion, leaving the group, or disbanding saves
 and benches that companion. `/spawn` still creates a temporary helper and has
 not been redirected to the persistent roster.
 
-This stage preserves the existing generated level-1 equipment as a one-time
+The roster preserves the existing generated level-1 equipment as a one-time
 starter loadout. Persistent inventory is saved across benching and restart.
-Persistent recruits do not yet earn progression XP or catch up while benched;
-XP, catch-up, and training policy are Stage 3. Authored characters and their
+Persistent recruits earn PvE progression while actively adventuring with an
+eligible owner; benched companions do not gain catch-up XP. All current classes
+use manual specialization training because no automatic plans have passed the
+research and runtime-database validation bar. Authored characters and their
 once-per-owner recruitment rules are Stage 5.
 
-## XP contract
+## Temporary `/spawn` XP contract
 
 The current contract is:
 
@@ -61,7 +63,7 @@ The current contract is:
 | Loot | Companions do not become loot owners or receive extra loot rolls. |
 | Persistence | XP and levels exist only for the current helper session. |
 
-The kill-credit flow is in
+The temporary-helper kill-credit flow is in
 `source/server/GameServer/serverrules/AbstractServerRules.cs`:
 
 1. `ProcessXpGainers` keeps a direct temporary helper in the bot contribution
@@ -72,18 +74,37 @@ The kill-credit flow is in
 3. `AwardBotOnNpcKill` grants the helper XP but records autonomous objective
    progress only for persistent autonomous bots.
 
-`ResolveRootRewardOwner` deliberately preserves direct temporary helpers while
-continuing to resolve their controlled pets to the human owner. If that policy
-changes, update the attribution tests in
+`ResolveNpcRewardOwner` preserves direct temporary helpers and persistent
+companions while resolving controlled pets to their appropriate reward actor.
+If that policy changes, update the attribution tests in
 `source/server/Tests/UnitTests/UT_AutonomousLootFlow.cs` at the same time.
 
 ## Leveling and tuning points
 
-`GameBot.GainExperience` is shared with persistent autonomous bots, so changes
-must preserve the `IsAutonomousWorldBot` branch. Temporary helpers use the
-normal player rate, start with the XP floor for their current level, and spend
-new specialization points immediately when they level. Their stat, spell, and
-style refresh is in-memory only; no autonomous status save is queued for them.
+`GameBot.GainExperience` handles autonomous bots, temporary helpers, and
+persistent player companions. Keep the `IsAutonomousWorldBot` branches separate:
+autonomous bots use `BOT_XP_RATE`, temporary helpers use `XP_RATE` and spend
+points on level-up, and persistent companions use `XP_RATE` while holding earned
+points for manual training. Persistent companions save XP progress through a
+coalescing record-only queue; their inventory is not rewritten for each kill.
+
+Persistent companions receive the owner's normal NPC party reward when the
+owner gains XP. Active companions must also be in range and pass the grey-con
+check; support companions qualify without dealing damage. A damage-dealing
+companion can also receive a separate damage-based NPC award when its eligible
+owner has no player damage share. Companion and controlled-pet damage stays out
+of player damage percentages, group divisors, and loot-owner selection. The
+companion's XP is clipped at the owner's current absolute XP total, preserving
+any higher saved companion XP. Only NPC kill rewards are accepted, so companion
+PvP XP and realm points remain disabled.
+
+The `/companions train` command accepts only a specialization from the
+companion's class career and applies normal point costs and level limits. It
+requires a compatible trainer unless `ALLOW_TRAIN_ANYWHERE` is enabled.
+`/companions respec` requires owner full-skill respec eligibility, honors
+`FREE_RESPEC`, confirms before resetting, and resets only the selected
+companion. No automatic plan is enabled until its career lines, total point
+budget, per-level milestones, and runtime skills have been checked.
 
 The main tuning points are:
 

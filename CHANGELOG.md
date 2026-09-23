@@ -12,6 +12,53 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-23
+
+### Added
+
+- Persistent companions earn eligible NPC PvE experience and can spend saved
+  specialization points through `/companions train` or reset them with
+  `/companions respec`.
+
+### Changed
+
+- Companion damage and controlled-pet damage use a separate reward path that
+  preserves player XP shares, group counts, and loot ownership. Companion XP
+  progress saves through a coalesced record-only queue.
+- The companion roadmap and command reference now describe Stage 3 policies and
+  the automatic-plan validation gate. Launcher and command-reference pins now
+  identify 0.24.0; the launcher presentation test pin matches.
+
+### Fixed
+
+- Persistent companion NPC rewards no longer flow through PvP XP or realm-point
+  paths, and companion pet damage remains attributed to the companion.
+
+### Removed
+
+- None.
+
+## [0.23.2] - 2026-09-23
+
+### Added
+
+- Companion Stage 3 code audit and progression/training decision brief with
+  proposed XP, catch-up, respecialization, and realm-point policies.
+
+### Changed
+
+- Companion roadmap records Stage 3 decision prep; owner policy selections
+  remain open. Launcher, command-reference, and test version pins now identify
+  0.23.2. This documentation change does not alter gameplay.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.23.1] - 2026-09-23
 
 ### Added

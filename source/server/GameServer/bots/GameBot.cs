@@ -37,6 +37,7 @@ namespace DOL.GS
         #region Core Properties
 
         public GamePlayer Owner { get; private set; }
+        internal Lock AwardLock { get; } = new();
         public GamePlayer PlayerGroupLeader { get; private set; }
         private readonly HashSet<GameLiving> _temporaryCompanionProtectedMembers = new();
         public bool IsPlayerLedGroup => PlayerGroupLeader != null;
@@ -1618,7 +1619,8 @@ namespace DOL.GS
 
         public override void GainExperience(GainedExperienceEventArgs arguments, bool notify = true)
         {
-            if ((!IsAutonomousWorldBot && !IsTemporaryGroupHelper) || arguments == null ||
+            bool persistentNpcReward = IsPersistentPlayerCompanion && arguments?.XPSource == eXPSource.NPC;
+            if ((!IsAutonomousWorldBot && !IsTemporaryGroupHelper && !persistentNpcReward) || arguments == null ||
                 arguments.ExpTotal <= 0 || Level >= MaxLevel)
                 return;
 
@@ -1648,6 +1650,14 @@ namespace DOL.GS
             if (experienceGained <= 0)
                 return;
 
+            if (IsPersistentPlayerCompanion)
+            {
+                long ownerExperience = Owner?.Experience ?? Experience;
+                experienceGained = Math.Min(experienceGained, Math.Max(0, ownerExperience - Experience));
+                if (experienceGained <= 0)
+                    return;
+            }
+
             long previousExperience = Experience;
             byte previousLevel = Level;
             Experience += experienceGained;
@@ -1664,18 +1674,29 @@ namespace DOL.GS
             {
                 if (IsTemporaryGroupHelper)
                     SpendSpecPoints(Level, previousLevel);
+                else if (IsPersistentPlayerCompanion && IsManualCompanionTraining)
+                    AwardCompanionSpecPoints(previousLevel, Level);
 
-                // New specialization points remain unspent until an autonomous
-                // bot chooses to reach and interact with its real class trainer.
-                RefreshSpecDependantSkills(false);
-                SetBotSpells();
-                SortStyles();
-                SortSpells();
+                // Manual companions hold new specialization points. Keep their
+                // career skills and spells in sync with each earned level.
+                if (IsPersistentPlayerCompanion)
+                    RefreshCompanionSkills();
+                else
+                {
+                    // Autonomous bots keep their points until they train at a
+                    // real class trainer; temporary helpers retain auto-training.
+                    RefreshSpecDependantSkills(false);
+                    SetBotSpells();
+                    SortStyles();
+                    SortSpells();
+                }
                 Health = MaxHealth;
                 Mana = MaxMana;
                 Endurance = MaxEndurance;
                 if (IsAutonomousWorldBot)
                     AutonomousBotStatusPersistence.Queue(this, true);
+                else if (IsPersistentPlayerCompanion)
+                    PlayerCompanionProgressPersistence.Queue(this);
             }
             else
             {
@@ -1686,6 +1707,8 @@ namespace DOL.GS
                     // next status batch instead of waiting for a server-wide save.
                     AutonomousBotStatusPersistence.Queue(this);
                 }
+                else if (IsPersistentPlayerCompanion)
+                    PlayerCompanionProgressPersistence.Queue(this);
             }
             if (previousExperience == 0 || previousLevel != Level)
             {
@@ -1697,12 +1720,131 @@ namespace DOL.GS
 
         private long ScaleExperience(long experience, bool isRvR)
         {
-            double rate = IsTemporaryGroupHelper
+            double rate = IsTemporaryGroupHelper || IsPersistentPlayerCompanion
                 ? ServerProperties.Properties.XP_RATE
                 : ServerProperties.Properties.BOT_XP_RATE;
             if (isRvR)
                 rate *= ServerProperties.Properties.RvR_XP_RATE;
             return (long)(experience * rate);
+        }
+
+        private bool IsManualCompanionTraining => IsPersistentPlayerCompanion;
+
+        private void AwardCompanionSpecPoints(byte previousLevel, byte currentLevel)
+        {
+            for (int level = previousLevel + 1; level <= currentLevel; level++)
+            {
+                if (level <= 5)
+                    m_leftOverSpecPoints += level;
+                else
+                    m_leftOverSpecPoints += CharacterClass.SpecPointsMultiplier * level / 10;
+
+                if (level > 40)
+                    m_leftOverSpecPoints += CharacterClass.SpecPointsMultiplier * (level - 1) / 20;
+            }
+        }
+
+        private int GetCompanionSpecPointBudget()
+        {
+            int points = -1;
+            for (int level = 1; level <= Level; level++)
+            {
+                if (level <= 5)
+                    points += level;
+                else
+                    points += CharacterClass.SpecPointsMultiplier * level / 10;
+
+                if (level > 40)
+                    points += CharacterClass.SpecPointsMultiplier * (level - 1) / 20;
+            }
+
+            return Math.Max(0, points);
+        }
+
+        public bool TryTrainCompanionSpecialization(Specialization specialization, int targetLevel,
+            out int pointsSpent, out string error)
+        {
+            pointsSpent = 0;
+            error = "The companion could not be trained.";
+            if (!IsPersistentPlayerCompanion || !IsManualCompanionTraining)
+            {
+                error = "Manual training is only available in manual mode.";
+                return false;
+            }
+
+            if (specialization == null || !specialization.Trainable ||
+                GetSpecializationByName(specialization.KeyName) != specialization)
+            {
+                error = "That specialization is not part of this companion's class career.";
+                return false;
+            }
+
+            if (specialization.LevelRequired > Level || specialization.Level >= Level ||
+                targetLevel <= specialization.Level || targetLevel > Level)
+            {
+                error = $"Choose a level above {specialization.Level} and no higher than the companion's level ({Level}).";
+                return false;
+            }
+
+            for (int level = specialization.Level + 1; level <= targetLevel; level++)
+                pointsSpent += level;
+
+            if (pointsSpent > m_leftOverSpecPoints)
+            {
+                error = $"That training costs {pointsSpent} specialization points; {m_leftOverSpecPoints} are available.";
+                pointsSpent = 0;
+                return false;
+            }
+
+            specialization.Level = targetLevel;
+            m_leftOverSpecPoints -= pointsSpent;
+            _lastAutonomousTrainedLevel = Level;
+            RefreshCompanionSkills();
+            return true;
+        }
+
+        public bool ResetCompanionSpecializations()
+        {
+            if (!IsPersistentPlayerCompanion)
+                return false;
+
+            List<Specialization> trainableSpecs = GetSpecList().Where(spec => spec.Trainable).ToList();
+            if (!trainableSpecs.Any(specialization => specialization.Level > 1))
+                return false;
+
+            HashSet<string> specializationAbilityKeys = trainableSpecs
+                .SelectMany(spec => spec.GetAbilitiesForLiving(this))
+                .Select(ability => ability.KeyName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (Specialization specialization in trainableSpecs)
+                specialization.Level = 1;
+
+            m_leftOverSpecPoints = GetCompanionSpecPointBudget();
+            _lastAutonomousTrainedLevel = Level;
+
+            foreach (string abilityKey in specializationAbilityKeys)
+                RemoveAbility(abilityKey);
+            Styles.Clear();
+            styleComponent?.RemoveAllStyles();
+            lock (m_spellLines)
+                m_spellLines.Clear();
+            m_usableSkills.Clear();
+            m_usableListSpells.Clear();
+            Spells = new List<Spell>();
+
+            RefreshCompanionSkills();
+            return true;
+        }
+
+        private void RefreshCompanionSkills()
+        {
+            RefreshSpecDependantSkills(false);
+            GetAllUsableSkills(update: true);
+            GetAllUsableListSpells(update: true);
+            Spells = new List<Spell>();
+            SetBotSpells();
+            SortStyles();
+            SortSpells();
         }
 
         private static long ScaleAutonomousExperience(long experience, bool isRvR)

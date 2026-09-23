@@ -32,6 +32,79 @@ namespace DOL.GS
                 : new List<PlayerCompanionRecord>();
         }
 
+        public static bool TryGetActiveCompanion(GamePlayer owner, string nameOrId, out GameBot companion)
+        {
+            companion = null;
+            if (owner == null)
+                return false;
+
+            PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+            if (record == null || !ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) ||
+                active?.Owner != owner || active.ObjectState != GameObject.eObjectState.Active)
+            {
+                return false;
+            }
+
+            companion = active;
+            return true;
+        }
+
+        public static bool TryGetActiveCompanionById(GamePlayer owner, string companionId, out GameBot companion) =>
+            TryGetActiveCompanion(owner, companionId, out companion);
+
+        public static bool TryMatchOwnedCompanionPrefix(GamePlayer owner, string[] arguments, int startIndex,
+            int endExclusive, out PlayerCompanionRecord record, out int consumedTokens)
+        {
+            record = null;
+            consumedTokens = 0;
+            if (arguments == null || startIndex < 0 || endExclusive > arguments.Length || startIndex >= endExclusive ||
+                !TryGetRoster(owner, out List<PlayerCompanionRecord> roster))
+            {
+                return false;
+            }
+
+            for (int tokenCount = endExclusive - startIndex; tokenCount > 0; tokenCount--)
+            {
+                string candidate = string.Join(' ', arguments.Skip(startIndex).Take(tokenCount));
+                PlayerCompanionRecord match = roster.FirstOrDefault(entry =>
+                    string.Equals(entry.Name, candidate, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.CompanionId, candidate, StringComparison.OrdinalIgnoreCase));
+                if (match == null)
+                    continue;
+
+                record = match;
+                consumedTokens = tokenCount;
+                return true;
+            }
+
+            return false;
+        }
+
+        public static bool TrySetManualTrainingMode(GamePlayer owner, string nameOrId, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                {
+                    message = "That companion name or ID is not in your roster. Type /companions list to see names.";
+                    return false;
+                }
+
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) && active?.Owner == owner)
+                    record = active.PlayerCompanionRecord;
+
+                message = $"{record.Name} is in manual training mode. Earned specialization points stay unspent until you train them.";
+                return true;
+            }
+        }
+
         public static bool TryGetRoster(GamePlayer owner, out List<PlayerCompanionRecord> records)
         {
             records = new List<PlayerCompanionRecord>();
@@ -359,19 +432,17 @@ namespace DOL.GS
             if (record == null)
                 return false;
 
-            record.Level = Math.Clamp((int)companion.Level, 1, 50);
-            record.Experience = Math.Max(0, companion.Experience);
-            record.SerializedSpecs = string.Join(';', companion.GetSpecList()
-                .Where(spec => spec.Trainable).Select(spec => $"{spec.KeyName}|{spec.Level}"));
-            record.SerializedBuildPlan = companion.BotSpec == null ? string.Empty : BotLifetimeBuild.Encode(companion.BotSpec);
-            record.UnspentSpecPoints = companion.UnspentSpecPoints;
-            record.LastTrainedLevel = companion.LastTrainedLevel;
-            record.IsActive = active;
-            record.StateVersion = 1;
-            record.UpdatedUtc = DateTime.UtcNow.ToString("O");
-            record.Dirty = true;
+            bool saved;
+            lock (record)
+            {
+                CopyProgressToRecord(companion, record);
+                record.IsActive = active;
+                record.StateVersion = 1;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                saved = SaveRecord(record);
+            }
 
-            bool saved = SaveRecord(record);
             if (saved && record.InventoryInitialized && companion.Inventory is BotInventory inventory)
             {
                 string ownerId = InventoryOwnerId(record.CompanionId);
@@ -382,6 +453,32 @@ namespace DOL.GS
             if (!saved)
                 Log.Error($"Could not persist companion {record.CompanionId} ({record.Name}).");
             return saved;
+        }
+
+        public static bool SaveProgress(GameBot companion)
+        {
+            PlayerCompanionRecord record = companion?.PlayerCompanionRecord;
+            if (record == null)
+                return false;
+
+            lock (record)
+            {
+                CopyProgressToRecord(companion, record);
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                return SaveRecord(record);
+            }
+        }
+
+        private static void CopyProgressToRecord(GameBot companion, PlayerCompanionRecord record)
+        {
+            record.Level = Math.Clamp((int)companion.Level, 1, 50);
+            record.Experience = Math.Max(0, companion.Experience);
+            record.SerializedSpecs = string.Join(';', companion.GetSpecList()
+                .Where(spec => spec.Trainable).Select(spec => $"{spec.KeyName}|{spec.Level}"));
+            record.SerializedBuildPlan = companion.BotSpec == null ? string.Empty : BotLifetimeBuild.Encode(companion.BotSpec);
+            record.UnspentSpecPoints = companion.UnspentSpecPoints;
+            record.LastTrainedLevel = companion.LastTrainedLevel;
         }
 
         public static void RestoreActiveForPlayer(GamePlayer owner)
