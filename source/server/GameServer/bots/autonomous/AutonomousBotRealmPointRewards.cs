@@ -148,6 +148,11 @@ public static class AutonomousBotRealmPointRewards
             return;
 
         GameLiving creditedKiller = ResolveRootRewardOwner(killer as GameLiving);
+        // Use the same generated gear drop as human PvP victims, after the
+        // existing contributor and repeat-kill eligibility checks.
+        if (isWorthRealmPoints)
+            AbstractServerRules.DropPlayerKillLoot(killedBot, creditedKiller, playerContributions, botContributions);
+
         int victimValue = GetPlayerEquivalentRealmPointValue(killedBot.Level, killedBot.RealmLevel);
 
         foreach (KeyValuePair<GamePlayer, EntityCountTotalDamagePair> pair in playerContributions)

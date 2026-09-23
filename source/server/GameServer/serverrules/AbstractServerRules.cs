@@ -2115,7 +2115,7 @@ namespace DOL.GS.ServerRules
             }
         }
 
-        private static void DropPlayerKillLoot(GamePlayer killedPlayer, GameObject killer,
+        internal static void DropPlayerKillLoot(GameLiving killedPlayer, GameObject killer,
             Dictionary<GamePlayer, EntityCountTotalDamagePair> playerCountAndDamage,
             Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage)
         {

@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-23
+
+### Added
+
+- None.
+
+### Changed
+
+- Launcher, command-reference, and launcher-test version pins identify 0.25.0.
+
+### Fixed
+
+- Reward-eligible autonomous-bot PvP deaths now generate the same guaranteed
+  class-appropriate gear drop as human-player deaths, retaining existing
+  contributor eligibility, repeat-kill protection, and automatic pickup.
+
+### Removed
+
+- None.
+
 ## [0.24.2] - 2026-09-23
 
 ### Added
