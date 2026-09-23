@@ -1,9 +1,10 @@
 # Companion build research and Stage 3 validation
 
-Status: Stage 1 proposal-or-gap research covers all 39 classes. This Stage 3
-record classifies all 39 candidates, records static endgame checks and available
-level milestones, and lists remaining blockers. No automatic plan is available
-for use.
+Status: Stage 1 source research and Stage 3 runtime validation cover all 39
+classes. Thirty-three project-recommended automatic plans are enabled; six
+classes remain manual-only with documented blockers. The enabled plan set and
+its exact targets are recorded in `CompanionBuildPlanCatalog.cs` and summarized
+below. Real-client acceptance remains pending.
 Updated 2026-09-23.
 
 These 1.65-era sources support review of companion build recommendations; they
@@ -12,6 +13,13 @@ is primarily community advice for Uthgard, whose official FAQ says it targets
 patch 1.65. Realm guide pages are undated. Uthgard-specific balance and
 implementation claims are identified below instead of being treated as facts
 about this fork.
+
+The owner delegated the general-adventuring plan choices for classes supported
+by the existing companion combat profiles. The selected level-50 allocations
+below are project recommendations based on the research candidates; they are
+not claims about historical level-by-level builds. Intermediate ranks are
+derived deterministically by the project schedule algorithm without autotrain
+or automatic respecialization.
 
 ## Candidate point and skill checks
 
@@ -32,12 +40,11 @@ but their exact ranked skill tiers have not passed that reference check.
 Animist and Wizard still lack numeric endgame candidates.
 
 The class career and skill records used by the server are loaded by SkillBase.
-No clean, pinned runtime database is present in this checkout, so local-runtime
-career, skill, and plan checks are blocked for all 39 classes. The upstream
-database snapshot does not substitute for a disposable copy of the fork's
-runtime database. Role labels summarize the cited build's stated focus;
-where a source does not name a role, the label is an inference from its skill
-priorities.
+The public upstream snapshot supported the original static candidate audit;
+the enabled project recommendations were separately checked against the local
+acceptance runtime skill data in a consistent, disposable fixture outside Git.
+Role labels summarize cited build focus or are project recommendations based
+on skill priorities.
 
 ## Leveling milestone coverage
 
@@ -68,9 +75,60 @@ The current companion respec path is owner-eligible full respecialization,
 not automatic line respec, so the cited route is not directly usable as an
 automatic plan.
 
-In every class row below, the validation column reports the static endgame and
-level-route result. Local-runtime validation is blocked for all 39 classes, and
-all candidates await owner review.
+The source tables below preserve historical candidate notes; their validation
+columns describe those source candidates, not the selected schedules. The
+enabled project plans and the six manual-only blockers are listed separately.
+
+## Enabled project-recommended plans
+
+All 33 schedules passed per-level budget, monotonicity, no-overlevel, and
+level-50 target checks. Fixture validation matched all 105 allocation targets
+to runtime class careers; 90 targets had ranked ability, spell, or style data,
+while 15 are career-only lines (Parry, Stealth, or Scout/Hunter/Ranger bow
+lines). Runtime data is checked again when automatic mode is enabled. IDs are
+stable and versioned as `general-pve-v1-<class>`.
+
+| Class | Role | Level-50 target allocations |
+| --- | --- | --- |
+| Armsman | Tank and group guard | Polearm 50, Shields 42, Slash 39, Parry 5 |
+| Cabalist | Pet caster and farmer | Body Magic 34, Spirit Magic 33, Matter Magic 25 |
+| Cleric | Healer and buffer | Enhancement 42, Rejuvenation 33 |
+| Friar | Melee support and healer | Enhancement 45, Staff 29, Rejuvenation 34, Parry 17 |
+| Infiltrator | Assassin | Thrust 50, Critical Strike 44, Stealth 36, Envenom 36, Dual Wield 14 |
+| Mercenary | Dual-wield melee damage | Dual Wield 50, Shields 42, Slash 36, Parry 16 |
+| Minstrel | Songs, charm, and group utility | Instruments 50, Thrust 43 |
+| Paladin | Defensive tank and group support | Chants 46, Thrust 44, Shields 42 |
+| Reaver | Shield control and melee pressure | Flexible 50, Shields 42, Soulrending 39, Parry 5 |
+| Scout | Ranged and melee hybrid | Longbows 50, Shields 42, Stealth 35, Slash 18 |
+| Sorcerer | Crowd control and ranged damage | Body Magic 39, Mind Magic 37 |
+| Theurgist | Pet interrupts and caster support | Earth Magic 40, Wind Magic 36 |
+| Berserker | Dual-wield melee damage | Sword 50, Left Axe 50, Parry 28 |
+| Bonedancer | Pet caster with sustain | Suppression 47, Darkness 26 |
+| Healer | Main healer and crowd control | Pacification 38, Mending 33, Augmentation 19 |
+| Hunter | Pet and ranged/melee hybrid | Beastcraft 50, Spear 44, Stealth 36, Composite Bow 9 |
+| Runemaster | Ranged damage and spell utility | Darkness 47, Suppression 26 |
+| Savage | Melee damage with self-buffs | Savagery 49, Hand to Hand 44 |
+| Shadowblade | Assassin | Left Axe 50, Sword 35, Stealth 36, Envenom 36, Critical Strike 5 |
+| Shaman | Buffer, healer, and ranged damage-over-time | Augmentation 46, Subterranean 27, Mending 8 |
+| Skald | Group speed and melee support | Battlesongs 46, Hammer 44, Parry 17 |
+| Spiritmaster | Pet caster and group damage | Darkness 47, Suppression 26 |
+| Thane | Hybrid tank and support damage | Stormcalling 46, Shields 42, Hammer 39, Parry 20 |
+| Bard | Group support and healer | Nurture 43, Music 37, Regrowth 33 |
+| Champion | Hybrid tank, debuffs, and interrupts | Valor 50, Shields 42, Large Weapons 39 |
+| Druid | Healer and buffer | Nurture 42, Regrowth 33, Nature 7 |
+| Eldritch | Group caster damage and utility | Mana 50, Light 20 |
+| Enchanter | Pet support and caster damage | Mana 49, Light 22 |
+| Mentalist | Healer support and ranged damage | Light 46, Mentalism 28, Mana 4 |
+| Nightshade | Assassin | Critical Strike 44, Piercing 36, Stealth 35, Envenom 35, Celtic Dual 25 |
+| Ranger | Ranged/melee hybrid with self-buffs | Celtic Dual 42, Pathfinding 40, Piercing 35, Stealth 33, Recurve Bow 11 |
+| Valewalker | Melee and spell hybrid | Scythe 50, Arboreal Path 38, Parry 20 |
+| Warden | Defensive melee and group support | Nurture 49, Regrowth 33, Blades 25, Parry 14 |
+
+| Manual-only class | Blocker |
+| --- | --- |
+| Animist, Wizard | Existing research has no numeric endgame allocation. |
+| Blademaster, Hero, Warrior | Dated forum candidates still need role and ranked-skill review. |
+| Necromancer | Numeric farming target depends on unsupported Death Servant companion combat; no substitute profile was validated. |
 
 ## Albion
 
@@ -129,15 +187,15 @@ all candidates await owner review.
 ## Findings and explicit planning gaps
 
 - The three realm guides cover 38 classes; the 2014 Necromancer discussion supplies a separate source. These community sources are emulator recommendations, not evidence of retail-era popularity.
-- Four source templates need companion-specific no-autotrain adjustments: Minstrel, Reaver, Runemaster, and Ranger. The 34 endgame candidates are research inputs; no BotSpec profile or build has been selected as an automatic plan.
+- Four source templates needed companion-specific no-autotrain adjustments: Minstrel, Reaver, Runemaster, and Ranger. The selected schedules derive from reviewed research inputs; no `BotSpec` profile is used as an automatic plan.
 - The Theurgist source calls its line Air; the server career key is Wind Magic.
 - Animist and Wizard still lack numeric endgame candidates. Blademaster, Hero, and Warrior forum candidates need an AI role decision and exact ranked-skill validation.
 - Sorcerer, Ranger, Nightshade, and Armsman have partial numeric leveling sources. Healer has a longer sourced route, but its respecialization and half-level steps do not map to the current companion progression path. Minstrel's level-24 note relies on human autotrain. Other 33 classes have only relative focus guidance.
-- All 34 currently checked endgame candidates pass static career/rank and no-autotrain level-50 budget checks. The partial route audits and Healer's unsupported transitions are recorded above; no complete, runtime-validated per-level plan is available.
-- The checkout has no clean local runtime database, and none was used. Local career, skill, and plan checks remain blocked for all 39 classes.
-- Every candidate awaits owner review. Automatic training remains unavailable until a plan is selected and the runtime checks pass.
+- The source candidates' point and route findings above remain research evidence, not a claim that every cited route is usable by companions. The selected plans have separate runtime and per-level validation recorded in the table above.
+- The 33 enabled schedules are project recommendations through level 50, not sourced historical per-level builds. They spend the normal no-autotrain companion budget and do not respec automatically.
+- Runtime validation covers the enabled plans only. The six listed manual-only classes remain gated pending better build or combat-profile evidence; real-client leveling and restart acceptance remains outstanding.
 
-This record extends Stage 1's proposal-or-gap research with Stage 3 validation status. It does not enable any automatic plan.
+This record extends Stage 1's source research with the selected Stage 3 plans, offline checks, and class-specific blockers.
 
 ## Sources
 

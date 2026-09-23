@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -202,25 +203,66 @@ namespace DOL.GS;
         /// materially better than the item presently worn there.  This is shared by loot,
         /// merchant, and Realm Exchange paths so they cannot accidentally vendor a usable upgrade.
         /// </summary>
-        public static bool TryGetEquipmentUpgrade(GameBot bot, DbInventoryItem item, out eInventorySlot equipSlot)
+        public static bool TryGetEquipmentUpgrade(GameBot bot, DbInventoryItem item, out eInventorySlot equipSlot,
+            bool ignoreCompanionSlotLocks = false, int minimumImprovement = MinimumEquipmentUpgrade,
+            int? companionPairTieBreak = null)
         {
             equipSlot = eInventorySlot.Invalid;
+            bool casterFocus = bot?.IsPersistentPlayerCompanion == true &&
+                               bot.CharacterClass?.IsFocusCaster == true &&
+                               item?.Object_Type == (int)eObjectType.Staff &&
+                               BotWeaponStats.HasCasterFocusBonus(item);
             if (bot?.Inventory == null || item?.Template == null || item.LevelRequirement > bot.Level ||
-                !BotWeaponStats.HasFunctionalMeleeStats(item) ||
+                (!BotWeaponStats.HasFunctionalMeleeStats(item) && !casterFocus) ||
                 (BotWeaponStats.IsMeleeWeapon((eObjectType)item.Object_Type) &&
-                 !BotWeaponStats.IsConfiguredMeleeWeapon(bot, item.Template)) ||
+                 !casterFocus && !BotWeaponStats.IsConfiguredMeleeWeapon(bot, item.Template)) ||
                 (BotRangedCombat.IsRangedWeaponType((eObjectType)item.Object_Type) && !BotRangedCombat.IsUsableWeapon(item)) ||
-                !GameServer.ServerRules.CheckAbilityToUseItem(bot, item.Template))
+                (casterFocus && !CanUseFocusStaff(bot, item.Template)) ||
+                (!casterFocus && !GameServer.ServerRules.CheckAbilityToUseItem(bot, item.Template)))
                 return false;
 
-            equipSlot = ResolveEquipmentSlot(bot, item);
+            equipSlot = ResolveEquipmentSlot(bot, item, ignoreCompanionSlotLocks, companionPairTieBreak);
             if (equipSlot == eInventorySlot.Invalid)
                 return false;
 
+            if (!ignoreCompanionSlotLocks && bot.IsPersistentPlayerCompanion &&
+                PlayerCompanionRoster.IsEquipmentSlotLocked(bot.PlayerCompanionRecord, equipSlot))
+            {
+                eInventorySlot unlockedAlternate = equipSlot switch
+                {
+                    eInventorySlot.LeftRing => eInventorySlot.RightRing,
+                    eInventorySlot.RightRing => eInventorySlot.LeftRing,
+                    eInventorySlot.LeftBracer => eInventorySlot.RightBracer,
+                    eInventorySlot.RightBracer => eInventorySlot.LeftBracer,
+                    _ => eInventorySlot.Invalid,
+                };
+                if (unlockedAlternate == eInventorySlot.Invalid ||
+                    PlayerCompanionRoster.IsEquipmentSlotLocked(bot.PlayerCompanionRecord, unlockedAlternate))
+                {
+                    equipSlot = eInventorySlot.Invalid;
+                    return false;
+                }
+                equipSlot = unlockedAlternate;
+            }
+
             DbInventoryItem equipped = bot.Inventory.GetItem(equipSlot);
             int improvement = EquipmentValue(item) - EquipmentValue(equipped);
-            return equipped == null || improvement > MinimumEquipmentUpgrade;
+            return equipped == null || improvement > minimumImprovement;
         }
+
+        // Focus staffs are usable by focus casters even when they do not train
+        // the staff weapon line. Preserve the ordinary realm and class filters
+        // that CheckAbilityToUseItem applies before its weapon-line check.
+        private static bool CanUseFocusStaff(GameBot bot, DbItemTemplate item) =>
+            bot?.CharacterClass != null && item != null &&
+            FocusStaffPassesRealmAndClassRestrictions(bot.Realm, bot.CharacterClass.ID,
+                item.Realm, item.AllowedClasses, ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS);
+
+        public static bool FocusStaffPassesRealmAndClassRestrictions(eRealm botRealm, int characterClassId,
+            int itemRealm, string allowedClasses, bool allowCrossRealmItems) =>
+            (allowCrossRealmItems || itemRealm == 0 || itemRealm == (int)botRealm) &&
+            (string.IsNullOrWhiteSpace(allowedClasses) ||
+             Util.SplitCSV(allowedClasses, true).Contains(characterClassId.ToString()));
 
         /// <summary>
         /// Equips an already-owned backpack item. MoveItem swaps an existing equipped item back
@@ -318,10 +360,12 @@ namespace DOL.GS;
             bot?.Inventory != null &&
             bot.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack) == eInventorySlot.Invalid;
 
-    private static eInventorySlot ResolveEquipmentSlot(GameBot bot, DbInventoryItem item)
+    private static eInventorySlot ResolveEquipmentSlot(GameBot bot, DbInventoryItem item,
+        bool ignoreCompanionSlotLocks = false, int? companionPairTieBreak = null)
     {
         eInventorySlot requested = (eInventorySlot)item.Item_Type;
-        if (BotWeaponStats.IsMeleeWeapon((eObjectType)item.Object_Type))
+        if (BotWeaponStats.IsMeleeWeapon((eObjectType)item.Object_Type) &&
+            !(bot.IsPersistentPlayerCompanion && BotWeaponStats.HasCasterFocusBonus(item)))
         {
             // A left-axe build may use ordinary one-handed axes in its offhand.
             // Don't buy/equip one as an upgrade to a trained sword/hammer mainhand.
@@ -332,12 +376,52 @@ namespace DOL.GS;
             if (!BotWeaponStats.FitsConfiguredSlot(bot, item, requested)) return eInventorySlot.Invalid;
         }
         if (requested is eInventorySlot.LeftRing or eInventorySlot.RightRing)
-            return WorseSlot(bot, eInventorySlot.LeftRing, eInventorySlot.RightRing);
+            return PreferredCompanionPairSlot(bot, item, eInventorySlot.LeftRing, eInventorySlot.RightRing,
+                ignoreCompanionSlotLocks, companionPairTieBreak);
         if (requested is eInventorySlot.LeftBracer or eInventorySlot.RightBracer)
-            return WorseSlot(bot, eInventorySlot.LeftBracer, eInventorySlot.RightBracer);
+            return PreferredCompanionPairSlot(bot, item, eInventorySlot.LeftBracer, eInventorySlot.RightBracer,
+                ignoreCompanionSlotLocks, companionPairTieBreak);
         return requested is >= eInventorySlot.MinEquipable and <= eInventorySlot.MaxEquipable
             ? requested
             : eInventorySlot.Invalid;
+    }
+
+    private static eInventorySlot PreferredCompanionPairSlot(GameBot bot, DbInventoryItem item,
+        eInventorySlot first, eInventorySlot second, bool ignoreCompanionSlotLocks,
+        int? companionPairTieBreak)
+    {
+        if (!bot.IsPersistentPlayerCompanion)
+            return WorseSlot(bot, first, second);
+
+        DbInventoryItem firstItem = bot.Inventory.GetItem(first);
+        DbInventoryItem secondItem = bot.Inventory.GetItem(second);
+        bool firstLocked = PlayerCompanionRoster.IsEquipmentSlotLocked(bot.PlayerCompanionRecord, first);
+        bool secondLocked = PlayerCompanionRoster.IsEquipmentSlotLocked(bot.PlayerCompanionRecord, second);
+        return ChooseCompanionPairSlot(first, firstItem?.Level, firstLocked, second, secondItem?.Level,
+            secondLocked, item.Level, ignoreCompanionSlotLocks,
+            companionPairTieBreak ?? Random.Shared.Next());
+    }
+
+    /// <summary>Selects a companion accessory slot by vacancy, item-level deficit, and locks.</summary>
+    public static eInventorySlot ChooseCompanionPairSlot(eInventorySlot first, int? firstLevel,
+        bool firstLocked, eInventorySlot second, int? secondLevel, bool secondLocked, int incomingLevel,
+        bool ignoreLocks, int tieBreak)
+    {
+        var choices = new List<(eInventorySlot Slot, int? Level)>(2);
+        if (ignoreLocks || !firstLocked)
+            choices.Add((first, firstLevel));
+        if (ignoreLocks || !secondLocked)
+            choices.Add((second, secondLevel));
+        if (choices.Count == 0)
+            return eInventorySlot.Invalid;
+
+        var missing = choices.Where(choice => choice.Level == null).ToArray();
+        if (missing.Length > 0)
+            return missing[Math.Abs(tieBreak % missing.Length)].Slot;
+
+        int greatestDeficit = choices.Max(choice => incomingLevel - choice.Level.Value);
+        var mostDeficient = choices.Where(choice => incomingLevel - choice.Level.Value == greatestDeficit).ToArray();
+        return mostDeficient[Math.Abs(tieBreak % mostDeficient.Length)].Slot;
     }
 
         private static eInventorySlot WorseSlot(GameBot bot, eInventorySlot first, eInventorySlot second)

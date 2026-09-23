@@ -53,6 +53,19 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false)]
         public int LastTrainedLevel { get; set; } = 1;
 
+        // Additive progression metadata. Empty plan and manual mode keep older
+        // records on the established player-controlled training path.
+        [DataElement(AllowDbNull = false, Varchar = 16)]
+        public string TrainingMode { get; set; } = "manual";
+
+        [DataElement(AllowDbNull = false, Varchar = 64)]
+        public string TrainingPlanId { get; set; } = string.Empty;
+
+        // Item IDs map to provenance/keep flags; equipped slots map to manual
+        // locks. Keeping this on the companion record avoids changing Inventory.
+        [DataElement(AllowDbNull = false)]
+        public string SerializedEquipmentState { get; set; } = string.Empty;
+
         [DataElement(AllowDbNull = false)]
         public bool IsActive { get; set; }
 

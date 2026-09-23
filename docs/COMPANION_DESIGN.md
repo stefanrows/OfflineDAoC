@@ -154,16 +154,18 @@ specializations, and spend available points automatically. Autonomous bots
 restore serialized specs, an encoded lifetime build plan, and unspent points
 from their own record. These are useful mechanics to audit, but they do not
 provide companion-controlled manual training or a researched class build plan.
-The source proposals were checked against the 39 career line sets, static
-reference skill tables, and companion point budgets. This is not a check against
-the fork's local runtime database; do that against a disposable clean database
-before enabling a build plan.
+This Stage 1 audit used the public static reference and did not enable plans.
+Stage 3 later validated 33 project-recommended schedules against a disposable
+fixture of the local acceptance installation's runtime career and skill tables.
+See [COMPANION_BUILD_RESEARCH.md](COMPANION_BUILD_RESEARCH.md) for the selected
+targets and the six manual-only blockers; real-client acceptance remains open.
 
 Temporary helpers get generated equipment in a nonpersistent inventory.
 Autonomous bots use persistent `BotInventory` rows and separate autonomous
-equipment/reward code. No companion gear transfer or drop policy is inferred
-from either system; the Stage 4 decisions remain open, including capacity,
-overflow, replacement recovery, and protection of manual choices.
+equipment/reward code. Stage 4 now records the separate companion reward,
+transfer, capacity, overflow, replacement-recovery, and manual-lock policy in
+[COMPANION_STAGE4_DECISIONS.md](COMPANION_STAGE4_DECISIONS.md). Its menu and
+gameplay acceptance still need real-client verification.
 
 ## Client interaction findings
 

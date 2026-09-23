@@ -6459,6 +6459,16 @@ namespace DOL.GS
             return Money.GetMoney(Mithril, Platinum, Gold, Silver, Copper);
         }
 
+        /// <summary>Refreshes live coin fields after a transaction already persisted DBCharacter.</summary>
+        internal void SetCurrentMoneyAfterAtomicPersistence(long money)
+        {
+            m_Copper = Money.GetCopper(money);
+            m_Silver = Money.GetSilver(money);
+            m_Gold = Money.GetGold(money);
+            m_Platinum = Money.GetPlatinum(money);
+            m_Mithril = Money.GetMithril(money);
+        }
+
         public long ApplyGuildDues(long money)
         {
             Guild guild = Guild;
@@ -7976,8 +7986,8 @@ namespace DOL.GS
                 IsDiving = true;
 
             // MoveTo is the authoritative path for same-region portals and
-            // teleports.  Only /spawn helpers in this player's existing group
-            // are moved by the travel coordinator; normal following is not.
+            // teleports. Relocate only this player's active companions; normal
+            // following and other group members keep their own travel behavior.
             if (DragonCombatGeometry.IsDisplacing(this))
                 return true;
             TemporaryGroupStableTravel.MarkAcceptedPlayerTransfer(this);

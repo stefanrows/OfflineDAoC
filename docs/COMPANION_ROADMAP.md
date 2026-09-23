@@ -1,8 +1,10 @@
 # Persistent companion roadmap
 
 Status: Stage 1 **Complete**; Stage 2 **Complete (implementation and runtime
-acceptance)**; Stage 3 **Core implementation complete; candidate review
-complete; runtime validation pending**; Stages 4–6 **Not started**.
+acceptance)**; Stage 3 **Implemented; 33 project-recommended automatic plans
+validated against runtime data; six classes remain manual-only; real-client
+acceptance pending**; Stage 4 **Implemented; offline checks complete;
+real-client acceptance pending**; Stages 5–6 **Not started**.
 Last updated: 2026-09-23.
 
 This roadmap records the agreed direction for lasting party members. It does
@@ -134,55 +136,69 @@ usable; any incompatibility requires an explicit migration decision.
 
 ### Stage 3 - Progression and training
 
-**Status:** Core XP/manual-training implementation and candidate review
-complete; local runtime validation, owner selection, and real-client acceptance
-pending.
+**Status:** Implemented; all 33 enabled plans passed fixture-based runtime
+validation and per-level budget checks. Six classes remain manual-only for
+documented research or combat-profile blockers. Real-client acceptance pending.
 
 **Progress:** The owner accepted the policies in the [Stage 3 decision
 brief](COMPANION_STAGE3_DECISIONS.md). XP, manual career training, persistence,
 and companion respecialization are implemented. The class-by-class review in
 [COMPANION_BUILD_RESEARCH.md](COMPANION_BUILD_RESEARCH.md) covers all 39
-classes: 34 endgame candidates pass static career/rank and point-budget checks,
-three forum candidates need role or ranked-skill validation, and Animist and
-Wizard lack numeric endgame templates. It records partial routes and their
-budget, respec, and autotrain gaps. No clean local runtime database is available
-in this checkout, so runtime checks remain blocked for all 39 classes. Static
-candidates await owner selection; automatic mode remains unavailable.
-Real-client XP and training acceptance has not been performed.
+classes. The owner delegated the general-adventuring selections: 33 plans use
+explicit level-50 recommendations and deterministic level-by-level schedules,
+identified as project recommendations rather than historical source builds.
+The sanitized local-acceptance skill fixture validated all 105 plan targets
+against class careers; 90 targets have ranked ability, spell, or style data and
+15 are career-only lines (Parry, Stealth, or class-specific bow lines). Every
+schedule was simulated through level 50 within the runtime point budget. Animist
+and Wizard lack numeric targets; Blademaster, Hero, and Warrior still need
+ranked-skill or role review; Necromancer's numeric candidate depends on the
+unsupported Death Servant companion profile. Those six stay manual-only.
 
 **Prerequisites:** Stage 2 complete; the owner accepted the Stage 3 XP,
-training, respecialization, and realm-point policies. A clean disposable runtime
-database and owner plan selection are required before automatic training can be
-enabled.
+training, respecialization, and realm-point policies and delegated the supported
+build choices. Runtime skill data was copied into a disposable, sanitized
+fixture outside Git; no character saves or personal inventories were copied.
 
 **Deliverables:** Active-party XP, saved unspent points, reviewable automatic
 build candidates, manual spending, and visible progression. Validate allocations
 against actual class rules and refresh combat skills after training. Preserve
 player reward shares unless explicitly changed.
 
-**Acceptance:** Benched companions earn no XP. Active companions receive the
-agreed NPC reward, controlled-pet damage stays attributed to the companion, and
-invalid specs and point overspending are rejected. Manual spending and XP
-survive restart. Record static and runtime plan checks separately for all
-classes; keep automatic mode gated until a selected plan passes those checks.
-Real-client XP and training acceptance remains outstanding.
+**Offline status:** Active-party XP, catch-up, manual career training, explicit
+respec, automatic/manual mode transitions, versioned plan persistence, and
+multi-level automatic gains are implemented. The focused suite checks every
+enabled plan at every level for budgets, monotonic ranks, and no overlevel
+training. Runtime fixture validation covers the real class-career and skill
+tables. Unsupported or changed plan IDs do not silently change allocations.
+**Real-client acceptance:** XP gain, trainer interaction, automatic mode
+switching, leveling, and restart persistence remain owner-run checks.
 
 ### Stage 4 - Equipment
 
-**Status:** Not started.
+**Status:** Implemented; focused offline validation and Release build complete.
+Clickable menu usability and gameplay acceptance remain owner-run checks.
 
-**Prerequisites:** Stages 2-3 complete; drop rules, transfers, capacity/overflow,
-starting gear, and manual override behavior decided.
+**Prerequisites:** Stages 2-3 complete; reward pacing, transfers, capacity and
+overflow, starter provenance, and manual slot-lock policy are recorded in the
+[Stage 4 decision brief](COMPANION_STAGE4_DECISIONS.md).
 
-**Deliverables:** Personal gear rolls, persistent inventory, class/build-aware
-automatic upgrades, manual equipping, and recoverable replaced items. Define how
-manual selections are protected and player-supplied gear is returned.
+**Deliverables:** Independent per-companion PvE drops and eligible PvP drops,
+persistent class-legal equipment and inventory, safe owner transfers, strict
+automatic upgrades, manual slot locks, recoverable replacements, protected
+surplus selling, and a private clickable menu with command fallback.
 
-**Acceptance:** Existing player loot remains intact. Items cannot duplicate or
-vanish through equip/replacement, benching, restart, failed transfers, or full
-inventories. Illegal equipment is rejected. Recruitment cannot bypass the agreed
-starter-item and transfer rules. Check autonomous equipment and normal player
-inventory behavior separately.
+**Offline status:** Atomic insert/update/delete transactions couple drops,
+transfers, surplus sales, and coin credits. Existing starter gear is marked
+protected; legacy unknown items stay unsellable and non-transferable. Personal
+loot does not alter player loot or autonomous-bot handling. Full-bag reward,
+transfer, and equip paths can sell only the lowest-scoring positive-value,
+unequipped companion-earned item. The bare command opens a temporary private
+menu; explicit roster/training commands remain available.
+**Real-client acceptance:** Clickable popup behavior, fast leveling, full-party
+PvE/PvP drops, equip and recovery, full-bag transfers, merchant-value proceeds,
+and reload persistence remain pending. See the checklist in
+[COMPANION_STAGE4_DECISIONS.md](COMPANION_STAGE4_DECISIONS.md).
 
 ### Stage 5 - Character and control
 
@@ -237,16 +253,16 @@ resolve it then rather than hiding it in implementation.
 | Recruitment location, cost, initial level, and roster limits | Stage 2 | Resolved: anywhere, free, level 1, 78 stored per character |
 | Ownership per character/account; uniqueness of authored recruits | Stage 2 | Resolved: per character; each authored individual once per owner |
 | Meaning of `/spawn`, old saved-bot compatibility, temporary testing helpers | Stage 2 | Resolved: `/spawn` stays temporary; no legacy conversion or GM test-helper command |
-| Companion XP eligibility, participation, catch-up target and pace, support/pet credit | Stage 3 | Resolved; implementation awaits real-client acceptance |
-| Automatic/manual modes, plan eligibility, transitions, and respecialization | Stage 3 | Manual and respec rules resolved; candidate review recorded, runtime validation and owner selection pending |
+| Companion XP eligibility, participation, catch-up target and pace, support/pet credit | Stage 3 | Resolved and implemented; real-client acceptance pending |
+| Automatic/manual modes, plan eligibility, transitions, and respecialization | Stage 3 | Resolved and implemented; 33 runtime-validated project plans, six manual-only blockers |
 | Companion realm-point eligibility and progression | Stage 3 | Resolved: companions do not earn realm points |
-| Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 | Open; the existing generated level-1 starter kit is retained for Stage 2 |
-| Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 | Open |
+| Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 | Resolved and implemented; independent XP-rate PvE chance, eligible PvP rewards, protected starter kit |
+| Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 | Resolved and implemented; free restricted transfers, manual slot locks, earned-gear surplus selling |
 | Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 | Open |
 | Death/recovery and raid rules | Stage 6, or earlier if changed by a prior stage | Open |
 
-Personal-drop transfer restrictions and a dedicated testing-helper command
-have not been approved as fixed rules.
+No Stage 5–6 behavior is included in this task. Real-client menu and gameplay
+acceptance remains pending and is not inferred from offline validation.
 
 ## Maintenance and boundaries
 

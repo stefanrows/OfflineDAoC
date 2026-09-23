@@ -12,9 +12,9 @@ using DOL.GS.PacketHandler;
 namespace DOL.GS;
 
 /// <summary>
-/// Keeps only ephemeral /spawn companions with their real-player leader over
-/// authoritative travel.  It never considers persistent bots, normal group
-/// members, money, inventory, or ticket ownership.
+/// Mirrors stable rides for ephemeral /spawn helpers and relocates a player's
+/// own active companions after an accepted portal or region transfer. It never
+/// moves other group members or changes money, inventory, or ticket ownership.
 /// </summary>
 public static class TemporaryGroupStableTravel
 {
@@ -38,7 +38,7 @@ public static class TemporaryGroupStableTravel
     private static readonly ConcurrentDictionary<GamePlayer, RouteMonitor> ActiveRoutes = new();
     // Zone/region differences occur during ordinary follower movement.  A marker
     // is created only by a successful GamePlayer.MoveTo, then consumed once the
-    // player's temporary helpers have joined that completed transfer.
+    // player's owned companions have joined that completed transfer.
     private static readonly ConcurrentDictionary<GamePlayer, DateTime> PendingPlayerTransfers = new();
     private static Timer _monitorTimer;
 
@@ -98,6 +98,13 @@ public static class TemporaryGroupStableTravel
         ushort playerZone) =>
         hasConfirmedPlayerTransfer && isTemporaryHelper && sharesGroup && followsPlayer;
 
+    public static bool ShouldRelocatePersistentCompanionForOwnerTransfer(
+        bool hasConfirmedPlayerTransfer,
+        bool isPersistentPlayerCompanion,
+        bool sharesGroup,
+        bool isOwnedByPlayer) =>
+        hasConfirmedPlayerTransfer && isPersistentPlayerCompanion && sharesGroup && isOwnedByPlayer;
+
     public static void MarkAcceptedPlayerTransfer(GamePlayer player)
     {
         if (player != null)
@@ -154,7 +161,7 @@ public static class TemporaryGroupStableTravel
 
     /// <summary>
     /// Event and failsafe entry point after a real player has completed an
-    /// authoritative MoveTo/portal/region transfer.  Existing helper objects
+    /// authoritative MoveTo/portal/region transfer. Existing owned companions
     /// move; none are created, saved, disbanded, or applied to other players.
     /// </summary>
     public static int RelocateHelpersAfterPlayerTransfer(GamePlayer player, bool explicitMoveTo = false)
@@ -181,7 +188,10 @@ public static class TemporaryGroupStableTravel
                     player.CurrentRegionID,
                     bot.CurrentZone?.ID ?? 0,
                     player.CurrentZone.ID);
-            if (!needsRelocation || !bot.IsTemporaryGroupHelper || bot.Group != player.Group || bot.PlayerGroupLeader != player)
+            bool ownedCompanion = ShouldRelocatePersistentCompanionForOwnerTransfer(
+                hasConfirmedTransfer, bot.IsPersistentPlayerCompanion,
+                bot.Group == player.Group, bot.Owner == player);
+            if (!needsRelocation && !ownedCompanion)
                 continue;
 
             bot.CompleteStableMasterRoute();
@@ -211,20 +221,24 @@ public static class TemporaryGroupStableTravel
     /// </summary>
     public static bool EnsureOwnerTransferCohesion(GameBot bot)
     {
-        if (bot is not { IsTemporaryGroupHelper: true, IsOnStableMasterRoute: false } || bot.Owner == null ||
+        if (bot == null || (!bot.IsTemporaryGroupHelper && !bot.IsPersistentPlayerCompanion) ||
+            bot.IsOnStableMasterRoute || bot.Owner == null ||
             !HasPendingPlayerTransfer(bot.Owner))
             return false;
 
         GamePlayer player = bot.Owner;
-        if (!ShouldRelocateForOwnerTransfer(
+        bool helper = ShouldRelocateForOwnerTransfer(
                 true,
-                true,
+                bot.IsTemporaryGroupHelper,
                 bot.Group == player.Group,
                 bot.PlayerGroupLeader == player,
                 bot.CurrentRegionID,
                 player.CurrentRegionID,
                 bot.CurrentZone?.ID ?? 0,
-                player.CurrentZone?.ID ?? 0))
+                player.CurrentZone?.ID ?? 0);
+        bool ownedCompanion = ShouldRelocatePersistentCompanionForOwnerTransfer(
+            true, bot.IsPersistentPlayerCompanion, bot.Group == player.Group, bot.Owner == player);
+        if (!helper && !ownedCompanion)
             return false;
 
         return RelocateHelpersAfterPlayerTransfer(player) > 0;

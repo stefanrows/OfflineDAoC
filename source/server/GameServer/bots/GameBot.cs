@@ -1674,13 +1674,26 @@ namespace DOL.GS
             {
                 if (IsTemporaryGroupHelper)
                     SpendSpecPoints(Level, previousLevel);
-                else if (IsPersistentPlayerCompanion && IsManualCompanionTraining)
-                    AwardCompanionSpecPoints(previousLevel, Level);
+                else if (IsPersistentPlayerCompanion)
+                {
+                    for (int reachedLevel = previousLevel + 1; reachedLevel <= Level; reachedLevel++)
+                    {
+                        AwardCompanionSpecPoints((byte)(reachedLevel - 1), (byte)reachedLevel);
+                        if (!IsManualCompanionTraining &&
+                            CompanionBuildPlanCatalog.TryGetPlan((eCharacterClass)CharacterClass.ID,
+                                out CompanionBuildPlan plan))
+                            TryApplyAutomaticCompanionPlanAtLevel(plan, reachedLevel, out _);
+                    }
+                }
 
                 // Manual companions hold new specialization points. Keep their
                 // career skills and spells in sync with each earned level.
                 if (IsPersistentPlayerCompanion)
+                {
                     RefreshCompanionSkills();
+                    if (Group?.IsInTheGroup(this) == true)
+                        Group.UpdateGroupWindow();
+                }
                 else
                 {
                     // Autonomous bots keep their points until they train at a
@@ -1728,7 +1741,171 @@ namespace DOL.GS
             return (long)(experience * rate);
         }
 
-        private bool IsManualCompanionTraining => IsPersistentPlayerCompanion;
+        private bool IsManualCompanionTraining => IsPersistentPlayerCompanion &&
+            (!string.Equals(PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) ||
+             !CompanionBuildPlanCatalog.TryGetEnabledPlan((eCharacterClass)CharacterClass.ID, out string planId) ||
+             !string.Equals(PlayerCompanionRecord.TrainingPlanId, planId, StringComparison.Ordinal));
+
+        internal bool TryEnableAutomaticCompanionPlan(CompanionBuildPlan plan, out string message)
+        {
+            message = "The automatic plan could not be applied.";
+            if (!IsPersistentPlayerCompanion || plan == null ||
+                !CompanionBuildPlanCatalog.TryGetPlan((eCharacterClass)CharacterClass.ID,
+                    out CompanionBuildPlan enabledPlan) || !string.Equals(plan.Id, enabledPlan.Id, StringComparison.Ordinal))
+                return false;
+
+            if (!CompanionBuildPlanCatalog.TryValidateRuntimePlan((eCharacterClass)CharacterClass.ID, plan,
+                    out string runtimeBlocker))
+            {
+                message = $"Automatic training for {Name} is blocked: {runtimeBlocker}.";
+                return false;
+            }
+
+            if (CharacterClass.SpecPointsMultiplier != plan.ExpectedSpecPointsMultiplier)
+            {
+                message = $"Automatic training for {Name} is blocked: the runtime specialization multiplier changed from the validated {plan.ExpectedSpecPointsMultiplier} to {CharacterClass.SpecPointsMultiplier}.";
+                return false;
+            }
+
+            Dictionary<string, Specialization> specs = GetSpecList().Where(spec => spec.Trainable)
+                .ToDictionary(spec => spec.KeyName, StringComparer.OrdinalIgnoreCase);
+            IReadOnlyDictionary<string, int> targets = plan.GetTargetsAtLevel(Level, CharacterClass.SpecPointsMultiplier);
+            foreach (Specialization specialization in specs.Values)
+            {
+                int target = targets.TryGetValue(specialization.KeyName, out int planned) ? planned : 1;
+                if (specialization.Level > target)
+                {
+                    message = $"{Name}'s {specialization.Name} {specialization.Level} allocation is above the validated level-{Level} schedule ({target}). Keep manual mode or use the explicit respec flow before switching.";
+                    return false;
+                }
+            }
+
+            var plannedChanges = new List<(Specialization Spec, int Target)>();
+            int pointsNeeded = 0;
+            foreach (CompanionBuildRank rank in plan.TargetAllocations)
+            {
+                if (!specs.TryGetValue(rank.Specialization, out Specialization specialization))
+                {
+                    message = $"Automatic training for {Name} is blocked: runtime class data has no trainable {rank.Specialization} career line.";
+                    return false;
+                }
+
+                int target = targets[rank.Specialization];
+                if (specialization.Level > target)
+                {
+                    message = $"{Name}'s {specialization.Name} {specialization.Level} allocation is above the validated level-{Level} schedule ({target}). Keep manual mode or use the explicit respec flow before switching.";
+                    return false;
+                }
+
+                pointsNeeded += CompanionBuildPlan.CostToReach(specialization.Level, target);
+                plannedChanges.Add((specialization, target));
+            }
+
+            if (pointsNeeded > m_leftOverSpecPoints)
+            {
+                message = $"{Name}'s current build needs {pointsNeeded} more points to reach the validated schedule, but only {m_leftOverSpecPoints} are available. Keep manual mode or use the explicit respec flow.";
+                return false;
+            }
+
+            if (string.Equals(PlayerCompanionRecord.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(PlayerCompanionRecord.TrainingPlanId, plan.Id, StringComparison.Ordinal))
+            {
+                message = $"{Name} already follows {plan.Id}.";
+                return true;
+            }
+
+            var previousLevels = plannedChanges.ToDictionary(change => change.Spec, change => change.Spec.Level);
+            int previousPoints = m_leftOverSpecPoints;
+            string previousMode = PlayerCompanionRecord.TrainingMode;
+            string previousPlan = PlayerCompanionRecord.TrainingPlanId;
+            string previousSerializedSpecs = PlayerCompanionRecord.SerializedSpecs;
+            int previousRecordPoints = PlayerCompanionRecord.UnspentSpecPoints;
+            foreach ((Specialization specialization, int target) in plannedChanges)
+            {
+                m_leftOverSpecPoints -= CompanionBuildPlan.CostToReach(specialization.Level, target);
+                specialization.Level = target;
+            }
+            PlayerCompanionRecord.TrainingMode = "automatic";
+            PlayerCompanionRecord.TrainingPlanId = plan.Id;
+            PlayerCompanionRecord.Dirty = true;
+
+            if (!PlayerCompanionRoster.SaveProgress(this))
+            {
+                foreach ((Specialization specialization, int level) in previousLevels)
+                    specialization.Level = level;
+                m_leftOverSpecPoints = previousPoints;
+                PlayerCompanionRecord.TrainingMode = previousMode;
+                PlayerCompanionRecord.TrainingPlanId = previousPlan;
+                PlayerCompanionRecord.SerializedSpecs = previousSerializedSpecs;
+                PlayerCompanionRecord.UnspentSpecPoints = previousRecordPoints;
+                PlayerCompanionRecord.Dirty = true;
+                RefreshCompanionSkills();
+                message = $"{Name}'s automatic plan could not be saved; their prior allocations and mode were restored.";
+                return false;
+            }
+
+            RefreshCompanionSkills();
+            message = $"{Name} is following {plan.Id} ({plan.Role}); spent {pointsNeeded} points, {m_leftOverSpecPoints} remain.";
+            return true;
+        }
+
+        private bool TryApplyAutomaticCompanionPlanAtLevel(CompanionBuildPlan plan, int targetLevel, out string error)
+        {
+            error = string.Empty;
+            if (plan == null || CharacterClass.SpecPointsMultiplier != plan.ExpectedSpecPointsMultiplier)
+            {
+                error = "The runtime specialization multiplier does not match the validated automatic plan.";
+                return false;
+            }
+            if (!CompanionBuildPlanCatalog.TryValidateRuntimePlan((eCharacterClass)CharacterClass.ID, plan,
+                    out error))
+                return false;
+
+            Dictionary<string, Specialization> specs = GetSpecList().Where(spec => spec.Trainable)
+                .ToDictionary(spec => spec.KeyName, StringComparer.OrdinalIgnoreCase);
+            IReadOnlyDictionary<string, int> targets = plan.GetTargetsAtLevel(targetLevel, CharacterClass.SpecPointsMultiplier);
+            foreach (Specialization specialization in specs.Values)
+            {
+                int target = targets.TryGetValue(specialization.KeyName, out int planned) ? planned : 1;
+                if (specialization.Level > target)
+                {
+                    error = $"Existing {specialization.KeyName} allocation exceeds the saved plan.";
+                    return false;
+                }
+            }
+
+            var plannedChanges = new List<(Specialization Spec, int Target)>();
+            int pointsNeeded = 0;
+            foreach (CompanionBuildRank rank in plan.TargetAllocations)
+            {
+                if (!specs.TryGetValue(rank.Specialization, out Specialization specialization))
+                {
+                    error = $"Runtime class data no longer contains {rank.Specialization}.";
+                    return false;
+                }
+                int target = targets[rank.Specialization];
+                if (specialization.Level > target)
+                {
+                    error = $"Existing {rank.Specialization} allocation exceeds the saved plan.";
+                    return false;
+                }
+                pointsNeeded += CompanionBuildPlan.CostToReach(specialization.Level, target);
+                plannedChanges.Add((specialization, target));
+            }
+
+            if (pointsNeeded > m_leftOverSpecPoints)
+            {
+                error = $"The saved plan requires {pointsNeeded} points but only {m_leftOverSpecPoints} are available.";
+                return false;
+            }
+
+            foreach ((Specialization specialization, int target) in plannedChanges)
+            {
+                m_leftOverSpecPoints -= CompanionBuildPlan.CostToReach(specialization.Level, target);
+                specialization.Level = target;
+            }
+            return true;
+        }
 
         private void AwardCompanionSpecPoints(byte previousLevel, byte currentLevel)
         {
@@ -2490,7 +2667,7 @@ namespace DOL.GS
             InitControlledBrainArray(1);
 
             GameEventMgr.AddHandler(Owner, GamePlayerEvent.Quit, new DOLEventHandler(OnOwnerQuit));
-            if (IsTemporaryGroupHelper)
+            if (IsTemporaryGroupHelper || IsPersistentPlayerCompanion)
                 GameEventMgr.AddHandler(Owner, GamePlayerEvent.RegionChanged, new DOLEventHandler(OnOwnerRegionChanged));
         }
 
@@ -2612,7 +2789,7 @@ namespace DOL.GS
 
         private void OnOwnerRegionChanged(DOLEvent e, object sender, EventArgs arguments)
         {
-            if (IsTemporaryGroupHelper && sender is GamePlayer player)
+            if ((IsTemporaryGroupHelper || IsPersistentPlayerCompanion) && sender is GamePlayer player)
                 TemporaryGroupStableTravel.RelocateHelpersAfterPlayerTransfer(player);
         }
 
@@ -2901,7 +3078,7 @@ namespace DOL.GS
             if (Owner != null)
             {
                 GameEventMgr.RemoveHandler(Owner, GamePlayerEvent.Quit, new DOLEventHandler(OnOwnerQuit));
-                if (IsTemporaryGroupHelper)
+                if (IsTemporaryGroupHelper || IsPersistentPlayerCompanion)
                     GameEventMgr.RemoveHandler(Owner, GamePlayerEvent.RegionChanged, new DOLEventHandler(OnOwnerRegionChanged));
             }
             Guild?.RemoveBotMember(this);
@@ -4348,6 +4525,194 @@ namespace DOL.GS
                 AutonomousBotStatusPersistence.Queue(this, true);
             }
             return changed;
+        }
+
+        /// <summary>Equips a strictly better earned item for an owned companion when it is safe.</summary>
+        internal bool TryEquipPersistentCompanionUpgrade(DbInventoryItem item)
+        {
+            int pairTieBreak = Random.Shared.Next();
+            if (!IsPersistentPlayerCompanion || Inventory == null || item == null ||
+                !Inventory.AllItems.Contains(item) ||
+                item.SlotPosition is < (int)eInventorySlot.FirstBackpack or > (int)eInventorySlot.LastBackpack ||
+                !PlayerCompanionRoster.GetEquipmentItemFlags(PlayerCompanionRecord, item.ObjectId).Contains('E') ||
+                !HasTrainedPersonalEquipmentLine(item) ||
+                !AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot target,
+                    minimumImprovement: 0, companionPairTieBreak: pairTieBreak))
+                return false;
+
+            int requiredFreeBackpackSlots = target switch
+            {
+                eInventorySlot.TwoHandWeapon =>
+                    (Inventory.GetItem(eInventorySlot.RightHandWeapon) != null ? 1 : 0) +
+                    (Inventory.GetItem(eInventorySlot.LeftHandWeapon) != null ? 1 : 0),
+                eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon =>
+                    Inventory.GetItem(eInventorySlot.TwoHandWeapon) != null ? 1 : 0,
+                _ => 0,
+            };
+
+            bool equipped = PlayerCompanionRoster.TryApplyEquipmentMutation(this, () =>
+            {
+                if (!AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot currentTarget,
+                        minimumImprovement: 0, companionPairTieBreak: pairTieBreak) || currentTarget != target ||
+                    PlayerCompanionRoster.IsEquipmentSlotLocked(PlayerCompanionRecord, target))
+                    return false;
+
+                List<eInventorySlot> conflictingSlots = target switch
+                {
+                    eInventorySlot.TwoHandWeapon => [eInventorySlot.RightHandWeapon, eInventorySlot.LeftHandWeapon],
+                    eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon => [eInventorySlot.TwoHandWeapon],
+                    _ => [],
+                };
+                var displaced = conflictingSlots.Select(slot => (Slot: slot, Item: Inventory.GetItem(slot)))
+                    .Where(entry => entry.Item != null).ToArray();
+                if (displaced.Any(entry => PlayerCompanionRoster.IsEquipmentSlotLocked(PlayerCompanionRecord, entry.Slot)))
+                    return false;
+
+                eInventorySlot source = (eInventorySlot)item.SlotPosition;
+                List<eInventorySlot> emptySlots = Enumerable.Range((int)eInventorySlot.FirstBackpack,
+                        (int)eInventorySlot.LastBackpack - (int)eInventorySlot.FirstBackpack + 1)
+                    .Select(value => (eInventorySlot)value)
+                    .Where(slot => slot != source && Inventory.GetItem(slot) == null)
+                    .Take(displaced.Length).ToList();
+                if (emptySlots.Count < displaced.Length ||
+                    !Inventory.MoveItem(source, target, Math.Max(1, item.Count)))
+                    return false;
+
+                for (int index = 0; index < displaced.Length; index++)
+                    if (!Inventory.MoveItem(displaced[index].Slot, emptySlots[index],
+                            Math.Max(1, displaced[index].Item.Count)))
+                        return false;
+                return true;
+            }, out _, requiredFreeBackpackSlots, item.ObjectId);
+            if (!equipped)
+                return false;
+
+            RefreshItemBonuses();
+            UpdateNPCEquipmentAppearance();
+            if (target is eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon)
+                SwitchWeapon(target == eInventorySlot.TwoHandWeapon
+                    ? eActiveWeaponSlot.TwoHanded : eActiveWeaponSlot.Standard);
+            return true;
+        }
+
+        internal bool TryApplyPendingPersistentCompanionUpgrade()
+        {
+            if (!IsPersistentPlayerCompanion || !PlayerCompanionRoster.CanManageInventory(this) ||
+                Inventory is not BotInventory inventory)
+                return false;
+
+            foreach (DbInventoryItem item in inventory.AllItems
+                         .Where(candidate => candidate.SlotPosition is >= (int)eInventorySlot.FirstBackpack and <= (int)eInventorySlot.LastBackpack &&
+                                             PlayerCompanionRoster.GetEquipmentItemFlags(PlayerCompanionRecord, candidate.ObjectId).Contains('E'))
+                         .OrderByDescending(AutonomousBotEconomy.EquipmentValue))
+                if (TryEquipPersistentCompanionUpgrade(item))
+                    return true;
+            return false;
+        }
+
+        internal void RefreshPersistentCompanionEquipment(bool weaponSlotsChanged = false)
+        {
+            if (!IsPersistentPlayerCompanion)
+                return;
+            RefreshItemBonuses();
+            UpdateNPCEquipmentAppearance();
+            if (weaponSlotsChanged)
+                SwitchWeapon(Inventory?.GetItem(eInventorySlot.TwoHandWeapon) != null
+                    ? eActiveWeaponSlot.TwoHanded
+                    : eActiveWeaponSlot.Standard);
+        }
+
+        private bool HasTrainedPersonalEquipmentLine(DbInventoryItem item)
+        {
+            eObjectType type = (eObjectType)item.Object_Type;
+            if (type == eObjectType.Staff && CharacterClass?.IsFocusCaster == true &&
+                BotWeaponStats.HasCasterFocusBonus(item))
+                return true;
+            if (!BotWeaponStats.IsMeleeWeapon(type) && !BotRangedCombat.IsRangedWeaponType(type) &&
+                type != eObjectType.Instrument)
+                return true;
+
+            string line = type == eObjectType.Instrument
+                ? Specs.Instruments
+                : SkillBase.ObjectTypeToSpec(type);
+            return !string.IsNullOrWhiteSpace(line) &&
+                   GetSpecializationByName(line) is { Trainable: true, Level: > 1 };
+        }
+
+        internal bool TryManuallyEquipPersistentCompanionItem(DbInventoryItem item)
+        {
+            if (!IsPersistentPlayerCompanion || Inventory == null || item == null ||
+                !Inventory.AllItems.Contains(item) ||
+                item.SlotPosition is < (int)eInventorySlot.FirstBackpack or > (int)eInventorySlot.LastBackpack)
+                return false;
+
+            // Resolve and validate the item's class-specific destination. The
+            // upgrade boolean is intentionally ignored: manual choices may be
+            // weaker than the current item.
+            int pairTieBreak = Random.Shared.Next();
+            AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot target,
+                ignoreCompanionSlotLocks: true, companionPairTieBreak: pairTieBreak);
+            if (target == eInventorySlot.Invalid)
+                return false;
+
+            int requiredFreeBackpackSlots = target switch
+            {
+                eInventorySlot.TwoHandWeapon =>
+                    (Inventory.GetItem(eInventorySlot.RightHandWeapon) != null ? 1 : 0) +
+                    (Inventory.GetItem(eInventorySlot.LeftHandWeapon) != null ? 1 : 0),
+                eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon =>
+                    Inventory.GetItem(eInventorySlot.TwoHandWeapon) != null ? 1 : 0,
+                _ => 0,
+            };
+
+            bool equipped = PlayerCompanionRoster.TryApplyEquipmentMutation(this, () =>
+            {
+                if (!Inventory.AllItems.Contains(item) ||
+                    item.SlotPosition is < (int)eInventorySlot.FirstBackpack or > (int)eInventorySlot.LastBackpack)
+                    return false;
+                // Manual equipment only needs a legal slot; its score may be lower.
+                AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot resolvedTarget,
+                    ignoreCompanionSlotLocks: true, companionPairTieBreak: pairTieBreak);
+                if (resolvedTarget == eInventorySlot.Invalid || resolvedTarget != target)
+                    return false;
+
+                List<eInventorySlot> conflictingSlots = target switch
+                {
+                    eInventorySlot.TwoHandWeapon => [eInventorySlot.RightHandWeapon, eInventorySlot.LeftHandWeapon],
+                    eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon => [eInventorySlot.TwoHandWeapon],
+                    _ => [],
+                };
+                var displaced = conflictingSlots.Select(slot => (Slot: slot, Item: Inventory.GetItem(slot)))
+                    .Where(entry => entry.Item != null).ToArray();
+                if (displaced.Any(entry => PlayerCompanionRoster.IsEquipmentSlotLocked(PlayerCompanionRecord, entry.Slot)))
+                    return false;
+
+                List<eInventorySlot> emptySlots = Enumerable.Range((int)eInventorySlot.FirstBackpack,
+                        (int)eInventorySlot.LastBackpack - (int)eInventorySlot.FirstBackpack + 1)
+                    .Select(value => (eInventorySlot)value)
+                    .Where(slot => Inventory.GetItem(slot) == null).Take(displaced.Length).ToList();
+                if (emptySlots.Count < displaced.Length)
+                    return false;
+
+                for (int index = 0; index < displaced.Length; index++)
+                    if (!Inventory.MoveItem(displaced[index].Slot, emptySlots[index],
+                            Math.Max(1, displaced[index].Item.Count)))
+                        return false;
+
+                if (!Inventory.MoveItem((eInventorySlot)item.SlotPosition, target, Math.Max(1, item.Count)))
+                    return false;
+                PlayerCompanionRoster.SetEquipmentSlotLocked(PlayerCompanionRecord, target, true);
+                return true;
+            }, out _, requiredFreeBackpackSlots, item.ObjectId);
+            if (!equipped)
+                return false;
+
+            RefreshItemBonuses();
+            UpdateNPCEquipmentAppearance();
+            if (target is eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon)
+                SwitchWeapon(target == eInventorySlot.TwoHandWeapon
+                    ? eActiveWeaponSlot.TwoHanded : eActiveWeaponSlot.Standard);
+            return true;
         }
 
         private void EnsureTemporaryHelperWeapon()

@@ -32,6 +32,19 @@ namespace DOL.GS
             HasFunctionalMeleeStats(item.Template) &&
             (!IsMeleeWeapon((eObjectType)item.Object_Type) || item.Condition > 0);
 
+        public static bool HasCasterFocusBonus(DbInventoryItem item)
+        {
+            if (item == null)
+                return false;
+            return HasFocus(item.Bonus1Type) || HasFocus(item.Bonus2Type) ||
+                   HasFocus(item.Bonus3Type) || HasFocus(item.Bonus4Type) || HasFocus(item.Bonus5Type) ||
+                   HasFocus(item.Bonus6Type) || HasFocus(item.Bonus7Type) || HasFocus(item.Bonus8Type) ||
+                   HasFocus(item.Bonus9Type) || HasFocus(item.Bonus10Type) || HasFocus(item.ExtraBonusType);
+
+            static bool HasFocus(int bonusType) => bonusType > 0 &&
+                SkillBase.CheckPropertyType((eProperty)bonusType, ePropertyType.Focus);
+        }
+
         /// <summary>
         /// Runtime melee-slot validation shared by autonomous and temporary
         /// bots.  Merely occupying a weapon slot is not enough: old generated
@@ -49,7 +62,15 @@ namespace DOL.GS
                 return bot.HasAbilityToUseItem(item);
 
             eObjectType type = (eObjectType)item.Object_Type;
-            return MatchesBuild(spec, type);
+            if (MatchesBuild(spec, type))
+                return true;
+
+            // Persistent companions may train a weapon line that differs from
+            // their seeded BotSpec. Their actual class career allocation is the
+            // authority for those personal equipment upgrades.
+            string trainedLine = SkillBase.ObjectTypeToSpec(type);
+            return bot.IsPersistentPlayerCompanion && !string.IsNullOrWhiteSpace(trainedLine) &&
+                   bot.GetSpecializationByName(trainedLine) is { Trainable: true, Level: > 1 };
         }
 
         public static bool MatchesBuild(BotSpec spec, eObjectType type)

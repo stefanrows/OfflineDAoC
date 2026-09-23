@@ -7,10 +7,10 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Manage your persistent companion roster", "/companions [list | recruit <class> | recruit <realm> <class> | invite <name> | bench <name> | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
+        "Open the companion menu or manage your roster, training, and equipment", "/companions [list | recruit <class> | recruit <realm> <class> | invite <name> | bench <name> | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
-        private const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
+        internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
 
         public void OnCommand(GameClient client, string[] args)
         {
@@ -18,7 +18,14 @@ namespace DOL.GS.Commands
             if (player == null)
                 return;
 
-            if (args.Length == 1 || args[1].Equals("list", StringComparison.OrdinalIgnoreCase))
+            if (args.Length == 1)
+            {
+                if (!PersistentCompanionMenu.Open(player))
+                    ShowRoster(client, player);
+                return;
+            }
+
+            if (args[1].Equals("list", StringComparison.OrdinalIgnoreCase))
             {
                 ShowRoster(client, player);
                 return;
@@ -81,7 +88,10 @@ namespace DOL.GS.Commands
                     string xpProgress = record.Level >= 50
                         ? $"XP {record.Experience:N0} (max level)"
                         : $"XP {record.Experience:N0}/{GamePlayer.GetExperienceAmountForLevel(record.Level):N0}";
-                    DisplayMessage(client, $"{record.Name}, level {record.Level} {(eCharacterClass)record.ClassId} ({state}; manual training; {record.UnspentSpecPoints} unspent spec points; {xpProgress})");
+                    string training = string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase)
+                        ? $"automatic ({record.TrainingPlanId})"
+                        : "manual";
+                    DisplayMessage(client, $"{record.Name}, level {record.Level} {(eCharacterClass)record.ClassId} ({state}; {training} training; {record.UnspentSpecPoints} unspent spec points; {xpProgress})");
                 }
             }
         }
@@ -139,7 +149,8 @@ namespace DOL.GS.Commands
             string name = string.Join(' ', args.Skip(2).Take(args.Length - 3));
             if (mode is "automatic" or "auto")
             {
-                DisplayMessage(client, "Automatic training is unavailable until a companion build plan passes career, point-budget, milestone, and runtime-skill checks and you select it for use. Use manual mode for now.");
+                PlayerCompanionRoster.TrySetAutomaticTrainingMode(player, name, out string automaticMessage);
+                DisplayMessage(client, automaticMessage);
                 return;
             }
 
@@ -161,7 +172,17 @@ namespace DOL.GS.Commands
                 return;
             }
 
-            DisplayMessage(client, "No owner-approved automatic companion build plans are available. Static candidates are documented for review; disposable runtime database validation is pending.");
+            if (!PlayerCompanionRoster.TryMatchOwnedCompanionPrefix(client.Player, args, 2, args.Length,
+                    out PlayerCompanionRecord record, out _))
+            {
+                DisplayMessage(client, "That companion name or ID is not in your roster.");
+                return;
+            }
+
+            string status = string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase)
+                ? $"automatic plan {record.TrainingPlanId}: {CompanionBuildPlanCatalog.GetBlocker((eCharacterClass)record.ClassId, record.TrainingPlanId)}"
+                : $"manual training; {CompanionBuildPlanCatalog.GetBlocker((eCharacterClass)record.ClassId)}";
+            DisplayMessage(client, $"{record.Name}: {status}.");
         }
 
         private void TrainCompanion(GameClient client, GamePlayer player, string[] args)
@@ -251,7 +272,7 @@ namespace DOL.GS.Commands
                 new CustomDialogResponse(CompanionRespecDialogResponse));
         }
 
-        private static void CompanionRespecDialogResponse(GamePlayer player, byte response)
+        internal static void CompanionRespecDialogResponse(GamePlayer player, byte response)
         {
             string companionId = player?.TempProperties.GetProperty<string>(CompanionRespecProperty);
             player?.TempProperties.RemoveProperty(CompanionRespecProperty);
@@ -321,6 +342,7 @@ namespace DOL.GS.Commands
 
         private void ShowUsage(GameClient client)
         {
+            DisplayMessage(client, "Bare /companions opens the private clickable roster, training, equipment, and inventory menu.");
             DisplayMessage(client, "Commands: /companions list | recruit <class> | recruit <realm> <class> | invite <name> | bench <name> | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }

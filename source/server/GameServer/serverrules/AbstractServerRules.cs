@@ -1038,7 +1038,9 @@ namespace DOL.GS.ServerRules
             // /spawn companions never satisfy this eligibility check.
             if (AutonomousBotRealmPointRewards.IsEligibleVictim(killedNpc))
             {
-                AutonomousBotRealmPointRewards.Award((GameBot)killedNpc, killer);
+                bool rewardEligibleDeath = AutonomousBotRealmPointRewards.Award((GameBot)killedNpc, killer);
+                if (rewardEligibleDeath)
+                    PlayerCompanionGearRewards.AwardPvpPartyGear(killedNpc);
                 return;
             }
 
@@ -1071,6 +1073,24 @@ namespace DOL.GS.ServerRules
                 persistentCompanionDamage.Count == 0)
                 return;
 
+            // Gear eligibility follows encounter participation, not whether
+            // the owner's XP award advanced their bar. This keeps the personal
+            // drop roll active at an XP cap and for maximum-level owners.
+            var gearOwners = new HashSet<GamePlayer>();
+            foreach (GamePlayer participant in playerCountAndDamage.Keys)
+            {
+                if (participant.Group == null)
+                    gearOwners.Add(participant);
+                else
+                    foreach (GamePlayer groupMember in participant.Group.GetMembersInTheGroup().OfType<GamePlayer>())
+                        gearOwners.Add(groupMember);
+            }
+            foreach (GameBot companion in persistentCompanionDamage.Keys)
+                if (companion.Owner != null)
+                    gearOwners.Add(companion.Owner);
+            foreach (GamePlayer gearOwner in gearOwners)
+                PlayerCompanionGearRewards.AwardPvePartyGear(gearOwner, killedNpc);
+
             // Award experience, faction change, and kill credit to every player involved.
             // Let `AwardExperience` fetch players that are in a group or a BG but didn't attack the target, and decide how experience should be shared.
             HashSet<GameBot> ownerAwardedCompanions = new();
@@ -1094,9 +1114,9 @@ namespace DOL.GS.ServerRules
             {
                 GameBot companion = pair.Key;
                 GamePlayer owner = companion.Owner;
-                if (ownerAwardedCompanions.Contains(companion) || pair.Value.Damage <= 0 ||
-                    owner?.GainXP != true || !playerCountAndDamage.ContainsKey(owner) ||
-                    !IsEligibleActivePlayerCompanion(companion, killedNpc))
+                bool eligibleCompanion = pair.Value.Damage > 0 && IsEligibleActivePlayerCompanion(companion, killedNpc);
+                if (ownerAwardedCompanions.Contains(companion) || !eligibleCompanion ||
+                    owner?.GainXP != true || !playerCountAndDamage.ContainsKey(owner))
                 {
                     continue;
                 }
@@ -2026,10 +2046,17 @@ namespace DOL.GS.ServerRules
                 out _);
 
             if (playerCountAndDamage.Count == 0 && botCountAndDamage.Count == 0)
+            {
+                if (IsWorthPlayerKillRewards(killedPlayer))
+                    PlayerCompanionGearRewards.AwardPvpPartyGear(killedPlayer);
                 return;
+            }
 
             if (IsWorthPlayerKillRewards(killedPlayer))
+            {
                 DropPlayerKillLoot(killedPlayer, killer, playerCountAndDamage, botCountAndDamage);
+                PlayerCompanionGearRewards.AwardPvpPartyGear(killedPlayer);
+            }
 
             bool isWorthAnything = false;
 

@@ -1,9 +1,9 @@
 # Companion Stage 3 decisions and implementation
 
-Updated: 2026-09-23. The owner accepted the recommended Stage 3 policies. The
-core PvE progression and manual-training paths are implemented. A class-by-class
-automatic-plan candidate review is recorded; local runtime validation, owner
-selection, and real-client acceptance remain pending.
+Updated: 2026-09-23. The owner accepted the Stage 3 policies and delegated
+selection of general-adventuring plans for every supported class. Progression,
+manual training, and automatic training for 33 validated plans are implemented.
+Six classes remain manual-only; real-client gameplay acceptance is pending.
 
 ## Relevant findings
 
@@ -15,13 +15,15 @@ selection, and real-client acceptance remain pending.
 - Temporary `/spawn` helpers keep their prior damage, XP, realm-point, loot, and
   session-only behavior. Persistent autonomous bots keep their separate
   `BOT_XP_RATE` progression.
-- Existing `BotSpec` profiles are not validated companion leveling plans.
-  The class-by-class review records 34 static endgame career/rank and budget
-  passes, three forum candidates needing role or ranked-skill validation, and
-  two classes without numeric templates. Partial routes and their budget,
-  respec, and autotrain gaps are documented in the build research. No clean
-  local runtime database is available in this checkout, so runtime validation
-  remains blocked for all 39 classes.
+- Existing `BotSpec` profiles are not companion leveling plans. The 33 enabled
+  schedules are project recommendations derived from selected endgame targets,
+  not historical level-by-level templates. Six unsupported classes remain
+  manual-only for explicit research or combat-profile blockers.
+- A consistent read of the local acceptance installation's skill data produced
+  a disposable fixture outside Git with the required career, specialization,
+  ability, spell, and style rows plus synthetic character and inventory records.
+  All enabled plan targets matched runtime class careers; 90 targets had ranked
+  skill data and 15 were career-only lines. The fixture is not committed.
 
 ## Accepted behavior
 
@@ -46,18 +48,20 @@ selection, and real-client acceptance remain pending.
 
 ### Automatic and manual training
 
-- New recruits use manual mode unless their class has a validated automatic
-  plan. Static recommendations are recorded for review, but none has passed the
-  complete research and runtime-database bar or been selected for use, so all
-  current recruits start in manual mode.
+- Existing companions remain in manual mode. New recruits start automatic only
+  for a class whose versioned plan passes runtime validation and whose runtime
+  specialization multiplier matches; unsupported classes start manual.
 - Manual mode keeps earned specialization points unspent until the owner trains
   a career line. `/companions train <name> <line> <level>` uses the companion's
   class careers, standard point costs, level limit, and skill refresh path. A
   compatible class trainer is required unless `ALLOW_TRAIN_ANYWHERE` applies.
-- `/companions mode <name> automatic` remains unavailable until a plan passes
-  career, point-budget, milestone, and runtime-skill checks and the owner selects
-  it for use. `/companions plan <name>` reports the current gate. Do not use
-  existing `BotSpec` profiles as automatic plans without that validation.
+- `/companions mode <name> automatic` uses the same service as the menu. It
+  checks current runtime data, saved allocations, and available points. If an
+  allocation is above schedule or points are insufficient, it preserves the
+  current mode/build and directs the owner to the existing explicit respec
+  flow. Switching back to manual preserves allocations. `/companions plan`
+  reports role, level-50 targets, validation status, and saved-plan mismatches.
+  Do not use existing `BotSpec` profiles as automatic plans.
 - `/companions respec <name>` resets only that active companion's
   specializations. It uses the owner's standard full-skill respec eligibility,
   respects `FREE_RESPEC`, and requires a trainer for the companion's class. The
@@ -72,16 +76,18 @@ selection, and real-client acceptance remain pending.
 - Preserve existing owner XP and loot behavior. Realm-point, realm-rank, and
   realm-ability progression remain disabled for player companions.
 
-## Remaining Stage 3 work
+## Offline validation and remaining acceptance
 
-The review record covers all 39 classes. Thirty-four endgame candidates pass
-static career/rank and no-autotrain level-50 budget checks. Three dated forum
-candidates still need role or ranked-skill validation, and Animist and Wizard
-lack numeric endgame templates. The build research records partial leveling
-routes, point-budget failures, and respec/autotrain constraints.
+The focused offline suite simulates every enabled plan at every level from 1 to
+50, checking point budgets, monotonic allocations, no overlevel ranks, and all
+level-50 targets. Runtime fixture checks cover the actual career and ranked
+ability/spell/style tables. Automatic mode metadata is additive and separate
+from the serialized build profile; missing or changed plan IDs do not rewrite
+allocations.
 
-No clean local runtime database is available in this checkout, so local career,
-skill, and plan checks remain blocked for all 39 classes. Automatic training
-stays unavailable until the owner selects a plan after review and it passes the
-runtime checks. The separate real-client XP and manual-training acceptance
-gate remains pending.
+Animist and Wizard lack numeric endgame targets. Blademaster, Hero, and Warrior
+need source-backed role or ranked-skill review. Necromancer's available numeric
+candidate relies on the unsupported Death Servant companion combat profile.
+These six classes remain manual-only. Real-client XP pacing, trainer behavior,
+automatic training, multi-level gains, and restart persistence remain owner-run
+acceptance checks.

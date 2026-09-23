@@ -70,10 +70,10 @@ public static class AutonomousBotRealmPointRewards
         return Math.Max(1, (int)(realmPoints * ChallengeMultiplier(victimLevel, awarderLevel)));
     }
 
-    public static void Award(GameBot killedBot, GameObject killer)
+    public static bool Award(GameBot killedBot, GameObject killer)
     {
         if (!IsEligibleVictim(killedBot))
-            return;
+            return false;
 
         long now = GameLoop.GameLoopTime;
         long previousDeath = killedBot.TempProperties.GetProperty<long>(
@@ -103,7 +103,7 @@ public static class AutonomousBotRealmPointRewards
 
         double totalDamage = hostileContributors.Sum(pair => pair.Value);
         if (totalDamage <= 0)
-            return;
+            return false;
 
         if (Properties.PVP_DEATH_CON_LOSS)
             killedBot.TotalConstitutionLostAtDeath += 3;
@@ -145,7 +145,7 @@ public static class AutonomousBotRealmPointRewards
         }
 
         if (playerContributions.Count == 0 && botContributions.Count == 0)
-            return;
+            return false;
 
         GameLiving creditedKiller = ResolveRootRewardOwner(killer as GameLiving);
         // Use the same generated gear drop as human PvP victims, after the
@@ -222,6 +222,8 @@ public static class AutonomousBotRealmPointRewards
             if (experience > 0)
                 bot.GainExperience(eXPSource.Player, experience);
         }
+
+        return isWorthRealmPoints;
     }
 
     public static GameLiving ResolveRootRewardOwner(GameLiving source)

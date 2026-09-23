@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
+using DOL.AI.Brain;
 using DOL.Database;
 using DOL.GS.Commands;
 using DOL.GS.PacketHandler;
@@ -17,12 +18,469 @@ namespace DOL.GS
     {
         public const int MaximumRosterSize = 78;
         private const string InventoryOwnerPrefix = "playercompanion:";
+        internal static readonly long MaximumOwnerMoney = Money.GetMoney(999, 999, 999, 99, 99);
         private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
         private static readonly ConcurrentDictionary<string, GameBot> ActiveCompanions = new(StringComparer.OrdinalIgnoreCase);
+
+        public static string GetEquipmentItemFlags(PlayerCompanionRecord record, string itemId)
+        {
+            if (record == null || string.IsNullOrWhiteSpace(itemId))
+                return string.Empty;
+            lock (record)
+            {
+                return ParseEquipmentState(record.SerializedEquipmentState)
+                    .TryGetValue("i:" + itemId, out string flags) ? flags : string.Empty;
+            }
+        }
+
+        public static bool SetEquipmentItemFlags(PlayerCompanionRecord record, string itemId, string flags)
+        {
+            if (record == null || string.IsNullOrWhiteSpace(itemId))
+                return false;
+            lock (record)
+            {
+                Dictionary<string, string> state = ParseEquipmentState(record.SerializedEquipmentState);
+                string key = "i:" + itemId;
+                if (string.IsNullOrEmpty(flags))
+                    state.Remove(key);
+                else
+                    state[key] = flags;
+                WriteEquipmentState(record, state);
+                return true;
+            }
+        }
+
+        public static bool IsEquipmentSlotLocked(PlayerCompanionRecord record, eInventorySlot slot)
+        {
+            if (record == null)
+                return false;
+            lock (record)
+                return ParseEquipmentState(record.SerializedEquipmentState).ContainsKey("s:" + (int)slot);
+        }
+
+        public static bool SetEquipmentSlotLocked(PlayerCompanionRecord record, eInventorySlot slot, bool locked)
+        {
+            if (record == null)
+                return false;
+            lock (record)
+            {
+                Dictionary<string, string> state = ParseEquipmentState(record.SerializedEquipmentState);
+                string key = "s:" + (int)slot;
+                if (locked)
+                    state[key] = "L";
+                else
+                    state.Remove(key);
+                WriteEquipmentState(record, state);
+                return true;
+            }
+        }
+
+        public static bool TryApplyEquipmentMutation(GameBot companion, Func<bool> mutation, out string error,
+            int requiredFreeBackpackSlots = 0, string excludeItemId = null)
+        {
+            error = "The equipment change could not be saved.";
+            if (!CanManageInventory(companion) || companion.Inventory is not BotInventory inventory || mutation == null ||
+                companion.Owner?.DBCharacter == null ||
+                GameServer.Database is not SqlObjectDatabase database)
+            {
+                error = "Inventory changes require an active, nearby companion while both of you are out of combat.";
+                return false;
+            }
+
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            GamePlayer owner = companion.Owner;
+            long saleCopper = 0;
+            long creditedMoney = owner.GetCurrentMoney();
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+            lock (inventory.Lock)
+            {
+                if (!CanManageInventory(companion))
+                {
+                    error = "The companion moved or combat started before the equipment change.";
+                    return false;
+                }
+
+                var originalItems = inventory.AllItems.Select(item =>
+                    (Item: item, Slot: item.SlotPosition, OwnerId: item.OwnerID)).ToArray();
+                string originalEquipmentState = record.SerializedEquipmentState;
+                string originalUpdatedUtc = record.UpdatedUtc;
+                int previousCopper = owner.DBCharacter.Copper;
+                int previousSilver = owner.DBCharacter.Silver;
+                int previousGold = owner.DBCharacter.Gold;
+                int previousPlatinum = owner.DBCharacter.Platinum;
+                int previousMithril = owner.DBCharacter.Mithril;
+                var soldItems = new List<DbInventoryItem>();
+
+                while (CountEmptyBackpackSlots(inventory) < requiredFreeBackpackSlots)
+                {
+                    DbInventoryItem candidate = PlayerCompanionGearRewards.FindSurplusForSpace(
+                        companion, inventory, out long candidateCopper, excludeItemId);
+                    if (candidate == null || !candidate.IsPersisted || candidateCopper <= 0 ||
+                        creditedMoney > MaximumOwnerMoney - candidateCopper ||
+                        !inventory.RemoveItemWithoutDbDeletion(candidate))
+                    {
+                        RestoreInventory(inventory, originalItems);
+                        record.SerializedEquipmentState = originalEquipmentState;
+                        record.UpdatedUtc = originalUpdatedUtc;
+                        record.Dirty = true;
+                        error = "The backpack needs space, but no sellable companion-earned item can safely make it.";
+                        return false;
+                    }
+
+                    soldItems.Add(candidate);
+                    saleCopper += candidateCopper;
+                    creditedMoney += candidateCopper;
+                    SetEquipmentItemFlags(record, candidate.ObjectId, string.Empty);
+                }
+
+                bool changed;
+                try
+                {
+                    changed = mutation();
+                }
+                catch
+                {
+                    changed = false;
+                }
+
+                if (!changed)
+                {
+                    RestoreInventory(inventory, originalItems);
+                    record.SerializedEquipmentState = originalEquipmentState;
+                    record.UpdatedUtc = originalUpdatedUtc;
+                    record.Dirty = true;
+                    if (saleCopper > 0)
+                        RestoreOwnerCoins(owner, previousCopper, previousSilver, previousGold, previousPlatinum, previousMithril);
+                    return false;
+                }
+
+                DbInventoryItem[] movedItems = inventory.AllItems.Where(item =>
+                        originalItems.Any(original => ReferenceEquals(original.Item, item) &&
+                            (original.Slot != item.SlotPosition || !string.Equals(original.OwnerId, item.OwnerID, StringComparison.Ordinal))))
+                    .ToArray();
+                if (movedItems.Any(item => !item.IsPersisted))
+                {
+                    RestoreInventory(inventory, originalItems);
+                    record.SerializedEquipmentState = originalEquipmentState;
+                    record.UpdatedUtc = originalUpdatedUtc;
+                    record.Dirty = true;
+                    if (saleCopper > 0)
+                        RestoreOwnerCoins(owner, previousCopper, previousSilver, previousGold, previousPlatinum, previousMithril);
+                    error = "The equipment change includes an unsaved item; try again after its save completes.";
+                    return false;
+                }
+
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                if (saleCopper > 0)
+                {
+                    owner.DBCharacter.Copper = Money.GetCopper(creditedMoney);
+                    owner.DBCharacter.Silver = Money.GetSilver(creditedMoney);
+                    owner.DBCharacter.Gold = Money.GetGold(creditedMoney);
+                    owner.DBCharacter.Platinum = Money.GetPlatinum(creditedMoney);
+                    owner.DBCharacter.Mithril = Money.GetMithril(creditedMoney);
+                }
+
+                DataObject[] updates = new DataObject[] { record }.Concat(movedItems)
+                    .Concat(saleCopper > 0 ? [owner.DBCharacter] : []).ToArray();
+                bool saved = soldItems.Count == 0
+                    ? database.SaveObjectsAtomically(updates)
+                    : database.UpdateAndDeleteObjectsAtomically(updates, soldItems);
+                if (!saved)
+                {
+                    RestoreInventory(inventory, originalItems);
+                    record.SerializedEquipmentState = originalEquipmentState;
+                    record.UpdatedUtc = originalUpdatedUtc;
+                    record.Dirty = true;
+                    if (saleCopper > 0)
+                        RestoreOwnerCoins(owner, previousCopper, previousSilver, previousGold, previousPlatinum, previousMithril);
+                    error = "The equipment change failed its atomic save and was rolled back.";
+                    return false;
+                }
+            }
+
+            if (saleCopper > 0)
+            {
+                owner.SetCurrentMoneyAfterAtomicPersistence(creditedMoney);
+                owner.Out.SendUpdateMoney();
+                owner.Out.SendMessage($"Surplus companion gear sold for {Money.GetString(saleCopper)} to make backpack space.",
+                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            }
+            error = string.Empty;
+            return true;
+        }
+
+        private static int CountEmptyBackpackSlots(IGameInventory inventory) =>
+            Enumerable.Range((int)eInventorySlot.FirstBackpack,
+                    (int)eInventorySlot.LastBackpack - (int)eInventorySlot.FirstBackpack + 1)
+                .Count(value => inventory.GetItem((eInventorySlot)value) == null);
+
+        private static void RestoreOwnerCoins(GamePlayer owner, int copper, int silver, int gold,
+            int platinum, int mithril)
+        {
+            owner.DBCharacter.Copper = copper;
+            owner.DBCharacter.Silver = silver;
+            owner.DBCharacter.Gold = gold;
+            owner.DBCharacter.Platinum = platinum;
+            owner.DBCharacter.Mithril = mithril;
+        }
+
+        public static bool CanManageInventory(GameBot companion)
+        {
+            GamePlayer owner = companion?.Owner;
+            return companion?.IsPersistentPlayerCompanion == true &&
+                   companion.ObjectState == GameObject.eObjectState.Active &&
+                   owner?.ObjectState == GameObject.eObjectState.Active &&
+                   owner.Group != null && owner.Group == companion.Group &&
+                   owner.Group.IsInTheGroup(companion) &&
+                   owner.CurrentRegion == companion.CurrentRegion &&
+                   owner.IsWithinRadius(companion, ServerProperties.Properties.WORLD_PICKUP_DISTANCE) &&
+                   !owner.InCombat && !companion.InCombat && !companion.IsAttacking && !companion.IsCasting &&
+                   !companion.IsOnStableMasterRoute && companion.Brain is not BotBrain { HasAggro: true } &&
+                   companion.ControlledBrain?.Body is not { InCombat: true };
+        }
+
+        private static void RestoreInventory(IGameInventory inventory,
+            (DbInventoryItem Item, int Slot, string OwnerId)[] originalItems)
+        {
+            foreach (DbInventoryItem item in inventory.AllItems.ToArray())
+                inventory.RemoveItemWithoutDbDeletion(item);
+            foreach ((DbInventoryItem item, int slot, string ownerId) in originalItems)
+            {
+                item.OwnerID = ownerId;
+                item.SlotPosition = slot;
+                inventory.AddItemWithoutDbAddition((eInventorySlot)slot, item);
+            }
+        }
+
+        public static bool TryTransferItem(GamePlayer owner, string companionNameOrId, string itemId,
+            bool toCompanion, out string message)
+        {
+            message = "The item could not be transferred.";
+            if (owner == null || string.IsNullOrWhiteSpace(itemId) ||
+                !TryGetActiveCompanion(owner, companionNameOrId, out GameBot companion) ||
+                companion.Owner != owner || owner.Inventory == null || owner.DBCharacter == null ||
+                companion.Inventory is not BotInventory botInventory)
+            {
+                message = "Invite the companion first and keep them nearby to transfer gear.";
+                return false;
+            }
+
+            if (!CanManageInventory(companion))
+            {
+                message = "Gear transfers require a nearby companion while you are out of combat.";
+                return false;
+            }
+
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            IGameInventory source = toCompanion ? owner.Inventory : botInventory;
+            IGameInventory destination = toCompanion ? botInventory : owner.Inventory;
+            string expectedOwnerId = toCompanion ? owner.InternalID : InventoryOwnerId(record.CompanionId);
+            DbInventoryItem item = source.AllItems.FirstOrDefault(candidate =>
+                string.Equals(candidate?.ObjectId, itemId, StringComparison.Ordinal));
+            if (item == null || item.OwnerID != expectedOwnerId || !CanTransferItem(item, out _))
+            {
+                message = CanTransferItem(item, out string blocker)
+                    ? "That item is not owned by the expected backpack."
+                    : $"That item cannot be transferred: {blocker}.";
+                return false;
+            }
+
+            if (!toCompanion && !CanReturnItemToOwner(item, record, out string returnBlocker))
+            {
+                message = returnBlocker;
+                return false;
+            }
+
+            if (!item.IsPersisted)
+            {
+                message = "Save this item to your inventory before transferring it.";
+                return false;
+            }
+
+            eInventorySlot destinationSlot = destination.FindFirstEmptySlot(
+                eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+            long saleProceeds = 0;
+            if (destinationSlot == eInventorySlot.Invalid && !toCompanion)
+            {
+                message = "The destination backpack is full.";
+                return false;
+            }
+
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+            lock (owner.Inventory.Lock)
+            lock (botInventory.Lock)
+            {
+                if (!CanManageInventory(companion) || companion.Owner != owner ||
+                    !source.AllItems.Contains(item) || item.OwnerID != expectedOwnerId ||
+                    !CanTransferItem(item, out _))
+                {
+                    message = CanTransferItem(item, out string blocker)
+                        ? "The item or companion changed before the transfer could finish. Check ownership, range, and combat state."
+                        : $"The item became ineligible for transfer: {blocker}.";
+                    return false;
+                }
+
+                if (!toCompanion && !CanReturnItemToOwner(item, record, out returnBlocker))
+                {
+                    message = returnBlocker;
+                    return false;
+                }
+
+                destinationSlot = destination.FindFirstEmptySlot(
+                    eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+                DbInventoryItem soldItem = null;
+                long soldCopper = 0;
+                if (destinationSlot == eInventorySlot.Invalid && toCompanion)
+                {
+                    soldItem = PlayerCompanionGearRewards.FindSurplusForSpace(
+                        companion, botInventory, out soldCopper);
+                    if (soldItem == null || !soldItem.IsPersisted || owner.DBCharacter == null ||
+                        soldCopper <= 0 || owner.GetCurrentMoney() > MaximumOwnerMoney - soldCopper)
+                    {
+                        message = "The companion backpack is full and has no sellable earned gear. Keep or protected items were left untouched.";
+                        return false;
+                    }
+                    destinationSlot = (eInventorySlot)soldItem.SlotPosition;
+                }
+                if (destinationSlot == eInventorySlot.Invalid)
+                {
+                    message = "The destination backpack is full.";
+                    return false;
+                }
+
+                var ownerItems = owner.Inventory.AllItems.Select(existing =>
+                    (Item: existing, Slot: existing.SlotPosition, OwnerId: existing.OwnerID)).ToArray();
+                var companionItems = botInventory.AllItems.Select(existing =>
+                    (Item: existing, Slot: existing.SlotPosition, OwnerId: existing.OwnerID)).ToArray();
+                string previousEquipmentState = record.SerializedEquipmentState;
+                string previousUpdatedUtc = record.UpdatedUtc;
+                int previousCopper = owner.DBCharacter.Copper;
+                int previousSilver = owner.DBCharacter.Silver;
+                int previousGold = owner.DBCharacter.Gold;
+                int previousPlatinum = owner.DBCharacter.Platinum;
+                int previousMithril = owner.DBCharacter.Mithril;
+
+                bool removedSaleItem = soldItem == null || botInventory.RemoveItemWithoutDbDeletion(soldItem);
+                if (!removedSaleItem || !source.RemoveItemWithoutDbDeletion(item) ||
+                    !destination.AddItemWithoutDbAddition(destinationSlot, item))
+                {
+                    RestoreInventory(owner.Inventory, ownerItems);
+                    RestoreInventory(botInventory, companionItems);
+                    if (soldItem != null)
+                        RestoreOwnerCoins(owner, previousCopper, previousSilver, previousGold, previousPlatinum, previousMithril);
+                    message = "The inventories changed before the transfer could finish. Try again.";
+                    return false;
+                }
+
+                item.OwnerID = toCompanion ? InventoryOwnerId(record.CompanionId) : owner.InternalID;
+                item.SlotPosition = (int)destinationSlot;
+                if (toCompanion)
+                    SetEquipmentItemFlags(record, item.ObjectId, "P");
+                else
+                    SetEquipmentItemFlags(record, item.ObjectId, string.Empty);
+                if (soldItem != null)
+                    SetEquipmentItemFlags(record, soldItem.ObjectId, string.Empty);
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+
+                long creditedMoney = 0;
+                if (soldItem != null)
+                {
+                    saleProceeds = soldCopper;
+                    creditedMoney = owner.GetCurrentMoney() + soldCopper;
+                    owner.DBCharacter.Copper = Money.GetCopper(creditedMoney);
+                    owner.DBCharacter.Silver = Money.GetSilver(creditedMoney);
+                    owner.DBCharacter.Gold = Money.GetGold(creditedMoney);
+                    owner.DBCharacter.Platinum = Money.GetPlatinum(creditedMoney);
+                    owner.DBCharacter.Mithril = Money.GetMithril(creditedMoney);
+                }
+
+                DataObject[] updates = soldItem == null
+                    ? [item, record]
+                    : [item, record, owner.DBCharacter];
+                bool saved = GameServer.Database is SqlObjectDatabase database &&
+                    (soldItem == null
+                        ? database.SaveObjectsAtomically(updates)
+                        : database.UpdateAndDeleteObjectsAtomically(updates, [soldItem]));
+                if (!saved)
+                {
+                    RestoreInventory(owner.Inventory, ownerItems);
+                    RestoreInventory(botInventory, companionItems);
+                    record.SerializedEquipmentState = previousEquipmentState;
+                    record.UpdatedUtc = previousUpdatedUtc;
+                    record.Dirty = true;
+                    if (soldItem != null)
+                        RestoreOwnerCoins(owner, previousCopper, previousSilver, previousGold, previousPlatinum, previousMithril);
+                    message = "The transfer could not be saved atomically. The item was returned to its original backpack.";
+                    return false;
+                }
+
+                if (soldItem != null)
+                    owner.SetCurrentMoneyAfterAtomicPersistence(creditedMoney);
+            }
+
+            companion.RefreshItemBonuses();
+            if (saleProceeds > 0)
+                owner.Out.SendUpdateMoney();
+            message = toCompanion
+                ? saleProceeds > 0
+                    ? $"Transferred {item.Name} to {companion.Name}; surplus gear sold for {Money.GetString(saleProceeds)}. The transferred item is protected as player-supplied gear."
+                    : $"Transferred {item.Name} to {companion.Name}. It is protected as player-supplied gear."
+                : $"Returned {item.Name} from {companion.Name} to your backpack.";
+            return true;
+        }
+
+        private static Dictionary<string, string> ParseEquipmentState(string serialized)
+        {
+            var state = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (string entry in (serialized ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                int separator = entry.IndexOf('=');
+                if (separator > 0 && separator < entry.Length - 1)
+                    state[entry[..separator]] = entry[(separator + 1)..];
+            }
+            return state;
+        }
+
+        private static void WriteEquipmentState(PlayerCompanionRecord record, Dictionary<string, string> state)
+        {
+            record.SerializedEquipmentState = string.Join(';', state.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => pair.Key + "=" + pair.Value));
+            record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+            record.Dirty = true;
+        }
 
         public static string InventoryOwnerId(string companionId)
         {
             return InventoryOwnerPrefix + companionId;
+        }
+
+        public static bool CanTransferItem(DbInventoryItem item, out string blocker)
+        {
+            if (item == null)
+                blocker = "the item reference is no longer valid";
+            else if (item.SlotPosition is < (int)eInventorySlot.FirstBackpack or > (int)eInventorySlot.LastBackpack)
+                blocker = "only unequipped backpack items can be transferred";
+            else if (!item.IsPersisted)
+                blocker = "the item must finish saving before it can be transferred";
+            else if (item.OwnerLot != 0 || !item.IsDropable || !item.IsTradable || item is GameInventoryRelic ||
+                     BotSiegeRuntime.IsSupply(item.Id_nb))
+                blocker = "special, quest, relic, siege, or otherwise restricted items cannot use this transfer path";
+            else
+                blocker = string.Empty;
+            return blocker.Length == 0;
+        }
+
+        public static bool CanReturnItemToOwner(DbInventoryItem item, PlayerCompanionRecord record, out string blocker)
+        {
+            if (!CanTransferItem(item, out blocker))
+                return false;
+            string flags = GetEquipmentItemFlags(record, item.ObjectId);
+            if (flags.Contains('S'))
+                blocker = "recruitment starter gear stays with its original companion";
+            else if (!flags.Contains('E') && !flags.Contains('P'))
+                blocker = "legacy ownership is unknown, so this item is protected from outward transfer";
+            return blocker.Length == 0;
         }
 
         public static List<PlayerCompanionRecord> GetRoster(GamePlayer owner)
@@ -100,9 +558,140 @@ namespace DOL.GS
                 if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) && active?.Owner == owner)
                     record = active.PlayerCompanionRecord;
 
-                message = $"{record.Name} is in manual training mode. Earned specialization points stay unspent until you train them.";
-                return true;
+                if (record.TrainingMode == "manual")
+                {
+                    message = $"{record.Name} is already in manual training mode. Earned specialization points stay unspent until you train them.";
+                    return true;
+                }
+
+                string previousMode = record.TrainingMode;
+                string previousPlan = record.TrainingPlanId;
+                record.TrainingMode = "manual";
+                record.TrainingPlanId = string.Empty;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                bool saved = SaveRecord(record);
+                if (!saved)
+                {
+                    record.TrainingMode = previousMode;
+                    record.TrainingPlanId = previousPlan;
+                    record.Dirty = true;
+                }
+                message = saved
+                    ? $"{record.Name} is in manual training mode. Existing specialization allocations were preserved."
+                    : $"{record.Name}'s training mode could not be saved. No mode change was applied.";
+                return saved;
             }
+        }
+
+        public static string AutomaticTrainingBlocker(eCharacterClass characterClass) =>
+            CompanionBuildPlanCatalog.GetBlocker(characterClass);
+
+        public static bool TrySetAutomaticTrainingMode(GamePlayer owner, string nameOrId, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                {
+                    message = "That companion name or ID is not in your roster.";
+                    return false;
+                }
+
+                eCharacterClass characterClass = (eCharacterClass)record.ClassId;
+                if (!CompanionBuildPlanCatalog.TryGetPlan(characterClass, out CompanionBuildPlan plan))
+                {
+                    message = $"Automatic training is unavailable for {record.Name}: {AutomaticTrainingBlocker(characterClass)}";
+                    return false;
+                }
+
+                ICharacterClass runtimeClass = ScriptMgr.FindCharacterClass(record.ClassId);
+                if (runtimeClass == null || runtimeClass.SpecPointsMultiplier != plan.ExpectedSpecPointsMultiplier)
+                {
+                    message = $"Automatic training is unavailable for {record.Name}: runtime class multiplier does not match the validated {plan.ExpectedSpecPointsMultiplier}-point plan.";
+                    return false;
+                }
+                if (!CompanionBuildPlanCatalog.TryValidateRuntimePlan(characterClass, plan, out string runtimeBlocker))
+                {
+                    message = $"Automatic training is unavailable for {record.Name}: {runtimeBlocker}.";
+                    return false;
+                }
+
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) && active?.Owner == owner)
+                {
+                    return active.TryEnableAutomaticCompanionPlan(plan, out message);
+                }
+
+                string previousMode = record.TrainingMode;
+                string previousPlan = record.TrainingPlanId;
+                string previousSpecs = record.SerializedSpecs;
+                int previousUnspent = record.UnspentSpecPoints;
+                var currentSpecs = ParseSerializedCompanionSpecs(record.SerializedSpecs);
+                IReadOnlyDictionary<string, int> targets = plan.GetTargetsAtLevel(record.Level,
+                    plan.ExpectedSpecPointsMultiplier);
+                foreach (KeyValuePair<string, int> current in currentSpecs)
+                {
+                    int target = targets.TryGetValue(current.Key, out int planned) ? planned : 1;
+                    if (current.Value > target)
+                    {
+                        message = $"{record.Name}'s {current.Key} {current.Value} allocation is above the validated level-{record.Level} schedule ({target}). Keep manual mode or use the explicit respec flow before switching.";
+                        return false;
+                    }
+                }
+
+                int pointsNeeded = 0;
+                foreach (CompanionBuildRank rank in plan.TargetAllocations)
+                {
+                    int current = currentSpecs.TryGetValue(rank.Specialization, out int value) ? value : 1;
+                    pointsNeeded += CompanionBuildPlan.CostToReach(current, targets[rank.Specialization]);
+                }
+                if (pointsNeeded > record.UnspentSpecPoints)
+                {
+                    message = $"{record.Name}'s current build needs {pointsNeeded} more points to reach the validated schedule, but only {record.UnspentSpecPoints} are available. Keep manual mode or use the explicit respec flow.";
+                    return false;
+                }
+
+                foreach (CompanionBuildRank rank in plan.TargetAllocations)
+                    currentSpecs[rank.Specialization] = targets[rank.Specialization];
+                record.SerializedSpecs = string.Join(';', currentSpecs.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(pair => $"{pair.Key}|{pair.Value}"));
+                record.UnspentSpecPoints -= pointsNeeded;
+                record.TrainingMode = "automatic";
+                record.TrainingPlanId = plan.Id;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                bool saved = SaveRecord(record);
+                if (!saved)
+                {
+                    record.TrainingMode = previousMode;
+                    record.TrainingPlanId = previousPlan;
+                    record.SerializedSpecs = previousSpecs;
+                    record.UnspentSpecPoints = previousUnspent;
+                    record.Dirty = true;
+                }
+                message = saved
+                    ? $"{record.Name} is following {plan.Id} ({plan.Role}); spent {pointsNeeded} points, {record.UnspentSpecPoints} remain."
+                    : $"{record.Name}'s training mode could not be saved; the previous mode remains active.";
+                return saved;
+            }
+        }
+
+        private static Dictionary<string, int> ParseSerializedCompanionSpecs(string serialized)
+        {
+            var specs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (string entry in (serialized ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] parts = entry.Split('|', 2);
+                if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]) && int.TryParse(parts[1], out int level))
+                    specs[parts[0]] = Math.Max(1, level);
+            }
+            return specs;
         }
 
         public static bool TryGetRoster(GamePlayer owner, out List<PlayerCompanionRecord> records)
@@ -167,6 +756,16 @@ namespace DOL.GS
                 }
 
                 string now = DateTime.UtcNow.ToString("O");
+                string trainingMode = "manual";
+                string trainingPlanId = string.Empty;
+                ICharacterClass runtimeClass = ScriptMgr.FindCharacterClass((int)characterClass);
+                if (CompanionBuildPlanCatalog.TryGetPlan(characterClass, out CompanionBuildPlan plan) &&
+                    runtimeClass?.SpecPointsMultiplier == plan.ExpectedSpecPointsMultiplier &&
+                    CompanionBuildPlanCatalog.TryValidateRuntimePlan(characterClass, plan, out _))
+                {
+                    trainingMode = "automatic";
+                    trainingPlanId = plan.Id;
+                }
                 record = new PlayerCompanionRecord
                 {
                     CompanionId = Guid.NewGuid().ToString("D"),
@@ -182,6 +781,8 @@ namespace DOL.GS
                     InventoryInitialized = false,
                     RecruitType = "generated",
                     AuthoredRecruitKey = string.Empty,
+                    TrainingMode = trainingMode,
+                    TrainingPlanId = trainingPlanId,
                     StateVersion = 1,
                     CreatedUtc = now,
                     UpdatedUtc = now,
@@ -207,7 +808,9 @@ namespace DOL.GS
                 }
             }
 
-            message = $"{record.Name}, level 1 {characterClass}, joined your roster. Invite with /companions invite {record.Name}.";
+            message = record.TrainingMode == "automatic"
+                ? $"{record.Name}, level 1 {characterClass}, joined your roster with automatic training ({record.TrainingPlanId}). Invite with /companions invite {record.Name}."
+                : $"{record.Name}, level 1 {characterClass}, joined your roster in manual training mode. Invite with /companions invite {record.Name}.";
             return true;
         }
 
@@ -433,21 +1036,20 @@ namespace DOL.GS
                 return false;
 
             bool saved;
-            lock (record)
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
             {
-                CopyProgressToRecord(companion, record);
-                record.IsActive = active;
-                record.StateVersion = 1;
-                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
-                record.Dirty = true;
-                saved = SaveRecord(record);
-            }
+                lock (record)
+                {
+                    CopyProgressToRecord(companion, record);
+                    record.IsActive = active;
+                    record.StateVersion = 1;
+                    record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                    record.Dirty = true;
+                    saved = SaveRecord(record);
+                }
 
-            if (saved && record.InventoryInitialized && companion.Inventory is BotInventory inventory)
-            {
-                string ownerId = InventoryOwnerId(record.CompanionId);
-                lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
-                    saved = inventory.SaveIntoDatabase(ownerId);
+                if (saved && record.InventoryInitialized && companion.Inventory is BotInventory inventory)
+                    saved = inventory.SaveIntoDatabase(InventoryOwnerId(record.CompanionId));
             }
 
             if (!saved)
@@ -461,6 +1063,7 @@ namespace DOL.GS
             if (record == null)
                 return false;
 
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
             lock (record)
             {
                 CopyProgressToRecord(companion, record);
@@ -592,29 +1195,89 @@ namespace DOL.GS
 
             if (companion.Inventory is BotInventory initial)
             {
-                foreach (DbInventoryItem item in initial.AllItems.ToArray())
+                DbInventoryItem[] initialItems = initial.AllItems.ToArray();
+                string previousEquipmentState = record.SerializedEquipmentState;
+                string previousUpdatedUtc = record.UpdatedUtc;
+                bool previousInitialized = record.InventoryInitialized;
+                bool movedAll = true;
+                foreach (DbInventoryItem item in initialItems)
                 {
                     eInventorySlot slot = (eInventorySlot)item.SlotPosition;
                     if (item.IUWrapper is { IsPersisted: false } definition)
                         definition.AllowAdd = true;
-                    if (!initial.RemoveItemWithoutDbDeletion(item) || !persistent.AddItem(slot, item))
-                        return false;
+                    if (!initial.RemoveItemWithoutDbDeletion(item) || !persistent.AddItemWithoutDbAddition(slot, item))
+                    {
+                        movedAll = false;
+                        break;
+                    }
+                    SetEquipmentItemFlags(record, item.ObjectId, "S");
                 }
-            }
-
-            companion.Inventory = persistent;
-            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
-            {
-                if (!persistent.SaveIntoDatabase(ownerId))
+                if (!movedAll)
+                {
+                    RestoreInitialItems(initial, persistent, initialItems);
+                    record.SerializedEquipmentState = previousEquipmentState;
+                    record.UpdatedUtc = previousUpdatedUtc;
+                    record.InventoryInitialized = previousInitialized;
+                    record.Dirty = true;
                     return false;
+                }
+
+                record.InventoryInitialized = true;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                if (GameServer.Database is not SqlObjectDatabase database)
+                    return false;
+
+                DbInventoryItem[] itemsToInsert = persistent.AllItems.Where(item => !item.IsPersisted).ToArray();
+                DataObject[] definitions = itemsToInsert.Select(item => item.IUWrapper)
+                    .Where(definition => definition != null && !definition.IsPersisted)
+                    .Distinct<DbItemUnique>(ReferenceEqualityComparer.Instance)
+                    .Cast<DataObject>().ToArray();
+                DataObject[] inserts = definitions.Concat(itemsToInsert).ToArray();
+                DataObject[] updates = persistent.AllItems.Where(item => item.IsPersisted)
+                    .Cast<DataObject>().Concat(record.IsPersisted ? [record] : []).ToArray();
+                if (!record.IsPersisted)
+                    inserts = inserts.Append(record).ToArray();
+
+                bool saved;
+                lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                lock (persistent.Lock)
+                {
+                    saved = inserts.Length == 0
+                        ? database.SaveObjectsAtomically(updates)
+                        : database.InsertUpdateAndDeleteObjectsAtomically(inserts, updates, []);
+                }
+                if (!saved)
+                {
+                    RestoreInitialItems(initial, persistent, initialItems);
+                    record.SerializedEquipmentState = previousEquipmentState;
+                    record.UpdatedUtc = previousUpdatedUtc;
+                    record.InventoryInitialized = previousInitialized;
+                    record.Dirty = true;
+                    companion.Inventory = initial;
+                    return false;
+                }
+
+                companion.Inventory = persistent;
+                companion.RefreshItemBonuses();
+                return true;
             }
 
-            record.InventoryInitialized = true;
-            record.Dirty = true;
-            bool saved = SaveRecord(record);
-            if (saved)
-                companion.RefreshItemBonuses();
-            return saved;
+            return false;
+        }
+
+        private static void RestoreInitialItems(BotInventory initial, BotInventory persistent,
+            DbInventoryItem[] originalItems)
+        {
+            foreach (DbInventoryItem item in persistent.AllItems.ToArray())
+                persistent.RemoveItemWithoutDbDeletion(item);
+            foreach (DbInventoryItem item in initial.AllItems.ToArray())
+                initial.RemoveItemWithoutDbDeletion(item);
+            foreach (DbInventoryItem item in originalItems)
+            {
+                item.OwnerID = null;
+                initial.AddItem((eInventorySlot)item.SlotPosition, item);
+            }
         }
 
         private static bool SaveRecord(PlayerCompanionRecord record)

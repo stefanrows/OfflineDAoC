@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Concurrent;
+using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using DOL.Database;
 using DOL.Database.Handlers;
+using DOL.GS;
 using NUnit.Framework;
 
 namespace DOL.UnitTests
@@ -34,6 +36,143 @@ namespace DOL.UnitTests
             finally
             {
                 DeleteTemporaryFile(path);
+            }
+        }
+
+        [Test]
+        public void AtomicUpdateAndDelete_CommitsBothAndMissingDeleteRollsBackUpdate()
+        {
+            string path = TemporaryPath();
+            try
+            {
+                SqliteObjectDatabase database = Open(path);
+                var (permission, proceeds) = Seed(database);
+                permission.Command = "sold";
+                Assert.That(database.UpdateAndDeleteObjectsAtomically([permission], [proceeds]), Is.True);
+                Assert.That(permission.Dirty, Is.False);
+                Assert.That(proceeds.IsPersisted, Is.False);
+
+                SqliteObjectDatabase fresh = Open(path);
+                Assert.That(fresh.SelectAllObjects<DbSinglePermission>().Single().Command, Is.EqualTo("sold"));
+                Assert.That(fresh.SelectAllObjects<DbCoreCharacterXCustomParam>(), Is.Empty);
+
+                var (rollbackPermission, missingDelete) = Seed(fresh);
+                rollbackPermission.Command = "must-roll-back";
+                Assert.That(fresh.DeleteObject(missingDelete), Is.True);
+                Assert.That(fresh.UpdateAndDeleteObjectsAtomically([rollbackPermission], [missingDelete]), Is.False);
+                Assert.That(rollbackPermission.Dirty, Is.True);
+                SqliteObjectDatabase afterRollback = Open(path);
+                DbSinglePermission[] remaining = afterRollback.SelectAllObjects<DbSinglePermission>().ToArray();
+                Assert.That(remaining.Select(row => row.Command), Does.Contain("sold"));
+                Assert.That(remaining.Select(row => row.Command), Does.Not.Contain("must-roll-back"));
+            }
+            finally
+            {
+                DeleteTemporaryFile(path);
+                DeleteTemporaryFile(path + "-wal");
+                DeleteTemporaryFile(path + "-shm");
+            }
+        }
+
+        [Test]
+        public void AtomicInsertUpdateDelete_AlsoRollsBackInsertsWhenAnExistingRowDisappears()
+        {
+            string path = TemporaryPath();
+            try
+            {
+                SqliteObjectDatabase database = Open(path);
+                var (remove, proceeds) = Seed(database);
+                var insert = new DbSinglePermission { PlayerID = "atomic-new", Command = "earned" };
+                proceeds.Value = "credited";
+                Assert.That(database.InsertUpdateAndDeleteObjectsAtomically([insert], [proceeds], [remove]), Is.True);
+                Assert.That(insert.IsPersisted, Is.True);
+                Assert.That(remove.IsDeleted, Is.True);
+
+                SqliteObjectDatabase fresh = Open(path);
+                Assert.That(fresh.SelectAllObjects<DbSinglePermission>().Single().Command, Is.EqualTo("earned"));
+                Assert.That(fresh.SelectAllObjects<DbCoreCharacterXCustomParam>().Single().Value, Is.EqualTo("credited"));
+
+                DbSinglePermission staleDelete = fresh.SelectAllObjects<DbSinglePermission>().Single();
+                SqliteObjectDatabase deleter = Open(path);
+                Assert.That(deleter.DeleteObject(deleter.SelectAllObjects<DbSinglePermission>().Single()), Is.True);
+                proceeds = fresh.SelectAllObjects<DbCoreCharacterXCustomParam>().Single();
+                proceeds.Value = "must-roll-back";
+                var rollbackInsert = new DbSinglePermission { PlayerID = "must-not-appear", Command = "rollback" };
+
+                Assert.That(fresh.InsertUpdateAndDeleteObjectsAtomically([rollbackInsert], [proceeds], [staleDelete]), Is.False);
+                Assert.That(rollbackInsert.IsPersisted, Is.False);
+                Assert.That(proceeds.Dirty, Is.True);
+                SqliteObjectDatabase afterRollback = Open(path);
+                Assert.That(afterRollback.SelectAllObjects<DbSinglePermission>(), Is.Empty);
+                Assert.That(afterRollback.SelectAllObjects<DbCoreCharacterXCustomParam>().Single().Value, Is.EqualTo("credited"));
+            }
+            finally
+            {
+                DeleteTemporaryFile(path);
+                DeleteTemporaryFile(path + "-wal");
+                DeleteTemporaryFile(path + "-shm");
+            }
+        }
+
+        [Test]
+        public void LegacyCompanionSchema_AddsTrainingAndEquipmentMetadataWithManualDefaults()
+        {
+            string path = TemporaryPath();
+            try
+            {
+                using (var connection = new SQLiteConnection($"Data Source={path};Version=3;Pooling=False;"))
+                {
+                    connection.Open();
+                    using SQLiteCommand command = connection.CreateCommand();
+                    command.CommandText = """
+                        CREATE TABLE `player_companions` (
+                            `CompanionId` VARCHAR(36) NOT NULL PRIMARY KEY,
+                            `OwnerCharacterId` VARCHAR(255) NOT NULL,
+                            `Name` VARCHAR(64) NOT NULL,
+                            `Realm` INT(11) NOT NULL,
+                            `ClassId` INT(11) NOT NULL,
+                            `RaceId` INT(11) NOT NULL,
+                            `GenderId` INT(11) NOT NULL,
+                            `Level` INT(11) NOT NULL,
+                            `Experience` BIGINT(20) NOT NULL,
+                            `SerializedSpecs` TEXT NOT NULL,
+                            `SerializedBuildPlan` TEXT NOT NULL,
+                            `UnspentSpecPoints` INT(11) NOT NULL,
+                            `LastTrainedLevel` INT(11) NOT NULL,
+                            `IsActive` TINYINT(1) NOT NULL,
+                            `InventoryInitialized` TINYINT(1) NOT NULL,
+                            `RecruitType` VARCHAR(16) NOT NULL,
+                            `AuthoredRecruitKey` VARCHAR(128) NOT NULL,
+                            `StateVersion` INT(11) NOT NULL,
+                            `CreatedUtc` VARCHAR(32) NOT NULL,
+                            `UpdatedUtc` VARCHAR(32) NOT NULL
+                        );
+                        INSERT INTO `player_companions` VALUES
+                            ('legacy-companion', 'owner-character', 'Old Companion', 1, 1, 1, 0, 12, 12345,
+                             'Slash|8', 'legacy-build', 7, 12, 0, 1, 'generated', '', 1, 'created', 'updated');
+                        """;
+                    command.ExecuteNonQuery();
+                }
+
+                var database = new SqliteObjectDatabase($"Data Source={path};Version=3;Pooling=False;");
+                database.RegisterDataObject(typeof(PlayerCompanionRecord));
+                PlayerCompanionRecord record = database.SelectObjects<PlayerCompanionRecord>(
+                    DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo("legacy-companion")).Single();
+
+                Assert.That(record.Level, Is.EqualTo(12));
+                Assert.That(record.Experience, Is.EqualTo(12345));
+                Assert.That(record.SerializedSpecs, Is.EqualTo("Slash|8"));
+                Assert.That(record.TrainingMode, Is.Empty,
+                    "The new non-null string column migrates to an empty value, which is the manual-mode default.");
+                Assert.That(record.TrainingPlanId, Is.Empty);
+                Assert.That(record.SerializedEquipmentState, Is.Empty,
+                    "Older inventory has no ownership provenance and therefore remains protected.");
+            }
+            finally
+            {
+                DeleteTemporaryFile(path);
+                DeleteTemporaryFile(path + "-wal");
+                DeleteTemporaryFile(path + "-shm");
             }
         }
 

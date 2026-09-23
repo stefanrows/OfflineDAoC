@@ -212,6 +212,25 @@ namespace DOL.GS
             }
         }
 
+        public override bool AddItemWithoutDbAddition(eInventorySlot slot, DbInventoryItem item)
+        {
+            if (item == null)
+                return false;
+
+            lock (Lock)
+            {
+                slot = GetValidInventorySlot(slot);
+                if (slot == eInventorySlot.Invalid || m_items.ContainsKey(slot))
+                    return false;
+
+                m_items.Add(slot, item);
+                item.SlotPosition = (int)slot;
+                item.OwnerID = IsPersistent ? _persistenceOwnerId : null;
+                _itemsAwaitingDeletion.Remove(item);
+                return true;
+            }
+        }
+
         public override bool RemoveItem(DbInventoryItem item)
         {
             return RemoveItem(item, true);

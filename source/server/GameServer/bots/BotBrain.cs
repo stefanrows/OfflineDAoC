@@ -1184,11 +1184,14 @@ namespace DOL.AI.Brain
             if (BotBody?.TryApplyEndgameCompanionUpgrade() == true)
                 return;
 
+            if (BotBody?.TryApplyPendingPersistentCompanionUpgrade() == true)
+                return;
+
             WakeNearbyNaturalAggroBrains();
 
-            // Narrow failsafe for an ephemeral /spawn companion whose owner's
-            // completed portal/region transfer was not observed by its event.
-            // Persistent bots and ordinary player group members never enter it.
+            // Failsafe for an owned companion whose owner's completed
+            // portal/region transfer was not observed by its event. Ordinary
+            // player group members never enter it.
             if (TemporaryGroupStableTravel.EnsureOwnerTransferCohesion(BotBody))
                 return;
 

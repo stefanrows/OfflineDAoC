@@ -594,6 +594,19 @@ namespace DOL.Database.Handlers
                 return base.SaveObjectsAtomicallyCore(rows);
         }
 
+        protected override bool UpdateAndDeleteObjectsAtomicallyCore(DataObject[] updates, DataObject[] deletes)
+        {
+            lock (WriteSerializationLock)
+                return base.UpdateAndDeleteObjectsAtomicallyCore(updates, deletes);
+        }
+
+        protected override bool InsertUpdateAndDeleteObjectsAtomicallyCore(DataObject[] inserts,
+            DataObject[] updates, DataObject[] deletes)
+        {
+            lock (WriteSerializationLock)
+                return base.InsertUpdateAndDeleteObjectsAtomicallyCore(inserts, updates, deletes);
+        }
+
         /// <summary>
         /// Implementation of Scalar Query with Parameters for Prepared Query
         /// </summary>

@@ -114,6 +114,251 @@ namespace DOL.Database
             }
         }
 
+        /// <summary>
+        /// Commits updates and persisted-row deletions in one database
+        /// transaction. Used for inventory sales so the item removal, owner
+        /// proceeds, and provenance update cannot split across a crash.
+        /// </summary>
+        public bool UpdateAndDeleteObjectsAtomically(IEnumerable<DataObject> updates,
+            IEnumerable<DataObject> deletes)
+        {
+            DataObject[] updateRows = updates?.Distinct<DataObject>(ReferenceEqualityComparer.Instance).ToArray();
+            DataObject[] deleteRows = deletes?.Distinct<DataObject>(ReferenceEqualityComparer.Instance).ToArray();
+            if (updateRows == null || updateRows.Length == 0 || deleteRows == null || deleteRows.Length == 0 ||
+                updateRows.Any(row => row == null || !row.IsPersisted) ||
+                deleteRows.Any(row => row == null || !row.IsPersisted) ||
+                updateRows.Intersect(deleteRows, ReferenceEqualityComparer.Instance).Any())
+                return false;
+
+            return UpdateAndDeleteObjectsAtomicallyCore(updateRows, deleteRows);
+        }
+
+        protected virtual bool UpdateAndDeleteObjectsAtomicallyCore(DataObject[] updates, DataObject[] deletes)
+        {
+            DbConnection connection = null;
+            bool committed = false;
+            try
+            {
+                connection = CreateConnection(ConnectionString);
+                OpenConnection(connection);
+                using DbTransaction transaction = connection.BeginTransaction();
+
+                foreach (DataObject row in updates)
+                {
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table == null)
+                        throw new DatabaseException("Atomic update/delete: unregistered update type.");
+                    var keys = table.FieldElementBindings.Where(binding => binding.PrimaryKey != null).ToArray();
+                    var changed = row.GetDirtyBindings(table).ToArray();
+                    if (keys.Length == 0)
+                        throw new DatabaseException("Atomic update/delete: missing update key.");
+                    using DbCommand command = connection.CreateCommand();
+                    command.Transaction = transaction;
+                    string where = string.Join(" AND ", keys.Select(key => $"`{key.ColumnName}` = @{key.ColumnName}"));
+                    if (changed.Length == 0)
+                    {
+                        command.CommandText = $"SELECT COUNT(*) FROM `{table.TableName}` WHERE {where}";
+                        FillSQLParameter(keys.Select(key => new QueryParameter($"@{key.ColumnName}", key.GetValue(row), key.ValueType)), command.Parameters);
+                        if (Convert.ToInt64(command.ExecuteScalar()) != 1)
+                            throw new DatabaseException("Atomic update/delete: an update row no longer exists.");
+                        continue;
+                    }
+                    command.CommandText = $"UPDATE `{table.TableName}` SET {string.Join(", ", changed.Select(binding => $"`{binding.ColumnName}` = @{binding.ColumnName}"))} WHERE {where}";
+                    FillSQLParameter(changed.Concat(keys).Distinct().Select(binding =>
+                        new QueryParameter($"@{binding.ColumnName}", binding.GetValue(row), binding.ValueType)), command.Parameters);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new DatabaseException("Atomic update/delete: an update row could not be written.");
+                }
+
+                foreach (DataObject row in deletes)
+                {
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table == null)
+                        throw new DatabaseException("Atomic update/delete: unregistered delete type.");
+                    var keys = table.FieldElementBindings.Where(binding => binding.PrimaryKey != null).ToArray();
+                    if (keys.Length == 0)
+                        throw new DatabaseException("Atomic update/delete: missing delete key.");
+                    using DbCommand command = connection.CreateCommand();
+                    command.Transaction = transaction;
+                    string where = string.Join(" AND ", keys.Select(key => $"`{key.ColumnName}` = @{key.ColumnName}"));
+                    command.CommandText = $"DELETE FROM `{table.TableName}` WHERE {where}";
+                    FillSQLParameter(keys.Select(key => new QueryParameter($"@{key.ColumnName}", key.GetValue(row), key.ValueType)), command.Parameters);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new DatabaseException("Atomic update/delete: a delete row no longer exists.");
+                }
+
+                transaction.Commit();
+                committed = true;
+                foreach (DataObject row in updates)
+                {
+                    row.Dirty = false;
+                    row.TakeSnapshot();
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table.UsesPreCaching && table.PrimaryKey != null)
+                        table.SetPreCachedObject(table.PrimaryKey.GetValue(row), row);
+                }
+                foreach (DataObject row in deletes)
+                {
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table.UsesPreCaching && table.PrimaryKey != null)
+                        table.DeletePreCachedObject(table.PrimaryKey.GetValue(row));
+                    row.IsPersisted = false;
+                    row.IsDeleted = true;
+                    row.Dirty = false;
+                }
+                return true;
+            }
+            catch (Exception exception)
+            {
+                try { log.Error(committed ? "Atomic update/delete committed but cache refresh failed." : "Atomic update/delete failed; transaction rolled back.", exception); }
+                catch { }
+                return committed;
+            }
+            finally
+            {
+                if (connection != null)
+                    CloseConnection(connection);
+            }
+        }
+
+        /// <summary>
+        /// Commits newly inserted rows, existing-row updates, and persisted-row
+        /// deletions as one transaction. Callers provide relation rows (such as
+        /// a unique item template) before rows that reference them. Auto-increment
+        /// primary keys are deliberately rejected; the inventory rows using this
+        /// path have stable string/object identities.
+        /// </summary>
+        public bool InsertUpdateAndDeleteObjectsAtomically(IEnumerable<DataObject> inserts,
+            IEnumerable<DataObject> updates, IEnumerable<DataObject> deletes)
+        {
+            DataObject[] insertRows = inserts?.Distinct<DataObject>(ReferenceEqualityComparer.Instance).ToArray();
+            DataObject[] updateRows = updates?.Distinct<DataObject>(ReferenceEqualityComparer.Instance).ToArray() ?? [];
+            DataObject[] deleteRows = deletes?.Distinct<DataObject>(ReferenceEqualityComparer.Instance).ToArray() ?? [];
+            if (insertRows == null || insertRows.Length == 0 ||
+                insertRows.Any(row => row == null || row.IsPersisted) ||
+                updateRows.Any(row => row == null || !row.IsPersisted) ||
+                deleteRows.Any(row => row == null || !row.IsPersisted) ||
+                insertRows.Intersect(updateRows, ReferenceEqualityComparer.Instance).Any() ||
+                insertRows.Intersect(deleteRows, ReferenceEqualityComparer.Instance).Any() ||
+                updateRows.Intersect(deleteRows, ReferenceEqualityComparer.Instance).Any())
+                return false;
+
+            return InsertUpdateAndDeleteObjectsAtomicallyCore(insertRows, updateRows, deleteRows);
+        }
+
+        protected virtual bool InsertUpdateAndDeleteObjectsAtomicallyCore(DataObject[] inserts,
+            DataObject[] updates, DataObject[] deletes)
+        {
+            DbConnection connection = null;
+            bool committed = false;
+            try
+            {
+                connection = CreateConnection(ConnectionString);
+                OpenConnection(connection);
+                using DbTransaction transaction = connection.BeginTransaction();
+
+                foreach (DataObject row in inserts)
+                {
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table == null)
+                        throw new DatabaseException("Atomic insert/update/delete: unregistered insert type.");
+                    if (table.FieldElementBindings.Any(binding => binding.PrimaryKey?.AutoIncrement == true))
+                        throw new DatabaseException("Atomic insert/update/delete does not accept auto-increment rows.");
+                    if (string.IsNullOrEmpty(row.ObjectId))
+                        row.ObjectId = IdGenerator.GenerateID();
+                    var columns = table.FieldElementBindings.ToArray();
+                    if (columns.Length == 0)
+                        throw new DatabaseException("Atomic insert/update/delete: insert has no fields.");
+
+                    using DbCommand command = connection.CreateCommand();
+                    command.Transaction = transaction;
+                    command.CommandText = $"INSERT INTO `{table.TableName}` ({string.Join(", ", columns.Select(binding => $"`{binding.ColumnName}`"))}) VALUES ({string.Join(", ", columns.Select(binding => $"@{binding.ColumnName}"))})";
+                    FillSQLParameter(columns.Select(binding => new QueryParameter(
+                        $"@{binding.ColumnName}", binding.GetValue(row), binding.ValueType)), command.Parameters);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new DatabaseException("Atomic insert/update/delete: an insert row could not be written.");
+                }
+
+                foreach (DataObject row in updates)
+                {
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table == null)
+                        throw new DatabaseException("Atomic insert/update/delete: unregistered update type.");
+                    var keys = table.FieldElementBindings.Where(binding => binding.PrimaryKey != null).ToArray();
+                    var changed = row.GetDirtyBindings(table).ToArray();
+                    if (keys.Length == 0)
+                        throw new DatabaseException("Atomic insert/update/delete: missing update key.");
+                    using DbCommand command = connection.CreateCommand();
+                    command.Transaction = transaction;
+                    string where = string.Join(" AND ", keys.Select(key => $"`{key.ColumnName}` = @{key.ColumnName}"));
+                    if (changed.Length == 0)
+                    {
+                        command.CommandText = $"SELECT COUNT(*) FROM `{table.TableName}` WHERE {where}";
+                        FillSQLParameter(keys.Select(key => new QueryParameter($"@{key.ColumnName}", key.GetValue(row), key.ValueType)), command.Parameters);
+                        if (Convert.ToInt64(command.ExecuteScalar()) != 1)
+                            throw new DatabaseException("Atomic insert/update/delete: an update row no longer exists.");
+                        continue;
+                    }
+                    command.CommandText = $"UPDATE `{table.TableName}` SET {string.Join(", ", changed.Select(binding => $"`{binding.ColumnName}` = @{binding.ColumnName}"))} WHERE {where}";
+                    FillSQLParameter(changed.Concat(keys).Distinct().Select(binding => new QueryParameter(
+                        $"@{binding.ColumnName}", binding.GetValue(row), binding.ValueType)), command.Parameters);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new DatabaseException("Atomic insert/update/delete: an update row could not be written.");
+                }
+
+                foreach (DataObject row in deletes)
+                {
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table == null)
+                        throw new DatabaseException("Atomic insert/update/delete: unregistered delete type.");
+                    var keys = table.FieldElementBindings.Where(binding => binding.PrimaryKey != null).ToArray();
+                    if (keys.Length == 0)
+                        throw new DatabaseException("Atomic insert/update/delete: missing delete key.");
+                    using DbCommand command = connection.CreateCommand();
+                    command.Transaction = transaction;
+                    string where = string.Join(" AND ", keys.Select(key => $"`{key.ColumnName}` = @{key.ColumnName}"));
+                    command.CommandText = $"DELETE FROM `{table.TableName}` WHERE {where}";
+                    FillSQLParameter(keys.Select(key => new QueryParameter($"@{key.ColumnName}", key.GetValue(row), key.ValueType)), command.Parameters);
+                    if (command.ExecuteNonQuery() != 1)
+                        throw new DatabaseException("Atomic insert/update/delete: a delete row no longer exists.");
+                }
+
+                transaction.Commit();
+                committed = true;
+                foreach (DataObject row in inserts.Concat(updates))
+                {
+                    row.Dirty = false;
+                    row.IsPersisted = true;
+                    row.IsDeleted = false;
+                    row.TakeSnapshot();
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table.UsesPreCaching && table.PrimaryKey != null)
+                        table.SetPreCachedObject(table.PrimaryKey.GetValue(row), row);
+                }
+                foreach (DataObject row in deletes)
+                {
+                    DataTableHandler table = GetTableHandler(row.GetType());
+                    if (table.UsesPreCaching && table.PrimaryKey != null)
+                        table.DeletePreCachedObject(table.PrimaryKey.GetValue(row));
+                    row.IsPersisted = false;
+                    row.IsDeleted = true;
+                    row.Dirty = false;
+                }
+                return true;
+            }
+            catch (Exception exception)
+            {
+                try { log.Error(committed ? "Atomic insert/update/delete committed but cache refresh failed." : "Atomic insert/update/delete failed; transaction rolled back.", exception); }
+                catch { }
+                return committed;
+            }
+            finally
+            {
+                if (connection != null)
+                    CloseConnection(connection);
+            }
+        }
+
         #region ObjectDatabase Base Implementation for SQL
         /// <summary>
         /// Register Data Object Type if not already Registered

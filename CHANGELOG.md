@@ -12,6 +12,39 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-23
+
+### Added
+
+- Persistent automatic companion training with 33 runtime-validated, versioned
+  project-recommended builds; six unsupported classes remain manual-only.
+- Personal class-legal PvE/PvP companion gear rewards and a private clickable
+  roster, training, equipment, and inventory menu.
+
+### Changed
+
+- Companion inventory now tracks starter, earned, and player-supplied gear,
+  manual slot locks, keep flags, safe transfers, and positive-value surplus sales.
+- Equipment changes, item ownership, sale removal, and owner coin proceeds use
+  atomic database transactions. Updated companion roadmap, contract, research,
+  decision records, and command help.
+
+### Fixed
+
+- Companion rewards and automatic upgrades preserve displaced items, respect
+  manual locks and protected provenance, and roll back inventory and coin state
+  together when persistence fails.
+- Personal reward rolls no longer depend on whether the owner's XP bar advances;
+  player loot shares and autonomous-bot reward handling retain their own paths.
+- Persistent companions now follow accepted owner teleports and refresh their
+  displayed group level as soon as they level up.
+- Equipment saves use a consistent lock order. Manual equipping accepts legal
+  weaker items, and tied accessory slots keep one choice through validation.
+
+### Removed
+
+- None.
+
 ## [0.25.0] - 2026-09-23
 
 ### Added
