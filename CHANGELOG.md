@@ -12,6 +12,53 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-09-23
+
+### Added
+
+- None.
+
+### Changed
+
+- New player characters retain the class selected during character creation
+  from level 1, with starter equipment assigned for that class when configured.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The startup class rewrite. A saved `start_as_base_class` property is left in
+  the database but no longer changes newly created characters.
+
+## [0.29.0] - 2026-09-23
+
+### Added
+
+- A native external-inventory view for an active companion's backpack. Item
+  inspection and drag/drop transfers use the existing protected companion
+  ownership and atomic save path.
+- Owner-reported Companion Step 2 UI findings and real-client retest tasks in
+  the roadmap and acceptance brief.
+
+### Changed
+
+- Split the companion gear menu into short equipment and backpack pages, moved
+  slot actions to item detail, and clarified generated versus authored recruits.
+- Reopen the NPC conversation for each page and keep older visible choices
+  bound to their original actions during the menu session.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- Removed hexadecimal action tokens from visible companion menu links.
+
+### Removed
+
+- None.
+
 ## [0.28.0] - 2026-09-23
 
 ### Added

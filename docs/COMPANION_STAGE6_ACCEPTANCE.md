@@ -78,6 +78,19 @@ each item. Do not mark Stage 6 complete based on offline results alone.
 **Owner observations:** _Pending._ Add the actual result and any failure details
 beside each checked item; do not infer gameplay results from these unit tests.
 
+**Owner progress, 2026-09-23:** The owner reports Step 1 preparation complete.
+The installed version and backup location still need to be recorded here.
+Four owner screenshots of Step 2 show roster/cast/recruit pages accumulating in
+the NPC popup, raw action tokens beside clickable links, and an equipment page
+crowded with per-slot controls. The owner could no longer select an older page's
+choices after navigating. The owner prefers a native inventory-style window if
+supported by the client. These Step 2 tasks are tracked as open in the
+[companion roadmap](COMPANION_ROADMAP.md#owner-acceptance-tasks-2026-09-23).
+Retest on a build containing the menu changes; record whether page transitions
+clear the old popup, older visible choices behave safely, the companion bag
+opens as a native external inventory, item delves and drag/drop work, and
+equipment actions remain usable. Do not mark Step 2 complete before that pass.
+
 ## Backup, restore, and rollout guidance
 
 Before an owner-run session that can change saved progression, stop the server

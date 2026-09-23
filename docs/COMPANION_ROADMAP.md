@@ -287,6 +287,41 @@ resolve it then rather than hiding it in implementation.
 Stage 6 offline validation is complete. Stage 4–5 real-client acceptance and
 Stage 6 client acceptance remain pending. See the Stage 6 acceptance brief.
 
+## Owner acceptance tasks (2026-09-23)
+
+These are the owner's in-client tasks from the current acceptance pass. A code
+change or an offline build does not close a client task; mark a task complete
+only after the owner confirms the behavior in the installed build. The owner
+reports Step 1 preparation complete, but the installed version and backup
+details have not yet been recorded in the acceptance brief.
+
+- [x] **Step 1 — Prepare the test installation and save.** Owner reported this
+  complete on 2026-09-23. Record the installed version and backup location
+  before final acceptance.
+- [ ] **Step 2 — Paging and stale choices.** Opening another roster, recruit,
+  cast, or inventory page must show a clear current page. Any older choices
+  still visible in the popup must either remain safe and usable or disappear;
+  clicking one must never act on a different item or companion.
+- [ ] **Step 2 — Readable choices.** Remove the raw hexadecimal action tokens
+  seen beside every link in the owner's screenshots. Navigation and recruitment
+  labels must be understandable without internal IDs.
+- [ ] **Step 2 — Usable inventory.** The owner prefers a native inventory-style
+  window if the client supports one. Verify that the companion backpack opens
+  in the client's external-inventory window, item delves and safe drag/drop
+  transfers work, and the separate equipment, companion backpack, and owner
+  backpack menus remain short and navigable. Check equip, lock, unequip, keep,
+  and transfer actions before closing this task.
+- [ ] **Step 2 — Recruitment wording.** Explain generated and authored
+  companions in the UI. Both are persistent; authored companions are named,
+  written individuals available once per owner, while generated recruits have
+  newly created identities.
+
+The owner supplied four screenshots for Step 2. They show speech pages
+accumulating in one popup, raw choice tokens, and an equipment page filled
+with per-slot actions. The menu changes addressing these findings require a
+new build and owner retest; no Step 2 item is accepted yet. Later acceptance
+steps remain as listed in the Stage 4–6 briefs.
+
 ## Maintenance and boundaries
 
 Keep this roadmap separate from shipped-feature documentation. Update the

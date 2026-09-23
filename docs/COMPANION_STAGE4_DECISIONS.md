@@ -60,13 +60,23 @@ acceptance remains pending.
 
 Bare `/companions` opens a temporary owner-private NPC popup. It provides
 paginated roster, detail, build/training, equipment, companion backpack, and
-owner backpack pages. Choices carry a short token for the current menu
-generation and resolve to server-side companion/item IDs; every action checks
-current ownership, context, slot, capacity, and combat state. Menus close on
-expiry, logout, or region/context loss. Respec uses the existing confirmation
-dialog. The `/companions` roster, mode, plan, training, and respec commands stay
+owner backpack pages. Choices resolve to server-side companion/item IDs, and
+older visible choices retain their original action for that menu session;
+every action checks current ownership, context, slot, capacity, and combat
+state. Menus close on expiry, logout, or region/context loss. Respec uses the
+existing confirmation dialog. The `/companions` roster, mode, plan, training,
+and respec commands stay
 available as explicit fallbacks. No native client patch or simulated second
 player-inventory window is used.
+
+The owner's later client screenshots exposed raw tokens, accumulated speech
+pages, and an overloaded equipment view. The follow-up menu implementation
+uses readable choice labels, requests a fresh NPC conversation per page, and
+separates equipment from the two backpacks. The companion backpack also opens
+in the client's existing housing-vault-style external inventory window. Dragged
+items use the companion's validated atomic transfer path; this window never
+replaces the player's own inventory. Its appearance and drag behavior remain
+pending real-client retest.
 
 ## Offline implementation checks
 

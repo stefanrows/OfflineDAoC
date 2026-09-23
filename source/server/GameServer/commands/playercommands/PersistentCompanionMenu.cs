@@ -17,9 +17,8 @@ namespace DOL.GS.Commands
         private readonly GameObject _previousTarget;
         private readonly DateTime _expiresUtc = DateTime.UtcNow.AddMilliseconds(LifetimeMilliseconds);
         private readonly Dictionary<string, Action> _choices = new(StringComparer.OrdinalIgnoreCase);
+        private PersistentCompanionInventoryView _inventoryView;
         private ECSGameTimer _expiry;
-        private string _generation;
-        private int _nextToken;
         private bool _closed;
 
         private PersistentCompanionMenu(GamePlayer owner)
@@ -66,22 +65,18 @@ namespace DOL.GS.Commands
 
         public override bool WhisperReceive(GameLiving source, string text)
         {
-            string token = text?.Trim().Trim('[', ']', ' ');
-            if (token?.LastIndexOf('|') is int separator and >= 0)
-                token = token[(separator + 1)..].Trim().Trim('[', ']', ' ');
+            string choice = text?.Trim().Trim('[', ']', ' ');
             if (ReferenceEquals(source, _owner) &&
                 (_owner?.ObjectState != eObjectState.Active || _owner.CurrentRegion != CurrentRegion))
             {
                 Close(false);
                 return false;
             }
-            if (!ReferenceEquals(source, _owner) || _closed || string.IsNullOrWhiteSpace(token) ||
+            if (!ReferenceEquals(source, _owner) || _closed || string.IsNullOrWhiteSpace(choice) ||
                 _owner?.ObjectState != eObjectState.Active || _owner.CurrentRegion != CurrentRegion ||
-                !token.StartsWith(_generation + ":", StringComparison.Ordinal) ||
-                !_choices.TryGetValue(token, out Action action))
+                !_choices.TryGetValue(choice, out Action action))
                 return false;
 
-            _choices.Clear();
             action();
             if (!_closed && _owner?.ObjectState == eObjectState.Active && _owner.CurrentRegion == CurrentRegion)
             {
@@ -106,7 +101,7 @@ namespace DOL.GS.Commands
             var entries = roster.OrderBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(record => (Label: $"{record.Name}, level {record.Level} {(eCharacterClass)record.ClassId} ({(record.IsActive ? "active" : "benched")})",
                     Action: (Action)(() => ShowDetails(record.CompanionId))))
-                .Append((Label: "Recruit a companion", Action: (Action)(() => ShowRecruit(0))))
+                .Append((Label: "Recruit generated or browse authored", Action: (Action)(() => ShowRecruit(0))))
                 .Skip(page * PageSize).Take(PageSize).ToArray();
             foreach (var entry in entries)
                 lines.Add(Link(entry.Label, entry.Action));
@@ -125,7 +120,10 @@ namespace DOL.GS.Commands
                 .ThenBy(entry => entry.CharacterClass.ToString(), StringComparer.Ordinal).ToArray();
             int pageCount = Math.Max(1, (int)Math.Ceiling((double)classes.Length / PageSize));
             page = Math.Clamp(page, 0, pageCount - 1);
-            var lines = new List<string> { $"Choose a class and realm, page {page + 1}/{pageCount}:" };
+            var lines = new List<string>
+            {
+                $"Generated recruits: new identity, same saved progress and controls. Page {page + 1}/{pageCount}:"
+            };
             foreach (var entry in classes.Skip(page * PageSize).Take(PageSize))
             {
                 string label = $"{TemporaryGroupClassCatalog.RealmName(entry.Realm)} {entry.CharacterClass} ({entry.Role})";
@@ -159,7 +157,10 @@ namespace DOL.GS.Commands
             CompanionCharacterCatalog.Character[] cast = CompanionCharacterCatalog.All.ToArray();
             int pageCount = Math.Max(1, (int)Math.Ceiling((double)cast.Length / PageSize));
             page = Math.Clamp(page, 0, pageCount - 1);
-            var lines = new List<string> { $"Authored companions, page {page + 1}/{pageCount}:" };
+            var lines = new List<string>
+            {
+                $"Authored cast: named people with a story; each can be recruited once. Page {page + 1}/{pageCount}:"
+            };
             foreach (CompanionCharacterCatalog.Character entry in cast.Skip(page * PageSize).Take(PageSize))
             {
                 bool owned = roster.Any(record => record.AuthoredRecruitKey == entry.Key);
@@ -224,7 +225,7 @@ namespace DOL.GS.Commands
             {
                 $"{record.Name} — level {record.Level} {(eCharacterClass)record.ClassId}",
                 $"Training: {record.TrainingMode}; {record.UnspentSpecPoints} unspent points.",
-                Link(record.IsActive ? "Bench" : "Invite", () => RunRosterAction(companionId, record.IsActive)),
+                Link(record.IsActive ? "Bench" : "Invite", () => RunRosterAction(companionId)),
                 Link("Manual training mode", () => SetTrainingMode(companionId, automatic: false)),
                 Link("Automatic training plan", () => SetTrainingMode(companionId, automatic: true)),
                 Link("Character and tactics", () => ShowCharacter(companionId)),
@@ -233,7 +234,7 @@ namespace DOL.GS.Commands
             if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion))
             {
                 lines.Add(Link("Training and build", () => ShowTraining(companionId)));
-                lines.Add(Link("Equipment and backpack", () => ShowInventory(companionId, 0)));
+                lines.Add(Link("Gear and bags", () => ShowInventory(companionId, 0)));
                 lines.Add(Link("Respecialize", () => BeginRespec(companion)));
             }
             else
@@ -303,32 +304,68 @@ namespace DOL.GS.Commands
                 return;
             }
 
-            var equipped = inventory.EquippedItems.OrderBy(item => item.SlotPosition).ToArray();
             var backpack = inventory.AllItems.Where(item => item.SlotPosition is >= (int)eInventorySlot.FirstBackpack and <= (int)eInventorySlot.LastBackpack)
                 .OrderBy(item => item.SlotPosition).ToArray();
-            var lines = new List<string> { $"{companion.Name}: equipment and backpack ({backpack.Length}/40), page {page + 1}." };
-            foreach (DbInventoryItem item in equipped)
+            int pageCount = Math.Max(1, (int)Math.Ceiling((double)backpack.Length / PageSize));
+            page = Math.Clamp(page, 0, pageCount - 1);
+            var lines = new List<string>
             {
-                eInventorySlot slot = (eInventorySlot)item.SlotPosition;
-                bool locked = PlayerCompanionRoster.IsEquipmentSlotLocked(companion.PlayerCompanionRecord, slot);
-                string flags = PlayerCompanionRoster.GetEquipmentItemFlags(companion.PlayerCompanionRecord, item.ObjectId);
-                lines.Add(Link($"{slot}: {item.Name} (level {item.Level}; {(locked ? "locked" : "unlocked")}; {DescribeFlags(flags)})",
-                    () => ShowItem(companionId, item.ObjectId)));
-                lines.Add(Link(locked ? $"Unlock {slot}" : $"Lock {slot}", () => ToggleSlotLock(companionId, slot, !locked)));
-                lines.Add(Link($"Unequip {slot}", () => Unequip(companionId, slot)));
-            }
+                $"{companion.Name}: backpack ({backpack.Length}/40), page {page + 1}/{pageCount}.",
+                "The native bag opens too. Drag ordinary items between bags, or select one here for gear actions."
+            };
             foreach (DbInventoryItem item in backpack.Skip(page * PageSize).Take(PageSize))
             {
                 string flags = PlayerCompanionRoster.GetEquipmentItemFlags(companion.PlayerCompanionRecord, item.ObjectId);
-                lines.Add(Link($"{item.Name} (level {item.Level}; {DescribeFlags(flags)})", () => ShowItem(companionId, item.ObjectId)));
+                int slot = item.SlotPosition - (int)eInventorySlot.FirstBackpack + 1;
+                lines.Add(Link($"Slot {slot}: {item.Name} (level {item.Level}; {DescribeFlags(flags)})",
+                    () => ShowItem(companionId, item.ObjectId, page)));
             }
-            int pageCount = Math.Max(1, (int)Math.Ceiling((double)backpack.Length / PageSize));
+            if (backpack.Length == 0)
+                lines.Add("The backpack is empty.");
             if (page > 0)
                 lines.Add(Link("Previous page", () => ShowInventory(companionId, page - 1)));
             if (page + 1 < pageCount)
                 lines.Add(Link("Next page", () => ShowInventory(companionId, page + 1)));
+            lines.Add(Link("Worn equipment", () => ShowEquipment(companionId, 0)));
             lines.Add(Link("Owner backpack", () => ShowOwnerBackpack(companionId, 0)));
-            lines.Add(Link("Back", () => ShowDetails(companionId)));
+            lines.Add(Link("Companion details", () => ShowDetails(companionId)));
+            Render(string.Join('\n', lines));
+            _inventoryView = new PersistentCompanionInventoryView(_owner, companionId);
+            _inventoryView.Open();
+        }
+
+        private void ShowEquipment(string companionId, int page)
+        {
+            StartPage();
+            if (!PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) ||
+                companion.Inventory is not BotInventory inventory)
+            {
+                ShowDetails(companionId);
+                return;
+            }
+
+            DbInventoryItem[] equipped = inventory.EquippedItems.OrderBy(item => item.SlotPosition).ToArray();
+            int pageCount = Math.Max(1, (int)Math.Ceiling((double)equipped.Length / PageSize));
+            page = Math.Clamp(page, 0, pageCount - 1);
+            var lines = new List<string>
+            {
+                $"{companion.Name}: worn equipment, page {page + 1}/{pageCount}.",
+                "Select a slot to inspect, lock, or unequip its item."
+            };
+            foreach (DbInventoryItem item in equipped.Skip(page * PageSize).Take(PageSize))
+            {
+                eInventorySlot slot = (eInventorySlot)item.SlotPosition;
+                bool locked = PlayerCompanionRoster.IsEquipmentSlotLocked(companion.PlayerCompanionRecord, slot);
+                lines.Add(Link($"{slot}: {item.Name} ({(locked ? "locked" : "unlocked")})",
+                    () => ShowItem(companionId, item.ObjectId, page, fromEquipment: true)));
+            }
+            if (equipped.Length == 0)
+                lines.Add("No equipment is worn.");
+            if (page > 0)
+                lines.Add(Link("Previous page", () => ShowEquipment(companionId, page - 1)));
+            if (page + 1 < pageCount)
+                lines.Add(Link("Next page", () => ShowEquipment(companionId, page + 1)));
+            lines.Add(Link("Companion backpack", () => ShowInventory(companionId, 0)));
             Render(string.Join('\n', lines));
         }
 
@@ -348,8 +385,8 @@ namespace DOL.GS.Commands
             page = Math.Clamp(page, 0, pageCount - 1);
             var lines = new List<string> { $"Owner backpack ({items.Length}/40), page {page + 1}/{pageCount}:" };
             foreach (DbInventoryItem item in items.Skip(page * PageSize).Take(PageSize))
-                lines.Add(Link($"Inspect {item.Name} (level {item.Level})",
-                    () => ShowOwnerItem(companionId, item.ObjectId)));
+                lines.Add(Link($"Slot {item.SlotPosition - (int)eInventorySlot.FirstBackpack + 1}: {item.Name} (level {item.Level})",
+                    () => ShowOwnerItem(companionId, item.ObjectId, page)));
             if (page > 0)
                 lines.Add(Link("Previous page", () => ShowOwnerBackpack(companionId, page - 1)));
             if (page + 1 < pageCount)
@@ -358,14 +395,14 @@ namespace DOL.GS.Commands
             Render(string.Join('\n', lines));
         }
 
-        private void ShowOwnerItem(string companionId, string itemId)
+        private void ShowOwnerItem(string companionId, string itemId, int returnPage)
         {
             StartPage();
             if (!PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) ||
                 _owner.Inventory?.AllItems.FirstOrDefault(item => item.ObjectId == itemId) is not DbInventoryItem item ||
                 item.SlotPosition is < (int)eInventorySlot.FirstBackpack or > (int)eInventorySlot.LastBackpack)
             {
-                ShowOwnerBackpack(companionId, 0);
+                ShowOwnerBackpack(companionId, returnPage);
                 return;
             }
 
@@ -378,23 +415,25 @@ namespace DOL.GS.Commands
             };
             if (transferable)
                 lines.Add(Link($"Give to {companion.Name}", () => TransferItem(companionId, item.ObjectId, toCompanion: true)));
-            lines.Add(Link("Back", () => ShowOwnerBackpack(companionId, 0)));
+            lines.Add(Link("Owner backpack", () => ShowOwnerBackpack(companionId, returnPage)));
             Render(string.Join('\n', lines));
         }
 
-        private void ShowItem(string companionId, string itemId)
+        private void ShowItem(string companionId, string itemId, int returnPage = 0, bool fromEquipment = false)
         {
             StartPage();
             if (!PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) ||
                 companion.Inventory?.AllItems.FirstOrDefault(item => item.ObjectId == itemId) is not DbInventoryItem item)
             {
-                ShowInventory(companionId, 0);
+                if (fromEquipment) ShowEquipment(companionId, returnPage);
+                else ShowInventory(companionId, returnPage);
                 return;
             }
 
             string flags = PlayerCompanionRoster.GetEquipmentItemFlags(companion.PlayerCompanionRecord, item.ObjectId);
             bool inBackpack = item.SlotPosition is >= (int)eInventorySlot.FirstBackpack and <= (int)eInventorySlot.LastBackpack;
             eInventorySlot equippedSlot = (eInventorySlot)item.SlotPosition;
+            bool locked = !inBackpack && PlayerCompanionRoster.IsEquipmentSlotLocked(companion.PlayerCompanionRecord, equippedSlot);
             bool saleEligible = inBackpack && PlayerCompanionGearRewards.CanSellForSpace(companion, item);
             string transferBlocker = inBackpack ? string.Empty : "equipped items cannot be transferred";
             bool returnEligible = inBackpack && PlayerCompanionRoster.CanReturnItemToOwner(item,
@@ -408,18 +447,23 @@ namespace DOL.GS.Commands
                 DescribeStats(item),
                 $"Equipment score: {AutonomousBotEconomy.EquipmentValue(item)}. Ownership: {DescribeFlags(flags)}; {saleStatus}.",
                 returnEligible ? "Transfer: eligible to return to your backpack." : $"Transfer: protected; {transferBlocker}.",
-                inBackpack ? Link("Equip and lock its slot", () => EquipItem(companionId, itemId)) : null,
-                Link(flags.Contains('K') ? "Remove keep flag" : "Keep item", () => ToggleKeep(companionId, itemId, !flags.Contains('K'))),
+                inBackpack ? Link("Equip and lock its slot", () => EquipItem(companionId, itemId, returnPage)) : null,
+                !inBackpack ? Link(locked ? "Unlock this slot" : "Lock this slot",
+                    () => ToggleSlotLock(companionId, equippedSlot, !locked, itemId, returnPage)) : null,
+                !inBackpack ? Link("Unequip to companion backpack", () => Unequip(companionId, equippedSlot, itemId, returnPage)) : null,
+                Link(flags.Contains('K') ? "Remove keep flag" : "Keep item",
+                    () => ToggleKeep(companionId, itemId, !flags.Contains('K'), returnPage, fromEquipment)),
                 returnEligible ? Link("Return to owner backpack", () => TransferItem(companionId, itemId, toCompanion: false)) : null,
-                Link("Back", () => ShowInventory(companionId, 0)),
+                Link(fromEquipment ? "Worn equipment" : "Companion backpack",
+                    () => { if (fromEquipment) ShowEquipment(companionId, returnPage); else ShowInventory(companionId, returnPage); }),
             };
             Render(string.Join('\n', lines.Where(line => !string.IsNullOrWhiteSpace(line))));
         }
 
-        private void RunRosterAction(string companionId, bool currentlyActive)
+        private void RunRosterAction(string companionId)
         {
             string message;
-            if (currentlyActive)
+            if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out _))
                 PlayerCompanionRoster.TryBench(_owner, companionId, out message);
             else
                 PlayerCompanionRoster.TryInvite(_owner, companionId, out message);
@@ -496,7 +540,7 @@ namespace DOL.GS.Commands
                 new CustomDialogResponse(PlayerCompanionCommandHandler.CompanionRespecDialogResponse));
         }
 
-        private void EquipItem(string companionId, string itemId)
+        private void EquipItem(string companionId, string itemId, int returnPage)
         {
             if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) &&
                 companion.Inventory?.AllItems.FirstOrDefault(item => item.ObjectId == itemId) is DbInventoryItem item &&
@@ -508,21 +552,21 @@ namespace DOL.GS.Commands
             else
                 _owner.Out.SendMessage("That item is not a legal upgrade, its slot is protected, or the companion is busy.",
                     eChatType.CT_System, eChatLoc.CL_SystemWindow);
-            ShowInventory(companionId, 0);
+            ShowInventory(companionId, returnPage);
         }
 
-        private void Unequip(string companionId, eInventorySlot slot)
+        private void Unequip(string companionId, eInventorySlot slot, string expectedItemId, int returnPage)
         {
             if (!PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) ||
                 companion.Inventory == null)
             {
                 _owner.Out.SendMessage("Unequipping requires a nearby companion while you are out of combat.",
                     eChatType.CT_System, eChatLoc.CL_SystemWindow);
-                ShowInventory(companionId, 0);
+                ShowEquipment(companionId, returnPage);
                 return;
             }
             DbInventoryItem item = companion.Inventory.GetItem(slot);
-            if (item == null || !PlayerCompanionRoster.TryApplyEquipmentMutation(companion, () =>
+            if (item?.ObjectId != expectedItemId || !PlayerCompanionRoster.TryApplyEquipmentMutation(companion, () =>
                 {
                     if (!ReferenceEquals(companion.Inventory.GetItem(slot), item))
                         return false;
@@ -540,14 +584,18 @@ namespace DOL.GS.Commands
                 companion.RefreshPersistentCompanionEquipment(
                     slot is eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon);
             }
-            ShowInventory(companionId, 0);
+            _inventoryView?.Refresh();
+            ShowEquipment(companionId, returnPage);
         }
 
-        private void ToggleSlotLock(string companionId, eInventorySlot slot, bool locked)
+        private void ToggleSlotLock(string companionId, eInventorySlot slot, bool locked, string expectedItemId, int returnPage)
         {
             if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) &&
+                companion.Inventory?.GetItem(slot)?.ObjectId == expectedItemId &&
                 PlayerCompanionRoster.TryApplyEquipmentMutation(companion, () =>
                 {
+                    if (companion.Inventory?.GetItem(slot)?.ObjectId != expectedItemId)
+                        return false;
                     PlayerCompanionRoster.SetEquipmentSlotLocked(companion.PlayerCompanionRecord, slot, locked);
                     return true;
                 }, out _))
@@ -556,10 +604,10 @@ namespace DOL.GS.Commands
             else
                 _owner.Out.SendMessage("Slot locks can only be changed near an idle companion.",
                     eChatType.CT_System, eChatLoc.CL_SystemWindow);
-            ShowInventory(companionId, 0);
+            ShowEquipment(companionId, returnPage);
         }
 
-        private void ToggleKeep(string companionId, string itemId, bool keep)
+        private void ToggleKeep(string companionId, string itemId, bool keep, int returnPage, bool fromEquipment)
         {
             if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) &&
                 PlayerCompanionRoster.TryApplyEquipmentMutation(companion, () =>
@@ -576,13 +624,16 @@ namespace DOL.GS.Commands
             else
                 _owner.Out.SendMessage("Keep flags can only be changed for inventory owned by an idle companion nearby.",
                     eChatType.CT_System, eChatLoc.CL_SystemWindow);
-            ShowItem(companionId, itemId);
+            ShowItem(companionId, itemId, returnPage, fromEquipment);
         }
 
         private void TransferItem(string companionId, string itemId, bool toCompanion)
         {
             bool transferred = PlayerCompanionRoster.TryTransferItem(_owner, companionId, itemId, toCompanion, out string message);
             _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            if (transferred)
+                _owner.Out.SendInventorySlotsUpdate(Enumerable.Range((int)eInventorySlot.FirstBackpack, 40)
+                    .Select(slot => (eInventorySlot)slot).ToArray());
             ShowInventory(companionId, 0);
         }
 
@@ -624,22 +675,28 @@ namespace DOL.GS.Commands
 
         private void StartPage()
         {
-            _choices.Clear();
-            _generation = Guid.NewGuid().ToString("N")[..6];
-            _nextToken = 0;
+            // Older speech can remain visible in this client. Keep its choices
+            // bound to their original actions for the life of this menu.
         }
 
         private string Link(string label, Action action)
         {
-            string token = _generation + ":" + (_nextToken++).ToString("x");
-            _choices[token] = action;
-            // The generation token is part of the clickable response so an old
-            // popup click cannot invoke the new page's action.
-            return $"[{label} | {token}]";
+            label = label.Replace('[', '(').Replace(']', ')').Replace('\n', ' ').Replace('\r', ' ');
+            string choice = label;
+            for (int duplicate = 2; _choices.ContainsKey(choice); duplicate++)
+                choice = $"{label} ({duplicate})";
+            _choices[choice] = action;
+            return $"[{choice}]";
         }
 
         private void Render(string text)
         {
+            // Close the previous NPC conversation before opening this page. The
+            // client otherwise appends every response to the same popup.
+            _owner.TargetObject = null;
+            _owner.Out.SendChangeTarget(null);
+            _owner.TargetObject = this;
+            _owner.Out.SendChangeTarget(this);
             _owner.Out.SendMessage(text, eChatType.CT_Say, eChatLoc.CL_PopupWindow);
         }
 
@@ -650,6 +707,9 @@ namespace DOL.GS.Commands
             _closed = true;
             _expiry?.Stop();
             _expiry = null;
+            if (ReferenceEquals(_owner?.ActiveInventoryObject, _inventoryView))
+                _owner.ActiveInventoryObject = null;
+            _inventoryView = null;
             if (ReferenceEquals(_owner?.TempProperties.GetProperty<PersistentCompanionMenu>(ActiveMenuProperty), this))
                 _owner.TempProperties.RemoveProperty(ActiveMenuProperty);
             if (restoreTarget && _owner?.ObjectState == eObjectState.Active && ReferenceEquals(_owner.TargetObject, this))

@@ -34,6 +34,11 @@ has a stable ID, saved identity/build state, and an independent inventory
 stored under a `playercompanion:` owner ID. Same-class recruits therefore
 remain separate.
 
+Generated recruits receive a new saved identity and personality. Authored
+recruits are named individuals with written backgrounds and dialogue, each
+available once per owning character. Both use the same persistent progression,
+gear, and player controls. Temporary `/spawn` helpers are a separate system.
+
 An active, living recruit follows its owner through an accepted portal or
 region teleport, including same-region moves. Only that owner's companion in
 the current group relocates; ordinary group members keep their own position.
@@ -178,7 +183,11 @@ persisted, tradable, droppable ordinary items can move; quest, relic, siege, and
 other restricted items are rejected. Full-bag transfers, upgrades, and rewards
 save item ownership, companion metadata, sale removal, and owner proceeds in one
 database transaction. The menu validates each choice against current owner,
-companion, item, slot, and menu-generation state.
+companion, item, and slot. The companion backpack can also open in the client's
+native external-inventory window. This view keeps the player's inventory
+separate and routes drag/drop transfers through the same protected companion
+transaction; worn equipment remains in the compact popup menu. The owner must
+verify the native window's appearance and drag behavior in the real client.
 
 The main tuning points are:
 

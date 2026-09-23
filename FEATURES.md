@@ -9,6 +9,8 @@ and verification history of the full-PvP conversion.
 
 - One Old Frontiers, pre-ToA, full-PvP world where realm is character identity,
   not a permanent team.
+- New characters begin as the class selected during creation, with that class's
+  configured starter equipment. The server no longer rewrites them to a base class.
 - Players, autonomous bots, persistent and temporary companions, and controlled pets use the
   same group, guild, battlegroup, safe-area, immunity, and `/safety` legality
   rules.
@@ -93,12 +95,16 @@ and verification history of the full-PvP conversion.
 
 ## Player companions
 
-- `/companions list`, `recruit`, `invite`, and `bench` manage free, level-1
-  persistent recruits. Each character can store up to 78; stable IDs keep
-  same-class individuals separate. Saved records and inventories survive
-  benching and attempt to restore active companions at login.
-- Persistent recruits do not yet earn XP or catch up while benched. XP, training,
-  catch-up, authored individuals, and gear upgrades remain later roadmap stages.
+- `/companions` opens a private clickable roster; `list`, `recruit`, `invite`,
+  and `bench` remain command fallbacks. Each character can store up to 78
+  persistent recruits, including generated and authored individuals. Saved
+  identities, XP, training, equipment, and inventories survive benching and
+  attempt to restore active companions at login.
+- Active companions earn eligible adventuring XP and can catch up toward their
+  owner's level. Benched companions retain progress without earning passive XP.
+  Automatic training plans cover 33 classes; six classes require manual training.
+  The menu offers short gear pages and a native external-inventory view for the
+  companion backpack. Client acceptance of the updated UI remains pending.
 - `/spawn` still creates temporary, player-owned helpers, separate from both the
   persistent recruit roster and autonomous population.
 - Companion PvP supports legal human, autonomous-bot, and controlled-pet targets.
@@ -128,10 +134,11 @@ and verification history of the full-PvP conversion.
 
 ## Verification status
 
-Offline checks on 2026-09-23: the Release server build passed with zero errors.
-The full server test suite passed (1,975 tests), and the Windows launcher test
-suite passed (114 tests). The new server source files pass a focused
-whitespace-format check.
+For 0.30.0 on 2026-09-23, the Release server and Windows launcher builds passed
+with zero errors. Automated tests were skipped under this fork's fast shipping
+workflow. Earlier stage checks passed the full server suite (1,975 tests) and
+Windows launcher suite (114 tests); those results do not cover the latest UI or
+character-creation changes.
 
 Runtime acceptance on 2026-09-23: the owner confirmed all Stage 2 checks passed
 in a separate Windows acceptance installation, including invites after
