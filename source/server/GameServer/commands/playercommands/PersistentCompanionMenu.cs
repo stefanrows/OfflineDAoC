@@ -143,7 +143,64 @@ namespace DOL.GS.Commands
                 lines.Add(Link("Previous page", () => ShowRecruit(page - 1)));
             if (page + 1 < pageCount)
                 lines.Add(Link("Next page", () => ShowRecruit(page + 1)));
+            lines.Add(Link("Browse authored cast", () => ShowAuthored(0)));
             lines.Add(Link("Roster", () => ShowHome()));
+            Render(string.Join('\n', lines));
+        }
+
+        private void ShowAuthored(int page)
+        {
+            StartPage();
+            if (!PlayerCompanionRoster.TryGetRoster(_owner, out List<PlayerCompanionRecord> roster))
+            {
+                ShowHome();
+                return;
+            }
+            CompanionCharacterCatalog.Character[] cast = CompanionCharacterCatalog.All.ToArray();
+            int pageCount = Math.Max(1, (int)Math.Ceiling((double)cast.Length / PageSize));
+            page = Math.Clamp(page, 0, pageCount - 1);
+            var lines = new List<string> { $"Authored companions, page {page + 1}/{pageCount}:" };
+            foreach (CompanionCharacterCatalog.Character entry in cast.Skip(page * PageSize).Take(PageSize))
+            {
+                bool owned = roster.Any(record => record.AuthoredRecruitKey == entry.Key);
+                lines.Add(Link($"{entry.Name}, {entry.Realm} {entry.Class} ({(owned ? "recruited" : "available")})",
+                    () => ShowAuthoredDetail(entry.Key, page)));
+            }
+            if (page > 0) lines.Add(Link("Previous page", () => ShowAuthored(page - 1)));
+            if (page + 1 < pageCount) lines.Add(Link("Next page", () => ShowAuthored(page + 1)));
+            lines.Add(Link("Recruit classes", () => ShowRecruit(0)));
+            lines.Add(Link("Roster", () => ShowHome()));
+            Render(string.Join('\n', lines));
+        }
+
+        private void ShowAuthoredDetail(string key, int returnPage)
+        {
+            StartPage();
+            CompanionCharacterCatalog.Character entry = CompanionCharacterCatalog.Find(key);
+            if (entry == null || !PlayerCompanionRoster.TryGetRoster(_owner, out List<PlayerCompanionRecord> roster))
+            {
+                ShowAuthored(returnPage);
+                return;
+            }
+            PlayerCompanionRecord owned = roster.FirstOrDefault(record => record.AuthoredRecruitKey == key);
+            var lines = new List<string>
+            {
+                $"{entry.Name}, {entry.Realm} {entry.Class}; {entry.Race}, {entry.Gender}; {entry.Personality}.",
+                entry.Background,
+                $"{entry.Name}: \"{entry.Greeting}\"",
+                $"{entry.Name}: \"{entry.FieldNote}\"",
+                owned != null
+                    ? Link("Open roster entry", () => ShowDetails(owned.CompanionId))
+                    : Link("Recruit this companion", () =>
+                    {
+                        PlayerCompanionRoster.TryRecruitAuthored(_owner, entry.Name,
+                            out PlayerCompanionRecord recruited, out string message);
+                        _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                        if (recruited != null && recruited.IsPersisted) ShowDetails(recruited.CompanionId);
+                        else ShowAuthoredDetail(key, returnPage);
+                    }),
+                Link("Back to cast", () => ShowAuthored(returnPage)),
+            };
             Render(string.Join('\n', lines));
         }
 
@@ -170,6 +227,7 @@ namespace DOL.GS.Commands
                 Link(record.IsActive ? "Bench" : "Invite", () => RunRosterAction(companionId, record.IsActive)),
                 Link("Manual training mode", () => SetTrainingMode(companionId, automatic: false)),
                 Link("Automatic training plan", () => SetTrainingMode(companionId, automatic: true)),
+                Link("Character and tactics", () => ShowCharacter(companionId)),
             };
 
             if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion))
@@ -182,6 +240,33 @@ namespace DOL.GS.Commands
                 lines.Add("Invite the companion to manage training or equipment.");
             lines.Add(Link("Roster", () => ShowHome()));
             Render(string.Join('\n', lines));
+        }
+
+        private void ShowCharacter(string companionId)
+        {
+            StartPage();
+            if (!PlayerCompanionRoster.TryGetRoster(_owner, out List<PlayerCompanionRecord> roster) ||
+                roster.FirstOrDefault(record => record.CompanionId == companionId) is not PlayerCompanionRecord record)
+            {
+                ShowHome();
+                return;
+            }
+            var lines = new List<string> { CompanionPersonality.Profile(record) };
+            eCharacterClass characterClass = (eCharacterClass)record.ClassId;
+            foreach (BotPveGroupRole role in Enum.GetValues<BotPveGroupRole>())
+                if (BotPartyRoles.CanFill(characterClass, role))
+                    lines.Add(Link($"Role: {role}", () => SetTactics(companionId, "role", role.ToString())));
+            lines.Add(Link("Stance: aggressive", () => SetTactics(companionId, "stance", "aggressive")));
+            lines.Add(Link("Stance: defensive", () => SetTactics(companionId, "stance", "defensive")));
+            lines.Add(Link("Back", () => ShowDetails(companionId)));
+            Render(string.Join('\n', lines));
+        }
+
+        private void SetTactics(string companionId, string kind, string value)
+        {
+            PlayerCompanionRoster.TrySetTactics(_owner, companionId, kind, value, out string message);
+            _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            ShowCharacter(companionId);
         }
 
         private void ShowTraining(string companionId)

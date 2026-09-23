@@ -21,7 +21,7 @@ Follow the included component licenses when modifying or redistributing code.
 - **Players:** [Download and play instructions](docs/PLAY.md).
 - **Everyday commands:** [Quick commands and bot-generation shortcuts](docs/QUICK-COMMANDS.md).
 - **Developers and LLM users:** [Fork and customize instructions](docs/LLM-QUICKSTART.md).
-- **Persistent companions:** Use `/companions` for the saved roster; see the [roadmap](docs/COMPANION_ROADMAP.md) for later progression, equipment, and authored-character stages.
+- **Persistent companions:** Use `/companions` for the saved roster; see the [roadmap](docs/COMPANION_ROADMAP.md) for the implemented stages and remaining integration checks.
 - **Implemented gameplay and systems:** [Feature guide](FEATURES.md).
 - **This fork's changes:** [Changelog](CHANGELOG.md). The launcher pin
   (`DisplayVersion`) is this fork's version. The playable runtime is still the

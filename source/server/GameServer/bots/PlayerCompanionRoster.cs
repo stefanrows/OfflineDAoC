@@ -483,6 +483,66 @@ namespace DOL.GS
             return blocker.Length == 0;
         }
 
+        public static bool TrySetTactics(GamePlayer owner, string nameOrId, string kind, string value,
+            out string message)
+        {
+            message = "That companion name or ID is not in your roster.";
+            if (owner == null)
+                return false;
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                    return false;
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) &&
+                    active?.PlayerCompanionRecord != null)
+                    record = active.PlayerCompanionRecord;
+                string normalized = value?.Trim().ToLowerInvariant() ?? string.Empty;
+                string previous;
+                string previousUpdatedUtc = record.UpdatedUtc;
+                if (kind == "role")
+                {
+                    if (normalized is not ("tank" or "healer" or "buffer" or "attacker") ||
+                        !Enum.TryParse(normalized, true, out BotPveGroupRole role) ||
+                        !BotPartyRoles.CanFill((eCharacterClass)record.ClassId, role))
+                    {
+                        message = $"{record.Name} cannot fill that role. Choose a class-legal tank, healer, buffer, or attacker role.";
+                        return false;
+                    }
+                    previous = record.TacticalRole;
+                    record.TacticalRole = normalized;
+                }
+                else if (kind == "stance")
+                {
+                    if (normalized is not ("aggressive" or "defensive"))
+                    {
+                        message = "Choose aggressive or defensive stance.";
+                        return false;
+                    }
+                    previous = record.EngagementPreference;
+                    record.EngagementPreference = normalized;
+                }
+                else
+                    return false;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                if (!SaveRecord(record))
+                {
+                    if (kind == "role") record.TacticalRole = previous;
+                    else record.EngagementPreference = previous;
+                    record.UpdatedUtc = previousUpdatedUtc;
+                    record.Dirty = true;
+                    message = "The preference could not be saved; the previous setting remains active.";
+                    return false;
+                }
+                if (kind == "stance") CompanionPvpEngagement.Reset(owner);
+                if (active?.Brain is DOL.AI.Brain.BotBrain brain)
+                    brain.EnforceCompanionEngagementRange();
+                message = $"{record.Name}: {kind} set to {normalized}.";
+                return true;
+            }
+        }
+
         public static List<PlayerCompanionRecord> GetRoster(GamePlayer owner)
         {
             return TryGetRoster(owner, out List<PlayerCompanionRecord> records)
@@ -717,7 +777,24 @@ namespace DOL.GS
         }
 
         public static bool TryRecruit(GamePlayer owner, eRealm realm, eCharacterClass characterClass,
-            out PlayerCompanionRecord record, out string message)
+            out PlayerCompanionRecord record, out string message) =>
+            TryRecruitInternal(owner, realm, characterClass, null, out record, out message);
+
+        public static bool TryRecruitAuthored(GamePlayer owner, string name, out PlayerCompanionRecord record,
+            out string message)
+        {
+            CompanionCharacterCatalog.Character character = CompanionCharacterCatalog.FindByName(name);
+            if (character == null)
+            {
+                record = null;
+                message = "That authored companion was not found. Browse the authored cast in /companions.";
+                return false;
+            }
+            return TryRecruitInternal(owner, character.Realm, character.Class, character, out record, out message);
+        }
+
+        private static bool TryRecruitInternal(GamePlayer owner, eRealm realm, eCharacterClass characterClass,
+            CompanionCharacterCatalog.Character authored, out PlayerCompanionRecord record, out string message)
         {
             record = null;
             message = "The companion could not be recruited.";
@@ -741,16 +818,33 @@ namespace DOL.GS
                     return false;
                 }
 
+                if (authored != null && roster.Any(entry =>
+                        string.Equals(entry.AuthoredRecruitKey, authored.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    message = $"{authored.Name} is already in your roster; invite that individual instead.";
+                    return false;
+                }
                 var reservedNames = new HashSet<string>(roster.Select(entry => entry.Name), StringComparer.OrdinalIgnoreCase);
-                eGender gender = Random.Shared.Next(2) == 0 ? eGender.Male : eGender.Female;
+                if (authored == null)
+                    foreach (CompanionCharacterCatalog.Character character in CompanionCharacterCatalog.All)
+                        reservedNames.Add(character.Name);
+                else if (reservedNames.Contains(authored.Name))
+                {
+                    message = $"A companion with the name {authored.Name} is already in your roster.";
+                    return false;
+                }
                 AutonomousBotIdentityGenerator.Identity identity;
                 try
                 {
-                    identity = AutonomousBotIdentityGenerator.GenerateForClass(realm, gender, characterClass, reservedNames);
+                    eGender gender = Random.Shared.Next(2) == 0 ? eGender.Male : eGender.Female;
+                    identity = authored == null
+                        ? AutonomousBotIdentityGenerator.GenerateForClass(realm, gender, characterClass, reservedNames)
+                        : new AutonomousBotIdentityGenerator.Identity(authored.Name, realm, authored.Gender,
+                            characterClass, authored.Race);
                 }
                 catch (Exception exception)
                 {
-                    Log.Error($"Could not generate a {realm} {characterClass} companion identity.", exception);
+                    Log.Error($"Could not create a {realm} {characterClass} companion identity.", exception);
                     message = $"A {characterClass} recruit could not be created. Try again.";
                     return false;
                 }
@@ -766,6 +860,7 @@ namespace DOL.GS
                     trainingMode = "automatic";
                     trainingPlanId = plan.Id;
                 }
+                string personality = authored?.Personality ?? CompanionPersonality.RandomKey();
                 record = new PlayerCompanionRecord
                 {
                     CompanionId = Guid.NewGuid().ToString("D"),
@@ -779,8 +874,12 @@ namespace DOL.GS
                     Experience = 0,
                     IsActive = false,
                     InventoryInitialized = false,
-                    RecruitType = "generated",
-                    AuthoredRecruitKey = string.Empty,
+                    RecruitType = authored == null ? "generated" : "authored",
+                    AuthoredRecruitKey = authored?.Key ?? string.Empty,
+                    PersonalityKey = personality,
+                    TacticalRole = BotPartyRoles.DefaultPreference(characterClass),
+                    EngagementPreference = CompanionPersonality.DefaultEngagement(personality),
+                    AppearanceSize = authored?.Size ?? Random.Shared.Next(46, 61),
                     TrainingMode = trainingMode,
                     TrainingPlanId = trainingPlanId,
                     StateVersion = 1,
@@ -811,6 +910,7 @@ namespace DOL.GS
             message = record.TrainingMode == "automatic"
                 ? $"{record.Name}, level 1 {characterClass}, joined your roster with automatic training ({record.TrainingPlanId}). Invite with /companions invite {record.Name}."
                 : $"{record.Name}, level 1 {characterClass}, joined your roster in manual training mode. Invite with /companions invite {record.Name}.";
+            message += " " + CompanionPersonality.Dialogue(record, "recruit");
             return true;
         }
 
@@ -924,6 +1024,8 @@ namespace DOL.GS
                 owner.Y + (float)(Math.Sin(angle) * distance), owner.Z);
             Vector3 spawn = PathfindingProvider.Instance.GetMoveAlongSurface(owner.CurrentZone, current, desired,
                 PathfindingProvider.Instance.DefaultFilters) ?? current;
+            if (record.AppearanceSize is >= 40 and <= 70)
+                companion.Size = (byte)record.AppearanceSize;
             companion.X = (int)Math.Round(spawn.X);
             companion.Y = (int)Math.Round(spawn.Y);
             companion.Z = (int)Math.Round(spawn.Z);
@@ -982,7 +1084,8 @@ namespace DOL.GS
                 return false;
             }
 
-            message = $"{record.Name}, level {companion.Level} {(eCharacterClass)companion.ClassId}, joined your group.";
+            message = $"{record.Name}, level {companion.Level} {(eCharacterClass)companion.ClassId}, joined your group. " +
+                CompanionPersonality.Dialogue(record, "invite");
             return true;
         }
 
@@ -1012,7 +1115,8 @@ namespace DOL.GS
                     }
 
                     DetachAndDelete(active);
-                    message = $"{record.Name} was benched. Their roster state was saved.";
+                    message = $"{record.Name} was benched. Their roster state was saved. " +
+                        CompanionPersonality.Dialogue(record, "bench");
                     return true;
                 }
 

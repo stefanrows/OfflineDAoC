@@ -1,3 +1,5 @@
+using System;
+
 namespace DOL.GS
 {
     public enum BotPartyRole { Damage, Tank, Support }
@@ -45,15 +47,23 @@ namespace DOL.GS
             eCharacterClass.Sorcerer or eCharacterClass.Mentalist or
             eCharacterClass.Bard or eCharacterClass.Minstrel or eCharacterClass.Skald;
 
+        public static string DefaultPreference(eCharacterClass characterClass) => For(characterClass) switch
+        {
+            BotPartyRole.Tank => "tank",
+            BotPartyRole.Support => "healer",
+            _ => "attacker",
+        };
+
         /// <summary>
         /// A support class is a non-combat role only when the party has an
-        /// actual combat-capable partner.  A solo healer (or a party made up
-        /// entirely of healers/supports) must still be allowed through the
-        /// normal attack path so it can level instead of repeatedly trying
-        /// defensive upkeep with no one to fight for it.
+        /// actual combat-capable partner. A solo healer must retain its attack path.
         /// </summary>
         public static bool IsSupport(GameBot bot) => bot?.Group?.MemberCount > 1 &&
-            bot.CharacterClass != null && For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Support &&
+            bot.CharacterClass != null &&
+            (bot.IsPersistentPlayerCompanion &&
+             Enum.TryParse(bot.PlayerCompanionRecord?.TacticalRole, true, out BotPveGroupRole preference)
+                ? preference is BotPveGroupRole.Healer or BotPveGroupRole.Buffer
+                : For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Support) &&
             HasCombatPartner(bot);
 
         private static bool HasCombatPartner(GameBot bot)
@@ -83,7 +93,10 @@ namespace DOL.GS
         }
 
         public static bool IsTank(GameBot bot) => bot?.CharacterClass != null &&
-            For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Tank;
+            (bot.IsPersistentPlayerCompanion &&
+             Enum.TryParse(bot.PlayerCompanionRecord?.TacticalRole, true, out BotPveGroupRole preference)
+                ? preference == BotPveGroupRole.Tank
+                : For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Tank);
 
         public static string Label(eCharacterClass characterClass) => IsHybridSupport(characterClass)
             ? (For(characterClass) == BotPartyRole.Tank ? "Tank/Healer/Buffer"

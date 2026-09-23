@@ -78,6 +78,18 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false, Varchar = 128)]
         public string AuthoredRecruitKey { get; set; } = string.Empty;
 
+        [DataElement(AllowDbNull = false, Varchar = 16)]
+        public string PersonalityKey { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false, Varchar = 16)]
+        public string TacticalRole { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false, Varchar = 16)]
+        public string EngagementPreference { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false)]
+        public int AppearanceSize { get; set; }
+
         [DataElement(AllowDbNull = false)]
         public int StateVersion { get; set; } = 1;
 

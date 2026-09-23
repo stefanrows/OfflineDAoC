@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the companion menu or manage your roster, training, and equipment", "/companions [list | recruit <class> | recruit <realm> <class> | invite <name> | bench <name> | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
+        "Open the companion menu or manage your roster, character, tactics, training, and equipment", "/companions [list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -34,8 +34,26 @@ namespace DOL.GS.Commands
             string action = args[1].ToLowerInvariant();
             switch (action)
             {
+                case "cast":
+                    ShowCast(client, player, args);
+                    break;
                 case "recruit":
                     Recruit(client, player, args);
+                    break;
+                case "profile":
+                    ShowProfile(client, player, args);
+                    break;
+                case "role":
+                case "stance":
+                    SetTactics(client, player, args, action);
+                    break;
+                case "group":
+                    if (args.Length == 3 && args[2].Equals("default", StringComparison.OrdinalIgnoreCase))
+                    {
+                        CompanionEngagementMode.ClearGroupOrder(player);
+                        DisplayMessage(client, "Group stance override cleared; each persistent companion uses their own preference.");
+                    }
+                    else ShowUsage(client);
                     break;
                 case "invite":
                     UpdateCompanion(client, player, args, invite: true);
@@ -96,11 +114,79 @@ namespace DOL.GS.Commands
             }
         }
 
+        private void ShowCast(GameClient client, GamePlayer player, string[] args)
+        {
+            if (!PlayerCompanionRoster.TryGetRoster(player, out var roster))
+            {
+                DisplayMessage(client, "Your companion roster could not be loaded.");
+                return;
+            }
+            eRealm? realm = null;
+            int page = 1;
+            if (args.Length > 2)
+            {
+                if (!int.TryParse(args[2], out _) && Enum.TryParse(args[2], true, out eRealm selectedRealm) &&
+                    selectedRealm is eRealm.Albion or eRealm.Midgard or eRealm.Hibernia)
+                    realm = selectedRealm;
+                else if (!int.TryParse(args[2], out page))
+                {
+                    DisplayMessage(client, "Use /companions cast [Albion|Midgard|Hibernia] [page].");
+                    return;
+                }
+            }
+            if (args.Length > 3 && !int.TryParse(args[3], out page))
+            {
+                DisplayMessage(client, "Use /companions cast [realm] [page].");
+                return;
+            }
+            var cast = CompanionCharacterCatalog.All.Where(entry => realm == null || entry.Realm == realm).ToArray();
+            int pageCount = Math.Max(1, (cast.Length + 7) / 8);
+            page = Math.Clamp(page, 1, pageCount);
+            DisplayMessage(client, $"Authored cast, page {page}/{pageCount}. Use /companions cast [realm] [page] to browse.");
+            foreach (var entry in cast.Skip((page - 1) * 8).Take(8))
+            {
+                string state = roster.Any(item => item.AuthoredRecruitKey == entry.Key) ? "recruited" : "available";
+                DisplayMessage(client, $"{entry.Name}, {entry.Realm} {entry.Class} ({entry.Personality}; {state}).");
+            }
+            DisplayMessage(client, "Recruit with /companions recruit authored <name>, or open /companions for biographies.");
+        }
+
+        private void ShowProfile(GameClient client, GamePlayer player, string[] args)
+        {
+            if (args.Length < 3 || !PlayerCompanionRoster.TryMatchOwnedCompanionPrefix(player, args, 2, args.Length,
+                    out PlayerCompanionRecord record, out _))
+            {
+                DisplayMessage(client, "Use /companions profile <name> for a companion in your roster.");
+                return;
+            }
+            foreach (string line in CompanionPersonality.Profile(record).Split('\n'))
+                DisplayMessage(client, line);
+        }
+
+        private void SetTactics(GameClient client, GamePlayer player, string[] args, string kind)
+        {
+            if (args.Length < 4 || !PlayerCompanionRoster.TryMatchOwnedCompanionPrefix(player, args, 2, args.Length - 1,
+                    out PlayerCompanionRecord record, out _))
+            {
+                DisplayMessage(client, $"Use /companions {kind} <name> <choice> for a companion in your roster.");
+                return;
+            }
+            PlayerCompanionRoster.TrySetTactics(player, record.CompanionId, kind, args[^1], out string message);
+            DisplayMessage(client, message);
+        }
+
         private void Recruit(GameClient client, GamePlayer player, string[] args)
         {
             if (args.Length < 3)
             {
                 DisplayMessage(client, "Use /companions recruit <class>, or /companions recruit <realm> <class>.");
+                return;
+            }
+
+            if (args.Length >= 4 && args[2].Equals("authored", StringComparison.OrdinalIgnoreCase))
+            {
+                PlayerCompanionRoster.TryRecruitAuthored(player, string.Join(' ', args.Skip(3)), out _, out string authoredMessage);
+                DisplayMessage(client, authoredMessage);
                 return;
             }
 
@@ -342,8 +428,8 @@ namespace DOL.GS.Commands
 
         private void ShowUsage(GameClient client)
         {
-            DisplayMessage(client, "Bare /companions opens the private clickable roster, training, equipment, and inventory menu.");
-            DisplayMessage(client, "Commands: /companions list | recruit <class> | recruit <realm> <class> | invite <name> | bench <name> | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>.");
+            DisplayMessage(client, "Bare /companions opens the private clickable roster, cast, character, tactics, training, equipment, and inventory menu.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }

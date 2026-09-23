@@ -30,6 +30,7 @@ namespace DOL.GS
         {
             Group group = player?.Group;
             if (!ValidEnemy(player, target)) return "No valid nearby pull target.";
+            CompanionEngagementMode.RememberPull(player, target);
             if (group == null)
             {
                 // Preserve /pull as a direct pet command when playing solo.

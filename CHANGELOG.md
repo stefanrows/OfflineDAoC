@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-09-23
+
+### Added
+
+- Two authored companions for each of the 39 Classic + SI classes, with stable
+  identities, appearances, backgrounds, personalities, and dialogue.
+- Persistent individual role and engagement preferences, authored-cast browsing,
+  character profiles, and private menu and command controls.
+
+### Changed
+
+- Personality supplies initial engagement behavior; direct player orders and
+  temporary group orders take precedence. Existing recruits retain their saved
+  identity and class behavior.
+- Updated companion roadmap, decision record, player commands, and version pins.
+
+### Fixed
+
+- Group engagement orders now apply to persistent companions as well as
+  temporary helpers, while autonomous bots remain separate.
+
+### Removed
+
+- None.
+
 ## [0.26.0] - 2026-09-23
 
 ### Added

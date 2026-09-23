@@ -44,6 +44,26 @@ space is available. Removing a companion, leaving the group, or disbanding saves
 and benches that companion. `/spawn` still creates a temporary helper and has
 not been redirected to the persistent roster.
 
+The Stage 5 cast adds two authored people for each of the 39 Classic + SI
+classes. Each has a stable key, name, eligible race and gender, size,
+background, personality, and dialogue. Browse them in the private menu or with
+`/companions cast [realm] [page]`; recruit each once per owner with
+`/companions recruit authored <name>`. Generated recruitment by class remains
+available. New generated recruits receive a saved personality template. Existing
+records keep their previous identity and class behavior. The catalog's preferred
+build is the validated class plan where available; six classes remain manual-only.
+
+`/companions profile <name>` shows identity, background, preferred build, role,
+stance, and a short line of dialogue. `/companions role <name> tank|healer|buffer|attacker` saves a class-legal
+party job;
+`/companions stance <name> aggressive|defensive` saves an individual engagement
+preference. Personality sets the first stance, and direct player attacks and
+`/pull` take precedence. `/aggressive` and `/defensive` issue a group order for
+helpers and persistent companions; `/companions group default` returns to
+individual stances. Dialogue appears on recruit, invite, bench, and requested
+profile views; it does not trigger during combat. Autonomous bots do not read
+these preferences. See [Stage 5 decisions](COMPANION_STAGE5_DECISIONS.md).
+
 The roster preserves the existing generated level-1 equipment as a one-time,
 protected starter loadout. Persistent inventory is saved across benching and
 restart. Persistent recruits earn PvE progression while actively adventuring

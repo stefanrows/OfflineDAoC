@@ -13,7 +13,7 @@ namespace DOL.GS.Commands
                 foreach (GameBot bot in client.Player.Group.GetMembersInTheGroup().OfType<GameBot>())
                     if (CompanionEngagementMode.DefensiveLeader(bot) == client.Player && bot.Brain is BotBrain brain)
                         brain.EnforceCompanionEngagementRange();
-            DisplayMessage(client, "Companions: DEFENSIVE. Pull enemies within 350 units of you; companions and their pets will engage nearby threats. Use /aggressive to restore normal assisting.");
+            DisplayMessage(client, "Companions: DEFENSIVE group order. Helpers and persistent companions hold near you; direct /pull and your attacks still take precedence. Use /companions group default for individual preferences.");
         }
     }
     [CmdAttribute("&aggressive", ePrivLevel.Player, "Restore normal companion assisting (default)", "/aggressive")]
@@ -22,7 +22,7 @@ namespace DOL.GS.Commands
         public void OnCommand(GameClient client, string[] args)
         {
             CompanionEngagementMode.Set(client.Player, false);
-            DisplayMessage(client, "Companions: AGGRESSIVE (default). They assist your attacks normally again.");
+            DisplayMessage(client, "Companions: AGGRESSIVE group order. Helpers and persistent companions assist normally. Use /companions group default for individual preferences.");
         }
     }
 }

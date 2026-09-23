@@ -4,7 +4,8 @@ Status: Stage 1 **Complete**; Stage 2 **Complete (implementation and runtime
 acceptance)**; Stage 3 **Implemented; 33 project-recommended automatic plans
 validated against runtime data; six classes remain manual-only; real-client
 acceptance pending**; Stage 4 **Implemented; offline checks complete;
-real-client acceptance pending**; Stages 5–6 **Not started**.
+real-client acceptance pending**; Stage 5 **Implemented; client and combat-role
+acceptance pending**; Stage 6 **Not started**.
 Last updated: 2026-09-23.
 
 This roadmap records the agreed direction for lasting party members. It does
@@ -202,7 +203,12 @@ and reload persistence remain pending. See the checklist in
 
 ### Stage 5 - Character and control
 
-**Status:** Not started.
+**Status:** Implemented; offline Release build and static cast checks complete.
+Real-client and combat-role acceptance remain pending. The owner selected the
+policy in [COMPANION_STAGE5_DECISIONS.md](COMPANION_STAGE5_DECISIONS.md).
+The catalog supplies 78 authored people; generated personalities, individual
+roles and stances, direct-order precedence, private menu, and command fallbacks
+are implemented. Existing records keep their prior class behavior.
 
 **Prerequisites:** Stages 2-4 complete; tactical controls and dialogue presentation
 decided. Identity design and writing may be prepared after Stage 1.
@@ -258,11 +264,11 @@ resolve it then rather than hiding it in implementation.
 | Companion realm-point eligibility and progression | Stage 3 | Resolved: companions do not earn realm points |
 | Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 | Resolved and implemented; independent XP-rate PvE chance, eligible PvP rewards, protected starter kit |
 | Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 | Resolved and implemented; free restricted transfers, manual slot locks, earned-gear surplus selling |
-| Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 | Open |
+| Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 | Resolved and implemented; client and combat-role acceptance pending |
 | Death/recovery and raid rules | Stage 6, or earlier if changed by a prior stage | Open |
 
-No Stage 5–6 behavior is included in this task. Real-client menu and gameplay
-acceptance remains pending and is not inferred from offline validation.
+Stage 6 behavior is not included in this task. Stage 4–5 real-client acceptance
+remains pending and is not inferred from offline validation.
 
 ## Maintenance and boundaries
 

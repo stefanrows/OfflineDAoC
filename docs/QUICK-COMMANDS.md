@@ -29,7 +29,11 @@ capacity. The Active Population tab shows autonomous crews and solo roamers.
 | `/grind` | Start automated grinding with a companion-bot group, including for AFK use. |
 | `/pull` | Order your companion group and pets to engage your selected enemy. When possible, a tank makes first contact before the rest of the group joins the fight. |
 | `/train <line> <level>` | Train a specialization to the chosen level using your available specialization points. Select a valid trainer for your class first. |
-| `/companions list` | List companion names grouped by realm. Recruit with `/companions recruit Warden` or any class name; use `/companions recruit <realm> <class>` if needed. Invite or bench by name. Recruits are free, start at level 1, and the roster holds 78 companions. |
+| `/companions list` | List companion names grouped by realm. Recruit generated people with `/companions recruit Warden` or another class; use an explicit realm if needed. Recruits are free, start at level 1, and the roster holds 78 companions. |
+| `/companions cast` | Browse the 78 authored people, eight at a time. Use `/companions cast <realm> <page>` or the private menu for biographies, then `/companions recruit authored <name>`. Each authored individual can join your roster once. |
+| `/companions profile <name>` | Show a saved companion's identity, background, preferred build, role, stance, and dialogue. |
+| `/companions role <name> <role>` | Set a class-legal tank, healer, buffer, or attacker job. |
+| `/companions stance <name> aggressive|defensive` | Set an individual's saved engagement preference. `/aggressive` and `/defensive` override the group until `/companions group default`. |
 | `/spawn` | Open the menu of valid companion bots to summon. |
 | `/spawn X` | Summon a companion by class name from your realm instead of using the menu; useful for macros. |
 | `/spawn Realm X` | Summon a named class from another realm, such as `/spawn Midgard Healer`. |
