@@ -139,7 +139,7 @@ namespace DOL.GS.Commands
             string name = string.Join(' ', args.Skip(2).Take(args.Length - 3));
             if (mode is "automatic" or "auto")
             {
-                DisplayMessage(client, "Automatic training is unavailable because no companion build plan has passed the required class, point-budget, milestone, and runtime-skill checks. Use manual mode for now.");
+                DisplayMessage(client, "Automatic training is unavailable until a companion build plan passes career, point-budget, milestone, and runtime-skill checks and you select it for use. Use manual mode for now.");
                 return;
             }
 
@@ -161,7 +161,7 @@ namespace DOL.GS.Commands
                 return;
             }
 
-            DisplayMessage(client, "No automatic companion build plans are validated yet. Per-class research and a disposable runtime database check are still required before plans can be selected.");
+            DisplayMessage(client, "No owner-approved automatic companion build plans are available. Static candidates are documented for review; disposable runtime database validation is pending.");
         }
 
         private void TrainCompanion(GameClient client, GamePlayer player, string[] args)

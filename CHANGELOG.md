@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-09-23
+
+### Added
+
+- Class-by-class Stage 3 build research and validation status for all 39
+  companion classes, including static career/skill checks, no-autotrain point
+  budgets, sourced milestone routes, and explicit blockers.
+
+### Changed
+
+- Companion plan commands now explain that static candidates await disposable
+  runtime validation and owner selection. The roadmap and Stage 3 decision
+  record distinguish static research from runtime and real-client acceptance.
+- Launcher, command-reference, and launcher-test version pins now identify
+  0.24.1.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.24.0] - 2026-09-23
 
 ### Added
