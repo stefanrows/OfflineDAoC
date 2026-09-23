@@ -4027,13 +4027,7 @@ namespace DOL.GS
         {
             get
             {
-                // Pre-1.81 formula: https://camelotherald.fandom.com/wiki/Patch_Notes:_Version_1.81
-                // 25 at RR1, level 25.
-                // 225 at RR1, level 35, 245 at RR3, level 35.
-                // 900 at RR1, level 50. 990 at RR10, level 50.
-                // Below level 20 the value is floored at 1 + RealmLevel.
-                int modifiedLevel = Math.Max(0, Level - 20);
-                return Math.Max(1, modifiedLevel * modifiedLevel) + RealmLevel;
+                return AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(Level, RealmLevel);
             }
         }
 

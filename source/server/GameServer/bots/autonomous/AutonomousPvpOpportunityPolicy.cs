@@ -10,6 +10,21 @@ public static class AutonomousPvpOpportunityPolicy
 {
     public const int PreferredLevelDifference = 5;
 
+    public static bool CanSeekOpportunity(eAutonomousObjectiveKind objective, int partySize) =>
+        objective == eAutonomousObjectiveKind.RvR ||
+        objective == eAutonomousObjectiveKind.GroupPve && partySize >= 2;
+
+    public static bool CanUseMatchmakingCamp(bool isDungeon, bool isFrontier,
+        ushort actorRegion, ushort campRegion) =>
+        !isDungeon && !isFrontier && actorRegion == campRegion;
+
+    public static int ChooseRoamIndex(int count, int previousIndex, int roll)
+    {
+        if (count <= 1) return 0;
+        int index = Math.Abs(roll % (count - (previousIndex >= 0 && previousIndex < count ? 1 : 0)));
+        return previousIndex >= 0 && index >= previousIndex ? index + 1 : index;
+    }
+
     public static bool LevelsPreferred(int actorLevel, int targetLevel) =>
         Math.Abs(actorLevel - targetLevel) <= PreferredLevelDifference;
 
@@ -32,7 +47,8 @@ public static class AutonomousPvpOpportunityPolicy
         if (identity == null)
             return (0, 0);
         GameLiving[] members = identity.Group?.GetMembersInTheGroup()
-            .Where(member => member?.IsAlive == true && member.CurrentRegionID == identity.CurrentRegionID)
+            .Where(member => member?.IsAlive == true && member.CurrentRegionID == identity.CurrentRegionID &&
+                member.IsWithinRadius(identity, 2000))
             .ToArray() ?? [identity];
         return (Math.Max(1, members.Length), (int)Math.Round(members.Average(member => member.EffectiveLevel)));
     }

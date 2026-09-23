@@ -1,5 +1,8 @@
 # `/spawn` Companion Bots
 
+For the proposed persistent roster, see the [companion roadmap](COMPANION_ROADMAP.md).
+That roadmap describes future work; the current behavior below remains unchanged.
+
 This document describes the intended behavior of temporary companion bots so
 their reward and progression rules can be tuned without confusing them with
 persistent autonomous world bots or real players.

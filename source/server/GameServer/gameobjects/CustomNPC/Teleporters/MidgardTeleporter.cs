@@ -27,7 +27,7 @@ namespace DOL.GS
 	/// Midgard teleporter.
 	/// </summary>
 	/// <author>Aredhel</author>
-	public class MidgardTeleporter : GameTeleporter
+	public class MidgardTeleporter : AllRealmsTeleporter
 	{
 		/// <summary>
 		/// Player right-clicked the teleporter.
@@ -36,21 +36,8 @@ namespace DOL.GS
 		/// <returns></returns>
 		public override bool Interact(GamePlayer player)
 		{
-			if (!base.Interact(player) || GameRelic.IsPlayerCarryingRelic(player)) return false;
-
-			TurnTo(player, 10000);
-			
-			SayTo(player, "Greetings, " + player.Name +
-			              " I am able to channel energy to transport you to distant lands. I can send you to the following locations:\n\n" +
-			              "[Svasud Faste] in Mularn or \n[Vindsaul Faste] in West Svealand\n" +
-			              "Beaches of [Gotar] near Nailiten\n" +
-			              "[Aegirhamn] in the [Shrouded Isles]\n" +
-			              "Our glorious city of [Jordheim]\n" +
-			              "[Entrance] to the areas of [housing]\n\n" +
-			              "Or one of the many [towns] throughout Midgard");
-			
-			return true;
-		}
+            return base.Interact(player);
+        }
 
 		/// <summary>
 		/// Player has picked a subselection.

@@ -24,15 +24,30 @@ public static class AutonomousBotRealmPointRewards
 
     public static int GetPlayerEquivalentRealmPointValue(byte level, int realmLevel)
     {
-        // This is the pre-1.81 player formula used by GamePlayer.RealmPointsValue.
-        // Victims below level 20 are floored so (level - 20)^2 cannot grow again.
+        // Keep the high-level curve, but give leveling kills a rising value.
+        // Humans and persistent bots use this same formula.
         int modifiedLevel = Math.Max(0, level - 20);
-        return Math.Max(1, modifiedLevel * modifiedLevel) + realmLevel;
+        return Math.Max(level * 5, modifiedLevel * modifiedLevel) + realmLevel;
+    }
+
+    // Defeating a higher-level opponent raises both rewards and their caps.
+    // The bounded bonus preserves damage sharing and repeat-kill protection.
+    public static double ChallengeMultiplier(int victimLevel, int awarderLevel) =>
+        1.0 + Math.Clamp(victimLevel - awarderLevel, 0, 4) * 0.25;
+
+    public static long CalculateExperienceReward(long victimValue, long awarderValue,
+        int victimLevel, int awarderLevel, int participants, double damagePercent, int capPercent)
+    {
+        if (participants <= 0 || damagePercent <= 0) return 0;
+        double bonus = ChallengeMultiplier(victimLevel, awarderLevel);
+        return (long)(Math.Min(victimValue / (double)participants,
+            awarderValue * (double)capPercent / 100) * bonus * Math.Min(1, damagePercent));
     }
 
     public static int CalculateRealmPointReward(int victimRealmPointValue, int victimRealmLevel,
         int awarderRealmPointValue, int awarderRealmLevel, int participantCount,
-        int groupContributorCount, double damagePercent, bool applyRealmRankAdjustment)
+        int groupContributorCount, double damagePercent, bool applyRealmRankAdjustment,
+        int victimLevel = 50, int awarderLevel = 50)
     {
         if (victimRealmPointValue <= 0 || awarderRealmPointValue <= 0 ||
             participantCount <= 0 || damagePercent <= 0)
@@ -40,20 +55,19 @@ public static class AutonomousBotRealmPointRewards
             return 0;
         }
 
-        int baseRealmPoints = victimRealmPointValue / participantCount;
+        double baseRealmPoints = victimRealmPointValue / (double)participantCount;
         baseRealmPoints = Math.Min(baseRealmPoints, awarderRealmPointValue * 2);
-        int realmPoints = (int)(baseRealmPoints * Math.Min(1.0, damagePercent));
+        double realmPoints = baseRealmPoints * Math.Min(1.0, damagePercent);
 
         if (applyRealmRankAdjustment)
         {
-            realmPoints = (int)(realmPoints *
-                (1.0 + 2.0 * (victimRealmLevel - awarderRealmLevel) / 900.0));
+            realmPoints *= 1.0 + 2.0 * (victimRealmLevel - awarderRealmLevel) / 900.0;
         }
 
         if (groupContributorCount > 1)
-            realmPoints += (int)(realmPoints * (groupContributorCount - 1) * 0.125);
+            realmPoints *= 1.0 + (groupContributorCount - 1) * 0.125;
 
-        return Math.Max(0, realmPoints);
+        return Math.Max(1, (int)(realmPoints * ChallengeMultiplier(victimLevel, awarderLevel)));
     }
 
     public static void Award(GameBot killedBot, GameObject killer)
@@ -156,7 +170,7 @@ public static class AutonomousBotRealmPointRewards
                     bool applyRankAdjustment = battleground == null || player.RealmLevel < battleground.MaxRealmLevel;
                     realmPointsEarned = CalculateRealmPointReward(victimValue, killedBot.RealmLevel,
                         player.RealmPointsValue, player.RealmLevel, contributorCount,
-                        groupContributorCount, damagePercent, applyRankAdjustment);
+                        groupContributorCount, damagePercent, applyRankAdjustment, killedBot.Level, player.Level);
 
                     if (realmPointsEarned > 0)
                         player.GainRealmPoints(realmPointsEarned, true);
@@ -193,7 +207,8 @@ public static class AutonomousBotRealmPointRewards
             int botVictimValue = GetPlayerEquivalentRealmPointValue(killedBot.Level, killedBot.RealmLevel);
             int botValue = GetPlayerEquivalentRealmPointValue(bot.Level, bot.RealmLevel);
             int realmPoints = CalculateRealmPointReward(botVictimValue, killedBot.RealmLevel,
-                botValue, bot.RealmLevel, contributorCount, contributorCount, damagePercent, true);
+                botValue, bot.RealmLevel, contributorCount, contributorCount, damagePercent, true,
+                killedBot.Level, bot.Level);
             if (realmPoints > 0)
                 bot.GainRealmPoints(realmPoints, true);
 
@@ -240,10 +255,8 @@ public static class AutonomousBotRealmPointRewards
             return 0;
 
         int contributorCount = Math.Max(1, contribution.Count);
-        long baseExperience = killedBot.GetExperienceValueForLevel(killedBot.Level) * 4 / contributorCount;
-        long experienceCap = awarder.GetExperienceValueForLevel(awarder.Level) * 4 *
-            Properties.XP_PVP_CAP_PERCENT / 100;
-        baseExperience = Math.Min(baseExperience, experienceCap);
-        return (long)(baseExperience * damagePercent);
+        return CalculateExperienceReward(killedBot.GetExperienceValueForLevel(killedBot.Level) * 4,
+            awarder.GetExperienceValueForLevel(awarder.Level) * 4, killedBot.Level, awarder.Level,
+            contributorCount, damagePercent, Properties.XP_PVP_CAP_PERCENT);
     }
 }

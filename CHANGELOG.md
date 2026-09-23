@@ -12,6 +12,213 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.20.6] - 2026-09-23
+
+### Added
+
+- Companion Stage 1 acceptance record with per-character ownership and additive
+  save-boundary recommendations, compatibility limits, and menu design notes.
+- Level-by-level source coverage, the nonportable Minstrel milestone, two
+  classes without numeric templates, and three unvalidated forum build variants.
+
+### Changed
+
+- Companion roadmap Stage 1 is complete to its documented proposal-or-gap
+  criteria; runtime database and real-client checks remain separate gates.
+- Launcher, command-reference, and test version pins now identify 0.20.6.
+  This documentation task does not change gameplay.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.20.5] - 2026-09-23
+
+### Added
+
+- First-pass sourced leveling and endgame build proposals or explicit research
+  gaps for all 39 companion classes, with dated Healer and Necromancer forum
+  supplements.
+- Static career, skill-table, and point-budget cross-checks for the candidate
+  builds, including four no-autotrain companion adjustments.
+
+### Changed
+
+- Companion Stage 1 remains in progress: five exact endgame templates, most
+  per-level milestones, local runtime database confirmation, and Stage 2 roster
+  decisions remain open.
+- Launcher, command-reference, and test version pins now identify 0.20.5.
+  This documentation task does not change gameplay.
+
+### Fixed
+
+- Mapped the Theurgist guide's Air line to the server career key Wind Magic.
+
+### Removed
+
+- None.
+
+## [0.20.4] - 2026-09-22
+
+### Added
+
+- Dated companion class-roster reconciliation: 33 base classes plus six
+  Shrouded Isles additions, matching the 39-class runtime catalog.
+
+### Changed
+
+- Companion Stage 1 class-era roster checkpoint is complete; per-class build
+  proposals and server allocation validation remain open.
+- Launcher, command-reference, and test version pins now identify 0.20.4.
+  This documentation task does not change gameplay.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.20.3] - 2026-09-22
+
+### Added
+
+- A first-pass audit of 1.65 class-era sources and companion build-guide
+  coverage, including the missing Necromancer entry and source limitations.
+
+### Changed
+
+- Companion Stage 1 remains in progress; dated per-class proposals and server
+  allocation validation are still required.
+- Launcher, command-reference, and test version pins now identify `0.20.3`.
+  This documentation task does not change gameplay.
+
+### Fixed
+
+- Corrected the companion design notes: the three Uthgard realm guides cover
+  38 of the 39 runtime classes, not all 39.
+
+### Removed
+
+- None.
+
+## [0.20.2] - 2026-09-22
+
+### Added
+
+- Stage 1 companion design notes with a provisional 39-class catalog and an
+  audit of existing persistence, reward, inventory, and client-menu boundaries,
+  plus an initial assessment of 1.65-era build-research sources.
+
+### Changed
+
+- Companion roadmap Stage 1 is in progress; sourced class-build research and
+  final roster decisions remain pending.
+- Launcher, command-reference, and test version pins now identify `0.20.2`.
+  This documentation task does not change gameplay.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.20.1] - 2026-09-22
+
+### Added
+
+- Persistent companion roadmap with agreed goals, six implementation stages,
+  decision gates, and separate offline and real-client acceptance checks.
+
+### Changed
+
+- README and current companion documentation link to the proposed roadmap.
+- Launcher, command-reference, and test version pins now identify `0.20.1`.
+  This documentation task does not change gameplay.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.20.0] - 2026-09-22
+
+### Added
+
+- Reward-eligible player PvP kills now produce one guaranteed class-appropriate
+  gear drop for the credited killer; autonomous bots collect it and equip usable
+  upgrades.
+
+### Changed
+
+- Launcher, command-reference, and test version pins now identify `0.20.0`.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.19.0] - 2026-09-22
+
+### Added
+
+- Higher-level PvP kill bonuses: +25% XP and RP per level above the winner,
+  capped at +100%, with the reward caps raised by the same bonus.
+
+### Changed
+
+- Low-level player and persistent-bot RP values now rise with level; fractional
+  eligible shared kills retain at least one RP before server rate modifiers.
+- Group-PvE bots hunt outdoor camps in their region while queued for guildmates.
+- Solo PvP hunters acquire nearby legal rivals and move between hunting grounds.
+- Launcher, command-reference, and test version pins now identify `0.19.0`.
+
+### Fixed
+
+- Inland, Live, and realm-specific town teleporters use the shared cross-realm
+  menus and destination handling, including Midgard travel to foreign towns.
+- Distant group members no longer inflate locally observed PvP party strength.
+
+### Removed
+
+- Stationary group-matchmaking waits and repeated selection of the same
+  low-level PvP hunting destination when alternatives exist.
+
+## [0.18.0] - 2026-09-22
+
+### Added
+
+- Cross-region matchmaking for ordinary same-guild PvE parties; nearby members
+  remain preferred and remote members use the existing rendezvous travel.
+
+### Changed
+
+- Launcher, command-reference, and test version pins now identify `0.18.0`.
+
+### Fixed
+
+- Group-PvE bots no longer wait for the 20-minute fallback solely because their
+  compatible guildmates are in other regions.
+- Never-killed characters are no longer treated as recently killed just because
+  their played time is shorter than the repeat-kill window.
+
+### Removed
+
+- None.
+
 ## [0.17.0] - 2026-09-22
 
 ### Added

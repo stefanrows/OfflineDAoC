@@ -80,17 +80,17 @@ public class UT_AutonomousBotRealmPointRewards
             "ordinary NPCs and pets remain on the zero-RP NPC path");
     }
 
-    [TestCase(25, 0, 25)]
+    [TestCase(25, 0, 125)]
     [TestCase(35, 0, 225)]
     [TestCase(35, 20, 245)]
     [TestCase(50, 0, 900)]
     [TestCase(50, 90, 990)]
-    [TestCase(1, 0, 1)]
-    [TestCase(2, 0, 1)]
-    [TestCase(19, 3, 4)]
-    [TestCase(20, 0, 1)]
-    [TestCase(21, 0, 1)]
-    public void VictimValueMatchesPre181PlayerFormula(int level, int realmLevel, int expected)
+    [TestCase(1, 0, 5)]
+    [TestCase(2, 0, 10)]
+    [TestCase(19, 3, 98)]
+    [TestCase(20, 0, 100)]
+    [TestCase(21, 0, 105)]
+    public void VictimValueScalesThroughLevelingAndPreservesHighLevelCurve(int level, int realmLevel, int expected)
     {
         Assert.That(AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(
             (byte)level, realmLevel), Is.EqualTo(expected));
@@ -110,10 +110,29 @@ public class UT_AutonomousBotRealmPointRewards
             applyRealmRankAdjustment: true);
 
         int baseShare = 990 / 2;
-        int damageShare = (int)(baseShare * 0.75);
-        int rankAdjusted = (int)(damageShare * (1.0 + 2.0 * 90 / 900.0));
-        int expected = rankAdjusted + (int)(rankAdjusted * 0.125);
+        int expected = (int)(baseShare * 0.75 * (1.0 + 2.0 * 90 / 900.0) * 1.125);
         Assert.That(actual, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void LevelOneDefeatingLevelFourEarnsMoreRpAndXpThanEqualLevelKill()
+    {
+        int EqualRp = AutonomousBotRealmPointRewards.CalculateRealmPointReward(5, 0, 5, 0, 1, 1, 1, true, 1, 1);
+        int harderRp = AutonomousBotRealmPointRewards.CalculateRealmPointReward(20, 0, 5, 0, 1, 1, 1, true, 4, 1);
+        Assert.That(EqualRp, Is.EqualTo(5));
+        Assert.That(harderRp, Is.EqualTo(17));
+        long equalXp = AutonomousBotRealmPointRewards.CalculateExperienceReward(100, 100, 1, 1, 1, 1, 100);
+        long harderXp = AutonomousBotRealmPointRewards.CalculateExperienceReward(1000, 100, 4, 1, 1, 1, 100);
+        Assert.That(harderXp, Is.EqualTo(175).And.GreaterThan(equalXp));
+        Assert.That(AutonomousBotRealmPointRewards.ChallengeMultiplier(50, 1), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void LowLevelSharedKillRetainsPositiveCreditButNoDamagePaysNothing()
+    {
+        Assert.That(AutonomousBotRealmPointRewards.CalculateRealmPointReward(5, 0, 5, 0, 8, 8, 0.1, true, 1, 1), Is.EqualTo(1));
+        Assert.That(AutonomousBotRealmPointRewards.CalculateRealmPointReward(5, 0, 5, 0, 8, 8, 0, true, 1, 1), Is.Zero);
+        Assert.That(AutonomousBotRealmPointRewards.CalculateExperienceReward(1000, 100, 4, 1, 1, 0.5, 100), Is.EqualTo(87));
     }
 
     [Test]

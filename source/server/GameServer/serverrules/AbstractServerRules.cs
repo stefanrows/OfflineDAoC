@@ -1927,6 +1927,9 @@ namespace DOL.GS.ServerRules
             if (playerCountAndDamage.Count == 0 && botCountAndDamage.Count == 0)
                 return;
 
+            if (IsWorthPlayerKillRewards(killedPlayer))
+                DropPlayerKillLoot(killedPlayer, killer, playerCountAndDamage, botCountAndDamage);
+
             bool isWorthAnything = false;
 
             // Let `AwardExperience` fetch players that are in a group but didn't attack the target, and decide how things should be shared.
@@ -2011,6 +2014,83 @@ namespace DOL.GS.ServerRules
             }
         }
 
+        private static void DropPlayerKillLoot(GamePlayer killedPlayer, GameObject killer,
+            Dictionary<GamePlayer, EntityCountTotalDamagePair> playerCountAndDamage,
+            Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage)
+        {
+            GameLiving killingCombatant = PvpCombatant.Resolve(killer as GameLiving);
+            var itemOwners = playerCountAndDamage
+                .Select(pair => new ItemOwnerTotalDamagePair(pair.Key, pair.Value.Damage))
+                .Concat(botCountAndDamage.Select(pair => new ItemOwnerTotalDamagePair(pair.Key, pair.Value.Damage)))
+                .OrderByDescending(pair => ReferenceEquals(pair.Owner, killingCombatant))
+                .ThenByDescending(pair => pair.Damage)
+                .ToList();
+
+            if (itemOwners.Count == 0 || itemOwners[0].Owner is not GameLiving lootOwner ||
+                lootOwner is not (GamePlayer or GameBot))
+                return;
+
+            eCharacterClass lootClass = lootOwner is GamePlayer player
+                ? (eCharacterClass)player.CharacterClass.ID
+                : (eCharacterClass)((GameBot)lootOwner).CharacterClass.ID;
+
+            if (lootOwner.Realm == eRealm.None || (int)lootClass == 0)
+                return;
+
+            try
+            {
+                byte lootLevel = (byte)Math.Min(byte.MaxValue, killedPlayer.Level + 1);
+                GeneratedUniqueItem itemTemplate = AtlasROGManager.GenerateMonsterLootROG(
+                    lootOwner.Realm, lootClass, lootLevel, killedPlayer.CurrentZone?.IsOF == true);
+                itemTemplate.GenerateItemQuality(lootOwner.GetConLevel(killedPlayer));
+
+                GameInventoryItem inventoryItem = GameInventoryItem.Create(itemTemplate);
+                inventoryItem.IsCrafted = false;
+                inventoryItem.IsROG = true;
+                inventoryItem.Creator = killedPlayer.Name;
+
+                WorldInventoryItem worldItem = new(inventoryItem)
+                {
+                    X = killedPlayer.X,
+                    Y = killedPlayer.Y,
+                    Z = killedPlayer.Z,
+                    Heading = killedPlayer.Heading,
+                    CurrentRegion = killedPlayer.CurrentRegion
+                };
+
+                foreach (GamePlayer nearbyPlayer in killedPlayer.GetPlayersInRadius(WorldMgr.INFO_DISTANCE))
+                {
+                    nearbyPlayer.Out.SendMessage(LanguageMgr.GetTranslation(nearbyPlayer.Client.Account.Language,
+                        "GameNPC.DropLoot.Drops",
+                        killedPlayer.GetName(0, true),
+                        worldItem.GetName(1, false)), eChatType.CT_Loot, eChatLoc.CL_SystemWindow);
+                }
+
+                foreach (ItemOwnerTotalDamagePair itemOwner in itemOwners)
+                {
+                    worldItem.AddOwner(itemOwner.Owner);
+                    TryPickUpResult result = worldItem.TryAutoPickUp(itemOwner.Owner);
+                    if (result is TryPickUpResult.Success)
+                        return;
+                    if (result is TryPickUpResult.Blocked)
+                        break;
+                }
+
+                worldItem.AddToWorld();
+            }
+            catch (Exception exception)
+            {
+                if (log.IsErrorEnabled)
+                    log.Error($"PVP_PLAYER_LOOT_FAILED victim=\"{killedPlayer.Name}\" owner=\"{lootOwner.Name}\"", exception);
+            }
+        }
+
+        // DeathTime is played-time at the last death; zero means the character
+        // has never died and must not be treated as inside the repeat-kill window.
+        private static bool IsWorthPlayerKillRewards(GamePlayer killedPlayer) =>
+            killedPlayer.DeathTime <= 0 ||
+            killedPlayer.DeathTime + Properties.RP_WORTH_SECONDS <= killedPlayer.PlayedTime;
+
         private static void AwardBotOnPlayerKill(GameBot botToAward,
             GameObject killer,
             double playerTotalDamageReceived,
@@ -2036,32 +2116,27 @@ namespace DOL.GS.ServerRules
                 return;
             }
 
-            isWorthAnything = killedPlayer.DeathTime + Properties.RP_WORTH_SECONDS <= killedPlayer.PlayedTime;
+            isWorthAnything = IsWorthPlayerKillRewards(killedPlayer);
             if (!isWorthAnything)
                 return;
 
             double damagePercent = Math.Min(1.0, contribution.Damage / playerTotalDamageReceived);
             int contributorCount = Math.Max(1, contribution.Count);
 
-            long baseXpReward = killedPlayer.ExperienceValue / contributorCount;
-            long xpCap = botToAward.GetExperienceValueForLevel(botToAward.Level) * 4 *
-                Properties.XP_PVP_CAP_PERCENT / 100;
-            long experience = (long)(Math.Min(baseXpReward, xpCap) * damagePercent);
+            long experience = AutonomousBotRealmPointRewards.CalculateExperienceReward(
+                killedPlayer.ExperienceValue, botToAward.GetExperienceValueForLevel(botToAward.Level) * 4,
+                killedPlayer.Level, botToAward.Level, contributorCount, damagePercent, Properties.XP_PVP_CAP_PERCENT);
             if (experience > 0)
                 botToAward.GainExperience(eXPSource.Player, experience);
 
             int botRealmPointValue = AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(
                 botToAward.Level, botToAward.RealmLevel);
-            int realmPoints = Math.Min(killedPlayer.RealmPointsValue / contributorCount,
-                botRealmPointValue * 2);
-            realmPoints = (int)(realmPoints * damagePercent);
             DbBattleground battleground = GameServer.KeepManager.GetBattleground(botToAward.CurrentRegionID);
-            if (battleground == null || botToAward.RealmLevel < battleground.MaxRealmLevel)
-                realmPoints = (int)(realmPoints *
-                    (1.0 + 2.0 * (killedPlayer.RealmLevel - botToAward.RealmLevel) / 900.0));
-
-            if (botToAward.Group != null)
-                realmPoints += (int)(realmPoints * (contributorCount - 1) * 0.125);
+            int realmPoints = AutonomousBotRealmPointRewards.CalculateRealmPointReward(
+                killedPlayer.RealmPointsValue, killedPlayer.RealmLevel, botRealmPointValue,
+                botToAward.RealmLevel, contributorCount, botToAward.Group == null ? 1 : contributorCount,
+                damagePercent, battleground == null || botToAward.RealmLevel < battleground.MaxRealmLevel,
+                killedPlayer.Level, botToAward.Level);
 
             if (realmPoints > 0)
                 botToAward.GainRealmPoints(realmPoints, true);
@@ -2089,9 +2164,8 @@ namespace DOL.GS.ServerRules
                 return;
             }
 
-            isWorthAnything = killedPlayer.DeathTime + Properties.RP_WORTH_SECONDS <= killedPlayer.PlayedTime;
+            isWorthAnything = IsWorthPlayerKillRewards(killedPlayer);
             double damagePercent = CalculateDamagePercent();
-            int baseRpReward;
             int baseBpReward;
             long baseXpReward;
             long baseMoneyReward;
@@ -2100,9 +2174,8 @@ namespace DOL.GS.ServerRules
             if (isWorthAnything)
             {
                 // Players don't drop bags of money, it's immediately split and awarded.
-                CalculateRewardsModifiedByGroup(entityCountTotalDamagePair, out baseRpReward, out baseBpReward, out baseXpReward, out baseMoneyReward);
+                CalculateRewardsModifiedByGroup(entityCountTotalDamagePair, out baseBpReward, out baseXpReward, out baseMoneyReward);
 
-                baseRpReward = Math.Min(baseRpReward, CalculateRpCap());
                 baseBpReward = Math.Min(baseBpReward, CalculateBpCap());
                 baseXpReward = Math.Min(baseXpReward, CalculateXpCap());
                 baseMoneyReward = Math.Min(baseMoneyReward, CalculateMoneyCap());
@@ -2135,18 +2208,12 @@ namespace DOL.GS.ServerRules
                 return damagePercent;
             }
 
-            void CalculateRewardsModifiedByGroup(EntityCountTotalDamagePair entityCountTotalDamagePair, out int baseRpReward, out int baseBpReward, out long baseXpReward, out long baseMoneyReward)
+            void CalculateRewardsModifiedByGroup(EntityCountTotalDamagePair entityCountTotalDamagePair, out int baseBpReward, out long baseXpReward, out long baseMoneyReward)
             {
                 int entityCount = entityCountTotalDamagePair.Count;
                 baseXpReward = killedPlayer.ExperienceValue / entityCount;
-                baseRpReward = killedPlayer.RealmPointsValue / entityCount;
                 baseBpReward = (!Properties.ALLOW_BPS_IN_BGS && killedPlayer.CurrentZone.IsBG ? 0 : killedPlayer.BountyPointsValue) / entityCount;
                 baseMoneyReward = killedPlayer.MoneyValue / entityCount;
-            }
-
-            int CalculateRpCap()
-            {
-                return playerToAward.RealmPointsValue * 2;
             }
 
             int CalculateBpCap()
@@ -2166,27 +2233,17 @@ namespace DOL.GS.ServerRules
 
             void RewardRealmPoints(out int realmPointsEarned)
             {
-                int realmPoints = (int) (baseRpReward * damagePercent);
                 DbBattleground battleground = GameServer.KeepManager.GetBattleground(playerToAward.CurrentRegionID);
-
-                // Only award RPs if the player is under the battleground's cap.
-                if (battleground == null || (playerToAward.RealmLevel < battleground.MaxRealmLevel))
-                    realmPoints = (int) (realmPoints * (1.0 + 2.0 * (killedPlayer.RealmLevel - playerToAward.RealmLevel) / 900.0));
-
-                realmPoints += CalculateGroupBonus();
-
-                if (realmPoints > 0)
-                    playerToAward.GainRealmPoints(realmPoints, true);
-
-                realmPointsEarned = realmPoints;
-
-                int CalculateGroupBonus()
-                {
-                    if (playerToAward.Group == null || !groupCountAndDamage.TryGetValue(playerToAward.Group, out EntityCountTotalDamagePair value))
-                        return 0;
-
-                    return (int) (realmPoints * (value.Count - 1) * 0.125);
-                }
+                int groupCount = playerToAward.Group != null &&
+                    groupCountAndDamage.TryGetValue(playerToAward.Group, out EntityCountTotalDamagePair group)
+                    ? group.Count : 1;
+                realmPointsEarned = AutonomousBotRealmPointRewards.CalculateRealmPointReward(
+                    killedPlayer.RealmPointsValue, killedPlayer.RealmLevel, playerToAward.RealmPointsValue,
+                    playerToAward.RealmLevel, entityCountTotalDamagePair.Count, groupCount, damagePercent,
+                    battleground == null || playerToAward.RealmLevel < battleground.MaxRealmLevel,
+                    killedPlayer.Level, playerToAward.Level);
+                if (realmPointsEarned > 0)
+                    playerToAward.GainRealmPoints(realmPointsEarned, true);
             }
 
             void RewardBountyPoints()
@@ -2211,7 +2268,9 @@ namespace DOL.GS.ServerRules
 
             void RewardExperience()
             {
-                long experience = (long) (baseXpReward * damagePercent);
+                long experience = AutonomousBotRealmPointRewards.CalculateExperienceReward(
+                    killedPlayer.ExperienceValue, playerToAward.ExperienceValue, killedPlayer.Level,
+                    playerToAward.Level, entityCountTotalDamagePair.Count, damagePercent, Properties.XP_PVP_CAP_PERCENT);
                 experience += CalculateOutpostExperienceBonus(playerToAward, baseXpReward);
 
                 if (experience > 0)

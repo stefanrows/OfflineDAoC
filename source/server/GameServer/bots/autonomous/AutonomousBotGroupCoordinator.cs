@@ -1223,12 +1223,16 @@ public static partial class AutonomousBotGroupCoordinator
                 .Where(candidate => candidate != leader && !claimed.Contains(candidate) && candidate.Group == null &&
                                      AutonomousObjectiveAssignments.Is(candidate, objectiveKind) &&
                                      AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
-                                     candidate.CurrentRegionID == leader.CurrentRegionID &&
+                                     (objectiveKind == eAutonomousObjectiveKind.GroupPve ||
+                                      candidate.CurrentRegionID == leader.CurrentRegionID) &&
                                      LevelsCompatible(leader.Level, candidate.Level))
-                .OrderBy(candidate => LastFormationAttemptTick.GetValueOrDefault(MemberKey(candidate)))
+                .OrderBy(candidate => objectiveKind == eAutonomousObjectiveKind.GroupPve &&
+                                      candidate.CurrentRegionID != leader.CurrentRegionID ? 1 : 0)
+                .ThenBy(candidate => LastFormationAttemptTick.GetValueOrDefault(MemberKey(candidate)))
                 .ThenBy(FormationWaitStartedUtc)
                 .ThenBy(candidate => Math.Abs(candidate.Level - leader.Level))
-                .ThenBy(candidate => candidate.GetDistanceTo(leader))
+                .ThenBy(candidate => candidate.CurrentRegionID == leader.CurrentRegionID
+                    ? candidate.GetDistanceTo(leader) : int.MaxValue)
                 .ThenBy(MemberKey)
                 .ToArray();
             int rolledSize = largestAllowed;
@@ -1252,7 +1256,7 @@ public static partial class AutonomousBotGroupCoordinator
             {
                 if (!TryBuildPveRoster(leader, compatiblePool, out compatible, out pveRoles))
                 {
-                    LogFormationBlocked(leader, objectiveKind, "No compatible guildmate is currently available in this level/region cohort");
+                    LogFormationBlocked(leader, objectiveKind, "No compatible guildmate is currently available in this crew/level cohort");
                     continue;
                 }
             }

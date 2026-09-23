@@ -14,13 +14,13 @@ using DOL.GS.Spells;
  */
 namespace DOL.GS.Scripts
 {
-    public class LiveTeleporter : GameNPC
+    public class LiveTeleporter : AllRealmsTeleporter
     {
         /// <summary>
         /// The type of teleporter; this is used in order to be able to handle
         /// identical TeleportIDs differently, depending on the actual teleporter.
         /// </summary>
-        protected virtual String Type
+        protected override String Type
         {
             get { return string.Empty; }
         }
@@ -28,7 +28,7 @@ namespace DOL.GS.Scripts
         /// <summary>
         /// The destination realm. 
         /// </summary>
-        protected virtual eRealm DestinationRealm
+        protected override eRealm DestinationRealm
         {
             get { return Realm; }
         }
@@ -97,82 +97,15 @@ namespace DOL.GS.Scripts
 
         public override bool Interact(GamePlayer player) // What to do when a player clicks on me
         {
-            if (!base.Interact(player) || GameRelic.IsPlayerCarryingRelic(player)) return false;
-
-            if (player.Realm != this.Realm && player.Client.Account.PrivLevel == 1) return false;
-
-            TurnTo(player, 10000);
-            
-            var message = string.Empty;
-
-            switch (Realm)
-            {
-                case eRealm.Albion:
-
-                    message = "Greetings, " + player.Name +
-                              " I am able to channel energy to transport you to distant lands. I can send you to the following locations:\n\n" +
-                              "[Castle Sauvage] in Camelot Hills or \n[Snowdonia Fortress] in Black Mtns. North,\n" +
-                              "[Avalon Marsh] wharf,\n" +
-                              "[Gothwaite Harbor] in the [Shrouded Isles],\n" +
-                              "[Camelot] our glorious capital,\n" +
-                              "[Entrance] to the areas of [Housing]\n\n" +
-                              "or one of the many [towns] throughout Albion.";
-                              //"For this event duration, I can send you to [Darkness Falls]";
-                    break;
-
-                case eRealm.Midgard:
-                    
-                    message = "Greetings, " + player.Name +
-                              " I am able to channel energy to transport you to distant lands. I can send you to the following locations:\n\n" +
-                              "[Svasud Faste] in Mularn or \n[Vindsaul Faste] in West Svealand,\n" +
-                              "Beaches of [Gotar] near Nailiten,\n" +
-                              "[Aegirhamn] in the [Shrouded Isles],\n" +
-                              "Our glorious city of [Jordheim],\n" +
-                              "[Entrance] to the areas of [Housing]\n\n" +
-                              "or one of the many [towns] throughout Midgard.";
-                    break;
-
-                case eRealm.Hibernia:
-                    
-                    message = "Greetings, " + player.Name +
-                              " I am able to channel energy to transport you to distant lands. I can send you to the following locations:\n\n" +
-                              "[Druim Ligen] in Connacht or \n[Druim Cain] in Bri Leith,\n" +
-                              "[Shannon Estuary] watchtower,\n" +
-                              "[Domnann] Grove in the [Shrouded Isles],\n" +
-                              "[Tir na Nog] our glorious capital,\n" +
-                              "[Entrance] to the areas of [Housing]\n\n" +
-                              "or one of the many [towns] throughout Hibernia.";
-                    break;
-
-                default:
-                    SayTo(player, "I have no Realm set, so don't know what locations to offer..");
-                    break;
-            }
-            
-            message += "\n\n" +
-                       "Perhaps you would like the challenge of the [Epic Dungeon]?";
-
-            SayTo(player, message);
-
-            return true;
+            return base.Interact(player);
         }
 
         public override bool WhisperReceive(GameLiving source, string str) // What to do when a player whispers me
         {
-            if (!base.WhisperReceive(source, str)) return false;
-
-            GamePlayer player = source as GamePlayer;
-            if (player == null)
-                return false;
-
-            if (GameRelic.IsPlayerCarryingRelic(player))
-                return false;
-
-            return GetTeleportLocation(player, str);
-
+            return base.WhisperReceive(source, str);
         }
 
-        protected virtual bool GetTeleportLocation(GamePlayer player, string text)
+        protected override bool GetTeleportLocation(GamePlayer player, string text)
         {
             switch (Realm) // Only offer locations based on what realm i am set at.
             {
@@ -450,7 +383,7 @@ namespace DOL.GS.Scripts
         /// </summary>
         /// <param name="player"></param>
         /// <param name="destination"></param>
-        protected virtual void OnDestinationPicked(GamePlayer player, DbTeleport destination)
+        protected override void OnDestinationPicked(GamePlayer player, DbTeleport destination)
         {
             Region region = WorldMgr.GetRegion((ushort) destination.RegionID);
 
@@ -474,7 +407,7 @@ namespace DOL.GS.Scripts
         /// </summary>
         /// <param name="player"></param>
         /// <param name="subSelection"></param>
-        protected virtual void OnSubSelectionPicked(GamePlayer player, DbTeleport subSelection)
+        protected override void OnSubSelectionPicked(GamePlayer player, DbTeleport subSelection)
         {
         }
 
@@ -484,7 +417,7 @@ namespace DOL.GS.Scripts
         /// </summary>
         /// <param name="player"></param>
         /// <param name="destination"></param>
-        protected virtual void OnTeleportSpell(GamePlayer player, DbTeleport destination)
+        protected override void OnTeleportSpell(GamePlayer player, DbTeleport destination)
         {
             SpellLine spellLine = SkillBase.GetSpellLine(GlobalSpellsLines.Mob_Spells);
             List<Spell> spellList = SkillBase.GetSpellList(GlobalSpellsLines.Mob_Spells);
@@ -512,7 +445,7 @@ namespace DOL.GS.Scripts
         /// </summary>
         /// <param name="player"></param>
         /// <param name="destination"></param>
-        protected virtual void OnTeleport(GamePlayer player, DbTeleport destination)
+        protected override void OnTeleport(GamePlayer player, DbTeleport destination)
         {
             if (player.InCombat == false && GameRelic.IsPlayerCarryingRelic(player) == false)
             {

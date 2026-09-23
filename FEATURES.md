@@ -14,6 +14,13 @@ and verification history of the full-PvP conversion.
   rules.
 - Same-realm strangers can fight. Mixed-realm groupmates and guildmates remain
   allied. Player-led groups retain their cross-guild invitation behavior.
+- PvP kills award XP and realm points. Base RP is the higher of five times
+  victim level or the existing high-level curve, plus realm level. Beating a
+  higher-level opponent adds 25% XP/RP per level difference (up to 100%),
+  including reward caps. Damage sharing and repeat-kill protection still apply;
+  a never-killed character is not blocked by the repeat-kill timer.
+- Inland, Live, and realm-specific town teleporters offer all three realms'
+  destinations through the same menu, regardless of the player's realm.
 - Keeps are claimed by guilds. Relics are physically carried and mounted at a
   claimed guild keep, and their bonuses apply to that guild.
 - Capitals, housing, protected starter dungeons, portal keeps, release immunity,
@@ -47,6 +54,8 @@ and verification history of the full-PvP conversion.
 - Ordinary autonomous parties recruit only compatible bots from the same guild,
   across all three realms. Matchmaking runs every five seconds, prioritizes the
   longest-waiting candidates, and limits route-validation work per pass.
+- Same-region candidates are preferred. If they cannot form a party, compatible
+  guildmates from other regions can join and travel to the existing rendezvous.
 - Ordinary PvE parties can start with any size from two through eight. Their
   roster is locked for the outing; after a permanent loss, roles and content are
   reassessed between fights, and the party dissolves below two members.
@@ -75,6 +84,11 @@ and verification history of the full-PvP conversion.
   and avoid visibly stronger parties. Retaliation is still legal.
 - PvP assignments explicitly relinquish optional low-level safety for autonomous
   actors while preserving safe areas and release immunity.
+- Solo PvP hunters also engage local legal rivals and change hunting grounds
+  instead of repeatedly selecting the same spot. Party strength counts nearby
+  living members rather than guildmates elsewhere in the region.
+- Queued group-PvE bots level at outdoor camps in their current region until
+  matched; the new party's rendezvous then supersedes their individual camp.
 - Formation delay and matchmaking blocks are logged separately from travel time.
 
 ## Player companions

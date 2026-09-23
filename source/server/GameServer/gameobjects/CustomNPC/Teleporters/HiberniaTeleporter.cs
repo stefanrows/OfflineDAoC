@@ -27,7 +27,7 @@ namespace DOL.GS
 	/// Hibernia teleporter.
 	/// </summary>
 	/// <author>Aredhel</author>
-	public class HiberniaTeleporter : GameTeleporter
+	public class HiberniaTeleporter : AllRealmsTeleporter
 	{
 		/// <summary>
 		/// Player right-clicked the teleporter.
@@ -36,19 +36,8 @@ namespace DOL.GS
 		/// <returns></returns>
 		public override bool Interact(GamePlayer player)
 		{
-			if (!base.Interact(player))
-				return false;
-
-			SayTo(player, "Greetings, " + player.Name +
-			              " I am able to channel energy to transport you to distant lands. I can send you to the following locations:\n\n" +
-			              "[Druim Ligen] in Connacht or \n[Druim Cain] in Bri Leith\n" +
-			              "[Shannon Estuary] watchtower\n" +
-			              "[Domnann] Grove in the [Shrouded Isles]\n" +
-			              "[Tir na Nog] our glorious capital\n" +
-			              "[Entrance] to the areas of [housing]\n\n" +
-			              "Or one of the many [towns] throughout Hibernia");
-			return true;
-		}
+            return base.Interact(player);
+        }
 
 		/// <summary>
 		/// Player has picked a subselection.
