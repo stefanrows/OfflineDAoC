@@ -1,6 +1,7 @@
 # Persistent companion roadmap
 
-Status: Stage 1 is **Complete**; Stages 2–6 are **Not started**.
+Status: Stage 1 **Complete**; Stage 2 **Complete (implementation and runtime
+acceptance)**; Stages 3–6 **Not started**.
 Last updated: 2026-09-23.
 
 This roadmap records the agreed direction for lasting party members. It does
@@ -72,10 +73,10 @@ Missing level-by-level schedules also block the affected automatic plans rather
 than inviting guessed templates. Uthgard sources are identified as emulator
 recommendations, not retail-era evidence. The local
 runtime database check remains a prerequisite before enabling any automatic plan.
-Character-scoped ownership and additive save boundaries are recorded as design
-recommendations; Stage 2 ownership and roster decisions remain gates. Code
-assessment of the menu is complete; real-client interaction checks remain
-pending and are not claimed by this stage.
+Character-scoped ownership and additive save boundaries were recorded as design
+recommendations; Stage 2 recruitment, ownership, and compatibility choices were
+confirmed by the owner and are recorded below. Code assessment of the menu is
+complete; runtime interactions were later verified as part of Stage 2 acceptance.
 
 **Prerequisites:** Read the current companion contract and relevant server code.
 
@@ -97,7 +98,22 @@ roster implementation.
 
 ### Stage 2 - Persistent roster
 
-**Status:** Not started.
+**Status:** Complete (implementation and runtime acceptance, 2026-09-23).
+
+**Progress:** The owner selected the recommended recruitment and compatibility
+rules in the 2026-09-23 [decision brief](COMPANION_STAGE2_DECISIONS.md): free
+recruitment anywhere, level 1, 78 stored companions per character, per-character
+ownership, unique authored individuals per owner, `/spawn` remains temporary,
+and no legacy profile conversion. Added an additive `player_companions` record,
+stable companion IDs, generated recruit/list/invite/bench commands, namespaced
+inventory persistence, and login restoration. Group removal, owner departure,
+and group disband save and bench persistent companions. Only generated recruits
+are available; authored individuals remain Stage 5 work. XP/catch-up and training
+rules remain Stage 3 work. The owner confirmed all Stage 2 runtime
+acceptance checks passed in a separate Windows acceptance installation on
+2026-09-23. The invite flow was rechecked after fixing persistence of newly
+generated unique starter-gear records. Stage 6 retains the broader integration
+scenarios that are outside this Stage 2 gate.
 
 **Prerequisites:** Stage 1 architecture/UI audit complete; recruitment, ownership,
 roster limits, `/spawn` compatibility, and temporary-helper policy decided.
@@ -190,29 +206,30 @@ record commands and results.
 companion, level together, inspect training, obtain/equip an upgrade, manually
 replace it, bench/reinvite, and restart. Verify a second same-class recruit,
 catch-up, support participation, cross-realm travel, death/recovery, and raids.
-Record observations separately; this gate remains pending until performed.
+Record observations separately; the broader Stage 6 gate remains pending until
+the listed cross-system scenarios are performed.
 
-## Open decisions and stage gates
+## Decisions and stage gates
 
 These are unresolved, not implicit defaults. Resolve and record each before
 implementing its dependent stage. If an earlier stage needs a later decision,
 resolve it then rather than hiding it in implementation.
 
-| Decision | Required before |
-| --- | --- |
-| Recruitment location, cost, initial level, and roster limits | Stage 2 |
-| Ownership per character/account; uniqueness of authored recruits | Stage 2 |
-| Meaning of `/spawn`, old saved-bot compatibility, temporary testing helpers | Stage 2 |
-| Catch-up rate, target/cap, participation range, support and pet eligibility | Stage 3 |
-| Respecialization and switching between automatic/manual training | Stage 3 |
-| Companion realm-point eligibility and progression | Stage 3 |
-| Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 |
-| Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 |
-| Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 |
-| Death/recovery and raid rules | Stage 6, or earlier if changed by a prior stage |
+| Decision | Required before | Status |
+| --- | --- | --- |
+| Recruitment location, cost, initial level, and roster limits | Stage 2 | Resolved: anywhere, free, level 1, 78 stored per character |
+| Ownership per character/account; uniqueness of authored recruits | Stage 2 | Resolved: per character; each authored individual once per owner |
+| Meaning of `/spawn`, old saved-bot compatibility, temporary testing helpers | Stage 2 | Resolved: `/spawn` stays temporary; no legacy conversion or GM test-helper command |
+| Catch-up rate, target/cap, participation range, support and pet eligibility | Stage 3 | Open |
+| Respecialization and switching between automatic/manual training | Stage 3 | Open |
+| Companion realm-point eligibility and progression | Stage 3 | Open |
+| Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 | Open; the existing generated level-1 starter kit is retained for Stage 2 |
+| Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 | Open |
+| Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 | Open |
+| Death/recovery and raid rules | Stage 6, or earlier if changed by a prior stage | Open |
 
-Personal-drop transfer restrictions, a dedicated testing-helper command, and a
-specific roster size have not been approved as fixed rules.
+Personal-drop transfer restrictions and a dedicated testing-helper command
+have not been approved as fixed rules.
 
 ## Maintenance and boundaries
 

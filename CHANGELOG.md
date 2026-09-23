@@ -12,6 +12,115 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-09-23
+
+### Added
+
+- None.
+
+### Changed
+
+- Companion roadmap, decision brief, and feature verification notes now record
+  owner-confirmed Stage 2 runtime acceptance and current offline checks.
+- Launcher, command-reference, and test version pins now identify 0.23.1.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.23.0] - 2026-09-23
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Persistent companion invites now save newly generated unique gear templates
+  with the companion inventory, allowing recruits to join and retain their gear.
+
+### Removed
+
+- None.
+
+## [0.22.0] - 2026-09-23
+
+### Added
+
+- Companion roster invite and bench commands accept companion names, and the
+  roster lists names grouped by realm without showing internal IDs.
+
+### Changed
+
+- `/companions recruit <class>` resolves a class from any realm; `/classes`
+  lists class names grouped by realm without role descriptions.
+- Launcher, command-reference, and test version pins now identify 0.22.0.
+
+### Fixed
+
+- Albion class listings now show “Albion” instead of the `_FirstPlayerRealm`
+  enum alias.
+
+### Removed
+
+- None.
+
+## [0.21.0] - 2026-09-23
+
+### Added
+
+- Persistent per-character companion records with stable IDs, saved identity,
+  specialization/build state, and namespaced companion inventories.
+- `/companions list`, `recruit`, `invite`, and `bench` flows for free level-1
+  Classic + SI recruits, with 78 stored roster slots per character.
+- Active persistent companions restore on login; failed invitations keep the
+  roster entry, and full groups leave companions benched.
+
+### Changed
+
+- Player group departure, explicit removal, and group disband save and bench
+  persistent companions. `/spawn` remains temporary, and legacy saved bot
+  profiles are left untouched without conversion.
+- Launcher, command-reference, and test version pins now identify 0.21.0.
+
+### Fixed
+
+- Companion equipment is saved under its own inventory owner ID, preventing
+  roster gear from sharing a player's or autonomous bot's inventory key.
+
+### Removed
+
+- None.
+
+## [0.20.7] - 2026-09-23
+
+### Added
+
+- Stage 2 companion decision brief grounded in current roster, menu, and
+  persistence code, with recommendations and unresolved owner choices.
+
+### Changed
+
+- Companion roadmap now records Stage 2 decision preparation; gameplay
+  and save behavior remain unchanged. Launcher, command-reference, and
+  test version pins now identify 0.20.7.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.20.6] - 2026-09-23
 
 ### Added

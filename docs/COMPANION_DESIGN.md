@@ -119,35 +119,25 @@ version. Persist companion inventory against a distinct companion owner ID;
 never alias the player's character inventory owner ID. Load only through the
 owning player's roster flow. Bench and logout should save and detach the
 companion without deleting its identity; autonomous controllers should never
-discover it. This is a proposed interface, not an approved schema: ownership,
-schema compatibility, and failure-recovery details remain open.
+discover it. Stage 2 implements this as a companion-specific record and
+inventory owner-ID namespace; disposable-save compatibility and failure
+recovery still require runtime verification.
 
 The additive-table approach appears safer than converting legacy bot rows, but
 existing-save compatibility still needs disposable-database verification. Do
 not reinterpret an old profile or auto-convert a temporary helper without an
 explicit mapping and migration decision.
 
-### Stage 2 ownership and roster interface recommendation
+### Stage 2 ownership and roster interface
 
-Recommend character-scoped ownership as the starting design: it matches the
-existing `BotProfile` owner-character relationship and keeps companion identity
-and equipment local to the character that recruited them. The owner has not
-chosen between character and account scope; record that decision before Stage 2
-implementation. Keep each companion's stable ID independent of name and class.
-
-Use a new additive companion record and a companion-specific `BotInventory`
-owner-ID namespace. A conceptual roster service should list, recruit, invite, and
-bench only records belonging to the current owner. Menu labels should resolve
-through an owner-scoped server-side mapping to stable IDs, never from a name or
-client-supplied database key. Bench and logout persist and detach; they do not
-delete. Additive schema setup must leave legacy `bot_profiles`, existing player
-items, and autonomous-world-bot records unchanged. Do not migrate old profiles
-or temporary `/spawn` helpers automatically.
-
-This interface and compatibility policy are design recommendations, not a
-committed schema or product decision. Recruitment rules, account-versus-character
-scope, roster limits, old `/spawn` meaning, and temporary-helper policy remain
-Stage 2 gates.
+The owner selected per-character ownership, free recruitment anywhere at level
+1, and 78 stored roster slots. Authored individuals will be unique per owner.
+`/spawn` remains temporary, and the server does not convert existing saved bot
+profiles. The implementation uses stable IDs independent of name/class, an
+additive `player_companions` record, and a `playercompanion:` inventory owner-ID
+namespace. `/companions` lists, recruits, invites, and benches only records
+belonging to the current owner. These choices and the implementation are
+recorded in [COMPANION_STAGE2_DECISIONS.md](COMPANION_STAGE2_DECISIONS.md).
 
 ## Reward, progression, and equipment findings
 
@@ -202,7 +192,7 @@ interactions remain unverified; no native client patch is assumed.
 | Research leveling and level-50 build proposals for each class | Complete to proposal-or-gap standard; two classes lack numeric templates, three forum variants await ranked-skill validation, and most schedules block affected automatic plans |
 | Check allocations against careers, abilities, skills, and point budgets | Complete for 34 proposals: all 39 career sets and 108 ranked lines; three additional forum variants have point checks but need rank validation |
 | Record source era, historical evidence, recommendations, and server deviations | Complete; Uthgard recommendations are separated from dated forum advice and retail-era evidence |
-| Document owner key, compatibility policy, and roster/save interface | Complete as a recommendation; owner scope and roster rules remain Stage 2 gates |
+| Document owner key, compatibility policy, and roster/save interface | Complete; owner choices and the Stage 2 implementation are recorded in the decision brief |
 | Verify client menu behavior in a real client | Pending a separately authorized client session |
 
 The static research, design boundary, and code-based menu assessment meet Stage
@@ -210,9 +200,9 @@ The static research, design boundary, and code-based menu assessment meet Stage
 automatic plans; real-client menu behavior remains unverified. Neither is
 reported as a successful runtime or client check.
 
-Stage 2 implementation remains gated by the open decisions in
-[COMPANION_ROADMAP.md](COMPANION_ROADMAP.md). No companion schema or gameplay
-behavior is implemented by these notes.
+Stage 2 implementation and decisions are recorded in
+[COMPANION_ROADMAP.md](COMPANION_ROADMAP.md). Disposable-save compatibility and
+real-client behavior remain unverified; these notes do not claim those checks.
 
 ## Source files reviewed
 

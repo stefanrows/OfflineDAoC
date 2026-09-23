@@ -390,6 +390,17 @@ namespace DOL.GS
             // GameBot.Delete and could run cleanup multiple times.
             if (living is GameBot { IsTemporaryGroupHelper: true } temporaryHelper)
                 temporaryHelper.Delete();
+            else if (living is GameBot { IsPersistentPlayerCompanion: true } persistentCompanion)
+                PlayerCompanionRoster.OnGroupMemberRemoved(persistentCompanion);
+
+            if (living is GamePlayer departedOwner)
+            {
+                GameBot[] ownedCompanions = GetMembersInTheGroup().OfType<GameBot>()
+                    .Where(bot => bot.IsPersistentPlayerCompanion && bot.Owner == departedOwner)
+                    .ToArray();
+                foreach (GameBot companion in ownedCompanions)
+                    RemoveMember(companion);
+            }
             return true;
         }
 
@@ -426,11 +437,15 @@ namespace DOL.GS
             Mission?.ExpireMission();
 
             List<GameBot> temporaryHelpers;
+            List<GameBot> persistentCompanions;
 
             lock (_groupMembersLock)
             {
                 temporaryHelpers = _groupMembers.OfType<GameBot>()
                     .Where(bot => bot.IsTemporaryGroupHelper)
+                    .ToList();
+                persistentCompanions = _groupMembers.OfType<GameBot>()
+                    .Where(bot => bot.IsPersistentPlayerCompanion)
                     .ToList();
                 foreach (GameLiving member in _groupMembers)
                 {
@@ -449,6 +464,8 @@ namespace DOL.GS
 
             foreach (GameBot helper in temporaryHelpers)
                 helper.Delete();
+            foreach (GameBot companion in persistentCompanions)
+                PlayerCompanionRoster.OnGroupMemberRemoved(companion);
         }
 
         private void UpdateGroupIndexes()

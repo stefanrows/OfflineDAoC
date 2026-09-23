@@ -67,12 +67,17 @@ namespace DOL.GS
         public long DatabaseID { get; set; }
         public bool IsAutonomousWorldBot { get; private set; }
         public bool IsTemporaryGroupHelper { get; private set; }
+        public bool IsPersistentPlayerCompanion => PlayerCompanionRecord != null;
+        internal bool SuppressRosterBenchOnGroupRemoval { get; set; }
         public bool IsEndgameCompanion => TemporaryCompanionBalance.IsEndgame(IsTemporaryGroupHelper, Level);
         private bool _endgameCompanionEquipped;
         public bool SuppressLootAndProgress => IsTemporaryGroupHelper;
         internal int EquipmentLevelFloor { get; private set; }
         internal int EquipmentLevelCap { get; private set; }
         public OfflineWorldBotRecord PersistentRecord { get; private set; }
+        public PlayerCompanionRecord PlayerCompanionRecord { get; private set; }
+        public int UnspentSpecPoints => m_leftOverSpecPoints;
+        public int LastTrainedLevel => _lastAutonomousTrainedLevel;
         internal AutonomousGoalAttempt GoalDiagnosticAttempt;
         private byte _lastAutonomousTrainedLevel = 1;
         public bool HasPendingAutonomousTraining => IsAutonomousWorldBot && _lastAutonomousTrainedLevel < Level;
@@ -2267,10 +2272,12 @@ namespace DOL.GS
             byte genderId = 0,
             bool temporaryGroupHelper = false,
             byte equipmentLevel = 0,
-            byte botLevel = 0)
+            byte botLevel = 0,
+            PlayerCompanionRecord playerCompanionRecord = null)
         {
             Owner = owner ?? throw new ArgumentNullException(nameof(owner));
             IsTemporaryGroupHelper = temporaryGroupHelper;
+            PlayerCompanionRecord = playerCompanionRecord;
             ClassId = classId;
             RaceId = raceId;
             GenderId = genderId;
@@ -2294,16 +2301,36 @@ namespace DOL.GS
             // Stat and spec initialization — order matters
             InitializeBotStats();
             eCharacterClass temporaryClass = (eCharacterClass)ClassId;
+            long companionSeed = PlayerCompanionRecord != null &&
+                                 Guid.TryParse(PlayerCompanionRecord.CompanionId, out Guid companionGuid)
+                ? BitConverter.ToInt64(companionGuid.ToByteArray(), 0)
+                : 0;
+            eSpecType initialSpec = PlayerCompanionRecord == null
+                ? BotSpec.ChooseRandomSpecialization(temporaryClass)
+                : BotSpec.ChoosePersistentSpecialization(temporaryClass, companionSeed);
             BotSpec = temporaryClass == eCharacterClass.Bonedancer
-                ? new BonedancerBotSpec(BotSpec.ChooseRandomSpecialization(temporaryClass), 0, false)
-                : BotSpec.GetSpec(temporaryClass, BotSpec.ChooseRandomSpecialization(temporaryClass));
+                ? new BonedancerBotSpec(initialSpec, companionSeed, PlayerCompanionRecord != null)
+                : BotSpec.GetSpec(temporaryClass, initialSpec);
             LoadClassSpecializations(false);
-            SpendSpecPoints(Level, 0);
+            if (PlayerCompanionRecord == null)
+            {
+                SpendSpecPoints(Level, 0);
+            }
+            else
+            {
+                LoadPersistedSpecs(PlayerCompanionRecord.SerializedSpecs);
+                if (!BotLifetimeBuild.Restore(BotSpec, PlayerCompanionRecord.SerializedBuildPlan))
+                    PlayerCompanionRecord.SerializedBuildPlan = BotLifetimeBuild.Encode(BotSpec);
+                m_leftOverSpecPoints = Math.Max(0, PlayerCompanionRecord.UnspentSpecPoints);
+                _lastAutonomousTrainedLevel = (byte)Math.Clamp(PlayerCompanionRecord.LastTrainedLevel, 1, Level);
+            }
             RefreshSpecDependantSkills(false);
             SetBotSpells();
             SortStyles();
             SortSpells();
             EquipBot(equipmentLevel);
+            if (PlayerCompanionRecord != null)
+                Experience = Math.Max(0, PlayerCompanionRecord.Experience);
 
             Health = MaxHealth;
             Endurance = MaxEndurance;
@@ -2433,7 +2460,9 @@ namespace DOL.GS
 
         private void OnOwnerQuit(DOLEvent e, object sender, EventArgs arguments)
         {
-            if (IsTemporaryGroupHelper)
+            if (IsPersistentPlayerCompanion)
+                PlayerCompanionRoster.OnOwnerQuit(this);
+            else if (IsTemporaryGroupHelper)
                 Delete();
             else
                 BotManager.RemoveBot(this);
@@ -4363,7 +4392,7 @@ namespace DOL.GS
 
         public void SaveToDatabase()
         {
-            if (IsTemporaryGroupHelper)
+            if (IsTemporaryGroupHelper || IsPersistentPlayerCompanion)
                 return;
             BotDatabase.SaveBot(this);
         }

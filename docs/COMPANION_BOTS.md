@@ -1,11 +1,9 @@
-# `/spawn` Companion Bots
+# Companion Bots: `/spawn` and Persistent Roster
 
-For the proposed persistent roster, see the [companion roadmap](COMPANION_ROADMAP.md).
-That roadmap describes future work; the current behavior below remains unchanged.
+For the staged design and remaining work, see the [companion roadmap](COMPANION_ROADMAP.md).
 
-This document describes the intended behavior of temporary companion bots so
-their reward and progression rules can be tuned without confusing them with
-persistent autonomous world bots or real players.
+This document records the behavior and persistence boundaries for owned
+companions so they stay distinct from autonomous world bots and real players.
 
 ## Identity and lifetime
 
@@ -19,6 +17,33 @@ The creation path is
 `source/server/GameServer/commands/playercommands/TemporaryGroupCommands.cs`.
 Keep the temporary-helper flag distinct from `IsAutonomousWorldBot`; the two
 bot types intentionally have different persistence, reward, and tuning rules.
+
+## Persistent roster
+
+`/companions list`, `/companions recruit <class>`,
+`/companions invite <name>`, and `/companions bench <name>` manage generated,
+persistent recruits. Class-only recruitment searches all realms, so commands
+such as `/companions recruit Warden` and `/companions recruit Healer` work
+without a realm argument. Use `/companions recruit <realm> <class>` when a class
+name is shared by multiple realms. Type `/classes` for class names grouped by
+realm. A character can recruit anywhere for free, starts each recruit at level
+1, and can store up to 78 companions. `/companions list` shows names grouped by
+realm without exposing internal IDs. Ownership is per character. Each recruit
+has a stable ID, saved identity/build state, and an independent inventory
+stored under a `playercompanion:` owner ID. Same-class recruits therefore
+remain separate.
+
+The roster lives in the additive `player_companions` table. Existing `bot_profiles`
+are not converted. Active companions attempt to rejoin at owner login when group
+space is available. Removing a companion, leaving the group, or disbanding saves
+and benches that companion. `/spawn` still creates a temporary helper and has
+not been redirected to the persistent roster.
+
+This stage preserves the existing generated level-1 equipment as a one-time
+starter loadout. Persistent inventory is saved across benching and restart.
+Persistent recruits do not yet earn progression XP or catch up while benched;
+XP, catch-up, and training policy are Stage 3. Authored characters and their
+once-per-owner recruitment rules are Stage 5.
 
 ## XP contract
 

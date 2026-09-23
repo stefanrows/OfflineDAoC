@@ -15,7 +15,7 @@ namespace DOL.UnitTests
         public void MenuContainsEveryClassFromEveryRealm(eRealm realm)
         {
             string[] expected = TemporaryGroupClassCatalog.All()
-                .Select(entry => $"{entry.Realm}: {entry.CharacterClass}")
+                .Select(entry => $"{TemporaryGroupClassCatalog.RealmName(entry.Realm)}: {entry.CharacterClass}")
                 .ToArray();
             string[] links = Regex.Matches(TemporaryGroupSpawnMenu.BuildMenuText(realm), @"\[([^\]]+)\]")
                 .Select(match => match.Groups[1].Value)
