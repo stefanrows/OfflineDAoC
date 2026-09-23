@@ -53,12 +53,10 @@ namespace DOL.GS
 		/// <returns></returns>
 		public override bool Interact(GamePlayer player)
 		{
-			String intro = DisplayTeleportDestinations(player.Realm);
-			if (intro != null)
-				SayTo(player, intro);
-
 			if (!base.Interact(player))
 				return false;
+
+			SayTo(player, DisplayTeleportDestinations(player.Realm));
 
 			return true;
 		}
@@ -72,7 +70,8 @@ namespace DOL.GS
 		public override bool WhisperReceive(GameLiving source, string text)
 		{
 			GamePlayer player = source as GamePlayer;
-			if (player == null)
+			if (player == null || !player.IsWithinRadius(this, WorldMgr.INTERACT_DISTANCE) ||
+                GameRelic.IsPlayerCarryingRelic(player))
 				return false;
 
 			eRealm realmTarget = player.Realm;

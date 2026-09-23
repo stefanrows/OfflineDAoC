@@ -21,6 +21,7 @@ Follow the included component licenses when modifying or redistributing code.
 - **Players:** [Download and play instructions](docs/PLAY.md).
 - **Everyday commands:** [Quick commands and bot-generation shortcuts](docs/QUICK-COMMANDS.md).
 - **Developers and LLM users:** [Fork and customize instructions](docs/LLM-QUICKSTART.md).
+- **Planned companion system:** [Persistent companion roadmap](docs/COMPANION_ROADMAP.md).
 - **Implemented gameplay and systems:** [Feature guide](FEATURES.md).
 - **This fork's changes:** [Changelog](CHANGELOG.md). The launcher pin
   (`DisplayVersion`) is this fork's version. The playable runtime is still the

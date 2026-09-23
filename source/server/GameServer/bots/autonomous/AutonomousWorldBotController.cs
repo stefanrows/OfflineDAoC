@@ -386,11 +386,8 @@ namespace DOL.GS
                 {
                     if (bot.CurrentZone?.IsDungeon == true)
                         return LeaveDungeonForGroupMatchmaking(bot);
-                    bot.StopMovingOnPath();
-                    bot.StopMoving();
-                    SetStatus(bot, "Awaiting group PvE matchmaking", "Join a same-guild group-PvE party",
-                        "This bot is assigned group PvE and will not silently substitute a solo grind");
-                    return true;
+                    // Stay queued, but travel to a nearby outdoor solo camp while
+                    // waiting. Joining a party clears this private camp above.
                 }
 
                 if (objectiveKind == eAutonomousObjectiveKind.RvR)
@@ -1491,7 +1488,7 @@ namespace DOL.GS
             }
 
             if (_rvrDestination == null || _rvrDestination.RegionId == 0 ||
-                (!_rvrSharedEvent && GameLoop.GameLoopTime >= _nextRvrPlanReview && !BotSiegeRuntime.Assigned(bot)) ||
+                (bot.Level >= 20 && !_rvrSharedEvent && GameLoop.GameLoopTime >= _nextRvrPlanReview && !BotSiegeRuntime.Assigned(bot)) ||
                 (_rvrIntent == AutonomousRvrEventLayer.Intent.Roam && bot.CurrentRegionID == _rvrDestination.RegionId &&
                  Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= CampArrivalRadius))
             {
@@ -1721,9 +1718,9 @@ namespace DOL.GS
 
         private bool TryEngageOpenWorldPvpOpportunity(BotBrain brain, GameBot bot)
         {
-            if (brain == null || bot?.Group == null || bot.Group.MemberCount < 2 ||
-                !(AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.GroupPve) ||
-                  AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) ||
+            if (brain == null || bot == null ||
+                !AutonomousPvpOpportunityPolicy.CanSeekOpportunity(AutonomousObjectiveAssignments.KindFor(bot),
+                    bot.Group?.MemberCount ?? 1) ||
                 brain.HasAggro || bot.InCombat || bot.IsAttacking || bot.IsRecoveryResting ||
                 _groupDirective?.RecoveringBetweenPulls == true || _groupDirective?.GroupCombatActive == true ||
                 IsSafeArea(bot) || !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
@@ -2024,11 +2021,12 @@ namespace DOL.GS
             if (choices.Length == 0)
                 return null;
 
-            long key = _groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID;
+            int previous = Array.FindIndex(choices, choice => choice.Id == _rvrDestination?.Id);
+            int next = AutonomousPvpOpportunityPolicy.ChooseRoamIndex(choices.Length, previous, Random.Shared.Next());
             _rvrSharedEvent = false;
             _rvrIntent = AutonomousRvrEventLayer.Intent.Roam;
             bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
-            return choices[(int)(unchecked((ulong)key * 11400714819323198485UL) % (ulong)choices.Length)];
+            return choices[next];
         }
 
         private AutonomousRvrEventLayer.Intent _rvrIntent;
@@ -2434,7 +2432,10 @@ namespace DOL.GS
             // realm/level/death filtering a cheap in-memory operation.
             foreach (CampCatalogCell cell in CampCatalogSnapshot()
                          .Where(cell => !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
-                                        IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID)))
+                                        IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID) &&
+                                        (!AutonomousObjectiveAssignments.IsAwaitingGroupMatchmaking(bot) ||
+                                         AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(cell.IsDungeon,
+                                             cell.IsFrontier, bot.CurrentRegionID, cell.RegionId))))
             {
                 int[] validLevels = cell.Levels.Where(level =>
                     {

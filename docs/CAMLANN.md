@@ -40,11 +40,12 @@ over a running install unless the owner asks.
 - Tier 6 implementation is complete on the current branch: Camlann PvP
   player kills award only XP and realm points, constitution loss is enabled,
   human and bot release/zone/teleport immunity is preserved, Old Frontiers
-  safety scope is enforced, Atlas bounty rewards are disabled, and `/level`
-  remains unavailable. The isolated server suite passed 1,918 tests and the
-  launcher build passed on 2026-09-20; launcher tests require the Windows
-  desktop runtime and were not executable on Linux. No live server or client
-  was started.
+  safety scope is enforced, new characters without a prior death are not
+  suppressed by the PvP repeat-kill timer, Atlas bounty rewards are disabled,
+  and `/level` remains unavailable. The original Tier 6 gate passed 1,918
+  server tests and a launcher build on 2026-09-20. The 0.18 and 0.19 follow-ups passed together in the 0.19
+  offline gate: 1,975 server tests and 114 Windows launcher tests on
+  2026-09-22. No live server or client was started for these checks.
 - Tier 7 implementation is complete on the current branch: autonomous PvE
   expeditions recruit by class, level, and crew across realms while retaining
   encounter locations, real loot/currency, Realm Exchange access, existing
@@ -52,17 +53,24 @@ over a running install unless the owner asks.
   1,924 tests and the launcher build passed on 2026-09-20; launcher tests
   require the Windows desktop runtime and were not executable on Linux. No
   live server or client was started.
-- Tier 8 population tuning now includes the 0.17 refinement: at most fifteen
+- Tier 8 population tuning now includes the 0.18 refinement: at most fifteen
   weighted mixed-realm guilds, five-second same-guild matchmaking, ordinary
-  2–8 member PvE parties, 45/40/15 low-level goals, and local level-appropriate
-  PvP hunts. Generated-guild consolidation is persisted and completes before
-  autonomous login; human memberships and player guilds are protected.
+  2–8 member PvE parties with cross-region recruitment, 45/40/15 low-level
+  goals, and local level-appropriate PvP hunts. Generated-guild consolidation
+  is persisted and completes before autonomous login; human memberships and
+  player guilds are protected.
 - Tier 9 product-surface work is complete offline: launcher copy,
   crew-generation controls, Camlann command/player guidance, and the
   Normal-save import refusal agree with the one-mode world. This remains an
   internal 0.x checkpoint; the real-client gate and final release decision
   remain open. No live server or client was started for the 0.17 work.
-- Next: Tier 9 real-client verification.
+- The 0.19 playtest follow-up adds active outdoor leveling while queued,
+  solo PvP acquisition and roaming, level-scaled XP/RP rewards, and shared
+  cross-realm menus for the installed Inland/Live teleporter classes. The
+  offline gate passed 1,975 server tests and 114 Windows launcher tests. The
+  existing server was inspected read-only and left running; no deployment or
+  real-client verification of the new code was performed.
+- Next: Tier 9 real-client verification of the playtest follow-up.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots
@@ -796,9 +804,10 @@ Change numbers; do not reintroduce realm teams to "balance" the frontier.
   protected exceptions. The isolated server suite passed 1,965 tests and the
   Windows launcher suite passed 114 tests on 2026-09-22.
 - Ordinary same-guild PvE parties form with 2–8 available members every five
-  seconds. Actual party size drives target difficulty; missing healing or
-  frontline capability caps new targets at the party's average level. Dedicated
-  raid parties retain their exact-size requirements.
+  seconds. Local members are preferred, then routed members from other regions
+  can join the rendezvous. Actual party size drives target difficulty; missing
+  healing or frontline capability caps new targets at the party's average
+  level. Dedicated raid parties retain their exact-size requirements.
 - Low-level PvP uses local reachable non-safe leveling areas, prefers pairs,
   and never grows past four. PvE parties may retaliate or take visible legal
   opportunities, but do not start extra fights during combat or recovery and
