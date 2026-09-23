@@ -1,8 +1,9 @@
 # Companion Stage 3 decisions and implementation
 
 Updated: 2026-09-23. The owner accepted the recommended Stage 3 policies. The
-core PvE progression and manual-training paths are implemented; automatic build
-plans and runtime acceptance remain pending.
+core PvE progression and manual-training paths are implemented. A class-by-class
+automatic-plan candidate review is recorded; local runtime validation, owner
+selection, and real-client acceptance remain pending.
 
 ## Relevant findings
 
@@ -15,9 +16,12 @@ plans and runtime acceptance remain pending.
   session-only behavior. Persistent autonomous bots keep their separate
   `BOT_XP_RATE` progression.
 - Existing `BotSpec` profiles are not validated companion leveling plans.
-  Research still lacks some sourced numeric schedules, and every plan needs a
-  disposable local-database check before automatic use. No local runtime
-  database is checked into this repository.
+  The class-by-class review records 34 static endgame career/rank and budget
+  passes, three forum candidates needing role or ranked-skill validation, and
+  two classes without numeric templates. Partial routes and their budget,
+  respec, and autotrain gaps are documented in the build research. No clean
+  local runtime database is available in this checkout, so runtime validation
+  remains blocked for all 39 classes.
 
 ## Accepted behavior
 
@@ -43,17 +47,17 @@ plans and runtime acceptance remain pending.
 ### Automatic and manual training
 
 - New recruits use manual mode unless their class has a validated automatic
-  plan. No class currently has a plan that has passed the complete research and
-  runtime-database validation bar, so all current recruits start in manual mode.
+  plan. Static recommendations are recorded for review, but none has passed the
+  complete research and runtime-database bar or been selected for use, so all
+  current recruits start in manual mode.
 - Manual mode keeps earned specialization points unspent until the owner trains
   a career line. `/companions train <name> <line> <level>` uses the companion's
   class careers, standard point costs, level limit, and skill refresh path. A
   compatible class trainer is required unless `ALLOW_TRAIN_ANYWHERE` applies.
-- `/companions mode <name> automatic` remains unavailable until a validated
-  plan is added. `/companions plan <name>` reports this gate. Adding plans must
-  validate career lines, total point budgets, per-level milestones, and runtime
-  skills. Do not use existing `BotSpec` profiles as automatic plans without
-  that validation.
+- `/companions mode <name> automatic` remains unavailable until a plan passes
+  career, point-budget, milestone, and runtime-skill checks and the owner selects
+  it for use. `/companions plan <name>` reports the current gate. Do not use
+  existing `BotSpec` profiles as automatic plans without that validation.
 - `/companions respec <name>` resets only that active companion's
   specializations. It uses the owner's standard full-skill respec eligibility,
   respects `FREE_RESPEC`, and requires a trainer for the companion's class. The
@@ -70,7 +74,14 @@ plans and runtime acceptance remain pending.
 
 ## Remaining Stage 3 work
 
-No automatic plans are enabled yet. Complete the class-by-class plan
-validation and disposable-database checks before enabling an automatic mode.
-The isolated server build passes, but real-client gameplay acceptance has not
-been performed.
+The review record covers all 39 classes. Thirty-four endgame candidates pass
+static career/rank and no-autotrain level-50 budget checks. Three dated forum
+candidates still need role or ranked-skill validation, and Animist and Wizard
+lack numeric endgame templates. The build research records partial leveling
+routes, point-budget failures, and respec/autotrain constraints.
+
+No clean local runtime database is available in this checkout, so local career,
+skill, and plan checks remain blocked for all 39 classes. Automatic training
+stays unavailable until the owner selects a plan after review and it passes the
+runtime checks. The separate real-client XP and manual-training acceptance
+gate remains pending.

@@ -1,8 +1,8 @@
 # Persistent companion roadmap
 
 Status: Stage 1 **Complete**; Stage 2 **Complete (implementation and runtime
-acceptance)**; Stage 3 **Core implementation complete; validation pending**;
-Stages 4–6 **Not started**.
+acceptance)**; Stage 3 **Core implementation complete; candidate review
+complete; runtime validation pending**; Stages 4–6 **Not started**.
 Last updated: 2026-09-23.
 
 This roadmap records the agreed direction for lasting party members. It does
@@ -134,32 +134,38 @@ usable; any incompatibility requires an explicit migration decision.
 
 ### Stage 3 - Progression and training
 
-**Status:** Core XP and manual-training implementation complete; automatic-plan
-research and real-client acceptance pending.
+**Status:** Core XP/manual-training implementation and candidate review
+complete; local runtime validation, owner selection, and real-client acceptance
+pending.
 
 **Progress:** The owner accepted the policies in the [Stage 3 decision
-brief](COMPANION_STAGE3_DECISIONS.md). Persistent companions now earn eligible
-active-party NPC XP, save progress without rewriting inventory rows, support
-manual career training, and can use companion-only full respecialization. The
-implementation adds no roster-table column. No automatic build plan has passed
-career, point-budget, milestone, and disposable-database checks, so automatic
-training remains unavailable. The isolated server build passes; real-client
-gameplay acceptance has not been performed.
+brief](COMPANION_STAGE3_DECISIONS.md). XP, manual career training, persistence,
+and companion respecialization are implemented. The class-by-class review in
+[COMPANION_BUILD_RESEARCH.md](COMPANION_BUILD_RESEARCH.md) covers all 39
+classes: 34 endgame candidates pass static career/rank and point-budget checks,
+three forum candidates need role or ranked-skill validation, and Animist and
+Wizard lack numeric endgame templates. It records partial routes and their
+budget, respec, and autotrain gaps. No clean local runtime database is available
+in this checkout, so runtime checks remain blocked for all 39 classes. Static
+candidates await owner selection; automatic mode remains unavailable.
+Real-client XP and training acceptance has not been performed.
 
 **Prerequisites:** Stage 2 complete; the owner accepted the Stage 3 XP,
-training, respecialization, and realm-point policies. Stage 1 research and
-runtime-database checks are required before enabling any automatic build plan.
+training, respecialization, and realm-point policies. A clean disposable runtime
+database and owner plan selection are required before automatic training can be
+enabled.
 
-**Deliverables:** Active-party XP, saved unspent points, validated automatic
-builds when available, manual spending, and visible progression. Validate
-allocations against actual class rules and refresh combat skills after training.
-Preserve player reward shares unless explicitly changed.
+**Deliverables:** Active-party XP, saved unspent points, reviewable automatic
+build candidates, manual spending, and visible progression. Validate allocations
+against actual class rules and refresh combat skills after training. Preserve
+player reward shares unless explicitly changed.
 
 **Acceptance:** Benched companions earn no XP. Active companions receive the
 agreed NPC reward, controlled-pet damage stays attributed to the companion, and
 invalid specs and point overspending are rejected. Manual spending and XP
-survive restart. Validate player and autonomous-bot rewards independently.
-Runtime acceptance has not been performed in this implementation step.
+survive restart. Record static and runtime plan checks separately for all
+classes; keep automatic mode gated until a selected plan passes those checks.
+Real-client XP and training acceptance remains outstanding.
 
 ### Stage 4 - Equipment
 
@@ -232,7 +238,7 @@ resolve it then rather than hiding it in implementation.
 | Ownership per character/account; uniqueness of authored recruits | Stage 2 | Resolved: per character; each authored individual once per owner |
 | Meaning of `/spawn`, old saved-bot compatibility, temporary testing helpers | Stage 2 | Resolved: `/spawn` stays temporary; no legacy conversion or GM test-helper command |
 | Companion XP eligibility, participation, catch-up target and pace, support/pet credit | Stage 3 | Resolved; implementation awaits real-client acceptance |
-| Automatic/manual modes, plan eligibility, transitions, and respecialization | Stage 3 | Manual and respec rules resolved; automatic plans remain gated on class and runtime-database validation |
+| Automatic/manual modes, plan eligibility, transitions, and respecialization | Stage 3 | Manual and respec rules resolved; candidate review recorded, runtime validation and owner selection pending |
 | Companion realm-point eligibility and progression | Stage 3 | Resolved: companions do not earn realm points |
 | Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 | Open; the existing generated level-1 starter kit is retained for Stage 2 |
 | Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 | Open |
