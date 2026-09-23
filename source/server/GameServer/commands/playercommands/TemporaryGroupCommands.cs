@@ -26,6 +26,63 @@ namespace DOL.GS.Commands
             PlayableRealms.SelectMany(realm => ForRealm(realm)
                 .Select(entry => (realm, entry.CharacterClass, entry.Role)));
 
+        public static string RealmName(eRealm realm)
+        {
+            return realm switch
+            {
+                eRealm.Albion => "Albion",
+                eRealm.Midgard => "Midgard",
+                eRealm.Hibernia => "Hibernia",
+                _ => realm.ToString(),
+            };
+        }
+
+        public static bool TryResolveForCompanion(
+            eRealm preferredRealm,
+            string input,
+            out eRealm realm,
+            out eCharacterClass characterClass,
+            out bool ambiguous)
+        {
+            string wanted = Normalize(input);
+            (eRealm Realm, eCharacterClass CharacterClass, string Role)[] entries = All().ToArray();
+
+            var explicitMatches = entries.Where(entry =>
+                Normalize(RealmName(entry.Realm) + entry.CharacterClass) == wanted ||
+                Normalize(entry.Realm.ToString() + entry.CharacterClass) == wanted).ToArray();
+            if (explicitMatches.Length == 1)
+            {
+                realm = explicitMatches[0].Realm;
+                characterClass = explicitMatches[0].CharacterClass;
+                ambiguous = false;
+                return true;
+            }
+
+            var classMatches = entries.Where(entry =>
+                Normalize(entry.CharacterClass.ToString()) == wanted).ToArray();
+            var preferredMatches = classMatches.Where(entry => entry.Realm == preferredRealm).ToArray();
+            if (preferredMatches.Length == 1)
+            {
+                realm = preferredMatches[0].Realm;
+                characterClass = preferredMatches[0].CharacterClass;
+                ambiguous = false;
+                return true;
+            }
+
+            if (classMatches.Length == 1)
+            {
+                realm = classMatches[0].Realm;
+                characterClass = classMatches[0].CharacterClass;
+                ambiguous = false;
+                return true;
+            }
+
+            ambiguous = classMatches.Length > 1 || explicitMatches.Length > 1;
+            realm = eRealm.None;
+            characterClass = default;
+            return false;
+        }
+
         public static bool TryResolve(eRealm realm, string input, out eCharacterClass characterClass)
         {
             if (TryResolve(realm, input, out _, out characterClass))
@@ -44,7 +101,8 @@ namespace DOL.GS.Commands
             string wanted = Normalize(input);
             foreach ((eRealm candidateRealm, eCharacterClass candidate, _) in All())
             {
-                bool explicitRealm = Normalize(candidateRealm.ToString() + candidate) == wanted;
+                bool explicitRealm = Normalize(RealmName(candidateRealm) + candidate) == wanted ||
+                                     Normalize(candidateRealm.ToString() + candidate) == wanted;
                 bool defaultRealmClass = candidateRealm == defaultRealm && Normalize(candidate.ToString()) == wanted;
                 if (!explicitRealm && !defaultRealmClass)
                     continue;
@@ -59,8 +117,10 @@ namespace DOL.GS.Commands
             return false;
         }
 
-        private static string Normalize(string value) =>
-            new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        private static string Normalize(string value)
+        {
+            return new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        }
     }
 
     /// <summary>
@@ -101,8 +161,8 @@ namespace DOL.GS.Commands
         {
             string links = string.Join('\n', TemporaryGroupClassCatalog.All()
                 .GroupBy(entry => entry.Realm)
-                .SelectMany(group => new[] { $"{group.Key}:" }
-                    .Concat(group.Select(entry => $"[{entry.Realm}: {entry.CharacterClass}]")
+                .SelectMany(group => new[] { $"{TemporaryGroupClassCatalog.RealmName(group.Key)}:" }
+                    .Concat(group.Select(entry => $"[{TemporaryGroupClassCatalog.RealmName(entry.Realm)}: {entry.CharacterClass}]")
                         .Chunk(4).Select(chunk => string.Join("   ", chunk)))));
             return $"Choose a companion from any realm to add to your group:\n\n{links}\n\nClick one class name.";
         }
@@ -183,18 +243,24 @@ namespace DOL.GS.Commands
         }
     }
 
-    [CmdAttribute("&classes", ePrivLevel.Player, "Lists every realm's Classic + SI classes and party roles", "/classes")]
+    [CmdAttribute("&classes", ePrivLevel.Player, "Lists Classic + SI class names grouped by realm", "/classes")]
     public sealed class ClassesCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         public void OnCommand(GameClient client, string[] args)
         {
-            var entries = TemporaryGroupClassCatalog.All()
-                .Select(entry => $"{entry.Realm}: {entry.CharacterClass} ({entry.Role})")
-                .ToArray();
-            DisplayMessage(client, "All realms' Classic + SI classes:");
-            foreach (string line in entries.Chunk(4).Select(chunk => string.Join("  |  ", chunk)))
-                DisplayMessage(client, line);
-            DisplayMessage(client, "Use /spawn <class name> for your realm, or /spawn <realm> <class name> for a cross-realm helper.");
+            DisplayMessage(client, "Classic + SI classes by realm:");
+            foreach (var realmGroup in TemporaryGroupClassCatalog.All().GroupBy(entry => entry.Realm))
+            {
+                DisplayMessage(client, $"{TemporaryGroupClassCatalog.RealmName(realmGroup.Key)}:");
+                foreach (string line in realmGroup
+                             .Select(entry => entry.CharacterClass.ToString())
+                             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                             .Chunk(4)
+                             .Select(chunk => string.Join(", ", chunk)))
+                    DisplayMessage(client, line);
+            }
+            DisplayMessage(client, "Use /companions recruit <class> to add a persistent recruit from any realm.");
+            DisplayMessage(client, "For temporary helpers, use /spawn <class> for your realm or /spawn <realm> <class>.");
         }
     }
 

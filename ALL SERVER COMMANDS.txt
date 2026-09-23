@@ -1,6 +1,6 @@
-OFFLINE DAOC 0.20.6 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.23.1 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
-285 command registrations read from the shipped server assemblies.
+286 command registrations read from the shipped server assemblies.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
 not an RvR team; ungrouped, unguilded or unallied player-shaped actors can be hostile.
 Normal commands can still have level, realm, cooldown or state requirements.
@@ -8,6 +8,7 @@ GM/admin commands can change or delete game data. Back up before using them.
 Descriptions containing a localization key have no matching shipped English text.
 
 COMMON COMPANION COMMANDS
+/companions keeps a persistent, per-character roster: free level-1 recruits, up to 78 stored. /companions list shows names by realm; recruit by class name and invite or bench by companion name.
 /spawn opens the all-realm companion class picker; /spawn <class> uses your realm, and /spawn <realm> <class> creates a foreign-realm class.
 /raid 40 or /raid 80 enables a level-50 companion raid (total includes you).
 There is no /spawn 40 or /spawn 80 raid-size command.
@@ -245,6 +246,12 @@ NORMAL PLAYER COMMANDS
   Toggle detailed combat log
   /combatstats <on/off>
   Handler: DOL.GS.Commands.CombatStatsCommandHandler
+
+/companions
+  Manage your persistent companion roster.
+  /companions [list | recruit <class> | recruit <realm> <class> | invite <name> | bench <name>]
+  Recruitment is free, starts at level 1, and works anywhere. Class names in /classes are grouped by realm; use an explicit realm if a name is ambiguous.
+  Handler: DOL.GS.Commands.PlayerCompanionCommandHandler
 
 /confuse
   Confused

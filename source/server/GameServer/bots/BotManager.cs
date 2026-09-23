@@ -29,7 +29,10 @@ namespace DOL.GS
         private static void OnPlayerLogin(DOLEvent e, object sender, EventArgs args)
         {
             if (sender is GamePlayer player)
+            {
                 RespawnBotsOnLogin(player);
+                PlayerCompanionRoster.RestoreActiveForPlayer(player);
+            }
         }
 
         public const int MAX_BOTS_PER_PLAYER = 15;

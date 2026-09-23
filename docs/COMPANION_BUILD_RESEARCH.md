@@ -120,7 +120,7 @@ researched or replaced by an explicitly approved server-specific plan.
 - Dated forum discussions add numeric examples for Blademaster, Hero, and Warrior, but these are role-specific human PvP builds and are not part of the 34-proposal skill-tier check. Their automatic plans remain blocked until an AI role is selected and ranks are validated.
 - Apart from the detailed Healer route, the source set does not provide complete per-level specialization schedules. The Minstrel level-24 autotrain/charm milestone is human-specific and does not transfer to companions.
 - The public database cross-check is not pinned to this checkout and cannot prove that the local runtime loads the same career, spell, ability, and style rows. Confirm those with a disposable clean database before enabling any automatic plan.
-- Proposals are not final build-plan decisions. Stage 2 roster ownership, recruitment, limits, and /spawn compatibility remain separate open gates in the roadmap.
+- Proposals are not final build-plan decisions. Stage 2 roster ownership, recruitment, limits, and `/spawn` compatibility are recorded as owner choices in the roadmap; enabling automatic plans remains a later progression decision.
 
 This research satisfies Stage 1's proposal-or-gap acceptance. The listed numeric,
 milestone, and local-runtime gaps remain explicit gates for any automatic plans;

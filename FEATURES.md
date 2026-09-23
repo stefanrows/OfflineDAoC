@@ -9,7 +9,7 @@ and verification history of the full-PvP conversion.
 
 - One Old Frontiers, pre-ToA, full-PvP world where realm is character identity,
   not a permanent team.
-- Players, autonomous bots, temporary companions, and controlled pets use the
+- Players, autonomous bots, persistent and temporary companions, and controlled pets use the
   same group, guild, battlegroup, safe-area, immunity, and `/safety` legality
   rules.
 - Same-realm strangers can fight. Mixed-realm groupmates and guildmates remain
@@ -93,8 +93,14 @@ and verification history of the full-PvP conversion.
 
 ## Player companions
 
-- `/spawn` companions remain temporary, player-owned helpers, separate from the
-  persistent autonomous population and its rewards.
+- `/companions list`, `recruit`, `invite`, and `bench` manage free, level-1
+  persistent recruits. Each character can store up to 78; stable IDs keep
+  same-class individuals separate. Saved records and inventories survive
+  benching and attempt to restore active companions at login.
+- Persistent recruits do not yet earn XP or catch up while benched. XP, training,
+  catch-up, authored individuals, and gear upgrades remain later roadmap stages.
+- `/spawn` still creates temporary, player-owned helpers, separate from both the
+  persistent recruit roster and autonomous population.
 - Companion PvP supports legal human, autonomous-bot, and controlled-pet targets.
   Explicit player or pet orders take priority, followed by active threats to the
   party.
@@ -106,7 +112,8 @@ and verification history of the full-PvP conversion.
 - Targets are revalidated as safety, alliance, ownership, region, and group
   membership change. Pursuit stays inside the existing 2,000-unit
   leader-centered defense envelope, with tighter limits in defensive mode.
-- Companion lifetime, loyalty, XP, loot, and regrouping behavior are unchanged.
+- Temporary helper lifetime, loyalty, XP, loot, and regrouping behavior are
+  unchanged.
 
 ## Launcher and local operation
 
@@ -121,8 +128,13 @@ and verification history of the full-PvP conversion.
 
 ## Verification status
 
-Version 0.17.0 passes the isolated server build and 1,965 server tests, plus 114
-Windows launcher tests. These checks do not replace a real-client playtest.
-Startup consolidation/grouping, low-level rival encounters, guild keep/relic
-state, and companion tactics should be verified in a disposable local copy before
-using an important save.
+Offline checks on 2026-09-23: the Release server build passed with zero errors.
+The full server test suite passed (1,975 tests), and the Windows launcher test
+suite passed (114 tests). The new server source files pass a focused
+whitespace-format check.
+
+Runtime acceptance on 2026-09-23: the owner confirmed all Stage 2 checks passed
+in a separate Windows acceptance installation, including invites after
+generated starter-gear persistence was fixed. These results cover Stage 2; the
+broader Stage 6 integration scenarios remain pending. The container image
+build could not be run because the local Docker engine was unavailable.

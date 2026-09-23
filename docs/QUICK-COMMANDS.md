@@ -29,6 +29,7 @@ capacity. The Active Population tab shows autonomous crews and solo roamers.
 | `/grind` | Start automated grinding with a companion-bot group, including for AFK use. |
 | `/pull` | Order your companion group and pets to engage your selected enemy. When possible, a tank makes first contact before the rest of the group joins the fight. |
 | `/train <line> <level>` | Train a specialization to the chosen level using your available specialization points. Select a valid trainer for your class first. |
+| `/companions list` | List companion names grouped by realm. Recruit with `/companions recruit Warden` or any class name; use `/companions recruit <realm> <class>` if needed. Invite or bench by name. Recruits are free, start at level 1, and the roster holds 78 companions. |
 | `/spawn` | Open the menu of valid companion bots to summon. |
 | `/spawn X` | Summon a companion by class name from your realm instead of using the menu; useful for macros. |
 | `/spawn Realm X` | Summon a named class from another realm, such as `/spawn Midgard Healer`. |

@@ -1,0 +1,77 @@
+using DOL.Database;
+using DOL.Database.Attributes;
+
+namespace DOL.GS
+{
+
+    [DataTable(TableName = "player_companions")]
+    public sealed class PlayerCompanionRecord : DataObject
+    {
+        public PlayerCompanionRecord()
+        {
+            AllowAdd = true;
+            AllowDelete = true;
+        }
+
+        [PrimaryKey]
+        [DataElement(AllowDbNull = false, Varchar = 36)]
+        public string CompanionId { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false, Index = true, Varchar = 255)]
+        public string OwnerCharacterId { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false, Varchar = 64)]
+        public string Name { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false)]
+        public int Realm { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int ClassId { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int RaceId { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int GenderId { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int Level { get; set; } = 1;
+
+        [DataElement(AllowDbNull = false)]
+        public long Experience { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public string SerializedSpecs { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false)]
+        public string SerializedBuildPlan { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false)]
+        public int UnspentSpecPoints { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int LastTrainedLevel { get; set; } = 1;
+
+        [DataElement(AllowDbNull = false)]
+        public bool IsActive { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public bool InventoryInitialized { get; set; }
+
+        [DataElement(AllowDbNull = false, Varchar = 16)]
+        public string RecruitType { get; set; } = "generated";
+
+        [DataElement(AllowDbNull = false, Varchar = 128)]
+        public string AuthoredRecruitKey { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false)]
+        public int StateVersion { get; set; } = 1;
+
+        [DataElement(AllowDbNull = false, Varchar = 32)]
+        public string CreatedUtc { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false, Varchar = 32)]
+        public string UpdatedUtc { get; set; } = string.Empty;
+    }
+}
