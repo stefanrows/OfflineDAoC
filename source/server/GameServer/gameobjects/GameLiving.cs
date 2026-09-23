@@ -1319,6 +1319,23 @@ namespace DOL.GS
 
 			double damageDealt = damageAmount + criticalAmount;
 
+			// NPC reward credit keeps persistent-companion damage and controlled-pet
+			// damage on the companion. Other pet types retain their existing owner
+			// attribution, and PvP kill credit still uses the ordinary source below.
+			GameLiving xpGainerSource = null;
+			if (this is GameNPC && source is GameBot { IsPersistentPlayerCompanion: true } persistentCompanion)
+			{
+				xpGainerSource = persistentCompanion;
+			}
+			else if (this is GameNPC && source is GameNPC controlledSource &&
+			         controlledSource.Brain is IControlledBrain controlledBrain &&
+			         controlledBrain.GetLivingOwner() is GameLiving controlledOwner)
+			{
+				xpGainerSource = controlledBrain.Owner is GameBot { IsPersistentPlayerCompanion: true } companionOwner
+					? companionOwner
+					: controlledOwner;
+			}
+
 			// Pets attribute damage to their owner. Independent playerbots also
 			// implement IControlledBrain, but have no owner and must remain the
 			// authoritative damage source for aggro, XP credit, and retaliation.
@@ -1353,9 +1370,12 @@ namespace DOL.GS
 				// Human players and persistent playerbots use the same group-credit
 				// path. This enrolls every nearby member in the authoritative group
 				// XP calculation even when a bot landed the first or final hit.
-				if (livingSource.Group != null && livingSource is GamePlayer or GameBot)
+				GameLiving rewardSource = this is GameNPC
+					? (xpGainerSource ?? livingSource)
+					: livingSource;
+				if (rewardSource.Group != null && rewardSource is GamePlayer or GameBot)
 				{
-					foreach (GameLiving living in livingSource.Group.GetMembersInTheGroup())
+					foreach (GameLiving living in rewardSource.Group.GetMembersInTheGroup())
 					{
 						if (!IsWithinRadius(living, WorldMgr.MAX_EXPFORKILL_DISTANCE) ||
 							living.ObjectState is not eObjectState.Active)
@@ -1363,12 +1383,12 @@ namespace DOL.GS
 							continue;
 						}
 
-						AddXPGainer(living, living == livingSource ? damageDealt : 0);
+						AddXPGainer(living, living == rewardSource ? damageDealt : 0);
 					}
 				}
 				else
 				{
-					AddXPGainer(livingSource, damageDealt);
+					AddXPGainer(rewardSource, damageDealt);
 				}
 			}
 

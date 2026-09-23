@@ -1065,21 +1065,47 @@ namespace DOL.GS.ServerRules
                 return;
             }
 
-            if (playerCountAndDamage.Count == 0 && botCountAndDamage.Count == 0)
+            Dictionary<GameBot, EntityCountTotalDamagePair> persistentCompanionDamage =
+                CollectPersistentCompanionDamage(killedNpc);
+            if (playerCountAndDamage.Count == 0 && botCountAndDamage.Count == 0 &&
+                persistentCompanionDamage.Count == 0)
                 return;
 
             // Award experience, faction change, and kill credit to every player involved.
             // Let `AwardExperience` fetch players that are in a group or a BG but didn't attack the target, and decide how experience should be shared.
+            HashSet<GameBot> ownerAwardedCompanions = new();
             foreach (var pair in playerCountAndDamage)
             {
                 GamePlayer player = pair.Key;
 
+                GainedExperienceEventArgs companionReward;
                 lock (player.AwardLock)
                 {
-                    AwardPlayerOnNpcKill(player, totalDamage, killedNpc, playerCountAndDamage, groupCountAndDamage, battlegroupCountAndDamage);
+                    companionReward = AwardPlayerOnNpcKill(player, totalDamage, killedNpc, playerCountAndDamage, groupCountAndDamage, battlegroupCountAndDamage);
                 }
 
+                AwardPersistentCompanionsOnNpcKill(player, killedNpc, companionReward, ownerAwardedCompanions);
+
                 killedNpc.Faction?.OnMemberKilled(player);
+            }
+
+            double companionEncounterDamage = totalDamage + persistentCompanionDamage.Values.Sum(pair => pair.Damage);
+            foreach (var pair in persistentCompanionDamage)
+            {
+                GameBot companion = pair.Key;
+                GamePlayer owner = companion.Owner;
+                if (ownerAwardedCompanions.Contains(companion) || pair.Value.Damage <= 0 ||
+                    owner?.GainXP != true || !playerCountAndDamage.ContainsKey(owner) ||
+                    !IsEligibleActivePlayerCompanion(companion, killedNpc))
+                {
+                    continue;
+                }
+
+                // A companion that supplied damage can still progress when its
+                // owner had no player damage share to copy. Keep this as a
+                // companion-only damage award so player percentages are intact.
+                AwardBotOnNpcKill(companion, companionEncounterDamage, killedNpc,
+                    persistentCompanionDamage, groupCountAndDamage, recordKillCredit: false);
             }
 
             // Snapshot the nearby expedition before completion can detach parties.
@@ -1161,13 +1187,13 @@ namespace DOL.GS.ServerRules
                 out ItemOwnerTotalDamagePair mostDamagingBattlegroup)
             {
                 // Damage from a controlled pet, Bonedancer sub-pet, or Animist
-                // turret belongs to its root player-like owner. Collapsing it
-                // here gives one participant count and therefore never splits
-                // a persistent bot's XP with its own pets.
+                // turret belongs to its root reward actor. Temporary helpers
+                // resolve to their human owner; persistent companions remain
+                // their own root so pet damage is not credited to the player.
                 Dictionary<GameLiving, double> creditedGainers = new();
                 foreach (var pair in killedNpc.XPGainers)
                 {
-                    GameLiving credited = ResolveRootRewardOwner(pair.Key);
+                    GameLiving credited = ResolveNpcRewardOwner(pair.Key);
                     if (credited == null)
                         continue;
                     creditedGainers[credited] = creditedGainers.TryGetValue(credited, out double existing)
@@ -1175,7 +1201,12 @@ namespace DOL.GS.ServerRules
                         : pair.Value;
                 }
 
-                totalDamage = creditedGainers.Sum(pair => pair.Value);
+                // Persistent companions receive a separate copy of their owner's
+                // eligible party award. Keep their own and their pets' damage out
+                // of every player and autonomous-bot damage percentage.
+                totalDamage = creditedGainers
+                    .Where(pair => pair.Key is not GameBot { IsPersistentPlayerCompanion: true })
+                    .Sum(pair => pair.Value);
 
                 playerCountAndDamage = new();
                 botCountAndDamage = new();
@@ -1194,6 +1225,9 @@ namespace DOL.GS.ServerRules
                 foreach (var pair in creditedGainers.Where(pair =>
                              pair.Key is not GameBot { IsTemporaryGroupHelper: true }))
                 {
+                    if (pair.Key is GameBot { IsPersistentPlayerCompanion: true })
+                        continue;
+
                     // If the killed NPC is gray to any of the entities, or if a guard is involved, don't give any XP, drop any loot, change faction relations, etc.
                     if (pair.Key.IsObjectGreyCon(killedNpc) || pair.Key is GameGuard)
                         return false;
@@ -1278,23 +1312,6 @@ namespace DOL.GS.ServerRules
 
                 return true;
 
-                static GameLiving ResolveRootRewardOwner(GameLiving source)
-                {
-                    if (source is GameBot { IsTemporaryGroupHelper: true })
-                        return source;
-
-                    GameLiving current = source;
-                    for (int depth = 0; depth < 16 && current is GameNPC npc &&
-                         npc.Brain is IControlledBrain controlled && controlled.Owner is GameLiving owner; depth++)
-                    {
-                        if (current is GameBot { IsTemporaryGroupHelper: true })
-                            return owner;
-
-                        current = owner;
-                    }
-                    return current;
-                }
-
                 static void ProcessBotDamage(GameBot bot, double damage,
                     Dictionary<GameBot, EntityCountTotalDamagePair> entityDamage,
                     ItemOwnerTotalDamagePair mostDamagingBot, bool trackLootOwner = true)
@@ -1353,7 +1370,61 @@ namespace DOL.GS.ServerRules
             }
         }
 
-        private static void AwardPlayerOnNpcKill(GamePlayer playerToAward,
+        private static GameLiving ResolveNpcRewardOwner(GameLiving source)
+        {
+            if (source is GameBot { IsTemporaryGroupHelper: true } or
+                GameBot { IsPersistentPlayerCompanion: true })
+            {
+                return source;
+            }
+
+            GameLiving current = source;
+            for (int depth = 0; depth < 16 && current is GameNPC npc &&
+                 npc.Brain is IControlledBrain controlled && controlled.Owner is GameLiving owner; depth++)
+            {
+                if (current is GameBot { IsPersistentPlayerCompanion: true })
+                    return current;
+                if (current is GameBot { IsTemporaryGroupHelper: true })
+                    return owner;
+
+                current = owner;
+            }
+
+            return current;
+        }
+
+        private static Dictionary<GameBot, EntityCountTotalDamagePair> CollectPersistentCompanionDamage(GameNPC killedNpc)
+        {
+            Dictionary<GameBot, EntityCountTotalDamagePair> contributions = new();
+            foreach (KeyValuePair<GameLiving, double> pair in killedNpc.XPGainers)
+            {
+                if (ResolveNpcRewardOwner(pair.Key) is not GameBot { IsPersistentPlayerCompanion: true } companion)
+                    continue;
+
+                if (contributions.TryGetValue(companion, out EntityCountTotalDamagePair existing))
+                    existing.Damage += pair.Value;
+                else
+                    contributions[companion] = new EntityCountTotalDamagePair(1, pair.Value, companion);
+            }
+
+            return contributions;
+        }
+
+        private static bool IsEligibleActivePlayerCompanion(GameBot companion, GameNPC killedNpc)
+        {
+            GamePlayer owner = companion?.Owner;
+            if (companion?.IsPersistentPlayerCompanion != true || owner == null || !owner.GainXP || killedNpc == null)
+                return false;
+
+            return companion.ObjectState == GameObject.eObjectState.Active &&
+                   owner.ObjectState == GameObject.eObjectState.Active && owner.Group != null &&
+                   companion.Group == owner.Group && companion.Group.IsInTheGroup(companion) &&
+                   owner.IsWithinRadius(killedNpc, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
+                   companion.IsWithinRadius(killedNpc, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
+                   !companion.IsObjectGreyCon(killedNpc);
+        }
+
+        private static GainedExperienceEventArgs AwardPlayerOnNpcKill(GamePlayer playerToAward,
             double npcTotalDamageReceived,
             GameNPC killedNpc,
             Dictionary<GamePlayer, EntityCountTotalDamagePair> playerCountAndDamage,
@@ -1370,7 +1441,7 @@ namespace DOL.GS.ServerRules
                 groupCountAndDamage.TryGetValue(playerToAward.Group, out entityCountTotalDamagePair);
 
                 if (entityCountTotalDamagePair == null)
-                    return;
+                    return null;
 
                 baseXpReward = CalculateNpcExperienceModifiedByGroupOrBattlegroup(entityCountTotalDamagePair);
             }
@@ -1379,7 +1450,7 @@ namespace DOL.GS.ServerRules
                 playerCountAndDamage.TryGetValue(playerToAward, out entityCountTotalDamagePair);
 
                 if (entityCountTotalDamagePair == null)
-                    return;
+                    return null;
 
                 baseXpReward = CalculateNpcExperience();
             }
@@ -1394,7 +1465,7 @@ namespace DOL.GS.ServerRules
             baseXpReward = Math.Min(baseXpReward, xpCap);
 
             if (baseXpReward <= 0)
-                return;
+                return null;
 
             // This has to be done after capping xp, otherwise a very low level player could simply tag any high level mob and hit the cap.
             baseXpReward = (long) (baseXpReward * damagePercent);
@@ -1408,10 +1479,15 @@ namespace DOL.GS.ServerRules
             long totalReward = arguments.ExpTotal;
 
             ShowXpStatsToPlayer();
+            long experienceBeforeAward = playerToAward.Experience;
             playerToAward.GainExperience(arguments);
+            return playerToAward.Experience > experienceBeforeAward ? arguments : null;
 
             double CalculateDamagePercent()
             {
+                if (npcTotalDamageReceived <= 0)
+                    return 0;
+
                 double damagePercent = entityCountTotalDamagePair.Damage / npcTotalDamageReceived;
 
                 if (damagePercent > 1.0)
@@ -1663,6 +1739,30 @@ namespace DOL.GS.ServerRules
             }
         }
 
+        private static void AwardPersistentCompanionsOnNpcKill(GamePlayer owner, GameNPC killedNpc,
+            GainedExperienceEventArgs arguments, HashSet<GameBot> ownerAwardedCompanions)
+        {
+            if (owner?.Group == null || killedNpc == null || arguments?.XPSource != eXPSource.NPC ||
+                !owner.GainXP ||
+                owner.ObjectState != GameObject.eObjectState.Active ||
+                !owner.IsWithinRadius(killedNpc, WorldMgr.MAX_EXPFORKILL_DISTANCE))
+            {
+                return;
+            }
+
+            foreach (GameBot companion in owner.Group.GetMembersInTheGroup().OfType<GameBot>())
+            {
+                if (companion.Owner != owner || !IsEligibleActivePlayerCompanion(companion, killedNpc))
+                {
+                    continue;
+                }
+
+                ownerAwardedCompanions.Add(companion);
+                lock (companion.AwardLock)
+                    companion.GainExperience(arguments, notify: false);
+            }
+        }
+
         public virtual void DropLoot(GameNPC killedNpc, GameObject killer, SortedSet<ItemOwnerTotalDamagePair> itemOwners)
         {
             List<GamePlayer> playersInRadius = killedNpc.GetPlayersInRadius(WorldMgr.INFO_DISTANCE);
@@ -1767,7 +1867,8 @@ namespace DOL.GS.ServerRules
             Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage,
             Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage, bool recordKillCredit = true)
         {
-            if (botToAward == null || (!botToAward.IsAutonomousWorldBot && !botToAward.IsTemporaryGroupHelper) ||
+            if (botToAward == null || (!botToAward.IsAutonomousWorldBot && !botToAward.IsTemporaryGroupHelper &&
+                                       !botToAward.IsPersistentPlayerCompanion) ||
                 npcTotalDamageReceived <= 0)
             {
                 return;
@@ -1839,7 +1940,7 @@ namespace DOL.GS.ServerRules
                 bafBonus,
                 0,
                 false,
-                true,
+                botToAward.IsPersistentPlayerCompanion,
                 eXPSource.NPC));
             // This award path already resolves pets, sub-pets, Animist
             // turrets, and Theurgist elementals to the bot that legitimately
