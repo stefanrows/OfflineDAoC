@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-09-23
+
+### Added
+
+- Focused disposable-SQLite Stage 6 integration coverage and an owner-run
+  companion acceptance brief.
+
+### Changed
+
+- Recorded the existing GameBot death-recovery policy and temporary-helper-only
+  `/raid 40|80` policy in the companion roadmap and player guide.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- Kept remembered defensive pull targets range-gated, so companions wait until
+  distant PvE and PvP targets enter the 350-unit defensive radius.
+
+### Removed
+
+- None.
+
 ## [0.27.0] - 2026-09-23
 
 ### Added

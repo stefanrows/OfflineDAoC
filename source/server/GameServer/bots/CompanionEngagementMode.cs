@@ -50,8 +50,7 @@ namespace DOL.GS
         {
             GamePlayer leader = DefensiveLeader(actor);
             return leader == null || target != null && target.CurrentRegionID == leader.CurrentRegionID &&
-                (leader.IsWithinRadius(target, DefensiveRadius) || CompanionPvpEngagement.Defending(actor, target) ||
-                 Modes.TryGetValue(leader, out Mode mode) && ReferenceEquals(mode.Pull, target));
+                (leader.IsWithinRadius(target, DefensiveRadius) || CompanionPvpEngagement.Defending(actor, target));
         }
         public static void RememberPull(GamePlayer player, GameLiving target)
         {

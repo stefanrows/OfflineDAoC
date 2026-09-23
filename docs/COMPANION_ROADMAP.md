@@ -5,7 +5,7 @@ acceptance)**; Stage 3 **Implemented; 33 project-recommended automatic plans
 validated against runtime data; six classes remain manual-only; real-client
 acceptance pending**; Stage 4 **Implemented; offline checks complete;
 real-client acceptance pending**; Stage 5 **Implemented; client and combat-role
-acceptance pending**; Stage 6 **Not started**.
+acceptance pending**; Stage 6 **Offline checks complete; real-client acceptance pending**.
 Last updated: 2026-09-23.
 
 This roadmap records the agreed direction for lasting party members. It does
@@ -226,27 +226,44 @@ checks and later real-client scenarios.
 
 ### Stage 6 - Integration and verification
 
-**Status:** Not started.
+**Status:** Offline regression checks complete (2026-09-23); owner-run
+real-client acceptance pending.
 
-**Prerequisites:** Stages 1-5 complete; death/recovery and raid behavior decided;
-all open decisions resolved for enabled features.
+**Progress:** The owner selected the existing GameBot death-recovery path for
+persistent companions. `/raid 40|80` remains limited to the owner's temporary
+`/spawn` helpers. The additive roster schema remains compatible; no saved death
+state or migration was added. Twelve focused NUnit cases use disposable SQLite
+fixtures. See [COMPANION_STAGE6_ACCEPTANCE.md](COMPANION_STAGE6_ACCEPTANCE.md)
+for the offline commands, results, and client checklist. The six manual-only
+class plans remain unchanged.
 
-**Deliverables:** Cross-system regression coverage, disposable-save compatibility
-checks, player instructions, and a real-client checklist. Document rollout,
-backup/restore, and any migration before separately authorized deployment.
-Do not implement unrelated Camlann tiers.
+**Prerequisites:** Stages 1-5 implementation is complete. Stage 4-5 client
+acceptance and Stage 6 owner-run cross-system checks remain outstanding.
 
-**Offline acceptance:** Check cross-realm parties, group removal, logout/restart,
-death/recovery, travel, raids, inventory ownership, save/load failures, and
-independence from autonomous bots. Use disposable existing-save fixtures and
-record commands and results.
+**Deliverables:** Cross-system regression coverage, disposable-save
+compatibility checks, player instructions, and a real-client checklist.
+Record rollout, backup/restore, and any migration before separately authorized
+deployment. Do not implement unrelated Camlann tiers.
 
-**Real-client acceptance:** In a separately authorized session, recruit a level-1
-companion, level together, inspect training, obtain/equip an upgrade, manually
-replace it, bench/reinvite, and restart. Verify a second same-class recruit,
-catch-up, support participation, cross-realm travel, death/recovery, and raids.
-Record observations separately; the broader Stage 6 gate remains pending until
-the listed cross-system scenarios are performed.
+**Offline acceptance:** Passed focused checks for companion identity and owner
+isolation, recruit/invite/bench boundaries, group removal, logout/restart,
+training-save rollback, XP and player-reward boundaries, gear ownership,
+cross-realm grouping and confirmed travel policy, existing death timers, both
+raid capacities, and separation from autonomous bots. The fixture creates and
+deletes GUID-named SQLite files under the system temporary directory; it never
+opens live save data.
+
+**Offline test results:** The Stage 6 fixture passed all 12 cases. The
+combined companion, persistence, travel, recovery, raid, and defensive-pull
+selection passed 278/278 tests. The complete Release server suite passed
+2,008/2,008 tests with no failures or skips. The full results and commands are
+recorded in the Stage 6 acceptance brief.
+
+**Real-client acceptance:** Stage 6 remains pending until the owner records the
+checklist in the acceptance brief. Verify leveling and training, gear and
+inventory, same-class companions, restart and catch-up, cross-realm travel,
+death and recovery, and temporary-only raid behavior. No client startup or
+deployment is part of the offline gate.
 
 ## Decisions and stage gates
 
@@ -265,10 +282,10 @@ resolve it then rather than hiding it in implementation.
 | Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 | Resolved and implemented; independent XP-rate PvE chance, eligible PvP rewards, protected starter kit |
 | Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 | Resolved and implemented; free restricted transfers, manual slot locks, earned-gear surplus selling |
 | Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 | Resolved and implemented; client and combat-role acceptance pending |
-| Death/recovery and raid rules | Stage 6, or earlier if changed by a prior stage | Open |
+| Death/recovery and raid rules | Stage 6, or earlier if changed by a prior stage | Resolved: existing GameBot recovery; raids allow owned temporary helpers only |
 
-Stage 6 behavior is not included in this task. Stage 4–5 real-client acceptance
-remains pending and is not inferred from offline validation.
+Stage 6 offline validation is complete. Stage 4–5 real-client acceptance and
+Stage 6 client acceptance remain pending. See the Stage 6 acceptance brief.
 
 ## Maintenance and boundaries
 

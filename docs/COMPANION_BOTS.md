@@ -73,6 +73,21 @@ plan; all pre-existing records stay manual. The current catalog has 33
 project-recommended plans and six manual-only classes. Authored characters and
 their once-per-owner recruitment rules are Stage 5.
 
+## Death recovery and raids
+
+Persistent companions use the existing GameBot corpse-recovery behavior. Their
+corpse and group are retained while dead; recovery follows the general GameBot
+timers (20 seconds when no viable resurrector is present, 90 seconds when one
+is present), then the existing bind/release behavior. They do not use the
+`/spawn` helper's release-to-owner path. Death recovery is runtime GameBot state;
+this policy adds no companion death fields or save migration.
+
+`/raid 40` and `/raid 80` remain raids for the owner's temporary `/spawn`
+helpers. The owner counts toward the selected capacity. Persistent companions
+and autonomous world bots are not eligible raid helpers; invite persistent
+companions to an ordinary party instead. Offline policy coverage does not replace
+the owner-run client check listed in the [Stage 6 acceptance brief](COMPANION_STAGE6_ACCEPTANCE.md).
+
 ## Temporary `/spawn` XP contract
 
 The current contract is:
