@@ -13,5 +13,6 @@
                       Link="data\classic165_restored_spawn_ids.txt" />
     <EmbeddedResource Include="..\..\server\GameServer\bots\autonomous\data\classic165_period_restored_spawn_ids.txt"
                       Link="data\classic165_period_restored_spawn_ids.txt" />
+    <EmbeddedResource Include="data\classic165_dungeon_restored_spawn_ids.txt" />
   </ItemGroup>
 </Project>

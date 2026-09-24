@@ -1269,6 +1269,89 @@ namespace DOL.GS
             }
         }
 
+        public static bool TryReset(GamePlayer owner, string nameOrId, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                {
+                    message = "That companion name or ID is not in your roster. Type /companions list to see names.";
+                    return false;
+                }
+
+                if (owner.CurrentRegion == null || owner.CurrentZone == null)
+                {
+                    message = "You must be in the world before resetting a companion.";
+                    return false;
+                }
+
+                if (!TryBench(owner, record.CompanionId, out _))
+                {
+                    message = $"{record.Name} could not be saved before resetting; they were left as they were.";
+                    return false;
+                }
+
+                if (!TryInvite(owner, record.CompanionId, out string inviteMessage))
+                {
+                    message = $"{record.Name} was saved in your roster but could not rejoin: {inviteMessage}";
+                    return false;
+                }
+
+                message = inviteMessage;
+                return true;
+            }
+        }
+
+        public static bool TryResetActive(GamePlayer owner, out List<string> messages)
+        {
+            messages = new List<string>();
+            if (owner == null)
+            {
+                messages.Add("Your character could not be found.");
+                return false;
+            }
+
+            lock (owner)
+            {
+                if (owner.CurrentRegion == null || owner.CurrentZone == null)
+                {
+                    messages.Add("You must be in the world before resetting companions.");
+                    return false;
+                }
+
+                if (!TryGetRoster(owner, out List<PlayerCompanionRecord> roster))
+                {
+                    messages.Add("Your companion roster could not be loaded. Try again later.");
+                    return false;
+                }
+
+                string[] activeCompanionIds = roster.Where(record => record.IsActive)
+                    .Select(record => record.CompanionId).ToArray();
+                if (activeCompanionIds.Length == 0)
+                {
+                    messages.Add("You have no active persistent companions to reset.");
+                    return true;
+                }
+
+                bool allReset = true;
+                foreach (string companionId in activeCompanionIds)
+                {
+                    if (!TryReset(owner, companionId, out string message))
+                        allReset = false;
+                    messages.Add(message);
+                }
+
+                return allReset;
+            }
+        }
+
         public static bool SaveBotState(GameBot companion, bool active)
         {
             PlayerCompanionRecord record = companion?.PlayerCompanionRecord;

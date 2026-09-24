@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.45.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.48.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 287 command registrations read from the shipped server assemblies.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -249,7 +249,8 @@ NORMAL PLAYER COMMANDS
 
 /companions
   Manage your roster, cast, tactics, training, and equipment.
-  /companions [find <name or class> | list | cast [realm] [page] | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | profile <name> | role <name> <role> | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]
+  /companions [find <name or class> | list | cast [realm] [page] | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> <role> | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]
+  /companions reset recreates each active persistent companion beside you; add a name to target one roster member. Progress and gear are saved first.
   Bare /companions opens the Companion Manager window, or prints command guidance if no client extension answers. Authored individuals are once per owner. Generated recruitment remains free at level 1. Group orders override saved individual stance until /companions group default. The manager's Group orders row sets the order and offers Pull, Invite all, Bench all, and Grind. The manager's Gear tab lists every worn slot: click a slot to see the bag items that fit it, best first, then [Equip + lock]; the companion bag window holds only the backpack. /companions build <name> lists builds; /companions build <name> <build> switches for free, anywhere, retrains to the current level, and sets the build's role. Roles are tank, healer, buffer, attacker, and cc (crowd control: Healer, Sorcerer, Bard, Mentalist, Spiritmaster).
   Handler: DOL.GS.Commands.PlayerCompanionCommandHandler
 

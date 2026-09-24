@@ -13,8 +13,10 @@ internal static class Program
 {
     private const int ExpectedConservativeRestoredSpawnCount = 983;
     private const int ExpectedPeriodMapRestoredSpawnCount = 1290;
+    private const int ExpectedDungeonRestoredSpawnCount = 2310;
     private const int ExpectedTotalRestoredSpawnCount =
-        ExpectedConservativeRestoredSpawnCount + ExpectedPeriodMapRestoredSpawnCount;
+        ExpectedConservativeRestoredSpawnCount + ExpectedPeriodMapRestoredSpawnCount +
+        ExpectedDungeonRestoredSpawnCount;
 
     private static int Main(string[] args)
     {
@@ -34,6 +36,7 @@ internal static class Program
                 RestoreClassic165ShroudedIslesAndDarknessFallsSpawns(migrationConnection);
                 RestoreConservativeClassic165FrontierAndAlbionSpawns(migrationConnection);
                 RestorePeriodMapClassic165FrontierAndAlbionSpawns(migrationConnection);
+                RestoreClassic165DungeonSpawns(migrationConnection);
                 EnsureRealmExchangeBrokers(migrationConnection);
                 VerifyClassic165SpawnProfile(migrationConnection);
                 Console.WriteLine($"Classic 1.65 spawn profile applied. Recoverable backup: {backupPath}");
@@ -58,6 +61,7 @@ internal static class Program
             RestoreClassic165ShroudedIslesAndDarknessFallsSpawns(connection);
             RestoreConservativeClassic165FrontierAndAlbionSpawns(connection);
             RestorePeriodMapClassic165FrontierAndAlbionSpawns(connection);
+            RestoreClassic165DungeonSpawns(connection);
             EnsureRealmExchangeBrokers(connection);
             ApplyClassicSiRules(connection);
             CreateAccount(connection, options.AccountName, options.Password);
@@ -619,6 +623,16 @@ internal static class Program
             "period-map verified Old Frontier and Albion");
     }
 
+    private static void RestoreClassic165DungeonSpawns(SQLiteConnection connection)
+    {
+        const string migrationId = "classic165-dungeon-spawns-v1";
+        ApplyArchivedSpawnManifest(connection, migrationId,
+            LoadRestoredSpawnIds("classic165_dungeon_restored_spawn_ids.txt"),
+            ExpectedDungeonRestoredSpawnCount,
+            "Restore the preserved neutral monster rows removed from the 15 Classic realm dungeons and four supported Old Frontiers dungeons; keep their original templates, positions, and levels.",
+            "Classic and Old Frontiers dungeons");
+    }
+
     private static void ApplyArchivedSpawnManifest(SQLiteConnection connection, string migrationId,
         string[] mobIds, int expectedCount, string description, string label)
     {
@@ -752,6 +766,7 @@ internal static class Program
                 (SELECT COUNT(*) FROM offline_world_migrations WHERE MigrationId='classic165-si-darkness-falls-spawns-v1'),
                 (SELECT COUNT(*) FROM offline_world_migrations WHERE MigrationId='classic165-conservative-frontier-albion-spawns-v1'),
                 (SELECT COUNT(*) FROM offline_world_migrations WHERE MigrationId='classic165-period-map-frontier-albion-spawns-v2'),
+                (SELECT COUNT(*) FROM offline_world_migrations WHERE MigrationId='classic165-dungeon-spawns-v1'),
                 (SELECT COUNT(*) FROM offline_classic165_restored_mobs),
                 (SELECT COUNT(*) FROM Mob WHERE PackageID='offline_realm_exchange' AND ClassType='DOL.GS.RealmExchangeBroker'),
                 (SELECT COUNT(*) FROM Mob WHERE PackageID='offline_realm_exchange' AND Guild='Exchange Guard'),
@@ -764,10 +779,11 @@ internal static class Program
             """;
         using var reader = verify.ExecuteReader();
         if (!reader.Read() || reader.GetInt32(0) != 1 || reader.GetInt32(1) != 1 || reader.GetInt32(2) != 1 ||
-            reader.GetInt32(3) != 1 || reader.GetInt32(4) != ExpectedTotalRestoredSpawnCount || reader.GetInt32(5) != 3 ||
-            reader.GetInt32(6) != 6 || reader.GetInt32(7) != 0)
+            reader.GetInt32(3) != 1 || reader.GetInt32(4) != 1 ||
+            reader.GetInt32(5) != ExpectedTotalRestoredSpawnCount || reader.GetInt32(6) != 3 ||
+            reader.GetInt32(7) != 6 || reader.GetInt32(8) != 0)
             throw new InvalidOperationException("Classic 1.65 spawn or Realm Exchange verification failed.");
-        Console.WriteLine($"Verified: 1.65 spawn profile, {ExpectedTotalRestoredSpawnCount:N0} source-checked restored monsters, 3 wealthy exchange brokers, and 6 capital-themed exchange guards.");
+        Console.WriteLine($"Verified: 1.65 spawn profile, {ExpectedTotalRestoredSpawnCount:N0} restored world rows, 3 wealthy exchange brokers, and 6 capital-themed exchange guards.");
     }
 
     private static void EnsureColumn(SQLiteConnection connection, string table, string column, string definition)

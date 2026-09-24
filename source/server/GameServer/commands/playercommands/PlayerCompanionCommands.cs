@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -68,6 +68,9 @@ namespace DOL.GS.Commands
                     break;
                 case "bench":
                     UpdateCompanion(client, player, args, invite: false);
+                    break;
+                case "reset":
+                    ResetCompanions(client, player, args);
                     break;
                 case "mode":
                     SetTrainingMode(client, player, args);
@@ -255,6 +258,20 @@ namespace DOL.GS.Commands
             else
                 PlayerCompanionRoster.TryBench(player, companionName, out message);
             DisplayMessage(client, message);
+        }
+
+        private void ResetCompanions(GameClient client, GamePlayer player, string[] args)
+        {
+            if (args.Length > 2)
+            {
+                PlayerCompanionRoster.TryReset(player, string.Join(' ', args.Skip(2)), out string message);
+                DisplayMessage(client, message);
+                return;
+            }
+
+            PlayerCompanionRoster.TryResetActive(player, out var messages);
+            foreach (string message in messages)
+                DisplayMessage(client, message);
         }
 
         private void SetTrainingMode(GameClient client, GamePlayer player, string[] args)
@@ -505,7 +522,7 @@ namespace DOL.GS.Commands
         private void ShowUsage(GameClient client)
         {
             DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }

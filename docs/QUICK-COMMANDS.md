@@ -47,6 +47,7 @@ stable samples at 500, 1,000, and 1,500 active bots.
 | `/companions build <name> [build]` | List a companion's builds, or switch to one, for example `/companions build Astrid summoning`. Switching is free, works anywhere, retrains the new build to the companion's level, and sets the build's role. Recruit with a build: `/companions recruit healer pacification`. |
 | `/companions role <name> <role>` | Set a class-legal tank, healer, buffer, attacker, or `cc` (crowd control) job. A crowd control companion mezzes extra monsters that are not the group's target; other companions leave mezzed monsters alone. |
 | `/companions stance <name> aggressive|defensive|passive` | Set an individual's saved engagement preference. Group commands override it until `/companions group default`. |
+| `/companions reset [name]` | Recreate all active persistent companions beside you, or bring one roster member back by name, even if dead or benched. Saved progress and gear are retained. |
 | `/spawn` | Open the menu of valid companion bots to summon. |
 | `/spawn X` | Summon a companion by class name from your realm instead of using the menu; useful for macros. |
 | `/spawn Realm X` | Summon a named class from another realm, such as `/spawn Midgard Healer`. |

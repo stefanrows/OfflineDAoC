@@ -12,6 +12,81 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-09-24
+
+### Added
+
+- Expanded `docs/BUGS.md` with the reported companion, dungeon, and server-population issues.
+
+### Changed
+
+- Ignore generated server build output and its NuGet/MSBuild cache files.
+
+### Fixed
+
+- Restored 2,310 archived monster rows across all Classic realm dungeons and the supported Old Frontiers dungeons through an additive Setup migration.
+
+### Removed
+
+- None.
+
+## [0.47.0] - 2026-09-24
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- All-realm travel uses standard fallback routes when an advertised
+  destination is missing from the installed teleport table. Menu labels
+  with full Shrouded Isles names and trailing spaces now resolve correctly.
+
+### Removed
+
+- None.
+
+## [0.46.1] - 2026-09-24
+
+### Added
+
+- `docs/BUGS.md` starts a list of confirmed, unresolved bugs.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.46.0] - 2026-09-24
+
+### Added
+
+- `/companions reset [name]` recreates active persistent companions at the
+  owner's current location, saving their roster progress and gear first.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.45.0] - 2026-09-24
 
 ### Added

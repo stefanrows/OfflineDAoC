@@ -78,7 +78,8 @@ namespace DOL.GS
 
 			StringBuilder sRet = new StringBuilder();
 
-			switch (text.ToUpper())
+			text = text.Trim();
+			switch (text.ToUpperInvariant())
 			{
 				// Realm specific menus
 				case "ALBION":
@@ -227,9 +228,13 @@ namespace DOL.GS
 					break;
 				// SI cities
 				case "GOTHWAITE":
+				case "CAER GOTHWAITE":
 				case "DIOGEL":
+				case "CAER DIOGEL":
 				case "GWYNTELL":
+				case "FORT GWYNTELL":
 				case "WEARYALL":
+				case "WEARYALL VILLAGE":
 					SayTo(player, "The Shrouded Isles await you.");
 					realmTarget = eRealm.Albion;
 					break;
@@ -635,8 +640,9 @@ namespace DOL.GS
 				}
 			}
 
-			// Find the teleport location in the database.
-			return WorldMgr.GetTeleportLocation(realm, String.Format(":{0}", text));
+			// Prefer the installed route so custom coordinates continue to take precedence.
+			DbTeleport destination = WorldMgr.GetTeleportLocation(realm, String.Format(":{0}", text));
+			return destination ?? AllRealmsTeleportFallbacks.Get(realm, text);
 		}
 	}
 }

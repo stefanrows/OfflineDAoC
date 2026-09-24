@@ -98,7 +98,10 @@ corpse and group are retained while dead; recovery follows the general GameBot
 timers (20 seconds when no viable resurrector is present, 90 seconds when one
 is present), then the existing bind/release behavior. They do not use the
 `/spawn` helper's release-to-owner path. Death recovery is runtime GameBot state;
-this policy adds no companion death fields or save migration.
+this policy adds no companion death fields or save migration. Use `/companions reset`
+to recreate every active roster companion beside you, or `/companions reset <name>`
+for one. Reset saves the companion before recreating them, including a dead actor
+that is still active in the roster.
 
 `/raid 40` and `/raid 80` remain raids for the owner's temporary `/spawn`
 helpers. The owner counts toward the selected capacity. Persistent companions
