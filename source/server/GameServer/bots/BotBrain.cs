@@ -3862,9 +3862,173 @@ namespace DOL.AI.Brain
             return casted;
         }
 
+        private static readonly Dictionary<eSpellType, eProperty[]> BuffCoverageProperties = new()
+        {
+            [eSpellType.StrengthBuff] = [eProperty.Strength],
+            [eSpellType.ConstitutionBuff] = [eProperty.Constitution],
+            [eSpellType.DexterityBuff] = [eProperty.Dexterity],
+            [eSpellType.QuicknessBuff] = [eProperty.Quickness],
+            [eSpellType.StrengthConstitutionBuff] = [eProperty.Strength, eProperty.Constitution],
+            [eSpellType.DexterityQuicknessBuff] = [eProperty.Dexterity, eProperty.Quickness]
+        };
+
+        private static IEnumerable<(SpellLine Line, Spell Spell)> GetKnownClassBuffs(GameLiving member)
+        {
+            if (member is GameBot bot)
+            {
+                foreach (var entry in bot.GetAllUsableListSpells())
+                {
+                    if (entry.Item1 == null || entry.Item2 == null)
+                        continue;
+                    foreach (Spell spell in entry.Item2.OfType<Spell>())
+                        yield return (entry.Item1, spell);
+                }
+
+                foreach (var entry in bot.GetAllUsableSkills())
+                    if (entry.Item1 is Spell spell && entry.Item2 is SpellLine line)
+                        yield return (line, spell);
+                yield break;
+            }
+
+            if (member is GamePlayer player)
+            {
+                foreach (var entry in player.GetAllUsableListSpells())
+                {
+                    if (entry.Item1 == null || entry.Item2 == null)
+                        continue;
+                    foreach (Spell spell in entry.Item2.OfType<Spell>())
+                        yield return (entry.Item1, spell);
+                }
+
+                foreach (var entry in player.GetAllUsableSkills())
+                    if (entry.Item1 is Spell spell && entry.Item2 is SpellLine line)
+                        yield return (line, spell);
+            }
+        }
+
+        private static void GetMaintainableBuffLineIds(
+            GameLiving member,
+            out HashSet<int> baseBuffIds,
+            out HashSet<int> specializationBuffIds)
+        {
+            baseBuffIds = [];
+            specializationBuffIds = [];
+            foreach ((SpellLine line, Spell spell) in GetKnownClassBuffs(member))
+            {
+                if (line == null || spell == null)
+                    continue;
+
+                if (spell.Level > member.Level || !IsMaintainableClassBuff(spell))
+                    continue;
+
+                (line.IsBaseLine ? baseBuffIds : specializationBuffIds).Add(spell.ID);
+            }
+
+            // If a spell is available through a specialization line too, treat
+            // it as a specialization buff for ordering and coverage purposes.
+            baseBuffIds.ExceptWith(specializationBuffIds);
+        }
+
+        private static eProperty[] GetBuffCoverage(Spell spell) =>
+            spell != null && BuffCoverageProperties.TryGetValue(spell.SpellType, out eProperty[] properties)
+                ? properties
+                : [];
+
+        private static bool CanProvideBuffToTarget(GameLiving provider, GameLiving target, Spell spell)
+        {
+            if (spell.Target == eSpellTarget.REALM)
+            {
+                if (!GameServer.ServerRules.IsSameRealm(provider, target, true))
+                    return false;
+
+                if (spell.Range > 0 &&
+                    !provider.IsWithinRadius(target, spell.CalculateEffectiveRange(provider)))
+                    return false;
+            }
+            else if (spell.Target == eSpellTarget.GROUP)
+            {
+                int range = spell.Range == 0 ? spell.Radius : spell.CalculateEffectiveRange(provider);
+                if (!provider.IsWithinRadius(target, range))
+                    return false;
+            }
+            else if (spell.Target != eSpellTarget.SELF || provider != target)
+                return false;
+
+            return spell.SpellType switch
+            {
+                eSpellType.StrengthBuff => !target.HasAbility(Abilities.VampiirStrength),
+                eSpellType.ConstitutionBuff => !target.HasAbility(Abilities.VampiirConstitution),
+                eSpellType.DexterityBuff => !target.HasAbility(Abilities.VampiirDexterity),
+                eSpellType.QuicknessBuff => !target.HasAbility(Abilities.VampiirQuickness),
+                eSpellType.StrengthConstitutionBuff =>
+                    !target.HasAbility(Abilities.VampiirStrength) && !target.HasAbility(Abilities.VampiirConstitution),
+                eSpellType.DexterityQuicknessBuff =>
+                    !target.HasAbility(Abilities.VampiirDexterity) && !target.HasAbility(Abilities.VampiirQuickness),
+                _ => true
+            };
+        }
+
+        private static bool HasOtherGroupMemberBuffCoverage(GameBot caster, GameLiving target, Spell requestedBuff)
+        {
+            Group group = caster?.Group;
+            if (group == null || target == null || requestedBuff == null)
+                return false;
+
+            eProperty[] requestedCoverage = GetBuffCoverage(requestedBuff);
+            if (requestedCoverage.Length == 0)
+            {
+                foreach (GameLiving member in group.GetMembersInTheGroup())
+                {
+                    if (member == caster || !member.IsAlive)
+                        continue;
+
+                    bool canProvideSameType = GetKnownClassBuffs(member)
+                        .Any(entry => entry.Spell.Level <= member.Level &&
+                                      entry.Spell.SpellType == requestedBuff.SpellType &&
+                                      entry.Spell.Value >= requestedBuff.Value &&
+                                      IsMaintainableClassBuff(entry.Spell) &&
+                                      CanProvideBuffToTarget(member, target, entry.Spell));
+                    if (canProvideSameType)
+                        return true;
+                }
+
+                return false;
+            }
+
+            HashSet<eProperty> coveredProperties = [];
+            foreach (GameLiving member in group.GetMembersInTheGroup())
+            {
+                if (member == caster || !member.IsAlive)
+                    continue;
+
+                foreach ((SpellLine line, Spell spell) in GetKnownClassBuffs(member))
+                {
+                    if (line == null || spell == null)
+                        continue;
+
+                    if (spell.Level > member.Level || spell.Value < requestedBuff.Value ||
+                        !IsMaintainableClassBuff(spell) || !CanProvideBuffToTarget(member, target, spell))
+                        continue;
+
+                    coveredProperties.UnionWith(GetBuffCoverage(spell));
+                }
+
+                if (requestedCoverage.All(coveredProperties.Contains))
+                    return true;
+            }
+
+            return false;
+        }
+
         bool CheckDefensiveSpells(List<Spell> spells)
         {
             List<(Spell, GameLiving)> spellsToCast = new(spells.Count);
+            bool prioritizeCompanionBuffs = BotBody?.IsPlayerLedGroup == true;
+            HashSet<int> baseBuffIds = [];
+            HashSet<int> specializationBuffIds = [];
+            if (prioritizeCompanionBuffs)
+                GetMaintainableBuffLineIds(BotBody, out baseBuffIds, out specializationBuffIds);
+            bool hasSpecializationBuffs = specializationBuffIds.Count > 0;
 
             foreach (Spell spell in spells)
             {
@@ -3884,12 +4048,26 @@ namespace DOL.AI.Brain
                 {
                     continue;
                 }
-                if (CanCastDefensiveSpell(spell, out GameLiving target))
+                if (CanCastDefensiveSpell(spell, out GameLiving target) &&
+                    !(hasSpecializationBuffs && baseBuffIds.Contains(spell.ID) &&
+                      HasOtherGroupMemberBuffCoverage(BotBody, target, spell)))
                     spellsToCast.Add((spell, target));
             }
 
             if (spellsToCast.Count == 0)
                 return false;
+
+            // Complete any currently available specialization-line buffs
+            // before spending a cast on this companion's weaker base-line
+            // buffs. A base-only buffer has no specialization candidates and
+            // therefore keeps the normal selection path.
+            if (hasSpecializationBuffs &&
+                spellsToCast.Any(entry => specializationBuffIds.Contains(entry.Item1.ID)))
+            {
+                spellsToCast = spellsToCast
+                    .Where(entry => !baseBuffIds.Contains(entry.Item1.ID))
+                    .ToList();
+            }
 
             GameObject oldTarget = Body.TargetObject;
             (Spell spell, GameLiving target) spellToCast = BotBody.IsEndgameCompanion
