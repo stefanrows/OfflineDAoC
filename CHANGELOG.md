@@ -12,6 +12,44 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-09-24
+
+### Added
+
+- None.
+
+### Changed
+
+- Companion buff coverage now checks active buffs from other group members on the target; a human player's known spell alone no longer suppresses a base buff.
+- Guard and Protect assignments honor their native effect ranges, including existing effects from outside the managed companion group.
+- Bombing's tank-aggro grace period restarts when the focused pull target changes.
+
+### Fixed
+
+- Idle player-led companions no longer repeat the same pet summon without an owner-level increase that improves the pet.
+
+### Removed
+
+- None.
+
+## [0.51.0] - 2026-09-24
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Player-led companions keep an idle pet summoned by the preferred spell until they learn a stronger summon or gain enough levels to improve the pet.
+
+### Removed
+
+- None.
+
 ## [0.50.0] - 2026-09-24
 
 ### Added

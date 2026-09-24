@@ -1017,6 +1017,14 @@ public static class AutonomousPetSupport
 
     private static bool IsMainPetUpgrade(GameBot owner, GameSummonedPet currentPet, Spell desiredSummon)
     {
+        // The native summon may create a pet below the projected level.
+        // Recasting the same spell at the same owner level cannot improve it.
+        if (currentPet.SummonSpellID == desiredSummon.ID)
+        {
+            return currentPet.SummonOwnerLevel > 0 && owner.Level > currentPet.SummonOwnerLevel &&
+                   ProjectedPetLevel(owner, desiredSummon) > currentPet.Level;
+        }
+
         if ((eCharacterClass)owner.CharacterClass.ID == eCharacterClass.Enchanter &&
             IsUnderhillAllySummon(desiredSummon) &&
             !IsUnderhillAllyPet(currentPet) &&
@@ -1038,8 +1046,9 @@ public static class AutonomousPetSupport
                 .FirstOrDefault();
         }
 
-        return (currentSummon != null && desiredSummon.Level > currentSummon.Level) ||
-               ProjectedPetLevel(owner, desiredSummon) > currentPet.Level;
+        // A different pet at the same or a lower spell rank is a choice, not
+        // an upgrade. Pet levels vary by spell and cannot order pet types.
+        return currentSummon != null && desiredSummon.Level > currentSummon.Level;
     }
 
     private static int ProjectedPetLevel(GameLiving owner, Spell summon)

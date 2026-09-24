@@ -17,6 +17,7 @@ namespace DOL.GS
         public double SummonSpellDamage { get; set; } = -88.0;
         public double SummonSpellValue { get; set; } = 44.0;
         public int SummonSpellID { get; set; }
+        public byte SummonOwnerLevel { get; set; }
 
         public override byte Level
         {
