@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-09-24
+
+### Added
+
+- Plain-language tooltips for server population presets, player-type mix,
+  leveling-zone danger, and world-shape controls.
+- A saved per-companion Auto/Bomb/Off preference for PBAoE spell use.
+
+### Changed
+
+- Companion buff maintenance recognizes stronger learned ranks, prioritizes
+  specialization buffs, and assigns Guard and Protect across group members.
+- Idle player-led companions upgrade to stronger summons; Enchanters prefer
+  Underhill Ally when available.
+- Bomb-capable companions prioritize PBAoE on sufficiently large focused pulls
+  and allow tanks a brief aggro window before bombing.
+
+### Fixed
+
+- Mob BAF resolves player-led companions and controlled pets to their group,
+  counts bot members for add selection, and retains the related experience bonus.
+
+### Removed
+
+- None.
+
 ## [0.48.0] - 2026-09-24
 
 ### Added
