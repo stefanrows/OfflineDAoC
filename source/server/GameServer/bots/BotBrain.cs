@@ -293,8 +293,21 @@ namespace DOL.AI.Brain
             return living.effectListComponent.ContainsEffectForEffectType(eEffect.Shade);
         }
 
+        /// <summary>
+        /// Companions leave a mezzed monster alone while another enemy is
+        /// left, then fall back to the full list so they never stand idle.
+        /// </summary>
         protected virtual GameLiving CleanUpAggroListAndGetHighestModifiedThreat()
         {
+            if (!CompanionAddControl.AppliesMezzProtection(BotBody))
+                return SelectHighestModifiedThreat(false, out _);
+            GameLiving target = SelectHighestModifiedThreat(true, out bool skippedMezz);
+            return target == null && skippedMezz ? SelectHighestModifiedThreat(false, out _) : target;
+        }
+
+        private GameLiving SelectHighestModifiedThreat(bool skipProtectedMezz, out bool skippedMezz)
+        {
+            skippedMezz = false;
             OrderedAggroList.Clear();
 
             int attackRange = Body.attackComponent.AttackRange;
@@ -318,6 +331,15 @@ namespace DOL.AI.Brain
 
                 if (ShouldBeIgnoredFromAggroList(living))
                     continue;
+
+                if (skipProtectedMezz && CompanionAddControl.ProtectsMezz(BotBody, living))
+                {
+                    // Also drop it as the sticky current target below.
+                    if (currentTarget.Key == living)
+                        currentTarget = default;
+                    skippedMezz = true;
+                    continue;
+                }
 
                 AggroAmount aggroAmount = pair.Value;
                 double distance = Body.GetDistanceTo(living);
@@ -731,7 +753,8 @@ namespace DOL.AI.Brain
             Body.TargetObject = null;
             Body.ControlledBrain?.Disengage();
             Body.ControlledBrain?.Follow(Body);
-            if (Body.IsCasting && Body.castingComponent?.SpellHandler?.Spell?.IsHarmful == true && !PvpControlInFlight)
+            if (Body.IsCasting && Body.castingComponent?.SpellHandler?.Spell?.IsHarmful == true && !PvpControlInFlight &&
+                !PveControlInFlight)
                 Body.StopCurrentSpellcast();
         }
 
@@ -2538,6 +2561,9 @@ namespace DOL.AI.Brain
             if (Body.IsCasting)
                 return;
 
+            if (TryPveAddControl())
+                return;
+
             GameLiving protectionTarget = FindProtectionTarget();
             if (protectionTarget != null)
                 AddToAggroList(protectionTarget, 10000);
@@ -2951,7 +2977,9 @@ namespace DOL.AI.Brain
         {
             Body.StopAttack();
             if (!UsesDefensiveOnlyPet) Body.ControlledBrain?.Disengage();
-            if (Body.IsCasting && Body.castingComponent?.SpellHandler?.Spell?.IsHarmful == true)
+            // A support companion's own mezz is harmful but is not an attack.
+            if (Body.IsCasting && Body.castingComponent?.SpellHandler?.Spell?.IsHarmful == true &&
+                !PvpControlInFlight && !PveControlInFlight)
                 Body.StopCurrentSpellcast();
         }
 
@@ -2960,7 +2988,7 @@ namespace DOL.AI.Brain
             if (CompanionFollowPolicy.SendsDruidPet(BotBody))
                 TryCommandCompanionDruidPet(CalculateNextAttackTarget());
             HoldSupportCombat();
-            if (!CheckHeals() && !TryPvpCrowdControl()) CheckSpells(eCheckSpellType.Defensive);
+            if (!CheckHeals() && !TryPvpCrowdControl() && !TryPveAddControl()) CheckSpells(eCheckSpellType.Defensive);
             if (BotBody.IsPlayerLedGroup)
             {
                 if (!Body.IsCasting && Body.castingComponent?.HasPendingSkillRequests != true)
@@ -3230,7 +3258,8 @@ namespace DOL.AI.Brain
                     {
                         bool meleePressure = Body.IsBeingInterruptedByOther &&
                             Body.IsWithinRadius(Body.TargetObject, Body.MeleeAttackRange + 35);
-                        if (!BotCasterPriority.AllowInstant(spell, PrefersCurrentSpellRange(), meleePressure))
+                        if (!BotCasterPriority.AllowInstant(spell, PrefersCurrentSpellRange(), meleePressure) ||
+                            CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, Body.TargetObject as GameLiving))
                             continue;
                         if (CheckInstantOffensiveSpells(spell))
                             return true;
@@ -3313,7 +3342,8 @@ namespace DOL.AI.Brain
                 {
                     // Do not roll a DoT/debuff already on this mob and mistake
                     // its refusal for a reason to abandon ranged combat.
-                    spellsToCast.RemoveAll(spell => !NeedsOffensiveSpellApplication((GameLiving)Body.TargetObject, spell));
+                    spellsToCast.RemoveAll(spell => !NeedsOffensiveSpellApplication((GameLiving)Body.TargetObject, spell) ||
+                        CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, Body.TargetObject as GameLiving));
                     if (spellsToCast.Count == 0) return Body.IsCasting;
                     if (PrefersCurrentSpellRange() &&
                         spellsToCast.Exists(spell => spell.Range > Body.MeleeAttackRange))

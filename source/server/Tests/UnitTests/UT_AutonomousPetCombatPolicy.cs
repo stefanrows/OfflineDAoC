@@ -170,8 +170,8 @@ public sealed class UT_AutonomousPetCombatPolicy
         {
             Assert.That(BotPartyRoles.For(eCharacterClass.Mentalist), Is.EqualTo(BotPartyRole.Damage));
             Assert.That(BotPartyRoles.For(eCharacterClass.Sorcerer), Is.EqualTo(BotPartyRole.Damage));
-            Assert.That(BotPartyRoles.Label(eCharacterClass.Mentalist), Is.EqualTo("Attacker/Buffer"));
-            Assert.That(BotPartyRoles.Label(eCharacterClass.Sorcerer), Is.EqualTo("Attacker/Buffer"));
+            Assert.That(BotPartyRoles.Label(eCharacterClass.Mentalist), Is.EqualTo("Attacker/Buffer/Crowd control"));
+            Assert.That(BotPartyRoles.Label(eCharacterClass.Sorcerer), Is.EqualTo("Attacker/Buffer/Crowd control"));
         });
     }
 
@@ -185,7 +185,8 @@ public sealed class UT_AutonomousPetCombatPolicy
             Assert.That(BotPartyRoles.For(characterClass), Is.EqualTo(BotPartyRole.Damage));
             Assert.That(BotPartyRoles.CanFill(characterClass, BotPveGroupRole.Attacker), Is.True);
             Assert.That(BotPartyRoles.CanFill(characterClass, BotPveGroupRole.Buffer), Is.True);
-            Assert.That(BotPartyRoles.Label(characterClass), Is.EqualTo("Attacker/Buffer"));
+            Assert.That(BotPartyRoles.Label(characterClass), Is.EqualTo(characterClass == eCharacterClass.Bard
+                ? "Attacker/Buffer/Crowd control" : "Attacker/Buffer"));
         });
     }
 

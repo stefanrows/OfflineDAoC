@@ -105,7 +105,9 @@ and verification history of the full-PvP conversion.
   owner's level. Benched companions retain progress without earning passive XP.
   Automatic training offers 57 named builds for 35 classes, chosen in the
   manager's Training & Tactics tab and recruit panel or with `/companions build`;
-  four classes require manual training.
+  four classes require manual training. Each build sets its group role. A
+  Crowd control companion mezzes extra monsters in PvE, and the other companions
+  leave mezzed monsters alone.
   The menu offers short gear pages and a native external-inventory view for the
   companion backpack. Client acceptance of the updated UI remains pending.
 - `/spawn` still creates temporary, player-owned helpers, separate from both the

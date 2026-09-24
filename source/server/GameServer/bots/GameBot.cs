@@ -1903,6 +1903,7 @@ namespace DOL.GS
             string previousPlan = PlayerCompanionRecord.TrainingPlanId;
             string previousSerializedSpecs = PlayerCompanionRecord.SerializedSpecs;
             int previousRecordPoints = PlayerCompanionRecord.UnspentSpecPoints;
+            string previousRole = PlayerCompanionRecord.TacticalRole;
 
             // Clears abilities, styles, and spells of the old ranks before retraining.
             ResetCompanionSpecializations();
@@ -1911,6 +1912,7 @@ namespace DOL.GS
             m_leftOverSpecPoints = unspentPoints;
             PlayerCompanionRecord.TrainingMode = "automatic";
             PlayerCompanionRecord.TrainingPlanId = plan.Id;
+            PlayerCompanionRecord.TacticalRole = BotPartyRoles.RoleValue(plan.PrimaryRole);
             PlayerCompanionRecord.Dirty = true;
 
             if (!PlayerCompanionRoster.SaveProgress(this))
@@ -1922,6 +1924,7 @@ namespace DOL.GS
                 PlayerCompanionRecord.TrainingPlanId = previousPlan;
                 PlayerCompanionRecord.SerializedSpecs = previousSerializedSpecs;
                 PlayerCompanionRecord.UnspentSpecPoints = previousRecordPoints;
+                PlayerCompanionRecord.TacticalRole = previousRole;
                 PlayerCompanionRecord.Dirty = true;
                 RefreshCompanionSkills();
                 message = $"{Name}'s build change could not be saved; their previous build and allocations were restored.";
@@ -1929,7 +1932,7 @@ namespace DOL.GS
             }
 
             RefreshCompanionSkills();
-            message = $"{Name} now follows the {plan.Name} build ({plan.Role}) and was retrained to level {Level}: {FormatBuildRanks(plan, allocation)}. {m_leftOverSpecPoints} points remain.";
+            message = $"{Name} now follows the {plan.Name} build ({plan.Role}; role {BotPartyRoles.GroupRoleLabel(plan.PrimaryRole).ToLowerInvariant()}) and was retrained to level {Level}: {FormatBuildRanks(plan, allocation)}. {m_leftOverSpecPoints} points remain.";
             return true;
         }
 

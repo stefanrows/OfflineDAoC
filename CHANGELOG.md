@@ -12,6 +12,52 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-09-24
+
+### Added
+
+- Crowd control role for companions (M1c). Healer, Sorcerer, Bard, Mentalist,
+  and Spiritmaster companions can take it with `/companions role <name> cc`
+  or in the manager's Training & Tactics tab.
+- PvE add control. Once the group is fighting a monster, a companion with
+  crowd control duty mezzes extra monsters that are attacking the group,
+  with non-tanks' attackers first. It never mezzes the group's target or the
+  owner's target, and it skips monsters that are immune, below 75% health,
+  or taking damage over time. Two companions never mezz the same add, and a
+  mezz is recast after it wears off.
+- Mezz protection in player-led groups. Companions leave a mezzed monster alone
+  while any other enemy is left, and skip area spells that would hit it. If
+  the owner attacks the mezzed monster, companions attack it too.
+- Each build sets a role when it is chosen or used at recruitment, following
+  the owner's Healer mapping: Tri-spec is Healer and also controls adds,
+  Mending is Healer, Augmentation is Buffer, and Pacification is Crowd
+  control. Sorcerer Body and Mind and Bard Music are Crowd control. Bard
+  Nurture and Shaman Augmentation are Buffer, Friar Group support is Healer,
+  and Armsman Two-handed is Attacker. The other builds keep the class default.
+- Tests for the role values, the build-to-role mapping, and the `cc` role
+  command.
+
+### Changed
+
+- Build lists in the window and in `/companions build` say which role each
+  build sets. Role names show as "Crowd control" rather than the saved value.
+- Class role labels include "Crowd control" for the five classes that can
+  fill it.
+- A Pacification Healer in the Crowd control role keeps healing when nothing
+  needs control.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- A support companion no longer cancels its own crowd-control cast while
+  holding back from melee.
+
+### Removed
+
+- None.
+
 ## [0.35.0] - 2026-09-24
 
 ### Added

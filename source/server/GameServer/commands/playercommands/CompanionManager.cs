@@ -360,6 +360,7 @@ namespace DOL.GS.Commands
                              TemporaryGroupClassCatalog.RealmName((eRealm)current.Realm);
             string role = string.IsNullOrWhiteSpace(current.TacticalRole)
                 ? BotPartyRoles.DefaultPreference(characterClass) : current.TacticalRole;
+            string roleLabel = BotPartyRoles.GroupRoleLabel(role);
             string stance = string.IsNullOrWhiteSpace(current.EngagementPreference) ? "aggressive" : current.EngagementPreference;
             bool automatic = string.Equals(current.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase);
             int unspent = live ? companion.UnspentSpecPoints : current.UnspentSpecPoints;
@@ -391,11 +392,11 @@ namespace DOL.GS.Commands
                         ? new Line("Switch to manual training", "mode:manual", () => SetTraining(player, session, id, false))
                         : new Line("Switch to automatic training", "mode:automatic", () => SetTraining(player, session, id, true)));
                     lines.Add(new Line(string.Empty));
-                    lines.Add(new Line($"Role: {role}. Class-legal roles:"));
+                    lines.Add(new Line($"Role: {roleLabel}. Class-legal roles:"));
                     foreach (BotPveGroupRole option in Enum.GetValues<BotPveGroupRole>().Where(option => BotPartyRoles.CanFill(characterClass, option)))
                     {
                         string value = option.ToString().ToLowerInvariant();
-                        lines.Add(new Line($"  {option}{(value == role ? " (current)" : string.Empty)}", "role:" + value,
+                        lines.Add(new Line($"  {BotPartyRoles.GroupRoleLabel(option)}{(value == role ? " (current)" : string.Empty)}", "role:" + value,
                             () => SetTactics(player, session, id, "role", value)));
                     }
                     lines.Add(new Line($"Stance: {stance}. Group orders can override it:"));
@@ -444,7 +445,7 @@ namespace DOL.GS.Commands
                         : $"XP: {current.Experience:N0} / {GamePlayer.GetExperienceAmountForLevel(current.Level):N0}"));
                     AddText(lines, $"Training: {(!automatic ? "manual" : CompanionBuildPlanCatalog.TryGetPlanById(characterClass,
                         current.TrainingPlanId, out CompanionBuildPlan build) ? $"automatic, {build.Name} build" : "automatic")}; {unspent} unspent points.");
-                    lines.Add(new Line($"Role: {role}; stance: {stance}."));
+                    lines.Add(new Line($"Role: {roleLabel}; stance: {stance}."));
                     lines.Add(new Line(string.Empty));
                     CompanionCharacterCatalog.Character authored = CompanionCharacterCatalog.Find(current.AuthoredRecruitKey);
                     if (authored != null)
@@ -658,11 +659,15 @@ namespace DOL.GS.Commands
                 string selected = build == chosen ? " <" : string.Empty;
                 lines.Add(new Line($"  {build.Name}{state}{selected}", "build:" + planId,
                     () => session.BuildChoice = (entryKey, planId)));
-                foreach (string line in CompanionManagerSession.Wrap(Sanitize(build.Role, int.MaxValue),
+                foreach (string line in CompanionManagerSession.Wrap(Sanitize(BuildRoleText(build), int.MaxValue),
                              DetailWidth - TextWidth(BuildIndent)))
                     lines.Add(new Line(BuildIndent + line));
             }
         }
+
+        public static string BuildRoleText(CompanionBuildPlan build) =>
+            $"{build.Role}. Sets role: {BotPartyRoles.GroupRoleLabel(build.PrimaryRole)}" +
+            (build.CrowdControlDuty ? ", also controls adds." : ".");
 
         private static bool TryParseGeneratedKey(string key, out eRealm realm, out eCharacterClass characterClass)
         {

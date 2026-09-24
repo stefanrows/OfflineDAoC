@@ -3,7 +3,8 @@
 Status: **M0 remainder implemented offline in 0.33.0; owner real-client check
 pending. M1a (build research, catalog, and command selection) implemented
 offline in 0.34.0. M1b (build list in the window and recruit flow) implemented
-offline in 0.35.0. M1c, M2, and M3 are not implemented yet.**
+offline in 0.35.0. M1c (Crowd control role and build roles) implemented
+offline in 0.36.0. M2 and M3 are not implemented yet.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -188,11 +189,78 @@ installed 0.33.0 (or 0.32.1) manager `game.dll` needs no change.
       Recruit one story companion and one class with a non-default build and
       check the build on the new roster entry.
 
-### M1c - Crowd control role
+### M1c - Crowd control role (0.36.0, offline)
 
-- Add the Crowd control role and check its AI (mezz and root choice, target
-  selection, breaking rules) against the existing bot crowd-control code.
-- Apply each build's role on selection, using the owner's Healer mapping.
+Server only. The installed manager `game.dll` needs no change.
+
+**Owner decisions (2026-09-24):**
+
+- PvE: the companion mezzes adds, and other companions protect the mezzes.
+- Hybrid builds keep one saved primary role. A build that lists crowd control
+  also controls adds when its primary job allows (Tri-spec = Healer + add
+  control).
+- Choosing a build always sets its role. The player can change it afterwards.
+- No native Crowd control filter button for now; the roster filter keeps its
+  four role buttons.
+
+**Check against the existing code:** before this change, crowd control was
+PvP only. `TryPvpCrowdControl` returned early unless a player-shaped enemy was
+involved. In PvE, a caster could mezz the monster it was attacking, and no
+companion skipped mezzed monsters when choosing a target, so every PvE mezz was
+broken at once.
+
+- [x] Role: `BotPveGroupRole.CrowdControl` (saved as `crowdcontrol`; commands
+      also take `cc` and `crowd control`). It is added after the four existing
+      values, so the native filter's control IDs are unchanged. It is class-legal
+      for the classes with a plain, non-pulsing mesmerize line in the runtime
+      spell table: Healer (Pacification), Sorcerer (Mind), Bard (Music),
+      Mentalist (Mentalism), and Spiritmaster (Suppression). Minstrel mezzes
+      only with a pulsing song, which the policy does not maintain.
+- [x] Mezz, not root: PvE add control uses only mesmerize. A rooted monster
+      keeps fighting anyone in melee range and can still cast, so roots stay
+      with the existing PvP policy.
+- [x] Target choice (`CompanionAddControl`, `BotBrain.PveCrowdControl`): nothing
+      happens until the group has a focus target, so a pull is never mezzed. The
+      focus is every member's attack or harmful-cast target, each companion's
+      ordered pull, their pets' targets, and the owner's target. An add is a
+      monster within 1,500 units that is attacking a group member or pet, or is
+      on the caster's aggro list. Adds hitting non-tanks come first, then the
+      most adds caught, then the nearest. Adds are skipped when they are immune,
+      under the NPC diminishing-return timer, below 75% health (the native
+      "enraged" resist), or taking damage over time. The shared short-lived
+      reservation keeps two companions off the same add. Single-target mezzes
+      come first; an area mezz is used only when no focus target is inside its
+      radius.
+- [x] Breaking rules: companions in a player-led group leave a mezzed monster
+      alone while another enemy is left, and fall back to it only when nothing
+      else remains. They skip harmful area spells whose radius holds a
+      protected mezz. If the owner attacks the mezzed monster, companions may
+      attack it too. Real players are never restricted, and autonomous bots
+      keep their rules.
+- [x] Priorities: a Healer (any role) heals first, then controls. A support
+      companion's own mezz cast is no longer cancelled by its hold-back-from-melee
+      step. A Sorcerer, Bard, Mentalist, or Spiritmaster in the Crowd control role
+      attacks when there is nothing to control.
+- [x] Build roles: choosing a build (window, `/companions build`, or recruitment)
+      saves its primary role in the same save as the new build, with rollback on
+      failure. Owner's Healer mapping: Tri-spec = Healer + add control, Mending =
+      Healer, Augmentation = Buffer, Pacification = Crowd control. Project
+      mapping for the other builds: Sorcerer Body and Mind and Bard Music =
+      Crowd control; Bard Nurture and Shaman Augmentation = Buffer; Friar Group
+      support = Healer; Armsman Two-handed = Attacker; all others keep the class
+      default. Existing records keep their saved role until a build is chosen.
+- [x] Tests: role numbers and aliases, class legality, the Healer mapping,
+      every build's role is class-legal, build text names the role, and the `cc`
+      command saves only for a class that can fill it. The AI needs live
+      monsters and is left to the owner check.
+- [ ] Owner: in the real client, group with a Pacification Healer (or a Sorcerer
+      on Body and Mind), pull two or three monsters, and check that the extra
+      monsters are mezzed, the pulled target is not, other companions leave the
+      mezzed ones alone until the first dies, and a Tri-spec Healer still heals
+      first. Switch builds and check the role follows.
+
+Known limits: companions' pets are not held back from mezzed monsters, and a
+monster that a real player's area spell wakes is simply mezzed again.
 
 ## M2 - Behaviour controls in the window
 

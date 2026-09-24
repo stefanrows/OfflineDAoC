@@ -3,7 +3,9 @@ using System;
 namespace DOL.GS
 {
     public enum BotPartyRole { Damage, Tank, Support }
-    public enum BotPveGroupRole { Tank, Healer, Buffer, Attacker }
+    // Append only: the manager's role filter maps native control IDs to the
+    // first four values, and companion records save the lower-case name.
+    public enum BotPveGroupRole { Tank, Healer, Buffer, Attacker, CrowdControl }
 
     /// <summary>Group jobs, not a test for whether a class happens to know a buff.</summary>
     public static class BotPartyRoles
@@ -31,16 +33,62 @@ namespace DOL.GS
             BotPveGroupRole.Healer => IsHealingClass(characterClass),
             BotPveGroupRole.Buffer => For(characterClass) == BotPartyRole.Support || IsHybridSupport(characterClass),
             BotPveGroupRole.Attacker => For(characterClass) != BotPartyRole.Support || IsHybridSupport(characterClass),
+            BotPveGroupRole.CrowdControl => IsCrowdControlClass(characterClass),
             _ => false
         };
+
+        /// <summary>
+        /// Classes with a single-target, non-pulsing mesmerize line that the
+        /// companion add-control policy can use in PvE.
+        /// </summary>
+        public static bool IsCrowdControlClass(eCharacterClass characterClass) => characterClass is
+            eCharacterClass.Healer or eCharacterClass.Sorcerer or eCharacterClass.Bard or
+            eCharacterClass.Mentalist or eCharacterClass.Spiritmaster;
+
+        /// <summary>Saved role value, as written to a companion record.</summary>
+        public static string RoleValue(BotPveGroupRole role) => role.ToString().ToLowerInvariant();
+
+        /// <summary>Reads a command or saved role, accepting "cc" and "crowd control".</summary>
+        public static bool TryParseRole(string value, out BotPveGroupRole role)
+        {
+            string normalized = (value ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", string.Empty).Replace("-", string.Empty);
+            if (normalized == "cc")
+                normalized = "crowdcontrol";
+            return Enum.TryParse(normalized, true, out role) && Enum.IsDefined(role) &&
+                   !int.TryParse(normalized, out _);
+        }
+
+        /// <summary>
+        /// A companion adds control when its role is Crowd control, or when its
+        /// automatic build lists crowd control as a second duty (Tri-spec).
+        /// </summary>
+        public static bool HasCrowdControlDuty(GameBot bot)
+        {
+            PlayerCompanionRecord record = bot?.PlayerCompanionRecord;
+            if (bot?.IsPersistentPlayerCompanion != true || record == null || bot.CharacterClass == null)
+                return false;
+            var characterClass = (eCharacterClass)bot.CharacterClass.ID;
+            if (!IsCrowdControlClass(characterClass))
+                return false;
+            if (TryParseRole(record.TacticalRole, out BotPveGroupRole role) && role == BotPveGroupRole.CrowdControl)
+                return true;
+            return string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                   CompanionBuildPlanCatalog.TryGetPlanById(characterClass, record.TrainingPlanId, out CompanionBuildPlan plan) &&
+                   plan.CrowdControlDuty;
+        }
 
         public static string GroupRoleLabel(BotPveGroupRole role) => role switch
         {
             BotPveGroupRole.Tank => "Tank",
             BotPveGroupRole.Healer => "Healer",
             BotPveGroupRole.Buffer => "Buffer",
+            BotPveGroupRole.CrowdControl => "Crowd control",
             _ => "Attacker"
         };
+
+        /// <summary>Display label for a saved role value; unknown text is shown as saved.</summary>
+        public static string GroupRoleLabel(string savedRole) =>
+            TryParseRole(savedRole, out BotPveGroupRole role) ? GroupRoleLabel(role) : savedRole;
 
         public static bool IsHybridSupport(eCharacterClass characterClass) => characterClass is
             eCharacterClass.Warden or eCharacterClass.Paladin or eCharacterClass.Shaman or eCharacterClass.Friar or
@@ -61,8 +109,10 @@ namespace DOL.GS
         public static bool IsSupport(GameBot bot) => bot?.Group?.MemberCount > 1 &&
             bot.CharacterClass != null &&
             (bot.IsPersistentPlayerCompanion &&
-             Enum.TryParse(bot.PlayerCompanionRecord?.TacticalRole, true, out BotPveGroupRole preference)
-                ? preference is BotPveGroupRole.Healer or BotPveGroupRole.Buffer
+             TryParseRole(bot.PlayerCompanionRecord?.TacticalRole, out BotPveGroupRole preference)
+                ? preference is BotPveGroupRole.Healer or BotPveGroupRole.Buffer ||
+                  preference == BotPveGroupRole.CrowdControl &&
+                  For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Support
                 : For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Support) &&
             HasCombatPartner(bot);
 
@@ -94,11 +144,15 @@ namespace DOL.GS
 
         public static bool IsTank(GameBot bot) => bot?.CharacterClass != null &&
             (bot.IsPersistentPlayerCompanion &&
-             Enum.TryParse(bot.PlayerCompanionRecord?.TacticalRole, true, out BotPveGroupRole preference)
+             TryParseRole(bot.PlayerCompanionRecord?.TacticalRole, out BotPveGroupRole preference)
                 ? preference == BotPveGroupRole.Tank
                 : For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Tank);
 
-        public static string Label(eCharacterClass characterClass) => IsHybridSupport(characterClass)
+        public static string Label(eCharacterClass characterClass) => IsCrowdControlClass(characterClass)
+            ? ClassLabel(characterClass) + "/Crowd control"
+            : ClassLabel(characterClass);
+
+        private static string ClassLabel(eCharacterClass characterClass) => IsHybridSupport(characterClass)
             ? (For(characterClass) == BotPartyRole.Tank ? "Tank/Healer/Buffer"
                 : IsHealingClass(characterClass) ? "Attacker/Healer/Buffer" : "Attacker/Buffer")
             : For(characterClass) switch

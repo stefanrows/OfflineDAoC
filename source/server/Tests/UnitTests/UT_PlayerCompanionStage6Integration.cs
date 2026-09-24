@@ -256,6 +256,31 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
+    public void CrowdControlRoleIsSavedOnlyForAClassWithAMezz()
+    {
+        Owner owner = NewOwner("cc-role-owner", eRealm.Midgard);
+        PlayerCompanionRecord healer = NewRecord(owner.ObjectId, "cc-healer", "Mezz Healer", eCharacterClass.Healer);
+        PlayerCompanionRecord shaman = NewRecord(owner.ObjectId, "cc-shaman", "Plain Shaman", eCharacterClass.Shaman);
+        shaman.TacticalRole = "buffer";
+        Assert.That(_database.AddObject(healer), Is.True);
+        Assert.That(_database.AddObject(shaman), Is.True);
+
+        Assert.That(PlayerCompanionRoster.TrySetTactics(owner, healer.Name, "role", "cc", out string accepted), Is.True, accepted);
+        Assert.That(PlayerCompanionRoster.TrySetTactics(owner, shaman.Name, "role", "crowd control", out string refused), Is.False);
+        PlayerCompanionRecord savedHealer = _database.SelectObjects<PlayerCompanionRecord>(
+            DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(healer.CompanionId)).Single();
+        PlayerCompanionRecord savedShaman = _database.SelectObjects<PlayerCompanionRecord>(
+            DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(shaman.CompanionId)).Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(accepted, Does.EndWith("role set to crowd control."));
+            Assert.That(savedHealer.TacticalRole, Is.EqualTo("crowdcontrol"));
+            Assert.That(refused, Does.Contain("crowd control (cc)"));
+            Assert.That(savedShaman.TacticalRole, Is.EqualTo("buffer"));
+        });
+    }
+
+    [Test]
     public void BuildSelectionRejectsUnknownBuildsWithoutChangingTheCompanion()
     {
         Owner owner = NewOwner("build-owner", eRealm.Albion);

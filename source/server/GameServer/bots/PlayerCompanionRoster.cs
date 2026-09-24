@@ -502,13 +502,13 @@ namespace DOL.GS
                 string previousUpdatedUtc = record.UpdatedUtc;
                 if (kind == "role")
                 {
-                    if (normalized is not ("tank" or "healer" or "buffer" or "attacker") ||
-                        !Enum.TryParse(normalized, true, out BotPveGroupRole role) ||
+                    if (!BotPartyRoles.TryParseRole(normalized, out BotPveGroupRole role) ||
                         !BotPartyRoles.CanFill((eCharacterClass)record.ClassId, role))
                     {
-                        message = $"{record.Name} cannot fill that role. Choose a class-legal tank, healer, buffer, or attacker role.";
+                        message = $"{record.Name} cannot fill that role. Choose a class-legal tank, healer, buffer, attacker, or crowd control (cc) role.";
                         return false;
                     }
+                    normalized = BotPartyRoles.RoleValue(role);
                     previous = record.TacticalRole;
                     record.TacticalRole = normalized;
                 }
@@ -541,7 +541,7 @@ namespace DOL.GS
                     brain.EnforceCompanionEngagementRange();
                     brain.RegroupWithLeader();
                 }
-                message = $"{record.Name}: {kind} set to {normalized}.";
+                message = $"{record.Name}: {kind} set to {(kind == "role" ? BotPartyRoles.GroupRoleLabel(normalized).ToLowerInvariant() : normalized)}.";
                 return true;
             }
         }
@@ -790,7 +790,15 @@ namespace DOL.GS
                 }
 
                 if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) && active?.Owner == owner)
-                    return active.TrySwitchCompanionBuild(plan, out message);
+                {
+                    bool switched = active.TrySwitchCompanionBuild(plan, out message);
+                    if (switched && active.Brain is DOL.AI.Brain.BotBrain brain)
+                    {
+                        brain.EnforceCompanionEngagementRange();
+                        brain.RegroupWithLeader();
+                    }
+                    return switched;
+                }
 
                 if (string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(record.TrainingPlanId, plan.Id, StringComparison.Ordinal))
@@ -811,6 +819,8 @@ namespace DOL.GS
                 string previousPlan = record.TrainingPlanId;
                 string previousSpecs = record.SerializedSpecs;
                 int previousUnspent = record.UnspentSpecPoints;
+                string previousRole = record.TacticalRole;
+                record.TacticalRole = BotPartyRoles.RoleValue(plan.PrimaryRole);
                 record.SerializedSpecs = string.Join(';', allocation.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
                     .Select(pair => $"{pair.Key}|{pair.Value}"));
                 record.UnspentSpecPoints = unspentPoints;
@@ -825,10 +835,11 @@ namespace DOL.GS
                     record.TrainingPlanId = previousPlan;
                     record.SerializedSpecs = previousSpecs;
                     record.UnspentSpecPoints = previousUnspent;
+                    record.TacticalRole = previousRole;
                     record.Dirty = true;
                 }
                 message = saved
-                    ? $"{record.Name} now follows the {plan.Name} build ({plan.Role}) and was retrained to level {record.Level}: " +
+                    ? $"{record.Name} now follows the {plan.Name} build ({plan.Role}; role {BotPartyRoles.GroupRoleLabel(plan.PrimaryRole).ToLowerInvariant()}) and was retrained to level {record.Level}: " +
                       $"{string.Join(", ", plan.TargetAllocations.Select(rank => $"{rank.Specialization} {allocation[rank.Specialization]}"))}. {unspentPoints} points remain."
                     : $"{record.Name}'s build change could not be saved; their previous build and allocations were kept.";
                 return saved;
@@ -975,12 +986,14 @@ namespace DOL.GS
                 string now = DateTime.UtcNow.ToString("O");
                 string trainingMode = "manual";
                 string trainingPlanId = string.Empty;
+                string tacticalRole = BotPartyRoles.DefaultPreference(characterClass);
                 CompanionBuildPlan plan = requestedPlan;
                 if ((plan != null || CompanionBuildPlanCatalog.TryGetPlan(characterClass, out plan)) &&
                     CompanionBuildPlanCatalog.TryValidateRuntimeBuild(characterClass, plan, out _))
                 {
                     trainingMode = "automatic";
                     trainingPlanId = plan.Id;
+                    tacticalRole = BotPartyRoles.RoleValue(plan.PrimaryRole);
                 }
                 string personality = authored?.Personality ?? CompanionPersonality.RandomKey();
                 record = new PlayerCompanionRecord
@@ -999,7 +1012,7 @@ namespace DOL.GS
                     RecruitType = authored == null ? "generated" : "authored",
                     AuthoredRecruitKey = authored?.Key ?? string.Empty,
                     PersonalityKey = personality,
-                    TacticalRole = BotPartyRoles.DefaultPreference(characterClass),
+                    TacticalRole = tacticalRole,
                     EngagementPreference = CompanionPersonality.DefaultEngagement(personality),
                     AppearanceSize = authored?.Size ?? Random.Shared.Next(46, 61),
                     TrainingMode = trainingMode,
