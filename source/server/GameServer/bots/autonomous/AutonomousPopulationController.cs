@@ -4,6 +4,8 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Numerics;
 using DOL.Database;
 using DOL.Database.Attributes;
@@ -12,13 +14,13 @@ using DOL.GS.Commands;
 using DOL.GS.GameEvents;
 using DOL.GS.PacketHandler;
 using DOL.Logging;
+using OfflineDaoc.Configuration;
 
 namespace DOL.GS;
 
 /// <summary>
-/// Loads persistent launcher-created characters as real world actors according
-/// to the configured startup ramp. It never invents offline progress and never
-/// creates characters on its own.
+/// Loads persistent characters as real world actors according to the startup
+/// ramp. New level-one alts are created only by the configured guild trickle.
 /// </summary>
 public static class AutonomousPopulationController
 {
@@ -33,6 +35,9 @@ public static class AutonomousPopulationController
     private static DateTime _nextRosterRefreshUtc;
     private static DateTime _nextCommandPollUtc;
     private static DateTime _nextOrphanRepairUtc;
+    private static DateTime _nextAltUtc;
+    private static DateTime _nextBenchmarkCheckUtc;
+    private static readonly Dictionary<int, DateTime> TierStableSince = new();
     private static volatile OfflineWorldBotRecord[] _cachedRoster = Array.Empty<OfflineWorldBotRecord>();
     private static bool _cachedEnabled;
     private static int _cachedRampMinutes = 15;
@@ -69,6 +74,9 @@ public static class AutonomousPopulationController
         RefreshControlPlane(force: true);
         _nextCommandPollUtc = DateTime.MinValue;
         _nextOrphanRepairUtc = DateTime.MinValue;
+        _nextAltUtc = _startedUtc.AddHours(Math.Max(1, AutonomousBotGoalPolicy.Settings.AltJoinIntervalHours));
+        _nextBenchmarkCheckUtc = DateTime.MinValue;
+        TierStableSince.Clear();
         _timer = new System.Threading.Timer(Poll, null, 500, 1000);
     }
 
@@ -106,6 +114,8 @@ public static class AutonomousPopulationController
             }
 
             OfflineWorldBotRecord[] roster = _cachedRoster;
+            TryCreateAlt(nowUtc, roster);
+            TryRecordBenchmark(nowUtc);
             int desired = AutonomousPopulationRamp.DesiredActiveCount(_cachedEnabled, roster.Length, _cachedRampMinutes, nowUtc - _startedUtc);
             int missing = desired - AutonomousBotRegistry.Count - PendingSpawns.Count;
             if (missing <= 0)
@@ -191,6 +201,77 @@ public static class AutonomousPopulationController
 
     private sealed record PreparedSpawn(long BotId, System.Collections.IList Inventory, int Generation);
 
+    private static void TryRecordBenchmark(DateTime nowUtc)
+    {
+        if (nowUtc < _nextBenchmarkCheckUtc) return;
+        _nextBenchmarkCheckUtc = nowUtc.AddMinutes(1);
+        int active = AutonomousBotRegistry.PopulationForBrainTick;
+        foreach (int tier in new[] { 500, 1000, 1500 })
+        {
+            if (active < tier || active > tier + 25)
+            {
+                TierStableSince.Remove(tier);
+                continue;
+            }
+            if (!TierStableSince.TryGetValue(tier, out DateTime since))
+            {
+                TierStableSince[tier] = nowUtc;
+                continue;
+            }
+            if (nowUtc - since < TimeSpan.FromMinutes(5)) continue;
+            try
+            {
+                string path = Path.Combine(AutonomousBotGoalPolicy.ServerDirectory, PopulationBenchmarks.FileName);
+                PopulationBenchmarks measurements = PopulationBenchmarks.Load(path);
+                int cores = Environment.ProcessorCount;
+                long available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+                if (measurements.Samples.Any(sample => sample.Tier == tier && sample.Cores == cores &&
+                    PopulationBenchmarks.MemoryTier(sample.AvailableMemoryBytes) ==
+                    PopulationBenchmarks.MemoryTier(available))) continue;
+                double p95 = GameLoopWorkMetrics.LatestTickP95Ms;
+                using Process process = Process.GetCurrentProcess();
+                var sample = new PopulationBenchmarkSample(tier, active, cores, available,
+                    process.WorkingSet64, p95, GameLoop.TickDuration, nowUtc);
+                measurements.Record(sample);
+                measurements.Save(path);
+                Log.Info($"AUTONOMOUS_POPULATION_SAMPLE tier={tier} active={active} cores={cores} " +
+                    $"workingMiB={sample.WorkingSetBytes / 1048576d:F1} tickP95Ms={p95:F1} " +
+                    $"workingKiBPerBot={sample.WorkingSetBytes / 1024d / active:F1} " +
+                    $"tickBudgetMs={sample.TickBudgetMs:F1}");
+            }
+            catch (Exception exception)
+            {
+                Log.Error($"Could not record autonomous population sample at {tier} bots", exception);
+            }
+        }
+    }
+
+    private static void TryCreateAlt(DateTime nowUtc, OfflineWorldBotRecord[] roster)
+    {
+        BotGoalSettings settings = AutonomousBotGoalPolicy.Settings;
+        if (!_cachedEnabled || !AutonomousAltTrickle.IsDue(settings, roster.Length, nowUtc, _nextAltUtc))
+            return;
+        bool lockTaken = false;
+        try
+        {
+            Monitor.TryEnter(AutonomousBotStatusPersistence.DatabaseWriteLock, 0, ref lockTaken);
+            if (!lockTaken) return;
+            OfflineWorldBotRecord alt = AutonomousAltTrickle.Create(roster, settings);
+            _nextAltUtc = nowUtc.AddHours(settings.AltJoinIntervalHours);
+            RefreshControlPlane(force: true);
+            Log.Info($"AUTONOMOUS_ALT_JOIN id={alt.BotId} guild={alt.GuildId} roster={roster.Length + 1}");
+        }
+        catch (Exception exception)
+        {
+            _nextAltUtc = nowUtc.AddHours(1);
+            Log.Error("Could not create the next autonomous guild alt", exception);
+        }
+        finally
+        {
+            if (lockTaken) Monitor.Exit(AutonomousBotStatusPersistence.DatabaseWriteLock);
+        }
+    }
+
     private static void SpawnOnGameLoop(PreparedSpawn prepared)
     {
         long botId = prepared.BotId;
@@ -222,7 +303,7 @@ public static class AutonomousPopulationController
             // not mistaken for an invalid origin and replaced by a capital.
             bot.SynchronizePositionForLoginValidation();
             AutonomousStuckWatchdog.RepairInvalidLoginPosition(bot);
-            if (string.IsNullOrWhiteSpace(record.LastSavedUtc) && record.Experience == 0)
+            if (ShouldFillNewBotVitals(record))
             {
                 bot.Health = bot.MaxHealth;
                 bot.Mana = bot.MaxMana;
@@ -261,6 +342,10 @@ public static class AutonomousPopulationController
     public static bool IsFreshUnplacedLevelOneRecord(OfflineWorldBotRecord record) =>
         record != null && record.Level == 1 && record.Experience == 0 && record.RealmPoints == 0 &&
         record.RegionId == 0 && string.IsNullOrWhiteSpace(record.LastSavedUtc);
+
+    public static bool ShouldFillNewBotVitals(OfflineWorldBotRecord record) =>
+        record != null && string.IsNullOrWhiteSpace(record.LastSavedUtc) &&
+        (record.Experience == 0 || record.Activity == "Queued at randomized starting location");
 
     private static void PlaceAtCapitalFallback(GameBot bot, OfflineWorldBotRecord record)
     {

@@ -12,6 +12,16 @@ namespace DOL.UnitTests;
 [TestFixture, NonParallelizable]
 public class UT_BotWeaponStats
 {
+    [Test]
+    public void ReaverFlexibleBuildUsesSlashUntilFlexibleUnlocksAtFive()
+    {
+        Assert.That(BotWeaponStats.AvailablePrimaryType(eCharacterClass.Reaver, 1, eObjectType.Flexible),
+            Is.EqualTo(eObjectType.SlashingWeapon));
+        Assert.That(BotWeaponStats.AvailablePrimaryType(eCharacterClass.Reaver, 4, eObjectType.Flexible),
+            Is.EqualTo(eObjectType.SlashingWeapon));
+        Assert.That(BotWeaponStats.AvailablePrimaryType(eCharacterClass.Reaver, 5, eObjectType.Flexible),
+            Is.EqualTo(eObjectType.Flexible));
+    }
     private static DbItemTemplate LargeWeapon(int dps = 15, int speed = 45, int quality = 89) => new()
     {
         Id_nb = Guid.NewGuid().ToString(), Name = "database two-hander", Level = 1,

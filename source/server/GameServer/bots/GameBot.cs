@@ -979,6 +979,10 @@ namespace DOL.GS
             if (IsAutonomousWorldBot && PersistentRecord != null)
             {
                 PersistentRecord.DeathCount++;
+                if (_lastDeathWasPvp && AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, DateTime.UtcNow) &&
+                    Group == null && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR) &&
+                    AutonomousActivityScheduler.IsPveBlocked(PersistentRecord, DateTime.UtcNow))
+                    PersistentRecord.ObjectiveExpiresUtc = DateTime.UtcNow.ToString("O");
                 GoalDiagnosticAttempt?.Died();
                 PersistentRecord.TargetName = (TargetObject as GameLiving)?.Name ?? killer?.Name ?? string.Empty;
                 PersistentRecord.Activity = "Defeated; reassessing target difficulty";
@@ -1624,27 +1628,40 @@ namespace DOL.GS
                 arguments.ExpTotal <= 0 || Level >= MaxLevel)
                 return;
 
-            long experienceGained = arguments.ExpTotal;
-            long baseExperience = arguments.ExpBase;
-            if (arguments.AllowMultiply)
+            long experienceGained;
+            if (persistentNpcReward)
             {
-                experienceGained -= baseExperience;
-
-                if (ServerProperties.Properties.ENABLE_ZONE_BONUSES && CurrentZone != null)
+                // A companion shares the owner's base kill award, subject to
+                // its own same-level cap. Owner-level bonuses must not bypass
+                // that cap when a new recruit joins a high-level party.
+                experienceGained = CalculateCompanionNpcExperience(arguments.ExpBase, Level,
+                    Owner?.Level ?? Level, arguments.AllowMultiply);
+            }
+            else
+            {
+                experienceGained = arguments.ExpTotal;
+                long baseExperience = arguments.ExpBase;
+                if (arguments.AllowMultiply)
                 {
-                    long zoneBonus = baseExperience * CurrentZone.BonusExperience / 100;
-                    if (zoneBonus > 0)
-                        experienceGained += ScaleExperience(zoneBonus, false);
+                    experienceGained -= baseExperience;
+
+                    if (ServerProperties.Properties.ENABLE_ZONE_BONUSES && CurrentZone != null)
+                    {
+                        long zoneBonus = baseExperience * CurrentZone.BonusExperience / 100;
+                        if (zoneBonus > 0)
+                            experienceGained += ScaleExperience(zoneBonus, false);
+                    }
+
+                    baseExperience = ScaleExperience(baseExperience,
+                        arguments.XPSource != eXPSource.Player &&
+                        (CurrentRegion?.IsRvR == true || CurrentZone?.IsRvR == true));
+
+                    long itemExperienceBonus = GetModified(eProperty.XpPoints);
+                    if (itemExperienceBonus != 0)
+                        baseExperience += baseExperience * itemExperienceBonus / 100;
+
+                    experienceGained += baseExperience;
                 }
-
-                baseExperience = ScaleExperience(baseExperience,
-                    CurrentRegion?.IsRvR == true || CurrentZone?.IsRvR == true);
-
-                long itemExperienceBonus = GetModified(eProperty.XpPoints);
-                if (itemExperienceBonus != 0)
-                    baseExperience += baseExperience * itemExperienceBonus / 100;
-
-                experienceGained += baseExperience;
             }
 
             if (experienceGained <= 0)
@@ -1739,6 +1756,16 @@ namespace DOL.GS
             if (isRvR)
                 rate *= ServerProperties.Properties.RvR_XP_RATE;
             return (long)(experience * rate);
+        }
+
+        private static long CalculateCompanionNpcExperience(long ownerBaseAward, int companionLevel,
+            int ownerLevel, bool allowMultiply)
+        {
+            long ownLevelCap = (long)(GameServer.ServerRules.GetExperienceForLiving(companionLevel) *
+                ServerProperties.Properties.XP_CAP_PERCENT / 100.0);
+            long baseAward = Math.Min(ownerBaseAward, ownLevelCap);
+            long award = allowMultiply ? (long)(baseAward * ServerProperties.Properties.XP_RATE) : baseAward;
+            return ownerLevel >= companionLevel + 5 ? (long)(award * 1.5) : award;
         }
 
         private bool IsManualCompanionTraining => IsPersistentPlayerCompanion &&
@@ -2109,14 +2136,6 @@ namespace DOL.GS
             SetBotSpells();
             SortStyles();
             SortSpells();
-        }
-
-        private static long ScaleAutonomousExperience(long experience, bool isRvR)
-        {
-            double rate = ServerProperties.Properties.BOT_XP_RATE;
-            if (isRvR)
-                rate *= ServerProperties.Properties.RvR_XP_RATE;
-            return (long)(experience * rate);
         }
 
         #endregion
@@ -2769,7 +2788,6 @@ namespace DOL.GS
         public GameBot(OfflineWorldBotRecord record, System.Collections.IList preparedInventory)
         {
             PersistentRecord = record ?? throw new ArgumentNullException(nameof(record));
-            AutonomousBotGoalPolicy.ReconcileSavedAssignment(record);
             // Autonomous Group instances are process-local and are rebuilt
             // after every server start. Never expose a former process's leader,
             // roster, or absolute meetup deadline while this actor is loading.
@@ -2823,6 +2841,16 @@ namespace DOL.GS
             }
             m_leftOverSpecPoints = Math.Max(0, record.UnspentSpecPoints);
             _lastAutonomousTrainedLevel = ParseLastTrainedLevel(record.SerializedAbilities, Level, record.SerializedSpecs);
+            bool newlyGenerated = string.IsNullOrWhiteSpace(record.SerializedSpecs) &&
+                string.Equals(record.SerializedAbilities, $"generated-level|{Level}", StringComparison.Ordinal);
+            bool generatedTraining = newlyGenerated && Level > 1;
+            if (generatedTraining)
+            {
+                SpendSpecPoints(Level, 1);
+                _lastAutonomousTrainedLevel = Level;
+                record.SerializedAbilities = $"trained-level|{Level}";
+                MarkAutonomousStateDirty();
+            }
             RefreshSpecDependantSkills(false);
             SetBotSpells();
             SortStyles();
@@ -2836,9 +2864,10 @@ namespace DOL.GS
             bool starterWeaponAdded = EnsureAutonomousStarterWeapon();
             starterWeaponAdded |= BotRangedCombat.EnsureStarter(this);
             starterWeaponAdded |= BotStarterInstruments.Ensure(this);
+            bool starterGearAdded = newlyGenerated && Level < 50 && EnsureGeneratedStartingGear();
             RefreshItemBonuses();
-            if (starterWeaponAdded || !buildLocked)
-                AutonomousBotStatusPersistence.Queue(this, starterWeaponAdded);
+            if (starterWeaponAdded || starterGearAdded || !buildLocked || generatedTraining)
+                AutonomousBotStatusPersistence.Queue(this, starterWeaponAdded || starterGearAdded);
             Experience = Math.Max(0, record.Experience);
             AutonomousRealmPoints = Math.Max(0, record.RealmPoints);
             CurrentRegionID = (ushort)Math.Clamp(record.RegionId, 0, ushort.MaxValue);
@@ -3474,6 +3503,9 @@ namespace DOL.GS
                     BotSpec?.Is2H == true, BotSpec?.WeaponTwoType ?? 0) &&
                 ShouldUsePlannedTwoHandedPrimary(trainedClass, Level,
                     BotSpec?.Is2H == true, BotSpec?.WeaponTwoType ?? 0))
+                EnsureAutonomousStarterWeapon();
+            if (trainedClass == eCharacterClass.Reaver && previous < 5 && Level >= 5 &&
+                BotSpec?.WeaponOneType == eObjectType.Flexible)
                 EnsureAutonomousStarterWeapon();
             MarkAutonomousStateDirty();
             // Training and its real equipment/inventory result are durable via
@@ -4337,7 +4369,8 @@ namespace DOL.GS
             {
                 if (BotSpec == null)
                     return 0;
-                return BotWeaponStats.PrimaryType(BotSpec.WeaponOneType, BotSpec.WeaponTwoType, PrimaryWeaponUsesTwoHands);
+                eObjectType planned = BotWeaponStats.PrimaryType(BotSpec.WeaponOneType, BotSpec.WeaponTwoType, PrimaryWeaponUsesTwoHands);
+                return BotWeaponStats.AvailablePrimaryType((eCharacterClass)CharacterClass.ID, Level, planned);
             }
         }
 
@@ -4596,6 +4629,41 @@ namespace DOL.GS
                     log.Warn($"No usable {preferredType} weapon or free replacement slot for bot {Name}; preserving existing inventory.");
             }
 
+            return changed;
+        }
+
+        private bool EnsureGeneratedStartingGear()
+        {
+            eObjectType armor = BestArmorLevel switch
+            {
+                2 => eObjectType.Leather,
+                3 => Realm == eRealm.Hibernia ? eObjectType.Reinforced : eObjectType.Studded,
+                4 => Realm == eRealm.Hibernia ? eObjectType.Scale : eObjectType.Chain,
+                5 => eObjectType.Plate,
+                _ => eObjectType.Cloth,
+            };
+            bool changed = false;
+            foreach (eInventorySlot slot in new[]
+                {
+                    eInventorySlot.HeadArmor, eInventorySlot.HandsArmor, eInventorySlot.FeetArmor,
+                    eInventorySlot.TorsoArmor, eInventorySlot.LegsArmor, eInventorySlot.ArmsArmor,
+                    eInventorySlot.Jewelry, eInventorySlot.Cloak, eInventorySlot.Neck,
+                    eInventorySlot.Waist, eInventorySlot.LeftBracer, eInventorySlot.RightBracer,
+                    eInventorySlot.LeftRing, eInventorySlot.RightRing,
+                })
+            {
+                if (Inventory.GetItem(slot) != null) continue;
+                eObjectType type = slot is eInventorySlot.HeadArmor or eInventorySlot.HandsArmor or
+                    eInventorySlot.FeetArmor or eInventorySlot.TorsoArmor or eInventorySlot.LegsArmor or
+                    eInventorySlot.ArmsArmor ? armor : eObjectType.Magical;
+                DbItemTemplate template = BotEquipment.CreateCompanionItem(
+                    Realm, (eCharacterClass)CharacterClass.ID, Level, type, slot);
+                template.AllowAdd = true;
+                if (!Inventory.AddItem(slot, GameInventoryItem.Create(template)))
+                    throw new InvalidOperationException($"Could not equip generated starting gear for {Name}.");
+                changed = true;
+            }
+            if (changed) MarkAutonomousStateDirty();
             return changed;
         }
 

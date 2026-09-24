@@ -3,12 +3,13 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using OfflineDaoc.Configuration;
 
 namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.34.0";
+    internal const string DisplayVersion = "0.40.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -60,7 +61,7 @@ internal sealed partial class MainForm : Form
         TextAlign = ContentAlignment.MiddleCenter,
     };
     private readonly ComboBox _realmFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
-    private readonly TextBox _search = new() { PlaceholderText = "Search name, class, zone or activity", Width = 280 };
+    private readonly TextBox _search = new() { PlaceholderText = "Search name, type, guild, zone or activity", Width = 280 };
     private readonly CheckBox _onlineOnly = new()
     {
         Text = "ONLINE ONLY",
@@ -427,7 +428,7 @@ internal sealed partial class MainForm : Form
 
     private Button RealmGenerateLevelButton(int realm, string realmName, Color accent, int level)
     {
-        Button button = ActionButton($"ADD LV.{level} CREW", accent);
+        Button button = ActionButton(level == 1 ? "ADD CREW" : "ADD LV.50 CREW", accent);
         if (button is RuneButton rune) rune.ShowOrnaments = false;
         button.Margin = new Padding(1, 0, 1, 0);
         button.Font = new Font("Georgia", 8f, FontStyle.Bold);
@@ -439,12 +440,17 @@ internal sealed partial class MainForm : Form
             if (_generatingBot)
                 return;
 
+            if (!BotGoalsServerStopped() || _botGoalsSettings?.HasUnsavedChanges == true)
+            {
+                MessageBox.Show(this, "Stop the server and save Server population settings before adding bots.",
+                    "Population settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             int batchSize = GetGenerationBatchSize();
             _generatingBot = true;
             SetRealmGenerationEnabled(false);
-            _footer.Text = batchSize == 1
-                ? $"Adding a level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} bot to the Camlann crew roster…"
-                : $"Adding {batchSize} level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} bots to the Camlann crew roster as one protected batch…";
+            _footer.Text = $"Adding {batchSize} {realmName[0] + realmName[1..].ToLowerInvariant()} bot(s) to the Camlann crew roster…";
             try
             {
                 IReadOnlyList<BotCharacterGenerator.Identity> identities =
@@ -454,8 +460,8 @@ internal sealed partial class MainForm : Form
                 BotCharacterGenerator.Identity last = identities[^1];
                 SelectBot(last.Name);
                 _footer.Text = batchSize == 1
-                    ? $"Added {last.Name}, a level {level} {last.RaceName} {last.ClassName}, to the Camlann crew roster. Queued for staggered login."
-                    : $"Added all {batchSize} level {level} {realmName[0] + realmName[1..].ToLowerInvariant()} bots to the Camlann crew roster. All are queued for staggered login.";
+                    ? $"Added {last.Name}, a {last.RaceName} {last.ClassName}, to the Camlann crew roster. Queued for staggered login."
+                    : $"Added all {batchSize} {realmName[0] + realmName[1..].ToLowerInvariant()} bots to the Camlann crew roster. All are queued for staggered login.";
             }
             catch (Exception exception)
             {
@@ -526,9 +532,10 @@ internal sealed partial class MainForm : Form
         records.Enter += async (_, _) => await eventRecords.RefreshAsync();
         tabs.TabPages.Add(records);
         tabs.TabPages.Add(xpSettings);
-        var botGoals = new TabPage("Bot Goals Setting") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
+        var botGoals = new TabPage("Server population") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         _botGoalsSettings = new BotGoalsSettingsControl(
-            Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName), BotGoalsServerStopped);
+            Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName),
+            BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued));
         botGoals.Controls.Add(_botGoalsSettings);
         tabs.TabPages.Add(botGoals);
         tabs.TabPages.Add(auction);
@@ -1180,6 +1187,9 @@ internal sealed partial class MainForm : Form
         _grid.Columns.Add(TextColumn("Race", "RaceName", 85));
         _grid.Columns.Add(TextColumn("Gender", "Gender", 60));
         _grid.Columns.Add(TextColumn("Class", "ClassName", 105));
+        _grid.Columns.Add(TextColumn("Type", "PlayerType", 95));
+        _grid.Columns.Add(TextColumn("Guild", "GuildName", 150));
+        _grid.Columns.Add(TextColumn("Charter", "GuildCharter", 90));
         _grid.Columns.Add(TextColumn("Lvl", "Level", 45));
         _grid.Columns.Add(TextColumn("Zone", "ZoneName", 110));
         _grid.Columns.Add(TextColumn("Task left", "TaskRemaining", 95));
@@ -1716,7 +1726,16 @@ internal sealed partial class MainForm : Form
                 : "'' AS ObjectiveKind, '' AS ObjectiveAssignmentId, '' AS ObjectiveAssignedUtc, '' AS ObjectivePhase";
             objectiveColumns += ColumnExists(connection, "offline_world_bots", "ObjectiveExpiresUtc")
                 ? ", COALESCE(ObjectiveExpiresUtc, '')" : ", '' AS ObjectiveExpiresUtc";
-            command.CommandText = $"SELECT BotId, Name, Realm, RaceName, Gender, ClassName, Level, COALESCE(ZoneName, '—'), Activity, CurrentGoal, TargetName, TravelDestination, ObjectiveProgress, IsOnline, IsRetired, COALESCE(ItineraryJson, ''), {objectiveColumns} FROM offline_world_bots ORDER BY Realm, Level DESC, Name";
+            bool hasGuildId = ColumnExists(connection, "offline_world_bots", "GuildId");
+            string playerType = ColumnExists(connection, "offline_world_bots", "PlayerType")
+                ? "COALESCE(b.PlayerType, '')" : "'' AS PlayerType";
+            string guildCharter = hasGuildId && TableExists(connection, "offline_managed_guild_charters")
+                ? "COALESCE((SELECT c.Charter FROM offline_managed_guild_charters c WHERE c.GuildId=b.GuildId AND c.IsManaged=1), '')"
+                : "'' AS GuildCharter";
+            string guildName = hasGuildId && TableExists(connection, "Guild")
+                ? "COALESCE((SELECT g.GuildName FROM Guild g WHERE g.GuildID=b.GuildId), '')"
+                : "'' AS GuildName";
+            command.CommandText = $"SELECT BotId, Name, Realm, RaceName, Gender, ClassName, Level, COALESCE(ZoneName, '—'), Activity, CurrentGoal, TargetName, TravelDestination, ObjectiveProgress, IsOnline, IsRetired, COALESCE(ItineraryJson, ''), {objectiveColumns}, {playerType}, {guildCharter}, {guildName} FROM offline_world_bots b ORDER BY Realm, Level DESC, Name";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -1748,6 +1767,9 @@ internal sealed partial class MainForm : Form
                     objectiveKind, assignmentId, assignedUtc, objectivePhase)
                 {
                     ObjectiveExpiresUtc = objectiveExpiresUtc,
+                    PlayerType = reader.GetString(21),
+                    GuildCharter = reader.GetString(22),
+                    GuildName = reader.GetString(23),
                     HasGroupTaskClock = group?.HasTaskClock == true,
                     TaskTimerPaused = group?.TaskTimerPaused == true,
                     TaskRemainingMilliseconds = group?.TaskRemainingMilliseconds ?? 0,
@@ -1905,7 +1927,7 @@ internal sealed partial class MainForm : Form
         IEnumerable<BotRow> filtered = _bots.Where(bot =>
             (!_onlineOnly.Checked || bot.IsOnline) &&
             (realm == "All realms" || bot.Realm == realm) &&
-            (search.Length == 0 || $"{bot.Name} {bot.Realm} {bot.RaceName} {bot.Gender} {bot.ClassName} {bot.ZoneName} {bot.Activity}".Contains(search, StringComparison.OrdinalIgnoreCase)));
+            (search.Length == 0 || $"{bot.Name} {bot.Realm} {bot.RaceName} {bot.Gender} {bot.ClassName} {bot.PlayerType} {bot.GuildName} {bot.GuildCharter} {bot.ZoneName} {bot.Activity}".Contains(search, StringComparison.OrdinalIgnoreCase)));
         _botSource.DataSource = SortBots(filtered).ToList();
         _botSource.ResetBindings(false);
         UpdateBotSortGlyph();
@@ -2053,6 +2075,11 @@ internal sealed partial class MainForm : Form
         if (count is not (1 or 10 or 100))
             throw new ArgumentOutOfRangeException(nameof(count));
         if (level is not (1 or 50)) throw new ArgumentOutOfRangeException(nameof(level));
+        if (!BotGoalsServerStopped()) throw new InvalidOperationException("Stop the server before adding bots.");
+        var settings = OfflineDaoc.Configuration.BotGoalSettings.Load(
+            Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName));
+        int[] levels = level == 50 ? Enumerable.Repeat(50, count).ToArray() :
+            OfflineDaoc.Configuration.AutonomousPopulationShape.NewLevels(settings.WorldShape, count);
 
         using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
         connection.Open();
@@ -2075,8 +2102,9 @@ internal sealed partial class MainForm : Form
         var identities = new List<BotCharacterGenerator.Identity>(count);
         for (int index = 0; index < count; index++)
         {
+            int newLevel = levels[index];
             BotCharacterGenerator.Identity identity = BotCharacterGenerator.Generate(realm, reserved);
-            BotStartingLocation start = level == 50
+            BotStartingLocation start = newLevel >= 20
                 ? CapitalBotStartingLocation(identity.Realm)
                 : ChooseBotStartingLocation(connection, transaction, identity.Realm, identity.RaceId, identity.ClassId);
             identities.Add(identity);
@@ -2088,17 +2116,19 @@ internal sealed partial class MainForm : Form
                     (Name, Realm, ClassId, ClassName, RaceId, RaceName, Gender, Level, Experience, RealmPoints,
                      ZoneName, Activity, IsOnline, IsAlive, LastUpdateUtc, MoneyCopper, InventoryRevision,
                      ZoneId, X, Y, Z, RegionId, Health, Mana, Endurance, BindRegionId, BindX, BindY, BindZ,
-                     CurrentGoal, ObjectiveProgress, LastMeaningfulProgressUtc, IsRetired)
+                     CurrentGoal, ObjectiveProgress, LastMeaningfulProgressUtc, IsRetired, SerializedAbilities)
                 VALUES
-                    (@name, @realm, @classId, @className, @raceId, @raceName, @gender, @level, @xp, 0,
+                    (@name, @realm, @classId, @className, @raceId, @raceName, @gender, @level, @xp, @rp,
                      @zoneName, 'Queued at randomized starting location', 0, 1, @now, @money, 0,
                      @zoneId, @x, @y, @z, @region, 1, 0, 0, @region, @x, @y, @z,
-                     'Awaiting staggered login queue', @placement, @now, 0)
+                     'Awaiting staggered login queue', @placement, @now, 0, @abilities)
                 """;
             insert.Parameters.AddWithValue("@name", identity.Name);
-            insert.Parameters.AddWithValue("@level", level);
-            insert.Parameters.AddWithValue("@xp", level == 50 ? 169999999950L : 0L);
-            insert.Parameters.AddWithValue("@money", level == 50 ? 100000000L : 0L);
+            insert.Parameters.AddWithValue("@level", newLevel);
+            insert.Parameters.AddWithValue("@xp", OfflineDaoc.Configuration.AutonomousPopulationShape.ExperienceForLevel(newLevel));
+            insert.Parameters.AddWithValue("@rp", newLevel == 50 ? OfflineDaoc.Configuration.AutonomousPopulationShape.RealmPointsForNewLevelFifty() : 0L);
+            insert.Parameters.AddWithValue("@money", newLevel == 50 ? 100000000L : newLevel >= 10 ? 1000L * newLevel * newLevel : 0L);
+            insert.Parameters.AddWithValue("@abilities", $"generated-level|{newLevel}");
             insert.Parameters.AddWithValue("@realm", identity.Realm);
             insert.Parameters.AddWithValue("@classId", identity.ClassId);
             insert.Parameters.AddWithValue("@className", identity.ClassName);
@@ -2111,32 +2141,39 @@ internal sealed partial class MainForm : Form
             insert.Parameters.AddWithValue("@y", start.Y);
             insert.Parameters.AddWithValue("@z", start.Z);
             insert.Parameters.AddWithValue("@zoneId", start.ZoneId);
-            insert.Parameters.AddWithValue("@zoneName", level == 50 ? start.ZoneName : start.RegionId is 51 or 151 or 181
+            insert.Parameters.AddWithValue("@zoneName", newLevel >= 20 ? start.ZoneName : start.RegionId is 51 or 151 or 181
                 ? "Shrouded Isles starting area"
                 : "Classic starting area");
             insert.Parameters.AddWithValue("@placement",
                 $"Launcher assigned a realm/race/class-valid random start in region {start.RegionId} before server startup");
             insert.ExecuteNonQuery();
-            if (level == 50)
+            if (newLevel == 50)
             {
                 long botId = connection.LastInsertRowId;
-                using var gear = connection.CreateCommand();
-                gear.Transaction = transaction;
-                gear.CommandText = """
-                    INSERT INTO Inventory (Inventory_ID,OwnerID,ITemplate_Id,SlotPosition,Count,Condition,Durability,LastTimeRowUpdated)
-                    SELECT lower(hex(randomblob(16))),@owner,l.TemplateId,l.SlotPosition,1,t.MaxCondition,t.MaxDurability,@now
-                    FROM offline_level50_loadouts l JOIN ItemTemplate t ON t.Id_nb=l.TemplateId WHERE l.ClassId=@class
-                    """;
-                gear.Parameters.AddWithValue("@owner", $"offlinebot:{botId}");
-                gear.Parameters.AddWithValue("@now", now);
-                gear.Parameters.AddWithValue("@class", identity.ClassId);
-                if (gear.ExecuteNonQuery() < 15) throw new InvalidOperationException("The level-50 class template is missing or incomplete. No bots were added.");
+                EquipGeneratedBot(connection, transaction, botId, identity, now);
             }
         }
 
         UpdatePopulationTarget(connection, transaction);
         transaction.Commit();
         return identities;
+    }
+
+    private static void EquipGeneratedBot(SQLiteConnection connection, SQLiteTransaction transaction,
+        long botId, BotCharacterGenerator.Identity identity, string now)
+    {
+        using var gear = connection.CreateCommand();
+        gear.Transaction = transaction;
+        gear.CommandText = """
+            INSERT INTO Inventory (Inventory_ID,OwnerID,ITemplate_Id,SlotPosition,Count,Condition,Durability,LastTimeRowUpdated)
+            SELECT lower(hex(randomblob(16))),@owner,l.TemplateId,l.SlotPosition,1,t.MaxCondition,t.MaxDurability,@now
+            FROM offline_level50_loadouts l JOIN ItemTemplate t ON t.Id_nb=l.TemplateId WHERE l.ClassId=@class
+            """;
+        gear.Parameters.AddWithValue("@owner", $"offlinebot:{botId}");
+        gear.Parameters.AddWithValue("@now", now);
+        gear.Parameters.AddWithValue("@class", identity.ClassId);
+        if (gear.ExecuteNonQuery() < 15)
+            throw new InvalidOperationException($"The level-50 class template for {identity.ClassName} is missing or incomplete. No bots were added.");
     }
 
     private sealed record BotStartingLocation(int RegionId, int X, int Y, int Z, int ZoneId = 0, string ZoneName = "");
@@ -2599,13 +2636,13 @@ internal sealed partial class MainForm : Form
         if (_resettingKeepsRelics || _savingXpRates || _serverProcess is { HasExited: false } || IsServerRunning() || FindExactServerProcess() is not null) return;
         if (_botGoalsSettings?.HasUnsavedChanges == true)
         {
-            MessageBox.Show(this, "Save or undo your edits in Bot Goals Setting before starting the server.", "Unsaved bot goals");
+            MessageBox.Show(this, "Review and save or undo your Server population edits before starting the server.", "Unsaved population settings");
             return;
         }
         try { OfflineDaoc.Configuration.BotGoalSettings.Load(Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName)); }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Correct Bot Goals Setting before starting:\n" + ex.Message, "Invalid bot goals");
+            MessageBox.Show(this, "Correct Server population settings before starting:\n" + ex.Message, "Invalid population settings");
             return;
         }
         if (!File.Exists(_serverExecutable))
@@ -3082,6 +3119,9 @@ internal sealed partial class MainForm : Form
     private sealed record BotRow(long? BotId, string Name, string Realm, string RaceName, string Gender, string ClassName, int Level, string ZoneName, string Activity, bool IsOnline, bool CanDelete, bool DeletionQueued,
         string GroupId, string GroupPhase, string GroupGoal, string GroupStatus, string ObjectiveKind, string ObjectiveAssignmentId, string ObjectiveAssignedUtc, string ObjectivePhase)
     {
+        public string PlayerType { get; init; } = string.Empty;
+        public string GuildCharter { get; init; } = string.Empty;
+        public string GuildName { get; init; } = string.Empty;
         public string ObjectiveExpiresUtc { get; init; } = string.Empty;
         public bool HasGroupTaskClock { get; init; }
         public bool TaskTimerPaused { get; init; }

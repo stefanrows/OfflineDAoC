@@ -1960,7 +1960,7 @@ namespace DOL.GS.ServerRules
                 bafBonus,
                 0,
                 false,
-                botToAward.IsPersistentPlayerCompanion,
+                true,
                 eXPSource.NPC));
             // This award path already resolves pets, sub-pets, Animist
             // turrets, and Theurgist elementals to the bot that legitimately
@@ -2255,7 +2255,7 @@ namespace DOL.GS.ServerRules
                 killedPlayer.ExperienceValue, botToAward.GetExperienceValueForLevel(botToAward.Level) * 4,
                 killedPlayer.Level, botToAward.Level, contributorCount, damagePercent, Properties.XP_PVP_CAP_PERCENT);
             if (experience > 0)
-                botToAward.GainExperience(eXPSource.Player, experience);
+                botToAward.GainExperience(eXPSource.Player, experience, true);
 
             int botRealmPointValue = AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(
                 botToAward.Level, botToAward.RealmLevel);
@@ -2402,7 +2402,7 @@ namespace DOL.GS.ServerRules
                 experience += CalculateOutpostExperienceBonus(playerToAward, baseXpReward);
 
                 if (experience > 0)
-                    playerToAward.GainExperience(eXPSource.Player, experience);
+                    playerToAward.GainExperience(eXPSource.Player, experience, true);
             }
 
             void RewardMoney()

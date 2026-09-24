@@ -30,7 +30,17 @@ public static class AutonomousRvrTargetPolicy
         if (con > ConColor.GREY || targetAttackedCrew || TargetedCrewMember(bot, target))
             return true;
 
-        return Util.Chance(Math.Clamp(Properties.CAMLANN_BOT_GREY_ENGAGE_CHANCE, 0, 100));
+        GameLiving victim = PvpCombatant.Resolve(target) ?? target;
+        int chance = AutonomousPlayerBehavior.GreyEngageChance(
+            AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord), bot.Level, victim.EffectiveLevel,
+            bot.PersistentRecord?.Aggression ?? 50,
+            AutonomousBotGoalPolicy.Danger,
+            Properties.CAMLANN_BOT_GREY_ENGAGE_CHANCE);
+        // A scan runs every few seconds. Use one stable draw per target and
+        // ten-minute window so a rare grey-gank chance stays rare in practice.
+        long window = DateTime.UtcNow.Ticks / TimeSpan.FromMinutes(10).Ticks;
+        int roll = (int)(unchecked((ulong)(bot.DatabaseID * 397L + victim.ObjectID * 7919L + window * 65537L)) % 100) + 1;
+        return ShouldEngageGrey(true, false, chance, roll);
     }
 
     public static bool ShouldEngageGrey(bool greyTarget, bool targetAttackedCrew, int chance, int roll) =>

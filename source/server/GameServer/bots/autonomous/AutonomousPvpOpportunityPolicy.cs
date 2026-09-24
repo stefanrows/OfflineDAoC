@@ -11,8 +11,7 @@ public static class AutonomousPvpOpportunityPolicy
     public const int PreferredLevelDifference = 5;
 
     public static bool CanSeekOpportunity(eAutonomousObjectiveKind objective, int partySize) =>
-        objective == eAutonomousObjectiveKind.RvR ||
-        objective == eAutonomousObjectiveKind.GroupPve && partySize >= 2;
+        objective == eAutonomousObjectiveKind.RvR;
 
     public static bool CanUseMatchmakingCamp(bool isDungeon, bool isFrontier,
         ushort actorRegion, ushort campRegion) =>
@@ -41,6 +40,14 @@ public static class AutonomousPvpOpportunityPolicy
         partyLevel < 20 && !isDungeon && !isFrontier && !isSafe && reachable &&
         areaLevels?.Any(level => LevelsPreferred(partyLevel, level)) == true;
 
+    public static bool IsHunterHuntArea(int partyLevel, IEnumerable<int> areaLevels,
+        bool isDungeon, bool isFrontier, bool isSafe, bool reachable) =>
+        partyLevel >= 10 && !isDungeon && (!isFrontier || partyLevel >= 35) && !isSafe && reachable &&
+        areaLevels?.Any(level => LevelsPreferred(partyLevel, level)) == true;
+
+    public static int HunterPatrolWeight(int activeCampPopulation, bool nearOutdoorRoute) =>
+        1 + Math.Min(4, Math.Max(0, activeCampPopulation)) * 2 + (nearOutdoorRoute ? 2 : 0);
+
     public static (int Count, int AverageLevel) VisibleParty(GameLiving living)
     {
         GameLiving identity = PvpCombatant.Resolve(living);
@@ -64,6 +71,8 @@ public static class AutonomousPvpOpportunityPolicy
                 target.ObjectState == GameObject.eObjectState.Active &&
                 target.CurrentRegionID == actor.CurrentRegionID &&
                 PvpCombatant.IsPlayerShaped(target) && !PvpCombatant.IsSafeArea(target) &&
+                (retaliation || AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) != AutonomousPlayerType.Hunter ||
+                    (PvpCombatant.Resolve(target)?.EffectiveLevel ?? target.EffectiveLevel) <= actor.Level + PreferredLevelDifference) &&
                 (retaliation || AutonomousRvrTargetPolicy.ShouldEngageGrey(actor, target)) &&
                 GameServer.ServerRules.IsAllowedToAttack(actor, target, true) && visible(actor, target))
             .Where(target => retaliation || !Stronger(target))

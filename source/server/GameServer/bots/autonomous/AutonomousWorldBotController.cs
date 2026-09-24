@@ -1488,9 +1488,13 @@ namespace DOL.GS
             }
 
             if (_rvrDestination == null || _rvrDestination.RegionId == 0 ||
-                (bot.Level >= 20 && !_rvrSharedEvent && GameLoop.GameLoopTime >= _nextRvrPlanReview && !BotSiegeRuntime.Assigned(bot)) ||
+                (bot.Level >= 20 && !_rvrSharedEvent && GameLoop.GameLoopTime >= _nextRvrPlanReview &&
+                 AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) is not (AutonomousPlayerType.Hunter or AutonomousPlayerType.Roamer) &&
+                 !BotSiegeRuntime.Assigned(bot)) ||
                 (_rvrIntent == AutonomousRvrEventLayer.Intent.Roam && bot.CurrentRegionID == _rvrDestination.RegionId &&
-                 Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= CampArrivalRadius))
+                 Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= CampArrivalRadius &&
+                 (AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) != AutonomousPlayerType.Hunter ||
+                  GameLoop.GameLoopTime - _campStartedTick >= 180_000)))
             {
                 _rvrDestination = ChooseRvrDestination(bot);
                 _nextRvrPlanReview = GameLoop.GameLoopTime + 45_000 + bot.ObjectID % 15_000;
@@ -1577,7 +1581,8 @@ namespace DOL.GS
                 return true;
             }
             PatrolRvr(bot);
-            if (GameLoop.GameLoopTime - _campStartedTick > 90_000)
+            if (GameLoop.GameLoopTime - _campStartedTick >
+                (AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.Hunter ? 180_000 : 90_000))
             {
                 _rvrDestination = null;
                 _rvrApproachDestination = null;
@@ -1721,6 +1726,7 @@ namespace DOL.GS
             if (brain == null || bot == null ||
                 !AutonomousPvpOpportunityPolicy.CanSeekOpportunity(AutonomousObjectiveAssignments.KindFor(bot),
                     bot.Group?.MemberCount ?? 1) ||
+                AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, DateTime.UtcNow) ||
                 brain.HasAggro || bot.InCombat || bot.IsAttacking || bot.IsRecoveryResting ||
                 _groupDirective?.RecoveringBetweenPulls == true || _groupDirective?.GroupCombatActive == true ||
                 IsSafeArea(bot) || !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
@@ -1735,6 +1741,17 @@ namespace DOL.GS
                 .Concat(bot.GetNPCsInRadius(ImmediateTargetSearchRadius)
                     .Where(PvpCombatant.IsPlayerShaped).Cast<GameLiving>());
             GameLiving opponent = AutonomousPvpOpportunityPolicy.Select(bot, candidates, BotSiegeRuntime.Visible);
+            bool atHuntingGround = _rvrDestination != null && bot.CurrentRegionID == _rvrDestination.RegionId &&
+                Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= 2_000;
+            if ((opponent != null || atHuntingGround) &&
+                AutonomousActivityScheduler.ObservePvpTarget(bot.PersistentRecord, DateTime.UtcNow, opponent != null))
+            {
+                if (opponent == null && bot.Group == null &&
+                    AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, DateTime.UtcNow))
+                    bot.PersistentRecord.ObjectiveExpiresUtc = DateTime.UtcNow.ToString("O");
+                bot.MarkAutonomousStateDirty();
+                AutonomousBotStatusPersistence.Queue(bot);
+            }
             if (opponent == null)
                 return false;
 
@@ -1867,8 +1884,12 @@ namespace DOL.GS
 
         private CampDestination ChooseRvrDestination(GameBot bot)
         {
-            if (bot.Level < 20)
+            AutonomousPlayerType type = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord);
+            if (type == AutonomousPlayerType.Hunter || bot.Level < 20)
                 return ChooseLowLevelPvpDestination(bot);
+
+            AutonomousPlayerType leaderType = AutonomousPlayerBehavior.TypeOf(
+                _groupDirective?.Leader?.PersistentRecord ?? bot.PersistentRecord);
 
             HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
             var choices = new List<CampDestination>();
@@ -1941,7 +1962,9 @@ namespace DOL.GS
                 foreach (CampCatalogCell cell in CampCatalogSnapshot()
                     .Where(c => c.IsFrontier && !c.IsDungeon && c.LiveMobCount > 0 && reachable.Contains(c.RegionId) &&
                         c.Zone != null && IsFrontierRegionPoint(c.RegionId, c.X, c.Y))
-                    .OrderBy(_ => Random.Shared.Next()).Take(24))
+                    .OrderBy(cell => leaderType == AutonomousPlayerType.Roamer
+                        ? HashCode.Combine(cell.Id, _groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID)
+                        : Random.Shared.Next()).Take(24))
                 {
                     Vector3 raw = new(cell.X, cell.Y, cell.Z);
                     Vector3? floor = patrolNav.GetClosestPoint(cell.Zone, raw, 64, 64, 96, patrolNav.DefaultFilters);
@@ -1969,12 +1992,20 @@ namespace DOL.GS
                                                     member.ClassName.Contains("druid", StringComparison.OrdinalIgnoreCase) ||
                                                     member.ClassName.Contains("bard", StringComparison.OrdinalIgnoreCase));
             bool siegeReady = warband.Length >= 4 && averageLevel >= 35 && CanSupplySiege(bot);
+            int minimumLevel = warband.Min(member => member.Level);
+            int roamReservePercent = leaderType switch
+            {
+                AutonomousPlayerType.Roamer => 70,
+                AutonomousPlayerType.Hybrid => 50,
+                AutonomousPlayerType.KeepWarrior => 5,
+                _ => 30,
+            };
             AutonomousRvrEventLayer.Plan plan = AutonomousRvrEventLayer.ChooseOrJoin(
                 new AutonomousRvrEventLayer.Force(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}", bot.Realm,
                     warband.Length, averageLevel, healers, siegeReady,
-                    (unchecked((ulong)(_groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID)) * 2654435761UL % 100) < 30,
-                    warband.Select(member => member.DatabaseID).ToArray(), warband.Min(member => member.Level),
-                    bot.Guild?.Name),
+                    (unchecked((ulong)(_groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID)) * 2654435761UL % 100) < (ulong)roamReservePercent,
+                    warband.Select(member => member.DatabaseID).ToArray(), minimumLevel,
+                    bot.Guild?.Name, AutonomousPlayerBehavior.CanStartCampaign(leaderType, minimumLevel, warband.Length)),
                 objectives, GameLoop.GameLoopTime, Random.Shared.NextDouble());
             _rvrSharedEvent = plan?.IsSharedEvent == true;
             _rvrIntent = plan?.Intent ?? AutonomousRvrEventLayer.Intent.Roam;
@@ -1982,6 +2013,18 @@ namespace DOL.GS
             bot.TempProperties.SetProperty("RvrDefendingKeep",
                 _rvrIntent == AutonomousRvrEventLayer.Intent.DefendEvent && plan.TargetId.StartsWith("rvr-keep-") &&
                 int.TryParse(plan.TargetId.Substring(9), out int defendingKeep) ? defendingKeep : -1);
+            if (leaderType == AutonomousPlayerType.Roamer && plan is { IsSharedEvent: false, Intent: AutonomousRvrEventLayer.Intent.Roam })
+            {
+                CampDestination[] loop = choices.Where(choice => choice.Id.StartsWith("rvr-camp-", StringComparison.Ordinal))
+                    .OrderBy(choice => choice.RegionId).ThenBy(choice => choice.X).ThenBy(choice => choice.Y).ToArray();
+                if (loop.Length > 0)
+                {
+                    int previous = Array.FindIndex(loop, choice => choice.Id == _rvrDestination?.Id);
+                    int next = AutonomousPlayerBehavior.NextLoopIndex(loop.Length, previous,
+                        _groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID);
+                    return loop[next];
+                }
+            }
             return choices.FirstOrDefault(destination => destination.Id == plan?.TargetId) ??
                 (plan == null ? null : new CampDestination(plan.TargetId, plan.Name, plan.Name,
                     plan.RegionId, plan.X, plan.Y, plan.Z, 1, false, true));
@@ -1994,10 +2037,15 @@ namespace DOL.GS
                 .Where(member => member.IsAlive).ToArray() ?? [bot];
             int level = (int)Math.Round(party.Average(member => member.Level));
             var nav = PathfindingProvider.Instance;
+            bool hunter = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.Hunter;
             CampDestination[] choices = CampCatalogSnapshot()
-                .Where(cell => cell.LiveMobCount > 0 && AutonomousPvpOpportunityPolicy.IsLocalHuntArea(
+                .Where(cell => cell.LiveMobCount > 0 && (hunter
+                    ? AutonomousPvpOpportunityPolicy.IsHunterHuntArea(
+                        level, cell.Levels, cell.IsDungeon, cell.IsFrontier, PvpCombatant.IsSafeRegion(cell.RegionId),
+                        reachable.Contains(cell.RegionId))
+                    : AutonomousPvpOpportunityPolicy.IsLocalHuntArea(
                     level, cell.Levels, cell.IsDungeon, cell.IsFrontier, PvpCombatant.IsSafeRegion(cell.RegionId),
-                    reachable.Contains(cell.RegionId)) &&
+                    reachable.Contains(cell.RegionId))) &&
                     IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID) &&
                     cell.Levels.Length > 0)
                 .Select(cell =>
@@ -2013,7 +2061,7 @@ namespace DOL.GS
                     int targetLevel = cell.Levels.OrderBy(candidate => Math.Abs(candidate - level)).First();
                     return new CampDestination("local-pvp-" + cell.Id,
                         "local rival hunt near " + cell.MonsterName, cell.ZoneName, cell.RegionId,
-                        (int)point.X, (int)point.Y, (int)point.Z, cell.LiveMobCount, false, false,
+                        (int)point.X, (int)point.Y, (int)point.Z, cell.LiveMobCount, false, cell.IsFrontier,
                         TargetLevel: targetLevel);
                 })
                 .Where(destination => destination != null)
@@ -2022,7 +2070,26 @@ namespace DOL.GS
                 return null;
 
             int previous = Array.FindIndex(choices, choice => choice.Id == _rvrDestination?.Id);
-            int next = AutonomousPvpOpportunityPolicy.ChooseRoamIndex(choices.Length, previous, Random.Shared.Next());
+            int next;
+            if (hunter)
+            {
+                // Outdoor route endpoints are leads, not guard posts. The
+                // patrol still stands at a level-appropriate, nav-safe camp
+                // clearing and never blocks a dungeon entrance.
+                DbZonePoint[] outdoorRoutes = ZonePoints().Where(point =>
+                    WorldMgr.GetRegion(point.TargetRegion)?.IsDungeon != true &&
+                    !PvpCombatant.IsSafeRegion(point.SourceRegion)).ToArray();
+                int[] weights = choices.Select((choice, index) =>
+                    index == previous && choices.Length > 1 ? 0 :
+                    AutonomousPvpOpportunityPolicy.HunterPatrolWeight(
+                        AutonomousOutdoorCampPressure.Population(choice.Id.Substring("local-pvp-".Length)),
+                        outdoorRoutes.Any(point => point.SourceRegion == choice.RegionId &&
+                            Distance(point.SourceX, point.SourceY, choice.X, choice.Y) <= 3500))).ToArray();
+                int draw = Random.Shared.Next(weights.Sum());
+                next = 0;
+                while (draw >= weights[next]) draw -= weights[next++];
+            }
+            else next = AutonomousPvpOpportunityPolicy.ChooseRoamIndex(choices.Length, previous, Random.Shared.Next());
             _rvrSharedEvent = false;
             _rvrIntent = AutonomousRvrEventLayer.Intent.Roam;
             bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
@@ -2146,6 +2213,8 @@ namespace DOL.GS
                         _camp.MonsterName, _camp.ZoneName);
                     return true;
                 }
+                if (!_camp.IsDungeon)
+                    AutonomousOutdoorCampPressure.MarkEmpty(_camp.Id, GameLoop.GameLoopTime);
                 AbandonCamp(bot, $"No live {_camp.MonsterName} remained at the camp");
                 return true;
             }
@@ -2397,6 +2466,8 @@ namespace DOL.GS
             _nextPlanTick = GameLoop.GameLoopTime + 30_000 + bot.ObjectID % 8_000;
             int groupSize = Math.Max(1, (int)(bot.Group?.MemberCount ?? 1));
             bool sharedGroup = _groupDirective?.IsDynamic == true;
+            bool localPickupGroup = sharedGroup && _groupDirective.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
+                AutonomousRealmRaid.GetView(bot.Group) == null;
             int planningLevel = sharedGroup ? _groupDirective.AverageLevel : bot.Level;
             GameBot[] planningMembers = sharedGroup
                 ? bot.Group.GetMembersInTheGroup().OfType<GameBot>().Where(member => member.IsAlive).ToArray()
@@ -2432,6 +2503,7 @@ namespace DOL.GS
             // realm/level/death filtering a cheap in-memory operation.
             foreach (CampCatalogCell cell in CampCatalogSnapshot()
                          .Where(cell => !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
+                                        (!localPickupGroup || cell.RegionId == bot.CurrentRegionID) &&
                                         IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID) &&
                                         (!AutonomousObjectiveAssignments.IsAwaitingGroupMatchmaking(bot) ||
                                          AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(cell.IsDungeon,
@@ -2480,16 +2552,19 @@ namespace DOL.GS
                     0,
                     averageLevel,
                     cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Population(cell.RegionId) : 0,
-                    cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Capacity(cell.RegionId, cell.LiveMobCount) : 0));
+                    cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Capacity(cell.RegionId, cell.LiveMobCount) : 0,
+                    cell.IsDungeon ? 0 : AutonomousOutdoorCampPressure.Population(cell.Id),
+                    !cell.IsDungeon && AutonomousOutdoorCampPressure.WasRecentlyEmpty(cell.Id, GameLoop.GameLoopTime)));
             }
 
-            // Once realm/accessibility/level/con filters have been applied, all
-            // distinct CapnBry-authoritative locations have equal probability.
-            // Distance, local density, and monster-name scoring may not pull a
-            // population into one nearby camp.
+            // Keep all level-valid locations eligible. Crowd and recent spawn
+            // depletion only soften the final outdoor draw.
             IEnumerable<AutonomousBotDecisionEngine.Camp> legal = camps.Where(camp =>
                 camp.Reachable && camp.Realm == bot.Realm && camp.LiveMobCount > 0);
             AutonomousBotDecisionEngine.PveEnvironment environment;
+            bool gearFarming = planningLevel >= 50 && AutonomousActivityScheduler.IsUndergeared(bot.Level,
+                AutonomousPlayerBehavior.BestEquippedWeaponLevel(bot),
+                AutonomousPlayerBehavior.EquippedArmorLevels(bot));
             if (sharedGroup)
             {
                 // Pick dungeon versus outdoor while every valid group level is
@@ -2497,7 +2572,7 @@ namespace DOL.GS
                 // every dungeon candidate before the preference was rolled.
                 AutonomousBotDecisionEngine.Camp[] categoryCandidates = legal.ToArray();
                 environment = AutonomousBotDecisionEngine.SelectPveEnvironment(
-                    categoryCandidates, groupSize, planningLevel, Random.Shared);
+                    categoryCandidates, groupSize, planningLevel, Random.Shared, gearFarming);
                 legal = categoryCandidates.Where(camp => environment == AutonomousBotDecisionEngine.PveEnvironment.Dungeon
                     ? camp.IsDungeon : !camp.IsDungeon);
                 int selectedLevel = AutonomousGroupTargetPolicy.SelectAvailableLevel(
@@ -2510,14 +2585,12 @@ namespace DOL.GS
                 legal = legal.Where(camp => camp.LowestCon >= minimumTargetCon && camp.TypicalCon <= maximumTargetCon);
                 AutonomousBotDecisionEngine.Camp[] categoryCandidates = legal.ToArray();
                 environment = AutonomousBotDecisionEngine.SelectPveEnvironment(
-                    categoryCandidates, groupSize, planningLevel, Random.Shared);
+                    categoryCandidates, groupSize, planningLevel, Random.Shared, gearFarming);
                 legal = categoryCandidates.Where(camp => environment == AutonomousBotDecisionEngine.PveEnvironment.Dungeon
                     ? camp.IsDungeon : !camp.IsDungeon);
             }
             AutonomousBotDecisionEngine.Camp[] legalCells = legal.ToArray();
-            // This is the deployed selection point. Each distinct verified
-            // location has one entry, and the selector draws uniformly with no
-            // distance, density, or name preference.
+            // This is the deployed selection point for verified locations.
             AutonomousBotDecisionEngine.Camp chosen = AutonomousBotDecisionEngine.SelectWithinEnvironment(
                 legalCells, environment, Random.Shared);
             bool usedDeathFallback = false;

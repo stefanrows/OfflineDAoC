@@ -256,14 +256,15 @@ namespace DOL.UnitTests
             Assert.That(bot.GetSpecList().All(spec => spec.Level <= expected), Is.True);
         }
 
-        [Test]
-        public void TemporaryCompanionUsesPlayerXpRateAndStartsWithCurrentLevelProgress()
+        [TestCase(1, 100L)]
+        [TestCase(10, 1000L)]
+        public void TemporaryCompanionUsesPlayerXpRateAndStartsWithCurrentLevelProgress(double rate, long expected)
         {
             double playerRate = Properties.XP_RATE;
             double botRate = Properties.BOT_XP_RATE;
             try
             {
-                Properties.XP_RATE = 2;
+                Properties.XP_RATE = rate;
                 Properties.BOT_XP_RATE = 9;
                 var owner = (Owner)RuntimeHelpers.GetUninitializedObject(typeof(Owner)); owner.Level = 20;
                 var bot = new GameBot(owner, (byte)eCharacterClass.Wizard, "XpTester", (byte)eRace.Briton,
@@ -274,7 +275,7 @@ namespace DOL.UnitTests
                 bot.GainExperience(new GainedExperienceEventArgs(
                     100, 0, 0, 0, 0, 0, false, true, eXPSource.NPC));
 
-                Assert.That(bot.Experience, Is.EqualTo(startingExperience + 200));
+                Assert.That(bot.Experience, Is.EqualTo(startingExperience + expected));
                 Assert.That(bot.Level, Is.EqualTo(owner.Level));
             }
             finally

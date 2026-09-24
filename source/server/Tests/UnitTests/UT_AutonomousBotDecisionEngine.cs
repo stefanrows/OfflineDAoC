@@ -69,7 +69,7 @@ public class UT_AutonomousBotDecisionEngine
     }
 
     [Test]
-    public void SelectionWithinEnvironmentRemainsUniformWithoutNearestOrDensityBias()
+    public void SelectionWithinEnvironmentRemainsUniformWithoutCrowdSignals()
     {
         var state = State();
         var camps = new[]
@@ -87,9 +87,9 @@ public class UT_AutonomousBotDecisionEngine
         AutonomousBotDecisionEngine.Camp near = AutonomousBotDecisionEngine.SelectWithinEnvironment(
             camps, AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(0));
         AutonomousBotDecisionEngine.Camp far = AutonomousBotDecisionEngine.SelectWithinEnvironment(
-            camps, AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(1));
+            camps, AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(100));
         AutonomousBotDecisionEngine.Camp frontier = AutonomousBotDecisionEngine.SelectWithinEnvironment(
-            camps, AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(2));
+            camps, AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(200));
         AutonomousBotDecisionEngine.Camp dungeon = AutonomousBotDecisionEngine.SelectWithinEnvironment(
             camps, AutonomousBotDecisionEngine.PveEnvironment.Dungeon, new IndexRandom(0));
 
@@ -99,6 +99,22 @@ public class UT_AutonomousBotDecisionEngine
             Assert.That(far.Id, Is.EqualTo("far-same-frog"));
             Assert.That(dungeon.Id, Is.EqualTo("dungeon"));
             Assert.That(frontier.Id, Is.EqualTo("frontier-pve"));
+        });
+    }
+
+    [Test]
+    public void OutdoorCampCrowdsAndEmptySpawnsLoseWeightButStayEligible()
+    {
+        var open = Camp("open", eRealm.Albion, ConColor.BLUE, true);
+        var crowded = open with { Id = "crowded", OutdoorPopulation = 9 };
+        var empty = open with { Id = "empty", RecentlyEmpty = true };
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.OutdoorCampWeight(open), Is.EqualTo(100));
+            Assert.That(AutonomousBotDecisionEngine.OutdoorCampWeight(crowded), Is.LessThan(100).And.GreaterThan(0));
+            Assert.That(AutonomousBotDecisionEngine.OutdoorCampWeight(empty), Is.LessThan(100).And.GreaterThan(0));
+            Assert.That(AutonomousBotDecisionEngine.SelectWithinEnvironment(new[] { crowded, open },
+                AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(6)).Id, Is.EqualTo("open"));
         });
     }
 
@@ -252,19 +268,10 @@ public class UT_AutonomousBotDecisionEngine
     }
 
     [Test]
-    public void ObjectiveAllocation_UsesRequestedLevelBandTargets()
+    public void SavedObjectiveNamesRemainReadable()
     {
-        AutonomousObjectiveAssignments.Allocation level20To49 = AutonomousObjectiveAssignments.TargetForPopulation(10, false);
-        AutonomousObjectiveAssignments.Allocation level50 = AutonomousObjectiveAssignments.TargetForPopulation(10, true);
-
         Assert.Multiple(() =>
         {
-            Assert.That(level20To49, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(3, 5, 2)));
-            Assert.That(level50, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(2, 3, 5)));
-            Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(10), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(5, 4, 1)));
-            Assert.That(AutonomousObjectiveAssignments.TargetForLowLevelPopulation(3), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(1, 1, 1)));
-            Assert.That(AutonomousObjectiveAssignments.TargetForPopulation(2, false), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(1, 1, 0)));
-            Assert.That(AutonomousObjectiveAssignments.TargetForPopulation(2, true), Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(0, 1, 1)));
             Assert.That(AutonomousObjectiveAssignments.Parse("RvR"), Is.EqualTo(eAutonomousObjectiveKind.RvR));
             Assert.That(AutonomousObjectiveAssignments.Parse("unknown"), Is.EqualTo(eAutonomousObjectiveKind.SoloPve));
         });
@@ -294,11 +301,11 @@ public class UT_AutonomousBotDecisionEngine
     }
 
     [Test]
-    public void RvrTenure_PveIntermissionAllocationNeverSelectsRvr()
+    public void RvrTenure_PveIntermissionNeverSelectsRvr()
     {
-        AutonomousObjectiveAssignments.Allocation target = AutonomousObjectiveAssignments.TargetForPopulation(10, true);
+        var record = new OfflineWorldBotRecord { PlayerType = "Roamer", Level = 50, Sociability = 50 };
         Assert.That(Enumerable.Range(0, 100)
-            .Select(seed => AutonomousObjectiveAssignments.ChoosePveObjective(target, 0, 0, new Random(seed))),
+            .Select(seed => AutonomousActivityScheduler.Choose(record, DateTime.UtcNow, seed / 100d, mayRvr: false)),
             Has.None.EqualTo(eAutonomousObjectiveKind.RvR));
     }
 

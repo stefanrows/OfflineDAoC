@@ -36,12 +36,12 @@ namespace DOL.GS
         public DateTime? DeadlineUtc(long memberId) => !_arrived.Contains(memberId) &&
             _dueUtc.TryGetValue(memberId, out DateTime due) ? due : null;
 
+        public bool HasArrived(long memberId) => _arrived.Contains(memberId);
+
         public bool Observe(long memberId, long now, bool atRendezvous)
         {
             Add(memberId, now);
             if (atRendezvous && _arrived.Add(memberId))
-                Revision++;
-            else if (!atRendezvous && _arrived.Remove(memberId))
                 Revision++;
             return !_arrived.Contains(memberId) && now >= _due[memberId];
         }

@@ -4351,7 +4351,9 @@ namespace DOL.GS
                     }
                 }
 
-                if (CurrentRegion.IsRvR || CurrentZone.IsRvR)
+                if (arguments.XPSource == eXPSource.Player)
+                    baseXp = (long) (baseXp * Properties.XP_RATE);
+                else if (CurrentRegion.IsRvR || CurrentZone.IsRvR)
                     baseXp = (long) (baseXp * Properties.RvR_XP_RATE);
                 else
                     baseXp = (long) (baseXp * Properties.XP_RATE);

@@ -1,128 +1,57 @@
 using System;
 using System.IO;
-using System.Linq;
 using DOL.GS;
 using NUnit.Framework;
 using OfflineDaoc.Configuration;
 
 [TestFixture, NonParallelizable]
-public class UT_BotGoalSettings
+public sealed class UT_BotGoalSettings
 {
     private string _directory;
     private string PathName => Path.Combine(_directory, BotGoalSettings.FileName);
-    [SetUp] public void Setup() { _directory = Path.Combine(Path.GetTempPath(), "bot-goal-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(_directory); }
+
+    [SetUp] public void Setup()
+    {
+        _directory = Path.Combine(Path.GetTempPath(), "population-settings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_directory);
+    }
+
     [TearDown] public void Cleanup()
     {
-        File.Delete(PathName);
-        AutonomousBotGoalPolicy.Initialize(_directory);
-        Directory.Delete(_directory, true);
-    }
-    private void Apply(BotGoalWeights weights)
-    {
-        (BotGoalSettings.Defaults with { Levels20To49 = weights, Level50 = weights }).Save(PathName, () => true);
+        if (Directory.Exists(_directory)) Directory.Delete(_directory, true);
         AutonomousBotGoalPolicy.Initialize(_directory);
     }
 
-    [TestCase(1, 45, 40, 15)] [TestCase(19, 45, 40, 15)]
-    [TestCase(20, 30, 45, 25)] [TestCase(49, 30, 45, 25)] [TestCase(50, 15, 35, 50)]
-    public void DefaultsAndBrackets(int level, int solo, int group, int rvr) =>
-        Assert.That(BotGoalSettings.Defaults.ForLevel(level), Is.EqualTo(new BotGoalWeights(solo, group, rvr)));
-
-    [TestCase(100, 0, 0, 0)] [TestCase(0, 100, 0, 1)] [TestCase(0, 0, 100, 2)]
-    public void ExclusivePoliciesApplyToAllocationRollsRecoveryAndOldEligibility(int solo, int group, int rvr, int kind)
+    [TestCase(PopulationPreset.Camlann2003, 25, 10, 30, 15, 12, 8, PopulationDanger.Authentic)]
+    [TestCase(PopulationPreset.Peaceful, 45, 20, 25, 3, 5, 2, PopulationDanger.Mild)]
+    [TestCase(PopulationPreset.Bloodbath, 10, 5, 25, 30, 20, 10, PopulationDanger.FullCamlann)]
+    [TestCase(PopulationPreset.KeepWars, 15, 5, 25, 10, 20, 25, PopulationDanger.Authentic)]
+    public void NamedPresetsHaveValidTypeMix(PopulationPreset preset, int leveler, int casual,
+        int hybrid, int hunter, int roamer, int keepWarrior, PopulationDanger danger)
     {
-        Apply(new(solo, group, rvr));
-        foreach (int level in new[] { 20, 49, 50 })
-        {
-            for (int seed = 0; seed < 300; seed++)
-                Assert.That((int)AutonomousBotGoalPolicy.Choose(level, new Random(seed)), Is.EqualTo(kind));
-            foreach (eAutonomousObjectiveKind previous in Enum.GetValues<eAutonomousObjectiveKind>())
-                Assert.That((int)AutonomousBotGoalPolicy.EnsureAllowed(level, previous), Is.EqualTo(kind));
-            var record = new OfflineWorldBotRecord { Level = level, ObjectiveRvrEligibleUtc = AutonomousObjectiveAssignments.PveCompletionRequired };
-            Assert.That(AutonomousObjectiveAssignments.IsRvrEligible(record, DateTime.UtcNow), Is.EqualTo(rvr > 0));
-        }
-        foreach (bool fifty in new[] { false, true })
-        {
-            var allocation = AutonomousObjectiveAssignments.TargetForPopulation(101, fifty);
-            Assert.That(allocation, Is.EqualTo(new AutonomousObjectiveAssignments.Allocation(solo > 0 ? 101 : 0, group > 0 ? 101 : 0, rvr > 0 ? 101 : 0)));
-        }
-    }
-
-    [TestCase(0, 25, 75)] [TestCase(25, 0, 75)] [TestCase(25, 75, 0)]
-    public void ZeroWeightsNeverAppearInMixedPolicies(int solo, int group, int rvr)
-    {
-        var weights = new BotGoalWeights(solo, group, rvr);
-        var choices = Enumerable.Range(0, 10000).Select(i => weights.Choose(i / 10000d)).ToArray();
-        Assert.That(choices.Count(i => i == 0), Is.EqualTo(solo * 100));
-        Assert.That(choices.Count(i => i == 1), Is.EqualTo(group * 100));
-        Assert.That(choices.Count(i => i == 2), Is.EqualTo(rvr * 100));
-    }
-
-    [TestCase(0, 100, 0, 1)] [TestCase(0, 50, 50, 2)] [TestCase(50, 50, 0, 0)]
-    public void MatchmakingFallbackNeverInventsADisabledGoal(int solo, int group, int rvr, int expected)
-    {
-        var weights = new BotGoalWeights(solo, group, rvr);
-        Assert.That(Enumerable.Range(0, 100).Select(i => weights.Choose(i / 100d, true)), Has.All.EqualTo(expected));
-    }
-
-    [Test]
-    public void DisabledSavedTaskIsClearedWithoutTouchingProgress()
-    {
-        Apply(new(0, 0, 100));
-        var record = new OfflineWorldBotRecord { Level = 50, Experience = 12345, Name = "PreserveMe", RegionId = 1, X = 456,
-            ObjectiveKind = "GroupPve", ObjectiveAssignmentId = "old-group", ObjectiveExpiresUtc = DateTime.UtcNow.AddHours(1).ToString("O"),
-            CurrentCampId = "old-camp", TargetName = "old-target", ObjectiveRvrEligibleUtc = AutonomousObjectiveAssignments.PveCompletionRequired };
-        Assert.That(AutonomousBotGoalPolicy.ReconcileSavedAssignment(record), Is.True);
+        BotGoalSettings settings = BotGoalSettings.ForPreset(preset);
         Assert.Multiple(() =>
         {
-            Assert.That(record.ObjectiveKind, Is.EqualTo("RvR"));
-            Assert.That(record.ObjectiveAssignmentId, Is.Empty);
-            Assert.That(record.ObjectiveExpiresUtc, Is.Empty);
-            Assert.That(record.CurrentCampId, Is.Empty);
-            Assert.That(record.ObjectiveRvrEligibleUtc, Is.Empty);
-            Assert.That(record.Experience, Is.EqualTo(12345));
-            Assert.That(record.X, Is.EqualTo(456));
-            Assert.That(record.Name, Is.EqualTo("PreserveMe"));
+            Assert.That(settings.Mix, Is.EqualTo(new PlayerTypeMix(leveler, casual, hybrid, hunter, roamer, keepWarrior)));
+            Assert.That(settings.Mix.Total, Is.EqualTo(100));
+            Assert.That(settings.Danger, Is.EqualTo(danger));
+            Assert.DoesNotThrow(settings.Validate);
         });
     }
 
     [Test]
-    public void AllowedTaskAndNecessaryServicePhaseArePreserved()
-    {
-        Apply(new(0, 0, 100));
-        foreach (var (kind, id) in new[] { ("RvR", "current-rvr"), ("SoloPve", "between-pve-services-T-1-123") })
-        {
-            var record = new OfflineWorldBotRecord { Level = 50, ObjectiveKind = kind, ObjectiveAssignmentId = id };
-            Assert.That(AutonomousBotGoalPolicy.ReconcileSavedAssignment(record), Is.False);
-            Assert.That(record.ObjectiveAssignmentId, Is.EqualTo(id));
-        }
-    }
-
-    [Test]
-    public void LowLevelExclusivePoliciesAndRoundingRemainLegal()
-    {
-        foreach (var weights in new[] { new BotGoalWeights(100, 0, 0), new BotGoalWeights(0, 100, 0), new BotGoalWeights(0, 0, 100) })
-        {
-            (BotGoalSettings.Defaults with { Levels1To19 = weights }).Save(PathName, () => true);
-            AutonomousBotGoalPolicy.Initialize(_directory);
-            for (int count = 1; count < 100; count++)
-            {
-                var target = AutonomousObjectiveAssignments.TargetForLowLevelPopulation(count);
-                Assert.That(target.SoloPve + target.GroupPve + target.RvR, Is.EqualTo(count));
-                Assert.That(target.SoloPve, Is.EqualTo(weights.SoloPve > 0 ? count : 0));
-                Assert.That(target.GroupPve, Is.EqualTo(weights.GroupPve > 0 ? count : 0));
-                Assert.That(target.RvR, Is.EqualTo(weights.RvR > 0 ? count : 0));
-            }
-        }
-    }
-
-    [Test]
-    public void InvalidSettingsCannotReplaceWorkingFileAndServerStartRaceIsRejected()
+    public void CustomMixValidationAndAtomicSavePreserveLastGoodFile()
     {
         BotGoalSettings.Defaults.Save(PathName, () => true);
         string original = File.ReadAllText(PathName);
-        foreach (var bad in new[] { new BotGoalWeights(-1, 101, 0), new(1, 1, 1), new(0, 0, 0) })
-            Assert.Throws<InvalidDataException>(() => (BotGoalSettings.Defaults with { Levels1To19 = bad }).Save(PathName, () => true));
+        BotGoalSettings bad = BotGoalSettings.Defaults with
+        {
+            Preset = PopulationPreset.Custom,
+            Mix = new PlayerTypeMix(50, 10, 30, 15, 12, 8),
+        };
+        Assert.Throws<InvalidDataException>(() => bad.Save(PathName, () => true));
+        Assert.Throws<InvalidDataException>(() => (BotGoalSettings.Defaults with
+            { Danger = PopulationDanger.FullCamlann }).Save(PathName, () => true));
         Assert.Throws<InvalidOperationException>(() => BotGoalSettings.Defaults.Save(PathName, () => false));
         int calls = 0;
         Assert.Throws<InvalidOperationException>(() => BotGoalSettings.Defaults.Save(PathName, () => ++calls == 1));
@@ -131,21 +60,68 @@ public class UT_BotGoalSettings
     }
 
     [Test]
-    public void PortableRoundTripAndMissingFileLegacyBehavior()
+    public void VersionOneMapsToNearestPresetWithoutWritingUntilSave()
     {
+        string legacy = """
+            {"Version":1,"Levels1To19":{"SoloPve":10,"GroupPve":90,"RvR":0},
+             "Levels20To49":{"SoloPve":20,"GroupPve":70,"RvR":10},
+             "Level50":{"SoloPve":20,"GroupPve":40,"RvR":40}}
+            """;
+        File.WriteAllText(PathName, legacy);
+        BotGoalLoadResult loaded = BotGoalSettings.LoadDetailed(PathName);
+        Assert.That(loaded.MigratedFromV1, Is.True);
+        Assert.That(loaded.Settings.Version, Is.EqualTo(2));
+        Assert.That(loaded.Settings.Preset, Is.EqualTo(loaded.MappedPreset));
+        Assert.That(File.ReadAllText(PathName), Is.EqualTo(legacy));
         AutonomousBotGoalPolicy.Initialize(_directory);
-        Assert.That(AutonomousBotGoalPolicy.IsConfigured, Is.False);
-        Apply(new(0, 0, 100));
-        Assert.That(BotGoalSettings.Load(PathName).Level50, Is.EqualTo(new BotGoalWeights(0, 0, 100)));
-        Assert.That(File.ReadAllText(PathName), Does.Not.Contain(_directory));
-        Assert.That(AutonomousBotGoalPolicy.IsConfigured, Is.True);
+        Assert.That(AutonomousBotGoalPolicy.LegacyFileMapped, Is.True);
+        loaded.Settings.Save(PathName, () => true);
+        Assert.That(BotGoalSettings.LoadDetailed(PathName).MigratedFromV1, Is.False);
+    }
+
+    [Test]
+    public void StartupReadsDangerAndMixWithoutTouchingSavedBotTask()
+    {
+        BotGoalSettings settings = BotGoalSettings.ForPreset(PopulationPreset.Bloodbath) with
+            { WorldShape = PopulationWorldShape.Established };
+        settings.Save(PathName, () => true);
+        AutonomousBotGoalPolicy.Initialize(_directory);
+        var record = new OfflineWorldBotRecord { PlayerType = "Leveler", Level = 41,
+            ObjectiveKind = "GroupPve", ObjectiveAssignmentId = "saved", Experience = 12345 };
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotGoalPolicy.Settings.Mix.Hunter, Is.EqualTo(30));
+            Assert.That(AutonomousBotGoalPolicy.Settings.WorldShape, Is.EqualTo(PopulationWorldShape.Established));
+            Assert.That(AutonomousBotGoalPolicy.Danger, Is.EqualTo(AutonomousLevelingDanger.FullCamlann));
+            Assert.That(record.ObjectiveAssignmentId, Is.EqualTo("saved"));
+            Assert.That(record.Experience, Is.EqualTo(12345));
+        });
+    }
+
+    [Test]
+    public void SelectedMixCanExcludeTypesForNewBotsWithoutChangingStampedIdentity()
+    {
+        var onlyLevelers = new PlayerTypeMix(100, 0, 0, 0, 0, 0);
+        for (int ordinal = 0; ordinal < 20; ordinal++)
+        {
+            Assert.That(AutonomousBotIdentity.CharterForOrdinal(ordinal, onlyLevelers),
+                Is.AnyOf(AutonomousGuildCharter.Leveling, AutonomousGuildCharter.Social));
+            Assert.That(AutonomousBotIdentity.TypeFor(ordinal + 1, 1, "guild", AutonomousGuildCharter.Hunting, onlyLevelers),
+                Is.EqualTo(AutonomousPlayerType.Leveler));
+        }
+        var stamped = new OfflineWorldBotRecord { BotId = 10, ClassId = 1,
+            GuildId = "guild", PlayerType = "Hunter", Experience = 12345 };
+        Assert.That(AutonomousBotIdentity.Ensure(stamped, AutonomousGuildCharter.Leveling, onlyLevelers), Is.False);
+        Assert.That(stamped.PlayerType, Is.EqualTo("Hunter"));
+        Assert.That(stamped.Experience, Is.EqualTo(12345));
     }
 
     [TestCase("{}")] [TestCase("null")] [TestCase("not json")]
-    [TestCase("{\"Version\":1,\"Levels1To19\":null,\"Levels20To49\":null,\"Level50\":null}")]
-    public void BrokenFilesAreRejectedInsteadOfSilentlyRestoringDisabledGoals(string json)
+    [TestCase("{\"Version\":2,\"Preset\":\"Custom\",\"Mix\":null}")]
+    [TestCase("{\"Version\":9}")]
+    public void BrokenFilesAreRejected(string json)
     {
         File.WriteAllText(PathName, json);
-        Assert.That(() => AutonomousBotGoalPolicy.Initialize(_directory), Throws.Exception);
+        Assert.That(() => BotGoalSettings.Load(PathName), Throws.Exception);
     }
 }

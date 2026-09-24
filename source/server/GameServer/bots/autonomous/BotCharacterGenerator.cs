@@ -1,4 +1,7 @@
-namespace OfflineDaoc.Launcher;
+using System;
+using System.Collections.Generic;
+
+namespace OfflineDaoc.Configuration;
 
 internal static class BotCharacterGenerator
 {

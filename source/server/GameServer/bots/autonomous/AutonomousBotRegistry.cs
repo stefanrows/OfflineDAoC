@@ -4,6 +4,8 @@ using System.Linq;
 using System.Collections.Generic;
 using DOL.Database;
 using System.Threading;
+using System.Reflection;
+using DOL.Logging;
 
 namespace DOL.GS;
 
@@ -11,7 +13,9 @@ namespace DOL.GS;
 public static class AutonomousBotRegistry
 {
     private static readonly ConcurrentDictionary<long, GameBot> Active = new();
+    private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
     private static int _populationForBrainTick;
+    private static long _nextActivitySummaryTick;
 
     // A cadence input, not a replacement for the exact live population checks
     // used by spawning, transfer recovery and the launcher. Sample once before
@@ -22,12 +26,38 @@ public static class AutonomousBotRegistry
     {
         int count = 0;
         var dungeonPopulation = new Dictionary<ushort, int>();
+        var outdoorPopulation = new Dictionary<string, int>(StringComparer.Ordinal);
+        long now = GameLoop.GameLoopTime;
+        bool summarize = now >= Interlocked.Read(ref _nextActivitySummaryTick);
+        int fighting = 0, traveling = 0, meetup = 0, dead = 0, town = 0, camp = 0, other = 0;
         foreach (var entry in Active)
         {
             GameBot bot = entry.Value;
             if (bot?.ObjectState != GameObject.eObjectState.Active)
                 continue;
             count++;
+
+            string campId = bot.PersistentRecord?.CurrentCampId;
+            if (bot.CurrentZone?.IsDungeon != true && bot.CurrentRegion?.IsDungeon != true &&
+                !string.IsNullOrWhiteSpace(campId))
+                outdoorPopulation[campId] = outdoorPopulation.GetValueOrDefault(campId) + 1;
+
+            if (summarize)
+            {
+                string activity = bot.PersistentRecord?.Activity ?? string.Empty;
+                if (!bot.IsAlive) dead++;
+                else if (bot.InCombat || bot.IsAttacking || activity.StartsWith("Pulling", StringComparison.OrdinalIgnoreCase) ||
+                         activity.StartsWith("Ranged pulling", StringComparison.OrdinalIgnoreCase)) fighting++;
+                else if (AutonomousBotGroupCoordinator.IsInitialMeetup(bot)) meetup++;
+                else if (bot.IsOnStableMasterRoute || activity.StartsWith("Travel", StringComparison.OrdinalIgnoreCase) ||
+                         activity.StartsWith("Following", StringComparison.OrdinalIgnoreCase)) traveling++;
+                else if (activity.Contains("town", StringComparison.OrdinalIgnoreCase) ||
+                         activity.StartsWith("Training", StringComparison.OrdinalIgnoreCase) ||
+                         activity.StartsWith("Vending", StringComparison.OrdinalIgnoreCase) ||
+                         activity.StartsWith("Banking", StringComparison.OrdinalIgnoreCase)) town++;
+                else if (!string.IsNullOrWhiteSpace(campId)) camp++;
+                else other++;
+            }
 
             ushort dungeonRegion = 0;
             if (bot.CurrentZone?.IsDungeon == true || bot.CurrentRegion?.IsDungeon == true)
@@ -40,6 +70,14 @@ public static class AutonomousBotRegistry
         }
         Volatile.Write(ref _populationForBrainTick, count);
         AutonomousDungeonPopulationPolicy.PublishPopulation(dungeonPopulation);
+        AutonomousOutdoorCampPressure.PublishPopulation(outdoorPopulation);
+        AutonomousOutdoorCampPressure.Prune(now);
+        if (summarize)
+        {
+            Interlocked.Exchange(ref _nextActivitySummaryTick, now + 60_000);
+            Log.Info($"AUTONOMOUS_ACTIVITY_SUMMARY active={count} fighting={fighting} traveling={traveling} " +
+                     $"meetup={meetup} dead={dead} town={town} camp={camp} other={other}");
+        }
     }
 
     // A failed cross-region AddToWorld can briefly leave an entry inactive.

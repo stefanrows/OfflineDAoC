@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.34.0"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.40.0"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -147,8 +147,8 @@ public sealed class LauncherPresentationTests
         Assert.That(form.Text, Is.EqualTo("Offline DAoC — Camlann 1.65 Old Frontiers"));
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("OFFLINE DAoC — CAMLANN", StringComparison.Ordinal)), Is.True);
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("CAMLANN POPULATION", StringComparison.Ordinal)), Is.True);
-        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("VERSION 0.34.0", StringComparison.Ordinal)), Is.True);
-        Label version = controls.OfType<Label>().Single(label => label.Text == "VERSION 0.34.0");
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("VERSION 0.40.0", StringComparison.Ordinal)), Is.True);
+        Label version = controls.OfType<Label>().Single(label => label.Text == "VERSION 0.40.0");
         Assert.That(version.Font.Bold, Is.True);
         Assert.That(version.Font.Size, Is.GreaterThanOrEqualTo(12));
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("1× PROGRESSION", StringComparison.Ordinal)), Is.False);
@@ -163,9 +163,13 @@ public sealed class LauncherPresentationTests
             Does.Not.Contain("Realm Status"));
         Assert.That(controls.OfType<TabControl>().SelectMany(tab => tab.TabPages.Cast<TabPage>()).Select(page => page.Text),
             Does.Contain("XP Settings"));
+        Assert.That(controls.OfType<TabControl>().SelectMany(tab => tab.TabPages.Cast<TabPage>()).Select(page => page.Text),
+            Does.Contain("Server population"));
         Assert.That(controls.OfType<DataGridView>(), Is.Not.Empty);
         Assert.That(controls.OfType<DataGridView>().All(grid => !grid.RowHeadersVisible), Is.True);
         var populationGrid = (DataGridView)mainFormType.GetField("_grid", HiddenInstance)!.GetValue(form)!;
+        Assert.That(populationGrid.Columns.Cast<DataGridViewColumn>().Select(column => column.DataPropertyName),
+            Is.SupersetOf(new[] { "PlayerType", "GuildName", "GuildCharter" }));
         Assert.That(populationGrid.ContextMenuStrip!.Items.OfType<ToolStripMenuItem>().Select(item => item.Text),
             Does.Contain("Teleport to"));
         Assert.That(controls.Any(control => control.GetType().FullName == "OfflineDaoc.Launcher.FantasyBanner"), Is.True);
@@ -179,7 +183,7 @@ public sealed class LauncherPresentationTests
         Assert.That(botRate.Items.Cast<object>().Select(item => item.ToString()),
             Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×" }));
         var realmButtons = (System.Collections.IEnumerable)mainFormType.GetField("_realmGenerateButtons", HiddenInstance)!.GetValue(form)!;
-        Assert.That(realmButtons.Cast<Button>().Count(button => button.Text == "ADD LV.1 CREW"), Is.EqualTo(3));
+        Assert.That(realmButtons.Cast<Button>().Count(button => button.Text == "ADD CREW"), Is.EqualTo(3));
         Assert.That(realmButtons.Cast<Button>().Count(button => button.Text == "ADD LV.50 CREW"), Is.EqualTo(3));
     }
 

@@ -115,15 +115,15 @@ public class UT_AutonomousBotRealmPointRewards
     }
 
     [Test]
-    public void LevelOneDefeatingLevelFourEarnsMoreRpAndXpThanEqualLevelKill()
+    public void PurpleVictimEarnsMoreRpAndXpThanEqualLevelKill()
     {
         int EqualRp = AutonomousBotRealmPointRewards.CalculateRealmPointReward(5, 0, 5, 0, 1, 1, 1, true, 1, 1);
         int harderRp = AutonomousBotRealmPointRewards.CalculateRealmPointReward(20, 0, 5, 0, 1, 1, 1, true, 4, 1);
         Assert.That(EqualRp, Is.EqualTo(5));
-        Assert.That(harderRp, Is.EqualTo(17));
+        Assert.That(harderRp, Is.EqualTo(20));
         long equalXp = AutonomousBotRealmPointRewards.CalculateExperienceReward(100, 100, 1, 1, 1, 1, 100);
         long harderXp = AutonomousBotRealmPointRewards.CalculateExperienceReward(1000, 100, 4, 1, 1, 1, 100);
-        Assert.That(harderXp, Is.EqualTo(175).And.GreaterThan(equalXp));
+        Assert.That(harderXp, Is.EqualTo(200).And.GreaterThan(equalXp));
         Assert.That(AutonomousBotRealmPointRewards.ChallengeMultiplier(50, 1), Is.EqualTo(2));
     }
 
@@ -132,7 +132,17 @@ public class UT_AutonomousBotRealmPointRewards
     {
         Assert.That(AutonomousBotRealmPointRewards.CalculateRealmPointReward(5, 0, 5, 0, 8, 8, 0.1, true, 1, 1), Is.EqualTo(1));
         Assert.That(AutonomousBotRealmPointRewards.CalculateRealmPointReward(5, 0, 5, 0, 8, 8, 0, true, 1, 1), Is.Zero);
-        Assert.That(AutonomousBotRealmPointRewards.CalculateExperienceReward(1000, 100, 4, 1, 1, 0.5, 100), Is.EqualTo(87));
+        Assert.That(AutonomousBotRealmPointRewards.CalculateExperienceReward(1000, 100, 4, 1, 1, 0.5, 100), Is.EqualTo(100));
+    }
+
+    [TestCase(40, 40, 1.0)]
+    [TestCase(44, 40, 1.25)]
+    [TestCase(49, 40, 1.5)]
+    [TestCase(26, 20, 2.0)]
+    public void ChallengeUsesConColor(int victimLevel, int awarderLevel, double expected)
+    {
+        Assert.That(AutonomousBotRealmPointRewards.ChallengeMultiplier(victimLevel, awarderLevel),
+            Is.EqualTo(expected));
     }
 
     [Test]

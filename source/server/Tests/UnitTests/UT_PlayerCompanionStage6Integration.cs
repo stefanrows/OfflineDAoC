@@ -455,34 +455,69 @@ public sealed class UT_PlayerCompanionStage6Integration
     [Test]
     public void PersistentCompanionsAcceptNpcXpButRejectPlayerXpAndRealmPoints()
     {
-        Owner owner = NewOwner("reward-owner", eRealm.Albion);
-        owner.Experience = 10_000;
-        PlayerCompanionRecord record = NewRecord(owner.ObjectId, Guid.NewGuid().ToString("D"),
-            "Reward Companion", eCharacterClass.Cleric);
-        Assert.That(_database.AddObject(record), Is.True);
-        Companion companion = NewCompanion(owner, record, eRealm.Albion);
-        SetField(typeof(GameObject), companion, "m_level", (byte)1);
-        long startingExperience = companion.Experience;
-
-        companion.GainExperience(new GainedExperienceEventArgs(
-            1, 0, 0, 0, 0, 0, false, false, eXPSource.NPC));
-        long afterNpcExperience = companion.Experience;
-        companion.GainExperience(new GainedExperienceEventArgs(
-            100, 0, 0, 0, 0, 0, false, false, eXPSource.Player));
-        companion.GainExperience(new GainedExperienceEventArgs(
-            100, 0, 0, 0, 0, 0, false, false, eXPSource.Quest));
-        RemovePendingProgress(record.CompanionId);
-        companion.GainRealmPoints(1000);
-
-        Assert.Multiple(() =>
+        int previousCap = DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT;
+        DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT = 125;
+        try
         {
-            Assert.That(afterNpcExperience, Is.EqualTo(startingExperience + 1),
-                "Persistent companions progress from NPC experience.");
-            Assert.That(companion.Experience, Is.EqualTo(afterNpcExperience),
-                "Quest and player-sourced XP do not progress persistent companions.");
-            Assert.That(companion.AutonomousRealmPoints, Is.Zero,
-                "Persistent companions do not earn realm points.");
-        });
+            Owner owner = NewOwner("reward-owner", eRealm.Albion);
+            owner.Experience = 10_000;
+            PlayerCompanionRecord record = NewRecord(owner.ObjectId, Guid.NewGuid().ToString("D"),
+                "Reward Companion", eCharacterClass.Cleric);
+            Assert.That(_database.AddObject(record), Is.True);
+            Companion companion = NewCompanion(owner, record, eRealm.Albion);
+            SetField(typeof(GameObject), companion, "m_level", (byte)1);
+            long startingExperience = companion.Experience;
+
+            companion.GainExperience(new GainedExperienceEventArgs(
+                1, 0, 0, 0, 0, 0, false, false, eXPSource.NPC));
+            long afterNpcExperience = companion.Experience;
+            companion.GainExperience(new GainedExperienceEventArgs(
+                100, 0, 0, 0, 0, 0, false, false, eXPSource.Player));
+            companion.GainExperience(new GainedExperienceEventArgs(
+                100, 0, 0, 0, 0, 0, false, false, eXPSource.Quest));
+            RemovePendingProgress(record.CompanionId);
+            companion.GainRealmPoints(1000);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(afterNpcExperience, Is.EqualTo(startingExperience + 1),
+                    "Persistent companions progress from NPC experience.");
+                Assert.That(companion.Experience, Is.EqualTo(afterNpcExperience),
+                    "Quest and player-sourced XP do not progress persistent companions.");
+                Assert.That(companion.AutonomousRealmPoints, Is.Zero,
+                    "Persistent companions do not earn realm points.");
+            });
+        }
+        finally
+        {
+            DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT = previousCap;
+        }
+    }
+
+    [Test]
+    public void LowLevelCompanionKillXpUsesOwnCapRateAndCatchUpBoost()
+    {
+        double previousRate = DOL.GS.ServerProperties.Properties.XP_RATE;
+        int previousCap = DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT;
+        try
+        {
+            DOL.GS.ServerProperties.Properties.XP_RATE = 10;
+            DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT = 125;
+            MethodInfo calculate = typeof(GameBot).GetMethod("CalculateCompanionNpcExperience",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            long ownCap = (long)(GameLiving.XPForLiving[1] * 1.25);
+            Assert.That(calculate.Invoke(null, new object[] { 1_000L, 1, 10, true }),
+                Is.EqualTo((long)(ownCap * 10 * 1.5)));
+            Assert.That(calculate.Invoke(null, new object[] { 1_000L, 1, 5, true }),
+                Is.EqualTo(ownCap * 10), "The catch-up boost ends within four levels of the owner.");
+            Assert.That(calculate.Invoke(null, new object[] { 5L, 1, 10, true }),
+                Is.EqualTo(75L), "The owner's smaller award remains the limit before scaling.");
+        }
+        finally
+        {
+            DOL.GS.ServerProperties.Properties.XP_RATE = previousRate;
+            DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT = previousCap;
+        }
     }
 
     private static void RemovePendingProgress(string companionId)

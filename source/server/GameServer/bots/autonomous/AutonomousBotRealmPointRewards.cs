@@ -30,10 +30,16 @@ public static class AutonomousBotRealmPointRewards
         return Math.Max(level * 5, modifiedLevel * modifiedLevel) + realmLevel;
     }
 
-    // Defeating a higher-level opponent raises both rewards and their caps.
-    // The bounded bonus preserves damage sharing and repeat-kill protection.
+    // Use the awarder's con color so a four-level gap at high levels does not
+    // receive the same bonus as a purple low-level opponent.
     public static double ChallengeMultiplier(int victimLevel, int awarderLevel) =>
-        1.0 + Math.Clamp(victimLevel - awarderLevel, 0, 4) * 0.25;
+        ConLevels.GetConColor(ConLevels.GetConLevel(awarderLevel, victimLevel)) switch
+        {
+            ConColor.ORANGE => 1.25,
+            ConColor.RED => 1.5,
+            ConColor.PURPLE => 2.0,
+            _ => 1.0
+        };
 
     public static long CalculateExperienceReward(long victimValue, long awarderValue,
         int victimLevel, int awarderLevel, int participants, double damagePercent, int capPercent)
@@ -183,7 +189,7 @@ public static class AutonomousBotRealmPointRewards
                     long experience = CalculatePlayerKillExperience(killedBot, player, contribution,
                         totalDamage, damagePercent);
                     if (experience > 0)
-                        player.GainExperience(eXPSource.Player, experience);
+                        player.GainExperience(eXPSource.Player, experience, true);
                 }
                 else
                 {
@@ -220,7 +226,7 @@ public static class AutonomousBotRealmPointRewards
             long experience = CalculatePlayerKillExperience(killedBot, bot, contribution,
                 totalDamage, damagePercent);
             if (experience > 0)
-                bot.GainExperience(eXPSource.Player, experience);
+                bot.GainExperience(eXPSource.Player, experience, true);
         }
 
         return isWorthRealmPoints;

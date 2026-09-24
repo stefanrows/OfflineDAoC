@@ -120,7 +120,7 @@ public sealed class UT_AutonomousCrewPolicy
 
         Assert.Multiple(() =>
         {
-            Assert.That(names[0], Does.StartWith(AutonomousCrewManager.CrewNamePrefix));
+            Assert.That(names[0], Does.Not.StartWith(AutonomousCrewManager.CrewNamePrefix));
             Assert.That(names[0], Is.Not.EqualTo(names[1]));
             Assert.That(names[1], Is.Not.EqualTo(names[2]));
         });

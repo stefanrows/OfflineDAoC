@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
+using System.Threading;
 using DOL.Logging;
 
 namespace DOL.GS
@@ -23,6 +24,26 @@ namespace DOL.GS
         private static readonly Dictionary<string, Counters> Stages = new();
         private static long _reportAt;
         private static double _stageWaitMs;
+        private static readonly double[] TickSamples = new double[1024];
+        private static int _tickSampleCount;
+        private static long _tickReportAt;
+        private static double _latestTickP95Ms;
+
+        public static double LatestTickP95Ms => Volatile.Read(ref _latestTickP95Ms);
+
+        public static void RecordTick(long started)
+        {
+            TickSamples[_tickSampleCount++ % TickSamples.Length] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            long now = Stopwatch.GetTimestamp();
+            if (_tickReportAt == 0) _tickReportAt = now + 60 * Stopwatch.Frequency;
+            if (now < _tickReportAt) return;
+            _tickReportAt = now + 60 * Stopwatch.Frequency;
+            int count = Math.Min(_tickSampleCount, TickSamples.Length);
+            var ordered = new double[count];
+            Array.Copy(TickSamples, ordered, count);
+            Array.Sort(ordered);
+            Volatile.Write(ref _latestTickP95Ms, ordered[(int)Math.Ceiling(count * .95) - 1]);
+        }
 
         public static long BeginStage()
         {

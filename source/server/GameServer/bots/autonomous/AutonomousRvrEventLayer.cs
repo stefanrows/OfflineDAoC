@@ -27,7 +27,7 @@ public static partial class AutonomousRvrEventLayer
 
     public sealed record Force(string GroupId, eRealm Realm, int MemberCount, int AverageLevel, int HealerCount,
         bool CanSupplySiege = true, bool RoamingReserve = false, long[] MemberIds = null, int MinimumMemberLevel = 50,
-        string GuildName = null);
+        string GuildName = null, bool CampaignEligible = false);
     public sealed record LiveObjective(string Id, string Name, Intent Kind, eRealm OwningRealm, ushort RegionId,
         int X, int Y, int Z, bool IsRelicKeep, int EnemyCount, int FriendlyCount, int GuardStrength, int ClosedDoors,
         bool IsRelicCarrier = false, bool IsPortalKeep = false, bool UnderAttack = false, string OwningGuild = null);
@@ -212,7 +212,7 @@ public static partial class AutonomousRvrEventLayer
         lock (Sync)
         {
             Cleanup(nowTick, objectives);
-            if (force.AverageLevel < 50 || force.MinimumMemberLevel < 50)
+            if ((force.AverageLevel < 50 || force.MinimumMemberLevel < 50) && !force.CampaignEligible)
                 return ReservePlan(force, objectives.Where(o => !o.IsRelicCarrier && o.Kind is not Intent.AssaultKeep and not Intent.AssaultRelicKeep).ToArray());
             if (ReleasedForces.ContainsKey(force.GroupId)) return null;
 

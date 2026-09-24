@@ -56,6 +56,8 @@ public static partial class AutonomousBotGroupCoordinator
         public bool LeaderReadyForAssembly { get; init; }
         public bool GroupCombatActive { get; init; }
         public bool RecoveringBetweenPulls { get; init; }
+        public bool SoftMeetupStarted { get; init; }
+        public bool HasReturningMembers { get; init; }
     }
 
     public sealed class StoredMetadata
@@ -118,6 +120,7 @@ public static partial class AutonomousBotGroupCoordinator
         public long LeaderStagingDeadlineTick { get; set; }
         public DateTime LeaderStagingDeadlineUtc { get; set; }
         public bool ProcessingAttendanceRemovals { get; set; }
+        public bool SoftMeetupStarted { get; set; }
         public int PreferredLevelBonus { get; set; }
         public Dictionary<long, BotPveGroupRole> PveRoles { get; } = new();
         public GameBot Puller { get; set; }
@@ -128,6 +131,8 @@ public static partial class AutonomousBotGroupCoordinator
         public Vector3 SharedWatchdogPosition { get; set; }
         public ushort SharedWatchdogRegion { get; set; }
         public long NoCombatCasualtySinceTick { get; set; }
+        public int CasualtiesWhileWaiting { get; set; }
+        public HashSet<long> ReturningFromDeath { get; } = new();
         public bool RosterReassessmentPending { get; set; }
         public string PhaseBeforeCasualty { get; set; } = string.Empty;
         public eAutonomousObjectiveKind ObjectiveKind { get; init; }
@@ -188,7 +193,15 @@ public static partial class AutonomousBotGroupCoordinator
         lock (Sync)
         {
             if (bot.Group != null && TryGetSession(bot.Group, out Session currentSession))
+            {
                 RemoveBrokenSession(currentSession.Group, currentSession);
+                // A PvP wall applies to a grouped bot after it recovers from
+                // the fight too. The remaining warband retains its own task.
+                if (bot.Group == currentSession.Group && currentSession.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
+                    bot.IsAlive && !bot.InCombat && !bot.IsAttacking &&
+                    AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, DateTime.UtcNow))
+                    currentSession.Group.RemoveMember(bot, retainSingleRemainingMember: true);
+            }
             if (bot.Group == null)
             {
                 ClearMetadata(bot, false);
@@ -329,6 +342,8 @@ public static partial class AutonomousBotGroupCoordinator
             if (!TryGetSession(bot.Group, out Session session) || session.Camp == null ||
                 session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve)
                 return;
+            if (!session.Camp.IsDungeon)
+                AutonomousOutdoorCampPressure.MarkEmpty(session.Camp.Id, GameLoop.GameLoopTime);
             GameBot[] members = BotMembers(session.Group);
             Log.Info("AUTONOMOUS_GROUP_CAMP_WAIT " + JsonSerializer.Serialize(new
             {
@@ -463,6 +478,9 @@ public static partial class AutonomousBotGroupCoordinator
         if (AutonomousRealmRaid.GetView(directive?.Leader?.Group) != null) return true;
         if (directive?.IsDynamic != true || directive.Leader == null)
             return true;
+        if (directive.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
+            (directive.SoftMeetupStarted || directive.HasReturningMembers))
+            return PresentPveMembers(BotMembers(directive.Leader.Group), directive.Leader, CohesionRadius).Length >= 2;
         return BotMembers(directive.Leader.Group).Where(member => member.IsAlive)
             .All(member => member.CurrentRegionID == directive.Leader.CurrentRegionID && member.GetDistanceTo(directive.Leader) <= CohesionRadius);
     }
@@ -868,14 +886,18 @@ public static partial class AutonomousBotGroupCoordinator
             }
             GameBot[] members = BotMembers(group);
             GameBot leader = ChooseLeader(session, members);
-            GameBot puller = ChoosePuller(session, members);
             if (leader == null) return false;
+            GameBot[] present = (session.SoftMeetupStarted || session.ReturningFromDeath.Count > 0) &&
+                session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve
+                ? PresentPveMembers(members, leader, PullCohesionRadius(corridorBlocker, bot.CurrentZone?.IsDungeon == true))
+                : members;
+            GameBot puller = ChoosePuller(session, present);
             bool combatActor = AutonomousRvrStaging.UsesIndependentCombatActors(session.ObjectiveKind) || bot == puller;
             return !IsAssemblyPhase(session.Phase) && !session.Recovery.IsRegrouping && combatActor &&
                 !session.Recovery.HasCasualty(RecoveryMembers(session, members, false)) &&
-                !session.RecoveringBetweenPulls && MembersFullyRecovered(members) &&
+                !session.RecoveringBetweenPulls && MembersFullyRecovered(present) &&
                 (session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve || HasRequiredPveComposition(session, members)) &&
-                members.Length >= 2 && members.All(member => !member.IsOnStableMasterRoute &&
+                present.Length >= 2 && present.All(member => !member.IsOnStableMasterRoute &&
                     member.CurrentRegionID == leader.CurrentRegionID && member.GetDistanceTo(leader) <=
                         PullCohesionRadius(corridorBlocker, bot.CurrentZone?.IsDungeon == true));
         }
@@ -887,6 +909,10 @@ public static partial class AutonomousBotGroupCoordinator
     // Ordinary camp pulls, full resources, assigned roles and casualty gates stay intact.
     public static int PullCohesionRadius(bool corridorBlocker, bool inDungeon) =>
         corridorBlocker && inDungeon ? 1100 : CohesionRadius;
+
+    private static GameBot[] PresentPveMembers(GameBot[] members, GameBot leader, int radius) =>
+        members.Where(member => member.IsAlive && !member.IsOnStableMasterRoute &&
+            member.CurrentRegionID == leader.CurrentRegionID && member.GetDistanceTo(leader) <= radius).ToArray();
 
     private static AutonomousGroupRecoveryState.Member[] RecoveryMembers(Session session, GameBot[] members, bool readiness) =>
         members.Select(member => new AutonomousGroupRecoveryState.Member(
@@ -1204,12 +1230,13 @@ public static partial class AutonomousBotGroupCoordinator
             if (claimed.Contains(leader))
                 continue;
             LastFormationAttemptTick[MemberKey(leader)] = GameLoop.GameLoopTime;
-            // A crew is the matchmaking boundary. Realm is an identity and
-            // combat attribute, not a reason to split one mixed-realm guild.
+            // Ordinary PvE uses local pickup parties. RvR still assembles
+            // same-crew forces; realm never defines an alliance on Camlann.
             int leaderSlots = availableGroupSlots - claimed.Count;
             int largestAllowed = Math.Min(8, leaderSlots);
-            if (objectiveKind == eAutonomousObjectiveKind.RvR && leader.Level < 20)
-                largestAllowed = Math.Min(4, largestAllowed);
+            if (objectiveKind == eAutonomousObjectiveKind.RvR)
+                largestAllowed = Math.Min(largestAllowed, AutonomousPlayerBehavior.MaximumRvrGroupSize(
+                    AutonomousPlayerBehavior.TypeOf(leader.PersistentRecord), leader.Level));
             const int minimumRequired = 2;
             if (largestAllowed < minimumRequired)
             {
@@ -1222,17 +1249,14 @@ public static partial class AutonomousBotGroupCoordinator
             GameBot[] compatiblePool = available
                 .Where(candidate => candidate != leader && !claimed.Contains(candidate) && candidate.Group == null &&
                                      AutonomousObjectiveAssignments.Is(candidate, objectiveKind) &&
-                                     AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
                                      (objectiveKind == eAutonomousObjectiveKind.GroupPve ||
-                                      candidate.CurrentRegionID == leader.CurrentRegionID) &&
+                                      AutonomousCrewManager.AreInSameCrew(leader, candidate)) &&
+                                     candidate.CurrentRegionID == leader.CurrentRegionID &&
                                      LevelsCompatible(leader.Level, candidate.Level))
-                .OrderBy(candidate => objectiveKind == eAutonomousObjectiveKind.GroupPve &&
-                                      candidate.CurrentRegionID != leader.CurrentRegionID ? 1 : 0)
-                .ThenBy(candidate => LastFormationAttemptTick.GetValueOrDefault(MemberKey(candidate)))
+                .OrderBy(candidate => LastFormationAttemptTick.GetValueOrDefault(MemberKey(candidate)))
                 .ThenBy(FormationWaitStartedUtc)
                 .ThenBy(candidate => Math.Abs(candidate.Level - leader.Level))
-                .ThenBy(candidate => candidate.CurrentRegionID == leader.CurrentRegionID
-                    ? candidate.GetDistanceTo(leader) : int.MaxValue)
+                .ThenBy(candidate => candidate.GetDistanceTo(leader))
                 .ThenBy(MemberKey)
                 .ToArray();
             int rolledSize = largestAllowed;
@@ -1244,9 +1268,11 @@ public static partial class AutonomousBotGroupCoordinator
                     LogFormationBlocked(leader, objectiveKind, "No compatible guildmate is currently available in this level/region cohort");
                     continue;
                 }
-                rolledSize = leader.Level < 20
-                    ? CamlannPopulationTuning.RollLowLevelPvpPartySize(compatibleMaximum, Random.Shared.NextDouble())
-                    : AutonomousRvrStaging.RollWarbandSize(compatibleMaximum, Random.Shared.NextDouble());
+                DateTime started = FormationWaitStartedUtc(leader);
+                TimeSpan waited = started == DateTime.MinValue ? TimeSpan.Zero : DateTime.UtcNow - started;
+                rolledSize = AutonomousPlayerBehavior.ChooseRvrGroupSize(
+                    AutonomousPlayerBehavior.TypeOf(leader.PersistentRecord), leader.Level,
+                    compatibleMaximum, Random.Shared.NextDouble(), waited);
                 if (rolledSize == 1)
                     continue;
             }
@@ -1256,7 +1282,7 @@ public static partial class AutonomousBotGroupCoordinator
             {
                 if (!TryBuildPveRoster(leader, compatiblePool, out compatible, out pveRoles))
                 {
-                    LogFormationBlocked(leader, objectiveKind, "No compatible guildmate is currently available in this crew/level cohort");
+                    LogFormationBlocked(leader, objectiveKind, "No compatible local pickup member is currently available in this level/region cohort");
                     continue;
                 }
             }
@@ -1428,6 +1454,11 @@ public static partial class AutonomousBotGroupCoordinator
             FinishGroupTask(session, "No living group leader remains");
             return false;
         }
+        if (leader != null && session.ReturningFromDeath.Count > 0)
+            foreach (GameBot member in members.Where(member => member.IsAlive &&
+                !member.IsOnStableMasterRoute && member.CurrentRegionID == leader.CurrentRegionID &&
+                member.GetDistanceTo(leader) <= CohesionRadius))
+                session.ReturningFromDeath.Remove(MemberKey(member));
 
         // Only enrolled dragon/epic parties use simultaneous hub assembly.
         // Automatic and forced enrollment share this path. Never wait for a
@@ -1555,16 +1586,21 @@ public static partial class AutonomousBotGroupCoordinator
         }
         else if (session.CombatObserved && !session.Recovery.IsRegrouping)
         {
-            session.RecoveringBetweenPulls = !MembersFullyRecovered(members);
+            GameBot[] readyCohort = session.ReturningFromDeath.Count > 0
+                ? PresentPveMembers(members, leader, CohesionRadius) : members;
+            session.RecoveringBetweenPulls = !MembersFullyRecovered(readyCohort);
             if (!session.RecoveringBetweenPulls)
                 session.CombatObserved = false;
         }
 
-        if (session.Phase == "Meeting up" && !(session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
-            AutonomousRvrEventLayer.IsBattleForce(session.Id, GameLoop.GameLoopTime)))
+        if ((session.Phase == "Meeting up" || session.SoftMeetupStarted) &&
+            !(session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
+              AutonomousRvrEventLayer.IsBattleForce(session.Id, GameLoop.GameLoopTime)))
         {
             if (raidView == null) ExpelRendezvousNoShows(session, members);
             members = BotMembers(session.Group);
+            if (session.SoftMeetupStarted && members.All(member => session.Attendance.HasArrived(MemberKey(member))))
+                session.SoftMeetupStarted = false;
             if (!Sessions.ContainsKey(session.Group))
                 return false;
         }
@@ -1593,6 +1629,10 @@ public static partial class AutonomousBotGroupCoordinator
             bool casualty = members.Any(member => !member.IsAlive);
             if (casualty)
             {
+                foreach (GameBot deadMember in members.Where(member => !member.IsAlive))
+                    session.ReturningFromDeath.Add(MemberKey(deadMember));
+                session.CasualtiesWhileWaiting = Math.Max(session.CasualtiesWhileWaiting,
+                    members.Count(member => !member.IsAlive));
                 if (session.Phase != "Waiting for resurrection")
                 {
                     session.PhaseBeforeCasualty = session.Phase;
@@ -1612,16 +1652,27 @@ public static partial class AutonomousBotGroupCoordinator
             }
             if (session.Phase == "Waiting for resurrection")
             {
+                // One released member rejoins the surviving party at its
+                // current goal. A true multi-member wipe still uses the
+                // established safe-town regroup path below.
+                if (session.CasualtiesWhileWaiting == 1)
+                    session.Recovery.Observe(RecoveryMembers(session, members, false), false);
+                else
+                    session.ReturningFromDeath.Clear();
+                session.CasualtiesWhileWaiting = 0;
                 session.Phase = session.PhaseBeforeCasualty is "Traveling" or "Grinding"
                     ? session.PhaseBeforeCasualty : "Traveling";
                 session.PhaseBeforeCasualty = string.Empty;
                 session.NoCombatCasualtySinceTick = 0;
-                session.RecoveringBetweenPulls = !MembersFullyRecovered(members);
+                GameBot[] readyCohort = session.ReturningFromDeath.Count > 0
+                    ? PresentPveMembers(members, leader, CohesionRadius) : members;
+                session.RecoveringBetweenPulls = !MembersFullyRecovered(readyCohort);
                 Log.Info($"AUTONOMOUS_GROUP_RESURRECTION_SUCCEEDED group={session.Id}");
             }
         }
         if (session.Recovery.Observe(RecoveryMembers(session, members, false), session.TaskClock.HasStarted))
         {
+            session.ReturningFromDeath.Clear();
             session.WipePenalty = session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve
                 ? AutonomousGroupTargetPolicy.PenaltyAfterWipe((int)Math.Round(members.Average(member => member.Level)),
                     members.Length, session.WipePenalty, session.Camp?.TargetLevel ?? 0)
@@ -1673,14 +1724,21 @@ public static partial class AutonomousBotGroupCoordinator
             }
         }
 
-        if (session.Phase == "Meeting up" && members.All(member => AtRendezvous(session, member)))
+        int arrived = members.Count(member => AtRendezvous(session, member));
+        bool softPveStart = session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
+            session.Phase == "Meeting up" && session.LeaderReadyForAssembly &&
+            AtRendezvous(session, leader) && arrived >= 2;
+        if (session.Phase == "Meeting up" && (softPveStart || arrived == members.Length))
         {
+            foreach (GameBot member in members)
+                session.Attendance.Observe(MemberKey(member), GameLoop.GameLoopTime, AtRendezvous(session, member));
             session.Phase = "Choosing group target";
+            session.SoftMeetupStarted = softPveStart && arrived < members.Length;
             // PvE starts when the leader publishes the actual outbound camp.
             // RvR heads out through its director as soon as assembly completes.
             if (session.ObjectiveKind == eAutonomousObjectiveKind.RvR)
                 StartTaskClock(session, members);
-            Log.Info($"AUTONOMOUS_GROUP_ASSEMBLED group={session.Id} realm={members[0].Realm} size={members.Length} " +
+            Log.Info($"AUTONOMOUS_GROUP_ASSEMBLED group={session.Id} realm={members[0].Realm} size={members.Length} arrived={arrived} " +
                      $"members=\"{string.Join(",", members.Select(member => member.Name))}\" " +
                      $"region={members[0].CurrentRegionID} rendezvous={(int)session.Rendezvous.X},{(int)session.Rendezvous.Y},{(int)session.Rendezvous.Z}");
         }
@@ -1725,19 +1783,13 @@ public static partial class AutonomousBotGroupCoordinator
             return;
         session.NextAttendanceTick = now + 5_000;
         // Capture attendance before removals shift group indexes/formation slots.
+        GameBot leader = ChooseLeader(session, members);
         GameBot[] missing = members.Where(member =>
-            session.Attendance.Observe(member.DatabaseID, now, AtRendezvous(session, member))).ToArray();
+            session.Attendance.Observe(MemberKey(member), now, AtRendezvous(session, member) ||
+                session.SoftMeetupStarted && leader != null && member.IsAlive &&
+                member.CurrentRegionID == leader.CurrentRegionID && member.GetDistanceTo(leader) <= CohesionRadius)).ToArray();
         if (missing.Length == 0)
             return;
-        if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve)
-        {
-            foreach (GameBot member in missing)
-                LogNoShow(session, member, now);
-            FinishGroupTask(session,
-                $"Locked meetup failed because {string.Join(", ", missing.Select(member => member.Name))} did not arrive");
-            return;
-        }
-        GameBot leader = ChooseLeader(session, members);
         bool everyInvitedMemberMissed = leader != null &&
             members.Any(member => member != leader) &&
             members.Where(member => member != leader).All(member => missing.Contains(member));
@@ -1756,6 +1808,15 @@ public static partial class AutonomousBotGroupCoordinator
             session.ProcessingAttendanceRemovals = false;
         }
         GameBot[] remaining = BotMembers(session.Group);
+        if (session.SoftMeetupStarted && remaining.Length >= 2)
+        {
+            session.SoftMeetupStarted = remaining.Any(member => !session.Attendance.HasArrived(MemberKey(member)));
+            session.LockedSize = remaining.Length;
+            AssignPveRoles(remaining, session.PveRoles);
+            session.Puller = null;
+            WriteSessionMetadata(session, remaining);
+            return;
+        }
         session.LockedSize = remaining.Length; // Do not backfill and restart the same wait.
         session.Camp = null;
         session.PreferredLevelBonus = RollPreferredLevelBonus(remaining.Length) - session.WipePenalty;
@@ -1995,17 +2056,12 @@ public static partial class AutonomousBotGroupCoordinator
                 return PveCorpseDisposition.HoldForResurrection;
             string roleName = session.PveRoles.TryGetValue(MemberKey(deadBot), out BotPveGroupRole role)
                 ? BotPartyRoles.GroupRoleLabel(role) : "unknown";
-            bool canContinue = members.Length > 2;
             Log.Warn($"AUTONOMOUS_GROUP_RESURRECTION_TIMEOUT group={session.Id} bot=\"{deadBot.Name}\" " +
-                     $"role=\"{roleName}\" combatClearSeconds=60 action={(canContinue ? "release-and-continue" : "release-and-disband")} " +
+                     $"role=\"{roleName}\" combatClearSeconds=60 action=release-and-rejoin " +
                      $"corpse={deadBot.CurrentRegionID}:{deadBot.X},{deadBot.Y},{deadBot.Z} " +
                      $"resurrectors=\"{string.Join(";", members.Where(m => m.ResurrectionSpell != null).Select(m =>
                          $"{m.Name}:alive={m.IsAlive}:region={m.CurrentRegionID}:distance={m.GetDistanceTo(deadBot)}:mana={m.ManaPercent}:casting={m.IsCasting}:interrupted={m.IsBeingInterruptedByOther}"))}\"");
-            if (canContinue)
-                session.Group.RemoveMember(deadBot, retainSingleRemainingMember: true);
-            else
-                FinishGroupTask(session, $"{deadBot.Name} could not be resurrected and fewer than two survivors would remain");
-            return PveCorpseDisposition.ReleaseAndDisband;
+            return PveCorpseDisposition.ReleaseAndRejoin;
         }
     }
 
@@ -2106,7 +2162,9 @@ public static partial class AutonomousBotGroupCoordinator
             Puller = puller,
             LeaderReadyForAssembly = session.LeaderReadyForAssembly,
             GroupCombatActive = groupCombatActive,
-            RecoveringBetweenPulls = session.RecoveringBetweenPulls
+            RecoveringBetweenPulls = session.RecoveringBetweenPulls,
+            SoftMeetupStarted = session.SoftMeetupStarted,
+            HasReturningMembers = session.ReturningFromDeath.Count > 0
         };
     }
 
@@ -2351,10 +2409,12 @@ public static partial class AutonomousBotGroupCoordinator
     private static GameBot ChooseLeader(Session session, GameBot[] members)
     {
         if (session?.Leader != null && session.Leader.IsAlive && session.Leader.Group == session.Group &&
-            members.Contains(session.Leader))
+            members.Contains(session.Leader) && !session.ReturningFromDeath.Contains(MemberKey(session.Leader)))
             return session.Leader;
 
-        GameBot replacement = ChooseLeader(session?.Group, members);
+        GameBot replacement = members.FirstOrDefault(member => member.IsAlive &&
+            (session == null || !session.ReturningFromDeath.Contains(MemberKey(member)))) ??
+            ChooseLeader(session?.Group, members);
         if (session != null)
             session.Leader = replacement;
         return replacement;
@@ -2371,6 +2431,16 @@ public static partial class AutonomousBotGroupCoordinator
         }
         if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve)
         {
+            if (session.SoftMeetupStarted || session.ReturningFromDeath.Count > 0)
+            {
+                GameBot anchor = ChooseLeader(session, members);
+                if (anchor != null)
+                {
+                    GameBot[] present = PresentPveMembers(members, anchor, CohesionRadius);
+                    if (present.Length >= 2)
+                        members = present;
+                }
+            }
             if (session.Puller?.IsAlive == true && members.Contains(session.Puller))
                 return session.Puller;
             session.Puller = ChooseLockedPvePuller(session, members);

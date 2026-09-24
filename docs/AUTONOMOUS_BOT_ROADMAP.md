@@ -1,6 +1,6 @@
 # Autonomous bot behaviour roadmap
 
-Status: **proposed; no milestone below is implemented yet.**
+Status: **M0–M5 implemented offline; owner playtest and population measurements pending. M6 is next.**
 Last updated: 2026-09-24.
 
 This roadmap covers the **autonomous gamebots**: the persistent population that
@@ -39,7 +39,10 @@ changed there, and no names or save data are copied into this document.
 
 ## 2. Findings
 
-### F1 — Bug: bots have been leveling at 1× since 2026-09-23
+F1, F6, and F7 describe the reviewed 0.32.3 baseline; M0 fixed them in
+0.35.0. The group and population findings remain work for later milestones.
+
+### F1 — Fixed in M0: bots leveled at 1× after 2026-09-23
 
 Commit `bd108b0` (0.24.0, companion Stage 3 progression) changed the `allowMultiply`
 argument in `AwardBotOnNpcKill` from `true` to
@@ -104,7 +107,7 @@ With 15 guilds, almost every neighbour is a legal target. Each death then ends
 the group (F3). That is not how 2003 levelers behaved. PvE groups mostly left
 equal-level strangers alone; the danger came from gank squads and grudges.
 
-### F6 — PvP kills give 1× XP
+### F6 — Fixed in M0: PvP kills gave 1× XP
 
 Both the player and bots receive PvP kill XP through `GainExperience(eXPSource.Player, …)`
 with no rate multiplier. A PvP-focused guild would level about 10× slower than
@@ -112,7 +115,7 @@ a PvE guild. The existing challenge bonus is also counted in **levels, not con
 colour**. At level 40 a victim only 4 levels higher (still orange) already
 gives the full 2×.
 
-### F7 — Companion catch-up is far too fast
+### F7 — Fixed in M0: companion catch-up was far too fast
 
 A persistent companion receives a copy of its **owner's** kill award. Then
 `XP_RATE` is applied, and the only limit is the owner's total XP
@@ -191,6 +194,7 @@ forums and wiki material.
 | D6 | Companion catch-up | **Live cap + small boost:** XP per kill capped by the companion's own level, times the XP rate, ×1.5 while it is 5+ levels behind the owner. |
 | D7 | Chat | **2003 style, rougher:** short, lowercase, abbreviations, spicier trash talk and taunts, but no slurs. |
 | D8 | Population size | **Stays the owner's choice.** The owner expects to run about 1,000–1,500. Add a recommended size based on the PC's specs for slower machines. |
+| D9 | Mixed-realm leveling | **Allow cross-realm leveling.** A local pickup party may level in another member's home realm. |
 
 ## 5. Target design
 
@@ -326,7 +330,7 @@ change only while the server is stopped and apply at the next start.
   rejoin, as real players did. A group ends only when it really cannot continue.
 - **Crowd-aware camps.** Outdoor camp choice gets a soft penalty for bots
   already present and for recently emptied spawns. It spreads bots across every
-  suitable zone in their realm's lands.
+  suitable reachable zone, including another realm's lands (D9).
 - **No automatic ganking by PvE groups.** PvE parties fight other players only
   when attacked, when defending a guildmate, over a grudge (5.7), or when their
   type and traits allow it (Hybrids and aggressive Levelers taking an easy
@@ -373,6 +377,10 @@ bumps follow `AGENTS.md`.
 
 ### M0 — XP fixes (can ship first)
 
+Implemented in 0.35.0 (2026-09-24). Focused offline XP tests pass; the owner
+check below still needs a real-client playtest. The PvP worth timers were left
+unchanged.
+
 1. Restore the mob-kill multiplier for autonomous bots and temporary helpers (F1).
 2. Companion catch-up with its own-level cap and the ×1.5 boost (F7, D6).
 3. PvP kill XP with the rate multiplier, and the con-based challenge bonus (F6, D5).
@@ -394,6 +402,22 @@ Targets on a 1,500-bot run (starting points): at least 50% of bots fighting,
 pulling, or resting at a camp; most groups ending by their timer rather than a
 failed meetup; bot-on-bot deaths among levelers well below today's 31%.
 
+Implemented offline in 0.36.0. Pickup PvE groups form from the local region
+across guilds and realms. They depart when the leader and one other member
+reach town, accept late followers, and remove no-shows individually. A single
+death preserves the camp and the member can release and run back; multi-member
+wipes retain the safe regroup. PvE groups no longer seek unprovoked open-world
+PvP. Outdoor camp draws prefer less crowded and recently productive spawns.
+The per-minute activity log reports mutually exclusive fighting, traveling,
+meetup, dead, town, camp, and other counts. The 1,500-bot targets still require
+the owner's real-client run.
+
+The installed world data has 30 pixie scout placements using two level-8
+templates, each with 500-unit aggression range and no configured spell or
+style. No template error was established, so M1 leaves those world rows alone.
+The installed Reaver career grants Flexible at level 5; level 1–4 Flexible
+builds now use Slash and switch to Flexible when that ability unlocks.
+
 ### M2 — Identity: player types, traits, and charters
 
 - Additive save changes: player type and traits on `offline_world_bots`, a
@@ -407,12 +431,43 @@ failed meetup; bot-on-bot deaths among levelers well below today's 31%.
   its durable timers and the between-task training, selling, and town-break
   services.
 
+Implemented offline in 0.37.0. The server adds type, five traits, and PvE-block
+state to each saved bot without resetting progress or possessions. Existing
+generated guilds gain durable charter rows and invented names. The marker row,
+not the final name, identifies a managed guild; interrupted renames retain the
+old and new names until keep references are updated. Guilds containing human
+characters stay protected during the automatic rename. The one-minute
+assignment pass selects each bot's next Solo PvE, Group PvE, or RvR task from
+its saved type, level phase, wall state, and raid reservation. Three PvP deaths
+in twenty minutes or ten minutes without a target starts a 45–90 minute PvE block;
+under-geared or outleveled bots also favor PvE at their next task boundary.
+The old Bot Goals Setting exclusions remained constraints at M2; M4 replaced
+that screen. Existing active task and between-task deadlines are retained.
+The owner still needs to verify startup migration and behavior on a backed-up
+real installation.
+
 ### M3 — Behaviour per type
 
 Hunter hunting grounds and target rules (including the player), Roamer 8-player
 loops and PvP leveling, Keep-warrior campaigns, Leveler and Casual routines,
 Hybrid prime-time roams, the wall rules (5.3), and gear farming at 50. The
 Danger setting drives Hunter patrol frequency and grey-gank chance.
+
+Implemented offline in 0.38.0. Hunters from level 10 patrol level-appropriate
+outdoor camps, with extra weight for active camps and nearby outdoor routes;
+level-35+ Hunters also use frontier clearings. They consider the player and
+autonomous bots through the same visible, legal target scan. Grey attacks use
+a stable ten-minute chance, limited by the danger setting and level gap.
+Roamers prefer full eight-person guild groups and follow frontier clearing
+loops; Keep warriors can open or reinforce ordinary keep campaigns from level
+35 when the group can supply siege. Hybrids favor evening roams, while Casuals
+take town breaks more often and Levelers remain PvE-focused. The saved PvE wall
+still handles losses, unavailable targets, weak gear, and guild level gaps;
+level-50 gear farming checks armor as well as weapons and favors dungeons when
+reachable. The server property `camlann_bot_leveling_danger` defaults to
+Authentic (1); M4 added the corresponding launcher setting. Hunters do
+not select dungeon entrances as patrol posts. Gameplay and danger tuning still
+need the owner's real-client playtest.
 
 ### M4 — Launcher "Server population"
 
@@ -421,11 +476,51 @@ includes `bot-goals.json` v2 with v1 migration, the server reading it at
 startup, and the Active Population tab showing each bot's type and guild
 charter. Launcher tests cover validation, presets, and migration.
 
+Implemented offline in 0.39.0. The launcher presents the named presets, six
+player-type percentages, leveling-zone danger, and world shape on one screen.
+The mix must total 100%; editing a named preset switches it to Custom. The
+existing Add crew buttons still set roster size, and a CPU/memory based hint
+is advisory and unbenchmarked. Settings are saved atomically only while the
+server is stopped, then read once at server startup. A version-1 goals file is
+mapped to the nearest preset in memory; the launcher shows that mapping for
+review before saving version 2. New autonomous guilds and unstamped bots use
+the selected mix, while stamped identities and active tasks remain saved.
+The Active Population tab shows each saved bot's type, guild, and charter.
+Established world shape was stored for the M5 generator; M5 now applies it to
+the Add crew buttons. The owner still needs a real-client playtest.
+
 ### M5 — Established-server generator and alts
 
 Level-spread creation with suitable gear, specializations, and realm points;
 the fresh-launch option; the alt trickle; measured size recommendations
 (5.8).
+
+Implemented offline in 0.40.0. Add crew creates level-1 bots for Fresh launch
+or a stratified established batch across the 1–9, 10–19, 20–34, 35–49, and
+50 bands (15/15/20/25/25 per 100 bots). The separate Add Lv.50 action remains
+available. Existing characters are never re-leveled. Newly created bots get
+the server's exact starting XP for their level. Levels 1–49 receive generated
+class-appropriate armor, jewelry, and weapons at first login; level-50 bots
+receive their prepared class loadout. Higher-level bots train their lifetime
+specialization plan at first login. Level-50 creations also get realm points.
+Creation rolls back if a complete level-50 loadout is unavailable. Higher-level
+bots start in their realm capital and travel to normal activity; lower-level
+bots use valid randomized Classic/SI starts.
+
+The server can add one new level-1 character to a managed guild every 72 hours
+by default, up to 5,000 non-retired bots; both values are configurable in Server
+population, and setting the interval to zero disables the trickle. The existing
+login ramp and total-roster meaning remain unchanged. The server records local
+working memory and game-loop tick p95 only after five stable minutes at each of
+500, 1,000, and 1,500 active bots. The launcher gives no numeric recommendation
+until all three samples exist for the same CPU/memory tier; it then recommends
+the highest consecutive tier within the measured memory and tick budget. To
+calibrate this PC, the owner must run separate stable rosters at those sizes and
+review `population-benchmarks.json` and `AUTONOMOUS_POPULATION_SAMPLE` logs.
+The logged memory-per-bot figure includes the shared server baseline; the
+recommendation uses total process working memory.
+No server was started for the offline implementation, so no measured capacity
+or real-client gameplay claim is made yet.
 
 ### M6 — Social realism
 
@@ -442,17 +537,14 @@ results. Record the outcome here.
 
 Resolve these with the owner before the milestone that needs them.
 
-1. **Sessions (M2/M5):** should bots log in and out in sessions, with a busier
-   evening prime time, so "who's online" changes? If yes, does the population
-   number mean the roster size or the number online at once?
+1. **Sessions (M2/M5):** Resolved: keep the existing login behavior. The
+   population number means the total roster, not a session target.
 2. **Grudges against the player (M6):** is the player a normal target for
    revenge crews, or should that be optional?
-3. **Leveling in other realms' lands (M1):** Camlann players mostly levelled in
-   their own realm's zones. Should mixed-realm guild groups ever level in
-   another realm's zones?
-4. **Dungeon squatting (M3):** should strong guilds occasionally hold a dungeon
-   ("pay or die")? The default proposal is no; it was one of the most hated
-   behaviours.
+3. **Leveling in other realms' lands (M1):** Resolved by D9: allow cross-realm
+   leveling for locally formed mixed-realm parties.
+4. **Dungeon squatting (M3):** Resolved: avoid it. Hunters patrol outdoor
+   camps and routes, not dungeon entrances.
 5. **Historical guild names (M6):** add an optional tribute list (Requiem, Fear,
    Horde, …), or invented names only?
 6. **Chat limits (M6):** the exact boundary for "rougher": which words and

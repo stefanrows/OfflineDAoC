@@ -147,8 +147,10 @@ inventory is not rewritten for each kill.
 Level gains refresh the group window so the displayed companion level matches
 the level used by combat and training immediately.
 
-Persistent companions receive the owner's normal NPC party reward when the
-owner gains XP. Active companions must also be in range and pass the grey-con
+Persistent companions receive the smaller of the owner's base NPC award and
+their own-level XP cap, multiplied by `XP_RATE`. A companion at least five
+levels behind its owner gets a 1.5× catch-up boost after the rate. Active
+companions must also be in range and pass the grey-con
 check; support companions qualify without dealing damage. A damage-dealing
 companion can also receive a separate damage-based NPC award when its eligible
 owner has no player damage share. Companion and controlled-pet damage stays out

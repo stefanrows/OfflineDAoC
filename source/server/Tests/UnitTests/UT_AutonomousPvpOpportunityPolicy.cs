@@ -7,11 +7,11 @@ namespace DOL.UnitTests;
 public sealed class UT_AutonomousPvpOpportunityPolicy
 {
     [Test]
-    public void SoloHuntersSeekFightsButQueuedPveBotsKeepLeveling()
+    public void OnlyRvrObjectiveSeeksUnprovokedFights()
     {
         Assert.That(AutonomousPvpOpportunityPolicy.CanSeekOpportunity(eAutonomousObjectiveKind.RvR, 1), Is.True);
         Assert.That(AutonomousPvpOpportunityPolicy.CanSeekOpportunity(eAutonomousObjectiveKind.GroupPve, 1), Is.False);
-        Assert.That(AutonomousPvpOpportunityPolicy.CanSeekOpportunity(eAutonomousObjectiveKind.GroupPve, 2), Is.True);
+        Assert.That(AutonomousPvpOpportunityPolicy.CanSeekOpportunity(eAutonomousObjectiveKind.GroupPve, 2), Is.False);
         Assert.That(AutonomousPvpOpportunityPolicy.CanSeekOpportunity(eAutonomousObjectiveKind.SoloPve, 1), Is.False);
         Assert.That(AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(false, false, 100, 100), Is.True);
         Assert.That(AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(true, false, 100, 100), Is.False);

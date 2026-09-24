@@ -62,6 +62,9 @@ namespace DOL.GS
                 return bot.HasAbilityToUseItem(item);
 
             eObjectType type = (eObjectType)item.Object_Type;
+            if (bot.CharacterClass?.ID == (int)eCharacterClass.Reaver && bot.Level < 5 &&
+                spec.WeaponOneType == eObjectType.Flexible && type == eObjectType.SlashingWeapon)
+                return true;
             if (MatchesBuild(spec, type))
                 return true;
 
@@ -94,6 +97,12 @@ namespace DOL.GS
         public static eObjectType PrimaryType(eObjectType first, eObjectType second, bool twoHanded) =>
             twoHanded && second is eObjectType.TwoHandedWeapon or eObjectType.PolearmWeapon or
                 eObjectType.LargeWeapons or eObjectType.CelticSpear ? second : first != 0 ? first : second;
+
+        // ReaverCareer grants Flexible at level 5. Before that, the class's
+        // base Slash line is the usable weapon for a planned Flexible build.
+        public static eObjectType AvailablePrimaryType(eCharacterClass characterClass, int level, eObjectType planned) =>
+            characterClass == eCharacterClass.Reaver && level < 5 && planned == eObjectType.Flexible
+                ? eObjectType.SlashingWeapon : planned;
 
         public static bool FitsConfiguredSlot(GameBot bot, DbInventoryItem item, eInventorySlot slot)
         {

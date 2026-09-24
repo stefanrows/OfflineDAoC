@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using DOL.Database;
 using DOL.Database.Attributes;
@@ -20,10 +21,12 @@ public static class AutonomousCrewManager
     public const int BotsPerSizeTriplet = 56;
 
     private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousCrewManager));
+    private static readonly ConcurrentDictionary<string, byte> ManagedGuildIds = new(StringComparer.Ordinal);
     private static readonly string[] CrewNames =
     {
-        "Ashen Concord", "Blackwood Pact", "Duskbound", "Emberwake", "Frostfall",
-        "Gravewind", "Ironroot", "Moonlit Fang", "Ravenshade", "Stormwake",
+        "Night Stalkers", "Iron Covenant", "Stone Ward", "Hearth and Blade", "Tavern Rats",
+        "Blackwood Pact", "Ashen Concord", "The Gatekeepers", "Duskbound", "The Usual Suspects",
+        "Moonlit Fang", "Stormwake", "Frostfall Guard", "Emberwake", "last orders",
     };
 
     public readonly record struct ReconcileResult(bool Succeeded, int ChangedBots, int ManagedGuilds, string Error)
@@ -38,7 +41,8 @@ public static class AutonomousCrewManager
 
     public static bool IsCrewGuild(Guild guild) =>
         guild != null && guild != Guild.DummyGuild &&
-        guild.Name?.StartsWith(CrewNamePrefix, StringComparison.Ordinal) == true;
+        (ManagedGuildIds.ContainsKey(guild.GuildID) ||
+         guild.Name?.StartsWith(CrewNamePrefix, StringComparison.Ordinal) == true);
 
     public static bool IsManagedMembership(string guildId, bool isGeneratedGuild, bool containsHuman) =>
         string.IsNullOrWhiteSpace(guildId) || isGeneratedGuild && !containsHuman;
@@ -59,7 +63,7 @@ public static class AutonomousCrewManager
     public static string NameForOrdinal(int ordinal)
     {
         ordinal = Math.Max(0, ordinal);
-        string baseName = CrewNamePrefix + CrewNames[ordinal % CrewNames.Length];
+        string baseName = CrewNames[ordinal % CrewNames.Length];
         int suffix = ordinal / CrewNames.Length;
         return suffix == 0 ? baseName : $"{baseName} {suffix + 1}";
     }
@@ -153,6 +157,11 @@ public static class AutonomousCrewManager
         {
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
             {
+                var charters = DOLDB<AutonomousGuildCharterRecord>.SelectAllObjects()
+                    .Where(row => row.IsManaged)
+                    .ToDictionary(row => row.GuildId, StringComparer.Ordinal);
+                foreach (string guildId in charters.Keys)
+                    ManagedGuildIds.TryAdd(guildId, 0);
                 OfflineWorldBotRecord[] roster = DOLDB<OfflineWorldBotRecord>
                     .SelectObjects(DB.Column("IsRetired").IsEqualTo(false))
                     .OrderBy(record => record.BotId)
@@ -163,7 +172,8 @@ public static class AutonomousCrewManager
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .ToHashSet(StringComparer.Ordinal);
                 List<Guild> generated = GuildMgr.GetGuilds().Where(IsCrewGuild)
-                    .OrderBy(guild => guild.Name, StringComparer.Ordinal)
+                    .OrderBy(guild => charters.TryGetValue(guild.GuildID, out var row) ? row.Ordinal : int.MaxValue)
+                    .ThenBy(guild => guild.Name, StringComparer.Ordinal)
                     .ThenBy(guild => guild.GuildID, StringComparer.Ordinal)
                     .ToList();
                 HashSet<string> protectedGuildIds = generated
@@ -193,7 +203,9 @@ public static class AutonomousCrewManager
 
                 for (int ordinal = 0; survivors.Count < desiredCount; ordinal++)
                 {
-                    string name = NameForOrdinal(ordinal);
+                    // A temporary legacy marker makes an interrupted create
+                    // discoverable even before its charter row is persisted.
+                    string name = CrewNamePrefix + NameForOrdinal(ordinal);
                     Guild existing = GuildMgr.GetGuildByName(name);
                     if (existing != null)
                     {
@@ -204,6 +216,7 @@ public static class AutonomousCrewManager
                     Guild created = GuildMgr.CreateGuild(eRealm.None, name);
                     if (created == null)
                         throw new InvalidOperationException($"Could not create generated guild '{name}'.");
+                    EnsureCharter(created, ordinal, charters);
                     survivors.Add(created);
                 }
                 survivors = survivors.Take(desiredCount).ToList();
@@ -304,6 +317,32 @@ public static class AutonomousCrewManager
                 foreach (AutonomousCrewMappingRecord mapping in persistedMappings.Values.Where(mapping =>
                              MappingNeedsCompletion(mapping.State, GuildMgr.GetGuildByGuildID(mapping.SourceGuildId) != null)))
                     CompleteMapping(mapping, protectedGuildIds);
+
+                for (int ordinal = 0; ordinal < survivors.Count; ordinal++)
+                {
+                    Guild guild = survivors[ordinal];
+                    AutonomousGuildCharterRecord charter = EnsureCharter(guild, ordinal, charters);
+                    if (charter.Ordinal != ordinal)
+                    {
+                        charter.Ordinal = ordinal;
+                        charter.Dirty = true;
+                        if (!GameServer.Database.SaveObject(charter))
+                            throw new InvalidOperationException($"Could not persist generated guild order for {guild.GuildID}.");
+                    }
+                    RenameManagedGuild(guild, charter, NameForOrdinal(ordinal));
+                }
+
+                var identityChanges = new List<DataObject>();
+                foreach (OfflineWorldBotRecord record in roster)
+                {
+                    AutonomousGuildCharter kind = charters.TryGetValue(record.GuildId ?? string.Empty, out var charter) &&
+                        Enum.TryParse(charter.Charter, out AutonomousGuildCharter parsed) && Enum.IsDefined(parsed)
+                            ? parsed : AutonomousGuildCharter.Leveling;
+                    if (AutonomousBotIdentity.Ensure(record, kind, AutonomousBotGoalPolicy.Settings.Mix))
+                        identityChanges.Add(record);
+                }
+                if (identityChanges.Count > 0 && !GameServer.Database.SaveObject(identityChanges))
+                    throw new InvalidOperationException("Could not persist autonomous player identities.");
 
                 int remainingManaged = GuildMgr.GetGuilds().Count(guild => IsCrewGuild(guild) &&
                     !humanGuildIds.Contains(guild.GuildID));
@@ -414,7 +453,9 @@ public static class AutonomousCrewManager
         {
             mapping.State = "Completed";
             mapping.UpdatedUtc = DateTime.UtcNow.ToString("O");
-            GameServer.Database.SaveObject(mapping);
+            mapping.Dirty = true;
+            if (!GameServer.Database.SaveObject(mapping))
+                throw new InvalidOperationException($"Could not finish generated guild mapping {mapping.SourceGuildId}.");
             return;
         }
         if (target == null)
@@ -429,6 +470,7 @@ public static class AutonomousCrewManager
         foreach (DbKeep keep in DOLDB<DbKeep>.SelectObjects(DB.Column("ClaimedGuildName").IsEqualTo(source.Name)))
         {
             keep.ClaimedGuildName = MappedKeepOwner(keep.ClaimedGuildName, source.Name, target.Name);
+            keep.Dirty = true;
             if (!GameServer.Database.SaveObject(keep))
                 throw new InvalidOperationException($"Could not transfer keep {keep.KeepID} from {source.Name} to {target.Name}.");
             AbstractGameKeep live = GameServer.KeepManager.GetKeepByID(keep.KeepID);
@@ -447,6 +489,7 @@ public static class AutonomousCrewManager
             throw new InvalidOperationException($"Could not remove empty generated guild '{source.Name}'.");
         mapping.State = "Completed";
         mapping.UpdatedUtc = DateTime.UtcNow.ToString("O");
+        mapping.Dirty = true;
         if (!GameServer.Database.SaveObject(mapping))
             throw new InvalidOperationException($"Could not complete persisted generated guild mapping for '{source.Name}'.");
     }
@@ -469,6 +512,7 @@ public static class AutonomousCrewManager
                     sourceAlliance.DbAlliance.LeaderGuildID = replacement.GuildID;
                     sourceAlliance.DbAlliance.DBguildleader = DOLDB<DbGuild>
                         .SelectObject(DB.Column("GuildID").IsEqualTo(replacement.GuildID));
+                    sourceAlliance.DbAlliance.Dirty = true;
                     if (!GameServer.Database.SaveObject(sourceAlliance.DbAlliance))
                         throw new InvalidOperationException($"Could not transfer alliance leadership from {source.Name} to {replacement.Name}.");
                 }
@@ -486,6 +530,7 @@ public static class AutonomousCrewManager
             !string.IsNullOrWhiteSpace(sourceRow.AllianceID))
         {
             targetRow.AllianceID = sourceRow.AllianceID;
+            targetRow.Dirty = true;
             if (!GameServer.Database.SaveObject(targetRow))
                 throw new InvalidOperationException($"Could not transfer alliance membership from {source.Name} to {target.Name}.");
         }
@@ -494,6 +539,7 @@ public static class AutonomousCrewManager
         {
             alliance.LeaderGuildID = target.GuildID;
             alliance.DBguildleader = targetRow;
+            alliance.Dirty = true;
             if (!GameServer.Database.SaveObject(alliance))
                 throw new InvalidOperationException($"Could not transfer alliance leadership from {source.Name} to {target.Name}.");
         }
@@ -501,6 +547,88 @@ public static class AutonomousCrewManager
 
     private static bool AreLevelsCompatible(int playerLevel, int botLevel) =>
         playerLevel >= 50 && botLevel >= 50 || Math.Abs(playerLevel - botLevel) <= 5;
+
+    private static AutonomousGuildCharterRecord EnsureCharter(Guild guild, int ordinal,
+        Dictionary<string, AutonomousGuildCharterRecord> charters)
+    {
+        if (charters.TryGetValue(guild.GuildID, out var existing)) return existing;
+        var row = new AutonomousGuildCharterRecord
+        {
+            GuildId = guild.GuildID,
+            IsManaged = true,
+            Charter = AutonomousBotIdentity.CharterForOrdinal(ordinal, AutonomousBotGoalPolicy.Settings.Mix).ToString(),
+            Ordinal = ordinal,
+        };
+        if (!GameServer.Database.AddObject(row))
+            throw new InvalidOperationException($"Could not mark generated guild {guild.GuildID} as managed.");
+        charters[guild.GuildID] = row;
+        ManagedGuildIds.TryAdd(guild.GuildID, 0);
+        return row;
+    }
+
+    private static void RenameManagedGuild(Guild guild, AutonomousGuildCharterRecord charter, string proposedName)
+    {
+        string oldName = string.IsNullOrWhiteSpace(charter.PendingOldName) ? guild.Name : charter.PendingOldName;
+        string desired = charter.PendingNewName;
+        if (string.IsNullOrWhiteSpace(desired))
+        {
+            desired = string.IsNullOrWhiteSpace(charter.DisplayName) ? proposedName : charter.DisplayName;
+            for (int suffix = 2; NameUsedByAnotherGuild(desired, guild); suffix++)
+                desired = proposedName + " " + suffix;
+            if (string.Equals(guild.Name, desired, StringComparison.Ordinal))
+            {
+                if (charter.DisplayName != desired)
+                {
+                    charter.DisplayName = desired;
+                    charter.Dirty = true;
+                    if (!GameServer.Database.SaveObject(charter))
+                        throw new InvalidOperationException($"Could not persist generated guild name for {guild.GuildID}.");
+                }
+                return;
+            }
+            charter.PendingOldName = oldName;
+            charter.PendingNewName = desired;
+            charter.Dirty = true;
+            if (!GameServer.Database.SaveObject(charter))
+                throw new InvalidOperationException($"Could not record pending rename for generated guild {guild.GuildID}.");
+        }
+        if (!string.Equals(guild.Name, desired, StringComparison.Ordinal))
+        {
+            if (!GuildMgr.RenameGuild(guild.Name, desired))
+                throw new InvalidOperationException($"Could not rename generated guild {guild.GuildID} to {desired}.");
+            DbGuild row = DOLDB<DbGuild>.SelectObject(DB.Column("GuildID").IsEqualTo(guild.GuildID)) ??
+                throw new InvalidOperationException($"Missing database row for generated guild {guild.GuildID}.");
+            row.GuildName = desired;
+            row.Dirty = true;
+            if (!GameServer.Database.SaveObject(row))
+                throw new InvalidOperationException($"Could not persist generated guild name {desired}.");
+        }
+        foreach (DbKeep keep in DOLDB<DbKeep>.SelectObjects(DB.Column("ClaimedGuildName").IsEqualTo(oldName)))
+        {
+            keep.ClaimedGuildName = MappedKeepOwner(keep.ClaimedGuildName, oldName, desired);
+            keep.Dirty = true;
+            if (!GameServer.Database.SaveObject(keep))
+                throw new InvalidOperationException($"Could not update keep {keep.KeepID} for renamed guild {desired}.");
+            AbstractGameKeep live = GameServer.KeepManager.GetKeepByID(keep.KeepID);
+            if (live == null) continue;
+            live.Guild = guild;
+            live.DBKeep.ClaimedGuildName = desired;
+            foreach (GameKeepGuard guard in live.Guards.Values) guard.ChangeGuild();
+        }
+        charter.DisplayName = desired;
+        charter.PendingOldName = charter.PendingNewName = string.Empty;
+        charter.Dirty = true;
+        if (!GameServer.Database.SaveObject(charter))
+            throw new InvalidOperationException($"Could not complete generated guild rename {desired}.");
+    }
+
+    private static bool NameUsedByAnotherGuild(string name, Guild owner)
+    {
+        Guild live = GuildMgr.GetGuildByName(name);
+        if (live != null && live != owner) return true;
+        DbGuild stored = DOLDB<DbGuild>.SelectObject(DB.Column("GuildName").IsEqualTo(name));
+        return stored != null && stored.GuildID != owner.GuildID;
+    }
 }
 
 [DataTable(TableName = "offline_crew_consolidation")]

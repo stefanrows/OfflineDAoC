@@ -1364,6 +1364,10 @@ namespace DOL.GS.ServerProperties
 		[ServerProperty("pvp", "camlann_bot_grey_engage_chance", "Chance in percent for an autonomous Camlann bot to start an opportunistic grey-target fight", 3)]
 		public static int CAMLANN_BOT_GREY_ENGAGE_CHANCE;
 
+		/// <summary>Autonomous leveling-zone danger: 0 mild, 1 authentic, 2 full Camlann.</summary>
+		[ServerProperty("pvp", "camlann_bot_leveling_danger", "Autonomous leveling-zone danger (0 mild, 1 authentic, 2 full Camlann)", 1)]
+		public static int CAMLANN_BOT_LEVELING_DANGER;
+
 		/// <summary>
 		/// Whether releasing in a battleground should teleport the player to the portal keep
 		/// </summary>

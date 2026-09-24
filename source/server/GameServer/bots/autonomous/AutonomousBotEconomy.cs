@@ -854,4 +854,15 @@ public sealed class OfflineWorldBotRecord : DataObject
     [DataElement(AllowDbNull = false)] public int ObjectivePveKills { get; set; }
     [DataElement(AllowDbNull = false)] public string GuildId { get; set; } = string.Empty;
     [DataElement(AllowDbNull = false)] public int GuildRank { get; set; } = 9;
+    [DataElement(AllowDbNull = false)] public string PlayerType { get; set; } = string.Empty;
+    [DataElement(AllowDbNull = false)] public int Aggression { get; set; }
+    [DataElement(AllowDbNull = false)] public int RiskTolerance { get; set; }
+    [DataElement(AllowDbNull = false)] public int Sociability { get; set; }
+    [DataElement(AllowDbNull = false)] public int Patience { get; set; }
+    [DataElement(AllowDbNull = false)] public int Chattiness { get; set; }
+    [DataElement(AllowDbNull = false)] public string PveBlockUntilUtc { get; set; } = string.Empty;
+    [DataElement(AllowDbNull = false)] public string PveBlockReason { get; set; } = string.Empty;
+    [DataElement(AllowDbNull = false)] public string NoTargetsSinceUtc { get; set; } = string.Empty;
+    [DataElement(AllowDbNull = false)] public string RecentPvpDeathWindowUtc { get; set; } = string.Empty;
+    [DataElement(AllowDbNull = false)] public int RecentPvpDeaths { get; set; }
 }

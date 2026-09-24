@@ -38,6 +38,18 @@ public sealed class UT_AutonomousGroupRecoveryState
     }
 
     [Test]
+    public void ReleasedSingleMemberCanRejoinWithoutStartingTownRegroup()
+    {
+        var recovery = new AutonomousGroupRecoveryState();
+        recovery.Observe(Ready(), false);
+        Member[] returned = [new(1, 0, true), new(2, 1, true), new(3, 0, true)];
+        Assert.That(recovery.Observe(returned, false), Is.False);
+        Assert.That(recovery.Observe(returned, true), Is.False);
+        Assert.That(recovery.IsRegrouping, Is.False);
+        Assert.That(recovery.HasCasualty(returned), Is.False);
+    }
+
+    [Test]
     public void InitialAssemblyDoesNotStartARecoveryTaskOrClock()
     {
         var recovery = new AutonomousGroupRecoveryState();
@@ -137,17 +149,4 @@ public sealed class UT_AutonomousGroupRecoveryState
     public void RecoveryUsesRealClassResources(int health, int power, int endurance, bool caster, bool ready) =>
         Assert.That(AutonomousGroupRecoveryState.ResourcesReady(health, power, endurance, caster), Is.EqualTo(ready));
 
-    private sealed class FixedRoll(double roll) : Random
-    {
-        public override double NextDouble() => roll;
-    }
-
-    [TestCase(0, eAutonomousObjectiveKind.SoloPve)]
-    [TestCase(.149999, eAutonomousObjectiveKind.SoloPve)]
-    [TestCase(.15, eAutonomousObjectiveKind.GroupPve)]
-    [TestCase(.499999, eAutonomousObjectiveKind.GroupPve)]
-    [TestCase(.50, eAutonomousObjectiveKind.RvR)]
-    [TestCase(.999999, eAutonomousObjectiveKind.RvR)]
-    public void LevelFiftyRollUsesTierEightActivityMix(double roll, eAutonomousObjectiveKind expected) =>
-        Assert.That(AutonomousObjectiveAssignments.RollLevelFiftyObjective(new FixedRoll(roll)), Is.EqualTo(expected));
 }

@@ -39,8 +39,8 @@ public static class AutonomousObjectiveAssignments
     private static readonly ConcurrentDictionary<long, (string Assignment, long StartedTick)> GroupWaits = new();
     private static long _nextRebalanceTick;
     private static long _epoch;
+    private static AutonomousLevelingDanger Danger => AutonomousBotGoalPolicy.Danger;
 
-    public readonly record struct Allocation(int SoloPve, int GroupPve, int RvR);
     public readonly record struct BetweenTaskPlan(bool Train, bool Unload);
 
     public static BetweenTaskPlan RollBetweenTaskPlan(bool canSpendPoints, bool backpackFull, double trainRoll, double unloadRoll) =>
@@ -134,54 +134,10 @@ public static class AutonomousObjectiveAssignments
 
     public static bool IsRvrEligible(OfflineWorldBotRecord record, DateTime utcNow)
     {
-        if (AutonomousBotGoalPolicy.IsConfigured)
-            return record == null || AutonomousBotGoalPolicy.Settings.ForLevel(record.Level).RvR > 0;
         if (record?.ObjectiveRvrEligibleUtc == PveCompletionRequired) return false;
         return record == null || string.IsNullOrWhiteSpace(record.ObjectiveRvrEligibleUtc) ||
                !DateTime.TryParse(record.ObjectiveRvrEligibleUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime eligibleUtc) ||
                eligibleUtc.ToUniversalTime() <= utcNow.ToUniversalTime();
-    }
-
-    /// <summary>Selects only PvE work, retaining the current bucket's solo/group balance.</summary>
-    public static eAutonomousObjectiveKind ChoosePveObjective(Allocation target, int assignedSolo, int assignedGroup, Random random = null)
-    {
-        random ??= Random.Shared;
-        int soloNeeded = Math.Max(0, target.SoloPve - assignedSolo);
-        int groupNeeded = Math.Max(0, target.GroupPve - assignedGroup);
-        if (soloNeeded + groupNeeded == 0)
-        {
-            if (target.SoloPve + target.GroupPve == 0) return eAutonomousObjectiveKind.RvR;
-            return random.Next(target.SoloPve + target.GroupPve) < target.SoloPve
-                ? eAutonomousObjectiveKind.SoloPve : eAutonomousObjectiveKind.GroupPve;
-        }
-        return random.Next(soloNeeded + groupNeeded) < soloNeeded ? eAutonomousObjectiveKind.SoloPve : eAutonomousObjectiveKind.GroupPve;
-    }
-
-    /// <summary>Returns exact integer targets from the startup goal policy.</summary>
-    public static Allocation TargetForPopulation(int count, bool levelFifty)
-    {
-        var weights = AutonomousBotGoalPolicy.Settings.ForLevel(levelFifty ? 50 : 20);
-        return Allocate(count, weights.SoloPve / 100d, weights.GroupPve / 100d, weights.RvR / 100d);
-    }
-
-    /// <summary>Below level 20 honors the full configured PvE/PvP mix.</summary>
-    public static Allocation TargetForLowLevelPopulation(int count)
-    {
-        var weights = AutonomousBotGoalPolicy.Settings.Levels1To19;
-        return Allocate(count, weights.SoloPve / 100d, weights.GroupPve / 100d, weights.RvR / 100d);
-    }
-
-    private static Allocation Allocate(int count, double soloWeight, double groupWeight, double rvrWeight)
-    {
-        count = Math.Max(0, count);
-        double[] desired = { count * soloWeight, count * groupWeight, count * rvrWeight };
-        int[] target = desired.Select(value => (int)Math.Floor(value)).ToArray();
-        foreach (int index in Enumerable.Range(0, target.Length)
-                     .OrderByDescending(index => desired[index] - target[index])
-                     .ThenBy(index => index)
-                     .Take(count - target.Sum()))
-            target[index]++;
-        return new Allocation(target[0], target[1], target[2]);
     }
 
     /// <summary>
@@ -256,95 +212,48 @@ public static class AutonomousObjectiveAssignments
             }
             _epoch++;
             Interlocked.Exchange(ref _nextRebalanceTick, nowTick + RebalanceIntervalMilliseconds);
-            foreach (IGrouping<(string Crew, int Band), GameBot> bucket in roster.GroupBy(bot =>
-                         (bot.PersistentRecord?.GuildId ?? string.Empty, bot.Level >= 50 ? 50 : bot.Level >= 20 ? 20 : 0)))
+            var guildLevels = roster.GroupBy(bot => bot.PersistentRecord.GuildId ?? string.Empty)
+                .ToDictionary(group => group.Key, group => group.Select(bot => (BotId: bot.DatabaseID, Level: (int)bot.Level)).ToArray(),
+                    StringComparer.Ordinal);
+            foreach (GameBot bot in roster.OrderBy(bot => bot.DatabaseID))
             {
-                GameBot[] members = bucket.Where(bot => !IsBetweenPveTasks(bot)).ToArray();
-                // Fisher-Yates, rather than a scored ordering: among the legal
-                // crew/level bucket every bot has equal selection probability.
-                for (int index = members.Length - 1; index > 0; index--)
+                if (groupOwned.Contains(bot)) continue;
+                OfflineWorldBotRecord record = bot.PersistentRecord;
+                bool mayRvr = IsRvrEligible(record, utcNow);
+                bool timedOut = Is(bot, eAutonomousObjectiveKind.GroupPve) && bot.Group == null &&
+                    GroupMatchmakingTimedOutOnline(bot);
+                if (timedOut)
                 {
-                    int other = Random.Shared.Next(index + 1);
-                    (members[index], members[other]) = (members[other], members[index]);
-                }
-
-                Allocation target = bucket.Key.Band == 0
-                    ? TargetForLowLevelPopulation(members.Length)
-                    : TargetForPopulation(members.Length, bucket.Key.Band == 50);
-                int currentRvr = members.Count(bot => Is(bot, eAutonomousObjectiveKind.RvR));
-                foreach (GameBot bot in members.Where(bot => bot.Group == null &&
-                             Is(bot, eAutonomousObjectiveKind.GroupPve) &&
-                             GroupMatchmakingTimedOutOnline(bot)).ToArray())
-                {
-                    bool useRvr = IsRvrEligible(bot.PersistentRecord, utcNow) && currentRvr < target.RvR;
-                    eAutonomousObjectiveKind fallback = useRvr
-                        ? eAutonomousObjectiveKind.RvR : eAutonomousObjectiveKind.SoloPve;
-                    if (AutonomousBotGoalPolicy.IsConfigured)
-                    {
-                        var weights = AutonomousBotGoalPolicy.Settings.ForLevel(bot.Level);
-                        if (!weights.Allows((int)fallback))
-                            fallback = AutonomousBotGoalPolicy.Choose(bot.Level, excludeGroup: true);
-                    }
-                    if (useRvr) currentRvr++;
+                    eAutonomousObjectiveKind fallback = AutonomousActivityScheduler.Choose(record, utcNow,
+                        Random.Shared.NextDouble(), mayRvr, excludeGroup: true, danger: Danger);
                     DOL.Logging.LoggerManager.Create(typeof(AutonomousObjectiveAssignments)).Warn(
                         $"AUTONOMOUS_GROUP_MATCHMAKING_TIMEOUT bot=\"{bot.Name}\" id={bot.DatabaseID} " +
-                        $"crew={bot.PersistentRecord?.GuildId ?? "unassigned"} realm={bot.Realm} level={bot.Level} waitedMinutes=20 fallback={fallback}");
-                    Assign(bot, fallback, bucket.Key, ++_epoch);
-                    bot.PersistentRecord.CurrentCampId = string.Empty;
-                    bot.PersistentRecord.TargetName = string.Empty;
-                    bot.PersistentRecord.TravelDestination = string.Empty;
-                    bot.PersistentRecord.ObjectivePhase =
-                        fallback == eAutonomousObjectiveKind.GroupPve
-                            ? "Group-only setting: no complete role roster yet; restarting the 20-minute queue"
-                            : $"No compatible guild party formed within 20 minutes; assigned {fallback}";
+                        $"crew={record.GuildId} realm={bot.Realm} level={bot.Level} waitedMinutes=20 fallback={fallback}");
+                    Assign(bot, fallback, CrewBucket(bot), ++_epoch);
+                    record.CurrentCampId = record.TargetName = record.TravelDestination = string.Empty;
+                    record.ObjectivePhase = fallback == eAutonomousObjectiveKind.GroupPve
+                        ? "Group-only setting: no local pickup party yet; restarting the 20-minute queue"
+                        : $"No local pickup party formed within 20 minutes; assigned {fallback}";
                     bot.MarkAutonomousStateDirty();
                     AutonomousBotStatusPersistence.Queue(bot);
+                    continue;
                 }
-                // A live RvR tour is per bot and is never disturbed by the
-                // shared seven-minute allocator. It continues through reloads
-                // because its expiry is held by the persistent record.
-                GameBot[] lockedRvr = members.Where(bot => HasActiveRvrTenure(bot.PersistentRecord, utcNow) ||
-                    groupOwned.Contains(bot) && Is(bot, eAutonomousObjectiveKind.RvR)).ToArray();
-                GameBot[] lockedPve = members.Where(bot => HasActivePveAssignment(bot.PersistentRecord, utcNow) ||
-                    groupOwned.Contains(bot) && !Is(bot, eAutonomousObjectiveKind.RvR)).ToArray();
-                int assignedSolo = lockedPve.Count(bot => Parse(bot.PersistentRecord.ObjectiveKind) == eAutonomousObjectiveKind.SoloPve);
-                int assignedGroup = lockedPve.Count(bot => Parse(bot.PersistentRecord.ObjectiveKind) == eAutonomousObjectiveKind.GroupPve);
-                int assignedRvr = lockedRvr.Length;
-                foreach (GameBot bot in members.Where(bot => !groupOwned.Contains(bot) && !HasActiveRvrTenure(bot.PersistentRecord, utcNow) &&
-                                                              !HasActivePveAssignment(bot.PersistentRecord, utcNow) &&
-                                                              !IsRvrEligible(bot.PersistentRecord, utcNow)))
-                {
-                    eAutonomousObjectiveKind kind = ChoosePveObjective(target, assignedSolo, assignedGroup);
-                    if (kind == eAutonomousObjectiveKind.SoloPve)
-                        assignedSolo++;
-                    else
-                        assignedGroup++;
-                    Assign(bot, kind, bucket.Key, _epoch);
-                }
+                if (HasActiveRvrTenure(record, utcNow) || HasActivePveAssignment(record, utcNow))
+                    continue;
 
-                foreach (GameBot bot in members.Where(bot => !groupOwned.Contains(bot) && !HasActiveRvrTenure(bot.PersistentRecord, utcNow) &&
-                                                              !HasActivePveAssignment(bot.PersistentRecord, utcNow) &&
-                                                              IsRvrEligible(bot.PersistentRecord, utcNow)))
-                {
-                    eAutonomousObjectiveKind kind;
-                    int rvrNeeded = Math.Max(0, target.RvR - assignedRvr);
-                    int soloNeeded = Math.Max(0, target.SoloPve - assignedSolo);
-                    int groupNeeded = Math.Max(0, target.GroupPve - assignedGroup);
-                    if (rvrNeeded > 0 && Random.Shared.Next(rvrNeeded + soloNeeded + groupNeeded) < rvrNeeded)
-                        kind = eAutonomousObjectiveKind.RvR;
-                    else if (AutonomousBotGoalPolicy.IsConfigured && rvrNeeded + soloNeeded + groupNeeded == 0)
-                        kind = AutonomousBotGoalPolicy.Choose(bot.Level);
-                    else
-                        kind = ChoosePveObjective(target, assignedSolo, assignedGroup);
-
-                    switch (kind)
-                    {
-                        case eAutonomousObjectiveKind.SoloPve: assignedSolo++; break;
-                        case eAutonomousObjectiveKind.GroupPve: assignedGroup++; break;
-                        case eAutonomousObjectiveKind.RvR: assignedRvr++; break;
-                    }
-                    Assign(bot, kind, bucket.Key, _epoch);
-                }
+                bool undergeared = AutonomousActivityScheduler.IsUndergeared(bot.Level,
+                    AutonomousPlayerBehavior.BestEquippedWeaponLevel(bot),
+                    AutonomousPlayerBehavior.EquippedArmorLevels(bot));
+                bool outleveled = guildLevels.TryGetValue(record.GuildId ?? string.Empty, out var peers) &&
+                    AutonomousActivityScheduler.IsOutleveledByGuild(bot.Level,
+                        peers.Where(peer => peer.BotId != bot.DatabaseID).Select(peer => peer.Level).ToArray());
+                if (undergeared || outleveled)
+                    AutonomousActivityScheduler.BeginPveBlock(record, utcNow,
+                        undergeared ? "equipment behind level" : "guild roam out of level range");
+                eAutonomousObjectiveKind kind = AutonomousActivityScheduler.Choose(record, utcNow,
+                    Random.Shared.NextDouble(), mayRvr, guildRaid: AutonomousRealmRaid.IsReserved(bot),
+                    undergeared: undergeared, outleveledByGuild: outleveled, danger: Danger);
+                Assign(bot, kind, CrewBucket(bot), _epoch);
             }
         }
     }
@@ -356,7 +265,7 @@ public static class AutonomousObjectiveAssignments
         record.ObjectivePveMode = string.Empty;
         record.ObjectivePveKillTarget = 0;
         record.ObjectivePveKills = 0;
-        record.ObjectiveRvrEligibleUtc = AutonomousBotGoalPolicy.IsConfigured ? string.Empty : PveCompletionRequired;
+        record.ObjectiveRvrEligibleUtc = PveCompletionRequired;
         record.ObjectiveAssignmentId = string.Empty;
         record.ObjectivePhase = "Returning to PvE after frontier tour";
         record.CurrentCampId = string.Empty;
@@ -378,11 +287,12 @@ public static class AutonomousObjectiveAssignments
         // one PvE assignment after an RvR tour before becoming eligible again.
         bool leavingRvr = Is(bot, eAutonomousObjectiveKind.RvR);
         if (leavingRvr)
-            bot.PersistentRecord.ObjectiveRvrEligibleUtc = AutonomousBotGoalPolicy.IsConfigured ? string.Empty : PveCompletionRequired;
+            bot.PersistentRecord.ObjectiveRvrEligibleUtc = PveCompletionRequired;
         if (TryBeginBetweenTaskServices(bot))
             return;
-        Assign(bot, AutonomousBotGoalPolicy.IsConfigured ? AutonomousBotGoalPolicy.Choose(bot.Level) :
-            bot.Level >= 50 && !leavingRvr ? RollLevelFiftyObjective() : eAutonomousObjectiveKind.SoloPve,
+        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, DateTime.UtcNow,
+                Random.Shared.NextDouble(), mayRvr: !leavingRvr && IsRvrEligible(bot.PersistentRecord, DateTime.UtcNow),
+                danger: Danger),
             CrewBucket(bot), GameLoop.GameLoopTime);
         bot.PersistentRecord.CurrentCampId = string.Empty;
         bot.PersistentRecord.TargetName = string.Empty;
@@ -447,7 +357,7 @@ public static class AutonomousObjectiveAssignments
     public static void AssignForcedRaid(GameBot bot, string eventId, bool forced = true)
     {
         if (!AutonomousRealmRaid.IsEligible(bot) || AutonomousRealmRaid.GetView(bot.Group)?.EventId != eventId) return;
-        Assign(bot, eAutonomousObjectiveKind.GroupPve, (CrewBucket(bot).Crew, 50), GameLoop.GameLoopTime, true);
+        Assign(bot, eAutonomousObjectiveKind.GroupPve, (CrewBucket(bot).Crew, 50), GameLoop.GameLoopTime);
         bot.PersistentRecord.ObjectiveAssignmentId = $"{(forced ? "forced" : "automatic")}-raid-{eventId}-{bot.DatabaseID}-{GameLoop.GameLoopTime}";
         bot.PersistentRecord.CurrentCampId = bot.PersistentRecord.TargetName = bot.PersistentRecord.TravelDestination = string.Empty;
         bot.PersistentRecord.ObjectivePhase = $"{(forced ? "Forced" : "Automatic")} realm event — heading to staging";
@@ -457,11 +367,8 @@ public static class AutonomousObjectiveAssignments
     private static (string Crew, int Band) CrewBucket(GameBot bot) =>
         (bot?.PersistentRecord?.GuildId ?? string.Empty, bot?.Level >= 50 ? 50 : bot?.Level >= 20 ? 20 : 0);
 
-    private static void Assign(GameBot bot, eAutonomousObjectiveKind kind, (string Crew, int Band) bucket, long epoch, bool forcedRaid = false)
+    private static void Assign(GameBot bot, eAutonomousObjectiveKind kind, (string Crew, int Band) bucket, long epoch)
     {
-        // Recovery and task-boundary callers cannot reintroduce a disabled goal.
-        if (AutonomousBotGoalPolicy.IsConfigured && !forcedRaid)
-            kind = AutonomousBotGoalPolicy.EnsureAllowed(bot.Level, kind);
         OfflineWorldBotRecord record = bot.PersistentRecord;
         string assignment = $"{(string.IsNullOrWhiteSpace(bucket.Crew) ? "unassigned" : bucket.Crew)}-{bucket.Band}-{epoch}-{kind}";
         if (string.Equals(record.ObjectiveKind, kind.ToString(), StringComparison.Ordinal) &&
@@ -535,11 +442,6 @@ public static class AutonomousObjectiveAssignments
             now < end.ToUniversalTime();
     }
 
-    public static eAutonomousObjectiveKind RollLevelFiftyObjective(Random random = null)
-    {
-        return AutonomousBotGoalPolicy.Choose(50, random);
-    }
-
     public static void MarkPveTaskCompleted(GameBot bot)
     {
         if (bot?.PersistentRecord == null || Is(bot, eAutonomousObjectiveKind.RvR) || IsBetweenPveTasks(bot)) return;
@@ -555,7 +457,8 @@ public static class AutonomousObjectiveAssignments
             return false;
         BetweenTaskPlan plan = RollBetweenTaskPlan(bot.HasSpendableAutonomousTrainingPoints,
             AutonomousBotEconomy.IsBackpackFull(bot), Random.Shared.NextDouble(), Random.Shared.NextDouble());
-        bool downtime = AutonomousTownDowntime.RollAtTaskBoundary(Random.Shared.NextDouble());
+        bool downtime = Random.Shared.NextDouble() < AutonomousPlayerBehavior.TownBreakChance(
+            AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord), bot.PersistentRecord.Patience);
         if (!plan.Train && !plan.Unload && !downtime) return false;
         OfflineWorldBotRecord record = bot.PersistentRecord;
         record.ObjectiveKind = eAutonomousObjectiveKind.SoloPve.ToString();
@@ -593,8 +496,9 @@ public static class AutonomousObjectiveAssignments
                 $"goal=\"{bot.PersistentRecord.CurrentGoal}\" activity=\"{bot.PersistentRecord.Activity}\" " +
                 $"assignment=\"{bot.PersistentRecord.ObjectiveAssignmentId}\"");
         bool pveRequired = bot.PersistentRecord.ObjectiveRvrEligibleUtc == PveCompletionRequired;
-        Assign(bot, AutonomousBotGoalPolicy.IsConfigured ? AutonomousBotGoalPolicy.Choose(bot.Level) :
-            bot.Level >= 50 && !pveRequired ? RollLevelFiftyObjective() : eAutonomousObjectiveKind.SoloPve,
+        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, DateTime.UtcNow,
+                Random.Shared.NextDouble(), mayRvr: !pveRequired && IsRvrEligible(bot.PersistentRecord, DateTime.UtcNow),
+                danger: Danger),
             CrewBucket(bot), GameLoop.GameLoopTime);
     }
 }

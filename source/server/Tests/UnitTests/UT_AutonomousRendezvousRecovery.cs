@@ -189,12 +189,13 @@ namespace DOL.GS.Tests
         }
 
         [Test]
-        public void DepartedMembersBecomeNoShowsAtTheirOriginalDeadlineAndNewMembersGetTheirOwnClock()
+        public void ArrivalIsRememberedAfterPartyLeavesAndLateMembersKeepTheirOwnDeadline()
         {
             var attendance = new AutonomousRendezvousAttendance();
             attendance.Observe(1, 0, true);
             attendance.Add(2, 10 * 60_000);
-            Assert.That(attendance.Observe(1, 30 * 60_000, false), Is.True);
+            Assert.That(attendance.Observe(1, 30 * 60_000, false), Is.False);
+            Assert.That(attendance.HasArrived(1), Is.True);
             Assert.That(attendance.Observe(2, 15 * 60_000, false), Is.False);
             Assert.That(attendance.Observe(2, 25 * 60_000, false), Is.True);
         }

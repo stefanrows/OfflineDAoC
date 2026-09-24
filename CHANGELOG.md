@@ -12,6 +12,158 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-09-24
+
+### Added
+
+- Established-server bot creation across five level bands with level-matched
+  starting experience, class equipment, first-login specialization training,
+  and realm points for new level-50 bots.
+- Configurable level-1 guild alts, limited by a total-roster cap.
+- Local population samples at stable 500, 1,000, and 1,500 active bots for a
+  measured launcher size recommendation after all three runs.
+
+### Changed
+
+- Add crew follows Fresh launch or Established world shape. The explicit Add
+  Lv.50 action remains available, and existing bot progress is retained.
+- The launcher withholds a numeric roster recommendation until this PC has
+  all three measured memory and game-loop tick samples.
+
+### Fixed
+
+- New level-1–49 bots receive class-appropriate generated starting gear without
+  depending on the world's sparse lower-level item templates. A missing
+  level-50 class loadout still rolls back its creation batch.
+
+### Removed
+
+- The earlier unbenchmarked numeric population-size estimate.
+
+## [0.39.0] - 2026-09-24
+
+### Added
+
+- A Server population launcher screen with named presets, six player-type
+  percentages, leveling-zone danger, world shape, and an advisory roster-size
+  suggestion based on CPU cores and memory.
+- Player type, guild, and guild charter columns in Active Population.
+
+### Changed
+
+- `bot-goals.json` version 2 stores the population mix, danger, and world shape.
+  The server reads it at startup; new autonomous identities and guild charters
+  use the selected mix. Version-1 goal weights map to the nearest preset for
+  launcher review before saving.
+
+### Fixed
+
+- Population settings cannot be saved with a mix other than 100%, while the
+  server is running, or over a valid file after a failed write.
+
+### Removed
+
+- The old Bot Goals Setting sliders and their objective-exclusion behavior.
+
+## [0.38.0] - 2026-09-24
+
+### Added
+
+- Type-specific Hunter patrols, Roamer frontier loops and group sizes, Keep
+  warrior campaigns from level 35, and a server danger setting for leveling
+  zones.
+
+### Changed
+
+- Hybrid roams favor local evening hours; Casuals take town breaks more often.
+  Level-50 bots with weak weapons or armor favor gear farming and dungeons.
+- Hunter patrols favor occupied, level-appropriate outdoor camps and nearby
+  routes while retaining occasional quiet-area visits.
+
+### Fixed
+
+- Rare grey-target engagement now uses one stable chance per target and
+  ten-minute window instead of rerolling every combat scan.
+
+### Removed
+
+- None.
+
+## [0.37.0] - 2026-09-24
+
+### Added
+
+- Persistent player type, five temperament traits, PvE wall state, and managed
+  guild charter rows for autonomous bots.
+
+### Changed
+
+- Generated guilds receive invented names and durable managed markers. New
+  autonomous tasks follow each bot's type, level phase, wall state, and guild
+  raid reservation while existing task timers continue.
+
+### Fixed
+
+- Guild consolidation and rename paths persist keep ownership and alliance
+  reference updates before deleting or renaming generated guilds.
+
+### Removed
+
+- Random per-guild level-bucket task allocation and the visible `Camlann Crew`
+  prefix on managed guilds.
+
+## [0.36.0] - 2026-09-24
+
+### Added
+
+- Per-minute autonomous activity counts and live outdoor camp pressure signals.
+
+### Changed
+
+- Ordinary PvE bots form local pickup groups across guilds and realms. Groups
+  depart with two arrivals, accept late followers, and preserve the party and
+  camp after a single death while the released member returns.
+- Outdoor camp selection softly favors less crowded and recently productive
+  spawns, while keeping every valid destination eligible.
+
+### Fixed
+
+- Level 1–4 Flexible-build Reavers use Slash until their Flexible ability
+  unlocks at level 5, then equip their planned weapon.
+
+### Removed
+
+- Automatic open-world ganking by ordinary PvE parties and whole-party
+  disbanding when only some meetup members fail to arrive.
+
+## [0.35.0] - 2026-09-24
+
+### Added
+
+- Focused XP checks for autonomous bots, temporary helpers, companion catch-up,
+  and PvP con-color rewards.
+
+### Changed
+
+- PvP kill XP now uses the player's `XP_RATE` or the autonomous bot's
+  `BOT_XP_RATE`. Challenge XP and realm-point bonuses follow the victim's con
+  color: orange 1.25×, red 1.5×, purple 2×.
+- A companion's NPC kill XP uses the smaller of its owner's base award and its
+  own-level cap, then `XP_RATE` and a 1.5× catch-up boost when five or more
+  levels behind. The owner's total XP remains the final ceiling.
+- Updated the autonomous roadmap and companion reward guide; synchronized the
+  launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- Autonomous bots and temporary `/spawn` helpers again receive their configured
+  XP multiplier on mob kills. Autonomous bots also regain zone and item XP
+  bonuses.
+
+### Removed
+
+- Unused autonomous XP scaling method.
+
 ## [0.34.0] - 2026-09-24
 
 ### Added

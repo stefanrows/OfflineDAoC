@@ -63,7 +63,9 @@ public static class AutonomousBotDecisionEngine
         double TravelMinutes,
         int AverageMobLevel = 0,
         int DungeonPopulation = 0,
-        int DungeonSoftCapacity = 0);
+        int DungeonSoftCapacity = 0,
+        int OutdoorPopulation = 0,
+        bool RecentlyEmpty = false);
 
     public sealed record Service(
         eWorldServiceKind Kind,
@@ -190,7 +192,7 @@ public static class AutonomousBotDecisionEngine
     }
 
     public static PveEnvironment SelectPveEnvironment(IEnumerable<Camp> camps, int groupSize,
-        int level, Random random = null)
+        int level, Random random = null, bool gearFarming = false)
     {
         Camp[] choices = camps?.Where(camp => camp != null).ToArray() ?? Array.Empty<Camp>();
         bool hasDungeon = choices.Any(camp => camp.IsDungeon);
@@ -202,6 +204,8 @@ public static class AutonomousBotDecisionEngine
         int preference = groupSize >= 2
             ? level >= 50 ? Level50GroupDungeonPreferencePermille : GroupDungeonPreferencePermille
             : SoloDungeonPreferencePermille;
+        if (level >= 50 && gearFarming)
+            preference = groupSize >= 2 ? 700 : 300;
         int availability = choices.Where(camp => camp.IsDungeon)
             .GroupBy(camp => camp.RegionId)
             .Select(group => DungeonAvailability(group))
@@ -221,7 +225,16 @@ public static class AutonomousBotDecisionEngine
             return null;
         random ??= Random.Shared;
         if (environment != PveEnvironment.Dungeon)
-            return choices[random.Next(choices.Length)];
+        {
+            int[] weights = choices.Select(OutdoorCampWeight).ToArray();
+            int outdoorDraw = random.Next(weights.Sum());
+            for (int index = 0; index < choices.Length; index++)
+            {
+                if (outdoorDraw < weights[index]) return choices[index];
+                outdoorDraw -= weights[index];
+            }
+            return choices[^1];
+        }
 
         var regions = choices.GroupBy(camp => camp.RegionId)
             .Select(group => new
@@ -239,6 +252,12 @@ public static class AutonomousBotDecisionEngine
         }
 
         return regions[^1].Camps[^1];
+    }
+
+    public static int OutdoorCampWeight(Camp camp)
+    {
+        int weight = Math.Max(1, 100 / (1 + Math.Max(0, camp.OutdoorPopulation) * 2));
+        return camp.RecentlyEmpty ? Math.Max(1, weight / 4) : weight;
     }
 
     private static int DungeonCapacity(IEnumerable<Camp> camps)

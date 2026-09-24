@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 using DOL.GS.ServerProperties;
@@ -108,6 +109,7 @@ namespace DOL.GS
 
         private static void TickServices()
         {
+            long tickStarted = Stopwatch.GetTimestamp();
             Diagnostics.StartPerfCounter(THREAD_NAME);
 
             for (int i = 0; i < _tickSequence.Count; i++)
@@ -118,6 +120,7 @@ namespace DOL.GS
 
             Diagnostics.StopPerfCounter(THREAD_NAME);
             Diagnostics.Tick();
+            GameLoopWorkMetrics.RecordTick(tickStarted);
 
             static void TickCallback(object state)
             {
