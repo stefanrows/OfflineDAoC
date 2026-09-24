@@ -421,6 +421,14 @@ namespace DOL.GS.Commands
                         lines.Add(new Line($"  {char.ToUpperInvariant(value[0])}{value[1..]}{(value == stance ? " (current)" : string.Empty)}",
                             "stance:" + value, () => SetTactics(player, session, id, "stance", value)));
                     }
+                    if (CompanionBombingPolicy.SupportsClass(characterClass))
+                    {
+                        string bombChoice = CompanionBombingPolicy.Choice(current);
+                        string nextBombChoice = CompanionBombingPolicy.NextChoice(bombChoice);
+                        lines.Add(new Line($"Bomb use: {CompanionBombingPolicy.ChoiceLabel(bombChoice)} (click to cycle)",
+                            "bomb-use:" + bombChoice,
+                            () => SetBombUse(player, session, id, nextBombChoice)));
+                    }
                     lines.Add(new Line(string.Empty));
                     if (live)
                     {
@@ -957,6 +965,12 @@ namespace DOL.GS.Commands
         private static void SetTactics(GamePlayer player, CompanionManagerSession session, string id, string kind, string value)
         {
             PlayerCompanionRoster.TrySetTactics(player, id, kind, value, out string message);
+            Report(player, session, message);
+        }
+
+        private static void SetBombUse(GamePlayer player, CompanionManagerSession session, string id, string value)
+        {
+            PlayerCompanionRoster.TrySetBombUsePreference(player, id, value, out string message);
             Report(player, session, message);
         }
 

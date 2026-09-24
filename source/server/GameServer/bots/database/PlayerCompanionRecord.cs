@@ -87,6 +87,11 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false, Varchar = 16)]
         public string EngagementPreference { get; set; } = string.Empty;
 
+        // Nullable so existing companion tables can add this preference without
+        // assigning a new combat policy to old records. Empty/null resolves to Auto.
+        [DataElement(AllowDbNull = true, Varchar = 16)]
+        public string BombUsePreference { get; set; } = CompanionBombingPolicy.Auto;
+
         [DataElement(AllowDbNull = false)]
         public int AppearanceSize { get; set; }
 

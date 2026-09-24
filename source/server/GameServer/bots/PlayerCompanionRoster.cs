@@ -546,6 +546,52 @@ namespace DOL.GS
             }
         }
 
+        public static bool TrySetBombUsePreference(GamePlayer owner, string nameOrId, string value,
+            out string message)
+        {
+            message = "That companion name or ID is not in your roster.";
+            if (owner == null)
+                return false;
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                    return false;
+                if (!CompanionBombingPolicy.SupportsClass((eCharacterClass)record.ClassId))
+                {
+                    message = $"{record.Name} does not have a supported bomb spell profile.";
+                    return false;
+                }
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) &&
+                    active?.PlayerCompanionRecord != null)
+                    record = active.PlayerCompanionRecord;
+
+                string normalized = value?.Trim().ToLowerInvariant() ?? string.Empty;
+                if (normalized is not (CompanionBombingPolicy.Auto or CompanionBombingPolicy.Bomb or CompanionBombingPolicy.Off))
+                {
+                    message = "Choose Auto, Bomb, or Off for bomb use.";
+                    return false;
+                }
+
+                string previous = record.BombUsePreference;
+                string previousUpdatedUtc = record.UpdatedUtc;
+                record.BombUsePreference = normalized;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                if (!SaveRecord(record))
+                {
+                    record.BombUsePreference = previous;
+                    record.UpdatedUtc = previousUpdatedUtc;
+                    record.Dirty = true;
+                    message = "The bomb preference could not be saved; the previous setting remains active.";
+                    return false;
+                }
+
+                message = $"{record.Name}: bomb use set to {CompanionBombingPolicy.ChoiceLabel(normalized)}.";
+                return true;
+            }
+        }
+
         public static List<PlayerCompanionRecord> GetRoster(GamePlayer owner)
         {
             return TryGetRoster(owner, out List<PlayerCompanionRecord> records)

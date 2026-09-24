@@ -25,6 +25,9 @@ namespace DOL.AI.Brain
 
         public GameBot BotBody => Body as GameBot;
         private long _nextPoisonSupplyTick;
+        private GameLiving _bombWaitTarget;
+        private long _bombWaitStartedTick;
+        private bool _bombWaitExpired;
 
         #region IControlledBrain Implementation
 
@@ -2843,9 +2846,14 @@ namespace DOL.AI.Brain
 
         private int OffensiveApproachRange(GameLiving target)
         {
+            int bombRange = CompanionBombApproachRange(target);
+            if (bombRange > 0)
+                return bombRange;
+
             // SortSpells stores bolts and instant nukes outside HarmfulSpells.
             // Read the small learned list so those classes use their real range.
             return Body.Spells?.Where(spell => spell != null && spell.IsHarmful &&
+                    !CompanionBombingPolicy.IsBombSpell(BotBody, spell) &&
                     spell.Level <= Body.Level && spell.Target is eSpellTarget.ENEMY or eSpellTarget.AREA or eSpellTarget.CONE &&
                     spell.SpellType is not eSpellType.Charm and not eSpellType.Amnesia and not eSpellType.Confusion and not eSpellType.Taunt &&
                     !AutonomousPetSupport.IsDisabledBotDamageShield(BotBody, spell) &&
@@ -2860,6 +2868,19 @@ namespace DOL.AI.Brain
             if (target?.IsAlive != true || Body.IsCrowdControlled ||
                 !PrefersCurrentSpellRange())
                 return false;
+
+            int bombRange = CompanionBombApproachRange(target);
+            if (bombRange > 0)
+            {
+                int desiredBombDistance = Math.Max(80, Math.Min(160, bombRange / 2));
+                if (Body.IsWithinRadius(target, desiredBombDistance))
+                    return false;
+
+                Body.StopAttack();
+                Body.Follow(target, (short)desiredBombDistance,
+                    (short)Math.Clamp(bombRange + 75, 200, (int)short.MaxValue));
+                return true;
+            }
 
             int castRange = OffensiveApproachRange(target);
             if (castRange <= 0 || Body.IsWithinRadius(target, castRange))
@@ -3252,6 +3273,14 @@ namespace DOL.AI.Brain
             else if (!casted && type == eCheckSpellType.Offensive)
             {
                 if (TryPvpCrowdControl()) return true;
+
+                GameLiving bombTarget = Body.TargetObject as GameLiving;
+                Spell[] readyBombs = ReadyCompanionBombs(bombTarget);
+                if (readyBombs.Length == 0)
+                    ResetBombWait();
+                else if (ShouldWaitForBombTank(bombTarget, readyBombs[0]))
+                    return true;
+
                 if (BotBody.CharacterClass.ID == (int)eCharacterClass.Cleric)
                 {
                     if (!Util.Chance(Math.Max(5, Body.ManaPercent - 50)))
@@ -3262,7 +3291,9 @@ namespace DOL.AI.Brain
                 if (Body.CanCastInstantHarmfulSpells)
                 {
                     IEnumerable<Spell> instantOffense = Body.InstantHarmfulSpells;
-                    if (UsesMinstrelHybridCombat)
+                    if (readyBombs.Length > 0)
+                        instantOffense = instantOffense.Where(spell => CompanionBombingPolicy.IsBombSpell(BotBody, spell));
+                    else if (UsesMinstrelHybridCombat)
                         instantOffense = instantOffense.OrderByDescending(BotCasterPriority.IsDamage);
                     foreach (Spell spell in instantOffense)
                     {
@@ -3321,6 +3352,24 @@ namespace DOL.AI.Brain
                     }
                 }
 
+                if (readyBombs.Length > 0)
+                {
+                    Spell preferredBomb = readyBombs[0];
+                    if (!Body.IsWithinRadius(bombTarget, preferredBomb.Radius))
+                        return false;
+
+                    Spell[] bombsInRange = readyBombs
+                        .Where(spell => Body.IsWithinRadius(bombTarget, spell.Radius) &&
+                            CompanionBombingPolicy.HasSufficientPull(BotBody, bombTarget, spell, Body) &&
+                            CanCastOffensiveSpell(spell))
+                        .ToArray();
+                    if (bombsInRange.Length > 0)
+                    {
+                        spellsToCast.Clear();
+                        spellsToCast.AddRange(bombsInRange);
+                    }
+                }
+
                 if (BotBody.CanCastBolts && spellsToCast.Count < 1)
                 {
                     foreach (Spell spell in BotBody.BoltSpells)
@@ -3352,7 +3401,9 @@ namespace DOL.AI.Brain
                 {
                     // Do not roll a DoT/debuff already on this mob and mistake
                     // its refusal for a reason to abandon ranged combat.
-                    spellsToCast.RemoveAll(spell => !NeedsOffensiveSpellApplication((GameLiving)Body.TargetObject, spell) ||
+                    spellsToCast.RemoveAll(spell =>
+                        !CompanionBombingPolicy.IsBombSpell(BotBody, spell) &&
+                            !NeedsOffensiveSpellApplication((GameLiving)Body.TargetObject, spell) ||
                         CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, Body.TargetObject as GameLiving));
                     if (spellsToCast.Count == 0) return Body.IsCasting;
                     if (PrefersCurrentSpellRange() &&
@@ -3372,6 +3423,64 @@ namespace DOL.AI.Brain
             }
 
             return casted || Body.IsCasting;
+        }
+
+        private Spell[] ReadyCompanionBombs(GameLiving target)
+        {
+            if (target?.IsAlive != true || Body == null ||
+                !CompanionBombingPolicy.CanUseBombs(BotBody))
+                return [];
+
+            return (Body.HarmfulSpells ?? []).Concat(Body.InstantHarmfulSpells ?? [])
+                .Where(spell => CompanionBombingPolicy.IsBombSpell(BotBody, spell) &&
+                    spell.Level <= Body.Level && !BotSpellPower.BlocksAttackerRotation(BotBody, spell) &&
+                    Body.GetSkillDisabledDuration(spell) <= 0 && Body.Mana >= BotBody.PowerCost(spell) &&
+                    CompanionBombingPolicy.HasSufficientPull(BotBody, target, spell, target) &&
+                    !CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, target))
+                .OrderByDescending(spell => spell.Radius)
+                .ThenByDescending(spell => spell.Level)
+                .ToArray();
+        }
+
+        private bool ShouldWaitForBombTank(GameLiving target, Spell spell)
+        {
+            if (!CompanionBombingPolicy.CanUseBombs(BotBody) ||
+                !CompanionBombingPolicy.HasTank(BotBody) ||
+                CompanionBombingPolicy.TankHasAggro(BotBody, target, spell))
+            {
+                ResetBombWait();
+                return false;
+            }
+
+            if (_bombWaitTarget == null)
+            {
+                _bombWaitTarget = target;
+                _bombWaitStartedTick = GameLoop.GameLoopTime;
+                _bombWaitExpired = false;
+            }
+            else if (_bombWaitTarget != target)
+                _bombWaitTarget = target;
+            if (_bombWaitExpired)
+                return false;
+            if (GameLoop.GameLoopTime - _bombWaitStartedTick >= CompanionBombingPolicy.TankAggroWaitMilliseconds)
+            {
+                _bombWaitExpired = true;
+                return false;
+            }
+            return true;
+        }
+
+        private void ResetBombWait()
+        {
+            _bombWaitTarget = null;
+            _bombWaitStartedTick = 0;
+            _bombWaitExpired = false;
+        }
+
+        private int CompanionBombApproachRange(GameLiving target)
+        {
+            Spell[] readyBombs = ReadyCompanionBombs(target);
+            return readyBombs.Length == 0 ? 0 : readyBombs[0].Radius;
         }
 
         private bool TryIssueNecromancerServantCommand(eCheckSpellType type)
@@ -3461,9 +3570,13 @@ namespace DOL.AI.Brain
         {
             if (spell == null || spell.Level > Body.Level || Body.TargetObject is not GameLiving target || !target.IsAlive ||
                 BotSpellPower.BlocksAttackerRotation(BotBody, spell) ||
-                !NeedsOffensiveSpellApplication(target, spell) ||
+                !CompanionBombingPolicy.IsBombSpell(BotBody, spell) && !NeedsOffensiveSpellApplication(target, spell) ||
                 Body.GetSkillDisabledDuration(spell) > 0 || Body.Mana < BotBody.PowerCost(spell))
                 return false;
+
+            if (CompanionBombingPolicy.IsBombSpell(BotBody, spell))
+                return CompanionBombingPolicy.HasSufficientPull(BotBody, target, spell, Body) &&
+                    Body.IsWithinRadius(target, spell.Radius);
 
             if (spell.CastTime > 0 && spell.Target is eSpellTarget.ENEMY or eSpellTarget.AREA or eSpellTarget.CONE)
             {
@@ -3504,7 +3617,8 @@ namespace DOL.AI.Brain
 
             bool casted = false;
 
-            if (Body.TargetObject is GameLiving living && NeedsOffensiveSpellApplication(living, spell))
+            if (Body.TargetObject is GameLiving living &&
+                (CompanionBombingPolicy.IsBombSpell(BotBody, spell) || NeedsOffensiveSpellApplication(living, spell)))
             {
                 casted = Body.CastSpell(spell, m_mobSpellLine);
             }
