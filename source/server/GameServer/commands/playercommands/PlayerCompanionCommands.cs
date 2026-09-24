@@ -59,8 +59,7 @@ namespace DOL.GS.Commands
                 case "group":
                     if (args.Length == 3 && args[2].Equals("default", StringComparison.OrdinalIgnoreCase))
                     {
-                        CompanionEngagementMode.ClearGroupOrder(player);
-                        DisplayMessage(client, "Group stance override cleared; each persistent companion uses their own preference.");
+                        DisplayMessage(client, CompanionGroupOrders.UseSavedStances(player));
                     }
                     else ShowUsage(client);
                     break;

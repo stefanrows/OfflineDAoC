@@ -12,6 +12,39 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-09-24
+
+### Added
+
+- Group orders in the Companion Manager (M2). A **Group orders** row leads the
+  roster list. It sets the group order (Aggressive, Defensive, Passive, or
+  saved stances) and shows each grouped companion's effective stance, with
+  its saved stance when the order overrides it.
+- Group actions in that row: **[Pull]** (like `/pull`), **[Invite all]**,
+  **[Bench all]**, and **[Grind]**/**[Stop grind]** (like `/grind`).
+  **[Invite all]** invites the benched companions shown in the list, top to
+  bottom, until the group is full, so search and filters choose who comes.
+  **[Bench all]** benches every active companion.
+- A test for the group row: order links, per-companion override text, and
+  the pull, invite-all, and grind refusal messages.
+
+### Changed
+
+- `/aggressive`, `/defensive`, `/passive`, `/companions group default`, and
+  `/pull` now share their code with the window; their behaviour and messages
+  are unchanged. `/grind` still accepts only temporary `/spawn` helpers.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.36.0] - 2026-09-24
 
 ### Added

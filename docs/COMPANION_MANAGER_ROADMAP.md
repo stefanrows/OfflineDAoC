@@ -4,7 +4,8 @@ Status: **M0 remainder implemented offline in 0.33.0; owner real-client check
 pending. M1a (build research, catalog, and command selection) implemented
 offline in 0.34.0. M1b (build list in the window and recruit flow) implemented
 offline in 0.35.0. M1c (Crowd control role and build roles) implemented
-offline in 0.36.0. M2 and M3 are not implemented yet.**
+offline in 0.36.0. M2 (group controls in the window) implemented offline in
+0.37.0. M3 is not implemented yet.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -276,7 +277,39 @@ monster that a real player's area spell wakes is simply mezzed again.
   them: `/pull`, `/grind`, and invite/bench-all.
 
 No native work is expected; this reuses the window's labels and click areas.
-Decision: which group controls belong in the window versus staying as commands.
+
+**Owner decision (2026-09-24):** all four go in the window: the group order
+row, pull, invite/bench all, and grind.
+
+### M2 - Group orders row (0.37.0, offline)
+
+Server only. The installed manager `game.dll` needs no change.
+
+- [x] Roster list: a **Group orders** row comes first whenever the roster has
+      companions or the player is in a group. Search and filters do not hide
+      it, and a companion stays the default selection. Its list text shows the
+      order (`order: defensive` or `order: saved stances`) and `grinding`.
+- [x] Detail: the four orders as links with the current one marked; each
+      grouped companion's effective stance, with `(saved: ...)` when the order
+      overrides it (clicking a saved companion opens it); temporary helpers are
+      listed as such. Per-companion role, stance, training mode, train, and
+      respec were already in the window.
+- [x] Actions: **[Pull]** orders the pull on the current target through the
+      `/pull` code. **[Invite all]** invites the benched companions shown in the
+      list, top to bottom, until the group is full (filters choose who comes).
+      **[Bench all]** benches every active companion. **[Grind]**/**[Stop
+      grind]** use the `/grind` code; grind still accepts only temporary
+      `/spawn` helpers, and the refusal explains that.
+- [x] Commands and window share one code path (`CompanionGroupOrders`,
+      `PullGroupCommandHandler.Order`); command behaviour is unchanged.
+- [x] Test: the group row leads the list without taking the default selection;
+      Defensive is applied and shown per companion; pull without a target,
+      invite all outside the world, and grind with a saved companion report
+      the existing refusals; saved stances clears the order.
+- [ ] Owner: in the real client, select Group orders, switch between the four
+      orders and watch companions react, pull a target with **[Pull]**, and use
+      **[Bench all]** then **[Invite all]** with a realm or search filter.
+      Start and stop **[Grind]** with `/spawn` helpers.
 
 ## M3 - Companion equipment in a slot layout
 

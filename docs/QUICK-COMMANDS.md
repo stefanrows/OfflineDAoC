@@ -45,6 +45,7 @@ capacity. The Active Population tab shows autonomous crews and solo roamers.
 | `/aggressive` | Companions assist your attacks and defend the party. They break off and return if left far behind. |
 | `/defensive` | Companions engage threats near you and return if left far behind. |
 | `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Choose another mode to resume fighting. |
+| Companion Manager: Group orders | The first roster row sets these orders, shows each companion's effective stance, and offers Pull, Invite all, Bench all, and Grind. |
 
 `/spawn 40` and `/spawn 80` are **not** the raid-size commands. Use `/raid` first.
 These modes control your companions, not autonomous gamebots. All three modes recall a companion beyond 2100 units until it reaches 650 units from you.

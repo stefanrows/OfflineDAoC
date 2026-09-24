@@ -619,6 +619,65 @@ public sealed class UT_PlayerCompanionStage6Integration
         });
     }
 
+    [Test]
+    public void CompanionManagerGroupRowSetsOrdersAndRunsGroupActions()
+    {
+        Owner owner = NewOwner("manager-group-owner", eRealm.Albion);
+        QuietGroup group = GroupWithOwner(owner);
+        PlayerCompanionRecord active = NewRecord(owner.ObjectId, Guid.NewGuid().ToString(), "Active Cleric", eCharacterClass.Cleric);
+        active.IsActive = true;
+        PlayerCompanionRecord benched = NewRecord(owner.ObjectId, Guid.NewGuid().ToString(), "Benched Friar", eCharacterClass.Friar);
+        Assert.That(_database.AddObject(active) && _database.AddObject(benched), Is.True);
+        AddDirect(group, NewCompanion(owner, active, eRealm.Albion));
+
+        CompanionManager.Open(owner);
+        CompanionManager.TryGetSession(owner, out CompanionManagerSession session);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.RowKeys[0], Is.EqualTo("group"), "The group row leads the roster list");
+            Assert.That(session.Roster.SelectedKey, Is.EqualTo("c:" + active.CompanionId), "A companion stays the default selection");
+        });
+
+        Click(owner, session, CompanionManagerProtocol.ControlRowBase);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelHeaderBase], Is.EqualTo("Group orders"));
+            Assert.That(VisibleLinks(session), Does.Contain("  Saved stances: no group order (current)"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + 4], Is.EqualTo("order: saved stances"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Pull]"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 2], Is.EqualTo("[Invite all]"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 4], Is.EqualTo("[Bench all]"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 6], Is.EqualTo("[Grind]"));
+        });
+
+        ClickLink(owner, session, "  Defensive: engage threats near you");
+        Assert.Multiple(() =>
+        {
+            Assert.That(CompanionEngagementMode.TryGetGroupOrder(owner, out eCompanionEngagementMode order) &&
+                        order == eCompanionEngagementMode.Defensive, Is.True);
+            Assert.That(VisibleLinks(session), Does.Contain("  Defensive: engage threats near you (current)")
+                .And.Contain("  Active Cleric: defensive (saved: aggressive)"), "The override is shown per companion");
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + 4], Is.EqualTo("order: defensive"));
+        });
+
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase);
+        Assert.That(session.Message, Is.EqualTo("Select a living enemy first, then choose [Pull]."));
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 1);
+        Assert.That(session.Message, Does.StartWith("Nobody was invited. You must be in the world"),
+            "Invite all reports the roster's own refusal");
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 3);
+        Assert.Multiple(() =>
+        {
+            Assert.That(PlayerCompanionGrind.IsActive(owner), Is.False);
+            Assert.That(session.Message, Does.Contain("/grind"), "Grind keeps its temporary-helpers-only rule");
+        });
+
+        ClickLink(owner, session, "  Saved stances: no group order");
+        Assert.That(CompanionEngagementMode.TryGetGroupOrder(owner, out _), Is.False);
+        ClickLink(owner, session, "  Active Cleric: aggressive");
+        Assert.That(session.Roster.SelectedKey, Is.EqualTo("c:" + active.CompanionId), "A member line opens that companion");
+    }
+
     private static void Click(Owner owner, CompanionManagerSession session, int control) =>
         CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), control.ToString("x2"));
 

@@ -53,6 +53,7 @@ command guidance. The accumulating NPC speech menu stays closed.
 | Gear | Worn slots and backpack items with item actions, plus the existing native companion bag for inspection and drag/drop. Benched gear is read-only. |
 | Builds (0.35.0) | Training & Tactics lists the class's builds as links with their role; selecting one and choosing **[Use build]** switches it. Recruit details list the builds with the class default preselected, and **[Recruit]**/**[Create]** use the selection. |
 | Crowd control (0.36.0) | Training & Tactics offers the Crowd control role to Healer, Sorcerer, Bard, Mentalist, and Spiritmaster companions. Each build line says which role it sets. The roster's role filter keeps its four native buttons; a Crowd control filter needs a later client patch. |
+| Group orders (0.37.0) | A **Group orders** row leads the roster list, whatever the search and filters. It shows the group order (Aggressive, Defensive, Passive, or saved stances) as links, each grouped companion's effective stance with its saved stance when an order overrides it, and **[Pull]**, **[Invite all]**, **[Bench all]**, and **[Grind]**/**[Stop grind]**. A companion stays the default selection. |
 
 The recruitment copy is shown in the detail panel exactly as agreed:
 
@@ -169,6 +170,11 @@ differences; **[Refresh]** resends everything.
 | --- | --- |
 | Recruit generated or authored | `PlayerCompanionRoster.TryRecruit` / `TryRecruitAuthored` with the selected build (capacity and once-per-owner checks stay there) |
 | Invite or bench | `PlayerCompanionRoster.TryInvite` / `TryBench` |
+| Invite all | `TryInvite` for each benched companion shown in the list (search and filters apply), top to bottom, until the group is full |
+| Bench all | `TryBench` for every active companion |
+| Group order | `CompanionGroupOrders`, shared with `/aggressive`, `/defensive`, `/passive`, and `/companions group default` |
+| Pull | `PullGroupCommandHandler.Order`, shared with `/pull` |
+| Grind | `PlayerCompanionGrind.TryStart` / `Stop`, shared with `/grind`; still only for temporary `/spawn` helpers |
 | Role or stance | `PlayerCompanionRoster.TrySetTactics` (roles include `crowdcontrol`; `cc` is accepted) |
 | Build switch | `PlayerCompanionRoster.TrySelectBuild` (free, no trainer, resets and retrains) |
 | Training mode | `TrySetManualTrainingMode` / `TrySetAutomaticTrainingMode` |

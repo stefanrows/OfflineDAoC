@@ -22,6 +22,7 @@ namespace DOL.GS.Commands
         private const int GuidanceDelayMilliseconds = 3000;
         private const int DetailWidth = WidthDetail - 6;
         private const string BuildIndent = "    ";
+        private const string GroupKey = "group";
         private static readonly ConditionalWeakTable<GamePlayer, CompanionManagerSession> Sessions = new();
 
         private sealed record Line(string Text, string Key = null, Action Run = null);
@@ -201,11 +202,17 @@ namespace DOL.GS.Commands
             bool rosterTab = session.Tab == CompanionManagerTab.Roster;
             IReadOnlyList<CompanionManagerEntry> all = rosterTab ? RosterEntries(roster) : RecruitEntries(roster);
             IReadOnlyList<CompanionManagerEntry> filtered = session.Filter(all);
+            IReadOnlyList<CompanionManagerEntry> companions = filtered;
+            // The group row ignores search and filters and always leads the roster list.
+            bool groupRow = rosterTab && (roster.Count > 0 || player.Group != null);
+            if (groupRow)
+                filtered = filtered.Prepend(GroupEntry(player)).ToArray();
             IReadOnlyList<CompanionManagerEntry> visible = session.VisibleRows(filtered);
             CompanionManagerListState list = session.Current;
-            if (list.SelectedKey == null || all.All(entry => entry.Key != list.SelectedKey))
+            if (list.SelectedKey == null || all.All(entry => entry.Key != list.SelectedKey) &&
+                !(groupRow && list.SelectedKey == GroupKey))
             {
-                list.SelectedKey = filtered.FirstOrDefault()?.Key ?? all.FirstOrDefault()?.Key;
+                list.SelectedKey = companions.FirstOrDefault()?.Key ?? all.FirstOrDefault()?.Key;
                 session.DetailOffset = 0;
                 session.SelectedItemId = null;
             }
@@ -241,6 +248,8 @@ namespace DOL.GS.Commands
                 view.Header = "Roster unavailable";
                 AddText(lines, "Your companion roster could not be loaded. Try [Refresh], or use /companions list.");
             }
+            else if (rosterTab && list.SelectedKey == GroupKey)
+                BuildGroupDetail(player, session, roster, companions, view, lines, choices);
             else if (rosterTab)
                 BuildRosterDetail(player, session, roster, selectedRecord, view, lines, choices);
             else
@@ -316,6 +325,12 @@ namespace DOL.GS.Commands
                 (eCharacterClass)record.ClassId, record.Name,
                 $"L{record.Level} {(eCharacterClass)record.ClassId}, {(record.IsActive ? "active" : "benched")}",
                 (record.IsActive ? "0:" : "1:") + record.Name)).ToArray();
+
+        private static CompanionManagerEntry GroupEntry(GamePlayer player) =>
+            new(GroupKey, player.Realm, eCharacterClass.Unknown, "Group orders",
+                "order: " + (CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order)
+                    ? order.ToString().ToLowerInvariant() : "saved stances") +
+                (PlayerCompanionGrind.IsActive(player) ? ", grinding" : string.Empty), string.Empty);
 
         private static IReadOnlyList<CompanionManagerEntry> RecruitEntries(IEnumerable<PlayerCompanionRecord> roster)
         {
@@ -471,6 +486,141 @@ namespace DOL.GS.Commands
                         Run(PlayerCompanionRoster.TryInvite, player, id))));
                 choices.Add(new Choice("[Open bag]", live, "bag", () => OpenBag(player, session, id)));
             }
+        }
+
+        /// <summary>Group orders, pull, invite/bench all, and grind; the same code paths as their chat commands.</summary>
+        private static void BuildGroupDetail(GamePlayer player, CompanionManagerSession session,
+            List<PlayerCompanionRecord> roster, IReadOnlyList<CompanionManagerEntry> shown, CompanionManagerView view,
+            List<Line> lines, List<Choice> choices)
+        {
+            bool ordered = CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order);
+            view.Header = "Group orders";
+            view.HeaderRealm = player.Realm;
+            view.Subheader = ordered
+                ? $"Order: {order}; it overrides every companion's saved stance"
+                : "No group order; each companion uses their saved stance";
+
+            lines.Add(new Line("Group order (select one):"));
+            foreach ((string text, string key, Func<GamePlayer, string> apply, bool current) in new (string, string, Func<GamePlayer, string>, bool)[]
+                     {
+                         ("Aggressive: assist your attacks", "order:aggressive", CompanionGroupOrders.Aggressive,
+                             ordered && order == eCompanionEngagementMode.Aggressive),
+                         ("Defensive: engage threats near you", "order:defensive", CompanionGroupOrders.Defensive,
+                             ordered && order == eCompanionEngagementMode.Defensive),
+                         ("Passive: return and hold combat", "order:passive", CompanionGroupOrders.Passive,
+                             ordered && order == eCompanionEngagementMode.Passive),
+                         ("Saved stances: no group order", "order:default", CompanionGroupOrders.UseSavedStances, !ordered),
+                     })
+            {
+                lines.Add(new Line($"  {text}{(current ? " (current)" : string.Empty)}", key,
+                    () => Report(player, session, apply(player))));
+            }
+            lines.Add(new Line(string.Empty));
+
+            GameBot[] members = player.Group?.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(bot => (bot.PlayerGroupLeader ?? bot.Owner) == player &&
+                              (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && !bot.IsAutonomousWorldBot)
+                .ToArray() ?? Array.Empty<GameBot>();
+            if (members.Length == 0)
+                AddText(lines, "No companions are in your group. [Invite all] invites benched companions shown in the list.");
+            else
+            {
+                lines.Add(new Line("Effective stance in your group:"));
+                foreach (GameBot bot in members)
+                {
+                    string effective = CompanionEngagementMode.Effective(bot).ToString().ToLowerInvariant();
+                    PlayerCompanionRecord record = bot.PlayerCompanionRecord;
+                    if (record == null)
+                    {
+                        lines.Add(new Line($"  {bot.Name}: {effective} (temporary helper)"));
+                        continue;
+                    }
+                    string saved = string.IsNullOrWhiteSpace(record.EngagementPreference) ? "aggressive" : record.EngagementPreference;
+                    string recordKey = RecordKey(record);
+                    lines.Add(new Line($"  {bot.Name}: {effective}{(saved != effective ? $" (saved: {saved})" : string.Empty)}",
+                        "open:" + recordKey, () => ShowInRoster(session, recordKey)));
+                }
+            }
+            lines.Add(new Line(string.Empty));
+
+            string[] benched = shown
+                .Select(entry => roster.FirstOrDefault(record => RecordKey(record) == entry.Key))
+                .Where(record => record != null && !PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
+                .Select(record => record.CompanionId).ToArray();
+            string[] active = roster
+                .Where(record => record.IsActive || PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
+                .Select(record => record.CompanionId).ToArray();
+            bool grinding = PlayerCompanionGrind.IsActive(player);
+            AddText(lines, "[Pull] sends your companions after your current target, like /pull.");
+            AddText(lines, $"[Invite all] invites the {benched.Length} benched companions shown in the list, top to bottom, " +
+                           "until your group is full; use search and filters to choose them. " +
+                           $"[Bench all] benches all {active.Length} active companions.");
+            AddText(lines, grinding
+                ? "Grind mode is active. [Stop grind] ends it, like /grind stop."
+                : "[Grind] starts /grind here. It needs a party of only you and temporary /spawn helpers; saved companions cannot grind.");
+
+            choices.Add(new Choice("[Pull]", true, "pull", () => Report(player, session,
+                PullGroupCommandHandler.Order(player, "choose [Pull]") ?? "That target cannot be attacked, so nobody was sent.")));
+            choices.Add(new Choice("[Invite all]", benched.Length > 0, "inviteall:" + string.Join(',', benched),
+                () => InviteAll(player, session, benched)));
+            choices.Add(new Choice("[Bench all]", active.Length > 0, "benchall:" + string.Join(',', active),
+                () => BenchAll(player, session, active)));
+            choices.Add(grinding
+                ? new Choice("[Stop grind]", true, "grind:stop", () => StopGrind(player, session))
+                : new Choice("[Grind]", true, "grind:start", () => StartGrind(player, session)));
+        }
+
+        private static void InviteAll(GamePlayer player, CompanionManagerSession session, IReadOnlyList<string> ids)
+        {
+            var invited = new List<string>();
+            string problem = null;
+            for (int index = 0; index < ids.Count; index++)
+            {
+                if (player.Group != null && player.Group.MemberCount >= player.Group.MaximumMemberCount)
+                {
+                    problem = $"Your group is full; {ids.Count - index} stay benched.";
+                    break;
+                }
+                if (PlayerCompanionRoster.TryInvite(player, ids[index], out string message) &&
+                    PlayerCompanionRoster.TryGetActiveCompanionById(player, ids[index], out GameBot companion))
+                    invited.Add(companion.Name);
+                else
+                    problem ??= message;
+            }
+            string result = invited.Count == 0 ? "Nobody was invited." : $"Invited {invited.Count}: {string.Join(", ", invited)}.";
+            Report(player, session, problem == null ? result : $"{result} {problem}");
+        }
+
+        private static void BenchAll(GamePlayer player, CompanionManagerSession session, IReadOnlyList<string> ids)
+        {
+            int benched = 0;
+            string problem = null;
+            foreach (string id in ids)
+            {
+                if (PlayerCompanionRoster.TryBench(player, id, out string message))
+                    benched++;
+                else
+                    problem ??= message;
+            }
+            Report(player, session, $"Benched {benched} of {ids.Count} companions.{(problem != null ? " " + problem : string.Empty)}");
+        }
+
+        private static void StartGrind(GamePlayer player, CompanionManagerSession session)
+        {
+            PlayerCompanionGrind.TryStart(player, out string message);
+            Report(player, session, message);
+        }
+
+        private static void StopGrind(GamePlayer player, CompanionManagerSession session)
+        {
+            if (!PlayerCompanionGrind.IsActive(player))
+            {
+                Report(player, session, "Grind mode is not active.");
+                return;
+            }
+            // Stop tells the player in chat itself; only the window line is set here.
+            PlayerCompanionGrind.Stop(player, "cancelled by you");
+            session.Message = "Grind mode stopped.";
         }
 
         private static void BuildGear(GamePlayer player, CompanionManagerSession session, PlayerCompanionRecord record,

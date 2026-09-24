@@ -107,7 +107,8 @@ and verification history of the full-PvP conversion.
   manager's Training & Tactics tab and recruit panel or with `/companions build`;
   four classes require manual training. Each build sets its group role. A
   Crowd control companion mezzes extra monsters in PvE, and the other companions
-  leave mezzed monsters alone.
+  leave mezzed monsters alone. The manager's Group orders row sets the group
+  order and offers pull, invite all, bench all, and grind.
   The menu offers short gear pages and a native external-inventory view for the
   companion backpack. Client acceptance of the updated UI remains pending.
 - `/spawn` still creates temporary, player-owned helpers, separate from both the
