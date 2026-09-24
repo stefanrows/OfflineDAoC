@@ -154,6 +154,7 @@ namespace DOL.GS.Spells
 
 			m_pet.SummonSpellDamage = Spell.Damage;
 			m_pet.SummonSpellValue = Spell.Value;
+			m_pet.SummonSpellID = Spell.ID;
 
 			int x, y, z;
 			ushort heading;

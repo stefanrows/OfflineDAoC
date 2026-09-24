@@ -2186,13 +2186,34 @@ namespace DOL.GS
             ReleaseControlledPet(PetReleaseReason.Voluntary);
         }
 
-        private enum PetReleaseReason { Voluntary, StableTravel, WorldRemoval }
+        private enum PetReleaseReason { Voluntary, SummonUpgrade, StableTravel, WorldRemoval }
+
+        internal bool TryReleasePetForSummonUpgrade()
+        {
+            if (IsAutonomousWorldBot || !IsPlayerLedGroup ||
+                !(IsTemporaryGroupHelper || IsPersistentPlayerCompanion) ||
+                !IsAlive || ObjectState != eObjectState.Active || InCombat || IsAttacking || IsCasting ||
+                Brain is BotBrain { HasAggro: true } ||
+                ControlledBrain?.Body is not GameSummonedPet
+                {
+                    IsAlive: true,
+                    ObjectState: eObjectState.Active,
+                    InCombat: false,
+                    IsAttacking: false
+                })
+            {
+                return false;
+            }
+
+            ReleaseControlledPet(PetReleaseReason.SummonUpgrade);
+            return ControlledBrain == null;
+        }
 
         private void ReleaseControlledPet(PetReleaseReason reason)
         {
-            // AI maintenance and companion-level upgrades cannot recycle a
-            // living Necromancer servant. Required travel/world teardown is
-            // explicit so this guard cannot leak pets or trap a shade.
+            // Ordinary voluntary AI maintenance cannot recycle a living
+            // Necromancer servant. A guarded companion summon upgrade uses its
+            // own release reason so the native shade cleanup still runs.
             if (reason == PetReleaseReason.Voluntary && IsAlive &&
                 ObjectState == eObjectState.Active &&
                 ControlledBrain?.Body is NecromancerPet { IsAlive: true, ObjectState: eObjectState.Active })

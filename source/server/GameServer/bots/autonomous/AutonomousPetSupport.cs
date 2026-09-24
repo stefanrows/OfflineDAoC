@@ -340,6 +340,15 @@ public static class AutonomousPetSupport
             return true;
         }
 
+        if (owner is GameBot playerLedCompanion &&
+            characterClass != eCharacterClass.Bonedancer &&
+            petBrain?.Body is GameSummonedPet currentMainPet &&
+            TryUpgradePlayerLedMainPet(playerLedCompanion, currentMainPet, spells, combatTarget,
+                ref nextDeployablePetTick, out activity))
+        {
+            return true;
+        }
+
         if (petBrain == null)
         {
             eCharacterClass ownerClass = characterClass;
@@ -380,9 +389,8 @@ public static class AutonomousPetSupport
                 nextDeployablePetTick = now + 3_000;
             }
 
-            (Spell Spell, SpellLine Line) summon = ChooseWeightedByRank(
-                spells.Where(entry => IsMainPetSummon(entry.Spell.SpellType) && CanCast(owner, entry.Spell)),
-                owner is GameBot { IsEndgameCompanion: true });
+            (Spell Spell, SpellLine Line) summon = ChooseMainPetSummon(owner,
+                spells.Where(entry => IsMainPetSummon(entry.Spell.SpellType) && CanCast(owner, entry.Spell)));
             if (summon.Spell != null)
             {
                 PrepareAnimistGroundTarget(owner, combatTarget, summon.Spell);
@@ -941,6 +949,123 @@ public static class AutonomousPetSupport
         eSpellType.SummonAnimistPet or
         eSpellType.SummonNecroPet;
 
+    internal static (Spell Spell, SpellLine Line) ChooseMainPetSummon(
+        GameLiving owner,
+        IEnumerable<(Spell Spell, SpellLine Line)> available)
+    {
+        (Spell Spell, SpellLine Line)[] summons = available
+            .Where(entry => entry.Spell != null && IsMainPetSummon(entry.Spell.SpellType))
+            .DistinctBy(entry => entry.Spell.ID)
+            .ToArray();
+        if (summons.Length == 0)
+            return default;
+
+        if (owner is GameBot enchanter && IsPlayerLedCompanion(enchanter) &&
+            (eCharacterClass)enchanter.CharacterClass.ID == eCharacterClass.Enchanter)
+        {
+            (Spell Spell, SpellLine Line)[] healingPets = summons
+                .Where(entry => IsUnderhillAllySummon(entry.Spell))
+                .ToArray();
+            if (healingPets.Length > 0)
+                return ChooseWeightedByRank(healingPets, highestRankOnly: true);
+        }
+
+        bool chooseHighestRank = owner is GameBot bot &&
+            (IsPlayerLedCompanion(bot) || bot.IsEndgameCompanion);
+        return ChooseWeightedByRank(summons, chooseHighestRank);
+    }
+
+    /// <summary>
+    /// Replaces only a player-led companion's idle main summon when a stronger
+    /// learned rank is available. Native summon handlers still validate and
+    /// perform the replacement cast.
+    /// </summary>
+    internal static bool TryUpgradePlayerLedMainPet(
+        GameBot owner,
+        GameSummonedPet currentPet,
+        IEnumerable<(Spell Spell, SpellLine Line)> knownSpells,
+        GameLiving combatTarget,
+        ref long nextDeployablePetTick,
+        out string activity)
+    {
+        activity = string.Empty;
+        long now = GameLoop.GameLoopTime;
+        if (!IsPlayerLedCompanion(owner) || currentPet == null ||
+            owner.ControlledBrain?.Body != currentPet || now < nextDeployablePetTick ||
+            owner.InCombat || owner.IsAttacking || owner.IsCasting || owner.IsCrowdControlled ||
+            owner.IsRecoveryResting || combatTarget?.IsAlive == true ||
+            currentPet.InCombat || currentPet.IsAttacking ||
+            owner.Brain is DOL.AI.Brain.BotBrain { HasAggro: true })
+        {
+            return false;
+        }
+
+        (Spell Spell, SpellLine Line)[] available = knownSpells
+            .Where(entry => entry.Spell != null && IsMainPetSummon(entry.Spell.SpellType) && CanCast(owner, entry.Spell))
+            .ToArray();
+        (Spell Spell, SpellLine Line) desired = ChooseMainPetSummon(owner, available);
+        if (desired.Spell == null || !IsMainPetUpgrade(owner, currentPet, desired.Spell))
+            return false;
+
+        if (!owner.TryReleasePetForSummonUpgrade())
+            return false;
+
+        nextDeployablePetTick = now + 1_500;
+        activity = $"Replacing pet with {desired.Spell.Name}";
+        return true;
+    }
+
+    private static bool IsMainPetUpgrade(GameBot owner, GameSummonedPet currentPet, Spell desiredSummon)
+    {
+        if ((eCharacterClass)owner.CharacterClass.ID == eCharacterClass.Enchanter &&
+            IsUnderhillAllySummon(desiredSummon) &&
+            !IsUnderhillAllyPet(currentPet) &&
+            currentPet.SummonSpellID != desiredSummon.ID)
+        {
+            return true;
+        }
+
+        Spell currentSummon = currentPet.SummonSpellID > 0
+            ? SkillBase.GetSpellByID(currentPet.SummonSpellID)
+            : null;
+        if (currentSummon == null && currentPet.NPCTemplate != null)
+        {
+            currentSummon = KnownSpells(owner)
+                .Select(entry => entry.Spell)
+                .Where(spell => spell != null && IsMainPetSummon(spell.SpellType) &&
+                                spell.LifeDrainReturn == currentPet.NPCTemplate.TemplateId)
+                .OrderByDescending(spell => spell.Level)
+                .FirstOrDefault();
+        }
+
+        return (currentSummon != null && desiredSummon.Level > currentSummon.Level) ||
+               ProjectedPetLevel(owner, desiredSummon) > currentPet.Level;
+    }
+
+    private static int ProjectedPetLevel(GameLiving owner, Spell summon)
+    {
+        int level = summon.Damage >= 0
+            ? (int)summon.Damage
+            : (int)(owner.Level * summon.Damage * -0.01);
+        if (summon.Value > 0 && level > summon.Value)
+            level = (int)summon.Value;
+        return Math.Max(1, level);
+    }
+
+    private static bool IsPlayerLedCompanion(GameBot bot) =>
+        bot is { IsAutonomousWorldBot: false, IsPlayerLedGroup: true } &&
+        (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper);
+
+    private static bool IsUnderhillAllySummon(Spell spell) =>
+        spell?.SpellType == eSpellType.SummonUnderhill &&
+        (spell.Name?.Contains("Underhill Ally", StringComparison.OrdinalIgnoreCase) == true ||
+         NpcTemplateMgr.GetTemplate(spell.LifeDrainReturn)?.Name?.Contains(
+             "Underhill Ally", StringComparison.OrdinalIgnoreCase) == true);
+
+    private static bool IsUnderhillAllyPet(GameSummonedPet pet) =>
+        pet?.NPCTemplate?.Name?.Contains("Underhill Ally", StringComparison.OrdinalIgnoreCase) == true ||
+        pet?.Name?.Contains("Underhill Ally", StringComparison.OrdinalIgnoreCase) == true;
+
     public static bool IsAnimistFieldTurret(eSpellType type) => type is
         eSpellType.SummonAnimistFnF or
         eSpellType.SummonAnimistFnFCustom or
@@ -1241,6 +1366,14 @@ public static class AutonomousPetSupport
             bool bonedancer = bot.CharacterClass?.ID == (int)eCharacterClass.Bonedancer;
             foreach (Spell spell in bot.Spells?.Where(spell => spell != null) ?? Enumerable.Empty<Spell>())
                 yield return (spell, bot.ResolvePowerSpellLine(spell, MobSpellLine));
+
+            if (bot.CharacterClass?.ID == (int)eCharacterClass.Enchanter && IsPlayerLedCompanion(bot))
+            {
+                foreach (Tuple<SpellLine, List<Skill>> entry in bot.GetAllUsableListSpells())
+                foreach (Spell summon in entry?.Item2?.OfType<Spell>() ?? Enumerable.Empty<Spell>())
+                    if (summon.SpellType == eSpellType.SummonUnderhill && summon.Level <= bot.Level)
+                        yield return (summon, entry.Item1);
+            }
 
             // SetCasterSpells intentionally retains only the highest rank per
             // role. Bonedancers are the exception: a three-pet level-45 plan

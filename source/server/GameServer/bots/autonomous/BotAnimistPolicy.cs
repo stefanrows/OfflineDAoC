@@ -71,6 +71,19 @@ namespace DOL.GS
             long now = GameLoop.GameLoopTime;
             State state = States.GetOrCreateValue(bot);
             var main = bot.ControlledBrain?.Body as TurretPet;
+            if (main != null && AutonomousPetSupport.TryUpgradePlayerLedMainPet(
+                    bot,
+                    main,
+                    AutonomousPetSupport.KnownSpells(bot).Where(entry =>
+                        (allowed == null || allowed(entry.Spell)) &&
+                        entry.Spell?.SpellType == eSpellType.SummonAnimistPet),
+                    encounter ? encounterTarget : null,
+                    ref nextDeployable,
+                    out activity))
+            {
+                return true;
+            }
+
             if (encounter && main?.IsAlive == true && main.ObjectState == GameObject.eObjectState.Active &&
                 bot.ControlledBrain is TurretBrain { IsMainPet: true } && now >= state.NextRelocation)
             {
@@ -95,8 +108,8 @@ namespace DOL.GS
                 .Where(entry => (allowed == null || allowed(entry.Spell)) && AutonomousPetSupport.CanCast(bot, entry.Spell));
             if (bot.ControlledBrain == null)
             {
-                var summon = AutonomousPetSupport.ChooseWeightedByRank(
-                    spells.Where(entry => entry.Spell.SpellType == eSpellType.SummonAnimistPet), bot.IsEndgameCompanion);
+                var summon = AutonomousPetSupport.ChooseMainPetSummon(bot,
+                    spells.Where(entry => entry.Spell.SpellType == eSpellType.SummonAnimistPet));
                 if (summon.Spell != null && Cast(bot, encounter ? encounterTarget : null, summon.Spell, summon.Line))
                 {
                     nextDeployable = now + Math.Max(1500, summon.Spell.CastTime + 500);

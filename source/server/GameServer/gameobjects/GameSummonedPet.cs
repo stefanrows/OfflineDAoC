@@ -16,6 +16,7 @@ namespace DOL.GS
         // Used to calculate pet level.
         public double SummonSpellDamage { get; set; } = -88.0;
         public double SummonSpellValue { get; set; } = 44.0;
+        public int SummonSpellID { get; set; }
 
         public override byte Level
         {
