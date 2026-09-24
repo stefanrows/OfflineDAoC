@@ -103,7 +103,8 @@ and verification history of the full-PvP conversion.
   attempt to restore active companions at login.
 - Active companions earn eligible adventuring XP and can catch up toward their
   owner's level. Benched companions retain progress without earning passive XP.
-  Automatic training offers 57 named builds for 35 classes (`/companions build`);
+  Automatic training offers 57 named builds for 35 classes, chosen in the
+  manager's Training & Tactics tab and recruit panel or with `/companions build`;
   four classes require manual training.
   The menu offers short gear pages and a native external-inventory view for the
   companion backpack. Client acceptance of the updated UI remains pending.

@@ -2,7 +2,8 @@
 
 Status: **M0 remainder implemented offline in 0.33.0; owner real-client check
 pending. M1a (build research, catalog, and command selection) implemented
-offline in 0.34.0; M1b, M1c, M2, and M3 are not implemented yet.**
+offline in 0.34.0. M1b (build list in the window and recruit flow) implemented
+offline in 0.35.0. M1c, M2, and M3 are not implemented yet.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -156,13 +157,36 @@ variant.
       benched), check its trained lines and spells, level it once, and recruit
       with `/companions recruit healer pacification`.
 
-### M1b - Build list in the window and recruit flow
+### M1b - Build list in the window and recruit flow (0.35.0, offline)
 
-- Training & Tactics: a clickable build list with each build's one-line
-  description and role; the current build is marked.
-- Recruit flow in the window: choose a story companion or class, then one of
-  its builds, then recruit. An authored companion's written preferred build is
-  preselected (the authored catalog does not record one yet).
+Server only. It reuses the window's detail links and action buttons, so the
+installed 0.33.0 (or 0.32.1) manager `game.dll` needs no change.
+
+- [x] Training & Tactics: every build is a detail link, followed by its role
+      text; the current build is marked `(current)`. Clicking a build selects
+      it (`<`) and shows its level-50 targets. **[Use build]** applies it
+      through `PlayerCompanionRoster.TrySelectBuild`, with the M1a rules: free,
+      no trainer, reset and retrain to the current level, active or benched.
+      It stays disabled until a build other than the current one is selected,
+      so one stray click cannot reset a companion.
+- [x] Recruit flow: a story companion or class lists its builds with the class
+      default preselected (`(default) <`). **[Recruit]** or **[Create]** uses
+      the selected build. The authored catalog records no preferred build yet,
+      so story companions preselect their class default. Manual-only classes
+      show why and recruit in manual training. A selection belongs to the one
+      row it was made on; changing rows or tabs never carries it over.
+- [x] Commands: `/companions recruit authored <name> [build]`.
+- [x] Overview names the build that automatic training follows.
+- [x] Test: a manual Healer shows all four builds with **[Use build]**
+      disabled; choosing Pacification enables it and sends that build, not the
+      default, to the roster; the recruit panel preselects Tri-spec and
+      recruits with the chosen build. The test server has no skill tables, so it
+      checks the refusal path; a successful switch is covered by the M1a
+      roster tests.
+- [ ] Owner: in the real client, open Training & Tactics, select a different
+      build, and choose **[Use build]** for an active and a benched companion.
+      Recruit one story companion and one class with a non-default build and
+      check the build on the new roster entry.
 
 ### M1c - Crowd control role
 

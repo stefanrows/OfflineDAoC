@@ -32,7 +32,7 @@ capacity. The Active Population tab shows autonomous crews and solo roamers.
 | `/companions` | Open the Companion Manager window, if its client extension is installed. Without it, you get one line of command guidance. |
 | `/companions find <name or class>` | Search the Companion Manager. The window's **[Search]** link types `/companions find ` into the chat line for you. |
 | `/companions list` | List companion names grouped by realm. Recruit generated people with `/companions recruit Warden` or another class; use an explicit realm if needed. Recruits are free, start at level 1, and the roster holds 78 companions. |
-| `/companions cast` | Browse the 78 authored people, eight at a time. Use `/companions cast <realm> <page>` to browse, then `/companions recruit authored <name>`. Each authored individual can join your roster once. |
+| `/companions cast` | Browse the 78 authored people, eight at a time. Use `/companions cast <realm> <page>` to browse, then `/companions recruit authored <name> [build]`. Each authored individual can join your roster once. |
 | `/companions profile <name>` | Show a saved companion's identity, background, preferred build, role, stance, and dialogue. |
 | `/companions build <name> [build]` | List a companion's builds, or switch to one, for example `/companions build Astrid summoning`. Switching is free, works anywhere, and retrains the new build to the companion's level. Recruit with a build: `/companions recruit healer pacification`. |
 | `/companions role <name> <role>` | Set a class-legal tank, healer, buffer, or attacker job. |

@@ -546,6 +546,81 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
+    public void CompanionManagerListsBuildsAndAppliesOnlyTheChosenOne()
+    {
+        Owner owner = NewOwner("manager-build-owner", eRealm.Midgard);
+        PlayerCompanionRecord healer = NewRecord(owner.ObjectId, Guid.NewGuid().ToString(), "Build Healer", eCharacterClass.Healer);
+        healer.Realm = (int)eRealm.Midgard;
+        Assert.That(_database.AddObject(healer), Is.True);
+        CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Healer, "pacification", out CompanionBuildPlan pacification);
+
+        CompanionManager.Open(owner);
+        CompanionManager.TryGetSession(owner, out CompanionManagerSession session);
+        Click(owner, session, CompanionManagerProtocol.ControlDetailTraining);
+        Assert.Multiple(() =>
+        {
+            Assert.That(VisibleLinks(session), Does.Contain("  Tri-spec").And.Contain("  Mending (healer)"),
+                "A manual companion has no current build");
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 3], Is.EqualTo("[Use build]"),
+                "[Use build] stays disabled until another build is chosen");
+        });
+
+        ClickLink(owner, session, "  Pacification (crowd control)");
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.BuildChoice, Is.EqualTo(("c:" + healer.CompanionId, pacification.Id)));
+            Assert.That(VisibleLinks(session), Does.Contain("  Pacification (crowd control) <"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 2], Is.EqualTo("[Use build]"));
+        });
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 1);
+        Assert.That(session.Message, Does.Contain("Pacification (crowd control)"),
+            "The chosen build, not the class default, reaches the roster");
+
+        Click(owner, session, CompanionManagerProtocol.ControlTabRecruit);
+        CompanionManager.SetQuery(owner, "healer");
+        string generatedHealer = $"g:{(int)eRealm.Midgard}:{(int)eCharacterClass.Healer}";
+        Click(owner, session, CompanionManagerProtocol.ControlRowBase + Array.IndexOf(session.RowKeys, generatedHealer));
+        Assert.That(VisibleLinks(session), Does.Contain("  Tri-spec (default) <"), "The class default is preselected");
+        Assert.That(session.BuildChoice.EntryKey, Is.Not.EqualTo(generatedHealer), "A roster choice never carries over");
+
+        ClickLink(owner, session, "  Pacification (crowd control)");
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.BuildChoice, Is.EqualTo((generatedHealer, pacification.Id)));
+            Assert.That(session.Message, Does.Contain("Pacification (crowd control)"));
+            Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(1),
+                "A build that fails its runtime check recruits nobody");
+        });
+    }
+
+    private static void Click(Owner owner, CompanionManagerSession session, int control) =>
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), control.ToString("x2"));
+
+    private static string[] VisibleLinks(CompanionManagerSession session) =>
+        Enumerable.Range(0, CompanionManagerProtocol.DetailLines)
+            .Select(line => session.SentLabels[CompanionManagerProtocol.LabelDetailBase + 2 * line + 1])
+            .Where(text => !string.IsNullOrEmpty(text)).ToArray();
+
+    /// <summary>Scrolls the detail panel until the link is visible, then clicks it.</summary>
+    private static void ClickLink(Owner owner, CompanionManagerSession session, string text)
+    {
+        for (int page = 0; page < 5; page++)
+        {
+            for (int line = 0; line < CompanionManagerProtocol.DetailLines; line++)
+            {
+                if (session.SentLabels[CompanionManagerProtocol.LabelDetailBase + 2 * line + 1] == text)
+                {
+                    Click(owner, session, CompanionManagerProtocol.ControlDetailBase + line);
+                    return;
+                }
+            }
+            Click(owner, session, CompanionManagerProtocol.ControlDetailDown);
+        }
+        Assert.Fail($"Detail link '{text}' was not found.");
+    }
+
+    [Test]
     public void CompanionManagerSessionsAreScopedToTheirOwner()
     {
         Owner first = NewOwner("manager-first", eRealm.Albion);

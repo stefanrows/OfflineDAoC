@@ -51,6 +51,7 @@ command guidance. The accumulating NPC speech menu stays closed.
 | Recruit | Starts on the player's realm and allows Albion, Midgard, and Hibernia; filters authored people and generated classes by name, class, realm, and role. |
 | Details | Overview, Training & Tactics, and Gear tabs; the selected record and list position are kept per tab during refreshes. |
 | Gear | Worn slots and backpack items with item actions, plus the existing native companion bag for inspection and drag/drop. Benched gear is read-only. |
+| Builds (0.35.0) | Training & Tactics lists the class's builds as links with their role; selecting one and choosing **[Use build]** switches it. Recruit details list the builds with the class default preselected, and **[Recruit]**/**[Create]** use the selection. |
 
 The recruitment copy is shown in the detail panel exactly as agreed:
 
@@ -165,9 +166,10 @@ differences; **[Refresh]** resends everything.
 
 | Manager action | Existing entry point |
 | --- | --- |
-| Recruit generated or authored | `PlayerCompanionRoster.TryRecruit` / `TryRecruitAuthored` (capacity and once-per-owner checks stay there) |
+| Recruit generated or authored | `PlayerCompanionRoster.TryRecruit` / `TryRecruitAuthored` with the selected build (capacity and once-per-owner checks stay there) |
 | Invite or bench | `PlayerCompanionRoster.TryInvite` / `TryBench` |
 | Role or stance | `PlayerCompanionRoster.TrySetTactics` |
+| Build switch | `PlayerCompanionRoster.TrySelectBuild` (free, no trainer, resets and retrains) |
 | Training mode | `TrySetManualTrainingMode` / `TrySetAutomaticTrainingMode` |
 | Train one rank | Rechecks active companion, class trainer (`CanUseCompanionTrainer`), line, and rank; `SaveProgress` with queued retry |
 | Respecialize | `PlayerCompanionCommandHandler.TryBeginCompanionRespec` and the existing confirmation dialog |

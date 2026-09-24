@@ -882,7 +882,12 @@ namespace DOL.GS
             TryRecruitInternal(owner, realm, characterClass, null, buildQuery, out record, out message);
 
         public static bool TryRecruitAuthored(GamePlayer owner, string name, out PlayerCompanionRecord record,
-            out string message)
+            out string message) =>
+            TryRecruitAuthored(owner, name, null, out record, out message);
+
+        /// <summary>Recruits an authored person with a chosen build; an empty build uses the class default.</summary>
+        public static bool TryRecruitAuthored(GamePlayer owner, string name, string buildQuery,
+            out PlayerCompanionRecord record, out string message)
         {
             CompanionCharacterCatalog.Character character = CompanionCharacterCatalog.FindByName(name);
             if (character == null)
@@ -891,7 +896,7 @@ namespace DOL.GS
                 message = "That authored companion was not found. Browse the authored cast in /companions.";
                 return false;
             }
-            return TryRecruitInternal(owner, character.Realm, character.Class, character, null, out record, out message);
+            return TryRecruitInternal(owner, character.Realm, character.Class, character, buildQuery, out record, out message);
         }
 
         private static bool TryRecruitInternal(GamePlayer owner, eRealm realm, eCharacterClass characterClass,

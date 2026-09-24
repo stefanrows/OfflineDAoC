@@ -56,7 +56,7 @@ The Stage 5 cast adds two authored people for each of the 39 Classic + SI
 classes. Each has a stable key, name, eligible race and gender, size,
 background, personality, and dialogue. Browse them with
 `/companions cast [realm] [page]`; recruit each once per owner with
-`/companions recruit authored <name>`. Generated recruitment by class remains
+`/companions recruit authored <name> [build]`. Generated recruitment by class remains
 available. New generated recruits receive a saved personality template. Existing
 records keep their previous identity and class behavior. The catalog's preferred
 build is the validated class default build where available; four classes remain manual-only.

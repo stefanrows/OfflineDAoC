@@ -21,6 +21,7 @@ namespace DOL.GS.Commands
         public const string PermanenceCopy = "Both are permanent companions who earn XP and keep their training and gear. /spawn helpers are temporary.";
         private const int GuidanceDelayMilliseconds = 3000;
         private const int DetailWidth = WidthDetail - 6;
+        private const string BuildIndent = "    ";
         private static readonly ConditionalWeakTable<GamePlayer, CompanionManagerSession> Sessions = new();
 
         private sealed record Line(string Text, string Key = null, Action Run = null);
@@ -366,13 +367,26 @@ namespace DOL.GS.Commands
             switch (session.DetailTab)
             {
                 case CompanionManagerDetailTab.Training:
-                    bool followsBuild = CompanionBuildPlanCatalog.TryGetPlanById(characterClass, current.TrainingPlanId,
-                        out CompanionBuildPlan currentBuild);
-                    AddText(lines, $"Training: {(!automatic ? "manual" : followsBuild ? $"automatic, {currentBuild.Name} build" : $"automatic, plan {current.TrainingPlanId}")}; {unspent} unspent points.");
+                    CompanionBuildPlan currentBuild = automatic &&
+                        CompanionBuildPlanCatalog.TryGetPlanById(characterClass, current.TrainingPlanId, out CompanionBuildPlan saved)
+                        ? saved : null;
+                    AddText(lines, $"Training: {(!automatic ? "manual" : currentBuild != null ? $"automatic, {currentBuild.Name} build" : $"automatic, plan {current.TrainingPlanId}")}; {unspent} unspent points.");
                     IReadOnlyList<CompanionBuildPlan> builds = CompanionBuildPlanCatalog.GetPlans(characterClass);
-                    AddText(lines, builds.Count > 0
-                        ? $"Builds: {string.Join(", ", builds.Select(build => build.Key))}. Switch with /companions build {current.Name} <build>."
-                        : "Manual only: " + CompanionBuildPlanCatalog.GetBlocker(characterClass) + ".");
+                    CompanionBuildPlan chosen = null;
+                    if (builds.Count > 0)
+                    {
+                        string entryKey = RecordKey(current);
+                        chosen = ChosenBuild(session, entryKey, characterClass, currentBuild);
+                        lines.Add(new Line("Builds (select one, then [Use build]):"));
+                        AddBuildList(session, lines, entryKey, builds, currentBuild, "current", chosen);
+                        if (chosen != null && chosen != currentBuild)
+                        {
+                            AddText(lines, $"Selected: {chosen.Name}. Level 50: {chosen.FormatTargets()}. " +
+                                           $"[Use build] resets {current.Name}'s specializations and retrains them to level {current.Level}; free, no trainer needed.");
+                        }
+                    }
+                    else
+                        AddText(lines, "Manual only: " + CompanionBuildPlanCatalog.GetBlocker(characterClass) + ".");
                     lines.Add(automatic
                         ? new Line("Switch to manual training", "mode:manual", () => SetTraining(player, session, id, false))
                         : new Line("Switch to automatic training", "mode:automatic", () => SetTraining(player, session, id, true)));
@@ -407,6 +421,13 @@ namespace DOL.GS.Commands
                     }
                     else
                         AddText(lines, "Invite this companion to train or respecialize.");
+                    if (builds.Count > 0)
+                    {
+                        bool switchable = chosen != null && chosen != currentBuild;
+                        string planId = chosen?.Id;
+                        choices.Add(new Choice("[Use build]", switchable, "usebuild:" + (switchable ? planId : string.Empty),
+                            () => UseBuild(player, session, id, switchable ? planId : null)));
+                    }
                     choices.Add(new Choice("[Respecialize]", live, "respec", () => Respec(player, session, id)));
                     break;
 
@@ -421,7 +442,8 @@ namespace DOL.GS.Commands
                     lines.Add(new Line(current.Level >= 50
                         ? $"XP: {current.Experience:N0} (maximum level)"
                         : $"XP: {current.Experience:N0} / {GamePlayer.GetExperienceAmountForLevel(current.Level):N0}"));
-                    lines.Add(new Line($"Training: {(automatic ? "automatic" : "manual")}; {unspent} unspent points."));
+                    AddText(lines, $"Training: {(!automatic ? "manual" : CompanionBuildPlanCatalog.TryGetPlanById(characterClass,
+                        current.TrainingPlanId, out CompanionBuildPlan build) ? $"automatic, {build.Name} build" : "automatic")}; {unspent} unspent points.");
                     lines.Add(new Line($"Role: {role}; stance: {stance}."));
                     lines.Add(new Line(string.Empty));
                     CompanionCharacterCatalog.Character authored = CompanionCharacterCatalog.Find(current.AuthoredRecruitKey);
@@ -553,6 +575,8 @@ namespace DOL.GS.Commands
                     ? "Already in your roster."
                     : full ? "Your roster is full." : "Available: free to recruit, starting at level 1.");
                 lines.Add(new Line(string.Empty));
+                // The authored catalog records no preferred build yet, so the class default is preselected.
+                string storyBuild = owned == null ? AddRecruitBuilds(session, lines, key, story.Class) : null;
                 AddText(lines, PermanenceCopy);
                 if (owned != null)
                 {
@@ -562,8 +586,8 @@ namespace DOL.GS.Commands
                 else
                 {
                     string storyKey = story.Key;
-                    choices.Add(new Choice("[Recruit]", !full, "recruit:" + key,
-                        () => RecruitStory(player, session, storyKey)));
+                    choices.Add(new Choice("[Recruit]", !full, $"recruit:{key}:{storyBuild}",
+                        () => RecruitStory(player, session, storyKey, storyBuild)));
                 }
                 return;
             }
@@ -575,12 +599,13 @@ namespace DOL.GS.Commands
                 view.Subheader = $"{TemporaryGroupClassCatalog.RealmName(realm)} {characterClass} - group roles: {BotPartyRoles.Label(characterClass)}";
                 AddText(lines, CreateCopy);
                 lines.Add(new Line(string.Empty));
+                string build = AddRecruitBuilds(session, lines, key, characterClass);
                 AddText(lines, "Recruiting is free and starts at level 1.");
                 AddText(lines, $"Roster: {roster.Count}/{PlayerCompanionRoster.MaximumRosterSize}.");
                 lines.Add(new Line(string.Empty));
                 AddText(lines, PermanenceCopy);
-                choices.Add(new Choice("[Create]", !full, "create:" + key,
-                    () => RecruitGenerated(player, session, key)));
+                choices.Add(new Choice("[Create]", !full, $"create:{key}:{build}",
+                    () => RecruitGenerated(player, session, key, build)));
                 return;
             }
 
@@ -590,6 +615,53 @@ namespace DOL.GS.Commands
             AddText(lines, StoryCopy);
             AddText(lines, CreateCopy);
             AddText(lines, PermanenceCopy);
+        }
+
+        /// <summary>
+        /// Lists a class's builds for recruitment with the class default preselected.
+        /// Returns the chosen plan ID, or null for the class default.
+        /// </summary>
+        private static string AddRecruitBuilds(CompanionManagerSession session, List<Line> lines, string entryKey,
+            eCharacterClass characterClass)
+        {
+            IReadOnlyList<CompanionBuildPlan> builds = CompanionBuildPlanCatalog.GetPlans(characterClass);
+            if (builds.Count == 0)
+            {
+                AddText(lines, $"Manual training only: {CompanionBuildPlanCatalog.GetBlocker(characterClass)}.");
+                lines.Add(new Line(string.Empty));
+                return null;
+            }
+            CompanionBuildPlan chosen = ChosenBuild(session, entryKey, characterClass, builds[0]);
+            lines.Add(new Line("Build (select one, then recruit):"));
+            AddBuildList(session, lines, entryKey, builds, builds[0], "default", chosen);
+            AddText(lines, $"Recruits with the {chosen.Name} build; it trains automatically at every level. " +
+                           $"Level 50: {chosen.FormatTargets()}. Switching later is free.");
+            lines.Add(new Line(string.Empty));
+            return chosen == builds[0] ? null : chosen.Id;
+        }
+
+        /// <summary>The build chosen for this entry, or <paramref name="fallback"/> when none is.</summary>
+        private static CompanionBuildPlan ChosenBuild(CompanionManagerSession session, string entryKey,
+            eCharacterClass characterClass, CompanionBuildPlan fallback) =>
+            session.BuildChoice.EntryKey == entryKey &&
+            CompanionBuildPlanCatalog.TryGetPlanById(characterClass, session.BuildChoice.PlanId, out CompanionBuildPlan chosen)
+                ? chosen
+                : fallback;
+
+        private static void AddBuildList(CompanionManagerSession session, List<Line> lines, string entryKey,
+            IReadOnlyList<CompanionBuildPlan> builds, CompanionBuildPlan marked, string markedLabel, CompanionBuildPlan chosen)
+        {
+            foreach (CompanionBuildPlan build in builds)
+            {
+                string planId = build.Id;
+                string state = build == marked ? $" ({markedLabel})" : string.Empty;
+                string selected = build == chosen ? " <" : string.Empty;
+                lines.Add(new Line($"  {build.Name}{state}{selected}", "build:" + planId,
+                    () => session.BuildChoice = (entryKey, planId)));
+                foreach (string line in CompanionManagerSession.Wrap(Sanitize(build.Role, int.MaxValue),
+                             DetailWidth - TextWidth(BuildIndent)))
+                    lines.Add(new Line(BuildIndent + line));
+            }
         }
 
         private static bool TryParseGeneratedKey(string key, out eRealm realm, out eCharacterClass characterClass)
@@ -679,6 +751,18 @@ namespace DOL.GS.Commands
                 : $"{companion.Name} trained {spec.Name} to {spec.Level}, but the save failed. Another save attempt is queued.");
         }
 
+        private static void UseBuild(GamePlayer player, CompanionManagerSession session, string id, string planId)
+        {
+            if (planId == null)
+            {
+                Report(player, session, "Select a different build first, then choose [Use build].");
+                return;
+            }
+            if (PlayerCompanionRoster.TrySelectBuild(player, id, planId, out string message))
+                session.BuildChoice = default;
+            Report(player, session, message);
+        }
+
         private static void Respec(GamePlayer player, CompanionManagerSession session, string id)
         {
             PlayerCompanionCommandHandler.TryBeginCompanionRespec(player.Client, player, id, out string message);
@@ -706,7 +790,7 @@ namespace DOL.GS.Commands
             session.SelectedItemId = null;
         }
 
-        private static void RecruitStory(GamePlayer player, CompanionManagerSession session, string storyKey)
+        private static void RecruitStory(GamePlayer player, CompanionManagerSession session, string storyKey, string planId)
         {
             CompanionCharacterCatalog.Character story = CompanionCharacterCatalog.Find(storyKey);
             if (story == null)
@@ -714,23 +798,29 @@ namespace DOL.GS.Commands
                 Report(player, session, "That story companion is no longer in the cast.");
                 return;
             }
-            PlayerCompanionRoster.TryRecruitAuthored(player, story.Name, out PlayerCompanionRecord record, out string message);
+            PlayerCompanionRoster.TryRecruitAuthored(player, story.Name, planId, out PlayerCompanionRecord record, out string message);
             Report(player, session, message);
             if (record?.IsPersisted == true)
+            {
+                session.BuildChoice = default;
                 ShowInRoster(session, RecordKey(record));
+            }
         }
 
-        private static void RecruitGenerated(GamePlayer player, CompanionManagerSession session, string key)
+        private static void RecruitGenerated(GamePlayer player, CompanionManagerSession session, string key, string planId)
         {
             if (!TryParseGeneratedKey(key, out eRealm realm, out eCharacterClass characterClass))
             {
                 Report(player, session, "That class is no longer available for recruitment.");
                 return;
             }
-            PlayerCompanionRoster.TryRecruit(player, realm, characterClass, out PlayerCompanionRecord record, out string message);
+            PlayerCompanionRoster.TryRecruit(player, realm, characterClass, planId, out PlayerCompanionRecord record, out string message);
             Report(player, session, message);
             if (record?.IsPersisted == true)
+            {
+                session.BuildChoice = default;
                 ShowInRoster(session, RecordKey(record));
+            }
         }
 
         private static DbInventoryItem[] LoadSavedItems(string companionId)

@@ -12,6 +12,39 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-09-24
+
+### Added
+
+- Build list in the Companion Manager (M1b). The Training & Tactics tab lists
+  every build for the selected companion with its role and marks the current
+  one. Selecting a build shows its level-50 targets. **[Use build]** switches
+  to it with the M1a rules: free, no trainer, reset and retrain to the current
+  level. It works for active and benched companions.
+- Build choice in the manager's recruit flow. Selecting a story companion or a
+  class lists its builds with the class default preselected; **[Recruit]** or
+  **[Create]** uses the selected build. Manual-only classes say so.
+- `/companions recruit authored <name> [build]` recruits a story companion
+  with a chosen build.
+- Integration test for the window's build list, **[Use build]**, and build
+  choice during recruitment.
+
+### Changed
+
+- The manager's Overview tab names the build that automatic training follows.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The Training & Tactics tab no longer tells players to switch builds with a
+  command. `/companions build` still works.
+
 ## [0.34.0] - 2026-09-24
 
 ### Added

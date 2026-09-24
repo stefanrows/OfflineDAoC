@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -167,7 +167,7 @@ namespace DOL.GS.Commands
                 string state = roster.Any(item => item.AuthoredRecruitKey == entry.Key) ? "recruited" : "available";
                 DisplayMessage(client, $"{entry.Name}, {entry.Realm} {entry.Class} ({entry.Personality}; {state}).");
             }
-            DisplayMessage(client, "Recruit with /companions recruit authored <name>, or open /companions for biographies.");
+            DisplayMessage(client, "Recruit with /companions recruit authored <name> [build], or open /companions for biographies.");
         }
 
         private void ShowProfile(GameClient client, GamePlayer player, string[] args)
@@ -204,7 +204,15 @@ namespace DOL.GS.Commands
 
             if (args.Length >= 4 && args[2].Equals("authored", StringComparison.OrdinalIgnoreCase))
             {
-                PlayerCompanionRoster.TryRecruitAuthored(player, string.Join(' ', args.Skip(3)), out _, out string authoredMessage);
+                string authoredName = string.Join(' ', args.Skip(3));
+                string authoredBuild = null;
+                if (CompanionCharacterCatalog.FindByName(authoredName) == null && args.Length >= 5)
+                {
+                    // A trailing word that is not part of the name names the build.
+                    authoredName = string.Join(' ', args.Skip(3).Take(args.Length - 4));
+                    authoredBuild = args[^1];
+                }
+                PlayerCompanionRoster.TryRecruitAuthored(player, authoredName, authoredBuild, out _, out string authoredMessage);
                 DisplayMessage(client, authoredMessage);
                 return;
             }
@@ -498,7 +506,7 @@ namespace DOL.GS.Commands
         private void ShowUsage(GameClient client)
         {
             DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }
