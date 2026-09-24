@@ -108,8 +108,8 @@ namespace DOL.GS {
                         
                         if (RollDropChance(chance) && numDrops < MaxDropCap)
                         {
-                            classForLoot = GetRandomClassFromGroup(owner.Group);
-                            var item = GenerateItemTemplate(owner, classForLoot, (byte)(mob.Level + 1), killedcon);
+                            GameLiving recipient = GetRandomLootParticipantFromGroup(owner.Group, owner) ?? owner;
+                            var item = GenerateItemTemplate(recipient, GetLootClass(recipient), (byte)(mob.Level + 1), killedcon);
                             loot.AddFixed(item, 1);
                             numDrops++;
                         }
@@ -118,8 +118,8 @@ namespace DOL.GS {
                     //if we're under the cap, add in the guaranteed drop
                     if (numDrops < MaxDropCap && guaranteedDrop > 0)
                     {
-                        classForLoot = GetRandomClassFromGroup(owner.Group);
-                        var item = GenerateItemTemplate(owner, classForLoot, (byte)(mob.Level + 1), killedcon);
+                        GameLiving recipient = GetRandomLootParticipantFromGroup(owner.Group, owner) ?? owner;
+                        var item = GenerateItemTemplate(recipient, GetLootClass(recipient), (byte)(mob.Level + 1), killedcon);
                         loot.AddFixed(item, 1);
                     }
 
@@ -225,17 +225,13 @@ namespace DOL.GS {
             return item;
         }
 
-        private eCharacterClass GetRandomClassFromGroup(Group group)
+        private static GameLiving GetRandomLootParticipantFromGroup(Group group, GameLiving owner)
         {
-            List<eCharacterClass> validClasses = new List<eCharacterClass>();
-
-            foreach (GameLiving member in GetLootParticipants(group))
-            {
-                validClasses.Add(GetLootClass(member));
-            }
-            eCharacterClass ranClass = validClasses[Util.Random(validClasses.Count - 1)];
-
-            return ranClass;
+            GameLiving[] members = GetLootParticipants(group)
+                .Where(member => member.CurrentRegion == owner.CurrentRegion &&
+                    member.IsWithinRadius(owner, WorldMgr.VISIBILITY_DISTANCE))
+                .ToArray();
+            return members.Length == 0 ? null : members[Util.Random(members.Length - 1)];
         }
         
         private eCharacterClass GetRandomClassFromBattlegroup(BattleGroup battlegroup)

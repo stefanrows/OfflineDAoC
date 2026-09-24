@@ -570,7 +570,16 @@ namespace DOL.AI.Brain
                     PlayerLedPullCoordinator.OnGroupThreat(groupMember);
                     AutonomousDefensivePull.OnThreat(groupMember, attacker);
                     if (sisterParty) AutonomousDefensivePull.OnThreat(BotBody, attacker);
-                    AddToAggroList(attacker, attacker.EffectiveLevel + ad.Damage + ad.CriticalDamage);
+                    int peelPriority = IsTankClass ? ProtectionPriority(groupMember, AssistedPlayer) : 0;
+                    long protectionUrgency = peelPriority * 500L;
+                    if (peelPriority >= 2 &&
+                        (GameLoop.GameLoopTime >= _groupPeelUntil || peelPriority >= _groupPeelPriority))
+                    {
+                        _groupPeelTarget = attacker;
+                        _groupPeelPriority = peelPriority;
+                        _groupPeelUntil = GameLoop.GameLoopTime + 3_000;
+                    }
+                    AddToAggroList(attacker, attacker.EffectiveLevel + ad.Damage + ad.CriticalDamage + protectionUrgency);
                     break;
             }
 
@@ -599,6 +608,9 @@ namespace DOL.AI.Brain
         private long _nextCombatProgressTick;
         private long _nextMaintenanceBuffTick;
         private long _nextCompanionProtectionTick;
+        private GameLiving _groupPeelTarget;
+        private int _groupPeelPriority;
+        private long _groupPeelUntil;
         private long _nextSongTwistTick;
         private long _lastPerformerFollowTick = long.MinValue;
         private long _nextInstrumentKitCheck;
@@ -1251,6 +1263,10 @@ namespace DOL.AI.Brain
                 return;
 
             if (BotBody?.TryApplyPendingPersistentCompanionUpgrade() == true)
+                return;
+
+            if (BotBody?.IsPersistentPlayerCompanion == true &&
+                PlayerCompanionRoster.UpgradeStarterEquipment(BotBody))
                 return;
 
             WakeNearbyNaturalAggroBrains();
@@ -2567,17 +2583,21 @@ namespace DOL.AI.Brain
                 return;
             }
 
-            // The native handler owns an accepted cast through completion (and
-            // handles real hits, range/LOS loss and death). Do not replace it
-            // with a melee/range/pull decision merely because an enemy is near.
-            // This also preserves legal uninterruptible casts.
+            // Preserve an accepted cast unless a different attacker is pressing
+            // a protected group member. In that case the tank must peel now.
+            GameLiving urgentProtectionTarget = FindProtectionTarget();
             if (Body.IsCasting)
-                return;
+            {
+                if (urgentProtectionTarget == null || Body.TargetObject == urgentProtectionTarget ||
+                    Body.castingComponent?.SpellHandler?.Spell?.IsHarmful != true)
+                    return;
+                Body.StopCurrentSpellcast();
+            }
 
             if (TryPveAddControl())
                 return;
 
-            GameLiving protectionTarget = FindProtectionTarget();
+            GameLiving protectionTarget = urgentProtectionTarget;
             if (protectionTarget != null)
             {
                 if (PvpCombatant.IsPlayerShaped(protectionTarget))
@@ -3103,6 +3123,17 @@ namespace DOL.AI.Brain
             return HasAggro;
         }
 
+        private static int ProtectionPriority(GameLiving victim, GamePlayer leader)
+        {
+            if (victim is GameBot bot && bot.Brain is BotBrain { IsHealer: true }) return 3;
+            if (victim is GamePlayer player && player.CharacterClass != null &&
+                BotPartyRoles.IsHealingClass((eCharacterClass)player.CharacterClass.ID)) return 3;
+            if (victim is GameBot bomber && CompanionBombingPolicy.CanUseBombs(bomber)) return 2;
+            if (victim is GamePlayer caster && caster.CharacterClass != null &&
+                CompanionBombingPolicy.SupportsClass((eCharacterClass)caster.CharacterClass.ID)) return 2;
+            return victim == leader ? 1 : 0;
+        }
+
         private GameLiving FindProtectionTarget()
         {
             if (!IsTankClass || Body?.Group == null)
@@ -3119,14 +3150,16 @@ namespace DOL.AI.Brain
             IEnumerable<GameLiving> candidates = AggroList.Keys
                 .Concat(Body.GetNPCsInRadius(2600).Cast<GameLiving>())
                 .Concat(Body.GetPlayersInRadius(2600).Cast<GameLiving>())
+                .Concat(_groupPeelTarget == null ? [] : [_groupPeelTarget])
                 .Distinct();
             return candidates
                 .Where(candidate => candidate?.IsAlive == true &&
-                                    candidate.TargetObject is GameLiving victim &&
-                                    protectedMembers.Contains(victim) &&
-                                    CanAggroTarget(candidate))
-                .OrderByDescending(candidate => candidate.TargetObject == leader)
-                .ThenByDescending(candidate => candidate.TargetObject is GameBot bot && bot.Brain is BotBrain { IsHealer: true })
+                                    (candidate.TargetObject is GameLiving victim && protectedMembers.Contains(victim) ||
+                                     candidate == _groupPeelTarget && GameLoop.GameLoopTime < _groupPeelUntil) &&
+                                    CanDefendAgainst(candidate))
+                .OrderByDescending(candidate => candidate == _groupPeelTarget && GameLoop.GameLoopTime < _groupPeelUntil
+                    ? Math.Max(_groupPeelPriority, ProtectionPriority(candidate.TargetObject as GameLiving, leader))
+                    : ProtectionPriority(candidate.TargetObject as GameLiving, leader))
                 .ThenBy(candidate => Body.GetDistanceTo(candidate))
                 .FirstOrDefault();
         }

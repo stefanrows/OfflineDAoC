@@ -299,7 +299,17 @@ namespace DOL.GS.PacketHandler
 			// Relies on 'SendObjectGuildID' not to be called after this.
 			if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
 			{
-				if (npc.Brain is IControlledBrain)
+				if (npc is GameBot bot)
+				{
+					GamePlayer viewer = m_gameClient.Player;
+					if (PvpCombatant.AreAllied(viewer, bot))
+					{
+						Guild viewerGuild = viewer.Guild;
+						SendObjectGuildID(bot, viewerGuild ?? Guild.DummyGuild);
+						SendObjectGuildID(viewer, viewerGuild ?? Guild.DummyGuild);
+					}
+				}
+				else if (npc.Brain is IControlledBrain)
 				{
 					GamePlayer player = m_gameClient.Player;
 					Guild playerGuild = player.Guild;

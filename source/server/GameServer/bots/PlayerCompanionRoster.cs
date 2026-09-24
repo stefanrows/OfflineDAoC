@@ -1245,6 +1245,7 @@ namespace DOL.GS
             }
 
             companion.EnterPlayerLedGroup(owner);
+            UpgradeStarterEquipment(companion);
             companion.Follow(owner, BotManager.FOLLOW_DISTANCE, BotManager.MAX_FOLLOW_DISTANCE);
             if (companion.Brain is DOL.AI.Brain.BotBrain brain)
                 brain.FSM.SetCurrentState(eFSMStateType.FOLLOW);
@@ -1633,6 +1634,111 @@ namespace DOL.GS
             }
 
             return false;
+        }
+
+        // Only the bound starter kit is refreshed. Earned loot and manually equipped
+        // items retain their identity, slot and lock state.
+        internal static bool UpgradeStarterEquipment(GameBot companion)
+        {
+            if (companion?.IsPersistentPlayerCompanion != true || companion.Inventory is not BotInventory inventory ||
+                GameServer.Database is not SqlObjectDatabase database || !companion.IsAlive ||
+                companion.InCombat || companion.IsAttacking ||
+                companion.IsCasting)
+                return false;
+
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            var replacements = inventory.EquippedItems
+                .Where(item => item != null && item.Level < companion.Level - 3 &&
+                    GetEquipmentItemFlags(record, item.ObjectId).Contains('S') &&
+                    !IsEquipmentSlotLocked(record, (eInventorySlot)item.SlotPosition) &&
+                    ((eInventorySlot)item.SlotPosition is eInventorySlot.HeadArmor or eInventorySlot.HandsArmor or
+                        eInventorySlot.FeetArmor or eInventorySlot.TorsoArmor or eInventorySlot.LegsArmor or
+                        eInventorySlot.ArmsArmor or eInventorySlot.RightHandWeapon or
+                        eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon))
+                .Select(item => (Slot: (eInventorySlot)item.SlotPosition, Old: item))
+                .ToList();
+            foreach (eInventorySlot slot in new[] { eInventorySlot.HeadArmor, eInventorySlot.HandsArmor,
+                eInventorySlot.FeetArmor, eInventorySlot.TorsoArmor, eInventorySlot.LegsArmor, eInventorySlot.ArmsArmor })
+                if (inventory.GetItem(slot) == null && !IsEquipmentSlotLocked(record, slot))
+                    replacements.Add((slot, null));
+            if (companion.BestShieldLevel > 0 &&
+                companion.BotSpec?.SpecType is eSpecType.OneHandAndShield or eSpecType.DualWieldAndShield &&
+                inventory.GetItem(eInventorySlot.LeftHandWeapon) == null &&
+                !IsEquipmentSlotLocked(record, eInventorySlot.LeftHandWeapon))
+                replacements.Add((eInventorySlot.LeftHandWeapon, null));
+            if (replacements.Count == 0)
+                return false;
+
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+            lock (inventory.Lock)
+            {
+                var originalItems = inventory.AllItems.Select(item =>
+                    (Item: item, Slot: item.SlotPosition, OwnerId: item.OwnerID)).ToArray();
+                string originalEquipmentState = record.SerializedEquipmentState;
+                string originalUpdatedUtc = record.UpdatedUtc;
+                var inserts = new List<DataObject>();
+                var deletes = new List<DataObject>();
+                foreach (var entry in replacements)
+                {
+                    eInventorySlot slot = entry.Slot;
+                    DbInventoryItem old = entry.Old;
+                    if (inventory.GetItem(slot) != old || old != null && !old.IsPersisted)
+                        continue;
+                    eObjectType type = old == null
+                        ? slot == eInventorySlot.LeftHandWeapon ? eObjectType.Shield : eObjectType.Cloth
+                        : (eObjectType)old.Object_Type;
+                    if (slot is eInventorySlot.HeadArmor or eInventorySlot.HandsArmor or eInventorySlot.FeetArmor or
+                        eInventorySlot.TorsoArmor or eInventorySlot.LegsArmor or eInventorySlot.ArmsArmor)
+                        type = companion.BestArmorLevel switch
+                        {
+                            2 => eObjectType.Leather,
+                            3 => companion.Realm == eRealm.Hibernia ? eObjectType.Reinforced : eObjectType.Studded,
+                            4 => companion.Realm == eRealm.Hibernia ? eObjectType.Scale : eObjectType.Chain,
+                            5 => eObjectType.Plate,
+                            _ => eObjectType.Cloth,
+                        };
+                    DbItemTemplate template = BotEquipment.CreateCompanionItem(companion.Realm,
+                        (eCharacterClass)companion.CharacterClass.ID, companion.Level, type, slot,
+                        old != null && BotWeaponStats.IsMeleeWeapon(type)
+                            ? (eWeaponDamageType)old.Type_Damage : 0);
+                    if (type == eObjectType.Shield)
+                        template.Type_Damage = Math.Min(companion.BestShieldLevel, 3);
+                    template.AllowAdd = true;
+                    DbInventoryItem replacement = GameInventoryItem.Create(template);
+                    if (old != null && !inventory.RemoveItemWithoutDbDeletion(old) ||
+                        !inventory.AddItemWithoutDbAddition(slot, replacement))
+                    {
+                        RestoreInventory(inventory, originalItems);
+                        record.SerializedEquipmentState = originalEquipmentState;
+                        record.UpdatedUtc = originalUpdatedUtc;
+                        record.Dirty = true;
+                        return false;
+                    }
+                    replacement.OwnerID = InventoryOwnerId(record.CompanionId);
+                    if (old != null)
+                        SetEquipmentItemFlags(record, old.ObjectId, string.Empty);
+                    SetEquipmentItemFlags(record, replacement.ObjectId, "S");
+                    if (replacement.IUWrapper is { IsPersisted: false } definition)
+                        inserts.Add(definition);
+                    inserts.Add(replacement);
+                    if (old != null)
+                        deletes.Add(old);
+                }
+                if (inserts.Count == 0)
+                    return false;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                if (!database.InsertUpdateAndDeleteObjectsAtomically(inserts.ToArray(), [record], deletes.ToArray()))
+                {
+                    RestoreInventory(inventory, originalItems);
+                    record.SerializedEquipmentState = originalEquipmentState;
+                    record.UpdatedUtc = originalUpdatedUtc;
+                    record.Dirty = true;
+                    return false;
+                }
+            }
+            companion.RefreshPersistentCompanionEquipment();
+            return true;
         }
 
         private static void RestoreInitialItems(BotInventory initial, BotInventory persistent,

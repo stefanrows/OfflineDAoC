@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-09-24
+
+### Added
+
+- None.
+
+### Changed
+
+- Bound starter equipment on saved companions is refreshed as they level while earned and manually equipped items remain intact.
+- Tanks prioritize attackers of healers, then bomb casters, then group leaders when peeling adds.
+- Mixed-realm group equipment drops use one selected member's class and realm; autonomous group and raid drops go first to members who can equip an upgrade.
+
+### Fixed
+
+- New persistent companions and loaded autonomous bots fill missing armor and appropriate shield slots even when the normal item tables are sparse.
+- PvP NPC creation and group membership changes maintain allied gamebot name colors and Tab targeting status without marking hostile gamebots friendly.
+- An urgent peel can interrupt a tank's offensive cast against a different target.
+
+### Removed
+
+- None.
+
 ## [0.55.0] - 2026-09-24
 
 ### Added

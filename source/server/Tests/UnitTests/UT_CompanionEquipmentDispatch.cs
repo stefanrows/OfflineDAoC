@@ -68,6 +68,23 @@ public class UT_CompanionEquipmentDispatch
         return bot;
     }
 
+    [Test]
+    public void PersistentCompanionFillsArmorAndShieldWhenTemplateTableIsSparse()
+    {
+        var bot = Make(eRealm.Albion, eCharacterClass.Paladin, 18, false);
+        typeof(GameBot).GetProperty(nameof(GameBot.PlayerCompanionRecord))
+            .SetValue(bot, new PlayerCompanionRecord { CompanionId = Guid.NewGuid().ToString() });
+
+        BotEquipment.SetArmor(bot, eObjectType.Chain);
+        BotEquipment.SetShield(bot, 1);
+
+        foreach (eInventorySlot slot in new[] { eInventorySlot.HeadArmor, eInventorySlot.HandsArmor,
+            eInventorySlot.FeetArmor, eInventorySlot.TorsoArmor, eInventorySlot.LegsArmor, eInventorySlot.ArmsArmor })
+            Assert.That(bot.Inventory.GetItem(slot), Is.Not.Null, slot.ToString());
+        Assert.That(bot.Inventory.GetItem(eInventorySlot.LeftHandWeapon)?.Object_Type,
+            Is.EqualTo((int)eObjectType.Shield));
+    }
+
     [TestCase(1)] [TestCase(20)] [TestCase(49)] [TestCase(50)]
     public void EmptyDatabaseStillEquipsEveryClassAndSpecialization(byte level)
     {

@@ -192,12 +192,13 @@ namespace DOL.GS
             // GameBots are NPC-backed player-shaped actors. Refresh their
             // guild IDs for each human viewer when grouping makes them
             // allied, including the bot's controlled pets.
-            if (living is GameBot && GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+            if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
             {
                 foreach (GamePlayer viewer in GetPlayersInTheGroup())
                 {
-                    if (PvpCombatant.AreAllied(viewer, living))
-                        SendPvpFriendlyGuildIDs(viewer, living);
+                    foreach (GameBot bot in GetMembersInTheGroup().OfType<GameBot>())
+                        if (PvpCombatant.AreAllied(viewer, bot))
+                            SendPvpFriendlyGuildIDs(viewer, bot);
                 }
             }
 
@@ -246,6 +247,12 @@ namespace DOL.GS
                         viewer.Out.SendObjectGuildID(removedBot, removedBot.Guild);
                 }
             }
+
+            if (!disbandEmptyGroup && GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+                foreach (GamePlayer viewer in GetPlayersInTheGroup())
+                    foreach (GameBot bot in GetMembersInTheGroup().OfType<GameBot>())
+                        if (PvpCombatant.AreAllied(viewer, bot))
+                            SendPvpFriendlyGuildIDs(viewer, bot);
 
             AutonomousBotGroupCoordinator.OnMemberRemoved(this, living);
 
@@ -627,7 +634,8 @@ namespace DOL.GS
                              .Where(bot => bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper &&
                                            bot.ObjectState == eObjectState.Active && bot.CurrentRegion == inventoryItem.CurrentRegion &&
                                            bot.IsWithinRadius(inventoryItem, WorldMgr.VISIBILITY_DISTANCE))
-                             .OrderBy(_ => Random.Shared.Next()))
+                             .OrderByDescending(bot => AutonomousBotEconomy.TryGetEquipmentUpgrade(bot, inventoryItem.Item, out _))
+                             .ThenBy(_ => Random.Shared.Next()))
                 {
                     TryPickUpResult result = bot.TryAutoPickUpItem(inventoryItem);
                     if (result is TryPickUpResult.Success)

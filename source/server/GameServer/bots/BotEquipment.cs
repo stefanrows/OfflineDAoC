@@ -294,7 +294,10 @@ namespace DOL.GS
                 DbItemTemplate itemTemplate = itemList[Util.Random(itemList.Count - 1)];
                 AddItem(player, itemTemplate);
             }
-            else
+            if (player is GameBot { IsPersistentPlayerCompanion: true } persistentCompanion &&
+                persistentCompanion.Inventory.GetItem(eInventorySlot.LeftHandWeapon) == null)
+                EquipCompanionWeapon(persistentCompanion, eObjectType.Shield, eInventorySlot.LeftHandWeapon, shieldSize: shieldSize);
+            else if (itemList.Count == 0)
                 log.Info("No shield found for " + player.Name);
         }
 
@@ -353,6 +356,15 @@ namespace DOL.GS
                         companion.Inventory.AddItem(slot, GameInventoryItem.Create(CreateCompanionItem(
                             companion.Realm, (eCharacterClass)companion.CharacterClass.ID, companion.Level, armorType, slot)));
                 }
+            }
+            else if (player is GameBot { IsPersistentPlayerCompanion: true } persistentCompanion)
+            {
+                foreach (eInventorySlot slot in new[] { eInventorySlot.HeadArmor, eInventorySlot.HandsArmor,
+                    eInventorySlot.FeetArmor, eInventorySlot.TorsoArmor, eInventorySlot.LegsArmor, eInventorySlot.ArmsArmor })
+                    if (persistentCompanion.Inventory.GetItem(slot) == null)
+                        persistentCompanion.Inventory.AddItem(slot, GameInventoryItem.Create(CreateCompanionItem(
+                            persistentCompanion.Realm, (eCharacterClass)persistentCompanion.CharacterClass.ID,
+                            persistentCompanion.Level, armorType, slot)));
             }
         }
 

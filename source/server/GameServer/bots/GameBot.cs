@@ -2903,7 +2903,7 @@ namespace DOL.GS
             bool starterWeaponAdded = EnsureAutonomousStarterWeapon();
             starterWeaponAdded |= BotRangedCombat.EnsureStarter(this);
             starterWeaponAdded |= BotStarterInstruments.Ensure(this);
-            bool starterGearAdded = newlyGenerated && Level < 50 && EnsureGeneratedStartingGear();
+            bool starterGearAdded = EnsureGeneratedStartingGear();
             RefreshItemBonuses();
             if (starterWeaponAdded || starterGearAdded || !buildLocked || generatedTraining)
                 AutonomousBotStatusPersistence.Queue(this, starterWeaponAdded || starterGearAdded);
@@ -4704,6 +4704,16 @@ namespace DOL.GS
                 if (!Inventory.AddItem(slot, GameInventoryItem.Create(template)))
                     throw new InvalidOperationException($"Could not equip generated starting gear for {Name}.");
                 changed = true;
+            }
+            if (BestShieldLevel > 0 && BotSpec?.SpecType is eSpecType.OneHandAndShield or eSpecType.DualWieldAndShield &&
+                Inventory.GetItem(eInventorySlot.LeftHandWeapon) == null)
+            {
+                DbItemTemplate shield = BotEquipment.CreateCompanionItem(Realm,
+                    (eCharacterClass)CharacterClass.ID, Level, eObjectType.Shield, eInventorySlot.LeftHandWeapon);
+                shield.Type_Damage = Math.Min(BestShieldLevel, 3);
+                shield.AllowAdd = true;
+                if (Inventory.AddItem(eInventorySlot.LeftHandWeapon, GameInventoryItem.Create(shield)))
+                    changed = true;
             }
             if (changed) MarkAutonomousStateDirty();
             return changed;

@@ -24,7 +24,8 @@ namespace DOL.GS
             lock (_ledger)
             {
                 foreach (GameBot bot in _members.Where(b => Eligible(b, item))
-                    .OrderBy(b => _ledger.ItemsReceived.GetValueOrDefault(b.DatabaseID)).ThenBy(_ => Random.Shared.Next()))
+                    .OrderByDescending(b => AutonomousBotEconomy.TryGetEquipmentUpgrade(b, item.Item, out _))
+                    .ThenBy(b => _ledger.ItemsReceived.GetValueOrDefault(b.DatabaseID)).ThenBy(_ => Random.Shared.Next()))
                 {
                     TryPickUpResult result = bot.TryAutoPickUpItem(item);
                     if (result != TryPickUpResult.Success) continue;
