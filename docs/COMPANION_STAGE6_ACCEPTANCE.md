@@ -1,6 +1,6 @@
 # Companion Stage 6 acceptance
 
-Last updated: 2026-09-23.
+Last updated: 2026-09-24.
 
 ## Status
 
@@ -8,6 +8,11 @@ Last updated: 2026-09-23.
 client or server was started, and no live save or game installation was opened
 or deployed for this work. The Stage 6 gate stays pending until the checklist
 below is run and its actual observations are recorded here.
+
+On 2026-09-24 the owner marked Stage 3 progression and training, Stage 5
+character and controls, and the companion-window acceptance items complete.
+This does not close the remaining Stage 4 gear or Stage 6 integration checks.
+Detailed observations for the accepted areas were not supplied.
 
 ## Decisions carried into Stage 6
 
@@ -80,16 +85,11 @@ beside each checked item; do not infer gameplay results from these unit tests.
 
 **Owner progress, 2026-09-23:** The owner reports Step 1 preparation complete.
 The installed version and backup location still need to be recorded here.
-Four owner screenshots of Step 2 show roster/cast/recruit pages accumulating in
-the NPC popup, raw action tokens beside clickable links, and an equipment page
-crowded with per-slot controls. The owner could no longer select an older page's
-choices after navigating. The owner prefers a native inventory-style window if
-supported by the client. These Step 2 tasks are tracked as open in the
+Four owner screenshots of the earlier NPC popup showed accumulated pages, raw
+action tokens, and crowded equipment controls. On 2026-09-24 the owner marked
+the replacement companion-window acceptance items complete in the
 [companion roadmap](COMPANION_ROADMAP.md#owner-acceptance-tasks-2026-09-23).
-Retest on a build containing the menu changes; record whether page transitions
-clear the old popup, older visible choices behave safely, the companion bag
-opens as a native external inventory, item delves and drag/drop work, and
-equipment actions remain usable. Do not mark Step 2 complete before that pass.
+Detailed observations were not supplied. Stage 4 gear acceptance remains open.
 
 ## Companion Manager window (0.32.0)
 
@@ -117,8 +117,10 @@ NPC popup.
 **Owner observations, 2026-09-24 (0.32.1):** Gate passed. The window opened,
 clicking worked, and the chat-line search worked. The owner's screenshot shows
 the roster (four active companions), the Overview tab, and the companion bag
-open beside the window. Not yet reported: raid windows and 800×600 (gate step
-4), and the individual Step 2 items. Follow-ups are in
+open beside the window. The owner subsequently marked raid-window compatibility,
+800×600 fit, and the individual Step 2 items complete on 2026-09-24; detailed
+observations and the installed version for that later report were not supplied.
+Follow-ups are in
 [COMPANION_MANAGER_ROADMAP.md](COMPANION_MANAGER_ROADMAP.md).
 
 ## Backup, restore, and rollout guidance

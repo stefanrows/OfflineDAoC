@@ -65,13 +65,14 @@ instructions for explicitly requested validation, not shipping gates.
 ## Build (does not deploy or start the server)
 
 For the owner's WSL2 + Windows setup (install location, SDKs, baseline,
-deploy/restore scripts), follow the tiered plan in `docs/DEV-SETUP.md`.
+deploy/restore scripts), follow the completed tiered plan in
+`docs/completed/DEV-SETUP.md`.
 
 ### WSL2 + Windows loop
 
 Verified end to end on 2026-09-19: build, tests, self-check, dry run,
 `-Apply`, in-game smoke test, Restore, and redeploy against the real install.
-Before Camlann Tier 0, make a fresh named save backup (`docs/DEV-SETUP.md`
+Before Camlann Tier 0, make a fresh named save backup (`docs/completed/DEV-SETUP.md`
 Tier 6).
 
 Repo: `/home/stefan/Development/Games/OfflineDAoC`. Install:

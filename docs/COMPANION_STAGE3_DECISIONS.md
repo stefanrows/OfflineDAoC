@@ -1,9 +1,10 @@
 # Companion Stage 3 decisions and implementation
 
-Updated: 2026-09-23. The owner accepted the Stage 3 policies and delegated
+Updated: 2026-09-24. The owner accepted the Stage 3 policies and delegated
 selection of general-adventuring plans for every supported class. Progression,
 manual training, and automatic training for 33 validated plans are implemented.
-Six classes remain manual-only; real-client gameplay acceptance is pending.
+Six classes remain manual-only. The owner marked Stage 3 real-client gameplay
+acceptance complete on 2026-09-24; the detailed observations were not supplied.
 
 ## Relevant findings
 
@@ -76,7 +77,7 @@ Six classes remain manual-only; real-client gameplay acceptance is pending.
 - Preserve existing owner XP and loot behavior. Realm-point, realm-rank, and
   realm-ability progression remain disabled for player companions.
 
-## Offline validation and remaining acceptance
+## Offline validation and owner acceptance
 
 The focused offline suite simulates every enabled plan at every level from 1 to
 50, checking point budgets, monotonic allocations, no overlevel ranks, and all
@@ -88,6 +89,6 @@ allocations.
 Animist and Wizard lack numeric endgame targets. Blademaster, Hero, and Warrior
 need source-backed role or ranked-skill review. Necromancer's available numeric
 candidate relies on the unsupported Death Servant companion combat profile.
-These six classes remain manual-only. Real-client XP pacing, trainer behavior,
-automatic training, multi-level gains, and restart persistence remain owner-run
-acceptance checks.
+These six classes remain manual-only. The owner marked real-client XP pacing,
+trainer behavior, automatic training, multi-level gains, and restart persistence
+accepted on 2026-09-24; detailed observations were not supplied.

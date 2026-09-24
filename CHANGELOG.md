@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.32.3] - 2026-09-24
+
+### Added
+
+- None.
+
+### Changed
+
+- Recorded the owner's acceptance of persistent companion Stage 3, Stage 5,
+  and companion-window checks. Stage 4 gear and Stage 6 integration checks
+  remain open.
+- Moved the completed development setup plan to `docs/completed/DEV-SETUP.md`
+  and updated its references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.32.2] - 2026-09-24
 
 ### Added
@@ -1136,7 +1159,7 @@ package, not this fork's version.
 
 ### Changed
 
-- `docs/DEV-SETUP.md`: Tier 5 (first real deploy, in-game smoke test,
+- `docs/completed/DEV-SETUP.md`: Tier 5 (first real deploy, in-game smoke test,
   restore, redeploy) and Tier 6 (hand-off to Camlann) recorded as done. The
   pre-Camlann save backup is deferred to the start of Camlann Tier 0.
 - `docs/DEVELOPMENT.md`: the WSL2 + Windows loop is marked verified end to
@@ -1161,7 +1184,7 @@ package, not this fork's version.
 
 ### Changed
 
-- `docs/DEV-SETUP.md`: Tier 1–4 gates recorded; Tier 2 baseline counts added.
+- `docs/completed/DEV-SETUP.md`: Tier 1–4 gates recorded; Tier 2 baseline counts added.
 - `docs/DEVELOPMENT.md`: short WSL2 + Windows loop commands pointing at the
   new wrappers.
 - `AGENTS.md`: preserve each file's existing line endings.
@@ -1170,7 +1193,7 @@ package, not this fork's version.
 
 ### Added
 
-- `docs/DEV-SETUP.md`: tiered WSL2 + Windows development setup plan. It covers
+- `docs/completed/DEV-SETUP.md`: tiered WSL2 + Windows development setup plan. It covers
   the install location, toolchains, baseline tests, line-ending guard,
   parameterized deploy/restore scripts, first client smoke test, and hand-off
   to the Camlann work.

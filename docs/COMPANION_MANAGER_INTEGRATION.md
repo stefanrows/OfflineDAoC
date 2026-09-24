@@ -2,10 +2,10 @@
 
 Status: **real-client gate passed on 0.32.1 (2026-09-24).** The owner confirmed
 that the window opens and that clicking and chat-line search work; the
-companion bag opened beside it. Gate step 4 (raid windows, 800×600) and the
-Stage 2 items are still to be recorded. Next steps are in the
-[Companion Manager roadmap](COMPANION_MANAGER_ROADMAP.md). No Stage 2 owner
-acceptance task is closed by this document.
+companion bag opened beside it. On 2026-09-24 the owner also marked gate step 4
+(raid windows, 800×600) and the companion-window acceptance items complete.
+Detailed observations were not supplied. Next steps are in the
+[Companion Manager roadmap](COMPANION_MANAGER_ROADMAP.md).
 
 ## Real-client result, 2026-09-24 (0.32.0)
 

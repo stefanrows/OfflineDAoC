@@ -13,12 +13,16 @@ milestone at a time, after its open decisions are resolved.
 
 ## M0 - Close out 0.32
 
-- [ ] Owner: check that the raid windows still work and that the manager fits
+- [x] Owner: check that the raid windows still work and that the manager fits
       at 800×600 (gate step 4). Record the result in
       [COMPANION_STAGE6_ACCEPTANCE.md](COMPANION_STAGE6_ACCEPTANCE.md).
-- [ ] Owner: repeat the open Stage 2 items (paging, readable choices, usable
+- [x] Owner: repeat the open Stage 2 items (paging, readable choices, usable
       inventory, recruitment wording) in the window, then close them in the
       companion roadmap.
+
+The owner marked both window acceptance checks complete on 2026-09-24. Detailed
+observations and the installed build/version were not supplied. The raid
+click-to-target fix below remains separate and open.
 - [ ] Fix raid click-to-target. The raid XML uses `RaidMemberNN` names, which
       the client's `OnClickEvent` parser rejects, exactly like the manager's
       first build. Use numeric IDs `1536`–`1615` (`0x600` + member) in the raid

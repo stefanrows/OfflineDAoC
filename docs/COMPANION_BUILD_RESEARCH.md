@@ -4,8 +4,8 @@ Status: Stage 1 source research and Stage 3 runtime validation cover all 39
 classes. Thirty-three project-recommended automatic plans are enabled; six
 classes remain manual-only with documented blockers. The enabled plan set and
 its exact targets are recorded in `CompanionBuildPlanCatalog.cs` and summarized
-below. Real-client acceptance remains pending.
-Updated 2026-09-23.
+below. The owner marked Stage 3 real-client acceptance complete on 2026-09-24.
+Updated 2026-09-24.
 
 These 1.65-era sources support review of companion build recommendations; they
 do not establish retail-era popularity or historical practice. The source set
@@ -193,7 +193,7 @@ stable and versioned as `general-pve-v1-<class>`.
 - Sorcerer, Ranger, Nightshade, and Armsman have partial numeric leveling sources. Healer has a longer sourced route, but its respecialization and half-level steps do not map to the current companion progression path. Minstrel's level-24 note relies on human autotrain. Other 33 classes have only relative focus guidance.
 - The source candidates' point and route findings above remain research evidence, not a claim that every cited route is usable by companions. The selected plans have separate runtime and per-level validation recorded in the table above.
 - The 33 enabled schedules are project recommendations through level 50, not sourced historical per-level builds. They spend the normal no-autotrain companion budget and do not respec automatically.
-- Runtime validation covers the enabled plans only. The six listed manual-only classes remain gated pending better build or combat-profile evidence; real-client leveling and restart acceptance remains outstanding.
+- Runtime validation covers the enabled plans only. The six listed manual-only classes remain gated pending better build or combat-profile evidence. The owner marked Stage 3 real-client leveling and restart acceptance complete on 2026-09-24; detailed observations were not supplied.
 
 This record extends Stage 1's source research with the selected Stage 3 plans, offline checks, and class-specific blockers.
 

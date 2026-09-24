@@ -1,10 +1,11 @@
 # Companion Stage 5 character and control decisions
 
-Updated: 2026-09-23. The owner chose individual role and engagement preferences,
+Updated: 2026-09-24. The owner chose individual role and engagement preferences,
 with personality providing defaults and direct player orders taking precedence.
 Dialogue appears on roster events and when requested, without combat chatter.
-The implementation is built offline; real-client and combat-role acceptance are
-still owner-run checks.
+The implementation was built offline. The owner marked real-client and
+combat-role acceptance complete on 2026-09-24; detailed observations were not
+supplied.
 
 ## Cast and identity
 

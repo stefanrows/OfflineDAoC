@@ -1,5 +1,8 @@
 # Development environment setup (WSL2 + Windows)
 
+Status: **Completed to the Tier 6 gate on 2026-09-19.** The fresh save backup
+listed in Tier 6 was deferred to Camlann Tier 0.
+
 A tiered plan to go from this checkout to a verified build, test, and deploy
 loop on the owner's machine. Execute **one tier at a time**, in order. Each
 tier ends with a gate; stop and report if it fails. Do not start Camlann work
@@ -185,7 +188,7 @@ Forcing `eol=crlf` would rewrite about 550 files and bury real diffs.
    rewrites endings on either OS:
 
    ```gitattributes
-   # Preserve line endings exactly as committed (tree is mixed; see docs/DEV-SETUP.md).
+   # Preserve line endings exactly as committed (tree is mixed; see docs/completed/DEV-SETUP.md).
    * -text
    ```
 

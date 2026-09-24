@@ -1,12 +1,12 @@
 # Persistent companion roadmap
 
 Status: Stage 1 **Complete**; Stage 2 **Complete (implementation and runtime
-acceptance)**; Stage 3 **Implemented; 33 project-recommended automatic plans
-validated against runtime data; six classes remain manual-only; real-client
-acceptance pending**; Stage 4 **Implemented; offline checks complete;
-real-client acceptance pending**; Stage 5 **Implemented; client and combat-role
-acceptance pending**; Stage 6 **Offline checks complete; real-client acceptance pending**.
-Last updated: 2026-09-23.
+acceptance)**; Stage 3 **Complete (owner acceptance, 2026-09-24); 33 plans
+validated, six classes manual-only**; Stage 4 **Implemented; offline checks
+complete, real-client acceptance pending**; Stage 5 **Complete (owner
+acceptance, 2026-09-24)**; Stage 6 **Offline checks complete, real-client
+acceptance pending**.
+Last updated: 2026-09-24.
 
 This roadmap records the agreed direction for lasting party members. It does
 not describe shipped gameplay or authorize implementation of every stage.
@@ -137,9 +137,9 @@ usable; any incompatibility requires an explicit migration decision.
 
 ### Stage 3 - Progression and training
 
-**Status:** Implemented; all 33 enabled plans passed fixture-based runtime
-validation and per-level budget checks. Six classes remain manual-only for
-documented research or combat-profile blockers. Real-client acceptance pending.
+**Status:** Complete (owner acceptance, 2026-09-24). All 33 enabled plans
+passed fixture-based runtime validation and per-level budget checks. Six
+classes remain manual-only for documented research or combat-profile blockers.
 
 **Progress:** The owner accepted the policies in the [Stage 3 decision
 brief](COMPANION_STAGE3_DECISIONS.md). XP, manual career training, persistence,
@@ -172,8 +172,9 @@ multi-level automatic gains are implemented. The focused suite checks every
 enabled plan at every level for budgets, monotonic ranks, and no overlevel
 training. Runtime fixture validation covers the real class-career and skill
 tables. Unsupported or changed plan IDs do not silently change allocations.
-**Real-client acceptance:** XP gain, trainer interaction, automatic mode
-switching, leveling, and restart persistence remain owner-run checks.
+**Real-client acceptance:** The owner marked XP gain, trainer interaction,
+automatic mode switching, leveling, and restart persistence complete on
+2026-09-24. Detailed observations were not supplied.
 
 ### Stage 4 - Equipment
 
@@ -203,9 +204,11 @@ and reload persistence remain pending. See the checklist in
 
 ### Stage 5 - Character and control
 
-**Status:** Implemented; offline Release build and static cast checks complete.
-Real-client and combat-role acceptance remain pending. The owner selected the
-policy in [COMPANION_STAGE5_DECISIONS.md](COMPANION_STAGE5_DECISIONS.md).
+**Status:** Complete (owner acceptance, 2026-09-24). Offline Release build
+and static cast checks are complete. The owner marked real-client and
+combat-role acceptance complete; detailed observations were not supplied.
+The owner selected the policy in
+[COMPANION_STAGE5_DECISIONS.md](COMPANION_STAGE5_DECISIONS.md).
 The catalog supplies 78 authored people; generated personalities, individual
 roles and stances, direct-order precedence, private menu, and command fallbacks
 are implemented. Existing records keep their prior class behavior.
@@ -221,8 +224,9 @@ Expose configurable combat preferences through validated client interactions.
 **Acceptance:** The authored catalog covers every supported class across all
 three realms. Same-class recruits remain distinguishable; generated identities
 survive reload. Orders override personality defaults. Dialogue does not flood
-combat chat. Verify roles actually use trained abilities through offline AI
-checks and later real-client scenarios.
+combat chat. The owner marked real-client role behavior complete on
+2026-09-24; detailed observations were not supplied. No separate offline AI
+check was recorded for this acceptance update.
 
 ### Stage 6 - Integration and verification
 
@@ -276,42 +280,45 @@ resolve it then rather than hiding it in implementation.
 | Recruitment location, cost, initial level, and roster limits | Stage 2 | Resolved: anywhere, free, level 1, 78 stored per character |
 | Ownership per character/account; uniqueness of authored recruits | Stage 2 | Resolved: per character; each authored individual once per owner |
 | Meaning of `/spawn`, old saved-bot compatibility, temporary testing helpers | Stage 2 | Resolved: `/spawn` stays temporary; no legacy conversion or GM test-helper command |
-| Companion XP eligibility, participation, catch-up target and pace, support/pet credit | Stage 3 | Resolved and implemented; real-client acceptance pending |
+| Companion XP eligibility, participation, catch-up target and pace, support/pet credit | Stage 3 | Resolved and implemented; owner acceptance reported 2026-09-24 |
 | Automatic/manual modes, plan eligibility, transitions, and respecialization | Stage 3 | Resolved and implemented; 33 runtime-validated project plans, six manual-only blockers |
 | Companion realm-point eligibility and progression | Stage 3 | Resolved: companions do not earn realm points |
 | Drop frequency/eligibility, starting gear, and recruit farming | Stage 4 | Resolved and implemented; independent XP-rate PvE chance, eligible PvP rewards, protected starter kit |
 | Item transfers, capacity/overflow, manual overrides, and item recovery | Stage 4 | Resolved and implemented; free restricted transfers, manual slot locks, earned-gear surplus selling |
-| Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 | Resolved and implemented; client and combat-role acceptance pending |
+| Exact tactical controls, personality defaults, and dialogue presentation | Stage 5 | Resolved and implemented; owner acceptance reported 2026-09-24 |
 | Death/recovery and raid rules | Stage 6, or earlier if changed by a prior stage | Resolved: existing GameBot recovery; raids allow owned temporary helpers only |
 
-Stage 6 offline validation is complete. Stage 4–5 real-client acceptance and
-Stage 6 client acceptance remain pending. See the Stage 6 acceptance brief.
+Stage 6 offline validation is complete. Stage 3 and Stage 5 owner acceptance
+and companion-window acceptance were reported complete on 2026-09-24. Stage 4
+gear acceptance and Stage 6 client acceptance remain pending. See the Stage 6
+acceptance brief.
 
 ## Owner acceptance tasks (2026-09-23)
 
 These are the owner's in-client tasks from the current acceptance pass. A code
 change or an offline build does not close a client task; mark a task complete
 only after the owner confirms the behavior in the installed build. The owner
-reports Step 1 preparation complete, but the installed version and backup
-details have not yet been recorded in the acceptance brief.
+reports Step 1 preparation complete and marked all Step 2 companion-window
+items complete on 2026-09-24. Detailed observations, installed version, and
+backup location have not yet been recorded in the acceptance brief.
 
 - [x] **Step 1 — Prepare the test installation and save.** Owner reported this
   complete on 2026-09-23. Record the installed version and backup location
   before final acceptance.
-- [ ] **Step 2 — Paging and stale choices.** Opening another roster, recruit,
+- [x] **Step 2 — Paging and stale choices.** Opening another roster, recruit,
   cast, or inventory page must show a clear current page. Any older choices
   still visible in the popup must either remain safe and usable or disappear;
   clicking one must never act on a different item or companion.
-- [ ] **Step 2 — Readable choices.** Remove the raw hexadecimal action tokens
+- [x] **Step 2 — Readable choices.** Remove the raw hexadecimal action tokens
   seen beside every link in the owner's screenshots. Navigation and recruitment
   labels must be understandable without internal IDs.
-- [ ] **Step 2 — Usable inventory.** The owner prefers a native inventory-style
+- [x] **Step 2 — Usable inventory.** The owner prefers a native inventory-style
   window if the client supports one. Verify that the companion backpack opens
   in the client's external-inventory window, item delves and safe drag/drop
   transfers work, and the separate equipment, companion backpack, and owner
   backpack menus remain short and navigable. Check equip, lock, unequip, keep,
   and transfer actions before closing this task.
-- [ ] **Step 2 — Recruitment wording.** Explain generated and authored
+- [x] **Step 2 — Recruitment wording.** Explain generated and authored
   companions in the UI. Both are persistent; authored companions are named,
   written individuals available once per owner, while generated recruits have
   newly created identities.
@@ -329,7 +336,7 @@ manager and a staged, hash-guarded client patch are implemented and passed
 offline emulation and focused tests. Bare `/companions` opens the manager and
 prints command guidance when no patched client answers. See the
 [integration handoff](COMPANION_MANAGER_INTEGRATION.md) for the one combined
-real-client check. Step 2 stays open until the owner confirms that check.
+real-client check. The owner marked Step 2 complete on 2026-09-24.
 On 2026-09-24 the 0.32.0 window opened but no click worked; 0.32.1 fixed the
 click wiring, and the owner confirmed that clicking and search work. Next steps
 (build selection, behaviour controls, equipment slot layout) are planned in the
@@ -337,9 +344,9 @@ click wiring, and the owner confirmed that clicking and search work. Next steps
 
 The owner supplied four screenshots for Step 2. They show speech pages
 accumulating in one popup, raw choice tokens, and an equipment page filled
-with per-slot actions. The menu changes addressing these findings require a
-new build and owner retest; no Step 2 item is accepted yet. Later acceptance
-steps remain as listed in the Stage 4–6 briefs.
+with per-slot actions. The owner marked the Step 2 companion-window items
+complete on 2026-09-24; detailed observations were not supplied. Stage 4
+gear and Stage 6 integration checks remain open in their acceptance briefs.
 
 ## Maintenance and boundaries
 
