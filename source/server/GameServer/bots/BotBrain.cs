@@ -1513,18 +1513,20 @@ namespace DOL.AI.Brain
             _nextAmbientChatCheckTick = nowTick + 15_000 + Random.Shared.Next(20_001) + bot.ObjectID % 4_000;
 
             DateTime now = DateTime.UtcNow;
+            OfflineWorldBotRecord record = bot.PersistentRecord;
             if (!AutonomousBotChat.ShouldSpeak(now, _lastIdleRoleplayUtc,
-                    bot.InCombat || bot.IsAttacking || bot.IsCasting || bot.IsOnStableMasterRoute))
+                    bot.InCombat || bot.IsAttacking || bot.IsCasting || bot.IsOnStableMasterRoute,
+                    record?.Chattiness ?? 50))
                 return;
 
-            OfflineWorldBotRecord record = bot.PersistentRecord;
             string item = bot.Inventory?.AllItems
                 .FirstOrDefault(entry => entry != null && entry.SlotPosition >= (int)eInventorySlot.FirstBackpack &&
                                          entry.SlotPosition <= (int)eInventorySlot.LastBackpack)?.Name ?? string.Empty;
             var context = new AutonomousBotChat.Context(
                 bot.Name, bot.ClassName, bot.CurrentZone?.Description,
                 record?.TargetName, record?.TravelDestination, item, string.Empty,
-                bot.Level, Math.Max(1, (int)(bot.Group?.MemberCount ?? 1)), bot.Realm);
+                bot.Level, Math.Max(1, (int)(bot.Group?.MemberCount ?? 1)), bot.Realm,
+                AutonomousPlayerBehavior.TypeOf(record), record?.Chattiness ?? 50);
             if (AutonomousBotChatCoordinator.TryStartAmbient(bot, context))
                 _lastIdleRoleplayUtc = now;
         }

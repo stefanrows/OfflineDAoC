@@ -97,6 +97,18 @@ namespace DOL.GS
                      ["a", "bhe", "dra", "la", "lin", "na", "ra", "rin", "se", "wen"]),
             };
 
+        private static readonly string[] HandleStarts =
+        [
+            "Ding", "Oom", "Inc", "Add", "Mezz", "Wipe", "Loot", "Rez", "Crit", "Free",
+            "Bad", "No", "Lag", "Late", "Bard", "Tank", "Dex", "Kite", "Pull", "Miss",
+        ];
+
+        private static readonly string[] HandleEnds =
+        [
+            "Again", "Train", "Me", "Pls", "Run", "Fast", "Oops", "Wait", "More", "Food",
+            "Now", "Resist", "Maybe", "Queue", "Pull", "Add", "Man", "Tap", "Log", "Out",
+        ];
+
         private static readonly IReadOnlyDictionary<eRealm, string[]> NameBridges = new Dictionary<eRealm, string[]>
         {
             [eRealm.Albion] = ["", "al", "en", "is", "or"],
@@ -158,12 +170,15 @@ namespace DOL.GS
             string[] bridges = NameBridges[realm];
             for (int attempt = 0; attempt < 1024; attempt++)
             {
-                string candidate = parts.Starts[random.Next(parts.Starts.Length)] +
-                                   parts.Middles[random.Next(parts.Middles.Length)] +
-                                   bridges[random.Next(bridges.Length)] +
-                                   parts.Ends[random.Next(parts.Ends.Length)];
+                string candidate = random.Next(100) < 18
+                    ? HandleStarts[random.Next(HandleStarts.Length)] + HandleEnds[random.Next(HandleEnds.Length)]
+                    : parts.Starts[random.Next(parts.Starts.Length)] +
+                      parts.Middles[random.Next(parts.Middles.Length)] +
+                      bridges[random.Next(bridges.Length)] +
+                      parts.Ends[random.Next(parts.Ends.Length)];
                 candidate = Normalize(candidate);
-                if (reservedNames == null || reservedNames.Add(candidate))
+                if (candidate.Length is >= 3 and <= 19 && !AutonomousChatSafetyPolicy.ContainsBlockedTerm(candidate) &&
+                    (reservedNames == null || reservedNames.Add(candidate)))
                     return candidate;
             }
 
@@ -175,7 +190,8 @@ namespace DOL.GS
             foreach (string end in parts.Ends)
             {
                 string candidate = Normalize(start + middle + bridge + end);
-                if (reservedNames == null || reservedNames.Add(candidate))
+                if (candidate.Length is >= 3 and <= 19 && !AutonomousChatSafetyPolicy.ContainsBlockedTerm(candidate) &&
+                    (reservedNames == null || reservedNames.Add(candidate)))
                     return candidate;
             }
 

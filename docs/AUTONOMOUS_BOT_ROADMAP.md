@@ -1,6 +1,6 @@
 # Autonomous bot behaviour roadmap
 
-Status: **M0–M5 implemented offline; owner playtest and population measurements pending. M6 is next.**
+Status: **M0–M6 implemented offline; owner playtest and population measurements pending. M7 is next.**
 Last updated: 2026-09-24.
 
 This roadmap covers the **autonomous gamebots**: the persistent population that
@@ -195,9 +195,12 @@ forums and wiki material.
 | D4 | Danger while leveling | **Authentic but survivable.** Gank squads sometimes patrol leveling spots and routes; most fights are within about 5 levels; high levels rarely gank much lower levels; remote spots are quieter. |
 | D5 | PvP kill XP | **Same multiplier as mob kills.** Higher-con victims give more XP and RP, as on live (killing purples paid well), without overdoing it. |
 | D6 | Companion catch-up | **Live cap + small boost:** XP per kill capped by the companion's own level, times the XP rate, ×1.5 while it is 5+ levels behind the owner. |
-| D7 | Chat | **2003 style, rougher:** short, lowercase, abbreviations, spicier trash talk and taunts, but no slurs. |
+| D7 | Chat | **2003 style, rougher:** short, lowercase, abbreviations, profanity allowed, no slurs. |
 | D8 | Population size | **Stays the owner's choice.** The owner expects to run about 1,000–1,500. Add a recommended size based on the PC's specs for slower machines. |
 | D9 | Mixed-realm leveling | **Allow cross-realm leveling.** A local pickup party may level in another member's home realm. |
+| D10 | Guild grudges | **Include the player.** A recent killer can be pursued if the target is worthwhile, legal, alive, and outside a safe area. |
+| D11 | Guild names | **Invented names only.** Do not use historical Camlann or Mordred guild names. |
+| D12 | Chat boundary | **Profanity allowed; no slurs.** Keep a maintained blocklist on authored autonomous chat and generated names. |
 
 ## 5. Target design
 
@@ -525,10 +528,20 @@ recommendation uses total process working memory.
 No server was started for the offline implementation, so no measured capacity
 or real-client gameplay claim is made yet.
 
-### M6 — Social realism
+### M6 — Social realism (implemented offline in 0.50.0)
 
-2003-style chat by type (with the blocklist), grudges and KOS lists, guild-chat
-banter, LFG and trade lines, and the new names and guild names.
+- Autonomous chat uses short player-type voices, LFG and trade lines, guild
+  banter, existing rate limits, and the D12 blocklist. Profanity remains
+  available for occasional fight taunts; authored text and generated names are
+  checked before use.
+- Guilds keep at most 16 recent KOS targets for three hours in an additive
+  table. The list includes the player, remembers companion kills as the human
+  owner, and is checked against target worth timers, current attack rules, and
+  safe areas. Existing RvR crews can pursue reachable targets.
+- New managed guilds receive invented charter-themed names. The character-name
+  generator also uses a small share of common and joking handle styles.
+- No server was started and no real-client gameplay was verified. M7 remains
+  the owner playtest and tuning milestone.
 
 ### M7 — Owner playtest and tuning
 
@@ -538,22 +551,8 @@ results. Record the outcome here.
 
 ## 7. Open questions
 
-Resolve these with the owner before the milestone that needs them.
-
-1. **Sessions (M2/M5):** Resolved: keep the existing login behavior. The
-   population number means the total roster, not a session target.
-2. **Grudges against the player (M6):** is the player a normal target for
-   revenge crews, or should that be optional?
-3. **Leveling in other realms' lands (M1):** Resolved by D9: allow cross-realm
-   leveling for locally formed mixed-realm parties.
-4. **Dungeon squatting (M3):** Resolved: avoid it. Hunters patrol outdoor
-   camps and routes, not dungeon entrances.
-5. **Historical guild names (M6):** add an optional tribute list (Requiem, Fear,
-   Horde, …), or invented names only?
-6. **Chat limits (M6):** the exact boundary for "rougher": which words and
-   taunts are fine, and which go on the blocklist?
-7. **Level spread (M5):** confirm or change the established-server
-   distribution in 5.8.
+The established-server level distribution in 5.8 still needs owner confirmation
+or revision. The owner playtest in M7 should also record any tuning changes.
 
 ## Sources
 

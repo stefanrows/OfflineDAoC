@@ -5786,6 +5786,8 @@ namespace DOL.GS
         /// <param name="killer">the killer</param>
         public override void ProcessDeath(GameObject killer)
         {
+            AutonomousBotChatCoordinator.OnAutonomousBotPvpKill(killer, this);
+
             // Ambient trigger upon killing player
             if (killer is GameNPC)
                 (killer as GameNPC).FireAmbientSentence(GameNPC.eAmbientTrigger.killing, killer as GameLiving);

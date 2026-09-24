@@ -66,17 +66,25 @@ public static class AutonomousPvpOpportunityPolicy
         if (actor == null || candidates == null || PvpCombatant.IsSafeArea(actor))
             return null;
         (int ownCount, int ownLevel) = VisibleParty(actor);
-        return candidates
+        DateTime nowUtc = DateTime.UtcNow;
+        GameLiving[] visibleCandidates = candidates
             .Where(target => target != null && target != actor && target.IsAlive &&
                 target.ObjectState == GameObject.eObjectState.Active &&
                 target.CurrentRegionID == actor.CurrentRegionID &&
                 PvpCombatant.IsPlayerShaped(target) && !PvpCombatant.IsSafeArea(target) &&
-                (retaliation || AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) != AutonomousPlayerType.Hunter ||
-                    (PvpCombatant.Resolve(target)?.EffectiveLevel ?? target.EffectiveLevel) <= actor.Level + PreferredLevelDifference) &&
-                (retaliation || AutonomousRvrTargetPolicy.ShouldEngageGrey(actor, target)) &&
                 GameServer.ServerRules.IsAllowedToAttack(actor, target, true) && visible(actor, target))
-            .Where(target => retaliation || !Stronger(target))
-            .OrderBy(target => LevelsPreferred(actor.Level, PvpCombatant.Resolve(target)?.Level ?? target.EffectiveLevel) ? 0 : 1)
+            .ToArray();
+        HashSet<GameLiving> grudges = visibleCandidates
+            .Where(target => AutonomousGuildGrudgeMemory.IsActiveTarget(actor, target, nowUtc))
+            .ToHashSet();
+        return visibleCandidates
+            .Where(target => retaliation || grudges.Contains(target) ||
+                AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) != AutonomousPlayerType.Hunter ||
+                (PvpCombatant.Resolve(target)?.EffectiveLevel ?? target.EffectiveLevel) <= actor.Level + PreferredLevelDifference)
+            .Where(target => retaliation || grudges.Contains(target) || AutonomousRvrTargetPolicy.ShouldEngageGrey(actor, target))
+            .Where(target => retaliation || grudges.Contains(target) || !Stronger(target))
+            .OrderByDescending(target => grudges.Contains(target))
+            .ThenBy(target => LevelsPreferred(actor.Level, PvpCombatant.Resolve(target)?.Level ?? target.EffectiveLevel) ? 0 : 1)
             .ThenBy(actor.GetDistanceTo)
             .FirstOrDefault();
 

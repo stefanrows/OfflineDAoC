@@ -2,38 +2,40 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DOL.GS.PacketHandler;
+using DOL.GS.ServerRules;
 
 namespace DOL.GS;
 
 /// <summary>
-/// Coordinates scarce, short bot conversations. Faction text stays broad;
-/// local text is allowed to mention the speaker's live task and surroundings.
+/// Coordinates scarce bot conversations across guild, faction and local chat.
 /// </summary>
 public static class AutonomousBotChatCoordinator
 {
     private static readonly object Sync = new();
     private static readonly Dictionary<eRealm, long> LastFactionAmbient = new();
+    private static readonly Dictionary<string, long> LastGuildAmbient = new(StringComparer.Ordinal);
     private static readonly Dictionary<ushort, long> LastLocalAmbient = new();
     private static readonly Dictionary<eRealm, long> LastFactionPlayerResponse = new();
+    private static readonly Dictionary<string, long> LastGuildPlayerResponse = new(StringComparer.Ordinal);
     private static readonly Dictionary<ushort, long> LastLocalPlayerResponse = new();
 
     private static readonly string[] FactionOpeners =
     [
-        "How fares everyone across the realm?", "Any groups forming today?", "The roads seem lively today.",
-        "Anyone heading out for a longer hunt?", "I may look for company later.", "Good hunting, everyone.",
-        "Has the frontier been active?", "Anyone trading useful equipment today?", "Stay sharp out there.",
-        "Which hunting grounds are treating everyone well?", "Any useful class advice to share today?",
-        "Has anyone found a dependable camp for their level?", "The realm feels lively today.",
-        "If anyone needs a group, say where you are headed.", "Remember to visit your trainer after leveling.",
-        "Are any dungeon groups planning a careful run?", "Safe roads and good hunting to everyone.",
+        "any groups forming today?", "the roads seem lively today.",
+        "anyone heading out for a longer hunt?", "i may look for company later.", "good hunting, everyone.",
+        "has the frontier been active?", "anyone trading useful equipment today?", "stay sharp out there.",
+        "which hunting grounds are treating everyone well?", "any class advice to share?",
+        "has anyone found a dependable camp for their level?", "roads feel busy tonight.",
+        "if anyone needs a group, say where you are headed.", "remember to visit your trainer after leveling.",
+        "any dungeon groups planning a careful run?", "safe roads and good hunting to everyone.",
         "What is everyone working on today?",
     ];
 
     private static readonly string[] FactionReplies =
     [
         "Things seem steady from where I am.", "I have seen a few adventurers moving around.",
-        "I may be available once I finish up here.", "That sounds worth keeping in mind.",
-        "Safe travels if you head that way.", "I have heard similar talk around the realm.",
+        "i may be available once i finish up here.", "that sounds worth keeping in mind.",
+        "safe travels if you head that way.", "heard similar talk around the frontier.",
         "There should be others interested before long.", "I will keep an eye out while I finish this task.",
         "Sharing the location may help someone nearby.", "A balanced group should handle that well.",
         "Checking your trainer and equipment is always worthwhile.", "Good luck with the next pull.",
@@ -44,15 +46,24 @@ public static class AutonomousBotChatCoordinator
         if (!Eligible(starter))
             return false;
 
+        bool guildAudience = HasGuildAudience(starter.Guild);
         bool factionAudience = HasFactionAudience(starter.Realm);
         bool localAudience = HasLocalAudience(starter);
-        if (!factionAudience && !localAudience)
+        if (!guildAudience && !factionAudience && !localAudience)
             return false;
 
-        bool faction = factionAudience && (!localAudience || Random.Shared.NextDouble() < 0.24);
+        bool guild = guildAudience;
+        bool faction = !guild && factionAudience && (!localAudience || Random.Shared.NextDouble() < 0.24);
         lock (Sync)
         {
-            if (faction)
+            if (guild)
+            {
+                string guildId = starter.Guild.GuildID;
+                if (LastGuildAmbient.TryGetValue(guildId, out long last) && GameLoop.GameLoopTime - last < 120_000)
+                    return false;
+                LastGuildAmbient[guildId] = GameLoop.GameLoopTime;
+            }
+            else if (faction)
             {
                 if (LastFactionAmbient.TryGetValue(starter.Realm, out long last) && GameLoop.GameLoopTime - last < 180_000)
                     return false;
@@ -66,13 +77,15 @@ public static class AutonomousBotChatCoordinator
             }
         }
 
-        string opening = BuildAmbientOpening(starter, context, faction);
-        if (faction)
+        string opening = AutonomousChatSafetyPolicy.Sanitize(BuildAmbientOpening(starter, context, faction));
+        if (guild)
+            BroadcastGuild(starter.Guild, starter.Name, opening);
+        else if (faction)
             BroadcastFaction(starter.Name, starter.Realm, opening);
         else if (!starter.Say(opening))
             return false;
 
-        ScheduleBotReplies(starter, opening, faction, false);
+        ScheduleBotReplies(starter, opening, faction, guild, false);
         return true;
     }
 
@@ -88,6 +101,51 @@ public static class AutonomousBotChatCoordinator
             LastFactionPlayerResponse[player.Realm] = GameLoop.GameLoopTime;
         }
         SchedulePlayerReplies(player, message, true);
+    }
+
+    public static void OnPlayerGuildChat(GamePlayer player, string message)
+    {
+        if (player?.Guild == null || string.IsNullOrWhiteSpace(message) ||
+            AutonomousChatIntentModel.Predict(message) == eAutonomousChatIntent.IgnoreOutOfWorld)
+            return;
+
+        string guildId = player.Guild.GuildID;
+        lock (Sync)
+        {
+            if (LastGuildPlayerResponse.TryGetValue(guildId, out long last) && GameLoop.GameLoopTime - last < 15_000)
+                return;
+            LastGuildPlayerResponse[guildId] = GameLoop.GameLoopTime;
+        }
+
+        GameBot[] eligible = AutonomousBotRegistry.Snapshot()
+            .Where(bot => Eligible(bot) && bot.Guild?.GuildID == guildId)
+            .OrderByDescending(bot => Relevance(bot, message))
+            .ThenBy(_ => Random.Shared.Next())
+            .ToArray();
+        GameBot[] mentioned = eligible.Where(bot => ContainsMention(message, bot.Name)).ToArray();
+        bool directed = mentioned.Length > 0;
+        if (directed)
+            eligible = mentioned;
+        int count = directed || AutonomousChatIntentModel.Predict(message) is eAutonomousChatIntent.Abuse
+            ? Math.Min(1, eligible.Length)
+            : RollResponseCount(eligible.Length);
+        HashSet<string> scheduledResponses = new(StringComparer.OrdinalIgnoreCase);
+        int scheduledIndex = 0;
+        for (int index = 0; index < count; index++)
+        {
+            GameBot responder = eligible[index];
+            string response = directed
+                ? GenerateDirectedReply(message)
+                : AutonomousBotChat.GenerateGuildReply(ContextFor(responder), message);
+            response = AutonomousChatSafetyPolicy.Sanitize(response);
+            if (!TryAddDistinctResponse(scheduledResponses, response, out response))
+                continue;
+            Schedule(responder, 1_300 + scheduledIndex++ * 1_800 + Random.Shared.Next(1_200), () =>
+            {
+                if (HasGuildAudience(responder.Guild) && responder.Guild?.GuildID == guildId)
+                    BroadcastGuild(responder.Guild, responder.Name, response);
+            });
+        }
     }
 
     public static void OnPlayerLocalChat(GamePlayer player, string message)
@@ -107,25 +165,45 @@ public static class AutonomousBotChatCoordinator
 
     public static bool TryAdvertiseExchangeItem(GameBot seller, string exactItemName)
     {
-        if (!Eligible(seller) || string.IsNullOrWhiteSpace(exactItemName) || !HasFactionAudience(seller.Realm))
+        if (!Eligible(seller) || string.IsNullOrWhiteSpace(exactItemName))
+            return false;
+        bool guild = HasGuildAudience(seller.Guild);
+        bool faction = !guild && HasFactionAudience(seller.Realm);
+        if (!guild && !faction)
             return false;
         lock (Sync)
         {
-            if (LastFactionAmbient.TryGetValue(seller.Realm, out long last) && GameLoop.GameLoopTime - last < 180_000)
-                return false;
-            LastFactionAmbient[seller.Realm] = GameLoop.GameLoopTime;
+            if (guild)
+            {
+                string guildId = seller.Guild.GuildID;
+                if (LastGuildAmbient.TryGetValue(guildId, out long last) && GameLoop.GameLoopTime - last < 120_000)
+                    return false;
+                LastGuildAmbient[guildId] = GameLoop.GameLoopTime;
+            }
+            else
+            {
+                if (LastFactionAmbient.TryGetValue(seller.Realm, out long last) && GameLoop.GameLoopTime - last < 180_000)
+                    return false;
+                LastFactionAmbient[seller.Realm] = GameLoop.GameLoopTime;
+            }
         }
 
         string item = exactItemName.Trim();
-        string opening = Random.Shared.Next(2) == 0
-            ? $"Does anybody want to make me an offer on {item}?"
-            : $"How much do u think {item} is worth?";
-        BroadcastFaction(seller.Name, seller.Realm, opening);
-        ScheduleBotReplies(seller, opening, true, false);
+        string opening = AutonomousChatSafetyPolicy.Sanitize(Random.Shared.Next(2) == 0
+            ? $"wts {item}, pst with an offer."
+            : $"anyone need {item}? pst with an offer.");
+        if (guild)
+            BroadcastGuild(seller.Guild, seller.Name, opening);
+        else
+            BroadcastFaction(seller.Name, seller.Realm, opening);
+        ScheduleBotReplies(seller, opening, faction, guild, false);
         return true;
     }
 
-    public static string GenerateFactionReply(string incoming, Random random = null)
+    public static string GenerateFactionReply(string incoming, Random random = null) =>
+        AutonomousChatSafetyPolicy.Sanitize(GenerateFactionReplyCore(incoming, random));
+
+    private static string GenerateFactionReplyCore(string incoming, Random random = null)
     {
         random ??= Random.Shared;
         if (incoming.Contains("offer on", StringComparison.OrdinalIgnoreCase) ||
@@ -172,9 +250,9 @@ public static class AutonomousBotChatCoordinator
         }
         return AutonomousChatIntentModel.Predict(incoming) switch
         {
-            eAutonomousChatIntent.Greeting => random.Next(2) == 0 ? "Greetings. Good hunting out there." : "Hello there. The realm is awake today.",
-            eAutonomousChatIntent.Banter => random.Next(2) == 0 ? "Good luck on your next pull." : "Save some of that energy for the frontier.",
-            eAutonomousChatIntent.Abuse => random.Next(3) switch { 0 => "Let us keep faction chat helpful.", 1 => "I would rather focus on the realm.", _ => "Good hunting when you head back out." },
+            eAutonomousChatIntent.Greeting => random.Next(2) == 0 ? "hey, good hunting." : "roads are busy today.",
+            eAutonomousChatIntent.Banter => random.Next(2) == 0 ? "gg, get back out there." : "save some energy for the frontier.",
+            eAutonomousChatIntent.Abuse => random.Next(3) switch { 0 => "keep it about the fight.", 1 => "back to the hunt.", _ => "good hunting when you head back out." },
             eAutonomousChatIntent.Grouping or eAutonomousChatIntent.Help => random.Next(2) == 0 ? "Share your level and location so nearby adventurers can help." : "I may be free once I finish my current task.",
             eAutonomousChatIntent.Travel => random.Next(2) == 0 ? "A stable master may shorten the trip." : "Check the road signs and travel with your group.",
             eAutonomousChatIntent.RvR => random.Next(2) == 0 ? "I have heard the frontier has some movement." : "A few defenders may head out before long.",
@@ -182,12 +260,15 @@ public static class AutonomousBotChatCoordinator
             eAutonomousChatIntent.Dungeon => "A careful group should clear one pull at a time on the way inside.",
             eAutonomousChatIntent.Grinding => "Share the camp and level if you are looking for company.",
             eAutonomousChatIntent.Farewell => "Safe travels. Until next time.",
-            eAutonomousChatIntent.IgnoreOutOfWorld => "Let us keep faction chat focused on the realm.",
+            eAutonomousChatIntent.IgnoreOutOfWorld => "back to the hunt; anyone need a group?",
             _ => FactionReplies[random.Next(FactionReplies.Length)],
         };
     }
 
-    public static string GenerateLocalReply(GameBot bot, string incoming, Random random = null)
+    public static string GenerateLocalReply(GameBot bot, string incoming, Random random = null) =>
+        AutonomousChatSafetyPolicy.Sanitize(GenerateLocalReplyCore(bot, incoming, random));
+
+    private static string GenerateLocalReplyCore(GameBot bot, string incoming, Random random = null)
     {
         random ??= Random.Shared;
         string activity = Clean(bot?.PersistentRecord?.Activity, "taking a short rest");
@@ -202,11 +283,11 @@ public static class AutonomousBotChatCoordinator
             eAutonomousChatIntent.Grouping or eAutonomousChatIntent.Help => bot?.Group == null ? $"I am working around {target} for now, but I could group." : "I am already moving with a group right now.",
             eAutonomousChatIntent.Travel => $"I am headed toward {destination}.",
             eAutonomousChatIntent.Dungeon => $"We should clear one pull at a time if we head deeper. I am {LowerFirst(activity)}.",
-            eAutonomousChatIntent.RvR => "If I head to the frontier, I will stay with the realm group.",
-            eAutonomousChatIntent.Trading => "I will check my real inventory and the Realm Exchange when I return to town.",
+            eAutonomousChatIntent.RvR => "If I head to the frontier, I will stay with the group.",
+            eAutonomousChatIntent.Trading => "I will check what I have and the Realm Exchange when I return to town.",
             eAutonomousChatIntent.Grinding => $"I am focused on {target} at the moment.",
             eAutonomousChatIntent.Farewell => "Safe travels. I will keep working here.",
-            eAutonomousChatIntent.IgnoreOutOfWorld => "Let us keep the conversation focused on the realm.",
+            eAutonomousChatIntent.IgnoreOutOfWorld => "back to the hunt; anyone need a group?",
             _ => random.Next(3) switch
             {
                 0 => $"I am focused on {target} at the moment.",
@@ -253,6 +334,90 @@ public static class AutonomousBotChatCoordinator
             player.Out.SendMessage(formatted, eChatType.CT_Broadcast, eChatLoc.CL_ChatWindow);
     }
 
+    public static void BroadcastGuild(Guild guild, string speakerName, string message)
+    {
+        if (guild == null || guild == Guild.DummyGuild || string.IsNullOrWhiteSpace(message))
+            return;
+        string safe = AutonomousChatSafetyPolicy.Sanitize(message);
+        if (safe.Length > 240)
+            safe = safe[..240];
+        guild.SendMessageToGuildMembers($"[Guild] {speakerName}: \"{safe}\"",
+            eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
+    }
+
+    public static void AnnounceGuildKOS(GameBot victim, string targetName, string location)
+    {
+        if (victim?.Guild == null || string.IsNullOrWhiteSpace(targetName))
+            return;
+        BroadcastGuild(victim.Guild, victim.Name,
+            $"KOS {targetName}, last seen in {Clean(location, "the frontier")}. Watch for the crew.");
+    }
+
+    public static void OnAutonomousBotPvpKill(GameObject killer, GamePlayer victim)
+    {
+        GameLiving identity = PvpCombatant.Resolve(killer as GameLiving);
+        if (victim == null || PvpCombatant.IsSafeArea(victim) ||
+            identity is not GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false } bot ||
+            PvpCombatant.AreAllied(bot, victim) ||
+            !AutonomousGuildGrudgeMemory.IsWorthTarget(victim, DateTime.UtcNow))
+            return;
+
+        AutonomousPlayerType type = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord);
+        int aggression = Math.Clamp(bot.PersistentRecord?.Aggression ?? 50, 0, 100);
+        int tauntChance = type switch
+        {
+            AutonomousPlayerType.Hunter => 25 + aggression / 2,
+            AutonomousPlayerType.Roamer => 10 + aggression / 2,
+            AutonomousPlayerType.KeepWarrior => 5 + aggression / 3,
+            AutonomousPlayerType.Hybrid => aggression / 4,
+            _ => 0,
+        };
+        if (Random.Shared.Next(100) >= tauntChance)
+            return;
+
+        SchedulePostFightTaunt(bot, AutonomousBotChat.GeneratePostFightTaunt(type));
+    }
+
+    private static void SchedulePostFightTaunt(GameBot speaker, string line)
+    {
+        int combatChecksRemaining = 8;
+        _ = new ECSGameTimer(speaker, timer =>
+        {
+            if (speaker?.IsAutonomousWorldBot != true || speaker.IsTemporaryGroupHelper ||
+                !speaker.IsAlive || speaker.ObjectState != GameObject.eObjectState.Active)
+                return 0;
+            if (speaker.InCombat || speaker.IsCasting)
+                return --combatChecksRemaining > 0 ? 1_500 : 0;
+            if (!Eligible(speaker))
+                return 0;
+
+            if (HasLocalAudience(speaker))
+            {
+                lock (Sync)
+                {
+                    if (LastLocalAmbient.TryGetValue(speaker.CurrentRegionID, out long last) &&
+                        GameLoop.GameLoopTime - last < 90_000)
+                        return 0;
+                    LastLocalAmbient[speaker.CurrentRegionID] = GameLoop.GameLoopTime;
+                }
+                speaker.Say(AutonomousChatSafetyPolicy.Sanitize(line));
+            }
+            else if (HasGuildAudience(speaker.Guild))
+            {
+                string guildId = speaker.Guild.GuildID;
+                lock (Sync)
+                {
+                    if (LastGuildAmbient.TryGetValue(guildId, out long last) &&
+                        GameLoop.GameLoopTime - last < 120_000)
+                        return 0;
+                    LastGuildAmbient[guildId] = GameLoop.GameLoopTime;
+                }
+                BroadcastGuild(speaker.Guild, speaker.Name, line);
+            }
+            return 0;
+        }, 3_000);
+    }
+
     private static void SchedulePlayerReplies(GamePlayer player, string message, bool faction)
     {
         bool hasKnowledge = AutonomousChatKnowledge.TryAnswer(player, message, out string knowledge);
@@ -280,7 +445,9 @@ public static class AutonomousBotChatCoordinator
                 ? knowledge
                 : directed
                     ? GenerateDirectedReply(message)
-                    : faction ? GenerateFactionReply(message) : GenerateLocalReply(responder, message);
+                    : faction ? AutonomousBotChat.GenerateGuildReply(ContextFor(responder), message)
+                    : GenerateLocalReply(responder, message);
+            response = AutonomousChatSafetyPolicy.Sanitize(response);
             if (!TryAddDistinctResponse(scheduledResponses, response, out response))
                 continue;
             Schedule(responder, 1_300 + scheduledIndex++ * 1_800 + Random.Shared.Next(1_200), () =>
@@ -293,12 +460,14 @@ public static class AutonomousBotChatCoordinator
         }
     }
 
-    private static void ScheduleBotReplies(GameBot starter, string opening, bool faction, bool fromPlayer)
+    private static void ScheduleBotReplies(GameBot starter, string opening, bool faction, bool guild, bool fromPlayer)
     {
         bool hasKnowledge = AutonomousChatKnowledge.TryAnswer(starter.Realm, opening, out string knowledge);
         GameBot[] eligible = AutonomousBotRegistry.Snapshot()
-            .Where(bot => bot != starter && Eligible(bot) && bot.Realm == starter.Realm)
-            .Where(bot => faction || bot.CurrentRegion == starter.CurrentRegion && bot.IsWithinRadius(starter, WorldMgr.SAY_DISTANCE))
+            .Where(bot => bot != starter && Eligible(bot))
+            .Where(bot => guild
+                ? bot.Guild?.GuildID == starter.Guild?.GuildID
+                : bot.Realm == starter.Realm && (faction || bot.CurrentRegion == starter.CurrentRegion && bot.IsWithinRadius(starter, WorldMgr.SAY_DISTANCE)))
             .OrderByDescending(bot => Relevance(bot, opening))
             .ThenBy(_ => Random.Shared.Next())
             .ToArray();
@@ -308,15 +477,20 @@ public static class AutonomousBotChatCoordinator
         for (int index = 0; index < count; index++)
         {
             GameBot responder = eligible[index];
-            string response = hasKnowledge ? knowledge : faction ? GenerateFactionReply(opening) : GenerateLocalReply(responder, opening);
+            string response = hasKnowledge ? knowledge : guild || faction
+                ? AutonomousBotChat.GenerateGuildReply(ContextFor(responder), opening)
+                : GenerateLocalReply(responder, opening);
+            response = AutonomousChatSafetyPolicy.Sanitize(response);
             if (!TryAddDistinctResponse(scheduledResponses, response, out response))
                 continue;
             Schedule(responder, 1_700 + scheduledCount++ * 2_100 + Random.Shared.Next(1_300), () =>
             {
-                if (faction && HasFactionAudience(responder.Realm))
+                if (guild && HasGuildAudience(responder.Guild) && responder.Guild?.GuildID == starter.Guild?.GuildID)
+                    BroadcastGuild(responder.Guild, responder.Name, response);
+                else if (faction && HasFactionAudience(responder.Realm))
                     BroadcastFaction(responder.Name, responder.Realm, response);
-                else if (!faction && HasLocalAudience(responder))
-                    responder.Say(response);
+                else if (!faction && !guild && HasLocalAudience(responder))
+                    responder.Say(AutonomousChatSafetyPolicy.Sanitize(response));
             });
         }
 
@@ -324,13 +498,15 @@ public static class AutonomousBotChatCoordinator
         // while the channel cooldown prevents it from becoming a chat loop.
         if (!fromPlayer && !hasKnowledge && scheduledCount > 0 && Random.Shared.NextDouble() < 0.28)
         {
-            string closing = faction ? "Fair enough. Safe travels." : "Understood. I will keep at it.";
+            string closing = guild ? "gg; back to it." : faction ? "Fair enough. Safe travels." : "Understood. I will keep at it.";
             Schedule(starter, 5_500 + scheduledCount * 1_500, () =>
             {
-                if (faction && HasFactionAudience(starter.Realm))
+                if (guild && HasGuildAudience(starter.Guild))
+                    BroadcastGuild(starter.Guild, starter.Name, closing);
+                else if (faction && HasFactionAudience(starter.Realm))
                     BroadcastFaction(starter.Name, starter.Realm, closing);
-                else if (!faction && HasLocalAudience(starter))
-                    starter.Say(closing);
+                else if (!faction && !guild && HasLocalAudience(starter))
+                    starter.Say(AutonomousChatSafetyPolicy.Sanitize(closing));
             });
         }
     }
@@ -357,9 +533,25 @@ public static class AutonomousBotChatCoordinator
 
     private static bool HasFactionAudience(eRealm realm) => ClientService.Instance.GetPlayersOfRealm(realm).Count > 0;
 
+    private static bool HasGuildAudience(Guild guild) => guild != null && guild != Guild.DummyGuild &&
+        guild.GetListOfOnlineMembers().Any(player => player?.ObjectState == GameObject.eObjectState.Active &&
+            guild.HasRank(player, Guild.eRank.GcHear));
+
     private static bool HasLocalAudience(GameBot bot) => bot?.CurrentRegion != null &&
         ClientService.Instance.GetPlayersOfRegion(bot.CurrentRegion)
             .Any(player => player.ObjectState == GameObject.eObjectState.Active && bot.IsWithinRadius(player, WorldMgr.SAY_DISTANCE));
+
+    private static AutonomousBotChat.Context ContextFor(GameBot bot)
+    {
+        OfflineWorldBotRecord record = bot?.PersistentRecord;
+        string item = bot?.Inventory?.AllItems
+            .FirstOrDefault(entry => entry != null && entry.SlotPosition >= (int)eInventorySlot.FirstBackpack &&
+                                     entry.SlotPosition <= (int)eInventorySlot.LastBackpack)?.Name ?? string.Empty;
+        return new AutonomousBotChat.Context(bot?.Name ?? string.Empty, bot?.ClassName ?? string.Empty,
+            bot?.CurrentZone?.Description, record?.TargetName, record?.TravelDestination, item, string.Empty,
+            bot?.Level ?? 1, Math.Max(1, (int)(bot?.Group?.MemberCount ?? 1)), bot?.Realm ?? eRealm.None,
+            AutonomousPlayerBehavior.TypeOf(record), record?.Chattiness ?? 50);
+    }
 
     private static string BuildAmbientOpening(GameBot starter, AutonomousBotChat.Context context, bool faction)
     {
@@ -400,57 +592,22 @@ public static class AutonomousBotChatCoordinator
                        situation.Contains("frontier", StringComparison.OrdinalIgnoreCase) || starter.CurrentZone?.IsRvR == true;
             return BuildFactionTaskOpening(starter, context, pvp);
         }
-        return AutonomousBotChat.Generate(context);
+        return AutonomousBotChat.GenerateForType(context);
     }
 
     private static string BuildFactionTaskOpening(GameBot starter, AutonomousBotChat.Context context, bool pvp)
     {
-        string className = Clean(context.ClassName, starter.ClassName);
-        string zone = Clean(context.ZoneName, starter.CurrentZone?.Description ?? "my current area");
-        string target = Clean(context.MonsterName, string.Empty);
-        string destination = Clean(starter.PersistentRecord?.TravelDestination, string.Empty);
-        int choice = Random.Shared.Next(10);
+        string zone = Clean(context.ZoneName, starter.CurrentZone?.Description ?? "the frontier");
+        if (!pvp)
+            return AutonomousBotChat.GenerateForType(context);
 
-        if (pvp)
+        return context.PlayerType switch
         {
-            return (choice % 4) switch
-            {
-                0 => $"I am watching the frontier around {zone}. Where are defenders gathering?",
-                1 => $"Any {className}s have advice for supporting a frontier group?",
-                2 => "If anyone sees enemy movement, share the location so the realm can respond.",
-                _ => "Good luck to everyone heading into the frontier. Stay with your group.",
-            };
-        }
-
-        if (!string.IsNullOrWhiteSpace(target) && choice < 4)
-        {
-            return choice switch
-            {
-                0 => $"I am hunting {target} around {zone}. Has anyone found a steady camp nearby?",
-                1 => $"These {target} are keeping me busy in {zone}. Anyone else working nearby?",
-                2 => starter.Group?.MemberCount > 1
-                    ? $"Our group is taking careful pulls of {target} in {zone}."
-                    : $"I am taking careful pulls of {target} in {zone}.",
-                _ => $"Has anyone learned a reliable way to handle {target} around {zone}?",
-            };
-        }
-
-        if (!string.IsNullOrWhiteSpace(destination) && choice < 7)
-        {
-            return (choice % 3) switch
-            {
-                0 => $"I am heading toward {destination}. Any advice on the safest route?",
-                1 => $"Does anyone know which stable master is best for reaching {destination}?",
-                _ => $"Safe travels to anyone heading toward {destination}.",
-            };
-        }
-
-        return choice switch
-        {
-            7 => $"Any other {className}s have advice for adventurers around level {starter.Level}?",
-            8 => $"How are the hunting grounds around {zone} treating everyone?",
-            9 when starter.Group?.MemberCount > 1 => $"Our group is working around {zone}. Are any other parties nearby?",
-            _ => FactionOpeners[Random.Shared.Next(FactionOpeners.Length)],
+            AutonomousPlayerType.Hunter => $"inc near {zone}; keep your eyes on the road.",
+            AutonomousPlayerType.Roamer => $"lf8 for a loop near {zone}; bring a healer.",
+            AutonomousPlayerType.KeepWarrior => $"who can bring siege? checking the keeps near {zone}.",
+            AutonomousPlayerType.Hybrid => $"anyone roaming near {zone}? can join after this pull.",
+            _ => $"frontier movement near {zone}; call it out so the group can regroup.",
         };
     }
 
@@ -473,7 +630,7 @@ public static class AutonomousBotChatCoordinator
             {
                 0 => "Understood. I will focus on my task.",
                 1 => "All right. Safe travels.",
-                2 => "No problem. I will keep faction chat clear.",
+                2 => "No problem. I will keep chat clear.",
                 _ => "Okay. I will get back to work.",
             };
         }
@@ -481,7 +638,7 @@ public static class AutonomousBotChatCoordinator
         {
             eAutonomousChatIntent.Greeting => "Greetings. How can I help?",
             eAutonomousChatIntent.Abuse => "Let us keep the conversation helpful.",
-            eAutonomousChatIntent.IgnoreOutOfWorld => "Let us keep the conversation focused on the realm.",
+            eAutonomousChatIntent.IgnoreOutOfWorld => "Let us keep the conversation focused on the game.",
             _ => Random.Shared.Next(3) switch { 0 => "What did you need?", 1 => "Perhaps after this task.", _ => "Yes?" },
         };
     }

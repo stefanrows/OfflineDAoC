@@ -50,6 +50,7 @@ namespace DOL.GS.Commands
 
 			string message = "[Guild] " + client.Player.Name + ": \"" + string.Join(" ", args, 1, args.Length - 1) + "\"";
 			client.Player.Guild.SendMessageToGuildMembers(message, eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
+			AutonomousBotChatCoordinator.OnPlayerGuildChat(client.Player, string.Join(" ", args, 1, args.Length - 1));
 		}
 	}
 

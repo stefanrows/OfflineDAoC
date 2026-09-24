@@ -28,6 +28,20 @@ public static class AutonomousCrewManager
         "Blackwood Pact", "Ashen Concord", "The Gatekeepers", "Duskbound", "The Usual Suspects",
         "Moonlit Fang", "Stormwake", "Frostfall Guard", "Emberwake", "last orders",
     };
+    private static readonly IReadOnlyDictionary<AutonomousGuildCharter, string[]> CharterNames =
+        new Dictionary<AutonomousGuildCharter, string[]>
+        {
+            [AutonomousGuildCharter.Hunting] = [
+                "Night Stalkers", "Blackwood Pact", "Road Tax", "No Warning", "Ashen Trackers", "Cutpurse Hour"],
+            [AutonomousGuildCharter.Rvr] = [
+                "Iron Covenant", "Ashen Concord", "Stormwake", "Eight or Nothing", "Inc at Eight", "The Last Loop"],
+            [AutonomousGuildCharter.Keep] = [
+                "Stone Ward", "The Gatekeepers", "Frostfall Guard", "Emberwake", "Hold Fast", "Last Stand"],
+            [AutonomousGuildCharter.Leveling] = [
+                "Hearth and Blade", "Duskbound", "Camp Watch", "Safe Pulls", "One More Ding", "Bandit Farmers"],
+            [AutonomousGuildCharter.Social] = [
+                "Tavern Rats", "The Usual Suspects", "last orders", "Late Again", "Inn Side Out", "Woad We Do"],
+        };
 
     public readonly record struct ReconcileResult(bool Succeeded, int ChangedBots, int ManagedGuilds, string Error)
     {
@@ -65,6 +79,16 @@ public static class AutonomousCrewManager
         ordinal = Math.Max(0, ordinal);
         string baseName = CrewNames[ordinal % CrewNames.Length];
         int suffix = ordinal / CrewNames.Length;
+        return suffix == 0 ? baseName : $"{baseName} {suffix + 1}";
+    }
+
+    public static string NameForOrdinal(int ordinal, AutonomousGuildCharter charter)
+    {
+        ordinal = Math.Max(0, ordinal);
+        if (!CharterNames.TryGetValue(charter, out string[] names) || names.Length == 0)
+            return NameForOrdinal(ordinal);
+        string baseName = names[ordinal % names.Length];
+        int suffix = ordinal / names.Length;
         return suffix == 0 ? baseName : $"{baseName} {suffix + 1}";
     }
 
@@ -205,7 +229,9 @@ public static class AutonomousCrewManager
                 {
                     // A temporary legacy marker makes an interrupted create
                     // discoverable even before its charter row is persisted.
-                    string name = CrewNamePrefix + NameForOrdinal(ordinal);
+                    AutonomousGuildCharter kind = AutonomousBotIdentity.CharterForOrdinal(
+                        ordinal, AutonomousBotGoalPolicy.Settings.Mix);
+                    string name = CrewNamePrefix + NameForOrdinal(ordinal, kind);
                     Guild existing = GuildMgr.GetGuildByName(name);
                     if (existing != null)
                     {
@@ -329,7 +355,9 @@ public static class AutonomousCrewManager
                         if (!GameServer.Database.SaveObject(charter))
                             throw new InvalidOperationException($"Could not persist generated guild order for {guild.GuildID}.");
                     }
-                    RenameManagedGuild(guild, charter, NameForOrdinal(ordinal));
+                    AutonomousGuildCharter kind = Enum.TryParse(charter.Charter, out AutonomousGuildCharter parsed) &&
+                        Enum.IsDefined(parsed) ? parsed : AutonomousGuildCharter.Leveling;
+                    RenameManagedGuild(guild, charter, NameForOrdinal(ordinal, kind));
                 }
 
                 var identityChanges = new List<DataObject>();

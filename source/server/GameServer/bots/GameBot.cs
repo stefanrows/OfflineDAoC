@@ -978,6 +978,10 @@ namespace DOL.GS
 
             if (IsAutonomousWorldBot && PersistentRecord != null)
             {
+                if (AutonomousGuildGrudgeMemory.RememberKiller(this, killer, DateTime.UtcNow,
+                        out string grudgeTargetName, out string grudgeLocation, out bool announceGrudge) && announceGrudge)
+                    AutonomousBotChatCoordinator.AnnounceGuildKOS(this, grudgeTargetName, grudgeLocation);
+
                 PersistentRecord.DeathCount++;
                 if (_lastDeathWasPvp && AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, DateTime.UtcNow) &&
                     Group == null && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR) &&

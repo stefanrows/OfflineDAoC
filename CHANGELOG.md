@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-09-24
+
+### Added
+
+- M6 autonomous social behavior: player-type chat, guild banter, post-fight
+  taunts, trade and LFG lines, invented charter-themed guild names, and
+  common/joking character-name styles.
+- Guild KOS memories that include the player, expire after three hours, respect
+  worth and safe-area rules, and direct existing RvR crews toward reachable
+  targets.
+- A blocklist for slurs in authored autonomous chat and generated names while
+  leaving ordinary profanity available.
+
+### Changed
+
+- Autonomous guild and faction conversations use existing chat rate limits and
+  only speak to audiences with permission to hear the channel.
+
+### Fixed
+
+- Exchange advertisements use channel-appropriate wording, and generated bot
+  replies pass through the chat safety policy.
+
+### Removed
+
+- None.
+
 ## [0.49.0] - 2026-09-24
 
 ### Added

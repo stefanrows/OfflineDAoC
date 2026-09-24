@@ -1667,6 +1667,12 @@ namespace DOL.GS
         {
             if (candidates == null || candidates.Length == 0)
                 return null;
+            GameLiving revengeTarget = candidates
+                .Where(candidate => AutonomousGuildGrudgeMemory.IsActiveTarget(bot, candidate, DateTime.UtcNow))
+                .OrderBy(bot.GetDistanceTo)
+                .FirstOrDefault();
+            if (revengeTarget != null)
+                return revengeTarget;
             int warbandSize = bot.Group?.GetMembersInTheGroup().OfType<GameBot>().Count() ?? 1;
             long actorKey = bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID;
             // Some attackers focus the objective carrier; the others fight its
@@ -1884,6 +1890,20 @@ namespace DOL.GS
 
         private CampDestination ChooseRvrDestination(GameBot bot)
         {
+            HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
+            GameLiving revengeTarget = AutonomousGuildGrudgeMemory.GetReachableTargets(bot, reachable, DateTime.UtcNow)
+                .OrderBy(target => EstimateTravelMinutes(bot, target.CurrentRegionID, target.X, target.Y))
+                .FirstOrDefault();
+            if (revengeTarget != null)
+            {
+                string targetId = AutonomousGuildGrudgeMemory.StableTargetId(revengeTarget);
+                _rvrSharedEvent = false;
+                _rvrIntent = AutonomousRvrEventLayer.Intent.HuntEnemy;
+                bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
+                return new(targetId, revengeTarget.Name, revengeTarget.CurrentZone?.Description ?? "frontier",
+                    revengeTarget.CurrentRegionID, revengeTarget.X, revengeTarget.Y, revengeTarget.Z, 1, false, true);
+            }
+
             AutonomousPlayerType type = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord);
             if (type == AutonomousPlayerType.Hunter || bot.Level < 20)
                 return ChooseLowLevelPvpDestination(bot);
@@ -1891,7 +1911,6 @@ namespace DOL.GS
             AutonomousPlayerType leaderType = AutonomousPlayerBehavior.TypeOf(
                 _groupDirective?.Leader?.PersistentRecord ?? bot.PersistentRecord);
 
-            HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
             var choices = new List<CampDestination>();
             var objectives = new List<AutonomousRvrEventLayer.LiveObjective>();
             RvrPlanningView planning = GetRvrPlanningView();
