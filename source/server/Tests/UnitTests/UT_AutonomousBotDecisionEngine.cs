@@ -422,6 +422,28 @@ public class UT_AutonomousBotDecisionEngine
         });
     }
 
+    [Test]
+    public void LevelingCampPrefersNearbyHomeRealmAndSpreadsWithinIt()
+    {
+        var homeCrowded = Camp("home-crowded", eRealm.Albion, ConColor.YELLOW, true) with
+        { ZoneName = "Starter", TravelMinutes = 1, OutdoorPopulation = 4 };
+        var homeOpen = Camp("home-open", eRealm.Albion, ConColor.YELLOW, true) with
+        { ZoneName = "Next zone", TravelMinutes = 8, OutdoorPopulation = 0 };
+        var foreignEmpty = Camp("foreign", eRealm.Midgard, ConColor.YELLOW, true) with
+        { RegionId = 100, TravelMinutes = 25, OutdoorPopulation = 0 };
+        var options = new[] { homeCrowded, homeOpen, foreignEmpty };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp(options, 1, "Starter",
+                eRealm.Albion, 5, new FixedRandom(0)).Id, Is.EqualTo("home-crowded"));
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp(options, 1, "Starter",
+                eRealm.Albion, 5, new FixedRandom(0.99)).Id, Is.EqualTo("home-open"));
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([foreignEmpty], 1, "Starter",
+                eRealm.Albion, 5, new FixedRandom(0)).Id, Is.EqualTo("foreign"));
+        });
+    }
+
     private static AutonomousBotDecisionEngine.State State() =>
         new(eRealm.Albion, 20, 100, 100, 100, 20, 0, 0, 0, 0, 5, string.Empty, 1, false, false, false);
 

@@ -46,6 +46,8 @@ namespace DOL.GS
         private CampDestination _camp;
         private CampDestination _restingCamp;
         private long _campStartedTick;
+        private int _soloCampStableRides;
+        private bool _walkToCampAfterRelease;
         private long _emptyCampSinceTick;
         private string _reportedEmptySharedCampId = string.Empty;
         private long _nextPlanTick;
@@ -173,6 +175,8 @@ namespace DOL.GS
                     _soloRvrBorderStaged = false;
                     _soloRvrStagingPoint = null;
                     _campStartedTick = 0;
+                    _soloCampStableRides = 0;
+                    _walkToCampAfterRelease = false;
                     _emptyCampSinceTick = 0;
                     _patrolDestination = null;
                     _pendingStableChoice = null;
@@ -298,7 +302,8 @@ namespace DOL.GS
 
                 if (_groupDirective?.IsDynamic == true &&
                     !AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase) &&
-                    (_groupDirective.GroupCombatActive || _groupDirective.RecoveringBetweenPulls) &&
+                    (_groupDirective.GroupCombatActive ||
+                     _groupDirective.RecoveringBetweenPulls && _groupDirective.Phase != "Choosing group target") &&
                     (AutonomousRealmRaid.GetView(bot.Group) == null ||
                      _groupDirective.Leader?.CurrentRegionID == bot.CurrentRegionID && bot.GetDistanceTo(_groupDirective.Leader) <= 1800))
                 {
@@ -560,6 +565,7 @@ namespace DOL.GS
                     return true;
                 }
 
+                _walkToCampAfterRelease = false;
                 if (_groupDirective?.IsDynamic == true)
                     AutonomousBotGroupCoordinator.MarkGrinding(bot);
                 return WorkCamp(brain, bot);
@@ -2563,7 +2569,7 @@ namespace DOL.GS
                     cell.Id,
                     cell.ZoneName,
                     cell.MonsterName,
-                    bot.Realm,
+                    ProtectedRealm(cell.RegionId, cell.Zone.ID),
                     cell.RegionId,
                     cons[0],
                     cons[cons.Length / 2],
@@ -2572,7 +2578,8 @@ namespace DOL.GS
                     cell.IsFrontier,
                     cell.LiveMobCount,
                     string.Equals(cell.Id, bot.PersistentRecord?.CurrentCampId, StringComparison.OrdinalIgnoreCase) ? bot.PersistentRecord.DeathCount : 0,
-                    0,
+                    !sharedGroup && bot.Level < 20
+                        ? EstimateTravelMinutes(bot, cell.RegionId, cell.X, cell.Y) : 0,
                     averageLevel,
                     cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Population(cell.RegionId) : 0,
                     cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Capacity(cell.RegionId, cell.LiveMobCount) : 0,
@@ -2583,7 +2590,7 @@ namespace DOL.GS
             // Keep all level-valid locations eligible. Crowd and recent spawn
             // depletion only soften the final outdoor draw.
             IEnumerable<AutonomousBotDecisionEngine.Camp> legal = camps.Where(camp =>
-                camp.Reachable && camp.Realm == bot.Realm && camp.LiveMobCount > 0);
+                camp.Reachable && camp.LiveMobCount > 0);
             AutonomousBotDecisionEngine.PveEnvironment environment;
             bool gearFarming = planningLevel >= 50 && AutonomousActivityScheduler.IsUndergeared(bot.Level,
                 AutonomousPlayerBehavior.BestEquippedWeaponLevel(bot),
@@ -2607,15 +2614,20 @@ namespace DOL.GS
             {
                 legal = legal.Where(camp => camp.LowestCon >= minimumTargetCon && camp.TypicalCon <= maximumTargetCon);
                 AutonomousBotDecisionEngine.Camp[] categoryCandidates = legal.ToArray();
-                environment = AutonomousBotDecisionEngine.SelectPveEnvironment(
-                    categoryCandidates, groupSize, planningLevel, Random.Shared, gearFarming);
-                legal = categoryCandidates.Where(camp => environment == AutonomousBotDecisionEngine.PveEnvironment.Dungeon
-                    ? camp.IsDungeon : !camp.IsDungeon);
+                environment = planningLevel < 20
+                    ? AutonomousBotDecisionEngine.PveEnvironment.None
+                    : AutonomousBotDecisionEngine.SelectPveEnvironment(
+                        categoryCandidates, groupSize, planningLevel, Random.Shared, gearFarming);
+                if (planningLevel >= 20)
+                    legal = categoryCandidates.Where(camp => environment == AutonomousBotDecisionEngine.PveEnvironment.Dungeon
+                        ? camp.IsDungeon : !camp.IsDungeon);
             }
             AutonomousBotDecisionEngine.Camp[] legalCells = legal.ToArray();
             // This is the deployed selection point for verified locations.
-            AutonomousBotDecisionEngine.Camp chosen = AutonomousBotDecisionEngine.SelectWithinEnvironment(
-                legalCells, environment, Random.Shared);
+            AutonomousBotDecisionEngine.Camp chosen = !sharedGroup && planningLevel < 20
+                ? AutonomousBotDecisionEngine.SelectLevelingCamp(legalCells, bot.CurrentRegionID,
+                    bot.CurrentZone?.Description, bot.Realm, planningLevel, Random.Shared)
+                : AutonomousBotDecisionEngine.SelectWithinEnvironment(legalCells, environment, Random.Shared);
             bool usedDeathFallback = false;
             if (chosen == null && !sharedGroup && _deathDifficultySteps > 0)
             {
@@ -2637,7 +2649,7 @@ namespace DOL.GS
                 : new(chosen.IsDungeon ? eAutonomousActivity.Dungeon : sharedGroup ? eAutonomousActivity.GroupGrind : eAutonomousActivity.Grind,
                     chosen.Id, usedDeathFallback
                         ? $"No {maximumTargetCon.ToString().ToLowerInvariant()}-or-easier XP camp exists; selected the safest available non-grey alternative."
-                        : $"Selected a live {environment.ToString().ToLowerInvariant()} camp from {legalCells.Length:N0} reachable level-valid spawn cells.");
+                        : $"Selected a live {(chosen.IsDungeon ? "dungeon" : "outdoor")} camp from {legalCells.Length:N0} reachable level-valid spawn cells.");
             if (!destinations.TryGetValue(decision.TargetId, out CampDestination selected))
                 return;
 
@@ -2650,6 +2662,7 @@ namespace DOL.GS
             _lastFailedCampId = string.Empty;
             _lastFailedTargetName = string.Empty;
             _campStartedTick = GameLoop.GameLoopTime;
+            _soloCampStableRides = 0;
             _emptyCampSinceTick = 0;
             _patrolDestination = null;
             _pendingStableChoice = null;
@@ -2672,6 +2685,21 @@ namespace DOL.GS
                 string.Join(",", members.Select(member => member is GameBot other ? other.ClassName : "Player")));
             }
             catch { } // Observability must never replan a working route.
+        }
+
+        public static bool HasLocalPickupCamp(GameBot[] members, ushort regionId)
+        {
+            if (members == null || members.Length < 2) return false;
+            GameBot leader = members[0];
+            return CampCatalogSnapshot().Any(cell => cell.RegionId == regionId &&
+                AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(cell.IsDungeon,
+                    cell.IsFrontier, regionId, cell.RegionId) &&
+                cell.LiveMobCount > 0 && IsZoneAccessible(leader.Realm, cell.Zone) &&
+                cell.Levels.Any(level => level <=
+                    (int)Math.Round(members.Average(member => member.Level)) +
+                        AutonomousGroupTargetPolicy.PreferredBonus(members.Length) &&
+                    ConLevels.GetConColor(ConLevels.GetConLevel(
+                        members.Max(member => member.EffectiveLevel), level)) > ConColor.GREY));
         }
 
         private static CampCatalogCell[] CampCatalogSnapshot()
@@ -2873,6 +2901,7 @@ namespace DOL.GS
                 return;
             }
 
+            _walkToCampAfterRelease = true;
             // A player-shaped killer says nothing about the monster's difficulty.
             // Replan without lowering the con ceiling or excluding the camp.
             if (bot.LastDeathWasPvp)
@@ -3139,6 +3168,9 @@ namespace DOL.GS
                 !AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase)) return false;
             if (GameRelic.IsPlayerCarryingRelic(bot))
                 return false;
+            if (_camp != null && _groupDirective?.IsDynamic != true &&
+                (_walkToCampAfterRelease || bot.Level < 20 && _soloCampStableRides >= 2))
+                return false;
             if (bot.CurrentRegion == null)
                 return false;
             if (IsStableSourceQuarantined(bot))
@@ -3174,6 +3206,13 @@ namespace DOL.GS
             }
 
             AutonomousStableRoutePlanner.Choice stable = _pendingStableChoice;
+            if (_camp != null && _groupDirective?.IsDynamic != true && bot.Level < 20 &&
+                _soloCampStableRides + stable.PlannedHops > 2)
+            {
+                _pendingStableChoice = null;
+                _nextStableCheckTick = GameLoop.GameLoopTime + 60_000;
+                return false;
+            }
             if (AutonomousStableRoutePlanner.MeetupBoardingExpired(meetup && expedition == null, _meetupBoardingStartedTick, GameLoop.GameLoopTime, _boardingProgressTick))
             {
                 RejectPendingBoarding(bot, "Meetup boarding stopped progressing or reached its five-minute limit; continuing toward the same rendezvous");
@@ -3229,6 +3268,8 @@ namespace DOL.GS
                 _pendingStableChoice = null;
                 return false;
             }
+            if (_camp != null && _groupDirective?.IsDynamic != true && bot.Level < 20)
+                _soloCampStableRides += stable.PlannedHops;
             _stableSourceQuarantine.Clear();
             _pendingStableChoice = null;
             SetStatus(bot, "Boarding a stablemaster horse", GoalText(),

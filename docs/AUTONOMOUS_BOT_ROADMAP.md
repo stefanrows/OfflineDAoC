@@ -557,7 +557,8 @@ groups never find a camp. M6 grudge writes stall the reaper tick. After about
 two hours, bots were level 1–8. The review's phases A–D are the next work.
 Phase A (low-level bot safety, batched grudge writes, grudge and crowd-control
 limits, PvP-death handling, engagement diagnostics) is implemented offline in
-0.53.0; its owner run is pending.
+0.53.0. Phase B (local, travel-aware leveling and viable pickup groups) is
+implemented offline in 0.54.0. The owner run for both phases is pending.
 
 ## 7. Open questions
 

@@ -105,7 +105,6 @@ public static partial class AutonomousBotGroupCoordinator
         public SharedCamp Camp { get; set; }
         public Dictionary<string, long> RejectedDungeonCamps { get; } = new(StringComparer.Ordinal);
         public int WipePenalty { get; set; }
-        public long? NoCampSinceTick { get; set; }
         public AutonomousGroupRecoveryState Recovery { get; } = new();
         public bool RecoveryRendezvousChosen { get; set; }
         public long NextRecoveryReadinessTick { get; set; }
@@ -301,7 +300,6 @@ public static partial class AutonomousBotGroupCoordinator
             session.DungeonInteriorStagingPoint = default;
             session.DungeonArrivalHoldUntilTick = 0;
             session.DungeonArrivalCompletedCampId = string.Empty;
-            session.NoCampSinceTick = null;
             session.Phase = "Traveling";
             StartTaskClock(session, members);
             WriteSessionMetadata(session, members);
@@ -316,11 +314,9 @@ public static partial class AutonomousBotGroupCoordinator
                 session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve || session.Camp != null ||
                 session.Phase != "Choosing group target" || ChooseLeader(session, BotMembers(session.Group)) != bot)
                 return;
-            session.NoCampSinceTick ??= GameLoop.GameLoopTime;
-            // Only after the normal level fallback is exhausted. Do not leave
-            // an assembled party waiting forever on a clock that never started.
-            if (GameLoop.GameLoopTime - session.NoCampSinceTick.Value >= 120_000)
-                FinishGroupTask(session, "No reachable non-grey group camp after lower-level fallbacks and two minutes of retries");
+            // The planner has exhausted its level fallbacks. There is no
+            // destination to recover toward, so return members to solo work.
+            FinishGroupTask(session, "No reachable non-grey group camp after lower-level fallbacks");
         }
     }
 
@@ -1294,6 +1290,13 @@ public static partial class AutonomousBotGroupCoordinator
                     LogFormationBlocked(leader, objectiveKind, $"Only {compatible.Length} of {rolledSize - 1} requested compatible guildmates are available");
                     continue;
                 }
+            }
+
+            if (objectiveKind == eAutonomousObjectiveKind.GroupPve &&
+                !AutonomousWorldBotController.HasLocalPickupCamp([leader, .. compatible], leader.CurrentRegionID))
+            {
+                LogFormationBlocked(leader, objectiveKind, "No live local non-grey camp fits this pickup cohort");
+                continue;
             }
 
             var group = new Group(leader);

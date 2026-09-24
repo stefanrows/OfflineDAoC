@@ -386,6 +386,12 @@ public static class AutonomousStuckWatchdog
         string logMarker = "AUTONOMOUS_POSITION_RECOVERY")
     {
         CapitalLocation capital = SafeCapitalFor(bot.Realm);
+        if (moveLiveObject && bot.CurrentZone != null && !bot.CurrentZone.IsDungeon &&
+            BotReleaseBindPoints.Nearest(bot.CurrentRegionID, bot.X, bot.Y, bot.Realm,
+                bot.CurrentZone.ID) is Point3D bind &&
+            WorldMgr.GetRegion(bot.CurrentRegionID)?.GetZone(bind.X, bind.Y)?.ID == bot.CurrentZone.ID)
+            capital = new CapitalLocation(bot.CurrentZone.Description, bot.CurrentRegionID,
+                bind.X, bind.Y, bind.Z, bot.Heading);
         if (capital.RegionId == 0)
             return false;
 
@@ -440,7 +446,7 @@ public static class AutonomousStuckWatchdog
         record.RecoveryCount++;
         record.CurrentCampId = string.Empty;
         record.ItineraryJson = string.Empty;
-        record.Activity = "Recovered to safe capital spawn";
+        record.Activity = "Recovered to safe local bind or capital";
         record.CurrentGoal = expedition == null ? GenerateFreshGoal(bot.DatabaseID, record.RecoveryCount) : $"Rejoin {expedition.Camp.MonsterName}";
         record.TargetName = string.Empty;
         record.TravelDestination = string.Empty;

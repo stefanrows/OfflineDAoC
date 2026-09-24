@@ -1,6 +1,6 @@
 # Autonomous bots: first live review of M0–M6 and improvement plan
 
-Status: **review complete. Phase A implemented offline in 0.53.0; its owner run is pending. Phases B–D not started.**
+Status: **review complete. Phases A and B implemented offline through 0.54.0; the owner run is pending. Phases C–D not started.**
 Date: 2026-09-24. Build under review: 0.50.0 (M6), with earlier sessions on 0.49.x.
 
 This is the first M7 input for [AUTONOMOUS_BOT_ROADMAP.md](AUTONOMOUS_BOT_ROADMAP.md).
@@ -257,6 +257,16 @@ level 10. Deaths at most 0.5 per bot-hour at levels 1–9. No
    not idle at full resources.
 5. **Local stuck recovery.** Recover to the nearest safe point in the bot's
    current zone, or its leveling-area bind, before falling back to the capital.
+
+**Implemented offline in 0.54.0.** Solo bots under 20 compare nearby
+home-realm camps using travel time and local crowding. They may use a
+cross-realm camp when no suitable home camp is within ten estimated minutes.
+Stable tickets are limited to two planned hops per solo camp attempt, and a
+bot walks back after a defeat. Release and watchdog recovery favor validated
+bind points in the current zone. Pickup groups require a live local camp
+before formation and dissolve if their later planner finds none. The owner
+run must still measure the acceptance targets below; no real-client result is
+claimed from the offline build.
 
 Acceptance: at least 50% of time fighting or at camp. At least 70% of goal
 attempts reach their camp. At least 20 monster kills per bot-hour at levels

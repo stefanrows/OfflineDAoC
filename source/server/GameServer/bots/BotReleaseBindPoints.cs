@@ -43,11 +43,15 @@ namespace DOL.GS
                 (int)System.Math.Round(floor.Value.Y), (int)System.Math.Round(floor.Value.Z));
         }
 
-        public static Point3D? Nearest(ushort region, int x, int y, eRealm realm = eRealm.None)
+        public static Point3D? Nearest(ushort region, int x, int y, eRealm realm = eRealm.None,
+            ushort preferredZone = 0)
         {
             if (!Regions.TryGetValue(region, out Bind[] points)) return null;
             Point3D? nearest = null;
+            Point3D? nearestInZone = null;
             double best = double.MaxValue;
+            double bestInZone = double.MaxValue;
+            Region currentRegion = preferredZone == 0 ? null : WorldMgr.GetRegion(region);
             foreach (Bind bind in points)
             {
                 // Unclassified stones fail closed for autonomous bots. The
@@ -56,11 +60,19 @@ namespace DOL.GS
                 Point3D point = bind.Point;
                 double dx = (double)x - point.X, dy = (double)y - point.Y;
                 double distance = dx * dx + dy * dy;
-                if (distance >= best) continue;
-                best = distance;
-                nearest = point;
+                if (distance < best)
+                {
+                    best = distance;
+                    nearest = point;
+                }
+                if (currentRegion?.GetZone(point.X, point.Y)?.ID == preferredZone && distance < bestInZone)
+                {
+                    bestInZone = distance;
+                    nearestInZone = point;
+                }
             }
-            return nearest == null ? null : new Point3D(nearest.X, nearest.Y, nearest.Z);
+            Point3D? selected = nearestInZone ?? nearest;
+            return selected == null ? null : new Point3D(selected.X, selected.Y, selected.Z);
         }
     }
 }

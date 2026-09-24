@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-09-24
+
+### Added
+
+- Pickup groups check the live local camp catalog before forming.
+
+### Changed
+
+- Solo bots below level 20 favor camps within ten estimated travel minutes in
+  their home realm, weighing travel and crowding together across nearby zones.
+  Ordinary leveling trips use at most two stable hops; bots walk to the next
+  camp after release.
+- Autonomous release prefers a validated bind point in the death zone, and
+  movement or goal-stall recovery prefers a bind in the current leveling zone
+  before falling back to the capital.
+
+### Fixed
+
+- A group with no usable camp dissolves after its planner exhausts the level
+  fallbacks. Recovery no longer keeps a fully rested, targetless group idle.
+
+### Removed
+
+- None.
+
 ## [0.53.0] - 2026-09-24
 
 ### Added

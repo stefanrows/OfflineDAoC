@@ -1164,7 +1164,9 @@ namespace DOL.GS
 
         private Point3D? FindNearestBindPoint()
         {
-            return BotReleaseBindPoints.Nearest(_deathRegionId, X, Y, IsAutonomousWorldBot ? Realm : eRealm.None);
+            return BotReleaseBindPoints.Nearest(_deathRegionId, _deathLocation.X, _deathLocation.Y,
+                IsAutonomousWorldBot ? Realm : eRealm.None,
+                IsAutonomousWorldBot ? WorldMgr.GetRegion(_deathRegionId)?.GetZone(_deathLocation.X, _deathLocation.Y)?.ID ?? 0 : (ushort)0);
         }
 
         private int DeathImmunityDurationMilliseconds() =>

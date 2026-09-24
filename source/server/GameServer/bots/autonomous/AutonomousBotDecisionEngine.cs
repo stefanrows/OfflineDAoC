@@ -254,6 +254,35 @@ public static class AutonomousBotDecisionEngine
         return regions[^1].Camps[^1];
     }
 
+    // Spend the first leveling hours in nearby, populated home zones. A distant
+    // camp remains eligible when the local catalog has no XP-bearing option.
+    public static Camp SelectLevelingCamp(IEnumerable<Camp> camps, ushort currentRegion,
+        string currentZone, eRealm homeRealm, int level, Random random = null)
+    {
+        Camp[] choices = camps?.Where(camp => camp != null).ToArray() ?? [];
+        if (choices.Length == 0) return null;
+        random ??= Random.Shared;
+        Camp[] home = choices.Where(camp => camp.Realm == homeRealm && camp.TravelMinutes <= 10).ToArray();
+        Camp[] pool = level < 20 && home.Length > 0 ? home : choices;
+        // Preserve the dungeon draw, but apply locality and distance inside
+        // the chosen environment instead of letting remote empty cells win.
+        PveEnvironment environment = SelectPveEnvironment(pool, 1, level, random);
+        Camp[] environmentPool = pool.Where(camp => environment == PveEnvironment.Dungeon
+            ? camp.IsDungeon : !camp.IsDungeon).ToArray();
+        if (environmentPool.Length == 0) environmentPool = pool;
+        double[] weights = environmentPool.Select(camp =>
+            OutdoorCampWeight(camp) * (camp.IsDungeon ? 1d : 1d / (1d + Math.Max(0, camp.TravelMinutes) / 5d)) *
+            (camp.RegionId == currentRegion ? 2d : 1d) *
+            (string.Equals(camp.ZoneName, currentZone, StringComparison.OrdinalIgnoreCase) ? 1.5d : 1d)).ToArray();
+        double draw = random.NextDouble() * weights.Sum();
+        for (int i = 0; i < environmentPool.Length; i++)
+        {
+            draw -= weights[i];
+            if (draw < 0) return environmentPool[i];
+        }
+        return environmentPool[^1];
+    }
+
     public static int OutdoorCampWeight(Camp camp)
     {
         int weight = Math.Max(1, 100 / (1 + Math.Max(0, camp.OutdoorPopulation) * 2));
