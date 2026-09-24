@@ -8,9 +8,19 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private static readonly string[] DangerNames = ["Mild", "Authentic", "Full Camlann"];
     private static readonly string[] ShapeNames = ["Fresh launch", "Established live server"];
     private static readonly string[] TypeNames = ["Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "Keep warrior"];
+    private static readonly string[] TypeToolTips =
+    [
+        "Weight for new autonomous bots assigned the Leveler behavior. Levelers focus on PvE leveling, usually hunt in groups, and only consider RvR from level 35, then rarely. A higher value makes this behavior more common; class and guild role also affect exact counts.",
+        "Weight for new autonomous bots assigned the Casual behavior. Casuals favor PvE, take more town breaks, form fewer groups, and do not choose RvR on their own. A higher value makes this behavior more common; class and guild role also affect exact counts.",
+        "Weight for new autonomous bots assigned the Hybrid behavior. Hybrids mix PvE leveling with RvR, considering RvR from level 20 and fighting more often during local evening hours. A higher value makes this behavior more common; class and guild role also affect exact counts.",
+        "Weight for new autonomous bots assigned the Hunter behavior. Hunters favor RvR patrols and nearby, level-appropriate targets; the danger setting changes their patrol frequency and whether they may attack much lower-level players. A higher value makes this behavior more common; class and guild role also affect exact counts.",
+        "Weight for new autonomous bots assigned the Roamer behavior. Roamers travel RvR routes and can form warband-sized groups from level 20. A higher value makes this behavior more common; class and guild role also affect exact counts.",
+        "Weight for new autonomous bots assigned the Keep warrior behavior. At level 35 and above, a Keep warrior group leader can start a keep campaign with four or more group members. A higher value makes this behavior more common; class and guild role also affect exact counts.",
+    ];
     private readonly string _path;
     private readonly Func<bool> _serverStopped;
     private readonly Func<int> _rosterCount;
+    private readonly ToolTip _toolTips = new() { InitialDelay = 450, ReshowDelay = 100, AutoPopDelay = 20000, ShowAlways = true };
     private readonly ComboBox _preset = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly ComboBox _danger = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly ComboBox _worldShape = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
@@ -55,31 +65,43 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _preset.Items.AddRange(PresetNames);
         _danger.Items.AddRange(DangerNames);
         _worldShape.Items.AddRange(ShapeNames);
-        body.Controls.Add(ChoiceRow("Preset", _preset));
-        body.Controls.Add(new Label { Text = "Player-type mix — total must equal 100%", AutoSize = true,
-            Margin = new Padding(3, 13, 3, 4), ForeColor = DaocTheme.GoldLight });
+        body.Controls.Add(ChoiceRow("Preset", _preset,
+            "Quick starting mixes: Camlann 2003 is balanced; Peaceful favors leveling and mild danger; Bloodbath favors Hunters and Roamers with Full Camlann danger; Keep Wars favors Keep warriors and Roamers. Selecting a preset replaces the six percentages and danger. Choose Custom to edit them. Saved bot types are retained."));
+        var mixHeading = new Label { Text = "Player-type mix — total must equal 100%", AutoSize = true,
+            Margin = new Padding(3, 13, 3, 4), ForeColor = DaocTheme.GoldLight };
+        _toolTips.SetToolTip(mixHeading,
+            "These percentages weight type assignments for autonomous bots that receive a new type. They must total 100%. Class and guild role also influence individual assignments, so exact counts can vary. Saved bot types are retained.");
+        body.Controls.Add(mixHeading);
         for (int index = 0; index < TypeNames.Length; index++)
         {
             int captured = index;
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
-            row.Controls.Add(new Label { Text = TypeNames[index], Width = 130, Height = 35, TextAlign = ContentAlignment.MiddleLeft });
+            var typeLabel = new Label { Text = TypeNames[index], Width = 130, Height = 35, TextAlign = ContentAlignment.MiddleLeft };
             var slider = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, Width = 390,
                 Height = 42, AccessibleName = TypeNames[index] + " percentage" };
             var value = new NumericUpDown { Minimum = 0, Maximum = 100, Width = 64,
                 BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text,
                 AccessibleName = TypeNames[index] + " exact percentage" };
+            var percentLabel = new Label { Text = "%", AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
+            _toolTips.SetToolTip(typeLabel, TypeToolTips[index]);
+            _toolTips.SetToolTip(slider, TypeToolTips[index]);
+            _toolTips.SetToolTip(value, TypeToolTips[index]);
+            _toolTips.SetToolTip(percentLabel, TypeToolTips[index]);
             _sliders[index] = slider;
             _values[index] = value;
             slider.ValueChanged += (_, _) => TypeValueChanged(captured, slider.Value, fromSlider: true);
             value.ValueChanged += (_, _) => TypeValueChanged(captured, (int)value.Value, fromSlider: false);
+            row.Controls.Add(typeLabel);
             row.Controls.Add(slider);
             row.Controls.Add(value);
-            row.Controls.Add(new Label { Text = "%", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
+            row.Controls.Add(percentLabel);
             body.Controls.Add(row);
         }
         body.Controls.Add(_total);
-        body.Controls.Add(ChoiceRow("Danger in leveling zones", _danger));
-        body.Controls.Add(ChoiceRow("World shape", _worldShape));
+        body.Controls.Add(ChoiceRow("Danger in leveling zones", _danger,
+            "Controls autonomous Hunters' RvR patrol frequency and chance to attack much lower-level (grey-con) players. Mild cuts patrols to about one third and disables grey-target attacks. Authentic uses normal patrol frequency and excludes targets over 20 levels lower. Full Camlann increases patrols and grey-target chances, including rare attacks on targets over 20 levels lower. Presets set this value; choose Custom to change it."));
+        body.Controls.Add(ChoiceRow("World shape", _worldShape,
+            "Once saved, this is used when you add a crew through the launcher. Fresh launch creates every added bot at level 1; Established live server gives the new crew a spread of levels from 1 to 50. Existing bots keep their levels and progress, and Add Lv.50 remains a separate option."));
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 8, 3, 3),
             Text = "Add crew creates level-1 bots for Fresh launch, or a spread from levels 1–50 for Established. Add Lv.50 remains an explicit option. Existing bots keep their progress." });
         body.Controls.Add(ChoiceRow("New alt every (hours; 0 = off)", _altHours));
@@ -126,10 +148,16 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _poll.Start();
     }
 
-    private static Control ChoiceRow(string name, Control combo)
+    private Control ChoiceRow(string name, Control combo, string toolTip = "")
     {
         var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
-        row.Controls.Add(new Label { Text = name, Width = 210, Height = 30, TextAlign = ContentAlignment.MiddleLeft });
+        var label = new Label { Text = name, Width = 210, Height = 30, TextAlign = ContentAlignment.MiddleLeft };
+        if (toolTip.Length > 0)
+        {
+            _toolTips.SetToolTip(label, toolTip);
+            _toolTips.SetToolTip(combo, toolTip);
+        }
+        row.Controls.Add(label);
         row.Controls.Add(combo);
         return row;
     }
@@ -253,7 +281,11 @@ internal sealed class BotGoalsSettingsControl : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _poll.Dispose();
+        if (disposing)
+        {
+            _poll.Dispose();
+            _toolTips.Dispose();
+        }
         base.Dispose(disposing);
     }
 }
