@@ -159,14 +159,13 @@ and verification history of the full-PvP conversion.
 
 ## Verification status
 
-For 0.30.0 on 2026-09-23, the Release server and Windows launcher builds passed
-with zero errors. Automated tests were skipped under this fork's fast shipping
-workflow. Earlier stage checks passed the full server suite (1,975 tests) and
-Windows launcher suite (114 tests); those results do not cover the latest UI or
-character-creation changes.
+For the integrated 0.45.0 source on 2026-09-24, the Release server and Windows
+launcher builds passed with zero errors. Automated suites were skipped under
+this fork's fast shipping workflow. Earlier focused autonomous checks passed
+during development; they do not replace a real-client playtest of M0–M5 or
+the newer companion UI.
 
 Runtime acceptance on 2026-09-23: the owner confirmed all Stage 2 checks passed
 in a separate Windows acceptance installation, including invites after
 generated starter-gear persistence was fixed. These results cover Stage 2; the
-broader Stage 6 integration scenarios remain pending. The container image
-build could not be run because the local Docker engine was unavailable.
+broader Stage 6 integration scenarios remain pending.
