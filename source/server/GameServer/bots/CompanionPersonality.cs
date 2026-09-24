@@ -48,8 +48,10 @@ namespace DOL.GS
             string identity = authored == null
                 ? $"Generated {(string.IsNullOrWhiteSpace(record?.PersonalityKey) ? "steady" : record.PersonalityKey)} companion."
                 : $"{authored.Background} Personality: {authored.Personality}.";
-            string plan = CompanionBuildPlanCatalog.TryGetPlan((eCharacterClass)(record?.ClassId ?? 0), out CompanionBuildPlan build)
-                ? build.Id : "manual training (no validated automatic plan)";
+            eCharacterClass characterClass = (eCharacterClass)(record?.ClassId ?? 0);
+            string plan = CompanionBuildPlanCatalog.TryGetPlanById(characterClass, record?.TrainingPlanId, out CompanionBuildPlan build) ||
+                          CompanionBuildPlanCatalog.TryGetPlan(characterClass, out build)
+                ? build.Name : "manual training (no validated automatic plan)";
             return $"{record?.Name}, level {record?.Level} {(eCharacterClass)(record?.ClassId ?? 0)}; " +
                    $"{(eRace)(record?.RaceId ?? 0)}, {(eGender)(record?.GenderId ?? 0)}.\n{identity}\n" +
                    $"Preferred build: {plan}. Role: {(string.IsNullOrWhiteSpace(record?.TacticalRole) ? BotPartyRoles.DefaultPreference((eCharacterClass)(record?.ClassId ?? 0)) : record.TacticalRole)}; " +

@@ -668,7 +668,12 @@ namespace DOL.GS
                 }
 
                 eCharacterClass characterClass = (eCharacterClass)record.ClassId;
-                if (!CompanionBuildPlanCatalog.TryGetPlan(characterClass, out CompanionBuildPlan plan))
+                string savedPlanId = ActiveCompanions.TryGetValue(record.CompanionId, out GameBot live) && live?.Owner == owner
+                    ? live.PlayerCompanionRecord.TrainingPlanId
+                    : record.TrainingPlanId;
+                // Keep a still-valid saved build; otherwise follow the class default.
+                if (!CompanionBuildPlanCatalog.TryGetPlanById(characterClass, savedPlanId, out CompanionBuildPlan plan) &&
+                    !CompanionBuildPlanCatalog.TryGetPlan(characterClass, out plan))
                 {
                     message = $"Automatic training is unavailable for {record.Name}: {AutomaticTrainingBlocker(characterClass)}";
                     return false;
@@ -739,11 +744,99 @@ namespace DOL.GS
                     record.Dirty = true;
                 }
                 message = saved
-                    ? $"{record.Name} is following {plan.Id} ({plan.Role}); spent {pointsNeeded} points, {record.UnspentSpecPoints} remain."
+                    ? $"{record.Name} is following the {plan.Name} build ({plan.Role}); spent {pointsNeeded} points, {record.UnspentSpecPoints} remain."
                     : $"{record.Name}'s training mode could not be saved; the previous mode remains active.";
                 return saved;
             }
         }
+
+        /// <summary>
+        /// Selects a companion's build and switches it to automatic training.
+        /// Owner decision (M1): the switch is free, needs no trainer, and
+        /// retrains the new build to the companion's current level.
+        /// </summary>
+        public static bool TrySelectBuild(GamePlayer owner, string nameOrId, string buildQuery, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                {
+                    message = "That companion name or ID is not in your roster. Type /companions list to see names.";
+                    return false;
+                }
+
+                eCharacterClass characterClass = (eCharacterClass)record.ClassId;
+                if (CompanionBuildPlanCatalog.GetPlans(characterClass).Count == 0)
+                {
+                    message = $"{record.Name} has no automatic builds: {AutomaticTrainingBlocker(characterClass)}.";
+                    return false;
+                }
+                if (!CompanionBuildPlanCatalog.TryFindPlan(characterClass, buildQuery, out CompanionBuildPlan plan))
+                {
+                    message = $"'{buildQuery}' is not a {characterClass} build. Choose one of: {FormatBuildChoices(characterClass)}.";
+                    return false;
+                }
+                if (!CompanionBuildPlanCatalog.TryValidateRuntimeBuild(characterClass, plan, out string runtimeBlocker))
+                {
+                    message = $"The {plan.Name} build is unavailable for {record.Name}: {runtimeBlocker}.";
+                    return false;
+                }
+
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) && active?.Owner == owner)
+                    return active.TrySwitchCompanionBuild(plan, out message);
+
+                if (string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(record.TrainingPlanId, plan.Id, StringComparison.Ordinal))
+                {
+                    message = $"{record.Name} already follows the {plan.Name} build.";
+                    return true;
+                }
+
+                if (!plan.TryGetSwitchedAllocation(ParseSerializedCompanionSpecs(record.SerializedSpecs).Keys,
+                        record.Level, plan.ExpectedSpecPointsMultiplier, out Dictionary<string, int> allocation,
+                        out int unspentPoints))
+                {
+                    message = $"The {plan.Name} build does not fit {record.Name}'s level-{record.Level} point budget. Nothing was changed.";
+                    return false;
+                }
+
+                string previousMode = record.TrainingMode;
+                string previousPlan = record.TrainingPlanId;
+                string previousSpecs = record.SerializedSpecs;
+                int previousUnspent = record.UnspentSpecPoints;
+                record.SerializedSpecs = string.Join(';', allocation.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(pair => $"{pair.Key}|{pair.Value}"));
+                record.UnspentSpecPoints = unspentPoints;
+                record.TrainingMode = "automatic";
+                record.TrainingPlanId = plan.Id;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                bool saved = SaveRecord(record);
+                if (!saved)
+                {
+                    record.TrainingMode = previousMode;
+                    record.TrainingPlanId = previousPlan;
+                    record.SerializedSpecs = previousSpecs;
+                    record.UnspentSpecPoints = previousUnspent;
+                    record.Dirty = true;
+                }
+                message = saved
+                    ? $"{record.Name} now follows the {plan.Name} build ({plan.Role}) and was retrained to level {record.Level}: " +
+                      $"{string.Join(", ", plan.TargetAllocations.Select(rank => $"{rank.Specialization} {allocation[rank.Specialization]}"))}. {unspentPoints} points remain."
+                    : $"{record.Name}'s build change could not be saved; their previous build and allocations were kept.";
+                return saved;
+            }
+        }
+
+        public static string FormatBuildChoices(eCharacterClass characterClass) =>
+            string.Join(", ", CompanionBuildPlanCatalog.GetPlans(characterClass).Select(plan => $"{plan.Key} ({plan.Name})"));
 
         private static Dictionary<string, int> ParseSerializedCompanionSpecs(string serialized)
         {
@@ -781,7 +874,12 @@ namespace DOL.GS
 
         public static bool TryRecruit(GamePlayer owner, eRealm realm, eCharacterClass characterClass,
             out PlayerCompanionRecord record, out string message) =>
-            TryRecruitInternal(owner, realm, characterClass, null, out record, out message);
+            TryRecruitInternal(owner, realm, characterClass, null, null, out record, out message);
+
+        /// <summary>Recruits with a chosen build; an empty build uses the class default.</summary>
+        public static bool TryRecruit(GamePlayer owner, eRealm realm, eCharacterClass characterClass,
+            string buildQuery, out PlayerCompanionRecord record, out string message) =>
+            TryRecruitInternal(owner, realm, characterClass, null, buildQuery, out record, out message);
 
         public static bool TryRecruitAuthored(GamePlayer owner, string name, out PlayerCompanionRecord record,
             out string message)
@@ -793,14 +891,31 @@ namespace DOL.GS
                 message = "That authored companion was not found. Browse the authored cast in /companions.";
                 return false;
             }
-            return TryRecruitInternal(owner, character.Realm, character.Class, character, out record, out message);
+            return TryRecruitInternal(owner, character.Realm, character.Class, character, null, out record, out message);
         }
 
         private static bool TryRecruitInternal(GamePlayer owner, eRealm realm, eCharacterClass characterClass,
-            CompanionCharacterCatalog.Character authored, out PlayerCompanionRecord record, out string message)
+            CompanionCharacterCatalog.Character authored, string buildQuery, out PlayerCompanionRecord record,
+            out string message)
         {
             record = null;
             message = "The companion could not be recruited.";
+            CompanionBuildPlan requestedPlan = null;
+            if (!string.IsNullOrWhiteSpace(buildQuery))
+            {
+                if (!CompanionBuildPlanCatalog.TryFindPlan(characterClass, buildQuery, out requestedPlan))
+                {
+                    message = CompanionBuildPlanCatalog.GetPlans(characterClass).Count == 0
+                        ? $"{characterClass} companions have no automatic builds yet; recruit without a build to train them manually."
+                        : $"'{buildQuery}' is not a {characterClass} build. Choose one of: {FormatBuildChoices(characterClass)}.";
+                    return false;
+                }
+                if (!CompanionBuildPlanCatalog.TryValidateRuntimeBuild(characterClass, requestedPlan, out string blocker))
+                {
+                    message = $"The {requestedPlan.Name} build is unavailable: {blocker}. Nothing was recruited.";
+                    return false;
+                }
+            }
             if (owner == null || !TemporaryGroupClassCatalog.ForRealm(realm)
                     .Any(entry => entry.CharacterClass == characterClass))
             {
@@ -855,10 +970,9 @@ namespace DOL.GS
                 string now = DateTime.UtcNow.ToString("O");
                 string trainingMode = "manual";
                 string trainingPlanId = string.Empty;
-                ICharacterClass runtimeClass = ScriptMgr.FindCharacterClass((int)characterClass);
-                if (CompanionBuildPlanCatalog.TryGetPlan(characterClass, out CompanionBuildPlan plan) &&
-                    runtimeClass?.SpecPointsMultiplier == plan.ExpectedSpecPointsMultiplier &&
-                    CompanionBuildPlanCatalog.TryValidateRuntimePlan(characterClass, plan, out _))
+                CompanionBuildPlan plan = requestedPlan;
+                if ((plan != null || CompanionBuildPlanCatalog.TryGetPlan(characterClass, out plan)) &&
+                    CompanionBuildPlanCatalog.TryValidateRuntimeBuild(characterClass, plan, out _))
                 {
                     trainingMode = "automatic";
                     trainingPlanId = plan.Id;
@@ -910,8 +1024,9 @@ namespace DOL.GS
                 }
             }
 
-            message = record.TrainingMode == "automatic"
-                ? $"{record.Name}, level 1 {characterClass}, joined your roster with automatic training ({record.TrainingPlanId}). Invite with /companions invite {record.Name}."
+            message = record.TrainingMode == "automatic" &&
+                      CompanionBuildPlanCatalog.TryGetPlanById(characterClass, record.TrainingPlanId, out CompanionBuildPlan chosen)
+                ? $"{record.Name}, level 1 {characterClass}, joined your roster with automatic training in the {chosen.Name} build. Invite with /companions invite {record.Name}; change builds with /companions build {record.Name} <build>."
                 : $"{record.Name}, level 1 {characterClass}, joined your roster in manual training mode. Invite with /companions invite {record.Name}.";
             message += " " + CompanionPersonality.Dialogue(record, "recruit");
             return true;

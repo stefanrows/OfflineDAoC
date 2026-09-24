@@ -256,6 +256,38 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
+    public void BuildSelectionRejectsUnknownBuildsWithoutChangingTheCompanion()
+    {
+        Owner owner = NewOwner("build-owner", eRealm.Albion);
+        PlayerCompanionRecord cleric = NewRecord(owner.ObjectId, "build-cleric", "Build Cleric", eCharacterClass.Cleric);
+        cleric.TrainingMode = "automatic";
+        cleric.TrainingPlanId = "general-pve-v1-cleric";
+        cleric.SerializedSpecs = "Enhancement|10;Rejuvenation|5";
+        cleric.UnspentSpecPoints = 19;
+        PlayerCompanionRecord necromancer = NewRecord(owner.ObjectId, "build-necro", "Build Necro", eCharacterClass.Necromancer);
+        Assert.That(_database.AddObject(cleric), Is.True);
+        Assert.That(_database.AddObject(necromancer), Is.True);
+
+        Assert.That(PlayerCompanionRoster.TrySelectBuild(owner, cleric.Name, "summoning", out string unknown), Is.False);
+        Assert.That(PlayerCompanionRoster.TrySelectBuild(owner, necromancer.Name, "deathsight", out string manualOnly), Is.False);
+        Assert.That(PlayerCompanionRoster.TryRecruit(owner, eRealm.Albion, eCharacterClass.Cleric, "summoning",
+            out PlayerCompanionRecord recruited, out string recruitMessage), Is.False);
+        PlayerCompanionRecord unchanged = _database.SelectObjects<PlayerCompanionRecord>(
+            DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(cleric.CompanionId)).Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(unknown, Does.Contain("rejuvenation (Rejuvenation (healer))"));
+            Assert.That(manualOnly, Does.Contain("has no automatic builds"));
+            Assert.That(recruitMessage, Does.Contain("is not a Cleric build"));
+            Assert.That(recruited, Is.Null);
+            Assert.That(PlayerCompanionRoster.TryGetRoster(owner, out var roster) ? roster.Count : -1, Is.EqualTo(2));
+            Assert.That(unchanged.TrainingPlanId, Is.EqualTo("general-pve-v1-cleric"));
+            Assert.That(unchanged.SerializedSpecs, Is.EqualTo("Enhancement|10;Rejuvenation|5"));
+            Assert.That(unchanged.UnspentSpecPoints, Is.EqualTo(19));
+        });
+    }
+
+    [Test]
     public void CrossRealmOwnedCompanionJoinsItsOwnersGroupAndMovesOnlyAfterConfirmedTransfer()
     {
         Assert.That(GameServer.Instance.Configuration.ServerType, Is.EqualTo(EGameServerType.GST_Normal));

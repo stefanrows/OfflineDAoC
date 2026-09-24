@@ -1,7 +1,8 @@
 # Companion Manager roadmap
 
 Status: **M0 remainder implemented offline in 0.33.0; owner real-client check
-pending. M1–M3 are not implemented yet.**
+pending. M1a (build research, catalog, and command selection) implemented
+offline in 0.34.0; M1b, M1c, M2, and M3 are not implemented yet.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -60,8 +61,8 @@ control)", or Spiritmaster "Darkness (bomb)", "Suppression", or "Summoning
 (pet)". In automatic mode the companion trains
 along that build at every level. Manual training and respec remain available.
 
-**Today:** `CompanionBuildPlanCatalog` holds one validated plan per class (33
-classes; six are manual-only). Each record's saved `TrainingPlanId` names the
+**Before M1a:** `CompanionBuildPlanCatalog` held one validated plan per class (33
+classes; six were manual-only). Each record's saved `TrainingPlanId` names the
 plan it follows, and changed or unknown IDs never silently change allocations.
 Build choice therefore needs **no save migration**: the plan ID simply names a
 variant.
@@ -114,14 +115,60 @@ variant.
    companion's written preferred build is preselected. The command fallback
    becomes `/companions recruit <class> [build]`.
 
-**Still open:**
+**Resolved (owner, 2026-09-24):**
 
-- Whether an automatic build switch uses the owner's full-skill respec
-  eligibility (the current Stage 3 rule for `/companions respec`) or is free for
-  companions. Recommendation: free, since it cannot change the player's own
-  character.
-- Whether a build switch still needs a class trainer, as manual training does
-  today. Recommendation: no, like automatic level-up training.
+5. **Switch cost:** a build switch is free. It does not use the owner's
+   full-skill respec eligibility, because it cannot change the player's own
+   character. `/companions respec` keeps its Stage 3 rule.
+6. **Trainer:** a build switch needs no class trainer, like automatic level-up
+   training. Manual training still needs one.
+7. **Split:** M1 ships in three parts: M1a (research, catalog, command
+   selection), M1b (manager build list and recruit flow), and M1c (Crowd
+   control role and build-to-role mapping).
+
+### M1a - Builds and command selection (0.34.0, offline)
+
+- [x] Research: 24 builds added from the 1.65 sources, each labelled sourced,
+      adjusted, or project. The Uthgard forum was down (HTTP 500), so forum
+      numbers come from search excerpts and should be rechecked. See
+      [Build choice (M1a)](COMPANION_BUILD_RESEARCH.md#build-choice-m1a).
+- [x] Catalog: 57 builds for 35 classes. The original 33 `general-pve-v1`
+      IDs are unchanged and stay each class's default build, so no save
+      migration is needed. Wizard and Animist now have builds; Blademaster,
+      Hero, Warrior, and Necromancer stay manual-only. Each build has a
+      one-word key, a name, and a role description.
+- [x] Level-up training follows the companion's saved build, not only the
+      class default. `/companions mode <name> automatic` keeps a valid saved
+      build.
+- [x] Commands: `/companions build <name>` lists the builds and marks the
+      current one; `/companions build <name> <build>` switches (free, no
+      trainer, resets and retrains to the current level, active or benched);
+      `/companions plan <name>` also lists builds;
+      `/companions recruit <class> [build]` recruits with a chosen build.
+- [x] Manager: the Training & Tactics tab names the current build and the
+      build keys, with the command to switch.
+- [x] Tests: every build simulated through level 50 (budget, monotonic,
+      no overlevel, targets reached); switching at every level resets every
+      line and keeps the point total; switching away and back restores the
+      same allocation; original IDs stay the defaults; unknown builds leave the
+      companion and roster unchanged.
+- [ ] Owner: in the real client, switch a companion's build (active and
+      benched), check its trained lines and spells, level it once, and recruit
+      with `/companions recruit healer pacification`.
+
+### M1b - Build list in the window and recruit flow
+
+- Training & Tactics: a clickable build list with each build's one-line
+  description and role; the current build is marked.
+- Recruit flow in the window: choose a story companion or class, then one of
+  its builds, then recruit. An authored companion's written preferred build is
+  preselected (the authored catalog does not record one yet).
+
+### M1c - Crowd control role
+
+- Add the Crowd control role and check its AI (mezz and root choice, target
+  selection, breaking rules) against the existing bot crowd-control code.
+- Apply each build's role on selection, using the owner's Healer mapping.
 
 ## M2 - Behaviour controls in the window
 

@@ -12,6 +12,46 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-09-24
+
+### Added
+
+- Build choice for persistent companions (Companion Manager M1a). The catalog
+  now holds 57 named, validated builds for 35 classes, for example Healer
+  Tri-spec, Mending (healer), Augmentation (buffer), and Pacification (crowd
+  control), or Spiritmaster Darkness (bomb), Suppression, and Summoning (pet).
+- `/companions build <name>` lists a companion's builds and marks the current
+  one. `/companions build <name> <build>` switches builds for active or benched
+  companions: it is free, needs no trainer or respec eligibility, resets that
+  companion's specializations, and retrains the new build to its level.
+- `/companions recruit <class> [build]` recruits with a chosen build.
+- Automatic builds for Wizard (Fire, Ice, Earth) and Animist (Creeping,
+  Arboreal), which were manual-only.
+- Research record for the 24 added builds, each labelled sourced, adjusted, or
+  project recommendation, and tests for every build through level 50, build
+  switching, and rejected build choices.
+
+### Changed
+
+- Automatic level-up training follows the companion's saved build instead of
+  only the class default. The 33 original `general-pve-v1` plan IDs are
+  unchanged and remain each class's default build, so existing saves need no
+  migration.
+- `/companions mode <name> automatic` keeps a companion's valid saved build.
+- `/companions plan <name>`, `/companions list`, profiles, and the manager's
+  Training & Tactics tab show build names and the build keys.
+- Updated the Companion Manager roadmap: the M1 switch-cost and trainer
+  decisions are recorded, and M1 is split into M1a, M1b, and M1c.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.33.0] - 2026-09-24
 
 ### Added

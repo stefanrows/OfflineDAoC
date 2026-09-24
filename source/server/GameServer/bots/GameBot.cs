@@ -1680,8 +1680,8 @@ namespace DOL.GS
                     {
                         AwardCompanionSpecPoints((byte)(reachedLevel - 1), (byte)reachedLevel);
                         if (!IsManualCompanionTraining &&
-                            CompanionBuildPlanCatalog.TryGetPlan((eCharacterClass)CharacterClass.ID,
-                                out CompanionBuildPlan plan))
+                            CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID,
+                                PlayerCompanionRecord.TrainingPlanId, out CompanionBuildPlan plan))
                             TryApplyAutomaticCompanionPlanAtLevel(plan, reachedLevel, out _);
                     }
                 }
@@ -1743,15 +1743,14 @@ namespace DOL.GS
 
         private bool IsManualCompanionTraining => IsPersistentPlayerCompanion &&
             (!string.Equals(PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) ||
-             !CompanionBuildPlanCatalog.TryGetEnabledPlan((eCharacterClass)CharacterClass.ID, out string planId) ||
-             !string.Equals(PlayerCompanionRecord.TrainingPlanId, planId, StringComparison.Ordinal));
+             !CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID,
+                 PlayerCompanionRecord.TrainingPlanId, out _));
 
         internal bool TryEnableAutomaticCompanionPlan(CompanionBuildPlan plan, out string message)
         {
             message = "The automatic plan could not be applied.";
             if (!IsPersistentPlayerCompanion || plan == null ||
-                !CompanionBuildPlanCatalog.TryGetPlan((eCharacterClass)CharacterClass.ID,
-                    out CompanionBuildPlan enabledPlan) || !string.Equals(plan.Id, enabledPlan.Id, StringComparison.Ordinal))
+                !CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID, plan.Id, out _))
                 return false;
 
             if (!CompanionBuildPlanCatalog.TryValidateRuntimePlan((eCharacterClass)CharacterClass.ID, plan,
@@ -1845,9 +1844,97 @@ namespace DOL.GS
             }
 
             RefreshCompanionSkills();
-            message = $"{Name} is following {plan.Id} ({plan.Role}); spent {pointsNeeded} points, {m_leftOverSpecPoints} remain.";
+            message = $"{Name} is following the {plan.Name} build ({plan.Role}); spent {pointsNeeded} points, {m_leftOverSpecPoints} remain.";
             return true;
         }
+
+        /// <summary>
+        /// Switches to another validated build: resets every trainable line and
+        /// retrains the new build's schedule to the current level. The owner
+        /// chose this to be free and trainer-free, because it cannot change the
+        /// owner's own character. Manual respec remains a separate action.
+        /// </summary>
+        internal bool TrySwitchCompanionBuild(CompanionBuildPlan plan, out string message)
+        {
+            eCharacterClass characterClass = (eCharacterClass)CharacterClass.ID;
+            if (!IsPersistentPlayerCompanion || plan == null ||
+                !CompanionBuildPlanCatalog.TryGetPlanById(characterClass, plan.Id, out _))
+            {
+                message = $"That build is not available for {Name}'s class.";
+                return false;
+            }
+
+            if (CharacterClass.SpecPointsMultiplier != plan.ExpectedSpecPointsMultiplier)
+            {
+                message = $"The {plan.Name} build is blocked for {Name}: the runtime specialization multiplier changed from the validated {plan.ExpectedSpecPointsMultiplier} to {CharacterClass.SpecPointsMultiplier}.";
+                return false;
+            }
+            if (!CompanionBuildPlanCatalog.TryValidateRuntimePlan(characterClass, plan, out string runtimeBlocker))
+            {
+                message = $"The {plan.Name} build is blocked for {Name}: {runtimeBlocker}.";
+                return false;
+            }
+
+            if (string.Equals(PlayerCompanionRecord.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(PlayerCompanionRecord.TrainingPlanId, plan.Id, StringComparison.Ordinal))
+            {
+                message = $"{Name} already follows the {plan.Name} build.";
+                return true;
+            }
+
+            List<Specialization> trainable = GetSpecList().Where(spec => spec.Trainable).ToList();
+            var specs = trainable.ToDictionary(spec => spec.KeyName, StringComparer.OrdinalIgnoreCase);
+            CompanionBuildRank missing = plan.TargetAllocations.FirstOrDefault(rank => !specs.ContainsKey(rank.Specialization));
+            if (missing != null)
+            {
+                message = $"The {plan.Name} build is blocked for {Name}: runtime class data has no trainable {missing.Specialization} career line.";
+                return false;
+            }
+            if (!plan.TryGetSwitchedAllocation(specs.Keys, Level, CharacterClass.SpecPointsMultiplier,
+                    out Dictionary<string, int> allocation, out int unspentPoints))
+            {
+                message = $"The {plan.Name} build does not fit {Name}'s level-{Level} point budget. Nothing was changed.";
+                return false;
+            }
+
+            var previousLevels = trainable.ToDictionary(spec => spec, spec => spec.Level);
+            int previousPoints = m_leftOverSpecPoints;
+            string previousMode = PlayerCompanionRecord.TrainingMode;
+            string previousPlan = PlayerCompanionRecord.TrainingPlanId;
+            string previousSerializedSpecs = PlayerCompanionRecord.SerializedSpecs;
+            int previousRecordPoints = PlayerCompanionRecord.UnspentSpecPoints;
+
+            // Clears abilities, styles, and spells of the old ranks before retraining.
+            ResetCompanionSpecializations();
+            foreach (Specialization specialization in trainable)
+                specialization.Level = allocation[specialization.KeyName];
+            m_leftOverSpecPoints = unspentPoints;
+            PlayerCompanionRecord.TrainingMode = "automatic";
+            PlayerCompanionRecord.TrainingPlanId = plan.Id;
+            PlayerCompanionRecord.Dirty = true;
+
+            if (!PlayerCompanionRoster.SaveProgress(this))
+            {
+                foreach ((Specialization specialization, int level) in previousLevels)
+                    specialization.Level = level;
+                m_leftOverSpecPoints = previousPoints;
+                PlayerCompanionRecord.TrainingMode = previousMode;
+                PlayerCompanionRecord.TrainingPlanId = previousPlan;
+                PlayerCompanionRecord.SerializedSpecs = previousSerializedSpecs;
+                PlayerCompanionRecord.UnspentSpecPoints = previousRecordPoints;
+                PlayerCompanionRecord.Dirty = true;
+                RefreshCompanionSkills();
+                message = $"{Name}'s build change could not be saved; their previous build and allocations were restored.";
+                return false;
+            }
+
+            RefreshCompanionSkills();
+            message = $"{Name} now follows the {plan.Name} build ({plan.Role}) and was retrained to level {Level}: {FormatBuildRanks(plan, allocation)}. {m_leftOverSpecPoints} points remain.";
+            return true;
+        }
+
+        private static string FormatBuildRanks(CompanionBuildPlan plan, IReadOnlyDictionary<string, int> allocation) =>
+            string.Join(", ", plan.TargetAllocations.Select(rank => $"{rank.Specialization} {allocation[rank.Specialization]}"));
 
         private bool TryApplyAutomaticCompanionPlanAtLevel(CompanionBuildPlan plan, int targetLevel, out string error)
         {

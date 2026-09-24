@@ -366,9 +366,12 @@ namespace DOL.GS.Commands
             switch (session.DetailTab)
             {
                 case CompanionManagerDetailTab.Training:
-                    AddText(lines, $"Training: {(automatic ? $"automatic, plan {current.TrainingPlanId}" : "manual")}; {unspent} unspent points.");
-                    AddText(lines, CompanionBuildPlanCatalog.TryGetPlan(characterClass, out CompanionBuildPlan plan)
-                        ? $"Automatic plan available: {plan.Id} ({plan.Role})."
+                    bool followsBuild = CompanionBuildPlanCatalog.TryGetPlanById(characterClass, current.TrainingPlanId,
+                        out CompanionBuildPlan currentBuild);
+                    AddText(lines, $"Training: {(!automatic ? "manual" : followsBuild ? $"automatic, {currentBuild.Name} build" : $"automatic, plan {current.TrainingPlanId}")}; {unspent} unspent points.");
+                    IReadOnlyList<CompanionBuildPlan> builds = CompanionBuildPlanCatalog.GetPlans(characterClass);
+                    AddText(lines, builds.Count > 0
+                        ? $"Builds: {string.Join(", ", builds.Select(build => build.Key))}. Switch with /companions build {current.Name} <build>."
                         : "Manual only: " + CompanionBuildPlanCatalog.GetBlocker(characterClass) + ".");
                     lines.Add(automatic
                         ? new Line("Switch to manual training", "mode:manual", () => SetTraining(player, session, id, false))

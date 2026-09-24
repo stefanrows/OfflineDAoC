@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -76,6 +76,10 @@ namespace DOL.GS.Commands
                 case "plan":
                     ShowPlanAvailability(client, args);
                     break;
+                case "build":
+                case "builds":
+                    SelectBuild(client, player, args);
+                    break;
                 case "train":
                     TrainCompanion(client, player, args);
                     break;
@@ -118,9 +122,12 @@ namespace DOL.GS.Commands
                     string xpProgress = record.Level >= 50
                         ? $"XP {record.Experience:N0} (max level)"
                         : $"XP {record.Experience:N0}/{GamePlayer.GetExperienceAmountForLevel(record.Level):N0}";
-                    string training = string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase)
-                        ? $"automatic ({record.TrainingPlanId})"
-                        : "manual";
+                    string training = !string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase)
+                        ? "manual"
+                        : CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)record.ClassId, record.TrainingPlanId,
+                            out CompanionBuildPlan build)
+                            ? $"automatic, {build.Name} build"
+                            : $"automatic ({record.TrainingPlanId})";
                     DisplayMessage(client, $"{record.Name}, level {record.Level} {(eCharacterClass)record.ClassId} ({state}; {training} training; {record.UnspentSpecPoints} unspent spec points; {xpProgress})");
                 }
             }
@@ -191,7 +198,7 @@ namespace DOL.GS.Commands
         {
             if (args.Length < 3)
             {
-                DisplayMessage(client, "Use /companions recruit <class>, or /companions recruit <realm> <class>.");
+                DisplayMessage(client, "Use /companions recruit <class> [build], or /companions recruit <realm> <class> [build].");
                 return;
             }
 
@@ -203,16 +210,24 @@ namespace DOL.GS.Commands
             }
 
             string requestedClass = string.Join(' ', args.Skip(2));
+            string build = null;
             if (!TemporaryGroupClassCatalog.TryResolveForCompanion(player.Realm, requestedClass,
                     out eRealm realm, out eCharacterClass characterClass, out bool ambiguous))
             {
-                DisplayMessage(client, ambiguous
-                    ? $"'{requestedClass}' is used by more than one realm. Use /companions recruit <realm> <class>."
-                    : $"'{requestedClass}' is not a supported Classic + SI class. Type /classes to see the catalog.");
-                return;
+                // A trailing word that is not part of the class names the build.
+                string classWithoutBuild = string.Join(' ', args.Skip(2).Take(args.Length - 3));
+                if (args.Length < 4 || !TemporaryGroupClassCatalog.TryResolveForCompanion(player.Realm, classWithoutBuild,
+                        out realm, out characterClass, out _))
+                {
+                    DisplayMessage(client, ambiguous
+                        ? $"'{requestedClass}' is used by more than one realm. Use /companions recruit <realm> <class> [build]."
+                        : $"'{requestedClass}' is not a supported Classic + SI class. Type /classes to see the catalog.");
+                    return;
+                }
+                build = args[^1];
             }
 
-            PlayerCompanionRoster.TryRecruit(player, realm, characterClass, out _, out string message);
+            PlayerCompanionRoster.TryRecruit(player, realm, characterClass, build, out _, out string message);
             DisplayMessage(client, message);
         }
 
@@ -281,6 +296,44 @@ namespace DOL.GS.Commands
                 ? $"automatic plan {record.TrainingPlanId}: {CompanionBuildPlanCatalog.GetBlocker((eCharacterClass)record.ClassId, record.TrainingPlanId)}"
                 : $"manual training; {CompanionBuildPlanCatalog.GetBlocker((eCharacterClass)record.ClassId)}";
             DisplayMessage(client, $"{record.Name}: {status}.");
+            ShowBuilds(client, record);
+        }
+
+        private void SelectBuild(GameClient client, GamePlayer player, string[] args)
+        {
+            if (args.Length < 3 || !PlayerCompanionRoster.TryMatchOwnedCompanionPrefix(player, args, 2, args.Length,
+                    out PlayerCompanionRecord record, out int nameTokens))
+            {
+                DisplayMessage(client, "Use /companions build <name> to list builds, or /companions build <name> <build> to switch.");
+                return;
+            }
+
+            if (2 + nameTokens >= args.Length)
+            {
+                ShowBuilds(client, record);
+                return;
+            }
+
+            PlayerCompanionRoster.TrySelectBuild(player, record.CompanionId,
+                string.Join(' ', args.Skip(2 + nameTokens)), out string message);
+            DisplayMessage(client, message);
+        }
+
+        private void ShowBuilds(GameClient client, PlayerCompanionRecord record)
+        {
+            eCharacterClass characterClass = (eCharacterClass)record.ClassId;
+            var plans = CompanionBuildPlanCatalog.GetPlans(characterClass);
+            if (plans.Count == 0)
+                return;
+
+            bool automatic = string.Equals(record.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase);
+            DisplayMessage(client, $"{characterClass} builds (* = current):");
+            foreach (CompanionBuildPlan plan in plans)
+            {
+                string marker = automatic && string.Equals(record.TrainingPlanId, plan.Id, StringComparison.Ordinal) ? "*" : "-";
+                DisplayMessage(client, $"{marker} {plan.Key}: {plan.Name}, {plan.Role}. Level 50: {plan.FormatTargets()}.");
+            }
+            DisplayMessage(client, $"Switch with /companions build {record.Name} <build>. Switching is free, needs no trainer, resets {record.Name}'s specializations, and retrains the new build to their level.");
         }
 
         private void TrainCompanion(GameClient client, GamePlayer player, string[] args)
@@ -445,7 +498,7 @@ namespace DOL.GS.Commands
         private void ShowUsage(GameClient client)
         {
             DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }

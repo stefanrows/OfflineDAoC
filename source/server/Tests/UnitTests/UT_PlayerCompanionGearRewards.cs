@@ -124,7 +124,7 @@ public class UT_PlayerCompanionGearRewards
     [Test]
     public void AutomaticPlansHaveBudgetSafeTargetsAtEveryLevel()
     {
-        Assert.That(CompanionBuildPlanCatalog.GetEnabledPlans(), Has.Count.EqualTo(33));
+        Assert.That(CompanionBuildPlanCatalog.GetEnabledPlans(), Has.Count.EqualTo(57));
         foreach (CompanionBuildPlan plan in CompanionBuildPlanCatalog.GetEnabledPlans())
         {
             Dictionary<string, int> previous = null;
@@ -158,12 +158,112 @@ public class UT_PlayerCompanionGearRewards
     {
         foreach (eCharacterClass characterClass in new[]
                  {
-                     eCharacterClass.Animist, eCharacterClass.Wizard, eCharacterClass.Necromancer,
-                     eCharacterClass.Blademaster, eCharacterClass.Hero, eCharacterClass.Warrior,
+                     eCharacterClass.Necromancer, eCharacterClass.Blademaster, eCharacterClass.Hero,
+                     eCharacterClass.Warrior,
                  })
         {
             Assert.That(CompanionBuildPlanCatalog.TryGetEnabledPlan(characterClass, out _), Is.False);
             Assert.That(CompanionBuildPlanCatalog.GetBlocker(characterClass), Is.Not.Empty);
         }
+    }
+
+    [Test]
+    public void OriginalPlanIdsStayTheDefaultBuildOfTheirClass()
+    {
+        eCharacterClass[] originalClasses =
+        {
+            eCharacterClass.Armsman, eCharacterClass.Cabalist, eCharacterClass.Cleric, eCharacterClass.Friar,
+            eCharacterClass.Infiltrator, eCharacterClass.Mercenary, eCharacterClass.Minstrel, eCharacterClass.Paladin,
+            eCharacterClass.Reaver, eCharacterClass.Scout, eCharacterClass.Sorcerer, eCharacterClass.Theurgist,
+            eCharacterClass.Berserker, eCharacterClass.Bonedancer, eCharacterClass.Healer, eCharacterClass.Hunter,
+            eCharacterClass.Runemaster, eCharacterClass.Savage, eCharacterClass.Shadowblade, eCharacterClass.Shaman,
+            eCharacterClass.Skald, eCharacterClass.Spiritmaster, eCharacterClass.Thane, eCharacterClass.Bard,
+            eCharacterClass.Champion, eCharacterClass.Druid, eCharacterClass.Eldritch, eCharacterClass.Enchanter,
+            eCharacterClass.Mentalist, eCharacterClass.Nightshade, eCharacterClass.Ranger, eCharacterClass.Valewalker,
+            eCharacterClass.Warden,
+        };
+        foreach (eCharacterClass characterClass in originalClasses)
+        {
+            string savedId = $"general-pve-v1-{characterClass.ToString().ToLowerInvariant()}";
+            Assert.That(CompanionBuildPlanCatalog.TryGetEnabledPlan(characterClass, out string defaultId), Is.True);
+            Assert.That(defaultId, Is.EqualTo(savedId), $"{characterClass} changed its default build.");
+            Assert.That(CompanionBuildPlanCatalog.TryGetPlanById(characterClass, savedId, out _), Is.True);
+        }
+    }
+
+    [Test]
+    public void BuildIdsAndKeysAreUniqueAndSelectable()
+    {
+        IReadOnlyCollection<CompanionBuildPlan> plans = CompanionBuildPlanCatalog.GetEnabledPlans();
+        Assert.That(plans.Select(plan => plan.Id).Distinct().Count(), Is.EqualTo(plans.Count));
+        Assert.That(plans.Select(plan => plan.CharacterClass).Distinct().Count(), Is.EqualTo(35));
+        foreach (IGrouping<eCharacterClass, CompanionBuildPlan> group in plans.GroupBy(plan => plan.CharacterClass))
+        {
+            Assert.That(group.Select(plan => plan.Key).Distinct().Count(), Is.EqualTo(group.Count()),
+                $"{group.Key} has duplicate build keys.");
+            foreach (CompanionBuildPlan plan in group)
+            {
+                Assert.That(plan.Key, Does.Match("^[a-z]+$"), $"{plan.Id} needs a one-word command key.");
+                Assert.That(plan.Name, Is.Not.Empty);
+                foreach (string query in new[] { plan.Key, plan.Key.ToUpperInvariant(), plan.Id, plan.Name })
+                {
+                    Assert.That(CompanionBuildPlanCatalog.TryFindPlan(group.Key, query, out CompanionBuildPlan found), Is.True);
+                    Assert.That(found.Id, Is.EqualTo(plan.Id));
+                }
+            }
+        }
+
+        Assert.That(CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Healer, "summoning", out _), Is.False);
+        Assert.That(CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Healer, " ", out _), Is.False);
+        Assert.That(CompanionBuildPlanCatalog.TryGetPlanById(eCharacterClass.Healer, "general-pve-v1-shaman", out _), Is.False);
+        Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Necromancer), Is.Empty);
+    }
+
+    [Test]
+    public void OwnerExampleBuildsAreOffered()
+    {
+        Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Healer).Select(plan => plan.Name),
+            Is.EquivalentTo(new[] { "Tri-spec", "Mending (healer)", "Augmentation (buffer)", "Pacification (crowd control)" }));
+        Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Spiritmaster).Select(plan => plan.Name),
+            Is.EquivalentTo(new[] { "Darkness (bomb)", "Suppression", "Summoning (pet)" }));
+    }
+
+    [Test]
+    public void BuildSwitchResetsEveryLineAndRetrainsWithinBudgetAtEveryLevel()
+    {
+        foreach (CompanionBuildPlan plan in CompanionBuildPlanCatalog.GetEnabledPlans())
+        {
+            string[] career = CompanionBuildPlanCatalog.GetPlans(plan.CharacterClass)
+                .SelectMany(entry => entry.TargetAllocations).Select(rank => rank.Specialization)
+                .Append("Unrelated Line").Distinct().ToArray();
+            for (int level = 1; level <= 50; level++)
+            {
+                int multiplier = plan.ExpectedSpecPointsMultiplier;
+                Assert.That(plan.TryGetSwitchedAllocation(career, level, multiplier,
+                    out Dictionary<string, int> allocation, out int unspent), Is.True, $"{plan.Id} at level {level}");
+                IReadOnlyDictionary<string, int> targets = plan.GetTargetsAtLevel(level, multiplier);
+                foreach (string line in career)
+                {
+                    int expected = targets.TryGetValue(line, out int target) ? target : 1;
+                    Assert.That(allocation[line], Is.EqualTo(expected), $"{plan.Id} {line} at level {level}");
+                }
+                int spent = allocation.Values.Sum(rank => CompanionBuildPlan.CostToReach(1, rank));
+                Assert.That(spent + unspent, Is.EqualTo(CompanionBuildPlan.GetPointBudgetAtLevel(level, multiplier)),
+                    $"{plan.Id} loses or creates points at level {level}");
+            }
+        }
+    }
+
+    [Test]
+    public void SwitchingBuildsAndBackRestoresTheSameAllocation()
+    {
+        IReadOnlyList<CompanionBuildPlan> healer = CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Healer);
+        string[] career = { "Mending", "Augmentation", "Pacification" };
+        Assert.That(healer[0].TryGetSwitchedAllocation(career, 37, 10, out Dictionary<string, int> original, out int originalPoints), Is.True);
+        Assert.That(healer[3].TryGetSwitchedAllocation(original.Keys, 37, 10, out Dictionary<string, int> pacification, out _), Is.True);
+        Assert.That(healer[0].TryGetSwitchedAllocation(pacification.Keys, 37, 10, out Dictionary<string, int> restored, out int restoredPoints), Is.True);
+        Assert.That(pacification, Is.Not.EqualTo(original));
+        Assert.That(restored, Is.EqualTo(original));
+        Assert.That(restoredPoints, Is.EqualTo(originalPoints));
     }
 }

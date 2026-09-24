@@ -59,7 +59,7 @@ background, personality, and dialogue. Browse them with
 `/companions recruit authored <name>`. Generated recruitment by class remains
 available. New generated recruits receive a saved personality template. Existing
 records keep their previous identity and class behavior. The catalog's preferred
-build is the validated class plan where available; six classes remain manual-only.
+build is the validated class default build where available; four classes remain manual-only.
 
 `/companions profile <name>` shows identity, background, preferred build, role,
 stance, and a short line of dialogue. `/companions role <name> tank|healer|buffer|attacker` saves a class-legal
@@ -81,8 +81,10 @@ protected starter loadout. Persistent inventory is saved across benching and
 restart. Persistent recruits earn PvE progression while actively adventuring
 with an eligible owner; benched companions do not gain catch-up XP. New recruits
 use automatic training only when their class has an enabled runtime-validated
-plan; all pre-existing records stay manual. The current catalog has 33
-project-recommended plans and six manual-only classes. Authored characters and
+plan; all pre-existing records stay manual. The catalog has 57
+project-recommended builds for 35 classes and four manual-only classes.
+`/companions recruit <class> [build]` picks a build at recruitment; without one,
+the class default build is used. Authored characters and
 their once-per-owner recruitment rules are Stage 5.
 
 ## Death recovery and raids
@@ -161,10 +163,14 @@ requires a compatible trainer unless `ALLOW_TRAIN_ANYWHERE` is enabled. The
 menu exposes the same training, mode, plan, and respec services.
 `/companions respec` requires owner full-skill respec eligibility, honors
 `FREE_RESPEC`, confirms before resetting, and resets only the selected
-companion. The 33 enabled automatic plans carry stable versioned IDs and are
-checked against the local runtime career and skill tables. A changed or missing
-plan never changes saved allocations; earned points stay manual until a valid
-plan is explicitly selected.
+companion. The 57 enabled builds carry stable versioned IDs and are checked
+against the local runtime career and skill tables. A changed or missing plan
+never changes saved allocations; earned points stay manual until a valid plan
+is explicitly selected. `/companions build <name>` lists a companion's builds;
+`/companions build <name> <build>` switches builds and automatic training. The
+switch is free, needs no trainer or respec eligibility, resets that companion's
+specializations, and retrains the new build to its current level. See
+[Build choice (M1a)](COMPANION_BUILD_RESEARCH.md#build-choice-m1a).
 
 ## Personal gear and inventory
 

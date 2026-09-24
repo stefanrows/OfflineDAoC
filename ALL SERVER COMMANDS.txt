@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.33.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.34.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 287 command registrations read from the shipped server assemblies.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -8,7 +8,7 @@ GM/admin commands can change or delete game data. Back up before using them.
 Descriptions containing a localization key have no matching shipped English text.
 
 COMMON COMPANION COMMANDS
-/companions opens the Companion Manager window (roster, recruitment, training and tactics, gear) when its client extension is installed; otherwise it prints command guidance. /companions find <name or class> searches it. The companion backpack also opens in a native external-inventory window for inspection and protected drag/drop transfers. New recruits use automatic training only for one of 33 validated class plans; six classes remain manual-only. Existing companions stay manual until changed. Gear rewards, safe transfers, manual slot locks, and protected surplus sales use companion-owned inventory.
+/companions opens the Companion Manager window (roster, recruitment, training and tactics, gear) when its client extension is installed; otherwise it prints command guidance. /companions find <name or class> searches it. The companion backpack also opens in a native external-inventory window for inspection and protected drag/drop transfers. New recruits use automatic training in a validated build: 57 builds for 35 classes, chosen with /companions recruit <class> [build] or switched later with /companions build <name> <build>; four classes remain manual-only. Existing companions stay manual until changed. Gear rewards, safe transfers, manual slot locks, and protected surplus sales use companion-owned inventory.
 /spawn opens the all-realm companion class picker; /spawn <class> uses your realm, and /spawn <realm> <class> creates a foreign-realm class.
 /raid 40 or /raid 80 enables a level-50 companion raid (total includes you).
 There is no /spawn 40 or /spawn 80 raid-size command.
@@ -249,8 +249,8 @@ NORMAL PLAYER COMMANDS
 
 /companions
   Manage your roster, cast, tactics, training, and equipment.
-  /companions [find <name or class> | list | cast [realm] [page] | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> <role> | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]
-  Bare /companions opens the Companion Manager window, or prints command guidance if no client extension answers. Authored individuals are once per owner. Generated recruitment remains free at level 1. Group orders override saved individual stance until /companions group default.
+  /companions [find <name or class> | list | cast [realm] [page] | recruit <class> [build] | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> <role> | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]
+  Bare /companions opens the Companion Manager window, or prints command guidance if no client extension answers. Authored individuals are once per owner. Generated recruitment remains free at level 1. Group orders override saved individual stance until /companions group default. /companions build <name> lists builds; /companions build <name> <build> switches for free, anywhere, and retrains to the current level.
   Handler: DOL.GS.Commands.PlayerCompanionCommandHandler
 
 /confuse

@@ -1,11 +1,13 @@
 # Companion build research and Stage 3 validation
 
 Status: Stage 1 source research and Stage 3 runtime validation cover all 39
-classes. Thirty-three project-recommended automatic plans are enabled; six
-classes remain manual-only with documented blockers. The enabled plan set and
-its exact targets are recorded in `CompanionBuildPlanCatalog.cs` and summarized
-below. The owner marked Stage 3 real-client acceptance complete on 2026-09-24.
-Updated 2026-09-24.
+classes. Companion Manager M1a (0.34.0) adds build choice: 57
+project-recommended builds are enabled for 35 classes, and four classes remain
+manual-only with documented blockers. The original 33 plans keep their IDs and
+stay each class's default build. The enabled plan set and its exact targets are
+recorded in `CompanionBuildPlanCatalog.cs` and summarized below. The owner
+marked Stage 3 real-client acceptance complete on 2026-09-24; the M1a builds
+passed offline checks only. Updated 2026-09-24.
 
 These 1.65-era sources support review of companion build recommendations; they
 do not establish retail-era popularity or historical practice. The source set
@@ -37,7 +39,8 @@ passive lines. Those 34 candidates' endgame point totals fit their no-autotrain
 level-50 budgets. This is a static upstream-reference check. The three
 Blademaster, Hero, and Warrior forum candidates have calculated point totals,
 but their exact ranked skill tiers have not passed that reference check.
-Animist and Wizard still lack numeric endgame candidates.
+Animist and Wizard lacked numeric endgame candidates here; M1a added
+forum-excerpt candidates below.
 
 The class career and skill records used by the server are loaded by SkillBase.
 The public upstream snapshot supported the original static candidate audit;
@@ -124,9 +127,12 @@ stable and versioned as `general-pve-v1-<class>`.
 | Valewalker | Melee and spell hybrid | Scythe 50, Arboreal Path 38, Parry 20 |
 | Warden | Defensive melee and group support | Nurture 49, Regrowth 33, Blades 25, Parry 14 |
 
+These are the original Stage 3 plans. Each is now its class's default build
+and carries a build name; see [Build choice (M1a)](#build-choice-m1a) for the
+names and the added builds.
+
 | Manual-only class | Blocker |
 | --- | --- |
-| Animist, Wizard | Existing research has no numeric endgame allocation. |
 | Blademaster, Hero, Warrior | Dated forum candidates still need role and ranked-skill review. |
 | Necromancer | Numeric farming target depends on unsupported Death Servant companion combat; no substitute profile was validated. |
 
@@ -189,7 +195,7 @@ stable and versioned as `general-pve-v1-<class>`.
 - The three realm guides cover 38 classes; the 2014 Necromancer discussion supplies a separate source. These community sources are emulator recommendations, not evidence of retail-era popularity.
 - Four source templates needed companion-specific no-autotrain adjustments: Minstrel, Reaver, Runemaster, and Ranger. The selected schedules derive from reviewed research inputs; no `BotSpec` profile is used as an automatic plan.
 - The Theurgist source calls its line Air; the server career key is Wind Magic.
-- Animist and Wizard still lack numeric endgame candidates. Blademaster, Hero, and Warrior forum candidates need an AI role decision and exact ranked-skill validation.
+- Animist and Wizard lacked numeric endgame candidates in this source set; M1a found forum excerpts with numbers (see [Build choice (M1a)](#build-choice-m1a)). Blademaster, Hero, and Warrior forum candidates need an AI role decision and exact ranked-skill validation.
 - Sorcerer, Ranger, Nightshade, and Armsman have partial numeric leveling sources. Healer has a longer sourced route, but its respecialization and half-level steps do not map to the current companion progression path. Minstrel's level-24 note relies on human autotrain. Other 33 classes have only relative focus guidance.
 - The source candidates' point and route findings above remain research evidence, not a claim that every cited route is usable by companions. The selected plans have separate runtime and per-level validation recorded in the table above.
 - The 33 enabled schedules are project recommendations through level 50, not sourced historical per-level builds. They spend the normal no-autotrain companion budget and do not respec automatically.
@@ -197,8 +203,136 @@ stable and versioned as `general-pve-v1-<class>`.
 
 This record extends Stage 1's source research with the selected Stage 3 plans, offline checks, and class-specific blockers.
 
+## Build choice (M1a)
+
+The owner asked for the most popular builds of each class at the 1.65 patch
+level (Classic + SI), with a build choice per companion. This section records
+the 24 builds added in 0.34.0 and the evidence for each. It follows the rules
+above: sources are cited, project numbers are labelled, and a class without
+evidence stays manual-only.
+
+**Evidence limits.** On 2026-09-24 the Uthgard forum returned HTTP 500
+("Unable to connect to the database") and the Internet Archive rate-limited
+requests, so no forum thread could be opened. Forum evidence below comes from
+search-engine excerpts of the listed threads. Where the excerpt does not name
+a single thread, every candidate thread is listed. Recheck these numbers
+against the threads when the forum is reachable. The three realm guides were
+reachable and were read again.
+
+**Labels.** *Sourced* means the source gives the level-50 numbers. *Adjusted*
+means a sourced template that assumed autotrain was reduced to fit the
+companion's no-autotrain budget. *Project* means the source gives only the
+direction ("full Augmentation"), and the project chose the numbers. All
+per-level schedules are derived by the project algorithm; no source gives
+one.
+
+**Checks.** Every added build passed the same checks as the original plans:
+level-50 budget and per-level budget, monotonic ranks, no overlevel training,
+and level-50 targets reached (unit tests). A read-only query of the installed
+runtime skill tables (on a scratch copy outside Git) found every line in the
+class career with ranked ability, spell, or style data, except the
+career-only Stealth and bow lines. The server repeats this runtime check
+before it applies a build.
+
+### Names of the original builds
+
+The original plans keep their `general-pve-v1-<class>` IDs and become the
+default build of their class. Their command keys and names are:
+
+| Class | Key | Name |
+| --- | --- | --- |
+| Armsman | `polearm` | Polearm and shield |
+| Cabalist | `body` | Body and Spirit |
+| Cleric | `enhancement` | Enhancement (buffer) |
+| Friar | `group` | Group support |
+| Infiltrator | `thrust` | Thrust assassin |
+| Mercenary | `dualwield` | Dual wield and shield |
+| Minstrel | `instruments` | Instruments and thrust |
+| Paladin | `chants` | Chants and shield |
+| Reaver | `flexible` | Flexible and shield |
+| Scout | `bow` | Longbow |
+| Sorcerer | `balanced` | Body and Mind |
+| Theurgist | `earth` | Earth and Wind |
+| Berserker | `sword` | Sword and left axe |
+| Bonedancer | `suppression` | Suppression |
+| Healer | `trispec` | Tri-spec |
+| Hunter | `spear` | Spear and Beastcraft |
+| Runemaster | `darkness` | Darkness (damage) |
+| Savage | `savagery` | Savagery and hand to hand |
+| Shadowblade | `leftaxe` | Left axe assassin |
+| Shaman | `augmentation` | Augmentation (buffer) |
+| Skald | `battlesongs` | Battlesongs and hammer |
+| Spiritmaster | `darkness` | Darkness (bomb) |
+| Thane | `stormcalling` | Stormcalling and shield |
+| Bard | `nurture` | Nurture (support) |
+| Champion | `valor` | Valor and shield |
+| Druid | `nurture` | Nurture (buffer) |
+| Eldritch | `mana` | Mana (group damage) |
+| Enchanter | `mana` | Mana (pet support) |
+| Mentalist | `light` | Light and Mentalism |
+| Nightshade | `piercing` | Piercing assassin |
+| Ranger | `melee` | Celtic dual (melee) |
+| Valewalker | `scythe` | Scythe and Arboreal |
+| Warden | `nurture` | Nurture (support) |
+
+The Healer default (38 Pacification, 33 Mending, 19 Augmentation) is named
+Tri-spec: a forum excerpt describes this exact split as a high-utility
+tri-spec that reaches the first Celerity.
+
+### Added builds
+
+IDs are `<key>-v1-<class>`. Wizard and Animist were manual-only; their first
+listed build is now the class default.
+
+| Class | Key and name | Role | Level-50 targets (points / budget) | Label | Source |
+| --- | --- | --- | --- | --- | --- |
+| Armsman | `twohanded` Two-handed and shield | Two-handed damage and group guard | Two Handed 50, Shields 42, Slash 39, Parry 5 (2,969/2,979) | Sourced | Albion guide: "50 Polearm (or 2 Handed), 42 Shield, and 30-39 Weapon type". Same split as the default with Two Handed. |
+| Cabalist | `matter` Matter (damage-over-time) | Pet caster with damage-over-time | Matter Magic 50, Body Magic 20, Spirit Magic 3 (1,488/1,494) | Project | Albion guide PvE: 3 Spirit for pet power recycle, the rest into Matter. Body 20 spends the remainder. |
+| Cleric | `rejuvenation` Rejuvenation (healer) | Main healer and buffer | Rejuvenation 36, Enhancement 40 (1,484/1,494) | Sourced (excerpt) | Forum excerpt: "The most common final specs for clerics … are 40 enh/36 rej, or 42 enh/33 rej." Candidate threads: [Cleric Specs](https://www.uthgard.net/forum/viewtopic.php?f=60&t=29332), [Cleric Spec](https://uthgard.net/forum/viewtopic.php?t=18165), [Leveling with a Cleric](https://www.uthgard.net/forum/viewtopic.php?f=106&t=38683). |
+| Friar | `solo` Staff (solo) | Melee damage with support | Enhancement 45, Staff 39, Rejuvenation 25, Parry 12 (2,214/2,223) | Sourced | Albion guide RvR solo: "45 Enhancement, 39 Staff, 25 Rejuvenation, rest into Parry". |
+| Scout | `melee` Shield and slash | Melee and ranged hybrid | Shields 42, Slash 40, Stealth 35, Longbows 35 (2,979/2,979) | Adjusted | Albion guide melee: "42 Shield, 41 Slash, 36 Stealth, 35 Bow" costs 3,056. Slash and Stealth each lose one rank. |
+| Sorcerer | `body` Body (damage) | Ranged damage and debuffs | Body Magic 45, Mind Magic 24, Matter Magic 17 (1,485/1,494) | Sourced plus project fill | Albion guide DD focus: "45+ Body, 24+ Mind". Matter 17 spends the remainder. |
+| Theurgist | `ice` Ice (group leveling) | Pet caster and group damage | Cold Magic 50, Earth Magic 20 (1,483/1,494) | Project | Albion guide PvE: "Full Ice spec". The server career key is Cold Magic. |
+| Wizard | `fire` Fire (single target) | Ranged single-target damage | Fire Magic 50, Earth Magic 18, Cold Magic 9 (1,488/1,494) | Sourced (excerpt) | Forum excerpt: "Fire with 50 Heat, 18 Earth and 9 Ice". Albion guide: Fire for solo. Candidate threads: [Wizard Specs in Uthgard 1.65](https://www.uthgard.net/forum/viewtopic.php?f=112&t=41544), [Wizard Templates](https://www.uthgard.net/forum/viewtopic.php?f=112&t=37338). |
+| Wizard | `ice` Ice (area damage) | Ranged and area damage | Cold Magic 50, Earth Magic 20 (1,483/1,494) | Adjusted | Same excerpt: "Ice with 50 Cold and 24 Earth" costs 1,573. Earth drops to 20. Albion guide: Ice for groups. |
+| Wizard | `earth` Earth (utility) | Ranged damage and utility | Earth Magic 48, Fire Magic 23, Cold Magic 7 (1,477/1,494) | Sourced (excerpt) | Excerpt: "48 Earth / 23 Fire / 7 Ice". Candidate thread: [Earth Wizard Race & Spec?](https://www.uthgard.net/forum/viewtopic.php?t=43112). The excerpt also calls Earth a weak leveling spec. |
+| Healer | `mending` Mending (healer) | Main healer | Mending 50, Augmentation 20 (1,483/1,494) | Project | Named by the owner. Augmentation 20 reaches Celerity (18). |
+| Healer | `augmentation` Augmentation (buffer) | Buffer | Augmentation 50, Mending 20 (1,483/1,494) | Project | Midgard guide PvE: "Full Augmentation spec". |
+| Healer | `pacification` Pacification (crowd control) | Crowd control | Pacification 44, Mending 30, Augmentation 8 (1,488/1,494) | Project | Midgard guide: Pacification healer. Forum excerpt: 30 Mending makes a healer, 36 Pacification a Pacification spec. Runtime data puts Tranquilize Area at Pacification 44. Candidate threads: [Healer Templates](https://www.uthgard.net/forum/viewtopic.php?t=37342), [PAC or AUG healer](https://www.uthgard.net/forum/viewtopic.php?f=61&t=41314), [Pac Healer Spec](https://www.uthgard.net/forum/viewtopic.php?f=116&t=36145). |
+| Hunter | `archery` Archery | Ranged damage with a pet | Beastcraft 40, Composite Bow 35, Spear 50, Stealth 22 (2,974/2,979) | Adjusted | Midgard guide bow build: "40 Beastcraft, 35 Bow, rest in Spear". Spear stops at 50; the remainder goes to Stealth. |
+| Runemaster | `suppression` Suppression (group support) | Group damage and utility | Suppression 50, Darkness 20 (1,483/1,494) | Project | Midgard guide PvE: Suppression spec for group support. |
+| Shaman | `cave` Cave (damage-over-time) | Ranged damage-over-time and buffs | Subterranean 50, Augmentation 20 (1,483/1,494) | Project | Midgard guide PvE: high Cave spec for solo. |
+| Spiritmaster | `suppression` Suppression | Area damage and utility | Suppression 50, Darkness 20 (1,483/1,494) | Project | Midgard guide PvE: Suppression for group PBAoE. |
+| Spiritmaster | `summoning` Summoning (pet) | Pet caster | Summoning 50, Darkness 20 (1,483/1,494) | Project | Midgard guide PvE: pet Summoning for solo. Forum excerpt: Darkness is the recommended second line for a Summoning Spiritmaster. Candidate threads: [Spiritmaster Templates](https://www.uthgard.net/forum/viewtopic.php?f=123&t=37349), [Summon spec Spiritmaster](https://forums.freddyshouse.com/threads/summon-spec-spiritmaster.117177/). |
+| Animist | `creeping` Creeping (turret farm) | Turret caster and area damage | Creeping Path 39, Arboreal Path 36, Verdant Path 7 (1,471/1,494) | Sourced (excerpt) | Excerpt: "35-39 Creeping with the rest in Arboreal, plus perhaps 7 Verdant". Hibernia guide: Creeping for PvE turret farms. |
+| Animist | `arboreal` Arboreal (main pet) | Pet caster and ranged damage | Arboreal Path 48, Creeping Path 23, Verdant Path 7 (1,477/1,494) | Sourced (excerpt) | Excerpt: "48 Arboreal/7 Verdant/rest Creeping". Candidate threads: [Animist Templates](https://www.uthgard.net/forum/viewtopic.php?f=127&t=37352), [lvl 50 creep spec / template question](https://www.uthgard.net/forum/viewtopic.php?f=127&t=46095), [Creeping/Verdant Animist questions](https://www.uthgard.net/forum/viewtopic.php?f=62&t=25305). |
+| Bard | `music` Music (crowd control) | Crowd control and group support | Music 47, Nurture 43, Regrowth 16 (2,207/2,223) | Sourced | Hibernia guide: "47 Music, 43 Nurture, 16 Regrowth". |
+| Druid | `regrowth` Regrowth (healer) | Main healer and buffer | Regrowth 35, Nurture 40, Nature 9 (1,492/1,494) | Sourced | Hibernia guide: "40 Nurture, 35 Regrowth, 9 Nature", for better group healing. |
+| Eldritch | `light` Light (single target) | Ranged single-target damage | Light 46, Mana 28 (1,485/1,494) | Sourced | Hibernia guide: "46 Light, 28 Mana". |
+| Ranger | `archery` Archery | Ranged damage with self-buffs | Recurve Bow 35, Pathfinding 40, Piercing 39, Stealth 33, Celtic Dual 19 (2,976/2,979) | Adjusted | Hibernia guide hybrid bow: "40 Pathfinding, 39 Pierce, 35 Bow, 35 Stealth, 18 Celtic Dual" costs 3,026. Stealth drops to 33, and Celtic Dual rises to 19 to spend the remainder. |
+
+### Not added
+
+- Weapon-only swaps (for example a Hammer Berserker or a Slash Infiltrator)
+  change only which weapon line is trained. They are left out so each list
+  offers different ways to play.
+- Multi-weapon or stealth-dependent templates that need autotrain (the
+  Berserker two-weapon split and the Minstrel stealth templates) do not fit a
+  useful companion build.
+- The Shadowblade high-Critical-Strike opener, a Smite Cleric, a solo Warden,
+  and Mentalism healer builds have no numeric source in this set.
+- Blademaster, Hero, Warrior, and Necromancer keep their blockers above.
+
+### Role mapping
+
+Each build carries a role description. Applying a build's role to the
+companion's party role, and the new Crowd control role for the Pacification
+Healer and similar builds, is M1c in the
+[Companion Manager roadmap](COMPANION_MANAGER_ROADMAP.md).
+
 ## Sources
 
+- Uthgard forum threads cited in [Build choice (M1a)](#build-choice-m1a) — read only as search-engine excerpts on 2026-09-24, because the forum returned HTTP 500; recheck when reachable.
 - [Uthgard patch-level FAQ](https://www.uthgard.net/howto) — official statement that Uthgard targets patch 1.65; it establishes the emulator context, not the historic provenance of its guides.
 - [Albion class guide](https://uthgard.blogspot.com/p/albion-class-guide.html), [Midgard class guide](https://uthgard.blogspot.com/p/midgard-class-guide.html), and [Hibernia class guide](https://uthgard.blogspot.com/p/hibernia-class-guide.html) — undated community recommendations; emulator-specific observations are not treated as retail facts.
 - [Healer advice and leveling route](https://www.uthgard.net/forum/viewtopic.php?f=61&t=30306) — forum posts dated April 21, 2013; community advice with an explicit level-by-level Pacification/Augmentation path.
