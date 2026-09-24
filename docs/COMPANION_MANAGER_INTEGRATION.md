@@ -54,6 +54,7 @@ command guidance. The accumulating NPC speech menu stays closed.
 | Builds (0.35.0) | Training & Tactics lists the class's builds as links with their role; selecting one and choosing **[Use build]** switches it. Recruit details list the builds with the class default preselected, and **[Recruit]**/**[Create]** use the selection. |
 | Crowd control (0.36.0) | Training & Tactics offers the Crowd control role to Healer, Sorcerer, Bard, Mentalist, and Spiritmaster companions. Each build line says which role it sets. The roster's role filter keeps its four native buttons; a Crowd control filter needs a later client patch. |
 | Group orders (0.37.0) | A **Group orders** row leads the roster list, whatever the search and filters. It shows the group order (Aggressive, Defensive, Passive, or saved stances) as links, each grouped companion's effective stance with its saved stance when an order overrides it, and **[Pull]**, **[Invite all]**, **[Bench all]**, and **[Grind]**/**[Stop grind]**. A companion stays the default selection. |
+| Worn slots (0.38.0) | The companion bag window shows the worn slots at positions 51-69 after the 40 backpack positions, two per row. Dropping a bag item there equips and locks it (a ring or bracer takes the side it lands on); dragging a worn item to an empty bag position unequips it there. Server only. |
 
 The recruitment copy is shown in the detail panel exactly as agreed:
 

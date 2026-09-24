@@ -6,9 +6,35 @@ using DOL.GS.PacketHandler;
 
 namespace DOL.GS.Commands
 {
-    /// <summary>Owner-only native vault view of one companion's backpack.</summary>
+    /// <summary>
+    /// Owner-only native vault view of one companion's backpack (positions 1-40) and worn
+    /// slots (positions 51-69, two per row). Dropping a bag item on a worn position equips it;
+    /// dropping a worn item on an empty bag position unequips it.
+    /// </summary>
     internal sealed class PersistentCompanionInventoryView : GameVault
     {
+        private const int BackpackSize = 40;
+        private const int WornOffset = 50;
+
+        /// <summary>Worn slots in vault order; ring and wrist pairs share a row.</summary>
+        internal static readonly eInventorySlot[] WornSlots =
+        [
+            eInventorySlot.HeadArmor, eInventorySlot.TorsoArmor,
+            eInventorySlot.ArmsArmor, eInventorySlot.HandsArmor,
+            eInventorySlot.LegsArmor, eInventorySlot.FeetArmor,
+            eInventorySlot.Cloak, eInventorySlot.Neck,
+            eInventorySlot.Jewelry, eInventorySlot.Waist,
+            eInventorySlot.LeftBracer, eInventorySlot.RightBracer,
+            eInventorySlot.LeftRing, eInventorySlot.RightRing,
+            eInventorySlot.RightHandWeapon, eInventorySlot.LeftHandWeapon,
+            eInventorySlot.TwoHandWeapon, eInventorySlot.DistanceWeapon,
+            eInventorySlot.Mythical,
+        ];
+
+        /// <summary>First and last 1-based vault positions of the worn slots.</summary>
+        internal const int FirstWornPosition = WornOffset + 1;
+        internal static int LastWornPosition => WornOffset + WornSlots.Length;
+
         private readonly GamePlayer _owner;
         private readonly string _companionId;
 
@@ -18,7 +44,7 @@ namespace DOL.GS.Commands
             _companionId = companionId;
         }
 
-        public override int VaultSize => 40;
+        public override int VaultSize => 100;
         public override int FirstDbSlot => (int)eInventorySlot.FirstBackpack;
         public override int LastDbSlot => (int)eInventorySlot.LastBackpack;
         public override eInventorySlot LastClientSlot => (eInventorySlot)((int)FirstClientSlot + VaultSize - 1);
@@ -28,11 +54,28 @@ namespace DOL.GS.Commands
 
         public override IEnumerable<DbInventoryItem> GetDbItems(GamePlayer player) =>
             TryGetCompanion(player, out GameBot companion) && companion.Inventory != null
-                ? companion.Inventory.AllItems.Where(item => IsBackpack((eInventorySlot)item.SlotPosition)).ToArray()
+                ? companion.Inventory.AllItems.Where(item => ClientSlotOf((eInventorySlot)item.SlotPosition) != null)
+                    .ToArray()
                 : Array.Empty<DbInventoryItem>();
 
         public override Dictionary<int, DbInventoryItem> GetClientInventory(GamePlayer player) =>
-            GetDbItems(player).ToDictionary(item => (int)FirstClientSlot + item.SlotPosition - FirstDbSlot);
+            GetDbItems(player).ToDictionary(item => ClientSlotOf((eInventorySlot)item.SlotPosition).Value);
+
+        /// <summary>The vault client slot that shows a companion inventory slot, if any.</summary>
+        internal static int? ClientSlotOf(eInventorySlot slot)
+        {
+            if (IsBackpack(slot))
+                return (int)eInventorySlot.HousingInventory_First + (int)slot - (int)eInventorySlot.FirstBackpack;
+            int worn = Array.IndexOf(WornSlots, slot);
+            return worn < 0 ? null : (int)eInventorySlot.HousingInventory_First + WornOffset + worn;
+        }
+
+        /// <summary>The worn slot shown at a vault client slot, or Invalid.</summary>
+        internal static eInventorySlot WornSlotAt(eInventorySlot clientSlot)
+        {
+            int index = (int)clientSlot - (int)eInventorySlot.HousingInventory_First - WornOffset;
+            return index >= 0 && index < WornSlots.Length ? WornSlots[index] : eInventorySlot.Invalid;
+        }
 
         public void Open()
         {
@@ -72,7 +115,9 @@ namespace DOL.GS.Commands
                 return true;
             }
 
-            bool fromCompanion = IsCompanionSlot(fromSlot);
+            eInventorySlot fromWorn = WornSlotAt(fromSlot);
+            eInventorySlot toWorn = WornSlotAt(toSlot);
+            bool fromCompanion = IsCompanionSlot(fromSlot) || fromWorn != eInventorySlot.Invalid;
             bool toCompanion = IsCompanionSlot(toSlot) || toSlot == eInventorySlot.GeneralHousing && IsBackpack(fromSlot);
             DbInventoryItem item = fromCompanion
                 ? GetClientInventory(player).GetValueOrDefault((int)fromSlot)
@@ -86,9 +131,28 @@ namespace DOL.GS.Commands
 
             bool moved = false;
             string message;
-            if (fromCompanion && toCompanion)
+            if (fromWorn != eInventorySlot.Invalid)
             {
-                eInventorySlot destination = (eInventorySlot)((int)eInventorySlot.FirstBackpack + (int)toSlot - (int)FirstClientSlot);
+                if (toWorn != eInventorySlot.Invalid)
+                    message = "Drag a worn item to an empty slot in the companion's backpack to unequip it.";
+                else if (!IsCompanionSlot(toSlot))
+                    message = "Unequip it into the companion's backpack first; from there it can move to yours.";
+                else if (GetClientInventory(player).ContainsKey((int)toSlot))
+                    message = "Choose an empty companion backpack slot to unequip this item.";
+                else
+                    moved = PersistentCompanionGear.TryUnequip(player, _companionId, fromWorn, item.ObjectId,
+                        BackpackSlotAt(toSlot), out message);
+            }
+            else if (toWorn != eInventorySlot.Invalid)
+            {
+                if (!fromCompanion)
+                    message = "Drag it into the companion's backpack first, then onto a worn slot.";
+                else
+                    moved = PersistentCompanionGear.TryEquip(player, _companionId, item.ObjectId, toWorn, out message);
+            }
+            else if (fromCompanion && toCompanion)
+            {
+                eInventorySlot destination = BackpackSlotAt(toSlot);
                 if (fromSlot == toSlot || companion.Inventory.GetItem(destination) != null)
                     message = "Choose an empty companion backpack slot to move this item.";
                 else
@@ -115,7 +179,8 @@ namespace DOL.GS.Commands
                         toCompanion: false, out message);
             }
             else
-                message = "Use an empty backpack slot to transfer this item.";
+                message = $"Use an empty backpack slot (positions 1-{BackpackSize}) or a worn slot " +
+                          $"({FirstWornPosition}-{LastWornPosition}).";
 
             Tell(moved && string.IsNullOrWhiteSpace(message)
                 ? $"Moved {item.Name} within {companion.Name}'s backpack."
@@ -134,7 +199,12 @@ namespace DOL.GS.Commands
                    PlayerCompanionRoster.TryGetActiveCompanionById(player, _companionId, out companion);
         }
 
-        private bool IsCompanionSlot(eInventorySlot slot) => slot >= FirstClientSlot && slot <= LastClientSlot;
+        /// <summary>True for the vault positions that show the companion's backpack.</summary>
+        private bool IsCompanionSlot(eInventorySlot slot) =>
+            slot >= FirstClientSlot && (int)slot < (int)FirstClientSlot + BackpackSize;
+
+        private eInventorySlot BackpackSlotAt(eInventorySlot clientSlot) =>
+            (eInventorySlot)((int)eInventorySlot.FirstBackpack + (int)clientSlot - (int)FirstClientSlot);
 
         private static bool IsVaultWindowSlot(eInventorySlot slot) =>
             slot >= eInventorySlot.HousingInventory_First && slot <= eInventorySlot.HousingInventory_Last;

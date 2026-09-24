@@ -296,4 +296,45 @@ public sealed class UT_CompanionManager
         (IReadOnlyList<CompanionManagerEntry>)typeof(CompanionManager)
             .GetMethod("RecruitEntries", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { new List<PlayerCompanionRecord>() });
+
+    [Test]
+    public void BagWindowShowsWornSlotsAfterTheBackpackInPairedRows()
+    {
+        Type view = typeof(CompanionManager).Assembly.GetType("DOL.GS.Commands.PersistentCompanionInventoryView")!;
+        var worn = (eInventorySlot[])view.GetField("WornSlots", BindingFlags.NonPublic | BindingFlags.Static)!
+            .GetValue(null)!;
+        MethodInfo clientSlotOf = view.GetMethod("ClientSlotOf", BindingFlags.NonPublic | BindingFlags.Static)!;
+        MethodInfo wornSlotAt = view.GetMethod("WornSlotAt", BindingFlags.NonPublic | BindingFlags.Static)!;
+        int? ClientSlot(eInventorySlot slot) => (int?)clientSlotOf.Invoke(null, new object[] { slot });
+        eInventorySlot WornAt(int clientSlot) => (eInventorySlot)wornSlotAt.Invoke(null, new object[] { (eInventorySlot)clientSlot })!;
+        int first = (int)eInventorySlot.HousingInventory_First;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ClientSlot(eInventorySlot.FirstBackpack), Is.EqualTo(first));
+            Assert.That(ClientSlot(eInventorySlot.LastBackpack), Is.EqualTo(first + 39));
+            Assert.That(ClientSlot(eInventorySlot.HeadArmor), Is.EqualTo(first + 50), "worn slots start at position 51");
+            Assert.That(worn, Is.Unique);
+            Assert.That(first + 50 + worn.Length - 1, Is.LessThanOrEqualTo((int)eInventorySlot.HousingInventory_Last));
+            foreach (eInventorySlot slot in worn)
+            {
+                Assert.That(slot, Is.InRange(eInventorySlot.MinEquipable, eInventorySlot.MaxEquipable));
+                Assert.That(WornAt(ClientSlot(slot)!.Value), Is.EqualTo(slot), slot.ToString());
+            }
+            foreach ((eInventorySlot left, eInventorySlot right) in new[]
+                     {
+                         (eInventorySlot.LeftRing, eInventorySlot.RightRing),
+                         (eInventorySlot.LeftBracer, eInventorySlot.RightBracer),
+                     })
+            {
+                int leftIndex = ClientSlot(left)!.Value - first;
+                Assert.That(leftIndex % 2, Is.Zero, $"{left} starts a two-column row");
+                Assert.That(ClientSlot(right), Is.EqualTo(ClientSlot(left) + 1), $"{right} sits beside {left}");
+            }
+            Assert.That(ClientSlot(eInventorySlot.FirstQuiver), Is.Null);
+            Assert.That(WornAt(first), Is.EqualTo(eInventorySlot.Invalid), "backpack positions are not worn slots");
+            Assert.That(WornAt(first + 49), Is.EqualTo(eInventorySlot.Invalid));
+            Assert.That(WornAt(first + 50 + worn.Length), Is.EqualTo(eInventorySlot.Invalid));
+        });
+    }
 }

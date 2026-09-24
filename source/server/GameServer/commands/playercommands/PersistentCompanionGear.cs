@@ -17,24 +17,34 @@ namespace DOL.GS.Commands
         public static bool IsBackpack(DbInventoryItem item) =>
             item?.SlotPosition is >= (int)eInventorySlot.FirstBackpack and <= (int)eInventorySlot.LastBackpack;
 
-        public static bool TryEquip(GamePlayer owner, string companionId, string itemId, out string message)
+        public static bool TryEquip(GamePlayer owner, string companionId, string itemId, out string message) =>
+            TryEquip(owner, companionId, itemId, eInventorySlot.Invalid, out message);
+
+        /// <param name="preferredSlot">The ring or wrist half to use; other slots follow the item.</param>
+        public static bool TryEquip(GamePlayer owner, string companionId, string itemId, eInventorySlot preferredSlot,
+            out string message)
         {
             if (!TryGetItem(owner, companionId, itemId, out GameBot companion, out DbInventoryItem item) || !IsBackpack(item))
             {
                 message = "That item is no longer in the companion's backpack.";
                 return false;
             }
-            if (!companion.TryManuallyEquipPersistentCompanionItem(item))
+            if (!companion.TryManuallyEquipPersistentCompanionItem(item, preferredSlot, out eInventorySlot slot))
             {
                 message = "That item is not a legal choice, its slot is protected, or the companion is busy.";
                 return false;
             }
-            message = $"{item.Name} is equipped and its slot is locked against automatic replacement.";
+            message = $"{item.Name} is equipped in the {SlotName(slot)} slot, which is locked against automatic replacement.";
             return true;
         }
 
         public static bool TryUnequip(GamePlayer owner, string companionId, eInventorySlot slot, string expectedItemId,
-            out string message)
+            out string message) =>
+            TryUnequip(owner, companionId, slot, expectedItemId, eInventorySlot.Invalid, out message);
+
+        /// <param name="destination">An empty backpack slot, or Invalid for the first empty one.</param>
+        public static bool TryUnequip(GamePlayer owner, string companionId, eInventorySlot slot, string expectedItemId,
+            eInventorySlot destination, out string message)
         {
             if (!PlayerCompanionRoster.TryGetActiveCompanionById(owner, companionId, out GameBot companion) ||
                 companion.Inventory == null)
@@ -47,8 +57,12 @@ namespace DOL.GS.Commands
                 {
                     if (!ReferenceEquals(companion.Inventory.GetItem(slot), item))
                         return false;
-                    eInventorySlot backpack = companion.Inventory.FindFirstEmptySlot(
-                        eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+                    eInventorySlot backpack = destination == eInventorySlot.Invalid
+                        ? companion.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack)
+                        : destination is >= eInventorySlot.FirstBackpack and <= eInventorySlot.LastBackpack &&
+                          companion.Inventory.GetItem(destination) == null
+                            ? destination
+                            : eInventorySlot.Invalid;
                     if (backpack == eInventorySlot.Invalid ||
                         !companion.Inventory.MoveItem(slot, backpack, Math.Max(1, item.Count)))
                         return false;

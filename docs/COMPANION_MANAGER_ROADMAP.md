@@ -5,7 +5,8 @@ pending. M1a (build research, catalog, and command selection) implemented
 offline in 0.34.0. M1b (build list in the window and recruit flow) implemented
 offline in 0.35.0. M1c (Crowd control role and build roles) implemented
 offline in 0.36.0. M2 (group controls in the window) implemented offline in
-0.37.0. M3 is not implemented yet.**
+0.37.0. M3 (worn slots on the bag window's second half) implemented offline in
+0.38.0.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -336,9 +337,52 @@ All options keep the current protections: `TryApplyEquipmentMutation`, class
 legality, slot locks, keep flags, and the rules that a rejected or full-bag
 action leaves items and coins intact.
 
+**Owner decision (2026-09-24):** option 2, the second vault page. Option 1
+stays a possible later probe; it is not planned.
+
+### M3 - Worn slots in the bag window (0.38.0, offline)
+
+Server only. The installed manager `game.dll` needs no change.
+
+- [x] Layout: the bag view now fills all 100 house-vault positions. Positions
+      1-40 stay the backpack; 41-50 are empty; positions 51-69 are the worn
+      slots, two per row in the client's two-column list: helm, chest / arms,
+      gloves / legs, boots / cloak, neck / jewel, belt / left, right wrist /
+      left, right ring / right hand, left hand / two-handed, ranged / mythical.
+      Position 51 starts a new page for page sizes of 10, 25, or 50 slots.
+      Quivers are not shown.
+- [x] Equip: dropping a companion bag item on a worn position calls
+      `PersistentCompanionGear.TryEquip`, the **[Equip + lock]** path. The item
+      goes to its own legal slot, whatever position it was dropped on. A ring or
+      bracer takes the side it was dropped on. The slot is locked.
+- [x] Unequip: dragging a worn item onto an empty companion bag position calls
+      `TryUnequip` into that exact bag slot and unlocks the slot.
+- [x] Refused: worn to worn, worn to the player's bag, the player's bag to a
+      worn position, and the empty positions 41-50 and 70-100 each explain the
+      right drag. Nothing moves.
+- [x] Protections: every change still goes through `TryApplyEquipmentMutation`
+      with class legality, displaced-weapon space, and slot locks; the bag
+      still needs an active, nearby companion out of combat.
+- [x] Manager: the Gear tab and the **[Open bag]** message name the worn
+      positions.
+- [x] Test: backpack and worn positions round-trip, they do not overlap or
+      leave the vault, and ring and wrist pairs share a row. Equip and unequip
+      reuse the existing roster paths; the real drags need the client.
+- [ ] Owner: in the real client, open a companion's bag, page to position 51,
+      and check that the worn items appear there in the order above. Drop a
+      helm and a ring from the companion's bag onto the worn positions, drag a
+      worn item back to an empty bag slot, and check that the Gear tab and the
+      companion's appearance follow. Note the client's page size.
+
+Known limits: empty worn positions have no slot names or silhouettes, so the
+order above (also listed in the Gear tab) is the key. The bag window does not
+refresh by itself when the companion equips loot automatically; reopen it or
+make any move to refresh.
+
 ## Order and gates
 
 M0, then M1, then M2, which carry no native risk and give the most gameplay
-value. M3 starts with its probe. Each milestone follows the repository's
+value. M3 uses the server-only vault page (option 2); a native slot-grid probe
+would come later only if the owner asks for it. Each milestone follows the repository's
 versioning, uses offline tests before any owner check, and closes only after
 the owner confirms it in the real client.

@@ -12,6 +12,38 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-09-24
+
+### Added
+
+- Worn slots in the companion bag window (M3). The bag window now also shows
+  the companion's worn equipment at positions 51-69, two per row: helm, chest,
+  arms, gloves, legs, boots, cloak, neck, jewel, belt, left and right wrist,
+  left and right ring, right hand, left hand, two-handed, ranged, and mythical.
+  Positions 1-40 are still the backpack.
+- Drag and drop to equip: drop a companion bag item on a worn position to
+  equip and lock it (like **[Equip + lock]**). The item goes to its own slot;
+  a ring or bracer goes to the side it was dropped on. Drag a worn item to an
+  empty companion bag slot to unequip it there (like **[Unequip]**).
+- A test for the vault layout: backpack and worn positions, no overlap, and
+  paired rings and wrists in one row.
+
+### Changed
+
+- The Gear tab and the **[Open bag]** message name the worn positions.
+- The equip message now names the slot the item went to.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.37.0] - 2026-09-24
 
 ### Added

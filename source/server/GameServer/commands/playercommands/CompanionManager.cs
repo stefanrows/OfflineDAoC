@@ -682,6 +682,10 @@ namespace DOL.GS.Commands
                         PersistentCompanionGear.TrySetKeep(player, id, itemId, !kept, out message))));
             }
 
+            AddText(lines, $"In the bag window, positions {PersistentCompanionInventoryView.FirstWornPosition}-" +
+                           $"{PersistentCompanionInventoryView.LastWornPosition} (after the backpack) are the worn slots: " +
+                           string.Join(", ", PersistentCompanionInventoryView.WornSlots.Select(PersistentCompanionGear.SlotName)) +
+                           ". Drop a bag item there to equip it; drag a worn item to an empty bag slot to unequip it.");
             lines.Add(new Line("Worn equipment (select for actions):"));
             foreach (DbInventoryItem item in companion.Inventory.EquippedItems.OrderBy(item => item.SlotPosition))
             {
@@ -933,7 +937,7 @@ namespace DOL.GS.Commands
             }
             session.Bag = new PersistentCompanionInventoryView(player, id);
             session.Bag.Open();
-            session.Message = $"{companion.Name}'s bag is open. Drag items between bags to transfer them.";
+            session.Message = $"{companion.Name}'s bag is open. Drag items between bags to transfer them; worn slots start at position {PersistentCompanionInventoryView.FirstWornPosition}.";
         }
 
         private static void ShowInRoster(CompanionManagerSession session, string recordKey)
