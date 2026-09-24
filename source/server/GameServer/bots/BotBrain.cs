@@ -2581,7 +2581,11 @@ namespace DOL.AI.Brain
 
             GameLiving protectionTarget = FindProtectionTarget();
             if (protectionTarget != null)
+            {
+                if (PvpCombatant.IsPlayerShaped(protectionTarget))
+                    AutonomousPvpEngagementTracker.Tag(Body, AutonomousPvpEngagementTracker.Protection);
                 AddToAggroList(protectionTarget, 10000);
+            }
 
             GameLiving directAttacker = RecentDirectAttacker();
 
@@ -3094,6 +3098,8 @@ namespace DOL.AI.Brain
             if (target == null)
                 return false;
 
+            if (PvpCombatant.IsPlayerShaped(target))
+                AutonomousPvpEngagementTracker.Tag(Body, AutonomousPvpEngagementTracker.GroupAssist);
             AddToAggroList(target, 1);
             FSM.SetCurrentState(eFSMStateType.AGGRO);
             return HasAggro;

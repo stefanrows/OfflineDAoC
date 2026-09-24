@@ -80,6 +80,7 @@ public sealed partial class AutonomousWorldBotController
         bot.StopMovingOnPath();
         bot.StopMoving();
         bot.WakeRecoveryRest();
+        AutonomousPvpEngagementTracker.Tag(bot, AutonomousPvpEngagementTracker.FrontierThreat);
         bot.TargetObject = enemy;
         brain.AddToAggroList(enemy, Math.Max(100, enemy.EffectiveLevel * 12));
         if (!brain.HasAggro) return false;

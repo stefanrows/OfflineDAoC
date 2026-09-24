@@ -155,8 +155,9 @@ namespace DOL.GS.ServerRules
 					}
 
 
-					// Players with safety flag can not attack other players
-					if (attacker is GamePlayer player && PvpCombatant.IsSafetyProtected(player, m_safetyLevel))
+					// Players with safety flag can not attack other players. Sub-10
+					// autonomous bots carry the same implicit flag.
+					if (PvpCombatant.IsSafetyProtected(attacker, m_safetyLevel))
 					{
 						if (quiet == false) MessageToLiving(attacker, "Your PvP safety flag is ON.");
 						return false;
@@ -167,6 +168,12 @@ namespace DOL.GS.ServerRules
 					{
 						//"PLAYER has his safety flag on and is in a safe area, you can't attack him here."
 						if (quiet == false) MessageToLiving(attacker, playerDefender.Name + " has " + playerDefender.GetPronoun(1, false) + " safety flag on and is in a safe area, you can't attack " + playerDefender.GetPronoun(2, false) + " here.");
+						return false;
+					}
+
+					if (PvpCombatant.IsSafetyProtected(defender, m_safetyLevel))
+					{
+						if (quiet == false) MessageToLiving(attacker, defender.Name + " is protected by the level " + m_safetyLevel + " PvP safety rule.");
 						return false;
 					}
 				}

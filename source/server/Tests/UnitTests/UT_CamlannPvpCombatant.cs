@@ -204,6 +204,100 @@ public sealed class UT_CamlannPvpCombatant
         Assert.That(new PvPServerRules().IsAllowedToAttack(companion, autonomous, true), Is.True);
     }
 
+    [Test]
+    public void SubTenAutonomousBotsCarryImplicitSafetyUntilRelinquished()
+    {
+        var rules = new PvPServerRules();
+        var first = AutonomousBot(eRealm.Albion, 5);
+        var second = AutonomousBot(eRealm.Albion, 5);
+        var human = new TestPlayer { Realm = eRealm.Albion, Level = 20, CurrentRegionID = 1 };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.IsSafetyProtected(first), Is.True);
+            Assert.That(rules.IsAllowedToAttack(first, second, true), Is.False);
+            Assert.That(rules.IsAllowedToAttack(human, first, true), Is.False);
+            Assert.That(rules.IsAllowedToAttack(first, human, true), Is.False);
+        });
+
+        PvpCombatant.RelinquishOptionalSafety(first);
+        Assert.That(rules.IsAllowedToAttack(first, second, true), Is.False, "the other bot keeps its safety");
+        PvpCombatant.RelinquishOptionalSafety(second);
+        Assert.That(rules.IsAllowedToAttack(first, second, true), Is.True);
+    }
+
+    [Test]
+    public void AutonomousSafetyEndsAtLevelTenAndSkipsCompanions()
+    {
+        var rules = new PvPServerRules();
+        var companion = Bot(eRealm.Albion);
+        companion.Level = 5;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rules.IsAllowedToAttack(AutonomousBot(eRealm.Midgard, 10),
+                AutonomousBot(eRealm.Midgard, 12), true), Is.True);
+            Assert.That(PvpCombatant.IsSafetyProtected(companion), Is.False);
+        });
+    }
+
+    [Test]
+    public void EngagementTrackerRemembersWhoStruckFirst()
+    {
+        var first = AutonomousBot(eRealm.Hibernia, 20);
+        var second = AutonomousBot(eRealm.Hibernia, 20);
+
+        AutonomousPvpEngagementTracker.ObserveAttack(second, new AttackData { Attacker = first, Target = second });
+        AutonomousPvpEngagementTracker.ObserveAttack(first, new AttackData { Attacker = second, Target = first });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousPvpEngagementTracker.VictimStartedFight(first, second), Is.True);
+            Assert.That(AutonomousPvpEngagementTracker.VictimStartedFight(second, first), Is.False);
+        });
+    }
+
+    [Test]
+    public void EngagementPathsAreClassifiedFromTheFirstBlow()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousPvpEngagementTracker.Classify(true, false, true, "grudge"),
+                Is.EqualTo(AutonomousPvpEngagementTracker.Human));
+            Assert.That(AutonomousPvpEngagementTracker.Classify(false, true, true, null),
+                Is.EqualTo(AutonomousPvpEngagementTracker.Pet));
+            Assert.That(AutonomousPvpEngagementTracker.Classify(false, false, false, "cc-sweep"),
+                Is.EqualTo(AutonomousPvpEngagementTracker.Collateral));
+            Assert.That(AutonomousPvpEngagementTracker.Classify(false, false, true, "cc-sweep"),
+                Is.EqualTo(AutonomousPvpEngagementTracker.CrowdControl));
+            Assert.That(AutonomousPvpEngagementTracker.Classify(false, false, true, null),
+                Is.EqualTo(AutonomousPvpEngagementTracker.Untagged));
+            Assert.That(AutonomousPvpEngagementTracker.LevelBand(9), Is.EqualTo("1-9"));
+            Assert.That(AutonomousPvpEngagementTracker.LevelBand(50), Is.EqualTo("50"));
+        });
+    }
+
+    [Test]
+    public void GuildGrudgesSkipLowLevelBrawlsGreyKillersAndSelfStartedFights()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(false, 5, false, false), Is.False);
+            Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(false, 10, false, false), Is.True);
+            Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(true, 5, false, false), Is.True);
+            Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(true, 30, true, false), Is.False);
+            Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(true, 30, false, true), Is.False);
+        });
+    }
+
+    private static TestBot AutonomousBot(eRealm realm, byte level)
+    {
+        TestBot bot = Bot(realm);
+        SetGameBotProperty(bot, "IsAutonomousWorldBot", true);
+        bot.Level = level;
+        return bot;
+    }
+
     private static void PutInGroup(params GameLiving[] members)
     {
         var group = new Group(members[0]);

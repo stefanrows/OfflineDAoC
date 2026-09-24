@@ -90,6 +90,7 @@ public static class AutonomousPopulationController
         // event-driven and included only when loot, equipment, buying, selling,
         // or training actually changed them; there is no shutdown-wide rewrite.
         AutonomousBotStatusPersistence.FlushAll();
+        AutonomousGuildGrudgeMemory.FlushAll();
         PendingSpawns.Clear();
         PendingCommands.Clear();
         _cachedRoster = Array.Empty<OfflineWorldBotRecord>();

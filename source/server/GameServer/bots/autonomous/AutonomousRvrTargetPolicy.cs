@@ -26,9 +26,8 @@ public static class AutonomousRvrTargetPolicy
         if (actor is not GameBot { IsAutonomousWorldBot: true } bot || !PvpCombatant.IsPlayerShaped(target))
             return true;
 
-        if (AutonomousGuildGrudgeMemory.IsActiveTarget(bot, target, DateTime.UtcNow))
-            return true;
-
+        // A grudge changes who is hunted first; it never overrides the grey
+        // restraint below. Grey kills grant no realm points.
         ConColor con = ConLevels.GetConColor(bot.GetConLevel(target));
         if (con > ConColor.GREY || targetAttackedCrew || TargetedCrewMember(bot, target))
             return true;

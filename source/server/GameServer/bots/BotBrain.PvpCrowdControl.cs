@@ -20,14 +20,22 @@ namespace DOL.AI.Brain
                 Body.Group?.GetMembersInTheGroup().Any(m=>m.IsAttacking && BotPvpCrowdControl.PlayerLike(m.TargetObject as GameLiving))!=true) return false;
             // PvE never enters this policy; native levels, specs, mana, immunity,
             // interruption and spell timers still decide whether a cast succeeds.
+            // Outside RvR tasks, an autonomous bot controls only opponents
+            // already in this fight: a mez on a bystander starts a new one.
+            // Companions and RvR warbands keep the full pre-emptive sweep.
+            bool sweepBystanders = BotBody.IsAutonomousWorldBot != true ||
+                AutonomousObjectiveAssignments.Is(BotBody, eAutonomousObjectiveKind.RvR);
             GameLiving[] enemies = Body.GetNPCsInRadius(1800).Where(BotPvpCrowdControl.PlayerLike).Cast<GameLiving>()
                 .Concat(Body.GetPlayersInRadius(1800)).Where(t => BotSiegeRuntime.LegalEnemy(Body,t) && !t.IsMezzed &&
+                    (sweepBystanders || BotPvpCrowdControl.IsInFightWith(Body, t, AggroList.Keys)) &&
                     !t.IsStealthed && !BotPvpCrowdControl.Protected(Body,t) && CompanionEngagementMode.Allows(Body,t) &&
                     !CompanionPvpEngagement.Focused(Body,t) && !CompanionPvpEngagement.Defending(Body,t))
                 .OrderBy(Body.GetDistanceTo).Take(24).ToArray();
             if (enemies.Length == 0) return false;
             foreach (Spell spell in BotBody.CrowdControlSpells.OrderByDescending(s=>s.SpellType==eSpellType.Mesmerize).ThenByDescending(s=>s.Radius).ThenByDescending(s=>s.Level))
             {
+                // An area mez would also catch bystanders outside the fight.
+                if (!sweepBystanders && spell.Radius > 0) continue;
                 if (spell.Level>Body.Level || Body.GetSkillDisabledDuration(spell)>0 || Body.Mana<BotBody.PowerCost(spell) ||
                     spell.CastTime>0 && Body.IsBeingInterrupted && !spell.Uninterruptible) continue;
                 int range = spell.Target==eSpellTarget.SELF || spell.Range<=0 ? spell.Radius : spell.CalculateEffectiveRange(Body);
@@ -35,6 +43,7 @@ namespace DOL.AI.Brain
                     NeedsOffensiveSpellApplication(t,spell)).OrderByDescending(t=>enemies.Count(n=>n.IsWithinRadius(t,Math.Max(1,spell.Radius))))
                     .ThenBy(Body.GetDistanceTo).FirstOrDefault(t=>BotSiegeRuntime.Visible(Body,t));
                 if (candidate==null || !BotPvpCrowdControl.Reserve(BotBody,candidate,spell.CastTime+2000)) continue;
+                AutonomousPvpEngagementTracker.Tag(Body, AutonomousPvpEngagementTracker.CrowdControl);
                 GameObject previous=Body.TargetObject;
                 Body.TargetObject=candidate;
                 if (spell.CastTime>0) { Body.StopMovingOnPath(); Body.StopMoving(); }

@@ -133,6 +133,7 @@ namespace DOL.GS
         public bool IsReturningAfterRelease { get; private set; }
         private long _pvpInvulnerabilityTick;
         private bool _lastDeathWasPvp;
+        public bool LastDeathWasPvp => _lastDeathWasPvp;
 
         /// <summary>
         /// PvP release/zone immunity for a bot. Bots do not have a real client
@@ -983,14 +984,22 @@ namespace DOL.GS
                     AutonomousBotChatCoordinator.AnnounceGuildKOS(this, grudgeTargetName, grudgeLocation);
 
                 PersistentRecord.DeathCount++;
-                if (_lastDeathWasPvp && AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, DateTime.UtcNow) &&
+                AutonomousPvpEngagementTracker.RecordDeath(_lastDeathWasPvp);
+                // Only PvP-minded actors hit the "losing" wall. A leveler who is
+                // ganked stays a leveler; its PvE task is not a PvP retreat.
+                if (_lastDeathWasPvp &&
+                    AutonomousActivityScheduler.CountsPvpDeathTowardWall(PersistentRecord,
+                        AutonomousObjectiveAssignments.KindFor(this)) &&
+                    AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, DateTime.UtcNow) &&
                     Group == null && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR) &&
                     AutonomousActivityScheduler.IsPveBlocked(PersistentRecord, DateTime.UtcNow))
                     PersistentRecord.ObjectiveExpiresUtc = DateTime.UtcNow.ToString("O");
                 GoalDiagnosticAttempt?.Died();
                 PersistentRecord.TargetName = (TargetObject as GameLiving)?.Name ?? killer?.Name ?? string.Empty;
-                PersistentRecord.Activity = "Defeated; reassessing target difficulty";
-                PersistentRecord.ObjectiveProgress = "The next grind target will be a lower con, never below green";
+                PersistentRecord.Activity = _lastDeathWasPvp ? "Defeated by a player" : "Defeated; reassessing target difficulty";
+                PersistentRecord.ObjectiveProgress = _lastDeathWasPvp
+                    ? "A PvP defeat does not lower the PvE target difficulty"
+                    : "The next grind target will be a lower con, never below green";
                 MarkAutonomousStateDirty();
             }
 

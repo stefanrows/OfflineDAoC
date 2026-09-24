@@ -75,8 +75,13 @@ public static class AutonomousBotRegistry
         if (summarize)
         {
             Interlocked.Exchange(ref _nextActivitySummaryTick, now + 60_000);
+            var engagement = AutonomousPvpEngagementTracker.Drain();
             Log.Info($"AUTONOMOUS_ACTIVITY_SUMMARY active={count} fighting={fighting} traveling={traveling} " +
-                     $"meetup={meetup} dead={dead} town={town} camp={camp} other={other}");
+                     $"meetup={meetup} dead={dead} town={town} camp={camp} other={other} " +
+                     $"pvpDeaths={engagement.PvpDeaths} pveDeaths={engagement.PveDeaths}");
+            // Key: start path|attacker band>victim band|attacker type:count.
+            if (engagement.Fights > 0)
+                Log.Info($"AUTONOMOUS_PVP_ENGAGE_SUMMARY fights={engagement.Fights} top=\"{engagement.Top}\"");
         }
     }
 

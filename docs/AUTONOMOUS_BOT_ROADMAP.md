@@ -1,6 +1,6 @@
 # Autonomous bot behaviour roadmap
 
-Status: **M0–M6 implemented offline; owner playtest and population measurements pending. M7 is next.**
+Status: **M0–M6 implemented offline. M7 started: the first live review found blocking issues; see [AUTONOMOUS_BOT_M7_REVIEW.md](AUTONOMOUS_BOT_M7_REVIEW.md).**
 Last updated: 2026-09-24.
 
 This roadmap covers the **autonomous gamebots**: the persistent population that
@@ -548,6 +548,16 @@ or real-client gameplay claim is made yet.
 A playtest checklist per preset: leveling a new character from 1 to 20,
 roaming at 20–40, and level 50. Tune the numbers in this document from the
 results. Record the outcome here.
+
+First input (2026-09-24, 0.50.0, 1,500 bots, Fresh launch): see
+[AUTONOMOUS_BOT_M7_REVIEW.md](AUTONOMOUS_BOT_M7_REVIEW.md). Bots below level 10
+have no PvP safety and kill each other at stables and bind points. Solo camp
+choice ignores travel time, so most solo trips cross realms. Many pickup
+groups never find a camp. M6 grudge writes stall the reaper tick. After about
+two hours, bots were level 1–8. The review's phases A–D are the next work.
+Phase A (low-level bot safety, batched grudge writes, grudge and crowd-control
+limits, PvP-death handling, engagement diagnostics) is implemented offline in
+0.51.0; its owner run is pending.
 
 ## 7. Open questions
 

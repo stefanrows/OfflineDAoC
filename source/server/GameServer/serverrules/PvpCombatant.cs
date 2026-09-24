@@ -124,6 +124,19 @@ namespace DOL.GS.ServerRules
 		public static bool IsSafetyProtected(int level, bool safetyFlag, bool isOldFrontier, int safetyLevel = 10) =>
 			safetyFlag && level < safetyLevel && !isOldFrontier;
 
+		/// <summary>
+		/// Autonomous world bots have no /safety command, so they keep the
+		/// sub-10 protection until an RvR assignment explicitly relinquishes it.
+		/// Player companions and temporary helpers follow their owner instead.
+		/// </summary>
+		public static bool IsSafetyProtected(GameLiving living, int safetyLevel = 10) => living switch
+		{
+			GamePlayer player => IsSafetyProtected(player, safetyLevel),
+			GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false } bot =>
+				IsSafetyProtected(bot.Level, !HasRelinquishedOptionalSafety(bot), IsOldFrontier(bot), safetyLevel),
+			_ => false
+		};
+
 		/// <summary>Uses the native player flag and records the equivalent explicit
 		/// opt-in for autonomous actors, which otherwise never own a /safety flag.</summary>
 		public static void RelinquishOptionalSafety(GameLiving living)

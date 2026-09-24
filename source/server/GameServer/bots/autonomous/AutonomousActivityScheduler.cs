@@ -73,6 +73,19 @@ public static class AutonomousActivityScheduler
         level >= 20 && level < 50 && peerLevels is { Count: > 0 } &&
         peerLevels.All(peer => peer > level + 5);
 
+    /// <summary>
+    /// The "three PvP deaths" wall is for actors who chose PvP: anyone on an RvR
+    /// task, and PvP-leaning types once they can fight (level 10+). Levelers and
+    /// Casuals who are ganked keep their normal schedule.
+    /// </summary>
+    public static bool CountsPvpDeathTowardWall(OfflineWorldBotRecord record, eAutonomousObjectiveKind objective)
+    {
+        if (record == null) return false;
+        if (objective == eAutonomousObjectiveKind.RvR) return true;
+        return record.Level >= 10 && AutonomousPlayerBehavior.TypeOf(record) is not
+            (AutonomousPlayerType.Leveler or AutonomousPlayerType.Casual);
+    }
+
     public static bool RecordPvpDeath(OfflineWorldBotRecord record, DateTime now)
     {
         if (record == null) return false;

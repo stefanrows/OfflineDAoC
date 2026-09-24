@@ -53,6 +53,22 @@ public sealed class UT_AutonomousActivityScheduler
     }
 
     [Test]
+    public void OnlyPvpMindedActorsCountPvpDeathsTowardTheWall()
+    {
+        var leveler = new OfflineWorldBotRecord { PlayerType = "Leveler", Level = 30 };
+        var youngHunter = new OfflineWorldBotRecord { PlayerType = "Hunter", Level = 9 };
+        var hunter = new OfflineWorldBotRecord { PlayerType = "Hunter", Level = 10 };
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousActivityScheduler.CountsPvpDeathTowardWall(leveler, eAutonomousObjectiveKind.SoloPve), Is.False);
+            Assert.That(AutonomousActivityScheduler.CountsPvpDeathTowardWall(leveler, eAutonomousObjectiveKind.RvR), Is.True);
+            Assert.That(AutonomousActivityScheduler.CountsPvpDeathTowardWall(youngHunter, eAutonomousObjectiveKind.GroupPve), Is.False);
+            Assert.That(AutonomousActivityScheduler.CountsPvpDeathTowardWall(hunter, eAutonomousObjectiveKind.SoloPve), Is.True);
+            Assert.That(AutonomousActivityScheduler.CountsPvpDeathTowardWall(null, eAutonomousObjectiveKind.RvR), Is.False);
+        });
+    }
+
+    [Test]
     public void GuildRaidAndGearWallApplyAtAssignmentBoundary()
     {
         var record = new OfflineWorldBotRecord { PlayerType = "Roamer", Level = 50,

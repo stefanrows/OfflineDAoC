@@ -1499,6 +1499,8 @@ namespace DOL.GS
 			if (ad == null)
 				return;
 
+			AutonomousPvpEngagementTracker.ObserveAttack(this, ad);
+
 			HandleCrowdControlOnAttacked(ad);
 
 			if (ad.IsHit && ad.CausesCombat)

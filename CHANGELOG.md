@@ -12,6 +12,57 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-09-24
+
+### Added
+
+- `AUTONOMOUS_PVP_ENGAGE_SUMMARY`: a per-minute count of new PvP fights that
+  involve autonomous bots, grouped by how the first blow was struck and by the
+  attacker's level band and player type.
+- `pvpDeaths` and `pveDeaths` on `AUTONOMOUS_ACTIVITY_SUMMARY`.
+
+### Changed
+
+- Autonomous bots below level 10 have the same implicit PvP safety as a
+  flagged player until an RvR assignment relinquishes it (review phase A1).
+- Guild kill-on-sight lists skip grey killers, fights the victim started, and
+  bot-on-bot kills below level 10. A KOS target is hunted first but still has to
+  pass the level, grey, and party-strength checks.
+- Outside RvR tasks, bot crowd control targets only opponents already in the
+  fight and does not use area mezzes.
+- A PvP death no longer lowers a bot's PvE target difficulty. The
+  three-PvP-deaths wall applies only to RvR tasks and to level 10+ types other
+  than Leveler and Casual.
+
+### Fixed
+
+- Guild kill-on-sight rows are written in batches on a timer thread instead
+  of synchronously during bot death processing, which stalled the reaper
+  tick for 30–80 ms on each bot-on-bot kill.
+
+### Removed
+
+- None.
+
+## [0.50.1] - 2026-09-24
+
+### Added
+
+- `docs/AUTONOMOUS_BOT_M7_REVIEW.md`: first live review of the autonomous bot
+  roadmap on a 1,500-bot fresh launch, with a phased improvement plan.
+
+### Changed
+
+- The autonomous bot roadmap links the review as the first M7 input.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.50.0] - 2026-09-24
 
 ### Added

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using DOL.Database;
 using DOL.Database.Attributes;
 using DOL.GS.ServerRules;
@@ -14,16 +15,29 @@ namespace DOL.GS;
 public static class AutonomousGuildGrudgePolicy
 {
     public static readonly TimeSpan GrudgeDuration = TimeSpan.FromHours(3);
+    public const int MinimumBotVictimLevel = 10;
 
     public static DateTime Expiry(DateTime createdUtc) => createdUtc.ToUniversalTime() + GrudgeDuration;
 
     public static bool IsActive(DateTime expiresUtc, DateTime nowUtc) =>
         expiresUtc > nowUtc;
+
+    /// <summary>
+    /// A guild remembers kills worth a grudge: never a fight its own member
+    /// started, never a killer who cons grey to the victim, and among bots only
+    /// once the victim is past the sub-10 safety level. Human killers count
+    /// at any level (the owner decision D10 includes the player).
+    /// </summary>
+    public static bool ShouldRemember(bool killerIsHuman, int victimLevel, bool killerGreyToVictim,
+        bool victimStartedFight) =>
+        !victimStartedFight && !killerGreyToVictim &&
+        (killerIsHuman || victimLevel >= MinimumBotVictimLevel);
 }
 
 /// <summary>
-/// Keeps recent killers in a guild-scoped, additive save table. Memories are
-/// cached after the first read so target scans never query the database.
+/// Keeps recent killers in a guild-scoped, additive save table. Memories live
+/// in a cache that game threads update immediately; SQLite writes are batched
+/// on a timer thread so a death never waits on the database.
 /// </summary>
 public static class AutonomousGuildGrudgeMemory
 {
@@ -33,14 +47,21 @@ public static class AutonomousGuildGrudgeMemory
     private const string WorldBotTarget = "WorldBot";
     private static readonly object LoadSync = new();
     private static readonly object WriteSync = new();
+    private static readonly object PendingGate = new();
     private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousGuildGrudgeMemory));
     private static readonly ConcurrentDictionary<GrudgeKey, MemoryEntry> Memories = new();
+    // Owned by the loader and then only by the flusher.
+    private static readonly ConcurrentDictionary<GrudgeKey, AutonomousGuildGrudgeRecord> DbRecords = new();
+    // A null entry is a pending delete.
+    private static readonly Dictionary<GrudgeKey, MemoryEntry> Pending = new();
+    private static readonly Timer FlushTimer = new(_ => Flush(), null, 2_000, 2_000);
     private static bool _loaded;
     private static long _nextPruneTick;
+    private static int _flushing;
 
     private readonly record struct GrudgeKey(string GuildId, string TargetKind, string TargetKey);
-    private sealed record MemoryEntry(AutonomousGuildGrudgeRecord Record, DateTime ExpiresUtc,
-        DateTime LastSeenUtc, DateTime LastAnnouncedUtc);
+    private sealed record MemoryEntry(string TargetName, int LastKnownRegionId, string LastKnownZone,
+        DateTime ExpiresUtc, DateTime LastSeenUtc, DateTime LastAnnouncedUtc);
 
     /// <summary>
     /// Records an enemy player-shaped killer after an autonomous world bot dies.
@@ -64,6 +85,10 @@ public static class AutonomousGuildGrudgeMemory
             identity = companion.Owner ?? companion.PlayerGroupLeader;
         if (!TryGetTargetKey(identity, out string targetKind, out string targetKey, out targetName))
             return false;
+        if (!AutonomousGuildGrudgePolicy.ShouldRemember(identity is GamePlayer, victim.Level,
+                victim.IsObjectGreyCon(identity),
+                AutonomousPvpEngagementTracker.VictimStartedFight(victim, killerLiving)))
+            return false;
 
         location = identity.CurrentZone?.Description ?? "the frontier";
         EnsureLoaded();
@@ -73,37 +98,15 @@ public static class AutonomousGuildGrudgeMemory
         nowUtc = nowUtc.ToUniversalTime();
         string guildId = victim.Guild.GuildID;
         GrudgeKey key = new(guildId, targetKind, targetKey);
-        lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
         lock (WriteSync)
         {
             MemoryEntry existing = Memories.GetValueOrDefault(key);
-            AutonomousGuildGrudgeRecord record = existing?.Record ?? new AutonomousGuildGrudgeRecord
-            {
-                GuildId = guildId,
-                TargetKind = targetKind,
-                TargetKey = targetKey,
-            };
             bool announce = existing == null || nowUtc - existing.LastAnnouncedUtc >= TimeSpan.FromMinutes(2);
-            record.TargetName = targetName;
-            record.LastKnownRegionId = identity.CurrentRegionID;
-            record.LastKnownZone = location;
-            record.LastSeenUtc = nowUtc.ToString("O", CultureInfo.InvariantCulture);
-            record.ExpiresUtc = AutonomousGuildGrudgePolicy.Expiry(nowUtc).ToString("O", CultureInfo.InvariantCulture);
-            if (announce)
-                record.LastAnnouncedUtc = nowUtc.ToString("O", CultureInfo.InvariantCulture);
-            record.Dirty = true;
-
-            bool saved = record.IsPersisted
-                ? GameServer.Database.SaveObject(record)
-                : GameServer.Database.AddObject(record);
-            if (!saved)
-            {
-                Log.Warn($"AUTONOMOUS_GUILD_GRUDGE_SAVE_FAILED guild={guildId} targetKind={targetKind}");
-                return false;
-            }
-
-            Memories[key] = new(record, AutonomousGuildGrudgePolicy.Expiry(nowUtc), nowUtc,
+            MemoryEntry entry = new(targetName, identity.CurrentRegionID, location,
+                AutonomousGuildGrudgePolicy.Expiry(nowUtc), nowUtc,
                 announce ? nowUtc : existing.LastAnnouncedUtc);
+            Memories[key] = entry;
+            QueueWrite(key, entry);
             shouldAnnounce = announce;
             TrimGuild(guildId);
         }
@@ -145,11 +148,11 @@ public static class AutonomousGuildGrudgeMemory
             return [];
         PruneIfDue(nowUtc);
 
-        MemoryEntry[] entries = Memories
+        (GrudgeKey Key, MemoryEntry Entry)[] entries = Memories
             .Where(pair => pair.Key.GuildId == hunter.Guild.GuildID &&
                 AutonomousGuildGrudgePolicy.IsActive(pair.Value.ExpiresUtc, nowUtc.ToUniversalTime()))
             .OrderByDescending(pair => pair.Value.LastSeenUtc)
-            .Select(pair => pair.Value)
+            .Select(pair => (pair.Key, pair.Value))
             .Take(MaximumTargetsPerGuild)
             .ToArray();
         if (entries.Length == 0)
@@ -164,10 +167,12 @@ public static class AutonomousGuildGrudgeMemory
             .Where(bot => bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper && bot.DatabaseID > 0)
             .ToDictionary(bot => bot.DatabaseID.ToString(CultureInfo.InvariantCulture), bot => bot, StringComparer.Ordinal);
 
-        return entries.Select(entry => ResolveTarget(entry.Record, players, bots))
+        // A revenge crew still needs a target worth its travel: never one that
+        // cons grey to the hunter.
+        return entries.Select(entry => ResolveTarget(entry.Key, players, bots))
             .Where(target => target != null && reachableRegions.Contains(target.CurrentRegionID))
             .Where(target => target != null && target.IsAlive && target.ObjectState == GameObject.eObjectState.Active &&
-                !target.IsStealthed && !PvpCombatant.IsSafeArea(target) &&
+                !target.IsStealthed && !PvpCombatant.IsSafeArea(target) && !hunter.IsObjectGreyCon(target) &&
                 GameServer.ServerRules.IsAllowedToAttack(hunter, target, true) &&
                 !PvpCombatant.AreAllied(hunter, target) && IsWorthTarget(target, nowUtc))
             .Distinct()
@@ -196,13 +201,106 @@ public static class AutonomousGuildGrudgeMemory
         return false;
     }
 
-    private static GameLiving ResolveTarget(AutonomousGuildGrudgeRecord record,
+    /// <summary>
+    /// Writes queued grudge rows. Runs on a timer thread; shutdown calls it
+    /// once more so the latest memories are durable.
+    /// </summary>
+    public static int Flush()
+    {
+        if (Interlocked.Exchange(ref _flushing, 1) != 0)
+            return 0;
+        try
+        {
+            KeyValuePair<GrudgeKey, MemoryEntry>[] batch;
+            lock (PendingGate)
+            {
+                if (Pending.Count == 0 || GameServer.Database == null)
+                    return 0;
+                batch = Pending.ToArray();
+                Pending.Clear();
+            }
+
+            int written = 0;
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+            {
+                foreach ((GrudgeKey key, MemoryEntry entry) in batch)
+                {
+                    try
+                    {
+                        if (entry == null)
+                        {
+                            if (DbRecords.TryRemove(key, out AutonomousGuildGrudgeRecord deleted) && deleted.IsPersisted)
+                                GameServer.Database.DeleteObject(deleted);
+                            written++;
+                            continue;
+                        }
+
+                        AutonomousGuildGrudgeRecord record = DbRecords.GetOrAdd(key, k => new AutonomousGuildGrudgeRecord
+                        {
+                            GuildId = k.GuildId,
+                            TargetKind = k.TargetKind,
+                            TargetKey = k.TargetKey,
+                        });
+                        record.TargetName = entry.TargetName;
+                        record.LastKnownRegionId = entry.LastKnownRegionId;
+                        record.LastKnownZone = entry.LastKnownZone;
+                        record.LastSeenUtc = entry.LastSeenUtc.ToString("O", CultureInfo.InvariantCulture);
+                        record.ExpiresUtc = entry.ExpiresUtc.ToString("O", CultureInfo.InvariantCulture);
+                        record.LastAnnouncedUtc = entry.LastAnnouncedUtc.ToString("O", CultureInfo.InvariantCulture);
+                        record.Dirty = true;
+                        bool saved = record.IsPersisted
+                            ? GameServer.Database.SaveObject(record)
+                            : GameServer.Database.AddObject(record);
+                        if (!saved)
+                        {
+                            Log.Warn($"AUTONOMOUS_GUILD_GRUDGE_SAVE_FAILED guild={key.GuildId} targetKind={key.TargetKind}");
+                            Requeue(key, entry);
+                            continue;
+                        }
+                        written++;
+                    }
+                    catch (Exception exception)
+                    {
+                        Log.Error("AUTONOMOUS_GUILD_GRUDGE_SAVE_FAILED", exception);
+                        Requeue(key, entry);
+                    }
+                }
+            }
+            return written;
+        }
+        finally
+        {
+            Volatile.Write(ref _flushing, 0);
+        }
+    }
+
+    public static void FlushAll()
+    {
+        for (int attempt = 0; attempt < 100 && Volatile.Read(ref _flushing) != 0; attempt++)
+            Thread.Sleep(10);
+        Flush();
+    }
+
+    private static void QueueWrite(GrudgeKey key, MemoryEntry entry)
+    {
+        lock (PendingGate)
+            Pending[key] = entry;
+    }
+
+    // Keep any newer queued change for the same key.
+    private static void Requeue(GrudgeKey key, MemoryEntry entry)
+    {
+        lock (PendingGate)
+            Pending.TryAdd(key, entry);
+    }
+
+    private static GameLiving ResolveTarget(GrudgeKey key,
         IReadOnlyDictionary<string, GamePlayer> players, IReadOnlyDictionary<string, GameBot> bots)
     {
-        if (record.TargetKind == CharacterTarget)
-            return players.GetValueOrDefault(record.TargetKey);
-        if (record.TargetKind == WorldBotTarget)
-            return bots.GetValueOrDefault(record.TargetKey);
+        if (key.TargetKind == CharacterTarget)
+            return players.GetValueOrDefault(key.TargetKey);
+        if (key.TargetKind == WorldBotTarget)
+            return bots.GetValueOrDefault(key.TargetKey);
         return null;
     }
 
@@ -244,37 +342,31 @@ public static class AutonomousGuildGrudgeMemory
                 IList<AutonomousGuildGrudgeRecord> records;
                 lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                     records = DOLDB<AutonomousGuildGrudgeRecord>.SelectAllObjects();
-                List<AutonomousGuildGrudgeRecord> expired = new();
                 foreach (AutonomousGuildGrudgeRecord record in records)
                 {
+                    GrudgeKey key = new(record.GuildId, record.TargetKind, record.TargetKey);
+                    // A duplicate row for the same key is surplus; delete it.
+                    if (!DbRecords.TryAdd(key, record))
+                    {
+                        lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                            GameServer.Database.DeleteObject(record);
+                        continue;
+                    }
                     if (!DateTime.TryParse(record.ExpiresUtc, CultureInfo.InvariantCulture,
                             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime expires) ||
                         !AutonomousGuildGrudgePolicy.IsActive(expires, now))
                     {
-                        expired.Add(record);
+                        QueueWrite(key, null);
                         continue;
                     }
                     DateTime.TryParse(record.LastSeenUtc, CultureInfo.InvariantCulture,
                         DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime lastSeen);
                     DateTime.TryParse(record.LastAnnouncedUtc, CultureInfo.InvariantCulture,
                         DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime lastAnnounced);
-                    Memories[new(record.GuildId, record.TargetKind, record.TargetKey)] =
-                        new(record, expires, lastSeen, lastAnnounced);
+                    Memories[key] = new(record.TargetName, record.LastKnownRegionId, record.LastKnownZone,
+                        expires, lastSeen, lastAnnounced);
                 }
                 _loaded = true;
-                if (expired.Count > 0)
-                {
-                    try
-                    {
-                        lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
-                            foreach (AutonomousGuildGrudgeRecord record in expired)
-                                GameServer.Database.DeleteObject(record);
-                    }
-                    catch (Exception exception)
-                    {
-                        Log.Error("AUTONOMOUS_GUILD_GRUDGE_EXPIRED_PRUNE_FAILED", exception);
-                    }
-                }
             }
             catch (Exception exception)
             {
@@ -286,8 +378,8 @@ public static class AutonomousGuildGrudgeMemory
     private static void PruneIfDue(DateTime nowUtc)
     {
         long nowTick = GameLoop.GameLoopTime;
-        long next = System.Threading.Interlocked.Read(ref _nextPruneTick);
-        if (nowTick < next || System.Threading.Interlocked.CompareExchange(
+        long next = Interlocked.Read(ref _nextPruneTick);
+        if (nowTick < next || Interlocked.CompareExchange(
                 ref _nextPruneTick, nowTick + PruneIntervalMilliseconds, next) != next)
             return;
         PruneExpired(nowUtc.ToUniversalTime());
@@ -298,18 +390,15 @@ public static class AutonomousGuildGrudgeMemory
         KeyValuePair<GrudgeKey, MemoryEntry>[] expired = Memories
             .Where(pair => !AutonomousGuildGrudgePolicy.IsActive(pair.Value.ExpiresUtc, nowUtc))
             .ToArray();
-        if (expired.Length == 0 || GameServer.Database == null)
+        if (expired.Length == 0)
             return;
-        lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
         lock (WriteSync)
         {
             foreach ((GrudgeKey key, MemoryEntry entry) in expired)
             {
-                if (Memories.TryGetValue(key, out MemoryEntry current) && ReferenceEquals(current, entry))
-                {
-                    GameServer.Database.DeleteObject(entry.Record);
-                    Memories.TryRemove(key, out _);
-                }
+                if (Memories.TryGetValue(key, out MemoryEntry current) && ReferenceEquals(current, entry) &&
+                    Memories.TryRemove(key, out _))
+                    QueueWrite(key, null);
             }
         }
     }
@@ -321,10 +410,10 @@ public static class AutonomousGuildGrudgeMemory
             .OrderByDescending(pair => pair.Value.LastSeenUtc)
             .Skip(MaximumTargetsPerGuild)
             .ToArray();
-        foreach ((GrudgeKey key, MemoryEntry entry) in excess)
+        foreach ((GrudgeKey key, _) in excess)
         {
-            GameServer.Database.DeleteObject(entry.Record);
-            Memories.TryRemove(key, out _);
+            if (Memories.TryRemove(key, out _))
+                QueueWrite(key, null);
         }
     }
 }

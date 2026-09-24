@@ -77,12 +77,14 @@ public static class AutonomousPvpOpportunityPolicy
         HashSet<GameLiving> grudges = visibleCandidates
             .Where(target => AutonomousGuildGrudgeMemory.IsActiveTarget(actor, target, nowUtc))
             .ToHashSet();
+        // A grudge only moves a target to the front of the queue. It still has
+        // to pass the level window, grey and "stronger party" checks.
         return visibleCandidates
-            .Where(target => retaliation || grudges.Contains(target) ||
+            .Where(target => retaliation ||
                 AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) != AutonomousPlayerType.Hunter ||
                 (PvpCombatant.Resolve(target)?.EffectiveLevel ?? target.EffectiveLevel) <= actor.Level + PreferredLevelDifference)
-            .Where(target => retaliation || grudges.Contains(target) || AutonomousRvrTargetPolicy.ShouldEngageGrey(actor, target))
-            .Where(target => retaliation || grudges.Contains(target) || !Stronger(target))
+            .Where(target => retaliation || AutonomousRvrTargetPolicy.ShouldEngageGrey(actor, target))
+            .Where(target => retaliation || !Stronger(target))
             .OrderByDescending(target => grudges.Contains(target))
             .ThenBy(target => LevelsPreferred(actor.Level, PvpCombatant.Resolve(target)?.Level ?? target.EffectiveLevel) ? 0 : 1)
             .ThenBy(actor.GetDistanceTo)

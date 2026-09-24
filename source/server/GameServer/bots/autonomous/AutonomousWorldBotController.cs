@@ -1718,6 +1718,7 @@ namespace DOL.GS
             if (opponent == null)
                 return false;
 
+            AutonomousPvpEngagementTracker.Tag(bot, AutonomousPvpEngagementTracker.SharedDungeon);
             bot.StopMovingOnPath();
             bot.StopMoving();
             bot.TargetObject = opponent;
@@ -1761,6 +1762,9 @@ namespace DOL.GS
             if (opponent == null)
                 return false;
 
+            AutonomousPvpEngagementTracker.Tag(bot,
+                AutonomousGuildGrudgeMemory.IsActiveTarget(bot, opponent, DateTime.UtcNow)
+                    ? AutonomousPvpEngagementTracker.Grudge : AutonomousPvpEngagementTracker.Opportunity);
             bot.StopMovingOnPath();
             bot.StopMoving();
             bot.TargetObject = opponent;
@@ -2866,6 +2870,29 @@ namespace DOL.GS
                 _lastEngagedCon = null;
                 SetStatus(bot, "Regrouping after defeat", _groupDirective.SharedGoal,
                     "The party will regroup before another pull; its original task deadline keeps running", bot.PersistentRecord?.TargetName ?? string.Empty, forceSave: true);
+                return;
+            }
+
+            // A player-shaped killer says nothing about the monster's difficulty.
+            // Replan without lowering the con ceiling or excluding the camp.
+            if (bot.LastDeathWasPvp)
+            {
+                _observedDeathCount = deathCount;
+                _lastEngagedCon = null;
+                string pvpFailedTarget = _camp?.MonsterName ?? bot.PersistentRecord?.TargetName ?? "the previous target";
+                AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Defeated, "PvP defeat; PvE difficulty unchanged");
+                _camp = null;
+                _campStartedTick = 0;
+                _emptyCampSinceTick = 0;
+                _patrolDestination = null;
+                _nextPlanTick = GameLoop.GameLoopTime + 2_500 + bot.ObjectID % 1_500;
+                if (bot.PersistentRecord != null)
+                    bot.PersistentRecord.CurrentCampId = string.Empty;
+                Log.Info($"AUTONOMOUS_DEATH_PVP_REPLAN bot={bot.Name} id={bot.DatabaseID} " +
+                         $"level={bot.Level} deaths={deathCount} max_con={MaximumTargetCon(groupSize)} " +
+                         $"region={bot.CurrentRegionID}");
+                SetStatus(bot, "Recovering from defeat", "Return to a level-appropriate XP camp",
+                    "A PvP defeat does not lower the PvE target difficulty", pvpFailedTarget, forceSave: true);
                 return;
             }
 

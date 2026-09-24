@@ -88,8 +88,18 @@ and verification history of the full-PvP conversion.
 - PvE parties can retaliate but do not start unrelated open-world fights.
 - New fights prefer opponents within five levels, preserve grey-target restraint,
   and avoid visibly stronger parties. Retaliation is still legal.
-- PvP assignments explicitly relinquish optional low-level safety for autonomous
-  actors while preserving safe areas and release immunity.
+- Autonomous bots below level 10 carry the same implicit `/safety` protection
+  as a flagged player: they cannot attack or be attacked by other characters.
+  Only an RvR assignment relinquishes it, and safe areas and release immunity
+  still apply.
+- Guild kill-on-sight lists record human killers and kills of level 10+
+  members, but never a killer who is grey to the victim or a fight the victim
+  started. A KOS target moves up the hunt order but still has to pass the level,
+  grey, and party-strength checks.
+- Outside RvR tasks, bot crowd control targets only opponents already in the
+  fight and skips area mezzes. Being ganked does not lower a bot's PvE target
+  difficulty, and only RvR tasks or level 10+ PvP-minded types hit the
+  three-PvP-deaths wall.
 - Solo PvP hunters also engage local legal rivals and change hunting grounds
   instead of repeatedly selecting the same spot. Party strength counts nearby
   living members rather than guildmates elsewhere in the region.
