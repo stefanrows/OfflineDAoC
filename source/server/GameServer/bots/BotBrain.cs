@@ -597,6 +597,7 @@ namespace DOL.AI.Brain
         private long _nextDeployablePetTick;
         private long _nextCombatProgressTick;
         private long _nextMaintenanceBuffTick;
+        private long _nextCompanionProtectionTick;
         private long _nextSongTwistTick;
         private long _lastPerformerFollowTick = long.MinValue;
         private long _nextInstrumentKitCheck;
@@ -1180,6 +1181,15 @@ namespace DOL.AI.Brain
             // Regroup before PvP scans, pull coordination, pet upkeep and casts
             // can claim another turn. The distance leash applies in every mode.
             if (RegroupWithLeader()) return;
+
+            if (BotBody?.IsPersistentPlayerCompanion == true || BotBody?.IsTemporaryGroupHelper == true)
+            {
+                if (GameLoop.GameLoopTime >= _nextCompanionProtectionTick)
+                {
+                    _nextCompanionProtectionTick = GameLoop.GameLoopTime + 5_000;
+                    CompanionProtection.Maintain(BotBody);
+                }
+            }
 
             CompanionPvpEngagement.Observe(BotBody);
 
