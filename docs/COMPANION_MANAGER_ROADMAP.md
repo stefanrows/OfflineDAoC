@@ -29,9 +29,10 @@ milestone at a time, after its open decisions are resolved.
 
 ## M1 - Build selection with automatic training
 
-**Goal:** choose a named build per companion, such as Healer "Pacification
-(main healer)" or "Augmentation (buffer)", or Spiritmaster "Darkness (bomb)",
-"Suppression", or "Summoning (pet)". In automatic mode the companion trains
+**Goal:** choose a named build per companion, such as Healer "Mending
+(healer)", "Tri-spec", "Augmentation (buffer)", or "Pacification (crowd
+control)", or Spiritmaster "Darkness (bomb)", "Suppression", or "Summoning
+(pet)". In automatic mode the companion trains
 along that build at every level. Manual training and respec remain available.
 
 **Today:** `CompanionBuildPlanCatalog` holds one validated plan per class (33
@@ -57,15 +58,45 @@ variant.
 4. Tests: every variant simulated through level 50, plus save/reload and
    switching between builds.
 
-**Decisions needed before M1:**
+**Owner decisions (2026-09-24):**
 
-- The builds offered per class (the owner's picks from the research).
-- Switching builds after points are spent: apply only to future points, require
-  a respec (the existing full-skill respec rule), or offer both with a warning.
-- Whether choosing a build also sets the tactical role (for example, a
-  Pacification Healer gets the `healer` role) or leaves the role alone.
-- The default build for new recruits: the class default, the one matching the
-  recruit's personality or role, or ask on recruitment.
+1. **Builds offered:** the most popular builds for each class at the 1.65
+   patch level (Classic + SI). The existing research covers only one build per
+   class, noting a few branches, so step 1 above is new research. It must follow
+   the same rules: cite era sources, label project recommendations, and keep a
+   class manual-only where evidence is missing.
+2. **Switching builds:** automatic. Choosing a new build resets the companion's
+   specializations and immediately retrains them along the new build to their
+   current level. The window keeps a separate **[Respecialize]** action for
+   manual rebuilding.
+3. **Build sets the role:** yes. The owner's healer example defines the
+   mapping. A build's primary job is shown and applied; a hybrid build can fill
+   several roles.
+
+   | Healer build | Role |
+   | --- | --- |
+   | Mending ("healing spec") | Healer |
+   | Tri-spec | Healer, also Buffer and Crowd control |
+   | Augmentation | Buffer |
+   | Pacification | Crowd control (not a healer) |
+
+   Today's roles are Tank, Healer, Buffer, and Attacker. A **Crowd control**
+   role must be added, and its AI behaviour (mezz and root choice, target
+   selection, breaking rules) checked against the existing bot crowd-control
+   code before builds can map to it.
+4. **Build chosen at recruitment:** required. Recruit flow: select a story
+   companion or class, choose one of its builds, then recruit. An authored
+   companion's written preferred build is preselected. The command fallback
+   becomes `/companions recruit <class> [build]`.
+
+**Still open:**
+
+- Whether an automatic build switch uses the owner's full-skill respec
+  eligibility (the current Stage 3 rule for `/companions respec`) or is free for
+  companions. Recommendation: free, since it cannot change the player's own
+  character.
+- Whether a build switch still needs a class trainer, as manual training does
+  today. Recommendation: no, like automatic level-up training.
 
 ## M2 - Behaviour controls in the window
 

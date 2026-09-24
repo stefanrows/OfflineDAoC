@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.32.2] - 2026-09-24
+
+### Added
+
+- None.
+
+### Changed
+
+- Recorded the owner's build-selection decisions in the Companion Manager
+  roadmap: research the popular 1.65 builds per class, switch builds with an
+  automatic respec and retrain, let builds set roles (including a new crowd
+  control role), and choose a build when recruiting.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.32.1] - 2026-09-24
 
 ### Added
