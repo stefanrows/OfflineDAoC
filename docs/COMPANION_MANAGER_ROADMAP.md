@@ -1,6 +1,7 @@
 # Companion Manager roadmap
 
-Status: **proposed; no milestone below is implemented or authorized yet.**
+Status: **M0 remainder implemented offline in 0.33.0; owner real-client check
+pending. M1–M3 are not implemented yet.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -21,15 +22,35 @@ milestone at a time, after its open decisions are resolved.
       companion roadmap.
 
 The owner marked both window acceptance checks complete on 2026-09-24. Detailed
-observations and the installed build/version were not supplied. The raid
-click-to-target fix below remains separate and open.
-- [ ] Fix raid click-to-target. The raid XML uses `RaidMemberNN` names, which
-      the client's `OnClickEvent` parser rejects, exactly like the manager's
-      first build. Use numeric IDs `1536`–`1615` (`0x600` + member) in the raid
-      builders and ship them as a separate hash-guarded client patch.
-- [ ] Cosmetic: the companion bag reuses the client's house-vault window, so its
-      title reads "House Vault 1". Check whether the server can set that title.
-      Hide the detail `[Up]`/`[Down]` links when nothing scrolls.
+observations and the installed build/version were not supplied.
+
+The three remaining M0 items were implemented on 2026-09-24 (0.33.0). They
+passed offline checks only; the owner check below closes them.
+
+- [x] Fix raid click-to-target (offline). The raid XML used `RaidMemberNN`
+      names, which the client's `OnClickEvent` parser rejects. Both raid
+      builders now write `1536`–`1615` (`0x600` + member). `game.dll` needs no
+      change: the raid's event handler already selects member *n* for event
+      `0x600 + n` by calling the client routine that the server's own
+      target packet uses (`0x41AB40`, mode 0), including its stock messages
+      for a member who cannot be targeted. The fix ships as its own
+      hash-guarded XML patch:
+      `build_raid_click_fix_client.py`, `test_raid_click_fix_client.py`, and
+      `tools/dev/Install-RaidClickFix.ps1`. See the
+      [integration handoff](COMPANION_MANAGER_INTEGRATION.md#raid-click-to-target-fix-0330).
+- [x] Companion bag title: checked. The client formats the caption itself
+      from the fixed string `House Vault %u`. The server sends only the number
+      (`GameVault.Index + 1`), so it cannot change the words. Renaming it needs a
+      native caption hook; that is not planned unless the owner asks for it.
+- [x] Hide the detail `[Up]`/`[Down]` links when nothing scrolls (offline).
+      They are now server-filled labels 130 and 131, shown only in the
+      direction that can scroll. This needs the rebuilt 0.33.0 manager
+      `game.dll`. A 0.32.1 client ignores the new labels and keeps its
+      static links, so the new server works with either client.
+- [ ] Owner: install both client patches, then check that clicking a raid
+      member targets them in `/raid 40` and `/raid 80`, and that the detail
+      links appear only when a companion's Overview or Gear page is long
+      enough to scroll.
 
 ## M1 - Build selection with automatic training
 

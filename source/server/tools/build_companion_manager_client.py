@@ -136,7 +136,12 @@ LABEL_SUBHEADER = LABEL_HEADER_BASE + 3
 LABEL_DETAIL_BASE = LABEL_SUBHEADER + 1  # +2j text, +2j+1 link
 LABEL_DETAIL_INDICATOR = LABEL_DETAIL_BASE + 2 * DETAIL_LINES
 LABEL_ACTION_BASE = LABEL_DETAIL_INDICATOR + 1  # +2k enabled, +2k+1 disabled
-LABEL_COUNT = LABEL_ACTION_BASE + 2 * ACTIONS
+# Appended in 0.33.0 so the server can hide the detail scroll links; the 0.32.1
+# client ignores these indexes and keeps its static [Up]/[Down] text.
+LABEL_DETAIL_UP = LABEL_ACTION_BASE + 2 * ACTIONS
+LABEL_DETAIL_DOWN = LABEL_DETAIL_UP + 1
+LABEL_COUNT = LABEL_DETAIL_DOWN + 1
+SCROLL_LINK_LABELS = {"DetailUp": LABEL_DETAIL_UP, "DetailDown": LABEL_DETAIL_DOWN}
 
 CONTROL_ROW_BASE = 0x00
 CONTROL_DETAIL_BASE = 0x10
@@ -155,6 +160,7 @@ def layout_constants():
         "LabelListIndicator": LABEL_LIST_INDICATOR, "LabelHeaderBase": LABEL_HEADER_BASE,
         "LabelSubheader": LABEL_SUBHEADER, "LabelDetailBase": LABEL_DETAIL_BASE,
         "LabelDetailIndicator": LABEL_DETAIL_INDICATOR, "LabelActionBase": LABEL_ACTION_BASE,
+        "LabelDetailUp": LABEL_DETAIL_UP, "LabelDetailDown": LABEL_DETAIL_DOWN,
         "LabelCount": LABEL_COUNT, "ControlRowBase": CONTROL_ROW_BASE,
         "ControlDetailBase": CONTROL_DETAIL_BASE, "ControlActionBase": CONTROL_ACTION_BASE,
         "ControlLimit": CONTROL_LIMIT, "ControlSearch": SEARCH_CONTROL, "ControlReady": READY_CONTROL,
@@ -502,8 +508,11 @@ def window():
         x, y = 312 + 106 * (action % 3), 352 + 18 * (action // 3)
         _label(panel, x, y, WIDTH_ACTION, GOLD, LABEL_ACTION_BASE + 2 * action, characters=32)
         _label(panel, x, y, WIDTH_ACTION, DISABLED, LABEL_ACTION_BASE + 2 * action + 1, characters=32)
-    for _name, text, _control, x, y, width in STATIC_LINKS:
-        _label(panel, x, y, width, LINK, text=text, characters=16)
+    for name, text, _control, x, y, width in STATIC_LINKS:
+        if name in SCROLL_LINK_LABELS:
+            _label(panel, x, y, width, LINK, SCROLL_LINK_LABELS[name], characters=16)
+        else:
+            _label(panel, x, y, width, LINK, text=text, characters=16)
 
     # Click areas after every label, matching the raid's z-order.
     for name, control, x, y, width in TOGGLES:

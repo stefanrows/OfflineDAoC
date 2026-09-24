@@ -280,6 +280,8 @@ namespace DOL.GS.Commands
             view.DetailIndicator = lines.Count > DetailLines
                 ? $"Lines {session.DetailOffset + 1}-{Math.Min(lines.Count, session.DetailOffset + DetailLines)} of {lines.Count}"
                 : string.Empty;
+            view.DetailCanScrollUp = session.DetailOffset > 0;
+            view.DetailCanScrollDown = session.DetailOffset + DetailLines < lines.Count;
             view.ListIndicator = filtered.Count == 0
                 ? (rosterTab && all.Count == 0 ? "Roster empty" : "No matches")
                 : $"{list.Offset + 1}-{list.Offset + visible.Count} of {filtered.Count}";

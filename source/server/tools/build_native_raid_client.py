@@ -211,7 +211,9 @@ def window():
         button.find('Position/X').text=label.find('Position/X').text
         button.find('Position/Y').text=label.find('Position/Y').text
         button.find('Width').text='112';button.find('Height').text='26'
-        button.find('OnClickEvent').text=f'RaidMember{i:02}'
+        # The stock OnClickEvent parser (0x4EA06F) rejects custom names such as
+        # RaidMember00 but atoi()s leading-digit values: 0x600+i reaches eventHandler.
+        button.find('OnClickEvent').text=str(0x600+i)
         button.find('Label').text=f'Raid member {i+1}'
         panel.append(button)
     ET.indent(root)

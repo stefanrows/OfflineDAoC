@@ -12,6 +12,40 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-09-24
+
+### Added
+
+- A separate, hash-guarded raid click-to-target client patch: a stage builder
+  (`build_raid_click_fix_client.py`), an offline emulation test, and
+  `tools/dev/Install-RaidClickFix.ps1` (dry run by default, backup, rollback,
+  restore). It changes only the four raid window XML files and never
+  `game.dll`.
+- Companion Manager labels 130 and 131 for the detail `[Up]` and `[Down]`
+  links, in a rebuilt manager `game.dll`.
+
+### Changed
+
+- The detail `[Up]` and `[Down]` links in the Companion Manager now appear
+  only in the direction that can scroll. A 0.32.1 client ignores the new labels
+  and keeps its static links.
+- Recorded that the companion bag's "House Vault 1" caption comes from a fixed
+  client string; the server can change only the number.
+- Updated the Companion Manager roadmap and integration handoff. The M0 items
+  passed offline checks and wait for the owner's real-client check.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- Clicking a member in the 40- or 80-person raid window did nothing. The raid
+  XML used event names that the client's parser ignores; both raid builders
+  and the new patch now use the numeric IDs `1536`–`1615`, which the existing
+  raid handler turns into target selection.
+
+### Removed
+
+- None.
+
 ## [0.32.4] - 2026-09-24
 
 ### Added

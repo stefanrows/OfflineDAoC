@@ -78,6 +78,7 @@ uc.mem_write(body+8,struct.pack('<I',0x600));uc.emu_start(report['blocks']['even
 assert len(selected)==40
 root=ET.fromstring(build.window())
 assert len(root.findall('.//InvisibleButtonDef'))==40
+assert [b.find('OnClickEvent').text for b in root.findall('.//InvisibleButtonDef')]==[str(0x600+i) for i in range(40)]
 assert len(root.findall('.//StatusBarDef'))==80
 print('PASS: 120 independent native adapters; all 40 live names/health/power/IDs.')
 print('PASS: bounded packets reject short/version/index/health errors.')

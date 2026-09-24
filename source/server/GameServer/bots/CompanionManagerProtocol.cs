@@ -36,7 +36,9 @@ namespace DOL.GS
         public const int LabelDetailBase = 95;
         public const int LabelDetailIndicator = 117;
         public const int LabelActionBase = 118;
-        public const int LabelCount = 130;
+        public const int LabelDetailUp = 130;
+        public const int LabelDetailDown = 131;
+        public const int LabelCount = 132;
 
         public const int ControlRowBase = 0x00;
         public const int ControlDetailBase = 0x10;

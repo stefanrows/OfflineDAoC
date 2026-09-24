@@ -184,6 +184,8 @@ namespace DOL.GS.Commands
         public eRealm HeaderRealm { get; set; } = eRealm.Albion;
         public string Subheader { get; set; } = string.Empty;
         public string DetailIndicator { get; set; } = string.Empty;
+        public bool DetailCanScrollUp { get; set; }
+        public bool DetailCanScrollDown { get; set; }
         public (string Text, bool Active)[] Toggles { get; } = new (string, bool)[ToggleCount];
         public (bool Selected, eRealm Realm, string Name, string Info)[] Rows { get; } =
             new (bool, eRealm, string, string)[CompanionManagerProtocol.Rows];
@@ -220,6 +222,9 @@ namespace DOL.GS.Commands
                 labels[LabelDetailBase + 2 * line + (link ? 1 : 0)] = Fit(Sanitize(text), WidthDetail);
             }
             labels[LabelDetailIndicator] = DetailIndicator;
+            // Clients before 0.33.0 ignore these two indexes and keep static [Up]/[Down] text.
+            labels[LabelDetailUp] = DetailCanScrollUp ? "[Up]" : string.Empty;
+            labels[LabelDetailDown] = DetailCanScrollDown ? "[Down]" : string.Empty;
             for (int action = 0; action < CompanionManagerProtocol.Actions; action++)
             {
                 (string text, bool enabled) = ActionLabels[action];

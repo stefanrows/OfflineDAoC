@@ -7,6 +7,14 @@ companion bag opened beside it. On 2026-09-24 the owner also marked gate step 4
 Detailed observations were not supplied. Next steps are in the
 [Companion Manager roadmap](COMPANION_MANAGER_ROADMAP.md).
 
+0.33.0 (offline only, owner check pending) rebuilds the manager `game.dll` with
+two extra labels for the detail scroll links and adds a separate raid
+click-to-target XML patch. See [Packaging](#packaging) and
+[Raid click-to-target fix](#raid-click-to-target-fix-0330). Offline results
+(2026-09-24): the manager emulation test passed with 132 adapters, the
+unchanged old builder still reproduced the installed 0.32.1 `game.dll`, and
+the companion, raid, and command server tests passed 318/318.
+
 ## Real-client result, 2026-09-24 (0.32.0)
 
 The window opened and showed server text, so labels, the token, and show work
@@ -18,8 +26,9 @@ confirmed by emulating the client's own code): the `ButtonDef` and
 (no event) unless the text starts with a digit, which it converts with `atoi`.
 Names such as `CompMgr30` therefore never fired. This also explains the probe's
 silent dedicated-action click. The raid's `RaidMemberNN` click areas are
-affected the same way, so raid click-to-target most likely never fired either;
-that is not changed here.
+affected the same way, so raid click-to-target most likely never fired either.
+0.33.0 fixes that separately; see
+[Raid click-to-target fix](#raid-click-to-target-fix-0330).
 
 0.32.1 writes decimal event IDs (`0x700 + control`, for example `1840`) into
 `OnClickEvent` and no longer patches `0x4E99E6`. The raid's bytes there stay as
@@ -123,9 +132,9 @@ raid handler unchanged.
 
 Server to client uses fixed 128-byte DebugMode bodies: byte 0 is `0`, marker
 `0x43`, version `2`, then operation, label index, and NUL-terminated ASCII text
-from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 130
-label adapters, `2` show (the client then sends control `be`, "ready"), `3`
-hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
+from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 132
+label adapters (130 before 0.33.0; the 0.32.1 client ignores indexes 130 and
+131), `2` show (the client then sends control `be`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
 short bodies, bad terminators, unknown operations, and out-of-range indexes are
 ignored. Raid marker `0x52` and ordinary DebugMode packets pass through. An
 unpatched client sees only a DebugMode packet whose flag byte is `0`, as with
@@ -184,8 +193,11 @@ The builders need `pefile`, `keystone-engine`, and `unicorn` (the emulation test
 only). The builder refuses a client that already has the manager installed;
 restore it first with the installer's `-RestoreBackup`, then rebuild. The patch is deterministic: from the verified client it produces
 `game.dll` SHA-256
-`3b6274dc385b90bf892f27d96c9e56cb457e1e94cbf45b5892d462a9e4d70890` (0.32.1; the
-broken 0.32.0 build was `c36faf71…acf2ee`).
+`88530c0093b285fd38fd6759e464373baa65ebb20473a949bc3b79fccbb41fd3` (0.33.0,
+with `custom8_window.xml`
+`27d85bd6d192e574bff96d6898674c201863db36f5d4f67a7ab23fbf0f90bc64`). Earlier
+builds: 0.32.1 `3b6274dc…4d70890`, broken 0.32.0 `c36faf71…acf2ee`.
+
 `tools/dev/Install-CompanionManager.ps1 -InstallRoot <root> -Stage <stage>` is a
 dry run by default. With `-Apply` it checks every input and output hash,
 requires the game, server, and launcher to be closed (it stops nothing), backs up
@@ -193,6 +205,54 @@ requires the game, server, and launcher to be closed (it stops nothing), backs u
 `-RestoreBackup <backup>` restores them and removes both `custom8_window.xml`
 files. Saves and server files are untouched; `tools/dev/deploy.sh` still handles
 the server and launcher.
+
+To upgrade an installed 0.32.1 manager, close the game, server, and launcher,
+then run the installer with `-RestoreBackup` on its 0.32.1 backup (it restores
+the raid `game.dll` and `uimain.xml` and removes both `custom8_window.xml`),
+and install the 0.33.0 stage with `-Apply`. The server works with either
+client: a 0.32.1 client shows static `[Up]`/`[Down]` links.
+
+## Raid click-to-target fix (0.33.0)
+
+The raid windows (`Custom9` for 40, `Custom10` for 80) laid an
+`InvisibleButtonDef` over each member row with `OnClickEvent` `RaidMember00`
+to `RaidMember79`. The stock parser `0x4EA06F` returns `-1` for those names, so
+the rows never fired. The raid's handler at `0x4E04DE` already handles event
+`0x600 + n`: if row *n* is visible and has an object ID, it calls `0x41AB40`,
+the routine the client's own server-target packet handler calls (mode 0, with
+the stock messages "You can't assist with that target!" and "That target is
+not visible to you!"). The Companion Manager
+handler passes any ID outside `0x700`–`0x7BF` on to it unchanged.
+
+The fix changes only the XML: each value becomes the decimal ID `1536`–`1615`.
+Both raid builders now write these values, and `build_native_raid80_client.window()`
+reproduces the staged files byte for byte. `game.dll` is checked, never
+changed.
+
+```bash
+# Read-only input; writes a fresh stage and manifest.
+python source/server/tools/build_raid_click_fix_client.py \
+  --client /mnt/d/Games/OfflineDAoC/runtime/client-opendaoc/app --output <new stage dir>
+python source/server/tools/test_raid_click_fix_client.py \
+  --client /mnt/d/Games/OfflineDAoC/runtime/client-opendaoc/app --stage <stage dir>
+```
+
+The stage builder accepts the raid `game.dll` (`67dcf68a…`) or the raid client
+with manager 0.32.1 (`3b6274dc…`) or 0.33.0 (`88530c00…`). It also requires
+the installed raid XML hashes (`custom9` `6ff8e226…`, `custom10` `aca82bf6…`).
+The staged windows are `custom9` `3f5f037d…` and `custom10` `2bd9e89b…`. The
+test runs the client's own parser on every value and its event chain from
+`0x4E04DE` for all 80 rows at both capacities, including empty rows, hidden
+rows, and a closed window. `tools/dev/Install-RaidClickFix.ps1 -InstallRoot <root> -Stage <stage>`
+is a dry run by default. With `-Apply` it checks every hash, requires the game,
+server, and launcher to be closed, backs up the four XML files, and rolls back
+on failure. `-RestoreBackup <backup>` restores them.
+
+Offline results (2026-09-24): the test passed against the installed 0.32.1
+client, the raid-only baseline, and the 0.33.0 manager build. The installer's
+dry run accepted the real installation; apply, refusal of a second install, and
+restore were exercised on a scratch copy. None of this is real-client
+acceptance.
 
 ## Remaining gate: one combined real-client check
 

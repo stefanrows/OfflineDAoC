@@ -81,6 +81,7 @@ import build_native_raid_client as old
 assert build.window(40)==old.window(), '40-person layout changed'
 root=ET.fromstring(build.window(80))
 assert len(root.findall('.//InvisibleButtonDef'))==80
+assert sorted(int(b.find('OnClickEvent').text) for b in root.findall('.//InvisibleButtonDef'))==list(range(0x600,0x650))
 assert len(root.findall('.//StatusBarDef'))==160
 assert root.find('.//Height').text=='466'
 for i in range(80):

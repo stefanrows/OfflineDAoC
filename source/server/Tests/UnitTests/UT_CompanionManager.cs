@@ -231,6 +231,28 @@ public sealed class UT_CompanionManager
             Assert.That(labels[LabelActionBase + 2], Is.Empty);
             Assert.That(labels.All(label => label.Length <= MaximumTextLength), Is.True);
             Assert.That(TextWidth(labels[LabelRowBase + 4]), Is.LessThanOrEqualTo(WidthRowInfo));
+            Assert.That(labels[LabelDetailUp], Is.Empty, "Nothing to scroll hides [Up]");
+            Assert.That(labels[LabelDetailDown], Is.Empty, "Nothing to scroll hides [Down]");
+        });
+    }
+
+    [Test]
+    public void DetailScrollLinksAppearOnlyInTheDirectionThatScrolls()
+    {
+        string[] Links(bool up, bool down)
+        {
+            string[] labels = new CompanionManagerView { DetailCanScrollUp = up, DetailCanScrollDown = down }.ToLabels();
+            return new[] { labels[LabelDetailUp], labels[LabelDetailDown] };
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Links(false, true), Is.EqualTo(new[] { "", "[Down]" }), "Top of a long page");
+            Assert.That(Links(true, true), Is.EqualTo(new[] { "[Up]", "[Down]" }), "Middle of a long page");
+            Assert.That(Links(true, false), Is.EqualTo(new[] { "[Up]", "" }), "Bottom of a long page");
+            Assert.That(LabelDetailUp, Is.GreaterThan(LabelActionBase + 2 * Actions - 1),
+                "Appended after the 0.32.1 labels so older clients ignore them");
+            Assert.That(LabelCount, Is.EqualTo(LabelDetailDown + 1));
         });
     }
 
