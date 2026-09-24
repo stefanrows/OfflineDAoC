@@ -59,8 +59,8 @@ not included. Each installation creates its own local account and saves.
 - `docs/DEVELOPMENT.md`: build, safety, portability, and dependency notes.
 - `docs/CAMLANN.md`: the tiered Camlann full-PvP conversion plan and current
   implementation status. Tiers 0–8 and the Tier 9 product-surface checkpoint
-  are implemented on the development branch; the real-client gate is still
-  pending. Do not deploy it over a running install without an explicit request.
+  are implemented in this fork; the real-client gate is still pending. Do not
+  deploy over a running install without an explicit request.
 
 No gameplay features have intentionally been removed for sharing. However, the
 original game executable is a binary dependency: the material found here includes
