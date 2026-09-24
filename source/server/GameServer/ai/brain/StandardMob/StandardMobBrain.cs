@@ -787,8 +787,8 @@ namespace DOL.AI.Brain
 
             // Treat controlled pets as their owner for group checks, and allow
             // companions in a player-led group to pull for the group as well.
-            if (puller is not GameBot && puller is GameNPC pet && pet.Brain is IControlledBrain brain)
-                groupPuller = brain.GetLivingOwner();
+            if (puller is not GameBot && puller is GameNPC pet && pet.Brain is IControlledBrain controlledPetBrain)
+                groupPuller = controlledPetBrain.GetLivingOwner();
 
             GamePlayer playerPuller;
             if (groupPuller is GamePlayer player)
