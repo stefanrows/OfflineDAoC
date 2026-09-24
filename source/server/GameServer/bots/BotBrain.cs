@@ -3975,6 +3975,39 @@ namespace DOL.AI.Brain
             return target;
         }
 
+        private static bool HasCurrentOrBetterBuffEffect(GameLiving target, eEffect effectType, Spell requestedSpell)
+        {
+            List<ECSGameEffect> existingEffects = target.effectListComponent.GetEffects(effectType);
+            bool foundSameBuffFamily = false;
+            foreach (ECSGameEffect existingEffect in existingEffects)
+            {
+                if (existingEffect is not ECSGameSpellEffect existingSpellEffect ||
+                    existingSpellEffect.SpellHandler?.Spell is not Spell existingSpell)
+                    continue;
+
+                bool sameBuffFamily = requestedSpell.EffectGroup != 0 || existingSpell.EffectGroup != 0
+                    ? requestedSpell.EffectGroup == existingSpell.EffectGroup
+                    : EffectHelper.GetEffectFromSpell(existingSpell) == effectType;
+                if (!sameBuffFamily)
+                    continue;
+
+                foundSameBuffFamily = true;
+                double existingValue = existingSpell.Value * existingSpellEffect.Effectiveness;
+                double requestedValue = requestedSpell.Value;
+                double existingDamage = existingSpell.Damage * existingSpellEffect.Effectiveness;
+                double requestedDamage = requestedSpell.Damage;
+                bool atLeastAsStrong = existingValue >= requestedValue && existingDamage >= requestedDamage;
+                bool sameStrength = existingValue == requestedValue && existingDamage == requestedDamage;
+                if (atLeastAsStrong && (!sameStrength || existingSpell.Level >= requestedSpell.Level))
+                    return true;
+            }
+
+            // A matching lower rank does not block the upgrade, even if another
+            // effect sharing this effect category is also present. If the target
+            // has no matching spell family, preserve the existing category check.
+            return !foundSameBuffFamily && existingEffects.Count > 0;
+        }
+
         public bool LivingHasEffect(GameLiving target, Spell spell)
         {
             if (target == null)
@@ -4021,7 +4054,10 @@ namespace DOL.AI.Brain
             if (pulseEffect != null)
                 return true;
 
-            return EffectListService.GetEffectOnTarget(target, spellEffect) != null || HasImmunityEffect(EffectHelper.GetImmunityEffectFromSpell(spell)) || HasImmunityEffect(EffectHelper.GetNpcImmunityEffectFromSpell(spell));
+            bool hasCurrentBuff = IsMaintainableClassBuff(spell)
+                ? HasCurrentOrBetterBuffEffect(target, spellEffect, spell)
+                : EffectListService.GetEffectOnTarget(target, spellEffect) != null;
+            return hasCurrentBuff || HasImmunityEffect(EffectHelper.GetImmunityEffectFromSpell(spell)) || HasImmunityEffect(EffectHelper.GetNpcImmunityEffectFromSpell(spell));
 
             bool HasImmunityEffect(eEffect immunityEffect)
             {
