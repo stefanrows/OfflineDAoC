@@ -256,6 +256,31 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
+    public void CrowdControlRoleIsSavedOnlyForAClassWithAMezz()
+    {
+        Owner owner = NewOwner("cc-role-owner", eRealm.Midgard);
+        PlayerCompanionRecord healer = NewRecord(owner.ObjectId, "cc-healer", "Mezz Healer", eCharacterClass.Healer);
+        PlayerCompanionRecord shaman = NewRecord(owner.ObjectId, "cc-shaman", "Plain Shaman", eCharacterClass.Shaman);
+        shaman.TacticalRole = "buffer";
+        Assert.That(_database.AddObject(healer), Is.True);
+        Assert.That(_database.AddObject(shaman), Is.True);
+
+        Assert.That(PlayerCompanionRoster.TrySetTactics(owner, healer.Name, "role", "cc", out string accepted), Is.True, accepted);
+        Assert.That(PlayerCompanionRoster.TrySetTactics(owner, shaman.Name, "role", "crowd control", out string refused), Is.False);
+        PlayerCompanionRecord savedHealer = _database.SelectObjects<PlayerCompanionRecord>(
+            DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(healer.CompanionId)).Single();
+        PlayerCompanionRecord savedShaman = _database.SelectObjects<PlayerCompanionRecord>(
+            DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(shaman.CompanionId)).Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(accepted, Does.EndWith("role set to crowd control."));
+            Assert.That(savedHealer.TacticalRole, Is.EqualTo("crowdcontrol"));
+            Assert.That(refused, Does.Contain("crowd control (cc)"));
+            Assert.That(savedShaman.TacticalRole, Is.EqualTo("buffer"));
+        });
+    }
+
+    [Test]
     public void BuildSelectionRejectsUnknownBuildsWithoutChangingTheCompanion()
     {
         Owner owner = NewOwner("build-owner", eRealm.Albion);
@@ -578,6 +603,140 @@ public sealed class UT_PlayerCompanionStage6Integration
         CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision),
             CompanionManagerProtocol.ControlClose.ToString("x2"));
         Assert.That(CompanionManager.TryGetSession(owner, out _), Is.False);
+    }
+
+    [Test]
+    public void CompanionManagerListsBuildsAndAppliesOnlyTheChosenOne()
+    {
+        Owner owner = NewOwner("manager-build-owner", eRealm.Midgard);
+        PlayerCompanionRecord healer = NewRecord(owner.ObjectId, Guid.NewGuid().ToString(), "Build Healer", eCharacterClass.Healer);
+        healer.Realm = (int)eRealm.Midgard;
+        Assert.That(_database.AddObject(healer), Is.True);
+        CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Healer, "pacification", out CompanionBuildPlan pacification);
+
+        CompanionManager.Open(owner);
+        CompanionManager.TryGetSession(owner, out CompanionManagerSession session);
+        Click(owner, session, CompanionManagerProtocol.ControlDetailTraining);
+        Assert.Multiple(() =>
+        {
+            Assert.That(VisibleLinks(session), Does.Contain("  Tri-spec").And.Contain("  Mending (healer)"),
+                "A manual companion has no current build");
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 3], Is.EqualTo("[Use build]"),
+                "[Use build] stays disabled until another build is chosen");
+        });
+
+        ClickLink(owner, session, "  Pacification (crowd control)");
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.BuildChoice, Is.EqualTo(("c:" + healer.CompanionId, pacification.Id)));
+            Assert.That(VisibleLinks(session), Does.Contain("  Pacification (crowd control) <"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 2], Is.EqualTo("[Use build]"));
+        });
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 1);
+        Assert.That(session.Message, Does.Contain("Pacification (crowd control)"),
+            "The chosen build, not the class default, reaches the roster");
+
+        Click(owner, session, CompanionManagerProtocol.ControlTabRecruit);
+        CompanionManager.SetQuery(owner, "healer");
+        string generatedHealer = $"g:{(int)eRealm.Midgard}:{(int)eCharacterClass.Healer}";
+        Click(owner, session, CompanionManagerProtocol.ControlRowBase + Array.IndexOf(session.RowKeys, generatedHealer));
+        Assert.That(VisibleLinks(session), Does.Contain("  Tri-spec (default) <"), "The class default is preselected");
+        Assert.That(session.BuildChoice.EntryKey, Is.Not.EqualTo(generatedHealer), "A roster choice never carries over");
+
+        ClickLink(owner, session, "  Pacification (crowd control)");
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.BuildChoice, Is.EqualTo((generatedHealer, pacification.Id)));
+            Assert.That(session.Message, Does.Contain("Pacification (crowd control)"));
+            Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(1),
+                "A build that fails its runtime check recruits nobody");
+        });
+    }
+
+    [Test]
+    public void CompanionManagerGroupRowSetsOrdersAndRunsGroupActions()
+    {
+        Owner owner = NewOwner("manager-group-owner", eRealm.Albion);
+        QuietGroup group = GroupWithOwner(owner);
+        PlayerCompanionRecord active = NewRecord(owner.ObjectId, Guid.NewGuid().ToString(), "Active Cleric", eCharacterClass.Cleric);
+        active.IsActive = true;
+        PlayerCompanionRecord benched = NewRecord(owner.ObjectId, Guid.NewGuid().ToString(), "Benched Friar", eCharacterClass.Friar);
+        Assert.That(_database.AddObject(active) && _database.AddObject(benched), Is.True);
+        AddDirect(group, NewCompanion(owner, active, eRealm.Albion));
+
+        CompanionManager.Open(owner);
+        CompanionManager.TryGetSession(owner, out CompanionManagerSession session);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.RowKeys[0], Is.EqualTo("group"), "The group row leads the roster list");
+            Assert.That(session.Roster.SelectedKey, Is.EqualTo("c:" + active.CompanionId), "A companion stays the default selection");
+        });
+
+        Click(owner, session, CompanionManagerProtocol.ControlRowBase);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelHeaderBase], Is.EqualTo("Group orders"));
+            Assert.That(VisibleLinks(session), Does.Contain("  Saved stances: no group order (current)"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + 4], Is.EqualTo("order: saved stances"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Pull]"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 2], Is.EqualTo("[Invite all]"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 4], Is.EqualTo("[Bench all]"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 6], Is.EqualTo("[Grind]"));
+        });
+
+        ClickLink(owner, session, "  Defensive: engage threats near you");
+        Assert.Multiple(() =>
+        {
+            Assert.That(CompanionEngagementMode.TryGetGroupOrder(owner, out eCompanionEngagementMode order) &&
+                        order == eCompanionEngagementMode.Defensive, Is.True);
+            Assert.That(VisibleLinks(session), Does.Contain("  Defensive: engage threats near you (current)")
+                .And.Contain("  Active Cleric: defensive (saved: aggressive)"), "The override is shown per companion");
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + 4], Is.EqualTo("order: defensive"));
+        });
+
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase);
+        Assert.That(session.Message, Is.EqualTo("Select a living enemy first, then choose [Pull]."));
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 1);
+        Assert.That(session.Message, Does.StartWith("Nobody was invited. You must be in the world"),
+            "Invite all reports the roster's own refusal");
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 3);
+        Assert.Multiple(() =>
+        {
+            Assert.That(PlayerCompanionGrind.IsActive(owner), Is.False);
+            Assert.That(session.Message, Does.Contain("/grind"), "Grind keeps its temporary-helpers-only rule");
+        });
+
+        ClickLink(owner, session, "  Saved stances: no group order");
+        Assert.That(CompanionEngagementMode.TryGetGroupOrder(owner, out _), Is.False);
+        ClickLink(owner, session, "  Active Cleric: aggressive");
+        Assert.That(session.Roster.SelectedKey, Is.EqualTo("c:" + active.CompanionId), "A member line opens that companion");
+    }
+
+    private static void Click(Owner owner, CompanionManagerSession session, int control) =>
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), control.ToString("x2"));
+
+    private static string[] VisibleLinks(CompanionManagerSession session) =>
+        Enumerable.Range(0, CompanionManagerProtocol.DetailLines)
+            .Select(line => session.SentLabels[CompanionManagerProtocol.LabelDetailBase + 2 * line + 1])
+            .Where(text => !string.IsNullOrEmpty(text)).ToArray();
+
+    /// <summary>Scrolls the detail panel until the link is visible, then clicks it.</summary>
+    private static void ClickLink(Owner owner, CompanionManagerSession session, string text)
+    {
+        for (int page = 0; page < 5; page++)
+        {
+            for (int line = 0; line < CompanionManagerProtocol.DetailLines; line++)
+            {
+                if (session.SentLabels[CompanionManagerProtocol.LabelDetailBase + 2 * line + 1] == text)
+                {
+                    Click(owner, session, CompanionManagerProtocol.ControlDetailBase + line);
+                    return;
+                }
+            }
+            Click(owner, session, CompanionManagerProtocol.ControlDetailDown);
+        }
+        Assert.Fail($"Detail link '{text}' was not found.");
     }
 
     [Test]

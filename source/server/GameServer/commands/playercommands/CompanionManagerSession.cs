@@ -34,6 +34,10 @@ namespace DOL.GS.Commands
         public string Query { get; set; } = string.Empty;
         public int DetailOffset { get; set; }
         public string SelectedItemId { get; set; }
+        /// <summary>The worn slot opened in the Gear tab, or Invalid.</summary>
+        public eInventorySlot SelectedSlot { get; set; } = eInventorySlot.Invalid;
+        /// <summary>A build chosen in the detail panel; it applies only while <c>EntryKey</c> stays selected.</summary>
+        public (string EntryKey, string PlanId) BuildChoice { get; set; }
         public ushort Revision { get; private set; } = 1;
         public string Signature { get; private set; } = string.Empty;
         public ushort Region { get; set; }
@@ -112,6 +116,7 @@ namespace DOL.GS.Commands
                 Current.SelectedKey = key;
                 DetailOffset = 0;
                 SelectedItemId = null;
+                SelectedSlot = eInventorySlot.Invalid;
             }
             return true;
         }

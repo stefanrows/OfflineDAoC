@@ -21,6 +21,8 @@ namespace DOL.GS.Commands
         public const string PermanenceCopy = "Both are permanent companions who earn XP and keep their training and gear. /spawn helpers are temporary.";
         private const int GuidanceDelayMilliseconds = 3000;
         private const int DetailWidth = WidthDetail - 6;
+        private const string BuildIndent = "    ";
+        private const string GroupKey = "group";
         private static readonly ConditionalWeakTable<GamePlayer, CompanionManagerSession> Sessions = new();
 
         private sealed record Line(string Text, string Key = null, Action Run = null);
@@ -200,13 +202,20 @@ namespace DOL.GS.Commands
             bool rosterTab = session.Tab == CompanionManagerTab.Roster;
             IReadOnlyList<CompanionManagerEntry> all = rosterTab ? RosterEntries(roster) : RecruitEntries(roster);
             IReadOnlyList<CompanionManagerEntry> filtered = session.Filter(all);
+            IReadOnlyList<CompanionManagerEntry> companions = filtered;
+            // The group row ignores search and filters and always leads the roster list.
+            bool groupRow = rosterTab && (roster.Count > 0 || player.Group != null);
+            if (groupRow)
+                filtered = filtered.Prepend(GroupEntry(player)).ToArray();
             IReadOnlyList<CompanionManagerEntry> visible = session.VisibleRows(filtered);
             CompanionManagerListState list = session.Current;
-            if (list.SelectedKey == null || all.All(entry => entry.Key != list.SelectedKey))
+            if (list.SelectedKey == null || all.All(entry => entry.Key != list.SelectedKey) &&
+                !(groupRow && list.SelectedKey == GroupKey))
             {
-                list.SelectedKey = filtered.FirstOrDefault()?.Key ?? all.FirstOrDefault()?.Key;
+                list.SelectedKey = companions.FirstOrDefault()?.Key ?? all.FirstOrDefault()?.Key;
                 session.DetailOffset = 0;
                 session.SelectedItemId = null;
+                session.SelectedSlot = eInventorySlot.Invalid;
             }
             for (int row = 0; row < visible.Count; row++)
             {
@@ -240,6 +249,8 @@ namespace DOL.GS.Commands
                 view.Header = "Roster unavailable";
                 AddText(lines, "Your companion roster could not be loaded. Try [Refresh], or use /companions list.");
             }
+            else if (rosterTab && list.SelectedKey == GroupKey)
+                BuildGroupDetail(player, session, roster, companions, view, lines, choices);
             else if (rosterTab)
                 BuildRosterDetail(player, session, roster, selectedRecord, view, lines, choices);
             else
@@ -251,7 +262,7 @@ namespace DOL.GS.Commands
             var keys = new List<string>(session.RowKeys.Select(key => key ?? string.Empty))
             {
                 session.Tab.ToString(), session.DetailTab.ToString(), list.SelectedKey ?? string.Empty,
-                session.SelectedItemId ?? string.Empty,
+                session.SelectedItemId ?? string.Empty, session.SelectedSlot.ToString(),
             };
             for (int line = 0; line < DetailLines; line++)
             {
@@ -316,6 +327,12 @@ namespace DOL.GS.Commands
                 $"L{record.Level} {(eCharacterClass)record.ClassId}, {(record.IsActive ? "active" : "benched")}",
                 (record.IsActive ? "0:" : "1:") + record.Name)).ToArray();
 
+        private static CompanionManagerEntry GroupEntry(GamePlayer player) =>
+            new(GroupKey, player.Realm, eCharacterClass.Unknown, "Group orders",
+                "order: " + (CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order)
+                    ? order.ToString().ToLowerInvariant() : "saved stances") +
+                (PlayerCompanionGrind.IsActive(player) ? ", grinding" : string.Empty), string.Empty);
+
         private static IReadOnlyList<CompanionManagerEntry> RecruitEntries(IEnumerable<PlayerCompanionRecord> roster)
         {
             HashSet<string> owned = roster.Select(record => record.AuthoredRecruitKey)
@@ -359,6 +376,7 @@ namespace DOL.GS.Commands
                              TemporaryGroupClassCatalog.RealmName((eRealm)current.Realm);
             string role = string.IsNullOrWhiteSpace(current.TacticalRole)
                 ? BotPartyRoles.DefaultPreference(characterClass) : current.TacticalRole;
+            string roleLabel = BotPartyRoles.GroupRoleLabel(role);
             string stance = string.IsNullOrWhiteSpace(current.EngagementPreference) ? "aggressive" : current.EngagementPreference;
             bool automatic = string.Equals(current.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase);
             int unspent = live ? companion.UnspentSpecPoints : current.UnspentSpecPoints;
@@ -366,22 +384,35 @@ namespace DOL.GS.Commands
             switch (session.DetailTab)
             {
                 case CompanionManagerDetailTab.Training:
-                    bool followsBuild = CompanionBuildPlanCatalog.TryGetPlanById(characterClass, current.TrainingPlanId,
-                        out CompanionBuildPlan currentBuild);
-                    AddText(lines, $"Training: {(!automatic ? "manual" : followsBuild ? $"automatic, {currentBuild.Name} build" : $"automatic, plan {current.TrainingPlanId}")}; {unspent} unspent points.");
+                    CompanionBuildPlan currentBuild = automatic &&
+                        CompanionBuildPlanCatalog.TryGetPlanById(characterClass, current.TrainingPlanId, out CompanionBuildPlan saved)
+                        ? saved : null;
+                    AddText(lines, $"Training: {(!automatic ? "manual" : currentBuild != null ? $"automatic, {currentBuild.Name} build" : $"automatic, plan {current.TrainingPlanId}")}; {unspent} unspent points.");
                     IReadOnlyList<CompanionBuildPlan> builds = CompanionBuildPlanCatalog.GetPlans(characterClass);
-                    AddText(lines, builds.Count > 0
-                        ? $"Builds: {string.Join(", ", builds.Select(build => build.Key))}. Switch with /companions build {current.Name} <build>."
-                        : "Manual only: " + CompanionBuildPlanCatalog.GetBlocker(characterClass) + ".");
+                    CompanionBuildPlan chosen = null;
+                    if (builds.Count > 0)
+                    {
+                        string entryKey = RecordKey(current);
+                        chosen = ChosenBuild(session, entryKey, characterClass, currentBuild);
+                        lines.Add(new Line("Builds (select one, then [Use build]):"));
+                        AddBuildList(session, lines, entryKey, builds, currentBuild, "current", chosen);
+                        if (chosen != null && chosen != currentBuild)
+                        {
+                            AddText(lines, $"Selected: {chosen.Name}. Level 50: {chosen.FormatTargets()}. " +
+                                           $"[Use build] resets {current.Name}'s specializations and retrains them to level {current.Level}; free, no trainer needed.");
+                        }
+                    }
+                    else
+                        AddText(lines, "Manual only: " + CompanionBuildPlanCatalog.GetBlocker(characterClass) + ".");
                     lines.Add(automatic
                         ? new Line("Switch to manual training", "mode:manual", () => SetTraining(player, session, id, false))
                         : new Line("Switch to automatic training", "mode:automatic", () => SetTraining(player, session, id, true)));
                     lines.Add(new Line(string.Empty));
-                    lines.Add(new Line($"Role: {role}. Class-legal roles:"));
+                    lines.Add(new Line($"Role: {roleLabel}. Class-legal roles:"));
                     foreach (BotPveGroupRole option in Enum.GetValues<BotPveGroupRole>().Where(option => BotPartyRoles.CanFill(characterClass, option)))
                     {
                         string value = option.ToString().ToLowerInvariant();
-                        lines.Add(new Line($"  {option}{(value == role ? " (current)" : string.Empty)}", "role:" + value,
+                        lines.Add(new Line($"  {BotPartyRoles.GroupRoleLabel(option)}{(value == role ? " (current)" : string.Empty)}", "role:" + value,
                             () => SetTactics(player, session, id, "role", value)));
                     }
                     lines.Add(new Line($"Stance: {stance}. Group orders can override it:"));
@@ -407,6 +438,13 @@ namespace DOL.GS.Commands
                     }
                     else
                         AddText(lines, "Invite this companion to train or respecialize.");
+                    if (builds.Count > 0)
+                    {
+                        bool switchable = chosen != null && chosen != currentBuild;
+                        string planId = chosen?.Id;
+                        choices.Add(new Choice("[Use build]", switchable, "usebuild:" + (switchable ? planId : string.Empty),
+                            () => UseBuild(player, session, id, switchable ? planId : null)));
+                    }
                     choices.Add(new Choice("[Respecialize]", live, "respec", () => Respec(player, session, id)));
                     break;
 
@@ -421,8 +459,9 @@ namespace DOL.GS.Commands
                     lines.Add(new Line(current.Level >= 50
                         ? $"XP: {current.Experience:N0} (maximum level)"
                         : $"XP: {current.Experience:N0} / {GamePlayer.GetExperienceAmountForLevel(current.Level):N0}"));
-                    lines.Add(new Line($"Training: {(automatic ? "automatic" : "manual")}; {unspent} unspent points."));
-                    lines.Add(new Line($"Role: {role}; stance: {stance}."));
+                    AddText(lines, $"Training: {(!automatic ? "manual" : CompanionBuildPlanCatalog.TryGetPlanById(characterClass,
+                        current.TrainingPlanId, out CompanionBuildPlan build) ? $"automatic, {build.Name} build" : "automatic")}; {unspent} unspent points.");
+                    lines.Add(new Line($"Role: {roleLabel}; stance: {stance}."));
                     lines.Add(new Line(string.Empty));
                     CompanionCharacterCatalog.Character authored = CompanionCharacterCatalog.Find(current.AuthoredRecruitKey);
                     if (authored != null)
@@ -450,6 +489,141 @@ namespace DOL.GS.Commands
             }
         }
 
+        /// <summary>Group orders, pull, invite/bench all, and grind; the same code paths as their chat commands.</summary>
+        private static void BuildGroupDetail(GamePlayer player, CompanionManagerSession session,
+            List<PlayerCompanionRecord> roster, IReadOnlyList<CompanionManagerEntry> shown, CompanionManagerView view,
+            List<Line> lines, List<Choice> choices)
+        {
+            bool ordered = CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order);
+            view.Header = "Group orders";
+            view.HeaderRealm = player.Realm;
+            view.Subheader = ordered
+                ? $"Order: {order}; it overrides every companion's saved stance"
+                : "No group order; each companion uses their saved stance";
+
+            lines.Add(new Line("Group order (select one):"));
+            foreach ((string text, string key, Func<GamePlayer, string> apply, bool current) in new (string, string, Func<GamePlayer, string>, bool)[]
+                     {
+                         ("Aggressive: assist your attacks", "order:aggressive", CompanionGroupOrders.Aggressive,
+                             ordered && order == eCompanionEngagementMode.Aggressive),
+                         ("Defensive: engage threats near you", "order:defensive", CompanionGroupOrders.Defensive,
+                             ordered && order == eCompanionEngagementMode.Defensive),
+                         ("Passive: return and hold combat", "order:passive", CompanionGroupOrders.Passive,
+                             ordered && order == eCompanionEngagementMode.Passive),
+                         ("Saved stances: no group order", "order:default", CompanionGroupOrders.UseSavedStances, !ordered),
+                     })
+            {
+                lines.Add(new Line($"  {text}{(current ? " (current)" : string.Empty)}", key,
+                    () => Report(player, session, apply(player))));
+            }
+            lines.Add(new Line(string.Empty));
+
+            GameBot[] members = player.Group?.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(bot => (bot.PlayerGroupLeader ?? bot.Owner) == player &&
+                              (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && !bot.IsAutonomousWorldBot)
+                .ToArray() ?? Array.Empty<GameBot>();
+            if (members.Length == 0)
+                AddText(lines, "No companions are in your group. [Invite all] invites benched companions shown in the list.");
+            else
+            {
+                lines.Add(new Line("Effective stance in your group:"));
+                foreach (GameBot bot in members)
+                {
+                    string effective = CompanionEngagementMode.Effective(bot).ToString().ToLowerInvariant();
+                    PlayerCompanionRecord record = bot.PlayerCompanionRecord;
+                    if (record == null)
+                    {
+                        lines.Add(new Line($"  {bot.Name}: {effective} (temporary helper)"));
+                        continue;
+                    }
+                    string saved = string.IsNullOrWhiteSpace(record.EngagementPreference) ? "aggressive" : record.EngagementPreference;
+                    string recordKey = RecordKey(record);
+                    lines.Add(new Line($"  {bot.Name}: {effective}{(saved != effective ? $" (saved: {saved})" : string.Empty)}",
+                        "open:" + recordKey, () => ShowInRoster(session, recordKey)));
+                }
+            }
+            lines.Add(new Line(string.Empty));
+
+            string[] benched = shown
+                .Select(entry => roster.FirstOrDefault(record => RecordKey(record) == entry.Key))
+                .Where(record => record != null && !PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
+                .Select(record => record.CompanionId).ToArray();
+            string[] active = roster
+                .Where(record => record.IsActive || PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
+                .Select(record => record.CompanionId).ToArray();
+            bool grinding = PlayerCompanionGrind.IsActive(player);
+            AddText(lines, "[Pull] sends your companions after your current target, like /pull.");
+            AddText(lines, $"[Invite all] invites the {benched.Length} benched companions shown in the list, top to bottom, " +
+                           "until your group is full; use search and filters to choose them. " +
+                           $"[Bench all] benches all {active.Length} active companions.");
+            AddText(lines, grinding
+                ? "Grind mode is active. [Stop grind] ends it, like /grind stop."
+                : "[Grind] starts /grind here. It needs a party of only you and temporary /spawn helpers; saved companions cannot grind.");
+
+            choices.Add(new Choice("[Pull]", true, "pull", () => Report(player, session,
+                PullGroupCommandHandler.Order(player, "choose [Pull]") ?? "That target cannot be attacked, so nobody was sent.")));
+            choices.Add(new Choice("[Invite all]", benched.Length > 0, "inviteall:" + string.Join(',', benched),
+                () => InviteAll(player, session, benched)));
+            choices.Add(new Choice("[Bench all]", active.Length > 0, "benchall:" + string.Join(',', active),
+                () => BenchAll(player, session, active)));
+            choices.Add(grinding
+                ? new Choice("[Stop grind]", true, "grind:stop", () => StopGrind(player, session))
+                : new Choice("[Grind]", true, "grind:start", () => StartGrind(player, session)));
+        }
+
+        private static void InviteAll(GamePlayer player, CompanionManagerSession session, IReadOnlyList<string> ids)
+        {
+            var invited = new List<string>();
+            string problem = null;
+            for (int index = 0; index < ids.Count; index++)
+            {
+                if (player.Group != null && player.Group.MemberCount >= player.Group.MaximumMemberCount)
+                {
+                    problem = $"Your group is full; {ids.Count - index} stay benched.";
+                    break;
+                }
+                if (PlayerCompanionRoster.TryInvite(player, ids[index], out string message) &&
+                    PlayerCompanionRoster.TryGetActiveCompanionById(player, ids[index], out GameBot companion))
+                    invited.Add(companion.Name);
+                else
+                    problem ??= message;
+            }
+            string result = invited.Count == 0 ? "Nobody was invited." : $"Invited {invited.Count}: {string.Join(", ", invited)}.";
+            Report(player, session, problem == null ? result : $"{result} {problem}");
+        }
+
+        private static void BenchAll(GamePlayer player, CompanionManagerSession session, IReadOnlyList<string> ids)
+        {
+            int benched = 0;
+            string problem = null;
+            foreach (string id in ids)
+            {
+                if (PlayerCompanionRoster.TryBench(player, id, out string message))
+                    benched++;
+                else
+                    problem ??= message;
+            }
+            Report(player, session, $"Benched {benched} of {ids.Count} companions.{(problem != null ? " " + problem : string.Empty)}");
+        }
+
+        private static void StartGrind(GamePlayer player, CompanionManagerSession session)
+        {
+            PlayerCompanionGrind.TryStart(player, out string message);
+            Report(player, session, message);
+        }
+
+        private static void StopGrind(GamePlayer player, CompanionManagerSession session)
+        {
+            if (!PlayerCompanionGrind.IsActive(player))
+            {
+                Report(player, session, "Grind mode is not active.");
+                return;
+            }
+            // Stop tells the player in chat itself; only the window line is set here.
+            PlayerCompanionGrind.Stop(player, "cancelled by you");
+            session.Message = "Grind mode stopped.";
+        }
+
         private static void BuildGear(GamePlayer player, CompanionManagerSession session, PlayerCompanionRecord record,
             GameBot companion, List<Line> lines, List<Choice> choices)
         {
@@ -458,9 +632,8 @@ namespace DOL.GS.Commands
             {
                 AddText(lines, "Benched companions keep their gear. It is shown read-only; invite them to change it.");
                 DbInventoryItem[] saved = LoadSavedItems(id);
-                foreach (DbInventoryItem item in saved.Where(item => item.SlotPosition is >= (int)eInventorySlot.MinEquipable
-                             and <= (int)eInventorySlot.MaxEquipable).OrderBy(item => item.SlotPosition))
-                    lines.Add(new Line($"  {PersistentCompanionGear.SlotName((eInventorySlot)item.SlotPosition)}: {item.Name}"));
+                foreach (eInventorySlot slot in PersistentCompanionGear.SheetSlots)
+                    lines.Add(new Line($"  {SlotLabel(slot)}: {saved.FirstOrDefault(item => item.SlotPosition == (int)slot)?.Name ?? "empty"}"));
                 lines.Add(new Line($"Backpack: {saved.Count(PersistentCompanionGear.IsBackpack)}/40 items."));
                 choices.Add(new Choice("[Invite]", true, "invite", () => Report(player, session,
                     Run(PlayerCompanionRoster.TryInvite, player, id))));
@@ -472,63 +645,138 @@ namespace DOL.GS.Commands
                 : companion.Inventory.AllItems.FirstOrDefault(item => item.ObjectId == session.SelectedItemId);
             if (selected == null)
                 session.SelectedItemId = null;
+            if (!PersistentCompanionGear.SheetSlots.Contains(session.SelectedSlot))
+                session.SelectedSlot = eInventorySlot.Invalid;
             choices.Add(new Choice("[Open bag]", true, "bag", () => OpenBag(player, session, id)));
-            if (selected != null)
+
+            if (session.SelectedSlot != eInventorySlot.Invalid)
+                BuildGearSlot(player, session, record, companion, session.SelectedSlot, selected, lines, choices);
+            else if (selected != null && PersistentCompanionGear.IsBackpack(selected))
             {
                 string itemId = selected.ObjectId;
-                bool inBag = PersistentCompanionGear.IsBackpack(selected);
-                var slot = (eInventorySlot)selected.SlotPosition;
-                string flags = PlayerCompanionRoster.GetEquipmentItemFlags(record, itemId);
-                bool kept = flags.Contains('K');
-                AddText(lines, $"Selected: {selected.Name} ({(inBag ? $"bag {selected.SlotPosition - (int)eInventorySlot.FirstBackpack + 1}" : PersistentCompanionGear.SlotName(slot))}).");
-                AddText(lines, $"Level {selected.Level}, quality {selected.Quality}, requires {selected.LevelRequirement}; score {AutonomousBotEconomy.EquipmentValue(selected)}.");
-                AddText(lines, PersistentCompanionGear.DescribeStats(selected) + ".");
-                AddText(lines, $"Ownership: {PersistentCompanionGear.DescribeFlags(flags)}.");
+                bool kept = PlayerCompanionRoster.GetEquipmentItemFlags(record, itemId).Contains('K');
+                AddText(lines, $"Selected: {selected.Name} (bag {selected.SlotPosition - (int)eInventorySlot.FirstBackpack + 1}).");
+                AddItemDetails(lines, record, selected);
                 lines.Add(new Line(string.Empty));
-                if (inBag)
-                {
-                    bool returnable = PlayerCompanionRoster.CanReturnItemToOwner(selected, record, out string blocker);
-                    choices.Add(new Choice("[Equip + lock]", true, "equip:" + itemId, () => Gear(player, session,
-                        (out string message) => PersistentCompanionGear.TryEquip(player, id, itemId, out message))));
-                    choices.Add(new Choice(returnable ? "[Return to me]" : "[Return: blocked]", returnable, "return:" + itemId,
-                        () => Gear(player, session, returnable
-                            ? (out string message) => PersistentCompanionGear.TryReturnToOwner(player, id, itemId, out message)
-                            : (out string message) => { message = $"Return blocked: {blocker}."; return false; })));
-                }
-                else
-                {
-                    bool locked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot);
-                    choices.Add(new Choice(locked ? "[Unlock slot]" : "[Lock slot]", true, $"lock:{itemId}:{!locked}",
-                        () => Gear(player, session, (out string message) =>
-                            PersistentCompanionGear.TrySetSlotLock(player, id, slot, !locked, itemId, out message))));
-                    choices.Add(new Choice("[Unequip]", true, "unequip:" + itemId, () => Gear(player, session,
-                        (out string message) => PersistentCompanionGear.TryUnequip(player, id, slot, itemId, out message))));
-                }
+                bool returnable = PlayerCompanionRoster.CanReturnItemToOwner(selected, record, out string blocker);
+                choices.Add(new Choice("[Equip + lock]", true, "equip:" + itemId, () => Gear(player, session,
+                    (out string message) => PersistentCompanionGear.TryEquip(player, id, itemId, out message))));
+                choices.Add(new Choice(returnable ? "[Return to me]" : "[Return: blocked]", returnable, "return:" + itemId,
+                    () => Gear(player, session, returnable
+                        ? (out string message) => PersistentCompanionGear.TryReturnToOwner(player, id, itemId, out message)
+                        : (out string message) => { message = $"Return blocked: {blocker}."; return false; })));
                 choices.Add(new Choice(kept ? "[Allow sale]" : "[Keep]", true, $"keep:{itemId}:{!kept}",
                     () => Gear(player, session, (out string message) =>
                         PersistentCompanionGear.TrySetKeep(player, id, itemId, !kept, out message))));
             }
 
-            lines.Add(new Line("Worn equipment (select for actions):"));
-            foreach (DbInventoryItem item in companion.Inventory.EquippedItems.OrderBy(item => item.SlotPosition))
-            {
-                var slot = (eInventorySlot)item.SlotPosition;
-                string marker = item.ObjectId == session.SelectedItemId ? " <" : string.Empty;
-                string locked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot) ? " (locked)" : string.Empty;
-                string itemId = item.ObjectId;
-                lines.Add(new Line($"  {PersistentCompanionGear.SlotName(slot)}: {item.Name}{locked}{marker}", "item:" + itemId,
-                    () => SelectItem(session, itemId)));
-            }
             DbInventoryItem[] backpack = companion.Inventory.AllItems.Where(PersistentCompanionGear.IsBackpack)
                 .OrderBy(item => item.SlotPosition).ToArray();
-            lines.Add(new Line($"Backpack {backpack.Length}/40; drag items in the bag window:"));
+            var resolved = backpack.ToDictionary(item => item, companion.GetManualEquipmentSlot);
+            lines.Add(new Line("Worn gear (click a slot to see what fits):"));
+            foreach (eInventorySlot slot in PersistentCompanionGear.SheetSlots)
+            {
+                DbInventoryItem worn = companion.Inventory.GetItem(slot);
+                int wornValue = AutonomousBotEconomy.EquipmentValue(worn);
+                DbInventoryItem[] fits = backpack.Where(item => PersistentCompanionGear.FitsSlot(resolved[item], slot)).ToArray();
+                string hint = worn == null
+                    ? fits.Length > 0 ? $" - {fits.Length} fit" : string.Empty
+                    : fits.Any(item => AutonomousBotEconomy.EquipmentValue(item) > wornValue) ? " - upgrade in bag" : string.Empty;
+                string locked = worn != null && PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot) ? " (locked)" : string.Empty;
+                string marker = slot == session.SelectedSlot ? " <" : string.Empty;
+                eInventorySlot target = slot;
+                lines.Add(new Line($"  {SlotLabel(slot)}: {worn?.Name ?? "empty"}{locked}{hint}{marker}", "slot:" + slot,
+                    () => SelectSlot(session, target)));
+            }
+            lines.Add(new Line($"Backpack {backpack.Length}/40 (select to return or keep; [Open bag] moves items):"));
             foreach (DbInventoryItem item in backpack)
             {
-                string marker = item.ObjectId == session.SelectedItemId ? " <" : string.Empty;
+                string marker = item.ObjectId == session.SelectedItemId && session.SelectedSlot == eInventorySlot.Invalid
+                    ? " <" : string.Empty;
                 string itemId = item.ObjectId;
                 lines.Add(new Line($"  Bag {item.SlotPosition - (int)eInventorySlot.FirstBackpack + 1}: {item.Name}{marker}",
-                    "item:" + itemId, () => SelectItem(session, itemId)));
+                    "item:" + itemId, () => SelectItem(session, itemId, keepSlot: false)));
             }
+        }
+
+        /// <summary>
+        /// One worn slot: what it holds, and every backpack item that fits it, best first.
+        /// Equipping a fitting item uses the same protected path as [Equip + lock].
+        /// </summary>
+        private static void BuildGearSlot(GamePlayer player, CompanionManagerSession session, PlayerCompanionRecord record,
+            GameBot companion, eInventorySlot slot, DbInventoryItem selected, List<Line> lines, List<Choice> choices)
+        {
+            string id = record.CompanionId;
+            DbInventoryItem worn = companion.Inventory.GetItem(slot);
+            int wornValue = AutonomousBotEconomy.EquipmentValue(worn);
+            IReadOnlyList<DbInventoryItem> fits = PersistentCompanionGear.ItemsFitting(companion, slot);
+            DbInventoryItem candidate = selected != null && fits.Contains(selected) ? selected : null;
+
+            lines.Add(new Line($"{SlotLabel(slot)} < (click to close)", "slot:" + slot, () => SelectSlot(session, slot)));
+            if (worn == null)
+                AddText(lines, "Worn: nothing.");
+            else
+            {
+                bool locked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot);
+                AddText(lines, $"Worn: {worn.Name}{(locked ? " (locked)" : string.Empty)}.");
+                AddItemDetails(lines, record, worn);
+            }
+
+            if (fits.Count == 0)
+                AddText(lines, "Nothing in the companion's bag fits this slot. Use [Open bag] to give it gear.");
+            else
+            {
+                lines.Add(new Line("Fits from the bag (select one, then [Equip + lock]):"));
+                foreach (DbInventoryItem item in fits)
+                {
+                    int value = AutonomousBotEconomy.EquipmentValue(item);
+                    string change = worn == null ? string.Empty : $" ({value - wornValue:+0;-0;0})";
+                    string marker = item == candidate ? " <" : string.Empty;
+                    string itemId = item.ObjectId;
+                    lines.Add(new Line($"  {item.Name}, L{item.Level} q{item.Quality}, score {value}{change}{marker}",
+                        "fit:" + itemId, () => SelectItem(session, itemId, keepSlot: true)));
+                }
+                if (candidate != null)
+                {
+                    AddText(lines, $"Selected: {candidate.Name}.");
+                    AddItemDetails(lines, record, candidate);
+                }
+            }
+            lines.Add(new Line(string.Empty));
+
+            string candidateId = candidate?.ObjectId;
+            choices.Add(new Choice("[Equip + lock]", candidate != null, "equip:" + (candidateId ?? string.Empty),
+                () => Gear(player, session, candidateId == null
+                    ? (out string message) => { message = "Select an item that fits this slot first."; return false; }
+                    : (out string message) => PersistentCompanionGear.TryEquip(player, id, candidateId, slot, out message))));
+            if (worn == null)
+                return;
+
+            string wornId = worn.ObjectId;
+            bool slotLocked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot);
+            bool kept = PlayerCompanionRoster.GetEquipmentItemFlags(record, wornId).Contains('K');
+            choices.Add(new Choice("[Unequip]", true, "unequip:" + wornId, () => Gear(player, session,
+                (out string message) => PersistentCompanionGear.TryUnequip(player, id, slot, wornId, out message))));
+            choices.Add(new Choice(slotLocked ? "[Unlock slot]" : "[Lock slot]", true, $"lock:{wornId}:{!slotLocked}",
+                () => Gear(player, session, (out string message) =>
+                    PersistentCompanionGear.TrySetSlotLock(player, id, slot, !slotLocked, wornId, out message))));
+            choices.Add(new Choice(kept ? "[Allow sale]" : "[Keep]", true, $"keep:{wornId}:{!kept}",
+                () => Gear(player, session, (out string message) =>
+                    PersistentCompanionGear.TrySetKeep(player, id, wornId, !kept, out message))));
+        }
+
+        private static void AddItemDetails(List<Line> lines, PlayerCompanionRecord record, DbInventoryItem item)
+        {
+            AddText(lines, $"Level {item.Level}, quality {item.Quality}, requires {item.LevelRequirement}; score {AutonomousBotEconomy.EquipmentValue(item)}.");
+            AddText(lines, PersistentCompanionGear.DescribeStats(item) + ".");
+            AddText(lines, $"Ownership: {PersistentCompanionGear.DescribeFlags(PlayerCompanionRoster.GetEquipmentItemFlags(record, item.ObjectId))}.");
+        }
+
+        /// <summary>A slot name with a leading capital, as the Gear tab lists it.</summary>
+        public static string SlotLabel(eInventorySlot slot)
+        {
+            string name = PersistentCompanionGear.SlotName(slot);
+            return name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
         }
 
         private static void BuildRecruitDetail(GamePlayer player, CompanionManagerSession session,
@@ -553,6 +801,8 @@ namespace DOL.GS.Commands
                     ? "Already in your roster."
                     : full ? "Your roster is full." : "Available: free to recruit, starting at level 1.");
                 lines.Add(new Line(string.Empty));
+                // The authored catalog records no preferred build yet, so the class default is preselected.
+                string storyBuild = owned == null ? AddRecruitBuilds(session, lines, key, story.Class) : null;
                 AddText(lines, PermanenceCopy);
                 if (owned != null)
                 {
@@ -562,8 +812,8 @@ namespace DOL.GS.Commands
                 else
                 {
                     string storyKey = story.Key;
-                    choices.Add(new Choice("[Recruit]", !full, "recruit:" + key,
-                        () => RecruitStory(player, session, storyKey)));
+                    choices.Add(new Choice("[Recruit]", !full, $"recruit:{key}:{storyBuild}",
+                        () => RecruitStory(player, session, storyKey, storyBuild)));
                 }
                 return;
             }
@@ -575,12 +825,13 @@ namespace DOL.GS.Commands
                 view.Subheader = $"{TemporaryGroupClassCatalog.RealmName(realm)} {characterClass} - group roles: {BotPartyRoles.Label(characterClass)}";
                 AddText(lines, CreateCopy);
                 lines.Add(new Line(string.Empty));
+                string build = AddRecruitBuilds(session, lines, key, characterClass);
                 AddText(lines, "Recruiting is free and starts at level 1.");
                 AddText(lines, $"Roster: {roster.Count}/{PlayerCompanionRoster.MaximumRosterSize}.");
                 lines.Add(new Line(string.Empty));
                 AddText(lines, PermanenceCopy);
-                choices.Add(new Choice("[Create]", !full, "create:" + key,
-                    () => RecruitGenerated(player, session, key)));
+                choices.Add(new Choice("[Create]", !full, $"create:{key}:{build}",
+                    () => RecruitGenerated(player, session, key, build)));
                 return;
             }
 
@@ -591,6 +842,57 @@ namespace DOL.GS.Commands
             AddText(lines, CreateCopy);
             AddText(lines, PermanenceCopy);
         }
+
+        /// <summary>
+        /// Lists a class's builds for recruitment with the class default preselected.
+        /// Returns the chosen plan ID, or null for the class default.
+        /// </summary>
+        private static string AddRecruitBuilds(CompanionManagerSession session, List<Line> lines, string entryKey,
+            eCharacterClass characterClass)
+        {
+            IReadOnlyList<CompanionBuildPlan> builds = CompanionBuildPlanCatalog.GetPlans(characterClass);
+            if (builds.Count == 0)
+            {
+                AddText(lines, $"Manual training only: {CompanionBuildPlanCatalog.GetBlocker(characterClass)}.");
+                lines.Add(new Line(string.Empty));
+                return null;
+            }
+            CompanionBuildPlan chosen = ChosenBuild(session, entryKey, characterClass, builds[0]);
+            lines.Add(new Line("Build (select one, then recruit):"));
+            AddBuildList(session, lines, entryKey, builds, builds[0], "default", chosen);
+            AddText(lines, $"Recruits with the {chosen.Name} build; it trains automatically at every level. " +
+                           $"Level 50: {chosen.FormatTargets()}. Switching later is free.");
+            lines.Add(new Line(string.Empty));
+            return chosen == builds[0] ? null : chosen.Id;
+        }
+
+        /// <summary>The build chosen for this entry, or <paramref name="fallback"/> when none is.</summary>
+        private static CompanionBuildPlan ChosenBuild(CompanionManagerSession session, string entryKey,
+            eCharacterClass characterClass, CompanionBuildPlan fallback) =>
+            session.BuildChoice.EntryKey == entryKey &&
+            CompanionBuildPlanCatalog.TryGetPlanById(characterClass, session.BuildChoice.PlanId, out CompanionBuildPlan chosen)
+                ? chosen
+                : fallback;
+
+        private static void AddBuildList(CompanionManagerSession session, List<Line> lines, string entryKey,
+            IReadOnlyList<CompanionBuildPlan> builds, CompanionBuildPlan marked, string markedLabel, CompanionBuildPlan chosen)
+        {
+            foreach (CompanionBuildPlan build in builds)
+            {
+                string planId = build.Id;
+                string state = build == marked ? $" ({markedLabel})" : string.Empty;
+                string selected = build == chosen ? " <" : string.Empty;
+                lines.Add(new Line($"  {build.Name}{state}{selected}", "build:" + planId,
+                    () => session.BuildChoice = (entryKey, planId)));
+                foreach (string line in CompanionManagerSession.Wrap(Sanitize(BuildRoleText(build), int.MaxValue),
+                             DetailWidth - TextWidth(BuildIndent)))
+                    lines.Add(new Line(BuildIndent + line));
+            }
+        }
+
+        public static string BuildRoleText(CompanionBuildPlan build) =>
+            $"{build.Role}. Sets role: {BotPartyRoles.GroupRoleLabel(build.PrimaryRole)}" +
+            (build.CrowdControlDuty ? ", also controls adds." : ".");
 
         private static bool TryParseGeneratedKey(string key, out eRealm realm, out eCharacterClass characterClass)
         {
@@ -626,9 +928,19 @@ namespace DOL.GS.Commands
             Report(player, session, message);
         }
 
-        private static void SelectItem(CompanionManagerSession session, string itemId)
+        private static void SelectItem(CompanionManagerSession session, string itemId, bool keepSlot)
         {
             session.SelectedItemId = session.SelectedItemId == itemId ? null : itemId;
+            if (!keepSlot)
+                session.SelectedSlot = eInventorySlot.Invalid;
+            session.DetailOffset = 0;
+        }
+
+        /// <summary>Opens a worn slot in the Gear tab, or closes it when it is already open.</summary>
+        private static void SelectSlot(CompanionManagerSession session, eInventorySlot slot)
+        {
+            session.SelectedSlot = session.SelectedSlot == slot ? eInventorySlot.Invalid : slot;
+            session.SelectedItemId = null;
             session.DetailOffset = 0;
         }
 
@@ -679,6 +991,18 @@ namespace DOL.GS.Commands
                 : $"{companion.Name} trained {spec.Name} to {spec.Level}, but the save failed. Another save attempt is queued.");
         }
 
+        private static void UseBuild(GamePlayer player, CompanionManagerSession session, string id, string planId)
+        {
+            if (planId == null)
+            {
+                Report(player, session, "Select a different build first, then choose [Use build].");
+                return;
+            }
+            if (PlayerCompanionRoster.TrySelectBuild(player, id, planId, out string message))
+                session.BuildChoice = default;
+            Report(player, session, message);
+        }
+
         private static void Respec(GamePlayer player, CompanionManagerSession session, string id)
         {
             PlayerCompanionCommandHandler.TryBeginCompanionRespec(player.Client, player, id, out string message);
@@ -694,7 +1018,7 @@ namespace DOL.GS.Commands
             }
             session.Bag = new PersistentCompanionInventoryView(player, id);
             session.Bag.Open();
-            session.Message = $"{companion.Name}'s bag is open. Drag items between bags to transfer them.";
+            session.Message = $"{companion.Name}'s bag is open. Drag items between bags to transfer them; equip them from the Gear tab's slot list.";
         }
 
         private static void ShowInRoster(CompanionManagerSession session, string recordKey)
@@ -704,9 +1028,10 @@ namespace DOL.GS.Commands
             session.DetailTab = CompanionManagerDetailTab.Overview;
             session.DetailOffset = 0;
             session.SelectedItemId = null;
+            session.SelectedSlot = eInventorySlot.Invalid;
         }
 
-        private static void RecruitStory(GamePlayer player, CompanionManagerSession session, string storyKey)
+        private static void RecruitStory(GamePlayer player, CompanionManagerSession session, string storyKey, string planId)
         {
             CompanionCharacterCatalog.Character story = CompanionCharacterCatalog.Find(storyKey);
             if (story == null)
@@ -714,23 +1039,29 @@ namespace DOL.GS.Commands
                 Report(player, session, "That story companion is no longer in the cast.");
                 return;
             }
-            PlayerCompanionRoster.TryRecruitAuthored(player, story.Name, out PlayerCompanionRecord record, out string message);
+            PlayerCompanionRoster.TryRecruitAuthored(player, story.Name, planId, out PlayerCompanionRecord record, out string message);
             Report(player, session, message);
             if (record?.IsPersisted == true)
+            {
+                session.BuildChoice = default;
                 ShowInRoster(session, RecordKey(record));
+            }
         }
 
-        private static void RecruitGenerated(GamePlayer player, CompanionManagerSession session, string key)
+        private static void RecruitGenerated(GamePlayer player, CompanionManagerSession session, string key, string planId)
         {
             if (!TryParseGeneratedKey(key, out eRealm realm, out eCharacterClass characterClass))
             {
                 Report(player, session, "That class is no longer available for recruitment.");
                 return;
             }
-            PlayerCompanionRoster.TryRecruit(player, realm, characterClass, out PlayerCompanionRecord record, out string message);
+            PlayerCompanionRoster.TryRecruit(player, realm, characterClass, planId, out PlayerCompanionRecord record, out string message);
             Report(player, session, message);
             if (record?.IsPersisted == true)
+            {
+                session.BuildChoice = default;
                 ShowInRoster(session, RecordKey(record));
+            }
         }
 
         private static DbInventoryItem[] LoadSavedItems(string companionId)

@@ -12,7 +12,7 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.40.0] - 2026-09-24
+## [0.45.0] - 2026-09-24
 
 ### Added
 
@@ -40,7 +40,7 @@ package, not this fork's version.
 
 - The earlier unbenchmarked numeric population-size estimate.
 
-## [0.39.0] - 2026-09-24
+## [0.44.0] - 2026-09-24
 
 ### Added
 
@@ -65,7 +65,7 @@ package, not this fork's version.
 
 - The old Bot Goals Setting sliders and their objective-exclusion behavior.
 
-## [0.38.0] - 2026-09-24
+## [0.43.0] - 2026-09-24
 
 ### Added
 
@@ -89,7 +89,7 @@ package, not this fork's version.
 
 - None.
 
-## [0.37.0] - 2026-09-24
+## [0.42.0] - 2026-09-24
 
 ### Added
 
@@ -112,7 +112,7 @@ package, not this fork's version.
 - Random per-guild level-bucket task allocation and the visible `Camlann Crew`
   prefix on managed guilds.
 
-## [0.36.0] - 2026-09-24
+## [0.41.0] - 2026-09-24
 
 ### Added
 
@@ -136,7 +136,7 @@ package, not this fork's version.
 - Automatic open-world ganking by ordinary PvE parties and whole-party
   disbanding when only some meetup members fail to arrive.
 
-## [0.35.0] - 2026-09-24
+## [0.40.0] - 2026-09-24
 
 ### Added
 
@@ -163,6 +163,185 @@ package, not this fork's version.
 ### Removed
 
 - Unused autonomous XP scaling method.
+
+## [0.39.0] - 2026-09-24
+
+### Added
+
+- A slot sheet in the Companion Manager's Gear tab. It lists all 19 worn slots
+  in character-sheet order, including empty ones, and marks slots where the
+  companion's bag holds items that fit (`2 fit`) or a better item
+  (`upgrade in bag`).
+- Clicking a slot opens it: the worn item with its stats, and every bag item
+  the companion can equip there, best first, with its score change.
+  **[Equip + lock]** equips the selected item in that slot (a ring or bracer on
+  the side you clicked); **[Unequip]**, **[Lock slot]**, and **[Keep]** act on
+  the worn item. Click the slot again to close it.
+- A test for the slot sheet order and paired ring and wrist matching.
+
+### Changed
+
+- The slot sheet replaces the Gear tab's list of worn items. The backpack
+  list below it keeps its **[Equip + lock]**, **[Return to me]**, and
+  **[Keep]** actions.
+- Benched companions show all worn slots, including empty ones.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The worn slots at positions 51-69 of the companion bag window (0.38.0). The
+  bag window shows only the 40 backpack positions again, and the drag-to-equip
+  and drag-to-unequip rules that came with it are gone.
+
+## [0.38.0] - 2026-09-24
+
+### Added
+
+- Worn slots in the companion bag window (M3). The bag window now also shows
+  the companion's worn equipment at positions 51-69, two per row: helm, chest,
+  arms, gloves, legs, boots, cloak, neck, jewel, belt, left and right wrist,
+  left and right ring, right hand, left hand, two-handed, ranged, and mythical.
+  Positions 1-40 are still the backpack.
+- Drag and drop to equip: drop a companion bag item on a worn position to
+  equip and lock it (like **[Equip + lock]**). The item goes to its own slot;
+  a ring or bracer goes to the side it was dropped on. Drag a worn item to an
+  empty companion bag slot to unequip it there (like **[Unequip]**).
+- A test for the vault layout: backpack and worn positions, no overlap, and
+  paired rings and wrists in one row.
+
+### Changed
+
+- The Gear tab and the **[Open bag]** message name the worn positions.
+- The equip message now names the slot the item went to.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.37.0] - 2026-09-24
+
+### Added
+
+- Group orders in the Companion Manager (M2). A **Group orders** row leads the
+  roster list. It sets the group order (Aggressive, Defensive, Passive, or
+  saved stances) and shows each grouped companion's effective stance, with
+  its saved stance when the order overrides it.
+- Group actions in that row: **[Pull]** (like `/pull`), **[Invite all]**,
+  **[Bench all]**, and **[Grind]**/**[Stop grind]** (like `/grind`).
+  **[Invite all]** invites the benched companions shown in the list, top to
+  bottom, until the group is full, so search and filters choose who comes.
+  **[Bench all]** benches every active companion.
+- A test for the group row: order links, per-companion override text, and
+  the pull, invite-all, and grind refusal messages.
+
+### Changed
+
+- `/aggressive`, `/defensive`, `/passive`, `/companions group default`, and
+  `/pull` now share their code with the window; their behaviour and messages
+  are unchanged. `/grind` still accepts only temporary `/spawn` helpers.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.36.0] - 2026-09-24
+
+### Added
+
+- Crowd control role for companions (M1c). Healer, Sorcerer, Bard, Mentalist,
+  and Spiritmaster companions can take it with `/companions role <name> cc`
+  or in the manager's Training & Tactics tab.
+- PvE add control. Once the group is fighting a monster, a companion with
+  crowd control duty mezzes extra monsters that are attacking the group,
+  with non-tanks' attackers first. It never mezzes the group's target or the
+  owner's target, and it skips monsters that are immune, below 75% health,
+  or taking damage over time. Two companions never mezz the same add, and a
+  mezz is recast after it wears off.
+- Mezz protection in player-led groups. Companions leave a mezzed monster alone
+  while any other enemy is left, and skip area spells that would hit it. If
+  the owner attacks the mezzed monster, companions attack it too.
+- Each build sets a role when it is chosen or used at recruitment, following
+  the owner's Healer mapping: Tri-spec is Healer and also controls adds,
+  Mending is Healer, Augmentation is Buffer, and Pacification is Crowd
+  control. Sorcerer Body and Mind and Bard Music are Crowd control. Bard
+  Nurture and Shaman Augmentation are Buffer, Friar Group support is Healer,
+  and Armsman Two-handed is Attacker. The other builds keep the class default.
+- Tests for the role values, the build-to-role mapping, and the `cc` role
+  command.
+
+### Changed
+
+- Build lists in the window and in `/companions build` say which role each
+  build sets. Role names show as "Crowd control" rather than the saved value.
+- Class role labels include "Crowd control" for the five classes that can
+  fill it.
+- A Pacification Healer in the Crowd control role keeps healing when nothing
+  needs control.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- A support companion no longer cancels its own crowd-control cast while
+  holding back from melee.
+
+### Removed
+
+- None.
+
+## [0.35.0] - 2026-09-24
+
+### Added
+
+- Build list in the Companion Manager (M1b). The Training & Tactics tab lists
+  every build for the selected companion with its role and marks the current
+  one. Selecting a build shows its level-50 targets. **[Use build]** switches
+  to it with the M1a rules: free, no trainer, reset and retrain to the current
+  level. It works for active and benched companions.
+- Build choice in the manager's recruit flow. Selecting a story companion or a
+  class lists its builds with the class default preselected; **[Recruit]** or
+  **[Create]** uses the selected build. Manual-only classes say so.
+- `/companions recruit authored <name> [build]` recruits a story companion
+  with a chosen build.
+- Integration test for the window's build list, **[Use build]**, and build
+  choice during recruitment.
+
+### Changed
+
+- The manager's Overview tab names the build that automatic training follows.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The Training & Tactics tab no longer tells players to switch builds with a
+  command. `/companions build` still works.
 
 ## [0.34.0] - 2026-09-24
 

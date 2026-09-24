@@ -53,14 +53,14 @@ and verification history of the full-PvP conversion.
 
 ## Autonomous parties and PvE
 
-- Ordinary autonomous parties recruit only compatible bots from the same guild,
-  across all three realms. Matchmaking runs every five seconds, prioritizes the
-  longest-waiting candidates, and limits route-validation work per pass.
-- Same-region candidates are preferred. If they cannot form a party, compatible
-  guildmates from other regions can join and travel to the existing rendezvous.
-- Ordinary PvE parties can start with any size from two through eight. Their
-  roster is locked for the outing; after a permanent loss, roles and content are
-  reassessed between fights, and the party dissolves below two members.
+- Ordinary autonomous PvE parties recruit compatible local bots across guilds
+  and realms. Matchmaking runs every five seconds and prioritizes the
+  longest-waiting candidates.
+- Parties can depart with two arrivals and accept late followers. A released
+  member can return after death without dissolving the surviving party.
+- Ordinary PvE parties can start with any size from two through eight. After a
+  permanent loss, roles and content are reassessed between fights, and the
+  party dissolves below two members.
 - Healing and frontline classes are preferred. Content difficulty uses the
   actual party size; a party missing either capability will not choose a target
   above its average level.
@@ -69,19 +69,23 @@ and verification history of the full-PvP conversion.
   raids keep their existing exact-size requirements.
 - Existing encounter locations, loot, currency, Realm Exchange behavior,
   navmeshes, training, selling, town recovery, and stable routes are retained.
+- Outdoor camp choice considers crowding and recent productivity without
+  excluding otherwise valid camps. Ordinary PvE parties do not initiate
+  unrelated PvP fights.
 
 ## Autonomous PvP
 
-- Default activity targets are 45% solo PvE, 40% group PvE, and 15% PvP for
-  levels 1–19; 30/45/25 for levels 20–49; and 15/35/50 at level 50. The launcher
-  can save other valid 100% distributions, including low-level PvP.
+- Each bot has a saved player type, traits, and activity state. Levelers favor
+  PvE, Hunters patrol leveling areas, Roamers loop through frontier clearings,
+  and Keep warriors pursue campaigns from level 35. Hybrid and Casual behavior
+  changes with local time and recovery needs.
+- The launcher offers named population presets and a six-type mix totaling
+  100%, plus leveling-zone danger and Fresh launch or Established world shape.
 - Low-level PvP groups prefer pairs and never exceed four members. They hunt in
   reachable, non-safe leveling areas near the party's level instead of being
   sent to keep and relic objectives early.
 - Mature bots retain frontier roaming, keep, relic, siege, and event behavior.
-- PvE parties can retaliate and can opportunistically engage a visible legal
-  rival from level 1. They do not initiate an extra fight during combat or
-  recovery.
+- PvE parties can retaliate but do not start unrelated open-world fights.
 - New fights prefer opponents within five levels, preserve grey-target restraint,
   and avoid visibly stronger parties. Retaliation is still legal.
 - PvP assignments explicitly relinquish optional low-level safety for autonomous
@@ -93,6 +97,20 @@ and verification history of the full-PvP conversion.
   matched; the new party's rendezvous then supersedes their individual camp.
 - Formation delay and matchmaking blocks are logged separately from travel time.
 
+## Population growth and performance
+
+- Fresh launch creates level-1 bots. Established batches spread levels across
+  five bands (15/15/20/25/25 per 100 bots), with matching XP, equipment, and
+  first-login training; level-50 creations also receive realm points. Existing
+  bots keep their progress. A separate Add Lv.50 action remains available.
+- Managed guilds can gain one new level-1 alt every 72 hours by default, up
+  to a 5,000-bot total roster cap. Both values can be changed while the server
+  is stopped; zero hours disables new alts. The population number means the
+  total roster, with the existing login behavior.
+- The launcher shows a numeric PC-specific population recommendation only
+  after stable local samples at 500, 1,000, and 1,500 active bots. Owner
+  calibration and real-client acceptance remain pending.
+
 ## Player companions
 
 - `/companions` opens the Companion Manager window (Roster, Recruit, and
@@ -103,10 +121,15 @@ and verification history of the full-PvP conversion.
   attempt to restore active companions at login.
 - Active companions earn eligible adventuring XP and can catch up toward their
   owner's level. Benched companions retain progress without earning passive XP.
-  Automatic training offers 57 named builds for 35 classes (`/companions build`);
-  four classes require manual training.
+  Automatic training offers 57 named builds for 35 classes, chosen in the
+  manager's Training & Tactics tab and recruit panel or with `/companions build`;
+  four classes require manual training. Each build sets its group role. A
+  Crowd control companion mezzes extra monsters in PvE, and the other companions
+  leave mezzed monsters alone. The manager's Group orders row sets the group
+  order and offers pull, invite all, bench all, and grind.
   The menu offers short gear pages and a native external-inventory view for the
-  companion backpack. Client acceptance of the updated UI remains pending.
+  companion backpack. The manager's Gear tab lists every worn slot; clicking a
+  slot shows the bag items that fit it, best first, with one-click equip. Client acceptance of the updated UI remains pending.
 - `/spawn` still creates temporary, player-owned helpers, separate from both the
   persistent recruit roster and autonomous population.
 - Companion PvP supports legal human, autonomous-bot, and controlled-pet targets.
@@ -126,7 +149,7 @@ and verification history of the full-PvP conversion.
 ## Launcher and local operation
 
 - The Windows launcher manages the local server and client, active autonomous
-  population, goal-weight settings, generated crews, realm events, save reset,
+  population, Server population settings, generated crews, realm events, save reset,
   Realm Exchange display, and operational diagnostics.
 - Save/reset and progress-import restrictions are Camlann-aware. Personal saves,
   account data, profiles, credentials, logs, and databases are not published.

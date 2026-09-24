@@ -51,6 +51,11 @@ command guidance. The accumulating NPC speech menu stays closed.
 | Recruit | Starts on the player's realm and allows Albion, Midgard, and Hibernia; filters authored people and generated classes by name, class, realm, and role. |
 | Details | Overview, Training & Tactics, and Gear tabs; the selected record and list position are kept per tab during refreshes. |
 | Gear | Worn slots and backpack items with item actions, plus the existing native companion bag for inspection and drag/drop. Benched gear is read-only. |
+| Builds (0.35.0) | Training & Tactics lists the class's builds as links with their role; selecting one and choosing **[Use build]** switches it. Recruit details list the builds with the class default preselected, and **[Recruit]**/**[Create]** use the selection. |
+| Crowd control (0.36.0) | Training & Tactics offers the Crowd control role to Healer, Sorcerer, Bard, Mentalist, and Spiritmaster companions. Each build line says which role it sets. The roster's role filter keeps its four native buttons; a Crowd control filter needs a later client patch. |
+| Group orders (0.37.0) | A **Group orders** row leads the roster list, whatever the search and filters. It shows the group order (Aggressive, Defensive, Passive, or saved stances) as links, each grouped companion's effective stance with its saved stance when an order overrides it, and **[Pull]**, **[Invite all]**, **[Bench all]**, and **[Grind]**/**[Stop grind]**. A companion stays the default selection. |
+| Worn slots (0.38.0) | Replaced in 0.39.0. The companion bag window showed the worn slots at positions 51-69; the owner found it unintuitive. |
+| Gear slot sheet (0.39.0) | The Gear tab lists all 19 worn slots in character-sheet order, including empty ones, with `N fit` or `upgrade in bag` hints. Clicking a slot opens it at the top of the detail pane: the worn item and every backpack item the companion can equip there, best first, with its score change. **[Equip + lock]** equips the selected item in that slot (a ring or bracer on the clicked side); **[Unequip]**, **[Lock slot]**, and **[Keep]** act on the worn item. The bag window is backpack-only again (40 positions). Server only. |
 
 The recruitment copy is shown in the detail panel exactly as agreed:
 
@@ -165,9 +170,15 @@ differences; **[Refresh]** resends everything.
 
 | Manager action | Existing entry point |
 | --- | --- |
-| Recruit generated or authored | `PlayerCompanionRoster.TryRecruit` / `TryRecruitAuthored` (capacity and once-per-owner checks stay there) |
+| Recruit generated or authored | `PlayerCompanionRoster.TryRecruit` / `TryRecruitAuthored` with the selected build (capacity and once-per-owner checks stay there) |
 | Invite or bench | `PlayerCompanionRoster.TryInvite` / `TryBench` |
-| Role or stance | `PlayerCompanionRoster.TrySetTactics` |
+| Invite all | `TryInvite` for each benched companion shown in the list (search and filters apply), top to bottom, until the group is full |
+| Bench all | `TryBench` for every active companion |
+| Group order | `CompanionGroupOrders`, shared with `/aggressive`, `/defensive`, `/passive`, and `/companions group default` |
+| Pull | `PullGroupCommandHandler.Order`, shared with `/pull` |
+| Grind | `PlayerCompanionGrind.TryStart` / `Stop`, shared with `/grind`; still only for temporary `/spawn` helpers |
+| Role or stance | `PlayerCompanionRoster.TrySetTactics` (roles include `crowdcontrol`; `cc` is accepted) |
+| Build switch | `PlayerCompanionRoster.TrySelectBuild` (free, no trainer, resets and retrains) |
 | Training mode | `TrySetManualTrainingMode` / `TrySetAutomaticTrainingMode` |
 | Train one rank | Rechecks active companion, class trainer (`CanUseCompanionTrainer`), line, and rank; `SaveProgress` with queued retry |
 | Respecialize | `PlayerCompanionCommandHandler.TryBeginCompanionRespec` and the existing confirmation dialog |

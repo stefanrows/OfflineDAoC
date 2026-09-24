@@ -18,7 +18,10 @@ look at the owner's local install on 2026-09-24: server logs from 2026-09-18 to
 2026-09-24, the save's bot table, and its server properties. Nothing was
 changed there, and no names or save data are copied into this document.
 
-## 1. How the system works today
+## 1. Reviewed baseline (0.32.3)
+
+The table records the system before M0–M5. The implementation notes below and
+the [feature guide](../FEATURES.md) describe the current behavior.
 
 | Area | Current behaviour | Code |
 |---|---|---|
@@ -40,7 +43,7 @@ changed there, and no names or save data are copied into this document.
 ## 2. Findings
 
 F1, F6, and F7 describe the reviewed 0.32.3 baseline; M0 fixed them in
-0.35.0. The group and population findings remain work for later milestones.
+0.40.0. The group and population findings remain work for later milestones.
 
 ### F1 — Fixed in M0: bots leveled at 1× after 2026-09-23
 
@@ -377,7 +380,7 @@ bumps follow `AGENTS.md`.
 
 ### M0 — XP fixes (can ship first)
 
-Implemented in 0.35.0 (2026-09-24). Focused offline XP tests pass; the owner
+Implemented in 0.40.0 (2026-09-24). Focused offline XP tests pass; the owner
 check below still needs a real-client playtest. The PvP worth timers were left
 unchanged.
 
@@ -402,7 +405,7 @@ Targets on a 1,500-bot run (starting points): at least 50% of bots fighting,
 pulling, or resting at a camp; most groups ending by their timer rather than a
 failed meetup; bot-on-bot deaths among levelers well below today's 31%.
 
-Implemented offline in 0.36.0. Pickup PvE groups form from the local region
+Implemented offline in 0.41.0. Pickup PvE groups form from the local region
 across guilds and realms. They depart when the leader and one other member
 reach town, accept late followers, and remove no-shows individually. A single
 death preserves the camp and the member can release and run back; multi-member
@@ -431,7 +434,7 @@ builds now use Slash and switch to Flexible when that ability unlocks.
   its durable timers and the between-task training, selling, and town-break
   services.
 
-Implemented offline in 0.37.0. The server adds type, five traits, and PvE-block
+Implemented offline in 0.42.0. The server adds type, five traits, and PvE-block
 state to each saved bot without resetting progress or possessions. Existing
 generated guilds gain durable charter rows and invented names. The marker row,
 not the final name, identifies a managed guild; interrupted renames retain the
@@ -453,7 +456,7 @@ loops and PvP leveling, Keep-warrior campaigns, Leveler and Casual routines,
 Hybrid prime-time roams, the wall rules (5.3), and gear farming at 50. The
 Danger setting drives Hunter patrol frequency and grey-gank chance.
 
-Implemented offline in 0.38.0. Hunters from level 10 patrol level-appropriate
+Implemented offline in 0.43.0. Hunters from level 10 patrol level-appropriate
 outdoor camps, with extra weight for active camps and nearby outdoor routes;
 level-35+ Hunters also use frontier clearings. They consider the player and
 autonomous bots through the same visible, legal target scan. Grey attacks use
@@ -476,7 +479,7 @@ includes `bot-goals.json` v2 with v1 migration, the server reading it at
 startup, and the Active Population tab showing each bot's type and guild
 charter. Launcher tests cover validation, presets, and migration.
 
-Implemented offline in 0.39.0. The launcher presents the named presets, six
+Implemented offline in 0.44.0. The launcher presents the named presets, six
 player-type percentages, leveling-zone danger, and world shape on one screen.
 The mix must total 100%; editing a named preset switches it to Custom. The
 existing Add crew buttons still set roster size, and a CPU/memory based hint
@@ -495,7 +498,7 @@ Level-spread creation with suitable gear, specializations, and realm points;
 the fresh-launch option; the alt trickle; measured size recommendations
 (5.8).
 
-Implemented offline in 0.40.0. Add crew creates level-1 bots for Fresh launch
+Implemented offline in 0.45.0. Add crew creates level-1 bots for Fresh launch
 or a stratified established batch across the 1–9, 10–19, 20–34, 35–49, and
 50 bands (15/15/20/25/25 per 100 bots). The separate Add Lv.50 action remains
 available. Existing characters are never re-leveled. Newly created bots get

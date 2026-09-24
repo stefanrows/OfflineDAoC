@@ -46,6 +46,16 @@ namespace DOL.GS
             }
         }
 
+        /// <summary>The order that overrides every companion's saved stance, if one is set.</summary>
+        public static bool TryGetGroupOrder(GamePlayer player, out eCompanionEngagementMode order)
+        {
+            order = eCompanionEngagementMode.Aggressive;
+            if (player == null || !Modes.TryGetValue(player, out Mode mode) || !mode.HasGroupOrder)
+                return false;
+            order = mode.GroupOrder;
+            return true;
+        }
+
         private static GameBot Companion(GameLiving actor)
         {
             // Include companion pets, never human pets or autonomous bots.

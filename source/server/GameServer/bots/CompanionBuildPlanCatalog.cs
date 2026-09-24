@@ -151,9 +151,39 @@ namespace DOL.GS
                 key, name, role, targets);
 
         private static CompanionBuildPlan Create(eCharacterClass characterClass, string id, int expectedMultiplier,
-            string key, string name, string role, (string Specialization, int Level)[] targets) =>
-            new(id, characterClass, key, name, role, expectedMultiplier,
+            string key, string name, string role, (string Specialization, int Level)[] targets)
+        {
+            (BotPveGroupRole primaryRole, bool crowdControlDuty) = GroupRole(characterClass, key);
+            return new(id, characterClass, key, name, role, primaryRole, crowdControlDuty, expectedMultiplier,
                 targets.Select(target => new CompanionBuildRank(target.Specialization, target.Level)).ToArray());
+        }
+
+        /// <summary>
+        /// The group role a build applies when it is chosen. The owner's Healer
+        /// mapping (2026-09-24) is authoritative; other builds whose primary job
+        /// differs from the class default are listed here, and the rest keep the
+        /// class default. A hybrid build keeps one saved role and adds control as
+        /// a second duty.
+        /// </summary>
+        private static (BotPveGroupRole Role, bool CrowdControlDuty) GroupRole(eCharacterClass characterClass, string key) =>
+            (characterClass, key) switch
+            {
+                (eCharacterClass.Healer, "trispec") => (BotPveGroupRole.Healer, true),
+                (eCharacterClass.Healer, "mending") => (BotPveGroupRole.Healer, false),
+                (eCharacterClass.Healer, "augmentation") => (BotPveGroupRole.Buffer, false),
+                (eCharacterClass.Healer, "pacification") => (BotPveGroupRole.CrowdControl, false),
+                (eCharacterClass.Sorcerer, "balanced") => (BotPveGroupRole.CrowdControl, false),
+                (eCharacterClass.Bard, "nurture") => (BotPveGroupRole.Buffer, false),
+                (eCharacterClass.Bard, "music") => (BotPveGroupRole.CrowdControl, false),
+                (eCharacterClass.Shaman, "augmentation") => (BotPveGroupRole.Buffer, false),
+                (eCharacterClass.Friar, "group") => (BotPveGroupRole.Healer, false),
+                (eCharacterClass.Armsman, "twohanded") => (BotPveGroupRole.Attacker, false),
+                _ => (DefaultRole(characterClass), false),
+            };
+
+        private static BotPveGroupRole DefaultRole(eCharacterClass characterClass) =>
+            BotPartyRoles.TryParseRole(BotPartyRoles.DefaultPreference(characterClass), out BotPveGroupRole role)
+                ? role : BotPveGroupRole.Attacker;
 
         private static IReadOnlyDictionary<eCharacterClass, IReadOnlyList<CompanionBuildPlan>> Index(
             params CompanionBuildPlan[] plans) =>
@@ -311,17 +341,24 @@ namespace DOL.GS
         public string Key { get; }
         public string Name { get; }
         public string Role { get; }
+        /// <summary>Group role set on the companion when this build is chosen.</summary>
+        public BotPveGroupRole PrimaryRole { get; }
+        /// <summary>A hybrid build also controls adds when its primary job allows.</summary>
+        public bool CrowdControlDuty { get; }
         public int ExpectedSpecPointsMultiplier { get; }
         public IReadOnlyList<CompanionBuildRank> TargetAllocations { get; }
 
         internal CompanionBuildPlan(string id, eCharacterClass characterClass, string key, string name, string role,
-            int expectedSpecPointsMultiplier, IReadOnlyList<CompanionBuildRank> targetAllocations)
+            BotPveGroupRole primaryRole, bool crowdControlDuty, int expectedSpecPointsMultiplier,
+            IReadOnlyList<CompanionBuildRank> targetAllocations)
         {
             Id = id;
             CharacterClass = characterClass;
             Key = key;
             Name = name;
             Role = role;
+            PrimaryRole = primaryRole;
+            CrowdControlDuty = crowdControlDuty;
             ExpectedSpecPointsMultiplier = expectedSpecPointsMultiplier;
             TargetAllocations = targetAllocations;
         }

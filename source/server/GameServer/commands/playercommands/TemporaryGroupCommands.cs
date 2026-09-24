@@ -395,16 +395,20 @@ namespace DOL.GS.Commands
     {
         public void OnCommand(GameClient client, string[] args)
         {
-            GamePlayer player = client.Player;
-            if (player.TargetObject is not GameLiving target || !target.IsAlive)
-            {
-                DisplayMessage(client, "Select a living enemy first, then type /pull.");
-                return;
-            }
-            if (!GameServer.ServerRules.IsAllowedToAttack(player, target, false))
-                return;
+            string message = Order(client.Player, "type /pull");
+            if (message != null)
+                DisplayMessage(client, message);
+        }
 
-            DisplayMessage(client, PlayerLedPullCoordinator.Begin(player, target));
+        /// <summary>Orders the pull on the player's target; null when the attack rules already told the player why not.</summary>
+        public static string Order(GamePlayer player, string retry)
+        {
+            if (player.TargetObject is not GameLiving target || !target.IsAlive)
+                return $"Select a living enemy first, then {retry}.";
+            if (!GameServer.ServerRules.IsAllowedToAttack(player, target, false))
+                return null;
+
+            return PlayerLedPullCoordinator.Begin(player, target);
         }
     }
 }

@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -59,8 +59,7 @@ namespace DOL.GS.Commands
                 case "group":
                     if (args.Length == 3 && args[2].Equals("default", StringComparison.OrdinalIgnoreCase))
                     {
-                        CompanionEngagementMode.ClearGroupOrder(player);
-                        DisplayMessage(client, "Group stance override cleared; each persistent companion uses their own preference.");
+                        DisplayMessage(client, CompanionGroupOrders.UseSavedStances(player));
                     }
                     else ShowUsage(client);
                     break;
@@ -167,7 +166,7 @@ namespace DOL.GS.Commands
                 string state = roster.Any(item => item.AuthoredRecruitKey == entry.Key) ? "recruited" : "available";
                 DisplayMessage(client, $"{entry.Name}, {entry.Realm} {entry.Class} ({entry.Personality}; {state}).");
             }
-            DisplayMessage(client, "Recruit with /companions recruit authored <name>, or open /companions for biographies.");
+            DisplayMessage(client, "Recruit with /companions recruit authored <name> [build], or open /companions for biographies.");
         }
 
         private void ShowProfile(GameClient client, GamePlayer player, string[] args)
@@ -204,7 +203,15 @@ namespace DOL.GS.Commands
 
             if (args.Length >= 4 && args[2].Equals("authored", StringComparison.OrdinalIgnoreCase))
             {
-                PlayerCompanionRoster.TryRecruitAuthored(player, string.Join(' ', args.Skip(3)), out _, out string authoredMessage);
+                string authoredName = string.Join(' ', args.Skip(3));
+                string authoredBuild = null;
+                if (CompanionCharacterCatalog.FindByName(authoredName) == null && args.Length >= 5)
+                {
+                    // A trailing word that is not part of the name names the build.
+                    authoredName = string.Join(' ', args.Skip(3).Take(args.Length - 4));
+                    authoredBuild = args[^1];
+                }
+                PlayerCompanionRoster.TryRecruitAuthored(player, authoredName, authoredBuild, out _, out string authoredMessage);
                 DisplayMessage(client, authoredMessage);
                 return;
             }
@@ -331,7 +338,7 @@ namespace DOL.GS.Commands
             foreach (CompanionBuildPlan plan in plans)
             {
                 string marker = automatic && string.Equals(record.TrainingPlanId, plan.Id, StringComparison.Ordinal) ? "*" : "-";
-                DisplayMessage(client, $"{marker} {plan.Key}: {plan.Name}, {plan.Role}. Level 50: {plan.FormatTargets()}.");
+                DisplayMessage(client, $"{marker} {plan.Key}: {plan.Name}, {CompanionManager.BuildRoleText(plan)} Level 50: {plan.FormatTargets()}.");
             }
             DisplayMessage(client, $"Switch with /companions build {record.Name} <build>. Switching is free, needs no trainer, resets {record.Name}'s specializations, and retrains the new build to their level.");
         }
@@ -498,7 +505,7 @@ namespace DOL.GS.Commands
         private void ShowUsage(GameClient client)
         {
             DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }

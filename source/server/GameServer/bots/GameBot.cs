@@ -1930,6 +1930,7 @@ namespace DOL.GS
             string previousPlan = PlayerCompanionRecord.TrainingPlanId;
             string previousSerializedSpecs = PlayerCompanionRecord.SerializedSpecs;
             int previousRecordPoints = PlayerCompanionRecord.UnspentSpecPoints;
+            string previousRole = PlayerCompanionRecord.TacticalRole;
 
             // Clears abilities, styles, and spells of the old ranks before retraining.
             ResetCompanionSpecializations();
@@ -1938,6 +1939,7 @@ namespace DOL.GS
             m_leftOverSpecPoints = unspentPoints;
             PlayerCompanionRecord.TrainingMode = "automatic";
             PlayerCompanionRecord.TrainingPlanId = plan.Id;
+            PlayerCompanionRecord.TacticalRole = BotPartyRoles.RoleValue(plan.PrimaryRole);
             PlayerCompanionRecord.Dirty = true;
 
             if (!PlayerCompanionRoster.SaveProgress(this))
@@ -1949,6 +1951,7 @@ namespace DOL.GS
                 PlayerCompanionRecord.TrainingPlanId = previousPlan;
                 PlayerCompanionRecord.SerializedSpecs = previousSerializedSpecs;
                 PlayerCompanionRecord.UnspentSpecPoints = previousRecordPoints;
+                PlayerCompanionRecord.TacticalRole = previousRole;
                 PlayerCompanionRecord.Dirty = true;
                 RefreshCompanionSkills();
                 message = $"{Name}'s build change could not be saved; their previous build and allocations were restored.";
@@ -1956,7 +1959,7 @@ namespace DOL.GS
             }
 
             RefreshCompanionSkills();
-            message = $"{Name} now follows the {plan.Name} build ({plan.Role}) and was retrained to level {Level}: {FormatBuildRanks(plan, allocation)}. {m_leftOverSpecPoints} points remain.";
+            message = $"{Name} now follows the {plan.Name} build ({plan.Role}; role {BotPartyRoles.GroupRoleLabel(plan.PrimaryRole).ToLowerInvariant()}) and was retrained to level {Level}: {FormatBuildRanks(plan, allocation)}. {m_leftOverSpecPoints} points remain.";
             return true;
         }
 
@@ -4794,8 +4797,30 @@ namespace DOL.GS
                    GetSpecializationByName(line) is { Trainable: true, Level: > 1 };
         }
 
-        internal bool TryManuallyEquipPersistentCompanionItem(DbInventoryItem item)
+        /// <summary>
+        /// The worn slot a manual equip would use for this item, ignoring slot locks, or
+        /// Invalid when the companion cannot use it. A ring or wrist item may report either half.
+        /// </summary>
+        internal eInventorySlot GetManualEquipmentSlot(DbInventoryItem item)
         {
+            if (!IsPersistentPlayerCompanion || Inventory == null || item == null)
+                return eInventorySlot.Invalid;
+            AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot resolved,
+                ignoreCompanionSlotLocks: true, companionPairTieBreak: 0);
+            return resolved;
+        }
+
+        internal bool TryManuallyEquipPersistentCompanionItem(DbInventoryItem item) =>
+            TryManuallyEquipPersistentCompanionItem(item, eInventorySlot.Invalid, out _);
+
+        /// <summary>
+        /// Equips a backpack item in its legal slot. <paramref name="preferredSlot"/> only chooses
+        /// between the two halves of a ring or wrist pair; every other slot follows the item.
+        /// </summary>
+        internal bool TryManuallyEquipPersistentCompanionItem(DbInventoryItem item, eInventorySlot preferredSlot,
+            out eInventorySlot equippedSlot)
+        {
+            equippedSlot = eInventorySlot.Invalid;
             if (!IsPersistentPlayerCompanion || Inventory == null || item == null ||
                 !Inventory.AllItems.Contains(item) ||
                 item.SlotPosition is < (int)eInventorySlot.FirstBackpack or > (int)eInventorySlot.LastBackpack)
@@ -4805,10 +4830,11 @@ namespace DOL.GS
             // upgrade boolean is intentionally ignored: manual choices may be
             // weaker than the current item.
             int pairTieBreak = Random.Shared.Next();
-            AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot target,
+            AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot resolved,
                 ignoreCompanionSlotLocks: true, companionPairTieBreak: pairTieBreak);
-            if (target == eInventorySlot.Invalid)
+            if (resolved == eInventorySlot.Invalid)
                 return false;
+            eInventorySlot target = IsSameEquipmentPair(resolved, preferredSlot) ? preferredSlot : resolved;
 
             int requiredFreeBackpackSlots = target switch
             {
@@ -4828,7 +4854,7 @@ namespace DOL.GS
                 // Manual equipment only needs a legal slot; its score may be lower.
                 AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot resolvedTarget,
                     ignoreCompanionSlotLocks: true, companionPairTieBreak: pairTieBreak);
-                if (resolvedTarget == eInventorySlot.Invalid || resolvedTarget != target)
+                if (resolvedTarget == eInventorySlot.Invalid || resolvedTarget != resolved)
                     return false;
 
                 List<eInventorySlot> conflictingSlots = target switch
@@ -4867,8 +4893,16 @@ namespace DOL.GS
             if (target is eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon)
                 SwitchWeapon(target == eInventorySlot.TwoHandWeapon
                     ? eActiveWeaponSlot.TwoHanded : eActiveWeaponSlot.Standard);
+            equippedSlot = target;
             return true;
         }
+
+        private static bool IsSameEquipmentPair(eInventorySlot first, eInventorySlot second) =>
+            first != second &&
+            (first is eInventorySlot.LeftRing or eInventorySlot.RightRing &&
+             second is eInventorySlot.LeftRing or eInventorySlot.RightRing ||
+             first is eInventorySlot.LeftBracer or eInventorySlot.RightBracer &&
+             second is eInventorySlot.LeftBracer or eInventorySlot.RightBracer);
 
         private void EnsureTemporaryHelperWeapon()
         {

@@ -14,22 +14,66 @@ namespace DOL.GS.Commands
     {
         private const string BusyMessage = "Gear changes need an active companion near you while both of you are out of combat.";
 
+        /// <summary>Worn slots in character-sheet order; ring and wrist pairs are adjacent.</summary>
+        public static readonly eInventorySlot[] SheetSlots =
+        [
+            eInventorySlot.HeadArmor, eInventorySlot.TorsoArmor, eInventorySlot.ArmsArmor,
+            eInventorySlot.HandsArmor, eInventorySlot.LegsArmor, eInventorySlot.FeetArmor,
+            eInventorySlot.Cloak, eInventorySlot.Neck, eInventorySlot.Jewelry, eInventorySlot.Waist,
+            eInventorySlot.LeftBracer, eInventorySlot.RightBracer,
+            eInventorySlot.LeftRing, eInventorySlot.RightRing,
+            eInventorySlot.RightHandWeapon, eInventorySlot.LeftHandWeapon,
+            eInventorySlot.TwoHandWeapon, eInventorySlot.DistanceWeapon, eInventorySlot.Mythical,
+        ];
+
         public static bool IsBackpack(DbInventoryItem item) =>
             item?.SlotPosition is >= (int)eInventorySlot.FirstBackpack and <= (int)eInventorySlot.LastBackpack;
 
-        public static bool TryEquip(GamePlayer owner, string companionId, string itemId, out string message)
+        /// <summary>
+        /// The companion's backpack items that it can equip in <paramref name="slot"/>, best first.
+        /// Uses the same legality as a manual equip; slot locks do not hide an item.
+        /// </summary>
+        public static IReadOnlyList<DbInventoryItem> ItemsFitting(GameBot companion, eInventorySlot slot) =>
+            companion?.Inventory == null
+                ? Array.Empty<DbInventoryItem>()
+                : companion.Inventory.AllItems.Where(IsBackpack)
+                    .Where(item => FitsSlot(companion.GetManualEquipmentSlot(item), slot))
+                    .OrderByDescending(AutonomousBotEconomy.EquipmentValue)
+                    .ThenBy(item => item.SlotPosition)
+                    .ToArray();
+
+        /// <summary>True when an item that resolves to <paramref name="resolved"/> can go in <paramref name="slot"/>.</summary>
+        public static bool FitsSlot(eInventorySlot resolved, eInventorySlot slot) =>
+            resolved != eInventorySlot.Invalid && (resolved == slot || PairOf(resolved) == slot);
+
+        /// <summary>The other half of a ring or wrist pair, or Invalid.</summary>
+        public static eInventorySlot PairOf(eInventorySlot slot) => slot switch
+        {
+            eInventorySlot.LeftRing => eInventorySlot.RightRing,
+            eInventorySlot.RightRing => eInventorySlot.LeftRing,
+            eInventorySlot.LeftBracer => eInventorySlot.RightBracer,
+            eInventorySlot.RightBracer => eInventorySlot.LeftBracer,
+            _ => eInventorySlot.Invalid,
+        };
+
+        public static bool TryEquip(GamePlayer owner, string companionId, string itemId, out string message) =>
+            TryEquip(owner, companionId, itemId, eInventorySlot.Invalid, out message);
+
+        /// <param name="preferredSlot">The ring or wrist half to use; other slots follow the item.</param>
+        public static bool TryEquip(GamePlayer owner, string companionId, string itemId, eInventorySlot preferredSlot,
+            out string message)
         {
             if (!TryGetItem(owner, companionId, itemId, out GameBot companion, out DbInventoryItem item) || !IsBackpack(item))
             {
                 message = "That item is no longer in the companion's backpack.";
                 return false;
             }
-            if (!companion.TryManuallyEquipPersistentCompanionItem(item))
+            if (!companion.TryManuallyEquipPersistentCompanionItem(item, preferredSlot, out eInventorySlot slot))
             {
                 message = "That item is not a legal choice, its slot is protected, or the companion is busy.";
                 return false;
             }
-            message = $"{item.Name} is equipped and its slot is locked against automatic replacement.";
+            message = $"{item.Name} is equipped in the {SlotName(slot)} slot, which is locked against automatic replacement.";
             return true;
         }
 

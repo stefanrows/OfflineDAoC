@@ -13,6 +13,16 @@ Hold **Ctrl** for **+100 bots** per click, or **Shift** for **+10**. Without a
 modifier, add one bot. Start small and increase the population for your PC's
 capacity. The Active Population tab shows autonomous crews and solo roamers.
 
+Use **Server population** while the server is stopped to choose a preset or
+six-type mix, leveling-zone danger, and Fresh launch or Established world
+shape. **ADD LV.1 CREW** follows the chosen shape: Fresh launch makes level-1
+bots; Established creates a spread of levels. **ADD LV.50 CREW** always creates
+level-50 bots. New higher-level bots receive suitable gear and training on
+first login. Existing bots keep their levels and possessions. The alt interval
+and total-roster cap control later level-1 additions to managed guilds.
+The launcher gives a numeric size recommendation only after this PC records
+stable samples at 500, 1,000, and 1,500 active bots.
+
 ## Travel and finding mobs
 
 | Command | What it does |
@@ -32,10 +42,10 @@ capacity. The Active Population tab shows autonomous crews and solo roamers.
 | `/companions` | Open the Companion Manager window, if its client extension is installed. Without it, you get one line of command guidance. |
 | `/companions find <name or class>` | Search the Companion Manager. The window's **[Search]** link types `/companions find ` into the chat line for you. |
 | `/companions list` | List companion names grouped by realm. Recruit generated people with `/companions recruit Warden` or another class; use an explicit realm if needed. Recruits are free, start at level 1, and the roster holds 78 companions. |
-| `/companions cast` | Browse the 78 authored people, eight at a time. Use `/companions cast <realm> <page>` to browse, then `/companions recruit authored <name>`. Each authored individual can join your roster once. |
+| `/companions cast` | Browse the 78 authored people, eight at a time. Use `/companions cast <realm> <page>` to browse, then `/companions recruit authored <name> [build]`. Each authored individual can join your roster once. |
 | `/companions profile <name>` | Show a saved companion's identity, background, preferred build, role, stance, and dialogue. |
-| `/companions build <name> [build]` | List a companion's builds, or switch to one, for example `/companions build Astrid summoning`. Switching is free, works anywhere, and retrains the new build to the companion's level. Recruit with a build: `/companions recruit healer pacification`. |
-| `/companions role <name> <role>` | Set a class-legal tank, healer, buffer, or attacker job. |
+| `/companions build <name> [build]` | List a companion's builds, or switch to one, for example `/companions build Astrid summoning`. Switching is free, works anywhere, retrains the new build to the companion's level, and sets the build's role. Recruit with a build: `/companions recruit healer pacification`. |
+| `/companions role <name> <role>` | Set a class-legal tank, healer, buffer, attacker, or `cc` (crowd control) job. A crowd control companion mezzes extra monsters that are not the group's target; other companions leave mezzed monsters alone. |
 | `/companions stance <name> aggressive|defensive|passive` | Set an individual's saved engagement preference. Group commands override it until `/companions group default`. |
 | `/spawn` | Open the menu of valid companion bots to summon. |
 | `/spawn X` | Summon a companion by class name from your realm instead of using the menu; useful for macros. |
@@ -45,6 +55,7 @@ capacity. The Active Population tab shows autonomous crews and solo roamers.
 | `/aggressive` | Companions assist your attacks and defend the party. They break off and return if left far behind. |
 | `/defensive` | Companions engage threats near you and return if left far behind. |
 | `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Choose another mode to resume fighting. |
+| Companion Manager: Group orders | The first roster row sets these orders, shows each companion's effective stance, and offers Pull, Invite all, Bench all, and Grind. |
 
 `/spawn 40` and `/spawn 80` are **not** the raid-size commands. Use `/raid` first.
 These modes control your companions, not autonomous gamebots. All three modes recall a companion beyond 2100 units until it reaches 650 units from you.

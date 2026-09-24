@@ -2,7 +2,11 @@
 
 Status: **M0 remainder implemented offline in 0.33.0; owner real-client check
 pending. M1a (build research, catalog, and command selection) implemented
-offline in 0.34.0; M1b, M1c, M2, and M3 are not implemented yet.**
+offline in 0.34.0. M1b (build list in the window and recruit flow) implemented
+offline in 0.35.0. M1c (Crowd control role and build roles) implemented
+offline in 0.36.0. M2 (group controls in the window) implemented offline in
+0.37.0. M3 (worn slots on the bag window's second half) implemented offline in
+0.38.0 and replaced by the Gear tab slot sheet (M3b) in 0.39.0.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -156,19 +160,109 @@ variant.
       benched), check its trained lines and spells, level it once, and recruit
       with `/companions recruit healer pacification`.
 
-### M1b - Build list in the window and recruit flow
+### M1b - Build list in the window and recruit flow (0.35.0, offline)
 
-- Training & Tactics: a clickable build list with each build's one-line
-  description and role; the current build is marked.
-- Recruit flow in the window: choose a story companion or class, then one of
-  its builds, then recruit. An authored companion's written preferred build is
-  preselected (the authored catalog does not record one yet).
+Server only. It reuses the window's detail links and action buttons, so the
+installed 0.33.0 (or 0.32.1) manager `game.dll` needs no change.
 
-### M1c - Crowd control role
+- [x] Training & Tactics: every build is a detail link, followed by its role
+      text; the current build is marked `(current)`. Clicking a build selects
+      it (`<`) and shows its level-50 targets. **[Use build]** applies it
+      through `PlayerCompanionRoster.TrySelectBuild`, with the M1a rules: free,
+      no trainer, reset and retrain to the current level, active or benched.
+      It stays disabled until a build other than the current one is selected,
+      so one stray click cannot reset a companion.
+- [x] Recruit flow: a story companion or class lists its builds with the class
+      default preselected (`(default) <`). **[Recruit]** or **[Create]** uses
+      the selected build. The authored catalog records no preferred build yet,
+      so story companions preselect their class default. Manual-only classes
+      show why and recruit in manual training. A selection belongs to the one
+      row it was made on; changing rows or tabs never carries it over.
+- [x] Commands: `/companions recruit authored <name> [build]`.
+- [x] Overview names the build that automatic training follows.
+- [x] Test: a manual Healer shows all four builds with **[Use build]**
+      disabled; choosing Pacification enables it and sends that build, not the
+      default, to the roster; the recruit panel preselects Tri-spec and
+      recruits with the chosen build. The test server has no skill tables, so it
+      checks the refusal path; a successful switch is covered by the M1a
+      roster tests.
+- [ ] Owner: in the real client, open Training & Tactics, select a different
+      build, and choose **[Use build]** for an active and a benched companion.
+      Recruit one story companion and one class with a non-default build and
+      check the build on the new roster entry.
 
-- Add the Crowd control role and check its AI (mezz and root choice, target
-  selection, breaking rules) against the existing bot crowd-control code.
-- Apply each build's role on selection, using the owner's Healer mapping.
+### M1c - Crowd control role (0.36.0, offline)
+
+Server only. The installed manager `game.dll` needs no change.
+
+**Owner decisions (2026-09-24):**
+
+- PvE: the companion mezzes adds, and other companions protect the mezzes.
+- Hybrid builds keep one saved primary role. A build that lists crowd control
+  also controls adds when its primary job allows (Tri-spec = Healer + add
+  control).
+- Choosing a build always sets its role. The player can change it afterwards.
+- No native Crowd control filter button for now; the roster filter keeps its
+  four role buttons.
+
+**Check against the existing code:** before this change, crowd control was
+PvP only. `TryPvpCrowdControl` returned early unless a player-shaped enemy was
+involved. In PvE, a caster could mezz the monster it was attacking, and no
+companion skipped mezzed monsters when choosing a target, so every PvE mezz was
+broken at once.
+
+- [x] Role: `BotPveGroupRole.CrowdControl` (saved as `crowdcontrol`; commands
+      also take `cc` and `crowd control`). It is added after the four existing
+      values, so the native filter's control IDs are unchanged. It is class-legal
+      for the classes with a plain, non-pulsing mesmerize line in the runtime
+      spell table: Healer (Pacification), Sorcerer (Mind), Bard (Music),
+      Mentalist (Mentalism), and Spiritmaster (Suppression). Minstrel mezzes
+      only with a pulsing song, which the policy does not maintain.
+- [x] Mezz, not root: PvE add control uses only mesmerize. A rooted monster
+      keeps fighting anyone in melee range and can still cast, so roots stay
+      with the existing PvP policy.
+- [x] Target choice (`CompanionAddControl`, `BotBrain.PveCrowdControl`): nothing
+      happens until the group has a focus target, so a pull is never mezzed. The
+      focus is every member's attack or harmful-cast target, each companion's
+      ordered pull, their pets' targets, and the owner's target. An add is a
+      monster within 1,500 units that is attacking a group member or pet, or is
+      on the caster's aggro list. Adds hitting non-tanks come first, then the
+      most adds caught, then the nearest. Adds are skipped when they are immune,
+      under the NPC diminishing-return timer, below 75% health (the native
+      "enraged" resist), or taking damage over time. The shared short-lived
+      reservation keeps two companions off the same add. Single-target mezzes
+      come first; an area mezz is used only when no focus target is inside its
+      radius.
+- [x] Breaking rules: companions in a player-led group leave a mezzed monster
+      alone while another enemy is left, and fall back to it only when nothing
+      else remains. They skip harmful area spells whose radius holds a
+      protected mezz. If the owner attacks the mezzed monster, companions may
+      attack it too. Real players are never restricted, and autonomous bots
+      keep their rules.
+- [x] Priorities: a Healer (any role) heals first, then controls. A support
+      companion's own mezz cast is no longer cancelled by its hold-back-from-melee
+      step. A Sorcerer, Bard, Mentalist, or Spiritmaster in the Crowd control role
+      attacks when there is nothing to control.
+- [x] Build roles: choosing a build (window, `/companions build`, or recruitment)
+      saves its primary role in the same save as the new build, with rollback on
+      failure. Owner's Healer mapping: Tri-spec = Healer + add control, Mending =
+      Healer, Augmentation = Buffer, Pacification = Crowd control. Project
+      mapping for the other builds: Sorcerer Body and Mind and Bard Music =
+      Crowd control; Bard Nurture and Shaman Augmentation = Buffer; Friar Group
+      support = Healer; Armsman Two-handed = Attacker; all others keep the class
+      default. Existing records keep their saved role until a build is chosen.
+- [x] Tests: role numbers and aliases, class legality, the Healer mapping,
+      every build's role is class-legal, build text names the role, and the `cc`
+      command saves only for a class that can fill it. The AI needs live
+      monsters and is left to the owner check.
+- [ ] Owner: in the real client, group with a Pacification Healer (or a Sorcerer
+      on Body and Mind), pull two or three monsters, and check that the extra
+      monsters are mezzed, the pulled target is not, other companions leave the
+      mezzed ones alone until the first dies, and a Tri-spec Healer still heals
+      first. Switch builds and check the role follows.
+
+Known limits: companions' pets are not held back from mezzed monsters, and a
+monster that a real player's area spell wakes is simply mezzed again.
 
 ## M2 - Behaviour controls in the window
 
@@ -184,7 +278,39 @@ variant.
   them: `/pull`, `/grind`, and invite/bench-all.
 
 No native work is expected; this reuses the window's labels and click areas.
-Decision: which group controls belong in the window versus staying as commands.
+
+**Owner decision (2026-09-24):** all four go in the window: the group order
+row, pull, invite/bench all, and grind.
+
+### M2 - Group orders row (0.37.0, offline)
+
+Server only. The installed manager `game.dll` needs no change.
+
+- [x] Roster list: a **Group orders** row comes first whenever the roster has
+      companions or the player is in a group. Search and filters do not hide
+      it, and a companion stays the default selection. Its list text shows the
+      order (`order: defensive` or `order: saved stances`) and `grinding`.
+- [x] Detail: the four orders as links with the current one marked; each
+      grouped companion's effective stance, with `(saved: ...)` when the order
+      overrides it (clicking a saved companion opens it); temporary helpers are
+      listed as such. Per-companion role, stance, training mode, train, and
+      respec were already in the window.
+- [x] Actions: **[Pull]** orders the pull on the current target through the
+      `/pull` code. **[Invite all]** invites the benched companions shown in the
+      list, top to bottom, until the group is full (filters choose who comes).
+      **[Bench all]** benches every active companion. **[Grind]**/**[Stop
+      grind]** use the `/grind` code; grind still accepts only temporary
+      `/spawn` helpers, and the refusal explains that.
+- [x] Commands and window share one code path (`CompanionGroupOrders`,
+      `PullGroupCommandHandler.Order`); command behaviour is unchanged.
+- [x] Test: the group row leads the list without taking the default selection;
+      Defensive is applied and shown per companion; pull without a target,
+      invite all outside the world, and grind with a saved companion report
+      the existing refusals; saved stances clears the order.
+- [ ] Owner: in the real client, select Group orders, switch between the four
+      orders and watch companions react, pull a target with **[Pull]**, and use
+      **[Bench all]** then **[Invite all]** with a realm or search filter.
+      Start and stop **[Grind]** with `/spawn` helpers.
 
 ## M3 - Companion equipment in a slot layout
 
@@ -211,9 +337,88 @@ All options keep the current protections: `TryApplyEquipmentMutation`, class
 legality, slot locks, keep flags, and the rules that a rejected or full-bag
 action leaves items and coins intact.
 
+**Owner decision (2026-09-24):** option 2, the second vault page. Option 1
+stays a possible later probe; it is not planned.
+
+**Owner decision (2026-09-24, later):** the vault page (0.38.0) is
+unintuitive. Replace it with a slot sheet in the Gear tab (M3b below) and
+return the bag window to the backpack only.
+
+### M3 - Worn slots in the bag window (0.38.0, offline; replaced in 0.39.0)
+
+Superseded by M3b. Its owner check below is no longer needed.
+
+Server only. The installed manager `game.dll` needs no change.
+
+- [x] Layout: the bag view now fills all 100 house-vault positions. Positions
+      1-40 stay the backpack; 41-50 are empty; positions 51-69 are the worn
+      slots, two per row in the client's two-column list: helm, chest / arms,
+      gloves / legs, boots / cloak, neck / jewel, belt / left, right wrist /
+      left, right ring / right hand, left hand / two-handed, ranged / mythical.
+      Position 51 starts a new page for page sizes of 10, 25, or 50 slots.
+      Quivers are not shown.
+- [x] Equip: dropping a companion bag item on a worn position calls
+      `PersistentCompanionGear.TryEquip`, the **[Equip + lock]** path. The item
+      goes to its own legal slot, whatever position it was dropped on. A ring or
+      bracer takes the side it was dropped on. The slot is locked.
+- [x] Unequip: dragging a worn item onto an empty companion bag position calls
+      `TryUnequip` into that exact bag slot and unlocks the slot.
+- [x] Refused: worn to worn, worn to the player's bag, the player's bag to a
+      worn position, and the empty positions 41-50 and 70-100 each explain the
+      right drag. Nothing moves.
+- [x] Protections: every change still goes through `TryApplyEquipmentMutation`
+      with class legality, displaced-weapon space, and slot locks; the bag
+      still needs an active, nearby companion out of combat.
+- [x] Manager: the Gear tab and the **[Open bag]** message name the worn
+      positions.
+- [x] Test: backpack and worn positions round-trip, they do not overlap or
+      leave the vault, and ring and wrist pairs share a row. Equip and unequip
+      reuse the existing roster paths; the real drags need the client.
+- [ ] Owner: in the real client, open a companion's bag, page to position 51,
+      and check that the worn items appear there in the order above. Drop a
+      helm and a ring from the companion's bag onto the worn positions, drag a
+      worn item back to an empty bag slot, and check that the Gear tab and the
+      companion's appearance follow. Note the client's page size.
+
+Known limits: empty worn positions have no slot names or silhouettes, so the
+order above (also listed in the Gear tab) is the key. The bag window does not
+refresh by itself when the companion equips loot automatically; reopen it or
+make any move to refresh.
+
+### M3b - Gear tab slot sheet (0.39.0, offline)
+
+Server only. The installed manager `game.dll` needs no change.
+
+- [x] Slot sheet: the Gear tab lists all 19 worn slots in character-sheet
+      order (helm, chest, arms, gloves, legs, boots, cloak, neck, jewel, belt,
+      left and right wrist, left and right ring, right hand, left hand,
+      two-handed, ranged, mythical), including empty ones. A slot shows
+      `N fit` when it is empty and bag items fit it, or `upgrade in bag` when a
+      bag item scores higher than the worn one.
+- [x] Open slot: clicking a slot opens it at the top of the detail pane with
+      the worn item's stats and every bag item the companion can equip there,
+      best first, with its score change. Fitting uses the manual-equip
+      legality (class, level, weapon configuration) and ignores slot locks.
+- [x] Actions: **[Equip + lock]** equips the selected item in the open slot
+      through `PersistentCompanionGear.TryEquip`; a ring or bracer goes on the
+      clicked side. **[Unequip]**, **[Lock slot]**, and **[Keep]** act on the
+      worn item. The backpack list keeps its equip, return, and keep actions.
+- [x] Bag window: backpack only again (40 positions); the 0.38.0 worn
+      positions and their drag rules are removed.
+- [x] Benched companions show all 19 slots read-only.
+- [x] Test: sheet order, 19 unique equipable slots, adjacent ring and wrist
+      pairs, and paired-slot matching. The fit list needs a live companion and
+      is left to the owner check.
+- [ ] Owner: in the real client, open a companion's Gear tab, click an empty
+      slot and a filled one, equip an item from the fit list (including a ring
+      on the left side), unequip it, and check that the `fit` and
+      `upgrade in bag` hints follow.
+
 ## Order and gates
 
 M0, then M1, then M2, which carry no native risk and give the most gameplay
-value. M3 starts with its probe. Each milestone follows the repository's
+value. M3 uses the server-only Gear tab slot sheet (M3b, replacing the 0.38.0
+vault page); a native slot-grid probe
+would come later only if the owner asks for it. Each milestone follows the repository's
 versioning, uses offline tests before any owner check, and closes only after
 the owner confirms it in the real client.

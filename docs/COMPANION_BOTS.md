@@ -56,14 +56,18 @@ The Stage 5 cast adds two authored people for each of the 39 Classic + SI
 classes. Each has a stable key, name, eligible race and gender, size,
 background, personality, and dialogue. Browse them with
 `/companions cast [realm] [page]`; recruit each once per owner with
-`/companions recruit authored <name>`. Generated recruitment by class remains
+`/companions recruit authored <name> [build]`. Generated recruitment by class remains
 available. New generated recruits receive a saved personality template. Existing
 records keep their previous identity and class behavior. The catalog's preferred
 build is the validated class default build where available; four classes remain manual-only.
 
 `/companions profile <name>` shows identity, background, preferred build, role,
-stance, and a short line of dialogue. `/companions role <name> tank|healer|buffer|attacker` saves a class-legal
-party job;
+stance, and a short line of dialogue. `/companions role <name> tank|healer|buffer|attacker|cc` saves a class-legal
+party job. Choosing a build also sets its role. A companion in the Crowd
+control role (Healer, Sorcerer, Bard, Mentalist, or Spiritmaster), or on a
+Healer Tri-spec build, mezzes extra monsters in PvE once the group is fighting.
+It never mezzes the group's or the owner's target. Companions in a player-led
+group leave mezzed monsters alone while another enemy is left;
 `/companions stance <name> aggressive|defensive|passive` saves an individual
 engagement preference. Personality sets the first stance. Aggressive companions
 assist attacks; defensive companions engage threats near the leader; passive
