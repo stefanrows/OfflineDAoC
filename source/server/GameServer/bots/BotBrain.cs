@@ -25,9 +25,7 @@ namespace DOL.AI.Brain
 
         public GameBot BotBody => Body as GameBot;
         private long _nextPoisonSupplyTick;
-        private GameLiving _bombWaitTarget;
-        private long _bombWaitStartedTick;
-        private bool _bombWaitExpired;
+        private readonly CompanionBombTankWait _bombTankWait = new();
 
         #region IControlledBrain Implementation
 
@@ -3460,29 +3458,12 @@ namespace DOL.AI.Brain
                 return false;
             }
 
-            if (_bombWaitTarget == null)
-            {
-                _bombWaitTarget = target;
-                _bombWaitStartedTick = GameLoop.GameLoopTime;
-                _bombWaitExpired = false;
-            }
-            else if (_bombWaitTarget != target)
-                _bombWaitTarget = target;
-            if (_bombWaitExpired)
-                return false;
-            if (GameLoop.GameLoopTime - _bombWaitStartedTick >= CompanionBombingPolicy.TankAggroWaitMilliseconds)
-            {
-                _bombWaitExpired = true;
-                return false;
-            }
-            return true;
+            return _bombTankWait.ShouldWait(target, GameLoop.GameLoopTime);
         }
 
         private void ResetBombWait()
         {
-            _bombWaitTarget = null;
-            _bombWaitStartedTick = 0;
-            _bombWaitExpired = false;
+            _bombTankWait.Reset();
         }
 
         private int CompanionBombApproachRange(GameLiving target)
@@ -4056,90 +4037,56 @@ namespace DOL.AI.Brain
                 ? properties
                 : [];
 
-        private static bool CanProvideBuffToTarget(GameLiving provider, GameLiving target, Spell spell)
-        {
-            if (spell.Target == eSpellTarget.REALM)
-            {
-                if (!GameServer.ServerRules.IsSameRealm(provider, target, true))
-                    return false;
-
-                if (spell.Range > 0 &&
-                    !provider.IsWithinRadius(target, spell.CalculateEffectiveRange(provider)))
-                    return false;
-            }
-            else if (spell.Target == eSpellTarget.GROUP)
-            {
-                int range = spell.Range == 0 ? spell.Radius : spell.CalculateEffectiveRange(provider);
-                if (!provider.IsWithinRadius(target, range))
-                    return false;
-            }
-            else if (spell.Target != eSpellTarget.SELF || provider != target)
-                return false;
-
-            return spell.SpellType switch
-            {
-                eSpellType.StrengthBuff => !target.HasAbility(Abilities.VampiirStrength),
-                eSpellType.ConstitutionBuff => !target.HasAbility(Abilities.VampiirConstitution),
-                eSpellType.DexterityBuff => !target.HasAbility(Abilities.VampiirDexterity),
-                eSpellType.QuicknessBuff => !target.HasAbility(Abilities.VampiirQuickness),
-                eSpellType.StrengthConstitutionBuff =>
-                    !target.HasAbility(Abilities.VampiirStrength) && !target.HasAbility(Abilities.VampiirConstitution),
-                eSpellType.DexterityQuicknessBuff =>
-                    !target.HasAbility(Abilities.VampiirDexterity) && !target.HasAbility(Abilities.VampiirQuickness),
-                _ => true
-            };
-        }
-
         private static bool HasOtherGroupMemberBuffCoverage(GameBot caster, GameLiving target, Spell requestedBuff)
         {
             Group group = caster?.Group;
-            if (group == null || target == null || requestedBuff == null)
+            if (group == null || target?.effectListComponent == null || requestedBuff == null)
+                return false;
+
+            List<ECSGameSpellEffect> appliedEffects = target.effectListComponent.GetSpellEffects();
+            if (appliedEffects.Count == 0)
                 return false;
 
             eProperty[] requestedCoverage = GetBuffCoverage(requestedBuff);
-            if (requestedCoverage.Length == 0)
-            {
-                foreach (GameLiving member in group.GetMembersInTheGroup())
-                {
-                    if (member == caster || !member.IsAlive)
-                        continue;
-
-                    bool canProvideSameType = GetKnownClassBuffs(member)
-                        .Any(entry => entry.Spell.Level <= member.Level &&
-                                      entry.Spell.SpellType == requestedBuff.SpellType &&
-                                      entry.Spell.Value >= requestedBuff.Value &&
-                                      IsMaintainableClassBuff(entry.Spell) &&
-                                      CanProvideBuffToTarget(member, target, entry.Spell));
-                    if (canProvideSameType)
-                        return true;
-                }
-
-                return false;
-            }
-
             HashSet<eProperty> coveredProperties = [];
             foreach (GameLiving member in group.GetMembersInTheGroup())
             {
+                // Spell knowledge alone does not prove that a group member will
+                // cast it; only an active effect on this target counts.
                 if (member == caster || !member.IsAlive)
                     continue;
 
-                foreach ((SpellLine line, Spell spell) in GetKnownClassBuffs(member))
+                foreach (ECSGameSpellEffect effect in appliedEffects)
                 {
-                    if (line == null || spell == null)
+                    if (effect == null || !effect.IsActive || effect.IsEnding || effect.IsEnded ||
+                        effect.Duration > 0 && effect.ExpireTick <= GameLoop.GameLoopTime ||
+                        effect.SpellHandler?.Caster != member || effect.SpellHandler.Spell is not Spell spell ||
+                        spell.Level > member.Level || !IsMaintainableClassBuff(spell))
                         continue;
 
-                    if (spell.Level > member.Level || spell.Value < requestedBuff.Value ||
-                        !IsMaintainableClassBuff(spell) || !CanProvideBuffToTarget(member, target, spell))
+                    bool sameBuffFamily = requestedBuff.EffectGroup != 0 || spell.EffectGroup != 0
+                        ? requestedBuff.EffectGroup == spell.EffectGroup
+                        : spell.SpellType == requestedBuff.SpellType;
+                    if (requestedCoverage.Length == 0 && !sameBuffFamily)
                         continue;
+
+                    double effectiveValue = spell.Value * effect.Effectiveness;
+                    double effectiveDamage = spell.Damage * effect.Effectiveness;
+                    bool atLeastAsStrong = effectiveValue >= requestedBuff.Value &&
+                                           effectiveDamage >= requestedBuff.Damage;
+                    bool sameStrength = effectiveValue == requestedBuff.Value &&
+                                        effectiveDamage == requestedBuff.Damage;
+                    if (!atLeastAsStrong || sameStrength && spell.Level < requestedBuff.Level)
+                        continue;
+
+                    if (requestedCoverage.Length == 0)
+                        return true;
 
                     coveredProperties.UnionWith(GetBuffCoverage(spell));
                 }
-
-                if (requestedCoverage.All(coveredProperties.Contains))
-                    return true;
             }
 
-            return false;
+            return requestedCoverage.Length > 0 && requestedCoverage.All(coveredProperties.Contains);
         }
 
         bool CheckDefensiveSpells(List<Spell> spells)

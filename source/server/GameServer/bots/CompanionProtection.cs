@@ -69,12 +69,12 @@ namespace DOL.AI.Brain
                 HashSet<GameLiving> externalProtects = FindExternallyCoveredTargets(targets, providerSet, eEffect.Protect);
                 Dictionary<GameBot, GameLiving> guardPlan = PlanCoverage(
                     providers.Where(bot => bot.GetAbilityLevel(Abilities.Guard) > 0).ToArray(),
-                    targets, externalGuards, externalProtects);
+                    targets, externalGuards, externalProtects, eEffect.Guard);
                 HashSet<GameLiving> guardedTargets = new(externalGuards);
                 guardedTargets.UnionWith(guardPlan.Values);
                 Dictionary<GameBot, GameLiving> protectPlan = PlanCoverage(
                     providers.Where(bot => bot.GetAbilityLevel(Abilities.Protect) > 0).ToArray(),
-                    targets, externalProtects, guardedTargets);
+                    targets, externalProtects, guardedTargets, eEffect.Protect);
 
                 ApplyGuardPlan(providers, guardPlan);
                 ApplyProtectPlan(providers, protectPlan);
@@ -88,7 +88,8 @@ namespace DOL.AI.Brain
             IReadOnlyList<GameBot> providers,
             IReadOnlyList<GameLiving> targets,
             HashSet<GameLiving> externallyCovered,
-            HashSet<GameLiving> preferDifferentCoverage)
+            HashSet<GameLiving> preferDifferentCoverage,
+            eEffect effectType)
         {
             Dictionary<GameBot, GameLiving> assignments = new();
             GameLiving[] orderedTargets = targets
@@ -100,7 +101,7 @@ namespace DOL.AI.Brain
                 .ToArray();
 
             foreach (GameLiving target in orderedTargets)
-                TryAssign(target, providers, assignments, new HashSet<GameBot>());
+                TryAssign(target, providers, assignments, new HashSet<GameBot>(), effectType);
 
             return assignments;
         }
@@ -109,15 +110,18 @@ namespace DOL.AI.Brain
             GameLiving target,
             IReadOnlyList<GameBot> providers,
             Dictionary<GameBot, GameLiving> assignments,
-            HashSet<GameBot> visitedProviders)
+            HashSet<GameBot> visitedProviders,
+            eEffect effectType)
         {
             foreach (GameBot provider in providers)
             {
-                if (provider == target || !visitedProviders.Add(provider))
+                if (provider == target || !IsWithinEffectRange(provider, target, effectType))
+                    continue;
+                if (!visitedProviders.Add(provider))
                     continue;
 
                 if (!assignments.TryGetValue(provider, out GameLiving assignedTarget) ||
-                    TryAssign(assignedTarget, providers, assignments, visitedProviders))
+                    TryAssign(assignedTarget, providers, assignments, visitedProviders, effectType))
                 {
                     assignments[provider] = target;
                     return true;
@@ -194,18 +198,39 @@ namespace DOL.AI.Brain
                 if (effectType == eEffect.Guard)
                 {
                     foreach (GuardECSGameEffect guard in target.effectListComponent.GetAbilityEffects(eEffect.Guard).OfType<GuardECSGameEffect>())
-                        if (guard.Target == target && (guard.Source is not GameBot sourceBot || !managedProviders.Contains(sourceBot)))
+                        if (guard.Target == target && IsEffectiveExternalSource(guard.Source, target, managedProviders, eEffect.Guard))
                             covered.Add(target);
                 }
                 else
                 {
                     foreach (ProtectECSGameEffect protect in target.effectListComponent.GetAbilityEffects(eEffect.Protect).OfType<ProtectECSGameEffect>())
-                        if (protect.Target == target && (protect.Source is not GameBot sourceBot || !managedProviders.Contains(sourceBot)))
+                        if (protect.Target == target && IsEffectiveExternalSource(protect.Source, target, managedProviders, eEffect.Protect))
                             covered.Add(target);
                 }
             }
 
             return covered;
+        }
+
+        private static bool IsEffectiveExternalSource(
+            GameLiving source,
+            GameLiving target,
+            HashSet<GameBot> managedProviders,
+            eEffect effectType) =>
+            source != null &&
+            (source is not GameBot sourceBot || !managedProviders.Contains(sourceBot)) &&
+            IsWithinEffectRange(source, target, effectType);
+
+        private static bool IsWithinEffectRange(GameLiving source, GameLiving target, eEffect effectType)
+        {
+            int range = effectType switch
+            {
+                eEffect.Guard => GuardAbilityHandler.GUARD_DISTANCE,
+                eEffect.Protect => ProtectAbilityHandler.PROTECT_DISTANCE,
+                _ => 0,
+            };
+
+            return source != null && target != null && range > 0 && source.IsWithinRadius(target, range);
         }
 
         private static void ApplyGuardPlan(
@@ -256,11 +281,13 @@ namespace DOL.AI.Brain
 
         private static bool HasOtherGuardSource(GameLiving target, GameBot provider) =>
             target.effectListComponent.GetAbilityEffects(eEffect.Guard).OfType<GuardECSGameEffect>()
-                .Any(effect => effect.Target == target && effect.Source != provider);
+                .Any(effect => effect.Target == target && effect.Source != provider &&
+                               IsWithinEffectRange(effect.Source, target, eEffect.Guard));
 
         private static bool HasOtherProtectSource(GameLiving target, GameBot provider) =>
             target.effectListComponent.GetAbilityEffects(eEffect.Protect).OfType<ProtectECSGameEffect>()
-                .Any(effect => effect.Target == target && effect.Source != provider);
+                .Any(effect => effect.Target == target && effect.Source != provider &&
+                               IsWithinEffectRange(effect.Source, target, eEffect.Protect));
 
         private static void EndOwnedEffects(GameBot bot)
         {

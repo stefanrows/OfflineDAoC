@@ -155,6 +155,7 @@ namespace DOL.GS.Spells
 			m_pet.SummonSpellDamage = Spell.Damage;
 			m_pet.SummonSpellValue = Spell.Value;
 			m_pet.SummonSpellID = Spell.ID;
+			m_pet.SummonOwnerLevel = Caster.Level;
 
 			int x, y, z;
 			ushort heading;

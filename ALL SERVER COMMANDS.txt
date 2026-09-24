@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.51.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.53.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 287 command registrations read from the shipped server assemblies.
 This installation runs one Camlann full-PvP world. Realm remains character identity,

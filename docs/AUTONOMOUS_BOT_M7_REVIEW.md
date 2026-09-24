@@ -1,6 +1,6 @@
 # Autonomous bots: first live review of M0–M6 and improvement plan
 
-Status: **review complete. Phase A implemented offline in 0.51.0; its owner run is pending. Phases B–D not started.**
+Status: **review complete. Phase A implemented offline in 0.53.0; its owner run is pending. Phases B–D not started.**
 Date: 2026-09-24. Build under review: 0.50.0 (M6), with earlier sessions on 0.49.x.
 
 This is the first M7 input for [AUTONOMOUS_BOT_ROADMAP.md](AUTONOMOUS_BOT_ROADMAP.md).
@@ -209,7 +209,7 @@ population and compare.
    "three PvP deaths" PvE block only to bots whose task is RvR (or which are
    Hunters and Roamers at level 10 or higher).
 
-**Implemented offline in 0.51.0.** Notes on the choices made:
+**Implemented offline in 0.53.0.** Notes on the choices made:
 
 - A1: safety applies to autonomous world bots only; player companions and
   temporary helpers follow their owner, as before. Hunters do not drop safety

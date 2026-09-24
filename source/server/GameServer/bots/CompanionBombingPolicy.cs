@@ -97,4 +97,46 @@ namespace DOL.GS
                 BotPartyRoles.For((eCharacterClass)player.CharacterClass.ID) == BotPartyRole.Tank;
         }
     }
+
+    /// <summary>Tracks the tank-aggro grace period for one focused pull target.</summary>
+    internal sealed class CompanionBombTankWait
+    {
+        private object _target;
+        private long _startedTick;
+        private bool _expired;
+
+        public bool ShouldWait(object target, long now)
+        {
+            if (target == null)
+            {
+                Reset();
+                return false;
+            }
+
+            if (!ReferenceEquals(_target, target))
+            {
+                _target = target;
+                _startedTick = now;
+                _expired = false;
+            }
+
+            if (_expired)
+                return false;
+
+            if (now - _startedTick >= CompanionBombingPolicy.TankAggroWaitMilliseconds)
+            {
+                _expired = true;
+                return false;
+            }
+
+            return true;
+        }
+
+        public void Reset()
+        {
+            _target = null;
+            _startedTick = 0;
+            _expired = false;
+        }
+    }
 }
