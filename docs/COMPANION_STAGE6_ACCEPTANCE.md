@@ -91,6 +91,26 @@ clear the old popup, older visible choices behave safely, the companion bag
 opens as a native external inventory, item delves and drag/drop work, and
 equipment actions remain usable. Do not mark Step 2 complete before that pass.
 
+## Companion Manager window (0.32.0)
+
+The Step 2 findings led to the native `Custom8` Companion Manager described in
+[COMPANION_MANAGER_INTEGRATION.md](COMPANION_MANAGER_INTEGRATION.md). Offline
+results on 2026-09-23:
+
+- `test_companion_manager_client.py` x86 emulation of the staged client passed:
+  adapter registration ahead of the unchanged raid adapters; packet validation;
+  token, show, and hide; clicks sent as `&companions ui <token> <control>`; the
+  Search chat prefill; and raid and stock DebugMode passthrough.
+- The installer dry run accepted the stage against the installed raid-patched
+  client (baseline SHA-256 `67dcf68a…de21e99`, staged `c36faf71…acf2ee`).
+- `UT_CompanionManager` (13 cases) and two new manager cases in this Stage 6
+  fixture passed. The fixture now passes all 14 cases. The companion, raid, and
+  command selection passed 317/317.
+
+**Owner observations:** _Pending._ Run the four-step combined check in the
+integration handoff first. If it passes, repeat the Step 2 items above in the
+window instead of the NPC popup.
+
 ## Backup, restore, and rollout guidance
 
 Before an owner-run session that can change saved progression, stop the server

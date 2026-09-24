@@ -543,136 +543,51 @@ namespace DOL.GS.Commands
 
         private void EquipItem(string companionId, string itemId, int returnPage)
         {
-            if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) &&
-                companion.Inventory?.AllItems.FirstOrDefault(item => item.ObjectId == itemId) is DbInventoryItem item &&
-                companion.TryManuallyEquipPersistentCompanionItem(item))
-            {
-                _owner.Out.SendMessage($"{item.Name} is equipped and its slot is locked against automatic replacement.",
-                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
-            }
-            else
-                _owner.Out.SendMessage("That item is not a legal upgrade, its slot is protected, or the companion is busy.",
-                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            PersistentCompanionGear.TryEquip(_owner, companionId, itemId, out string message);
+            _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
             ShowInventory(companionId, returnPage);
         }
 
         private void Unequip(string companionId, eInventorySlot slot, string expectedItemId, int returnPage)
         {
-            if (!PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) ||
-                companion.Inventory == null)
-            {
-                _owner.Out.SendMessage("Unequipping requires a nearby companion while you are out of combat.",
-                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
-                ShowEquipment(companionId, returnPage);
-                return;
-            }
-            DbInventoryItem item = companion.Inventory.GetItem(slot);
-            if (item?.ObjectId != expectedItemId || !PlayerCompanionRoster.TryApplyEquipmentMutation(companion, () =>
-                {
-                    if (!ReferenceEquals(companion.Inventory.GetItem(slot), item))
-                        return false;
-                    eInventorySlot backpack = companion.Inventory.FindFirstEmptySlot(
-                        eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
-                    if (backpack == eInventorySlot.Invalid ||
-                        !companion.Inventory.MoveItem(slot, backpack, Math.Max(1, item.Count)))
-                        return false;
-                    PlayerCompanionRoster.SetEquipmentSlotLocked(companion.PlayerCompanionRecord, slot, false);
-                    return true;
-                }, out _, requiredFreeBackpackSlots: 1))
-                _owner.Out.SendMessage("The item could not be moved to the companion's backpack.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-            else
-            {
-                companion.RefreshPersistentCompanionEquipment(
-                    slot is eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon);
-            }
+            if (!PersistentCompanionGear.TryUnequip(_owner, companionId, slot, expectedItemId, out string message))
+                _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
             _inventoryView?.Refresh();
             ShowEquipment(companionId, returnPage);
         }
 
         private void ToggleSlotLock(string companionId, eInventorySlot slot, bool locked, string expectedItemId, int returnPage)
         {
-            if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) &&
-                companion.Inventory?.GetItem(slot)?.ObjectId == expectedItemId &&
-                PlayerCompanionRoster.TryApplyEquipmentMutation(companion, () =>
-                {
-                    if (companion.Inventory?.GetItem(slot)?.ObjectId != expectedItemId)
-                        return false;
-                    PlayerCompanionRoster.SetEquipmentSlotLocked(companion.PlayerCompanionRecord, slot, locked);
-                    return true;
-                }, out _))
-            {
-            }
-            else
-                _owner.Out.SendMessage("Slot locks can only be changed near an idle companion.",
-                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            if (!PersistentCompanionGear.TrySetSlotLock(_owner, companionId, slot, locked, expectedItemId, out string message))
+                _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
             ShowEquipment(companionId, returnPage);
         }
 
         private void ToggleKeep(string companionId, string itemId, bool keep, int returnPage, bool fromEquipment)
         {
-            if (PlayerCompanionRoster.TryGetActiveCompanionById(_owner, companionId, out GameBot companion) &&
-                PlayerCompanionRoster.TryApplyEquipmentMutation(companion, () =>
-                {
-                    if (companion.Inventory?.AllItems.Any(item => item.ObjectId == itemId) != true)
-                        return false;
-                    string flags = PlayerCompanionRoster.GetEquipmentItemFlags(companion.PlayerCompanionRecord, itemId);
-                    flags = keep ? string.Concat(flags, "K") : flags.Replace("K", string.Empty, StringComparison.Ordinal);
-                    PlayerCompanionRoster.SetEquipmentItemFlags(companion.PlayerCompanionRecord, itemId, flags);
-                    return true;
-                }, out _))
-            {
-            }
-            else
-                _owner.Out.SendMessage("Keep flags can only be changed for inventory owned by an idle companion nearby.",
-                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            if (!PersistentCompanionGear.TrySetKeep(_owner, companionId, itemId, keep, out string message))
+                _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
             ShowItem(companionId, itemId, returnPage, fromEquipment);
         }
 
         private void TransferItem(string companionId, string itemId, bool toCompanion)
         {
-            bool transferred = PlayerCompanionRoster.TryTransferItem(_owner, companionId, itemId, toCompanion, out string message);
+            string message;
+            if (toCompanion)
+            {
+                if (PlayerCompanionRoster.TryTransferItem(_owner, companionId, itemId, toCompanion: true, out message))
+                    _owner.Out.SendInventorySlotsUpdate(Enumerable.Range((int)eInventorySlot.FirstBackpack, 40)
+                        .Select(slot => (eInventorySlot)slot).ToArray());
+            }
+            else
+                PersistentCompanionGear.TryReturnToOwner(_owner, companionId, itemId, out message);
             _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
-            if (transferred)
-                _owner.Out.SendInventorySlotsUpdate(Enumerable.Range((int)eInventorySlot.FirstBackpack, 40)
-                    .Select(slot => (eInventorySlot)slot).ToArray());
             ShowInventory(companionId, 0);
         }
 
-        private static string DescribeFlags(string flags)
-        {
-            if (flags.Contains('S')) return "starter gear; protected";
-            if (flags.Contains('P')) return "player-supplied; protected";
-            if (flags.Contains('E')) return flags.Contains('K') ? "companion gear; kept" : "companion gear";
-            return "legacy ownership unknown; protected";
-        }
+        private static string DescribeFlags(string flags) => PersistentCompanionGear.DescribeFlags(flags);
 
-        private static string DescribeStats(DbInventoryItem item)
-        {
-            var stats = new List<string>();
-            AddStat("Bonus", item.Bonus);
-            AddStat((eProperty)item.Bonus1Type, item.Bonus1);
-            AddStat((eProperty)item.Bonus2Type, item.Bonus2);
-            AddStat((eProperty)item.Bonus3Type, item.Bonus3);
-            AddStat((eProperty)item.Bonus4Type, item.Bonus4);
-            AddStat((eProperty)item.Bonus5Type, item.Bonus5);
-            AddStat((eProperty)item.Bonus6Type, item.Bonus6);
-            AddStat((eProperty)item.Bonus7Type, item.Bonus7);
-            AddStat((eProperty)item.Bonus8Type, item.Bonus8);
-            AddStat((eProperty)item.Bonus9Type, item.Bonus9);
-            AddStat((eProperty)item.Bonus10Type, item.Bonus10);
-            AddStat((eProperty)item.ExtraBonusType, item.ExtraBonus);
-            if (item.DPS_AF > 0)
-                stats.Add($"DPS/AF {item.DPS_AF}");
-            if (item.SPD_ABS > 0)
-                stats.Add($"speed {item.SPD_ABS}");
-            return stats.Count == 0 ? "Stats: none" : "Stats: " + string.Join(", ", stats);
-
-            void AddStat(object type, int value)
-            {
-                if (value != 0 && !string.Equals(type?.ToString(), "Undefined", StringComparison.Ordinal))
-                    stats.Add($"{type} {value}");
-            }
-        }
+        private static string DescribeStats(DbInventoryItem item) => PersistentCompanionGear.DescribeStats(item);
 
         private void StartPage()
         {

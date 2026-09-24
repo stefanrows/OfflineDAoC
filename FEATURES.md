@@ -95,8 +95,9 @@ and verification history of the full-PvP conversion.
 
 ## Player companions
 
-- `/companions` opens a private clickable roster; `list`, `recruit`, `invite`,
-  and `bench` remain command fallbacks. Each character can store up to 78
+- `/companions` opens the Companion Manager window (Roster, Recruit, and
+  Overview, Training & Tactics, and Gear details) with a client extension;
+  `find`, `list`, `recruit`, `invite`, and `bench` remain command fallbacks. Each character can store up to 78
   persistent recruits, including generated and authored individuals. Saved
   identities, XP, training, equipment, and inventories survive benching and
   attempt to restore active companions at login.

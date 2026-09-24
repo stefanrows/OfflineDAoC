@@ -9,6 +9,7 @@ using DOL.Database;
 using DOL.Database.Handlers;
 using DOL.Events;
 using DOL.GS;
+using DOL.GS.Commands;
 using DOL.GS.PacketHandler;
 using DOL.GS.PlayerClass;
 using DOL.Logging;
@@ -456,6 +457,86 @@ public sealed class UT_PlayerCompanionStage6Integration
     {
         FieldInfo pending = typeof(PlayerCompanionProgressPersistence).GetField("Pending", Hidden | BindingFlags.Static);
         ((System.Collections.IDictionary)pending.GetValue(null)).Remove(companionId);
+    }
+
+    [Test]
+    public void CompanionManagerRecruitsOnlyThroughCurrentSessionRowsAndActions()
+    {
+        Owner owner = NewOwner("manager-owner", eRealm.Midgard);
+        CompanionManager.Open(owner);
+        Assert.That(CompanionManager.TryGetSession(owner, out CompanionManagerSession session), Is.True);
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelListIndicator], Is.EqualTo("Roster empty"));
+
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "31");
+        Assert.That(session.Tab, Is.EqualTo(CompanionManagerTab.Recruit));
+        Assert.That(session.Recruit.Realm, Is.EqualTo(eRealm.Midgard), "Recruit starts on the player's realm");
+
+        CompanionManager.SetQuery(owner, "shaman");
+        string generatedShaman = $"g:{(int)eRealm.Midgard}:{(int)eCharacterClass.Shaman}";
+        Assert.That(session.RowKeys.Where(key => key != null),
+            Is.EqualTo(new[] { "a:midgard-shaman-brakka", "a:midgard-shaman-kiri", generatedShaman }));
+
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "01");
+        Assert.That(session.Recruit.SelectedKey, Is.EqualTo("a:midgard-shaman-kiri"));
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Recruit]"));
+        string details = string.Join(' ', Enumerable.Range(CompanionManagerProtocol.LabelDetailBase,
+                2 * CompanionManagerProtocol.DetailLines).Select(index => session.SentLabels[index])
+            .Where(text => !string.IsNullOrEmpty(text)));
+        Assert.That(details, Does.StartWith(CompanionManager.StoryCopy), "The agreed copy is shown in full");
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelHeaderBase + 1], Is.EqualTo("Kiri"));
+
+        ushort stale = (ushort)(session.Revision == 1 ? ushort.MaxValue : session.Revision - 1);
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(stale), "20");
+        Assert.That(PlayerCompanionRoster.GetRoster(owner), Is.Empty, "A stale click must not recruit");
+        Assert.That(session.Message, Does.Contain("nothing was done"));
+
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "20");
+        PlayerCompanionRecord kiri = PlayerCompanionRoster.GetRoster(owner).Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(kiri.AuthoredRecruitKey, Is.EqualTo("midgard-shaman-kiri"));
+            Assert.That(session.Tab, Is.EqualTo(CompanionManagerTab.Roster));
+            Assert.That(session.Roster.SelectedKey, Is.EqualTo("c:" + kiri.CompanionId));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelHeaderBase + 1], Is.EqualTo("Kiri"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Invite]"));
+        });
+
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "31");
+        Assert.That(session.Recruit.SelectedKey, Is.EqualTo("a:midgard-shaman-kiri"), "Selection is retained per tab");
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Open in roster]"));
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "20");
+        Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(1), "An authored person is recruited once");
+        Assert.That(PlayerCompanionRoster.TryRecruitAuthored(owner, "Kiri", out _, out string duplicate), Is.False, duplicate);
+
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision),
+            CompanionManagerProtocol.ControlClose.ToString("x2"));
+        Assert.That(CompanionManager.TryGetSession(owner, out _), Is.False);
+    }
+
+    [Test]
+    public void CompanionManagerSessionsAreScopedToTheirOwner()
+    {
+        Owner first = NewOwner("manager-first", eRealm.Albion);
+        Owner second = NewOwner("manager-second", eRealm.Albion);
+        CompanionManager.Open(first);
+        CompanionManager.TryGetSession(first, out CompanionManagerSession firstSession);
+        CompanionManager.HandleClientControl(first, CompanionManagerProtocol.FormatToken(firstSession.Revision), "31");
+        string token = CompanionManagerProtocol.FormatToken(firstSession.Revision);
+
+        CompanionManager.HandleClientControl(second, token, "20");
+        Assert.Multiple(() =>
+        {
+            Assert.That(PlayerCompanionRoster.GetRoster(first), Is.Empty);
+            Assert.That(PlayerCompanionRoster.GetRoster(second), Is.Empty,
+                "A click without the player's own session reopens the window and does nothing");
+            Assert.That(CompanionManager.TryGetSession(second, out CompanionManagerSession secondSession), Is.True);
+            Assert.That(secondSession, Is.Not.SameAs(firstSession));
+            Assert.That(secondSession.Message, Does.Contain("nothing was changed"));
+        });
+
+        CompanionManager.HandleClientControl(first, "ZZZZ", "20");
+        CompanionManager.HandleClientControl(first, token, "c0");
+        Assert.That(PlayerCompanionRoster.GetRoster(first), Is.Empty, "Malformed controls are ignored");
     }
 
     private void InstallQuietGameBotLoggerQueue()

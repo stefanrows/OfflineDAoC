@@ -36,9 +36,17 @@ register this unproven action channel in the normal installation.
 - The failed probe was removed. Installed `game.dll` again matches the raid
   baseline hash above. Restoration occurred with the game, server, and launcher stopped.
 
-The immediate blocker is the client action and editable-search path. The
+The immediate blocker was the client action and editable-search path. The
 manager needs reliable server-bound controls for selecting rows, filtering, and
 item actions. Do not replace these with speech pages or a reduced page-button
-interface. Investigate the native event and edit-box behavior offline before
-requesting another owner test. Then repeat a single real-client gate with a
-working click and typed query before building the manager.
+interface.
+
+## Follow-up, 2026-09-23
+
+The offline repair replaced both failed paths with stock client mechanisms.
+Clicks call the client's own slash-command sender, which the right-click menu
+uses for `/talk`. The **[Search]** link opens the ordinary chat line prefilled
+with `/companions find `. No new opcode or native edit box remains. The probe
+builder is kept for reference only. See the protocol, the staged build, and the
+single combined real-client check in
+[COMPANION_MANAGER_INTEGRATION.md](COMPANION_MANAGER_INTEGRATION.md).

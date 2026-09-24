@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Manage your companion roster, cast, tactics, training, and equipment", "/companions [list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -20,7 +20,7 @@ namespace DOL.GS.Commands
 
             if (args.Length == 1)
             {
-                DisplayMessage(client, "Companion window controls are under repair. Use /companions list, /companions cast, or /companions recruit <class>; type /companions help for all commands.");
+                CompanionManager.Open(player);
                 return;
             }
 
@@ -33,6 +33,16 @@ namespace DOL.GS.Commands
             string action = args[1].ToLowerInvariant();
             switch (action)
             {
+                case "ui":
+                    if (args.Length == 4)
+                        CompanionManager.HandleClientControl(player, args[2], args[3]);
+                    else
+                        ShowUsage(client);
+                    break;
+                case "find":
+                case "search":
+                    CompanionManager.SetQuery(player, string.Join(' ', args.Skip(2)));
+                    break;
                 case "cast":
                     ShowCast(client, player, args);
                     break;
@@ -70,7 +80,10 @@ namespace DOL.GS.Commands
                     TrainCompanion(client, player, args);
                     break;
                 case "respec":
-                    BeginCompanionRespec(client, player, args);
+                    if (args.Length < 3)
+                        DisplayMessage(client, "Use /companions respec <name>. This resets only that companion's specializations and uses your full-skill respec eligibility.");
+                    else if (!TryBeginCompanionRespec(client, player, string.Join(' ', args.Skip(2)), out string respecMessage))
+                        DisplayMessage(client, respecMessage);
                     break;
                 default:
                     ShowUsage(client);
@@ -318,43 +331,39 @@ namespace DOL.GS.Commands
                 : $"{companion.Name} trained {specialization.Name} to {specialization.Level}, but the save failed. Their progress is queued for another save attempt.");
         }
 
-        private void BeginCompanionRespec(GameClient client, GamePlayer player, string[] args)
+        /// <summary>Checks eligibility and opens the existing respec confirmation dialog.</summary>
+        internal static bool TryBeginCompanionRespec(GameClient client, GamePlayer player, string nameOrId, out string message)
         {
-            if (args.Length < 3)
+            if (!PlayerCompanionRoster.TryGetActiveCompanion(player, nameOrId, out GameBot companion))
             {
-                DisplayMessage(client, "Use /companions respec <name>. This resets only that companion's specializations and uses your full-skill respec eligibility.");
-                return;
-            }
-
-            string name = string.Join(' ', args.Skip(2));
-            if (!PlayerCompanionRoster.TryGetActiveCompanion(player, name, out GameBot companion))
-            {
-                DisplayMessage(client, "Invite that companion first, then respecialize them while they are active in your group.");
-                return;
+                message = "Invite that companion first, then respecialize them while they are active in your group.";
+                return false;
             }
 
             if (!CanUseCompanionTrainer(client, companion))
             {
-                DisplayMessage(client, "Select a trainer who can train your companion's class.");
-                return;
+                message = "Select a trainer who can train your companion's class.";
+                return false;
             }
 
             if (!companion.GetSpecList().Any(spec => spec.Trainable && spec.Level > 1))
             {
-                DisplayMessage(client, $"{companion.Name} has no trained specialization levels to reset.");
-                return;
+                message = $"{companion.Name} has no trained specialization levels to reset.";
+                return false;
             }
 
             if (!HasCompanionFullRespecEligibility(player))
             {
-                DisplayMessage(client, "You need a full-skill respec available to reset a companion's specializations.");
-                return;
+                message = "You need a full-skill respec available to reset a companion's specializations.";
+                return false;
             }
 
             player.TempProperties.SetProperty(CompanionRespecProperty, companion.PlayerCompanionRecord.CompanionId);
             client.Out.SendCustomDialog(
                 $"Reset all specializations for {companion.Name}? This uses your full-skill respec eligibility and keeps their level, XP, inventory, and equipment.",
                 new CustomDialogResponse(CompanionRespecDialogResponse));
+            message = $"Confirm the respec for {companion.Name} in the dialog.";
+            return true;
         }
 
         internal static void CompanionRespecDialogResponse(GamePlayer player, byte response)
@@ -409,7 +418,7 @@ namespace DOL.GS.Commands
         private static bool RequiresFullRespecToken(GamePlayer player) =>
             TimeSpan.FromSeconds(player?.PlayedTimeSinceLevel ?? 0).TotalHours > 24;
 
-        private static bool CanUseCompanionTrainer(GameClient client, GameBot companion)
+        internal static bool CanUseCompanionTrainer(GameClient client, GameBot companion)
         {
             if (client?.Player == null || companion == null)
                 return false;
@@ -425,9 +434,17 @@ namespace DOL.GS.Commands
                     trainer.TrainedClass == (eCharacterClass)companion.CharacterClass.ID);
         }
 
+        internal static void ShowClientGuidance(GameClient client)
+        {
+            if (client?.IsPlaying != true)
+                return;
+            client.Out.SendMessage("No Companion Manager window? It needs the Companion Manager client extension. Every roster action also works by command; type /companions help.",
+                eChatType.CT_System, eChatLoc.CL_SystemWindow);
+        }
+
         private void ShowUsage(GameClient client)
         {
-            DisplayMessage(client, "Bare /companions shows command guidance while the native companion window is under repair.");
+            DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
             DisplayMessage(client, "Commands: /companions list | cast | recruit <class> | recruit authored <name> | invite <name> | bench <name> | profile <name> | role <name> tank|healer|buffer|attacker | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | train <name> <line> <level> | respec <name>.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }

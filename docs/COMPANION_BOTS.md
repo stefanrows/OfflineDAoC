@@ -20,7 +20,10 @@ bot types intentionally have different persistence, reward, and tuning rules.
 
 ## Persistent roster
 
-Bare `/companions` opens a temporary owner-private clickable menu. The explicit
+Bare `/companions` opens the Companion Manager window when the client has its
+extension installed (see `docs/COMPANION_MANAGER_INTEGRATION.md`). Without it,
+the server prints one line of command guidance. `/companions find <name or
+class>` searches the window from the chat line. The explicit
 `/companions list`, `/companions recruit <class>`,
 `/companions invite <name>`, and `/companions bench <name>` manage generated,
 persistent recruits. Class-only recruitment searches all realms, so commands

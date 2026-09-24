@@ -12,6 +12,59 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-09-24
+
+### Added
+
+- A native Companion Manager window (`Custom8`): Roster and Recruit lists with
+  realm and role filters, name/class search, and scrolling; Overview, Training
+  & Tactics, and Gear details; invite, bench, recruit, tactics, training,
+  respec, gear actions, and the native companion bag.
+- `/companions find <name or class>` search. The window's **[Search]** link
+  opens the chat line with it prefilled.
+- A hash-guarded client patch builder, offline x86 emulation test, and dry-run
+  installer with rollback (`tools/dev/Install-CompanionManager.ps1`). Nothing
+  is installed automatically.
+
+### Changed
+
+- Manager clicks travel through the client's own slash-command path, and search
+  uses the ordinary chat line. This replaces the probe's failed action packet
+  and edit box. Every click is resolved against a server-held session and
+  current roster; stale clicks are refused.
+- Bare `/companions` opens the manager and prints one line of command guidance
+  when no patched client answers. All subcommands are unchanged.
+- Companion gear operations moved into a shared helper used by the manager and
+  the legacy menu. The respec start is shared with the manager.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.31.1] - 2026-09-23
+
+### Added
+
+- A Companion Manager integration handoff recording verified client controls,
+  the failed action/search gate, server reuse, safe packaging, and acceptance.
+
+### Changed
+
+- Linked the handoff from the companion roadmap and synchronized version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.31.0] - 2026-09-23
 
 ### Added

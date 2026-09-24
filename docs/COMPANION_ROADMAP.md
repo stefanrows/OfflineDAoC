@@ -320,10 +320,16 @@ details have not yet been recorded in the acceptance brief.
 server label updates, and returned a button click through target selection.
 The dedicated action packet did not reach the server, and the visible search
 field would not accept focus or text. The failed probe was removed and the
-verified raid-patched client restored. Bare `/companions` gives command
-guidance; subcommands remain available. See
-[COMPANION_CUSTOM8_PROBE.md](COMPANION_CUSTOM8_PROBE.md). Step 2 stays open
-until client actions and typed search pass in the real game.
+verified raid-patched client restored. See
+[COMPANION_CUSTOM8_PROBE.md](COMPANION_CUSTOM8_PROBE.md).
+
+**Companion Manager (0.32.0, offline):** Clicks now use the client's own
+slash-command sender, and search uses the ordinary chat line. The server
+manager and a staged, hash-guarded client patch are implemented and passed
+offline emulation and focused tests. Bare `/companions` opens the manager and
+prints command guidance when no patched client answers. See the
+[integration handoff](COMPANION_MANAGER_INTEGRATION.md) for the one combined
+real-client check. Step 2 stays open until the owner confirms that check.
 
 The owner supplied four screenshots for Step 2. They show speech pages
 accumulating in one popup, raw choice tokens, and an equipment page filled
