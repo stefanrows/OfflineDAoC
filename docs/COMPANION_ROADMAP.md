@@ -330,6 +330,10 @@ offline emulation and focused tests. Bare `/companions` opens the manager and
 prints command guidance when no patched client answers. See the
 [integration handoff](COMPANION_MANAGER_INTEGRATION.md) for the one combined
 real-client check. Step 2 stays open until the owner confirms that check.
+On 2026-09-24 the 0.32.0 window opened but no click worked; 0.32.1 fixed the
+click wiring, and the owner confirmed that clicking and search work. Next steps
+(build selection, behaviour controls, equipment slot layout) are planned in the
+[Companion Manager roadmap](COMPANION_MANAGER_ROADMAP.md).
 
 The owner supplied four screenshots for Step 2. They show speech pages
 accumulating in one popup, raw choice tokens, and an equipment page filled

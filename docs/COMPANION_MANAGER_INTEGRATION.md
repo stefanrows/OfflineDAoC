@@ -1,9 +1,31 @@
 # Companion Manager integration handoff
 
-Status: **implemented and checked offline; waiting for the owner's single
-combined real-client check.** The repaired client-control design, the server
-manager, and the staged client patch exist. Nothing is installed in the game,
-and no Stage 2 owner acceptance task is closed by this document.
+Status: **real-client gate passed on 0.32.1 (2026-09-24).** The owner confirmed
+that the window opens and that clicking and chat-line search work; the
+companion bag opened beside it. Gate step 4 (raid windows, 800×600) and the
+Stage 2 items are still to be recorded. Next steps are in the
+[Companion Manager roadmap](COMPANION_MANAGER_ROADMAP.md). No Stage 2 owner
+acceptance task is closed by this document.
+
+## Real-client result, 2026-09-24 (0.32.0)
+
+The window opened and showed server text, so labels, the token, and show work
+in the real client. No click did anything. Root cause (static disassembly,
+confirmed by emulating the client's own code): the `ButtonDef` and
+`InvisibleButtonDef` parsers read `OnClickEvent` through `0x4EA06F`, not the
+`ControlId` mapper `0x4E99E6` that the raid and the 0.32.0 manager hooked.
+`0x4EA06F` knows only stock event names. For anything else it returns `-1`
+(no event) unless the text starts with a digit, which it converts with `atoi`.
+Names such as `CompMgr30` therefore never fired. This also explains the probe's
+silent dedicated-action click. The raid's `RaidMemberNN` click areas are
+affected the same way, so raid click-to-target most likely never fired either;
+that is not changed here.
+
+0.32.1 writes decimal event IDs (`0x700 + control`, for example `1840`) into
+`OnClickEvent` and no longer patches `0x4E99E6`. The raid's bytes there stay as
+the raid built them. The offline test now runs the client's own `0x4EA06F` on
+every XML value and checks statically that the `InvisibleButtonDef` parser
+calls it.
 
 ## Intended player experience
 
@@ -91,8 +113,10 @@ or class and presses Enter. The query reaches the server as a normal command,
 and the window shows the current query. `/companions find` with no text clears it.
 
 **Event IDs.** Stock event names map to IDs up to about `0x246`; small client
-helpers return `0x7E0` and `0x7E1`. Manager events use `CompMgr00` to
-`CompMgrBF`, which map to `0x700`–`0x7BF` only. Every other ID continues to the
+helpers return `0x7E0` and `0x7E1`. Manager click areas use the decimal event
+IDs `1792`–`1983` (`0x700`–`0x7BF`), which the stock `OnClickEvent` parser
+accepts directly. (0.32.0 used names such as `CompMgr30`, which the parser
+rejects; see the real-client result above.) Every other ID continues to the
 raid handler unchanged.
 
 ## Protocol version 2
@@ -157,9 +181,11 @@ python source/server/tools/test_companion_manager_client.py --stage <stage dir>
 ```
 
 The builders need `pefile`, `keystone-engine`, and `unicorn` (the emulation test
-only). The patch is deterministic: from the verified client it produces
+only). The builder refuses a client that already has the manager installed;
+restore it first with the installer's `-RestoreBackup`, then rebuild. The patch is deterministic: from the verified client it produces
 `game.dll` SHA-256
-`c36faf7178a52f53360737f3b3550a11a001af02da884a4826d6117372acf2ee`.
+`3b6274dc385b90bf892f27d96c9e56cb457e1e94cbf45b5892d462a9e4d70890` (0.32.1; the
+broken 0.32.0 build was `c36faf71…acf2ee`).
 `tools/dev/Install-CompanionManager.ps1 -InstallRoot <root> -Stage <stage>` is a
 dry run by default. With `-Apply` it checks every input and output hash,
 requires the game, server, and launcher to be closed (it stops nothing), backs up

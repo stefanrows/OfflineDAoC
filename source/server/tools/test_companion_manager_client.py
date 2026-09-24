@@ -74,8 +74,16 @@ def stub(machine, address, size, user):
     elif address == builder.SET_ADAPTER_TEXT:
         texts[machine.reg_read(UC_X86_REG_EBX)] = cstring(read32(stack + 4))
         ret(4)
-    elif address == 0x77156E:
-        machine.reg_write(UC_X86_REG_EAX, 0 if cstring(read32(stack + 4)) == cstring(read32(stack + 8)) else 1)
+    elif address == 0x77156E:  # _stricmp
+        same = cstring(read32(stack + 4)).lower() == cstring(read32(stack + 8)).lower()
+        machine.reg_write(UC_X86_REG_EAX, 0 if same else 1)
+        ret()
+    elif address == 0x770FBE:  # isdigit
+        machine.reg_write(UC_X86_REG_EAX, 4 if chr(read32(stack + 4) & 0xFF).isdigit() else 0)
+        ret()
+    elif address == 0x7720C0:  # atoi
+        digits = re.match(r"\s*([+-]?\d+)", cstring(read32(stack + 4)))
+        machine.reg_write(UC_X86_REG_EAX, (int(digits.group(1)) if digits else 0) & 0xFFFFFFFF)
         ret()
     elif address == builder.SEND_SLASH_COMMAND:
         commands.append(cstring(read32(stack + 4)))
@@ -155,29 +163,34 @@ for bad in ("0A9F", "0a9g", "0a9", "zzzz"):
     assert command() == "&companions ui 0a9f 00", bad
 
 
-def event_name(name):
+def stock_click_event(value):
+    """Runs the client's own OnClickEvent mapper on an XML value."""
     setup()
     uc.mem_write(sp, struct.pack("<I", sentinel))
-    uc.mem_write(body, name.encode("ascii") + b"\0")
+    uc.mem_write(body, value.encode("ascii") + b"\0")
     uc.reg_write(UC_X86_REG_ESI, body)
-    uc.emu_start(manifest["blocks"]["eventName"]["address"], sentinel, count=100000)
+    uc.emu_start(builder.CLICK_EVENT_MAPPER, sentinel, count=2000000)
     return uc.reg_read(UC_X86_REG_EAX)
 
 
-def event_name_passes_through(name):
-    setup()
-    uc.mem_write(body, name.encode("ascii") + b"\0")
-    uc.reg_write(UC_X86_REG_ESI, body)
-    uc.emu_start(manifest["blocks"]["eventName"]["address"], builder.RAID_EVENT_NAME, count=100000)
-    return uc.reg_read(UC_X86_REG_EIP) == builder.RAID_EVENT_NAME
+# Static: InvisibleButtonDef (parser 0x4ED9B4) maps OnClickEvent through
+# 0x4EA06F, not the ControlId mapper 0x4E99E6 that the raid hooks.
+parser = image[pe.get_offset_from_rva(0x4ED9B4 - 0x400000):][:0x200]
+keyword = parser.find(b"\xff\x35" + struct.pack("<I", 0x99B780))
+assert keyword > 0, "OnClickEvent keyword test not found in the InvisibleButtonDef parser"
+assert pe.get_string_at_rva(struct.unpack("<I", pe.get_data(0x99B780 - 0x400000, 4))[0] - 0x400000).lower() == b"onclickevent"
+# The branch is: xmlStrcasecmp(name, keyword), xmlNodeGetContent(node), mapper(text).
+branch_calls = [0x4ED9B4 + offset + 5 + struct.unpack("<i", parser[offset + 1:offset + 5])[0]
+                for offset in range(keyword, keyword + 0x28) if parser[offset] == 0xE8]
+assert branch_calls[:3] == [0x6DDD8E, 0x6DDD7C, builder.CLICK_EVENT_MAPPER], [hex(t) for t in branch_calls]
+# The raid's ControlId-mapper hook is left exactly as the raid built it.
+assert image[pe.get_offset_from_rva(0x4E99E6 - 0x400000):][:5] == bytes.fromhex("e9 15 96 f9 01")
 
-
-assert event_name("CompMgr00") == 0x700
-assert event_name("CompMgr2A") == 0x72A
-assert event_name("CompMgrBF") == 0x7BF
-for name in ("CompMgrC0", "CompMgr0a", "CompMgr001", "CompMgr0", "CompMgr", "Comp", "", "RaidMember00",
-             "CompanionProbeClick"):
-    assert event_name_passes_through(name), name
+assert stock_click_event("1840") == 0x730
+assert stock_click_event("1983") == 0x7BF
+assert stock_click_event("toggleattackmode") == 0x64, "stock names still resolve, case-insensitively"
+for unknown in ("CompMgr30", "RaidMember00", "CompanionProbeClick"):
+    assert stock_click_event(unknown) == 0xFFFFFFFF, unknown
 
 
 def click(event_id, stop=None):
@@ -242,11 +255,11 @@ for skin in ("atlantis", "isles"):
     adapters = [element.text for element in window.iter("Adapter")]
     assert sorted(adapters) == sorted(builder.adapter_name(index) for index in range(LABELS))
     for button in window.iter("InvisibleButtonDef"):
-        name = button.find("OnClickEvent").text
-        assert re.fullmatch(r"CompMgr[0-9A-F]{2}", name), name
-        value = int(name[7:], 16)
-        assert value < builder.CONTROL_LIMIT and event_name(name) == 0x700 + value
-        controls.add(value)
+        text = button.find("OnClickEvent").text
+        assert re.fullmatch(r"[0-9]+", text), text
+        event = stock_click_event(text)
+        assert builder.EVENT_BASE <= event < builder.EVENT_BASE + builder.CONTROL_LIMIT, text
+        controls.add(event - builder.EVENT_BASE)
     assert window.find(".//EditBoxDef") is None and window.find(".//ClickableEditBoxDef") is None
     for element in window.iter():
         assert element.tag in {"WindowTemplate", "Name", "WindowId", "CloseButton", "MoveButton",
@@ -270,6 +283,7 @@ for name, value in layout.items():
 
 print(f"PASS (offline only): {LABELS} manager adapters registered before the unchanged raid adapters")
 print("PASS (offline only): versioned label/token/show/hide packets; malformed packets ignored")
+print("PASS (offline only): the stock OnClickEvent mapper turns every XML click value into a manager event")
 print("PASS (offline only): clicks send &companions ui <token> <control>; Search opens the chat line")
 print("PASS (offline only): raid events, raid packets, and stock DebugMode packets pass through")
 print("PASS (offline only): Custom8 XML uses only raid-proven controls; server constants match")

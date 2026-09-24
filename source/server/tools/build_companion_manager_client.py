@@ -7,9 +7,13 @@ Protocol version 2 replaces the failed probe paths:
 
 * Server to client: fixed 128-byte DebugMode bodies with marker 0x43 update
   registered label adapters, show or hide Custom8, and set the view token.
-* Client to server: manager clicks call the client's own slash-command sender
-  (the path used by its context menu for /talk and /loco) with
-  ``&companions ui <token> <control>``. No new packet opcode is needed.
+* Client to server: each click area's OnClickEvent is a decimal event ID
+  (0x700 + control). The stock XML parser maps OnClickEvent through 0x4EA06F,
+  which returns -1 for unknown names but accepts a leading-digit value via
+  atoi; names such as "CompMgr30" therefore never fire. The event handler
+  hook calls the client's own slash-command sender (the path used by its
+  context menu for /talk and /loco) with ``&companions ui <token> <control>``.
+  No new packet opcode is needed.
 * Search: the Search link opens the ordinary chat line prefilled with
   ``/companions find `` using the same calls as the chat window's own
   channel-prefix menu. No native edit box is used.
@@ -34,12 +38,10 @@ from keystone import Ks, KS_ARCH_X86, KS_MODE_32
 RAID_SHA256 = "67dcf68a37b95a93946a943b99d5e19b4a03e08cd6469275e25c7b909de21e99"
 RAID_INIT = 0x247E000
 RAID_PACKET = 0x2482000
-RAID_EVENT_NAME = 0x2483000
 RAID_EVENT_HANDLER = 0x2485000
 HOOKS = (
     (0x4DA938, bytes.fromhex("e9 c3 36 fa 01 90 90 90"), 0x0000),
     (0x411201, bytes.fromhex("e9 fa 0d 07 02 90 90 90"), 0x1000),
-    (0x4E99E6, bytes.fromhex("e9 15 96 f9 01"), 0x1800),
     (0x4E04DE, bytes.fromhex("e9 1d 4b fa 01 90 90 90 90 90"), 0x1C00),
 )
 
@@ -54,6 +56,8 @@ SET_CHAT_TEXT = 0x40D5D4           # cdecl(const char* text)
 CHAT_HISTORY_INDEX = 0x9A5EC4
 CHAT_SCROLL_INDEX = 0x10498D8
 PACKET_DONE = 0x4113AD
+# Stock OnClickEvent mapper used by ButtonDef and InvisibleButtonDef parsers.
+CLICK_EVENT_MAPPER = 0x4EA06F
 
 CUSTOM8_WINDOW = 0x75
 MARKER = 0x43
@@ -169,8 +173,9 @@ def adapter_name(index):
     return f"cmgr_{index:03d}"
 
 
-def event_name(control):
-    return f"CompMgr{control:02X}"
+def click_event(control):
+    """Decimal event ID; the stock OnClickEvent mapper atoi()s leading-digit values."""
+    return str(EVENT_BASE + control)
 
 
 def sha256(data):
@@ -317,45 +322,6 @@ def build(image):
         jmp {RAID_PACKET}
     """, 0x1800)
 
-    # ESI is the event name. Only CompMgr00..CompMgrBF map into 0x700..0x7BF.
-    prefix_checks = "\n".join(
-        f"cmp byte ptr [esi+{index}], {ord(char)}; jne raid" for index, char in enumerate("CompMgr"))
-    put("eventName", 0x1800, f"""
-        {prefix_checks}
-        movzx eax, byte ptr [esi+7]
-        call nibble
-        cmp eax, 15
-        ja raid
-        mov edx, eax
-        shl edx, 4
-        movzx eax, byte ptr [esi+8]
-        call nibble
-        cmp eax, 15
-        ja raid
-        or edx, eax
-        cmp byte ptr [esi+9], 0
-        jne raid
-        cmp edx, {CONTROL_LIMIT}
-        jae raid
-        lea eax, [edx+{EVENT_BASE}]
-        ret
-    nibble:
-        sub eax, 0x30
-        cmp eax, 9
-        jbe nibble_done
-        sub eax, 7
-        cmp eax, 10
-        jb nibble_bad
-        cmp eax, 15
-        jbe nibble_done
-    nibble_bad:
-        or eax, -1
-    nibble_done:
-        ret
-    raid:
-        jmp {RAID_EVENT_NAME}
-    """, 0x1C00)
-
     # EAX is the event record and [EAX+8] its ID; unrelated IDs keep the raid chain intact.
     put("eventHandler", 0x1C00, f"""
         cmp dword ptr [eax+8], {EVENT_BASE}
@@ -467,7 +433,7 @@ def _click(panel, x, y, width, control, caption, height=16):
     ET.SubElement(button, "ControlId")
     _position(button, x, y)
     ET.SubElement(button, "Label").text = caption
-    ET.SubElement(button, "OnClickEvent").text = event_name(control)
+    ET.SubElement(button, "OnClickEvent").text = click_event(control)
     ET.SubElement(button, "Width").text = str(width)
     ET.SubElement(button, "Height").text = str(height)
 

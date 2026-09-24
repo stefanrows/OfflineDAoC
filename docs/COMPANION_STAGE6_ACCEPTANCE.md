@@ -107,9 +107,19 @@ results on 2026-09-23:
   fixture passed. The fixture now passes all 14 cases. The companion, raid, and
   command selection passed 317/317.
 
-**Owner observations:** _Pending._ Run the four-step combined check in the
-integration handoff first. If it passes, repeat the Step 2 items above in the
-window instead of the NPC popup.
+**Owner observations, 2026-09-24 (0.32.0):** `/companions` opened the window,
+but no button could be clicked. The click areas used event names the client's
+`OnClickEvent` parser rejects; 0.32.1 uses numeric event IDs instead (details
+in the integration handoff). Recheck the four-step combined check on 0.32.1
+first. If it passes, repeat the Step 2 items above in the window instead of the
+NPC popup.
+
+**Owner observations, 2026-09-24 (0.32.1):** Gate passed. The window opened,
+clicking worked, and the chat-line search worked. The owner's screenshot shows
+the roster (four active companions), the Overview tab, and the companion bag
+open beside the window. Not yet reported: raid windows and 800×600 (gate step
+4), and the individual Step 2 items. Follow-ups are in
+[COMPANION_MANAGER_ROADMAP.md](COMPANION_MANAGER_ROADMAP.md).
 
 ## Backup, restore, and rollout guidance
 

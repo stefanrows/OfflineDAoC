@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-09-24
+
+### Added
+
+- The client patch test now emulates the client's own `OnClickEvent` parser on
+  every window click value and checks which parser function reads it.
+- A Companion Manager roadmap: close-out checks, the raid click fix, build
+  selection with automatic training, behaviour controls, and a companion
+  equipment slot layout.
+- The owner's real-client gate result: clicking and search work in 0.32.1.
+
+### Changed
+
+- The Companion Manager client patch no longer hooks the `ControlId` name
+  mapper; the raid's patch bytes there are left unchanged.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- Companion Manager buttons did nothing in the real client. The window now uses
+  numeric click event IDs, which the client's XML parser accepts, instead of
+  custom event names, which it silently ignored.
+
+### Removed
+
+- None.
+
 ## [0.32.0] - 2026-09-24
 
 ### Added
