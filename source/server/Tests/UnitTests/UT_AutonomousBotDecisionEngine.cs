@@ -69,6 +69,41 @@ public class UT_AutonomousBotDecisionEngine
     }
 
     [Test]
+    public void LowLevelDeathFallbackKeepsSafestConAndNearbyHomeCamp()
+    {
+        var failed = Camp("failed", eRealm.Albion, ConColor.YELLOW, true) with
+        { MonsterName = "frog", TravelMinutes = 1 };
+        var nearby = Camp("nearby", eRealm.Albion, ConColor.YELLOW, true) with
+        { MonsterName = "boar", TravelMinutes = 5 };
+        var foreign = Camp("foreign", eRealm.Midgard, ConColor.YELLOW, true) with
+        { MonsterName = "wolf", RegionId = 100, TravelMinutes = 25 };
+        var harder = Camp("harder", eRealm.Albion, ConColor.ORANGE, true) with
+        { MonsterName = "bandit", TravelMinutes = 2 };
+
+        var selected = AutonomousBotDecisionEngine.SelectSafestAvailableAfterDeath(
+            [failed, nearby, foreign, harder], "failed", "frog", new FixedRandom(0.99),
+            1, "Test Zone", eRealm.Albion, 5);
+        Assert.That(selected.Id, Is.EqualTo("nearby"));
+
+        var withoutHome = AutonomousBotDecisionEngine.SelectSafestAvailableAfterDeath(
+            [failed, foreign], "failed", "frog", new FixedRandom(0),
+            1, "Test Zone", eRealm.Albion, 5);
+        Assert.That(withoutHome.Id, Is.EqualTo("foreign"));
+    }
+
+    [Test]
+    public void DeathFallbackNeverChoosesHarderCampOnlyToAvoidFailedName()
+    {
+        var safest = Camp("failed", eRealm.Albion, ConColor.YELLOW, true) with { MonsterName = "frog" };
+        var harder = Camp("harder", eRealm.Albion, ConColor.ORANGE, true) with { MonsterName = "wolf" };
+
+        var selected = AutonomousBotDecisionEngine.SelectSafestAvailableAfterDeath(
+            [safest, harder], "failed", "frog", new FixedRandom(0));
+
+        Assert.That(selected.Id, Is.EqualTo("failed"));
+    }
+
+    [Test]
     public void SelectionWithinEnvironmentRemainsUniformWithoutCrowdSignals()
     {
         var state = State();

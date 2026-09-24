@@ -1,6 +1,6 @@
 # Autonomous bots: first live review of M0–M6 and improvement plan
 
-Status: **review complete. Phases A and B implemented offline through 0.54.0; the owner run is pending. Phases C–D not started.**
+Status: **review complete. Phases A and B received a first owner run on 0.54.0; targeted follow-up fixes are implemented offline in 0.55.0. Further owner verification and Phases C–D are pending.**
 Date: 2026-09-24. Build under review: 0.50.0 (M6), with earlier sessions on 0.49.x.
 
 This is the first M7 input for [AUTONOMOUS_BOT_ROADMAP.md](AUTONOMOUS_BOT_ROADMAP.md).
@@ -267,6 +267,17 @@ bind points in the current zone. Pickup groups require a live local camp
 before formation and dissolve if their later planner finds none. The owner
 run must still measure the acceptance targets below; no real-client result is
 claimed from the offline build.
+
+The first 0.54.0 owner run improved camp arrival to 360 of 842 concluded
+attempts (43%) and fighting-plus-camp time to 48% in the measured steady
+window. Stable boardings fell to 0.32 per bot-hour. Of 529 attempts that
+did not arrive, 333 ended in defeat. All 216 solo PvP-death replans were at
+levels 1–8. Group formation could still admit a party without a healer or
+frontliner for a camp one level above its actual planner ceiling, and the
+solo death fallback drew uniformly from distant camps of the safest con.
+Version 0.55.0 aligns the group precheck with the planner, applies the local
+camp preference after death, and enforces low-level autonomous PvP safety at
+the attack and damage paths. These fixes still need an owner run.
 
 Acceptance: at least 50% of time fighting or at camp. At least 70% of goal
 attempts reach their camp. At least 20 monster kills per bot-hour at levels

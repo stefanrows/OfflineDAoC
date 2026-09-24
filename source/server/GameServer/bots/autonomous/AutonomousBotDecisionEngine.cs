@@ -314,7 +314,11 @@ public static class AutonomousBotDecisionEngine
         IEnumerable<Camp> camps,
         string failedCampId,
         string failedMonsterName,
-        Random random = null)
+        Random random = null,
+        ushort currentRegion = 0,
+        string currentZone = null,
+        eRealm homeRealm = eRealm.None,
+        int level = 0)
     {
         Camp[] safe = camps?
             .Where(camp => camp != null && camp.Reachable && camp.LiveMobCount > 0 &&
@@ -323,13 +327,16 @@ public static class AutonomousBotDecisionEngine
         if (safe.Length == 0)
             return null;
 
-        Camp[] alternatives = safe.Where(camp =>
+        ConColor safestCon = safe.Min(camp => camp.TypicalCon);
+        Camp[] safest = safe.Where(camp => camp.TypicalCon == safestCon).ToArray();
+        Camp[] alternatives = safest.Where(camp =>
                 !string.Equals(camp.Id, failedCampId, StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(camp.MonsterName, failedMonsterName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        Camp[] pool = alternatives.Length > 0 ? alternatives : safe;
-        ConColor safestCon = pool.Min(camp => camp.TypicalCon);
-        return SelectUniformGrindCamp(pool.Where(camp => camp.TypicalCon == safestCon), random);
+        Camp[] pool = alternatives.Length > 0 ? alternatives : safest;
+        return level is >= 1 and < 20
+            ? SelectLevelingCamp(pool, currentRegion, currentZone, homeRealm, level, random)
+            : SelectUniformGrindCamp(pool, random);
     }
 
     private static Service Find(IEnumerable<Service> services, eWorldServiceKind kind) =>

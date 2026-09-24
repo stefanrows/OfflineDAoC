@@ -3281,6 +3281,9 @@ namespace DOL.GS
 
         public override void OnAttackedByEnemy(AttackData ad)
         {
+            if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+                return;
+
             // Notify BotBrain of the attack so it can add aggro and transition to combat state
             if (Brain is BotBrain botBrain)
                 botBrain.OnAttackedByEnemy(ad);

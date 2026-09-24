@@ -13,6 +13,7 @@ using DOL.GS.Keeps;
 using DOL.GS.PacketHandler;
 using DOL.GS.PropertyCalc;
 using DOL.GS.RealmAbilities;
+using DOL.GS.ServerRules;
 using DOL.GS.ServerProperties;
 using DOL.GS.SkillHandler;
 using DOL.GS.Spells;
@@ -1315,6 +1316,9 @@ namespace DOL.GS
 		/// <param name="criticalAmount">the amount of critical damage</param>
 		public override void TakeDamage(GameObject source, eDamageType damageType, int damageAmount, int criticalAmount)
 		{
+			if (source is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+				return;
+
 			base.TakeDamage(source, damageType, damageAmount, criticalAmount);
 
 			double damageDealt = damageAmount + criticalAmount;
@@ -1488,6 +1492,9 @@ namespace DOL.GS
 		/// <param name="ad">information about the attack</param>
 		public virtual void OnAttackedByEnemy(AttackData ad)
 		{
+			if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+				return;
+
 			// Fire the event for registered handlers (like BotBrain)
 			GameEventMgr.Notify(GameLivingEvent.AttackedByEnemy, this, new AttackedByEnemyEventArgs(ad));
 

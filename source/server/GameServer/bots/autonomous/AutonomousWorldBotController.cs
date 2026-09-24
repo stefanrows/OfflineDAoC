@@ -2541,8 +2541,8 @@ namespace DOL.GS
                 int[] validLevels = cell.Levels.Where(level =>
                     {
                         if (sharedGroup)
-                            return level <= planningLevel + groupTargetBonus &&
-                                ConLevels.GetConColor(ConLevels.GetConLevel(highestMemberLevel, level)) > ConColor.GREY;
+                            return AutonomousGroupTargetPolicy.CanUseCampLevel(level, planningLevel,
+                                highestMemberLevel, groupTargetBonus);
                         ConColor con = ConLevels.GetConColor(ConLevels.GetConLevel(bot.EffectiveLevel, level));
                         // Retain every naturally valid non-grey option in the
                         // catalog. The requested death ceiling is applied below,
@@ -2635,7 +2635,7 @@ namespace DOL.GS
                     camps.Where(camp => camp.TypicalCon <= naturalMaximumTargetCon),
                     _lastFailedCampId,
                     _lastFailedTargetName,
-                    Random.Shared);
+                    Random.Shared, bot.CurrentRegionID, bot.CurrentZone?.Description, bot.Realm, bot.Level);
                 usedDeathFallback = chosen != null;
                 if (usedDeathFallback)
                 {
@@ -2691,15 +2691,20 @@ namespace DOL.GS
         {
             if (members == null || members.Length < 2) return false;
             GameBot leader = members[0];
+            int averageLevel = (int)Math.Round(members.Average(member => member.Level));
+            int highestMemberLevel = members.Max(member => member.EffectiveLevel);
+            bool hasHealing = members.Any(member => member.CharacterClass != null &&
+                BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID));
+            bool hasFrontline = members.Any(member => member.CharacterClass != null &&
+                BotPartyRoles.For((eCharacterClass)member.CharacterClass.ID) == BotPartyRole.Tank);
+            int targetBonus = hasHealing && hasFrontline
+                ? AutonomousGroupTargetPolicy.PreferredBonus(members.Length) : 0;
             return CampCatalogSnapshot().Any(cell => cell.RegionId == regionId &&
                 AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(cell.IsDungeon,
                     cell.IsFrontier, regionId, cell.RegionId) &&
-                cell.LiveMobCount > 0 && IsZoneAccessible(leader.Realm, cell.Zone) &&
-                cell.Levels.Any(level => level <=
-                    (int)Math.Round(members.Average(member => member.Level)) +
-                        AutonomousGroupTargetPolicy.PreferredBonus(members.Length) &&
-                    ConLevels.GetConColor(ConLevels.GetConLevel(
-                        members.Max(member => member.EffectiveLevel), level)) > ConColor.GREY));
+                cell.LiveMobCount > 0 && IsZoneAccessible(leader.Realm, cell.Zone, regionId) &&
+                cell.Levels.Any(level => AutonomousGroupTargetPolicy.CanUseCampLevel(
+                    level, averageLevel, highestMemberLevel, targetBonus)));
         }
 
         private static CampCatalogCell[] CampCatalogSnapshot()

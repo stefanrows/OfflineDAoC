@@ -16,6 +16,11 @@ namespace DOL.GS
         public static int PreferredLevel(int averageLevel, int groupSize, int wipePenalty = 0) =>
             Math.Max(1, averageLevel + PreferredBonus(groupSize) - Math.Max(0, wipePenalty));
 
+        public static bool CanUseCampLevel(int level, int averageLevel, int highestMemberLevel,
+            int targetBonus) =>
+            level > 0 && level <= averageLevel + targetBonus &&
+            ConLevels.GetConColor(ConLevels.GetConLevel(highestMemberLevel, level)) > ConColor.GREY;
+
         public static int PenaltyAfterWipe(int averageLevel, int groupSize, int oldPenalty, int selectedLevel)
         {
             int previousTarget = selectedLevel > 0 ? selectedLevel : PreferredLevel(averageLevel, groupSize, oldPenalty);

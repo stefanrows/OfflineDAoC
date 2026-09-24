@@ -19,6 +19,14 @@ namespace DOL.UnitTests
             Assert.That(AutonomousBotGroupCoordinator.IsOrdinaryPvePartySize(size), Is.True);
         }
 
+        [Test]
+        public void PickupCampEligibilityUsesTheSameRoleAdjustedCeilingAsPlanning()
+        {
+            Assert.That(AutonomousGroupTargetPolicy.CanUseCampLevel(6, 5, 5, 0), Is.False);
+            Assert.That(AutonomousGroupTargetPolicy.CanUseCampLevel(6, 5, 5, 1), Is.True);
+            Assert.That(AutonomousGroupTargetPolicy.CanUseCampLevel(5, 5, 5, 0), Is.True);
+        }
+
         [TestCase(0)] [TestCase(1)] [TestCase(9)]
         public void OrdinaryPveRejectsSizesOutsideTwoThroughEight(int size) =>
             Assert.That(AutonomousBotGroupCoordinator.IsOrdinaryPvePartySize(size), Is.False);

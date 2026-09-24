@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-09-24
+
+### Added
+
+- None.
+
+### Changed
+
+- Pickup-group formation now applies the same role-adjusted monster-level limit as its camp planner, so incomplete parties do not form for camps they cannot use.
+- Solo death recovery below level 20 keeps the safest non-grey target con while favoring nearby home-realm camps.
+
+### Fixed
+
+- Autonomous world bots below level 10 stay protected from player-shaped attacks even after a stale RvR safety opt-in. Direct attack and damage paths also protect the bot and its controlled pets; monster combat and player companions keep their existing rules.
+
+### Removed
+
+- None.
+
 ## [0.54.0] - 2026-09-24
 
 ### Added

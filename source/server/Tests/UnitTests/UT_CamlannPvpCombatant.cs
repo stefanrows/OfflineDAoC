@@ -184,6 +184,52 @@ public sealed class UT_CamlannPvpCombatant
     }
 
     [Test]
+    public void LowLevelAutonomousSafetyCoversPetsButAllowsMonsterCombat()
+    {
+        var bot = AutonomousBot(eRealm.Midgard, 5);
+        var human = new TestPlayer { Realm = eRealm.Albion, Level = 20, CurrentRegionID = 1 };
+        var monster = (TestPet)RuntimeHelpers.GetUninitializedObject(typeof(TestPet));
+        typeof(GameNPC).GetField("m_brains", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(monster, new ArrayList());
+        var pet = (TestPet)RuntimeHelpers.GetUninitializedObject(typeof(TestPet));
+        var brain = new PetBrain(bot) { Body = pet };
+        typeof(GameNPC).GetField("m_brains", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(pet, new ArrayList());
+        typeof(GameNPC).GetField("m_ownBrain", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(pet, brain);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.BlocksLowLevelAutonomousPvp(pet, human), Is.True);
+            Assert.That(PvpCombatant.BlocksLowLevelAutonomousPvp(human, pet), Is.True);
+            Assert.That(PvpCombatant.BlocksLowLevelAutonomousPvp(bot, monster), Is.False);
+            Assert.That(PvpCombatant.BlocksLowLevelAutonomousPvp(monster, bot), Is.False);
+            Assert.That(PvpCombatant.BlocksLowLevelAutonomousPvp(bot, bot), Is.False);
+            Assert.That(PvpCombatant.BlocksLowLevelAutonomousPvp(pet, bot), Is.False);
+        });
+    }
+
+    [Test]
+    public void DirectDamageCannotBypassLowLevelAutonomousSafety()
+    {
+        var bot = AutonomousBot(eRealm.Albion, 5);
+        var human = new TestPlayer { Realm = eRealm.Midgard, Level = 20, CurrentRegionID = 1 };
+        typeof(GameLiving).GetField("m_health", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(bot, 100);
+        typeof(GameLiving).GetField("m_health", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(human, 100);
+
+        bot.TakeDamage(human, eDamageType.Slash, 40, 0);
+        human.TakeDamage(bot, eDamageType.Slash, 40, 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(bot.Health, Is.EqualTo(100));
+            Assert.That(human.Health, Is.EqualTo(100));
+        });
+    }
+
+    [Test]
     public void TemporaryCompanionProtectsOwnerButNotAutonomousBot()
     {
         var owner = new TestPlayer { Realm = eRealm.Albion };
@@ -205,7 +251,7 @@ public sealed class UT_CamlannPvpCombatant
     }
 
     [Test]
-    public void SubTenAutonomousBotsCarryImplicitSafetyUntilRelinquished()
+    public void SubTenAutonomousBotsStayProtectedAfterRelinquishingSafety()
     {
         var rules = new PvPServerRules();
         var first = AutonomousBot(eRealm.Albion, 5);
@@ -223,7 +269,14 @@ public sealed class UT_CamlannPvpCombatant
         PvpCombatant.RelinquishOptionalSafety(first);
         Assert.That(rules.IsAllowedToAttack(first, second, true), Is.False, "the other bot keeps its safety");
         PvpCombatant.RelinquishOptionalSafety(second);
-        Assert.That(rules.IsAllowedToAttack(first, second, true), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.IsSafetyProtected(first), Is.True);
+            Assert.That(rules.IsAllowedToAttack(first, second, true), Is.False);
+            Assert.That(rules.IsAllowedToAttack(human, first, true), Is.False);
+            Assert.That(rules.IsAllowedToAttack(first, human, true), Is.False);
+            Assert.That(PvpCombatant.BlocksLowLevelAutonomousPvp(first, second), Is.True);
+        });
     }
 
     [Test]

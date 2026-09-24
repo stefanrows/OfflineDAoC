@@ -100,6 +100,9 @@ namespace DOL.GS.ServerRules
 
 		public override bool IsAllowedToAttack(GameLiving attacker, GameLiving defender, bool quiet)
 		{
+			if (PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, defender))
+				return false;
+
 			if (BotPvpCrowdControl.Protected(attacker, defender))
 				return false;
 
