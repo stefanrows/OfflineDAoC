@@ -14,8 +14,47 @@ namespace DOL.GS.Commands
     {
         private const string BusyMessage = "Gear changes need an active companion near you while both of you are out of combat.";
 
+        /// <summary>Worn slots in character-sheet order; ring and wrist pairs are adjacent.</summary>
+        public static readonly eInventorySlot[] SheetSlots =
+        [
+            eInventorySlot.HeadArmor, eInventorySlot.TorsoArmor, eInventorySlot.ArmsArmor,
+            eInventorySlot.HandsArmor, eInventorySlot.LegsArmor, eInventorySlot.FeetArmor,
+            eInventorySlot.Cloak, eInventorySlot.Neck, eInventorySlot.Jewelry, eInventorySlot.Waist,
+            eInventorySlot.LeftBracer, eInventorySlot.RightBracer,
+            eInventorySlot.LeftRing, eInventorySlot.RightRing,
+            eInventorySlot.RightHandWeapon, eInventorySlot.LeftHandWeapon,
+            eInventorySlot.TwoHandWeapon, eInventorySlot.DistanceWeapon, eInventorySlot.Mythical,
+        ];
+
         public static bool IsBackpack(DbInventoryItem item) =>
             item?.SlotPosition is >= (int)eInventorySlot.FirstBackpack and <= (int)eInventorySlot.LastBackpack;
+
+        /// <summary>
+        /// The companion's backpack items that it can equip in <paramref name="slot"/>, best first.
+        /// Uses the same legality as a manual equip; slot locks do not hide an item.
+        /// </summary>
+        public static IReadOnlyList<DbInventoryItem> ItemsFitting(GameBot companion, eInventorySlot slot) =>
+            companion?.Inventory == null
+                ? Array.Empty<DbInventoryItem>()
+                : companion.Inventory.AllItems.Where(IsBackpack)
+                    .Where(item => FitsSlot(companion.GetManualEquipmentSlot(item), slot))
+                    .OrderByDescending(AutonomousBotEconomy.EquipmentValue)
+                    .ThenBy(item => item.SlotPosition)
+                    .ToArray();
+
+        /// <summary>True when an item that resolves to <paramref name="resolved"/> can go in <paramref name="slot"/>.</summary>
+        public static bool FitsSlot(eInventorySlot resolved, eInventorySlot slot) =>
+            resolved != eInventorySlot.Invalid && (resolved == slot || PairOf(resolved) == slot);
+
+        /// <summary>The other half of a ring or wrist pair, or Invalid.</summary>
+        public static eInventorySlot PairOf(eInventorySlot slot) => slot switch
+        {
+            eInventorySlot.LeftRing => eInventorySlot.RightRing,
+            eInventorySlot.RightRing => eInventorySlot.LeftRing,
+            eInventorySlot.LeftBracer => eInventorySlot.RightBracer,
+            eInventorySlot.RightBracer => eInventorySlot.LeftBracer,
+            _ => eInventorySlot.Invalid,
+        };
 
         public static bool TryEquip(GamePlayer owner, string companionId, string itemId, out string message) =>
             TryEquip(owner, companionId, itemId, eInventorySlot.Invalid, out message);
@@ -39,12 +78,7 @@ namespace DOL.GS.Commands
         }
 
         public static bool TryUnequip(GamePlayer owner, string companionId, eInventorySlot slot, string expectedItemId,
-            out string message) =>
-            TryUnequip(owner, companionId, slot, expectedItemId, eInventorySlot.Invalid, out message);
-
-        /// <param name="destination">An empty backpack slot, or Invalid for the first empty one.</param>
-        public static bool TryUnequip(GamePlayer owner, string companionId, eInventorySlot slot, string expectedItemId,
-            eInventorySlot destination, out string message)
+            out string message)
         {
             if (!PlayerCompanionRoster.TryGetActiveCompanionById(owner, companionId, out GameBot companion) ||
                 companion.Inventory == null)
@@ -57,12 +91,8 @@ namespace DOL.GS.Commands
                 {
                     if (!ReferenceEquals(companion.Inventory.GetItem(slot), item))
                         return false;
-                    eInventorySlot backpack = destination == eInventorySlot.Invalid
-                        ? companion.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack)
-                        : destination is >= eInventorySlot.FirstBackpack and <= eInventorySlot.LastBackpack &&
-                          companion.Inventory.GetItem(destination) == null
-                            ? destination
-                            : eInventorySlot.Invalid;
+                    eInventorySlot backpack = companion.Inventory.FindFirstEmptySlot(
+                        eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
                     if (backpack == eInventorySlot.Invalid ||
                         !companion.Inventory.MoveItem(slot, backpack, Math.Max(1, item.Count)))
                         return false;

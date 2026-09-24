@@ -4729,6 +4729,19 @@ namespace DOL.GS
                    GetSpecializationByName(line) is { Trainable: true, Level: > 1 };
         }
 
+        /// <summary>
+        /// The worn slot a manual equip would use for this item, ignoring slot locks, or
+        /// Invalid when the companion cannot use it. A ring or wrist item may report either half.
+        /// </summary>
+        internal eInventorySlot GetManualEquipmentSlot(DbInventoryItem item)
+        {
+            if (!IsPersistentPlayerCompanion || Inventory == null || item == null)
+                return eInventorySlot.Invalid;
+            AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot resolved,
+                ignoreCompanionSlotLocks: true, companionPairTieBreak: 0);
+            return resolved;
+        }
+
         internal bool TryManuallyEquipPersistentCompanionItem(DbInventoryItem item) =>
             TryManuallyEquipPersistentCompanionItem(item, eInventorySlot.Invalid, out _);
 

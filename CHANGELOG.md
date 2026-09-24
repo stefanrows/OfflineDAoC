@@ -12,6 +12,41 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-09-24
+
+### Added
+
+- A slot sheet in the Companion Manager's Gear tab. It lists all 19 worn slots
+  in character-sheet order, including empty ones, and marks slots where the
+  companion's bag holds items that fit (`2 fit`) or a better item
+  (`upgrade in bag`).
+- Clicking a slot opens it: the worn item with its stats, and every bag item
+  the companion can equip there, best first, with its score change.
+  **[Equip + lock]** equips the selected item in that slot (a ring or bracer on
+  the side you clicked); **[Unequip]**, **[Lock slot]**, and **[Keep]** act on
+  the worn item. Click the slot again to close it.
+- A test for the slot sheet order and paired ring and wrist matching.
+
+### Changed
+
+- The slot sheet replaces the Gear tab's list of worn items. The backpack
+  list below it keeps its **[Equip + lock]**, **[Return to me]**, and
+  **[Keep]** actions.
+- Benched companions show all worn slots, including empty ones.
+- Updated the Companion Manager roadmap, the integration handoff, and the
+  command references.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The worn slots at positions 51-69 of the companion bag window (0.38.0). The
+  bag window shows only the 40 backpack positions again, and the drag-to-equip
+  and drag-to-unequip rules that came with it are gone.
+
 ## [0.38.0] - 2026-09-24
 
 ### Added

@@ -6,7 +6,7 @@ offline in 0.34.0. M1b (build list in the window and recruit flow) implemented
 offline in 0.35.0. M1c (Crowd control role and build roles) implemented
 offline in 0.36.0. M2 (group controls in the window) implemented offline in
 0.37.0. M3 (worn slots on the bag window's second half) implemented offline in
-0.38.0.**
+0.38.0 and replaced by the Gear tab slot sheet (M3b) in 0.39.0.**
 Last updated: 2026-09-24.
 
 The `Custom8` Companion Manager (0.32.1) passed the owner's real-client gate
@@ -340,7 +340,13 @@ action leaves items and coins intact.
 **Owner decision (2026-09-24):** option 2, the second vault page. Option 1
 stays a possible later probe; it is not planned.
 
-### M3 - Worn slots in the bag window (0.38.0, offline)
+**Owner decision (2026-09-24, later):** the vault page (0.38.0) is
+unintuitive. Replace it with a slot sheet in the Gear tab (M3b below) and
+return the bag window to the backpack only.
+
+### M3 - Worn slots in the bag window (0.38.0, offline; replaced in 0.39.0)
+
+Superseded by M3b. Its owner check below is no longer needed.
 
 Server only. The installed manager `game.dll` needs no change.
 
@@ -379,10 +385,40 @@ order above (also listed in the Gear tab) is the key. The bag window does not
 refresh by itself when the companion equips loot automatically; reopen it or
 make any move to refresh.
 
+### M3b - Gear tab slot sheet (0.39.0, offline)
+
+Server only. The installed manager `game.dll` needs no change.
+
+- [x] Slot sheet: the Gear tab lists all 19 worn slots in character-sheet
+      order (helm, chest, arms, gloves, legs, boots, cloak, neck, jewel, belt,
+      left and right wrist, left and right ring, right hand, left hand,
+      two-handed, ranged, mythical), including empty ones. A slot shows
+      `N fit` when it is empty and bag items fit it, or `upgrade in bag` when a
+      bag item scores higher than the worn one.
+- [x] Open slot: clicking a slot opens it at the top of the detail pane with
+      the worn item's stats and every bag item the companion can equip there,
+      best first, with its score change. Fitting uses the manual-equip
+      legality (class, level, weapon configuration) and ignores slot locks.
+- [x] Actions: **[Equip + lock]** equips the selected item in the open slot
+      through `PersistentCompanionGear.TryEquip`; a ring or bracer goes on the
+      clicked side. **[Unequip]**, **[Lock slot]**, and **[Keep]** act on the
+      worn item. The backpack list keeps its equip, return, and keep actions.
+- [x] Bag window: backpack only again (40 positions); the 0.38.0 worn
+      positions and their drag rules are removed.
+- [x] Benched companions show all 19 slots read-only.
+- [x] Test: sheet order, 19 unique equipable slots, adjacent ring and wrist
+      pairs, and paired-slot matching. The fit list needs a live companion and
+      is left to the owner check.
+- [ ] Owner: in the real client, open a companion's Gear tab, click an empty
+      slot and a filled one, equip an item from the fit list (including a ring
+      on the left side), unequip it, and check that the `fit` and
+      `upgrade in bag` hints follow.
+
 ## Order and gates
 
 M0, then M1, then M2, which carry no native risk and give the most gameplay
-value. M3 uses the server-only vault page (option 2); a native slot-grid probe
+value. M3 uses the server-only Gear tab slot sheet (M3b, replacing the 0.38.0
+vault page); a native slot-grid probe
 would come later only if the owner asks for it. Each milestone follows the repository's
 versioning, uses offline tests before any owner check, and closes only after
 the owner confirms it in the real client.

@@ -298,43 +298,35 @@ public sealed class UT_CompanionManager
             .Invoke(null, new object[] { new List<PlayerCompanionRecord>() });
 
     [Test]
-    public void BagWindowShowsWornSlotsAfterTheBackpackInPairedRows()
+    public void GearTabListsEveryWornSlotInSheetOrderAndMatchesPairedSlots()
     {
-        Type view = typeof(CompanionManager).Assembly.GetType("DOL.GS.Commands.PersistentCompanionInventoryView")!;
-        var worn = (eInventorySlot[])view.GetField("WornSlots", BindingFlags.NonPublic | BindingFlags.Static)!
-            .GetValue(null)!;
-        MethodInfo clientSlotOf = view.GetMethod("ClientSlotOf", BindingFlags.NonPublic | BindingFlags.Static)!;
-        MethodInfo wornSlotAt = view.GetMethod("WornSlotAt", BindingFlags.NonPublic | BindingFlags.Static)!;
-        int? ClientSlot(eInventorySlot slot) => (int?)clientSlotOf.Invoke(null, new object[] { slot });
-        eInventorySlot WornAt(int clientSlot) => (eInventorySlot)wornSlotAt.Invoke(null, new object[] { (eInventorySlot)clientSlot })!;
-        int first = (int)eInventorySlot.HousingInventory_First;
-
+        eInventorySlot[] sheet = PersistentCompanionGear.SheetSlots;
         Assert.Multiple(() =>
         {
-            Assert.That(ClientSlot(eInventorySlot.FirstBackpack), Is.EqualTo(first));
-            Assert.That(ClientSlot(eInventorySlot.LastBackpack), Is.EqualTo(first + 39));
-            Assert.That(ClientSlot(eInventorySlot.HeadArmor), Is.EqualTo(first + 50), "worn slots start at position 51");
-            Assert.That(worn, Is.Unique);
-            Assert.That(first + 50 + worn.Length - 1, Is.LessThanOrEqualTo((int)eInventorySlot.HousingInventory_Last));
-            foreach (eInventorySlot slot in worn)
+            Assert.That(sheet, Has.Length.EqualTo(19));
+            Assert.That(sheet, Is.Unique);
+            Assert.That(sheet[0], Is.EqualTo(eInventorySlot.HeadArmor), "the sheet starts with the helm");
+            Assert.That(sheet, Does.Not.Contain(eInventorySlot.FirstQuiver));
+            foreach (eInventorySlot slot in sheet)
             {
                 Assert.That(slot, Is.InRange(eInventorySlot.MinEquipable, eInventorySlot.MaxEquipable));
-                Assert.That(WornAt(ClientSlot(slot)!.Value), Is.EqualTo(slot), slot.ToString());
+                Assert.That(CompanionManager.SlotLabel(slot), Does.Match("^[A-Z]"), slot.ToString());
             }
             foreach ((eInventorySlot left, eInventorySlot right) in new[]
                      {
-                         (eInventorySlot.LeftRing, eInventorySlot.RightRing),
                          (eInventorySlot.LeftBracer, eInventorySlot.RightBracer),
+                         (eInventorySlot.LeftRing, eInventorySlot.RightRing),
                      })
             {
-                int leftIndex = ClientSlot(left)!.Value - first;
-                Assert.That(leftIndex % 2, Is.Zero, $"{left} starts a two-column row");
-                Assert.That(ClientSlot(right), Is.EqualTo(ClientSlot(left) + 1), $"{right} sits beside {left}");
+                Assert.That(Array.IndexOf(sheet, right), Is.EqualTo(Array.IndexOf(sheet, left) + 1), $"{right} follows {left}");
+                Assert.That(PersistentCompanionGear.FitsSlot(left, right), Is.True, "a paired item fits either side");
+                Assert.That(PersistentCompanionGear.FitsSlot(right, left), Is.True);
             }
-            Assert.That(ClientSlot(eInventorySlot.FirstQuiver), Is.Null);
-            Assert.That(WornAt(first), Is.EqualTo(eInventorySlot.Invalid), "backpack positions are not worn slots");
-            Assert.That(WornAt(first + 49), Is.EqualTo(eInventorySlot.Invalid));
-            Assert.That(WornAt(first + 50 + worn.Length), Is.EqualTo(eInventorySlot.Invalid));
+            Assert.That(PersistentCompanionGear.FitsSlot(eInventorySlot.HeadArmor, eInventorySlot.HeadArmor), Is.True);
+            Assert.That(PersistentCompanionGear.FitsSlot(eInventorySlot.RightHandWeapon, eInventorySlot.TwoHandWeapon), Is.False);
+            Assert.That(PersistentCompanionGear.FitsSlot(eInventorySlot.LeftRing, eInventorySlot.LeftBracer), Is.False);
+            Assert.That(PersistentCompanionGear.FitsSlot(eInventorySlot.Invalid, eInventorySlot.Invalid), Is.False,
+                "an unusable item fits nowhere");
         });
     }
 }

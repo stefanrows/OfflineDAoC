@@ -110,8 +110,8 @@ and verification history of the full-PvP conversion.
   leave mezzed monsters alone. The manager's Group orders row sets the group
   order and offers pull, invite all, bench all, and grind.
   The menu offers short gear pages and a native external-inventory view for the
-  companion backpack; its worn slots follow the backpack from position 51, and
-  dragging between them equips or unequips. Client acceptance of the updated UI remains pending.
+  companion backpack. The manager's Gear tab lists every worn slot; clicking a
+  slot shows the bag items that fit it, best first, with one-click equip. Client acceptance of the updated UI remains pending.
 - `/spawn` still creates temporary, player-owned helpers, separate from both the
   persistent recruit roster and autonomous population.
 - Companion PvP supports legal human, autonomous-bot, and controlled-pet targets.

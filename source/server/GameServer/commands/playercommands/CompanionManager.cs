@@ -215,6 +215,7 @@ namespace DOL.GS.Commands
                 list.SelectedKey = companions.FirstOrDefault()?.Key ?? all.FirstOrDefault()?.Key;
                 session.DetailOffset = 0;
                 session.SelectedItemId = null;
+                session.SelectedSlot = eInventorySlot.Invalid;
             }
             for (int row = 0; row < visible.Count; row++)
             {
@@ -261,7 +262,7 @@ namespace DOL.GS.Commands
             var keys = new List<string>(session.RowKeys.Select(key => key ?? string.Empty))
             {
                 session.Tab.ToString(), session.DetailTab.ToString(), list.SelectedKey ?? string.Empty,
-                session.SelectedItemId ?? string.Empty,
+                session.SelectedItemId ?? string.Empty, session.SelectedSlot.ToString(),
             };
             for (int line = 0; line < DetailLines; line++)
             {
@@ -631,9 +632,8 @@ namespace DOL.GS.Commands
             {
                 AddText(lines, "Benched companions keep their gear. It is shown read-only; invite them to change it.");
                 DbInventoryItem[] saved = LoadSavedItems(id);
-                foreach (DbInventoryItem item in saved.Where(item => item.SlotPosition is >= (int)eInventorySlot.MinEquipable
-                             and <= (int)eInventorySlot.MaxEquipable).OrderBy(item => item.SlotPosition))
-                    lines.Add(new Line($"  {PersistentCompanionGear.SlotName((eInventorySlot)item.SlotPosition)}: {item.Name}"));
+                foreach (eInventorySlot slot in PersistentCompanionGear.SheetSlots)
+                    lines.Add(new Line($"  {SlotLabel(slot)}: {saved.FirstOrDefault(item => item.SlotPosition == (int)slot)?.Name ?? "empty"}"));
                 lines.Add(new Line($"Backpack: {saved.Count(PersistentCompanionGear.IsBackpack)}/40 items."));
                 choices.Add(new Choice("[Invite]", true, "invite", () => Report(player, session,
                     Run(PlayerCompanionRoster.TryInvite, player, id))));
@@ -645,67 +645,138 @@ namespace DOL.GS.Commands
                 : companion.Inventory.AllItems.FirstOrDefault(item => item.ObjectId == session.SelectedItemId);
             if (selected == null)
                 session.SelectedItemId = null;
+            if (!PersistentCompanionGear.SheetSlots.Contains(session.SelectedSlot))
+                session.SelectedSlot = eInventorySlot.Invalid;
             choices.Add(new Choice("[Open bag]", true, "bag", () => OpenBag(player, session, id)));
-            if (selected != null)
+
+            if (session.SelectedSlot != eInventorySlot.Invalid)
+                BuildGearSlot(player, session, record, companion, session.SelectedSlot, selected, lines, choices);
+            else if (selected != null && PersistentCompanionGear.IsBackpack(selected))
             {
                 string itemId = selected.ObjectId;
-                bool inBag = PersistentCompanionGear.IsBackpack(selected);
-                var slot = (eInventorySlot)selected.SlotPosition;
-                string flags = PlayerCompanionRoster.GetEquipmentItemFlags(record, itemId);
-                bool kept = flags.Contains('K');
-                AddText(lines, $"Selected: {selected.Name} ({(inBag ? $"bag {selected.SlotPosition - (int)eInventorySlot.FirstBackpack + 1}" : PersistentCompanionGear.SlotName(slot))}).");
-                AddText(lines, $"Level {selected.Level}, quality {selected.Quality}, requires {selected.LevelRequirement}; score {AutonomousBotEconomy.EquipmentValue(selected)}.");
-                AddText(lines, PersistentCompanionGear.DescribeStats(selected) + ".");
-                AddText(lines, $"Ownership: {PersistentCompanionGear.DescribeFlags(flags)}.");
+                bool kept = PlayerCompanionRoster.GetEquipmentItemFlags(record, itemId).Contains('K');
+                AddText(lines, $"Selected: {selected.Name} (bag {selected.SlotPosition - (int)eInventorySlot.FirstBackpack + 1}).");
+                AddItemDetails(lines, record, selected);
                 lines.Add(new Line(string.Empty));
-                if (inBag)
-                {
-                    bool returnable = PlayerCompanionRoster.CanReturnItemToOwner(selected, record, out string blocker);
-                    choices.Add(new Choice("[Equip + lock]", true, "equip:" + itemId, () => Gear(player, session,
-                        (out string message) => PersistentCompanionGear.TryEquip(player, id, itemId, out message))));
-                    choices.Add(new Choice(returnable ? "[Return to me]" : "[Return: blocked]", returnable, "return:" + itemId,
-                        () => Gear(player, session, returnable
-                            ? (out string message) => PersistentCompanionGear.TryReturnToOwner(player, id, itemId, out message)
-                            : (out string message) => { message = $"Return blocked: {blocker}."; return false; })));
-                }
-                else
-                {
-                    bool locked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot);
-                    choices.Add(new Choice(locked ? "[Unlock slot]" : "[Lock slot]", true, $"lock:{itemId}:{!locked}",
-                        () => Gear(player, session, (out string message) =>
-                            PersistentCompanionGear.TrySetSlotLock(player, id, slot, !locked, itemId, out message))));
-                    choices.Add(new Choice("[Unequip]", true, "unequip:" + itemId, () => Gear(player, session,
-                        (out string message) => PersistentCompanionGear.TryUnequip(player, id, slot, itemId, out message))));
-                }
+                bool returnable = PlayerCompanionRoster.CanReturnItemToOwner(selected, record, out string blocker);
+                choices.Add(new Choice("[Equip + lock]", true, "equip:" + itemId, () => Gear(player, session,
+                    (out string message) => PersistentCompanionGear.TryEquip(player, id, itemId, out message))));
+                choices.Add(new Choice(returnable ? "[Return to me]" : "[Return: blocked]", returnable, "return:" + itemId,
+                    () => Gear(player, session, returnable
+                        ? (out string message) => PersistentCompanionGear.TryReturnToOwner(player, id, itemId, out message)
+                        : (out string message) => { message = $"Return blocked: {blocker}."; return false; })));
                 choices.Add(new Choice(kept ? "[Allow sale]" : "[Keep]", true, $"keep:{itemId}:{!kept}",
                     () => Gear(player, session, (out string message) =>
                         PersistentCompanionGear.TrySetKeep(player, id, itemId, !kept, out message))));
             }
 
-            AddText(lines, $"In the bag window, positions {PersistentCompanionInventoryView.FirstWornPosition}-" +
-                           $"{PersistentCompanionInventoryView.LastWornPosition} (after the backpack) are the worn slots: " +
-                           string.Join(", ", PersistentCompanionInventoryView.WornSlots.Select(PersistentCompanionGear.SlotName)) +
-                           ". Drop a bag item there to equip it; drag a worn item to an empty bag slot to unequip it.");
-            lines.Add(new Line("Worn equipment (select for actions):"));
-            foreach (DbInventoryItem item in companion.Inventory.EquippedItems.OrderBy(item => item.SlotPosition))
-            {
-                var slot = (eInventorySlot)item.SlotPosition;
-                string marker = item.ObjectId == session.SelectedItemId ? " <" : string.Empty;
-                string locked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot) ? " (locked)" : string.Empty;
-                string itemId = item.ObjectId;
-                lines.Add(new Line($"  {PersistentCompanionGear.SlotName(slot)}: {item.Name}{locked}{marker}", "item:" + itemId,
-                    () => SelectItem(session, itemId)));
-            }
             DbInventoryItem[] backpack = companion.Inventory.AllItems.Where(PersistentCompanionGear.IsBackpack)
                 .OrderBy(item => item.SlotPosition).ToArray();
-            lines.Add(new Line($"Backpack {backpack.Length}/40; drag items in the bag window:"));
+            var resolved = backpack.ToDictionary(item => item, companion.GetManualEquipmentSlot);
+            lines.Add(new Line("Worn gear (click a slot to see what fits):"));
+            foreach (eInventorySlot slot in PersistentCompanionGear.SheetSlots)
+            {
+                DbInventoryItem worn = companion.Inventory.GetItem(slot);
+                int wornValue = AutonomousBotEconomy.EquipmentValue(worn);
+                DbInventoryItem[] fits = backpack.Where(item => PersistentCompanionGear.FitsSlot(resolved[item], slot)).ToArray();
+                string hint = worn == null
+                    ? fits.Length > 0 ? $" - {fits.Length} fit" : string.Empty
+                    : fits.Any(item => AutonomousBotEconomy.EquipmentValue(item) > wornValue) ? " - upgrade in bag" : string.Empty;
+                string locked = worn != null && PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot) ? " (locked)" : string.Empty;
+                string marker = slot == session.SelectedSlot ? " <" : string.Empty;
+                eInventorySlot target = slot;
+                lines.Add(new Line($"  {SlotLabel(slot)}: {worn?.Name ?? "empty"}{locked}{hint}{marker}", "slot:" + slot,
+                    () => SelectSlot(session, target)));
+            }
+            lines.Add(new Line($"Backpack {backpack.Length}/40 (select to return or keep; [Open bag] moves items):"));
             foreach (DbInventoryItem item in backpack)
             {
-                string marker = item.ObjectId == session.SelectedItemId ? " <" : string.Empty;
+                string marker = item.ObjectId == session.SelectedItemId && session.SelectedSlot == eInventorySlot.Invalid
+                    ? " <" : string.Empty;
                 string itemId = item.ObjectId;
                 lines.Add(new Line($"  Bag {item.SlotPosition - (int)eInventorySlot.FirstBackpack + 1}: {item.Name}{marker}",
-                    "item:" + itemId, () => SelectItem(session, itemId)));
+                    "item:" + itemId, () => SelectItem(session, itemId, keepSlot: false)));
             }
+        }
+
+        /// <summary>
+        /// One worn slot: what it holds, and every backpack item that fits it, best first.
+        /// Equipping a fitting item uses the same protected path as [Equip + lock].
+        /// </summary>
+        private static void BuildGearSlot(GamePlayer player, CompanionManagerSession session, PlayerCompanionRecord record,
+            GameBot companion, eInventorySlot slot, DbInventoryItem selected, List<Line> lines, List<Choice> choices)
+        {
+            string id = record.CompanionId;
+            DbInventoryItem worn = companion.Inventory.GetItem(slot);
+            int wornValue = AutonomousBotEconomy.EquipmentValue(worn);
+            IReadOnlyList<DbInventoryItem> fits = PersistentCompanionGear.ItemsFitting(companion, slot);
+            DbInventoryItem candidate = selected != null && fits.Contains(selected) ? selected : null;
+
+            lines.Add(new Line($"{SlotLabel(slot)} < (click to close)", "slot:" + slot, () => SelectSlot(session, slot)));
+            if (worn == null)
+                AddText(lines, "Worn: nothing.");
+            else
+            {
+                bool locked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot);
+                AddText(lines, $"Worn: {worn.Name}{(locked ? " (locked)" : string.Empty)}.");
+                AddItemDetails(lines, record, worn);
+            }
+
+            if (fits.Count == 0)
+                AddText(lines, "Nothing in the companion's bag fits this slot. Use [Open bag] to give it gear.");
+            else
+            {
+                lines.Add(new Line("Fits from the bag (select one, then [Equip + lock]):"));
+                foreach (DbInventoryItem item in fits)
+                {
+                    int value = AutonomousBotEconomy.EquipmentValue(item);
+                    string change = worn == null ? string.Empty : $" ({value - wornValue:+0;-0;0})";
+                    string marker = item == candidate ? " <" : string.Empty;
+                    string itemId = item.ObjectId;
+                    lines.Add(new Line($"  {item.Name}, L{item.Level} q{item.Quality}, score {value}{change}{marker}",
+                        "fit:" + itemId, () => SelectItem(session, itemId, keepSlot: true)));
+                }
+                if (candidate != null)
+                {
+                    AddText(lines, $"Selected: {candidate.Name}.");
+                    AddItemDetails(lines, record, candidate);
+                }
+            }
+            lines.Add(new Line(string.Empty));
+
+            string candidateId = candidate?.ObjectId;
+            choices.Add(new Choice("[Equip + lock]", candidate != null, "equip:" + (candidateId ?? string.Empty),
+                () => Gear(player, session, candidateId == null
+                    ? (out string message) => { message = "Select an item that fits this slot first."; return false; }
+                    : (out string message) => PersistentCompanionGear.TryEquip(player, id, candidateId, slot, out message))));
+            if (worn == null)
+                return;
+
+            string wornId = worn.ObjectId;
+            bool slotLocked = PlayerCompanionRoster.IsEquipmentSlotLocked(record, slot);
+            bool kept = PlayerCompanionRoster.GetEquipmentItemFlags(record, wornId).Contains('K');
+            choices.Add(new Choice("[Unequip]", true, "unequip:" + wornId, () => Gear(player, session,
+                (out string message) => PersistentCompanionGear.TryUnequip(player, id, slot, wornId, out message))));
+            choices.Add(new Choice(slotLocked ? "[Unlock slot]" : "[Lock slot]", true, $"lock:{wornId}:{!slotLocked}",
+                () => Gear(player, session, (out string message) =>
+                    PersistentCompanionGear.TrySetSlotLock(player, id, slot, !slotLocked, wornId, out message))));
+            choices.Add(new Choice(kept ? "[Allow sale]" : "[Keep]", true, $"keep:{wornId}:{!kept}",
+                () => Gear(player, session, (out string message) =>
+                    PersistentCompanionGear.TrySetKeep(player, id, wornId, !kept, out message))));
+        }
+
+        private static void AddItemDetails(List<Line> lines, PlayerCompanionRecord record, DbInventoryItem item)
+        {
+            AddText(lines, $"Level {item.Level}, quality {item.Quality}, requires {item.LevelRequirement}; score {AutonomousBotEconomy.EquipmentValue(item)}.");
+            AddText(lines, PersistentCompanionGear.DescribeStats(item) + ".");
+            AddText(lines, $"Ownership: {PersistentCompanionGear.DescribeFlags(PlayerCompanionRoster.GetEquipmentItemFlags(record, item.ObjectId))}.");
+        }
+
+        /// <summary>A slot name with a leading capital, as the Gear tab lists it.</summary>
+        public static string SlotLabel(eInventorySlot slot)
+        {
+            string name = PersistentCompanionGear.SlotName(slot);
+            return name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
         }
 
         private static void BuildRecruitDetail(GamePlayer player, CompanionManagerSession session,
@@ -857,9 +928,19 @@ namespace DOL.GS.Commands
             Report(player, session, message);
         }
 
-        private static void SelectItem(CompanionManagerSession session, string itemId)
+        private static void SelectItem(CompanionManagerSession session, string itemId, bool keepSlot)
         {
             session.SelectedItemId = session.SelectedItemId == itemId ? null : itemId;
+            if (!keepSlot)
+                session.SelectedSlot = eInventorySlot.Invalid;
+            session.DetailOffset = 0;
+        }
+
+        /// <summary>Opens a worn slot in the Gear tab, or closes it when it is already open.</summary>
+        private static void SelectSlot(CompanionManagerSession session, eInventorySlot slot)
+        {
+            session.SelectedSlot = session.SelectedSlot == slot ? eInventorySlot.Invalid : slot;
+            session.SelectedItemId = null;
             session.DetailOffset = 0;
         }
 
@@ -937,7 +1018,7 @@ namespace DOL.GS.Commands
             }
             session.Bag = new PersistentCompanionInventoryView(player, id);
             session.Bag.Open();
-            session.Message = $"{companion.Name}'s bag is open. Drag items between bags to transfer them; worn slots start at position {PersistentCompanionInventoryView.FirstWornPosition}.";
+            session.Message = $"{companion.Name}'s bag is open. Drag items between bags to transfer them; equip them from the Gear tab's slot list.";
         }
 
         private static void ShowInRoster(CompanionManagerSession session, string recordKey)
@@ -947,6 +1028,7 @@ namespace DOL.GS.Commands
             session.DetailTab = CompanionManagerDetailTab.Overview;
             session.DetailOffset = 0;
             session.SelectedItemId = null;
+            session.SelectedSlot = eInventorySlot.Invalid;
         }
 
         private static void RecruitStory(GamePlayer player, CompanionManagerSession session, string storyKey, string planId)
