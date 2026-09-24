@@ -71,6 +71,10 @@ over a running install unless the owner asks.
   existing server was inspected read-only and left running; no deployment or
   real-client verification of the new code was performed.
 - Next: Tier 9 real-client verification of the playtest follow-up.
+- The next revision of the autonomous population (player types, guild
+  charters, the launcher's population settings, and two XP fixes) is planned in
+  [AUTONOMOUS_BOT_ROADMAP.md](AUTONOMOUS_BOT_ROADMAP.md). It supersedes the
+  Tier 8 goal sliders once implemented.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, and `source/server/AGENTS.md` before
 editing. Distinguish the real player, companion bots, and autonomous gamebots

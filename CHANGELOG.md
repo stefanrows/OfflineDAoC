@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.32.4] - 2026-09-24
+
+### Added
+
+- An autonomous bot behaviour roadmap (`docs/AUTONOMOUS_BOT_ROADMAP.md`): a
+  review of the current population system, findings on the slowdown around
+  levels 10–12, Camlann and Mordred research, the owner's design decisions,
+  and milestones for player types, guild charters, the launcher's population
+  settings, rewards, and chat.
+
+### Changed
+
+- Linked the roadmap from the README and the Camlann plan.
+- Synchronized launcher, launcher-test, and command-reference version pins.
+
+### Fixed
+
+- None. The roadmap records, but does not yet fix, two XP bugs: autonomous bots
+  and `/spawn` helpers have received 1× XP from mob kills since 0.24.0, and a
+  low-level persistent companion receives its owner's full kill award.
+
+### Removed
+
+- None.
+
 ## [0.32.3] - 2026-09-24
 
 ### Added
