@@ -783,16 +783,25 @@ namespace DOL.AI.Brain
                 return;
             }
 
+            GameLiving groupPuller = puller;
+
+            // Treat controlled pets as their owner for group checks, and allow
+            // companions in a player-led group to pull for the group as well.
+            if (puller is not GameBot && puller is GameNPC pet && pet.Brain is IControlledBrain brain)
+                groupPuller = brain.GetLivingOwner();
+
             GamePlayer playerPuller;
-
-            // Only BAF on players and pets of players
-            if (puller is GamePlayer player)
+            if (groupPuller is GamePlayer player)
                 playerPuller = player;
-            else if (puller is GameNPC pet && pet.Brain is ControlledMobBrain brain)
+            else if (groupPuller is GameBot bot)
             {
-                playerPuller = brain.GetPlayerOwner();
+                playerPuller = bot.PlayerGroupLeader ?? bot.Owner;
+                if (bot.Group == null || playerPuller?.Group != bot.Group ||
+                    !bot.Group.IsInTheGroup(playerPuller))
+                    playerPuller = bot.Group?.Leader;
 
-                if (playerPuller == null)
+                if (playerPuller == null || playerPuller.Group != bot.Group ||
+                    !bot.Group.IsInTheGroup(playerPuller))
                     return;
             }
             else
@@ -804,7 +813,8 @@ namespace DOL.AI.Brain
 
             _ = new ResetBafPropertyAction(playerPuller);
             CanBaf = false; // Mobs only BAF once per fight.
-            int maxAdds = GetMaxAddsCountFromBaf(playerPuller, out List<GamePlayer> otherTargets, out int attackersCount);
+            int maxAdds = GetMaxAddsCountFromBaf(groupPuller, playerPuller,
+                out List<GameLiving> otherTargets, out int attackersCount);
             int bafRadius = BAF_MIN_RADIUS + (Math.Min(8, attackersCount) - 1) * BAF_EXTRA_RADIUS_PER_OTHER_PLAYER;
 
             if (Body.CurrentZone.IsDungeon)
@@ -829,13 +839,14 @@ namespace DOL.AI.Brain
                 brain.AddToAggroList(target);
             }
 
-            static int GetMaxAddsCountFromBaf(GamePlayer puller, out List<GamePlayer> otherTargets, out int attackersCount)
+            static int GetMaxAddsCountFromBaf(GameLiving puller, GamePlayer playerPuller,
+                out List<GameLiving> otherTargets, out int attackersCount)
             {
                 attackersCount = 0;
                 otherTargets = null;
                 HashSet<string> countedVictims = null;
                 HashSet<string> countedAttackers = null;
-                BattleGroup bg = puller.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
+                BattleGroup bg = playerPuller.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
                 Group group = puller.Group;
 
                 if (group != null)
@@ -854,17 +865,19 @@ namespace DOL.AI.Brain
                             otherTargets = new(group.MemberCount);
                     }
 
-                    foreach (GamePlayer playerInGroup in group.GetPlayersInTheGroup())
+                    foreach (GameLiving member in group.GetMembersInTheGroup())
                     {
-                        if (playerInGroup != null && (playerInGroup.InternalID == puller.InternalID || playerInGroup.IsWithinRadius(puller, WorldMgr.VISIBILITY_DISTANCE, true)))
+                        if ((member is GamePlayer or GameBot) &&
+                            (member.InternalID == puller.InternalID ||
+                             member.IsWithinRadius(puller, WorldMgr.VISIBILITY_DISTANCE, true)))
                         {
                             attackersCount++;
-                            countedAttackers?.Add(playerInGroup.InternalID);
+                            countedAttackers?.Add(member.InternalID);
 
                             if (otherTargets != null)
                             {
-                                otherTargets.Add(playerInGroup);
-                                countedVictims?.Add(playerInGroup.InternalID);
+                                otherTargets.Add(member);
+                                countedVictims?.Add(member.InternalID);
                             }
                         }
                     }
