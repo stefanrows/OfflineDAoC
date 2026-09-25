@@ -39,12 +39,12 @@ public class UT_SeptemberFourteenMaintenance
     }
 
     [Test]
-    public void OrdinaryBuffsRemainAvailableAndDarknessFallsCannotBeAGoal()
+    public void OrdinaryBuffsRemainAvailableAndAuditedDarknessFallsCanBeAGoal()
     {
         Spell ordinary = new(new DbSpell { SpellID = 3, Type = "StrengthBuff", Target = "Realm", Duration = 600 }, 1);
         Assert.That(BotMaintenancePulsePolicy.CanMaintain(ordinary, 2), Is.True);
-        Assert.That(AutonomousDungeonPolicy.IsSupportedDungeonZone(249), Is.False);
-        Assert.That(AutonomousDungeonPolicy.IsReliableAutonomousGoal(249, "lilispawn"), Is.False);
+        Assert.That(AutonomousDungeonPolicy.IsSupportedDungeonZone(249), Is.True);
+        Assert.That(AutonomousDungeonPolicy.IsReliableAutonomousGoal(249, "lilispawn"), Is.True);
         Assert.That(AutonomousDungeonPolicy.IsSupportedDungeonZone(23), Is.True);
         Assert.That(AutonomousDarknessFallsPolicy.CanUseRegionEdge(eRealm.Albion, 249, 1, _ => false), Is.True);
     }

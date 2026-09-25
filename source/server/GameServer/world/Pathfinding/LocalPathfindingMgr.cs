@@ -201,6 +201,13 @@ namespace DOL.GS
                 }
             }
 
+            bool verifiedDarknessFalls = false;
+            if (id == AutonomousDarknessFallsPolicy.RegionId)
+            {
+                verifiedDarknessFalls = AutonomousDarknessFallsNavigation.TryPrepare(path, out string prepared);
+                if (verifiedDarknessFalls) path = prepared;
+            }
+
             nint meshPtr = IntPtr.Zero;
 
             if (!LoadNavMesh(path, ref meshPtr))
@@ -227,12 +234,15 @@ namespace DOL.GS
                 _navmeshPtrs[zone.ID] = meshPtr;
             }
 
+            if (id == AutonomousDarknessFallsPolicy.RegionId)
+                AutonomousDarknessFallsNavigation.Ready = verifiedDarknessFalls;
             zone.IsPathfindingEnabled = true;
             NavigationGeometryRevision.Changed(zone);
         }
 
         public static void UnloadNavMesh(Zone zone)
         {
+            if (zone.ID == AutonomousDarknessFallsPolicy.RegionId) AutonomousDarknessFallsNavigation.Ready = false;
             if (!_navmeshPtrs.TryGetValue(zone.ID, out nint ptr))
                 return;
 

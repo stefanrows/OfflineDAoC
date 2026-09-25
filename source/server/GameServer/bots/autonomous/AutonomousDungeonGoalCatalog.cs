@@ -44,6 +44,12 @@ namespace DOL.GS
             string resource = assembly.GetManifestResourceNames().Single(name => name.EndsWith("dungeon_navigation_points.json", StringComparison.Ordinal));
             using Stream stream = assembly.GetManifestResourceStream(resource);
             Document document = JsonSerializer.Deserialize<Document>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            string dfResource = assembly.GetManifestResourceNames().Single(name => name.EndsWith("darkness_falls_navigation_points.json", StringComparison.Ordinal));
+            using Stream dfStream = assembly.GetManifestResourceStream(dfResource);
+            Document df = JsonSerializer.Deserialize<Document>(dfStream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            // Replace the three obsolete DF rows with the audited stair-connected catalogue.
+            document.Spawns = document.Spawns.Where(point => point.Region != AutonomousDarknessFallsPolicy.RegionId)
+                .Concat(df.Spawns).ToArray();
             var points = new Dictionary<string, Point>(StringComparer.Ordinal);
             var entries = new Dictionary<(ushort, int, int), HashSet<(int, int, int)>>();
             foreach (Point point in document.Spawns)

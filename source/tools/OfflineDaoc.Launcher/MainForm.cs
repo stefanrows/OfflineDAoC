@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.60.0";
+    internal const string DisplayVersion = "0.62.1";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -2086,7 +2086,8 @@ internal sealed partial class MainForm : Form
                 {
                     ObjectiveExpiresUtc = objectiveExpiresUtc,
                     PlayerType = reader.GetString(21),
-                    GuildCharter = reader.GetString(22),
+                    GuildCharter = reader.GetString(22).Equals("Rvr", StringComparison.OrdinalIgnoreCase)
+                        ? "PvP" : reader.GetString(22),
                     GuildName = reader.GetString(23),
                     HasGroupTaskClock = group?.HasTaskClock == true,
                     TaskTimerPaused = group?.TaskTimerPaused == true,
@@ -3285,6 +3286,7 @@ internal sealed partial class MainForm : Form
         string live = details.Count > 0 ? string.Join(" — ", details) : activity.Length > 0 ? activity : "Choosing next activity";
         if (isOnline && activity.Length > 0 && !live.StartsWith(activity, StringComparison.OrdinalIgnoreCase))
             live = $"{activity}: {live}";
+        live = live.Replace("RvR", "PvP", StringComparison.OrdinalIgnoreCase);
         return isOnline ? live : $"Parked — resumes {live}";
     }
 

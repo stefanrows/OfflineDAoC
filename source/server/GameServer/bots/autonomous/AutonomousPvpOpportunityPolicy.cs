@@ -42,11 +42,29 @@ public static class AutonomousPvpOpportunityPolicy
 
     public static bool IsHunterHuntArea(int partyLevel, IEnumerable<int> areaLevels,
         bool isDungeon, bool isFrontier, bool isSafe, bool reachable) =>
-        partyLevel >= 10 && !isDungeon && (!isFrontier || partyLevel >= 35) && !isSafe && reachable &&
+        partyLevel >= 10 && (!isFrontier || partyLevel >= 35) && !isSafe && reachable &&
         areaLevels?.Any(level => LevelsPreferred(partyLevel, level)) == true;
 
     public static int HunterPatrolWeight(int activeCampPopulation, bool nearOutdoorRoute) =>
         1 + Math.Min(4, Math.Max(0, activeCampPopulation)) * 2 + (nearOutdoorRoute ? 2 : 0);
+
+    // Frontier scans must honor the same task and strength limits as outdoor hunts.
+    // Actual self/group defense is checked separately by their caller.
+    public static bool MayHunt(GameBot actor) => actor != null &&
+        CanSeekOpportunity(AutonomousObjectiveAssignments.KindFor(actor), actor.Group?.MemberCount ?? 1) &&
+        !AutonomousActivityScheduler.IsPveBlocked(actor.PersistentRecord, WorldSimulationClock.UtcNow) &&
+        !actor.IsRecoveryResting && AutonomousBotGroupCoordinator.CanInitiateNewPull(actor);
+
+    public static bool SuitableOpponent(GameBot actor, GameLiving target)
+    {
+        GameLiving identity = PvpCombatant.Resolve(target);
+        if (identity == null) return false;
+        if (AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) == AutonomousPlayerType.Hunter &&
+            identity.EffectiveLevel > actor.Level + PreferredLevelDifference) return false;
+        (int ownCount, int ownLevel) = VisibleParty(actor);
+        (int count, int level) = VisibleParty(identity);
+        return !IsVisiblyStronger(ownCount, ownLevel, count, level);
+    }
 
     public static (int Count, int AverageLevel) VisibleParty(GameLiving living)
     {
@@ -65,11 +83,10 @@ public static class AutonomousPvpOpportunityPolicy
     {
         if (actor == null || candidates == null || PvpCombatant.IsSafeArea(actor))
             return null;
-        (int ownCount, int ownLevel) = VisibleParty(actor);
         DateTime nowUtc = WorldSimulationClock.UtcNow;
         GameLiving[] visibleCandidates = candidates
             .Where(target => target != null && target != actor && target.IsAlive &&
-                target.ObjectState == GameObject.eObjectState.Active &&
+                target.ObjectState == GameObject.eObjectState.Active && !target.IsStealthed &&
                 target.CurrentRegionID == actor.CurrentRegionID &&
                 PvpCombatant.IsPlayerShaped(target) && !PvpCombatant.IsSafeArea(target) &&
                 GameServer.ServerRules.IsAllowedToAttack(actor, target, true) && visible(actor, target))
@@ -80,20 +97,12 @@ public static class AutonomousPvpOpportunityPolicy
         // A grudge only moves a target to the front of the queue. It still has
         // to pass the level window, grey and "stronger party" checks.
         return visibleCandidates
-            .Where(target => retaliation ||
-                AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) != AutonomousPlayerType.Hunter ||
-                (PvpCombatant.Resolve(target)?.EffectiveLevel ?? target.EffectiveLevel) <= actor.Level + PreferredLevelDifference)
+            .Where(target => retaliation || SuitableOpponent(actor, target))
             .Where(target => retaliation || AutonomousRvrTargetPolicy.ShouldEngageGrey(actor, target))
-            .Where(target => retaliation || !Stronger(target))
             .OrderByDescending(target => grudges.Contains(target))
             .ThenBy(target => LevelsPreferred(actor.Level, PvpCombatant.Resolve(target)?.Level ?? target.EffectiveLevel) ? 0 : 1)
             .ThenBy(actor.GetDistanceTo)
             .FirstOrDefault();
 
-        bool Stronger(GameLiving target)
-        {
-            (int count, int level) = VisibleParty(target);
-            return IsVisiblyStronger(ownCount, ownLevel, count, level);
-        }
     }
 }

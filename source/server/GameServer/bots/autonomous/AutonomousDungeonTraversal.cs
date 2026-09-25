@@ -16,7 +16,6 @@ namespace DOL.GS
         private long _dungeonProbeExpires;
         private bool _dungeonRouteResting;
         private readonly Dictionary<string, long> _rejectedDungeonCamps = new(StringComparer.Ordinal);
-        private long _nextSharedDungeonEnemyScan;
 
         private void RejectDungeonRoute(GameBot bot, string reason)
         {

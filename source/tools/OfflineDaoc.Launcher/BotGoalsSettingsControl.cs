@@ -8,14 +8,15 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private static readonly string[] DangerNames = ["Mild", "Authentic", "Full Camlann"];
     private static readonly string[] ShapeNames = ["Fresh launch", "Established live server"];
     private static readonly string[] TypeNames = ["Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "Keep warrior"];
+    private const string TypeMixHint = "\n\nHigher values give this type more weight for new bots. Existing bots keep their saved types. Save and restart the server; keep all six sliders at 100% total.";
     private static readonly string[] TypeToolTips =
     [
-        "Weight for new autonomous bots assigned the Leveler behavior. Levelers focus on PvE leveling, usually hunt in groups, and only consider RvR from level 35, then rarely. A higher value makes this behavior more common; class and guild role also affect exact counts.",
-        "Weight for new autonomous bots assigned the Casual behavior. Casuals favor PvE, take more town breaks, form fewer groups, and do not choose RvR on their own. A higher value makes this behavior more common; class and guild role also affect exact counts.",
-        "Weight for new autonomous bots assigned the Hybrid behavior. Hybrids mix PvE leveling with RvR, considering RvR from level 20 and fighting more often during local evening hours. A higher value makes this behavior more common; class and guild role also affect exact counts.",
-        "Weight for new autonomous bots assigned the Hunter behavior. Hunters favor RvR patrols and nearby, level-appropriate targets; the danger setting changes their patrol frequency and whether they may attack much lower-level players. A higher value makes this behavior more common; class and guild role also affect exact counts.",
-        "Weight for new autonomous bots assigned the Roamer behavior. Roamers travel RvR routes and can form warband-sized groups from level 20. A higher value makes this behavior more common; class and guild role also affect exact counts.",
-        "Weight for new autonomous bots assigned the Keep warrior behavior. At level 35 and above, a Keep warrior group leader can start a keep campaign with four or more group members. A higher value makes this behavior more common; class and guild role also affect exact counts.",
+        "Leveler: mainly PvE leveling, usually in groups. Rarely chooses PvP, and only from level 35. Increase this for more leveling parties." + TypeMixHint,
+        "Casual: relaxed PvE, more town breaks and fewer groups. Does not choose PvP on its own, but can defend itself. Increase this for a quieter population." + TypeMixHint,
+        "Hybrid: alternates PvE and PvP from level 20, with more PvP during local evening hours. Increase this for a mix of leveling and fighting." + TypeMixHint,
+        "Hunter: seeks victims near level-appropriate leveling spots from level 10, alone or in crews of up to four. Increase this for more PvP encounters while leveling. Danger controls hunting tendency and attacks on much lower-level targets." + TypeMixHint,
+        "Roamer: favors traveling PvP groups. Starts considering PvP at level 15 and favors eight-player parties from level 20. Increase this for more organized roaming group fights." + TypeMixHint,
+        "Keep warrior: favors keep and siege warfare as levels rise. From level 35, a leader with at least four group members can start a keep campaign. Increase this for more keep-focused activity." + TypeMixHint,
     ];
     private readonly string _path;
     private readonly Func<bool> _serverStopped;
@@ -99,7 +100,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
         }
         body.Controls.Add(_total);
         body.Controls.Add(ChoiceRow("Danger in leveling zones", _danger,
-            "Controls autonomous Hunters' RvR patrol frequency and chance to attack much lower-level (grey-con) players. Mild cuts patrols to about one third and disables grey-target attacks. Authentic uses normal patrol frequency and excludes targets over 20 levels lower. Full Camlann increases patrols and grey-target chances, including rare attacks on targets over 20 levels lower. Presets set this value; choose Custom to change it."));
+            "Changes hunting tendency for existing and new Hunters after saving and restarting the server. Mild reduces hunting and disables attacks on much lower-level (grey-con) targets. Authentic uses normal hunting and excludes targets over 20 levels lower. Full Camlann increases hunting and grey-target attacks, including rare attacks on targets over 20 levels lower. It does not convert other bot types into Hunters. Choose Custom to edit."));
         body.Controls.Add(ChoiceRow("World shape", _worldShape,
             "Once saved, this is used when you add a crew through the launcher. Fresh launch creates every added bot at level 1; Established live server gives the new crew a spread of levels from 1 to 50. Existing bots keep their levels and progress, and Add Lv.50 remains a separate option."));
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 8, 3, 3),

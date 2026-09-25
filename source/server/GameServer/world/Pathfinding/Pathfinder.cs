@@ -251,7 +251,7 @@ namespace DOL.GS
             if (!_activePath.Nodes.TryPeek(0, out WrappedPathfindingNode current) || !Owner.IsWithinRadius(current.Position, NODE_REACHED_DISTANCE))
                 return;
 
-            // Glacier climb links follow the original rock surface in 3D.
+            // Glacier climbs and DF stair links follow the original surface in 3D.
             // A floor-only LOS shortcut must not skip their intermediate nodes.
             // All ordinary walking, other zones, horses and players retain their
             // existing movement smoothing and cadence.
@@ -305,7 +305,7 @@ namespace DOL.GS
         }
 
         public static bool RequiresExactClimbNode(bool bot, ushort zone, EDtPolyFlags current, EDtPolyFlags next) =>
-            bot && zone == 160 && ((current | next) & EDtPolyFlags.Jump) != 0;
+            bot && zone is 160 or 249 && ((current | next) & EDtPolyFlags.Jump) != 0;
 
         public bool TryGetClosestReachableNode(Zone zone, Vector3 position, Vector3 target, out Vector3? node)
         {

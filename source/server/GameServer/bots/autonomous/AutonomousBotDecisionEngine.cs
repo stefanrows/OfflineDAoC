@@ -240,7 +240,8 @@ public static class AutonomousBotDecisionEngine
             .Select(group => new
             {
                 Camps = group.ToArray(),
-                Weight = Math.Max(1, DungeonCapacity(group) * DungeonAvailability(group)),
+                Weight = Math.Max(1, DungeonCapacity(group) * DungeonAvailability(group) *
+                    AutonomousDungeonPolicy.DestinationWeight(group.Key)),
             }).ToArray();
         int totalWeight = regions.Sum(region => region.Weight);
         int draw = random.Next(totalWeight);
@@ -262,7 +263,8 @@ public static class AutonomousBotDecisionEngine
         Camp[] choices = camps?.Where(camp => camp != null).ToArray() ?? [];
         if (choices.Length == 0) return null;
         random ??= Random.Shared;
-        Camp[] home = choices.Where(camp => camp.Realm == homeRealm && camp.TravelMinutes <= 10).ToArray();
+        Camp[] home = choices.Where(camp => (camp.Realm == homeRealm || camp.RegionId == AutonomousDarknessFallsPolicy.RegionId) &&
+            camp.TravelMinutes <= 10).ToArray();
         Camp[] pool = level < 20 && home.Length > 0 ? home : choices;
         // Preserve the dungeon draw, but apply locality and distance inside
         // the chosen environment instead of letting remote empty cells win.
@@ -270,6 +272,8 @@ public static class AutonomousBotDecisionEngine
         Camp[] environmentPool = pool.Where(camp => environment == PveEnvironment.Dungeon
             ? camp.IsDungeon : !camp.IsDungeon).ToArray();
         if (environmentPool.Length == 0) environmentPool = pool;
+        if (environment == PveEnvironment.Dungeon)
+            return SelectWithinEnvironment(environmentPool, environment, random);
         double[] weights = environmentPool.Select(camp =>
             OutdoorCampWeight(camp) * (camp.IsDungeon ? 1d : 1d / (1d + Math.Max(0, camp.TravelMinutes) / 5d)) *
             (camp.RegionId == currentRegion ? 2d : 1d) *

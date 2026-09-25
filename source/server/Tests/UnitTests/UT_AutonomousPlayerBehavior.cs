@@ -28,7 +28,7 @@ public sealed class UT_AutonomousPlayerBehavior
         Assert.That(AutonomousPvpOpportunityPolicy.IsHunterHuntArea(35, new[] { 32, 34 },
             false, false, false, true), Is.True);
         Assert.That(AutonomousPvpOpportunityPolicy.IsHunterHuntArea(35, new[] { 32 },
-            true, false, false, true), Is.False);
+            true, false, false, true), Is.True);
         Assert.That(AutonomousPvpOpportunityPolicy.HunterPatrolWeight(2, true),
             Is.GreaterThan(AutonomousPvpOpportunityPolicy.HunterPatrolWeight(0, false)));
     }

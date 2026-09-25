@@ -28,14 +28,18 @@ public sealed partial class AutonomousWorldBotController
 
         var nav = PathfindingProvider.Instance;
         if (!nav.IsAvailable || !nav.HasNavmesh(bot.CurrentZone)) return false;
+        bool mayHunt = AutonomousPvpOpportunityPolicy.MayHunt(bot);
+        bool InOurFight(GameLiving target) => BotPvpCrowdControl.IsInFightWith(bot, target, null);
         bool Eligible(GameLiving target) => target != bot && !target.IsStealthed &&
+            (siegeFighter || InOurFight(target) ||
+                mayHunt && AutonomousPvpOpportunityPolicy.SuitableOpponent(bot, target)) &&
             target.ObjectState == GameObject.eObjectState.Active &&
             AutonomousRvrTargetPolicy.IsEligible(
                 AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, target) || target is GameSiegeWeapon or GameKeepGuard,
                 target.IsAlive,
                 target.CurrentRegionID == bot.CurrentRegionID, IsInFrontier(target), IsSafeArea(target),
                 GameServer.ServerRules.IsAllowedToAttack(bot, target, true)) &&
-            AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, target);
+            AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, target, InOurFight(target));
         bool IsHeldByAlliedOperator(GameLiving target) => target.TargetObject is GameBot friendly &&
             PvpCombatant.AreAllied(bot, friendly) && bot.IsWithinRadius(friendly, 1000) &&
             BotSiegeRuntime.HoldingPosition(friendly);

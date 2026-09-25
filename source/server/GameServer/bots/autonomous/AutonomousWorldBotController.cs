@@ -167,6 +167,7 @@ namespace DOL.GS
                     ResetTownIdle();
                     _camp = null;
                     _rvrDestination = null;
+                    _hunterPatrolArrivedTick = 0;
                     _rvrApproachDestination = null;
                     bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
                     bot.TempProperties.RemoveProperty("RvrSupplying");
@@ -247,12 +248,8 @@ namespace DOL.GS
                 if (HandleStableTravel(bot))
                     return true;
 
-                // Shared dungeons are RvR areas even when the bot's durable
-                // assignment is PvE. Only opponents actually present inside
-                // the local awareness radius are considered; no human player
-                // or enemy bot is selected through global knowledge.
-                if (TryEngageSharedDungeonOpponent(brain, bot))
-                    return false;
+                // PvP opportunities in shared dungeons follow the same task,
+                // level and party-strength policy as outdoor hunts.
                 if (TryEngageOpenWorldPvpOpportunity(brain, bot))
                     return false;
 
@@ -361,6 +358,7 @@ namespace DOL.GS
                     {
                         _nextRvrPlanReview = nowTick + 45_000;
                         _rvrDestination = ChooseRvrDestination(bot);
+                        _hunterPatrolArrivedTick = 0;
                     }
                     if (AutonomousRvrEventLayer.IsBattleForce(eventForce, nowTick))
                         return ExecuteRvr(brain, bot);
@@ -1422,7 +1420,7 @@ namespace DOL.GS
                 brain.AddToAggroList(enemy, Math.Max(100, enemy.EffectiveLevel * 12));
                 brain.FSM.SetCurrentState(eFSMStateType.AGGRO);
                 eAutonomousRvrPhase phase = AutonomousRvrObjectiveState.ForTarget(enemy);
-                SetRvrStatus(bot, phase.ToString(), "Live RvR target in awareness range", enemy.Name);
+                SetRvrStatus(bot, phase.ToString(), "Live PvP target in awareness range", enemy.Name);
                 return false;
             }
 
@@ -1494,29 +1492,41 @@ namespace DOL.GS
                         escorted.TryPickup(bot);
                     }
                     else TravelRvrObjective(bot, _rvrDestination);
-                    SetRvrStatus(bot, "Recovering dropped relic", escorted.Name, "Recovering the real dropped item for the realm");
+                    SetRvrStatus(bot, "Recovering dropped relic", escorted.Name, "Recovering the dropped relic for the guild");
                     return true;
                 }
                 _rvrDestination = null;
             }
 
+            if (_rvrDestination?.IsDungeon == true &&
+                _rejectedDungeonCamps.TryGetValue(_rvrDestination.Id, out long rejectedUntil) &&
+                rejectedUntil > GameLoop.GameLoopTime)
+            {
+                _rvrDestination = null;
+                _hunterPatrolArrivedTick = 0;
+            }
+            bool atPatrol = _rvrDestination != null && bot.CurrentRegionID == _rvrDestination.RegionId &&
+                Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= CampArrivalRadius &&
+                (!_rvrDestination.IsDungeon || Math.Abs(bot.Z - _rvrDestination.Z) <= 160);
+            if (atPatrol && _hunterPatrolArrivedTick == 0)
+                _hunterPatrolArrivedTick = GameLoop.GameLoopTime;
             if (_rvrDestination == null || _rvrDestination.RegionId == 0 ||
                 (bot.Level >= 20 && !_rvrSharedEvent && GameLoop.GameLoopTime >= _nextRvrPlanReview &&
                  AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) is not (AutonomousPlayerType.Hunter or AutonomousPlayerType.Roamer) &&
                  !BotSiegeRuntime.Assigned(bot)) ||
-                (_rvrIntent == AutonomousRvrEventLayer.Intent.Roam && bot.CurrentRegionID == _rvrDestination.RegionId &&
-                 Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= CampArrivalRadius &&
+                (_rvrIntent == AutonomousRvrEventLayer.Intent.Roam && atPatrol &&
                  (AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) != AutonomousPlayerType.Hunter ||
-                  GameLoop.GameLoopTime - _campStartedTick >= 180_000)))
+                  _hunterPatrolArrivedTick > 0 && GameLoop.GameLoopTime - _hunterPatrolArrivedTick >= 180_000)))
             {
                 _rvrDestination = ChooseRvrDestination(bot);
+                _hunterPatrolArrivedTick = 0;
                 _nextRvrPlanReview = GameLoop.GameLoopTime + 45_000 + bot.ObjectID % 15_000;
                 _campStartedTick = GameLoop.GameLoopTime;
                 _patrolDestination = null;
                 _rvrApproachDestination = null;
                 if (_rvrDestination == null)
                 {
-                    SetRvrStatus(bot, "Awaiting a frontier objective", "Roam active frontier keeps, relic routes, and enemy forces",
+                    SetRvrStatus(bot, "Awaiting a PvP destination", "Roam active frontier keeps, relic routes, and enemy forces",
                         "No reachable live enemy force or frontier keep is currently available");
                     return true;
                 }
@@ -1567,7 +1577,8 @@ namespace DOL.GS
                 if (FollowKeepTravel(bot, _rvrDestination)) return true;
                 destination = _rvrApproachDestination.Value;
             }
-            if (Vector2.Distance(new(bot.X, bot.Y), new(destination.X, destination.Y)) > 650)
+            if (Vector2.Distance(new(bot.X, bot.Y), new(destination.X, destination.Y)) > 650 ||
+                _rvrDestination.IsDungeon && Math.Abs(bot.Z - destination.Z) > 160)
             {
                 // The first outbound leg leaves the safe border keep on foot,
                 // keeping the assembled force together through the frontier
@@ -1577,7 +1588,7 @@ namespace DOL.GS
                     return true;
                 IssueVariedRvrPath(bot, destination);
                 SetRvrStatus(bot, $"Roaming toward {_rvrDestination.MonsterName}",
-                    "Roam active frontier keeps, relic routes, and enemy forces", "Using a collision-safe frontier route", _rvrDestination.MonsterName);
+                    "Roam active frontier keeps, relic routes, and enemy forces", "Following a reachable PvP patrol route", _rvrDestination.MonsterName);
                 return true;
             }
 
@@ -1594,17 +1605,18 @@ namespace DOL.GS
                 return true;
             }
             PatrolRvr(bot);
-            if (GameLoop.GameLoopTime - _campStartedTick >
-                (AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.Hunter ? 180_000 : 90_000))
+            bool hunterPatrol = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.Hunter;
+            if (hunterPatrol ? _hunterPatrolArrivedTick > 0 && GameLoop.GameLoopTime - _hunterPatrolArrivedTick > 180_000
+                : GameLoop.GameLoopTime - _campStartedTick > 90_000)
             {
                 _rvrDestination = null;
                 _rvrApproachDestination = null;
-                SetRvrStatus(bot, "Refreshing frontier patrol", "Roam active frontier keeps, relic routes, and enemy forces",
+                SetRvrStatus(bot, "Refreshing PvP patrol", "Roam active frontier keeps, relic routes, and enemy forces",
                     "No opposing force arrived at this patrol point; choosing another live objective");
                 return true;
             }
             SetRvrStatus(bot, $"Searching near {_rvrDestination.MonsterName}",
-                "Roam active frontier keeps, relic routes, and enemy forces", "Scanning for opposing-realm RvR forces", _rvrDestination.MonsterName);
+                "Roam active frontier keeps, relic routes, and enemy forces", "Scanning for hostile players and crews", _rvrDestination.MonsterName);
             return true;
         }
 
@@ -1696,49 +1708,6 @@ namespace DOL.GS
                 if (carrier != null) return carrier;
             }
             return candidates[AutonomousRvrStaging.TargetIndex(actorKey, candidates.Length, warbandSize)];
-        }
-
-        private bool TryEngageSharedDungeonOpponent(BotBrain brain, GameBot bot)
-        {
-            // Shared frontier dungeons use the early bounded threat check;
-            // retain this separate path only for the other shared dungeon.
-            if (brain == null || bot == null || !AutonomousDungeonPolicy.IsSharedCombatDungeon(bot.CurrentRegionID) ||
-                AutonomousDungeonPolicy.IsSharedFrontierDungeon(bot.CurrentRegionID) ||
-                brain.HasAggro || bot.InCombat || bot.IsAttacking || IsSafeArea(bot) ||
-                !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
-                return false;
-
-            if (GameLoop.GameLoopTime < _nextSharedDungeonEnemyScan) return false;
-            _nextSharedDungeonEnemyScan = GameLoop.GameLoopTime + 1500 + bot.ObjectID % 500;
-
-            IEnumerable<GameLiving> humans = bot.GetPlayersInRadius(TargetSearchRadius)
-                .Cast<GameLiving>();
-            IEnumerable<GameLiving> worldBots = bot.GetNPCsInRadius(TargetSearchRadius).OfType<GameBot>()
-                .Where(candidate => candidate != bot && candidate.IsAutonomousWorldBot && !candidate.IsTemporaryGroupHelper &&
-                                    candidate.CurrentRegionID == bot.CurrentRegionID && bot.GetDistanceTo(candidate) <= TargetSearchRadius)
-                .Cast<GameLiving>();
-
-            GameLiving opponent = humans.Concat(worldBots)
-                .Where(candidate => candidate != null && !IsSafeArea(candidate))
-                .Where(candidate => !candidate.IsStealthed && AutonomousDungeonPolicy.CanEngageLocalOpponent(
-                    AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, candidate), bot.CurrentRegionID, candidate.CurrentRegionID,
-                    candidate.IsAlive, GameServer.ServerRules.IsAllowedToAttack(bot, candidate, true)))
-                .Where(candidate => AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, candidate))
-                .OrderBy(candidate => bot.GetDistanceTo(candidate))
-                .Where(candidate => PathfindingProvider.Instance.HasLineOfSight(bot.CurrentZone,
-                    new(bot.X, bot.Y, bot.Z), new(candidate.X, candidate.Y, candidate.Z), PathfindingProvider.Instance.DefaultFilters))
-                .FirstOrDefault();
-            if (opponent == null)
-                return false;
-
-            AutonomousPvpEngagementTracker.Tag(bot, AutonomousPvpEngagementTracker.SharedDungeon);
-            bot.StopMovingOnPath();
-            bot.StopMoving();
-            bot.TargetObject = opponent;
-            AutonomousBotGroupCoordinator.MarkCombatObserved(bot.Group);
-            brain.AddToAggroList(opponent, Math.Max(100, opponent.EffectiveLevel * 12));
-            brain.FSM.SetCurrentState(eFSMStateType.AGGRO);
-            return true;
         }
 
         private bool TryEngageOpenWorldPvpOpportunity(BotBrain brain, GameBot bot)
@@ -2074,8 +2043,12 @@ namespace DOL.GS
             int level = (int)Math.Round(party.Average(member => member.Level));
             var nav = PathfindingProvider.Instance;
             bool hunter = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.Hunter;
+            foreach (string id in _rejectedDungeonCamps.Where(pair => pair.Value <= GameLoop.GameLoopTime)
+                         .Select(pair => pair.Key).ToArray())
+                _rejectedDungeonCamps.Remove(id);
             CampDestination[] choices = CampCatalogSnapshot()
-                .Where(cell => cell.LiveMobCount > 0 && (hunter
+                .Where(cell => !_rejectedDungeonCamps.ContainsKey("local-pvp-" + cell.Id) &&
+                    cell.LiveMobCount > 0 && (hunter
                     ? AutonomousPvpOpportunityPolicy.IsHunterHuntArea(
                         level, cell.Levels, cell.IsDungeon, cell.IsFrontier, PvpCombatant.IsSafeRegion(cell.RegionId),
                         reachable.Contains(cell.RegionId))
@@ -2087,7 +2060,9 @@ namespace DOL.GS
                 .Select(cell =>
                 {
                     Vector3 point = new(cell.X, cell.Y, cell.Z);
-                    if (nav.IsAvailable && nav.HasNavmesh(cell.Zone))
+                    // Dungeon coordinates are audited catalog keys; keep their exact
+                    // position so entrance restrictions remain attached to the camp.
+                    if (!cell.IsDungeon && nav.IsAvailable && nav.HasNavmesh(cell.Zone))
                     {
                         Vector3? floor = nav.GetClosestPoint(cell.Zone, point, 64, 64, 96, nav.DefaultFilters);
                         if (!floor.HasValue || !AutonomousRendezvousNavigation.HasLocalExit(nav, cell.Zone, floor.Value))
@@ -2097,7 +2072,7 @@ namespace DOL.GS
                     int targetLevel = cell.Levels.OrderBy(candidate => Math.Abs(candidate - level)).First();
                     return new CampDestination("local-pvp-" + cell.Id,
                         "local rival hunt near " + cell.MonsterName, cell.ZoneName, cell.RegionId,
-                        (int)point.X, (int)point.Y, (int)point.Z, cell.LiveMobCount, false, cell.IsFrontier,
+                        (int)point.X, (int)point.Y, (int)point.Z, cell.LiveMobCount, cell.IsDungeon, cell.IsFrontier,
                         TargetLevel: targetLevel);
                 })
                 .Where(destination => destination != null)
@@ -2105,6 +2080,28 @@ namespace DOL.GS
             if (choices.Length == 0)
                 return null;
 
+            if (hunter)
+            {
+                // Choose an environment first so a large dungeon catalog cannot
+                // swallow the outdoor patrol share. Within dungeons, DF has a
+                // modest preference; safe starter dungeons were filtered above.
+                var dungeons = choices.Where(choice => choice.IsDungeon).ToArray();
+                var outdoor = choices.Where(choice => !choice.IsDungeon).ToArray();
+                if (dungeons.Length > 0 && (outdoor.Length == 0 || Random.Shared.NextDouble() < .30))
+                {
+                    var regions = dungeons.GroupBy(choice => choice.RegionId).ToArray();
+                    int draw = Random.Shared.Next(regions.Sum(region => AutonomousDungeonPolicy.DestinationWeight(region.Key)));
+                    var selected = regions[0];
+                    foreach (var region in regions)
+                    {
+                        selected = region;
+                        draw -= AutonomousDungeonPolicy.DestinationWeight(region.Key);
+                        if (draw < 0) break;
+                    }
+                    choices = selected.ToArray();
+                }
+                else choices = outdoor;
+            }
             int previous = Array.FindIndex(choices, choice => choice.Id == _rvrDestination?.Id);
             int next;
             if (hunter)
@@ -2134,6 +2131,7 @@ namespace DOL.GS
 
         private AutonomousRvrEventLayer.Intent _rvrIntent;
         private long _nextRvrPlanReview;
+        private long _hunterPatrolArrivedTick;
         // Removed world objects have ObjectID zero. Realm/type remains unique
         // while two or more relics are simultaneously carried or dropped.
         private static string RelicObjectiveId(GameRelic relic) =>
@@ -2150,6 +2148,10 @@ namespace DOL.GS
                 Vector3 center = _rvrApproachDestination ?? new(_rvrDestination.X, _rvrDestination.Y, _rvrDestination.Z);
                 _patrolDestination = PathfindingProvider.Instance.GetRandomPoint(zone, center, 700,
                     PathfindingProvider.Instance.DefaultFilters) ?? center;
+                if (_rvrDestination.IsDungeon &&
+                    !AutonomousZoneItinerary.HasCompleteCorridor(PathfindingProvider.Instance, zone,
+                        current, _patrolDestination.Value))
+                    _patrolDestination = center;
                 if(IsKeepOrKeepPatrolDestination(_rvrDestination) &&
                     !AutonomousZoneItinerary.HasCompleteCorridor(AutonomousKeepApproachNavigation.ForRealm(PathfindingProvider.Instance,bot.CurrentRegion,bot.Realm),zone,current,_patrolDestination.Value))
                     _patrolDestination=center;
@@ -2162,7 +2164,7 @@ namespace DOL.GS
         {
             if (bot.PersistentRecord != null)
                 bot.PersistentRecord.ObjectivePhase = activity;
-            SetStatus(bot, activity, "Active frontier RvR", detail, target, _rvrDestination?.ZoneName ?? string.Empty, true);
+            SetStatus(bot, activity, "Active PvP", detail, target, _rvrDestination?.ZoneName ?? string.Empty, true);
         }
 
         private bool WorkCamp(BotBrain brain, GameBot bot)
@@ -2525,6 +2527,12 @@ namespace DOL.GS
                 ? ConColor.GREEN
                 : groupSize >= 2 ? ConColor.YELLOW : ConColor.GREEN;
             HashSet<ushort> reachableRegions = ReachableRegions(bot.Realm, bot.CurrentRegionID);
+            DbZonePoint[] directDungeonEntrances = localPickupGroup
+                ? ZonePoints().Where(edge => edge.SourceRegion == _groupDirective.RendezvousRegion &&
+                    IsAuthoritativeZonePointEdge(edge) &&
+                    WorldMgr.GetRegion(edge.TargetRegion)?.IsDungeon == true &&
+                    IsRegionEdgeAccessible(bot.Realm, edge.SourceRegion, edge.TargetRegion)).ToArray()
+                : [];
             HashSet<string> rejectedDungeons = AutonomousBotGroupCoordinator.RejectedDungeonCamps(bot);
             foreach (string id in _rejectedDungeonCamps.Where(pair => pair.Value <= GameLoop.GameLoopTime).Select(pair => pair.Key).ToArray())
                 _rejectedDungeonCamps.Remove(id);
@@ -2539,7 +2547,10 @@ namespace DOL.GS
             // realm/level/death filtering a cheap in-memory operation.
             foreach (CampCatalogCell cell in CampCatalogSnapshot()
                          .Where(cell => !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
-                                        (!localPickupGroup || cell.RegionId == _groupDirective.RendezvousRegion &&
+                                        (!localPickupGroup ||
+                                            (cell.RegionId == _groupDirective.RendezvousRegion ||
+                                             cell.IsDungeon && directDungeonEntrances.Any(edge => edge.TargetRegion == cell.RegionId &&
+                                                 AutonomousDungeonGoalCatalog.CanUseEntrance(edge, cell.RegionId, cell.X, cell.Y))) &&
                                             CampUsableByEveryMember(cell, planningMembers, groupTargetBonus)) &&
                                         IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID) &&
                                         (!AutonomousObjectiveAssignments.IsAwaitingGroupMatchmaking(bot) ||
@@ -2636,7 +2647,8 @@ namespace DOL.GS
                 ? AutonomousBotDecisionEngine.SelectLevelingCamp(legalCells, bot.CurrentRegionID,
                     bot.CurrentZone?.Description, bot.Realm, planningLevel, Random.Shared)
                 : AutonomousBotDecisionEngine.SelectWithinEnvironment(legalCells, environment, Random.Shared);
-            if (localPickupGroup && !string.IsNullOrEmpty(_groupDirective.PreferredPickupCampId))
+            if (localPickupGroup && environment != AutonomousBotDecisionEngine.PveEnvironment.Dungeon &&
+                !string.IsNullOrEmpty(_groupDirective.PreferredPickupCampId))
                 chosen = legalCells.FirstOrDefault(camp => camp.Id == _groupDirective.PreferredPickupCampId) ?? chosen;
             bool usedDeathFallback = false;
             if (chosen == null && !sharedGroup && _deathDifficultySteps > 0)
@@ -2852,6 +2864,12 @@ namespace DOL.GS
 
         private void AbandonCamp(GameBot bot, string reason)
         {
+            // PvP dungeon travel shares the guarded path pipeline with XP
+            // travel, but has its own destination. Replan it on the next turn
+            // so callers can finish reporting this turn's route safely.
+            if (_rvrDestination?.IsDungeon == true &&
+                AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
+                _rejectedDungeonCamps[_rvrDestination.Id] = GameLoop.GameLoopTime + 30 * 60_000;
             if (AutonomousRealmRaid.GetView(bot.Group) != null)
             {
                 // A failed member route is retryable; it is not a vote to
@@ -3844,8 +3862,9 @@ namespace DOL.GS
             if (zone.IsDungeon && (!AutonomousDungeonPolicy.IsSupportedDungeonZone(zone.ID) ||
                                    !PathfindingProvider.Instance.HasNavmesh(zone)))
                 return false;
-            if (zone.ZoneRegion.ID == AutonomousDarknessFallsPolicy.RegionId)
-                return false; // Temporarily disabled as an autonomous goal, not as player content.
+            if (zone.ZoneRegion.ID == AutonomousDarknessFallsPolicy.RegionId &&
+                !AutonomousDarknessFallsNavigation.Ready)
+                return false; // Unknown or unpatched entrance geometry remains unavailable to bots.
             return AutonomousRealmBoundary.Allows(realm, zone.ZoneRegion.ID, zone.ID);
         }
 

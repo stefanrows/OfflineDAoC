@@ -601,6 +601,14 @@ implemented offline in 0.54.0. Phase C (three-realm pickup matching, town
 teleporter rendezvous travel, and the remote meetup deadline) is implemented
 offline in 0.59.0. The owner run for phases A–C is pending.
 
+The 2026-09-25 [Camlann PvP review](CAMLANN_PVP_REVIEW.md) samples a newer
+600-bot session with substantial leveling and combat. Source changes in 0.61.0
+close frontier/shared-dungeon PvE aggression bypasses and add audited Darkness
+Falls XP/hunt destinations, with outdoor/dungeon balancing and clearer launcher
+labels. This extends M3's originally outdoor-only Hunter destinations.
+Installation and owner gameplay verification remain pending; group camp-travel
+deadline failures are still tracked separately.
+
 ## 7. Open questions
 
 The established-server level distribution in 5.8 still needs owner confirmation

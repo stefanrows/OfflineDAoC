@@ -12,6 +12,56 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.62.1] - 2026-09-25
+
+### Added
+
+- A tracked task and implementation checklist for applying population-type
+  mixes to existing autonomous bots while the server runs, with safe task
+  transitions, progress preservation and restart persistence acceptance checks.
+
+## [0.62.0] - 2026-09-25
+
+### Changed
+
+- Expanded all six population-type tooltips with practical PvE/PvP guidance,
+  including Hunter crews versus Roamer groups, level thresholds, and the fact
+  that slider weights apply to new bots rather than changing saved types.
+- The Danger tooltip now explains that it affects existing Hunters after a
+  restart, including the increased grey-target aggression of Full Camlann.
+
+## [0.61.0] - 2026-09-25
+
+### Added
+
+- Darkness Falls destinations for autonomous XP parties and Hunters, backed by
+  1,417 entrance-specific round-trip navigation proofs. A hash-checked cached
+  repair connects the nine entrance stairs while preserving all other mesh
+  tiles and the installed navigation file.
+- An offline DF audit/patch-packaging tool and a Camlann activity review with
+  read-only live-session findings and pending real-client checks.
+
+### Changed
+
+- Hunters choose dungeons on 30% of eligible destination draws. Darkness Falls
+  gets twice the destination weight within the dungeon share for XP and hunts;
+  ordinary pickup groups can select proved camps in connected dungeons.
+- Launcher charter/activity labels and population-setting explanations use PvP
+  while retaining compatible saved charter and objective identifiers.
+
+### Fixed
+
+- Frontier first-strike scans respect PvE assignments, recovery and opposing
+  party strength while retaining real defense and committed siege combat.
+- Hunter patrol dwell time starts on arrival rather than departure; dungeon
+  arrival checks include height, and generic hunt scans reject stealthed targets.
+- Gamebot path smoothing retains DF stair-link endpoints, including companions
+  following over the previously disconnected Midgard entrance stairs.
+
+### Removed
+
+- The separate shared-dungeon aggression scan that bypassed assigned PvE work.
+
 ## [0.60.0] - 2026-09-25
 
 ### Added
