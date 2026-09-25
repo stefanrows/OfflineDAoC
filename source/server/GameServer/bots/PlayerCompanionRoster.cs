@@ -1267,9 +1267,58 @@ namespace DOL.GS
                 return false;
             }
 
+            if (!string.IsNullOrWhiteSpace(record.GuildId))
+            {
+                Guild savedGuild = GuildMgr.GetGuildByGuildID(record.GuildId);
+                DbGuildRank rank = savedGuild?.GetRankByID(Math.Clamp(record.GuildRank, 0, 9));
+                if (rank != null)
+                    savedGuild.AddBotMember(companion, rank);
+            }
+
             message = $"{record.Name}, level {companion.Level} {(eCharacterClass)companion.ClassId}, joined your group. " +
                 CompanionPersonality.Dialogue(record, "invite");
             return true;
+        }
+
+        public static bool TryJoinGuild(GamePlayer inviter, GameBot companion)
+        {
+            if (inviter?.Guild == null || companion?.Owner != inviter ||
+                (!companion.IsPersistentPlayerCompanion && !companion.IsTemporaryGroupHelper) ||
+                companion.Guild != null)
+                return false;
+
+            Guild guild = inviter.Guild;
+            DbGuildRank rank = guild.GetRankByID(9);
+            if (rank == null)
+                return false;
+
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            string previousGuildId = record?.GuildId;
+            int previousGuildRank = record?.GuildRank ?? 9;
+            if (record != null)
+            {
+                record.GuildId = guild.GuildID;
+                record.GuildRank = rank.RankLevel;
+                record.Dirty = true;
+                if (!SaveRecord(record))
+                {
+                    record.GuildId = previousGuildId;
+                    record.GuildRank = previousGuildRank;
+                    return false;
+                }
+            }
+
+            if (guild.AddBotMember(companion, rank))
+                return true;
+
+            if (record != null)
+            {
+                record.GuildId = previousGuildId;
+                record.GuildRank = previousGuildRank;
+                record.Dirty = true;
+                SaveRecord(record);
+            }
+            return false;
         }
 
         public static bool TryBench(GamePlayer owner, string nameOrId, out string message)

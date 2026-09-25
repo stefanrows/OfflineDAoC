@@ -208,8 +208,7 @@ namespace DOL.GS;
             int? companionPairTieBreak = null)
         {
             equipSlot = eInventorySlot.Invalid;
-            bool casterFocus = bot?.IsPersistentPlayerCompanion == true &&
-                               bot.CharacterClass?.IsFocusCaster == true &&
+            bool casterFocus = bot?.CharacterClass?.IsFocusCaster == true &&
                                item?.Object_Type == (int)eObjectType.Staff &&
                                BotWeaponStats.HasCasterFocusBonus(item);
             if (bot?.Inventory == null || item?.Template == null || item.LevelRequirement > bot.Level ||
@@ -247,6 +246,10 @@ namespace DOL.GS;
 
             DbInventoryItem equipped = bot.Inventory.GetItem(equipSlot);
             int improvement = EquipmentValue(item) - EquipmentValue(equipped);
+            if (bot.CharacterClass?.IsFocusCaster == true &&
+                item.Object_Type == (int)eObjectType.Staff)
+                improvement += (BotWeaponStats.CasterFocusScore(bot, item) -
+                    BotWeaponStats.CasterFocusScore(bot, equipped)) * 100_000;
             return equipped == null || improvement > minimumImprovement;
         }
 

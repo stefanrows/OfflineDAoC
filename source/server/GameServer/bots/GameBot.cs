@@ -39,6 +39,7 @@ namespace DOL.GS
         public GamePlayer Owner { get; private set; }
         internal Lock AwardLock { get; } = new();
         public GamePlayer PlayerGroupLeader { get; private set; }
+        internal GameSiegeRam CompanionRam { get; set; }
         private readonly HashSet<GameLiving> _temporaryCompanionProtectedMembers = new();
         public bool IsPlayerLedGroup => PlayerGroupLeader != null;
         internal void RememberTemporaryCompanionGroup(IEnumerable<GameLiving> members)
@@ -550,12 +551,40 @@ namespace DOL.GS
 
         public string GuildID
         {
-            get => PersistentRecord?.GuildId ?? Guild?.GuildID ?? string.Empty;
+            get => PersistentRecord?.GuildId ?? PlayerCompanionRecord?.GuildId ?? Guild?.GuildID ?? string.Empty;
             set
             {
                 if (PersistentRecord != null)
                     PersistentRecord.GuildId = value ?? string.Empty;
+                if (PlayerCompanionRecord != null)
+                    PlayerCompanionRecord.GuildId = value ?? string.Empty;
             }
+        }
+
+        public void RefreshGuildEmblem()
+        {
+            if (EnsureGuildEmblem())
+                BroadcastLivingEquipmentUpdate();
+        }
+
+        internal bool EnsureGuildEmblem()
+        {
+            if ((!IsPersistentPlayerCompanion && !IsTemporaryGroupHelper) || Inventory == null ||
+                Guild == null || Guild.Emblem <= 0)
+                return false;
+
+            bool changed = false;
+            foreach (eInventorySlot slot in new[] { eInventorySlot.Cloak, eInventorySlot.LeftHandWeapon })
+            {
+                DbInventoryItem item = Inventory.GetItem(slot);
+                if (item == null || (slot == eInventorySlot.LeftHandWeapon &&
+                    item.Object_Type != (int)eObjectType.Shield) || item.Emblem == Guild.Emblem)
+                    continue;
+                item.Emblem = Guild.Emblem;
+                item.Dirty = true;
+                changed = true;
+            }
+            return changed;
         }
 
         public override string GuildName
@@ -968,6 +997,7 @@ namespace DOL.GS
 
         public override void ProcessDeath(GameObject killer)
         {
+            CompanionRam?.DismountCompanion(this);
             _lastDeathWasPvp = PvpCombatant.Resolve(killer as GameLiving) != null;
             AutonomousPetSupport.CancelPendingCharm(this);
             _deathTick = GameLoop.GameLoopTime;
@@ -3242,6 +3272,7 @@ namespace DOL.GS
 
         public override bool RemoveFromWorld()
         {
+            CompanionRam?.DismountCompanion(this);
             // Capture this before base.RemoveFromWorld stops the brain. The stop
             // path is allowed to invoke virtual methods and must never change how
             // this removal is classified after it has begun.
@@ -4416,12 +4447,13 @@ namespace DOL.GS
             }
         }
 
-        private static int OwnedWeaponScore(DbInventoryItem item, eObjectType preferredType)
+        private int OwnedWeaponScore(DbInventoryItem item, eObjectType preferredType)
         {
             if (item == null)
                 return int.MinValue;
             int preferred = (eObjectType)item.Object_Type == preferredType ? 1_000_000 : 0;
-            return preferred + Math.Max(0, item.Level) * 10_000 + Math.Max(0, item.DPS_AF) * 100 +
+            int focus = BotWeaponStats.CasterFocusScore(this, item) * 1_000_000;
+            return focus + preferred + Math.Max(0, item.Level) * 10_000 + Math.Max(0, item.DPS_AF) * 100 +
                    Math.Max(0, item.Quality) + Math.Max(0, item.Bonus) * 2;
         }
 

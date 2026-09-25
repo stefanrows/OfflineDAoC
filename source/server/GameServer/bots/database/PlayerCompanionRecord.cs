@@ -38,6 +38,12 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false)]
         public int Level { get; set; } = 1;
 
+        [DataElement(AllowDbNull = false, Varchar = 255)]
+        public string GuildId { get; set; } = string.Empty;
+
+        [DataElement(AllowDbNull = false)]
+        public int GuildRank { get; set; } = 9;
+
         [DataElement(AllowDbNull = false)]
         public long Experience { get; set; }
 

@@ -555,10 +555,11 @@ three realm factions.
 3. `Guild.HasRank`, rosters, `/gc` listings, and guild chat must accept bot
    members, or the claim/relic code must use a bot-aware rank check. Choose
    one and test it.
-4. The **player's guild (decision 2):** `/gc form` without the 8-player rule
-   (the `GUILD_NUM` check is already commented out; keep it off). The player can
-   `/gc invite` autonomous bots and companions; invited bots accept based on
-   crew AI (level fit, not already in a crew).
+4. The **player's guild (decision 2):** `/gc form` has no 8-player rule. A player
+   can found a guild alone; other human group members confirm while owned
+   companions join automatically. `/gc invite` adds an owned companion at once
+   and persists its membership, while autonomous bots accept based on crew AI
+   (level fit, not already in a crew).
 
 ### What to stop
 

@@ -580,7 +580,14 @@ namespace DOL.GS
 			bot.GuildName = Name;
 			bot.GuildID = GuildID;
 			bot.GuildRank = rank;
+			bot.RefreshGuildEmblem();
 			return true;
+		}
+
+		public GameBot[] GetOnlineBotMembers()
+		{
+			lock (m_memberListLock)
+				return m_onlineGuildBots.Values.ToArray();
 		}
 
 		public bool RemoveBotMember(GameBot bot)

@@ -30,12 +30,17 @@ namespace DOL.GS
         public static bool HasEquipment(GameLiving actor) =>
             Kind(actor) is 204 or 206 || actor.Inventory != null;
 
-        public static ICollection<DbInventoryItem> Equipment(GameLiving actor) => Kind(actor) switch
+        public static ICollection<DbInventoryItem> Equipment(GameLiving actor)
         {
-            204 => ServantEquipment,
-            206 => HeroEquipment,
-            _ => actor.Inventory?.VisibleItems
-        };
+            if (actor is GameBot companion)
+                companion.EnsureGuildEmblem();
+            return Kind(actor) switch
+            {
+                204 => ServantEquipment,
+                206 => HeroEquipment,
+                _ => actor.Inventory?.VisibleItems
+            };
+        }
 
         public static byte WeaponSlots(GameLiving actor) => Kind(actor) switch
         {

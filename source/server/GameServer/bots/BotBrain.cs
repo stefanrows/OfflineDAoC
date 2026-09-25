@@ -400,6 +400,11 @@ namespace DOL.AI.Brain
             if (PvpCombatant.IsPlayerShaped(realTarget) && !PvpCombatant.AreAllied(Body, realTarget))
                 return BotBody?.IsAutonomousWorldBot != true || AutonomousRvrTargetPolicy.ShouldEngageGrey(Body, realTarget);
 
+            // A player-led siege order is valid even when the door's con is grey.
+            if (realTarget is DOL.GS.Keeps.GameKeepDoor door &&
+                CompanionEngagementMode.LeaderAttackingDoor(AssistedPlayer, door))
+                return true;
+
             // Evaluate the monster from the character's perspective, not the
             // reverse. The native NPC check rejected purple pulls because the
             // character was grey to the monster. Camp selection owns difficulty;
@@ -889,6 +894,31 @@ namespace DOL.AI.Brain
                 _temporaryCompanionLastActionTick = GameLoop.GameLoopTime;
         }
 
+        private GameSiegeRam _companionRam;
+
+        private bool FollowLeaderIntoRam()
+        {
+            GamePlayer leader = AssistedPlayer;
+            GameBot bot = BotBody;
+            GameSiegeRam desired = leader?.Steed as GameSiegeRam;
+            if (_companionRam != null && _companionRam.CompanionRiderSlot(bot) < 0)
+                _companionRam = null;
+            if (_companionRam != null && (_companionRam != desired ||
+                !PlayerLedPullCoordinator.Available(bot, leader) || !bot.IsAlive || !desired.IsAlive))
+            {
+                _companionRam.DismountCompanion(bot);
+                _companionRam = null;
+            }
+            if (desired == null || !PlayerLedPullCoordinator.Available(bot, leader) ||
+                !bot.IsWithinRadius(desired, 350))
+                return false;
+            if (_companionRam == null && !desired.BoardCompanion(bot, leader)) return false;
+            _companionRam = desired;
+            bot.StopAttack();
+            bot.StopFollowing();
+            return true;
+        }
+
         internal void MarkTemporaryCompanionRestActivity()
         {
             if (BotBody?.IsTemporaryGroupHelper == true)
@@ -1190,6 +1220,8 @@ namespace DOL.AI.Brain
                 BotBody.TryCompleteStableMasterRouteAfterArrival();
                 return;
             }
+
+            if (FollowLeaderIntoRam()) return;
 
             // Regroup before PvP scans, pull coordination, pet upkeep and casts
             // can claim another turn. The distance leash applies in every mode.
@@ -3034,7 +3066,7 @@ namespace DOL.AI.Brain
             if (!UsesDefensiveOnlyPet) Body.ControlledBrain?.Disengage();
             // A support companion's own mezz is harmful but is not an attack.
             if (Body.IsCasting && Body.castingComponent?.SpellHandler?.Spell?.IsHarmful == true &&
-                !PvpControlInFlight && !PveControlInFlight)
+                !PvpControlInFlight && !PveControlInFlight && !HealerAreaStunInFlight)
                 Body.StopCurrentSpellcast();
         }
 
@@ -3043,7 +3075,9 @@ namespace DOL.AI.Brain
             if (CompanionFollowPolicy.SendsDruidPet(BotBody))
                 TryCommandCompanionDruidPet(CalculateNextAttackTarget());
             HoldSupportCombat();
-            if (!CheckHeals() && !TryPvpCrowdControl() && !TryPveAddControl()) CheckSpells(eCheckSpellType.Defensive);
+            bool bombStun = BotBody.IsPlayerLedGroup && BombGroupReadyForStun() && TryHealerAreaStun();
+            if (!bombStun && !CheckHeals() && !TryHealerAreaStun() && !TryPvpCrowdControl() && !TryPveAddControl())
+                CheckSpells(eCheckSpellType.Defensive);
             if (BotBody.IsPlayerLedGroup)
             {
                 if (!Body.IsCasting && Body.castingComponent?.HasPendingSkillRequests != true)
@@ -3450,7 +3484,10 @@ namespace DOL.AI.Brain
                         spellsToCast.RemoveAll(spell => spell.Range <= Body.MeleeAttackRange);
                     if (PrefersCurrentSpellRange() && spellsToCast.Exists(BotCasterPriority.IsDamage))
                         spellsToCast.RemoveAll(spell => !BotCasterPriority.IsDamage(spell));
-                    Spell spellToCast = BotBody.IsEndgameCompanion
+                    Spell spellToCast = readyBombs.Length > 0 && spellsToCast.All(spell =>
+                            CompanionBombingPolicy.IsBombSpell(BotBody, spell))
+                        ? spellsToCast.OrderByDescending(spell => spell.Level).First()
+                        : BotBody.IsEndgameCompanion
                         ? TemporaryCompanionBalance.HighestSpell(spellsToCast)
                         : spellsToCast[Util.Random(spellsToCast.Count - 1)];
 
@@ -3484,6 +3521,7 @@ namespace DOL.AI.Brain
         private bool ShouldWaitForBombTank(GameLiving target, Spell spell)
         {
             if (!CompanionBombingPolicy.CanUseBombs(BotBody) ||
+                BotPvpCrowdControl.PlayerLike(target) ||
                 !CompanionBombingPolicy.HasTank(BotBody) ||
                 CompanionBombingPolicy.TankHasAggro(BotBody, target, spell))
             {

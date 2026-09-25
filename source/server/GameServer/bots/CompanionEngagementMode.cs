@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using DOL.AI.Brain;
+using DOL.GS.Keeps;
 
 namespace DOL.GS
 {
@@ -118,8 +119,15 @@ namespace DOL.GS
                 !owner.IsWithinRadius(target, RecallDistance))) return false;
             GamePlayer leader = DefensiveLeader(actor);
             return leader == null || target != null && target.CurrentRegionID == leader.CurrentRegionID &&
-                (leader.IsWithinRadius(target, DefensiveRadius) || CompanionPvpEngagement.Defending(actor, target));
+                (leader.IsWithinRadius(target, DefensiveRadius) || CompanionPvpEngagement.Defending(actor, target) ||
+                 LeaderAttackingDoor(leader, target));
         }
+
+        public static bool LeaderAttackingDoor(GamePlayer leader, GameLiving target) =>
+            leader?.IsAlive == true && target is GameKeepDoor { IsAlive: true, State: eDoorState.Closed } door &&
+            door.IsAttackableDoor && leader.CurrentRegionID == door.CurrentRegionID &&
+            leader.TargetObject == door && leader.IsAttacking &&
+            GameServer.ServerRules.IsAllowedToAttack(leader, door, true);
 
         public static void RememberPull(GamePlayer player, GameLiving target)
         {

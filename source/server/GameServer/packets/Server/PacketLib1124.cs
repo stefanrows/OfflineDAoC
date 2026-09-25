@@ -283,7 +283,11 @@ namespace DOL.GS.PacketHandler
 			// NPC-backed riders need the same reattachment after either object is
 			// recreated, including explicit client requests outside ClientService.
 			if (npc is GameBot rider)
+			{
 				rider.SendStableRideAssociation(m_gameClient.Player, true);
+				if (rider.CompanionRam?.CompanionRiderSlot(rider) > 0)
+					m_gameClient.Player.Out.SendRiding(rider, rider.CompanionRam, false);
+			}
 			else if (npc is GameBotTaxi taxi && taxi.Rider?.StableRouteMountForClient == taxi)
 				taxi.Rider.SendStableRideAssociation(m_gameClient.Player, true);
 

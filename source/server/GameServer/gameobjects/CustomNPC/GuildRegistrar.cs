@@ -48,7 +48,7 @@ namespace DOL.GS
 			switch (text)
 			{
 				case FORM_A_GUILD:
-					SayTo(player, "Well, then. This can be done. Gather together " + ServerProperties.Properties.GUILD_NUM + " people who would join with you, and bring them here. The price will be one gold. After I am paid, use /gc form <guildname>. Then I will ask you all if you wish to form such a guild. All must choose to form the guild. It's quite simple, really.");
+					SayTo(player, "You may found a guild here on your own or with your group. The price is one gold. Use /gc form <guildname>; any other players in your group must agree to join.");
 					break;
 			}
 

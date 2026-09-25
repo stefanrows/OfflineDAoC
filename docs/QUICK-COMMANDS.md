@@ -75,8 +75,8 @@ These modes control your companions, not autonomous gamebots. All three modes re
 | Command | What it does |
 |---|---|
 | `/safety off` | Permanently turn off the under-level-10 PvP safety flag. Capitals, housing and portal-keep hubs remain sanctuaries; leveling towns and the Old Frontiers are dangerous. |
-| `/gc form <guild name>` | Start player guild formation with your current group. Companions and recruited bots can join the guild and count toward its keep claims. |
-| `/gc invite <bot>` | Invite a targeted or named autonomous bot to your guild when you have the guild invite rank. |
+| `/gc form <guild name>` | Found your guild near a registrar, alone or as group leader. Other human group members confirm; owned companions in the group join automatically. Companions and recruited bots can join the guild and count toward its keep claims. |
+| `/gc invite <bot or companion>` | Invite a targeted or named autonomous bot or your own active companion when you have the guild invite rank. Your companion joins immediately and displays the chosen guild emblem on their equipped cloak and shield. |
 | `/relics` | Inspect the current guild-owned keep and relic state. Relic bonuses belong to the carrying guild, not a realm. |
 
 There is one full-PvP world: an ungrouped, unguilded or unallied player-shaped

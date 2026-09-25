@@ -56,22 +56,42 @@ namespace DOL.GS
         /// have selected or are fighting. It never treats nearby idle spawns as
         /// a reason to move a caster into range or trigger a bomb.
         /// </summary>
-        public static GameNPC[] PullTargets(GameBot bot, GameLiving target, Spell spell, GameLiving center)
+        public static GameLiving[] PullTargets(GameBot bot, GameLiving target, Spell spell, GameLiving center)
         {
             if (!CanUseBombs(bot) || !IsBombSpell(bot, spell) || bot.Group == null ||
-                target is not GameNPC focus || center == null || focus.CurrentRegion != center.CurrentRegion)
+                target == null || center == null || target.CurrentRegion != center.CurrentRegion)
                 return [];
 
+            int radius = System.Math.Clamp(spell.Radius, 1, ushort.MaxValue);
+            if (BotPvpCrowdControl.PlayerLike(target))
+            {
+                // A Bomb preference permits a committed PvP clump. Never pull
+                // idle players into combat just because they are standing near it.
+                if (Choice(bot.PlayerCompanionRecord) != Bomb ||
+                    !BotPvpCrowdControl.IsInFightWith(bot, target, null))
+                    return [];
+                GameLiving[] nearby = center.GetNPCsInRadius((ushort)radius).Cast<GameLiving>()
+                    .Concat(center.GetPlayersInRadius((ushort)radius))
+                    .Where(enemy => enemy.IsAlive && enemy.ObjectState == GameObject.eObjectState.Active &&
+                        BotPvpCrowdControl.PlayerLike(enemy) &&
+                        GameServer.ServerRules.IsAllowedToAttack(bot, enemy, true))
+                    .Distinct().ToArray();
+                if (nearby.Any(enemy => enemy.IsMezzed || CompanionAddControl.ProtectsMezz(bot, enemy) ||
+                    !BotPvpCrowdControl.IsInFightWith(bot, enemy, null)))
+                    return [];
+                return nearby;
+            }
+
+            if (target is not GameNPC focus) return [];
             HashSet<GameLiving> focused = CompanionAddControl.FocusTargets(bot);
             focused.Add(focus);
-            int radius = System.Math.Clamp(spell.Radius, 1, ushort.MaxValue);
             return focused.OfType<GameNPC>()
                 .Where(npc => npc.IsAlive && npc.ObjectState == GameObject.eObjectState.Active &&
                     npc.CurrentRegion == center.CurrentRegion && center.IsWithinRadius(npc, radius) &&
                     !BotPvpCrowdControl.PlayerLike(npc) && !CompanionAddControl.ProtectsMezz(bot, npc) &&
                     GameServer.ServerRules.IsAllowedToAttack(bot, npc, true))
                 .Distinct()
-                .ToArray();
+                .Cast<GameLiving>().ToArray();
         }
 
         public static bool HasSufficientPull(GameBot bot, GameLiving target, Spell spell, GameLiving center) =>

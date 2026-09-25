@@ -265,6 +265,8 @@ namespace DOL.GS
                 // Houses of offline members will be updated when they log in.
                 foreach (GamePlayer member in player.Guild.GetListOfOnlineMembers())
                     RefreshPersonalHouseEmblem(member, guild);
+                foreach (GameBot bot in guild.GetOnlineBotMembers())
+                    bot.RefreshGuildEmblem();
             }
         }
 

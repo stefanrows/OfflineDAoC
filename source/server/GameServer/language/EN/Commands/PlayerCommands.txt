@@ -373,7 +373,7 @@ Scripts.Player.Guild.Help.GuildEditView:		'/gc edit <ranknum> view <y/n>'  edits
 Scripts.Player.Guild.Help.GuildEditWithdraw:		'/gc edit <ranknum> withdraw <y/n>'  to be able to withdraw from guild bank	
 Scripts.Player.Guild.Help.GuildEmail:			'/gc email <contact@guildpage.com>' is an additional line set by the leader that can be displayed in a /gc info command, as well as on the Herald.	
 Scripts.Player.Guild.Help.GuildEmblem:			'/gc emblem' to set emblem	
-Scripts.Player.Guild.Help.GuildForm:			'/gc form <Name>' to create a new guilde with all player of group	
+Scripts.Player.Guild.Help.GuildForm:			'/gc form <Name>' to found a guild alone or with your group near a guild registrar
 Scripts.Player.Guild.Help.GuildGMAddPlayer:		'/gc addplayer <player> to <guild>' to add player to guild	
 Scripts.Player.Guild.Help.GuildGMCommands:		Game Master commands:	
 Scripts.Player.Guild.Help.GuildGMCreate:		'/gc create <Name>' Create a new guild with targeted player as leader	

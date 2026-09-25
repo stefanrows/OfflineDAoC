@@ -1148,6 +1148,8 @@ namespace DOL.GS.PacketHandler
 				pak.WriteByte(0x00);
 				SendTCP(pak);
 			}
+			if (npc is GameBot rider && rider.CompanionRam?.CompanionRiderSlot(rider) > 0)
+				m_gameClient.Player.Out.SendRiding(rider, rider.CompanionRam, false);
 		}
 
 		public virtual void SendLivingEquipmentUpdate(GameLiving living)
@@ -1351,6 +1353,10 @@ namespace DOL.GS.PacketHandler
 			if (steed is GameNPC && rider is GamePlayer && dismount == false)
 			{
 				slot = (steed as GameNPC).RiderSlot(rider as GamePlayer);
+			}
+			else if (steed is GameSiegeRam ram && rider is GameBot bot && !dismount)
+			{
+				slot = ram.CompanionRiderSlot(bot);
 			}
 			if (slot == -1)
 				log.Error("SendRiding error, slot is -1 with rider " + rider.Name + " steed " + steed.Name);

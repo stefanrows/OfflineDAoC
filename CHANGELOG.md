@@ -12,6 +12,61 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-09-25
+
+### Added
+
+- Player-led casters set to Bomb can use PBAoE against at least two PvP opponents already fighting their group, while avoiding idle and mezzed players.
+
+### Changed
+
+- Ready bombers prefer their highest learned PBAoE rank. Focus casters prioritize staves by the focus levels covering their learned spell lines, including all-lines focus, before ordinary item value.
+
+### Fixed
+
+- A staff with unrelated focus no longer displaces a staff covering the caster's spell lines solely because its item level is higher.
+
+### Removed
+
+- None.
+
+## [0.64.0] - 2026-09-25
+
+### Added
+
+- Owned companions accept `/gc invite` immediately; persistent companions keep guild membership after being benched or reloaded and show the guild emblem on equipped cloaks and shields.
+
+### Changed
+
+- `/gc form` permits a solo founder at a registrar and asks only other human group members to approve the guild.
+
+### Fixed
+
+- Guild founding no longer stalls when companion bots occupy group slots.
+
+### Removed
+
+- None.
+
+## [0.63.0] - 2026-09-25
+
+### Added
+
+- Nearby player-led companions board the player's siege ram in available seats and leave when the player dismounts. Companion seats count toward ram damage and reload timing.
+- Grouped player-led Healers use learned area stuns against clustered enemies already fighting the group. A bomb caster with a learned PBAoE spell draws stun placement toward its pull, with healing still taking priority when a group member is below 65% health.
+
+### Changed
+
+- Defensive companions follow a player's active attack on a closed enemy keep door beyond the normal defensive radius. Pet classes command their pets to that door, and Theurgists repeatedly summon pets while their normal cast and power rules allow it.
+
+### Fixed
+
+- Keep doors with a grey con no longer block an explicit player-led companion attack or pet order.
+
+### Removed
+
+- None.
+
 ## [0.62.1] - 2026-09-25
 
 ### Added

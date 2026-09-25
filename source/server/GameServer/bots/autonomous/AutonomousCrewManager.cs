@@ -409,8 +409,11 @@ public static class AutonomousCrewManager
     /// <summary>Accepts a nearby player invitation for an unassigned live bot.</summary>
     public static bool TryAcceptGuildInvite(GamePlayer inviter, GameBot bot)
     {
+        if (bot?.Owner == inviter && (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper))
+            return PlayerCompanionRoster.TryJoinGuild(inviter, bot);
+
         if (inviter?.Guild == null || bot == null || !bot.IsAlive || bot.Guild != null ||
-            (!bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper) || !AreLevelsCompatible(inviter.Level, bot.Level))
+            !bot.IsAutonomousWorldBot || !AreLevelsCompatible(inviter.Level, bot.Level))
             return false;
 
         DbGuildRank rank = inviter.Guild.GetRankByID(9);

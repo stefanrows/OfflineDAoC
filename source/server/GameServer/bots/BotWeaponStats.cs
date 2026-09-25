@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using DOL.Database;
 
 namespace DOL.GS
@@ -43,6 +44,41 @@ namespace DOL.GS
 
             static bool HasFocus(int bonusType) => bonusType > 0 &&
                 SkillBase.CheckPropertyType((eProperty)bonusType, ePropertyType.Focus);
+        }
+
+        // Focus is a level, not a generic item bonus. Count the learned spell
+        // lines covered by this staff, including the all-lines property.
+        public static int CasterFocusScore(GameBot bot, DbInventoryItem item)
+        {
+            if (bot?.CharacterClass?.IsFocusCaster != true || item == null ||
+                (eObjectType)item.Object_Type != eObjectType.Staff)
+                return 0;
+
+            var lines = bot.GetAllUsableListSpells()
+                .Where(entry => entry?.Item1 != null && entry.Item2?.Count > 0)
+                .Select(entry => SkillBase.SpecToFocus(entry.Item1.Spec))
+                .Where(property => property != eProperty.Undefined)
+                .Distinct();
+            int all = FocusLevel(item, eProperty.AllFocusLevels);
+            return lines.Sum(property => Math.Min(bot.Level,
+                Math.Max(all, FocusLevel(item, property))));
+        }
+
+        private static int FocusLevel(DbInventoryItem item, eProperty property)
+        {
+            int level = 0;
+            if (item.Bonus1Type == (int)property) level = Math.Max(level, item.Bonus1);
+            if (item.Bonus2Type == (int)property) level = Math.Max(level, item.Bonus2);
+            if (item.Bonus3Type == (int)property) level = Math.Max(level, item.Bonus3);
+            if (item.Bonus4Type == (int)property) level = Math.Max(level, item.Bonus4);
+            if (item.Bonus5Type == (int)property) level = Math.Max(level, item.Bonus5);
+            if (item.Bonus6Type == (int)property) level = Math.Max(level, item.Bonus6);
+            if (item.Bonus7Type == (int)property) level = Math.Max(level, item.Bonus7);
+            if (item.Bonus8Type == (int)property) level = Math.Max(level, item.Bonus8);
+            if (item.Bonus9Type == (int)property) level = Math.Max(level, item.Bonus9);
+            if (item.Bonus10Type == (int)property) level = Math.Max(level, item.Bonus10);
+            if (item.ExtraBonusType == (int)property) level = Math.Max(level, item.ExtraBonus);
+            return Math.Clamp(level, 0, 50);
         }
 
         /// <summary>

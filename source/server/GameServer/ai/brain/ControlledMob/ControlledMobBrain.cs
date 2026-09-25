@@ -796,8 +796,11 @@ namespace DOL.AI.Brain
 			ownerToCheck ??= Owner;
 			// Persistent world-bot pets are explicitly commanded by the owner's
 			// combat brain. They must never roam-pull targets on their own.
-			if (GetLivingOwner() is GameBot { IsAutonomousWorldBot: true })
+			if (GetLivingOwner() is GameBot { IsAutonomousWorldBot: true, IsPlayerLedGroup: false })
 				return false;
+			if (GetLivingOwner() is GameBot companion &&
+			    CompanionEngagementMode.LeaderAttackingDoor(companion.PlayerGroupLeader ?? companion.Owner, target))
+				return AggroLevel > 0 && GameServer.ServerRules.IsAllowedToAttack(Body, target, true);
 			return AggroLevel > 0 && !ownerToCheck.IsObjectGreyCon(target) && GameServer.ServerRules.IsAllowedToAttack(Body, target, true);
 		}
 

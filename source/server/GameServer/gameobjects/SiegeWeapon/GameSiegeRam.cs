@@ -1,3 +1,4 @@
+using System.Linq;
 using DOL.GS.Keeps;
 using DOL.GS.PacketHandler;
 
@@ -165,12 +166,83 @@ namespace DOL.GS
 			base.DoDamage();
 		}
 
+		private readonly System.Collections.Generic.Dictionary<GameBot, int> _companionRiders = new();
+		private GameBot[] CompanionRiders
+		{
+			get { lock (_companionRiders) return _companionRiders.Keys.ToArray(); }
+		}
+
+		public int CompanionRiderSlot(GameBot bot)
+		{
+			lock (_companionRiders)
+				return bot != null && _companionRiders.TryGetValue(bot, out int slot) ? slot + SLOT_OFFSET : -1;
+		}
+
+		public bool BoardCompanion(GameBot bot, GamePlayer leader)
+		{
+			if (bot?.IsAlive != true || leader?.Steed != this || bot.Group == null || bot.Group != leader.Group ||
+			    !bot.Group.IsInTheGroup(bot) || !bot.Group.IsInTheGroup(leader) ||
+			    (bot.PlayerGroupLeader != leader && bot.Owner != leader) ||
+			    !bot.IsWithinRadius(this, 350) || bot.CurrentRegionID != CurrentRegionID ||
+			    ObjectState != eObjectState.Active || !IsAlive)
+				return false;
+			lock (_companionRiders)
+			{
+				if (_companionRiders.ContainsKey(bot)) return true;
+				for (int slot = 0; slot < System.Math.Min(MAX_PASSENGERS, Riders?.Length ?? 0); slot++)
+				{
+					if (Riders[slot] != null || _companionRiders.ContainsValue(slot)) continue;
+					bot.StopAttack();
+					bot.StopFollowing();
+					bot.StopMovingOnPath();
+					if (!bot.MoveInRegion(CurrentRegionID, X, Y, Z, Heading, true)) return false;
+					_companionRiders.Add(bot, slot);
+					bot.CompanionRam = this;
+					foreach (GamePlayer viewer in bot.GetPlayersInRadius(WorldMgr.VISIBILITY_DISTANCE))
+						viewer.Out.SendRiding(bot, this, false);
+					UpdateRamStatus();
+					return true;
+				}
+			}
+			return false;
+		}
+
+		public void DismountCompanion(GameBot bot)
+		{
+			if (bot == null) return;
+			lock (_companionRiders)
+			{
+				if (!_companionRiders.Remove(bot)) return;
+				if (bot.CompanionRam == this) bot.CompanionRam = null;
+				foreach (GamePlayer viewer in bot.GetPlayersInRadius(WorldMgr.VISIBILITY_DISTANCE))
+					viewer.Out.SendRiding(bot, this, true);
+				UpdateRamStatus();
+			}
+		}
+
 		public override bool RiderMount(GamePlayer rider, bool forced)
 		{
 			if (!base.RiderMount(rider, forced))
 				return false;
+			foreach (GameBot bot in CompanionRiders)
+				if (CompanionRiderSlot(bot) == RiderSlot(rider)) DismountCompanion(bot);
 			UpdateRamStatus();
 			return true;
+		}
+
+		public override bool RiderMount(GamePlayer rider, bool forced, int slot)
+		{
+			if (!base.RiderMount(rider, forced, slot)) return false;
+			foreach (GameBot bot in CompanionRiders)
+				if (CompanionRiderSlot(bot) == RiderSlot(rider)) DismountCompanion(bot);
+			UpdateRamStatus();
+			return true;
+		}
+
+		public override bool RemoveFromWorld()
+		{
+			foreach (GameBot bot in CompanionRiders) DismountCompanion(bot);
+			return base.RemoveFromWorld();
 		}
 
 		public override bool RiderDismount(bool forced, GamePlayer player)
@@ -179,6 +251,8 @@ namespace DOL.GS
 				return false;
 			if (player.SiegeWeapon == this)
 				ReleaseControl();
+			foreach (GameBot bot in CompanionRiders)
+				if (bot.PlayerGroupLeader == player || bot.Owner == player) DismountCompanion(bot);
 			UpdateRamStatus();
 			return true;
 		}
@@ -188,6 +262,7 @@ namespace DOL.GS
 			base.ReleaseControl();
 			foreach (GamePlayer player in CurrentRiders)
 				player.DismountSteed(true);
+			foreach (GameBot bot in CompanionRiders) DismountCompanion(bot);
 		}
 
 		public void UpdateRamStatus()
@@ -201,14 +276,19 @@ namespace DOL.GS
 			get
 			{
 				//custom formula
-				return 10000 + ((Level + 1) * 2000) - (int)(10000 * ((double)CurrentRiders.Length / (double)MAX_PASSENGERS));
+				return 10000 + ((Level + 1) * 2000) - (int)(10000 * ((double)RiderCount / (double)MAX_PASSENGERS));
 			}
+		}
+
+		private int RiderCount
+		{
+			get { lock (_companionRiders) return CurrentRiders.Length + _companionRiders.Count; }
 		}
 
 		public override int CalcDamageToTarget(GameLiving target)
 		{
 			//return BaseDamage + (int)(((double)BaseDamage / 2.0) * (double)((double)CurrentRiders.Length / (double)MAX_PASSENGERS));
-			return BaseDamage + (BaseDamage/2 * CurrentRiders.Length);
+			return BaseDamage + (BaseDamage/2 * RiderCount);
 		}
 
 		public override int BaseDamage
