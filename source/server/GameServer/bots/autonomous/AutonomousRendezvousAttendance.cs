@@ -19,15 +19,19 @@ namespace DOL.GS
             return Vector3.DistanceSquared(position, slot) <= radius * radius;
         }
         private readonly Dictionary<long, long> _due = new();
+        private readonly Dictionary<long, long> _started = new();
         private readonly HashSet<long> _arrived = new();
         private readonly Dictionary<long, DateTime> _dueUtc = new();
         public long Revision { get; private set; }
 
-        public void Add(long memberId, long now, DateTime? utcNow = null)
+        public void Add(long memberId, long now, DateTime? utcNow = null, long timeoutMilliseconds = TimeoutMilliseconds)
         {
-            if (_due.TryAdd(memberId, now + TimeoutMilliseconds))
+            timeoutMilliseconds = Math.Max(0, timeoutMilliseconds);
+            if (!_due.ContainsKey(memberId))
             {
-                _dueUtc[memberId] = (utcNow ?? WorldSimulationClock.UtcNow).AddMilliseconds(TimeoutMilliseconds);
+                _due[memberId] = now + timeoutMilliseconds;
+                _started[memberId] = now;
+                _dueUtc[memberId] = (utcNow ?? WorldSimulationClock.UtcNow).AddMilliseconds(timeoutMilliseconds);
                 Revision++;
             }
         }
@@ -47,7 +51,7 @@ namespace DOL.GS
         }
 
         public long WaitedMilliseconds(long memberId, long now) =>
-            _due.TryGetValue(memberId, out long due) ? now - (due - TimeoutMilliseconds) : 0;
+            _started.TryGetValue(memberId, out long started) ? now - started : 0;
 
         /// <summary>
         /// Starts one new, shared attendance window after the coordinator has
@@ -55,19 +59,22 @@ namespace DOL.GS
         /// expired deadlines would immediately expel members that were already
         /// present but were assigned a different slot by that rebuild.
         /// </summary>
-        public void Rebase(IEnumerable<long> memberIds, long now, DateTime? utcNow = null)
+        public void Rebase(IEnumerable<long> memberIds, long now, DateTime? utcNow = null,
+            long timeoutMilliseconds = TimeoutMilliseconds)
         {
             _due.Clear();
+            _started.Clear();
             _arrived.Clear();
             _dueUtc.Clear();
             Revision++;
             foreach (long memberId in memberIds)
-                Add(memberId, now, utcNow);
+                Add(memberId, now, utcNow, timeoutMilliseconds);
         }
 
         public void Reset()
         {
             _due.Clear();
+            _started.Clear();
             _arrived.Clear();
             _dueUtc.Clear();
             Revision++;

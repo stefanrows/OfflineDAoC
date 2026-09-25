@@ -1006,6 +1006,11 @@ namespace DOL.GS
         {
             GameBot leader = directive.Leader;
             bool leaderStaging = directive.Phase == "Leader staging";
+            // Invited remote members can approach/use their porter while the
+            // local leader stages; their shared deadline already started at formation.
+            if (leaderStaging && bot != leader && bot.CurrentRegionID != directive.RendezvousRegion &&
+                AutonomousBotGroupCoordinator.IsRemoteMeetupMember(bot, directive))
+                return HandleTownMeetupTravel(bot, directive);
             if ((leaderStaging || directive.Phase == "Regrouping" && !directive.LeaderReadyForAssembly) && bot != leader)
             {
                 bot.WakeRecoveryRest();
@@ -1030,6 +1035,8 @@ namespace DOL.GS
             if (bot.CurrentRegionID != directive.RendezvousRegion)
             {
                 bot.WakeRecoveryRest();
+                if (AutonomousBotGroupCoordinator.IsRemoteMeetupMember(bot, directive))
+                    return HandleTownMeetupTravel(bot, directive);
                 return TravelToGroupRegion(bot, directive, directive.RendezvousRegion,
                     (int)directive.Rendezvous.X, (int)directive.Rendezvous.Y,
                     leaderStaging ? directive.RendezvousName : "group rendezvous");
@@ -2499,7 +2506,7 @@ namespace DOL.GS
                 AutonomousRealmRaid.GetView(bot.Group) == null;
             int planningLevel = sharedGroup ? _groupDirective.AverageLevel : bot.Level;
             GameBot[] planningMembers = sharedGroup
-                ? bot.Group.GetMembersInTheGroup().OfType<GameBot>().Where(member => member.IsAlive).ToArray()
+                ? bot.Group.GetMembersInTheGroup().OfType<GameBot>().ToArray()
                 : [bot];
             bool hasHealing = planningMembers.Any(member => member.CharacterClass != null &&
                 BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID));
@@ -2532,7 +2539,8 @@ namespace DOL.GS
             // realm/level/death filtering a cheap in-memory operation.
             foreach (CampCatalogCell cell in CampCatalogSnapshot()
                          .Where(cell => !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
-                                        (!localPickupGroup || cell.RegionId == bot.CurrentRegionID) &&
+                                        (!localPickupGroup || cell.RegionId == _groupDirective.RendezvousRegion &&
+                                            CampUsableByEveryMember(cell, planningMembers, groupTargetBonus)) &&
                                         IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID) &&
                                         (!AutonomousObjectiveAssignments.IsAwaitingGroupMatchmaking(bot) ||
                                          AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(cell.IsDungeon,
@@ -2628,6 +2636,8 @@ namespace DOL.GS
                 ? AutonomousBotDecisionEngine.SelectLevelingCamp(legalCells, bot.CurrentRegionID,
                     bot.CurrentZone?.Description, bot.Realm, planningLevel, Random.Shared)
                 : AutonomousBotDecisionEngine.SelectWithinEnvironment(legalCells, environment, Random.Shared);
+            if (localPickupGroup && !string.IsNullOrEmpty(_groupDirective.PreferredPickupCampId))
+                chosen = legalCells.FirstOrDefault(camp => camp.Id == _groupDirective.PreferredPickupCampId) ?? chosen;
             bool usedDeathFallback = false;
             if (chosen == null && !sharedGroup && _deathDifficultySteps > 0)
             {
@@ -2690,9 +2700,6 @@ namespace DOL.GS
         public static bool HasLocalPickupCamp(GameBot[] members, ushort regionId)
         {
             if (members == null || members.Length < 2) return false;
-            GameBot leader = members[0];
-            int averageLevel = (int)Math.Round(members.Average(member => member.Level));
-            int highestMemberLevel = members.Max(member => member.EffectiveLevel);
             bool hasHealing = members.Any(member => member.CharacterClass != null &&
                 BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID));
             bool hasFrontline = members.Any(member => member.CharacterClass != null &&
@@ -2702,9 +2709,19 @@ namespace DOL.GS
             return CampCatalogSnapshot().Any(cell => cell.RegionId == regionId &&
                 AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(cell.IsDungeon,
                     cell.IsFrontier, regionId, cell.RegionId) &&
-                cell.LiveMobCount > 0 && IsZoneAccessible(leader.Realm, cell.Zone, regionId) &&
-                cell.Levels.Any(level => AutonomousGroupTargetPolicy.CanUseCampLevel(
-                    level, averageLevel, highestMemberLevel, targetBonus)));
+                cell.LiveMobCount > 0 && CampUsableByEveryMember(cell, members, targetBonus));
+        }
+
+        private static bool CampUsableByEveryMember(CampCatalogCell cell, GameBot[] members, int targetBonus)
+        {
+            if (cell?.Zone == null || members == null || members.Length < 2 ||
+                members.Any(member => member?.CharacterClass == null || !IsZoneAccessible(member.Realm, cell.Zone)))
+                return false;
+            int averageLevel = (int)Math.Round(members.Average(member => member.Level));
+            int highestLevel = members.Max(member => member.EffectiveLevel);
+            return cell.Levels.Any(level => AutonomousGroupTargetPolicy.CanUseCampLevel(
+                    level, averageLevel, highestLevel, targetBonus) &&
+                members.All(member => ConLevels.GetConColor(ConLevels.GetConLevel(member.EffectiveLevel, level)) > ConColor.GREY));
         }
 
         private static CampCatalogCell[] CampCatalogSnapshot()

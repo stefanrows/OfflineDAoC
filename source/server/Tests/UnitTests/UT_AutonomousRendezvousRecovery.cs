@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
+using System.Text.Json;
 using NUnit.Framework;
 
 namespace DOL.GS.Tests
@@ -153,6 +155,96 @@ namespace DOL.GS.Tests
             Assert.That(attendance.Observe(1, 500 + 15 * 60_000 - 1, false), Is.False);
             Assert.That(attendance.Observe(1, 500 + 15 * 60_000, false), Is.True);
             Assert.That(attendance.WaitedMilliseconds(1, 500 + 15 * 60_000), Is.EqualTo(900_000));
+        }
+
+        [Test]
+        public void RemoteMeetupHasOneFortyFiveMinuteDeadlineAndNoShowCleanupLeavesCampClockSeparate()
+        {
+            var attendance = new AutonomousRendezvousAttendance();
+            DateTime formedUtc = new(2026, 9, 25, 12, 0, 0, DateTimeKind.Utc);
+            const long formedTick = 31_000;
+            const long remoteDeadline = AutonomousBotGroupCoordinator.RemoteMeetupTimeoutMilliseconds;
+            attendance.Rebase(new long[] { 1, 2, 3 }, formedTick, formedUtc, remoteDeadline);
+            Assert.That(attendance.DeadlineUtc(2), Is.EqualTo(formedUtc.AddMinutes(45)));
+            Assert.That(attendance.Observe(1, formedTick, true), Is.False);
+            Assert.That(attendance.Observe(3, formedTick + 10 * 60_000, true), Is.False);
+            Assert.That(attendance.HasArrived(1), Is.True);
+            Assert.That(attendance.Observe(2, formedTick + remoteDeadline - 1, false), Is.False);
+            Assert.That(attendance.Observe(2, formedTick + remoteDeadline, false), Is.True);
+            Assert.That(attendance.WaitedMilliseconds(2, formedTick + remoteDeadline), Is.EqualTo(remoteDeadline));
+
+            // Remove only the missed remote member; the two local attendees
+            // remain and are rebased onto their ordinary local meetup window.
+            long cleanupTick = formedTick + remoteDeadline;
+            attendance.Rebase(new long[] { 1, 3 }, cleanupTick, formedUtc.AddMinutes(45));
+            attendance.Observe(1, cleanupTick, true);
+            attendance.Observe(3, cleanupTick, true);
+            Assert.That(attendance.DeadlineUtc(1), Is.Null);
+            Assert.That(attendance.DeadlineUtc(3), Is.Null);
+            Assert.That(attendance.Observe(1, cleanupTick + AutonomousRendezvousAttendance.TimeoutMilliseconds, false), Is.False);
+
+            var clock = new AutonomousGroupTaskClock(eAutonomousObjectiveKind.GroupPve, new Random(11));
+            Assert.That(clock.HasStarted, Is.False);
+            Assert.That(clock.RemainingMilliseconds(cleanupTick), Is.EqualTo(clock.DurationMilliseconds));
+            Assert.That(clock.BeginTravel(cleanupTick, formedUtc.AddMinutes(45)), Is.True);
+            long campArrival = cleanupTick + AutonomousGroupTaskClock.CampTravelTimeoutMilliseconds - 1;
+            Assert.That(clock.HasTravelTimedOut(campArrival), Is.False);
+            Assert.That(clock.Start(campArrival, formedUtc.AddMilliseconds(campArrival)), Is.True);
+            Assert.That(clock.ExpiresUtc, Is.EqualTo(formedUtc.AddMilliseconds(campArrival + clock.DurationMilliseconds)));
+        }
+
+        [Test]
+        public void PickupPolicyPrioritizesBothOtherRealmsAndMissingPartyRoles()
+        {
+            eRealm[] realms = [eRealm.Albion, eRealm.Midgard, eRealm.Hibernia];
+            foreach (eRealm leaderRealm in realms)
+            {
+                eRealm[] ordered = realms.OrderBy(realm => AutonomousBotGroupCoordinator.PickupRealmPriority(leaderRealm, realm)).ToArray();
+                Assert.That(ordered.Take(2), Does.Not.Contain(leaderRealm));
+                Assert.That(ordered[^1], Is.EqualTo(leaderRealm));
+            }
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBotGroupCoordinator.PickupRolePriority(eCharacterClass.Cleric, true, true), Is.EqualTo(-2));
+                Assert.That(AutonomousBotGroupCoordinator.PickupRolePriority(eCharacterClass.Armsman, true, true), Is.EqualTo(-1));
+                Assert.That(AutonomousBotGroupCoordinator.PickupRolePriority(eCharacterClass.Paladin, true, true), Is.EqualTo(-3));
+                Assert.That(AutonomousBotGroupCoordinator.PickupRolePriority(eCharacterClass.Scout, true, true), Is.Zero);
+            });
+        }
+
+        [Test]
+        public void CrossRealmGroupLocationIsPreservedUntilRvROwnsTheReturn()
+        {
+            var record = new OfflineWorldBotRecord
+            {
+                ObjectiveKind = eAutonomousObjectiveKind.GroupPve.ToString(),
+                ObjectivePhase = "Taking a town break",
+            };
+            Assert.That(AutonomousObjectiveAssignments.ShouldPreserveCrossRealmGroupLocation(record), Is.True);
+            Assert.That(AutonomousObjectiveAssignments.ShouldDeferAutomaticForeignFrontierReturn(record, false), Is.True);
+            Assert.That(AutonomousObjectiveAssignments.ShouldDeferAutomaticForeignFrontierReturn(record, true), Is.True);
+
+            record.ObjectiveKind = eAutonomousObjectiveKind.RvR.ToString();
+            Assert.That(AutonomousObjectiveAssignments.ShouldPreserveCrossRealmGroupLocation(record), Is.False);
+            Assert.That(AutonomousObjectiveAssignments.ShouldDeferAutomaticForeignFrontierReturn(record, false), Is.False);
+
+            record.ObjectiveKind = eAutonomousObjectiveKind.SoloPve.ToString();
+            record.ObjectivePhase = "Returning to PvE after frontier tour";
+            record.ObjectiveRvrEligibleUtc = AutonomousObjectiveAssignments.PveCompletionRequired;
+            Assert.That(AutonomousObjectiveAssignments.ShouldDeferAutomaticForeignFrontierReturn(record, false), Is.False);
+        }
+
+        [Test]
+        public void ExistingAutonomousSaveShapeStillLoadsWithoutRemoteMeetupFields()
+        {
+            const string savedRecord = """{"BotId":42,"Name":"ExistingBot","Realm":1,"ClassId":1,"Level":50,"RegionId":1,"ObjectiveKind":"GroupPve","ObjectiveAssignmentId":"crew-50-12-GroupPve","ObjectivePhase":"Awaiting objective","ItineraryJson":"offline-group-v1:{\"GroupId\":\"old\",\"Phase\":\"Meeting up\",\"MeetUpDeadlineUtc\":\"2026-09-25T12:15:00Z\"}"}""";
+            OfflineWorldBotRecord loaded = JsonSerializer.Deserialize<OfflineWorldBotRecord>(savedRecord);
+            Assert.That(loaded, Is.Not.Null);
+            Assert.That(loaded.BotId, Is.EqualTo(42));
+            Assert.That(loaded.ObjectiveKind, Is.EqualTo("GroupPve"));
+            Assert.That(loaded.ItineraryJson, Does.Contain("Meeting up"));
+            Assert.That(loaded.ItineraryJson, Does.Contain("MeetUpDeadlineUtc"));
         }
 
         [Test]

@@ -10,6 +10,29 @@ namespace DOL.GS
 	/// </summary>
 	internal static class AllRealmsTeleportFallbacks
 	{
+		// Destination names exposed by AllRealmsTeleporter's capital, mainland,
+		// and Shrouded Isles town menus. Keep dungeon and frontier routes out of
+		// autonomous pickup-group travel.
+		private static readonly string[] AlbionTownRoutes =
+		[
+			"Camelot", "Holtham", "Cotswold Village", "Prydwen Keep", "Caer Ulfwych",
+			"Campacorentin Station", "Adribard's Retreat", "Cornwall Station", "Swanton Keep",
+			"Lyonesse", "Dartmoor", "Caer Gothwaite", "Wearyall Village", "Fort Gwyntell", "Caer Diogel",
+		];
+
+		private static readonly string[] MidgardTownRoutes =
+		[
+			"Jordheim", "Hafheim", "Mularn", "Fort Veldon", "Audliten", "Huginfell", "Fort Atla",
+			"Gna Faste", "Vindsaul Faste", "Raumarik", "Malmohus", "Aegirhamn", "Bjarken", "Hagall", "Knarr",
+		];
+
+		private static readonly string[] HiberniaTownRoutes =
+		[
+			"Tir na Nog", "Fintain", "Mag Mell", "Tir na mBeo", "Ardagh", "Howth", "Connla",
+			"Innis Carthaig", "Druim Cain", "Cursed Forest", "Sheeroe Hills", "Domnann", "Droighaid",
+			"Aalid Feie", "Necht",
+		];
+
 		// Mirrors the default, untyped route rows in DOL's public Teleport.json.
 		private static readonly Dictionary<string, (string TeleportID, int RegionID, int X, int Y, int Z, int Heading)> Routes = new(StringComparer.OrdinalIgnoreCase)
 		{
@@ -130,5 +153,18 @@ namespace DOL.GS
 				Heading = route.Heading,
 			};
 		}
+
+		/// <summary>
+		/// Standard AllRealmsTeleporter town menu IDs, excluding dungeons and
+		/// frontier destinations. Autonomous NPC travel uses this same route
+		/// catalog and resolves each ID from the installed table before this fallback.
+		/// </summary>
+		public static IReadOnlyList<string> GetTownRouteIDs(eRealm realm) => realm switch
+		{
+			eRealm.Albion => AlbionTownRoutes,
+			eRealm.Midgard => MidgardTownRoutes,
+			eRealm.Hibernia => HiberniaTownRoutes,
+			_ => Array.Empty<string>(),
+		};
 	}
 }

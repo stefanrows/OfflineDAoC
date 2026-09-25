@@ -19,6 +19,17 @@ public sealed partial class AutonomousWorldBotController
         // PvE/services cannot walk through another realm's border gates to get
         // home. Use the same real porter/ticket boarding used by outbound RvR.
         ushort home = bot.Realm switch { eRealm.Albion => 1, eRealm.Midgard => 100, eRealm.Hibernia => 200, _ => 0 };
+        if (home != 0 && bot.CurrentRegionID == home &&
+            AutonomousObjectiveAssignments.CompletePostRvrReturn(bot.PersistentRecord))
+        {
+            bot.MarkAutonomousStateDirty();
+            AutonomousBotStatusPersistence.Queue(bot);
+        }
+        bool activePveGroup = _groupDirective?.IsDynamic == true &&
+            _groupDirective.ObjectiveKind == eAutonomousObjectiveKind.GroupPve;
+        if (AutonomousObjectiveAssignments.ShouldDeferAutomaticForeignFrontierReturn(
+                bot.PersistentRecord, activePveGroup))
+            return false;
         if (home == 0 || bot.CurrentRegionID == home || bot.CurrentRegionID is not (1 or 100 or 200) ||
             AutonomousObjectiveAssignments.Parse(bot.PersistentRecord?.ObjectiveKind) == eAutonomousObjectiveKind.RvR ||
             GameRelic.IsPlayerCarryingRelic(bot)) return false;

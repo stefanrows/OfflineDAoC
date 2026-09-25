@@ -34,6 +34,7 @@ public static class AutonomousObjectiveAssignments
     public static readonly TimeSpan GroupMatchmakingTimeout = TimeSpan.FromMinutes(20);
     private const string BetweenTasksPrefix = "between-pve-services-";
     public const string PveCompletionRequired = "awaiting-completed-pve-task";
+    public const string PveCompletionRequiredAfterReturn = "awaiting-completed-pve-task-returned";
     public static readonly TimeSpan MaximumBetweenTaskDuration = TimeSpan.FromMinutes(30);
     private static readonly object Sync = new();
     private static readonly ConcurrentDictionary<long, (string Assignment, long StartedTick)> GroupWaits = new();
@@ -134,7 +135,7 @@ public static class AutonomousObjectiveAssignments
 
     public static bool IsRvrEligible(OfflineWorldBotRecord record, DateTime utcNow)
     {
-        if (record?.ObjectiveRvrEligibleUtc == PveCompletionRequired) return false;
+        if (record?.ObjectiveRvrEligibleUtc is PveCompletionRequired or PveCompletionRequiredAfterReturn) return false;
         return record == null || string.IsNullOrWhiteSpace(record.ObjectiveRvrEligibleUtc) ||
                !DateTime.TryParse(record.ObjectiveRvrEligibleUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime eligibleUtc) ||
                eligibleUtc.ToUniversalTime() <= utcNow.ToUniversalTime();
@@ -417,6 +418,36 @@ public static class AutonomousObjectiveAssignments
 
     public static bool IsBetweenPveTasks(GameBot bot) => IsBetweenPveTasks(bot?.PersistentRecord);
 
+    // A realm is a travel destination, not a leash. Ordinary PvE visitors stay
+    // where their activities leave them. The existing durable RvR eligibility
+    // state owns the explicit post-tour return, independently of status text.
+    // Older saves can contain a timed intermission instead of the completion
+    // sentinel, so preserve its return intent until that intermission expires.
+    public static bool HasPostRvrReturnIntent(OfflineWorldBotRecord record, DateTime utcNow) =>
+        record?.ObjectiveRvrEligibleUtc == PveCompletionRequired ||
+        DateTime.TryParse(record?.ObjectiveRvrEligibleUtc, null,
+            System.Globalization.DateTimeStyles.RoundtripKind, out DateTime eligibleUtc) &&
+        eligibleUtc.ToUniversalTime() > utcNow.ToUniversalTime();
+
+    public static bool CompletePostRvrReturn(OfflineWorldBotRecord record)
+    {
+        if (record?.ObjectiveRvrEligibleUtc != PveCompletionRequired)
+            return false;
+        // Returning home satisfies the journey only. Keep the independent
+        // requirement to complete PvE before another frontier tour.
+        record.ObjectiveRvrEligibleUtc = PveCompletionRequiredAfterReturn;
+        return true;
+    }
+
+    public static bool ShouldPreserveCrossRealmGroupLocation(OfflineWorldBotRecord record) =>
+        record != null && Parse(record.ObjectiveKind) != eAutonomousObjectiveKind.RvR &&
+        !HasPostRvrReturnIntent(record, WorldSimulationClock.UtcNow);
+
+    public static bool ShouldDeferAutomaticForeignFrontierReturn(OfflineWorldBotRecord record,
+        bool activePveGroup) =>
+        record != null && Parse(record.ObjectiveKind) != eAutonomousObjectiveKind.RvR &&
+        (activePveGroup || ShouldPreserveCrossRealmGroupLocation(record));
+
     public static bool WantsBetweenTaskTraining(GameBot bot) =>
         HasBetweenTaskFlag(bot?.PersistentRecord, 'T');
 
@@ -496,7 +527,7 @@ public static class AutonomousObjectiveAssignments
                 $"region={bot.CurrentRegionID} x={bot.X} y={bot.Y} z={bot.Z} " +
                 $"goal=\"{bot.PersistentRecord.CurrentGoal}\" activity=\"{bot.PersistentRecord.Activity}\" " +
                 $"assignment=\"{bot.PersistentRecord.ObjectiveAssignmentId}\"");
-        bool pveRequired = bot.PersistentRecord.ObjectiveRvrEligibleUtc == PveCompletionRequired;
+        bool pveRequired = bot.PersistentRecord.ObjectiveRvrEligibleUtc is PveCompletionRequired or PveCompletionRequiredAfterReturn;
         Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
                 Random.Shared.NextDouble(), mayRvr: !pveRequired && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
                 danger: Danger),

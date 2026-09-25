@@ -12,6 +12,48 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.59.0] - 2026-09-25
+
+### Added
+
+- Autonomous PvE pickup groups can match compatible bots across all three realms
+  and prefer a viable mixed-realm party. Remote members travel through an active
+  `AllRealmsTeleporter` to the leader's town rendezvous; the Active Groups card
+  shows their 45-minute simulated-time meetup deadline, which starts when the
+  remote group forms.
+
+### Changed
+
+- Pickup groups compare a bounded shortlist of live camps across up to three
+  regions, then elect a nearby leader and stage in a connected town. Camp
+  suitability, crowding, travel, familiar locations, and known deaths affect the
+  choice. Mixed-realm parties are preferred within a 20-minute estimated meetup
+  journey and a five-minute detour over a viable nearby party.
+- Remote members start traveling while the leader stages. Productive, healthy
+  ordinary PvE parties can continue together for one additional task when no
+  member needs training or inventory services; camps are reconsidered at renewal.
+- PvE visitors stay where their activities leave them, including during town
+  downtime and after save reload. Explicit post-RvR returns still go home, and
+  completing the journey preserves the separate requirement to finish PvE.
+
+### Fixed
+
+- Remote invitations validate the complete porter approach and onward town
+  journey, including intervening zone crossings. Arrival towns are chosen near
+  the actual rendezvous; unreachable nearby porters and local applicants no
+  longer prevent usable alternatives from joining. Travel requires real porter
+  proximity, life, and no combat, without a catch-up teleport.
+- Post-group location no longer depends on mutable activity text. Removing a
+  no-show immediately refreshes party roles and preserves prior attendance when
+  formation slots shift at the expired shared deadline. Remote meetups use a
+  shared 45-minute simulated-time deadline; local-only meetups remain 15 minutes and the leader
+  staging limit remains 20 minutes. The shared 45–120-minute task still starts
+  on camp arrival, with its separate 30-minute camp travel window.
+
+### Removed
+
+- None.
+
 ## [0.58.0] - 2026-09-25
 
 ### Added

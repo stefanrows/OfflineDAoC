@@ -1,7 +1,7 @@
 # Autonomous bot behaviour roadmap
 
 Status: **M0–M6 implemented offline. M7 started: the first live review found blocking issues; see [AUTONOMOUS_BOT_M7_REVIEW.md](AUTONOMOUS_BOT_M7_REVIEW.md).**
-Last updated: 2026-09-24.
+Last updated: 2026-09-25.
 
 This roadmap covers the **autonomous gamebots**: the persistent population that
 levels, groups, and fights on its own. It does not cover the player's
@@ -325,13 +325,52 @@ change only while the server is stopped and apply at the next start.
 
 ### 5.6 Leveling flow (fixes F3–F5)
 
-- **Local groups first.** Ordinary PvE groups form from bots already in the
-  same region and level range. **Pickup groups across guilds** are allowed for
-  PvE (grouping makes members allies, as on Camlann). Cross-region travel is
-  kept for planned guild events: dungeon runs, roams, keep and relic
-  campaigns.
-- **Soft meetups.** A group starts once a minimum number has arrived; late
-  members join on the way. A no-show leaves the group without ending it.
+- **Pickup matching across realms.** Autonomous PvE pickup groups recruit
+  compatible bots across guilds and all three realms, preserving level, role,
+  group-size, and live-camp checks. Prefer at least one compatible bot from
+  another realm when its route is viable; choose remaining members by role fit
+  and feasible travel distance. Estimated meetup journeys are capped at 20
+  minutes, and realm diversity may add at most five minutes over a viable
+  nearby party. Player companions, raids, and RvR keep their recruitment rules.
+- **Camp before leader.** Compare up to two candidate camps in each of three
+  regions with eligible local leaders, considering suitable mobs, live crowding,
+  travel, recent depletion, familiar camps, and known deaths. Elect a nearby
+  reachable leader and stage in a connected safe town near the selected camp.
+  A local-region alternative stays in the shortlist. At most four planning
+  attempts, four town/leader navigation probes, four remote route probes, and
+  32 local applicant probes run per matchmaking pass; failed geometry gets a
+  brief retry delay so other camps and leaders can be considered.
+- **Town-route meetups.** A remote member walks or rides to an active
+  `AllRealmsTeleporter`, approaches within interaction distance, and uses a
+  validated town destination from the installed player-teleporter route data or
+  its fallback data. Choose arrival towns near the actual rendezvous and
+  validate every intervening zone crossing on both sides of the teleport.
+  Remote members start moving while the leader is still staging. Try bounded
+  alternative porters when the closest approach fails. Transfer only while
+  alive and out of combat, then walk to the formation slot. A missing porter,
+  destination, or usable route rejects the invitation or becomes a no-show;
+  there is no catch-up teleport.
+- **Meetup timing and camps.** Keep the group camp in the rendezvous region and
+  require it to be usable by every member. Keep the 20-minute leader staging
+  limit and 15-minute local-only meetup behavior. A group with remote members
+  gets a shared 45-simulated-minute meetup deadline that begins when the group
+  forms and appears in the Active Groups countdown. The
+  45–120-minute task starts when members arrive at camp, with a
+  separate 30-minute camp-travel window.
+- **Realm return after a group.** Active PvE parties take priority over automatic
+  return. Ordinary visitors remain where their activities leave them; town
+  breaks, changed status text, and save reloads do not reverse that decision.
+  Explicit post-RvR return intent lives in the existing saved eligibility field.
+  Arrival home completes the journey but still requires a completed PvE task
+  before another RvR tour. No save schema migration is needed.
+- **Productive parties continue.** A healthy ordinary PvE party that earned XP or
+  kills may renew once if no member needs training/inventory service, is reserved
+  for a raid, or is recovering from a wipe. It reconsiders live camps at its new
+  levels and starts another 45–120-minute task only on arrival, with the normal
+  30-minute travel deadline. Individual logout scheduling still applies.
+- **No-show cleanup.** Refresh roles immediately after departures. Preserve
+  attendance for members already present when removal changes formation slots,
+  including at the fixed 45-minute remote deadline.
 - **Groups survive deaths.** Low-level dead members release, run back, and
   rejoin, as real players did. A group ends only when it really cannot continue.
 - **Crowd-aware camps.** Outdoor camp choice gets a soft penalty for bots
@@ -558,7 +597,9 @@ two hours, bots were level 1–8. The review's phases A–D are the next work.
 Phase A (low-level bot safety, batched grudge writes, grudge and crowd-control
 limits, PvP-death handling, engagement diagnostics) is implemented offline in
 0.53.0. Phase B (local, travel-aware leveling and viable pickup groups) is
-implemented offline in 0.54.0. The owner run for both phases is pending.
+implemented offline in 0.54.0. Phase C (three-realm pickup matching, town
+teleporter rendezvous travel, and the remote meetup deadline) is implemented
+offline in 0.59.0. The owner run for phases A–C is pending.
 
 ## 7. Open questions
 

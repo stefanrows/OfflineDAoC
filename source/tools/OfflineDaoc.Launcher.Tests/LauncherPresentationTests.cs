@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.58.0"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.59.0"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -95,6 +95,30 @@ public sealed class LauncherPresentationTests
         mainFormType.GetMethod("BeginServerReadinessPolling", HiddenInstance)!.Invoke(form, null);
         Assert.That(readinessTimer.Enabled, Is.True, "Starting the server must arm the readiness probe.");
         readinessTimer.Stop();
+    }
+
+    [Test]
+    public void ActiveGroupMeetupCountdownUsesTheRemoteFortyFiveMinuteSimulationDeadline()
+    {
+        Type mainForm = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
+        Type botRow = mainForm.GetNestedType("BotRow", BindingFlags.NonPublic)!;
+        ConstructorInfo constructor = botRow.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Single(candidate => candidate.GetParameters().Length == 20);
+        DateTime simulationNow = new(2026, 9, 25, 12, 0, 0, DateTimeKind.Utc);
+        object row = constructor.Invoke(new object[]
+        {
+            42L, "RemoteBot", "Midgard", "Kobold", "Male", "Healer", 50, "Mularn", "Meeting up",
+            true, true, false, "group-1", "Meeting up", "Shared PvE", "Traveling to the town rendezvous",
+            "GroupPve", "assignment", "2026-09-25T12:00:00Z", "Meeting up"
+        });
+        botRow.GetProperty("SimulationUtcNow")!.SetValue(row, new Func<DateTime?>(() => simulationNow));
+        botRow.GetProperty("MeetUpDeadlineUtc")!.SetValue(row, "2026-09-25T12:45:00Z");
+
+        Assert.That(botRow.GetProperty("AssemblyRemainingMilliseconds")!.GetValue(row), Is.EqualTo(45 * 60_000L));
+        Assert.That(botRow.GetProperty("GroupTimerText")!.GetValue(row), Is.EqualTo("MEETUP LEFT: 45:00"));
+
+        simulationNow = simulationNow.AddMinutes(1.5);
+        Assert.That(botRow.GetProperty("GroupTimerText")!.GetValue(row), Is.EqualTo("MEETUP LEFT: 43:30"));
     }
 
     [TestCase(300.0, "5:00")]
