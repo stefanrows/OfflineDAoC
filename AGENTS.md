@@ -5,6 +5,16 @@ Read README.md, CHANGELOG.md, docs/DEVELOPMENT.md, and the relevant component's
 AGENTS.md before editing. Camlann conversion (in progress, tier by tier):
 docs/CAMLANN.md. Work only on the tier the owner asks for.
 
+## Bug and task tracking
+
+- Record bugs in `docs/BUGS.md`; record rapid-fire tasks, feature requests, and
+  ideas in `docs/TASKS.md`. Read the relevant tracker before working on an item.
+- Update tracked items as part of completing their work. Follow each tracker's
+  verification-pending and Finished rules; never leave completed items in Open.
+- Mark finished tasks Done with a brief result and completion version or date.
+  Keep work awaiting installation or real-client checks in the pending section.
+- Capturing an idea is not authorization to implement the rest of the backlog.
+
 ## Changelog and versioning
 
 This fork uses MAJOR.MINOR.PATCH. The launcher pin `DisplayVersion` and the

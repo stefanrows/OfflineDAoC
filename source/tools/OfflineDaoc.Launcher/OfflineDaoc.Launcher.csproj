@@ -18,6 +18,9 @@
     <Compile Include="../../server/GameServer/bots/autonomous/RealmEventRecordStore.cs" Link="Records/RealmEventRecordStore.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="Join Friend.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="Assets\offline-daoc-header.png"
                       LogicalName="OfflineDaoc.Launcher.Assets.offline-daoc-header.png" />
     <EmbeddedResource Include="Assets\offline-daoc-realm-shield.png"

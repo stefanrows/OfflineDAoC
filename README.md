@@ -19,11 +19,13 @@ Follow the included component licenses when modifying or redistributing code.
 ## Play / download
 
 - **Players:** [Download and play instructions](docs/PLAY.md).
+- **Co-op:** [Join a friend over Tailscale](docs/TAILSCALE_COOP.md).
 - **Everyday commands:** [Quick commands and bot-generation shortcuts](docs/QUICK-COMMANDS.md).
 - **Developers and LLM users:** [Fork and customize instructions](docs/LLM-QUICKSTART.md).
 - **Persistent companions:** Use `/companions` for the saved roster; see the [roadmap](docs/COMPANION_ROADMAP.md) for the implemented stages and remaining integration checks.
 - **Autonomous bots:** the [behaviour roadmap](docs/AUTONOMOUS_BOT_ROADMAP.md) tracks player types, guild charters, server population settings, and remaining milestones.
 - **Implemented gameplay and systems:** [Feature guide](FEATURES.md).
+- **Work tracking:** [Known bugs](docs/BUGS.md) and [tasks and ideas](docs/TASKS.md).
 - **This fork's changes:** [Changelog](CHANGELOG.md). The launcher pin
   (`DisplayVersion`) is this fork's version. The playable runtime is still the
   upstream v0.3 download.

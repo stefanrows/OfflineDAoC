@@ -12,6 +12,60 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-09-25
+
+### Added
+
+- A client-only Join Friend launcher mode (`--join` and a Windows shortcut) for
+  connecting to a host's Tailscale IPv4 address without starting the local
+  server or opening the local world save. Source implementation awaits a real
+  two-home client check.
+
+### Changed
+
+- Launcher deployment now installs `Join Friend.cmd` with backup and rollback
+  handling for the new file.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.59.2] - 2026-09-25
+
+### Added
+
+- A fast implementation plan for private two-home Tailscale co-op, with a
+  client-only guest launcher path and live verification in both hosting directions.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.59.1] - 2026-09-25
+
+### Added
+
+- A dedicated `docs/TASKS.md` for rapid-fire tasks and ideas, with open,
+  verification-pending, and finished states and explicit Done records.
+- Agent tracking rules and README links for the bug and task lists.
+
+### Changed
+
+- Moved the autonomous-bot dungeon review from the Tasks section in
+  `docs/BUGS.md` to `docs/TASKS.md`, preserving its scope and open status.
+
 ## [0.59.0] - 2026-09-25
 
 ### Added

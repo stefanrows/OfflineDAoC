@@ -11,6 +11,8 @@ internal static class Program
             return;
         }
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        Application.Run(args.Length == 1 && args[0] == "--join"
+            ? new JoinFriendForm()
+            : new MainForm());
     }
 }

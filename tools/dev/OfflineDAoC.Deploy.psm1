@@ -5,7 +5,8 @@ $script:LauncherFileNames = @(
     'OfflineDAoC.exe',
     'OfflineDAoC.pdb',
     'OfflineDAoC.deps.json',
-    'OfflineDAoC.runtimeconfig.json'
+    'OfflineDAoC.runtimeconfig.json',
+    'Join Friend.cmd'
 )
 $script:NativeFileNames = @(
     'SQLite.Interop.dll',
@@ -274,7 +275,7 @@ function Get-OfflineDaocDeployPlan {
             $relative = Join-Path 'runtime' $fileName
             $target = Join-Path $root $relative
             Assert-OfflineDaocPathUnderRoot -InstallRoot $root -Path $target | Out-Null
-            if (-not (Test-Path -LiteralPath $target)) {
+            if (-not (Test-Path -LiteralPath $target) -and $fileName -ne 'Join Friend.cmd') {
                 continue
             }
             if (-not $source) {
@@ -334,6 +335,15 @@ function Restore-OfflineDaocEntriesFromBackup {
             $temporary = $entry.Target + '.offline-daoc-new'
             if (Test-Path -LiteralPath $temporary) {
                 Remove-Item -LiteralPath $temporary -Force
+            }
+            if (-not $entry.InstalledHash) {
+                if (Test-Path -LiteralPath $entry.Target) {
+                    Remove-Item -LiteralPath $entry.Target -Force
+                }
+                if (Test-Path -LiteralPath $entry.Target) {
+                    throw 'new file remained after rollback'
+                }
+                continue
             }
             if ((Get-OfflineDaocFileHash $entry.Target) -eq $entry.InstalledHash) {
                 continue
@@ -413,12 +423,14 @@ function Invoke-OfflineDaocDeploy {
         foreach ($entry in $replace) {
             Assert-OfflineDaocPathUnderRoot -InstallRoot $root -Path $entry.Target | Out-Null
             Assert-OfflineDaocPathUnderRoot -InstallRoot $root -Path (Join-Path $root $entry.Relative) | Out-Null
-            $copy = Join-Path $backupRoot $entry.Relative
-            New-Item -ItemType Directory -Path (Split-Path -Parent $copy) -Force | Out-Null
-            Copy-Item -LiteralPath $entry.Target -Destination $copy
-            if ((Get-OfflineDaocFileHash $copy) -ne $entry.InstalledHash) {
-                Remove-Item -LiteralPath $copy -Force -ErrorAction SilentlyContinue
-                throw "Backup verification failed for $($entry.Relative)"
+            if ($entry.InstalledHash) {
+                $copy = Join-Path $backupRoot $entry.Relative
+                New-Item -ItemType Directory -Path (Split-Path -Parent $copy) -Force | Out-Null
+                Copy-Item -LiteralPath $entry.Target -Destination $copy
+                if ((Get-OfflineDaocFileHash $copy) -ne $entry.InstalledHash) {
+                    Remove-Item -LiteralPath $copy -Force -ErrorAction SilentlyContinue
+                    throw "Backup verification failed for $($entry.Relative)"
+                }
             }
             $backedUp += $entry
         }

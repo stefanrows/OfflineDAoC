@@ -2,9 +2,15 @@
 
 Track confirmed, unresolved bugs here. Include the affected version, steps to reproduce, expected and actual behavior, impact, and any workaround. Fixes are handled in a separate task unless noted below. When a bug is fixed and its required verification is complete, move it out of its current section into **Finished** immediately, recording a brief resolution and version. Do not leave completed items in **Open**. If a source fix still awaits installation or real-client verification, keep it under **Fixed in source; installation verification pending** until that check is complete.
 
+Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
+
 ## Open
 
-None.
+1. **`/gc form` does nothing with a full group.** Reproduce with eight people in the group and run `/gc form`. Expected: the command performs its form action. Actual: nothing happens, even with all eight group slots filled. Affected version and workaround were not provided.
+2. **Hasteners do not always work.** Expected: hasteners consistently apply their intended effect. Actual: they appear to work inconsistently; the specific class, ability, and situation have not been recorded. Affected version and workaround were not provided.
+3. **Companions get stuck atop the Midgard Darkness Falls entrance stairs.** Reproduce by bringing companions to the Midgard Darkness Falls entrance and moving them over its three large stairs. Expected: they navigate the stairs and continue following. Actual: they get stuck on top of the stairs. Affected version and workaround were not provided.
+4. **Tank companions may not use styles or their specced weapons.** Reproduce by observing a tank companion in combat and checking its equipped weapon against its weapon specialization. Expected: tanks use their available weapon styles and equip a weapon matching their specialization. Actual: they appear to attack without styles; whether their equipped weapons match their specialization has not been checked. Affected version and workaround were not provided.
+5. **Some helmets render oversized or glitched.** Expected: equipped helmets display at the correct scale and appearance. Actual: some helmets appear oversized and visually buggy; the affected items and viewing context have not been recorded. Affected version and workaround were not provided.
 
 ## Fixed in source; installation verification pending
 
