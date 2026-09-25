@@ -2165,7 +2165,7 @@ namespace DOL.GS
                 if (Level >= 48)
                     return 1;
 
-                TimeSpan t = new TimeSpan((long)(DateTime.Now.Ticks - LastFreeLeveled.Ticks));
+                TimeSpan t = new TimeSpan((long)(WorldSimulationClock.LocalNow.Ticks - LastFreeLeveled.Ticks));
                 if (t.Days >= freelevel_days)
                 {
                     if (Level >= LastFreeLevel + 2)

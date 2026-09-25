@@ -340,6 +340,11 @@ namespace DOL.GS
 					return false;
 
 				//---------------------------------------------------------------
+				// Initialize gameplay UTC before loading world actors and deadlines.
+				if (!InitComponent(() => WorldSimulationClock.Initialize(Database), "World Simulation Clock"))
+					return false;
+
+				//---------------------------------------------------------------
 				//Try to init the RSA key
 				/* No Cryptlib currently
 					if (log.IsInfoEnabled)
@@ -517,11 +522,20 @@ namespace DOL.GS
 
 				//---------------------------------------------------------------
 				//Try to start the base server (open server port for connections)
-				if (!InitComponent(base.Start(), "base.Start()"))
+				if (!InitComponent(OfflineWorldSpeedControl.Initialize(), "Offline World Speed Control"))
 					return false;
 
-				if (!InitComponent(GameLoop.Init(), "GameLoop Init"))
+				if (!InitComponent(base.Start(), "base.Start()"))
+				{
+					OfflineWorldSpeedControl.Stop();
 					return false;
+				}
+
+				if (!InitComponent(GameLoop.Init(), "GameLoop Init"))
+				{
+					OfflineWorldSpeedControl.Stop();
+					return false;
+				}
 
 				if (!InitComponent(StatPrint.Init(), "StatPrint Init"))
 					return false;
@@ -1036,6 +1050,7 @@ namespace DOL.GS
 				log.Info("No longer accepting incoming connections");
 
 			GameLoop.Exit();
+			OfflineWorldSpeedControl.Stop();
 			GameEventMgr.Notify(ScriptEvent.Unloaded);
 			GameEventMgr.Notify(GameServerEvent.Stopped, this);
 			GameEventMgr.RemoveAllHandlers();

@@ -20,9 +20,13 @@ namespace DOL.GS
         private static GameLoopTickPacer _tickPacer;
         private static bool _running;
         private static List<TickStep> _tickSequence;
+        private static int _logicalTimeRemainder;
+        private static double _tickBudgetMilliseconds;
 
         public static double TickDuration { get; private set; }
         public static long GameLoopTime { get; private set; }
+        public static double TickBudgetMilliseconds => Volatile.Read(ref _tickBudgetMilliseconds);
+        public static double SelectedTickBudgetMilliseconds => TickDuration / Math.Max(1, OfflineWorldSpeedControl.SelectedMultiplier);
         public static string ActiveService { get; set; }
 
         public static bool Init()
@@ -31,6 +35,9 @@ namespace DOL.GS
                 return false;
 
             TickDuration = 1000.0 / Properties.GAME_LOOP_TICK_RATE;
+            GameLoopTime = 0;
+            _logicalTimeRemainder = 0;
+            _tickBudgetMilliseconds = TickDuration;
 
             _gameLoopThread = new(new ThreadStart(Run))
             {
@@ -59,6 +66,24 @@ namespace DOL.GS
         public static List<(int, double)> GetAverageTps()
         {
             return _tickPacer.Stats.GetAverageTicks();
+        }
+
+        public static void NotifySpeedChanged()
+        {
+            _tickPacer?.PaceChanged();
+        }
+
+        public static int CalculateLogicalTickDeltaMilliseconds(int logicalTicksPerSecond, ref int remainder)
+        {
+            if (logicalTicksPerSecond <= 0)
+                throw new ArgumentOutOfRangeException(nameof(logicalTicksPerSecond));
+            if (remainder < 0 || remainder >= logicalTicksPerSecond)
+                throw new ArgumentOutOfRangeException(nameof(remainder));
+
+            int accumulatedMilliseconds = remainder + 1000;
+            int deltaMilliseconds = accumulatedMilliseconds / logicalTicksPerSecond;
+            remainder = accumulatedMilliseconds % logicalTicksPerSecond;
+            return deltaMilliseconds;
         }
 
         public static void ExecuteForEach<T>(List<T> items, int toExclusive, Action<T> action)
@@ -90,8 +115,13 @@ namespace DOL.GS
             {
                 try
                 {
+                    OfflineWorldSpeedControl.RefreshClientCount(ClientService.Instance.ClientCount);
+                    int effectiveMultiplier = OfflineWorldSpeedControl.EffectiveMultiplier;
+                    Volatile.Write(ref _tickBudgetMilliseconds, TickDuration / Math.Max(1, effectiveMultiplier));
                     TickServices();
-                    GameLoopTime = _tickPacer.WaitForNextTick();
+                    AdvanceCompletedTick();
+                    OfflineWorldSpeedControl.RecordCompletedLogicalTick();
+                    _tickPacer.WaitForNextTick(() => OfflineWorldSpeedControl.EffectiveMultiplier);
                 }
                 catch (Exception e)
                 {
@@ -105,6 +135,14 @@ namespace DOL.GS
 
             if (log.IsInfoEnabled)
                 log.Info($"Thread \"{Thread.CurrentThread.Name}\" is stopping");
+        }
+
+        private static void AdvanceCompletedTick()
+        {
+            int deltaMilliseconds = CalculateLogicalTickDeltaMilliseconds(Properties.GAME_LOOP_TICK_RATE, ref _logicalTimeRemainder);
+
+            WorldSimulationClock.AdvanceMilliseconds(deltaMilliseconds);
+            GameLoopTime += deltaMilliseconds;
         }
 
         private static void TickServices()

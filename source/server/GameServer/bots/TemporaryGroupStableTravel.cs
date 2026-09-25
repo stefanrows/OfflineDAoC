@@ -108,7 +108,7 @@ public static class TemporaryGroupStableTravel
     public static void MarkAcceptedPlayerTransfer(GamePlayer player)
     {
         if (player != null)
-            PendingPlayerTransfers[player] = DateTime.UtcNow;
+            PendingPlayerTransfers[player] = WorldSimulationClock.UtcNow;
     }
 
     private static void StartMirroredStableRoute(GamePlayer player, PathPoint route, DbItemTemplate ticket)
@@ -120,7 +120,7 @@ public static class TemporaryGroupStableTravel
             !AutonomousStableRoutePlanner.TryMeasureRide(route, out _, out double rideSeconds))
             return;
 
-        DateTime started = DateTime.UtcNow;
+        DateTime started = WorldSimulationClock.UtcNow;
         GameBot[] eligible = player.Group.GetMembersInTheGroup()
             .OfType<GameBot>()
             .Where(bot => IsEligibleForMirroredRide(
@@ -248,7 +248,7 @@ public static class TemporaryGroupStableTravel
     {
         if (player == null || !PendingPlayerTransfers.TryGetValue(player, out DateTime markedUtc))
             return false;
-        if (DateTime.UtcNow - markedUtc <= TransferMarkerLifetime)
+        if (WorldSimulationClock.UtcNow - markedUtc <= TransferMarkerLifetime)
             return true;
         PendingPlayerTransfers.TryRemove(player, out _);
         return false;
@@ -293,7 +293,7 @@ public static class TemporaryGroupStableTravel
             if (!ActiveRoutes.TryGetValue(monitor.Player, out RouteMonitor current) || current != monitor)
                 return;
 
-            DateTime now = DateTime.UtcNow;
+            DateTime now = WorldSimulationClock.UtcNow;
             bool playerStillRiding = monitor.Player.ObjectState is GameObject.eObjectState.Active &&
                                      monitor.Player.IsAlive && monitor.Player.Steed != null && monitor.Player.IsOnHorse;
             bool routeMayHaveFinished = now >= monitor.ExpectedArrivalUtc;

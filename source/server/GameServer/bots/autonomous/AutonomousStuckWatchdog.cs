@@ -136,7 +136,7 @@ public static class AutonomousStuckWatchdog
             return true;
         }
 
-        return RelocateToSafeCapital(bot, DateTime.UtcNow, $"login position invalid: {reason}", false);
+        return RelocateToSafeCapital(bot, WorldSimulationClock.UtcNow, $"login position invalid: {reason}", false);
     }
 
     public static bool ShouldRecoverMovement(
@@ -191,7 +191,7 @@ public static class AutonomousStuckWatchdog
         if (bot?.IsAutonomousWorldBot != true || bot.DatabaseID <= 0)
             return;
 
-        DateTime now = nowUtc ?? DateTime.UtcNow;
+        DateTime now = nowUtc ?? WorldSimulationClock.UtcNow;
         Observations.TryAdd(bot.DatabaseID, Capture(bot, now));
         GoalObservations.TryAdd(bot.DatabaseID, new GoalObservation
         {
@@ -219,7 +219,7 @@ public static class AutonomousStuckWatchdog
         if (bot?.IsAutonomousWorldBot != true || bot.DatabaseID <= 0 || bot.PersistentRecord == null)
             return;
 
-        DateTime now = nowUtc ?? DateTime.UtcNow;
+        DateTime now = nowUtc ?? WorldSimulationClock.UtcNow;
         Observation current = Capture(bot, now);
         Observation observation = Observations.GetOrAdd(bot.DatabaseID, current);
         CopyOutcomeSnapshot(observation, current);
@@ -252,7 +252,7 @@ public static class AutonomousStuckWatchdog
             bot.ObjectState != GameObject.eObjectState.Active)
             return false;
 
-        DateTime now = nowUtc ?? DateTime.UtcNow;
+        DateTime now = nowUtc ?? WorldSimulationClock.UtcNow;
         // The stable route is the authoritative mover. Do not mesh-snap or
         // relocate a rider while the horse is traversing route geometry.
         if (bot.IsProtectedStableMasterTravel(now))

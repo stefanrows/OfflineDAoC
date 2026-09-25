@@ -527,7 +527,7 @@ namespace DOL.GS
             if (!RealmExchangeBroker.IsExchangeOwnerLot(ownerLot))
                 return [];
             search.realm = eRealm.None;
-            return ApplyFilters(GetInitialCandidates(search).Where(item => item.OwnerLot == ownerLot && !RealmExchangeExpiry.IsExpired(item, DateTime.UtcNow)), search)
+            return ApplyFilters(GetInitialCandidates(search).Where(item => item.OwnerLot == ownerLot && !RealmExchangeExpiry.IsExpired(item, WorldSimulationClock.UtcNow)), search)
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.SellPrice)
                 .ThenBy(item => item.ObjectId, StringComparer.Ordinal)

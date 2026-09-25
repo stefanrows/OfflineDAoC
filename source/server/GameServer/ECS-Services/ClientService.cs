@@ -26,7 +26,7 @@ namespace DOL.GS
         private GameClient[] _clientsBySessionId = new GameClient[ushort.MaxValue];
         private Trie<GamePlayer> _playerNameTrie = new();
 
-        public int ClientCount => _clientCount;
+        public int ClientCount => Volatile.Read(ref _clientCount);
         public static ClientService Instance { get; }
 
         static ClientService()
@@ -187,17 +187,33 @@ namespace DOL.GS
             _clientsBySessionId[client.SessionId.Value] = client;
 
             if (ServiceObjectStore.Add(client))
-                Interlocked.Increment(ref _clientCount);
-            else if (log.IsWarnEnabled)
             {
-                ServiceObjectId serviceObjectId = client.ServiceObjectId;
-                log.Warn($"{nameof(OnClientConnect)} was called but the client couldn't be added to the entity manager." +
-                    $"(Client: {client})" +
-                    $"(IsIdSet: {serviceObjectId.IsSet})" +
-                    $"(IsPendingAddition: {serviceObjectId.IsPendingAddition})" +
-                    $"(IsPendingRemoval: {serviceObjectId.IsPendingAddition})" +
-                    $"\n{Environment.StackTrace}");
+                Interlocked.Increment(ref _clientCount);
+                OfflineWorldSpeedControl.OnClientRegistrationCompleted(client, ClientCount);
             }
+            else
+            {
+                if (log.IsWarnEnabled)
+                {
+                    ServiceObjectId serviceObjectId = client.ServiceObjectId;
+                    log.Warn($"{nameof(OnClientConnect)} was called but the client couldn't be added to the entity manager." +
+                        $"(Client: {client})" +
+                        $"(IsIdSet: {serviceObjectId.IsSet})" +
+                        $"(IsPendingAddition: {serviceObjectId.IsPendingAddition})" +
+                        $"(IsPendingRemoval: {serviceObjectId.IsPendingAddition})" +
+                        $"\n{Environment.StackTrace}");
+                }
+
+                try
+                {
+                    client.Disconnect();
+                }
+                finally
+                {
+                    OfflineWorldSpeedControl.OnClientDisconnected(client, ClientCount);
+                }
+            }
+
         }
 
         public void OnClientDisconnect(GameClient client)
@@ -221,6 +237,8 @@ namespace DOL.GS
                          $"(IsPendingRemoval: {serviceObjectId.IsPendingAddition})" +
                          $"\n{Environment.StackTrace}");
             }
+
+            OfflineWorldSpeedControl.OnClientDisconnected(client, ClientCount);
         }
 
         public void OnPlayerJoin(GamePlayer player)

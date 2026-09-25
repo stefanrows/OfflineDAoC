@@ -120,7 +120,7 @@ public static class AutonomousPlayerPilot
         }
 
         PilotState state = new(player) { Quickbar = quickbar };
-        CaptureProgress(state, DateTime.UtcNow);
+        CaptureProgress(state, WorldSimulationClock.UtcNow);
         if (!Pilots.TryAdd(player, state))
             return true;
 
@@ -252,7 +252,7 @@ public static class AutonomousPlayerPilot
 
             if (player.Steed != null || player.IsOnHorse)
             {
-                CaptureProgress(state, DateTime.UtcNow);
+                CaptureProgress(state, WorldSimulationClock.UtcNow);
                 StopPilotMovement(player);
                 SetGoal(state, "Traveling by stable route", "Waiting for the real horse path to finish");
                 DrawHud(state);
@@ -577,7 +577,7 @@ public static class AutonomousPlayerPilot
         {
             state.ReleaseRequested = true;
             player.Release(eReleaseType.Normal, true);
-            CaptureProgress(state, DateTime.UtcNow);
+            CaptureProgress(state, WorldSimulationClock.UtcNow);
         }
         DrawHud(state);
     }
@@ -585,7 +585,7 @@ public static class AutonomousPlayerPilot
     private static bool ObserveProgressAndRecover(PilotState state)
     {
         GamePlayer player = state.Player;
-        DateTime now = DateTime.UtcNow;
+        DateTime now = WorldSimulationClock.UtcNow;
         long dx = (long)player.X - state.ProgressX;
         long dy = (long)player.Y - state.ProgressY;
         long dz = (long)player.Z - state.ProgressZ;

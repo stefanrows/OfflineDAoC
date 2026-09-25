@@ -97,7 +97,7 @@ namespace DOL.GS
 				GameInventoryItem trophy = new GameInventoryItem(template);
                 player.Inventory.AddItem(eInventorySlot.FirstEmptyBackpack, trophy);
 				OwnerGuild.SendMessageToGuildMembers(player.Name + " of " + GlobalConstants.RealmToName(player.Realm) + " has captured your guild banner!", eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
-				OwnerGuild.GuildBannerLostTime = DateTime.Now;
+				OwnerGuild.GuildBannerLostTime = WorldSimulationClock.LocalNow;
 			}
 			else
 			{

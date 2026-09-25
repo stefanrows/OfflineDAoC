@@ -359,7 +359,7 @@ public static class AutonomousBotChatCoordinator
         if (victim == null || PvpCombatant.IsSafeArea(victim) ||
             identity is not GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false } bot ||
             PvpCombatant.AreAllied(bot, victim) ||
-            !AutonomousGuildGrudgeMemory.IsWorthTarget(victim, DateTime.UtcNow))
+            !AutonomousGuildGrudgeMemory.IsWorthTarget(victim, WorldSimulationClock.UtcNow))
             return;
 
         AutonomousPlayerType type = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord);

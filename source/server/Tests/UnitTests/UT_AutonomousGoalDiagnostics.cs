@@ -87,6 +87,21 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void ExpiryClassificationUsesSimulationDeadlineWhileRecordingWallUtc()
+        {
+            var attempt = Attempt();
+            DateTime wallEnded = attempt.StartedUtc.AddMinutes(10);
+            object result = attempt.Finish(GoalAttemptEnd.Reassigned, "expiry", wallEnded,
+                200, 1, 2, 3, attempt.ExpiresUtc.AddSeconds(1));
+            using JsonDocument json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+            Assert.Multiple(() =>
+            {
+                Assert.That(json.RootElement.GetProperty("reason").GetString(), Is.EqualTo("Expired"));
+                Assert.That(json.RootElement.GetProperty("endedUtc").GetDateTime(), Is.EqualTo(wallEnded));
+            });
+        }
+
+        [Test]
         public void SuccessfulRecoveryIsNotReportedAsTerminalRouteFailure()
         {
             var attempt = Attempt();

@@ -9,6 +9,7 @@ namespace DOL.GS;
 public static class RealmExchangeExpiry
 {
     public static readonly TimeSpan BotListingLifetime = TimeSpan.FromHours(24);
+    public const int SweepIntervalMilliseconds = 20_000;
     private static Timer _timer;
     private static int _running;
     public static DateTime? ExpiresUtc(DbInventoryItem item) =>
@@ -35,16 +36,18 @@ public static class RealmExchangeExpiry
         {
             if (!RealmExchangeBroker.IsExchangeOwnerLot(item.OwnerLot) ||
                 !AutonomousBotEconomy.TryParseOwnerId(item.OwnerID, out _) || ExpiresUtc(item) != null) continue;
-            item.RealmExchangeListedUtc = DateTime.UtcNow.ToString("O");
+            item.RealmExchangeListedUtc = WorldSimulationClock.UtcNow.ToString("O");
             GameServer.Database.SaveObject(item);
         }
-        _timer ??= new Timer(_ => Sweep(), null, 60_000, 60_000);
+        // The sweep is bounded to 200 writes. Twenty real seconds keeps its
+        // maximum lag within one simulated minute at the supported 3x rate.
+        _timer ??= new Timer(_ => Sweep(), null, SweepIntervalMilliseconds, SweepIntervalMilliseconds);
     }
 
     private static void Sweep()
     {
         if (Interlocked.Exchange(ref _running, 1) != 0) return;
-        try { ExpireDue(DateTime.UtcNow); }
+        try { ExpireDue(WorldSimulationClock.UtcNow); }
         catch (Exception error) { Logging.LoggerManager.Create(typeof(RealmExchangeExpiry)).Error("Realm Exchange expiry sweep failed; retained remaining items.", error); }
         finally { Volatile.Write(ref _running, 0); }
     }

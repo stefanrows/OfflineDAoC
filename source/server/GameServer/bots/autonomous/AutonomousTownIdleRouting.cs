@@ -59,7 +59,7 @@ namespace DOL.GS
         private bool HandleTownIdle(BotBrain brain, GameBot bot)
         {
             if (_townIdleFinished) return false;
-            DateTime now = DateTime.UtcNow;
+            DateTime now = WorldSimulationClock.UtcNow;
             if (!DateTime.TryParse(bot.PersistentRecord.ObjectiveExpiresUtc, null,
                 System.Globalization.DateTimeStyles.RoundtripKind, out DateTime deadline))
                 return FinishTownIdle(bot, "Invalid maintenance deadline");
@@ -153,7 +153,7 @@ namespace DOL.GS
 
             if (!IsInsideIdleTown(bot, selected))
                 return FinishTownIdle(bot, "Arrival is outside the safe area");
-            DateTime arrived = DateTime.UtcNow;
+            DateTime arrived = WorldSimulationClock.UtcNow;
             TimeSpan? duration = AutonomousTownDowntime.RollWithinBudget(deadline - arrived);
             if (!duration.HasValue)
                 return FinishTownIdle(bot, "Travel left insufficient time for the minimum break");

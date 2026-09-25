@@ -198,7 +198,7 @@ public static partial class AutonomousBotGroupCoordinator
                 // the fight too. The remaining warband retains its own task.
                 if (bot.Group == currentSession.Group && currentSession.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
                     bot.IsAlive && !bot.InCombat && !bot.IsAttacking &&
-                    AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, DateTime.UtcNow))
+                    AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow))
                     currentSession.Group.RemoveMember(bot, retainSingleRemainingMember: true);
             }
             if (bot.Group == null)
@@ -1132,7 +1132,7 @@ public static partial class AutonomousBotGroupCoordinator
                             session.Camp = null;
                             session.Attendance.Reset();
                             session.LeaderStagingDeadlineTick = GameLoop.GameLoopTime + LeaderStagingTimeoutMilliseconds;
-                            session.LeaderStagingDeadlineUtc = DateTime.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds);
+                            session.LeaderStagingDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds);
                             if (TryBuildRendezvousSlots(session, remaining))
                                 WriteSessionMetadata(session, remaining);
                             else
@@ -1265,7 +1265,7 @@ public static partial class AutonomousBotGroupCoordinator
                     continue;
                 }
                 DateTime started = FormationWaitStartedUtc(leader);
-                TimeSpan waited = started == DateTime.MinValue ? TimeSpan.Zero : DateTime.UtcNow - started;
+                TimeSpan waited = started == DateTime.MinValue ? TimeSpan.Zero : WorldSimulationClock.UtcNow - started;
                 rolledSize = AutonomousPlayerBehavior.ChooseRvrGroupSize(
                     AutonomousPlayerBehavior.TypeOf(leader.PersistentRecord), leader.Level,
                     compatibleMaximum, Random.Shared.NextDouble(), waited);
@@ -1336,8 +1336,8 @@ public static partial class AutonomousBotGroupCoordinator
             Sessions[group] = session;
             GameBot[] formedMembers = BotMembers(group);
             DateTime formationStarted = formedMembers.Select(FormationWaitStartedUtc)
-                .Where(started => started != DateTime.MinValue).DefaultIfEmpty(DateTime.UtcNow).Min();
-            int formationWaitSeconds = (int)Math.Max(0, (DateTime.UtcNow - formationStarted).TotalSeconds);
+                .Where(started => started != DateTime.MinValue).DefaultIfEmpty(WorldSimulationClock.UtcNow).Min();
+            int formationWaitSeconds = (int)Math.Max(0, (WorldSimulationClock.UtcNow - formationStarted).TotalSeconds);
             foreach (GameBot member in formedMembers)
                 LastFormationAttemptTick.Remove(MemberKey(member));
             WriteSessionMetadata(session, formedMembers);
@@ -1359,7 +1359,7 @@ public static partial class AutonomousBotGroupCoordinator
     private static void LogFormationBlocked(GameBot bot, eAutonomousObjectiveKind objectiveKind, string reason)
     {
         DateTime started = FormationWaitStartedUtc(bot);
-        double waitedSeconds = started == DateTime.MinValue ? 0 : Math.Max(0, (DateTime.UtcNow - started).TotalSeconds);
+        double waitedSeconds = started == DateTime.MinValue ? 0 : Math.Max(0, (WorldSimulationClock.UtcNow - started).TotalSeconds);
         Log.Info($"AUTONOMOUS_MATCHMAKING_BLOCKED bot=\"{bot.Name}\" id={bot.DatabaseID} objective={objectiveKind} " +
                  $"crew=\"{bot.Guild?.Name ?? "unassigned"}\" waitedSeconds={(int)waitedSeconds} reason=\"{reason}\"");
     }
@@ -1389,7 +1389,7 @@ public static partial class AutonomousBotGroupCoordinator
             ObjectiveKind = objectiveKind,
             RendezvousRegion = rendezvousRegion,
             LeaderStagingDeadlineTick = GameLoop.GameLoopTime + LeaderStagingTimeoutMilliseconds,
-            LeaderStagingDeadlineUtc = DateTime.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds),
+            LeaderStagingDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds),
         };
         if (!TryBuildRendezvousSlots(session, BotMembers(group)))
             return null;
@@ -1772,7 +1772,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     private static void StartTaskClock(Session session, GameBot[] members)
     {
-        if (!session.TaskClock.Start(GameLoop.GameLoopTime, DateTime.UtcNow))
+        if (!session.TaskClock.Start(GameLoop.GameLoopTime, WorldSimulationClock.UtcNow))
             return;
         Log.Info($"AUTONOMOUS_GROUP_TASK_STARTED group={session.Id} objective={session.ObjectiveKind} " +
                  $"size={members.Length} remainingSeconds={session.TaskClock.RemainingMilliseconds(GameLoop.GameLoopTime) / 1000} " +
@@ -1842,7 +1842,7 @@ public static partial class AutonomousBotGroupCoordinator
             session.LeaderReadyForAssembly = false;
             session.Attendance.Reset();
             session.LeaderStagingDeadlineTick = now + LeaderStagingTimeoutMilliseconds;
-            session.LeaderStagingDeadlineUtc = DateTime.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds);
+            session.LeaderStagingDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds);
             if (!TryBuildRendezvousSlots(session, remaining))
             {
                 FinishGroupTask(session, "The replacement meetup leader has no valid formation staging point");

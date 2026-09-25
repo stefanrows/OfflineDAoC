@@ -137,7 +137,7 @@ namespace DOL.GS
 
         public static int GetDaysSinceCapture(GameRelic relic)
         {
-            TimeSpan daysPassed = DateTime.Now.Subtract(relic.LastCaptureDate);
+            TimeSpan daysPassed = WorldSimulationClock.LocalNow.Subtract(relic.LastCaptureDate);
             return daysPassed.Days;
         }
 

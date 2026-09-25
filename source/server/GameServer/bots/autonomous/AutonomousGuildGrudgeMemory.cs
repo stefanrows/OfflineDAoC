@@ -338,7 +338,7 @@ public static class AutonomousGuildGrudgeMemory
                 return;
             try
             {
-                DateTime now = DateTime.UtcNow;
+                DateTime now = WorldSimulationClock.UtcNow;
                 IList<AutonomousGuildGrudgeRecord> records;
                 lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                     records = DOLDB<AutonomousGuildGrudgeRecord>.SelectAllObjects();

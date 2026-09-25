@@ -1126,7 +1126,7 @@ namespace DOL.GS
 
 		public bool ShouldGuildBuffExpire()
 		{
-			return DateTime.Now.Subtract(BonusStartTime).Days > 0;
+			return WorldSimulationClock.LocalNow.Subtract(BonusStartTime).Days > 0;
 		}
 
 		public enum ChangeBankResult

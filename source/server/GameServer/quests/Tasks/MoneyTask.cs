@@ -166,7 +166,7 @@ namespace DOL.GS.Quests
                 DbInventoryItem TaskItems = GenerateNPCItem(NPC.Name, player.Level);
                 
                 player.GameTask = new MoneyTask(player);
-                player.GameTask.TimeOut = DateTime.Now.AddHours(2);
+                player.GameTask.TimeOut = WorldSimulationClock.LocalNow.AddHours(2);
                 player.GameTask.ItemName = TaskItems.Name;
                 player.GameTask.ReceiverName = NPC.Name;
                 ((MoneyTask)player.GameTask).RecieverZone = NPC.CurrentZone.Description;

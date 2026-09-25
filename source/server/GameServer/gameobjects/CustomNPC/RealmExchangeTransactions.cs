@@ -103,6 +103,6 @@ public sealed partial class RealmExchangeBroker
 
     internal static bool IsAvailableListing(DbInventoryItem item, eRealm realm) =>
         item != null && item.IsTradable && item.SellPrice > 0 && item.OwnerLot == GetOwnerLot(realm) &&
-        !RealmExchangeExpiry.IsExpired(item, DateTime.UtcNow) &&
+        !RealmExchangeExpiry.IsExpired(item, WorldSimulationClock.UtcNow) &&
         MarketCache.SearchItems(new ItemQuery { Owner = item.OwnerID }).Any(listing => ReferenceEquals(listing, item));
 }

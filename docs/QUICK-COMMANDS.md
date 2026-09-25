@@ -23,6 +23,15 @@ and total-roster cap control later level-1 additions to managed guilds.
 The launcher gives a numeric size recommendation only after this PC records
 stable samples at 500, 1,000, and 1,500 active bots.
 
+## World Speed while away
+
+With the server running, use the launcher's **World Speed** control to choose
+1×, 2×, or 3×. Autonomous bots still travel, fight, recover, and earn their
+normal per-event rewards in the live world. A connected game client makes the
+server run at 1×; the chosen speed resumes five seconds after the last client
+disconnects. The launcher shows the speed actually achieved if the PC cannot
+keep up. Each server start selects 1× again.
+
 ## Travel and finding mobs
 
 | Command | What it does |

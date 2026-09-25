@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-09-25
+
+### Added
+
+- World Speed control in the launcher for 1×, 2×, and 3× live-world simulation while no game client is connected, with selected, effective, and achieved speed status.
+
+### Changed
+
+- Gameplay clocks and saved deadlines advance with completed world ticks at the selected speed. A connecting client restores 1×; the selected speed resumes after the last client disconnects. Each server start selects 1×.
+- Simulated time is checkpointed with the local save and resumes through server downtime at 1×.
+
+### Fixed
+
+- Launcher bot-task and bot-auction countdowns use simulated time during and after accelerated sessions.
+
+### Removed
+
+- None.
+
 ## [0.56.0] - 2026-09-24
 
 ### Added

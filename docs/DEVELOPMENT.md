@@ -62,6 +62,23 @@ Report build, merge/push, and deployment outcomes separately. Ordinary developme
 requests do not deploy. The full test and setup commands below are reference
 instructions for explicitly requested validation, not shipping gates.
 
+## Offline World Speed
+
+The launcher can request 1×, 2×, or 3× world speed for a running local server.
+The game loop retains its 30 Hz logical tick and runs complete ticks at a
+shorter real interval; overload slows actual progress rather than skipping
+ticks. Any connected client forces 1×, and the selected speed resumes five
+seconds after the last disconnect. A new server session always selects 1×.
+The launcher's achieved-speed reading is measured, not an XP multiplier.
+
+Gameplay UTC is derived from completed world ticks. Operational timestamps
+(logs, request freshness, and backups) remain real UTC. A versioned clock
+checkpoint in the save's `offline_local_options` row keeps gameplay deadlines
+continuous through restarts; downtime advances those deadlines at 1×. Keep
+this row with the save when making backups or restoring progress. The local
+`world-speed.request.json` and `world-speed.status.json` files are transient
+launcher/server control and status, not save data.
+
 ## Build (does not deploy or start the server)
 
 For the owner's WSL2 + Windows setup (install location, SDKs, baseline,

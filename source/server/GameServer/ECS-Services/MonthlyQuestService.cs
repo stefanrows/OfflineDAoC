@@ -34,20 +34,20 @@ namespace DOL.GS
         public override void Tick()
         {
             // This is where the weekly check will go once testing is finished.
-            if (_lastMonthlyRollover.Date.Month < DateTime.Now.Date.Month || _lastMonthlyRollover.Year < DateTime.Now.Year)
+            if (_lastMonthlyRollover.Date.Month < WorldSimulationClock.LocalNow.Date.Month || _lastMonthlyRollover.Year < WorldSimulationClock.LocalNow.Year)
             {
                 DbTaskRefreshInterval loadQuestsProp = GameServer.Database.SelectObject<DbTaskRefreshInterval>(DB.Column("RolloverInterval").IsEqualTo(MONTHLY_INTERVAL_KEY));
 
                 // Update the one we've got, or make a new one.
                 if (loadQuestsProp != null)
                 {
-                    loadQuestsProp.LastRollover = DateTime.Now;
+                    loadQuestsProp.LastRollover = WorldSimulationClock.LocalNow;
                     GameServer.Database.SaveObject(loadQuestsProp);
                 }
                 else
                 {
                     DbTaskRefreshInterval newTime = new();
-                    newTime.LastRollover = DateTime.Now;
+                    newTime.LastRollover = WorldSimulationClock.LocalNow;
                     newTime.RolloverInterval = MONTHLY_INTERVAL_KEY;
                     GameServer.Database.AddObject(newTime);
                 }
@@ -67,7 +67,7 @@ namespace DOL.GS
                     return;
                 }
 
-                _lastMonthlyRollover = DateTime.Now;
+                _lastMonthlyRollover = WorldSimulationClock.LocalNow;
 
                 for (int i = 0; i < lastValidIndex + 1; i++)
                 {

@@ -83,6 +83,12 @@ public sealed class UT_RealmExchangeExpiry
     }
 
     [Test]
+    public void ExpirySweepIntervalStaysWithinOneSimulatedMinuteAtThreeTimes()
+    {
+        Assert.That(RealmExchangeExpiry.SweepIntervalMilliseconds * 3, Is.LessThanOrEqualTo(TimeSpan.FromMinutes(1).TotalMilliseconds));
+    }
+
+    [Test]
     public void HumanListing_NeverExpiresEvenWhenItsTimestampLooksLikeABotListing()
     {
         DbInventoryItem item = new()

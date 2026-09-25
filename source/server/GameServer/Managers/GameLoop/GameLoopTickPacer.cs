@@ -16,8 +16,8 @@ namespace DOL.GS
         private bool _running;
         private Thread _busyWaitThresholdThread;
         private int _busyWaitThreshold;
+        private readonly AutoResetEvent _paceChanged = new(false);
 
-        private double _gameLoopTime;
         private double _totalElapsedTime;
         private Stopwatch _stopwatch;
 
@@ -49,47 +49,77 @@ namespace DOL.GS
                 _busyWaitThresholdThread.Start();
             }
 
-            Stats = new([60000, 30000, 10000], 1000.0 / _tickDuration);
+            Stats = new([60000, 30000, 10000], 1000.0 / _tickDuration * OfflineWorldSpeedControl.MaximumMultiplier);
             _stopwatch = Stopwatch.StartNew();
         }
 
         public void Stop()
         {
-            if (_busyWaitThresholdThread == null)
+            if (!_running)
                 return;
 
             _running = false;
+            _paceChanged.Set();
 
-            if (_busyWaitThresholdThread != Thread.CurrentThread && _busyWaitThresholdThread.IsAlive)
+            if (_busyWaitThresholdThread != null && _busyWaitThresholdThread != Thread.CurrentThread && _busyWaitThresholdThread.IsAlive)
                 _busyWaitThresholdThread.Interrupt(); // This thread sleeps for a long time, let's not wait for it to finish.
 
             _busyWaitThresholdThread = null;
         }
 
-        public long WaitForNextTick()
+        public void PaceChanged()
         {
-            int sleepFor = (int) (_tickDuration - _stopwatch.Elapsed.TotalMilliseconds);
-            int busyWaitThreshold = _busyWaitThreshold;
+            _paceChanged.Set();
+        }
 
-            if (sleepFor >= busyWaitThreshold)
-                Thread.Sleep(sleepFor - busyWaitThreshold);
-
-            if (_tickDuration > _stopwatch.Elapsed.TotalMilliseconds)
+        public void WaitForNextTick(Func<int> getEffectiveMultiplier)
+        {
+            while (true)
             {
-                // Any small number will do here. Technically, this could be 0.
-                // If the game loop appears to overshoot the tick duration for no reason, this can be reduced even further.
-                while (_tickDuration > _stopwatch.Elapsed.TotalMilliseconds)
+                double multiplier = Math.Clamp(getEffectiveMultiplier(), 1, OfflineWorldSpeedControl.MaximumMultiplier);
+                double targetDuration = GetTargetTickDuration(_tickDuration, (int) multiplier);
+                double remaining = targetDuration - _stopwatch.Elapsed.TotalMilliseconds;
+
+                if (remaining <= 0)
+                    break;
+
+                int busyWaitThreshold = Volatile.Read(ref _busyWaitThreshold);
+                if (busyWaitThreshold == 0 && remaining >= 1)
+                {
+                    int sleepFor = (int) Math.Max(1, Math.Floor(remaining));
+                    _paceChanged.WaitOne(sleepFor);
+                }
+                else if (remaining >= busyWaitThreshold && busyWaitThreshold > 0)
+                {
+                    int sleepFor = (int) Math.Max(1, Math.Floor(remaining - busyWaitThreshold));
+                    _paceChanged.WaitOne(sleepFor);
+                }
+                else
+                {
+                    if (_paceChanged.WaitOne(0))
+                        continue;
+
+                    // Any small number will do here. Technically, this could be 0.
+                    // If the game loop appears to overshoot the tick duration for no reason, this can be reduced even further.
                     Thread.SpinWait(10);
+                }
             }
 
             double elapsedTime = _stopwatch.Elapsed.TotalMilliseconds;
             _totalElapsedTime += elapsedTime;
             _stopwatch.Restart();
 
-            // In case the game loop is running faster than the tick rate. We don't want things to run faster than intended.
-            _gameLoopTime += elapsedTime < _tickDuration ? elapsedTime : _tickDuration;
             Stats.RecordTick(_totalElapsedTime);
-            return (long) _gameLoopTime;
+        }
+
+        public static double GetTargetTickDuration(double logicalTickDuration, int multiplier)
+        {
+            if (logicalTickDuration <= 0)
+                throw new ArgumentOutOfRangeException(nameof(logicalTickDuration));
+            if (multiplier < 1 || multiplier > OfflineWorldSpeedControl.MaximumMultiplier)
+                throw new ArgumentOutOfRangeException(nameof(multiplier));
+
+            return logicalTickDuration / multiplier;
         }
 
         private void UpdateBusyWaitThreshold()

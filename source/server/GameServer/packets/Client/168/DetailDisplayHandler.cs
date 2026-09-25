@@ -114,7 +114,7 @@ namespace DOL.GS.PacketHandler.Client.v168
 						caption = invItem.Name;
 
                         if (RealmExchangeBroker.IsExchangeOwnerLot(invItem.OwnerLot))
-                            objectInfo.Add(RealmExchangeExpiry.Describe(invItem, DateTime.UtcNow));
+                            objectInfo.Add(RealmExchangeExpiry.Describe(invItem, WorldSimulationClock.UtcNow));
 
 						if (client.Player.DelveItem(invItem, objectInfo))
 							break;

@@ -437,7 +437,7 @@ namespace DOL.GS.Quests
         /// </summary>
         public bool CheckTaskExpired()
         {
-            if (TaskActive && (DateTime.Compare(TimeOut, DateTime.Now) < 0 || m_taskPlayer.Level > MAX_LEVEL))
+            if (TaskActive && (DateTime.Compare(TimeOut, WorldSimulationClock.LocalNow) < 0 || m_taskPlayer.Level > MAX_LEVEL))
             {
                 ExpireTask();
                 return true;

@@ -40,7 +40,7 @@ public static class AutonomousRvrTargetPolicy
             Properties.CAMLANN_BOT_GREY_ENGAGE_CHANCE);
         // A scan runs every few seconds. Use one stable draw per target and
         // ten-minute window so a rare grey-gank chance stays rare in practice.
-        long window = DateTime.UtcNow.Ticks / TimeSpan.FromMinutes(10).Ticks;
+        long window = WorldSimulationClock.UtcNow.Ticks / TimeSpan.FromMinutes(10).Ticks;
         int roll = (int)(unchecked((ulong)(bot.DatabaseID * 397L + victim.ObjectID * 7919L + window * 65537L)) % 100) + 1;
         return ShouldEngageGrey(true, false, chance, roll);
     }

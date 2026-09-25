@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.56.0"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.57.0"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -147,8 +147,9 @@ public sealed class LauncherPresentationTests
         Assert.That(form.Text, Is.EqualTo("Offline DAoC — Camlann 1.65 Old Frontiers"));
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("OFFLINE DAoC — CAMLANN", StringComparison.Ordinal)), Is.True);
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("CAMLANN POPULATION", StringComparison.Ordinal)), Is.True);
-        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("VERSION 0.55.0", StringComparison.Ordinal)), Is.True);
-        Label version = controls.OfType<Label>().Single(label => label.Text == "VERSION 0.55.0");
+        string versionText = "VERSION " + mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue();
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains(versionText, StringComparison.Ordinal)), Is.True);
+        Label version = controls.OfType<Label>().Single(label => label.Text == versionText);
         Assert.That(version.Font.Bold, Is.True);
         Assert.That(version.Font.Size, Is.GreaterThanOrEqualTo(12));
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("1× PROGRESSION", StringComparison.Ordinal)), Is.False);
@@ -205,8 +206,8 @@ public sealed class LauncherPresentationTests
 
         Type snapshotType = mainFormType.GetNestedType("DashboardSnapshot", BindingFlags.NonPublic)!;
         object runningSnapshot = snapshotType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Single(constructor => constructor.GetParameters().Length == 10)
-            .Invoke(new object[] { "Running", null!, null!, 0, 0d, 0d, 1d, 1d, false, null! });
+            .Single(constructor => constructor.GetParameters().Length == 11)
+            .Invoke(new object[] { "Running", null!, null!, 0, 0d, 0d, 1d, 1d, false, null!, null! });
         mainFormType.GetField("_stoppingServer", HiddenInstance)!.SetValue(form, false);
         mainFormType.GetMethod("UpdateXpRateControls", HiddenInstance)!.Invoke(form, new[] { runningSnapshot });
         var playerRate = (ComboBox)mainFormType.GetField("_playerXpRate", HiddenInstance)!.GetValue(form)!;

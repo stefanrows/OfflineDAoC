@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.56.0";
+    internal const string DisplayVersion = "0.57.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -18,6 +18,8 @@ internal sealed partial class MainForm : Form
     private readonly string _root = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
     private readonly string _database;
     private readonly string _serverDirectory;
+    private readonly string _worldSpeedRequestPath;
+    private readonly string _worldSpeedStatusPath;
     private readonly string _serverExecutable;
     private readonly string _clientDirectory;
     private readonly string _clientConnector;
@@ -82,6 +84,11 @@ internal sealed partial class MainForm : Form
     private readonly TextBox _groupSearch = new() { PlaceholderText = "Search bot, zone or crew", Width = 340 };
     private readonly ComboBox _playerXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly ComboBox _botXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
+    private readonly ComboBox _worldSpeedMultiplier = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
+    private readonly Label _worldSpeedStatusText = new() { AutoSize = false, Dock = DockStyle.Fill };
+    private readonly Label _worldSpeedTelemetryText = new() { AutoSize = false, Dock = DockStyle.Fill };
+    private readonly Label _worldSpeedErrorText = new() { AutoSize = false, Dock = DockStyle.Fill };
+    private readonly Label _worldSpeedClockText = new() { AutoSize = false, Dock = DockStyle.Fill };
     private readonly CheckBox _makeMeGm = new() { Text = "Make Me a GM", AutoSize = true, ForeColor = DaocTheme.Parchment, Font = new Font("Georgia", 9f, FontStyle.Bold) };
     private readonly Label _xpSettingsStatus = new()
     {
@@ -133,6 +140,17 @@ internal sealed partial class MainForm : Form
     private bool _refreshingExchange;
     private bool _loadingXpRates;
     private bool _savingXpRates;
+    private bool _loadingWorldSpeed;
+    private WorldSpeedStatus? _worldSpeedSnapshot;
+    private string? _worldSpeedUnavailableReason;
+    private string? _worldSpeedLocalError;
+    private string? _worldSpeedSessionId;
+    private int? _pendingWorldSpeedMultiplier;
+    private DateTime _pendingWorldSpeedSinceUtc;
+    private bool? _lastWorldSpeedServerRunning;
+    private bool _stoppedSimulationClockLoaded;
+    private WorldSimulationClockRead? _savedSimulationClock;
+    private DateTime? _simulationUtc;
     private bool _generatingBot;
     private DateTime _nextAutoRefreshUtc;
     private DateTime _nextRvrSnapshotRefreshUtc;
@@ -147,6 +165,8 @@ internal sealed partial class MainForm : Form
     {
         _database = Path.Combine(_root, "data", "opendaoc.sqlite3.db");
         _serverDirectory = Path.Combine(_root, "server");
+        _worldSpeedRequestPath = Path.Combine(_serverDirectory, WorldSpeedProtocol.RequestFileName);
+        _worldSpeedStatusPath = Path.Combine(_serverDirectory, WorldSpeedProtocol.StatusFileName);
         _serverExecutable = Path.Combine(_serverDirectory, "CoreServer.exe");
         string officialClientDirectory = Path.Combine(_root, "client-opendaoc", "app");
         _clientDirectory = File.Exists(Path.Combine(officialClientDirectory, "game.dll"))
@@ -204,6 +224,7 @@ internal sealed partial class MainForm : Form
         ConfigureXpRateSelector(_botXpRate);
         _playerXpRate.SelectedIndexChanged += async (_, _) => await SaveXpRateAsync("xp_rate", _playerXpRate);
         _botXpRate.SelectedIndexChanged += async (_, _) => await SaveXpRateAsync("bot_xp_rate", _botXpRate);
+        _worldSpeedMultiplier.SelectedIndexChanged += (_, _) => RequestWorldSpeedChange();
         _groupSearch.TextChanged += (_, _) => ApplyGroupSearch();
         _groupSearch.KeyDown += (_, e) =>
         {
@@ -264,8 +285,9 @@ internal sealed partial class MainForm : Form
 
     private void RefreshVisibleCountdowns()
     {
-        // Repaint only visible clock cells/labels from the last manual snapshot.
-        // No ResetBindings, resort, card reconstruction, DB reads or server writes.
+        RefreshWorldSpeedState();
+        // Repaint visible clock cells from the last snapshot. No resort or
+        // card reconstruction occurs on this one-second display timer.
         UpdateAutoRefreshCountdown();
         RefreshRvrSnapshotIfDue();
         if (_rvrObjectivesGrid.Visible)
@@ -279,6 +301,10 @@ internal sealed partial class MainForm : Form
                 if (column.DataPropertyName is "TaskRemaining" or "NameWithMeetUpTimer")
                     grid.InvalidateColumn(column.Index);
         }
+        if (_auctionGrid.Visible)
+            foreach (DataGridViewColumn column in _auctionGrid.Columns)
+                if (column.DataPropertyName == "Expires")
+                    _auctionGrid.InvalidateColumn(column.Index);
         if (!_groupsPanel.Visible) return;
         Rectangle viewport = _groupsPanel.RectangleToScreen(_groupsPanel.ClientRectangle);
         foreach (var (label, bot) in _memberCountdowns)
@@ -519,6 +545,8 @@ internal sealed partial class MainForm : Form
         groups.Controls.Add(BuildActiveGroupsPanel());
         var xpSettings = new TabPage("XP Settings") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         xpSettings.Controls.Add(BuildXpSettingsPanel());
+        var worldSpeed = new TabPage("World Speed") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
+        worldSpeed.Controls.Add(BuildWorldSpeedPanel());
         tabs.TabPages.Add(population);
         tabs.TabPages.Add(groups);
         // Camlann keep/relic reset is exposed through the Realm Events panel;
@@ -532,6 +560,7 @@ internal sealed partial class MainForm : Form
         records.Enter += async (_, _) => await eventRecords.RefreshAsync();
         tabs.TabPages.Add(records);
         tabs.TabPages.Add(xpSettings);
+        tabs.TabPages.Add(worldSpeed);
         var botGoals = new TabPage("Server population") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         _botGoalsSettings = new BotGoalsSettingsControl(
             Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName),
@@ -597,6 +626,292 @@ internal sealed partial class MainForm : Form
         surface.Controls.Add(layout);
         return surface;
     }
+
+    private Control BuildWorldSpeedPanel()
+    {
+        var surface = new InsetPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 314,
+            Margin = new Padding(18),
+            Padding = new Padding(20),
+            Accent = DaocTheme.Gold,
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 5,
+            BackColor = Color.Transparent,
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 135));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var title = new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = "WORLD SPEED CONTROL",
+            Font = new Font("Georgia", 13f, FontStyle.Bold),
+            ForeColor = DaocTheme.GoldLight,
+            TextAlign = ContentAlignment.MiddleLeft,
+        };
+        layout.Controls.Add(title, 0, 0);
+        layout.SetColumnSpan(title, 3);
+        layout.Controls.Add(XpRateLabel("WORLD SPEED"), 0, 1);
+        StyleInput(_worldSpeedMultiplier);
+        _worldSpeedMultiplier.Anchor = AnchorStyles.Left;
+        _worldSpeedMultiplier.Margin = new Padding(0, 10, 0, 9);
+        _loadingWorldSpeed = true;
+        try
+        {
+            _worldSpeedMultiplier.Items.AddRange(new object[]
+            {
+                new WorldSpeedOption(1, "1×"),
+                new WorldSpeedOption(2, "2×"),
+                new WorldSpeedOption(3, "3×"),
+            });
+            _worldSpeedMultiplier.SelectedIndex = 0;
+        }
+        finally
+        {
+            _loadingWorldSpeed = false;
+        }
+        _worldSpeedMultiplier.Enabled = false;
+        layout.Controls.Add(_worldSpeedMultiplier, 1, 1);
+        layout.Controls.Add(XpRateDescription("Applies only while no game client is connected."), 2, 1);
+
+        _worldSpeedStatusText.Text = "Waiting for a live server session.";
+        _worldSpeedStatusText.TextAlign = ContentAlignment.MiddleLeft;
+        _worldSpeedStatusText.ForeColor = DaocTheme.Parchment;
+        _worldSpeedStatusText.Font = new Font("Georgia", 9f, FontStyle.Bold);
+        layout.Controls.Add(_worldSpeedStatusText, 0, 2);
+        layout.SetColumnSpan(_worldSpeedStatusText, 3);
+
+        _worldSpeedTelemetryText.Text = "Tick P95 and the speed-specific tick budget appear with live status.";
+        _worldSpeedTelemetryText.TextAlign = ContentAlignment.MiddleLeft;
+        _worldSpeedTelemetryText.ForeColor = DaocTheme.Muted;
+        _worldSpeedTelemetryText.Font = new Font("Georgia", 8.5f);
+        layout.Controls.Add(_worldSpeedTelemetryText, 0, 3);
+        layout.SetColumnSpan(_worldSpeedTelemetryText, 3);
+
+        _worldSpeedClockText.Text = "Simulated time unavailable until the server publishes its clock.";
+        _worldSpeedClockText.TextAlign = ContentAlignment.MiddleLeft;
+        _worldSpeedClockText.ForeColor = DaocTheme.Muted;
+        _worldSpeedClockText.Font = new Font("Georgia", 8.5f);
+        layout.Controls.Add(_worldSpeedClockText, 0, 4);
+        layout.SetColumnSpan(_worldSpeedClockText, 3);
+
+        var description = new Label
+        {
+            Dock = DockStyle.Bottom,
+            Height = 45,
+            Text = "2× aims to complete two simulated hours per real hour. Connected clients hold the world at 1×; the selected speed resumes five seconds after the last client leaves. XP and loot per event stay the same. Higher speeds depend on available CPU time.",
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = DaocTheme.Parchment,
+            Font = new Font("Georgia", 8.5f),
+            Padding = new Padding(0, 5, 0, 0),
+        };
+        surface.Controls.Add(layout);
+        surface.Controls.Add(description);
+
+        _worldSpeedErrorText.Dock = DockStyle.Top;
+        _worldSpeedErrorText.Height = 30;
+        _worldSpeedErrorText.TextAlign = ContentAlignment.MiddleLeft;
+        _worldSpeedErrorText.ForeColor = DaocTheme.Danger;
+        _worldSpeedErrorText.Font = new Font("Georgia", 8.5f, FontStyle.Bold);
+        _worldSpeedErrorText.Visible = false;
+        surface.Controls.Add(_worldSpeedErrorText);
+        return surface;
+    }
+
+    private void RequestWorldSpeedChange()
+    {
+        if (_loadingWorldSpeed || _worldSpeedMultiplier.SelectedItem is not WorldSpeedOption option)
+            return;
+
+        DateTime nowUtc = DateTime.UtcNow;
+        WorldSpeedStatus? status = WorldSpeedProtocol.ReadFreshStatus(
+            _worldSpeedStatusPath, nowUtc, out string? unavailableReason);
+        if (status is null || !(IsServerRunning() || _serverProcess is { HasExited: false }))
+        {
+            _worldSpeedLocalError = unavailableReason ?? "A live server status is required to change world speed.";
+            RefreshWorldSpeedState();
+            return;
+        }
+
+        if (option.Multiplier == status.SelectedMultiplier && _pendingWorldSpeedMultiplier is null)
+            return;
+
+        try
+        {
+            WorldSpeedProtocol.WriteRequest(_worldSpeedRequestPath, status.SessionId, option.Multiplier, nowUtc);
+            _worldSpeedSnapshot = status;
+            _worldSpeedSessionId = status.SessionId;
+            _pendingWorldSpeedMultiplier = option.Multiplier;
+            _pendingWorldSpeedSinceUtc = nowUtc;
+            _worldSpeedLocalError = null;
+            RefreshWorldSpeedState();
+        }
+        catch (Exception exception)
+        {
+            _pendingWorldSpeedMultiplier = null;
+            _worldSpeedLocalError = $"Unable to write the world speed request: {exception.Message}";
+            SetWorldSpeedSelection(status.SelectedMultiplier);
+            UpdateWorldSpeedPresentation(true, status);
+        }
+    }
+
+    private void RefreshWorldSpeedState()
+    {
+        DateTime nowUtc = DateTime.UtcNow;
+        bool running = IsServerRunning() || _serverProcess is { HasExited: false };
+        bool justStopped = _lastWorldSpeedServerRunning == true && !running;
+        _lastWorldSpeedServerRunning = running;
+
+        if (running)
+        {
+            _stoppedSimulationClockLoaded = false;
+            _worldSpeedSnapshot = WorldSpeedProtocol.ReadFreshStatus(
+                _worldSpeedStatusPath, nowUtc, out _worldSpeedUnavailableReason);
+            if (_worldSpeedSnapshot is WorldSpeedStatus status)
+            {
+                if (_worldSpeedSessionId != status.SessionId)
+                {
+                    _worldSpeedSessionId = status.SessionId;
+                    _pendingWorldSpeedMultiplier = null;
+                    _worldSpeedLocalError = null;
+                }
+
+                if (_pendingWorldSpeedMultiplier == status.SelectedMultiplier)
+                {
+                    _pendingWorldSpeedMultiplier = null;
+                    _worldSpeedLocalError = null;
+                }
+                else if (_pendingWorldSpeedMultiplier.HasValue &&
+                    nowUtc - _pendingWorldSpeedSinceUtc > WorldSpeedProtocol.StatusMaxAge)
+                {
+                    _pendingWorldSpeedMultiplier = null;
+                    _worldSpeedLocalError = "The server did not acknowledge the speed request. Select a speed to retry.";
+                }
+
+                _simulationUtc = WorldSpeedProtocol.AdvanceLiveClock(status, nowUtc);
+            }
+            else
+            {
+                _simulationUtc = null;
+                if (_pendingWorldSpeedMultiplier.HasValue &&
+                    nowUtc - _pendingWorldSpeedSinceUtc > WorldSpeedProtocol.StatusMaxAge)
+                {
+                    _pendingWorldSpeedMultiplier = null;
+                    _worldSpeedLocalError = "The server did not acknowledge the speed request. Select a speed to retry.";
+                }
+            }
+
+            UpdateWorldSpeedPresentation(true, _worldSpeedSnapshot);
+            return;
+        }
+
+        _worldSpeedSnapshot = null;
+        _pendingWorldSpeedMultiplier = null;
+        if (!_stoppedSimulationClockLoaded || justStopped)
+        {
+            _savedSimulationClock = ReadSavedSimulationClock();
+            _stoppedSimulationClockLoaded = true;
+        }
+        _simulationUtc = WorldSimulationClock.AdvanceStoppedClock(_savedSimulationClock, nowUtc);
+        UpdateWorldSpeedPresentation(false, null);
+    }
+
+    private WorldSimulationClockRead ReadSavedSimulationClock()
+    {
+        if (!File.Exists(_database))
+            return new WorldSimulationClockRead(null, false, null);
+        try
+        {
+            using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Read Only=True;Pooling=False;Default Timeout=5");
+            connection.Open();
+            return WorldSimulationClock.ReadCheckpoint(connection);
+        }
+        catch (Exception exception) when (exception is SQLiteException or IOException or UnauthorizedAccessException)
+        {
+            return new WorldSimulationClockRead(null, false, $"Unable to read the saved simulation clock: {exception.Message}");
+        }
+    }
+
+    private void UpdateWorldSpeedPresentation(bool running, WorldSpeedStatus? status)
+    {
+        if (!running)
+        {
+            _worldSpeedMultiplier.Enabled = false;
+            SetWorldSpeedSelection(1);
+            _worldSpeedStatusText.Text = "Server stopped. Each new session starts with 1× selected.";
+            _worldSpeedTelemetryText.Text = "Choose 1×, 2×, or 3× after live server status appears.";
+            _worldSpeedClockText.Text = _simulationUtc is DateTime stoppedNow
+                ? $"Simulated UTC: {stoppedNow:yyyy-MM-dd HH:mm:ss} (server stopped; downtime advances at 1×)"
+                : "Simulated time unavailable because the saved clock could not be read.";
+            ShowWorldSpeedError(_worldSpeedLocalError ?? _savedSimulationClock?.Error);
+            return;
+        }
+
+        if (status is null)
+        {
+            _worldSpeedMultiplier.Enabled = false;
+            SetWorldSpeedSelection(null);
+            _worldSpeedStatusText.Text = "World speed unavailable — waiting for fresh live server status.";
+            _worldSpeedTelemetryText.Text = _worldSpeedUnavailableReason ?? "Status becomes available when the server reports its session.";
+            _worldSpeedClockText.Text = "Simulated time unavailable while live status is stale.";
+            ShowWorldSpeedError(_worldSpeedLocalError);
+            return;
+        }
+
+        _worldSpeedMultiplier.Enabled = true;
+        SetWorldSpeedSelection(_pendingWorldSpeedMultiplier ?? status.SelectedMultiplier);
+        string clientSummary = status.ConnectedClients == 0
+            ? "no clients"
+            : $"{status.ConnectedClients} client{(status.ConnectedClients == 1 ? string.Empty : "s")}";
+        string pendingSummary = _pendingWorldSpeedMultiplier is int requested && requested != status.SelectedMultiplier
+            ? $" · requested {requested}×, waiting for server acknowledgement"
+            : string.Empty;
+        _worldSpeedStatusText.Text = $"Selected {status.SelectedMultiplier}×  ·  Effective {status.EffectiveMultiplier}× ({clientSummary})  ·  Achieved {status.AchievedMultiplier:0.00}×{pendingSummary}";
+        double budgetMs = 1000d / (30d * status.EffectiveMultiplier);
+        _worldSpeedTelemetryText.Text = $"Tick P95 {status.TickP95Ms:0.0} ms  ·  {budgetMs:0.0} ms budget at effective {status.EffectiveMultiplier}× (selected target {status.SelectedMultiplier}×)";
+        _worldSpeedClockText.Text = _simulationUtc is DateTime liveNow
+            ? $"Simulated UTC: {liveNow:yyyy-MM-dd HH:mm:ss}  ·  clients connected: {status.ConnectedClients}"
+            : "Simulated time unavailable because live status is stale.";
+        string? error = FirstNonEmpty(_worldSpeedLocalError, status.Error);
+        ShowWorldSpeedError(error);
+    }
+
+    private void SetWorldSpeedSelection(int? multiplier)
+    {
+        _loadingWorldSpeed = true;
+        try
+        {
+            _worldSpeedMultiplier.SelectedIndex = multiplier is int value
+                ? Enumerable.Range(0, _worldSpeedMultiplier.Items.Count)
+                    .FirstOrDefault(index => _worldSpeedMultiplier.Items[index] is WorldSpeedOption option && option.Multiplier == value, -1)
+                : -1;
+        }
+        finally
+        {
+            _loadingWorldSpeed = false;
+        }
+    }
+
+    private void ShowWorldSpeedError(string? error)
+    {
+        _worldSpeedErrorText.Visible = !string.IsNullOrWhiteSpace(error);
+        _worldSpeedErrorText.Text = error ?? string.Empty;
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static Label XpRateLabel(string text) => new()
     {
@@ -1271,6 +1586,10 @@ internal sealed partial class MainForm : Form
         try
         {
             var snapshot = await Task.Run(ReadSnapshot);
+            _savedSimulationClock = snapshot.SavedSimulationClock;
+            if (snapshot.ServerState == "Stopped")
+                _stoppedSimulationClockLoaded = true;
+            RefreshWorldSpeedState();
             // Restore the pre-refresh baseline while still on the UI thread,
             // then apply the authoritative states from the completed snapshot.
             // No click can be processed between these operations.
@@ -1402,20 +1721,19 @@ internal sealed partial class MainForm : Form
         {
             long buyoutCopper = reader.GetInt64(4);
             string expiry = "Never (player listing)";
+            DateTime? expiresUtc = null;
             if (reader.GetString(6).StartsWith("offlinebot:", StringComparison.OrdinalIgnoreCase))
             {
                 expiry = "24h from first load";
                 if (DateTime.TryParse(reader.GetString(7), System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.RoundtripKind, out DateTime listedUtc))
-                {
-                    DateTime expiresUtc = listedUtc.ToUniversalTime().AddHours(24);
-                    TimeSpan remaining = expiresUtc - DateTime.UtcNow;
-                    expiry = remaining <= TimeSpan.Zero ? "Expired - removing" :
-                        $"{(int)remaining.TotalHours}h {remaining.Minutes:00}m • {expiresUtc.ToLocalTime():MMM d HH:mm}";
-                }
+                    expiresUtc = listedUtc.ToUniversalTime().AddHours(24);
             }
             auctions.Add(new AuctionRow(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetInt32(3),
-                "Fixed price", FormatCopper(buyoutCopper), buyoutCopper, expiry, reader.GetString(5)));
+                "Fixed price", FormatCopper(buyoutCopper), buyoutCopper, expiresUtc, expiry, reader.GetString(5))
+            {
+                SimulationUtcNow = () => _simulationUtc,
+            });
         }
         return auctions;
     }
@@ -1761,7 +2079,7 @@ internal sealed partial class MainForm : Form
                         ? "Deletion requested — waiting for safe server removal"
                         : "Deletion pending — Delete is available while the server is stopped"
                     : FormatBotActivity(rawActivity, currentGoal, targetName, destination, progress, isOnline);
-                GroupMetadata? group = isOnline ? ParseGroupMetadata(itinerary) : null;
+                GroupMetadata? group = ParseGroupMetadata(itinerary);
                 bots.Add(new BotRow(botId, reader.GetString(1), RealmName(reader.GetInt32(2)), reader.GetString(3), GenderName(reader.GetInt32(4)), reader.GetString(5), level, zoneName, activity, isOnline, true, deletionQueued,
                     group?.GroupId ?? string.Empty, group?.Phase ?? string.Empty, group?.SharedGoal ?? string.Empty, group?.Status ?? string.Empty,
                     objectiveKind, assignmentId, assignedUtc, objectivePhase)
@@ -1778,7 +2096,9 @@ internal sealed partial class MainForm : Form
                     GroupLeaderName = group?.LeaderName ?? string.Empty,
                     GroupRendezvousName = group?.RendezvousName ?? string.Empty,
                     GroupPullerName = group?.PullerName ?? string.Empty
-                    ,GroupRole = group?.MemberRole ?? string.Empty
+                    ,GroupRole = group?.MemberRole ?? string.Empty,
+                    SimulationUtcNow = () => _simulationUtc,
+                    ServerRunningAtSnapshot = running,
                 });
             }
         }
@@ -1827,7 +2147,8 @@ internal sealed partial class MainForm : Form
             gm.CommandText = "SELECT Value FROM offline_local_options WHERE Key='MakeMeGM'";
             makeMeGm = string.Equals(gm.ExecuteScalar()?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         }
-        return new DashboardSnapshot(serverState, bots, groups, active, memoryMb, tickP95Ms, playerXpRate, botXpRate, makeMeGm, ReadRvrWorld());
+        return new DashboardSnapshot(serverState, bots, groups, active, memoryMb, tickP95Ms, playerXpRate, botXpRate,
+            makeMeGm, ReadRvrWorld(), WorldSimulationClock.ReadCheckpoint(connection));
     }
 
     private static double ReadServerRate(SQLiteConnection connection, string key, double fallback)
@@ -3119,6 +3440,8 @@ internal sealed partial class MainForm : Form
     private sealed record BotRow(long? BotId, string Name, string Realm, string RaceName, string Gender, string ClassName, int Level, string ZoneName, string Activity, bool IsOnline, bool CanDelete, bool DeletionQueued,
         string GroupId, string GroupPhase, string GroupGoal, string GroupStatus, string ObjectiveKind, string ObjectiveAssignmentId, string ObjectiveAssignedUtc, string ObjectivePhase)
     {
+        public Func<DateTime?> SimulationUtcNow { get; init; } = () => null;
+        public bool ServerRunningAtSnapshot { get; init; }
         public string PlayerType { get; init; } = string.Empty;
         public string GuildCharter { get; init; } = string.Empty;
         public string GuildName { get; init; } = string.Empty;
@@ -3132,36 +3455,52 @@ internal sealed partial class MainForm : Form
         public string GroupRendezvousName { get; init; } = string.Empty;
         public string GroupPullerName { get; init; } = string.Empty;
         public string GroupRole { get; init; } = string.Empty;
-        public long? AssemblyRemainingMilliseconds => IsOnline &&
-            GroupPhase is "Leader staging" or "Meeting up"
-                ? TaskTimerDisplay.Remaining(MeetUpDeadlineUtc, DateTime.UtcNow) : null;
-        public long? RemainingMilliseconds => !IsOnline || DeletionQueued || GroupPhase == "Player-led" ? null :
+        public long? AssemblyRemainingMilliseconds =>
+            (IsOnline || !ServerRunningAtSnapshot && BotId.HasValue) &&
+            GroupPhase is ("Leader staging" or "Meeting up")
+                ? TaskTimerDisplay.Remaining(MeetUpDeadlineUtc, SimulationUtcNow()) : null;
+        public long? RemainingMilliseconds => (!IsOnline && ServerRunningAtSnapshot) || !BotId.HasValue || DeletionQueued || GroupPhase == "Player-led" ? null :
             AssemblyRemainingMilliseconds ?? (HasGroupTaskClock && TaskTimerPaused
                 ? TaskRemainingMilliseconds
-                : TaskTimerDisplay.Remaining(HasGroupTaskClock ? GroupTaskExpiresUtc : ObjectiveExpiresUtc, DateTime.UtcNow));
-        public string TaskRemaining => !IsOnline ? "Offline" : GroupPhase == "Player-led" ? "Player-led" :
+                : TaskTimerDisplay.Remaining(HasGroupTaskClock ? GroupTaskExpiresUtc : ObjectiveExpiresUtc, SimulationUtcNow()));
+        public string TaskRemaining => (!IsOnline && ServerRunningAtSnapshot) || !BotId.HasValue ? "Offline" : GroupPhase == "Player-led" ? "Player-led" :
             GroupPhase == "Leader staging" && AssemblyRemainingMilliseconds is long staging
                 ? TaskTimerDisplay.Format(staging) + " (staging)" :
             GroupPhase == "Meeting up" && AssemblyRemainingMilliseconds is long meetup
                 ? TaskTimerDisplay.Format(meetup) + " (meetup)" :
             ObjectiveAssignmentId.StartsWith("between-pve-services-", StringComparison.Ordinal)
-                ? "Town " + TaskTimerDisplay.Format(RemainingMilliseconds ?? 0) :
+                ? "Town " + (RemainingMilliseconds is long town ? TaskTimerDisplay.Format(town) : "Unavailable") :
             RemainingMilliseconds is long remaining
-                ? TaskTimerDisplay.Format(remaining) + (HasGroupTaskClock && TaskTimerPaused ? " (paused)" : string.Empty) : "—";
+                ? TaskTimerDisplay.Format(remaining) + (HasGroupTaskClock && TaskTimerPaused ? " (paused)" : string.Empty)
+                : HasUnavailableDeadline ? "Unavailable" : "—";
+        private bool HasUnavailableDeadline => SimulationUtcNow() is null &&
+            (MeetUpDeadlineUtc.Length > 0 || HasGroupTaskClock && GroupTaskExpiresUtc.Length > 0 || ObjectiveExpiresUtc.Length > 0);
         public string GroupTimerText => GroupPhase switch
         {
-            "Leader staging" => "LEADER STAGING: " + TaskTimerDisplay.Format(AssemblyRemainingMilliseconds ?? 0),
-            "Meeting up" => "MEETUP LEFT: " + TaskTimerDisplay.Format(AssemblyRemainingMilliseconds ?? 0),
+            "Leader staging" => "LEADER STAGING: " + AssemblyTimerText,
+            "Meeting up" => "MEETUP LEFT: " + AssemblyTimerText,
             _ => "TASK LEFT: " + TaskRemaining,
         };
+        private string AssemblyTimerText => AssemblyRemainingMilliseconds is long remaining
+            ? TaskTimerDisplay.Format(remaining)
+            : MeetUpDeadlineUtc.Length > 0 && SimulationUtcNow() is null ? "Unavailable" : "—";
         public string NameWithMeetUpTimer => IsOnline && GroupPhase == "Meeting up" &&
-            TaskTimerDisplay.Remaining(MeetUpDeadlineUtc, DateTime.UtcNow) is long remaining
-                ? $"{Name} ({TaskTimerDisplay.Format(remaining)})" : Name;
+            TaskTimerDisplay.Remaining(MeetUpDeadlineUtc, SimulationUtcNow()) is long remaining
+                ? $"{Name} ({TaskTimerDisplay.Format(remaining)})"
+                : IsOnline && GroupPhase == "Meeting up" && MeetUpDeadlineUtc.Length > 0 && SimulationUtcNow() is null
+                    ? $"{Name} (unavailable)" : Name;
         public string State => DeletionQueued ? "Deleting…" : IsOnline ? "Online" : "Offline";
         public string RvrFormation => GroupId.Length > 0 ? $"Warband {GroupId}" : "Solo roamer";
     }
 
-    private sealed record AuctionRow(string ItemName, string Seller, int ItemLevel, int Quantity, string CurrentBid, string Buyout, long BuyoutCopper, string Expires, string State);
+    private sealed record AuctionRow(string ItemName, string Seller, int ItemLevel, int Quantity, string CurrentBid,
+        string Buyout, long BuyoutCopper, DateTime? ExpiresUtc, string ExpiryFallback, string State)
+    {
+        public Func<DateTime?> SimulationUtcNow { get; init; } = () => null;
+        public string Expires => ExpiresUtc is DateTime expires
+            ? TaskTimerDisplay.FormatAuctionExpiry(expires, SimulationUtcNow())
+            : ExpiryFallback;
+    }
     private sealed record GroupRow(string GroupId, string Realm, string Phase, string SharedGoal, string Status,
         string LeaderName, string RendezvousName, string PullerName, List<BotRow> Members);
     private sealed class GroupMetadata
@@ -3181,7 +3520,8 @@ internal sealed partial class MainForm : Form
         public string MemberRole { get; set; } = string.Empty;
     }
     private sealed record DashboardSnapshot(string ServerState, List<BotRow> Bots, List<GroupRow> Groups,
-        int Active, double ServerMemoryMb, double TickP95Ms, double PlayerXpRate, double BotXpRate, bool MakeMeGm = false, RvrWorldSnapshot? RvrWorld = null);
+        int Active, double ServerMemoryMb, double TickP95Ms, double PlayerXpRate, double BotXpRate,
+        bool MakeMeGm = false, RvrWorldSnapshot? RvrWorld = null, WorldSimulationClockRead? SavedSimulationClock = null);
 
     private sealed record LiveBotStatus(long BotId, int Level, string ZoneName, string Activity,
         string CurrentGoal, string TargetName, string TravelDestination, string ObjectiveProgress,
@@ -3214,6 +3554,10 @@ internal sealed partial class MainForm : Form
     private sealed record RvrWorldSnapshot(DateTime UpdatedUtc, bool Running, List<RvrObjective> Objectives, List<EventParticipant>? Participants = null);
 
     private sealed record XpRateOption(double Multiplier, string Label)
+    {
+        public override string ToString() => Label;
+    }
+    private sealed record WorldSpeedOption(int Multiplier, string Label)
     {
         public override string ToString() => Label;
     }

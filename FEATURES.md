@@ -32,6 +32,12 @@ and verification history of the full-PvP conversion.
 
 - Autonomous bots are persistent world actors with saved level, experience,
   equipment, inventory, money, location, objective, and recovery state.
+- The launcher's World Speed control can run the live world at 1×, 2×, or 3×
+  while no game client is connected. Travel, fights, cooldowns, recovery,
+  respawns, bot schedules, and world deadlines advance through real server
+  ticks; XP and loot per event are unchanged. A client connection restores 1×,
+  and the selected speed resumes five seconds after the last disconnect.
+  The launcher reports the speed actually achieved if the PC cannot keep up.
 - The managed population is consolidated before login into no more than fifteen
   mixed-realm guilds: up to five small/medium/large triplets with 1:2:4 target
   membership weights. One triplet is used per 56 managed bots, rounded up, and

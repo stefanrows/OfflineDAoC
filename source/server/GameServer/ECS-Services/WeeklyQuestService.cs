@@ -36,20 +36,20 @@ namespace DOL.GS
             ProcessPostedActionsParallel();
 
             // This is where the weekly check will go once testing is finished.
-            if (_lastWeeklyRollover.Date.DayOfYear + 7 < DateTime.Now.Date.DayOfYear || _lastWeeklyRollover.Year < DateTime.Now.Year)
+            if (_lastWeeklyRollover.Date.DayOfYear + 7 < WorldSimulationClock.LocalNow.Date.DayOfYear || _lastWeeklyRollover.Year < WorldSimulationClock.LocalNow.Year)
             {
                 DbTaskRefreshInterval loadQuestsProp = GameServer.Database.SelectObject<DbTaskRefreshInterval>(DB.Column("RolloverInterval").IsEqualTo(WEEKLY_INTERVAL_KEY));
 
                 // Update the one we've got, or make a new one.
                 if (loadQuestsProp != null)
                 {
-                    loadQuestsProp.LastRollover = DateTime.Now;
+                    loadQuestsProp.LastRollover = WorldSimulationClock.LocalNow;
                     GameServer.Database.SaveObject(loadQuestsProp);
                 }
                 else
                 {
                     DbTaskRefreshInterval newTime = new DbTaskRefreshInterval();
-                    newTime.LastRollover = DateTime.Now;
+                    newTime.LastRollover = WorldSimulationClock.LocalNow;
                     newTime.RolloverInterval = WEEKLY_INTERVAL_KEY;
                     GameServer.Database.AddObject(newTime);
                 }
@@ -69,7 +69,7 @@ namespace DOL.GS
                     return;
                 }
 
-                _lastWeeklyRollover = DateTime.Now;
+                _lastWeeklyRollover = WorldSimulationClock.LocalNow;
 
                 for (int i = 0; i < lastValidIndex + 1; i++)
                 {

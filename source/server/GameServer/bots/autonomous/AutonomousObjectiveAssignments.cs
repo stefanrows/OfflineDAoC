@@ -162,7 +162,7 @@ public static class AutonomousObjectiveAssignments
             if (nowTick < _nextRebalanceTick)
                 return;
 
-            DateTime utcNow = DateTime.UtcNow;
+            DateTime utcNow = WorldSimulationClock.UtcNow;
             GameBot[] roster = AutonomousBotRegistry.Snapshot()
                 .Where(bot => bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper && !bot.IsPlayerLedGroup &&
                               bot.PersistentRecord != null)
@@ -290,8 +290,8 @@ public static class AutonomousObjectiveAssignments
             bot.PersistentRecord.ObjectiveRvrEligibleUtc = PveCompletionRequired;
         if (TryBeginBetweenTaskServices(bot))
             return;
-        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, DateTime.UtcNow,
-                Random.Shared.NextDouble(), mayRvr: !leavingRvr && IsRvrEligible(bot.PersistentRecord, DateTime.UtcNow),
+        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
+                Random.Shared.NextDouble(), mayRvr: !leavingRvr && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
                 danger: Danger),
             CrewBucket(bot), GameLoop.GameLoopTime);
         bot.PersistentRecord.CurrentCampId = string.Empty;
@@ -377,8 +377,8 @@ public static class AutonomousObjectiveAssignments
 
         record.ObjectiveKind = kind.ToString();
         record.ObjectiveAssignmentId = assignment;
-        record.ObjectiveAssignedUtc = DateTime.UtcNow.ToString("O");
-        DateTime now = DateTime.UtcNow;
+        record.ObjectiveAssignedUtc = WorldSimulationClock.UtcNow.ToString("O");
+        DateTime now = WorldSimulationClock.UtcNow;
         record.ObjectivePveKills = 0;
         record.ObjectivePveKillTarget = 0;
         if (kind == eAutonomousObjectiveKind.RvR)
@@ -464,10 +464,10 @@ public static class AutonomousObjectiveAssignments
         record.ObjectiveKind = eAutonomousObjectiveKind.SoloPve.ToString();
         record.ObjectiveAssignmentId = BetweenTasksPrefix + (plan.Train ? "T" : "") + (plan.Unload ? "I" : "") + (downtime ? "D" : "") +
             "-" + bot.DatabaseID + "-" + GameLoop.GameLoopTime;
-        record.ObjectiveAssignedUtc = DateTime.UtcNow.ToString("O");
+        record.ObjectiveAssignedUtc = WorldSimulationClock.UtcNow.ToString("O");
         // A failed service route cannot trap the bot forever either. Existing
         // movement/progress watchdogs still operate during the trip.
-        record.ObjectiveExpiresUtc = DateTime.UtcNow.Add(MaximumBetweenTaskDuration).ToString("O");
+        record.ObjectiveExpiresUtc = WorldSimulationClock.UtcNow.Add(MaximumBetweenTaskDuration).ToString("O");
         record.ObjectivePveMode = eAutonomousPveCompletionMode.Time.ToString();
         record.ObjectivePveKillTarget = 0;
         record.ObjectivePhase = "Between tasks";
@@ -484,7 +484,7 @@ public static class AutonomousObjectiveAssignments
 
     public static bool BetweenTaskServiceExpired(GameBot bot) => IsBetweenPveTasks(bot) &&
         (!DateTime.TryParse(bot.PersistentRecord.ObjectiveExpiresUtc, null,
-             System.Globalization.DateTimeStyles.RoundtripKind, out DateTime due) || due.ToUniversalTime() <= DateTime.UtcNow);
+             System.Globalization.DateTimeStyles.RoundtripKind, out DateTime due) || due.ToUniversalTime() <= WorldSimulationClock.UtcNow);
 
     public static void CompleteBetweenTaskServices(GameBot bot)
     {
@@ -496,8 +496,8 @@ public static class AutonomousObjectiveAssignments
                 $"goal=\"{bot.PersistentRecord.CurrentGoal}\" activity=\"{bot.PersistentRecord.Activity}\" " +
                 $"assignment=\"{bot.PersistentRecord.ObjectiveAssignmentId}\"");
         bool pveRequired = bot.PersistentRecord.ObjectiveRvrEligibleUtc == PveCompletionRequired;
-        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, DateTime.UtcNow,
-                Random.Shared.NextDouble(), mayRvr: !pveRequired && IsRvrEligible(bot.PersistentRecord, DateTime.UtcNow),
+        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
+                Random.Shared.NextDouble(), mayRvr: !pveRequired && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
                 danger: Danger),
             CrewBucket(bot), GameLoop.GameLoopTime);
     }

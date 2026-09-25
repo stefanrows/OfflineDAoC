@@ -132,7 +132,7 @@ namespace DOL.GS;
         ItemQuery query = new() { Realm = bot.Realm };
         return MarketCache.SearchItems(query)
             .Where(item => item.OwnerLot == lot && item.IsTradable && item.SellPrice > 0 && item.SellPrice <= money &&
-                item.OwnerID != GetOwnerId(bot.DatabaseID) && !RealmExchangeExpiry.IsExpired(item, DateTime.UtcNow))
+                item.OwnerID != GetOwnerId(bot.DatabaseID) && !RealmExchangeExpiry.IsExpired(item, WorldSimulationClock.UtcNow))
             .OrderBy(item => item.SellPrice)
             .Take(maximumResults)
             .ToArray();
@@ -648,7 +648,7 @@ namespace DOL.GS;
         item.OwnerLot = RealmExchangeBroker.GetOwnerLot(bot.Realm);
         item.SlotPosition = slot;
         item.SellPrice = priceCopper;
-        item.RealmExchangeListedUtc = DateTime.UtcNow.ToString("O");
+        item.RealmExchangeListedUtc = WorldSimulationClock.UtcNow.ToString("O");
         bool saved = item.IsPersisted ? GameServer.Database.SaveObject(item) : GameServer.Database.AddObject(item);
         if (!saved)
         {

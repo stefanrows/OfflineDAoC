@@ -66,7 +66,7 @@ public static class AutonomousPvpOpportunityPolicy
         if (actor == null || candidates == null || PvpCombatant.IsSafeArea(actor))
             return null;
         (int ownCount, int ownLevel) = VisibleParty(actor);
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = WorldSimulationClock.UtcNow;
         GameLiving[] visibleCandidates = candidates
             .Where(target => target != null && target != actor && target.IsAlive &&
                 target.ObjectState == GameObject.eObjectState.Active &&

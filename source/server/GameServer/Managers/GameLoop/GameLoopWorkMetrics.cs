@@ -35,9 +35,9 @@ namespace DOL.GS
         {
             TickSamples[_tickSampleCount++ % TickSamples.Length] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             long now = Stopwatch.GetTimestamp();
-            if (_tickReportAt == 0) _tickReportAt = now + 60 * Stopwatch.Frequency;
+            if (_tickReportAt == 0) _tickReportAt = now + Stopwatch.Frequency;
             if (now < _tickReportAt) return;
-            _tickReportAt = now + 60 * Stopwatch.Frequency;
+            _tickReportAt = now + Stopwatch.Frequency;
             int count = Math.Min(_tickSampleCount, TickSamples.Length);
             var ordered = new double[count];
             Array.Copy(TickSamples, ordered, count);
@@ -63,7 +63,7 @@ namespace DOL.GS
             counters.TotalMs += ms;
             counters.MaxMs = Math.Max(counters.MaxMs, ms);
             counters.WaitMs += _stageWaitMs;
-            if (ms > GameLoop.TickDuration) counters.OverBudget++;
+            if (ms > GameLoop.TickBudgetMilliseconds) counters.OverBudget++;
 
             long now = Stopwatch.GetTimestamp();
             if (_reportAt == 0) _reportAt = now + 60 * Stopwatch.Frequency;
@@ -73,7 +73,7 @@ namespace DOL.GS
             {
                 Counters value = pair.Value;
                 if (value.Count == 0) continue;
-                Log.Info(FormattableString.Invariant($"SERVER_WORK stage={pair.Key} samples={value.Count} avgMs={value.TotalMs / value.Count:F3} maxMs={value.MaxMs:F3} barrierAvgMs={value.WaitMs / value.Count:F3} overBudget={value.OverBudget}"));
+                Log.Info(FormattableString.Invariant($"SERVER_WORK stage={pair.Key} samples={value.Count} avgMs={value.TotalMs / value.Count:F3} maxMs={value.MaxMs:F3} barrierAvgMs={value.WaitMs / value.Count:F3} selectedBudgetMs={GameLoop.SelectedTickBudgetMilliseconds:F3} effectiveBudgetMs={GameLoop.TickBudgetMilliseconds:F3} tickP95Ms={LatestTickP95Ms:F3} overBudget={value.OverBudget}"));
                 value.Count = value.OverBudget = 0;
                 value.TotalMs = value.MaxMs = value.WaitMs = 0;
             }

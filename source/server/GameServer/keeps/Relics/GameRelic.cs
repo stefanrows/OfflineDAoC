@@ -30,7 +30,7 @@ namespace DOL.GS
         private long _timeRelicOnGround;
         private GameRelicPad _returnRelicPad;
 
-        public DateTime LastCaptureDate { get; set; } = DateTime.Now;
+        public DateTime LastCaptureDate { get; set; } = WorldSimulationClock.LocalNow;
         public eRelicType RelicType { get; private set; }
         public eRealm OriginalRealm { get; private set; }
         public eRealm LastRealm { get; private set; } = eRealm.None;

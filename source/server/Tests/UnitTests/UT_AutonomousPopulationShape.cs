@@ -49,6 +49,19 @@ public sealed class UT_AutonomousPopulationShape
     }
 
     [Test]
+    public void ThreeTimesSpawnCapacityKeepsTenThousandBotRampOnSchedule()
+    {
+        const int rosterSize = 10_000;
+        int earlyTarget = (int)Math.Ceiling(rosterSize * AutonomousPopulationRamp.EarlyPopulationFraction);
+        double earlyRatePerSimulationSecond = earlyTarget / (AutonomousPopulationRamp.EarlyRampMinutes * 60d);
+        double laterRatePerSimulationSecond = (rosterSize - earlyTarget) / ((15 - AutonomousPopulationRamp.EarlyRampMinutes) * 60d);
+        int requiredAtThreeTimes = (int)Math.Ceiling(Math.Max(earlyRatePerSimulationSecond, laterRatePerSimulationSecond) *
+            3d * AutonomousPopulationController.PopulationPollIntervalMilliseconds / 1000d);
+
+        Assert.That(AutonomousPopulationController.MaximumSpawnEnqueuePerPoll, Is.GreaterThanOrEqualTo(requiredAtThreeTimes));
+    }
+
+    [Test]
     public void RecommendationRequiresThreeStableSamplesForSameHardware()
     {
         string folder = Path.Combine(Path.GetTempPath(), "population-benchmark-" + Guid.NewGuid().ToString("N"));

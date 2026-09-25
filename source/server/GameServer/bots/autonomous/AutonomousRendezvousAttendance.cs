@@ -27,7 +27,7 @@ namespace DOL.GS
         {
             if (_due.TryAdd(memberId, now + TimeoutMilliseconds))
             {
-                _dueUtc[memberId] = (utcNow ?? DateTime.UtcNow).AddMilliseconds(TimeoutMilliseconds);
+                _dueUtc[memberId] = (utcNow ?? WorldSimulationClock.UtcNow).AddMilliseconds(TimeoutMilliseconds);
                 Revision++;
             }
         }

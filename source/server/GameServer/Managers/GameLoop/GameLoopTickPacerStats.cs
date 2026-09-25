@@ -71,6 +71,13 @@ namespace DOL.GS
                     ticks.Add(tick);
             }
 
+            if (ticks.Count == 0)
+            {
+                foreach (int interval in _intervals)
+                    result.Add((interval, 0));
+                return;
+            }
+
             int startIndex = 0;
 
             // Count ticks per interval and calculate averages.

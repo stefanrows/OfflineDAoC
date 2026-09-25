@@ -463,6 +463,7 @@ namespace DOL.GS
             base.OnConnect(sessionId);
 
             // `OnConnect` is exclusively called from outside the game loop.
+            OfflineWorldSpeedControl.OnClientConnectionPending(this);
             ClientService.Instance.Post(static state =>
             {
                 ClientService.Instance.OnClientConnect(state);

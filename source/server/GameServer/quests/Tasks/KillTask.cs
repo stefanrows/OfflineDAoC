@@ -285,7 +285,7 @@ namespace DOL.GS.Quests
             else
             {
                 player.GameTask = new KillTask(player);
-                player.GameTask.TimeOut = DateTime.Now.AddHours(2);
+                player.GameTask.TimeOut = WorldSimulationClock.LocalNow.AddHours(2);
                 ((KillTask)player.GameTask).MobKilled = false;
                 ((KillTask)player.GameTask).ItemIndex = Util.Random(0, TaskObjects.Length - 1);
                 ((KillTask)player.GameTask).MobName = Mob.Name;

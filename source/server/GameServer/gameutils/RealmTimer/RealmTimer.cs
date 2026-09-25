@@ -97,7 +97,7 @@ public class RealmTimer
             return;
 
         DbAccount playerAccount = player.Client.Account;
-        DateTime LastCombatTickPvPDateTime = DateTime.Now.AddMilliseconds(-(GameLoop.GameLoopTime - player.LastCombatTickPvP));
+        DateTime LastCombatTickPvPDateTime = WorldSimulationClock.LocalNow.AddMilliseconds(-(GameLoop.GameLoopTime - player.LastCombatTickPvP));
 
         //Don't update realmtimer it is still in effect and players realm is not the realm_timer_realm
         eRealm current_realm_timer_realm = (eRealm)CurrentRealm(player);
@@ -121,10 +121,10 @@ public class RealmTimer
             return (int)eRealm.None;
 
         DbAccount playerAccount = player.Client.Account;
-        DateTime LastCombatTickPvPDateTime = DateTime.Now.AddMilliseconds(-(GameLoop.GameLoopTime - player.LastCombatTickPvP));
+        DateTime LastCombatTickPvPDateTime = WorldSimulationClock.LocalNow.AddMilliseconds(-(GameLoop.GameLoopTime - player.LastCombatTickPvP));
         
         //Return Realm_Timer_Realm if realm timer is active. Help prevent realm timer from switching realms on duels/etc.
-        if ((DateTime.Now - playerAccount.Realm_Timer_Last_Combat).TotalMinutes < ServerProperties.Properties.PVP_REALM_TIMER_MINUTES)
+        if ((WorldSimulationClock.LocalNow - playerAccount.Realm_Timer_Last_Combat).TotalMinutes < ServerProperties.Properties.PVP_REALM_TIMER_MINUTES)
             return (int)playerAccount.Realm_Timer_Realm;
         //Return players current realm.
         else
@@ -135,20 +135,20 @@ public class RealmTimer
     {
         DbAccount playerAccount = player.Client.Account;
 
-        double timeSinceLastCombat = (DateTime.Now - playerAccount.Realm_Timer_Last_Combat).TotalMinutes;
+        double timeSinceLastCombat = (WorldSimulationClock.LocalNow - playerAccount.Realm_Timer_Last_Combat).TotalMinutes;
         //If DB realm_timer_last_combat value is within the pvp_realm_timer_minutes & this player is not the realm in DB, return the time remaing based on DB value
         if (timeSinceLastCombat < ServerProperties.Properties.PVP_REALM_TIMER_MINUTES && (eRealm)playerAccount.Realm_Timer_Realm != player.Realm)    
             return ServerProperties.Properties.PVP_REALM_TIMER_MINUTES - timeSinceLastCombat;
 
         //Get datetime of this players Last Combat Tick PvP
-        DateTime LastCombatTickPvPDateTime = DateTime.Now.AddMilliseconds(-(GameLoop.GameLoopTime - player.LastCombatTickPvP));
+        DateTime LastCombatTickPvPDateTime = WorldSimulationClock.LocalNow.AddMilliseconds(-(GameLoop.GameLoopTime - player.LastCombatTickPvP));
 
         //Check if Realm_Timer_Last_Combat was more recent than LastCombatTickPvP
         if(player.LastCombatTickPvP == 0 || LastCombatTickPvPDateTime < playerAccount.Realm_Timer_Last_Combat)
             LastCombatTickPvPDateTime = playerAccount.Realm_Timer_Last_Combat;
 
         //Return time left on realm timer. If timeSinceLastCombat > PVP_REALM_TIMER_MINUTES, return 0;
-        timeSinceLastCombat = (DateTime.Now - LastCombatTickPvPDateTime).TotalMinutes;
+        timeSinceLastCombat = (WorldSimulationClock.LocalNow - LastCombatTickPvPDateTime).TotalMinutes;
         if (timeSinceLastCombat < ServerProperties.Properties.PVP_REALM_TIMER_MINUTES)    
             return ServerProperties.Properties.PVP_REALM_TIMER_MINUTES - timeSinceLastCombat;
         else

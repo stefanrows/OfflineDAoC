@@ -1123,7 +1123,7 @@ namespace DOL.AI.Brain
             if (!CanAmbientWander || Body.IsMoving || Body.IsCasting || Body.InCombat)
                 return;
 
-            DateTime now = DateTime.UtcNow;
+            DateTime now = WorldSimulationClock.UtcNow;
             if (!AutonomousBotChat.ShouldSpeak(now, _lastIdleRoleplayUtc, false))
                 return;
 
@@ -1526,7 +1526,7 @@ namespace DOL.AI.Brain
                 return;
             _nextAmbientChatCheckTick = nowTick + 15_000 + Random.Shared.Next(20_001) + bot.ObjectID % 4_000;
 
-            DateTime now = DateTime.UtcNow;
+            DateTime now = WorldSimulationClock.UtcNow;
             OfflineWorldBotRecord record = bot.PersistentRecord;
             if (!AutonomousBotChat.ShouldSpeak(now, _lastIdleRoleplayUtc,
                     bot.InCombat || bot.IsAttacking || bot.IsCasting || bot.IsOnStableMasterRoute,

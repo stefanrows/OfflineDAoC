@@ -1674,7 +1674,7 @@ namespace DOL.GS
             if (candidates == null || candidates.Length == 0)
                 return null;
             GameLiving revengeTarget = candidates
-                .Where(candidate => AutonomousGuildGrudgeMemory.IsActiveTarget(bot, candidate, DateTime.UtcNow))
+                .Where(candidate => AutonomousGuildGrudgeMemory.IsActiveTarget(bot, candidate, WorldSimulationClock.UtcNow))
                 .OrderBy(bot.GetDistanceTo)
                 .FirstOrDefault();
             if (revengeTarget != null)
@@ -1739,7 +1739,7 @@ namespace DOL.GS
             if (brain == null || bot == null ||
                 !AutonomousPvpOpportunityPolicy.CanSeekOpportunity(AutonomousObjectiveAssignments.KindFor(bot),
                     bot.Group?.MemberCount ?? 1) ||
-                AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, DateTime.UtcNow) ||
+                AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow) ||
                 brain.HasAggro || bot.InCombat || bot.IsAttacking || bot.IsRecoveryResting ||
                 _groupDirective?.RecoveringBetweenPulls == true || _groupDirective?.GroupCombatActive == true ||
                 IsSafeArea(bot) || !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
@@ -1757,11 +1757,11 @@ namespace DOL.GS
             bool atHuntingGround = _rvrDestination != null && bot.CurrentRegionID == _rvrDestination.RegionId &&
                 Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= 2_000;
             if ((opponent != null || atHuntingGround) &&
-                AutonomousActivityScheduler.ObservePvpTarget(bot.PersistentRecord, DateTime.UtcNow, opponent != null))
+                AutonomousActivityScheduler.ObservePvpTarget(bot.PersistentRecord, WorldSimulationClock.UtcNow, opponent != null))
             {
                 if (opponent == null && bot.Group == null &&
-                    AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, DateTime.UtcNow))
-                    bot.PersistentRecord.ObjectiveExpiresUtc = DateTime.UtcNow.ToString("O");
+                    AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow))
+                    bot.PersistentRecord.ObjectiveExpiresUtc = WorldSimulationClock.UtcNow.ToString("O");
                 bot.MarkAutonomousStateDirty();
                 AutonomousBotStatusPersistence.Queue(bot);
             }
@@ -1769,7 +1769,7 @@ namespace DOL.GS
                 return false;
 
             AutonomousPvpEngagementTracker.Tag(bot,
-                AutonomousGuildGrudgeMemory.IsActiveTarget(bot, opponent, DateTime.UtcNow)
+                AutonomousGuildGrudgeMemory.IsActiveTarget(bot, opponent, WorldSimulationClock.UtcNow)
                     ? AutonomousPvpEngagementTracker.Grudge : AutonomousPvpEngagementTracker.Opportunity);
             bot.StopMovingOnPath();
             bot.StopMoving();
@@ -1901,7 +1901,7 @@ namespace DOL.GS
         private CampDestination ChooseRvrDestination(GameBot bot)
         {
             HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
-            GameLiving revengeTarget = AutonomousGuildGrudgeMemory.GetReachableTargets(bot, reachable, DateTime.UtcNow)
+            GameLiving revengeTarget = AutonomousGuildGrudgeMemory.GetReachableTargets(bot, reachable, WorldSimulationClock.UtcNow)
                 .OrderBy(target => EstimateTravelMinutes(bot, target.CurrentRegionID, target.X, target.Y))
                 .FirstOrDefault();
             if (revengeTarget != null)

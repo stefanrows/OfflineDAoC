@@ -121,13 +121,15 @@ namespace DOL.GS
                 GoalAttemptEnd.ServiceDetour or GoalAttemptEnd.Logout ? "interrupted" : "failed";
         }
 
-        public object Finish(GoalAttemptEnd reason, string detail, DateTime utcNow, int region, int x, int y, int z)
+        public object Finish(GoalAttemptEnd reason, string detail, DateTime utcNow, int region, int x, int y, int z,
+            DateTime? simulationUtcNow = null)
         {
             lock (_gate)
             {
                 if (_closed) return null;
                 _closed = true;
-                if (reason == GoalAttemptEnd.Reassigned && ExpiresUtc != default && utcNow >= ExpiresUtc)
+                DateTime deadlineNow = simulationUtcNow?.ToUniversalTime() ?? utcNow.ToUniversalTime();
+                if (reason == GoalAttemptEnd.Reassigned && ExpiresUtc != default && deadlineNow >= ExpiresUtc.ToUniversalTime())
                     reason = GoalAttemptEnd.Expired;
                 return new
                 {
@@ -202,7 +204,7 @@ namespace DOL.GS
             {
                 var position = failurePosition ?? (bot.CurrentRegionID, bot.X, bot.Y, bot.Z);
                 object summary = attempt.Finish(reason, detail, DateTime.UtcNow,
-                    position.Item1, position.Item2, position.Item3, position.Item4);
+                    position.Item1, position.Item2, position.Item3, position.Item4, WorldSimulationClock.UtcNow);
                 if (summary != null) Log.Info("AUTONOMOUS_GOAL_ATTEMPT " + JsonSerializer.Serialize(summary));
             }
             catch { }

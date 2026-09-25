@@ -46,7 +46,7 @@ namespace DOL.GS.Keeps
 
             DateTime claimedAt = Keep.ClaimedAt;
             return claimedAt == DateTime.MinValue ||
-                DateTime.UtcNow - claimedAt >= TimeSpan.FromSeconds(ServerProperties.Properties.RELIC_KEEP_CLAIM_DELAY);
+                WorldSimulationClock.UtcNow - claimedAt >= TimeSpan.FromSeconds(ServerProperties.Properties.RELIC_KEEP_CLAIM_DELAY);
         }
     }
 }

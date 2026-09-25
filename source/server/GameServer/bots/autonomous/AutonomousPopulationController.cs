@@ -25,7 +25,11 @@ namespace DOL.GS;
 public static class AutonomousPopulationController
 {
     public const string TeleportToBotCommandType = "TeleportToBot";
-    public const int MaximumSpawnEnqueuePerPoll = 16;
+    public const int PopulationPollIntervalMilliseconds = 1_000;
+    // At a 3x simulation rate, the 10,000-bot startup ramp needs up to about
+    // 34 actor preparations per real second. Keep the I/O batch bounded with
+    // headroom for timer jitter and slower inventory reads.
+    public const int MaximumSpawnEnqueuePerPoll = 48;
     private const float MaximumStartupGroundDelta = 96f;
     private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
     private static readonly ConcurrentDictionary<long, byte> PendingSpawns = new();
@@ -48,7 +52,7 @@ public static class AutonomousPopulationController
     public static void OnServerStarted(DOLEvent e, object sender, EventArgs args)
     {
         Interlocked.Increment(ref _loginGeneration);
-        _startedUtc = DateTime.UtcNow;
+        _startedUtc = WorldSimulationClock.UtcNow;
         OfflineWorldBotRecord[] previouslyOnline = DOLDB<OfflineWorldBotRecord>
             .SelectObjects(DB.Column("IsOnline").IsEqualTo(true))
             .ToArray();
@@ -77,7 +81,7 @@ public static class AutonomousPopulationController
         _nextAltUtc = _startedUtc.AddHours(Math.Max(1, AutonomousBotGoalPolicy.Settings.AltJoinIntervalHours));
         _nextBenchmarkCheckUtc = DateTime.MinValue;
         TierStableSince.Clear();
-        _timer = new System.Threading.Timer(Poll, null, 500, 1000);
+        _timer = new System.Threading.Timer(Poll, null, 500, PopulationPollIntervalMilliseconds);
     }
 
     [GameServerStoppedEvent]
@@ -103,21 +107,22 @@ public static class AutonomousPopulationController
 
         try
         {
-            DateTime nowUtc = DateTime.UtcNow;
+            DateTime wallNowUtc = DateTime.UtcNow;
+            DateTime simulationNowUtc = WorldSimulationClock.UtcNow;
             RefreshControlPlane(force: false);
-            if (nowUtc >= _nextCommandPollUtc)
+            if (wallNowUtc >= _nextCommandPollUtc)
             {
-                _nextCommandPollUtc = nowUtc.AddSeconds(3);
-                bool repairOrphans = nowUtc >= _nextOrphanRepairUtc;
+                _nextCommandPollUtc = wallNowUtc.AddSeconds(3);
+                bool repairOrphans = wallNowUtc >= _nextOrphanRepairUtc;
                 if (repairOrphans)
-                    _nextOrphanRepairUtc = nowUtc.AddMinutes(1);
+                    _nextOrphanRepairUtc = wallNowUtc.AddMinutes(1);
                 QueueOwnerCommands(repairOrphans);
             }
 
             OfflineWorldBotRecord[] roster = _cachedRoster;
-            TryCreateAlt(nowUtc, roster);
-            TryRecordBenchmark(nowUtc);
-            int desired = AutonomousPopulationRamp.DesiredActiveCount(_cachedEnabled, roster.Length, _cachedRampMinutes, nowUtc - _startedUtc);
+            TryCreateAlt(simulationNowUtc, roster);
+            TryRecordBenchmark(wallNowUtc);
+            int desired = AutonomousPopulationRamp.DesiredActiveCount(_cachedEnabled, roster.Length, _cachedRampMinutes, simulationNowUtc - _startedUtc);
             int missing = desired - AutonomousBotRegistry.Count - PendingSpawns.Count;
             if (missing <= 0)
                 return;
@@ -144,9 +149,10 @@ public static class AutonomousPopulationController
                 .Where(record => !record.IsOnline && !AutonomousBotRegistry.Contains(record.BotId) && !PendingSpawns.ContainsKey(record.BotId))
                 .ToList();
 
-            // Ten thousand actors require about eleven scheduled logins per
-            // second to reach 33% at five minutes and 100% at fifteen. Keep
-            // every pulse bounded while retaining modest catch-up headroom.
+            // Ten thousand actors need roughly eleven logins per simulated
+            // second to reach 33% at five minutes and 100% at fifteen. At 3x,
+            // that is about 34 preparations per real second; keep each pulse
+            // bounded while retaining modest catch-up headroom.
             int enqueueCount = Math.Min(Math.Min(missing, available.Count), MaximumSpawnEnqueuePerPoll);
             for (int i = 0; i < enqueueCount; i++)
             {
@@ -232,7 +238,7 @@ public static class AutonomousPopulationController
                 double p95 = GameLoopWorkMetrics.LatestTickP95Ms;
                 using Process process = Process.GetCurrentProcess();
                 var sample = new PopulationBenchmarkSample(tier, active, cores, available,
-                    process.WorkingSet64, p95, GameLoop.TickDuration, nowUtc);
+                    process.WorkingSet64, p95, GameLoop.TickBudgetMilliseconds, nowUtc);
                 measurements.Record(sample);
                 measurements.Save(path);
                 Log.Info($"AUTONOMOUS_POPULATION_SAMPLE tier={tier} active={active} cores={cores} " +

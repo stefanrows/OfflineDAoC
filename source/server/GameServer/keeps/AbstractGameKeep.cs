@@ -706,7 +706,7 @@ namespace DOL.GS.Keeps
 				GameBot bot => bot.Guild,
 				_ => null,
 			};
-			ClaimedAt = DateTime.UtcNow;
+			ClaimedAt = WorldSimulationClock.UtcNow;
 			
 			if (ServerProperties.Properties.GUILDS_CLAIM_LIMIT > 1)
 				Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps of a maximum of " + ServerProperties.Properties.GUILDS_CLAIM_LIMIT, eChatType.CT_Guild, eChatLoc.CL_ChatWindow);

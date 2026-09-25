@@ -705,7 +705,7 @@ namespace DOL.GS
             IsOnStableMasterRoute = true;
             IsOnHorse = true;
             StableRouteDestination = destination ?? string.Empty;
-            _stableRouteExpectedArrivalUtc = DateTime.UtcNow + expectedDuration +
+            _stableRouteExpectedArrivalUtc = WorldSimulationClock.UtcNow + expectedDuration +
                                               TimeSpan.FromMilliseconds(Math.Max(0, departureDelayMilliseconds)) +
                                               TimeSpan.FromMinutes(2);
             _stableRouteLastMovementTick = GameLoop.GameLoopTime;
@@ -979,7 +979,7 @@ namespace DOL.GS
 
             if (IsAutonomousWorldBot && PersistentRecord != null)
             {
-                if (AutonomousGuildGrudgeMemory.RememberKiller(this, killer, DateTime.UtcNow,
+                if (AutonomousGuildGrudgeMemory.RememberKiller(this, killer, WorldSimulationClock.UtcNow,
                         out string grudgeTargetName, out string grudgeLocation, out bool announceGrudge) && announceGrudge)
                     AutonomousBotChatCoordinator.AnnounceGuildKOS(this, grudgeTargetName, grudgeLocation);
 
@@ -990,10 +990,10 @@ namespace DOL.GS
                 if (_lastDeathWasPvp &&
                     AutonomousActivityScheduler.CountsPvpDeathTowardWall(PersistentRecord,
                         AutonomousObjectiveAssignments.KindFor(this)) &&
-                    AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, DateTime.UtcNow) &&
+                    AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, WorldSimulationClock.UtcNow) &&
                     Group == null && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR) &&
-                    AutonomousActivityScheduler.IsPveBlocked(PersistentRecord, DateTime.UtcNow))
-                    PersistentRecord.ObjectiveExpiresUtc = DateTime.UtcNow.ToString("O");
+                    AutonomousActivityScheduler.IsPveBlocked(PersistentRecord, WorldSimulationClock.UtcNow))
+                    PersistentRecord.ObjectiveExpiresUtc = WorldSimulationClock.UtcNow.ToString("O");
                 GoalDiagnosticAttempt?.Died();
                 PersistentRecord.TargetName = (TargetObject as GameLiving)?.Name ?? killer?.Name ?? string.Empty;
                 PersistentRecord.Activity = _lastDeathWasPvp ? "Defeated by a player" : "Defeated; reassessing target difficulty";

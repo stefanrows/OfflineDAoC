@@ -35,20 +35,20 @@ namespace DOL.GS
         {
             ProcessPostedActionsParallel();
 
-            if (_lastDailyRollover.Date.DayOfYear < DateTime.Now.Date.DayOfYear || _lastDailyRollover.Year < DateTime.Now.Year)
+            if (_lastDailyRollover.Date.DayOfYear < WorldSimulationClock.LocalNow.Date.DayOfYear || _lastDailyRollover.Year < WorldSimulationClock.LocalNow.Year)
             {
                 DbTaskRefreshInterval loadQuestsProp = GameServer.Database.SelectObject<DbTaskRefreshInterval>(DB.Column("RolloverInterval").IsEqualTo(DAILY_INTERVAL_KEY));
 
                 // Update the one we've got, or make a new one.
                 if (loadQuestsProp != null)
                 {
-                    loadQuestsProp.LastRollover = DateTime.Now;
+                    loadQuestsProp.LastRollover = WorldSimulationClock.LocalNow;
                     GameServer.Database.SaveObject(loadQuestsProp);
                 }
                 else
                 {
                     DbTaskRefreshInterval newTime = new();
-                    newTime.LastRollover = DateTime.Now;
+                    newTime.LastRollover = WorldSimulationClock.LocalNow;
                     newTime.RolloverInterval = DAILY_INTERVAL_KEY;
                     GameServer.Database.AddObject(newTime);
                 }
@@ -68,7 +68,7 @@ namespace DOL.GS
                     return;
                 }
 
-                _lastDailyRollover = DateTime.Now;
+                _lastDailyRollover = WorldSimulationClock.LocalNow;
 
                 for (int i = 0; i < lastValidIndex + 1; i++)
                 {

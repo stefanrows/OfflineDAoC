@@ -107,12 +107,16 @@ namespace DOL.GS
 
                 stats.AppendLine("[Application]");
                 stats.AppendLine($"  {"Clients:".PadRight(PADDING)} {clientCount}");
+                stats.AppendLine($"  {"World speed (S/E/A):".PadRight(PADDING)} {OfflineWorldSpeedControl.SelectedMultiplier}x / {OfflineWorldSpeedControl.EffectiveMultiplier}x / {OfflineWorldSpeedControl.AchievedMultiplier:F2}x");
+                stats.AppendLine($"  {"Tick budget (selected/effective):".PadRight(PADDING)} {GameLoop.SelectedTickBudgetMilliseconds:F2}ms / {GameLoop.TickBudgetMilliseconds:F2}ms; p95 {GameLoopWorkMetrics.LatestTickP95Ms:F2}ms");
                 stats.AppendLine($"  {"Event handlers (G/O):".PadRight(PADDING)} {globalHandlers} / {objectHandlers}");
 
                 if (averageTps.Count != 0)
                 {
                     stats.Append("  ");
-                    StringBuilder labelBuilder = new("Game loop TPS (");
+                    double effectiveMultiplier = OfflineWorldSpeedControl.EffectiveMultiplier;
+                    double targetTps = 1000.0 / GameLoop.TickDuration * effectiveMultiplier;
+                    StringBuilder labelBuilder = new($"Game loop TPS @ {effectiveMultiplier}x (target {targetTps:F0}/sec; ");
 
                     for (int i = averageTps.Count - 1; i >= 0; i--)
                     {
@@ -128,7 +132,7 @@ namespace DOL.GS
 
                     for (int i = averageTps.Count - 1; i >= 0; i--)
                     {
-                        double percentOfTarget = averageTps[i].Item2 / (10 / GameLoop.TickDuration);
+                        double percentOfTarget = averageTps[i].Item2 / targetTps;
                         stats.Append($"{percentOfTarget:F1}%");
 
                         if (i != 0)
