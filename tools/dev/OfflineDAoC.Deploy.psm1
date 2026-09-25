@@ -461,7 +461,12 @@ function Invoke-OfflineDaocDeploy {
         foreach ($entry in $replace) {
             Assert-OfflineDaocStopped
             $current = Get-OfflineDaocFileHash $entry.Target
-            if ($current -ne $entry.InstalledHash) {
+            if ($entry.InstalledHash) {
+                if ($current -ne $entry.InstalledHash) {
+                    throw "Runtime changed during deployment: $($entry.Relative)"
+                }
+            }
+            elseif (Test-Path -LiteralPath $entry.Target) {
                 throw "Runtime changed during deployment: $($entry.Relative)"
             }
             Copy-OfflineDaocVerified -Source $entry.Source -Destination $entry.Target -ExpectedHash $entry.NewHash
