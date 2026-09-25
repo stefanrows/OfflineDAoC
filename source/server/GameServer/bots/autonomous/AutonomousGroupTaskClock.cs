@@ -2,12 +2,15 @@ using System;
 
 namespace DOL.GS
 {
-    /// <summary>One duration: only initial assembly is excluded; recovery never pauses it.</summary>
+    /// <summary>Travel has a bounded window; the task duration begins at the camp and recovery never pauses it.</summary>
     public sealed class AutonomousGroupTaskClock
     {
+        public const long CampTravelTimeoutMilliseconds = 30 * 60_000L;
         public long DurationMilliseconds { get; }
         public long? DeadlineTick { get; private set; }
+        public long? TravelDeadlineTick { get; private set; }
         public DateTime ExpiresUtc { get; private set; }
+        public DateTime TravelExpiresUtc { get; private set; }
         public long PausedRemainingMilliseconds { get; private set; }
         public bool HasStarted { get; private set; }
         public bool IsPaused => !DeadlineTick.HasValue;
@@ -24,10 +27,24 @@ namespace DOL.GS
             if (DeadlineTick.HasValue)
                 return false;
             HasStarted = true;
+            TravelDeadlineTick = null;
+            TravelExpiresUtc = default;
             DeadlineTick = nowTick + PausedRemainingMilliseconds;
             ExpiresUtc = utcNow.AddMilliseconds(PausedRemainingMilliseconds);
             return true;
         }
+
+        public bool BeginTravel(long nowTick, DateTime utcNow)
+        {
+            if (HasStarted || TravelDeadlineTick.HasValue)
+                return false;
+            TravelDeadlineTick = nowTick + CampTravelTimeoutMilliseconds;
+            TravelExpiresUtc = utcNow.AddMilliseconds(CampTravelTimeoutMilliseconds);
+            return true;
+        }
+
+        public bool HasTravelTimedOut(long nowTick) =>
+            !HasStarted && TravelDeadlineTick.HasValue && nowTick >= TravelDeadlineTick.Value;
 
         public long RemainingMilliseconds(long nowTick) => DeadlineTick.HasValue
             ? Math.Max(0, DeadlineTick.Value - nowTick) : PausedRemainingMilliseconds;

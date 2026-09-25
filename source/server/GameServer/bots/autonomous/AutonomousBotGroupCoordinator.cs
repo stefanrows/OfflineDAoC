@@ -70,6 +70,7 @@ public static partial class AutonomousBotGroupCoordinator
         public bool TaskTimerPaused { get; set; }
         public long TaskRemainingMilliseconds { get; set; }
         public string TaskExpiresUtc { get; set; } = string.Empty;
+        public string TravelDeadlineUtc { get; set; } = string.Empty;
         public string MeetUpDeadlineUtc { get; set; } = string.Empty;
         public string LeaderName { get; set; } = string.Empty;
         public string RendezvousName { get; set; } = string.Empty;
@@ -301,7 +302,8 @@ public static partial class AutonomousBotGroupCoordinator
             session.DungeonArrivalHoldUntilTick = 0;
             session.DungeonArrivalCompletedCampId = string.Empty;
             session.Phase = "Traveling";
-            StartTaskClock(session, members);
+            if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve)
+                session.TaskClock.BeginTravel(GameLoop.GameLoopTime, WorldSimulationClock.UtcNow);
             WriteSessionMetadata(session, members);
         }
     }
@@ -464,8 +466,20 @@ public static partial class AutonomousBotGroupCoordinator
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Camp == null || session.Recovery.IsRegrouping)
                 return;
+            GameBot[] members = BotMembers(bot.Group);
+            if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve)
+            {
+                GameBot leader = ChooseLeader(session, members);
+                // One early arrival must not spend the whole party's work
+                // window while the other members are still on the route.
+                if (leader == null || leader.CurrentRegionID != bot.CurrentRegionID ||
+                    leader.GetDistanceTo(bot) > CohesionRadius ||
+                    PresentPveMembers(members, leader, CohesionRadius).Length < 2)
+                    return;
+                StartTaskClock(session, members);
+            }
             session.Phase = "Grinding";
-            WriteSessionMetadata(session, BotMembers(bot.Group));
+            WriteSessionMetadata(session, members);
         }
     }
 
@@ -1196,6 +1210,11 @@ public static partial class AutonomousBotGroupCoordinator
             FinishGroupTask(expired, AutonomousRealmRaid.TryConsumeRelease(expired.Group, out string releaseReason)
                 ? releaseReason : "Shared group task expired");
 
+        if (objectiveKind == eAutonomousObjectiveKind.GroupPve)
+            foreach (Session timedOut in Sessions.Values.Where(session => session.ObjectiveKind == objectiveKind &&
+                         session.TaskClock.HasTravelTimedOut(GameLoop.GameLoopTime)).ToArray())
+                FinishGroupTask(timedOut, "Party did not reach its camp within the 30-minute travel window", returnToSolo: true);
+
         GameBot[] activeRoster = AutonomousBotRegistry.Snapshot()
             .Where(bot => !bot.IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(bot, objectiveKind))
             .ToArray();
@@ -1433,6 +1452,12 @@ public static partial class AutonomousBotGroupCoordinator
               AutonomousRvrEventLayer.IsForceCommitted(session.Id, GameLoop.GameLoopTime)))
         {
             FinishGroupTask(session, "Shared group task expired");
+            return false;
+        }
+        if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
+            session.TaskClock.HasTravelTimedOut(GameLoop.GameLoopTime))
+        {
+            FinishGroupTask(session, "Party did not reach its camp within the 30-minute travel window", returnToSolo: true);
             return false;
         }
         if (raidView == null && session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
@@ -1884,7 +1909,7 @@ public static partial class AutonomousBotGroupCoordinator
             session.Attendance.Observe(MemberKey(member), now, AtRendezvous(session, member));
     }
 
-    private static void FinishGroupTask(Session session, string reason)
+    private static void FinishGroupTask(Session session, string reason, bool returnToSolo = false)
     {
         if (session == null || session.Ending)
             return;
@@ -1928,7 +1953,8 @@ public static partial class AutonomousBotGroupCoordinator
             ClearMetadata(member, true);
             if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve && session.TaskClock.HasExpired(GameLoop.GameLoopTime))
                 AutonomousObjectiveAssignments.MarkPveTaskCompleted(member);
-            AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(member, reason + "; choosing independent work");
+            AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(member,
+                reason + "; choosing independent work", forceSoloPve: returnToSolo);
         }
     }
 
@@ -2153,6 +2179,8 @@ public static partial class AutonomousBotGroupCoordinator
             "Grinding" => $"Grinding {session.Camp?.MonsterName} as a party",
             _ => session.Phase,
         };
+        if (session.TaskClock.TravelDeadlineTick.HasValue && AutonomousRealmRaid.GetView(session.Group) == null)
+            status += $"; camp travel ends {session.TaskClock.TravelExpiresUtc:HH:mm} UTC";
         if (session.TaskClock.DeadlineTick.HasValue && AutonomousRealmRaid.GetView(session.Group) == null)
             status += $"; shared task ends {session.TaskClock.ExpiresUtc:HH:mm} UTC";
         return new(session.Id, session.Phase, goal, status, session.ObjectiveKind, leader, session.Rendezvous, session.Camp,
@@ -2353,6 +2381,8 @@ public static partial class AutonomousBotGroupCoordinator
                     TaskTimerPaused = session.TaskClock.IsPaused,
                     TaskRemainingMilliseconds = session.TaskClock.IsPaused ? session.TaskClock.PausedRemainingMilliseconds : 0,
                     TaskExpiresUtc = expiry,
+                    TravelDeadlineUtc = session.TaskClock.TravelDeadlineTick.HasValue
+                        ? session.TaskClock.TravelExpiresUtc.ToString("O") : string.Empty,
                     MeetUpDeadlineUtc = session.Phase == "Leader staging"
                         ? session.LeaderStagingDeadlineUtc.ToString("O")
                         : session.Phase == "Meeting up"

@@ -51,24 +51,34 @@ namespace DOL.GS.Tests
             Assert.That(clock.HasExpired(deadline), Is.True);
         }
 
-        [TestCase(eAutonomousObjectiveKind.GroupPve)]
-        [TestCase(eAutonomousObjectiveKind.RvR)]
-        public void OnlyInitialMeetupPausesTaskAndRecoveryCannotExtendIt(eAutonomousObjectiveKind kind)
+        [Test]
+        public void CampTravelHasItsOwnDeadlineAndRecoveryCannotExtendTheTask()
         {
-            var clock = new AutonomousGroupTaskClock(kind, new Random(3));
+            var clock = new AutonomousGroupTaskClock(eAutonomousObjectiveKind.GroupPve, new Random(3));
             var attendance = new AutonomousRendezvousAttendance();
             DateTime utc = new(2026, 8, 30, 5, 0, 0, DateTimeKind.Utc);
             attendance.Add(1, 0, utc);
             Assert.That(clock.RemainingMilliseconds(900_000), Is.EqualTo(clock.DurationMilliseconds));
             Assert.That(attendance.Observe(1, 900_000, false), Is.True);
-            clock.Start(900_000, utc.AddMinutes(15));
+            Assert.That(clock.BeginTravel(900_000, utc.AddMinutes(15)), Is.True);
+            Assert.That(clock.BeginTravel(1_200_000, utc.AddMinutes(20)), Is.False);
+            Assert.That(clock.HasTravelTimedOut(900_000 + AutonomousGroupTaskClock.CampTravelTimeoutMilliseconds - 1), Is.False);
+            Assert.That(clock.HasTravelTimedOut(900_000 + AutonomousGroupTaskClock.CampTravelTimeoutMilliseconds), Is.True);
+            Assert.That(clock.HasExpired(long.MaxValue), Is.False);
+            Assert.That(clock.RemainingMilliseconds(1_800_000), Is.EqualTo(clock.DurationMilliseconds));
+
+            // Arrival with one minute of travel allowance left starts the full
+            // work duration. Another camp choice or recovery cannot restart it.
+            long arrival = 900_000 + AutonomousGroupTaskClock.CampTravelTimeoutMilliseconds - 60_000;
+            clock.Start(arrival, utc.AddMilliseconds(arrival));
             long deadline = clock.DeadlineTick.Value;
-            // Ten minutes outbound plus fifteen minutes recovering all count.
-            long remaining = clock.DurationMilliseconds - 1_500_000;
-            Assert.That(clock.RemainingMilliseconds(2_400_000), Is.EqualTo(remaining));
-            Assert.That(clock.Start(2_400_000, utc.AddMinutes(40)), Is.False);
+            Assert.That(clock.HasTravelTimedOut(arrival + 60_000), Is.False);
+            Assert.That(clock.BeginTravel(arrival + 60_000, utc.AddMilliseconds(arrival + 60_000)), Is.False);
+            long recovery = arrival + 15 * 60_000;
+            Assert.That(clock.RemainingMilliseconds(recovery), Is.EqualTo(clock.DurationMilliseconds - 15 * 60_000));
+            Assert.That(clock.Start(recovery, utc.AddMilliseconds(recovery)), Is.False);
             Assert.That(clock.DeadlineTick, Is.EqualTo(deadline));
-            Assert.That(clock.ExpiresUtc, Is.EqualTo(utc.AddMinutes(15).AddMilliseconds(clock.DurationMilliseconds)));
+            Assert.That(clock.ExpiresUtc, Is.EqualTo(utc.AddMilliseconds(arrival + clock.DurationMilliseconds)));
             Assert.That(clock.HasExpired(clock.DeadlineTick.Value), Is.True);
         }
 

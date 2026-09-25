@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-09-25
+
+### Added
+
+- A separate 30-minute simulated-time travel window for autonomous PvE parties after choosing a camp. The Active Groups card shows its remaining travel time.
+
+### Changed
+
+- The shared 45–120-minute PvE task starts when a party reaches its camp instead of when the leader chooses the camp. Subsequent recovery and camp replanning still consume the original task duration.
+
+### Fixed
+
+- Long outbound trips no longer exhaust a group's fighting time before it reaches the camp. A party that misses its travel window sends its members to solo PvE before they can seek another group.
+
+### Removed
+
+- None.
+
 ## [0.57.0] - 2026-09-25
 
 ### Added

@@ -277,7 +277,7 @@ public static class AutonomousObjectiveAssignments
         AutonomousBotStatusPersistence.Queue(bot);
     }
 
-    public static void BeginSoloAfterGroupTask(GameBot bot, string reason)
+    public static void BeginSoloAfterGroupTask(GameBot bot, string reason, bool forceSoloPve = false)
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Group != null || bot.PersistentRecord == null)
             return;
@@ -288,11 +288,12 @@ public static class AutonomousObjectiveAssignments
         bool leavingRvr = Is(bot, eAutonomousObjectiveKind.RvR);
         if (leavingRvr)
             bot.PersistentRecord.ObjectiveRvrEligibleUtc = PveCompletionRequired;
-        if (TryBeginBetweenTaskServices(bot))
+        if (!forceSoloPve && TryBeginBetweenTaskServices(bot))
             return;
-        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
-                Random.Shared.NextDouble(), mayRvr: !leavingRvr && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
-                danger: Danger),
+        Assign(bot, forceSoloPve ? eAutonomousObjectiveKind.SoloPve :
+                AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
+                    Random.Shared.NextDouble(), mayRvr: !leavingRvr && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
+                    danger: Danger),
             CrewBucket(bot), GameLoop.GameLoopTime);
         bot.PersistentRecord.CurrentCampId = string.Empty;
         bot.PersistentRecord.TargetName = string.Empty;

@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.57.0";
+    internal const string DisplayVersion = "0.58.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -2092,6 +2092,7 @@ internal sealed partial class MainForm : Form
                     TaskTimerPaused = group?.TaskTimerPaused == true,
                     TaskRemainingMilliseconds = group?.TaskRemainingMilliseconds ?? 0,
                     GroupTaskExpiresUtc = group?.TaskExpiresUtc ?? string.Empty,
+                    TravelDeadlineUtc = group?.TravelDeadlineUtc ?? string.Empty,
                     MeetUpDeadlineUtc = group?.MeetUpDeadlineUtc ?? string.Empty,
                     GroupLeaderName = group?.LeaderName ?? string.Empty,
                     GroupRendezvousName = group?.RendezvousName ?? string.Empty,
@@ -3450,6 +3451,7 @@ internal sealed partial class MainForm : Form
         public bool TaskTimerPaused { get; init; }
         public long TaskRemainingMilliseconds { get; init; }
         public string GroupTaskExpiresUtc { get; init; } = string.Empty;
+        public string TravelDeadlineUtc { get; init; } = string.Empty;
         public string MeetUpDeadlineUtc { get; init; } = string.Empty;
         public string GroupLeaderName { get; init; } = string.Empty;
         public string GroupRendezvousName { get; init; } = string.Empty;
@@ -3479,6 +3481,9 @@ internal sealed partial class MainForm : Form
         {
             "Leader staging" => "LEADER STAGING: " + AssemblyTimerText,
             "Meeting up" => "MEETUP LEFT: " + AssemblyTimerText,
+            _ when TaskTimerPaused && TravelDeadlineUtc.Length > 0 =>
+                "CAMP TRAVEL LEFT: " + (TaskTimerDisplay.Remaining(TravelDeadlineUtc, SimulationUtcNow()) is long travel
+                    ? TaskTimerDisplay.Format(travel) : "Unavailable"),
             _ => "TASK LEFT: " + TaskRemaining,
         };
         private string AssemblyTimerText => AssemblyRemainingMilliseconds is long remaining
@@ -3513,6 +3518,7 @@ internal sealed partial class MainForm : Form
         public bool TaskTimerPaused { get; set; }
         public long TaskRemainingMilliseconds { get; set; }
         public string TaskExpiresUtc { get; set; } = string.Empty;
+        public string TravelDeadlineUtc { get; set; } = string.Empty;
         public string MeetUpDeadlineUtc { get; set; } = string.Empty;
         public string LeaderName { get; set; } = string.Empty;
         public string RendezvousName { get; set; } = string.Empty;

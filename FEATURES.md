@@ -59,9 +59,14 @@ and verification history of the full-PvP conversion.
 
 ## Autonomous parties and PvE
 
-- Ordinary autonomous PvE parties recruit compatible local bots across guilds
-  and realms. Matchmaking runs every five seconds and prioritizes the
-  longest-waiting candidates.
+- Ordinary autonomous PvE parties recruit compatible bots in the same region
+  across guilds and realms. Matchmaking runs every five seconds and prioritizes
+  the longest-waiting candidates; bots in separate home regions do not travel
+  across realms just to seek a pickup group.
+- Their meetup has its own deadline. After choosing a camp, the party has up
+  to 30 simulated minutes to arrive; the shared 45–120-minute task starts at
+  the camp and continues through later recovery and camp replanning. A party
+  that misses the camp travel window returns to solo PvE first.
 - Parties can depart with two arrivals and accept late followers. A released
   member can return after death without dissolving the surviving party.
 - Ordinary PvE parties can start with any size from two through eight. After a
