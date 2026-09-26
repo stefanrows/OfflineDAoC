@@ -21,7 +21,7 @@ namespace DOL.GS
             246 or 248 or 249 or 276 or 277;
 
         // A preference within the dungeon share, never a mandate to leave outdoor XP.
-        public static int DestinationWeight(ushort region) => region == 249 ? 2 : 1;
+        public static int DestinationWeight(ushort region) => region == 249 ? 3 : 1;
 
         public static bool IsStarterDungeonRegion(ushort region) => region is 21 or 129 or 221;
 

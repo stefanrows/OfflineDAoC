@@ -4064,6 +4064,11 @@ namespace DOL.GS
         {
             DbZonePoint[] points = ZonePoints()
                 .Where(point => IsAuthoritativeZonePointEdge(point) &&
+                                // DF is a destination, not a shortcut between the
+                                // three realm exits for unrelated world travel.
+                                (point.TargetRegion != AutonomousDarknessFallsPolicy.RegionId ||
+                                 targetRegion == AutonomousDarknessFallsPolicy.RegionId ||
+                                 currentRegion == AutonomousDarknessFallsPolicy.RegionId) &&
                                 AutonomousDungeonGoalCatalog.CanUseEntrance(point, targetRegion, targetX, targetY) &&
                                 IsRegionEdgeAccessible(realm, point.SourceRegion, point.TargetRegion) &&
                                 IsRegionPointAccessible(realm, point.SourceRegion, point.SourceX, point.SourceY) &&

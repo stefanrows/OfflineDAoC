@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.79.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Darkness Falls receives triple rather than double destination weight within eligible dungeon choices for autonomous XP camps and Hunter PvP patrols. The overall dungeon choice rates and population pressure remain unchanged.
+
+### Fixed
+
+- Autonomous routes to destinations outside Darkness Falls no longer use its entrances and exits as a cross-realm transit shortcut. Explicit DF camp and patrol destinations remain reachable.
+
+### Removed
+
+- None.
+
 ## [0.78.0] - 2026-09-26
 
 ### Added
