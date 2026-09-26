@@ -287,7 +287,7 @@ namespace DOL.GS.Keeps
             if (!(source is GamePlayer)) return false;
             GamePlayer player = (GamePlayer)source;
 
-            if (!GameServer.ServerRules.IsSameRealm(this, player, true) || !GameServer.ServerRules.IsAllowedToClaim(player, CurrentRegion))
+            if (!GameServer.ServerRules.IsAllowedToClaim(player, CurrentRegion))
             {
                 return false;
             }

@@ -230,6 +230,8 @@ namespace DOL.GS.Keeps
 		/// <returns></returns>
 		public static bool IsAllowedToInteract(GamePlayer player, AbstractGameKeep keep, eInteractType type)
 		{
+			if (type == eInteractType.Claim)
+				return keep.CheckForClaim(player);
 			if (player.Client.Account.PrivLevel > 1)
 				return true;
 			if (player.Realm != keep.Realm)
@@ -245,25 +247,6 @@ namespace DOL.GS.Keeps
 
 			switch (type)
 			{
-				case eInteractType.Claim:
-					{
-						if (keep.Guild != null)
-							return false;
-						foreach (AbstractGameKeep k in GameServer.KeepManager.GetAllKeeps())
-						{
-							if (k.Guild == player.Guild)
-								return false;
-						}
-						if (player.Group == null)
-							return false;
-						if (player.Group.Leader != player)
-							return false;
-						if (player.Group.MemberCount < ServerProperties.Properties.CLAIM_NUM)
-							return false;
-						if (!player.GuildRank.Claim)
-							return false;
-						break;
-					}
 				case eInteractType.Release:
 					{
 						if (keep.Guild == null)

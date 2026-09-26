@@ -19,7 +19,8 @@ public sealed record PlayerTypeMix(int Leveler, int Casual, int Hybrid, int Hunt
 public sealed record BotGoalLoadResult(BotGoalSettings Settings, bool MigratedFromV1,
     PopulationPreset MappedPreset);
 
-// Shared by server and launcher. The file changes only while the server is stopped.
+// Shared by server and launcher. Launcher edits are stop-only except for the
+// server-accepted live type-mix operation below.
 public sealed record BotGoalSettings
 {
     public const string FileName = "bot-goals.json";
@@ -96,6 +97,20 @@ public sealed record BotGoalSettings
     {
         Validate();
         if (!serverStopped()) throw new InvalidOperationException("Stop the server before saving population settings.");
+        SaveAtomic(path, serverStopped);
+    }
+
+    /// <summary>Changes only the durable player-type mix for a live rebalance request.</summary>
+    public static BotGoalSettings SaveMixForLiveApply(string path, PlayerTypeMix mix)
+    {
+        BotGoalSettings settings = Load(path) with { Preset = PopulationPreset.Custom, Mix = mix };
+        settings.Validate();
+        settings.SaveAtomic(path);
+        return settings;
+    }
+
+    private void SaveAtomic(string path, Func<bool>? beforeCommit = null)
+    {
         string fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         string temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -106,7 +121,8 @@ public sealed record BotGoalSettings
                 JsonSerializer.Serialize(file, this, Json);
                 file.Flush(true);
             }
-            if (!serverStopped()) throw new InvalidOperationException("The server started; population settings were not saved.");
+            if (beforeCommit != null && !beforeCommit())
+                throw new InvalidOperationException("The server started; population settings were not saved.");
             File.Move(temporary, fullPath, true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }

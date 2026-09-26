@@ -147,6 +147,7 @@ namespace DOL.GS
 
             try
             {
+                AutonomousBotTypeMixControl.ApplyAtTaskBoundary(bot);
                 long nowTick = GameLoop.GameLoopTime;
                 if (bot.Group == null && AutonomousRvrEventLayer.TryConsumeRelease($"rvr-{bot.DatabaseID}", nowTick, out string eventReason))
                     AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(bot, eventReason);

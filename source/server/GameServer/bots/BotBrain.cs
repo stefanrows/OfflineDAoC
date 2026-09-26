@@ -823,11 +823,23 @@ namespace DOL.AI.Brain
         private bool UsesMinstrelHybridCombat => BotBody?.IsAutonomousWorldBot == true &&
             BotBody.CharacterClass?.ID == (int)eCharacterClass.Minstrel;
 
+        // A grouped Bard's endurance pulse needs its instrument to stay active;
+        // its combat turn therefore runs the ordinary group-support actions.
         private bool HoldsExclusiveSupportRole() =>
-            BotPartyRoles.IsSupport(BotBody) &&
-            ((eCharacterClass?)BotBody?.CharacterClass?.ID != eCharacterClass.Minstrel ||
-             RecentDirectAttacker() is not GameLiving attacker ||
-             !Body.IsWithinRadius(attacker, Body.MeleeAttackRange + 35));
+            (BotBody?.CharacterClass?.ID == (int)eCharacterClass.Bard &&
+             BotBody.Group?.MemberCount > 1 &&
+             HasBardEnduranceSong(BotBody)) ||
+            (BotPartyRoles.IsSupport(BotBody) &&
+             ((eCharacterClass?)BotBody?.CharacterClass?.ID != eCharacterClass.Minstrel ||
+              RecentDirectAttacker() is not GameLiving attacker ||
+              !Body.IsWithinRadius(attacker, Body.MeleeAttackRange + 35)));
+
+        private static bool HasBardEnduranceSong(GameBot bot) =>
+            bot?.CharacterClass?.ID == (int)eCharacterClass.Bard &&
+            (bot.MiscSpells ?? []).Concat(bot.InstantMiscSpells ?? [])
+                .Any(spell => spell != null && spell.IsPulsing && !spell.IsHarmful &&
+                              spell.SpellType == eSpellType.EnduranceRegenBuff &&
+                              spell.Level <= bot.Level);
 
         private int PlayerLedCasterEngagementRange(GameLiving target)
         {
@@ -1921,16 +1933,17 @@ namespace DOL.AI.Brain
             // casts and pet/group combat. A lingering combat flag after the
             // fight must not stop the resting performer's harmless songs.
             bool immediateCombat = !bot.IsEnhancedResting && (bot.InCombat || HasAggro || bot.IsAttacking);
+            bool bardCombatSong = immediateCombat && groupedSupport &&
+                (eCharacterClass)bot.CharacterClass.ID == eCharacterClass.Bard &&
+                HasBardEnduranceSong(bot);
 
-            // Bard and Skald preserve the last song's child buff, swap back to
-            // their legal melee weapon, and fight in both solo and group play.
-            // Autonomous Minstrels and grouped companions swap to melee;
-            // only the legacy ungrouped companion keeps its ranged posture.
-            // None of the three becomes a passive
-            // support-only actor merely because a group exists.
+            // Grouped Bards with endurance songs stay on their instrument and
+            // use the ordinary healing/control support turn. Solo Bards and
+            // Skalds retain their weapon behavior; Minstrels retain their
+            // existing hybrid and ranged combat rules.
             bool minstrelAtRange = !groupedSupport && !UsesMinstrelHybridCombat && (eCharacterClass)bot.CharacterClass.ID == eCharacterClass.Minstrel &&
                                     !IsUnderImmediateMeleePressure();
-            if (immediateCombat && !minstrelAtRange)
+            if (immediateCombat && !bardCombatSong && !minstrelAtRange)
             {
                 StopTwistedSong();
                 SwitchToUsableMeleeWeapon();
@@ -1949,12 +1962,26 @@ namespace DOL.AI.Brain
                                 spell.Level <= bot.Level && IsMaintainableClassBuff(spell) &&
                                 bot.Mana >= bot.PowerCost(spell))
                 .DistinctBy(spell => spell.ID)
+                .Where(spell => !bardCombatSong || spell.SpellType == eSpellType.EnduranceRegenBuff)
                 .Where(spell => spell.SpellType != eSpellType.SpeedEnhancement || !immediateCombat && (traveling || groupedSupport))
                 .OrderByDescending(spell => spell.SpellType == eSpellType.SpeedEnhancement && !immediateCombat)
                 .ThenByDescending(spell => groupedSupport && spell.Target is eSpellTarget.GROUP or eSpellTarget.REALM)
                 .ThenByDescending(spell => spell.Value)
                 .ThenByDescending(spell => spell.Level)
                 .ToList();
+
+            if (bardCombatSong)
+            {
+                // Keep only the useful combat song; speed and mana can resume
+                // when the fight ends.
+                foreach (ECSPulseEffect pulse in Body.effectListComponent.GetPulseEffects()
+                             .Where(effect => effect?.SpellHandler?.Spell is Spell activeSpell &&
+                                              activeSpell.SpellType != eSpellType.EnduranceRegenBuff &&
+                                              activeSpell.IsPulsing && !activeSpell.IsHarmful &&
+                                              IsMaintainableClassBuff(activeSpell))
+                             .ToList())
+                    pulse.End();
+            }
 
             if (songs.Count == 0)
             {

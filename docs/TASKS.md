@@ -6,34 +6,11 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
-2. **Add a Realm Points column to the launcher's Active Population table.** Show each listed bot's current Realm Points alongside its existing population details. Requested from the Active Population screenshot; implementation has not started.
-3. **Rework the Active Groups window for large group lists.** The window takes a long time to load when many groups are present, and scrolling through the groups is inconvenient. Improve loading and make large lists easier to navigate. The screenshot shows the current card-based view with 82 groups; the exact cause and preferred navigation design have not been determined.
-
-
-4. **Apply population-type changes to existing bots live.** Add an explicit
-   "Apply mix to existing bots" launcher action so the six type percentages
-   can rebalance the current autonomous population without restarting. This is
-   one contained task; no separate roadmap. Recorded 2026-09-25; implementation
-   has not started.
-
-   Implementation checklist:
-   - Send validated settings from the launcher to the running server and show
-     whether the rebalance is pending, applied, or failed.
-   - Reassign enough existing autonomous bots to approach the requested mix,
-     minimizing unnecessary type changes. Define whether the target counts
-     cover the active population or the entire saved roster before implementing.
-   - Apply behavior changes at safe task boundaries after combat; handle active
-     group tasks without abruptly breaking parties or leaving stale assignments.
-   - Preserve character identity, levels, equipment, inventories, money, guild
-     membership and progress. Exclude player-led companions and temporary helpers.
-   - Persist both settings and reassigned types consistently; make repeated
-     application of the same mix stable and update launcher help accordingly.
-
-   Acceptance: change the mix while the server runs, observe the type counts
-   approach the requested percentages as pending tasks finish, verify safe
-   combat/group transitions, and confirm the new mix and character progress
-   survive a restart. Saving creation weights and explicitly rebalancing existing
-   bots must have clear, distinct effects.
+6. **Check XP and Realm Point rewards for `/companions` group members.** Verify
+   whether companions receive the same XP and Realm Points as their player for
+   PvP kills, and explain any differences in reward distribution. Observation:
+   after two PvP kills, the player was level 17 while companions were level 13;
+   everyone started at level 1.
 
 ## Implemented in source; installation verification pending
 
@@ -46,9 +23,17 @@ When a task is done and its required verification is complete, move it out of it
 
 2. **Autonomous dungeon activity, Darkness Falls and Camlann PvP behavior.** Implemented in source 0.61.0 after the owner's explicit DF implementation approval. DF now has a bounded entrance-stair repair, 1,417 proved spawn destinations and extra weight within the dungeon share. Hunters can patrol dungeons; ordinary pickup groups can choose connected dungeon camps. PvE aggression bypasses, patrol dwell timing and misleading RvR launcher labels are corrected. Awaiting installation, all-entrance client traversal and live PvE/PvP balance checks in [CAMLANN_PVP_REVIEW.md](CAMLANN_PVP_REVIEW.md).
 
-3. **Population slider and Danger tooltips.** Expanded in source 0.62.0: all six type labels, sliders and percentage inputs explain the behavior, relevant levels and the effect on new versus existing bots; Danger explains its effect on existing Hunters after a restart. Tests and builds skipped as requested. Installation and launcher hover verification pending.
+3. **Population slider and Danger tooltips.** Expanded in source 0.62.0: all six type labels, sliders and percentage inputs explain the behavior, relevant levels and the effect on new versus existing bots; Danger explains its effect on existing Hunters after a restart. Source 0.70.0 further distinguishes saving new-bot weights from applying a live mix to the saved roster. Installation and launcher hover verification pending.
 
 4. **Focus staff selection for casters.** Source 0.65.0 ranks earned and owned staves by the focus levels covering learned spell lines, including all-lines focus, before general item value. Installation and real-client inspection of caster loadouts and power use remain pending.
+
+5. **Realm Points in Active Population.** Source version 0.67.0 adds a sortable Realm Points column using live points for active autonomous bots and saved points otherwise. Companions without a Realm Points record show a dash. Launcher display and live point updates await installation verification.
+
+6. **Active Groups for large populations.** Source version 0.68.0 replaces the per-group card stack with a sortable, realm-filterable table. Search covers group, bot, class, zone, and task details; selecting a row shows member roles, locations, and live timers. Launcher installation and inspection with a large list (including the reported 82-group case) remain pending.
+
+7. **Bard songs useful during combat.** Source version 0.69.0 keeps grouped Bards with an endurance song on their instrument during combat, preserves the endurance pulse, and lets them use the existing group-support actions. Mana and speed songs resume after combat; solo Bard behavior is unchanged. Installation and real-client verification of endurance upkeep alongside healing and control remain pending.
+
+8. **Apply population-type changes to existing bots live.** Source version 0.70.0 adds a launcher action and server request/status flow for the entire non-retired saved autonomous roster, including offline bots. Player-led companions and temporary helpers are excluded. Offline changes run in bounded batches; active changes wait for safe task or group boundaries. The server saves the requested mix and bot types, and reports pending/applied/failed status. Installation and live acceptance remain pending: verify counts converge, active groups stay intact, repeated application is stable, and settings plus character progress survive restart.
 
 ## Finished
 

@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.65.0";
+    internal const string DisplayVersion = "0.70.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -81,7 +81,8 @@ internal sealed partial class MainForm : Form
     };
     private readonly TextBox _auctionSearch = new() { PlaceholderText = "Search item, seller or state", Width = 300 };
     private readonly TabControl _auctionRealmTabs = new() { Width = 280, Height = 29, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(87, 22) };
-    private readonly TextBox _groupSearch = new() { PlaceholderText = "Search bot, zone or crew", Width = 340 };
+    private readonly TextBox _groupSearch = new() { PlaceholderText = "Search bot, class, zone or task", Width = 340 };
+    private readonly ComboBox _groupRealm = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 125 };
     private readonly ComboBox _playerXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly ComboBox _botXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly ComboBox _worldSpeedMultiplier = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
@@ -98,9 +99,11 @@ internal sealed partial class MainForm : Form
         Text = "Rates are loaded from the saved server settings.",
     };
     private readonly Label _groupSearchStatus = new() { AutoSize = true, ForeColor = DaocTheme.Muted, Margin = new Padding(10, 7, 0, 0) };
-    private readonly List<Label> _groupMemberLabels = [];
-    private readonly List<(Label Label, BotRow Bot)> _memberCountdowns = [];
-    private readonly List<(Label Label, BotRow Bot)> _taskCountdowns = [];
+    private readonly BindingSource _groupSource = new();
+    private readonly DataGridView _groupsGrid = new();
+    private readonly DataGridView _groupMembersGrid = new();
+    private readonly Label _groupDetailsTitle = new();
+    private readonly Label _groupDetailsSummary = new();
     private readonly System.Windows.Forms.Timer _displayClock = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer _autoRefresh = new() { Interval = AutoRefreshMilliseconds };
     private readonly System.Windows.Forms.Timer _serverReadinessPoll = new() { Interval = ServerReadinessPollMilliseconds };
@@ -123,7 +126,9 @@ internal sealed partial class MainForm : Form
     private bool _rvrServerRunning;
     private string _rvrSortProperty = "Name";
     private bool _rvrSortAscending = true;
-    private readonly FlowLayoutPanel _groupsPanel = new();
+    private string _groupSortProperty = "Realm";
+    private bool _groupSortAscending = true;
+    private bool _updatingGroupGrid;
     private Button? _refreshButton;
     private Button? _refreshExchangeButton;
     private Button? _deleteBotButton;
@@ -305,14 +310,18 @@ internal sealed partial class MainForm : Form
             foreach (DataGridViewColumn column in _auctionGrid.Columns)
                 if (column.DataPropertyName == "Expires")
                     _auctionGrid.InvalidateColumn(column.Index);
-        if (!_groupsPanel.Visible) return;
-        Rectangle viewport = _groupsPanel.RectangleToScreen(_groupsPanel.ClientRectangle);
-        foreach (var (label, bot) in _memberCountdowns)
-            if (label.Visible && viewport.IntersectsWith(label.RectangleToScreen(label.ClientRectangle)))
-                label.Text = GroupMemberText(bot);
-        foreach (var (label, bot) in _taskCountdowns)
-            if (label.Visible && viewport.IntersectsWith(label.RectangleToScreen(label.ClientRectangle)))
-                label.Text = bot.GroupTimerText;
+        if (_groupsGrid.Visible)
+        {
+            foreach (DataGridViewColumn column in _groupsGrid.Columns)
+                if (column.DataPropertyName == "TimeRemaining")
+                    _groupsGrid.InvalidateColumn(column.Index);
+            if (SelectedGroupRow() is GroupRow selectedGroup)
+                _groupDetailsSummary.Text = GroupDetailsSummary(selectedGroup);
+        }
+        if (_groupMembersGrid.Visible)
+            foreach (DataGridViewColumn column in _groupMembersGrid.Columns)
+                if (column.Name == "MemberTaskRemaining")
+                    _groupMembersGrid.InvalidateColumn(column.Index);
     }
 
     private void RefreshRvrSnapshotIfDue()
@@ -345,19 +354,6 @@ internal sealed partial class MainForm : Form
     {
         int seconds = Math.Max(0, (int)Math.Ceiling(remaining.TotalSeconds));
         return $"{seconds / 60}:{seconds % 60:00}";
-    }
-
-    private static string GroupMemberText(BotRow member)
-    {
-        var badges = new List<string>();
-        if (!string.IsNullOrWhiteSpace(member.GroupRole))
-            badges.Add(member.GroupRole.ToUpperInvariant());
-        if (member.Name.Equals(member.GroupLeaderName, StringComparison.OrdinalIgnoreCase))
-            badges.Add("LEADER");
-        if (member.Name.Equals(member.GroupPullerName, StringComparison.OrdinalIgnoreCase))
-            badges.Add("PULLER");
-        string role = badges.Count == 0 ? string.Empty : "  " + string.Join(" ", badges.Select(badge => $"[{badge}]"));
-        return $"{member.NameWithMeetUpTimer}{role}   •   Level {member.Level} {member.ClassName}   •   {member.ZoneName}";
     }
 
     private Control BuildHeader()
@@ -564,6 +560,8 @@ internal sealed partial class MainForm : Form
         var botGoals = new TabPage("Server population") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         _botGoalsSettings = new BotGoalsSettingsControl(
             Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName),
+            _worldSpeedStatusPath,
+            Path.Combine(_serverDirectory, PopulationTypeMixProtocol.RequestFileName),
             BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued));
         botGoals.Controls.Add(_botGoalsSettings);
         tabs.TabPages.Add(botGoals);
@@ -962,7 +960,7 @@ internal sealed partial class MainForm : Form
         layout.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "⚔  ACTIVE GROUPS  •  Name (MM:SS) shows the meet-up deadline",
+            Text = "⚔  ACTIVE GROUPS  •  Filter or sort the list; select a row for roster and task details",
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Georgia", 9.5f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
@@ -973,24 +971,165 @@ internal sealed partial class MainForm : Form
 
         var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(3) };
         StyleInput(_groupSearch);
+        StyleInput(_groupRealm);
+        _groupRealm.Items.AddRange(["All realms", "Albion", "Midgard", "Hibernia"]);
+        _groupRealm.SelectedIndex = 0;
         filters.Controls.Add(_groupSearch);
+        filters.Controls.Add(_groupRealm);
         var clearSearch = ActionButton("CLEAR", DaocTheme.Panel);
         clearSearch.Width = 80;
-        clearSearch.Click += (_, _) => _groupSearch.Clear();
+        clearSearch.Click += (_, _) =>
+        {
+            _groupSearch.Clear();
+            _groupRealm.SelectedIndex = 0;
+        };
         filters.Controls.Add(clearSearch);
         filters.Controls.Add(_groupSearchStatus);
         layout.Controls.Add(filters, 0, 1);
 
-        _groupsPanel.Dock = DockStyle.Fill;
-        _groupsPanel.AutoScroll = true;
-        _groupsPanel.FlowDirection = FlowDirection.TopDown;
-        _groupsPanel.WrapContents = false;
-        _groupsPanel.Padding = new Padding(3, 6, 3, 6);
-        _groupsPanel.BackColor = DaocTheme.Panel;
-        _groupsPanel.SizeChanged += (_, _) => ResizeGroupCards();
-        layout.Controls.Add(_groupsPanel, 0, 2);
+        ConfigureGroupGrid(_groupsGrid);
+        _groupsGrid.DataSource = _groupSource;
+        _groupsGrid.Columns.Add(TextColumn("Realm", "Realm", 82));
+        _groupsGrid.Columns.Add(TextColumn("Phase", "Phase", 105));
+        _groupsGrid.Columns.Add(TextColumn("Leader", "LeaderName", 120));
+        _groupsGrid.Columns.Add(TextColumn("Members", "MemberNames", 240));
+        _groupsGrid.Columns.Add(TextColumn("Meet-up / area", "Location", 145));
+        _groupsGrid.Columns.Add(TextColumn("Time left", "TimeRemaining", 115));
+        _groupsGrid.Columns.Add(TextColumn("Shared goal", "SharedGoal", 220, DataGridViewAutoSizeColumnMode.Fill));
+        foreach (DataGridViewColumn column in _groupsGrid.Columns)
+            column.SortMode = DataGridViewColumnSortMode.Programmatic;
+        _groupsGrid.ColumnHeaderMouseClick += (_, eventArgs) =>
+        {
+            string property = _groupsGrid.Columns[eventArgs.ColumnIndex].DataPropertyName;
+            _groupSortAscending = property == _groupSortProperty ? !_groupSortAscending : true;
+            _groupSortProperty = property;
+            ApplyGroupSearch(SelectedGroupRow()?.GroupId);
+        };
+        _groupsGrid.SelectionChanged += (_, _) =>
+        {
+            if (!_updatingGroupGrid)
+                UpdateSelectedGroupDetails();
+        };
+        _groupsGrid.CellFormatting += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex < 0 || eventArgs.ColumnIndex < 0 ||
+                _groupsGrid.Rows[eventArgs.RowIndex].DataBoundItem is not GroupRow group)
+                return;
+            if (_groupsGrid.Columns[eventArgs.ColumnIndex].DataPropertyName == "Realm")
+                eventArgs.CellStyle.ForeColor = GroupRealmColor(group.Realm);
+        };
+        _groupSearch.TextChanged += (_, _) => ApplyGroupSearch();
+        _groupRealm.SelectedIndexChanged += (_, _) => ApplyGroupSearch();
+        _groupSource.DataSource = new List<GroupRow>();
+
+        ConfigureGroupGrid(_groupMembersGrid);
+        _groupMembersGrid.Columns.Add(GroupMemberColumn("Name", "MemberName", 145));
+        _groupMembersGrid.Columns.Add(GroupMemberColumn("Role", "MemberRole", 155));
+        _groupMembersGrid.Columns.Add(GroupMemberColumn("Level", "MemberLevel", 58));
+        _groupMembersGrid.Columns.Add(GroupMemberColumn("Class", "MemberClass", 110));
+        _groupMembersGrid.Columns.Add(GroupMemberColumn("Zone", "MemberZone", 145));
+        _groupMembersGrid.Columns.Add(GroupMemberColumn("Time left", "MemberTaskRemaining", 135));
+        _groupMembersGrid.Columns[^1].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        _groupMembersGrid.CellFormatting += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex < 0 || eventArgs.ColumnIndex < 0 ||
+                _groupMembersGrid.Rows[eventArgs.RowIndex].Tag is not BotRow member ||
+                _groupMembersGrid.Columns[eventArgs.ColumnIndex].Name != "MemberTaskRemaining")
+                return;
+            eventArgs.Value = member.TaskRemaining;
+            eventArgs.FormattingApplied = true;
+        };
+
+        _groupDetailsTitle.Dock = DockStyle.Fill;
+        _groupDetailsTitle.TextAlign = ContentAlignment.MiddleLeft;
+        _groupDetailsTitle.Padding = new Padding(8, 0, 0, 0);
+        _groupDetailsTitle.Font = new Font("Georgia", 9f, FontStyle.Bold);
+        _groupDetailsTitle.ForeColor = DaocTheme.GoldLight;
+        _groupDetailsTitle.BackColor = DaocTheme.StoneDark;
+        _groupDetailsSummary.Dock = DockStyle.Fill;
+        _groupDetailsSummary.TextAlign = ContentAlignment.MiddleLeft;
+        _groupDetailsSummary.Padding = new Padding(8, 4, 8, 4);
+        _groupDetailsSummary.Font = new Font("Georgia", 8.25f);
+        _groupDetailsSummary.ForeColor = DaocTheme.Parchment;
+        _groupDetailsSummary.BackColor = DaocTheme.Panel;
+
+        var details = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(0, 5, 0, 0),
+            BackColor = DaocTheme.Panel,
+        };
+        details.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        details.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        details.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        details.Controls.Add(_groupDetailsTitle, 0, 0);
+        details.Controls.Add(_groupDetailsSummary, 0, 1);
+        details.Controls.Add(_groupMembersGrid, 0, 2);
+
+        var content = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = DaocTheme.Panel,
+        };
+        content.RowStyles.Add(new RowStyle(SizeType.Percent, 56));
+        content.RowStyles.Add(new RowStyle(SizeType.Percent, 44));
+        content.Controls.Add(_groupsGrid, 0, 0);
+        content.Controls.Add(details, 0, 1);
+        layout.Controls.Add(content, 0, 2);
         return layout;
     }
+
+    private static void ConfigureGroupGrid(DataGridView grid)
+    {
+        grid.Dock = DockStyle.Fill;
+        grid.ReadOnly = true;
+        grid.AllowUserToAddRows = false;
+        grid.AllowUserToDeleteRows = false;
+        grid.AllowUserToResizeRows = false;
+        grid.AutoGenerateColumns = false;
+        grid.RowHeadersVisible = false;
+        grid.MultiSelect = false;
+        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.BackgroundColor = DaocTheme.StoneDark;
+        grid.BorderStyle = BorderStyle.Fixed3D;
+        grid.GridColor = Color.FromArgb(78, 70, 56);
+        grid.EnableHeadersVisualStyles = false;
+        grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(61, 54, 43),
+            ForeColor = DaocTheme.GoldLight,
+            SelectionBackColor = Color.FromArgb(61, 54, 43),
+            Font = new Font("Georgia", 8.25f, FontStyle.Bold),
+            Padding = new Padding(2),
+        };
+        grid.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(35, 31, 26),
+            ForeColor = DaocTheme.Text,
+            SelectionBackColor = Color.FromArgb(90, 72, 43),
+            SelectionForeColor = DaocTheme.GoldLight,
+            Padding = new Padding(2),
+            Font = new Font("Georgia", 8.25f),
+        };
+        grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(42, 37, 30),
+        };
+        grid.ColumnHeadersHeight = 28;
+        grid.RowTemplate.Height = 25;
+    }
+
+    private static DataGridViewTextBoxColumn GroupMemberColumn(string header, string name, int width) => new()
+    {
+        Name = name,
+        HeaderText = header,
+        Width = width,
+        SortMode = DataGridViewColumnSortMode.NotSortable,
+    };
 
     private Control BuildActiveRvrPanel()
     {
@@ -1131,181 +1270,141 @@ internal sealed partial class MainForm : Form
 
     private void RenderActiveGroups()
     {
-        _groupsPanel.SuspendLayout();
-        _groupMemberLabels.Clear();
-        _memberCountdowns.Clear();
-        _taskCountdowns.Clear();
-        // Refresh replaces cards; dispose them rather than leaking controls and fonts.
-        foreach (Control oldCard in _groupsPanel.Controls.Cast<Control>().ToArray()) oldCard.Dispose();
-        _groupsPanel.Controls.Clear();
-        if (_groups.Count == 0)
-        {
-            _groupsPanel.Controls.Add(new Label
-            {
-                AutoSize = false,
-                Width = Math.Max(400, _groupsPanel.ClientSize.Width - 28),
-                Height = 72,
-                Text = "No active playerbot groups in the current snapshot.\nGroups appear here after matchmaking and disappear after disbanding.",
-                TextAlign = ContentAlignment.MiddleCenter,
-                ForeColor = DaocTheme.Muted,
-                BackColor = DaocTheme.StoneDark,
-                Font = new Font("Georgia", 9f, FontStyle.Italic),
-                BorderStyle = BorderStyle.Fixed3D,
-            });
-        }
-        else
-        {
-            int number = 1;
-            foreach (GroupRow group in _groups.OrderBy(row => row.Realm).ThenBy(row => row.GroupId, StringComparer.OrdinalIgnoreCase))
-                _groupsPanel.Controls.Add(BuildGroupCard(group, number++));
-        }
-        ResizeGroupCards();
-        _groupsPanel.ResumeLayout();
-        ApplyGroupSearch();
+        ApplyGroupSearch(SelectedGroupRow()?.GroupId);
     }
 
-    private void ApplyGroupSearch()
+    private void ApplyGroupSearch(string? preferredGroupId = null)
     {
-        // Work entirely on the last dashboard snapshot. No DB query, HTTP call,
-        // refresh, or new card construction is performed while typing.
+        // Filter only the last snapshot and bind compact rows. This keeps both
+        // typing and refreshes independent of per-member WinForms control creation.
+        preferredGroupId ??= SelectedGroupRow()?.GroupId;
         string query = _groupSearch.Text.Trim();
-        Control? first = null;
-        Control? exact = null;
-        int matches = 0;
-        _groupsPanel.SuspendLayout();
-        foreach (Control card in _groupsPanel.Controls)
+        string realm = _groupRealm.SelectedItem?.ToString() ?? "All realms";
+        List<GroupRow> matches = SortGroups(_groups.Where(group =>
+            (realm == "All realms" || group.Realm.Equals(realm, StringComparison.OrdinalIgnoreCase)) &&
+            (query.Length == 0 || GroupMatchesSearch(group, query)))).ToList();
+
+        int exactMemberIndex = query.Length == 0 ? -1 : matches.FindIndex(group =>
+            group.Members.Any(member => member.Name.Equals(query, StringComparison.OrdinalIgnoreCase)));
+        int selectedIndex = exactMemberIndex >= 0
+            ? exactMemberIndex
+            : matches.FindIndex(group => group.GroupId.Equals(preferredGroupId, StringComparison.OrdinalIgnoreCase));
+
+        _updatingGroupGrid = true;
+        try
         {
-            if (card.Tag is not GroupRow group) continue;
-            bool visible = query.Length == 0 ||
-                group.Realm.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                group.Members.Any(member => member.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    member.ZoneName.Contains(query, StringComparison.OrdinalIgnoreCase));
-            card.Visible = visible;
-            if (!visible) continue;
-            matches++;
-            first ??= card;
-            if (query.Length > 0 && group.Members.Any(member => member.Name.Equals(query, StringComparison.OrdinalIgnoreCase)))
-                exact ??= card;
+            _groupSource.DataSource = matches;
+            _groupSource.ResetBindings(false);
+            _groupsGrid.ClearSelection();
+            _groupsGrid.CurrentCell = null;
+            if (matches.Count > 0)
+            {
+                if (selectedIndex < 0)
+                    selectedIndex = 0;
+                _groupsGrid.CurrentCell = _groupsGrid.Rows[selectedIndex].Cells[0];
+                _groupsGrid.Rows[selectedIndex].Selected = true;
+            }
         }
-        foreach (Label label in _groupMemberLabels)
+        finally
         {
-            bool hit = query.Length > 0 && label.Tag is string name && name.Contains(query, StringComparison.OrdinalIgnoreCase);
-            label.BackColor = hit ? Color.FromArgb(105, 79, 30) : Color.Transparent;
-            label.ForeColor = hit ? DaocTheme.GoldLight : DaocTheme.Text;
+            _updatingGroupGrid = false;
         }
-        _groupSearchStatus.Text = query.Length == 0 ? $"{matches} groups" : matches == 0
-            ? "No group matches that bot, zone or crew in the snapshot."
-            : $"{matches} matching group{(matches == 1 ? string.Empty : "s")}";
-        _groupsPanel.ResumeLayout(true);
-        if (query.Length > 0 && (exact ?? first) is Control target)
-            _groupsPanel.ScrollControlIntoView(target);
+
+        _groupSearchStatus.Text = matches.Count == _groups.Count && realm == "All realms"
+            ? $"{matches.Count} groups"
+            : $"{matches.Count} of {_groups.Count} groups";
+        UpdateSelectedGroupDetails();
     }
 
-    private Control BuildGroupCard(GroupRow group, int number)
+    private static bool GroupMatchesSearch(GroupRow group, string query) =>
+        group.Realm.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.Phase.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.GroupId.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.LeaderName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.RendezvousName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.PullerName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.SharedGoal.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.Status.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.TimeRemaining.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        group.Members.Any(member => member.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            member.ZoneName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            member.ClassName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            member.GroupRole.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            member.TaskRemaining.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<GroupRow> SortGroups(IEnumerable<GroupRow> groups)
     {
-        // Small parties still need room for phase, shared goal and route status.
-        int memberRowsHeight = Math.Max(205, group.Members.Count * 27 + 9);
-        var card = new TableLayoutPanel
+        bool ascending = _groupSortAscending;
+        return (_groupSortProperty, ascending) switch
         {
-            Tag = group,
-            Width = Math.Max(560, _groupsPanel.ClientSize.Width - 28),
-            Height = 43 + memberRowsHeight,
-            RowCount = 2,
-            ColumnCount = 2,
-            Margin = new Padding(0, 0, 0, 9),
-            BackColor = Color.FromArgb(35, 31, 26),
-            CellBorderStyle = TableLayoutPanelCellBorderStyle.Single,
+            ("Realm", true) => groups.OrderBy(group => group.Realm, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("Realm", false) => groups.OrderByDescending(group => group.Realm, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("Phase", true) => groups.OrderBy(group => group.Phase, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("Phase", false) => groups.OrderByDescending(group => group.Phase, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("LeaderName", true) => groups.OrderBy(group => group.LeaderName, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("LeaderName", false) => groups.OrderByDescending(group => group.LeaderName, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("MemberNames", true) => groups.OrderBy(group => group.MemberNames, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("MemberNames", false) => groups.OrderByDescending(group => group.MemberNames, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("Location", true) => groups.OrderBy(group => group.Location, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("Location", false) => groups.OrderByDescending(group => group.Location, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("TimeRemaining", true) => groups.OrderBy(group => group.RemainingMilliseconds ?? long.MaxValue).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("TimeRemaining", false) => groups.OrderByDescending(group => group.RemainingMilliseconds ?? -1).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("SharedGoal", true) => groups.OrderBy(group => group.SharedGoal, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            ("SharedGoal", false) => groups.OrderByDescending(group => group.SharedGoal, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
+            _ => groups.OrderBy(group => group.Realm, StringComparer.OrdinalIgnoreCase).ThenBy(group => group.GroupId, StringComparer.OrdinalIgnoreCase),
         };
-        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
-        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
-        card.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        card.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+    }
 
-        string levels = group.Members.Count == 0 ? "—" : group.Members.Min(member => member.Level) == group.Members.Max(member => member.Level)
-            ? group.Members[0].Level.ToString()
-            : $"{group.Members.Min(member => member.Level)}–{group.Members.Max(member => member.Level)}";
-        var heading = new Label
+    private GroupRow? SelectedGroupRow() => _groupsGrid.CurrentRow?.DataBoundItem as GroupRow;
+
+    private void UpdateSelectedGroupDetails()
+    {
+        GroupRow? group = SelectedGroupRow();
+        _groupMembersGrid.Rows.Clear();
+        if (group is null)
         {
-            Dock = DockStyle.Fill,
-            Text = $"GROUP {number}  •  {group.Realm.ToUpperInvariant()}  •  {group.Members.Count} PLAYERBOT{(group.Members.Count == 1 ? string.Empty : "S")}  •  LEVELS {levels}",
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(10, 0, 0, 0),
-            BackColor = RealmGroupColor(group.Realm),
-            ForeColor = DaocTheme.GoldLight,
-            Font = new Font("Georgia", 9f, FontStyle.Bold),
-        };
-        card.Controls.Add(heading, 0, 0);
-        card.SetColumnSpan(heading, 2);
+            _groupDetailsTitle.Text = _groups.Count == 0 ? "No active playerbot groups in the current snapshot" : "No groups match this filter";
+            _groupDetailsSummary.Text = _groups.Count == 0
+                ? "Groups appear here after matchmaking and disappear after disbanding."
+                : "Change the search or realm filter to see groups.";
+            return;
+        }
 
-        var roster = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = group.Members.Count + 1, Padding = new Padding(5, 4, 5, 4), BackColor = Color.FromArgb(31, 29, 25) };
+        int minimumLevel = group.Members.Count == 0 ? 0 : group.Members.Min(member => member.Level);
+        int maximumLevel = group.Members.Count == 0 ? 0 : group.Members.Max(member => member.Level);
+        string levels = minimumLevel == maximumLevel ? minimumLevel.ToString() : $"{minimumLevel}–{maximumLevel}";
+        _groupDetailsTitle.Text = $"{group.Realm.ToUpperInvariant()}  •  {group.Members.Count} PLAYERBOTS  •  LEVELS {levels}  •  {group.Phase.ToUpperInvariant()}";
+        _groupDetailsSummary.Text = GroupDetailsSummary(group);
+
         foreach (BotRow member in group.Members.OrderBy(member => member.Level).ThenBy(member => member.Name, StringComparer.OrdinalIgnoreCase))
         {
-            roster.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            var memberLabel = new Label
-            {
-                Tag = member.Name,
-                Dock = DockStyle.Fill,
-                Text = GroupMemberText(member),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(6, 0, 0, 0),
-                ForeColor = DaocTheme.Text,
-                BackColor = Color.Transparent,
-                Font = new Font("Georgia", 8.25f),
-            };
-            roster.Controls.Add(memberLabel);
-            _groupMemberLabels.Add(memberLabel);
-            _memberCountdowns.Add((memberLabel, member));
+            int rowIndex = _groupMembersGrid.Rows.Add(member.Name, GroupMemberRole(group, member), member.Level,
+                member.ClassName, member.ZoneName, member.TaskRemaining);
+            _groupMembersGrid.Rows[rowIndex].Tag = member;
         }
-        roster.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        card.Controls.Add(roster, 0, 1);
-        var details = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(44, 38, 29) };
-        details.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            Text = $"LEADER: {group.LeaderName}\nTOWN: {group.RendezvousName}\nPULLER: {group.PullerName}\n\n" +
-                   $"{group.Phase.ToUpperInvariant()}\n\n{group.SharedGoal}\n\n{group.Status}",
-            TextAlign = ContentAlignment.TopLeft,
-            Padding = new Padding(13, 10, 10, 8),
-            ForeColor = Color.FromArgb(214, 196, 151),
-            BackColor = Color.FromArgb(44, 38, 29),
-            Font = new Font("Georgia", 8.5f),
-        });
-        // Arrived meetup members intentionally have no personal deadline. Do
-        // not choose one of those rows as the card's clock owner or the group
-        // falsely displays 0:00 while other members still have time remaining.
-        BotRow? timerOwner = group.Phase == "Meeting up"
-            ? group.Members.Where(member => member.AssemblyRemainingMilliseconds.HasValue)
-                .OrderByDescending(member => member.AssemblyRemainingMilliseconds)
-                .FirstOrDefault()
-            : group.Members.FirstOrDefault();
-        if (timerOwner != null)
-        {
-            var timerLabel = new Label
-            {
-                Dock = DockStyle.Top, Height = 28, Padding = new Padding(13, 4, 0, 0),
-                Text = timerOwner.GroupTimerText, ForeColor = DaocTheme.GoldLight,
-                Font = new Font("Georgia", 8.5f, FontStyle.Bold)
-            };
-            details.Controls.Add(timerLabel);
-            _taskCountdowns.Add((timerLabel, timerOwner));
-        }
-        card.Controls.Add(details, 1, 1);
-        return card;
     }
 
-    private void ResizeGroupCards()
+    private static string GroupMemberRole(GroupRow group, BotRow member)
     {
-        int width = Math.Max(560, _groupsPanel.ClientSize.Width - 28);
-        foreach (Control control in _groupsPanel.Controls)
-            control.Width = width;
+        var roles = new List<string>();
+        if (!string.IsNullOrWhiteSpace(member.GroupRole))
+            roles.Add(member.GroupRole.ToUpperInvariant());
+        if (member.Name.Equals(group.LeaderName, StringComparison.OrdinalIgnoreCase))
+            roles.Add("LEADER");
+        if (member.Name.Equals(group.PullerName, StringComparison.OrdinalIgnoreCase))
+            roles.Add("PULLER");
+        return roles.Count == 0 ? "—" : string.Join(" · ", roles);
     }
 
-    private static Color RealmGroupColor(string realm) => realm switch
+    private static string GroupDetailsSummary(GroupRow group) =>
+        $"LEADER: {group.LeaderName}    TOWN: {group.RendezvousName}    PULLER: {group.PullerName}    {group.TimeRemaining}\n{group.SharedGoal}\n{group.Status}";
+
+    private static Color GroupRealmColor(string realm) => realm switch
     {
-        "Albion" => Color.FromArgb(76, 42, 35),
-        "Midgard" => Color.FromArgb(37, 54, 75),
-        "Hibernia" => Color.FromArgb(43, 66, 38),
-        _ => Color.FromArgb(61, 54, 43),
+        "Albion" => Color.FromArgb(225, 116, 105),
+        "Midgard" => Color.FromArgb(124, 161, 215),
+        "Hibernia" => Color.FromArgb(112, 178, 112),
+        _ => Color.White,
     };
 
     private Control BuildFilters()
@@ -1506,6 +1605,8 @@ internal sealed partial class MainForm : Form
         _grid.Columns.Add(TextColumn("Guild", "GuildName", 150));
         _grid.Columns.Add(TextColumn("Charter", "GuildCharter", 90));
         _grid.Columns.Add(TextColumn("Lvl", "Level", 45));
+        _grid.Columns.Add(TextColumn("Realm Points", "RealmPointsDisplay", 100));
+        _grid.Columns[^1].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         _grid.Columns.Add(TextColumn("Zone", "ZoneName", 110));
         _grid.Columns.Add(TextColumn("Task left", "TaskRemaining", 95));
         _grid.Columns.Add(TextColumn("Activity", "Activity", 210, DataGridViewAutoSizeColumnMode.Fill));
@@ -2053,7 +2154,7 @@ internal sealed partial class MainForm : Form
             string guildName = hasGuildId && TableExists(connection, "Guild")
                 ? "COALESCE((SELECT g.GuildName FROM Guild g WHERE g.GuildID=b.GuildId), '')"
                 : "'' AS GuildName";
-            command.CommandText = $"SELECT BotId, Name, Realm, RaceName, Gender, ClassName, Level, COALESCE(ZoneName, '—'), Activity, CurrentGoal, TargetName, TravelDestination, ObjectiveProgress, IsOnline, IsRetired, COALESCE(ItineraryJson, ''), {objectiveColumns}, {playerType}, {guildCharter}, {guildName} FROM offline_world_bots b ORDER BY Realm, Level DESC, Name";
+            command.CommandText = $"SELECT BotId, Name, Realm, RaceName, Gender, ClassName, Level, COALESCE(ZoneName, '—'), Activity, CurrentGoal, TargetName, TravelDestination, ObjectiveProgress, IsOnline, IsRetired, COALESCE(ItineraryJson, ''), {objectiveColumns}, {playerType}, {guildCharter}, {guildName}, COALESCE(b.RealmPoints, 0) FROM offline_world_bots b ORDER BY Realm, Level DESC, Name";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -2089,6 +2190,7 @@ internal sealed partial class MainForm : Form
                     GuildCharter = reader.GetString(22).Equals("Rvr", StringComparison.OrdinalIgnoreCase)
                         ? "PvP" : reader.GetString(22),
                     GuildName = reader.GetString(23),
+                    RealmPoints = hasLiveStatus ? live!.RealmPoints ?? reader.GetInt64(24) : reader.GetInt64(24),
                     HasGroupTaskClock = group?.HasTaskClock == true,
                     TaskTimerPaused = group?.TaskTimerPaused == true,
                     TaskRemainingMilliseconds = group?.TaskRemainingMilliseconds ?? 0,
@@ -2289,6 +2391,8 @@ internal sealed partial class MainForm : Form
             ("TaskRemaining", false) => bots.OrderByDescending(bot => bot.RemainingMilliseconds ?? -1).ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase),
             ("Level", true) => bots.OrderBy(bot => bot.Level).ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase),
             ("Level", false) => bots.OrderByDescending(bot => bot.Level).ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase),
+            ("RealmPointsDisplay", true) => bots.OrderBy(bot => bot.RealmPoints ?? -1).ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase),
+            ("RealmPointsDisplay", false) => bots.OrderByDescending(bot => bot.RealmPoints ?? -1).ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase),
             ("BotId", true) => bots.OrderBy(bot => bot.BotId).ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase),
             ("BotId", false) => bots.OrderByDescending(bot => bot.BotId).ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase),
             ("State", true) => TextAscending(bots, bot => bot.State),
@@ -3448,6 +3552,8 @@ internal sealed partial class MainForm : Form
         public string PlayerType { get; init; } = string.Empty;
         public string GuildCharter { get; init; } = string.Empty;
         public string GuildName { get; init; } = string.Empty;
+        public long? RealmPoints { get; init; }
+        public string RealmPointsDisplay => RealmPoints?.ToString("N0") ?? "—";
         public string ObjectiveExpiresUtc { get; init; } = string.Empty;
         public bool HasGroupTaskClock { get; init; }
         public bool TaskTimerPaused { get; init; }
@@ -3509,7 +3615,37 @@ internal sealed partial class MainForm : Form
             : ExpiryFallback;
     }
     private sealed record GroupRow(string GroupId, string Realm, string Phase, string SharedGoal, string Status,
-        string LeaderName, string RendezvousName, string PullerName, List<BotRow> Members);
+        string LeaderName, string RendezvousName, string PullerName, List<BotRow> Members)
+    {
+        private BotRow? TimerOwner => Phase == "Meeting up"
+            ? Members.Where(member => member.AssemblyRemainingMilliseconds.HasValue)
+                .OrderByDescending(member => member.AssemblyRemainingMilliseconds)
+                .FirstOrDefault()
+            : Members.FirstOrDefault();
+        public long? RemainingMilliseconds => TimerOwner?.RemainingMilliseconds;
+        public string TimeRemaining => TimerOwner?.GroupTimerText ?? "—";
+        public string MemberNames => string.Join(", ", Members.Select(member => member.Name));
+        public string Location
+        {
+            get
+            {
+                string[] zones = Members.Select(member => member.ZoneName)
+                    .Where(zone => !string.IsNullOrWhiteSpace(zone))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                string area = zones.Length switch
+                {
+                    0 => string.Empty,
+                    1 => zones[0],
+                    2 => string.Join(" / ", zones),
+                    _ => $"{zones[0]} (+{zones.Length - 1})",
+                };
+                if (string.IsNullOrWhiteSpace(RendezvousName))
+                    return area;
+                return string.IsNullOrWhiteSpace(area) ? RendezvousName : $"{RendezvousName} · {area}";
+            }
+        }
+    }
     private sealed class GroupMetadata
     {
         public string GroupId { get; set; } = string.Empty;
@@ -3534,7 +3670,7 @@ internal sealed partial class MainForm : Form
     private sealed record LiveBotStatus(long BotId, int Level, string ZoneName, string Activity,
         string CurrentGoal, string TargetName, string TravelDestination, string ObjectiveProgress,
         bool IsAlive, string ItineraryJson, string ObjectiveKind, string ObjectiveAssignmentId,
-        string ObjectiveAssignedUtc, string ObjectivePhase, string ObjectiveExpiresUtc);
+        string ObjectiveAssignedUtc, string ObjectivePhase, string ObjectiveExpiresUtc, long? RealmPoints = null);
     private sealed record LiveBotSnapshot(DateTime UpdatedUtc, bool Running, string RequestId, List<LiveBotStatus> Bots);
 
     private sealed record RvrObjective(string Kind, string Name, string Owner, string State, string Location, string Carrier, string Forces, string Id = "", long CooldownMilliseconds = 0, bool IsCatalogOnly = false, long PhaseRemainingMilliseconds = 0, string Phase = "")

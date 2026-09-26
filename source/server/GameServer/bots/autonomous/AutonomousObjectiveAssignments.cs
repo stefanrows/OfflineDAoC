@@ -242,6 +242,7 @@ public static class AutonomousObjectiveAssignments
                 if (HasActiveRvrTenure(record, utcNow) || HasActivePveAssignment(record, utcNow))
                     continue;
 
+                AutonomousBotTypeMixControl.ApplyAtTaskBoundary(bot, taskJustCompleted: true);
                 bool undergeared = AutonomousActivityScheduler.IsUndergeared(bot.Level,
                     AutonomousPlayerBehavior.BestEquippedWeaponLevel(bot),
                     AutonomousPlayerBehavior.EquippedArmorLevels(bot));
@@ -282,6 +283,7 @@ public static class AutonomousObjectiveAssignments
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Group != null || bot.PersistentRecord == null)
             return;
+        AutonomousBotTypeMixControl.ApplyAtTaskBoundary(bot, taskJustCompleted: true);
         // Do not acquire the allocation lock from the group coordinator: the
         // allocation pass itself can remove group members. A fresh independent
         // task resets only work, never progress/items. Every level must finish

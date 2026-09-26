@@ -99,6 +99,38 @@ public sealed class UT_AllRealmsTeleporter
         finally { field.SetValue(null, previous); }
     }
 
+    [TestCase("Forest Sauvage", eRealm.Albion, 1)]
+    [TestCase("Uppland", eRealm.Midgard, 100)]
+    [TestCase("Cruachan Gorge", eRealm.Hibernia, 200)]
+    public void FrontierTravelReplacesInstalledNewFrontiersRoutes(string destinationName, eRealm realm, int oldFrontiersRegion)
+    {
+        FieldInfo field = typeof(WorldMgr).GetField("m_teleportLocations", BindingFlags.Static | BindingFlags.NonPublic)!;
+        object previous = field.GetValue(null);
+        try
+        {
+            field.SetValue(null, new Dictionary<eRealm, Dictionary<string, DbTeleport>>
+            {
+                [realm] = new() { [":" + destinationName] = new DbTeleport { TeleportID = destinationName, Realm = (int)realm, RegionID = 163 } }
+            });
+            LivePorter porter = (LivePorter)RuntimeHelpers.GetUninitializedObject(typeof(LivePorter));
+            GamePlayer player = (GamePlayer)RuntimeHelpers.GetUninitializedObject(typeof(MidgardPlayer));
+            Assert.That(porter.WhisperReceive(player, destinationName), Is.True);
+            Assert.That(porter.Destination?.RegionID, Is.EqualTo(oldFrontiersRegion));
+        }
+        finally { field.SetValue(null, previous); }
+    }
+
+    [TestCase("New Frontiers")]
+    [TestCase("Agramon")]
+    [TestCase("Albion Agramon")]
+    public void AgramonCannotBeReachedByTypingAnOldMenuOption(string destinationName)
+    {
+        LivePorter porter = (LivePorter)RuntimeHelpers.GetUninitializedObject(typeof(LivePorter));
+        GamePlayer player = (GamePlayer)RuntimeHelpers.GetUninitializedObject(typeof(MidgardPlayer));
+        Assert.That(porter.WhisperReceive(player, destinationName), Is.True);
+        Assert.That(porter.Destination, Is.Null);
+    }
+
     [TestCase(eRealm.Albion)]
     [TestCase(eRealm.Midgard)]
     [TestCase(eRealm.Hibernia)]

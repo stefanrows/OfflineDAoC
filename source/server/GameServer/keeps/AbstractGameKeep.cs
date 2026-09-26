@@ -681,7 +681,7 @@ namespace DOL.GS.Keeps
 			{
 				foreach (GameLiving member in player.Group.GetMembersInTheGroup())
 				{
-					if (member.CurrentAreas.Contains(this.Area))
+					if (member.CurrentRegionID == Region && Area?.IsContaining(member, false) == true)
 						count++;
 				}
 			}

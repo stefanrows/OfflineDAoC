@@ -24,4 +24,12 @@ public static class AutonomousBotGoalPolicy
         IsConfigured = File.Exists(path);
         LegacyFileMapped = loaded.MigratedFromV1;
     }
+
+    public static void ApplyLiveSettings(BotGoalSettings settings)
+    {
+        settings.Validate();
+        Settings = settings;
+        IsConfigured = true;
+        LegacyFileMapped = false;
+    }
 }

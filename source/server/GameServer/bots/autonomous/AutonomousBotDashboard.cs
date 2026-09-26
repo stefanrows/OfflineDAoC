@@ -21,7 +21,7 @@ public static class AutonomousBotDashboard
     public sealed record BotStatus(long BotId, int Level, string ZoneName, string Activity,
         string CurrentGoal, string TargetName, string TravelDestination, string ObjectiveProgress,
         bool IsAlive, string ItineraryJson, string ObjectiveKind, string ObjectiveAssignmentId,
-        string ObjectiveAssignedUtc, string ObjectivePhase, string ObjectiveExpiresUtc);
+        string ObjectiveAssignedUtc, string ObjectivePhase, string ObjectiveExpiresUtc, long? RealmPoints = null);
     public sealed record Snapshot(DateTime UpdatedUtc, bool Running, string RequestId, BotStatus[] Bots);
 
     private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousBotDashboard));
@@ -66,7 +66,8 @@ public static class AutonomousBotDashboard
             record?.ObjectiveAssignmentId ?? string.Empty,
             record?.ObjectiveAssignedUtc ?? string.Empty,
             record?.ObjectivePhase ?? string.Empty,
-            record?.ObjectiveExpiresUtc ?? string.Empty);
+            record?.ObjectiveExpiresUtc ?? string.Empty,
+            bot.AutonomousRealmPoints);
     }
 
     private static void PollForRequest()

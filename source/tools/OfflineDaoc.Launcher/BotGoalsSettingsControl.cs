@@ -8,7 +8,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private static readonly string[] DangerNames = ["Mild", "Authentic", "Full Camlann"];
     private static readonly string[] ShapeNames = ["Fresh launch", "Established live server"];
     private static readonly string[] TypeNames = ["Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "Keep warrior"];
-    private const string TypeMixHint = "\n\nHigher values give this type more weight for new bots. Existing bots keep their saved types. Save and restart the server; keep all six sliders at 100% total.";
+    private const string TypeMixHint = "\n\nHigher values give this type more weight for new bots. Existing saved types stay as they are until you apply the mix while the server is running. Keep all six sliders at 100% total.";
     private static readonly string[] TypeToolTips =
     [
         "Leveler: mainly PvE leveling, usually in groups. Rarely chooses PvP, and only from level 35. Increase this for more leveling parties." + TypeMixHint,
@@ -19,6 +19,8 @@ internal sealed class BotGoalsSettingsControl : UserControl
         "Keep warrior: favors keep and siege warfare as levels rise. From level 35, a leader with at least four group members can start a keep campaign. Increase this for more keep-focused activity." + TypeMixHint,
     ];
     private readonly string _path;
+    private readonly string _worldSpeedStatusPath;
+    private readonly string _mixRequestPath;
     private readonly Func<bool> _serverStopped;
     private readonly Func<int> _rosterCount;
     private readonly ToolTip _toolTips = new() { InitialDelay = 450, ReshowDelay = 100, AutoPopDelay = 20000, ShowAlways = true };
@@ -35,18 +37,22 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private readonly Button _save = new() { Text = "Save settings", AutoSize = true };
     private readonly Button _undo = new() { Text = "Undo edits", AutoSize = true };
     private readonly Button _defaults = new() { Text = "Restore defaults", AutoSize = true };
+    private readonly Button _applyMix = new() { Text = "Apply mix to existing bots", AutoSize = true };
     private readonly System.Windows.Forms.Timer _poll = new() { Interval = 2000 };
     private BotGoalSettings _saved = BotGoalSettings.Defaults;
     private bool _loading, _loadFailed, _savedFile, _legacyMapping;
     private string _notice = string.Empty;
+    private string? _pendingMixRequestId;
+    private DateTime _pendingMixRequestSinceUtc;
+    private string _lastAppliedRequestId = string.Empty;
     public bool HasUnsavedChanges => _legacyMapping || _loadFailed || ReadValues() != _saved;
 
-    public BotGoalsSettingsControl(string path, Func<bool> serverStopped)
-        : this(path, serverStopped, () => 0) { }
-
-    public BotGoalsSettingsControl(string path, Func<bool> serverStopped, Func<int> rosterCount)
+    public BotGoalsSettingsControl(string path, string worldSpeedStatusPath, string mixRequestPath,
+        Func<bool> serverStopped, Func<int> rosterCount)
     {
         _path = path;
+        _worldSpeedStatusPath = worldSpeedStatusPath;
+        _mixRequestPath = mixRequestPath;
         _serverStopped = serverStopped;
         _rosterCount = rosterCount;
         Dock = DockStyle.Fill;
@@ -61,17 +67,17 @@ internal sealed class BotGoalsSettingsControl : UserControl
         body.Controls.Add(new Label { Text = "Server population", AutoSize = true,
             Font = new Font(Font.FontFamily, 15, FontStyle.Bold), ForeColor = DaocTheme.GoldLight });
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 9, 3, 12),
-            Text = "Choose the mix for new autonomous guilds and bots. Existing bot types, levels, items, and money stay saved. Changes apply on the next server start." });
+            Text = "Choose the mix for new autonomous guilds and bots. Existing bot types stay saved until you apply the mix while the server is running. Levels, items, money, and other character progress are preserved." });
 
         _preset.Items.AddRange(PresetNames);
         _danger.Items.AddRange(DangerNames);
         _worldShape.Items.AddRange(ShapeNames);
         body.Controls.Add(ChoiceRow("Preset", _preset,
-            "Quick starting mixes: Camlann 2003 is balanced; Peaceful favors leveling and mild danger; Bloodbath favors Hunters and Roamers with Full Camlann danger; Keep Wars favors Keep warriors and Roamers. Selecting a preset replaces the six percentages and danger. Choose Custom to edit them. Saved bot types are retained."));
+            "Quick starting mixes: Camlann 2003 is balanced; Peaceful favors leveling and mild danger; Bloodbath favors Hunters and Roamers with Full Camlann danger; Keep Wars favors Keep warriors and Roamers. Selecting a preset replaces the six percentages and danger. Choose Custom to edit them. Saving a preset changes future type assignments; use Apply mix to existing bots for a live rebalance."));
         var mixHeading = new Label { Text = "Player-type mix — total must equal 100%", AutoSize = true,
             Margin = new Padding(3, 13, 3, 4), ForeColor = DaocTheme.GoldLight };
         _toolTips.SetToolTip(mixHeading,
-            "These percentages weight type assignments for autonomous bots that receive a new type. They must total 100%. Class and guild role also influence individual assignments, so exact counts can vary. Saved bot types are retained.");
+            "These percentages weight new type assignments and set the target mix for the entire saved autonomous roster when you apply it live. The server changes the minimum number of types needed; active bots wait for a safe task boundary. They must total 100%.");
         body.Controls.Add(mixHeading);
         for (int index = 0; index < TypeNames.Length; index++)
         {
@@ -111,7 +117,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
             Text = "New level-1 alts join existing managed guilds while the server runs. The cap counts the full roster. The server reads these settings at startup." });
         body.Controls.Add(_population);
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 13, 0, 9) };
-        buttons.Controls.AddRange([_save, _undo, _defaults]);
+        buttons.Controls.AddRange([_save, _undo, _defaults, _applyMix]);
         body.Controls.Add(buttons);
         body.Controls.Add(_status);
         Controls.Add(body);
@@ -137,6 +143,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _altHours.ValueChanged += (_, _) => { if (!_loading) UpdateState(); };
         _altCap.ValueChanged += (_, _) => { if (!_loading) UpdateState(); };
         _save.Click += (_, _) => SaveSettings();
+        _applyMix.Click += (_, _) => ApplyMixToExistingBots();
         _undo.Click += (_, _) => LoadSettings();
         _defaults.Click += (_, _) =>
         {
@@ -244,19 +251,94 @@ internal sealed class BotGoalsSettingsControl : UserControl
         UpdateState();
     }
 
+    private void ApplyMixToExistingBots()
+    {
+        try
+        {
+            if (_serverStopped())
+                throw new InvalidOperationException("Start the server before applying the mix to existing bots.");
+            BotGoalSettings values = ReadValues();
+            values.Validate();
+            WorldSpeedStatus? live = WorldSpeedProtocol.ReadFreshStatus(
+                _worldSpeedStatusPath, DateTime.UtcNow, out string? unavailable);
+            if (live == null)
+                throw new InvalidOperationException(unavailable ?? "Fresh live server status is required.");
+
+            string statusPath = Path.Combine(Path.GetDirectoryName(_mixRequestPath)!, PopulationTypeMixProtocol.StatusFileName);
+            PopulationTypeMixStatus? previous = PopulationTypeMixProtocol.ReadStatus(statusPath);
+            if (previous?.State.Equals("pending", StringComparison.OrdinalIgnoreCase) == true)
+                throw new InvalidOperationException("A population mix is still being applied. Wait for it to finish before sending another.");
+
+            PopulationTypeMixRequest request = PopulationTypeMixProtocol.WriteRequest(
+                _mixRequestPath, live.SessionId, values.Mix, DateTime.UtcNow);
+            _pendingMixRequestId = request.RequestId;
+            _pendingMixRequestSinceUtc = DateTime.UtcNow;
+            _notice = "Mix request sent. Waiting for the server to accept it.";
+        }
+        catch (Exception exception)
+        {
+            _pendingMixRequestId = null;
+            _notice = "Mix not applied: " + exception.Message;
+        }
+        UpdateState();
+    }
+
     public void UpdateState()
     {
         bool stopped = _serverStopped();
+        DateTime nowUtc = DateTime.UtcNow;
+        WorldSpeedStatus? liveStatus = stopped ? null : WorldSpeedProtocol.ReadFreshStatus(
+            _worldSpeedStatusPath, nowUtc, out _);
+        string statusPath = Path.Combine(Path.GetDirectoryName(_mixRequestPath)!, PopulationTypeMixProtocol.StatusFileName);
+        PopulationTypeMixStatus? mixStatus = PopulationTypeMixProtocol.ReadStatus(statusPath);
+        bool matchingRequest = _pendingMixRequestId != null && mixStatus?.RequestId == _pendingMixRequestId;
+        if (_pendingMixRequestId != null && matchingRequest && mixStatus != null)
+        {
+            if (mixStatus.State.Equals("applied", StringComparison.OrdinalIgnoreCase))
+            {
+                _saved = _saved with { Preset = PopulationPreset.Custom, Mix = mixStatus.Mix };
+                _savedFile = true;
+                _loadFailed = _legacyMapping = false;
+                _pendingMixRequestId = null;
+                _lastAppliedRequestId = mixStatus.RequestId;
+                SetValues(_saved);
+                _notice = "Applied to the entire saved autonomous roster. Character progress was preserved.";
+            }
+            else if (mixStatus.State.Equals("failed", StringComparison.OrdinalIgnoreCase))
+            {
+                _pendingMixRequestId = null;
+                _notice = "Mix apply failed: " + mixStatus.Error;
+            }
+        }
+        else if (_pendingMixRequestId != null && nowUtc - _pendingMixRequestSinceUtc > TimeSpan.FromSeconds(15))
+        {
+            _pendingMixRequestId = null;
+            _notice = "The server did not acknowledge the mix request. Review status and try again.";
+        }
+        bool mixPending = mixStatus?.State.Equals("pending", StringComparison.OrdinalIgnoreCase) == true;
+        bool mixOperationPending = mixPending || _pendingMixRequestId != null;
+        if (_pendingMixRequestId == null && mixStatus?.RequestId != _lastAppliedRequestId &&
+            mixStatus?.State.Equals("applied", StringComparison.OrdinalIgnoreCase) == true &&
+            liveStatus?.SessionId == mixStatus.SessionId)
+        {
+            _saved = _saved with { Preset = PopulationPreset.Custom, Mix = mixStatus.Mix };
+            _savedFile = true;
+            _loadFailed = _legacyMapping = false;
+            _lastAppliedRequestId = mixStatus.RequestId;
+            SetValues(_saved);
+            _notice = "Applied to the entire saved autonomous roster. Character progress was preserved.";
+        }
         int total = ReadValues().Mix.Total;
         bool valid = total == 100;
         _total.Text = valid ? "Total: 100% — ready" : $"Total: {total}% — adjust to 100%";
         _total.ForeColor = valid ? Color.LightGreen : Color.Salmon;
         foreach (Control control in _sliders.Cast<Control>().Concat(_values))
-            control.Enabled = stopped;
-        _preset.Enabled = _danger.Enabled = _worldShape.Enabled = stopped;
-        _altHours.Enabled = _altCap.Enabled = stopped;
-        _save.Enabled = stopped && valid;
-        _undo.Enabled = _defaults.Enabled = stopped;
+            control.Enabled = !mixOperationPending && (stopped || liveStatus != null);
+        _preset.Enabled = _danger.Enabled = _worldShape.Enabled = stopped && !mixOperationPending;
+        _altHours.Enabled = _altCap.Enabled = stopped && !mixOperationPending;
+        _save.Enabled = stopped && valid && !mixOperationPending;
+        _undo.Enabled = _defaults.Enabled = stopped && !mixOperationPending;
+        _applyMix.Enabled = !stopped && liveStatus != null && valid && !mixPending && _pendingMixRequestId == null;
         string recommendation;
         try
         {
@@ -272,12 +354,37 @@ internal sealed class BotGoalsSettingsControl : UserControl
         }
         catch (Exception ex) { recommendation = "Could not read population measurements: " + ex.Message; }
         _population.Text = $"Generated roster: {_rosterCount():N0} bots. {recommendation}";
-        _status.Text = !stopped ? "Locked: stop the server to change population settings." :
-            _notice.Length > 0 ? _notice : !valid ? "Not saved. Adjust the player-type mix to exactly 100%." :
+        string liveMixSummary = string.Empty;
+        if (mixStatus != null)
+        {
+            string[] names = ["Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "Keep warrior"];
+            string counts = string.Join(" · ", names.Select((name, index) =>
+                $"{name} {mixStatus.CurrentCounts.ElementAtOrDefault(index)}/{mixStatus.TargetCounts.ElementAtOrDefault(index)}"));
+            liveMixSummary = mixStatus.State.ToLowerInvariant() switch
+            {
+                "pending" => $"{(stopped ? "Pending; this mix will resume when the server starts" : "Applying to the full saved autonomous roster")} ({mixStatus.RosterCount:N0} bots). {counts}. Active bots waiting at safe task boundaries: {mixStatus.ActivePending:N0}. " +
+                    (string.IsNullOrWhiteSpace(mixStatus.Error) ? string.Empty : mixStatus.Error),
+                "applied" => $"Last mix applied to the full saved autonomous roster ({mixStatus.RosterCount:N0} bots). {counts}.",
+                "failed" => "Last mix apply failed: " + mixStatus.Error,
+                _ => string.Empty,
+            };
+        }
+        _status.Text = mixPending && liveMixSummary.Length > 0 ? liveMixSummary :
+            !stopped && liveStatus == null ? "Waiting for fresh live server status before applying a mix." :
+            _notice.Length > 0 ? _notice :
+            liveMixSummary.Length > 0 ? liveMixSummary :
+            !stopped ? "Adjust the six percentages, then apply the mix to the saved autonomous roster." :
+            !valid ? "Not saved. Adjust the player-type mix to exactly 100%." :
             HasUnsavedChanges ? "Unsaved changes — click Save settings before starting the server." :
             _savedFile ? "Saved settings ready. Start the server when ready." :
             "Default population settings shown. Save to make this preset explicit.";
-        _status.ForeColor = stopped && valid && !_loadFailed ? DaocTheme.GoldLight : Color.Salmon;
+        bool statusError = _notice.StartsWith("Not saved", StringComparison.OrdinalIgnoreCase) ||
+                           _notice.StartsWith("Mix not applied", StringComparison.OrdinalIgnoreCase) ||
+                           _notice.StartsWith("Mix apply failed", StringComparison.OrdinalIgnoreCase) ||
+                           _notice.StartsWith("The server did not acknowledge", StringComparison.OrdinalIgnoreCase) ||
+                           _notice.StartsWith("Cannot read", StringComparison.OrdinalIgnoreCase) ||
+                           mixPending && !string.IsNullOrWhiteSpace(mixStatus?.Error);
+        _status.ForeColor = valid && !_loadFailed && !statusError ? DaocTheme.GoldLight : Color.Salmon;
     }
 
     protected override void Dispose(bool disposing)

@@ -12,6 +12,115 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.70.0] - 2026-09-26
+
+### Added
+
+- Added a live launcher action to rebalance the full non-retired saved autonomous-bot roster, including offline bots, with pending/applied/failed status and safe-boundary handling for active bots.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.69.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Grouped Bards with endurance songs maintain their instrument pulse during combat and continue their group-support actions; mana and speed songs wait until after combat.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.68.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Replaced the Active Groups card stack with a sortable, realm-filterable table and selected-group roster details, reducing per-refresh control construction while retaining live group timers.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.67.0] - 2026-09-26
+
+### Added
+
+- Active Population shows sortable Realm Points for autonomous bots, using live values when available and saved values otherwise.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.66.1] - 2026-09-25
+
+### Added
+
+- Recorded the live effect-lock server deadlock and client disconnect for investigation.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.66.0] - 2026-09-25
+
+### Added
+
+- None.
+
+### Changed
+
+- Realm frontier travel now leads to Old Frontiers mob areas and no longer offers Agramon.
+
+### Fixed
+
+- The keep Chief claim prompt accepts eligible guilds at unclaimed Camlann keeps, and eight-member claims use each group member's actual position at the keep.
+- Legacy New Frontiers teleport rows can no longer send players to region 163 through the shared teleporter.
+
+### Removed
+
+- None.
+
 ## [0.65.0] - 2026-09-25
 
 ### Added

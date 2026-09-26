@@ -81,6 +81,15 @@ namespace DOL.GS
 			text = text.Trim();
 			switch (text.ToUpperInvariant())
 			{
+				// New Frontiers is outside the Camlann 1.65 world.
+				case "NEW FRONTIERS":
+				case "AGRAMON":
+				case "ALBION AGRAMON":
+				case "MIDGARD AGRAMON":
+				case "HIBERNIA AGRAMON":
+					SayTo(player, "New Frontiers is unavailable. Choose an Old Frontiers destination.");
+					return true;
+
 				// Realm specific menus
 				case "ALBION":
 					SayTo(player, DisplayTeleportDestinations(eRealm.Albion));
@@ -94,7 +103,6 @@ namespace DOL.GS
 
 				case "ALBION FRONTIERS":
 					sRet.Append("Where in the frontiers would you like to go?\n[Forest Sauvage]\n[Castle Sauvage]\n[Snowdonia Fortress]\n");
-					sRet.Append("[Albion Agramon]");
 					SayTo(player, sRet.ToString());
 					return true;
 				case "ALBION MAINLAND":
@@ -122,7 +130,6 @@ namespace DOL.GS
 
 				case "MIDGARD FRONTIERS":
 					sRet.Append("Where in the frontiers would you like to go?\n[Uppland]\n[Svasud Faste]\n[Vindsaul Faste]\n");
-					sRet.Append("[Midgard Agramon]");
 					SayTo(player, sRet.ToString());
 					return true;
 				case "MIDGARD MAINLAND":
@@ -150,7 +157,6 @@ namespace DOL.GS
 
 				case "HIBERNIA FRONTIERS":
 					sRet.Append("Where in the frontiers would you like to go?\n[Cruachan Gorge]\n[Druim Ligen]\n[Druim Cain]\n");
-					sRet.Append("[Hibernia Agramon]");
 					SayTo(player, sRet.ToString());
 					return true;
 				case "HIBERNIA MAINLAND":
@@ -197,19 +203,6 @@ namespace DOL.GS
 					text = "Darkness Falls";
 					break;
 
-				// Agramon
-				case "ALBION AGRAMON":
-					realmTarget = eRealm.Albion;
-					text = "Agramon";
-					break;
-				case "MIDGARD AGRAMON":
-					realmTarget = eRealm.Midgard;
-					text = "Agramon";
-					break;
-				case "HIBERNIA AGRAMON":
-					realmTarget = eRealm.Hibernia;
-					text = "Agramon";
-					break;
 
 				// Albion destinations
 				case "CAMELOT":
@@ -640,8 +633,13 @@ namespace DOL.GS
 				}
 			}
 
-			// Prefer the installed route so custom coordinates continue to take precedence.
+			// The installed table can still contain New Frontiers destinations.
+			// Reject those rows so the named frontier entrances use Old Frontiers fallbacks.
+			if (text.Equals("Agramon", StringComparison.OrdinalIgnoreCase))
+				return null;
 			DbTeleport destination = WorldMgr.GetTeleportLocation(realm, String.Format(":{0}", text));
+			if (destination?.RegionID == 163)
+				destination = null;
 			return destination ?? AllRealmsTeleportFallbacks.Get(realm, text);
 		}
 	}

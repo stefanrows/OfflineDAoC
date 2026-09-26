@@ -67,6 +67,7 @@ public static class AutonomousPopulationController
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                 GameServer.Database.SaveObject(previouslyOnline.Cast<DataObject>());
         }
+        AutonomousBotTypeMixControl.Start();
         AutonomousCrewManager.ReconcileResult guilds = AutonomousCrewManager.Reconcile();
         if (!guilds.Succeeded)
         {
@@ -90,6 +91,7 @@ public static class AutonomousPopulationController
         Interlocked.Increment(ref _loginGeneration);
         _timer?.Dispose();
         _timer = null;
+        AutonomousBotTypeMixControl.Stop();
         // Persist the coalesced launcher/status batch here. Inventories are
         // event-driven and included only when loot, equipment, buying, selling,
         // or training actually changed them; there is no shutdown-wide rewrite.
@@ -119,8 +121,9 @@ public static class AutonomousPopulationController
                 QueueOwnerCommands(repairOrphans);
             }
 
+            TryCreateAlt(simulationNowUtc, _cachedRoster);
             OfflineWorldBotRecord[] roster = _cachedRoster;
-            TryCreateAlt(simulationNowUtc, roster);
+            AutonomousBotTypeMixControl.Poll(roster, botId => PendingSpawns.ContainsKey(botId));
             TryRecordBenchmark(wallNowUtc);
             int desired = AutonomousPopulationRamp.DesiredActiveCount(_cachedEnabled, roster.Length, _cachedRampMinutes, simulationNowUtc - _startedUtc);
             int missing = desired - AutonomousBotRegistry.Count - PendingSpawns.Count;
