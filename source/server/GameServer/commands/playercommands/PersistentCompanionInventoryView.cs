@@ -26,9 +26,12 @@ namespace DOL.GS.Commands
         public override string GetOwner(GamePlayer player) =>
             ReferenceEquals(player, _owner) ? PlayerCompanionRoster.InventoryOwnerId(_companionId) : string.Empty;
 
+        // Only what the owner can take out is shown; starter and protected gear
+        // stays visible in the manager's Gear tab.
         public override IEnumerable<DbInventoryItem> GetDbItems(GamePlayer player) =>
             TryGetCompanion(player, out GameBot companion) && companion.Inventory != null
-                ? companion.Inventory.AllItems.Where(item => IsBackpack((eInventorySlot)item.SlotPosition)).ToArray()
+                ? PlayerCompanionRoster.OwnerTakeableBackpack(companion.PlayerCompanionRecord,
+                    companion.Inventory.AllItems.Where(item => IsBackpack((eInventorySlot)item.SlotPosition))).ToArray()
                 : Array.Empty<DbInventoryItem>();
 
         public override Dictionary<int, DbInventoryItem> GetClientInventory(GamePlayer player) =>
@@ -90,7 +93,9 @@ namespace DOL.GS.Commands
             {
                 eInventorySlot destination = (eInventorySlot)((int)eInventorySlot.FirstBackpack + (int)toSlot - (int)FirstClientSlot);
                 if (fromSlot == toSlot || companion.Inventory.GetItem(destination) != null)
-                    message = "Choose an empty companion backpack slot to move this item.";
+                    message = companion.Inventory.GetItem(destination) != null && !GetClientInventory(player).ContainsKey((int)toSlot)
+                        ? "That slot holds gear that stays with the companion; see the Gear tab. Choose another slot."
+                        : "Choose an empty companion backpack slot to move this item.";
                 else
                     moved = PlayerCompanionRoster.TryApplyEquipmentMutation(companion,
                         () => companion.Inventory.GetItem((eInventorySlot)item.SlotPosition)?.ObjectId == item.ObjectId &&

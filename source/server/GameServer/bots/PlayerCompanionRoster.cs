@@ -471,6 +471,14 @@ namespace DOL.GS
             return blocker.Length == 0;
         }
 
+        /// <summary>
+        /// Backpack items the owner may take out. Starter gear, items of unknown
+        /// origin and bound or special items stay with the companion.
+        /// </summary>
+        public static IEnumerable<DbInventoryItem> OwnerTakeableBackpack(PlayerCompanionRecord record,
+            IEnumerable<DbInventoryItem> items) =>
+            items.Where(item => CanReturnItemToOwner(item, record, out _));
+
         public static bool CanReturnItemToOwner(DbInventoryItem item, PlayerCompanionRecord record, out string blocker)
         {
             if (!CanTransferItem(item, out blocker))
