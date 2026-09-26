@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.77.0] - 2026-09-26
+
+### Added
+
+- Join Friend remembers the host address, host account and guest account per Windows user, and can store the guest password encrypted with Windows DPAPI when "Remember my password" is ticked.
+
+### Changed
+
+- The Join Friend form pre-fills the saved details; unticking "Remember my password" removes the stored password.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.76.0] - 2026-09-26
 
 ### Added

@@ -70,8 +70,11 @@ check must use those two homes; a LAN test is not a prerequisite.
    the guest account name and password. Compare account names and reject a
    duplicate. Validate the IPv4 address and the legacy 20-character ASCII login
    fields. Do not reuse or overwrite the guest's local `account.txt`. Do not log
-   credentials or put them in diagnostics. Passwords are entered again each
-   session; nothing is persisted.
+   credentials or put them in diagnostics. The form remembers the host address,
+   host account and guest account per Windows user in
+   `%LOCALAPPDATA%\OfflineDAoC\join-friend.json`. The password is stored only
+   when the guest ticks "Remember my password", encrypted with Windows DPAPI for
+   that Windows user; otherwise it is entered again each session.
 3. Reuse the current compatible `game.dll` and `connect.exe` launch method,
    client profile isolation, and diagnostics. The client receives the host
    address instead of `127.0.0.1`; diagnostics observe TCP 10300 to that address.

@@ -13,6 +13,14 @@ internal sealed class JoinFriendForm : Form
     private readonly TextBox _hostAccount = InputBox(20);
     private readonly TextBox _guestAccount = InputBox(20);
     private readonly TextBox _password = InputBox(20, password: true);
+    private readonly CheckBox _rememberPassword = new()
+    {
+        Text = "Remember my password (encrypted for this Windows user)",
+        Dock = DockStyle.Fill,
+        ForeColor = DaocTheme.Parchment,
+        Font = new Font("Georgia", 8f),
+        BackColor = Color.Transparent,
+    };
     private readonly Label _status = new()
     {
         AutoSize = false,
@@ -42,8 +50,8 @@ internal sealed class JoinFriendForm : Form
     public JoinFriendForm()
     {
         Text = "Join a Friend — Offline DAoC";
-        ClientSize = new Size(620, 540);
-        MinimumSize = new Size(590, 520);
+        ClientSize = new Size(620, 568);
+        MinimumSize = new Size(590, 548);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = DaocTheme.Void;
         ForeColor = DaocTheme.Text;
@@ -57,7 +65,7 @@ internal sealed class JoinFriendForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 8,
+            RowCount = 9,
             Padding = new Padding(4),
             BackColor = Color.Transparent,
         };
@@ -66,6 +74,7 @@ internal sealed class JoinFriendForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         for (int index = 0; index < 4; index++)
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 59));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
 
@@ -89,6 +98,7 @@ internal sealed class JoinFriendForm : Form
         layout.Controls.Add(Field("Host's local account name (ask the host; do not use their password)", _hostAccount), 0, 3);
         layout.Controls.Add(Field("Your guest account name", _guestAccount), 0, 4);
         layout.Controls.Add(Field("Your guest account password", _password), 0, 5);
+        layout.Controls.Add(_rememberPassword, 0, 6);
 
         var connectionNote = new TableLayoutPanel
         {
@@ -110,7 +120,7 @@ internal sealed class JoinFriendForm : Form
             TextAlign = ContentAlignment.MiddleLeft,
         }, 0, 0);
         connectionNote.Controls.Add(_status, 0, 1);
-        layout.Controls.Add(connectionNote, 0, 6);
+        layout.Controls.Add(connectionNote, 0, 7);
 
         var buttons = new FlowLayoutPanel
         {
@@ -122,7 +132,7 @@ internal sealed class JoinFriendForm : Form
         };
         buttons.Controls.Add(_closeButton);
         buttons.Controls.Add(_joinButton);
-        layout.Controls.Add(buttons, 0, 7);
+        layout.Controls.Add(buttons, 0, 8);
         frame.Controls.Add(layout);
 
         _joinButton.Click += async (_, _) => await JoinAsync();
@@ -130,6 +140,34 @@ internal sealed class JoinFriendForm : Form
         AcceptButton = _joinButton;
         CancelButton = _closeButton;
         _status.Text = "Enter your friend's Tailscale IPv4 address and your own account credentials.";
+        LoadSavedProfile();
+    }
+
+    private void LoadSavedProfile()
+    {
+        JoinFriendProfile saved = JoinFriendProfile.Load(JoinFriendProfile.DefaultPath);
+        _hostAddress.Text = saved.HostAddress;
+        _hostAccount.Text = saved.HostAccount;
+        _guestAccount.Text = saved.GuestAccount;
+        _password.Text = saved.Password;
+        _rememberPassword.Checked = saved.RememberPassword;
+        if (saved.GuestAccount.Length > 0)
+            _status.Text = saved.RememberPassword
+                ? "Saved details loaded. Press JOIN FRIEND to connect."
+                : "Saved details loaded. Enter your password to connect.";
+    }
+
+    private void SaveProfile(IPAddress hostAddress, string guestAccount, string password)
+    {
+        try
+        {
+            JoinFriendProfile.Save(JoinFriendProfile.DefaultPath, hostAddress.ToString(), _hostAccount.Text.Trim(),
+                guestAccount, password, _rememberPassword.Checked);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            // Joining matters more than remembering; the next session asks again.
+        }
     }
 
     private async Task JoinAsync()
@@ -181,10 +219,12 @@ internal sealed class JoinFriendForm : Form
             }
 
             ClientSessionDiagnostics.Start(client, clientDirectory, logsDirectory, hostAddress);
+            SaveProfile(hostAddress, guestAccount, password);
             _password.Clear();
             _hostAddress.Enabled = false;
             _hostAccount.Enabled = false;
             _guestAccount.Enabled = false;
+            _rememberPassword.Enabled = false;
             _joinButton.Text = "CLIENT STARTED";
             SetStatus("Client started. Keep this window open for session diagnostics; close it when you finish playing.", DaocTheme.Success);
         }

@@ -6,6 +6,8 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+33. **Launcher BotGoalsSettings tests cannot construct the control.** On 0.76.0, `BotGoalsSettingsTests` fails in SetUp with `MissingMethodException: Constructor on type 'OfflineDaoc.Launcher.BotGoalsSettingsControl' not found` for LegacyFileExplainsMappingBeforeRewriting, MeasuredRecommendationAndPanelRenderWithoutLaunchingServer, MixTotalAndServerStateGateSaving and PresetAndWorldShapeSaveAndUndo. Reproduce with `tools/dev/winnet.sh test source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj -c Release`. Expected: the fixture creates the control with its current constructor. Impact: the population-settings tests do not run; the launcher itself is unaffected. Likely the test still reflects an older constructor signature; not yet investigated.
+
 26. **World-speed status publication intermittently fails.** Installed 0.73.0 logged three `UnauthorizedAccessException` failures while replacing the status file during the 2026-09-26 observation. Later snapshots resumed and simulation kept progressing. Expected: continuous dashboard status updates; actual: transient publication failures. Root cause and gameplay impact are unconfirmed; concurrent diagnostic readers are a possible confound. Workaround: wait for the next status update. No fix included in 0.74.0.
 
 27. **Missing NPC template 5232525.** Installed 0.73.0 logged one missing-template error during the 2026-09-26 autonomous session. Expected: the requested NPC template resolves; actual: lookup failed. The spawning caller and gameplay impact remain unidentified; no template was guessed or added. Reproduction beyond the observed log event and workaround are unknown.
