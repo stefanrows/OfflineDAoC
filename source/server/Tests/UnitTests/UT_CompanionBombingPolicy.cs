@@ -84,6 +84,46 @@ public sealed class UT_CompanionBombingPolicy
         return mob;
     }
 
+    private static readonly System.Type VolleyType = typeof(GameLiving).Assembly.GetType(
+        "DOL.GS.CompanionBombVolley", true)!;
+
+    [Test]
+    public void FirstBomberWaitsBrieflyForTheOthersThenTheGroupChainsFreely()
+    {
+        object a = new(), b = new(), c = new();
+        object[] bombers = [a, b, c];
+        object volley = System.Activator.CreateInstance(VolleyType, nonPublic: true)!;
+        MethodInfo hold = VolleyType.GetMethod("ShouldHold")!;
+        bool Hold(object bomber, long now) => (bool)hold.Invoke(volley, [bomber, bombers, now])!;
+
+        Assert.That(Hold(a, 1_000), Is.True, "The first bomber in position waits for the others.");
+        Assert.That(Hold(b, 1_400), Is.True);
+        Assert.That(Hold(c, 1_600), Is.False, "The last arrival opens the volley.");
+        Assert.That(Hold(a, 1_650), Is.False, "Everyone already waiting fires with it.");
+        Assert.That(Hold(b, 1_700), Is.False);
+        Assert.That(Hold(a, 4_500), Is.False, "Follow-up bombs chain without re-syncing.");
+        Assert.That(Hold(b, 10_000), Is.False, "Each bomb keeps the chain window open.");
+
+        Assert.That(Hold(a, 30_000), Is.True, "A new pull after a pause syncs again.");
+        Assert.That(Hold(a, 31_199), Is.True);
+        Assert.That(Hold(a, 31_200), Is.False, "Missing bombers delay the volley by at most 1.2 s.");
+    }
+
+    [Test]
+    public void AStaleWaitDoesNotReleaseTheNextPullEarly()
+    {
+        object a = new(), b = new();
+        object[] bombers = [a, b];
+        object volley = System.Activator.CreateInstance(VolleyType, nonPublic: true)!;
+        MethodInfo hold = VolleyType.GetMethod("ShouldHold")!;
+        bool Hold(object bomber, long now) => (bool)hold.Invoke(volley, [bomber, bombers, now])!;
+
+        Assert.That(Hold(a, 1_000), Is.True);
+        // The pack died before b arrived; nobody bombed.
+        Assert.That(Hold(a, 60_000), Is.True, "An abandoned wait restarts instead of firing at once.");
+        Assert.That(Hold(b, 60_300), Is.False);
+    }
+
     private static bool ShouldWait(object instance, System.Reflection.MethodInfo method, object target, long now) =>
         (bool)method.Invoke(instance, [target, now])!;
 }

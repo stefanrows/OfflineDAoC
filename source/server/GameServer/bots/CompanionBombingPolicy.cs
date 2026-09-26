@@ -163,4 +163,51 @@ namespace DOL.GS
             _expired = false;
         }
     }
+
+    /// <summary>
+    /// Loose volley timing for one group's companion bombers: the first bomber in
+    /// position waits briefly so the others can land their bombs together, then
+    /// the group chains freely until the fight pauses. Casts are never cut short.
+    /// </summary>
+    internal sealed class CompanionBombVolley
+    {
+        public const int MaxHoldMilliseconds = 1200;
+        public const int ChainWindowMilliseconds = 6000;
+
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Group, CompanionBombVolley> Groups = new();
+
+        private readonly HashSet<object> _arrived = new();
+        private readonly object _lock = new();
+        private long _openedTick;
+        private long _lastReleaseTick = long.MinValue / 2;
+
+        public static CompanionBombVolley For(Group group) => Groups.GetValue(group, _ => new CompanionBombVolley());
+
+        /// <summary>True while <paramref name="bomber"/> should hold its first bomb for the rest of the volley.</summary>
+        public bool ShouldHold(object bomber, IReadOnlyCollection<object> bombers, long now)
+        {
+            lock (_lock)
+            {
+                if (now - _lastReleaseTick <= ChainWindowMilliseconds)
+                {
+                    _lastReleaseTick = now;
+                    return false;
+                }
+
+                if (_arrived.Count > 0 && now - _openedTick > ChainWindowMilliseconds)
+                    _arrived.Clear();
+                if (_arrived.Count == 0)
+                    _openedTick = now;
+                _arrived.Add(bomber);
+
+                if (bombers.All(_arrived.Contains) || now - _openedTick >= MaxHoldMilliseconds)
+                {
+                    _arrived.Clear();
+                    _lastReleaseTick = now;
+                    return false;
+                }
+                return true;
+            }
+        }
+    }
 }

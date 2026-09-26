@@ -3380,6 +3380,8 @@ namespace DOL.AI.Brain
                     ResetBombWait();
                 else if (ShouldWaitForBombTank(bombTarget, readyBombs[0]))
                     return true;
+                else if (ShouldHoldForBombVolley(bombTarget, readyBombs[0]))
+                    return true;
 
                 if (BotBody.CharacterClass.ID == (int)eCharacterClass.Cleric)
                 {
@@ -3563,6 +3565,30 @@ namespace DOL.AI.Brain
         {
             _bombTankWait.Reset();
         }
+
+        /// <summary>
+        /// Holds a bomber that is in position so the group's other companion
+        /// bombers can join the first volley; never while a cast is running.
+        /// </summary>
+        private bool ShouldHoldForBombVolley(GameLiving target, Spell bomb)
+        {
+            if (Body.IsCasting || Body.Group == null || !Body.IsWithinRadius(target, bomb.Radius) ||
+                !CompanionBombingPolicy.HasSufficientPull(BotBody, target, bomb, Body))
+                return false;
+
+            object[] bombers = Body.Group.GetMembersInTheGroup()
+                .OfType<GameBot>()
+                .Where(member => member.IsAlive && CompanionBombingPolicy.CanUseBombs(member) &&
+                    member.CurrentRegionID == Body.CurrentRegionID &&
+                    member.IsWithinRadius(target, CompanionBombVolleyReach))
+                .Cast<object>()
+                .ToArray();
+            return bombers.Length > 1 &&
+                CompanionBombVolley.For(Body.Group).ShouldHold(Body, bombers, GameLoop.GameLoopTime);
+        }
+
+        // Bombers farther than this are not worth waiting for.
+        private const int CompanionBombVolleyReach = 1500;
 
         private int CompanionBombApproachRange(GameLiving target)
         {
