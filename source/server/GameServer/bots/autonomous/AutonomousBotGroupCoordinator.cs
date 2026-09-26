@@ -120,6 +120,7 @@ public static partial class AutonomousBotGroupCoordinator
         public long NextRecoveryReadinessTick { get; set; }
         public int LockedSize { get; set; }
         public long RecruitmentDeadlineTick { get; init; } = GameLoop.GameLoopTime + 2 * 60_000;
+        public Dictionary<long, long> RecruitmentRetryTicks { get; } = new();
         public long CreatedTick { get; init; } = GameLoop.GameLoopTime;
         public ushort RendezvousRegion { get; set; }
         public AutonomousRendezvousAttendance Attendance { get; } = new();
@@ -1208,6 +1209,7 @@ public static partial class AutonomousBotGroupCoordinator
                 AutonomousRvrEventLayer.RemoveForce(ending.Id);
             foreach (GameBot bot in AllBotMembers(group))
                 ClearMetadata(bot, true);
+            GuildRecruitmentOffers.TryRemove(group, out _);
             Sessions.Remove(group);
         }
     }
@@ -1423,7 +1425,9 @@ public static partial class AutonomousBotGroupCoordinator
                 int compatibleMaximum = Math.Min(largestAllowed, compatiblePool.Length + 1);
                 if (compatibleMaximum < minimumRequired)
                 {
-                    LogFormationBlocked(leader, objectiveKind, "No compatible guildmate is currently available in this level/region cohort");
+                    LogFormationBlocked(leader, objectiveKind,
+                        $"Guild recruitment: eligible={eligibleCandidates.Length}, reachable={compatiblePool.Length}, " +
+                        $"routeChecksUsed={rvrRouteChecks}/12, desiredSize={largestAllowed}; candidates must be free, level-compatible and accept this party size");
                     continue;
                 }
                 DateTime started = FormationWaitStartedUtc(leader);
@@ -1648,6 +1652,8 @@ public static partial class AutonomousBotGroupCoordinator
             Id = $"{leader.Guild?.GuildID ?? "unassigned"}-{RuntimeGroupToken}-{++_nextGroupNumber:000}",
             Rendezvous = center,
             RendezvousName = rendezvousName,
+            RecruitmentDeadlineTick = GameLoop.GameLoopTime +
+                (objectiveKind == eAutonomousObjectiveKind.RvR ? 10 : 2) * 60_000L,
             PreferredPickupCampId = pickupDestination?.Camp?.Id ?? string.Empty,
             TaskClock = new AutonomousGroupTaskClock(objectiveKind),
             LockedSize = lockedSize > 0 ? lockedSize : BotMembers(group).Length,
@@ -2203,6 +2209,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (session == null || session.Ending)
             return;
         session.Ending = true;
+        GuildRecruitmentOffers.TryRemove(session.Group, out _);
         GameBot[] members = AllBotMembers(session.Group);
         if (session.ObjectiveKind == eAutonomousObjectiveKind.RvR)
             AutonomousRvrEventLayer.RemoveForce(session.Id);
@@ -2219,6 +2226,10 @@ public static partial class AutonomousBotGroupCoordinator
             camp = session.Camp?.Id ?? string.Empty,
             target = session.Camp?.MonsterName ?? string.Empty,
             zone = session.Camp?.ZoneName ?? string.Empty,
+            campRegion = session.Camp?.RegionId,
+            campX = session.Camp?.X,
+            campY = session.Camp?.Y,
+            campZ = session.Camp?.Z,
             members = members.Select(member => new
             {
                 name = member.Name,
@@ -2230,6 +2241,12 @@ public static partial class AutonomousBotGroupCoordinator
                 x = member.X,
                 y = member.Y,
                 z = member.Z,
+                className = member.CharacterClass?.Name ?? string.Empty,
+                moving = member.IsMoving,
+                inCombat = member.InCombat,
+                riding = member.IsOnStableMasterRoute,
+                distanceToCamp = session.Camp != null && member.CurrentRegionID == session.Camp.RegionId
+                    ? (int?)Vector3.Distance(new(member.X, member.Y, member.Z), new(session.Camp.X, session.Camp.Y, session.Camp.Z)) : null,
                 activity = member.PersistentRecord?.Activity ?? string.Empty,
                 progress = member.PersistentRecord?.ObjectiveProgress ?? string.Empty,
                 deaths = member.PersistentRecord?.DeathCount ?? 0,
@@ -2653,6 +2670,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     private static void WriteSessionMetadata(Session session, GameBot[] members)
     {
+        PublishGuildRecruitment(session, members);
         Directive directive = BuildDirective(session, members);
         bool remoteMeetupActive = session.RemoteMeetupDeadlineTick.HasValue &&
             members.Any(member => session.RemoteMemberIds.Contains(MemberKey(member)));

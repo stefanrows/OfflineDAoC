@@ -278,12 +278,18 @@ public static class AutonomousObjectiveAssignments
             AutonomousCrewManager.AreInSameCrew(bot, peer)).ToArray();
         if (AutonomousActivityScheduler.IsOutleveledByGuild(bot.Level, peers.Select(peer => (int)peer.Level).ToArray()))
             return chosen;
-        int waiting = peers.Count(peer => peer.Group == null && peer.IsAlive && Is(peer, eAutonomousObjectiveKind.RvR) &&
+        bool invitation = peers.Any(peer => peer.IsAlive && Is(peer, eAutonomousObjectiveKind.RvR) &&
+            !AutonomousRealmRaid.IsReserved(peer) &&
             !AutonomousActivityScheduler.IsPveBlocked(peer.PersistentRecord, now) &&
-            AutonomousBotGroupCoordinator.LevelsCompatible(bot.Level, peer.Level));
-        // Only a new task can accept the invitation; active work and mandatory
-        // PvE intermissions are never cancelled to populate a warband.
-        return waiting is > 0 and < 8 ? eAutonomousObjectiveKind.RvR : chosen;
+            AutonomousBotGroupCoordinator.LevelsCompatible(bot.Level, peer.Level) &&
+            (peer.Group == null
+                ? AutonomousPlayerBehavior.MaximumRvrGroupSize(AutonomousPlayerBehavior.TypeOf(record), bot.Level) >=
+                    AutonomousPlayerBehavior.MaximumRvrGroupSize(AutonomousPlayerBehavior.TypeOf(peer.PersistentRecord), peer.Level)
+                : AutonomousBotGroupCoordinator.HasOpenGuildRecruitment(bot, peer)));
+        // A partial assembling party still advertises its spare seats. Eight
+        // waiting guildmates are not a full party; do not suppress their invite.
+        // Only new tasks accept: active work and required PvE remain untouched.
+        return invitation ? eAutonomousObjectiveKind.RvR : chosen;
     }
 
     private static void BeginPveIntermission(GameBot bot)

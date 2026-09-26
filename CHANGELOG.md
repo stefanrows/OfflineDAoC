@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.74.0] - 2026-09-26
+
+### Added
+
+- Guild recruitment diagnostics distinguish eligible candidates, reachable candidates, route-budget usage and requested party size. Group outcome records include camp coordinates, member classes, motion/combat/riding state and same-region distance to camp.
+
+### Changed
+
+- Initial PvP parties can recruit for ten simulated minutes. Eligible guildmates consider spare seats in assembling parties at task boundaries; eight waiting guildmates no longer suppress invitations. Active tasks and mandatory PvE intermissions remain authoritative.
+- Late recruitment recalculates missing healer/tank roles after each addition and defers failed candidates for thirty simulated seconds so other candidates can use the bounded route budget.
+
+### Fixed
+
+- Late PvE recruits must leave the planned pickup camp usable by every member before joining, matching the initial roster check.
+
+### Removed
+
+- None.
+
 ## [0.73.0] - 2026-09-26
 
 ### Added
