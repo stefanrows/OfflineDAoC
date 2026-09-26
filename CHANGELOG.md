@@ -12,9 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.76.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
 ### Fixed
 
 - Persistent companions no longer swap a shield and a two-handed weapon on every AI tick; equipment upgrades are weighed against every weapon they displace. The loop saved to the database each time and stalled the game loop for up to 1.4 s.
+- /pull only commands companions assigned to the player issuing it, preserving each other player's companion follow leader in a shared group.
+
+### Removed
+
+- None.
 
 ## [0.75.0] - 2026-09-26
 

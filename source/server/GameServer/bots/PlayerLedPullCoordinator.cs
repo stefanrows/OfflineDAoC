@@ -40,9 +40,9 @@ namespace DOL.GS
             GroupState state = States.GetOrCreateValue(group);
             Cancel(state.Pending, false);
             GameBot[] helpers = group.GetMembersInTheGroup().OfType<GameBot>()
-                .Where(bot => Available(bot, player) && bot.IsWithinRadius(target, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) &&
+                .Where(bot => bot.PlayerGroupLeader == player && Available(bot, player) &&
+                    bot.IsWithinRadius(target, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) &&
                     bot.Brain is BotBrain).ToArray();
-            foreach (GameBot bot in helpers) bot.EnterPlayerLedGroup(player);
             helpers = helpers.Where(bot => !CompanionEngagementMode.ShouldRegroup(bot)).ToArray();
             if (helpers.Length == 0)
             {
@@ -96,6 +96,7 @@ namespace DOL.GS
             if (bot?.Group == null || !States.TryGetValue(bot.Group, out GroupState state)) return false;
             Order order = Volatile.Read(ref state.Pending);
             if (order == null || Volatile.Read(ref order.Finished) != 0) return false;
+            if (bot.PlayerGroupLeader != order.Leader) return false;
             if (order.Leader.Group != order.Group || !order.Group.IsInTheGroup(order.Leader) ||
                 !ValidEnemy(order.Leader, order.Target) || !Available(order.Tank, order.Leader) ||
                 CompanionEngagementMode.ShouldRegroup(order.Tank) ||
