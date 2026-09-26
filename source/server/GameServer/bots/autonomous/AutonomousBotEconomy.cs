@@ -245,12 +245,44 @@ namespace DOL.GS;
             }
 
             DbInventoryItem equipped = bot.Inventory.GetItem(equipSlot);
-            int improvement = EquipmentValue(item) - EquipmentValue(equipped);
+            DbInventoryItem[] displaced = DisplacedWeapons(bot.Inventory, equipSlot);
+            int focusBonus = 0;
             if (bot.CharacterClass?.IsFocusCaster == true &&
                 item.Object_Type == (int)eObjectType.Staff)
-                improvement += (BotWeaponStats.CasterFocusScore(bot, item) -
+                focusBonus = (BotWeaponStats.CasterFocusScore(bot, item) -
                     BotWeaponStats.CasterFocusScore(bot, equipped)) * 100_000;
-            return equipped == null || improvement > minimumImprovement;
+            return IsEquipmentUpgrade(item, equipped, displaced, minimumImprovement, focusBonus);
+        }
+
+        /// <summary>
+        /// Weapons a move into <paramref name="target"/> pushes out of their own
+        /// slots: a two-hander clears both hands, and either hand clears a
+        /// worn two-hander.
+        /// </summary>
+        private static DbInventoryItem[] DisplacedWeapons(IGameInventory inventory, eInventorySlot target)
+        {
+            eInventorySlot[] conflicting = target switch
+            {
+                eInventorySlot.TwoHandWeapon => [eInventorySlot.RightHandWeapon, eInventorySlot.LeftHandWeapon],
+                eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon => [eInventorySlot.TwoHandWeapon],
+                _ => [],
+            };
+            return conflicting.Select(inventory.GetItem).Where(item => item != null).ToArray();
+        }
+
+        /// <summary>
+        /// Compares against everything the move removes, not only the target
+        /// slot. Otherwise a shield and a two-hander each see an empty slot
+        /// while the other is worn and replace each other indefinitely.
+        /// </summary>
+        public static bool IsEquipmentUpgrade(DbInventoryItem item, DbInventoryItem equipped,
+            DbInventoryItem[] displaced, int minimumImprovement, int focusBonus = 0)
+        {
+            if (equipped == null && displaced.Length == 0)
+                return true;
+            int improvement = EquipmentValue(item) - EquipmentValue(equipped) -
+                displaced.Sum(EquipmentValue) + focusBonus;
+            return improvement > minimumImprovement;
         }
 
         // Focus staffs are usable by focus casters even when they do not train

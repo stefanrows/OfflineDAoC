@@ -12,6 +12,10 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+### Fixed
+
+- Persistent companions no longer swap a shield and a two-handed weapon on every AI tick; equipment upgrades are weighed against every weapon they displace. The loop saved to the database each time and stalled the game loop for up to 1.4 s.
+
 ## [0.75.0] - 2026-09-26
 
 ### Added
