@@ -454,11 +454,13 @@ public static class AutonomousRestPolicy
 
     // Starting recovery uses the existing low-resource thresholds; once seated,
     // finish recovering instead of standing as soon as those thresholds are crossed.
+    // A sitting real-player leader asks the party to top off any missing pool.
     public static bool ShouldRest(
         bool atRestPoint, bool moving, bool inCombat, bool alreadyResting,
-        byte healthPercent, byte manaPercent, byte endurancePercent, bool usesPower) =>
+        byte healthPercent, byte manaPercent, byte endurancePercent, bool usesPower,
+        bool leaderSitting = false) =>
         atRestPoint && !moving && !inCombat &&
-        (alreadyResting
+        (alreadyResting || leaderSitting
             ? !IsFullyRecovered(healthPercent, manaPercent, endurancePercent, usesPower)
             : NeedsRecovery(healthPercent, manaPercent, endurancePercent, usesPower));
 }

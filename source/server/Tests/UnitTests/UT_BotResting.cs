@@ -73,6 +73,24 @@ namespace DOL.UnitTests
             Assert.That(AutonomousRestPolicy.ShouldRest(true, false, false, false, hp, power, endurance, usesPower), Is.EqualTo(expected));
         }
 
+        [TestCase(100, 90, 100, true, true)]
+        [TestCase(95, 100, 100, false, true)]
+        [TestCase(100, 100, 99, false, true)]
+        [TestCase(100, 50, 100, false, false)]
+        [TestCase(100, 100, 100, true, false)]
+        public void SittingLeaderStartsRestForAnyMissingPool(byte hp, byte power, byte endurance, bool usesPower, bool expected)
+        {
+            Assert.That(AutonomousRestPolicy.ShouldRest(true, false, false, false, hp, power, endurance, usesPower,
+                leaderSitting: true), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void SittingLeaderDoesNotOverrideTravelOrCombat()
+        {
+            Assert.That(AutonomousRestPolicy.ShouldRest(true, true, false, false, 100, 60, 100, true, leaderSitting: true), Is.False);
+            Assert.That(AutonomousRestPolicy.ShouldRest(true, false, true, false, 100, 60, 100, true, leaderSitting: true), Is.False);
+        }
+
         [Test]
         public void NonCasterDoesNotWaitForAPowerPoolItCannotHave()
         {

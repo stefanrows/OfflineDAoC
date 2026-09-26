@@ -2545,7 +2545,8 @@ namespace DOL.AI.Brain
                         _brain.Body.HealthPercent,
                         _brain.Body.ManaPercent,
                         _brain.Body.EndurancePercent,
-                        _brain.Body.MaxMana > 0);
+                        _brain.Body.MaxMana > 0,
+                        leader.IsSitting);
                     if (rest)
                         _brain._ambientWanderMovement = false;
                     if (rest)

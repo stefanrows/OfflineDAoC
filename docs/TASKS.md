@@ -16,6 +16,13 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+22. **Companions rest with a sitting player.** Source 0.90.0 lets roster
+    companions start fast recovery for any missing health, power, or endurance
+    while their player-leader sits, and finish to full. Before, they rested only
+    below 70% health, 45% power, or 35% endurance and otherwise regenerated at
+    standing speed. Travel and combat still interrupt the rest. Real-client
+    check that casters refill during a sit is pending.
+
 21. **Remove character-level requirements from realm abilities.** Source
     0.87.0 allows training Charge, Wild Power, Toughness, maximum health,
     Decimation Trap, and Atlas Old Frontiers Striking the Soul at any character

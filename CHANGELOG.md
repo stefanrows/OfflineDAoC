@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.90.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Roster companions now rest to full whenever their player-leader sits and any
+  health, power, or endurance is missing, instead of only below 70% health,
+  45% power, or 35% endurance. Travel and combat still interrupt the rest.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.89.0] - 2026-09-27
 
 ### Added
