@@ -609,6 +609,14 @@ three realm factions.
 
 ## Tier 5 — Guild keeps and relics
 
+**0.72.0 follow-up supersedes the initial unclaimed-keep flow below:** see
+[Frontier campaign](FRONTIER_CAMPAIGN.md). Stationary Frontier Wardens defend
+initially unclaimed keeps and home relic shrines. Defeating a lord exposes a
+claim steward for players or autonomous guild crews. Ownership and defeat
+state persist across restarts; resets restore garrisons. Existing guild claims
+are preserved. Frontier/DF monster XP gains a 50% base bonus, and a roster-backed
+archived population restoration expands the outdoor frontiers.
+
 **Goal:** Old Frontiers warfare matches Camlann: guilds own keeps and relics;
 relic bonuses apply to that guild only; stacking is uncapped (decision 3).
 

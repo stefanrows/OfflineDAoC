@@ -67,6 +67,16 @@ public static class KeepRelicReset
             ? "UPDATE [Keep] SET Realm=0, ClaimedGuildName='', ClaimedAt='0001-01-01T00:00:00.0000000Z'"
             : "UPDATE [Keep] SET Realm=0, ClaimedGuildName=''";
         int count = command.ExecuteNonQuery();
+        if (HasColumn("Keep", "LordDefeated"))
+        {
+            command.CommandText = "UPDATE [Keep] SET LordDefeated=0";
+            command.ExecuteNonQuery();
+        }
+        if (HasColumn("Keep", "LastCaptureRewardAt"))
+        {
+            command.CommandText = "UPDATE [Keep] SET LastCaptureRewardAt='0001-01-01T00:00:00.0000000Z'";
+            command.ExecuteNonQuery();
+        }
         foreach (var relic in relics)
         {
             var home = pads.Single(p => Number(p, "Emblem") == Number(relic, "OriginalRealm") + 10 * Number(relic, "relicType"));

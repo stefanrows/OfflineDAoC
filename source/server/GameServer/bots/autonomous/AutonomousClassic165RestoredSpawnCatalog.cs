@@ -18,6 +18,7 @@ public static class AutonomousClassic165RestoredSpawnCatalog
     {
         "classic165_restored_spawn_ids.txt",
         "classic165_period_restored_spawn_ids.txt",
+        "frontier_garrison_restored_spawn_ids.txt",
     };
     private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
     private static readonly Lazy<HashSet<string>> LoadedIds = new(Load, true);

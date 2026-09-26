@@ -247,7 +247,7 @@ namespace DOL.GS
             {
                 bool allied = this is Keeps.GameKeepRelicPad keepPad
                     ? ServerRules.PvpCombatant.GuildOf(player) == keepPad.Guild
-                    : player.Realm == Realm;
+                    : GameServer.ServerRules is not ServerRules.PvPServerRules && player.Realm == Realm;
                 if (allied || !player.IsAlive || player.IsStealthed)
                     continue;
 
@@ -255,10 +255,10 @@ namespace DOL.GS
             }
 
             enemyNearby += GetNPCsInRadius(500).OfType<GameBot>().Count(bot =>
-                bot.IsAutonomousWorldBot && bot.IsAlive && !bot.IsStealthed &&
+                (bot.IsAutonomousWorldBot || bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && bot.IsAlive && !bot.IsStealthed &&
                 (this is Keeps.GameKeepRelicPad keepPad
                     ? ServerRules.PvpCombatant.GuildOf(bot) != keepPad.Guild
-                    : bot.Realm != Realm && bot.Realm != eRealm.None) &&
+                    : GameServer.ServerRules is ServerRules.PvPServerRules || bot.Realm != Realm && bot.Realm != eRealm.None) &&
                 bot.ObjectState == eObjectState.Active);
 
             return enemyNearby;

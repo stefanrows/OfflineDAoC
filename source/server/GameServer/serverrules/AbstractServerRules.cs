@@ -1916,6 +1916,8 @@ namespace DOL.GS.ServerRules
             }
 
             double damagePercent = Math.Min(1.0, contribution.Damage / npcTotalDamageReceived);
+            if (botToAward.IsAutonomousWorldBot && killedNpc is GameKeepGuard && !botToAward.IsObjectGreyCon(killedNpc))
+                botToAward.GainRealmPoints((long)(killedNpc.RealmPointsValue * damagePercent));
             long xpCap = GameServer.ServerRules.GetExperienceForLiving(botToAward.Level);
             xpCap = (long)(xpCap * Properties.XP_CAP_PERCENT / 100.0 * killedNpc.ExceedXPCapAmount);
             baseXpReward = (long)(Math.Min(baseXpReward, xpCap) * damagePercent);

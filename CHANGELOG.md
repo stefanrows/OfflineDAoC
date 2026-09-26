@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.72.0] - 2026-09-26
+
+### Added
+
+- Frontier Wardens stationary NPC garrisons hold initially unclaimed Old Frontier keeps and guard the six home relic shrines. Killing a keep lord unlocks a claim steward; player groups and autonomous guild crews can claim through the same proximity, rank, group-size, and guild-limit checks.
+- Keep guards award 25 base RP; nearby living members of the capturing group and guild receive 1,500 base RP, with a persistent 30-minute reward cooldown per keep.
+- Setup can restore 4,851 archived Old Frontier monster rows matching retained zone, species, and level rosters, preserving their saved locations, templates, and loot.
+
+### Changed
+
+- Old Frontiers and Darkness Falls monster kills grant a 50% base-XP bonus on top of the selected player/companion or autonomous-bot XP rate.
+- Keep ownership and defeated-lord claim state survive restarts. Fresh/reset worlds initialize NPC garrisons; existing player and autonomous guild claims stay intact. Relic pickup requires a defeated shrine garrison or keep lord, and the dashboard names guild owners.
+
+### Fixed
+
+- Human frontier XP no longer substitutes the frontier rate for the selected XP rate in Camlann.
+- Ordinary keep doors handle door-request packets and suppress duplicate traversal from one client click; bot traversal and guard hostility use guild ownership.
+- Pure autonomous guilds receive native claim permission for their ordinary members, and crews explicitly approach and use defeated keeps' claim stewards.
+
+### Removed
+
+- Free claiming of undefeated Old Frontier keeps.
+
 ## [0.71.0] - 2026-09-26
 
 ### Added

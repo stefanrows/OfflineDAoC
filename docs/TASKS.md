@@ -14,6 +14,8 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+9. **Frontier PvE incentives and NPC-held keeps/relics.** Source version 0.72.0 adds +50% base monster XP in Old Frontiers/DF, on top of the configured rate; restores a manifest of 4,851 archived frontier spawns; and adds stationary Frontier Wardens garrisons, lord-unlocked claim stewards, 25 base guard RP and 1,500 base capture RP (30-minute reward cooldown per keep). Autonomous crews explicitly claim for their guild using native permissions and group checks. Fresh/reset worlds use NPC ownership; captured territory persists across restarts and existing guild claims are preserved. Server, launcher and Setup build verification are recorded in [FRONTIER_CAMPAIGN.md](FRONTIER_CAMPAIGN.md). Installation, backed-up spawn migration, world density/navigation, human/crew capture, rewards, restart persistence and relic raids await owner verification.
+
 1. **Private Tailscale co-op between two home installations.** The launcher now
    has a client-only Join Friend shortcut with a Tailscale IPv4 login-port check,
    separate host and guest account names, and remote-session diagnostics. Source

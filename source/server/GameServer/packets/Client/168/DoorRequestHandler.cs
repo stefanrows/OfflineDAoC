@@ -80,7 +80,7 @@ namespace DOL.GS.PacketHandler.Client.v168
                     return;
                 }
 
-                if (doorType is 7 or 9)
+                if (door is GameKeepDoor || doorType is 7 or 9)
                 {
                     UseDoor();
                     return;
@@ -146,8 +146,7 @@ namespace DOL.GS.PacketHandler.Client.v168
                     {
                         GameKeepDoor keepDoor = door as GameKeepDoor;
 
-                        if (keepDoor.Component.Keep is GameKeepTower && keepDoor.Component.Keep.KeepComponents.Count > 1)
-                            keepDoor.Interact(player);
+                        keepDoor.Interact(player);
                     }
                     else
                     {

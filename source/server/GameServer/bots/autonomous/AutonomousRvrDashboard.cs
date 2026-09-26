@@ -79,7 +79,7 @@ public static class AutonomousRvrDashboard
                         keep.CurrentRegion.Time - keep.LastAttackedByEnemyTick < 120_000) ||
                         keep.Guards.Values.Any(guard => guard.IsAlive && guard.LastAttackedByEnemyTick > 0 && guard.InCombat);
                     string forces = FormatForces(battle);
-                    string owner = keep.Guild?.Name ?? (keep.Realm == eRealm.None ? "Unclaimed" : GlobalConstants.RealmToName(keep.Realm));
+                    string owner = keep.Guild?.Name ?? (keep.DBKeep.LordDefeated ? "Awaiting guild claim" : "Unclaimed");
                     return new Objective(keep.IsRelic ? "Relic keep" : "Keep", keep.Name, owner,
                         battle?.Kind ?? (attacked ? "Under attack — no organized siege" : "Secure"), keep.CurrentRegion.Description,
                         "", forces, $"rvr-keep-{keep.KeepID}",
@@ -91,7 +91,10 @@ public static class AutonomousRvrDashboard
                 GameLiving carrier = relic.CurrentCarrier;
                 long remaining = AutonomousRvrEventLayer.CarrierRemainingMilliseconds(
                     AutonomousRvrEventLayer.RelicCarrierTargetId(relic), GameLoop.GameLoopTime);
-                return new Objective("Relic", relic.Name, relic.Realm == eRealm.None ? "In transit" : GlobalConstants.RealmToName(relic.Realm),
+                string relicOwner = carrier != null ? DOL.GS.ServerRules.PvpCombatant.GuildOf(carrier)?.Name ?? carrier.Name
+                    : relic.CurrentRelicPad is GameKeepRelicPad pad ? pad.Guild?.Name ?? "Unclaimed"
+                    : relic.IsMounted ? PvpKeepCampaign.GarrisonName : "In transit";
+                return new Objective("Relic", relic.Name, relicOwner,
                     carrier != null ? remaining > 0 ? "SIEGE — relic escort / interception" : "ESCORT / INTERCEPTION" : relic.IsMounted ? "At shrine" : "DROPPED — recoverable",
                     carrier?.CurrentZone?.Description ?? relic.CurrentZone?.Description ?? "Unknown", carrier?.Name ?? "",
                     $"Original realm: {GlobalConstants.RealmToName(relic.OriginalRealm)} · {relic.RelicType}" +

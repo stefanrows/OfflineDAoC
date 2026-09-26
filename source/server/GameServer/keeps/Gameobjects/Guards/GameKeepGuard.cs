@@ -16,6 +16,10 @@ namespace DOL.GS.Keeps
 	{
 		private static new readonly Logging.Logger log = Logging.LoggerManager.Create(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
+        public override int RealmPointsValue => PvpKeepCampaign.Applies(Component?.Keep)
+            ? (Component.Keep.DBKeep.LordDefeated ? 0 : PvpKeepCampaign.GuardRealmPoints)
+            : base.RealmPointsValue;
+
 		private Patrol m_Patrol = null;
 		public Patrol PatrolGroup
 		{

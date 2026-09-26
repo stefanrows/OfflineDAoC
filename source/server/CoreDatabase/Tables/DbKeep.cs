@@ -23,6 +23,20 @@ namespace DOL.Database
 		private int m_midgardDifficultyLevel;
 		private int m_hiberniaDifficultyLevel;
 		private int m_originalRealm;
+        private DateTime m_lastCaptureRewardAt;
+        [DataElement(AllowDbNull = false)]
+        public DateTime LastCaptureRewardAt
+        {
+            get => m_lastCaptureRewardAt;
+            set { Dirty = true; m_lastCaptureRewardAt = value; }
+        }
+        private bool m_lordDefeated;
+        [DataElement(AllowDbNull = false)]
+        public bool LordDefeated
+        {
+            get => m_lordDefeated;
+            set { Dirty = true; m_lordDefeated = value; }
+        }
 		private DateTime m_claimedAt;
 		private int m_type;
 		private byte m_baseLevel;

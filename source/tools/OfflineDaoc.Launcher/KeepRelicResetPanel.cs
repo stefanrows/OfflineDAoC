@@ -32,7 +32,7 @@ internal sealed partial class MainForm
             MessageBox.Show(this, "Stop the server completely before resetting keeps and relics.", "Server must be stopped");
             return;
         }
-        if (MessageBox.Show(this, "Reset the Camlann frontier: clear all keep guild claims, return keeps to the unclaimed state, and return all six relics to their temple shrines?\n\nCharacters, bots, inventories, coins, Realm Exchange and event records are not changed. A small backup of the keep/relic rows will be saved.",
+        if (MessageBox.Show(this, "Reset the Camlann frontier: clear all keep guild claims, restore Frontier Wardens garrisons on the next server start, and return all six relics to their guarded temple shrines?\n\nCharacters, bots, inventories, coins, Realm Exchange and event records are not changed. A small backup of the keep/relic rows will be saved.",
             "Reset Keeps & Relics", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
         if (_resetKeepsRelics is null) return;
         _resettingKeepsRelics = true;

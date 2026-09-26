@@ -299,6 +299,16 @@ public static class CamlannWorldReset
             ? "UPDATE [Keep] SET Realm=0, ClaimedGuildName='', ClaimedAt='0001-01-01T00:00:00.0000000Z'"
             : "UPDATE [Keep] SET Realm=0, ClaimedGuildName=''";
         command.ExecuteNonQuery();
+        if (ColumnExists(connection, transaction, "Keep", "LordDefeated"))
+        {
+            command.CommandText = "UPDATE [Keep] SET LordDefeated=0";
+            command.ExecuteNonQuery();
+        }
+        if (ColumnExists(connection, transaction, "Keep", "LastCaptureRewardAt"))
+        {
+            command.CommandText = "UPDATE [Keep] SET LastCaptureRewardAt='0001-01-01T00:00:00.0000000Z'";
+            command.ExecuteNonQuery();
+        }
     }
 
     private static void ResetRelics(SQLiteConnection connection, SQLiteTransaction transaction)

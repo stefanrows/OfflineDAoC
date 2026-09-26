@@ -182,6 +182,8 @@ namespace DOL.GS.Keeps
 		/// The guild which has claimed the keep
 		/// </summary>
 		public Guild Guild { get; set; } = null;
+        public KeepClaimPoint ClaimPoint { get; internal set; }
+
 
 		/// <summary>
 		/// UTC time at which the current guild claimed this keep.
@@ -583,7 +585,7 @@ namespace DOL.GS.Keeps
 
 		public virtual void EnsureRelicPad()
 		{
-			if (IsPortalKeep || Guild == null || RelicPad != null)
+			if (IsPortalKeep || Guild == null || PvpKeepCampaign.IsGarrison(Guild) || RelicPad != null)
 				return;
 
 			RelicPad = new GameKeepRelicPad(this);
@@ -607,6 +609,12 @@ namespace DOL.GS.Keeps
 			if (playerLike == null || playerLike.Out == null || playerGuild == null)
 				return false;
 
+            if (PvpKeepCampaign.Applies(this) && (!DBKeep.LordDefeated || ClaimPoint == null ||
+                !player.IsAlive || !player.IsWithinRadius(ClaimPoint, WorldMgr.INTERACT_DISTANCE)))
+            {
+                playerLike.Out.SendMessage("Defeat the keep lord, then approach the Keep Claim Steward to claim this keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                return false;
+            }
 			if (InCombat)
 			{
 				playerLike.Out.SendMessage(Name + " is under attack and can't be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
@@ -698,8 +706,16 @@ namespace DOL.GS.Keeps
 		/// claim the keep to a guild
 		/// </summary>
 		/// <param name="player">the player who have claim the keep</param>
+        private readonly object _claimGate = new();
+
 		public virtual void Claim(GameLiving player)
+        {
+            lock (_claimGate) ClaimCore(player);
+        }
+
+        private void ClaimCore(GameLiving player)
 		{
+            if (PvpKeepCampaign.Applies(this) && !CheckForClaim(player)) return;
 			Guild = player switch
 			{
 				GamePlayer human => human.Guild,
@@ -707,6 +723,11 @@ namespace DOL.GS.Keeps
 				_ => null,
 			};
 			ClaimedAt = WorldSimulationClock.UtcNow;
+            if (PvpKeepCampaign.Applies(this))
+            {
+                Realm = player.Realm;
+                PvpKeepCampaign.CompleteClaim(this, player);
+            }
 			
 			if (ServerProperties.Properties.GUILDS_CLAIM_LIMIT > 1)
 				Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps of a maximum of " + ServerProperties.Properties.GUILDS_CLAIM_LIMIT, eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
@@ -732,6 +753,8 @@ namespace DOL.GS.Keeps
             // door.BroadcastDoorStatus();
             StartDeductionTimer();
             GameEventMgr.Notify(KeepEvent.KeepClaimed, this, new KeepEventArgs(this));
+            if (PvpKeepCampaign.Applies(this))
+                GameEventMgr.Notify(KeepEvent.KeepTaken, this, new KeepEventArgs(this));
 		}
 
 		/// <summary>

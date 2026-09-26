@@ -1681,6 +1681,9 @@ namespace DOL.GS
                 // that cap when a new recruit joins a high-level party.
                 experienceGained = CalculateCompanionNpcExperience(arguments.ExpBase, Level,
                     Owner?.Level ?? Level, arguments.AllowMultiply);
+                if (arguments.AllowMultiply)
+                    experienceGained = (long)(experienceGained *
+                        DOL.GS.ServerRules.PvpDangerExperience.Multiplier(this, arguments.XPSource));
             }
             else
             {
@@ -1698,8 +1701,11 @@ namespace DOL.GS
                     }
 
                     baseExperience = ScaleExperience(baseExperience,
+                        GameServer.ServerRules is not DOL.GS.ServerRules.PvPServerRules &&
                         arguments.XPSource != eXPSource.Player &&
                         (CurrentRegion?.IsRvR == true || CurrentZone?.IsRvR == true));
+                    baseExperience = (long)(baseExperience *
+                        DOL.GS.ServerRules.PvpDangerExperience.Multiplier(this, arguments.XPSource));
 
                     long itemExperienceBonus = GetModified(eProperty.XpPoints);
                     if (itemExperienceBonus != 0)

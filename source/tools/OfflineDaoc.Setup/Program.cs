@@ -14,14 +14,29 @@ internal static class Program
     private const int ExpectedConservativeRestoredSpawnCount = 983;
     private const int ExpectedPeriodMapRestoredSpawnCount = 1290;
     private const int ExpectedDungeonRestoredSpawnCount = 2310;
+    private const int ExpectedFrontierGarrisonSpawnCount = 4851;
     private const int ExpectedTotalRestoredSpawnCount =
         ExpectedConservativeRestoredSpawnCount + ExpectedPeriodMapRestoredSpawnCount +
-        ExpectedDungeonRestoredSpawnCount;
+        ExpectedDungeonRestoredSpawnCount + ExpectedFrontierGarrisonSpawnCount;
 
     private static int Main(string[] args)
     {
         try
         {
+            if (TryGetArgument(args, "--apply-frontier-garrison-spawns", out string frontierDatabase))
+            {
+                frontierDatabase = Path.GetFullPath(frontierDatabase);
+                string backupPath = CreateConsistentBackup(frontierDatabase);
+                using var frontierConnection = OpenForMigration(frontierDatabase);
+                RestoreFrontierGarrisonSpawns(frontierConnection);
+                using var verify = frontierConnection.CreateCommand();
+                verify.CommandText = "SELECT COUNT(*) FROM offline_classic165_restored_mobs restored JOIN Mob ON Mob.Mob_ID=restored.Mob_ID WHERE restored.MigrationId='frontier-garrison-spawns-v1'";
+                if (Convert.ToInt32(verify.ExecuteScalar(), CultureInfo.InvariantCulture) != ExpectedFrontierGarrisonSpawnCount)
+                    throw new InvalidOperationException("Frontier spawn migration verification failed. Recoverable backup: " + backupPath);
+                Console.WriteLine($"Verified {ExpectedFrontierGarrisonSpawnCount:N0} frontier rows. Recoverable backup: {backupPath}");
+                return 0;
+            }
+
             if (TryGetArgument(args, "--apply-classic165-spawns", out string migrationDatabase))
             {
                 migrationDatabase = Path.GetFullPath(migrationDatabase);
@@ -37,6 +52,7 @@ internal static class Program
                 RestoreConservativeClassic165FrontierAndAlbionSpawns(migrationConnection);
                 RestorePeriodMapClassic165FrontierAndAlbionSpawns(migrationConnection);
                 RestoreClassic165DungeonSpawns(migrationConnection);
+                RestoreFrontierGarrisonSpawns(migrationConnection);
                 EnsureRealmExchangeBrokers(migrationConnection);
                 VerifyClassic165SpawnProfile(migrationConnection);
                 Console.WriteLine($"Classic 1.65 spawn profile applied. Recoverable backup: {backupPath}");
@@ -62,6 +78,7 @@ internal static class Program
             RestoreConservativeClassic165FrontierAndAlbionSpawns(connection);
             RestorePeriodMapClassic165FrontierAndAlbionSpawns(connection);
             RestoreClassic165DungeonSpawns(connection);
+            RestoreFrontierGarrisonSpawns(connection);
             EnsureRealmExchangeBrokers(connection);
             ApplyClassicSiRules(connection);
             CreateAccount(connection, options.AccountName, options.Password);
@@ -623,6 +640,15 @@ internal static class Program
             "period-map verified Old Frontier and Albion");
     }
 
+    private static void RestoreFrontierGarrisonSpawns(SQLiteConnection connection)
+    {
+        ApplyArchivedSpawnManifest(connection, "frontier-garrison-spawns-v1",
+            LoadRestoredSpawnIds("frontier_garrison_restored_spawn_ids.txt"),
+            ExpectedFrontierGarrisonSpawnCount,
+            "Restore archived outdoor Old Frontier rows matching retained zone/species/level rosters, without the earlier two-to-three-mob camp cap; preserve original world coordinates, templates, and loot.",
+            "Old Frontier camp population");
+    }
+
     private static void RestoreClassic165DungeonSpawns(SQLiteConnection connection)
     {
         const string migrationId = "classic165-dungeon-spawns-v1";
@@ -775,13 +801,14 @@ internal static class Program
                     AND Mob.Region <> 249
                     AND Mob.Mob_ID NOT IN (SELECT Mob_ID FROM offline_classic165_restored_mobs)
                     AND COALESCE(Mob.PackageID,'') <> 'offline-classic-frontier-dungeon-restored'
-                    AND COALESCE(Mob.LastTimeRowUpdated,'') >= '2021-01-01');
+                    AND COALESCE(Mob.LastTimeRowUpdated,'') >= '2021-01-01'),
+                (SELECT COUNT(*) FROM offline_world_migrations WHERE MigrationId='frontier-garrison-spawns-v1');
             """;
         using var reader = verify.ExecuteReader();
         if (!reader.Read() || reader.GetInt32(0) != 1 || reader.GetInt32(1) != 1 || reader.GetInt32(2) != 1 ||
             reader.GetInt32(3) != 1 || reader.GetInt32(4) != 1 ||
             reader.GetInt32(5) != ExpectedTotalRestoredSpawnCount || reader.GetInt32(6) != 3 ||
-            reader.GetInt32(7) != 6 || reader.GetInt32(8) != 0)
+            reader.GetInt32(7) != 6 || reader.GetInt32(8) != 0 || reader.GetInt32(9) != 1)
             throw new InvalidOperationException("Classic 1.65 spawn or Realm Exchange verification failed.");
         Console.WriteLine($"Verified: 1.65 spawn profile, {ExpectedTotalRestoredSpawnCount:N0} restored world rows, 3 wealthy exchange brokers, and 6 capital-themed exchange guards.");
     }

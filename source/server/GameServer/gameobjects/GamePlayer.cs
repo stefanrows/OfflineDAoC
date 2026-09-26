@@ -4351,7 +4351,10 @@ namespace DOL.GS
                     }
                 }
 
-                if (arguments.XPSource == eXPSource.Player)
+                if (GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules)
+                    baseXp = (long)(baseXp * Properties.XP_RATE *
+                        DOL.GS.ServerRules.PvpDangerExperience.Multiplier(this, arguments.XPSource));
+                else if (arguments.XPSource == eXPSource.Player)
                     baseXp = (long) (baseXp * Properties.XP_RATE);
                 else if (CurrentRegion.IsRvR || CurrentZone.IsRvR)
                     baseXp = (long) (baseXp * Properties.RvR_XP_RATE);

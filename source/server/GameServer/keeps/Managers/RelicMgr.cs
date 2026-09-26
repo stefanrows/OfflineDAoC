@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
@@ -249,7 +250,17 @@ namespace DOL.GS
             }
 
             Guild guild = ServerRules.PvpCombatant.GuildOf(player);
-            return ServerRules.PvpCombatant.IsRealGuild(guild) && guild.ClaimedKeeps.Count > 0;
+            if (!ServerRules.PvpCombatant.IsRealGuild(guild) || guild.ClaimedKeeps.Count == 0) return false;
+            if (!relic.IsMounted) return true;
+            if (relic.CurrentRelicPad is GameKeepRelicPad keepPad)
+                return keepPad.Keep.DBKeep.LordDefeated;
+            // A shrine's guards are stationary world NPCs, not autonomous bots.
+            AbstractGameKeep shrine = GameServer.KeepManager.GetClosestKeepToSpot(relic.CurrentRegionID, relic, 5000);
+            return shrine?.IsRelic == true && !shrine.Guards.Values.Any(guard =>
+                guard.IsAlive && guard.ObjectState == GameObject.eObjectState.Active &&
+                guard is not GuardMerchant && guard is not FrontierHastener &&
+                (guard.Flags & GameNPC.eFlags.PEACE) == 0);
+
         }
 
         public static GameRelicPad GetHomePad(GameRelic relic)

@@ -26,6 +26,8 @@ namespace DOL.GS.Keeps
         {
             get
             {
+                // Camlann awards the capture once at the claim point.
+                if (PvpKeepCampaign.Applies(Component?.Keep)) return 0;
                 // PvE Lords drop stacks of dreaded seals instead of giving RP directly
                 if (Realm == eRealm.None && GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvE)
                     return 0;
@@ -226,6 +228,7 @@ namespace DOL.GS.Keeps
 
         public override bool AddToWorld()
         {
+            if (PvpKeepCampaign.Applies(Component?.Keep) && Component.Keep.DBKeep.LordDefeated) return false;
             if (base.AddToWorld())
             {
                 m_lastRealm = Realm;

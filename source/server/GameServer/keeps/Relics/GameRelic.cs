@@ -102,7 +102,7 @@ namespace DOL.GS
 
             if (!RelicMgr.CanPickupRelicFromShrine(player, this))
             {
-                OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. Your guild must own a keep first.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. Your guild must own a keep, and the defending lord or shrine guards must be defeated first.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
                 return false;
             }
 
@@ -202,7 +202,10 @@ namespace DOL.GS
         public override IList GetExamineMessages(GamePlayer player)
         {
             IList messages = base.GetExamineMessages(player);
-            messages.Add(IsMounted ? $"It is owned by {(player.Realm == Realm ? "your realm" : GlobalConstants.RealmToName(Realm))}." : "It is without owner, take it!");
+            if (GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules && IsMounted)
+                messages.Add($"It is held by {(CurrentRelicPad is GameKeepRelicPad pad ? pad.Guild?.Name ?? "an unclaimed keep" : PvpKeepCampaign.GarrisonName)}.");
+            else
+                messages.Add(IsMounted ? $"It is owned by {(player.Realm == Realm ? "your realm" : GlobalConstants.RealmToName(Realm))}." : "It is without owner, take it!");
             return messages;
         }
 

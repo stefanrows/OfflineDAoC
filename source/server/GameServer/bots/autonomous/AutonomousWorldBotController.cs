@@ -1373,6 +1373,22 @@ namespace DOL.GS
         private bool ExecuteRvr(BotBrain brain, GameBot bot)
         {
             PvpCombatant.RelinquishOptionalSafety(bot);
+            KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
+                .FirstOrDefault(point => point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null);
+            if (claimPoint != null && bot.Guild != null && !bot.InCombat &&
+                (bot.Group == null || bot.Group.LivingLeader == bot))
+            {
+                if (bot.IsWithinRadius(claimPoint, WorldMgr.INTERACT_DISTANCE))
+                {
+                    if (claimPoint.TryClaim(bot)) return true;
+                }
+                else
+                {
+                    IssuePath(bot, new(claimPoint.X, claimPoint.Y, claimPoint.Z), preciseArrival: true);
+                    SetRvrStatus(bot, "Claiming keep", "Secure the defeated keep for our guild", "Approaching the claim steward", claimPoint.Keep.Name);
+                    return true;
+                }
+            }
             bool dynamicWarband = _groupDirective?.IsDynamic == true &&
                                   _groupDirective.ObjectiveKind == eAutonomousObjectiveKind.RvR;
             string forceId = dynamicWarband ? _groupDirective.GroupId : $"rvr-{bot.DatabaseID}";
@@ -1762,7 +1778,7 @@ namespace DOL.GS
         private static GameKeepDoor FindClosedEnemyDoor(GameBot bot, string objectiveId = null) =>
             GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID)
                 .Where(AutonomousRvrKeepPolicy.IsSiegeObjective)
-                .Where(keep => keep.Guild == null || keep.Guild != bot.Guild)
+                .Where(keep => GameServer.KeepManager.IsEnemy(keep, bot))
                 .Where(keep => objectiveId == null || objectiveId == $"rvr-keep-{keep.KeepID}")
                 .SelectMany(keep => keep.Doors.Values)
                 .Where(door => door.IsAlive && door.IsAttackableDoor && door.State == eDoorState.Closed)

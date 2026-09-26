@@ -54,7 +54,7 @@ namespace DOL.AI.Brain
             foreach (GameNPC npc in Body.GetNPCsInRadius((ushort)AggroRange))
             {
                 GameBot autonomous = npc as GameBot ?? (npc.Brain as IControlledBrain)?.GetLivingOwner() as GameBot;
-                if (autonomous?.IsAutonomousWorldBot == true)
+                if (autonomous != null)
                 {
                     if (!npc.IsAlive || npc.IsStealthed || !CanAggroTarget(npc) ||
                         !PathfindingProvider.Instance.HasLineOfSight(Body.CurrentZone, new(Body.X, Body.Y, Body.Z),
@@ -86,8 +86,8 @@ namespace DOL.AI.Brain
                 return false;
 
             GameBot autonomous = target as GameBot ?? ((target as GameNPC)?.Brain as IControlledBrain)?.GetLivingOwner() as GameBot;
-            if (autonomous?.IsAutonomousWorldBot == true)
-                return autonomous.Realm != eRealm.None && autonomous.Realm != Body.Realm;
+            if (autonomous != null)
+                return GameServer.KeepManager.IsEnemy(_keepGuardBody, autonomous, true);
 
             GamePlayer checkPlayer = null;
 

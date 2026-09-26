@@ -210,7 +210,7 @@ namespace DOL.GS.ServerRules
 				if (defender is GameKeepGuard)
 					return false;
 
-				if (defender is GameNPC && (defender as GameNPC).Brain is IControlledBrain == false)
+				if (defender is GameNPC && !PvpCombatant.IsPlayerShaped(defender) && (defender as GameNPC).Brain is IControlledBrain == false)
 					return false;
 			}
 
@@ -269,26 +269,24 @@ namespace DOL.GS.ServerRules
 			//keep guards
 			if (source is GameKeepGuard && PvpCombatant.IsPlayerShaped(target))
 			{
-				if (!GameServer.KeepManager.IsEnemy(source as GameKeepGuard, target))
-					return true;
+                return !GameServer.KeepManager.IsEnemy(source as GameKeepGuard, target);
 			}
 
 			if (target is GameKeepGuard && PvpCombatant.IsPlayerShaped(source))
 			{
-				if (!GameServer.KeepManager.IsEnemy(target as GameKeepGuard, source))
-					return true;
+                return !GameServer.KeepManager.IsEnemy(target as GameKeepGuard, source);
 			}
 
 			//doors need special handling
 			if (target is GameKeepDoor && PvpCombatant.IsPlayerShaped(source))
-				return GameServer.KeepManager.IsEnemy(target as GameKeepDoor, source);
+				return !GameServer.KeepManager.IsEnemy(target as GameKeepDoor, source);
 
 			if (source is GameKeepDoor && PvpCombatant.IsPlayerShaped(target))
-				return GameServer.KeepManager.IsEnemy(source as GameKeepDoor, target);
+				return !GameServer.KeepManager.IsEnemy(source as GameKeepDoor, target);
 
 			//components need special handling
 			if (target is GameKeepComponent && PvpCombatant.IsPlayerShaped(source))
-				return GameServer.KeepManager.IsEnemy(target as GameKeepComponent, source);
+				return !GameServer.KeepManager.IsEnemy(target as GameKeepComponent, source);
 
 			//Peace flag NPCs are same realm
 			if (target is GameNPC)
@@ -318,7 +316,7 @@ namespace DOL.GS.ServerRules
 
 		public override bool IsAllowedToJoinGuild(GamePlayer source, Guild guild)
 		{
-			return true;
+			return !PvpKeepCampaign.IsGarrison(guild);
 		}
 
 		public override bool IsAllowedToTrade(GameLiving source, GameLiving target, bool quiet)
@@ -466,6 +464,11 @@ namespace DOL.GS.ServerRules
 		/// <param name="killer">The lord's killer</param>
 		public override void ResetKeep(GuardLord lord, GameObject killer)
 		{
+            if (PvpKeepCampaign.Applies(lord.Component?.Keep))
+            {
+                PvpKeepCampaign.DefeatLord(lord);
+                return;
+            }
 			base.ResetKeep(lord, killer);
 			eRealm realm = eRealm.None;
 

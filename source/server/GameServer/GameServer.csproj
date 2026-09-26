@@ -59,6 +59,7 @@
         <EmbeddedResource Include=".\bots\autonomous\data\capnbry_classic_si_goals.json" />
         <EmbeddedResource Include=".\bots\autonomous\data\classic165_restored_spawn_ids.txt" />
         <EmbeddedResource Include=".\bots\autonomous\data\classic165_period_restored_spawn_ids.txt" />
+        <EmbeddedResource Include=".\bots\autonomous\data\frontier_garrison_restored_spawn_ids.txt" />
         <EmbeddedResource Include=".\bots\autonomous\data\dungeon_navigation_points.json" />
         <EmbeddedResource Include=".\bots\autonomous\data\darkness_falls_navigation_patch.json" />
         <EmbeddedResource Include=".\bots\autonomous\data\darkness_falls_navigation_points.json" />

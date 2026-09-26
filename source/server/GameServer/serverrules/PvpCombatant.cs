@@ -171,7 +171,7 @@ namespace DOL.GS.ServerRules
 		};
 
 		public static bool IsRealGuild(Guild guild) =>
-			guild != null && guild.Name != DummyGuildName;
+			guild != null && guild.Name != DummyGuildName && !DOL.GS.Keeps.PvpKeepCampaign.IsGarrison(guild);
 
 		public static bool AreGuildIdsAllied(string firstId, string firstName, string secondId, string secondName) =>
 			!string.IsNullOrWhiteSpace(firstId) && !string.IsNullOrWhiteSpace(secondId) &&

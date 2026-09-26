@@ -279,22 +279,27 @@ namespace DOL.GS.Keeps
             }
 
             if (!GameServer.KeepManager.IsEnemy(this, player) || player.Client.Account.PrivLevel != 1)
-            {
-                TraverseDoor(player);
-            }
-            return base.Interact(player);
+                return TraverseDoor(player);
+            player.Out.SendMessage("This keep is hostile. Break through its gates to enter.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            return false;
         }
 
         public bool TryTraverse(GameBot bot)
         {
             if (bot?.IsAutonomousWorldBot != true || !bot.IsAlive || bot.IsStunned || bot.IsMezzed ||
-                Component?.Keep == null || bot.Realm != Component.Keep.Realm ||
+                Component?.Keep == null || GameServer.KeepManager.IsEnemy(this, bot) ||
                 !bot.IsWithinRadius(this, WorldMgr.INTERACT_DISTANCE)) return false;
             return TraverseDoor(bot);
         }
 
         private bool TraverseDoor(GameLiving player)
         {
+            // The client may send DoorRequest and ObjectInteract for one click.
+            // Handle either, but never teleport back on the duplicate request.
+            const string traversalKey = "keep-door.last-traversal";
+            long previous = player.TempProperties.GetProperty<long>(traversalKey, -1000);
+            if (GameLoop.GameLoopTime - previous < 750) return true;
+            player.TempProperties.SetProperty(traversalKey, GameLoop.GameLoopTime);
                 int keepz = Z, distance = 0;
 
                 //calculate distance

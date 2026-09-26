@@ -161,7 +161,10 @@ namespace DOL.GS.Keeps
 			LoadHookPoints();
 
 			foreach (AbstractGameKeep keep in m_keepList.Values)
-				keep.EnsureRelicPad();
+            {
+                PvpKeepCampaign.Initialize(keep);
+                keep.EnsureRelicPad();
+            }
 
 			log.Info("Loaded " + m_keepList.Count + " keeps successfully");
 
@@ -565,6 +568,8 @@ namespace DOL.GS.Keeps
 				if (keep.IsPortalKeep)
 					return false;
 
+                if (PvpKeepCampaign.Applies(keep) && keep.DBKeep.LordDefeated) return false;
+                if (PvpKeepCampaign.IsGarrison(keep.Guild)) return true;
 				if (keep.Guild == null)
 					return ServerProperties.Properties.PVP_UNCLAIMED_KEEPS_ENEMY;
 

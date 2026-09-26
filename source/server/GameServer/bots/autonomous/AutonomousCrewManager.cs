@@ -325,6 +325,19 @@ public static class AutonomousCrewManager
                     persistedMappings[sourceGuild.GuildID] = mapping;
                 }
 
+                // Pure autonomous guilds need a claim-capable rank for their
+                // ordinary members; player-managed guild permissions stay intact.
+                foreach (Guild guild in survivors)
+                {
+                    if (protectedGuildIds.Contains(guild.GuildID)) continue;
+                    DbGuildRank memberRank = guild.GetRankByID(9);
+                    if (memberRank != null && !memberRank.Claim)
+                    {
+                        memberRank.Claim = true;
+                        if (!GameServer.Database.SaveObject(memberRank))
+                            throw new InvalidOperationException("Could not enable autonomous guild keep claiming.");
+                    }
+                }
                 var changed = new List<DataObject>();
                 foreach (OfflineWorldBotRecord record in candidates)
                 {
