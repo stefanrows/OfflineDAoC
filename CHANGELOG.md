@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.80.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Gear trades with a persistent companion reach the 400-unit follow distance instead of the 256-unit loot pickup distance.
+- A refused gear trade names its actual blocker: distance with both values, remaining combat seconds, casting, aggro, a fighting pet, group or zone.
+- The companion [Open bag] window lists only items the owner can take out; starter, protected and untradable gear remains visible in the Gear tab.
+
+### Fixed
+
+- Dragging starter or protected gear out of the companion bag window silently failed.
+- Gear trades failed with a generic message although the companion stood at its normal follow distance.
+
+### Removed
+
+- None.
+
 ## [0.79.0] - 2026-09-26
 
 ### Added
