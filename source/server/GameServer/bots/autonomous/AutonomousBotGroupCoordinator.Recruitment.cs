@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Linq;
 using System.Numerics;
 
@@ -7,6 +9,40 @@ namespace DOL.GS
 {
     public static partial class AutonomousBotGroupCoordinator
     {
+        private static void LogGuildRecruitment(GameBot leader, GameBot[] population, int desiredSize,
+            int eligible, int reachable, int routeProbes, int routeBudgetUsed, string status)
+        {
+            // Exclusive first-rejection counts over the full live roster, not
+            // just the already-filtered PvP pool. This makes missing population
+            // distinguishable from occupied, differently assigned or busy peers.
+            var rejected = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (GameBot candidate in population.Where(candidate => candidate != leader))
+            {
+                string reason = !candidate.IsAutonomousWorldBot || candidate.IsTemporaryGroupHelper || candidate.IsPlayerLedGroup
+                    ? "excludedActor"
+                    : !AutonomousCrewManager.AreInSameCrew(leader, candidate) ? "otherGuild"
+                    : candidate.Group != null ? "alreadyGrouped"
+                    : !AutonomousObjectiveAssignments.Is(candidate, eAutonomousObjectiveKind.RvR) ? "otherTask"
+                    : !LevelsCompatible(leader.Level, candidate.Level) ? "levelMismatch"
+                    : RecruitmentTarget(candidate, eAutonomousObjectiveKind.RvR) < desiredSize ? "partySizePreference"
+                    : !candidate.IsAlive ? "dead"
+                    : candidate.CurrentRegion == null ? "noRegion"
+                    : AutonomousRealmRaid.IsReserved(candidate) ? "raidReserved"
+                    : candidate.InCombat || candidate.IsAttacking ? "combat"
+                    : candidate.IsOnStableMasterRoute ? "riding"
+                    : AutonomousActivityScheduler.IsPveBlocked(candidate.PersistentRecord, WorldSimulationClock.UtcNow) ? "pveIntermission"
+                    : "eligibleBeforeRoute";
+                rejected[reason] = rejected.GetValueOrDefault(reason) + 1;
+            }
+            Log.Info("AUTONOMOUS_GUILD_RECRUITMENT " + JsonSerializer.Serialize(new
+            {
+                groupLeader = leader.DatabaseID, guild = leader.Guild?.Name ?? string.Empty,
+                level = leader.Level, type = AutonomousPlayerBehavior.TypeOf(leader.PersistentRecord).ToString(),
+                desiredSize, status, eligible, reachable, routeProbes, routeBudgetUsed,
+                notProbed = Math.Max(0, eligible - routeProbes), rejected
+            }));
+        }
+
         private sealed record GuildRecruitmentOffer(GameBot Leader, GameBot[] Members, int Maximum, long Deadline);
         // Allocation can call this while holding its own lock. Publish immutable
         // offers instead of taking the coordinator lock in the opposite order.
@@ -66,11 +102,11 @@ namespace DOL.GS
 
         // Fill spare seats before creating another small party. Only initial assembly
         // can recruit: an active grind, siege, raid or recovery keeps its own roster.
-        private static void FillAssemblingParties(GameBot[] available, ref int availableSlots)
+        private static void FillAssemblingParties(GameBot[] available, eAutonomousObjectiveKind objective, ref int availableSlots)
         {
             int probes = 0;
             long now = GameLoop.GameLoopTime;
-            foreach (Session session in Sessions.Values.Where(session => !session.Ending &&
+            foreach (Session session in Sessions.Values.Where(session => !session.Ending && session.ObjectiveKind == objective &&
                          IsAssemblyPhase(session.Phase) && !session.TaskClock.HasStarted &&
                          now < session.RecruitmentDeadlineTick && AutonomousRealmRaid.GetView(session.Group) == null)
                      .OrderBy(session => session.CreatedTick).ToArray())
@@ -91,6 +127,8 @@ namespace DOL.GS
                          RecruitmentTarget(candidate, session.ObjectiveKind) >= maximum))
                     .OrderBy(candidate => candidate.CurrentRegionID == session.RendezvousRegion ? 0 : 1)
                     .ThenBy(FormationWaitStartedUtc).ToList();
+                int shortlisted = candidates.Count;
+                int attempted = 0, routeRejected = 0, campRejected = 0, slotsRejected = 0, joinRejected = 0, added = 0;
                 bool changed = false;
                 while (candidates.Count > 0)
                 {
@@ -100,22 +138,37 @@ namespace DOL.GS
                     GameBot candidate = candidates.OrderBy(candidate => RecruitmentRolePriority(members, candidate)).First();
                     candidates.Remove(candidate);
                     probes++;
+                    attempted++;
                     // Retry failed candidates later, allowing other guildmates to
                     // use the bounded probe budget on the next formation pass.
                     session.RecruitmentRetryTicks[MemberKey(candidate)] = now + 30_000;
-                    if (!CanReachRecruitmentPoint(candidate, session.RendezvousRegion, session.Rendezvous)) continue;
+                    if (!CanReachRecruitmentPoint(candidate, session.RendezvousRegion, session.Rendezvous))
+                    {
+                        routeRejected++;
+                        continue;
+                    }
                     GameBot[] expanded = [.. members, candidate];
                     if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
                         !string.IsNullOrEmpty(session.PreferredPickupCampId) &&
                         !AutonomousWorldBotController.IsPickupCampUsable(session.PreferredPickupCampId, expanded))
+                    {
+                        campRejected++;
                         continue;
-                    if (!TryBuildRendezvousSlots(session, expanded)) continue;
+                    }
+                    if (!TryBuildRendezvousSlots(session, expanded))
+                    {
+                        slotsRejected++;
+                        continue;
+                    }
                     if (!session.Group.AddMember(candidate))
                     {
+                        joinRejected++;
                         TryBuildRendezvousSlots(session, members);
                         continue;
                     }
                     members = expanded;
+                    session.RecruitmentRetryTicks.Remove(MemberKey(candidate));
+                    added++;
                     availableSlots--;
                     changed = true;
                     if (candidate.CurrentRegionID != session.RendezvousRegion)
@@ -125,6 +178,19 @@ namespace DOL.GS
                         session.RemoteMeetupDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(
                             Math.Max(0, session.RemoteMeetupDeadlineTick.Value - now));
                     }
+                }
+                if (attempted > 0 || now >= session.NextRecruitmentDiagnosticTick)
+                {
+                    session.NextRecruitmentDiagnosticTick = now + 30_000;
+                    Log.Info("AUTONOMOUS_GROUP_RECRUITMENT_RESULT " + JsonSerializer.Serialize(new
+                    {
+                        group = session.Id, objective = session.ObjectiveKind.ToString(),
+                        size = members.Length, target = maximum, availableCandidates = available.Count(candidate => candidate.Group == null),
+                        retryDeferred = session.RecruitmentRetryTicks.Count, shortlisted, attempted, added,
+                        routeRejected, campRejected, slotsRejected, joinRejected,
+                        unprobed = candidates.Count, availableSlots,
+                        remainingSeconds = Math.Max(0, session.RecruitmentDeadlineTick - now) / 1000
+                    }));
                 }
                 if (changed)
                 {

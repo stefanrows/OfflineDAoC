@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-09-26
+
+### Added
+
+- Guild recruitment logs exclusive first-rejection counts across the live roster: other guild, existing group, current task, level, preferred party size, death, missing region, raid reservation, combat, riding and required PvE. Route probes and unprobed candidates are reported separately.
+- Late-party recruitment logs route, planned-camp, formation-slot and join rejections; bounded travel-hold snapshots show member positions and distances to the leader.
+
+### Changed
+
+- Ordinary PvE combat/recovery travel holds apply to nearby party members, allowing safe remote members to resume real travel. Personal defense, full-party pull checks, expedition rules and task deadlines remain intact.
+
+### Fixed
+
+- Rendezvous town detection tolerates an actor with no current zone during travel/recovery instead of dereferencing the unsafe area getter.
+- A PvE leader recognizes members already in the final camp region as ahead of its next crossing, avoiding a circular wait across multiple region edges.
+- A single remaining population allocation seat can backfill an assembling PvE party before the minimum-two check for creating new parties.
+
+### Removed
+
+- None.
+
 ## [0.74.0] - 2026-09-26
 
 ### Added

@@ -289,10 +289,9 @@ namespace DOL.GS
                     return false;
                 }
 
-                // Roadside combat pauses the entire formation. Once it ends,
-                // every member holds while the coordinator waits for the whole
-                // party to reach full resources. Attack events still run above
-                // this gate and wake recovery immediately.
+                // Roadside combat pauses nearby party members. A distant or
+                // cross-region fight must not pin safe members who still need
+                // to travel to the party. Personal defense remains above this gate.
                 // Defense above remains authoritative. A member safely outside
                 // must finish a committed portal crossing, not rest outside
                 // while its tank (or a corpse needing resurrection) is inside.
@@ -304,6 +303,7 @@ namespace DOL.GS
                     !AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase) &&
                     (_groupDirective.GroupCombatActive ||
                      _groupDirective.RecoveringBetweenPulls && _groupDirective.Phase != "Choosing group target") &&
+                    HasLocalGroupTravelHold(bot, _groupDirective) &&
                     (AutonomousRealmRaid.GetView(bot.Group) == null ||
                      _groupDirective.Leader?.CurrentRegionID == bot.CurrentRegionID && bot.GetDistanceTo(_groupDirective.Leader) <= 1800))
                 {
@@ -479,13 +479,19 @@ namespace DOL.GS
                         bool enteringStagingArea = next != null && _camp.IsDungeon && next.TargetRegion == _camp.RegionId &&
                             Distance(bot.X, bot.Y, next.SourceX, next.SourceY) <= AutonomousDungeonPolicy.DungeonEntranceStagingRadius;
                         bool crossingStarted = next != null && bot.Group.GetMembersInTheGroup()
-                            .Any(member => member.IsAlive && member.CurrentRegionID == next.TargetRegion);
+                            .Any(member => member.IsAlive &&
+                                (member.CurrentRegionID == next.TargetRegion || member.CurrentRegionID == _camp.RegionId));
+                        // A member already at the camp is also ahead of this
+                        // crossing, even if the leader still has several edges
+                        // to traverse. Waiting for that member to come back
+                        // while it waits at the camp strands both sides.
                         if (!enteringStagingArea && !crossingStarted)
                         {
                             bot.StopMovingOnPath();
                             bot.StopMoving();
                             SetStatus(bot, "Waiting for group members", GoalText(),
                                 "Holding the route until the party catches up before the next region crossing");
+                            AutonomousBotGroupCoordinator.ReportTravelHold(bot, _groupDirective);
                             return true;
                         }
                     }
@@ -554,6 +560,7 @@ namespace DOL.GS
                         bot.StopMoving();
                         SetStatus(bot, "Waiting for group members", GoalText(),
                             "Holding the route until every living bot is back in formation", _camp.MonsterName, _camp.ZoneName);
+                        AutonomousBotGroupCoordinator.ReportTravelHold(bot, _groupDirective);
                         return true;
                     }
                     if ((_groupDirective?.IsDynamic != true || _groupDirective.Leader == bot) &&
@@ -1102,6 +1109,25 @@ namespace DOL.GS
                     ? "The leader arrived; inviting the remaining members to form around this position"
                     : $"Waiting in formation for {directive.BotMemberCount:N0} bot members");
             return true;
+        }
+
+        private static bool HasLocalGroupTravelHold(GameBot bot, AutonomousBotGroupCoordinator.Directive directive)
+        {
+            if (directive.ObjectiveKind != eAutonomousObjectiveKind.GroupPve ||
+                AutonomousRealmRaid.GetView(bot.Group) != null)
+                return true;
+            // Scope the formation stop to members this bot can actually help.
+            // Check combat actors, not just proximity to the leader: a leader
+            // and follower can both be stranded far from a third member's fight.
+            GameBot[] nearby = bot.Group?.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(member => member.IsAlive && member.CurrentRegionID == bot.CurrentRegionID &&
+                    member.GetDistanceTo(bot) <= 1800).ToArray() ?? [];
+            if (directive.GroupCombatActive)
+                return nearby.Any(member => member.InCombat || member.IsAttacking ||
+                    (member.Brain as BotBrain)?.HasAggro == true);
+            return directive.RecoveringBetweenPulls && nearby.Any(member =>
+                !AutonomousRestPolicy.IsFullyRecovered(member.HealthPercent, member.ManaPercent,
+                    member.EndurancePercent, member.MaxMana > 0));
         }
 
         private bool HandleGroupCombatAndRecovery(BotBrain brain, GameBot bot,

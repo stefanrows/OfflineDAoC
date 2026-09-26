@@ -121,6 +121,7 @@ public static partial class AutonomousBotGroupCoordinator
         public int LockedSize { get; set; }
         public long RecruitmentDeadlineTick { get; init; } = GameLoop.GameLoopTime + 2 * 60_000;
         public Dictionary<long, long> RecruitmentRetryTicks { get; } = new();
+        public long NextRecruitmentDiagnosticTick { get; set; }
         public long CreatedTick { get; init; } = GameLoop.GameLoopTime;
         public ushort RendezvousRegion { get; set; }
         public AutonomousRendezvousAttendance Attendance { get; } = new();
@@ -140,6 +141,7 @@ public static partial class AutonomousBotGroupCoordinator
         public Dictionary<long, BotPveGroupRole> PveRoles { get; } = new();
         public GameBot Puller { get; set; }
         public bool Ending { get; set; }
+        public long NextTravelHoldDiagnosticTick { get; set; }
         public long SharedWatchdogProgressTick { get; set; }
         public long SharedWatchdogSampleTick { get; set; }
         public long SharedWatchdogExperience { get; set; }
@@ -498,6 +500,34 @@ public static partial class AutonomousBotGroupCoordinator
             }
             session.Phase = "Grinding";
             WriteSessionMetadata(session, members);
+        }
+    }
+
+    public static void ReportTravelHold(GameBot leader, Directive directive)
+    {
+        if (leader?.Group == null || directive?.ObjectiveKind != eAutonomousObjectiveKind.GroupPve)
+            return;
+        lock (Sync)
+        {
+            if (!TryGetSession(leader.Group, out Session session) || session.Id != directive.GroupId ||
+                leader != session.Leader || GameLoop.GameLoopTime < session.NextTravelHoldDiagnosticTick ||
+                AutonomousRealmRaid.GetView(session.Group) != null)
+                return;
+            session.NextTravelHoldDiagnosticTick = GameLoop.GameLoopTime + 60_000;
+            Log.Info("AUTONOMOUS_GROUP_TRAVEL_HOLD " + JsonSerializer.Serialize(new
+            {
+                group = session.Id, leader = leader.DatabaseID, phase = session.Phase,
+                camp = session.Camp?.Id, campRegion = session.Camp?.RegionId,
+                members = BotMembers(session.Group).Select(member => new
+                {
+                    id = member.DatabaseID, region = member.CurrentRegionID,
+                    x = member.X, y = member.Y, z = member.Z,
+                    distanceToLeader = member.CurrentRegionID == leader.CurrentRegionID
+                        ? (int?)member.GetDistanceTo(leader) : null,
+                    moving = member.IsMoving, alive = member.IsAlive, combat = member.InCombat,
+                    riding = member.IsOnStableMasterRoute, activity = member.PersistentRecord?.Activity
+                }).ToArray()
+            }));
         }
     }
 
@@ -1248,7 +1278,8 @@ public static partial class AutonomousBotGroupCoordinator
                          session.TaskClock.HasTravelTimedOut(GameLoop.GameLoopTime)).ToArray())
                 FinishGroupTask(timedOut, "Party did not reach its camp within the 30-minute travel window", returnToSolo: true);
 
-        GameBot[] activeRoster = AutonomousBotRegistry.Snapshot()
+        GameBot[] population = AutonomousBotRegistry.Snapshot();
+        GameBot[] activeRoster = population
             .Where(bot => !bot.IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(bot, objectiveKind))
             .ToArray();
         int groupedCount = activeRoster.Count(bot => bot.Group != null);
@@ -1257,7 +1288,7 @@ public static partial class AutonomousBotGroupCoordinator
         // of the full roster.
         int maximumGrouped = MaximumGroupedForObjective(objectiveKind, activeRoster.Length);
         int availableGroupSlots = maximumGrouped - groupedCount;
-        if (objectiveKind != eAutonomousObjectiveKind.RvR && availableGroupSlots < 2)
+        if (objectiveKind != eAutonomousObjectiveKind.RvR && availableGroupSlots <= 0)
             return;
         GameBot[] available = activeRoster
             .Where(bot => bot.IsAlive && !bot.IsTemporaryGroupHelper && !bot.IsPlayerLedGroup && bot.Group == null && bot.CurrentRegion != null &&
@@ -1272,7 +1303,11 @@ public static partial class AutonomousBotGroupCoordinator
             .ThenBy(FormationWaitStartedUtc)
             .ThenBy(MemberKey)
             .ToArray();
-        FillAssemblingParties(available, ref availableGroupSlots);
+        FillAssemblingParties(available, objectiveKind, ref availableGroupSlots);
+        // A single free seat can complete an assembling party even though it
+        // cannot create a new one. Apply the two-member gate after backfilling.
+        if (objectiveKind != eAutonomousObjectiveKind.RvR && availableGroupSlots < 2)
+            return;
         var claimed = new HashSet<GameBot>();
         int rendezvousChecks = 0;
         int townRouteChecks = 0;
@@ -1325,6 +1360,7 @@ public static partial class AutonomousBotGroupCoordinator
                                      LevelsCompatible(leader.Level, candidate.Level))
                 .ToArray();
             GameBot[] compatiblePool;
+            int leaderRouteChecks = 0;
             GameBot[] localCandidates = [];
             GameBot[] sameRealmRemoteCandidates = [];
             if (objectiveKind == eAutonomousObjectiveKind.GroupPve)
@@ -1398,7 +1434,7 @@ public static partial class AutonomousBotGroupCoordinator
                     .ThenBy(candidate => candidate.CurrentRegionID == rallyRegion ? 0 : 1)
                     .ThenBy(FormationWaitStartedUtc)
                     .Take(12 - rvrRouteChecks)
-                    .Where(candidate => { rvrRouteChecks++; return CanReachRecruitmentPoint(candidate, rallyRegion, rally); })
+                    .Where(candidate => { rvrRouteChecks++; leaderRouteChecks++; return CanReachRecruitmentPoint(candidate, rallyRegion, rally); })
                     .Take(7).ToArray();
             }
 
@@ -1425,9 +1461,8 @@ public static partial class AutonomousBotGroupCoordinator
                 int compatibleMaximum = Math.Min(largestAllowed, compatiblePool.Length + 1);
                 if (compatibleMaximum < minimumRequired)
                 {
-                    LogFormationBlocked(leader, objectiveKind,
-                        $"Guild recruitment: eligible={eligibleCandidates.Length}, reachable={compatiblePool.Length}, " +
-                        $"routeChecksUsed={rvrRouteChecks}/12, desiredSize={largestAllowed}; candidates must be free, level-compatible and accept this party size");
+                    LogGuildRecruitment(leader, population, largestAllowed, eligibleCandidates.Length,
+                        compatiblePool.Length, leaderRouteChecks, rvrRouteChecks, "No reachable candidate");
                     continue;
                 }
                 DateTime started = FormationWaitStartedUtc(leader);
@@ -1436,7 +1471,11 @@ public static partial class AutonomousBotGroupCoordinator
                     AutonomousPlayerBehavior.TypeOf(leader.PersistentRecord), leader.Level,
                     compatibleMaximum, Random.Shared.NextDouble(), waited);
                 if (rolledSize == 1)
+                {
+                    LogGuildRecruitment(leader, population, largestAllowed, eligibleCandidates.Length,
+                        compatiblePool.Length, leaderRouteChecks, rvrRouteChecks, "Waiting for preferred party size");
                     continue;
+                }
             }
             Dictionary<long, BotPveGroupRole> pveRoles = null;
             GameBot[] compatible = [];
@@ -2409,11 +2448,11 @@ public static partial class AutonomousBotGroupCoordinator
         AutonomousWorldBotController.IsIdleTownArea(area);
 
     private static bool IsTownArea(GameObject obj) => obj?.CurrentRegion?.IsCapitalCity == true ||
-        obj?.CurrentAreas?.OfType<AbstractArea>().Any(IsNamedRendezvousArea) == true;
+        obj?.CurrentZone?.GetAreasOfSpot(obj)?.OfType<AbstractArea>().Any(IsNamedRendezvousArea) == true;
 
     private static string TownName(GameObject obj) => obj?.CurrentRegion?.IsCapitalCity == true
-        ? obj.CurrentRegion.Description
-        : obj?.CurrentAreas?.OfType<AbstractArea>()
+        ? obj.CurrentRegion?.Description ?? "reachable town"
+        : obj?.CurrentZone?.GetAreasOfSpot(obj)?.OfType<AbstractArea>()
             .FirstOrDefault(IsNamedRendezvousArea)?.Description ??
           obj?.CurrentZone?.Description ?? "reachable town";
 
