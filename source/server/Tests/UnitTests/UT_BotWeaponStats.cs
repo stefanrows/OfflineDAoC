@@ -111,6 +111,27 @@ public class UT_BotWeaponStats
     }
 
     [Test]
+    public void ShieldAndTwoHanderNeverUpgradeOverEachOther()
+    {
+        // Each one's target slot is empty while the other is worn; comparing
+        // only against that slot made both look like upgrades and swapped
+        // them on every companion think.
+        var twoHander = GameInventoryItem.Create(LargeWeapon(102, 50, 95));
+        var shield = GameInventoryItem.Create(LargeWeapon(102, 40, 95));
+        shield.Object_Type = (int)eObjectType.Shield; shield.Item_Type = Slot.LEFTHAND; shield.Hand = 2;
+        Assume.That(AutonomousBotEconomy.EquipmentValue(shield), Is.GreaterThan(0));
+
+        bool shieldReplaces = AutonomousBotEconomy.IsEquipmentUpgrade(shield, null, [twoHander], 0);
+        bool twoHanderReplaces = AutonomousBotEconomy.IsEquipmentUpgrade(twoHander, null, [shield], 0);
+        Assert.That(shieldReplaces && twoHanderReplaces, Is.False);
+
+        shield.Quality = 99;
+        Assert.That(AutonomousBotEconomy.IsEquipmentUpgrade(shield, null, [twoHander], 0), Is.True);
+        Assert.That(AutonomousBotEconomy.IsEquipmentUpgrade(twoHander, null, [shield], 0), Is.False);
+        Assert.That(AutonomousBotEconomy.IsEquipmentUpgrade(twoHander, null, [], 0), Is.True);
+    }
+
+    [Test]
     public void EarnedMalformedMeleeIsNotAnUpgradeButLevelZeroStarterRemainsValid()
     {
         var broken = GameInventoryItem.Create(LargeWeapon(1));
