@@ -13,3 +13,10 @@ GameHastener.StrengthOffer:				I can also grant you extra [strength] to help you
 ## RvR
 GameHastener.BorderKeepPortOffer:		If you have to not achieved your tenth season I can transport you to the [borderkeep] so that you may assist in battleground combat. 
 GameHastener.DefaultMovementOffer:		I am here to assist with travel across our fair lands. Just say the word and I will gladly increase your rate of [movement] to aid your adventures!
+
+GameHastener.SpeedBlockedCombat:	The hastener cannot grant travel speed while you are in combat.
+GameHastener.SpeedBlockedMovementEffect:	Another movement ability is preventing the hastener's speed from taking hold.
+GameHastener.SpeedBlockedRiding:	Dismount before receiving the hastener's speed.
+GameHastener.SpeedBlockedStronger:	An equally strong or stronger speed effect is already active.
+GameHastener.SpeedBlockedRealm:	This hastener cannot grant speed to members of another realm.
+GameHastener.SpeedBlockedStealthed:	Leave stealth before receiving the hastener's speed.

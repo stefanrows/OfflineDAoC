@@ -329,9 +329,11 @@ public static partial class AutonomousBotGroupCoordinator
                 session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve || session.Camp != null ||
                 session.Phase != "Choosing group target" || ChooseLeader(session, BotMembers(session.Group)) != bot)
                 return;
-            // The planner has exhausted its level fallbacks. There is no
-            // destination to recover toward, so return members to solo work.
-            FinishGroupTask(session, "No reachable non-grey group camp after lower-level fallbacks");
+            // The leader has exhausted the bounded level, travel and corridor
+            // candidates. End this party once and return its members to solo
+            // work; a later matchmaking cycle can try again without repeatedly
+            // spending the fixed travel window on an unqualified camp.
+            FinishGroupTask(session, "No reachable non-grey group camp met the party's level, route, and travel checks");
         }
     }
 

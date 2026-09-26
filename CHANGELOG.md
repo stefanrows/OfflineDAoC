@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.71.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Effect expiration and replacement no longer acquire effect-state and effect-list locks in opposite order, preventing the observed game-loop deadlock.
+- Neutral world and frontier hasteners use the server's alliance rules and show success only when their speed effect takes hold; blocked casts explain why.
+- Legacy saved tank companions align a missing build plan with their trained weapon specialization without replacing saved equipment or valid plans.
+- Autonomous PvE groups choose camps within a bounded party travel estimate and verify candidate routes before committing their fixed 30-minute travel window.
+
+### Removed
+
+- None.
+
 ## [0.70.0] - 2026-09-26
 
 ### Added

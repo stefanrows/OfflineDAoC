@@ -187,6 +187,56 @@ namespace DOL.UnitTests
         }
 
         [Test]
+        public void LegacyCompanionPlanFollowsInvestedWeaponAndLeavesOwnedGearUntouched()
+        {
+            var plan = new BotSpec { WeaponOneType = eObjectType.Axe,
+                SpecLines = new List<BotSpecLine> { new(Specs.Axe, 50, 1) } };
+            var inventory = new BotInventory();
+            DbInventoryItem earned = Weapon(eObjectType.Sword);
+            DbInventoryItem manuallyStored = Weapon(eObjectType.Blades);
+            Assert.That(inventory.AddItem(eInventorySlot.RightHandWeapon, earned), Is.True);
+            Assert.That(inventory.AddItem(eInventorySlot.FirstBackpack, manuallyStored), Is.True);
+
+            bool restored = BotLifetimeBuild.RestoreOrAlignWithInvestedWeapons(plan, string.Empty,
+                line => line == Specs.Sword ? 39 : line == Specs.Axe ? 1 : 0);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(restored, Is.False);
+                Assert.That(plan.WeaponOneType, Is.EqualTo(eObjectType.Sword));
+                Assert.That(plan.SpecLines[0].Spec, Is.EqualTo(Specs.Sword));
+                Assert.That(BotWeaponStats.MatchesBuild(plan, eObjectType.Sword), Is.True);
+                Assert.That(BotMeleeStylePolicy.MatchesWeapon(Style((int)eObjectType.Sword, Specs.Sword),
+                    earned, null, eActiveWeaponSlot.Standard), Is.True);
+                Assert.That(inventory.GetItem(eInventorySlot.RightHandWeapon), Is.SameAs(earned));
+                Assert.That(inventory.GetItem(eInventorySlot.FirstBackpack), Is.SameAs(manuallyStored));
+                Assert.That(earned.Object_Type, Is.EqualTo((int)eObjectType.Sword));
+                Assert.That(manuallyStored.Object_Type, Is.EqualTo((int)eObjectType.Blades));
+            });
+        }
+
+        [Test]
+        public void ValidSavedCompanionPlanWinsOverDifferentPersistedWeaponRanks()
+        {
+            var savedPlan = new BotSpec { WeaponOneType = eObjectType.Axe,
+                SpecLines = new List<BotSpecLine> { new(Specs.Axe, 50, 1) } };
+            var loaded = new BotSpec { WeaponOneType = eObjectType.Sword,
+                SpecLines = new List<BotSpecLine> { new(Specs.Sword, 50, 1) } };
+
+            bool restored = BotLifetimeBuild.RestoreOrAlignWithInvestedWeapons(loaded,
+                BotLifetimeBuild.Encode(savedPlan), line => line == Specs.Sword ? 39 : line == Specs.Axe ? 1 : 0);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(restored, Is.True);
+                Assert.That(loaded.WeaponOneType, Is.EqualTo(eObjectType.Axe));
+                Assert.That(loaded.SpecLines[0].Spec, Is.EqualTo(Specs.Axe));
+                Assert.That(BotWeaponStats.MatchesBuild(loaded, eObjectType.Axe), Is.True);
+                Assert.That(BotWeaponStats.MatchesBuild(loaded, eObjectType.Sword), Is.False);
+            });
+        }
+
+        [Test]
         public void GeneratedFistSavageAndUntrainedSecondaryWeaponStayBuildCorrect()
         {
             var savage = new SavageBotSpec(eSpecType.DualWield, eObjectType.HandToHand);

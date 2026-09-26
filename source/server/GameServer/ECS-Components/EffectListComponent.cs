@@ -658,7 +658,17 @@ namespace DOL.GS
                     // This doesn't work will pulsing charm spells, and it's probably safer to exclude every pulsing spell for now.
                     // This should also ignore effects being re-enabled.
                     // For those, we replace the instance directly, both in our list and in `ServiceObjectStore`.
-                    if (!existingEffect.IsDisabled && !effect.IsEnabling && !newSpell.IsPulsing)
+                    if (existingEffect.IsEnding)
+                    {
+                        // The expiration path has already claimed this effect and may be waiting
+                        // for this list lock. Let it finish removing the old instance while the
+                        // refreshed spell is added, instead of waiting on its state lock here.
+                        existingEffect.IsBeingReplaced = true;
+                        effect.IsBeingReplaced = true;
+                        existingEffects.Add(effect);
+                        result = AddEffectResult.Added;
+                    }
+                    else if (!existingEffect.IsDisabled && !effect.IsEnabling && !newSpell.IsPulsing)
                     {
                         existingEffect.IsBeingReplaced = true;
 

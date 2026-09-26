@@ -34,6 +34,8 @@ namespace DOL.GS
         private const int EmptyGroupCampRoamMilliseconds = 180_000;
         private const int RouteStallReplotMilliseconds = 12_000;
         private const int RouteRecoveryAttemptsBeforeNewGoal = AutonomousRouteRecoveryPolicy.MaximumLocalAttempts;
+        private const int MaximumReachableGroupCampCandidates = 4;
+        private const int MaximumGroupCampRouteChecksPerPass = 12;
         private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
         private static readonly object ZonePointLock = new();
         private static DbZonePoint[] _zonePoints;
@@ -2585,6 +2587,12 @@ namespace DOL.GS
 
                 destinations[cell.Id] = new(cell.Id, cell.MonsterName, cell.ZoneName, cell.RegionId,
                     cell.X, cell.Y, cell.Z, cell.LiveMobCount, cell.IsDungeon, cell.IsFrontier);
+                double travelMinutes = localPickupGroup
+                    ? AutonomousPickupPlanning.SlowestMemberTravelMinutes(planningMembers.Select(member =>
+                        EstimateGroupCampTravelMinutes(member, cell.RegionId, cell.X, cell.Y)))
+                    : !sharedGroup && bot.Level < 20
+                        ? EstimateTravelMinutes(bot, cell.RegionId, cell.X, cell.Y)
+                        : 0;
                 camps.Add(new(
                     cell.Id,
                     cell.ZoneName,
@@ -2598,8 +2606,7 @@ namespace DOL.GS
                     cell.IsFrontier,
                     cell.LiveMobCount,
                     string.Equals(cell.Id, bot.PersistentRecord?.CurrentCampId, StringComparison.OrdinalIgnoreCase) ? bot.PersistentRecord.DeathCount : 0,
-                    !sharedGroup && bot.Level < 20
-                        ? EstimateTravelMinutes(bot, cell.RegionId, cell.X, cell.Y) : 0,
+                    travelMinutes,
                     averageLevel,
                     cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Population(cell.RegionId) : 0,
                     cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Capacity(cell.RegionId, cell.LiveMobCount) : 0,
@@ -2611,6 +2618,16 @@ namespace DOL.GS
             // depletion only soften the final outdoor draw.
             IEnumerable<AutonomousBotDecisionEngine.Camp> legal = camps.Where(camp =>
                 camp.Reachable && camp.LiveMobCount > 0);
+            if (localPickupGroup)
+            {
+                // Camp planning used to assign every group camp a zero travel
+                // estimate, so outdoor selection could draw any spawn cell in
+                // the region. Bound the trip using the slowest member's
+                // connected route and retain ten minutes inside the unchanged
+                // thirty-minute coordinator deadline for real path detours.
+                legal = AutonomousPickupPlanning.GroupCampsWithinTravelBudget(legal);
+            }
+            AutonomousBotDecisionEngine.Camp[] allLocalGroupCells = localPickupGroup ? legal.ToArray() : null;
             AutonomousBotDecisionEngine.PveEnvironment environment;
             bool gearFarming = planningLevel >= 50 && AutonomousActivityScheduler.IsUndergeared(bot.Level,
                 AutonomousPlayerBehavior.BestEquippedWeaponLevel(bot),
@@ -2643,6 +2660,48 @@ namespace DOL.GS
                         ? camp.IsDungeon : !camp.IsDungeon);
             }
             AutonomousBotDecisionEngine.Camp[] legalCells = legal.ToArray();
+            if (localPickupGroup)
+            {
+                // Region connectivity and a projected spawn anchor are not
+                // proof that this party can walk the whole corridor. Check a
+                // bounded set beyond the first four and reuse route results
+                // if the preferred environment needs a fallback.
+                Dictionary<string, bool> routeResults = new(StringComparer.OrdinalIgnoreCase);
+                bool CanReach(AutonomousBotDecisionEngine.Camp camp)
+                {
+                    if (routeResults.TryGetValue(camp.Id, out bool reachable))
+                        return reachable;
+                    reachable = destinations.TryGetValue(camp.Id, out CampDestination destination) &&
+                        CanReachGroupCamp(planningMembers, destination);
+                    routeResults[camp.Id] = reachable;
+                    return reachable;
+                }
+                legalCells = AutonomousPickupPlanning.GroupCampsWithVerifiedRoutes(
+                    legalCells, CanReach, MaximumReachableGroupCampCandidates, MaximumGroupCampRouteChecksPerPass);
+                if (legalCells.Length == 0)
+                {
+                    // The preferred environment or level may have no walkable
+                    // corridor. Fall back to the other eligible choices before
+                    // ending the party without a camp.
+                    AutonomousBotDecisionEngine.Camp[] alternatives =
+                        AutonomousPickupPlanning.GroupCampsWithVerifiedRoutes(
+                            allLocalGroupCells.Where(camp => !routeResults.ContainsKey(camp.Id)),
+                            CanReach, MaximumReachableGroupCampCandidates,
+                            MaximumGroupCampRouteChecksPerPass);
+                    if (alternatives.Length > 0)
+                    {
+                        environment = AutonomousBotDecisionEngine.SelectPveEnvironment(
+                            alternatives, groupSize, planningLevel, Random.Shared, gearFarming);
+                        AutonomousBotDecisionEngine.Camp[] chosenEnvironment = alternatives.Where(camp =>
+                            environment == AutonomousBotDecisionEngine.PveEnvironment.Dungeon
+                                ? camp.IsDungeon : !camp.IsDungeon).ToArray();
+                        int fallbackLevel = AutonomousGroupTargetPolicy.SelectAvailableLevel(
+                            chosenEnvironment.Select(camp => camp.AverageMobLevel), planningLevel, groupSize,
+                            Math.Max(0, AutonomousGroupTargetPolicy.PreferredBonus(groupSize) - groupTargetBonus));
+                        legalCells = chosenEnvironment.Where(camp => camp.AverageMobLevel == fallbackLevel).ToArray();
+                    }
+                }
+            }
             // This is the deployed selection point for verified locations.
             AutonomousBotDecisionEngine.Camp chosen = !sharedGroup && planningLevel < 20
                 ? AutonomousBotDecisionEngine.SelectLevelingCamp(legalCells, bot.CurrentRegionID,
@@ -4168,6 +4227,88 @@ namespace DOL.GS
                 ? Distance(crossing.TargetX, crossing.TargetY, x, y) / Math.Max(1d, bot.MaxSpeed) / 60d
                 : 6;
             return firstLeg + finalBias + 1;
+        }
+
+        private static double EstimateGroupCampTravelMinutes(GameBot bot, ushort targetRegion,
+            int targetX, int targetY)
+        {
+            if (bot?.CurrentRegion == null || targetRegion == 0 || bot.MaxSpeed <= 0)
+                return double.PositiveInfinity;
+
+            double speed = bot.MaxSpeed;
+            double minutes = 0;
+            ushort currentRegion = bot.CurrentRegionID;
+            int currentX = bot.X;
+            int currentY = bot.Y;
+            var visited = new HashSet<ushort> { currentRegion };
+            for (int crossingCount = 0; crossingCount < 32; crossingCount++)
+            {
+                if (currentRegion == targetRegion)
+                    return minutes + Distance(currentX, currentY, targetX, targetY) / speed / 60d;
+
+                DbZonePoint crossing = FindNextCrossing(bot.Realm, currentRegion, targetRegion, targetX, targetY);
+                if (crossing == null || crossing.SourceRegion != currentRegion ||
+                    !visited.Add(crossing.TargetRegion))
+                    return double.PositiveInfinity;
+
+                minutes += Distance(currentX, currentY, crossing.SourceX, crossing.SourceY) / speed / 60d + 1;
+                currentRegion = crossing.TargetRegion;
+                currentX = crossing.TargetX;
+                currentY = crossing.TargetY;
+            }
+
+            return double.PositiveInfinity;
+        }
+
+        private static bool CanReachGroupCamp(GameBot[] members, CampDestination camp)
+        {
+            if (members == null || members.Length < 2 || camp == null)
+                return false;
+
+            Vector3 destination = new(camp.X, camp.Y, camp.Z);
+            foreach (GameBot member in members)
+            {
+                if (member?.CurrentRegion == null || member.MaxSpeed <= 0)
+                    return false;
+
+                ushort currentRegion = member.CurrentRegionID;
+                Vector3 current = new(member.X, member.Y, member.Z);
+                var visited = new HashSet<ushort> { currentRegion };
+                bool reachedCamp = false;
+                for (int crossingCount = 0; crossingCount < 32; crossingCount++)
+                {
+                    Region region = WorldMgr.GetRegion(currentRegion);
+                    if (region == null || region.IsDisabled)
+                        return false;
+                    if (currentRegion == camp.RegionId)
+                    {
+                        if (!AutonomousBotTownTravel.CanReachTownPoint(region,
+                                region.GetZone((int)current.X, (int)current.Y), current, destination))
+                            return false;
+                        reachedCamp = true;
+                        break;
+                    }
+
+                    DbZonePoint crossing = FindNextCrossing(member.Realm, currentRegion, camp.RegionId,
+                        camp.X, camp.Y);
+                    if (crossing == null || crossing.SourceRegion != currentRegion ||
+                        !visited.Add(crossing.TargetRegion))
+                        return false;
+
+                    Vector3 source = new(crossing.SourceX, crossing.SourceY, crossing.SourceZ);
+                    if (!AutonomousBotTownTravel.CanReachTownPoint(region,
+                            region.GetZone((int)current.X, (int)current.Y), current, source))
+                        return false;
+
+                    currentRegion = crossing.TargetRegion;
+                    current = new(crossing.TargetX, crossing.TargetY, crossing.TargetZ);
+                }
+
+                if (!reachedCamp)
+                    return false;
+            }
+
+            return true;
         }
 
         private static int Distance(int ax, int ay, int bx, int by) =>

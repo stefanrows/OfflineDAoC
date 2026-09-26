@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using DOL.Database;
 using DOL.GS.Effects;
+using DOL.GS.Keeps;
 using DOL.GS.PacketHandler;
 
 namespace DOL.GS.Spells
@@ -16,8 +17,45 @@ namespace DOL.GS.Spells
 
 		public SpeedEnhancementSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
 
+		private bool TryReportBlockedHastenerCast(GameLiving target)
+		{
+			if (Spell.ID != GameHastener.SPEEDOFTHEREALMID ||
+				Caster is not GameHastener and not FrontierHastener || target is not GamePlayer player)
+				return false;
+
+			string translationKey = null;
+
+			if (player.InCombat)
+				translationKey = "GameHastener.SpeedBlockedCombat";
+			else if (player.IsRiding)
+				translationKey = "GameHastener.SpeedBlockedRiding";
+			else if (player.EffectList.GetOfType<ChargeEffect>() != null ||
+				player.TempProperties.GetProperty<bool>("Charging") ||
+				player.EffectList.GetOfType<ArmsLengthEffect>() != null ||
+				player.effectListComponent.ContainsEffectForEffectType(eEffect.SpeedOfSound))
+				translationKey = "GameHastener.SpeedBlockedMovementEffect";
+			else if (player.IsStealthed)
+				translationKey = "GameHastener.SpeedBlockedStealthed";
+			else if (player.effectListComponent.GetSpellEffects(eEffect.MovementSpeedBuff).Exists(effect =>
+				effect.IsActive && !effect.IsEnding && effect.SpellHandler?.Spell != null &&
+				effect.SpellHandler.Spell.Value * effect.Effectiveness >= Spell.Value * CasterEffectiveness))
+				translationKey = "GameHastener.SpeedBlockedStronger";
+
+			if (translationKey == null)
+				return false;
+
+			GameHastener.SendSpeedBlockMessage(player, translationKey);
+			return true;
+		}
+
 		public override void FinishSpellCast(GameLiving target)
 		{
+			bool isHastenerCast = Spell.ID == GameHastener.SPEEDOFTHEREALMID &&
+				Caster is GameHastener or FrontierHastener;
+
+			if (isHastenerCast && TryReportBlockedHastenerCast(target))
+				return;
+
 			Caster.Mana -= PowerCost(target);
 			base.FinishSpellCast(target);
 		}

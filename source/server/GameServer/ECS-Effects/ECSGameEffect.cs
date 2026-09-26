@@ -10,9 +10,9 @@ namespace DOL.GS
 {
     public abstract class ECSGameEffect : IServiceObject, IPooledList<ECSGameEffect>
     {
-        private State _state;
-        private TransitionalState _transitionalState;
-        private Lock _stateLock = new();
+        private volatile State _state;
+        private volatile TransitionalState _transitionalState;
+        private readonly Lock _stateLock = new();
 
         public long ExpireTick;
         public long StartTick;
@@ -68,7 +68,7 @@ namespace DOL.GS
 
         public bool Start()
         {
-            if (!CanStart || !Owner.IsAlive)
+            if (!Owner.IsAlive)
                 return false;
 
             lock (_stateLock)
@@ -77,48 +77,43 @@ namespace DOL.GS
                     return false;
 
                 _transitionalState = TransitionalState.Starting;
-                Owner.effectListComponent.ProcessEffect(this);
-                return true;
             }
+
+            // Never hold the effect-state lock while acquiring the owner's effect-list lock.
+            Owner.effectListComponent.ProcessEffect(this);
+            return true;
         }
 
         public virtual bool Enable()
         {
-            if (!CanBeEnabled)
-                return false;
-
             lock (_stateLock)
             {
                 if (!CanBeEnabled)
                     return false;
 
                 _transitionalState = TransitionalState.Enabling;
-                Owner.effectListComponent.ProcessEffect(this);
-                return true;
             }
+
+            Owner.effectListComponent.ProcessEffect(this);
+            return true;
         }
 
         public bool Disable()
         {
-            if (!CanBeDisabled)
-                return false;
-
             lock (_stateLock)
             {
                 if (!CanBeDisabled)
                     return false;
 
                 _transitionalState = TransitionalState.Disabling;
-                Owner.effectListComponent.ProcessEffect(this);
-                return true;
             }
+
+            Owner.effectListComponent.ProcessEffect(this);
+            return true;
         }
 
         public bool End(bool playerCanceled = false)
         {
-            if (!CanBeEnded)
-                return false;
-
             lock (_stateLock)
             {
                 if (!CanBeEnded)
@@ -134,9 +129,10 @@ namespace DOL.GS
                 }
 
                 _transitionalState = TransitionalState.Ending;
-                Owner.effectListComponent.ProcessEffect(this);
-                return true;
             }
+
+            Owner.effectListComponent.ProcessEffect(this);
+            return true;
         }
 
         /// <summary>
@@ -186,76 +182,82 @@ namespace DOL.GS
         public virtual bool FinalizeState(EffectListComponent.AddEffectResult result)
         {
             // Returns true if the effect needs to be started.
-            try
+            lock (_stateLock)
             {
-                switch (result)
+                try
                 {
-                    case EffectListComponent.AddEffectResult.Added:
+                    switch (result)
                     {
-                        _state = State.Active;
-                        return true;
-                    }
-                    case EffectListComponent.AddEffectResult.RenewedActive:
-                    {
-                        _state = State.Active;
-                        return false;
-                    }
-                    case EffectListComponent.AddEffectResult.Disabled:
-                    {
-                        _state = State.Disabled;
-                        return false;
-                    }
-                    case EffectListComponent.AddEffectResult.RenewedDisabled:
-                    {
-                        if (IsDisabled)
+                        case EffectListComponent.AddEffectResult.Added:
                         {
                             _state = State.Active;
                             return true;
                         }
-                        else
+                        case EffectListComponent.AddEffectResult.RenewedActive:
+                        {
+                            _state = State.Active;
+                            return false;
+                        }
+                        case EffectListComponent.AddEffectResult.Disabled:
                         {
                             _state = State.Disabled;
                             return false;
                         }
+                        case EffectListComponent.AddEffectResult.RenewedDisabled:
+                        {
+                            if (IsDisabled)
+                            {
+                                _state = State.Active;
+                                return true;
+                            }
+                            else
+                            {
+                                _state = State.Disabled;
+                                return false;
+                            }
+                        }
+                        case EffectListComponent.AddEffectResult.Failed:
+                        default:
+                            throw new InvalidOperationException($"Unhandled result: {result}.");
                     }
-                    case EffectListComponent.AddEffectResult.Failed:
-                    default:
-                        throw new InvalidOperationException($"Unhandled result: {result}.");
                 }
-            }
-            finally
-            {
-                _transitionalState = TransitionalState.None;
+                finally
+                {
+                    _transitionalState = TransitionalState.None;
+                }
             }
         }
 
         public bool FinalizeState(EffectListComponent.RemoveEffectResult result)
         {
             // Returns true if the effect needs to be stopped.
-            try
+            lock (_stateLock)
             {
-                switch (result)
+                try
                 {
-                    case EffectListComponent.RemoveEffectResult.Removed:
+                    switch (result)
                     {
-                        bool shouldBeStopped = IsActive;
-                        _state = State.Ended;
-                        return shouldBeStopped;
+                        case EffectListComponent.RemoveEffectResult.Removed:
+                        {
+                            bool shouldBeStopped = IsActive;
+                            _state = State.Ended;
+                            return shouldBeStopped;
+                        }
+                        case EffectListComponent.RemoveEffectResult.Disabled:
+                        {
+                            bool shouldBeStopped = IsActive;
+                            _state = State.Disabled;
+                            return shouldBeStopped;
+                        }
+                        case EffectListComponent.RemoveEffectResult.Failed:
+                        default:
+                            throw new InvalidOperationException($"Unhandled result: {result}.");
                     }
-                    case EffectListComponent.RemoveEffectResult.Disabled:
-                    {
-                        bool shouldBeStopped = IsActive;
-                        _state = State.Disabled;
-                        return shouldBeStopped;
-                    }
-                    case EffectListComponent.RemoveEffectResult.Failed:
-                    default:
-                        throw new InvalidOperationException($"Unhandled result: {result}.");
                 }
-            }
-            finally
-            {
-                _transitionalState = TransitionalState.None;
+                finally
+                {
+                    _transitionalState = TransitionalState.None;
+                }
             }
         }
 

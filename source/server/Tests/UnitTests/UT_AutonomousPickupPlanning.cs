@@ -18,6 +18,75 @@ public sealed class UT_AutonomousPickupPlanning
     }
 
     [Test]
+    public void GroupCampTravelMustFitWithinTheDeadlineAndEveryMemberNeedsAConnectedEstimate()
+    {
+        var eligible = GroupCamp("twenty-minute", 20);
+        var tooFar = GroupCamp("over-budget", 20.01);
+        var unknown = GroupCamp("unknown-route", double.PositiveInfinity);
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousPickupPlanning.WithinGroupCampTravelBudget(20), Is.True);
+            Assert.That(AutonomousPickupPlanning.WithinGroupCampTravelBudget(20.01), Is.False);
+            Assert.That(AutonomousPickupPlanning.WithinGroupCampTravelBudget(9999), Is.False);
+            Assert.That(AutonomousPickupPlanning.WithinGroupCampTravelBudget(double.NaN), Is.False);
+            Assert.That(AutonomousPickupPlanning.SlowestMemberTravelMinutes([4, 11, 7]), Is.EqualTo(11));
+            Assert.That(AutonomousPickupPlanning.SlowestMemberTravelMinutes([4, double.PositiveInfinity]),
+                Is.EqualTo(double.PositiveInfinity));
+            Assert.That(AutonomousPickupPlanning.SlowestMemberTravelMinutes(Array.Empty<double>()),
+                Is.EqualTo(double.PositiveInfinity));
+            Assert.That(AutonomousPickupPlanning.GroupCampsWithinTravelBudget([eligible, tooFar, unknown]),
+                Is.EqualTo(new[] { eligible }));
+            Assert.That(AutonomousPickupPlanning.GroupCampsWithinTravelBudget([tooFar, unknown]), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void AReachableCampAfterFourBlockedCorridorsRemainsEligible()
+    {
+        var camps = new[]
+        {
+            GroupCamp("blocked-1", 1), GroupCamp("blocked-2", 2),
+            GroupCamp("blocked-3", 3), GroupCamp("blocked-4", 4),
+            GroupCamp("reachable", 5)
+        };
+        int checkedRoutes = 0;
+
+        var verified = AutonomousPickupPlanning.GroupCampsWithVerifiedRoutes(camps, camp =>
+        {
+            checkedRoutes++;
+            return camp.Id == "reachable";
+        }, 4, 12);
+
+        Assert.That(checkedRoutes, Is.EqualTo(5));
+        Assert.That(verified, Is.EqualTo(new[] { camps[4] }));
+    }
+
+    [Test]
+    public void UnreachableCampsDoNotTriggerUnboundedRouteChecks()
+    {
+        var camps = new[]
+        {
+            GroupCamp("blocked-1", 1), GroupCamp("blocked-2", 2),
+            GroupCamp("blocked-3", 3), GroupCamp("blocked-4", 4),
+            GroupCamp("blocked-5", 5)
+        };
+        int checkedRoutes = 0;
+
+        var verified = AutonomousPickupPlanning.GroupCampsWithVerifiedRoutes(camps, _ =>
+        {
+            checkedRoutes++;
+            return false;
+        }, 4, 3);
+
+        Assert.That(verified, Is.Empty);
+        Assert.That(checkedRoutes, Is.EqualTo(3));
+    }
+
+    private static AutonomousBotDecisionEngine.Camp GroupCamp(string id, double travelMinutes) =>
+        new(id, "zone", "mob", eRealm.Albion, 1, ConColor.BLUE, ConColor.BLUE,
+            true, false, false, 5, 0, travelMinutes, 10);
+
+    [Test]
     public void BetterUncrowdedCampCanJustifyChangingRegions()
     {
         double nearbyCrowded = AutonomousPickupPlanning.CampScore(13, 13, 4, 12, false, 1, true, 0);

@@ -2813,8 +2813,12 @@ namespace DOL.GS
             else
             {
                 LoadPersistedSpecs(PlayerCompanionRecord.SerializedSpecs);
-                if (!BotLifetimeBuild.Restore(BotSpec, PlayerCompanionRecord.SerializedBuildPlan))
+                if (!BotLifetimeBuild.RestoreOrAlignWithInvestedWeapons(BotSpec,
+                        PlayerCompanionRecord.SerializedBuildPlan, GetBaseSpecLevel))
+                {
                     PlayerCompanionRecord.SerializedBuildPlan = BotLifetimeBuild.Encode(BotSpec);
+                    PlayerCompanionRecord.Dirty = true;
+                }
                 m_leftOverSpecPoints = Math.Max(0, PlayerCompanionRecord.UnspentSpecPoints);
                 _lastAutonomousTrainedLevel = (byte)Math.Clamp(PlayerCompanionRecord.LastTrainedLevel, 1, Level);
             }
@@ -2901,10 +2905,10 @@ namespace DOL.GS
             };
             LoadClassSpecializations(false);
             LoadPersistedSpecs(record.SerializedSpecs);
-            bool buildLocked = BotLifetimeBuild.Restore(BotSpec, record.SerializedBuildPlan);
+            bool buildLocked = BotLifetimeBuild.RestoreOrAlignWithInvestedWeapons(BotSpec,
+                record.SerializedBuildPlan, GetBaseSpecLevel);
             if (!buildLocked)
             {
-                BotLifetimeBuild.AlignWithInvestedWeapons(BotSpec, GetBaseSpecLevel);
                 record.SerializedBuildPlan = BotLifetimeBuild.Encode(BotSpec);
                 MarkAutonomousStateDirty();
             }

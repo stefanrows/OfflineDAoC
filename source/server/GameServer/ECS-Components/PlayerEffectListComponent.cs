@@ -53,7 +53,8 @@ namespace DOL.GS
         protected override void RemoveEffectIdToEffect(ECSGameEffect effect)
         {
             // `_effectsLock` is expected to be acquired already.
-            _effectIdToEffect.Remove(effect.Icon);
+            if (_effectIdToEffect.TryGetValue(effect.Icon, out ECSGameEffect mappedEffect) && ReferenceEquals(mappedEffect, effect))
+                _effectIdToEffect.Remove(effect.Icon);
         }
 
         private void SendPlayerUpdates()

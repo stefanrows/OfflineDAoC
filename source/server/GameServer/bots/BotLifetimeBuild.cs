@@ -29,6 +29,21 @@ namespace DOL.GS
             return true;
         }
 
+        /// <summary>
+        /// Restores an explicitly saved lifetime build. Older records without
+        /// a valid build plan inherit the weapon line their saved spec levels
+        /// actually trained.
+        /// </summary>
+        public static bool RestoreOrAlignWithInvestedWeapons(BotSpec destination, string saved,
+            Func<string, int> trained)
+        {
+            if (Restore(destination, saved))
+                return true;
+
+            AlignWithInvestedWeapons(destination, trained);
+            return false;
+        }
+
         public static void AlignWithInvestedWeapons(BotSpec plan, Func<string, int> trained)
         {
             eObjectType[] primary = { eObjectType.Sword, eObjectType.Axe, eObjectType.Hammer,

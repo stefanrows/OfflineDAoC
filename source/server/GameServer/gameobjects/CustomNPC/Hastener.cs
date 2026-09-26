@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using DOL.Events;
 using DOL.GS.PacketHandler;
@@ -12,6 +13,32 @@ namespace DOL.GS
 
 		public const int SPEEDOFTHEREALMID = 2430;
 
+		public static void CastSpeedOfTheRealm(GameNPC sourceNpc, GamePlayer player)
+		{
+			if (!GameServer.ServerRules.IsSameRealm(sourceNpc, player, true))
+			{
+				SendSpeedBlockMessage(player, "GameHastener.SpeedBlockedRealm");
+				return;
+			}
+
+			if (player.InCombat)
+			{
+				SendSpeedBlockMessage(player, "GameHastener.SpeedBlockedCombat");
+				return;
+			}
+
+			Spell spell = SkillBase.GetSpellByID(SPEEDOFTHEREALMID);
+			if (spell != null)
+				GameNPCHelper.CastSpellOnOwnerAndPets(sourceNpc, player, spell,
+					SkillBase.GetSpellLine(GlobalSpellsLines.Realm_Spells), false);
+		}
+
+		internal static void SendSpeedBlockMessage(GamePlayer player, string translationKey)
+		{
+			player.Out.SendMessage(LanguageMgr.GetTranslation(player.Client.Account.Language, translationKey),
+				eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+		}
+
 		public override bool Interact(GamePlayer player)
 		{
 			if (player.Client.Account.PrivLevel == 1 && !IsWithinRadius(player, WorldMgr.INTERACT_DISTANCE))
@@ -24,9 +51,8 @@ namespace DOL.GS
 			if (!base.Interact(player))
 				return false;
 
-			// just give out speed without asking
-			GameNPCHelper.CastSpellOnOwnerAndPets(this, player, SkillBase.GetSpellByID(GameHastener.SPEEDOFTHEREALMID), SkillBase.GetSpellLine(GlobalSpellsLines.Realm_Spells), false);
-			player.Out.SendSpellEffectAnimation(this, player, SkillBase.GetSpellByID(935).ClientEffect, 0, false, 1);
+			// Just give out speed without asking.
+			CastSpeedOfTheRealm(this, player);
 
 			if (player.CurrentRegion.IsCapitalCity)
 				SayTo(player, string.Format("{0} {1}. {2}",
@@ -52,7 +78,7 @@ namespace DOL.GS
 			if (base.WhisperReceive(source, str))
 			{
 				GamePlayer player = source as GamePlayer;
-				if (player == null || player.InCombat)
+				if (player == null)
 					return false;
 
 				if (GameServer.ServerRules.IsSameRealm(this, player, true))
@@ -60,8 +86,7 @@ namespace DOL.GS
 					switch (str.ToLower())
 					{
 						case "movement":
-							if (!player.CurrentRegion.IsRvR || player.Realm == Realm)
-								GameNPCHelper.CastSpellOnOwnerAndPets(this, player, SkillBase.GetSpellByID(GameHastener.SPEEDOFTHEREALMID), SkillBase.GetSpellLine(GlobalSpellsLines.Realm_Spells), false);
+							CastSpeedOfTheRealm(this, player);
 							break;
 						// disabled until we figure out how to disable it on port outside of capital cities
 						// case "strength":
@@ -73,6 +98,8 @@ namespace DOL.GS
 						// 	break;
 					}
 				}
+				else if (str.Equals("movement", StringComparison.OrdinalIgnoreCase))
+					SendSpeedBlockMessage(player, "GameHastener.SpeedBlockedRealm");
 
 				return true;
 			}
