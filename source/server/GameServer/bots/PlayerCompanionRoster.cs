@@ -79,11 +79,11 @@ namespace DOL.GS
             int requiredFreeBackpackSlots = 0, string excludeItemId = null)
         {
             error = "The equipment change could not be saved.";
-            if (!CanManageInventory(companion) || companion.Inventory is not BotInventory inventory || mutation == null ||
-                companion.Owner?.DBCharacter == null ||
+            if (!CanManageInventory(companion, out string accessBlocker) || companion.Inventory is not BotInventory inventory ||
+                mutation == null || companion.Owner?.DBCharacter == null ||
                 GameServer.Database is not SqlObjectDatabase database)
             {
-                error = "Inventory changes require an active, nearby companion while both of you are out of combat.";
+                error = accessBlocker.Length > 0 ? accessBlocker : "The equipment change is unavailable right now.";
                 return false;
             }
 
@@ -225,19 +225,69 @@ namespace DOL.GS
             owner.DBCharacter.Mithril = mithril;
         }
 
-        public static bool CanManageInventory(GameBot companion)
+        /// <summary>Companions follow up to this far away, so gear trades must reach that far.</summary>
+        public const int InventoryManageDistance = BotManager.MAX_FOLLOW_DISTANCE;
+
+        /// <summary>Facts that decide whether an owner may trade gear with a companion right now.</summary>
+        public readonly record struct InventoryAccess(string CompanionName, bool Linked, bool SameRegion, int Distance,
+            long OwnerCombatMs, long CompanionCombatMs, bool Casting, bool Aggro, bool PetInCombat, bool Travelling);
+
+        public static bool CanManageInventory(GameBot companion) => CanManageInventory(companion, out _);
+
+        public static bool CanManageInventory(GameBot companion, out string blocker)
         {
             GamePlayer owner = companion?.Owner;
-            return companion?.IsPersistentPlayerCompanion == true &&
-                   companion.ObjectState == GameObject.eObjectState.Active &&
-                   owner?.ObjectState == GameObject.eObjectState.Active &&
-                   owner.Group != null && owner.Group == companion.Group &&
-                   owner.Group.IsInTheGroup(companion) &&
-                   owner.CurrentRegion == companion.CurrentRegion &&
-                   owner.IsWithinRadius(companion, ServerProperties.Properties.WORLD_PICKUP_DISTANCE) &&
-                   !owner.InCombat && !companion.InCombat && !companion.IsAttacking && !companion.IsCasting &&
-                   !companion.IsOnStableMasterRoute && companion.Brain is not BotBrain { HasAggro: true } &&
-                   companion.ControlledBrain?.Body is not { InCombat: true };
+            bool linked = companion?.IsPersistentPlayerCompanion == true &&
+                          companion.ObjectState == GameObject.eObjectState.Active &&
+                          owner?.ObjectState == GameObject.eObjectState.Active &&
+                          owner.Group != null && owner.Group == companion.Group &&
+                          owner.Group.IsInTheGroup(companion);
+            bool sameRegion = linked && owner.CurrentRegion == companion.CurrentRegion;
+            blocker = InventoryBlocker(new InventoryAccess(
+                companion?.Name ?? "The companion",
+                linked,
+                sameRegion,
+                sameRegion ? owner.GetDistanceTo(companion) : int.MaxValue,
+                linked ? CombatMsLeft(owner) : 0,
+                linked ? CombatMsLeft(companion) : 0,
+                linked && (companion.IsAttacking || companion.IsCasting),
+                linked && companion.Brain is BotBrain { HasAggro: true },
+                linked && companion.ControlledBrain?.Body is { InCombat: true },
+                linked && companion.IsOnStableMasterRoute));
+            return blocker.Length == 0;
+        }
+
+        public static string InventoryBlocker(InventoryAccess access)
+        {
+            if (!access.Linked)
+                return "Invite the companion into your group to trade gear.";
+            if (!access.SameRegion)
+                return $"{access.CompanionName} is in another zone.";
+            if (access.Travelling)
+                return $"{access.CompanionName} is travelling by horse route.";
+            if (access.Distance > InventoryManageDistance)
+                return $"{access.CompanionName} is {access.Distance} units away; gear trades reach {InventoryManageDistance}.";
+            if (access.OwnerCombatMs > 0)
+                return $"You are still in combat for {Seconds(access.OwnerCombatMs)} s.";
+            if (access.CompanionCombatMs > 0 || access.Aggro)
+                return access.CompanionCombatMs > 0
+                    ? $"{access.CompanionName} is still in combat for {Seconds(access.CompanionCombatMs)} s."
+                    : $"{access.CompanionName} still has an enemy on them.";
+            if (access.Casting)
+                return $"{access.CompanionName} is attacking or casting; wait a moment.";
+            if (access.PetInCombat)
+                return $"{access.CompanionName}'s pet is still fighting.";
+            return string.Empty;
+        }
+
+        private static long Seconds(long milliseconds) => (milliseconds + 999) / 1000;
+
+        private static long CombatMsLeft(GameLiving living)
+        {
+            if (living == null || !living.InCombat)
+                return 0;
+            long last = Math.Max(living.LastCombatTickPvE, living.LastCombatTickPvP);
+            return Math.Max(1, last + GameLiving.IN_COMBAT_DURATION - GameLoop.GameLoopTime);
         }
 
         private static void RestoreInventory(IGameInventory inventory,
@@ -266,9 +316,9 @@ namespace DOL.GS
                 return false;
             }
 
-            if (!CanManageInventory(companion))
+            if (!CanManageInventory(companion, out string accessBlocker))
             {
-                message = "Gear transfers require a nearby companion while you are out of combat.";
+                message = accessBlocker;
                 return false;
             }
 

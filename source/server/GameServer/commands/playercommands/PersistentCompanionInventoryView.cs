@@ -67,10 +67,11 @@ namespace DOL.GS.Commands
             if (!CanHandleMove(player, fromSlot, toSlot))
                 return false;
 
+            string blocker = "Invite the companion into your group to trade gear.";
             if (!TryGetCompanion(player, out GameBot companion) ||
-                !PlayerCompanionRoster.CanManageInventory(companion))
+                !PlayerCompanionRoster.CanManageInventory(companion, out blocker))
             {
-                Tell("Inventory changes require an active, nearby companion while both of you are out of combat.");
+                Tell(blocker);
                 Refresh();
                 return true;
             }
