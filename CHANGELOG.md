@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.78.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Companion bombers count NPCs inside the bomb radius that are already fighting a group member or a member's pet toward the PvE bomb threshold; idle spawns still do not count.
+
+### Fixed
+
+- Companion bombers no longer stay at range in PvE: the per-member focus set rarely reached the three targets Auto requires, so the bomb never counted as ready and no approach started.
+
+### Removed
+
+- None.
+
 ## [0.77.0] - 2026-09-26
 
 ### Added

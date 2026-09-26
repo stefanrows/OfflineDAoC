@@ -85,6 +85,10 @@ namespace DOL.GS
             if (target is not GameNPC focus) return [];
             HashSet<GameLiving> focused = CompanionAddControl.FocusTargets(bot);
             focused.Add(focus);
+            // Adds on healers or casters are part of the pull even when nobody
+            // has them targeted; idle spawns in the radius still do not count.
+            focused.UnionWith(CompanionAddControl.EngagedWithGroup(bot.Group,
+                center.GetNPCsInRadius((ushort)radius).Cast<GameNPC>()));
             return focused.OfType<GameNPC>()
                 .Where(npc => npc.IsAlive && npc.ObjectState == GameObject.eObjectState.Active &&
                     npc.CurrentRegion == center.CurrentRegion && center.IsWithinRadius(npc, radius) &&

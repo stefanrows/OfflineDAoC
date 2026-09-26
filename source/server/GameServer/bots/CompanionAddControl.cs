@@ -72,6 +72,14 @@ namespace DOL.GS
             return focus;
         }
 
+        /// <summary>
+        /// Living NPCs already fighting the group: their target is a member or a
+        /// member's pet. Idle spawns and fights elsewhere are excluded.
+        /// </summary>
+        public static IEnumerable<GameNPC> EngagedWithGroup(Group group, IEnumerable<GameNPC> npcs) =>
+            npcs.Where(npc => npc != null && npc.IsAlive && npc.TargetObject is GameLiving victim &&
+                OnGroupSide(group, victim));
+
         /// <summary>True when the living is a group member or one of their pets.</summary>
         public static bool OnGroupSide(Group group, GameLiving living)
         {
