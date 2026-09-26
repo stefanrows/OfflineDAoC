@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using DOL.Database;
 using DOL.GS.Styles;
 
@@ -23,6 +25,16 @@ namespace DOL.GS
             StyleProcessor.CheckEnduranceCost(bot, Weapon(bot, style), style) &&
             bot.CheckStyleStun(style) &&
             StyleProcessor.CanUseStyle(lastAttack, bot, style, Weapon(bot, style));
+
+        /// <summary>
+        /// Highest available taunt that the wielded weapons can execute. Picking
+        /// by level alone queued another line's taunt, which the swing dropped.
+        /// </summary>
+        public static Style SelectTaunt(IEnumerable<Style> taunts, int level, DbInventoryItem primary,
+            DbInventoryItem left, eActiveWeaponSlot slot) =>
+            taunts?.Where(style => style != null && style.Level <= level && MatchesWeapon(style, primary, left, slot))
+                .OrderByDescending(style => style.Level)
+                .FirstOrDefault();
 
         public static bool MatchesWeapon(Style style, DbInventoryItem primary, DbInventoryItem left, eActiveWeaponSlot slot)
         {

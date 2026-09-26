@@ -3249,10 +3249,8 @@ namespace DOL.AI.Brain
                 }
             }
 
-            Style tauntStyle = BotBody.StylesTaunt?
-                .Where(style => style.Level <= Body.Level)
-                .OrderByDescending(style => style.Level)
-                .FirstOrDefault();
+            Style tauntStyle = BotMeleeStylePolicy.SelectTaunt(BotBody.StylesTaunt, Body.Level, Body.ActiveWeapon,
+                BotBody.Inventory?.GetItem(eInventorySlot.LeftHandWeapon), Body.ActiveWeaponSlot);
             if (tauntStyle != null)
             {
                 Body.styleComponent.NextCombatStyle = tauntStyle;
