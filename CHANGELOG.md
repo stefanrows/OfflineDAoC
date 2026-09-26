@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.81.0] - 2026-09-26
+
+### Added
+
+- Companion bombers open each pull with a loose volley: the first bomber in position holds its first bomb for at most 1.2 s until the group's other companion bombers within 1,500 units are ready, then all fire and chain freely; each bomb keeps a 6 s chain window open. No hold starts while a cast is running.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Tanks only queue taunts their wielded weapon can execute; previously the highest-level learned taunt was chosen regardless of weapon (for example an Armsman's polearm Distract while wielding sword and shield), so no taunt fired. Applies to every tank class with taunts in several weapon lines.
+
+### Removed
+
+- None.
+
 ## [0.80.0] - 2026-09-26
 
 ### Added
