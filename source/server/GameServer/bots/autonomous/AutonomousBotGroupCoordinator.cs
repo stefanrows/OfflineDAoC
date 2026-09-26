@@ -119,6 +119,8 @@ public static partial class AutonomousBotGroupCoordinator
         public bool RecoveryRendezvousChosen { get; set; }
         public long NextRecoveryReadinessTick { get; set; }
         public int LockedSize { get; set; }
+        public long RecruitmentDeadlineTick { get; init; } = GameLoop.GameLoopTime + 2 * 60_000;
+        public long CreatedTick { get; init; } = GameLoop.GameLoopTime;
         public ushort RendezvousRegion { get; set; }
         public AutonomousRendezvousAttendance Attendance { get; } = new();
         public Dictionary<long, Vector3> RendezvousSlots { get; } = new();
@@ -528,7 +530,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     public static bool IsRemoteMeetupMember(GameBot bot, Directive directive)
     {
-        if (bot?.Group == null || directive?.ObjectiveKind != eAutonomousObjectiveKind.GroupPve ||
+        if (bot?.Group == null || directive == null ||
             !directive.RemoteMemberIds.Contains(MemberKey(bot)))
             return false;
         lock (Sync)
@@ -986,7 +988,7 @@ public static partial class AutonomousBotGroupCoordinator
         var resolved = new Dictionary<long, Vector3>();
         foreach (GameBot member in members)
         {
-            Vector3 desired = DesiredFormationPoint(member, session.Rendezvous, tight);
+            Vector3 desired = DesiredFormationPoint(member, session.Rendezvous, tight, members);
             if (!AutonomousRendezvousNavigation.TryResolveFormationSlot(PathfindingProvider.Instance,
                     zone, session.Rendezvous, desired, out Vector3 slot))
                 return false;
@@ -1029,9 +1031,9 @@ public static partial class AutonomousBotGroupCoordinator
         }
     }
 
-    private static Vector3 DesiredFormationPoint(GameBot bot, Vector3 center, bool tight)
+    private static Vector3 DesiredFormationPoint(GameBot bot, Vector3 center, bool tight, GameBot[] roster = null)
     {
-        GameBot[] members = BotMembers(bot?.Group)
+        GameBot[] members = (roster ?? BotMembers(bot?.Group))
             .OrderBy(member => member.DatabaseID > 0 ? member.DatabaseID : member.ObjectID)
             .ToArray();
         int index = Array.IndexOf(members, bot);
@@ -1257,17 +1259,24 @@ public static partial class AutonomousBotGroupCoordinator
             return;
         GameBot[] available = activeRoster
             .Where(bot => bot.IsAlive && !bot.IsTemporaryGroupHelper && !bot.IsPlayerLedGroup && bot.Group == null && bot.CurrentRegion != null &&
-                          !AutonomousRealmRaid.IsReserved(bot) &&
+                          !AutonomousRealmRaid.IsReserved(bot) && !bot.InCombat && !bot.IsAttacking && !bot.IsOnStableMasterRoute &&
+                          (objectiveKind != eAutonomousObjectiveKind.RvR ||
+                           !AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow)) &&
                           AutonomousObjectiveAssignments.Is(bot, objectiveKind))
-            .OrderBy(bot => LastFormationAttemptTick.GetValueOrDefault(MemberKey(bot)))
+            .OrderByDescending(bot => objectiveKind == eAutonomousObjectiveKind.RvR ? RecruitmentTarget(bot, objectiveKind) : 0)
+            .ThenByDescending(bot => objectiveKind == eAutonomousObjectiveKind.RvR &&
+                AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.KeepWarrior)
+            .ThenBy(bot => LastFormationAttemptTick.GetValueOrDefault(MemberKey(bot)))
             .ThenBy(FormationWaitStartedUtc)
             .ThenBy(MemberKey)
             .ToArray();
+        FillAssemblingParties(available, ref availableGroupSlots);
         var claimed = new HashSet<GameBot>();
         int rendezvousChecks = 0;
         int townRouteChecks = 0;
         int pickupPlans = 0;
         int localRouteChecks = 0;
+        int rvrRouteChecks = 0;
         var rejectedPickupCamps = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (GameBot seed in available)
@@ -1277,7 +1286,7 @@ public static partial class AutonomousBotGroupCoordinator
             // Bad geometry must not turn one formation pass into thousands of
             // native queries. Continue with more candidates on the next pass.
             if (rendezvousChecks >= MaximumRendezvousChecksPerPass) break;
-            if (claimed.Contains(leader))
+            if (claimed.Contains(leader) || leader.Group != null)
                 continue;
             LastFormationAttemptTick[MemberKey(leader)] = GameLoop.GameLoopTime;
             if (objectiveKind == eAutonomousObjectiveKind.GroupPve && pickupPlans++ >= MaximumRendezvousChecksPerPass)
@@ -1309,10 +1318,9 @@ public static partial class AutonomousBotGroupCoordinator
                 .Where(candidate => candidate != leader && !claimed.Contains(candidate) && candidate.Group == null &&
                                      AutonomousObjectiveAssignments.Is(candidate, objectiveKind) &&
                                      (objectiveKind == eAutonomousObjectiveKind.GroupPve ||
-                                      AutonomousCrewManager.AreInSameCrew(leader, candidate)) &&
-                                     LevelsCompatible(leader.Level, candidate.Level) &&
-                                     (objectiveKind == eAutonomousObjectiveKind.GroupPve ||
-                                      candidate.CurrentRegionID == leader.CurrentRegionID))
+                                      AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
+                                      RecruitmentTarget(candidate, objectiveKind) >= largestAllowed) &&
+                                     LevelsCompatible(leader.Level, candidate.Level))
                 .ToArray();
             GameBot[] compatiblePool;
             GameBot[] localCandidates = [];
@@ -1345,7 +1353,7 @@ public static partial class AutonomousBotGroupCoordinator
                     .ThenBy(FormationWaitStartedUtc)
                     .ThenBy(candidate => Math.Abs(candidate.Level - leader.Level))
                     .ThenBy(MemberKey)
-                    .Take(Math.Min(2, MaximumRendezvousChecksPerPass - townRouteChecks))
+                    .Take(Math.Min(7, 8 - townRouteChecks))
                     .ToArray();
                 var crossRealmRoutes = new List<GameBot>(crossRealmToProbe.Length);
                 foreach (GameBot candidate in crossRealmToProbe)
@@ -1362,7 +1370,7 @@ public static partial class AutonomousBotGroupCoordinator
                     .ThenBy(FormationWaitStartedUtc)
                     .ThenBy(candidate => Math.Abs(candidate.Level - leader.Level))
                     .ThenBy(MemberKey)
-                    .Take(Math.Min(2, MaximumRendezvousChecksPerPass - townRouteChecks))
+                    .Take(Math.Min(7, 8 - townRouteChecks))
                     .ToArray();
                 var sameRealmRoutes = new List<GameBot>(sameRealmToProbe.Length);
                 foreach (GameBot candidate in sameRealmToProbe)
@@ -1375,7 +1383,22 @@ public static partial class AutonomousBotGroupCoordinator
                 compatiblePool = [.. localCandidates, .. crossRealmRemoteCandidates, .. sameRealmRemoteCandidates];
             }
             else
-                compatiblePool = eligibleCandidates.Where(candidate => candidate.CurrentRegionID == leader.CurrentRegionID).ToArray();
+            {
+                if (rvrRouteChecks >= 12) break;
+                rendezvousChecks++;
+                if (!TryChooseRendezvous(leader, objectiveKind, out Vector3 rally, out string rallyName, out ushort rallyRegion))
+                    continue;
+                pickupDestination = new(null, rally, rallyName, rallyRegion);
+                // Invite through actual town routes, even when guildmates are on
+                // different continents. Bound expensive probes on this pass.
+                compatiblePool = eligibleCandidates
+                    .OrderBy(candidate => PickupRolePriority(leader, null, candidate))
+                    .ThenBy(candidate => candidate.CurrentRegionID == rallyRegion ? 0 : 1)
+                    .ThenBy(FormationWaitStartedUtc)
+                    .Take(12 - rvrRouteChecks)
+                    .Where(candidate => { rvrRouteChecks++; return CanReachRecruitmentPoint(candidate, rallyRegion, rally); })
+                    .Take(7).ToArray();
+            }
 
             compatiblePool = objectiveKind == eAutonomousObjectiveKind.GroupPve
                 ? compatiblePool
@@ -1479,7 +1502,9 @@ public static partial class AutonomousBotGroupCoordinator
             }
             else
             {
-                compatible = compatiblePool.Take(rolledSize - 1).ToArray();
+                // Select support before filling damage slots, using the same
+                // class-aware roster builder as PvE without assigning PvE work.
+                TryBuildPveRoster(leader, compatiblePool, out compatible, out _, maximumSize: rolledSize);
                 if (compatible.Length != rolledSize - 1)
                 {
                     LogFormationBlocked(leader, objectiveKind, $"Only {compatible.Length} of {rolledSize - 1} requested compatible guildmates are available");
@@ -1506,7 +1531,6 @@ public static partial class AutonomousBotGroupCoordinator
                 continue;
             }
 
-            if (objectiveKind != eAutonomousObjectiveKind.GroupPve) rendezvousChecks++;
             Session session = NewSession(group, leader, group.MemberCount, objectiveKind, pickupDestination: pickupDestination);
             if (session == null)
             {
@@ -1624,7 +1648,7 @@ public static partial class AutonomousBotGroupCoordinator
             Id = $"{leader.Guild?.GuildID ?? "unassigned"}-{RuntimeGroupToken}-{++_nextGroupNumber:000}",
             Rendezvous = center,
             RendezvousName = rendezvousName,
-            PreferredPickupCampId = pickupDestination?.Camp.Id ?? string.Empty,
+            PreferredPickupCampId = pickupDestination?.Camp?.Id ?? string.Empty,
             TaskClock = new AutonomousGroupTaskClock(objectiveKind),
             LockedSize = lockedSize > 0 ? lockedSize : BotMembers(group).Length,
             PreferredLevelBonus = RollPreferredLevelBonus(lockedSize > 0 ? lockedSize : BotMembers(group).Length),
@@ -1634,9 +1658,10 @@ public static partial class AutonomousBotGroupCoordinator
             LeaderStagingDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds),
         };
         GameBot[] sessionMembers = BotMembers(group);
-        if (objectiveKind == eAutonomousObjectiveKind.GroupPve && raidStaging == null)
+        if (raidStaging == null)
         {
-            session.IsCrossRealmPve = sessionMembers.Select(member => member.Realm).Distinct().Skip(1).Any();
+            session.IsCrossRealmPve = objectiveKind == eAutonomousObjectiveKind.GroupPve &&
+                sessionMembers.Select(member => member.Realm).Distinct().Skip(1).Any();
             foreach (GameBot member in sessionMembers.Where(member => member.CurrentRegionID != rendezvousRegion))
                 session.RemoteMemberIds.Add(MemberKey(member));
             if (session.RemoteMemberIds.Count > 0)
@@ -1996,7 +2021,9 @@ public static partial class AutonomousBotGroupCoordinator
         bool softPveStart = session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
             session.Phase == "Meeting up" && session.LeaderReadyForAssembly &&
             AtRendezvous(session, leader) && arrived >= 2 && !HasPendingRemoteMembers(session, members);
-        if (session.Phase == "Meeting up" && (softPveStart || arrived == members.Length))
+        bool recruiting = raidView == null && members.Length < RecruitmentTarget(session.Leader, session.ObjectiveKind) &&
+            GameLoop.GameLoopTime < session.RecruitmentDeadlineTick;
+        if (session.Phase == "Meeting up" && !recruiting && (softPveStart || arrived == members.Length))
         {
             foreach (GameBot member in members)
                 session.Attendance.Observe(MemberKey(member), GameLoop.GameLoopTime, AtRendezvous(session, member));

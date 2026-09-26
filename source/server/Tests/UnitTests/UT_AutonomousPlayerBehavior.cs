@@ -48,7 +48,7 @@ public sealed class UT_AutonomousPlayerBehavior
                 8, .1, TimeSpan.Zero), Is.EqualTo(8));
             Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.KeepWarrior, 40,
                 3, .8, TimeSpan.FromMinutes(20)), Is.EqualTo(1));
-            Assert.That(AutonomousPlayerBehavior.CanStartCampaign(AutonomousPlayerType.KeepWarrior, 35, 4), Is.True);
+            Assert.That(AutonomousPlayerBehavior.CanStartCampaign(AutonomousPlayerType.KeepWarrior, 35, 8), Is.True);
             Assert.That(AutonomousPlayerBehavior.CanStartCampaign(AutonomousPlayerType.Roamer, 50, 8), Is.False);
             Assert.That(AutonomousPlayerBehavior.NextLoopIndex(8, 7, 42), Is.Zero);
             Assert.That(AutonomousPlayerBehavior.NextLoopIndex(8, 3, 42), Is.EqualTo(4));

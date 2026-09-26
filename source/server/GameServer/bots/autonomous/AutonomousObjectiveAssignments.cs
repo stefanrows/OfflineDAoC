@@ -255,9 +255,35 @@ public static class AutonomousObjectiveAssignments
                 eAutonomousObjectiveKind kind = AutonomousActivityScheduler.Choose(record, utcNow,
                     Random.Shared.NextDouble(), mayRvr, guildRaid: AutonomousRealmRaid.IsReserved(bot),
                     undergeared: undergeared, outleveledByGuild: outleveled, danger: Danger);
+                kind = PreferGuildInvitation(bot, kind, roster);
                 Assign(bot, kind, CrewBucket(bot), _epoch);
             }
         }
+    }
+
+    private static eAutonomousObjectiveKind PreferGuildInvitation(GameBot bot, eAutonomousObjectiveKind chosen,
+        GameBot[] roster = null)
+    {
+        OfflineWorldBotRecord record = bot.PersistentRecord;
+        DateTime now = WorldSimulationClock.UtcNow;
+        if (bot.Level < 20 || !IsRvrEligible(record, now) || AutonomousRealmRaid.IsReserved(bot) ||
+            AutonomousActivityScheduler.IsPveBlocked(record, now) ||
+            AutonomousActivityScheduler.IsUndergeared(bot.Level, AutonomousPlayerBehavior.BestEquippedWeaponLevel(bot),
+                AutonomousPlayerBehavior.EquippedArmorLevels(bot)) ||
+            AutonomousPlayerBehavior.TypeOf(record) is not
+                (AutonomousPlayerType.Hybrid or AutonomousPlayerType.Roamer or AutonomousPlayerType.KeepWarrior))
+            return chosen;
+        GameBot[] peers = (roster ?? AutonomousBotRegistry.Snapshot()).Where(peer => peer != bot &&
+            peer.IsAutonomousWorldBot && !peer.IsTemporaryGroupHelper && !peer.IsPlayerLedGroup &&
+            AutonomousCrewManager.AreInSameCrew(bot, peer)).ToArray();
+        if (AutonomousActivityScheduler.IsOutleveledByGuild(bot.Level, peers.Select(peer => (int)peer.Level).ToArray()))
+            return chosen;
+        int waiting = peers.Count(peer => peer.Group == null && peer.IsAlive && Is(peer, eAutonomousObjectiveKind.RvR) &&
+            !AutonomousActivityScheduler.IsPveBlocked(peer.PersistentRecord, now) &&
+            AutonomousBotGroupCoordinator.LevelsCompatible(bot.Level, peer.Level));
+        // Only a new task can accept the invitation; active work and mandatory
+        // PvE intermissions are never cancelled to populate a warband.
+        return waiting is > 0 and < 8 ? eAutonomousObjectiveKind.RvR : chosen;
     }
 
     private static void BeginPveIntermission(GameBot bot)
@@ -294,9 +320,9 @@ public static class AutonomousObjectiveAssignments
         if (!forceSoloPve && TryBeginBetweenTaskServices(bot))
             return;
         Assign(bot, forceSoloPve ? eAutonomousObjectiveKind.SoloPve :
-                AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
+                PreferGuildInvitation(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
                     Random.Shared.NextDouble(), mayRvr: !leavingRvr && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
-                    danger: Danger),
+                    danger: Danger)),
             CrewBucket(bot), GameLoop.GameLoopTime);
         bot.PersistentRecord.CurrentCampId = string.Empty;
         bot.PersistentRecord.TargetName = string.Empty;
@@ -530,9 +556,9 @@ public static class AutonomousObjectiveAssignments
                 $"goal=\"{bot.PersistentRecord.CurrentGoal}\" activity=\"{bot.PersistentRecord.Activity}\" " +
                 $"assignment=\"{bot.PersistentRecord.ObjectiveAssignmentId}\"");
         bool pveRequired = bot.PersistentRecord.ObjectiveRvrEligibleUtc is PveCompletionRequired or PveCompletionRequiredAfterReturn;
-        Assign(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
+        Assign(bot, PreferGuildInvitation(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
                 Random.Shared.NextDouble(), mayRvr: !pveRequired && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
-                danger: Danger),
+                danger: Danger)),
             CrewBucket(bot), GameLoop.GameLoopTime);
     }
 }

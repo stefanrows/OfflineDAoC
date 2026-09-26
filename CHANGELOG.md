@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.73.0] - 2026-09-26
+
+### Added
+
+- Initial autonomous parties recruit reachable members into spare seats for two minutes, prioritizing existing assembling parties before creating more small groups.
+
+### Changed
+
+- PvP matchmaking recruits same-guild members across regions using validated town-teleporter routes, prioritizes organized warband leaders and selects healing/tank support before filling damage slots. Eligible Hybrid, Roamer and KeepWarrior bots can accept waiting guildmates' invitations at their next task boundary.
+- Hybrid and KeepWarrior parties prefer eight members, with bounded waiting and smaller roaming fallbacks. New automatic keep assaults require at least eight members, a healer and siege supplies; smaller parties can still reinforce existing battles.
+- PvE remote recruitment can consider enough candidates to fill a normal eight-member party, with bounded route checks.
+
+### Fixed
+
+- PvP opponent evaluation handles groups with no living nearby members without throwing an empty-sequence exception.
+
+### Removed
+
+- The same-region-only restriction on autonomous guild PvP matchmaking.
+
 ## [0.72.0] - 2026-09-26
 
 ### Added

@@ -2011,11 +2011,9 @@ namespace DOL.GS
             if (warband.Length == 0)
                 warband = [bot];
             int averageLevel = (int)Math.Round(warband.Average(member => member.Level));
-            int healers = warband.Count(member => member.ClassName.Contains("cleric", StringComparison.OrdinalIgnoreCase) ||
-                                                    member.ClassName.Contains("healer", StringComparison.OrdinalIgnoreCase) ||
-                                                    member.ClassName.Contains("druid", StringComparison.OrdinalIgnoreCase) ||
-                                                    member.ClassName.Contains("bard", StringComparison.OrdinalIgnoreCase));
-            bool siegeReady = warband.Length >= 4 && averageLevel >= 35 && CanSupplySiege(bot);
+            int healers = warband.Count(member => member.CharacterClass != null &&
+                BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID));
+            bool siegeReady = warband.Length >= 8 && averageLevel >= 35 && healers > 0 && CanSupplySiege(bot);
             int minimumLevel = warband.Min(member => member.Level);
             int roamReservePercent = leaderType switch
             {

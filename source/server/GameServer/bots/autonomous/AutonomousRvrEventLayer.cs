@@ -165,7 +165,7 @@ public static partial class AutonomousRvrEventLayer
     public static Intent ChooseIntent(Force force, bool hasEnemy, bool hasOrdinaryKeep, bool hasRelicKeep, double roll)
     {
         roll = Math.Clamp(roll, 0d, 1d);
-        if (force.MemberCount < 4 || force.AverageLevel < 35 || !force.CanSupplySiege)
+        if (force.MemberCount < 8 || force.HealerCount < 1 || force.AverageLevel < 35 || !force.CanSupplySiege)
             return hasEnemy ? Intent.HuntEnemy : Intent.Roam;
 
         double weight = MajorAssaultWeight(force.MemberCount, force.AverageLevel);

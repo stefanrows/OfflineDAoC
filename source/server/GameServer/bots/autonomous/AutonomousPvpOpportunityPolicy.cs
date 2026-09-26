@@ -75,7 +75,9 @@ public static class AutonomousPvpOpportunityPolicy
             .Where(member => member?.IsAlive == true && member.CurrentRegionID == identity.CurrentRegionID &&
                 member.IsWithinRadius(identity, 2000))
             .ToArray() ?? [identity];
-        return (Math.Max(1, members.Length), (int)Math.Round(members.Average(member => member.EffectiveLevel)));
+        return members.Length == 0
+            ? (1, identity.EffectiveLevel)
+            : (members.Length, (int)Math.Round(members.Average(member => member.EffectiveLevel)));
     }
 
     public static GameLiving Select(GameBot actor, IEnumerable<GameLiving> candidates,

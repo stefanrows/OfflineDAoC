@@ -65,7 +65,9 @@ public static class AutonomousPlayerBehavior
             return maximum >= 6 ? maximum : 1;
         }
         if (type == AutonomousPlayerType.KeepWarrior && level >= 35)
-            return maximum >= 4 ? maximum : 1;
+            return maximum >= 8 ? 8 : waited >= TimeSpan.FromMinutes(10) && maximum >= 6 ? maximum : 1;
+        if (type == AutonomousPlayerType.Hybrid && level >= 20)
+            return maximum >= 8 ? 8 : waited >= TimeSpan.FromMinutes(2) ? maximum : 1;
         if (type == AutonomousPlayerType.Hunter)
             return roll < .2 ? 1 : Math.Min(maximum, roll < .55 ? 2 : 4);
         return level < 20
@@ -81,7 +83,7 @@ public static class AutonomousPlayerBehavior
     };
 
     public static bool CanStartCampaign(AutonomousPlayerType type, int minimumLevel, int size) =>
-        type == AutonomousPlayerType.KeepWarrior && minimumLevel >= 35 && size >= 4;
+        type == AutonomousPlayerType.KeepWarrior && minimumLevel >= 35 && size >= 8;
 
     public static int NextLoopIndex(int count, int previousIndex, long seed) =>
         count <= 0 ? -1 : previousIndex >= 0 && previousIndex < count

@@ -1,5 +1,21 @@
 # Frontier campaign — 0.72.0
 
+## Warband formation — 0.73.0
+
+Guild PvP recruitment can use validated town-teleporter routes across regions.
+New parties have two minutes to fill spare seats before leaving assembly;
+recruitment does not refill a party already fighting, grinding or recovering.
+Hybrid and KeepWarrior leaders favor eight-member parties. Hunters retain
+small-party behavior. New automatic assaults require a full party, healing
+support and siege supplies; smaller forces may reinforce an existing battle.
+Eligible guildmates can coordinate their next task with a waiting PvP cohort,
+without interrupting active tasks or mandatory PvE recovery. This improves
+formation opportunities; it does not establish successful live keep captures
+or repair every frontier route. Installation and gameplay validation are pending.
+CoreServer and Windows launcher Release builds passed on 2026-09-26.
+Automated tests were not run under the local project workflow; live acceptance
+requires a separately authorized deployment and a new population observation.
+
 ## World and capture rules
 
 Frontier Wardens are stationary keep guards, not autonomous gamebots and not
