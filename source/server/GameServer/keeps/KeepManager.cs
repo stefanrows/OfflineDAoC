@@ -560,7 +560,14 @@ namespace DOL.GS.Keeps
 
 		public virtual bool IsEnemy(AbstractGameKeep keep, GameLiving target, bool checkGroup)
 		{
-			if (keep == null || target is not IGamePlayer playerLike || playerLike.Client?.Account?.PrivLevel != 1)
+			// Real players do not implement IGamePlayer; only gamebots do.
+			GameClient client = target switch
+			{
+				GamePlayer human => human.Client,
+				IGamePlayer bot => bot.Client,
+				_ => null
+			};
+			if (keep == null || client?.Account?.PrivLevel != 1)
 				return false;
 
 			if (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvP)

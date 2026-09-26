@@ -55,8 +55,8 @@ namespace DOL.GS
                     return eEffect.MeleeDamageBuff;
                 case eSpellType.CombatSpeedBuff:
                     return eEffect.MeleeHasteBuff;
-                //case eSpellType.Celerity: // Possibly the same as CombatSpeedBuff?
-                //    return eEffect.Celerity;
+                case eSpellType.CelerityBuff:
+                    return eEffect.Celerity;
                 case eSpellType.SpeedOfTheRealm:
                 case eSpellType.SpeedEnhancement:
                     return eEffect.MovementSpeedBuff;
@@ -430,6 +430,7 @@ namespace DOL.GS
                 case eEffect.EnduranceRegenBuff:
                     list.Add(eProperty.EnduranceRegenerationAmount);
                     return list;
+                case eEffect.Celerity:
                 case eEffect.MeleeHasteBuff:
                 case eEffect.MeleeHasteDebuff:
                     list.Add(eProperty.MeleeSpeed);

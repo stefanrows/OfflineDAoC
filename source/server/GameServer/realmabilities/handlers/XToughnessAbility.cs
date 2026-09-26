@@ -48,7 +48,7 @@ namespace DOL.GS.RealmAbilities
 
 		public override bool CheckRequirement(GamePlayer player)
 		{
-			return player.Level >= 40;
+			return true;
 		}
 	}
 }

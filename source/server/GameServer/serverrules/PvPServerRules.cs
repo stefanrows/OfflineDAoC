@@ -359,6 +359,12 @@ namespace DOL.GS.ServerRules
 			if (target is GamePlayer playerTarget && playerTarget.Client.Account.PrivLevel > 1)
 				return (byte)player.Realm;
 
+			// A hostile keep guard must appear as an enemy to the client even
+			// when its unclaimed keep has no realm.
+			if (target is GameKeepGuard guard && guard.Component?.Keep != null &&
+				GameServer.KeepManager.IsEnemy(guard, player))
+				return (byte)(player.Realm == eRealm.Albion ? eRealm.Midgard : eRealm.Albion);
+
 			if (PvpCombatant.IsPlayerShaped(target))
 			{
 				if (PvpCombatant.AreAllied(player, target))

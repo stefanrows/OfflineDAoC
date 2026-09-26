@@ -98,7 +98,7 @@ namespace DOL.GS.RealmAbilities
 
 		public override bool CheckRequirement(GamePlayer player)
 		{
-			return player.Level >= 45;
+			return true;
 		}
 
 		public override void AddDelve(ref MiniDelveWriter w)

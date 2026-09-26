@@ -16,6 +16,13 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+21. **Remove character-level requirements from realm abilities.** Source
+    0.87.0 allows training Charge, Wild Power, Toughness, maximum health,
+    Decimation Trap, and Atlas Old Frontiers Striking the Soul at any character
+    level. Realm Rank requirements, point costs, and ability-specific
+    prerequisites remain. Installation and real-client checks that a low-level
+    character can train and benefit from the affected abilities are pending.
+
 20. **Remove the player logout timer.** Source 0.85.0 completes accepted player logout immediately, including during combat and while moving, without changing the dead, mounted, crafting, or instance restrictions. `/stuck` still uses its safe position on successful logout and clears the request if logout is refused. Installation and real-client checks of combat logout, normal logout, and `/stuck` remain pending.
 
 19. **Enable companion area taunt.** Source 0.84.0 lets persistent Armsman, Hero, and Warrior companions cast their learned Taunting Shout when at least two attackable NPCs in the frontal cone are already fighting the group. The AI skips cones containing idle NPCs or protected mezzes and leaves single-target taunts in place. Installation and real-client checks of cone targeting, threat transfer, cooldown, and mezz/idle safety remain pending.

@@ -12,6 +12,81 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.89.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Offensive caster damage spells cost 50% less mana for companion bots and player characters, including PBAoE bombs; healing, buffs and nondamaging spells retain their existing costs.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.88.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Healer bots cast available Celerity on group members who need it, including during combat; Celerity effects now update melee speed and are recognized during buff upkeep.
+
+### Removed
+
+- None.
+
+## [0.87.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Realm abilities with character-level requirements can be trained at any character
+  level, including Charge, Wild Power, Toughness, maximum health, Decimation
+  Trap, and Atlas Old Frontiers Striking the Soul. Realm Rank requirements and
+  ability-specific prerequisites remain.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.86.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Real players are evaluated against keep ownership like gamebots. Hostile Fensalir Faste guards become attackable to players, and right-clicking its intact doors no longer traverses them; friendly keep access remains available.
+
+### Removed
+
+- None.
+
 ## [0.85.0] - 2026-09-26
 
 ### Added

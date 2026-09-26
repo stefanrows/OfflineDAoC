@@ -3,14 +3,24 @@ using System;
 namespace DOL.GS
 {
     /// <summary>
-    /// Bot affordability mirrors native costs without guessing free-cast procs.
+    /// Bot affordability shares the damaging-caster cost reduction with player spell costs.
     /// Only native settlement rolls free-cast effects, never AI evaluation.
-    /// Quickcast is never used by a GameBot. Human spell costs are unchanged.
+    /// Quickcast is never used by a GameBot.
     /// </summary>
     public static class BotSpellPower
     {
-        public static bool IsOffensiveCaster(GameBot bot) => bot.CharacterClass?.ClassType == eClassType.ListCaster &&
-            bot.CharacterClass.ID is not (int)eCharacterClass.Valewalker and not (int)eCharacterClass.Vampiir;
+        private const double OffensiveCasterDamageCostMultiplier = 0.5;
+
+        public static bool IsOffensiveCaster(GameBot bot) => bot != null && IsOffensiveCaster(bot.CharacterClass);
+
+        private static bool IsOffensiveCaster(ICharacterClass characterClass) =>
+            characterClass?.ClassType == eClassType.ListCaster &&
+            characterClass.ID is not (int)eCharacterClass.Valewalker and not (int)eCharacterClass.Vampiir;
+
+        public static double ApplyDamageCostReduction(ICharacterClass characterClass, Spell spell, double cost) =>
+            IsOffensiveCaster(characterClass) && spell is { IsHarmful: true } && BotCasterPriority.IsDamage(spell)
+                ? cost * OffensiveCasterDamageCostMultiplier
+                : cost;
 
         // A focus root channels until canceled, spending power while preventing
         // the aggressive caster rotation. Use ordinary roots/DoTs/nukes instead.
@@ -53,6 +63,8 @@ namespace DOL.GS
                     cost *= 1.2 - focus;
                 }
             }
+
+            cost = ApplyDamageCostReduction(bot.CharacterClass, spell, cost);
 
             return Math.Max(0, (int)cost);
         }

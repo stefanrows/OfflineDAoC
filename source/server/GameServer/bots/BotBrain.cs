@@ -4336,7 +4336,8 @@ namespace DOL.AI.Brain
                     break;
                 foreach (Spell spell in spells)
                 {
-                    if (Body.InCombat && IsMaintainableClassBuff(spell))
+                    if (Body.InCombat && IsMaintainableClassBuff(spell) &&
+                        spell.SpellType != eSpellType.CelerityBuff)
                         continue;
                     // Caster-pet classes maintain their pets through AutonomousPetSupport.
                     if (BotBody?.CharacterClass != null &&
@@ -4435,6 +4436,7 @@ namespace DOL.AI.Brain
                 case eSpellType.SpecArmorFactorBuff:
                 case eSpellType.PaladinArmorFactorBuff:
                 case eSpellType.Buff:
+                case eSpellType.CelerityBuff:
                 case eSpellType.ConstitutionBuff:
                 case eSpellType.CourageBuff:
                 case eSpellType.CrushSlashTrustBuff:

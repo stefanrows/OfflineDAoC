@@ -340,7 +340,9 @@ namespace DOL.GS.PacketHandler
 						SendObjectGuildID(player, playerGuild ?? Guild.DummyGuild);
 					}
 				}
-				else if ((npc.Flags & GameNPC.eFlags.PEACE) != 0 || npc.Realm is not eRealm.None)
+				else if (((npc.Flags & GameNPC.eFlags.PEACE) != 0 || npc.Realm is not eRealm.None) &&
+				         (npc is not GameKeepGuard guard || guard.Component?.Keep == null ||
+				          !GameServer.KeepManager.IsEnemy(guard, m_gameClient.Player)))
 				{
 					GamePlayer player = m_gameClient.Player;
 					Guild playerGuild = player.Guild;
