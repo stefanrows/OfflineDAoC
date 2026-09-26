@@ -80,6 +80,13 @@ distance leash. Dialogue appears on recruit, invite, bench, and requested
 profile views; it does not trigger during combat. Autonomous bots do not read
 these preferences. See [Stage 5 decisions](COMPANION_STAGE5_DECISIONS.md).
 
+Persistent Armsman, Hero, and Warrior companions use their learned Taunting
+Shout on a frontal pack of at least two NPCs already attacking their group.
+They skip a cone that would hit an idle NPC, a protected mezz, or an attackable
+player. The usual single-target taunt and taunt style remain available when a
+safe area shout is unavailable. Temporary helpers and autonomous gamebots do
+not use this companion area-taunt decision.
+
 The roster preserves the existing generated level-1 equipment as a one-time,
 protected starter loadout. Persistent inventory is saved across benching and
 restart. Persistent recruits earn PvE progression while actively adventuring
@@ -180,6 +187,26 @@ is explicitly selected. `/companions build <name>` lists a companion's builds;
 switch is free, needs no trainer or respec eligibility, resets that companion's
 specializations, and retrains the new build to its current level. See
 [Build choice (M1a)](COMPANION_BUILD_RESEARCH.md#build-choice-m1a).
+
+## PvP kill rewards for persistent companions
+
+Persistent `/companions` members receive neither XP nor Realm Points from a
+PvP kill, even if they are grouped with the player, deal damage, or land the
+killing blow. This applies to both human and autonomous-bot victims. The PvP
+reward paths accept human players and autonomous world bots as recipients;
+`GameBot.GainExperience` accepts a persistent companion's NPC rewards only,
+and `GameBot.GainRealmPoints` accepts autonomous world bots only.
+
+The owner can earn PvP XP and Realm Points from qualifying personal damage or
+damage by a controlled pet credited to that player. Damage dealt by a
+persistent companion stays in the encounter's damage total but is not
+transferred to the owner as kill credit. Consequently, a companion's damage
+can reduce the owner's percentage of a shared PvP reward. Group membership
+alone does not award PvP progression to a companion or to an owner who has no
+credited contribution. A player can therefore level from PvP kills while
+companions retain their levels until they earn eligible PvE XP. Individual
+reward amounts still depend on victim eligibility, level, damage share, caps,
+and the configured XP and Realm Point rates.
 
 ## Personal gear and inventory
 

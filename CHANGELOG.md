@@ -12,6 +12,96 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.85.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Player logout completes immediately, including during combat and while moving. The former quit timer and its server setting are removed; existing logout restrictions and save handling remain.
+
+### Fixed
+
+- `/stuck` clears its safe-position request when logout is refused.
+
+### Removed
+
+- None.
+
+## [0.84.0] - 2026-09-26
+
+### Added
+
+- Persistent Armsman, Hero, and Warrior companions use Taunting Shout on packs already attacking their group when at least two enemies are in the cone. They avoid idle enemies, protected mezzes, and player targets; ordinary single-target taunts remain the fallback.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.83.1] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Documented that persistent companions receive no PvP kill XP or Realm Points and that their damage does not give their owner PvP kill credit.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.83.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Bot buff upkeep and fallback selection cover eligible group members before attached pets across routine buffs. Pets receive remaining coverage once member needs are met.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.82.0] - 2026-09-26
+
+### Added
+
+- None.
+
+### Changed
+
+- Grouped Shamans prioritize their highest learned endurance regeneration buff for nearby group members before other routine buffs. If their concentration is full, they release a lower priority buff to make room for endurance coverage.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.81.0] - 2026-09-26
 
 ### Added

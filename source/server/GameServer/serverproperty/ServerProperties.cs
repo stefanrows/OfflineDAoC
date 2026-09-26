@@ -354,12 +354,6 @@ namespace DOL.GS.ServerProperties
 		public static int KICK_IDLE_PLAYER_TIME;
 
 		/// <summary>
-		/// Disable quit timers for players?
-		/// </summary>
-		[ServerProperty("server", "disable_quit_timer", "Allow players to log out without waiting?", false)]
-		public static bool DISABLE_QUIT_TIMER;
-
-		/// <summary>
 		/// Queue Service Host
 		/// </summary>
 		[ServerProperty("server", "queue_api_url", "Provide the URL for the queue service endpoint - blank to disable", "")]

@@ -6,13 +6,23 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
-6. **Check XP and Realm Point rewards for `/companions` group members.** Verify
-   whether companions receive the same XP and Realm Points as their player for
-   PvP kills, and explain any differences in reward distribution. Observation:
-   after two PvP kills, the player was level 17 while companions were level 13;
-   everyone started at level 1.
+7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
+   the level XP curve and XP awarded at different levels to determine whether
+   the slowdown is expected progression or an unintended drop in rewards, then
+   document the intended behavior and fix it if needed. Initial read-only check
+   on 2026-09-26: installed save settings show `rates.xp_rate=10`; saved
+   characters are levels 19 and 36. The server was not running locally, and the
+   save has no XP-award history, so it cannot confirm when the slowdown began.
 
 ## Implemented in source; installation verification pending
+
+20. **Remove the player logout timer.** Source 0.85.0 completes accepted player logout immediately, including during combat and while moving, without changing the dead, mounted, crafting, or instance restrictions. `/stuck` still uses its safe position on successful logout and clears the request if logout is refused. Installation and real-client checks of combat logout, normal logout, and `/stuck` remain pending.
+
+19. **Enable companion area taunt.** Source 0.84.0 lets persistent Armsman, Hero, and Warrior companions cast their learned Taunting Shout when at least two attackable NPCs in the frontal cone are already fighting the group. The AI skips cones containing idle NPCs or protected mezzes and leaves single-target taunts in place. Installation and real-client checks of cone targeting, threat transfer, cooldown, and mezz/idle safety remain pending.
+
+18. **Give group members buff priority over pets.** Source 0.83.0 selects missing buffs for eligible group members before pet buffs across routine upkeep and fallback selection. Realm buffs choose members before attached pets, while pet-only and spare pet coverage remain available once member needs are met. Installation and real-client checks with mixed player/companion/pet groups remain pending.
+
+17. **Prioritize Shaman endurance buffs for the whole group.** Source 0.82.0 selects the highest learned endurance rank before other routine Shaman buffs, covers nearby group members before pets or other allies, and frees concentration from a lower priority buff when needed for a group member. Installation and real-client checks with Kiri and full autonomous groups remain pending, including coverage after travel and combat.
 
 14. **Companion bombers open a pull with one loose volley.** Implemented in source 0.81.0. Requested so a group's bombs land together for maximum damage without constant re-syncing or cut casts. Result: the first companion bomber in position holds its first bomb for at most 1.2 s until the group's other companion bombers within 1,500 units are in position; then all fire and chain freely for 6 s after each bomb, so a new pull syncs again. Holding never starts while a cast is running; human bombers are not waited for. Unit tests cover the hold, release, chain and stale-wait cases; real-client check of volley timing pending.
 
@@ -48,6 +58,18 @@ When a task is done and its required verification is complete, move it out of it
 8. **Apply population-type changes to existing bots live.** Source version 0.70.0 adds a launcher action and server request/status flow for the entire non-retired saved autonomous roster, including offline bots. Player-led companions and temporary helpers are excluded. Offline changes run in bounded batches; active changes wait for safe task or group boundaries. The server saves the requested mix and bot types, and reports pending/applied/failed status. Installation and live acceptance remain pending: verify counts converge, active groups stay intact, repeated application is stable, and settings plus character progress survive restart.
 
 ## Finished
+
+3. **Done — Check XP and Realm Point rewards for `/companions` group members**
+   (0.83.1, 2026-09-26). Source audit confirms persistent companions gain XP
+   only from eligible NPC kills and gain no Realm Points. Both human-victim and
+   autonomous-bot-victim PvP reward paths exclude persistent companions, even
+   when they deal damage. The player receives PvP XP and Realm Points only for
+   qualifying player or player-controlled-pet damage; companion damage does not
+   become owner kill credit. Thus PvP kills can advance the player while leaving
+   companions at their prior level, consistent with the reported level 17 versus
+   13 gap after two kills. No pre-kill XP snapshots were available to quantify
+   those two awards; real-client reward amounts were not measured. The intended
+   reward boundary is documented in [COMPANION_BOTS.md](COMPANION_BOTS.md).
 
 2. **Done — Thirty-minute observation of installed 0.73.0** (2026-09-26). Captured 61 snapshots at 600-bot peak population: seven PvE assemblies had eight members physically present; nine eight-member PvE rosters began tasks. PvP task starts remained two to four members and no keep ownership changed. Thirteen parties hit the camp-travel deadline and twelve found no usable camp. No observed freeze or empty-party exception recurrence; all samples had zero connected clients. Evidence supports partial PvE recruitment success, not a controlled before/after performance improvement. Raw logs and the detailed report remain outside Git; broader feature acceptance stays pending.
 

@@ -23,10 +23,13 @@ namespace DOL.GS.Commands
                 return;
             }
 
-            movementComponent.UseSafePosition = true; // Will be reset if the quit timer is interrupted.
+            movementComponent.UseSafePosition = true;
 
             if (!player.Quit(false))
+            {
+                movementComponent.UseSafePosition = false;
                 return;
+            }
         }
     }
 }

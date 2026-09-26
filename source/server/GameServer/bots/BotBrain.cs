@@ -1855,24 +1855,42 @@ namespace DOL.AI.Brain
             IEnumerable<Spell> candidates = known
                 .Where(spell => BotMaintenancePulsePolicy.CanMaintain(spell, maintenancePulse))
                 .Where(spell => spell.SpellType != eSpellType.SpeedEnhancement || traveling)
-                .OrderByDescending(spell => spell.SpellType == eSpellType.SpeedEnhancement && traveling)
+                .OrderByDescending(spell => IsGroupedShamanEnduranceBuff(bot, spell))
+                .ThenByDescending(spell => spell.SpellType == eSpellType.SpeedEnhancement && traveling)
                 .ThenByDescending(spell => spell.Value)
                 .ThenByDescending(spell => spell.Level);
 
-            foreach (Spell spell in candidates)
+            // A pet receives routine coverage only after every reachable member
+            // has the buffs this caster can provide.
+            List<(Spell Spell, GameLiving Target)> pending = candidates
+                .Select(spell => (Spell: spell, Target: FindMissingMaintenanceTarget(spell, false)))
+                .Where(entry => entry.Target != null)
+                .ToList();
+            if (pending.Count == 0)
+                pending = candidates
+                    .Select(spell => (Spell: spell, Target: FindMissingMaintenanceTarget(spell, true)))
+                    .Where(entry => entry.Target != null)
+                    .ToList();
+
+            foreach ((Spell spell, GameLiving target) in pending)
             {
                 if (spell.HasRecastDelay && bot.GetSkillDisabledDuration(spell) > 0)
                     continue;
                 if (bot.Mana < bot.PowerCost(spell))
                     continue;
-                if (!bot.CanAffordConcentration(spell))
-                    continue;
                 if (spell.NeedInstrument && !TryEquipRealInstrument(bot, spell.InstrumentRequirement))
                     continue;
 
-                GameLiving target = FindMissingMaintenanceTarget(spell);
-                if (target == null)
+                if (!bot.CanAffordConcentration(spell))
+                {
+                    if (IsGroupedShamanEnduranceBuff(bot, spell) &&
+                        bot.Group.IsInTheGroup(target) && FreeConcentrationForEndurance(bot, spell))
+                    {
+                        _nextMaintenanceBuffTick = GameLoop.GameLoopTime + 1_000;
+                        return true;
+                    }
                     continue;
+                }
 
                 GameObject previousTarget = bot.TargetObject;
                 if (spell.CastTime > 0)
@@ -2151,10 +2169,12 @@ namespace DOL.AI.Brain
         public static bool IsClassicSongClass(eCharacterClass characterClass) => characterClass is
             eCharacterClass.Bard or eCharacterClass.Minstrel or eCharacterClass.Skald;
 
-        private GameLiving FindMissingMaintenanceTarget(Spell spell)
+        private GameLiving FindMissingMaintenanceTarget(Spell spell, bool includePets = true)
         {
             if (spell.Target is eSpellTarget.PET or eSpellTarget.CONTROLLED)
             {
+                if (!includePets)
+                    return null;
                 GameLiving pet = Body.ControlledBrain?.Body;
                 return pet?.IsAlive == true && Body.IsWithinRadius(pet, Math.Max(350, spell.Range)) && !LivingHasEffect(pet, spell)
                     ? pet
@@ -2168,7 +2188,7 @@ namespace DOL.AI.Brain
             {
                 IEnumerable<GameLiving> members = Body.Group?.GetMembersInTheGroup() ?? [Body];
                 return members.Any(member => member.IsAlive && Body.IsWithinRadius(member, Math.Max(350, spell.Range)) && !LivingHasEffect(member, spell)) ||
-                       FindMissingPartyPetBuffTarget(spell) != null
+                       includePets && FindMissingPartyPetBuffTarget(spell) != null
                     ? Body
                     : null;
             }
@@ -2176,13 +2196,14 @@ namespace DOL.AI.Brain
             if (spell.Target == eSpellTarget.REALM)
             {
                 if (!spell.IsPulsing)
-                    return FindRandomMissingRealmBuffTarget(spell, 350);
+                    return FindRandomMissingRealmBuffTarget(spell, 350, includePets);
                 if (!LivingHasEffect(Body, spell))
                     return Body;
                 return Body.Group?.GetMembersInTheGroup()
                     .FirstOrDefault(member => member != Body && member.IsAlive &&
                                               Body.IsWithinRadius(member, Math.Max(350, spell.Range)) &&
-                                              !LivingHasEffect(member, spell)) ?? FindMissingPartyPetBuffTarget(spell);
+                                              !LivingHasEffect(member, spell)) ??
+                       (includePets ? FindMissingPartyPetBuffTarget(spell) : null);
             }
 
             return null;
@@ -2190,7 +2211,7 @@ namespace DOL.AI.Brain
 
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, BotBuffReservations<GameLiving>> BuffClaims = new();
 
-        private GameLiving FindRandomMissingRealmBuffTarget(Spell spell, int minimumRange = 0)
+        private GameLiving FindRandomMissingRealmBuffTarget(Spell spell, int minimumRange = 0, bool includePets = true)
         {
             Group group = Body.Group;
             var claims = group == null ? null : BuffClaims.GetValue(AutonomousRealmRaid.SupportScope(BotBody), _ => new());
@@ -2198,10 +2219,24 @@ namespace DOL.AI.Brain
             long now = GameLoop.GameLoopTime;
             int range = Math.Max(minimumRange, spell.CalculateEffectiveRange(Body));
             IEnumerable<GameLiving> members = spell.Target == eSpellTarget.REALM ? AutonomousRealmRaid.SupportMembers(BotBody) : group?.GetMembersInTheGroup() ?? [Body];
-            // One pool: players, companions, world bots and valid attached pets.
-            // Do not leave pets until every humanoid has been processed first.
+            if (IsGroupedShamanEnduranceBuff(BotBody, spell))
+            {
+                GameLiving groupTarget = BotBuffReservations<GameLiving>.Choose(
+                    group.GetMembersInTheGroup(),
+                    target => target.IsAlive && Body.IsWithinRadius(target, range) &&
+                        !LivingHasEffect(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
+                if (groupTarget != null)
+                    return groupTarget;
+            }
+            GameLiving memberTarget = BotBuffReservations<GameLiving>.Choose(
+                members,
+                target => target.IsAlive && Body.IsWithinRadius(target, range) &&
+                    !LivingHasEffect(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
+            if (memberTarget != null || !includePets)
+                return memberTarget;
+
             return BotBuffReservations<GameLiving>.Choose(
-                members.Concat(BotGroupPetBuffTargets.Enumerate(BotBody, spell)),
+                BotGroupPetBuffTargets.Enumerate(BotBody, spell),
                 target => target.IsAlive && Body.IsWithinRadius(target, range) &&
                     !LivingHasEffect(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
         }
@@ -2273,6 +2308,29 @@ namespace DOL.AI.Brain
             }
 
             return false;
+        }
+
+        private static bool IsGroupedShamanEnduranceBuff(GameBot bot, Spell spell) =>
+            bot?.Group != null && bot.CharacterClass?.ID == (int)eCharacterClass.Shaman &&
+            spell?.SpellType == eSpellType.EnduranceRegenBuff &&
+            spell.Target == eSpellTarget.REALM && spell.Concentration > 0;
+
+        private static bool FreeConcentrationForEndurance(GameBot bot, Spell enduranceSpell)
+        {
+            if (bot.MaxConcentration < enduranceSpell.Concentration)
+                return false;
+
+            ECSGameSpellEffect otherBuff = bot.effectListComponent.GetConcentrationEffects()
+                .Where(effect => effect?.SpellHandler?.Spell is Spell spell &&
+                                 spell.SpellType != eSpellType.EnduranceRegenBuff &&
+                                 !effect.IsEnding && !effect.IsEnded)
+                .OrderByDescending(effect => effect.SpellHandler.Spell.Concentration)
+                .FirstOrDefault();
+            if (otherBuff == null)
+                return false;
+
+            otherBuff.End();
+            return true;
         }
 
         internal static bool IsMaintainableClassBuff(Spell spell) => spell?.SpellType switch
@@ -3233,6 +3291,9 @@ namespace DOL.AI.Brain
                 !Body.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS))
                 return false;
 
+            if (TryCompanionTauntingShout())
+                return true;
+
             if (GameLoop.GameLoopTime >= _nextPriorityTauntTick)
             {
                 Spell taunt = Body.HarmfulSpells?
@@ -3261,6 +3322,47 @@ namespace DOL.AI.Brain
             }
 
             return false;
+        }
+
+        private bool TryCompanionTauntingShout()
+        {
+            if (!BotBody.IsPlayerLedGroup || BotBody.PersistentRecord == null ||
+                (eCharacterClass)BotBody.CharacterClass.ID is not (eCharacterClass.Armsman or eCharacterClass.Hero or eCharacterClass.Warrior))
+                return false;
+
+            Ability ability = Body.GetAbility(Abilities.TauntingShout);
+            Spell shout = SkillBase.GetSpellByID(14377);
+            if (ability == null || Body.GetSkillDisabledDuration(ability) > 0 ||
+                shout is not { SpellType: eSpellType.Taunt, Target: eSpellTarget.CONE } ||
+                Body.GetSkillDisabledDuration(shout) > 0 || Body.Mana < BotBody.PowerCost(shout))
+                return false;
+
+            int range = shout.CalculateEffectiveRange(Body);
+            if (range <= 0)
+                return false;
+            int angle = shout.Radius != 0 ? shout.Radius : 100;
+            if (Body.GetPlayersInRadius((ushort)Math.Min(range, ushort.MaxValue))
+                .Any(player => Body.IsObjectInFront(player, angle) &&
+                               GameServer.ServerRules.IsAllowedToAttack(Body, player, true)))
+                return false;
+            GameNPC[] inCone = Body.GetNPCsInRadius((ushort)Math.Min(range, ushort.MaxValue))
+                .Where(npc => npc != Body && npc.IsAlive && Body.IsObjectInFront(npc, angle) &&
+                              GameServer.ServerRules.IsAllowedToAttack(Body, npc, true) &&
+                              !npc.HasAbility("DamageImmunity"))
+                .ToArray();
+
+            // The native cone hits every attackable NPC in front of the tank.
+            // Do not pull idle neighbors or wake a protected mezz to taunt a pack.
+            if (inCone.Length < 2 || inCone.Any(npc => CompanionAddControl.ProtectsMezz(BotBody, npc) ||
+                    npc.TargetObject is not GameLiving victim ||
+                    !CompanionAddControl.OnGroupSide(Body.Group, victim)))
+                return false;
+
+            SpellLine abilities = SkillBase.GetSpellLine(GlobalSpellsLines.Character_Abilities);
+            if (abilities == null || !Body.CastSpell(shout, abilities))
+                return false;
+            Body.DisableSkill(ability, shout.RecastDelay == 0 ? 3000 : shout.RecastDelay);
+            return true;
         }
 
         public void CheckOffensiveAbilities()
@@ -4221,32 +4323,46 @@ namespace DOL.AI.Brain
                 GetMaintainableBuffLineIds(BotBody, out baseBuffIds, out specializationBuffIds);
             bool hasSpecializationBuffs = specializationBuffIds.Count > 0;
 
-            foreach (Spell spell in spells)
+            for (int pass = 0; pass < 2; pass++)
             {
-                if (Body.InCombat && IsMaintainableClassBuff(spell))
-                    continue;
-                // Caster-pet classes, including a Bonedancer's commander tree,
-                // maintain their controlled pets through AutonomousPetSupport. The
-                // generic defensive selector historically treated PET spells
-                // as self buffs, queued the cast, then lost the AI turn when
-                // the native target validation rejected it.  Repeating that on
-                // every FOLLOW pulse starved formation movement forever after
-                // the first successful summon.
-                if (BotBody?.CharacterClass != null &&
-                    AutonomousPetSupport.OwnsPetUpkeep(
-                        (eCharacterClass)BotBody.CharacterClass.ID) &&
-                    spell.Target is eSpellTarget.PET or eSpellTarget.CONTROLLED)
-                {
-                    continue;
-                }
-                if (CanCastDefensiveSpell(spell, out GameLiving target) &&
+                bool includePets = pass == 1;
+                // Missing member coverage also blocks the pet pass when power or
+                // concentration temporarily prevents a member cast.
+                if (includePets && !Body.InCombat && spells.Any(spell =>
+                    spell != null && spell.Level <= Body.Level && IsMaintainableClassBuff(spell) &&
+                    FindTargetForDefensiveSpell(spell, false) is GameLiving member &&
                     !(hasSpecializationBuffs && baseBuffIds.Contains(spell.ID) &&
-                      HasOtherGroupMemberBuffCoverage(BotBody, target, spell)))
-                    spellsToCast.Add((spell, target));
+                      HasOtherGroupMemberBuffCoverage(BotBody, member, spell))))
+                    break;
+                foreach (Spell spell in spells)
+                {
+                    if (Body.InCombat && IsMaintainableClassBuff(spell))
+                        continue;
+                    // Caster-pet classes maintain their pets through AutonomousPetSupport.
+                    if (BotBody?.CharacterClass != null &&
+                        AutonomousPetSupport.OwnsPetUpkeep((eCharacterClass)BotBody.CharacterClass.ID) &&
+                        spell.Target is eSpellTarget.PET or eSpellTarget.CONTROLLED)
+                    {
+                        continue;
+                    }
+                    if (CanCastDefensiveSpell(spell, includePets, out GameLiving target) &&
+                        !(hasSpecializationBuffs && baseBuffIds.Contains(spell.ID) &&
+                          HasOtherGroupMemberBuffCoverage(BotBody, target, spell)))
+                        spellsToCast.Add((spell, target));
+                }
+                if (spellsToCast.Count > 0)
+                    break;
             }
 
             if (spellsToCast.Count == 0)
                 return false;
+
+            if (spellsToCast.Any(entry => IsGroupedShamanEnduranceBuff(BotBody, entry.Item1)))
+                spellsToCast = spellsToCast
+                    .Where(entry => IsGroupedShamanEnduranceBuff(BotBody, entry.Item1))
+                    .OrderByDescending(entry => entry.Item1.Value)
+                    .ThenByDescending(entry => entry.Item1.Level)
+                    .ToList();
 
             // Complete any currently available specialization-line buffs
             // before spending a cast on this companion's weaker base-line
@@ -4270,7 +4386,7 @@ namespace DOL.AI.Brain
             Body.TargetObject = oldTarget;
             return cast;
 
-            bool CanCastDefensiveSpell(Spell spell, out GameLiving target)
+            bool CanCastDefensiveSpell(Spell spell, bool includePets, out GameLiving target)
             {
                 target = null;
                 if (CompanionFollowPolicy.DeferBuff(BotBody, spell)) return false;
@@ -4284,19 +4400,22 @@ namespace DOL.AI.Brain
                     return false;
                 }
 
-                target = FindTargetForDefensiveSpell(spell);
+                target = FindTargetForDefensiveSpell(spell, includePets);
                 return target != null;
             }
         }
 
-        protected virtual GameLiving FindTargetForDefensiveSpell(Spell spell)
+        protected virtual GameLiving FindTargetForDefensiveSpell(Spell spell) =>
+            FindTargetForDefensiveSpell(spell, true);
+
+        private GameLiving FindTargetForDefensiveSpell(Spell spell, bool includePets)
         {
             // Do not let the secondary defensive selector undo stationary PBT
             // upkeep by starting caster speed again on the next FOLLOW pulse.
             if (spell.SpellType == eSpellType.SpeedEnhancement && spell.IsPulsing && !IsMaintenanceTraveling())
                 return null;
             if (spell.Target == eSpellTarget.REALM && !spell.IsPulsing && IsMaintainableClassBuff(spell))
-                return FindRandomMissingRealmBuffTarget(spell);
+                return FindRandomMissingRealmBuffTarget(spell, includePets: includePets);
             GameLiving target = null;
 
             switch (spell.SpellType)
@@ -4346,7 +4465,7 @@ namespace DOL.AI.Brain
                             }
                         }
                     }
-                    if (target == null)
+                    if (target == null && includePets)
                         target = FindMissingPartyPetBuffTarget(spell);
                     break;
             }
