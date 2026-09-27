@@ -173,6 +173,7 @@ public static partial class AutonomousBotGroupCoordinator
             RealmEventControls.Pulse();
             AutonomousRealmRaid.Pulse(now);
             AutonomousRealmRaid.RecruitForcedParty(now);
+            AutonomousRaidSchedule.Pulse(now);
             // Tier 4 has no realm-wide keep defense or RvR rally pulse. PvE
             // expeditions remain owned by AutonomousRealmRaid.
             AutonomousObjectiveAssignments.ReconcileIfDue();

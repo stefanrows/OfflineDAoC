@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.105.0] - 2026-09-27
+
+### Added
+
+- A raid calendar: about every 1.5-2.5 hours a dragon or epic dungeon raid is
+  announced 25 minutes ahead. Level-50 bots sign up by type and sociability
+  and keep doing what they do; at the start time everyone who signed up leaves
+  their group (the rest of the group carries on) and gathers at the muster.
+  The raid needs at least 40 sign-ups, moves out once most of them (at least
+  24) have gathered, and stages for at least 10 minutes. Too few sign-ups call
+  it off.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.104.0] - 2026-09-27
 
 ### Added

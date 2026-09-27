@@ -36,6 +36,10 @@ namespace DOL.GS
             public bool Started;
             public bool PreparationNoticeSent;
             public bool Forced;
+            /// <summary>A sign-up raid from the raid calendar: runs like a forced raid, with its own head count.</summary>
+            public bool Scheduled;
+            public int MinimumPresent = RealmRaidRecruitmentPolicy.AutonomousMinimumPresent;
+            public long MinimumStaging = RealmRaidRecruitmentPolicy.AutonomousMinimumStagingMilliseconds;
             public long Created;
             public RealmRaidMuster.Hub Hub;
             public bool HubDeparted;
@@ -125,7 +129,7 @@ namespace DOL.GS
                     }
                     raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
                     int presentAtHub = raid.Parties.Values.Sum(p => PresentAtHub(raid, p));
-                    bool departing = !raid.HubDeparted && RealmRaidRecruitmentPolicy.DepartHub(false, presentAtHub);
+                    bool departing = !raid.HubDeparted && RealmRaidRecruitmentPolicy.DepartHub(false, presentAtHub, raid.MinimumPresent);
                     raid.HubDeparted |= departing;
                     if (departing) RealmEventNotices.Queue(raid.Definition.Id, raid.Definition.Realm,
                         $"{presentAtHub} adventurers present at {raid.Hub.Name}; departing together for {raid.Definition.Name}. Late arrivals will join the expedition directly.");
@@ -153,7 +157,8 @@ namespace DOL.GS
                                 RealmEventBanter.RaidReminder(raid.Definition.Name, raid.Forced));
                         }
                         int present = PresentAtStaging(raid);
-                        if (RealmRaidRecruitmentPolicy.Ready(raid.Forced, now - raid.Created, present, DragonLanded(raid)))
+                        if (RealmRaidRecruitmentPolicy.Ready(raid.Forced, now - raid.Created, present, DragonLanded(raid),
+                                raid.MinimumPresent, raid.MinimumStaging))
                         {
                             raid.Started = true;
                             raid.Deadline = now + RealmRaidRecruitmentPolicy.BattleMilliseconds;
@@ -161,7 +166,8 @@ namespace DOL.GS
                             RealmEventNotices.Queue(raid.Definition.Id, raid.Definition.Realm,
                                 $"The {raid.Definition.Name} expedition is advancing with {present} staged level-50 adventurers.");
                         }
-                        else if (RealmRaidRecruitmentPolicy.StagingExpired(raid.Forced, now - raid.Created, present, DragonLanded(raid)))
+                        else if (RealmRaidRecruitmentPolicy.StagingExpired(raid.Forced, now - raid.Created, present, DragonLanded(raid),
+                                     raid.MinimumPresent))
                         { End(raid, now, $"Staging failed: {present} adventurers arrived; no undersized or airborne assault was ordered."); continue; }
                     }
                     if (raid.Started && raid.DungeonRoute != null)
@@ -213,6 +219,59 @@ namespace DOL.GS
                 raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
                 UpdateView(raid, party);
                 view = party.View;
+                return true;
+            }
+        }
+
+        public static bool HasActiveEvent { get { lock (Sync) return Raids.Count > 0; } }
+
+        /// <summary>A random encounter that is alive and off cooldown, for the raid calendar.</summary>
+        public static Definition PickAvailableDefinition()
+        {
+            lock (Sync)
+                return Definitions.Where(d => Available(d.Id)).OrderBy(_ => Random.Shared.Next()).FirstOrDefault();
+        }
+
+        public static bool IsAvailable(string id) { lock (Sync) return Available(id); }
+
+        /// <summary>
+        /// Starts a calendar raid with the parties planned from its sign-ups.
+        /// It runs through the forced-raid pipeline (reserved parties, muster,
+        /// staging) but departs and starts with its own, smaller head count.
+        /// </summary>
+        public static bool StartScheduled(string id, GameBot[][] parties, int minimumPresent, out string reason)
+        {
+            lock (Sync)
+            {
+                Definition definition = Definitions.FirstOrDefault(d => d.Id == id);
+                if (definition == null || !Available(id) || Raids.ContainsKey(id))
+                { reason = "The encounter is no longer available."; return false; }
+                if (parties.SelectMany(p => p).Any(b => IsReserved(b) || GetView(b.Group) != null))
+                { reason = "A signed-up adventurer joined another expedition."; return false; }
+                long now = GameLoop.GameLoopTime;
+                var raid = new Raid { Definition = definition, Boss = Bosses[id], Forced = true, Scheduled = true, Created = now,
+                    Hub = RealmRaidMuster.Hubs.Single(h => h.Event == id),
+                    MinimumPresent = minimumPresent, MinimumStaging = RealmRaidRecruitmentPolicy.ScheduledStagingMilliseconds,
+                    Deadline = now + RealmRaidRecruitmentPolicy.ForcedStagingLimitMilliseconds };
+                if (definition.IsDungeon)
+                {
+                    if (!RealmRaidDungeonRoute.TryCreate(definition.Region, definition.Trigger, definition.FinalTypes, out var route))
+                    { reason = "The dungeon entrance could not be validated."; return false; }
+                    raid.DungeonRoute = route;
+                }
+                if (!TryStaging(raid, 0, out var destination) || !TryHubPost(raid, 0, out var origin) ||
+                    !RealmRaidMuster.TryRoute(WorldMgr.GetRegion(raid.Hub.Region), PathfindingProvider.Instance, definition.Realm,
+                        origin, destination, out raid.OutboundSeams, raid.Hub.Via))
+                { reason = "No connected hub-to-encounter route was found."; return false; }
+                Raids[id] = raid;
+                RealmEventRecords.Begin(id, definition.Name, definition.IsDungeon ? "Epic dungeon" : "Dragon",
+                    GlobalConstants.RealmToName(definition.Realm), "Scheduled sign-up raid via " + raid.Hub.Name);
+                raid.ForcedParties.AddRange(parties);
+                foreach (GameBot bot in parties.SelectMany(p => p)) Reservations[bot.DatabaseID] = id;
+                int total = parties.Sum(p => p.Length);
+                RealmEventNotices.Queue(id, definition.Realm,
+                    $"{definition.Name}: {total} signed-up adventurers are heading to {raid.Hub.Name}; the raid moves out once {minimumPresent} have gathered.");
+                reason = $"Started with {total} signed-up bots.";
                 return true;
             }
         }

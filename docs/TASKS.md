@@ -6,18 +6,6 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
-34. **Level-50 life between RvR tours and raid sign-ups.** Aaron,
-    2026-09-27: level-50 bots mostly take a town break (sell loot, buy what
-    they need) and sometimes run Darkness Falls, spending seals at the DF seal
-    merchants; they sign up for raids on the side, and when a raid's start
-    time comes, the signed-up bots leave RvR or PvE and gather for it, as
-    players did. Context: level-50 PvE today mostly fails (22 of 705 goal
-    attempts reached a camp, 0 kills); raids need 200 simultaneous level-50
-    GroupPve bots and never start; bots never spend seals; money is flat.
-    Source 0.104.0 (partial): veterans take a town break instead of owing PvE,
-    level-50 PvE prefers DF, bots spend seals at DF merchants. Still open:
-    scheduled raids with sign-ups, buying consumables.
-
 7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
    the level XP curve and XP awarded at different levels to determine whether
    the slowdown is expected progression or an unintended drop in rewards, then
@@ -27,6 +15,19 @@ When a task is done and its required verification is complete, move it out of it
    save has no XP-award history, so it cannot confirm when the slowdown began.
 
 ## Implemented in source; installation verification pending
+
+34. **Level-50 life between RvR tours and raid sign-ups.** Aaron,
+    2026-09-27: level-50 bots mostly take a town break (sell loot, buy what
+    they need) and sometimes run Darkness Falls, spending seals at the DF seal
+    merchants; they sign up for raids on the side, and when a raid's start
+    time comes, the signed-up bots leave RvR or PvE and gather for it, as
+    players did. Context: level-50 PvE today mostly fails (22 of 705 goal
+    attempts reached a camp, 0 kills); raids need 200 simultaneous level-50
+    GroupPve bots and never start; bots never spend seals; money is flat.
+    Source 0.104.0 (partial): veterans take a town break instead of owing PvE,
+    level-50 PvE prefers DF, bots spend seals at DF merchants. Source 0.105.0
+    adds the raid calendar with sign-ups (see CHANGELOG). Still open: buying
+    consumables. Checks pending: raid announcement, sign-ups, muster, raid.
 
 33. **Bots stack in Jordheim at the vault keeper.** Aaron, 2026-09-27: many
     bots stand in one spot next to the vault keeper. In town they should sell

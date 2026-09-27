@@ -276,3 +276,34 @@ public sealed class UT_CompanionFollowStyle
         });
     }
 }
+
+[TestFixture]
+public sealed class UT_AutonomousRaidSchedule
+{
+    [Test]
+    public void LevellersSignUpMoreThanKeepWarriorsAndSociableBotsMoreThanLoners()
+    {
+        Assert.That(AutonomousRaidSchedule.SignUpChance(AutonomousPlayerType.Leveler, 50),
+            Is.GreaterThan(AutonomousRaidSchedule.SignUpChance(AutonomousPlayerType.KeepWarrior, 50)));
+        Assert.That(AutonomousRaidSchedule.SignUpChance(AutonomousPlayerType.Hybrid, 85),
+            Is.GreaterThan(AutonomousRaidSchedule.SignUpChance(AutonomousPlayerType.Hybrid, 15)));
+    }
+
+    [Test]
+    public void ScheduledRaidsNeedMostSignUpsPresentAndTheirOwnStagingTime()
+    {
+        int minimum = RealmRaidRecruitmentPolicy.ScheduledMinimumPresent(80);
+        Assert.Multiple(() =>
+        {
+            Assert.That(minimum, Is.EqualTo(48));
+            Assert.That(RealmRaidRecruitmentPolicy.ScheduledMinimumPresent(10), Is.EqualTo(24));
+            Assert.That(RealmRaidRecruitmentPolicy.Ready(true, RealmRaidRecruitmentPolicy.ScheduledStagingMilliseconds, 48, true,
+                minimum, RealmRaidRecruitmentPolicy.ScheduledStagingMilliseconds), Is.True);
+            Assert.That(RealmRaidRecruitmentPolicy.Ready(true, RealmRaidRecruitmentPolicy.ScheduledStagingMilliseconds, 47, true,
+                minimum, RealmRaidRecruitmentPolicy.ScheduledStagingMilliseconds), Is.False);
+            Assert.That(RealmRaidRecruitmentPolicy.DepartHub(false, 48, minimum), Is.True);
+            Assert.That(RealmRaidRecruitmentPolicy.Ready(false, RealmRaidRecruitmentPolicy.AutonomousMinimumStagingMilliseconds,
+                199, true), Is.False, "Automatic raids keep their 200 head count.");
+        });
+    }
+}

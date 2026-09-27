@@ -23,13 +23,31 @@ public static class RealmRaidRecruitmentPolicy
         !sameEncounterEvent && (forced || !activePveEvent);
 
     public static bool Ready(bool forced, long elapsed, int present, bool landed) =>
-        elapsed >= (forced ? ForcedStagingMilliseconds : AutonomousMinimumStagingMilliseconds) &&
-        present >= AutonomousMinimumPresent && landed;
+        Ready(forced, elapsed, present, landed, AutonomousMinimumPresent,
+            forced ? ForcedStagingMilliseconds : AutonomousMinimumStagingMilliseconds);
+
+    /// <summary>A raid with its own head count and preparation time (scheduled sign-up raids).</summary>
+    public static bool Ready(bool forced, long elapsed, int present, bool landed, int minimumPresent, long minimumStaging) =>
+        elapsed >= minimumStaging && present >= minimumPresent && landed;
 
     public static bool DepartHub(bool alreadyDeparted, int presentBots) =>
-        alreadyDeparted || presentBots >= AutonomousMinimumPresent;
+        DepartHub(alreadyDeparted, presentBots, AutonomousMinimumPresent);
+
+    public static bool DepartHub(bool alreadyDeparted, int presentBots, int minimumPresent) =>
+        alreadyDeparted || presentBots >= minimumPresent;
 
     public static bool StagingExpired(bool forced, long elapsed, int present = 0, bool landed = true) =>
+        StagingExpired(forced, elapsed, present, landed, AutonomousMinimumPresent);
+
+    public static bool StagingExpired(bool forced, long elapsed, int present, bool landed, int minimumPresent) =>
         elapsed >= (forced ? ForcedStagingLimitMilliseconds : AutonomousStagingLimitMilliseconds) &&
-        !(present >= AutonomousMinimumPresent && !landed);
+        !(present >= minimumPresent && !landed);
+
+    // Scheduled sign-up raids (0.105.0): announced ahead, smaller head count.
+    public const long ScheduledLeadMilliseconds = 25 * 60_000L;
+    public const long ScheduledStagingMilliseconds = 10 * 60_000L;
+    public const int ScheduledMinimumSignUps = 40;
+
+    /// <summary>Head count that must actually arrive: most of those who signed up, never fewer than 24.</summary>
+    public static int ScheduledMinimumPresent(int signedUp) => Math.Max(24, signedUp * 3 / 5);
 }

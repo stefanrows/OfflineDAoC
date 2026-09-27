@@ -117,4 +117,44 @@ public static partial class AutonomousBotGroupCoordinator
             return true;
         }
     }
+    /// <summary>
+    /// A signed-up bot leaves its current group for a raid without ending its
+    /// groupmates' work or its own tour: the rest of the group carries on.
+    /// </summary>
+    public static bool DetachForRaid(GameBot bot)
+    {
+        if (bot?.Group == null) return true;
+        lock (Sync)
+        {
+            if (AutonomousRealmRaid.GetView(bot.Group) != null ||
+                AutonomousRvrEventLayer.IsForceCommitted(RvrForceId(bot), GameLoop.GameLoopTime))
+                return false;
+            TransferringMembers.Add(MemberKey(bot));
+            try { bot.Group.RemoveMember(bot); }
+            finally { TransferringMembers.Remove(MemberKey(bot)); }
+            return bot.Group == null;
+        }
+    }
+
+    /// <summary>Eight-person raid rosters with real roles from the signed-up, ungrouped bots.</summary>
+    public static GameBot[][] PlanSignedRaid(IEnumerable<GameBot> signedUp)
+    {
+        var candidates = signedUp.Where(b => AutonomousRealmRaid.IsEligible(b) && b.Group == null && b.IsAlive &&
+                b.PersistentRecord != null && b.CurrentRegion != null && !AutonomousRealmRaid.IsReserved(b))
+            .OrderBy(_ => Random.Shared.Next()).ToList();
+        var parties = new List<GameBot[]>();
+        while (candidates.Count >= 8 && parties.Sum(p => p.Length) + 8 <= RealmRaidRecruitmentPolicy.MaximumBots)
+        {
+            GameBot[] chosen = null;
+            foreach (GameBot leader in candidates.Take(8))
+                if (TryBuildPveRoster(leader, candidates.Where(b => b != leader).ToArray(), out var others, out _))
+                { chosen = new[] { leader }.Concat(others).ToArray(); break; }
+            if (chosen == null) break;
+            parties.Add(chosen);
+            foreach (var bot in chosen) candidates.Remove(bot);
+        }
+        if (candidates.Count >= 4 && parties.Sum(p => p.Length) + 4 <= RealmRaidRecruitmentPolicy.MaximumBots)
+            parties.Add(candidates.Take(4).ToArray());
+        return parties.ToArray();
+    }
 }
