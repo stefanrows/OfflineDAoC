@@ -6,6 +6,36 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+42. **Every player kill freezes the server for about 0.4-6 s (companion gear
+    rewards).** Reported on 0.89.0/0.91.0-dev by Aaron: "when several mobs die
+    at once it almost always lags". Evidence from the installed logs: 524 of
+    536 `Long ReaperService.Tick` warnings name the player as killer (today
+    min 415 ms, median 1.4 s, max 6.2 s); autonomous-bot kills barely appear.
+    Cause (code-read, timing split inferred): `AbstractServerRules.OnNpcKilled`
+    (line ~1092) calls `PlayerCompanionGearRewards.AwardPvePartyGear`, which
+    grants an item to **every** companion in the group. The chance is
+    `min(1, XP_RATE * 0.25)`, so at `xp_rate=10` it is 100 %: 7 companions =
+    7 items per kill. Each grant runs synchronously on the game loop inside
+    `ReaperService` under `DatabaseWriteLock` (shared with the 2 s bot
+    persistence flush) and writes an atomic transaction (INSERT ItemUnique,
+    INSERT Inventory, UPDATE player_companions). With full backpacks it also
+    sells surplus (DELETE Inventory, UPDATE DOLCharacters). `Pooling=False`
+    plus WAL makes each connection close checkpoint and fsync, which is slow on
+    Windows. Several simultaneous deaths queue behind each other.
+    Workaround: none short of fewer companions or a lower XP rate.
+    **Questions for Stefan (owner decision):**
+    - Is one item per companion per kill intended, and should the chance really
+      scale to 100 % with the XP rate?
+    - Aaron's proposal: a **loot pool per fight** instead of per-companion
+      rolls. The kill (or the whole pull) rolls once into a shared pool, and
+      the pool is handed out when the fight ends, e.g. to the companion who
+      benefits most. Fewer items, fairer spread, and the DB writes happen once
+      after combat instead of during it.
+    - Technical fix options regardless of the gameplay answer: (A) roll during
+      the kill but persist the grant off the game loop; (B) keep one SQLite
+      connection open (pooling) to stop checkpoint-per-close; (C) batch all
+      grants of one tick in one transaction.
+
 38. **Server unit tests fail in bulk depending on filter and order.** On 0.80.0, `dotnet test source/server/Tests/Tests.csproj -c Release --filter "FullyQualifiedName~Companion|FullyQualifiedName~Bomb|FullyQualifiedName~BotBrain|FullyQualifiedName~Style|FullyQualifiedName~Taunt|FullyQualifiedName~BotCombat|FullyQualifiedName~Tank"` fails 133 tests with `TypeInitializationException: The type initializer for 'DOL.GS.GameObject' threw` (inner NullReferenceException). Other filters pass or fail intermittently (19 tests), and `UT_BotWeaponStats` alone fails 4. Likely a test touches `GameObject` before any `EpicTestServerScope` exists, which poisons the type for the whole run. Impact: suite results depend on selection and order; product code unaffected. Not yet investigated.
 
 33. **Launcher BotGoalsSettings tests cannot construct the control.** On 0.76.0, `BotGoalsSettingsTests` fails in SetUp with `MissingMethodException: Constructor on type 'OfflineDaoc.Launcher.BotGoalsSettingsControl' not found` for LegacyFileExplainsMappingBeforeRewriting, MeasuredRecommendationAndPanelRenderWithoutLaunchingServer, MixTotalAndServerStateGateSaving and PresetAndWorldShapeSaveAndUndo. Reproduce with `tools/dev/winnet.sh test source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj -c Release`. Expected: the fixture creates the control with its current constructor. Impact: the population-settings tests do not run; the launcher itself is unaffected. Likely the test still reflects an older constructor signature; not yet investigated.
