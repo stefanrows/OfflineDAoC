@@ -100,6 +100,8 @@ namespace DOL.GS
         }
         public long Experience { get; private set; }
         public long AutonomousRealmPoints { get; private set; }
+        /// <summary>RvR realm points earned by a persistent player companion; saved additively in PlayerCompanionRecord.RealmPoints.</summary>
+        public long CompanionRealmPoints { get; private set; }
         public bool AutonomousStateDirty { get; private set; }
         public eAutonomousFidelity AutonomousFidelity { get; set; } = eAutonomousFidelity.Efficient;
         public bool IsOnStableMasterRoute { get; private set; }
@@ -1670,11 +1672,22 @@ namespace DOL.GS
 
         public void GainRealmPoints(long amount, bool modify)
         {
-            if (!IsAutonomousWorldBot || amount <= 0)
+            if (amount <= 0 || (!IsAutonomousWorldBot && !IsPersistentPlayerCompanion))
                 return;
-            AutonomousRealmPoints += amount;
-            AutonomousStuckWatchdog.MarkProgress(this, eAutonomousProgressKind.RealmPoints);
-            MarkAutonomousStateDirty();
+
+            if (IsAutonomousWorldBot)
+            {
+                AutonomousRealmPoints += amount;
+                AutonomousStuckWatchdog.MarkProgress(this, eAutonomousProgressKind.RealmPoints);
+                MarkAutonomousStateDirty();
+            }
+            else
+            {
+                // Persistent companions never earn PvP XP (see GainExperience), but
+                // earn RvR realm points through the same award path as autonomous bots.
+                CompanionRealmPoints += amount;
+                PlayerCompanionProgressPersistence.Queue(this);
+            }
         }
 
         public override void GainRealmPoints(long amount) => GainRealmPoints(amount, true);
@@ -2949,7 +2962,10 @@ namespace DOL.GS
             SortSpells();
             EquipBot(equipmentLevel);
             if (PlayerCompanionRecord != null)
+            {
                 Experience = Math.Max(0, PlayerCompanionRecord.Experience);
+                CompanionRealmPoints = Math.Max(0, PlayerCompanionRecord.RealmPoints);
+            }
 
             Health = MaxHealth;
             Endurance = MaxEndurance;

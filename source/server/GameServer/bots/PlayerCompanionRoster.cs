@@ -719,6 +719,25 @@ namespace DOL.GS
                 : new List<PlayerCompanionRecord>();
         }
 
+        /// <summary>Every companion currently active in the world, for /who and /send.</summary>
+        public static GameBot[] ActiveSnapshot() => ActiveCompanions.Values
+            .Where(companion => companion?.ObjectState == GameObject.eObjectState.Active)
+            .ToArray();
+
+        /// <summary>Finds any owner's active companion by exact name, for /send.</summary>
+        public static bool TryFindActiveByName(string name, out GameBot companion)
+        {
+            companion = null;
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+
+            string requestedName = name.Trim();
+            companion = ActiveCompanions.Values.FirstOrDefault(candidate =>
+                candidate?.ObjectState == GameObject.eObjectState.Active &&
+                string.Equals(candidate.Name, requestedName, StringComparison.OrdinalIgnoreCase));
+            return companion != null;
+        }
+
         public static bool TryGetActiveCompanion(GamePlayer owner, string nameOrId, out GameBot companion)
         {
             companion = null;
@@ -1151,12 +1170,28 @@ namespace DOL.GS
                     return false;
                 }
                 var reservedNames = new HashSet<string>(roster.Select(entry => entry.Name), StringComparer.OrdinalIgnoreCase);
+                // A new recruit's name must also stay clear of real characters and
+                // autonomous world bots (see AutonomousAltTrickle for the same check
+                // on a new world-bot alt). Existing companion records are untouched.
+                // Either table missing (e.g. a database connection without world-bot
+                // support) never blocks recruitment; it only narrows this check.
+                try
+                {
+                    foreach (string characterName in DOLDB<DbCoreCharacter>.SelectAllObjects().Select(character => character.Name))
+                        reservedNames.Add(characterName);
+                    foreach (string worldBotName in DOLDB<OfflineWorldBotRecord>.SelectAllObjects().Select(worldBot => worldBot.Name))
+                        reservedNames.Add(worldBotName);
+                }
+                catch (Exception exception)
+                {
+                    Log.Warn($"Could not check real characters and world bots for a name collision before recruiting: {exception.Message}");
+                }
                 if (authored == null)
                     foreach (CompanionCharacterCatalog.Character character in CompanionCharacterCatalog.All)
                         reservedNames.Add(character.Name);
                 else if (reservedNames.Contains(authored.Name))
                 {
-                    message = $"A companion with the name {authored.Name} is already in your roster.";
+                    message = $"The name {authored.Name} is already in use by a character, a world bot, or your roster.";
                     return false;
                 }
                 AutonomousBotIdentityGenerator.Identity identity;
@@ -1642,6 +1677,7 @@ namespace DOL.GS
         {
             record.Level = Math.Clamp((int)companion.Level, 1, 50);
             record.Experience = Math.Max(0, companion.Experience);
+            record.RealmPoints = Math.Max(0, companion.CompanionRealmPoints);
             record.SerializedSpecs = string.Join(';', companion.GetSpecList()
                 .Where(spec => spec.Trainable).Select(spec => $"{spec.KeyName}|{spec.Level}"));
             record.SerializedBuildPlan = companion.BotSpec == null ? string.Empty : BotLifetimeBuild.Encode(companion.BotSpec);

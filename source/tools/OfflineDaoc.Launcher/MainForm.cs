@@ -2220,6 +2220,32 @@ internal sealed partial class MainForm : Form
             }
         }
 
+        // Persistent player companions (the current `/companions` roster), with
+        // their real saved Realm Points and owner name where those are available.
+        // Additive columns/tables are optional so an older save still loads.
+        if (TableExists(connection, "player_companions"))
+        {
+            bool hasRealmPoints = ColumnExists(connection, "player_companions", "RealmPoints");
+            string realmPointsColumn = hasRealmPoints ? "COALESCE(pc.RealmPoints, 0)" : "0";
+            string ownerNameColumn = TableExists(connection, "DOLCharacters")
+                ? "COALESCE((SELECT c.Name FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId), '')"
+                : "''";
+            using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT pc.Name, pc.Realm, pc.ClassId, pc.Level, pc.IsActive, {realmPointsColumn}, {ownerNameColumn} FROM player_companions pc ORDER BY pc.Name";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var classInfo = ClassInfo(reader.GetInt32(2));
+                string ownerName = reader.GetString(6);
+                string zoneName = ownerName.Length == 0 ? "With owner" : $"With {ownerName}";
+                bots.Add(new BotRow(null, reader.GetString(0), RealmName(reader.GetInt32(1)), "—", "—", classInfo.Name, reader.GetInt32(3), zoneName, "Companion", running && reader.GetBoolean(4), false, false, string.Empty, string.Empty, string.Empty, string.Empty,
+                    string.Empty, string.Empty, string.Empty, string.Empty)
+                {
+                    RealmPoints = reader.GetInt64(5),
+                });
+            }
+        }
+
         active = bots.Count(bot => bot.IsOnline);
         List<GroupRow> groups = bots
             .Where(bot => bot.IsOnline && !bot.DeletionQueued && bot.GroupId.Length > 0)

@@ -116,6 +116,7 @@ public static class AutonomousBotRealmPointRewards
 
         Dictionary<GamePlayer, EntityCountTotalDamagePair> playerContributions = new();
         Dictionary<GameBot, EntityCountTotalDamagePair> botContributions = new();
+        Dictionary<GameBot, EntityCountTotalDamagePair> companionContributions = new();
         Dictionary<Group, EntityCountTotalDamagePair> groupContributions = new();
 
         foreach (KeyValuePair<GameLiving, double> pair in hostileContributors)
@@ -125,15 +126,26 @@ public static class AutonomousBotRealmPointRewards
             // players. Temporary companions have already resolved to the owner.
             if (pair.Key is GameBot bot)
             {
-                if (!bot.IsAutonomousWorldBot || bot.IsTemporaryGroupHelper ||
-                    bot.ObjectState is not GameObject.eObjectState.Active ||
+                if (bot.ObjectState is not GameObject.eObjectState.Active ||
                     !bot.IsWithinRadius(killedBot, WorldMgr.MAX_EXPFORKILL_DISTANCE) ||
                     bot.IsObjectGreyCon(killedBot))
                     continue;
 
-                AddContribution(bot, pair.Value, bot, botContributions);
-                if (bot.Group != null)
-                    AddContribution(bot, pair.Value, bot.Group, groupContributions);
+                if (bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper)
+                {
+                    AddContribution(bot, pair.Value, bot, botContributions);
+                    if (bot.Group != null)
+                        AddContribution(bot, pair.Value, bot.Group, groupContributions);
+                }
+                // Persistent companions earn realm points the same way, but never
+                // become the killed bot's loot owner (they stay out of
+                // botContributions / DropPlayerKillLoot below).
+                else if (bot.IsPersistentPlayerCompanion)
+                {
+                    AddContribution(bot, pair.Value, bot, companionContributions);
+                    if (bot.Group != null)
+                        AddContribution(bot, pair.Value, bot.Group, groupContributions);
+                }
                 continue;
             }
 
@@ -150,7 +162,7 @@ public static class AutonomousBotRealmPointRewards
                 AddContribution(player, pair.Value, player.Group, groupContributions);
         }
 
-        if (playerContributions.Count == 0 && botContributions.Count == 0)
+        if (playerContributions.Count == 0 && botContributions.Count == 0 && companionContributions.Count == 0)
             return false;
 
         GameLiving creditedKiller = ResolveRootRewardOwner(killer as GameLiving);
@@ -227,6 +239,30 @@ public static class AutonomousBotRealmPointRewards
                 totalDamage, damagePercent);
             if (experience > 0)
                 bot.GainExperience(eXPSource.Player, experience, true);
+        }
+
+        // Same reward formula and GainRealmPoints path as autonomous bots above,
+        // minus PvP experience (companions stay XP-neutral in PvP; see
+        // GameBot.GainExperience) and minus any loot-owner eligibility.
+        foreach (KeyValuePair<GameBot, EntityCountTotalDamagePair> pair in companionContributions)
+        {
+            GameBot companion = pair.Key;
+            EntityCountTotalDamagePair contribution = pair.Value;
+            if (companion.Group != null && groupContributions.TryGetValue(companion.Group, out EntityCountTotalDamagePair group))
+                contribution = group;
+
+            double damagePercent = Math.Min(1.0, contribution.Damage / totalDamage);
+            if (!isWorthRealmPoints)
+                continue;
+
+            int contributorCount = Math.Max(1, contribution.Count);
+            int companionVictimValue = GetPlayerEquivalentRealmPointValue(killedBot.Level, killedBot.RealmLevel);
+            int companionValue = GetPlayerEquivalentRealmPointValue(companion.Level, companion.RealmLevel);
+            int realmPoints = CalculateRealmPointReward(companionVictimValue, killedBot.RealmLevel,
+                companionValue, companion.RealmLevel, contributorCount, contributorCount, damagePercent, true,
+                killedBot.Level, companion.Level);
+            if (realmPoints > 0)
+                companion.GainRealmPoints(realmPoints, true);
         }
 
         return isWorthRealmPoints;

@@ -47,6 +47,13 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false)]
         public long Experience { get; set; }
 
+        // Additive: RvR realm points earned by this companion, awarded the same
+        // way autonomous bots earn them. Existing records default to zero;
+        // no migration rewrites earlier saves. Temporary /spawn helpers never
+        // reach this table.
+        [DataElement(AllowDbNull = false)]
+        public long RealmPoints { get; set; }
+
         [DataElement(AllowDbNull = false)]
         public string SerializedSpecs { get; set; } = string.Empty;
 

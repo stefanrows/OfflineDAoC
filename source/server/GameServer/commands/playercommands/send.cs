@@ -36,6 +36,13 @@ namespace DOL.GS.Commands
 
             if (targetPlayer == null)
             {
+                if (PlayerCompanionRoster.TryFindActiveByName(targetName, out GameBot companion) &&
+                    companion.Owner != null && GameServer.ServerRules.IsAllowedToUnderstand(client.Player, companion.Owner))
+                {
+                    DeliverCompanionMessage(client, companion, message);
+                    return;
+                }
+
                 // Message: "{0} is not in the game, or is a member of another realm."
                 ChatUtil.SendSystemMessage(client, "Social.SendMessage.Err.OfflineOtherRealm", nameToDisplay);
                 return;
@@ -89,6 +96,22 @@ namespace DOL.GS.Commands
                     return;
                 }
             }
+        }
+
+        // A companion is not a real client: the owner gets a system line and the
+        // sender gets a short in-character reply instead of a normal /send.
+        private static void DeliverCompanionMessage(GameClient client, GameBot companion, string message)
+        {
+            GamePlayer owner = companion.Owner;
+            if (owner?.Client != null)
+            {
+                ChatUtil.SendSystemMessage(owner, $"{companion.Name} (your companion) received: {message}");
+            }
+
+            string reply = companion.IsPersistentPlayerCompanion
+                ? CompanionPersonality.Dialogue(companion.PlayerCompanionRecord, "send")
+                : $"{companion.Name}: is busy following {owner?.Name ?? "its owner"}.";
+            ChatUtil.SendSendMessage(client, reply);
         }
     }
 }

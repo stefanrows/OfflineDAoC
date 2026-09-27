@@ -166,4 +166,42 @@ public class UT_AutonomousBotRealmPointRewards
         Assert.That(AutonomousBotRealmPointRewards.IsEligibleVictim(companion), Is.False);
         Assert.That(AutonomousBotRealmPointRewards.IsEligibleVictim(pet), Is.False);
     }
+
+    private static RewardBot PersistentCompanion()
+    {
+        RewardBot companion = Bot(false, false);
+        SetField(typeof(GameBot), companion, "<PlayerCompanionRecord>k__BackingField",
+            new PlayerCompanionRecord { CompanionId = string.Empty });
+        return companion;
+    }
+
+    [Test]
+    public void GainRealmPointsCreditsAutonomousBotsAndPersistentCompanionsOnly()
+    {
+        RewardBot autonomous = Bot(true, false);
+        autonomous.GainRealmPoints(50, true);
+        Assert.That(autonomous.AutonomousRealmPoints, Is.EqualTo(50));
+
+        RewardBot companion = PersistentCompanion();
+        Assert.That(companion.IsPersistentPlayerCompanion, Is.True,
+            "the reflection-set PlayerCompanionRecord must make this a persistent companion");
+        companion.GainRealmPoints(30, true);
+        Assert.That(companion.CompanionRealmPoints, Is.EqualTo(30));
+        Assert.That(companion.AutonomousRealmPoints, Is.Zero,
+            "a companion's realm points are tracked separately from autonomous bots'");
+
+        RewardBot temporaryHelper = Bot(false, true);
+        temporaryHelper.GainRealmPoints(30, true);
+        Assert.That(temporaryHelper.CompanionRealmPoints, Is.Zero, "/spawn helpers never earn realm points");
+        Assert.That(temporaryHelper.AutonomousRealmPoints, Is.Zero);
+
+        RewardBot neither = Bot(false, false);
+        neither.GainRealmPoints(30, true);
+        Assert.That(neither.CompanionRealmPoints, Is.Zero);
+        Assert.That(neither.AutonomousRealmPoints, Is.Zero);
+
+        companion.GainRealmPoints(0, true);
+        companion.GainRealmPoints(-5, true);
+        Assert.That(companion.CompanionRealmPoints, Is.EqualTo(30), "zero or negative amounts are never credited");
+    }
 }

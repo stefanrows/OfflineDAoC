@@ -45,8 +45,13 @@ namespace DOL.GS.Commands
 			ArrayList filters = null;
 			ArrayList clientsList = new ArrayList();
 			ArrayList resultMessages = new ArrayList();
-			GameBot[] worldBots = AutonomousBotRegistry.Snapshot()
-				.Where(bot => bot?.IsAutonomousWorldBot == true && !bot.IsTemporaryGroupHelper &&
+			// Persistent player companions are listed alongside autonomous world
+			// bots (same fields, filters and realm rules); temporary /spawn
+			// helpers never appear here.
+			GameBot[] listedBots = AutonomousBotRegistry.Snapshot()
+				.Concat(PlayerCompanionRoster.ActiveSnapshot())
+				.Where(bot => bot != null && !bot.IsTemporaryGroupHelper &&
+					(bot.IsAutonomousWorldBot || bot.IsPersistentPlayerCompanion) &&
 					bot.ObjectState == GameObject.eObjectState.Active &&
 					(client.Account.PrivLevel > (uint)ePrivLevel.Player ||
 					 GameServer.ServerRules.IsSameRealm(client.Player, bot, true)))
@@ -74,7 +79,7 @@ namespace DOL.GS.Commands
 			// no params
 			if (args.Length == 1)
 			{
-				int playing = clientsList.Count + worldBots.Length;
+				int playing = clientsList.Count + listedBots.Length;
 
 				// including anon?
 				DisplayMessage(client, string.Format(MESSAGE_PLAYERS_ONLINE, playing, playing > 1 ? "s" : ""));
@@ -178,7 +183,7 @@ namespace DOL.GS.Commands
 				}
 			}
 
-			foreach (GameBot bot in worldBots)
+			foreach (GameBot bot in listedBots)
 			{
 				if (!ApplyBotFilter(args, bot))
 					continue;

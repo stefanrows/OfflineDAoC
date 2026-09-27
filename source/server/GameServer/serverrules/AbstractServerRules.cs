@@ -2044,10 +2044,11 @@ namespace DOL.GS.ServerRules
                 out double totalDamage,
                 out Dictionary<GamePlayer, EntityCountTotalDamagePair> playerCountAndDamage,
                 out Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage,
+                out Dictionary<GameBot, EntityCountTotalDamagePair> companionCountAndDamage,
                 out Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
                 out _);
 
-            if (playerCountAndDamage.Count == 0 && botCountAndDamage.Count == 0)
+            if (playerCountAndDamage.Count == 0 && botCountAndDamage.Count == 0 && companionCountAndDamage.Count == 0)
             {
                 if (IsWorthPlayerKillRewards(killedPlayer))
                     PlayerCompanionGearRewards.AwardPvpPartyGear(killedPlayer);
@@ -2077,6 +2078,13 @@ namespace DOL.GS.ServerRules
                 AwardBotOnPlayerKill(pair.Key, killer, totalDamage, killedPlayer,
                     botCountAndDamage, groupCountAndDamage, out isWorthAnything);
 
+            // Persistent companions earn realm points through the same award
+            // path as autonomous bots (RP only; PvP XP remains disabled for
+            // companions in GainExperience).
+            foreach (var pair in companionCountAndDamage)
+                AwardCompanionRealmPointsOnPlayerKill(pair.Key, totalDamage, killedPlayer,
+                    companionCountAndDamage, groupCountAndDamage, out isWorthAnything);
+
             killedPlayer.DeathsPvP++;
 
             if (isWorthAnything)
@@ -2086,6 +2094,7 @@ namespace DOL.GS.ServerRules
                 out double totalDamage,
                 out Dictionary<GamePlayer, EntityCountTotalDamagePair> playerCountAndDamage,
                 out Dictionary<GameBot, EntityCountTotalDamagePair> botCountAndDamage,
+                out Dictionary<GameBot, EntityCountTotalDamagePair> companionCountAndDamage,
                 out Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
                 out ItemOwnerTotalDamagePair mostDamagingGroup)
             {
@@ -2093,6 +2102,7 @@ namespace DOL.GS.ServerRules
 
                 playerCountAndDamage = new();
                 botCountAndDamage = new();
+                companionCountAndDamage = new();
 
                 groupCountAndDamage = null;
                 mostDamagingGroup = null;
@@ -2112,6 +2122,8 @@ namespace DOL.GS.ServerRules
                         AddContribution(player, pair.Value, player, playerCountAndDamage);
                     else if (combatant is GameBot bot && bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper)
                         AddContribution(bot, pair.Value, bot, botCountAndDamage);
+                    else if (combatant is GameBot companion && companion.IsPersistentPlayerCompanion)
+                        AddContribution(companion, pair.Value, companion, companionCountAndDamage);
                     else
                         continue;
 
@@ -2270,6 +2282,52 @@ namespace DOL.GS.ServerRules
 
             if (realmPoints > 0)
                 botToAward.GainRealmPoints(realmPoints, true);
+        }
+
+        // Persistent companions use this same formula and GainRealmPoints path
+        // as autonomous world bots (see AwardBotOnPlayerKill above), but never
+        // receive PvP experience or become a PvP kill's loot owner.
+        private static void AwardCompanionRealmPointsOnPlayerKill(GameBot companion,
+            double playerTotalDamageReceived,
+            GamePlayer killedPlayer,
+            Dictionary<GameBot, EntityCountTotalDamagePair> companionCountAndDamage,
+            Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
+            out bool isWorthAnything)
+        {
+            isWorthAnything = false;
+            if (companion?.IsPersistentPlayerCompanion != true || playerTotalDamageReceived <= 0)
+                return;
+
+            EntityCountTotalDamagePair contribution;
+            if (companion.Group != null)
+            {
+                if (groupCountAndDamage == null ||
+                    !groupCountAndDamage.TryGetValue(companion.Group, out contribution))
+                    return;
+            }
+            else if (!companionCountAndDamage.TryGetValue(companion, out contribution))
+            {
+                return;
+            }
+
+            isWorthAnything = IsWorthPlayerKillRewards(killedPlayer);
+            if (!isWorthAnything)
+                return;
+
+            double damagePercent = Math.Min(1.0, contribution.Damage / playerTotalDamageReceived);
+            int contributorCount = Math.Max(1, contribution.Count);
+
+            int companionRealmPointValue = AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(
+                companion.Level, companion.RealmLevel);
+            DbBattleground battleground = GameServer.KeepManager.GetBattleground(companion.CurrentRegionID);
+            int realmPoints = AutonomousBotRealmPointRewards.CalculateRealmPointReward(
+                killedPlayer.RealmPointsValue, killedPlayer.RealmLevel, companionRealmPointValue,
+                companion.RealmLevel, contributorCount, companion.Group == null ? 1 : contributorCount,
+                damagePercent, battleground == null || companion.RealmLevel < battleground.MaxRealmLevel,
+                killedPlayer.Level, companion.Level);
+
+            if (realmPoints > 0)
+                companion.GainRealmPoints(realmPoints, true);
         }
 
         private static void AwardPlayerOnPlayerKill(GamePlayer playerToAward,

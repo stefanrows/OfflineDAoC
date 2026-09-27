@@ -177,8 +177,10 @@ companion can also receive a separate damage-based NPC award when its eligible
 owner has no player damage share. Companion and controlled-pet damage stays out
 of player damage percentages, group divisors, and loot-owner selection. The
 companion's XP is clipped at the owner's current absolute XP total, preserving
-any higher saved companion XP. Only NPC kill rewards are accepted, so companion
-PvP XP and realm points remain disabled.
+any higher saved companion XP. Only NPC kill rewards are accepted for
+companion XP, so a companion still gains no XP from a PvP kill. RvR Realm
+Points are a separate, additive reward: see
+[PvP kill rewards for persistent companions](#pvp-kill-rewards-for-persistent-companions).
 
 The `/companions train` command accepts only a specialization from the
 companion's class career and applies normal point costs and level limits. It
@@ -221,23 +223,31 @@ for source status and real-client acceptance.
 
 ## PvP kill rewards for persistent companions
 
-Persistent `/companions` members receive neither XP nor Realm Points from a
-PvP kill, even if they are grouped with the player, deal damage, or land the
-killing blow. This applies to both human and autonomous-bot victims. The PvP
-reward paths accept human players and autonomous world bots as recipients;
-`GameBot.GainExperience` accepts a persistent companion's NPC rewards only,
-and `GameBot.GainRealmPoints` accepts autonomous world bots only.
+Persistent `/companions` members still receive no XP from a PvP kill, even
+if they are grouped with the player, deal damage, or land the killing blow.
+`GameBot.GainExperience` accepts a persistent companion's NPC rewards only;
+a companion's `eXPSource.Player` award from the paths below is always a
+no-op. Persistent companions do earn Realm Points from a PvP kill, through
+the same `GameBot.GainRealmPoints` path, reward formula and repeat-kill
+window used for autonomous world bots, against both human and
+autonomous-bot victims. A companion's realm rank is derived the same way an
+autonomous bot's is (not tracked separately), and a companion never becomes
+a PvP kill's loot owner; its personal gear still comes only from
+`PlayerCompanionGearRewards`. Temporary `/spawn` helpers remain excluded
+from both PvP XP and Realm Points.
 
 The owner can earn PvP XP and Realm Points from qualifying personal damage or
 damage by a controlled pet credited to that player. Damage dealt by a
 persistent companion stays in the encounter's damage total but is not
-transferred to the owner as kill credit. Consequently, a companion's damage
-can reduce the owner's percentage of a shared PvP reward. Group membership
+transferred to the owner as kill credit; the companion earns its own Realm
+Points (saved additively in `PlayerCompanionRecord.RealmPoints`) instead.
+Consequently, a companion's damage can reduce the owner's percentage of a
+shared PvP reward while the companion earns its own share. Group membership
 alone does not award PvP progression to a companion or to an owner who has no
 credited contribution. A player can therefore level from PvP kills while
-companions retain their levels until they earn eligible PvE XP. Individual
-reward amounts still depend on victim eligibility, level, damage share, caps,
-and the configured XP and Realm Point rates.
+companions retain their levels until they earn eligible PvE XP or a PvP kill
+they contributed damage to. Individual reward amounts still depend on victim
+eligibility, level, damage share, caps, and the configured Realm Point rate.
 
 ## Personal gear and inventory
 
