@@ -211,3 +211,30 @@ public sealed class UT_AutonomousRvrHotspots
         Assert.That(AutonomousRvrHotspots.Weight(null), Is.EqualTo(1.0));
     }
 }
+
+[TestFixture]
+public sealed class UT_AutonomousRvrLfg
+{
+    [TestCase(eCharacterClass.Healer, AutonomousPlayerType.Roamer, 50, true)]
+    [TestCase(eCharacterClass.Warrior, AutonomousPlayerType.KeepWarrior, 50, true)]
+    [TestCase(eCharacterClass.Shadowblade, AutonomousPlayerType.Roamer, 50, false)]
+    [TestCase(eCharacterClass.Hunter, AutonomousPlayerType.Roamer, 50, false)]
+    [TestCase(eCharacterClass.Healer, AutonomousPlayerType.Hunter, 50, false)]
+    [TestCase(eCharacterClass.Healer, AutonomousPlayerType.Roamer, 15, false)]
+    public void GroupSeekersWaitAtTheKeepSoloistsLeave(eCharacterClass characterClass, AutonomousPlayerType type,
+        int level, bool seeks)
+    {
+        Assert.That(AutonomousRvrLfg.SeeksGroup(characterClass, type, level), Is.EqualTo(seeks));
+    }
+
+    [Test]
+    public void PatienceDecidesTheWaitAndAPartialDeathIsNoWipe()
+    {
+        Assert.That(AutonomousRvrLfg.PatienceMilliseconds(0), Is.EqualTo(8 * 60_000));
+        Assert.That(AutonomousRvrLfg.PatienceMilliseconds(100), Is.EqualTo(20 * 60_000));
+        Assert.That(AutonomousRvrLfg.IsWipe(6, 8, true), Is.False, "Two dead: fight on, rez later.");
+        Assert.That(AutonomousRvrLfg.IsWipe(3, 8, true), Is.False, "A living rezzer can bring them back.");
+        Assert.That(AutonomousRvrLfg.IsWipe(3, 8, false), Is.True, "Most dead and nobody to rez.");
+        Assert.That(AutonomousRvrLfg.IsWipe(1, 8, true), Is.True);
+    }
+}

@@ -1019,7 +1019,9 @@ namespace DOL.GS
                     AutonomousGuildEncounterMemory.RecordDeath(this, killer, WorldSimulationClock.UtcNow);
                 // Only PvP-minded actors hit the "losing" wall. A leveler who is
                 // ganked stays a leveler; its PvE task is not a PvP retreat.
-                if (_lastDeathWasPvp &&
+                // Dying with a real group is part of RvR, not a reason to quit it.
+                bool inRvrGroup = Group?.MemberCount >= 3 && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR);
+                if (_lastDeathWasPvp && !inRvrGroup &&
                     AutonomousActivityScheduler.CountsPvpDeathTowardWall(PersistentRecord,
                         AutonomousObjectiveAssignments.KindFor(this)) &&
                     AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, WorldSimulationClock.UtcNow) &&
@@ -1069,7 +1071,9 @@ namespace DOL.GS
             if (groupDisposition == AutonomousBotGroupCoordinator.PveCorpseDisposition.HoldForResurrection)
                 return 3000;
             bool resurrectionPossible = HasViableResurrector();
-            long releaseDelay = resurrectionPossible ? 90_000 : 20_000;
+            // An RvR group finishes its fight before rezzing; its dead wait longer.
+            long releaseDelay = !resurrectionPossible ? 20_000 :
+                AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR) ? 180_000 : 90_000;
             if (groupDisposition is not (AutonomousBotGroupCoordinator.PveCorpseDisposition.ReleaseAndDisband or
                 AutonomousBotGroupCoordinator.PveCorpseDisposition.ReleaseAndRejoin) &&
                 deadFor < releaseDelay)

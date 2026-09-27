@@ -12,6 +12,40 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.101.0] - 2026-09-27
+
+### Added
+
+- RvR bots who want a group (healers, casters, tanks; not stealthers,
+  archers or Hunter-type players) wait at their realm's border keep with LFG
+  for 8-20 minutes by patience, idle and out of combat, where guild leaders
+  can recruit them; then they go out alone.
+
+### Changed
+
+- Roamer and keep-warrior leaders leave with a viable group: eight when
+  available, four after three minutes, three after eight, instead of waiting
+  ten minutes for six. Guildmates happy in groups of four or more fill open
+  slots of bigger groups.
+- A partial death no longer sends an RvR group back to regroup: the living
+  finish the fight and rez afterwards, and the dead wait up to three minutes
+  while a rezzer lives. Only a wipe (one survivor, or most dead with no
+  rezzer) regroups, now at the realm's border keep instead of a town.
+- PvP deaths inside an RvR group of three or more no longer count toward the
+  three-deaths "take a break" rule that pulled bots out of their group.
+
+### Fixed
+
+- Bots now get the spells of their trained specialization level. Every bot
+  spec line was capped at 75 % of the character level (38 at level 50), so
+  a Battlesongs 46 Skald sang speed 4 (Magnificent Song of Travel) instead
+  of speed 5 (Heavenly Song of Travel), and every hybrid and caster missed
+  its top spec spells. Untrained lines keep the old fallback.
+
+### Removed
+
+- None.
+
 ## [0.100.0] - 2026-09-27
 
 ### Added

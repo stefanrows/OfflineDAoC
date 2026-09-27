@@ -1358,7 +1358,8 @@ public static partial class AutonomousBotGroupCoordinator
                                      AutonomousObjectiveAssignments.Is(candidate, objectiveKind) &&
                                      (objectiveKind == eAutonomousObjectiveKind.GroupPve ||
                                       AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
-                                      RecruitmentTarget(candidate, objectiveKind) >= largestAllowed) &&
+                                      // Anyone content in a group of four or more fills an open slot.
+                                      RecruitmentTarget(candidate, objectiveKind) >= Math.Min(largestAllowed, 4)) &&
                                      LevelsCompatible(leader.Level, candidate.Level))
                 .ToArray();
             GameBot[] compatiblePool;
@@ -2010,7 +2011,12 @@ public static partial class AutonomousBotGroupCoordinator
                 Log.Info($"AUTONOMOUS_GROUP_RESURRECTION_SUCCEEDED group={session.Id}");
             }
         }
-        if (session.Recovery.Observe(RecoveryMembers(session, members, false), session.TaskClock.HasStarted))
+        // RvR: a partial death is fought through and rezzed afterwards; only a
+        // wipe sends the group back to regroup.
+        bool regroupWorthy = session.ObjectiveKind != eAutonomousObjectiveKind.RvR ||
+            AutonomousRvrLfg.IsWipe(members.Count(member => member.IsAlive), members.Length,
+                members.Any(member => member.IsAlive && member.ResurrectionSpell != null));
+        if (session.Recovery.Observe(RecoveryMembers(session, members, false), session.TaskClock.HasStarted && regroupWorthy))
         {
             session.ReturningFromDeath.Clear();
             session.WipePenalty = session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve
@@ -2486,10 +2492,30 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (session.RecoveryRendezvousChosen) return;
         session.RecoveryRendezvousChosen = true;
-        // RvR regrouping returns to the same validated safe border keep used
-        // for initial assembly. It must never drift to a random town or bind.
+        // RvR regrouping after a wipe happens where players released to: the
+        // realm's border keep. Keep the original point only if that fails.
         if (session.ObjectiveKind == eAutonomousObjectiveKind.RvR)
+        {
+            if (AutonomousRvrStaging.TryGetBorderKeep(realm, out AutonomousRvrStaging.BorderKeep border))
+            {
+                ushort borderPreviousRegion = session.RendezvousRegion;
+                Vector3 borderPreviousPoint = session.Rendezvous;
+                foreach (Vector3 anchor in AutonomousRvrStaging.CandidateAnchors(border).Take(6))
+                {
+                    Zone zone = WorldMgr.GetRegion(border.RegionId)?.GetZone((int)anchor.X, (int)anchor.Y);
+                    if (!AutonomousRendezvousNavigation.TryChoosePoint(PathfindingProvider.Instance, zone, anchor,
+                            out Vector3 borderPoint)) continue;
+                    session.RendezvousRegion = border.RegionId;
+                    session.Rendezvous = borderPoint;
+                    if (TryBuildRendezvousSlots(session, BotMembers(session.Group)))
+                        return;
+                }
+                session.RendezvousRegion = borderPreviousRegion;
+                session.Rendezvous = borderPreviousPoint;
+                TryBuildRendezvousSlots(session, BotMembers(session.Group));
+            }
             return;
+        }
         // Search once per party in its original assembly region, never at the
         // death site. Reuse this point after later casualties; normal routes,
         // stable tickets and region crossings still perform all travel.

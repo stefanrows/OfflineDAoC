@@ -8,6 +8,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+45. **Bots never got their top spec spells (Skald stuck on speed 4).**
+    Reported by Aaron on 0.99.0: the buff bar showed Magnificent Song of
+    Travel (speed 4) although Freunborg has Battlesongs 46. Cause:
+    `Specialization.GetSpellLinesForLiving` capped every bot spec line at
+    75 % of the character level (38 at level 50), ignoring the trained spec,
+    so Heavenly Song of Travel (43) and every higher spec spell never entered
+    any bot's spell list. Fixed in source 0.101.0: bots use their trained spec
+    level; untrained lines keep the fallback. Real-client check pending:
+    Heavenly Song of Travel in the buff bar.
+
 44. **Companion inventory window jumps back to the top after taking an item.**
     Reported by Aaron on 0.96.0: after dragging an item out of a companion's
     **[Open inventory]** window, the window scrolls to the top, so taking

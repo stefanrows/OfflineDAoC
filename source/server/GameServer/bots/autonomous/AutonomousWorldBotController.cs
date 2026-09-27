@@ -178,6 +178,8 @@ namespace DOL.GS
                     _nextPorterSearch = 0;
                     _soloRvrBorderStaged = false;
                     _soloRvrStagingPoint = null;
+                    _rvrLfgStartedTick = 0;
+                    _rvrLfgGaveUp = false;
                     _campStartedTick = 0;
                     _soloCampStableRides = 0;
                     _walkToCampAfterRelease = false;
@@ -1415,6 +1417,14 @@ namespace DOL.GS
                     return true;
                 }
             }
+            if (bot.Group != null)
+            {
+                // After this group ends, look for the next one at the keep again.
+                _rvrLfgStartedTick = 0;
+                _rvrLfgGaveUp = false;
+            }
+            else if (TryWaitForRvrGroup(brain, bot))
+                return true;
             bool dynamicWarband = _groupDirective?.IsDynamic == true &&
                                   _groupDirective.ObjectiveKind == eAutonomousObjectiveKind.RvR;
             string forceId = dynamicWarband ? _groupDirective.GroupId : $"rvr-{bot.DatabaseID}";
@@ -2454,6 +2464,72 @@ namespace DOL.GS
         private static bool IsKeepOrKeepPatrolDestination(CampDestination destination) =>
             destination != null && (destination.Id.StartsWith("rvr-keep-", StringComparison.Ordinal) ||
                                     destination.Id.StartsWith("rvr-roam-", StringComparison.Ordinal));
+
+        private long _rvrLfgStartedTick;
+        private bool _rvrLfgGaveUp;
+
+        /// <summary>
+        /// A group-seeking bot waits at its realm's border keep, idle and out of
+        /// combat, so guild leaders there can recruit it; after its patience it
+        /// goes out alone. Soloist classes and types never wait.
+        /// </summary>
+        private bool TryWaitForRvrGroup(BotBrain brain, GameBot bot)
+        {
+            if (_rvrLfgGaveUp || bot.CharacterClass == null ||
+                !AutonomousRvrLfg.SeeksGroup((eCharacterClass)bot.CharacterClass.ID,
+                    AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord), bot.Level))
+                return false;
+            long now = GameLoop.GameLoopTime;
+            if (_rvrLfgStartedTick == 0)
+                _rvrLfgStartedTick = now;
+            if (now - _rvrLfgStartedTick > AutonomousRvrLfg.PatienceMilliseconds(bot.PersistentRecord?.Patience ?? 50))
+            {
+                _rvrLfgGaveUp = true;
+                SetRvrStatus(bot, "Going out alone", "Roam the frontier", "Nobody picked this bot up at the border keep");
+                return false;
+            }
+            if (!AutonomousRvrStaging.TryGetBorderKeep(bot.Realm, out AutonomousRvrStaging.BorderKeep keep))
+                return false;
+
+            Vector3 destination;
+            if (_soloRvrStagingPoint.HasValue)
+                destination = _soloRvrStagingPoint.Value;
+            else if (TryResolveRvrBorderStaging(keep, out destination, bot.DatabaseID))
+                _soloRvrStagingPoint = destination;
+            else
+                return false;
+
+            if (bot.CurrentRegionID == keep.RegionId &&
+                Distance(bot.X, bot.Y, (int)destination.X, (int)destination.Y) <= 650)
+            {
+                bot.StopMovingOnPath();
+                bot.StopMoving();
+                if (!AutonomousRestPolicy.IsFullyRecovered(bot.HealthPercent, bot.ManaPercent, bot.EndurancePercent,
+                        bot.MaxMana > 0) && !BotRestRecovery.BlocksRest(bot))
+                    bot.BeginRecoveryRest();
+                SetRvrStatus(bot, $"LFG at {keep.Name}", "Join a guild warband before heading out",
+                    "Waiting at the border keep for a group");
+                return true;
+            }
+
+            if (bot.CurrentRegionID != keep.RegionId)
+            {
+                CampDestination previous = _camp;
+                _camp = new($"rvr-lfg-{bot.Realm}", keep.Name, keep.Name, keep.RegionId,
+                    (int)destination.X, (int)destination.Y, (int)destination.Z, 0, false, false);
+                bool moving = TravelAcrossRegions(bot);
+                _camp = previous;
+                SetRvrStatus(bot, $"Heading to {keep.Name} to find a group", "Join a guild warband before heading out",
+                    "Travelling to the realm border keep");
+                return moving;
+            }
+
+            if (!TryBeginFasterStableRoute(bot, destination, keep.Name))
+                IssuePath(bot, destination);
+            SetRvrStatus(bot, $"Heading to {keep.Name} to find a group", "Join a guild warband before heading out",
+                "Walking to the border keep");
+            return true;
+        }
 
         private bool StageSoloRvrAtBorderKeep(GameBot bot)
         {

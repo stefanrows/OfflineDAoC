@@ -70,6 +70,19 @@ one healer means picking on solos and duos and retreating at the first add.
   clump for bomb groups, loose for stealthers); melee on the edges, healers in
   the middle, casters behind.
 
+## Forming up, dying, regrouping
+
+- **Form-up:** group seekers wait at their realm's border keep (the portal
+  keep of 2003, also bind and safe hub) with LFG; guild leaders there recruit
+  them. A group leaves when it is viable (eight, or four after three minutes,
+  three after eight). Soloist classes leave at once. Impatient bots give up
+  after 8-20 minutes and go out alone.
+- **A few die:** the living finish the fight; healers rez out of combat; the
+  dead wait up to three minutes while a rezzer lives.
+- **Wipe:** one survivor, or most dead with no rezzer: release, regroup at the
+  border keep, recover, go again.
+- **Deaths inside a group** do not end a bot's RvR tour.
+
 ## Camlann and guilds
 
 Guildmates in the area help each other when attacked. Guild grudges (already

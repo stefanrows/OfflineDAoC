@@ -40,14 +40,19 @@ public sealed class UT_AutonomousPlayerBehavior
         {
             Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.Hunter, 40,
                 8, .8, TimeSpan.FromMinutes(20)), Is.EqualTo(4));
+            // 0.101.0: a viable group of four leaves after three minutes.
             Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.Roamer, 40,
-                7, .8, TimeSpan.FromMinutes(5)), Is.EqualTo(1));
+                7, .8, TimeSpan.FromMinutes(2)), Is.EqualTo(1));
+            Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.Roamer, 40,
+                7, .8, TimeSpan.FromMinutes(5)), Is.EqualTo(7));
             Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.Roamer, 40,
                 7, .8, TimeSpan.FromMinutes(11)), Is.EqualTo(7));
             Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.Roamer, 40,
                 8, .1, TimeSpan.Zero), Is.EqualTo(8));
             Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.KeepWarrior, 40,
-                3, .8, TimeSpan.FromMinutes(20)), Is.EqualTo(1));
+                3, .8, TimeSpan.FromMinutes(20)), Is.EqualTo(3));
+            Assert.That(AutonomousPlayerBehavior.ChooseRvrGroupSize(AutonomousPlayerType.KeepWarrior, 40,
+                2, .8, TimeSpan.FromMinutes(20)), Is.EqualTo(1));
             Assert.That(AutonomousPlayerBehavior.CanStartCampaign(AutonomousPlayerType.KeepWarrior, 35, 8), Is.True);
             Assert.That(AutonomousPlayerBehavior.CanStartCampaign(AutonomousPlayerType.Roamer, 50, 8), Is.False);
             Assert.That(AutonomousPlayerBehavior.NextLoopIndex(8, 7, 42), Is.Zero);

@@ -58,14 +58,11 @@ public static class AutonomousPlayerBehavior
     {
         int maximum = Math.Min(MaximumRvrGroupSize(type, level), compatibleMaximum);
         if (maximum < 2) return 1;
-        if (type == AutonomousPlayerType.Roamer && level >= 20)
-        {
-            if (maximum >= 8) return 8;
-            if (waited < TimeSpan.FromMinutes(10)) return 1;
-            return maximum >= 6 ? maximum : 1;
-        }
-        if (type == AutonomousPlayerType.KeepWarrior && level >= 35)
-            return maximum >= 8 ? 8 : waited >= TimeSpan.FromMinutes(10) && maximum >= 6 ? maximum : 1;
+        // Roamers and keep warriors want a full eight but leave with a viable
+        // group (4 after three minutes, 3 after eight), as players did.
+        if (type == AutonomousPlayerType.Roamer && level >= 20 ||
+            type == AutonomousPlayerType.KeepWarrior && level >= 35)
+            return AutonomousRvrLfg.ViableSize(maximum, waited);
         if (type == AutonomousPlayerType.Hybrid && level >= 20)
             return maximum >= 8 ? 8 : waited >= TimeSpan.FromMinutes(2) ? maximum : 1;
         if (type == AutonomousPlayerType.Hunter)

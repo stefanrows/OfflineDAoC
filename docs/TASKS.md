@@ -16,6 +16,17 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+32. **RvR groups form and stay together.** Aaron on 0.100.0: "almost only
+    single bots running around". Cause from code and his log: leaders found
+    0 free guildmates in 98 % of attempts because ungrouped RvR bots roamed
+    and fought at once; roamers waited solo for a full eight; one death sent
+    the whole group back to a town; three deaths pulled bots out of their
+    group. Source 0.101.0: group seekers LFG at the border keep, viable groups
+    of 4 leave, partial deaths are fought through and rezzed, wipes regroup at
+    the border keep, deaths in a group no longer end the RvR tour. Research
+    notes: scratchpad research-forming-death.md summarized in
+    RVR_GROUP_DOCTRINE.md. Checks pending: groups visible in the frontier.
+
 31. **Companion loot: fewer drops, no endlessly full backpacks.** Aaron,
     2026-09-27: one companion gets a reward per kill instead of every
     companion; when a companion's backpack is full, clear room in one go

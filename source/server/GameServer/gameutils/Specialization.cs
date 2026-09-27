@@ -131,6 +131,10 @@ namespace DOL.GS
 			return GetSpellLinesForLiving(living, step);
 		}
 		
+		/// <summary>Spec-line level for a bot: its trained spec, or 75 % of its level when untrained.</summary>
+		private static int BotSpecLineLevel(GameLiving living, int level) =>
+			level > 1 ? Math.Min(level, Math.Max(1, (int)living.Level)) : Math.Max(1, living.Level - (living.Level >> 2));
+
 		/// <summary>
 		/// Default getter for SpellLines
 		/// Retrieve spell line depending on advanced class and class hint
@@ -221,7 +225,9 @@ namespace DOL.GS
 				{
 					foreach (var ls in specline)
 					{
-						ls.Item1.Level = Math.Max(1, living.Level - (living.Level >> 2));
+						// A bot's trained spec level gates its spec spells like a player's;
+						// only an untrained line keeps the old 75 % of level fallback.
+						ls.Item1.Level = BotSpecLineLevel(living, level);
 						list.Add(ls.Item1);
 					}
 				}
@@ -229,7 +235,9 @@ namespace DOL.GS
 				{
 					foreach (var ls in spsl.Where(item => !item.Item1.IsBaseLine && item.Item2 == 0))
 					{
-						ls.Item1.Level = Math.Max(1, living.Level - (living.Level >> 2));
+						// A bot's trained spec level gates its spec spells like a player's;
+						// only an untrained line keeps the old 75 % of level fallback.
+						ls.Item1.Level = BotSpecLineLevel(living, level);
 						list.Add(ls.Item1);
 					}
 				}
