@@ -2002,12 +2002,15 @@ namespace DOL.GS
         }
 
         // A walk of a few minutes is normal; the far side of the frontier is not.
+        // The classic meeting grounds pull groups across realm borders, Emain
+        // Macha above all, as they did in 2003.
         private static double RoamDistanceWeight(GameBot bot, CampDestination destination)
         {
+            double hotspot = AutonomousRvrHotspots.Weight(destination.ZoneName);
             if (destination.RegionId != bot.CurrentRegionID)
-                return 0.35;
+                return 0.6 * hotspot;
             double distance = Distance(bot.X, bot.Y, destination.X, destination.Y);
-            return distance < 1_500 ? 0.3 : 1 / (1 + distance / 25_000);
+            return (distance < 1_500 ? 0.3 : 1 / (1 + distance / 25_000)) * hotspot;
         }
 
         private double RoamRecencyWeight(string id) => _recentRoamIds.Contains(id) ? 0.15 : 1;
@@ -2086,7 +2089,8 @@ namespace DOL.GS
                          .OrderBy(keep => bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z))).Take(24))
             {
                 string id = $"rvr-keep-{keep.KeepID}";
-                choices.Add(new(id, keep.Name, keep.CurrentRegion?.Description ?? "frontier keep",
+                choices.Add(new(id, keep.Name, WorldMgr.GetRegion(keep.Region)?.GetZone(keep.X, keep.Y)?.Description ??
+                    keep.CurrentRegion?.Description ?? "frontier keep",
                     keep.Region, keep.X, keep.Y, keep.Z, 1, false, true));
                 objectives.Add(new(id, keep.Name,
                     keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,

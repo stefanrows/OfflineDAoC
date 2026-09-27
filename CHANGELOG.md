@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.100.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Roaming RvR groups are drawn to the classic meeting grounds: Emain Macha
+  counts three times, Hadrian's Wall and Odin's Gate 1.6 times, and other
+  frontiers now weigh 0.6 instead of 0.35, so groups cross realm borders more
+  often. Keep destinations use their zone, not their region, for this.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.99.0] - 2026-09-27
 
 ### Added

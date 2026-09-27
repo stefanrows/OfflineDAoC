@@ -199,3 +199,15 @@ public sealed class UT_AutonomousRvrDoctrine
         Assert.That(AutonomousGuildEncounterMemory.Factor(5, 0), Is.GreaterThan(1));
     }
 }
+
+[TestFixture]
+public sealed class UT_AutonomousRvrHotspots
+{
+    [Test]
+    public void EmainMachaDrawsMoreThanBorderZonesAndOrdinaryZones()
+    {
+        Assert.That(AutonomousRvrHotspots.Weight("Emain Macha"), Is.GreaterThan(AutonomousRvrHotspots.Weight("Odin's Gate")));
+        Assert.That(AutonomousRvrHotspots.Weight("Hadrian's Wall"), Is.GreaterThan(AutonomousRvrHotspots.Weight("Uppland")));
+        Assert.That(AutonomousRvrHotspots.Weight(null), Is.EqualTo(1.0));
+    }
+}

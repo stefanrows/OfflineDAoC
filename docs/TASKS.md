@@ -51,6 +51,9 @@ When a task is done and its required verification is complete, move it out of it
     of leaving on arrival, and do not re-plan every minute while walking to a
     roaming spot. Travel formation follows the doctrine: two-file column
     (melee front, healers middle, casters back), clump, or a loose fan.
+    Source 0.100.0 adds hotspot weights (Emain Macha x3, Hadrian's Wall and
+    Odin's Gate x1.6) and raises other-frontier destinations from 0.35 to
+    0.6, so groups meet across realm borders.
     Checks pending: watch several warbands for distinct routes and lingering.
 
 28. **Human-like RvR combat habits.** Source 0.98.0: autonomous RvR bots pick
