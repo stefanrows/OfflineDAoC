@@ -194,8 +194,7 @@ namespace DOL.GS
             if (companion.Inventory is not BotInventory inventory || companion.Owner?.DBCharacter == null)
                 return false;
 
-            GeneratedUniqueItem template = AtlasROGManager.GenerateMonsterLootROG(
-                companion.Realm, (eCharacterClass)companion.CharacterClass.ID,
+            GeneratedUniqueItem template = CompanionLootMix.Generate(companion,
                 (byte)Math.Clamp((int)companion.Level, 1, 50),
                 victim.CurrentZone?.IsOF == true);
             if (template == null)
@@ -331,13 +330,14 @@ namespace DOL.GS
         /// <summary>Backpack slots a full companion frees at once: two bags of eight.</summary>
         public const int ClearBatchSlots = 16;
 
-        /// <summary>The worst sellable surplus items, up to <paramref name="count"/>, worst first.</summary>
+        /// <summary>The worst sellable surplus items, up to <paramref name="count"/>: gear the companion cannot use first, then the lowest keep value.</summary>
         internal static List<DbInventoryItem> FindSurplusBatch(GameBot companion, BotInventory inventory, int count,
             out long copper)
         {
             List<DbInventoryItem> items = inventory.AllItems
                 .Where(item => CanSellForSpace(companion, item))
-                .OrderBy(AutonomousBotEconomy.EquipmentValue)
+                .OrderBy(item => CompanionLootMix.CanUse(companion, item.Template))
+                .ThenBy(CompanionLootMix.KeepValue)
                 .ThenBy(item => item.Price)
                 .Take(Math.Max(1, count))
                 .ToList();
@@ -352,7 +352,8 @@ namespace DOL.GS
             var candidate = inventory.AllItems
                 .Where(item => !string.Equals(item.ObjectId, excludeItemId, StringComparison.Ordinal) &&
                                CanSellForSpace(companion, item))
-                .OrderBy(AutonomousBotEconomy.EquipmentValue)
+                .OrderBy(item => CompanionLootMix.CanUse(companion, item.Template))
+                .ThenBy(CompanionLootMix.KeepValue)
                 .ThenBy(item => item.Price)
                 .FirstOrDefault();
             copper = candidate == null ? 0 : AutonomousBotEconomy.CalculateStandardVendorSaleCopper(candidate);

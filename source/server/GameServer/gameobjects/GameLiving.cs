@@ -1591,7 +1591,7 @@ namespace DOL.GS
 		{
 			if (ad.AttackType is eAttackType.Spell)
 			{
-				if (ad.Damage > 0 && this is GameNPC npc && npc.Brain is IControlledBrain controlledBrain)
+				if (ad.Damage > 0 && this is GameNPC npc && npc.Brain is IControlledBrain controlledBrain && !CompanionCombatChat.IsQuiet(npc))
 				{
 					GamePlayer player = controlledBrain.GetPlayerOwner();
 
@@ -1613,7 +1613,7 @@ namespace DOL.GS
 			}
 			else
 			{
-				if (ad.Attacker is GameNPC npc && npc.Brain is IControlledBrain brain)
+				if (ad.Attacker is GameNPC npc && npc.Brain is IControlledBrain brain && !CompanionCombatChat.IsQuiet(npc))
 				{
 					GamePlayer player = brain.GetPlayerOwner();
 
@@ -1678,7 +1678,7 @@ namespace DOL.GS
 					}
 				}
 
-				if (ad.Target is GameNPC npcTarget && npcTarget.Brain is IControlledBrain targetBrain)
+				if (ad.Target is GameNPC npcTarget && npcTarget.Brain is IControlledBrain targetBrain && !CompanionCombatChat.IsQuiet(npcTarget))
 				{
 					GamePlayer player = targetBrain.GetPlayerOwner();
 

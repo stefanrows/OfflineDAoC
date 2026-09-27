@@ -8,6 +8,33 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+50. **Companion combat is mirrored into the owner's own combat chat.**
+    Reported by Aaron on 0.105.0: every companion's damage showed in his
+    chat. Cause: companions use the pet brain interface, so the pet-owner
+    message paths (`SpellHandler.MessageToCaster`, `GameLiving` pet hit and
+    block messages) forwarded their hits, resists and blocks. Fixed in source
+    0.107.0: companions and their pets are treated as groupmates, the
+    player's own pets keep their messages. Real-client check pending.
+
+49. **Companion rewards feel like weapons only.** Reported by Aaron on
+    0.105.0. Cause: armor and jewelry upgrades are worn at once, weapons of
+    types the class never uses pile up (33 staves), and a full backpack sold
+    the lowest `EquipmentValue` first, which ranks by DPS/AF and so sold
+    jewelry before weapons; drops were 50 % armor, 30 % weapons, 20 %
+    jewelry. Fixed in source 0.107.0: 45 % armor, 35 % jewelry, 20 %
+    weapon/shield, weapons only of usable types, and unusable gear is sold
+    first, then the lowest level/quality/bonus value. Real-client check
+    pending: more armor and jewelry in the companion inventories.
+
+48. **DF weekly quests never count.** Reported by Aaron on 0.105.0 at the
+    Midgard DF entrance (Patrick). Cause: "Darkness Falls Invasion" counted
+    companions as group members, so an 8-member companion group needed purple
+    mobs; "Femurs" counted only real enemy players, never enemy bots. A
+    companion-led group also had no player leader (null). Fixed in source
+    0.107.0 for all three realms: only real players raise the con bar (alone
+    with companions yellow and above counts), con is checked from the player,
+    and enemy-realm bots count for Femurs. Real-client check pending.
+
 47. **Companions crowd onto the player in dungeons (DF).** Reported by Aaron
     on 0.105.0: in Darkness Falls the companions stood almost exactly where
     he stood. Cause: the indoor formation radius was 40-54 units, less than

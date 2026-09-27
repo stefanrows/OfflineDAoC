@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.107.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Companion kill rewards follow 1.65-style loot: about 45 % armor, 35 %
+  jewelry and 20 % weapons or shields, and only weapons the companion can
+  actually use. A full backpack sells unusable gear first, then the weakest
+  by level, quality and bonuses, no longer jewelry before weapons.
+- Companions' hits, resists and blocks no longer appear in the owner's own
+  combat chat; they show like any groupmate's. The player's own pets are
+  unchanged.
+
+### Fixed
+
+- The Darkness Falls weekly quests count again: companions no longer raise
+  the required monster con in "Darkness Falls Invasion", and enemy-realm
+  bots count for "Femurs from Darkness Falls" (all three realms).
+
+### Removed
+
+- None.
+
 ## [0.106.0] - 2026-09-27
 
 ### Added

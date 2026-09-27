@@ -2583,7 +2583,7 @@ namespace DOL.GS.Spells
                 CabalistRestDiagnostics.Message(Caster, Spell, message);
 			if (Caster is GamePlayer playerCaster)
 				playerCaster.MessageToSelf(message, type);
-			else if (Caster is GameNPC npcCaster && npcCaster.Brain is IControlledBrain npcCasterBrain
+			else if (Caster is GameNPC npcCaster && npcCaster.Brain is IControlledBrain npcCasterBrain && !CompanionCombatChat.IsQuiet(npcCaster)
 					 && (type is eChatType.CT_YouHit or eChatType.CT_SpellResisted or eChatType.CT_Spell))
 			{
 				GamePlayer playerOwner = npcCasterBrain.GetPlayerOwner();

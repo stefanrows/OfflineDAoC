@@ -336,11 +336,14 @@ namespace DOL.GS.WeeklyQuest.Albion
 			
 			if (gArgs.Target.Realm != 0 || gArgs.Target is not GameNPC || gArgs.Target.CurrentRegionID != 249 ||
 			    !(player.GetConLevel(gArgs.Target) > -2)) return;
-			if (player.Group != null)
+			// Only real players make a zerg; companions do not raise the bar,
+			// and a group led by a companion has no player leader to con from.
+			int groupPlayers = player.Group?.GetPlayersInTheGroup().Count ?? 0;
+			if (groupPlayers > 1)
 			{
-				int minRequiredCon = (int) Math.Ceiling(player.Group.MemberCount / 3.0);
+				int minRequiredCon = (int) Math.Ceiling(groupPlayers / 3.0);
 				if (minRequiredCon > 3) minRequiredCon = 3;
-				if (player.Group.Leader.GetConLevel(gArgs.Target) >= minRequiredCon)
+				if (player.GetConLevel(gArgs.Target) >= minRequiredCon)
 					_mobsKilled++;
 				else
 				{
