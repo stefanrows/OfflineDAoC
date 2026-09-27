@@ -8,6 +8,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+52. **Companions can stand idle after the build expansion.** Reported
+    2026-09-27, Paladin given as an example; installed version and equipment
+    not yet confirmed. Source regression in 0.96.0 (`1a50ffb`): automatic
+    plans replace the seeded weapon profile but preserve saved equipment and
+    disable weapon reconciliation. Reproduce with an automatic thrust Paladin
+    retaining only a slash/crush weapon and no invested line for that weapon:
+    both equipped slots fail the build filter, so combat clears its target.
+    Expected: use the legal equipped weapon while awaiting matching gear.
+    Fixed in source 0.109.0: only when neither equipped weapon matches the
+    build, allow a functional, class-legal equipped weapon as a combat fallback.
+    Equipment, locks, and upgrade eligibility are unchanged. Workaround:
+    equip a weapon matching the selected build. Installation and real-client
+    verification of the reported Paladin and other affected companions pending;
+    automated tests skipped per project instructions.
+
 51. **Companion bombers keep waiting in PvE before they bomb.** Reported by
     Aaron on 0.107.0. Cause: three waits stacked and restarted on every
     target switch: the 2.5 s tank-aggro grace (per focused mob, and reset

@@ -130,6 +130,18 @@ namespace DOL.GS
             item.LevelRequirement <= bot.Level &&
             bot.HasAbilityToUseItem(item.Template);
 
+        // Build changes preserve owned equipment. If neither equipped weapon
+        // matches the new plan, keep fighting with a class-legal equipped item
+        // until the owner supplies matching gear. This is combat-only: it must
+        // not make untrained weapons eligible for automatic gear upgrades.
+        public static bool CanUseEquippedMeleeFallback(GameBot bot, DbInventoryItem item, eInventorySlot slot) =>
+            bot?.HasSelectedAutomaticCompanionPlan == true && item?.Template != null &&
+            item.SlotPosition == (int)slot && IsMeleeWeapon((eObjectType)item.Object_Type) &&
+            HasFunctionalMeleeStats(item) && item.LevelRequirement <= bot.Level &&
+            bot.HasAbilityToUseItem(item.Template) &&
+            (slot == eInventorySlot.RightHandWeapon && item.Item_Type != Slot.TWOHAND && item.Hand != 1 ||
+             slot == eInventorySlot.TwoHandWeapon && item.Item_Type == Slot.TWOHAND);
+
         public static eObjectType PrimaryType(eObjectType first, eObjectType second, bool twoHanded) =>
             twoHanded && second is eObjectType.TwoHandedWeapon or eObjectType.PolearmWeapon or
                 eObjectType.LargeWeapons or eObjectType.CelticSpear ? second : first != 0 ? first : second;

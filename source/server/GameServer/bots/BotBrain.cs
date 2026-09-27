@@ -3304,11 +3304,14 @@ namespace DOL.AI.Brain
         private bool SwitchToUsableMeleeWeapon()
         {
             DbInventoryItem rightHand = BotBody?.Inventory?.GetItem(eInventorySlot.RightHandWeapon);
-            DbInventoryItem leftHand = BotBody?.Inventory?.GetItem(eInventorySlot.LeftHandWeapon);
             DbInventoryItem twoHand = BotBody?.Inventory?.GetItem(eInventorySlot.TwoHandWeapon);
             bool rightUsable = BotWeaponStats.FitsConfiguredSlot(BotBody, rightHand, eInventorySlot.RightHandWeapon);
-            bool leftUsable = BotWeaponStats.CanUseMelee(BotBody, leftHand);
             bool twoHandUsable = BotWeaponStats.FitsConfiguredSlot(BotBody, twoHand, eInventorySlot.TwoHandWeapon);
+            if (!rightUsable && !twoHandUsable)
+            {
+                rightUsable = BotWeaponStats.CanUseEquippedMeleeFallback(BotBody, rightHand, eInventorySlot.RightHandWeapon);
+                twoHandUsable = BotWeaponStats.CanUseEquippedMeleeFallback(BotBody, twoHand, eInventorySlot.TwoHandWeapon);
+            }
             // The standard attack action requires a real primary-hand weapon.
             // An off-hand-only persisted loadout is not combat-ready; weapon
             // reconciliation will move/create a legal primary weapon instead.

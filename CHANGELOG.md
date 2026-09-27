@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.109.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Automatic companions whose preserved weapons no longer match their selected
+  build can fight with a class-legal weapon already equipped instead of clearing
+  their target and standing idle. Build-matching weapons remain preferred;
+  owned equipment and automatic upgrade rules are preserved (bug 52).
+
+### Removed
+
+- None.
+
 ## [0.108.0] - 2026-09-27
 
 ### Added
