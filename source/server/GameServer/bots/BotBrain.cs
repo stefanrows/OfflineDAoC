@@ -3707,7 +3707,7 @@ namespace DOL.AI.Brain
                 GameLiving bombTarget = Body.TargetObject as GameLiving;
                 Spell[] readyBombs = ReadyCompanionBombs(bombTarget);
                 if (readyBombs.Length == 0)
-                    ResetBombWait();
+                    ResetBombWait(!Body.InCombat);
                 else if (ShouldWaitForBombTank(bombTarget, readyBombs[0]))
                     return true;
                 else if (ShouldWaitForAreaStun(bombTarget, readyBombs[0]))
@@ -3984,19 +3984,26 @@ namespace DOL.AI.Brain
         {
             if (!CompanionBombingPolicy.CanUseBombs(BotBody) ||
                 BotPvpCrowdControl.PlayerLike(target) ||
-                !CompanionBombingPolicy.HasTank(BotBody) ||
-                CompanionBombingPolicy.TankHasAggro(BotBody, target, spell))
+                !CompanionBombingPolicy.HasTank(BotBody))
+                return false;
+
+            // Once the tank holds the pull or a groupmate has bombed, the fight
+            // is on: the next mob of the same fight gets no fresh wait.
+            if (CompanionBombingPolicy.TankHasAggro(BotBody, target, spell) ||
+                Body.Group != null && CompanionBombVolley.For(Body.Group).ChainOpen(GameLoop.GameLoopTime))
             {
-                ResetBombWait();
+                _bombTankWait.Finish(target);
                 return false;
             }
 
             return _bombTankWait.ShouldWait(target, GameLoop.GameLoopTime);
         }
 
-        private void ResetBombWait()
+        /// <summary>The stun wait is per clump; the tank wait only ends with the fight.</summary>
+        private void ResetBombWait(bool fightOver)
         {
-            _bombTankWait.Reset();
+            if (fightOver)
+                _bombTankWait.Reset();
             _bombStunWait.Reset();
         }
 

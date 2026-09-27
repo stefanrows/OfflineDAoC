@@ -170,9 +170,13 @@ namespace DOL.GS
     internal sealed class CompanionBombCentreApproach
     {
         public const int GiveUpMilliseconds = 3000;
+        // A pile that drifts after the first bomb gets only a short catch-up run.
+        public const int DriftGiveUpMilliseconds = 1500;
+        private const int StaleRunMilliseconds = 10_000;
         private object _target;
         private long _startedTick;
         private bool _inPosition;
+        private bool _drift;
         private Vector3 _lastDestination;
         private bool _hasDestination;
 
@@ -180,21 +184,32 @@ namespace DOL.GS
         {
             if (!ReferenceEquals(_target, target))
             {
+                // The next mob of the same pile is not a new run: a bomber
+                // already standing in the knot keeps bombing.
                 _target = target;
-                _startedTick = now;
-                _inPosition = false;
                 _hasDestination = false;
+                // A run in progress keeps its clock, so flipping targets
+                // cannot hold the bomber at the edge forever.
+                if (!_inPosition && now - _startedTick > StaleRunMilliseconds)
+                {
+                    _startedTick = now;
+                    _drift = false;
+                }
             }
 
-            int allowed = _inPosition ? tolerance * 2 : tolerance;
-            if (distance <= allowed || now - _startedTick >= GiveUpMilliseconds)
+            int allowed = _inPosition ? tolerance * 3 : tolerance;
+            int giveUp = _drift ? DriftGiveUpMilliseconds : GiveUpMilliseconds;
+            if (distance <= allowed)
                 _inPosition = true;
             else if (_inPosition)
             {
                 // The pile moved away after arrival: a new, short run.
                 _inPosition = false;
+                _drift = true;
                 _startedTick = now;
             }
+            else if (now - _startedTick >= giveUp)
+                _inPosition = true;
             return _inPosition;
         }
 
@@ -210,7 +225,11 @@ namespace DOL.GS
         }
     }
 
-    /// <summary>Tracks the tank-aggro grace period for one focused pull target.</summary>
+    /// <summary>
+    /// The tank-aggro grace period, once per fight: the bomber lets the tank
+    /// grab the pull before the first bomb, but switching to the next mob of
+    /// the same fight does not start another wait. Reset when combat ends.
+    /// </summary>
     internal sealed class CompanionBombTankWait
     {
         private object _target;
@@ -220,12 +239,9 @@ namespace DOL.GS
         public bool ShouldWait(object target, long now)
         {
             if (target == null)
-            {
-                Reset();
                 return false;
-            }
 
-            if (!ReferenceEquals(_target, target))
+            if (_target == null)
             {
                 _target = target;
                 _startedTick = now;
@@ -242,6 +258,13 @@ namespace DOL.GS
             }
 
             return true;
+        }
+
+        /// <summary>The fight is under way (tank has aggro, bombs already fell): no more waiting.</summary>
+        public void Finish(object target)
+        {
+            _target ??= target;
+            _expired = true;
         }
 
         public void Reset()
@@ -270,6 +293,13 @@ namespace DOL.GS
         private long _lastReleaseTick = long.MinValue / 2;
 
         public static CompanionBombVolley For(Group group) => Groups.GetValue(group, _ => new CompanionBombVolley());
+
+        /// <summary>A groupmate bombed recently: the fight is on, nobody waits any more.</summary>
+        public bool ChainOpen(long now)
+        {
+            lock (_lock)
+                return now - _lastReleaseTick <= ChainWindowMilliseconds;
+        }
 
         /// <summary>True while <paramref name="bomber"/> should hold its first bomb for the rest of the volley.</summary>
         public bool ShouldHold(object bomber, IReadOnlyCollection<object> bombers, long now)

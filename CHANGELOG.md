@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.108.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Companion bombers in PvE no longer wait again for every new mob: they
+  give the tank one short moment at the start of a fight, then bomb the
+  rest of the fight without fresh waits, and stay in the knot when they
+  switch to the next mob.
+
+### Removed
+
+- None.
+
 ## [0.107.0] - 2026-09-27
 
 ### Added

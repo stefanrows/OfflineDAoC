@@ -8,6 +8,17 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+51. **Companion bombers keep waiting in PvE before they bomb.** Reported by
+    Aaron on 0.107.0. Cause: three waits stacked and restarted on every
+    target switch: the 2.5 s tank-aggro grace (per focused mob, and reset
+    whenever the bombs were on cooldown), the run into the pile's centre
+    (up to 3 s, restarted per target and on every drift of the pile), and
+    the 1.2 s volley hold. Fixed in source 0.108.0: the tank grace runs once
+    per fight and ends as soon as the tank holds the pull or a groupmate has
+    bombed; a bomber already in the knot stays in position for the next mob,
+    keeps its run clock across target switches, and a drifting pile gets a
+    1.5 s catch-up run. Real-client check pending.
+
 50. **Companion combat is mirrored into the owner's own combat chat.**
     Reported by Aaron on 0.105.0: every companion's damage showed in his
     chat. Cause: companions use the pet brain interface, so the pet-owner

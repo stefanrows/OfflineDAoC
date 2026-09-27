@@ -15,7 +15,7 @@ public sealed class UT_CompanionBombingPolicy
         "DOL.GS.CompanionBombTankWait", true)!;
 
     [Test]
-    public void TankAggroWaitRestartsForANewFocusedTarget()
+    public void TankAggroWaitRunsOncePerFight()
     {
         object first = new();
         object second = new();
@@ -23,13 +23,22 @@ public sealed class UT_CompanionBombingPolicy
         System.Reflection.MethodInfo shouldWait = WaitType.GetMethod("ShouldWait")!;
 
         Assert.That(ShouldWait(wait, shouldWait, first, 1_000), Is.True);
-        Assert.That(ShouldWait(wait, shouldWait, first, 3_499), Is.True);
-        Assert.That(ShouldWait(wait, shouldWait, second, 3_499), Is.True,
-            "Switching focus starts a fresh grace period for the new pull target.");
-        Assert.That(ShouldWait(wait, shouldWait, second, 5_998), Is.True);
-        Assert.That(ShouldWait(wait, shouldWait, second, 5_999), Is.False);
-        Assert.That(ShouldWait(wait, shouldWait, second, 7_000), Is.False,
-            "An expired wait stays expired while the same target remains focused.");
+        Assert.That(ShouldWait(wait, shouldWait, second, 2_000), Is.True,
+            "The next mob of the same fight continues the same grace period.");
+        Assert.That(ShouldWait(wait, shouldWait, second, 3_500), Is.False);
+        Assert.That(ShouldWait(wait, shouldWait, first, 9_000), Is.False,
+            "Switching mobs later in the fight never waits again.");
+
+        WaitType.GetMethod("Reset")!.Invoke(wait, null);
+        Assert.That(ShouldWait(wait, shouldWait, first, 20_000), Is.True, "A new fight waits once more.");
+    }
+
+    [Test]
+    public void FinishedWaitDoesNotRestartForTheNextMob()
+    {
+        object wait = System.Activator.CreateInstance(WaitType, nonPublic: true)!;
+        WaitType.GetMethod("Finish")!.Invoke(wait, [new object()]);
+        Assert.That(ShouldWait(wait, WaitType.GetMethod("ShouldWait")!, new object(), 1_000), Is.False);
     }
 
     [Test]
