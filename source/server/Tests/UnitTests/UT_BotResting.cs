@@ -179,6 +179,24 @@ namespace DOL.UnitTests
                 500, 1000, 500, 1000, 500, 1000), Is.False);
         }
 
+        [TestCase(true, false, 1000)]   // sitting, out of combat: fast rest like companions
+        [TestCase(true, true, 10000)]   // sitting in combat stays classic
+        [TestCase(false, false, 6000)]  // standing stays classic
+        public void PlayerSittingOutOfCombatRestsFast(bool sitting, bool combat, int interval)
+        {
+            Assert.That(ClassicRestRegeneration.PlayerHealthAndPowerInterval(sitting, combat), Is.EqualTo(interval));
+        }
+
+        [Test]
+        public void PlayerFastRestRefillsTenPercentPerTick()
+        {
+            Assert.That(ClassicRestRegeneration.PlayerRestAmount(6, 400, sitting: true, inCombat: false), Is.EqualTo(40));
+            Assert.That(ClassicRestRegeneration.PlayerRestAmount(6, 400, sitting: true, inCombat: true), Is.EqualTo(6));
+            Assert.That(ClassicRestRegeneration.PlayerRestAmount(6, 400, sitting: false, inCombat: false), Is.EqualTo(6));
+            Assert.That(ClassicRestRegeneration.PlayerRestAmount(0, 400, sitting: true, inCombat: false), Is.EqualTo(0),
+                "Suppressed regeneration (disease) stays suppressed.");
+        }
+
         [Test]
         public void TemporaryCompanionDoesNotRestWhenAlreadyFull()
         {

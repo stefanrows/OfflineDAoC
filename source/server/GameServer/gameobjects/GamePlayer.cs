@@ -2195,7 +2195,34 @@ namespace DOL.GS
             // There is no elegant formula for this. Sitting + in-combat might have been caused by rounding errors on Live.
             bool inCombat = InCombat;
             bool isSitting = IsSitting;
-            return ClassicRestRegeneration.HealthAndPowerInterval(isSitting, inCombat);
+            return ClassicRestRegeneration.PlayerHealthAndPowerInterval(isSitting, inCombat);
+        }
+
+        protected override int PowerRegenerationTimerCallback(ECSGameTimer selfRegenerationTimer)
+        {
+            if (DrainsPowerOutOfCombat || Mana >= MaxMana || !ClassicRestRegeneration.IsPlayerFastRest(IsSitting, InCombat))
+                return base.PowerRegenerationTimerCallback(selfRegenerationTimer);
+
+            ChangeMana(this, eManaChangeType.Regenerate, ClassicRestRegeneration.PlayerRestAmount(
+                GetModified(eProperty.PowerRegenerationAmount), MaxMana, IsSitting, InCombat));
+            return GetPowerRegenerationInterval();
+        }
+
+        private bool DrainsPowerOutOfCombat =>
+            (eCharacterClass)CharacterClass.ID is eCharacterClass.Vampiir or
+                (>= eCharacterClass.MaulerAlb and <= eCharacterClass.MaulerHib);
+
+        /// <summary>Sitting down starts the fast rest right away instead of after the pending slow tick.</summary>
+        private void StartFastRestTimers()
+        {
+            if (!ClassicRestRegeneration.IsPlayerFastRest(IsSitting, InCombat) || !IsAlive || ObjectState is not eObjectState.Active)
+                return;
+            if (Health < MaxHealth)
+                m_healthRegenerationTimer?.Start(ClassicRestRegeneration.FastRestIntervalMilliseconds);
+            if (Mana < MaxMana && !DrainsPowerOutOfCombat)
+                m_powerRegenerationTimer?.Start(ClassicRestRegeneration.FastRestIntervalMilliseconds);
+            if (Endurance < MaxEndurance)
+                m_enduRegenerationTimer?.Start(ClassicRestRegeneration.FastRestIntervalMilliseconds);
         }
 
         protected override int GetHealthRegenerationInterval()
@@ -2245,7 +2272,8 @@ namespace DOL.GS
                 return 0;
             }
 
-            ChangeHealth(this, eHealthChangeType.Regenerate, GetModified(eProperty.HealthRegenerationAmount));
+            ChangeHealth(this, eHealthChangeType.Regenerate, ClassicRestRegeneration.PlayerRestAmount(
+                GetModified(eProperty.HealthRegenerationAmount), maxHealth, IsSitting, InCombat));
             return GetHealthRegenerationInterval();
         }
 
@@ -2262,7 +2290,8 @@ namespace DOL.GS
                     return 0;
             }
 
-            int regen = GetModified(eProperty.EnduranceRegenerationAmount);
+            int regen = ClassicRestRegeneration.PlayerRestAmount(GetModified(eProperty.EnduranceRegenerationAmount),
+                maxEndurance, IsSitting, InCombat);
             int endChant = GetModified(eProperty.FatigueConsumption);
             ECSGameEffect charge = EffectListService.GetEffectOnTarget(this, eEffect.Charge);
             int longWind = 5;
@@ -8643,6 +8672,8 @@ namespace DOL.GS
 
             IsSitting = sit;
             UpdatePlayerStatus();
+            if (sit)
+                StartFastRestTimers();
         }
 
         protected override bool CanSetGroundTarget()

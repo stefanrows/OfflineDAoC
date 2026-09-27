@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.91.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Players sitting out of combat now recover health, power, and endurance like
+  resting companions: one tick per second, at least 10% of the pool, starting
+  as soon as they sit. Standing and combat regeneration stay classic.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.90.1] - 2026-09-27
 
 ### Added
