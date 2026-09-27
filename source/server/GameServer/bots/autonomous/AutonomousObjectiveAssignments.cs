@@ -192,6 +192,9 @@ public static class AutonomousObjectiveAssignments
             foreach (GameBot bot in expiredRvr)
             {
                 // Solo roaming retains its own clock. Warbands expire together.
+                // A level-50 veteran takes a town break instead of owing PvE.
+                if (bot.Level >= 50 && TryBeginBetweenTaskServices(bot, forceTownBreak: true))
+                    continue;
                 BeginPveIntermission(bot);
             }
             GameBot[] completedPve = roster.Where(bot => Parse(bot.PersistentRecord.ObjectiveKind) != eAutonomousObjectiveKind.RvR &&
@@ -321,13 +324,16 @@ public static class AutonomousObjectiveAssignments
         // task resets only work, never progress/items. Every level must finish
         // one PvE assignment after an RvR tour before becoming eligible again.
         bool leavingRvr = Is(bot, eAutonomousObjectiveKind.RvR);
-        if (leavingRvr)
+        // Level-50 veterans went back out after a break in town (sell, buy,
+        // train), as Camlann players did; only levelling characters owe PvE.
+        bool veteran = bot.Level >= 50;
+        if (leavingRvr && !veteran)
             bot.PersistentRecord.ObjectiveRvrEligibleUtc = PveCompletionRequired;
-        if (!forceSoloPve && TryBeginBetweenTaskServices(bot))
+        if (!forceSoloPve && TryBeginBetweenTaskServices(bot, forceTownBreak: leavingRvr && veteran))
             return;
         Assign(bot, forceSoloPve ? eAutonomousObjectiveKind.SoloPve :
                 PreferGuildInvitation(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
-                    Random.Shared.NextDouble(), mayRvr: !leavingRvr && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
+                    Random.Shared.NextDouble(), mayRvr: (!leavingRvr || veteran) && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
                     danger: Danger)),
             CrewBucket(bot), GameLoop.GameLoopTime);
         bot.PersistentRecord.CurrentCampId = string.Empty;
@@ -517,14 +523,14 @@ public static class AutonomousObjectiveAssignments
 
     // Called only at a task boundary, never from loot handling. Entering this
     // durable phase commits to unloading even after the first slot is freed.
-    private static bool TryBeginBetweenTaskServices(GameBot bot)
+    private static bool TryBeginBetweenTaskServices(GameBot bot, bool forceTownBreak = false)
     {
         if (bot?.PersistentRecord == null || bot.Group != null)
             return false;
         BetweenTaskPlan plan = RollBetweenTaskPlan(bot.HasSpendableAutonomousTrainingPoints,
             // Sell in town before the bags are completely full, like a player would.
             AutonomousBotEconomy.NeedsMerchant(bot), Random.Shared.NextDouble(), Random.Shared.NextDouble());
-        bool downtime = Random.Shared.NextDouble() < AutonomousPlayerBehavior.TownBreakChance(
+        bool downtime = forceTownBreak || Random.Shared.NextDouble() < AutonomousPlayerBehavior.TownBreakChance(
             AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord), bot.PersistentRecord.Patience);
         if (!plan.Train && !plan.Unload && !downtime) return false;
         OfflineWorldBotRecord record = bot.PersistentRecord;

@@ -664,6 +664,68 @@ namespace DOL.GS;
             return true;
         }
 
+        /// <summary>
+        /// Darkness Falls seal trading: buy the best equipment upgrade the bot's
+        /// seals can pay for from a currency merchant, the way a player turns in
+        /// Diamond/Emerald/Sapphire seals. Mirrors GameItemCurrencyMerchant.OnPlayerBuy.
+        /// </summary>
+        public static bool TryBuyWithCurrency(GameBot bot, GameItemCurrencyMerchant merchant, out DbInventoryItem purchased,
+            out int spent)
+        {
+            purchased = null;
+            spent = 0;
+            string currency = merchant?.MoneyItem?.Item?.Id_nb;
+            if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Inventory == null ||
+                currency == null || merchant.TradeItems == null ||
+                !merchant.IsWithinRadius(bot, GS.ServerProperties.Properties.WORLD_PICKUP_DISTANCE))
+                return false;
+
+            lock (bot.Inventory.Lock)
+            {
+                if (bot.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack) == eInventorySlot.Invalid)
+                    return false;
+                int have = bot.Inventory.CountItemTemplate(currency, eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+                DbItemTemplate template = merchant.TradeItems.GetAllItems().Values
+                    .OfType<DbItemTemplate>()
+                    .Where(candidate => candidate.Price > 0 && candidate.Price <= have)
+                    .Select(GameInventoryItem.Create)
+                    .Where(item => item != null && TryGetEquipmentUpgrade(bot, item, out _))
+                    .OrderByDescending(EquipmentValue)
+                    .Select(item => item.Template)
+                    .FirstOrDefault();
+                if (template == null)
+                    return false;
+
+                eInventorySlot slot = bot.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+                purchased = GameInventoryItem.Create(template);
+                if (purchased == null || !bot.Inventory.AddItem(slot, purchased))
+                {
+                    purchased = null;
+                    return false;
+                }
+                int price = (int)template.Price;
+                foreach (DbInventoryItem stack in bot.Inventory.GetItemRange(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack).ToArray())
+                {
+                    if (stack.Id_nb != currency) continue;
+                    int take = Math.Min(stack.Count, price - spent);
+                    bot.Inventory.RemoveCountFromStack(stack, take);
+                    spent += take;
+                    if (spent >= price) break;
+                }
+            }
+
+            TryEquipOwnedUpgrade(bot, purchased, "seals");
+            MarkInventoryChanged(bot);
+            bot.MarkAutonomousStateDirty();
+            AutonomousBotStatusPersistence.Queue(bot, true);
+            return true;
+        }
+
+        /// <summary>Seals and similar item currencies the bot carries, by item id.</summary>
+        public static bool CarriesCurrency(GameBot bot, string currencyId, int atLeast) =>
+            bot?.Inventory != null && currencyId != null &&
+            bot.Inventory.CountItemTemplate(currencyId, eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack) >= atLeast;
+
     public static int RollListingPrice(DbInventoryItem item) => RecommendListingPrice(item, -0.35 + Random.Shared.NextDouble() * 0.85);
 
         public static int RecommendListingPrice(DbInventoryItem item, double sellerDisposition = 0)

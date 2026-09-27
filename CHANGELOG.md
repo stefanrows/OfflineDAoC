@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.104.0] - 2026-09-27
+
+### Added
+
+- Bots in Darkness Falls spend their Diamond, Emerald and Sapphire seals at
+  the DF seal merchants on the best equipment upgrade they can afford.
+
+### Changed
+
+- Level-50 bots no longer owe a PvE task after an RvR tour: they take a town
+  break (sell, buy, train) and may go straight back out.
+- Level-50 PvE prefers dungeons, above all Darkness Falls (double weight
+  among dungeons), for seals and gear.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.103.0] - 2026-09-27
 
 ### Added

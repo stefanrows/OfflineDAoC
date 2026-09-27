@@ -1356,6 +1356,8 @@ namespace DOL.AI.Brain
                 AutonomousRvrDoctrineRuntime.EvaluateRetreat(BotBody);
                 if (AutonomousRvrDoctrineRuntime.TryRunRetreat(this))
                     return;
+                if (AutonomousSealShopping.TryRun(this))
+                    return;
             }
 
             // Frontier enemies take priority over rally/follow/rest and optional

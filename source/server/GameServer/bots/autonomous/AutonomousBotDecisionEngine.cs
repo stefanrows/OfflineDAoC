@@ -204,8 +204,9 @@ public static class AutonomousBotDecisionEngine
         int preference = groupSize >= 2
             ? level >= 50 ? Level50GroupDungeonPreferencePermille : GroupDungeonPreferencePermille
             : SoloDungeonPreferencePermille;
-        if (level >= 50 && gearFarming)
-            preference = groupSize >= 2 ? 700 : 300;
+        // Level-50 PvE is Darkness Falls and the SI dungeons: seals and gear.
+        if (level >= 50)
+            preference = gearFarming ? (groupSize >= 2 ? 750 : 450) : (groupSize >= 2 ? 600 : 350);
         int availability = choices.Where(camp => camp.IsDungeon)
             .GroupBy(camp => camp.RegionId)
             .Select(group => DungeonAvailability(group))

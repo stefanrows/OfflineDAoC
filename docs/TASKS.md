@@ -14,6 +14,9 @@ When a task is done and its required verification is complete, move it out of it
     players did. Context: level-50 PvE today mostly fails (22 of 705 goal
     attempts reached a camp, 0 kills); raids need 200 simultaneous level-50
     GroupPve bots and never start; bots never spend seals; money is flat.
+    Source 0.104.0 (partial): veterans take a town break instead of owing PvE,
+    level-50 PvE prefers DF, bots spend seals at DF merchants. Still open:
+    scheduled raids with sign-ups, buying consumables.
 
 7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
    the level XP curve and XP awarded at different levels to determine whether
