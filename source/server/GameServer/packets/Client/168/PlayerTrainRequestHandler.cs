@@ -173,11 +173,7 @@ namespace DOL.GS.PacketHandler.Client.v168
                             continue;
                         }
 
-                        if (!ra.CheckRequirement(client.Player))
-                        {
-                            client.Out.SendMessage($"You are not experienced enough to get {ra.Name} now. Come back later.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-                            continue;
-                        }
+                        // Realm ability prerequisites do not block training.
 
                         if (playerRA != null)
                             playerRA.Level = (int) pair.Value;

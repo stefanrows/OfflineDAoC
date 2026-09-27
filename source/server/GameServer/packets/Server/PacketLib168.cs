@@ -2732,8 +2732,8 @@ namespace DOL.GS.PacketHandler
 					pak.WriteByte((byte) i++);
 					pak.WriteByte((byte) level);
 					pak.WriteByte((byte) ra.CostForUpgrade(level));
-					bool canBeUsed = ra.CheckRequirement(m_gameClient.Player);
-					pak.WritePascalString(canBeUsed ? ra.Name : string.Format("[{0}]", ra.Name));
+					// Realm ability prerequisites do not block training.
+					pak.WritePascalString(ra.Name);
 				}
 
 				SendTCP(pak);

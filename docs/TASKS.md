@@ -38,12 +38,13 @@ When a task is done and its required verification is complete, move it out of it
     standing speed. Travel and combat still interrupt the rest. Real-client
     check that casters refill during a sit is pending.
 
-21. **Remove character-level requirements from realm abilities.** Source
-    0.87.0 allows training Charge, Wild Power, Toughness, maximum health,
-    Decimation Trap, and Atlas Old Frontiers Striking the Soul at any character
-    level. Realm Rank requirements, point costs, and ability-specific
-    prerequisites remain. Installation and real-client checks that a low-level
-    character can train and benefit from the affected abilities are pending.
+21. **Remove level and ability prerequisites from realm ability training.** Source
+    0.94.0 removes character-level gates and ignores ability-specific
+    prerequisites in the trainer; a level 42 character can train Mastery of
+    Pain without Augmented Dexterity II. Realm Point costs, maximum ranks, and
+    class availability remain; RR5 abilities still unlock at Realm Level 40.
+    Installation and real-client checks of low-level training and ability effects
+    are pending.
 
 20. **Remove the player logout timer.** Source 0.85.0 completes accepted player logout immediately, including during combat and while moving, without changing the dead, mounted, crafting, or instance restrictions. `/stuck` still uses its safe position on successful logout and clears the request if logout is refused. Installation and real-client checks of combat logout, normal logout, and `/stuck` remain pending.
 

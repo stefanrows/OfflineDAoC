@@ -54,10 +54,11 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 41. **Casters run out of mana too quickly, especially while bombing.** The
     2026-09-26 source audit found bot damaging spells use native mana costs and
     continuous high-rank PBAoE could outpace combat regeneration. Source 0.89.0
-    reduces damaging spell mana costs by 50% for offensive caster classes on
-    companion bots and player characters, including PBAoE bombs. Healing, buffs,
-    and other nondamaging spells keep their existing costs. Installation and
-    real-client checks across companion and player caster groups remain pending.
+    reduced damaging spell mana costs by 50% for offensive caster classes.
+    Source 0.95.0 raises that reduction to 70% and reduces mana costs by 90%
+    for all buffs and pet summons. Other spells keep their existing costs.
+    Installation and real-client checks across companion and
+    player caster groups remain pending.
 
 40. **Grouped bot Healers do not cast their learned Celerity buff.** Reported while source was 0.87.0 (installed version unknown): a grouped Healer bot with Celerity available does not cast it. Expected: Celerity is applied to the Healer and eligible group members when missing, including during combat. The defensive selector omitted Celerity from its target choices, the in-combat filter skipped maintained buffs, and effect handling returned Unknown for Celerity, preventing reliable coverage checks. Source fix 0.88.0 recognizes Celerity group targets, permits this buff during combat, and tracks its dedicated melee-speed effect. Installation and real-client verification pending.
 

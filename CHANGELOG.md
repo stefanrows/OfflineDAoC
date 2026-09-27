@@ -12,6 +12,46 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.95.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Offensive caster damage spells now cost 70% less mana, up from 50%; all
+  mana-costing buffs and pet summons cost 90% less.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.94.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Realm ability training no longer enforces character-level or ability-specific
+  prerequisites, including Augmented Dexterity II for Mastery of Pain. Realm Point
+  costs, maximum ranks, and class availability remain; RR5 abilities still unlock
+  at Realm Level 40.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.93.0] - 2026-09-27
 
 ### Added
