@@ -2386,6 +2386,30 @@ public static partial class AutonomousBotGroupCoordinator
             return true;
         }
 
+        // A guild already out in the frontier gathers where players did: at its
+        // own keep, or inside its realm's border keep, instead of walking home
+        // to a town first. Both are real, validated meeting points.
+        if (objectiveKind == eAutonomousObjectiveKind.RvR)
+        {
+            if (leader.Guild != null)
+                foreach (DOL.GS.Keeps.AbstractGameKeep keep in GameServer.KeepManager.GetKeepsOfRegion(leader.CurrentRegionID)
+                             .Where(keep => keep.Guild == leader.Guild)
+                             .OrderBy(keep => Vector3.DistanceSquared(current, new(keep.X, keep.Y, keep.Z))).Take(2))
+                {
+                    if (!TryPoint(leader.CurrentRegion, new(keep.X, keep.Y, keep.Z), out point)) continue;
+                    rendezvousName = keep.Name;
+                    return true;
+                }
+            if (AutonomousRvrStaging.TryGetBorderKeep(leader.Realm, out AutonomousRvrStaging.BorderKeep border) &&
+                border.RegionId == leader.CurrentRegionID)
+                foreach (Vector3 anchor in AutonomousRvrStaging.CandidateAnchors(border, leader.DatabaseID).Take(6))
+                {
+                    if (!TryPoint(leader.CurrentRegion, anchor, out point)) continue;
+                    rendezvousName = border.Name;
+                    return true;
+                }
+        }
+
         // Never form a party around an arbitrary wilderness point. A future
         // matchmaking pass can elect a leader near a real, level-local town.
         return false;

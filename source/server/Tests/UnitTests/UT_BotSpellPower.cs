@@ -340,11 +340,12 @@ namespace DOL.UnitTests
         {
             Bot bot = MakeBot(typeof(ClassSpiritmaster), 1);
             bot.Mana = bot.MaxMana;
-            Spell spell = S(2, 2);
+            // 0.95.0: offensive casters pay 30 % for damage spells (10 -> 3).
+            Spell spell = S(10, 2);
             int cost = new SpellHandler(bot, spell, new SpellLine("test", "test", "", true)).PowerCost(bot);
             Assert.That(bot.MaxMana, Is.EqualTo(55));
-            Assert.That(cost, Is.EqualTo(2));
-            Assert.That(bot.Mana - cost, Is.EqualTo(53));
+            Assert.That(cost, Is.EqualTo(3));
+            Assert.That(bot.Mana - cost, Is.EqualTo(52));
         }
 
         [TestCase(typeof(ClassShaman))] [TestCase(typeof(ClassWarden))]
@@ -448,13 +449,13 @@ namespace DOL.UnitTests
         {
             Bot bot = MakeBot(typeof(ClassSpiritmaster), 1);
             bot.Mana = 55;
-            var handler = new DebitOnlyDamage(bot, S(2, 2), new SpellLine("test", "test", "", true));
+            var handler = new DebitOnlyDamage(bot, S(10, 2), new SpellLine("test", "test", "", true));
             handler.Target = bot;
             Field(typeof(SpellHandler), handler, "<CastState>k__BackingField", eCastState.Finished);
             handler.Tick();
-            Assert.That(bot.Mana, Is.EqualTo(53));
+            Assert.That(bot.Mana, Is.EqualTo(52));
             handler.Tick();
-            Assert.That(bot.Mana, Is.EqualTo(53));
+            Assert.That(bot.Mana, Is.EqualTo(52));
         }
 
         [Test] public void GenericNpcDispatchAndAffordabilityUseNativeLearnedFocusLine()
@@ -466,8 +467,9 @@ namespace DOL.UnitTests
             Field(typeof(GameBot), bot, "_powerSpellLines", new Dictionary<int, SpellLine> { [spell.ID] = learned });
             var generic = new SpellLine(GlobalSpellsLines.Mob_Spells, GlobalSpellsLines.Mob_Spells, GlobalSpellsLines.Mob_Spells, true);
             Player player = Actor<Player>(); player.Class = bot.Class; player.Level = 50; player.Focus = 50;
-            Assert.That(new SpellHandler(player, spell, learned).PowerCost(player), Is.EqualTo(23), "human focus cost is unchanged");
-            int expected = 23;
+            // Humans share the 0.95.0 caster damage discount (23 -> 7).
+            Assert.That(new SpellHandler(player, spell, learned).PowerCost(player), Is.EqualTo(7), "human and bot focus cost match");
+            int expected = 7;
             Assert.That(bot.PowerCost(spell), Is.EqualTo(expected));
             var handler = new DebitOnlyDamage(bot, spell, generic) { Target = bot };
             Field(typeof(SpellHandler), handler, "<CastState>k__BackingField", eCastState.Finished);
@@ -537,8 +539,12 @@ namespace DOL.UnitTests
             Bot bot = MakeBot(typeof(ClassSpiritmaster), 50);
             foreach (string type in new[] { "SummonSpiritFighter", "StrengthBuff", "DamageOverTime", "DirectDamage" })
             {
-                Assert.That(BotSpellPower.Cost(bot, S(-80, 3, 50, type), null),
-                    Is.EqualTo((int)(bot.CalculateMaxMana(bot.Level, bot.GetBaseStat(bot.CharacterClass.ManaStat)) * 0.8)));
+                Spell spell = S(-80, 3, 50, type);
+                double pool = bot.CalculateMaxMana(bot.Level, bot.GetBaseStat(bot.CharacterClass.ManaStat)) * 0.8;
+                // 0.95.0: buffs and pet summons cost 10 %, caster damage 30 %.
+                double discounted = BotSpellPower.ApplyDamageCostReduction(bot.CharacterClass, spell,
+                    BotSpellPower.ApplyBuffAndPetSummonCostReduction(spell, pool));
+                Assert.That(BotSpellPower.Cost(bot, spell, null), Is.EqualTo((int)discounted).Within(1), type);
                 Assert.That(BotSpellPower.Cost(bot, S(0, 3, 50, type), null), Is.Zero);
             }
         }
@@ -667,7 +673,8 @@ namespace DOL.UnitTests
                 var handler = new SpellHandler(actor, spell, line);
                 Field(typeof(SpellHandler), handler, "_quickcast", new QuickCastECSGameEffect(new(actor, 3000, 1)));
                 Assert.That(handler.IsQuickCasting, Is.EqualTo(actor is GamePlayer));
-                Assert.That(handler.PowerCost(actor), Is.EqualTo(actor is GamePlayer ? 60 : 30));
+                // Quickcast doubles the discounted (30 %) damage cost for humans only.
+                Assert.That(handler.PowerCost(actor), Is.EqualTo(actor is GamePlayer ? 18 : 9));
             }
         }
 

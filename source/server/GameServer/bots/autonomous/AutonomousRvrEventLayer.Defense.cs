@@ -53,6 +53,24 @@ namespace DOL.GS
         }
 
         public static int ResponseCap(bool defending) => defending ? 240 : 96;
+
+        /// <summary>
+        /// Which side a responding warband joins. A guild-owned keep is defended
+        /// by its own guild; the attacking player's guild reinforces the attack;
+        /// every other guild contests on its own. Guildless (realm) keeps keep
+        /// the realm rule.
+        /// </summary>
+        private static Dictionary<string, int> ResponseBucket(ActiveEvent active, Force force)
+        {
+            if (string.IsNullOrEmpty(active.Target.OwningGuild))
+                return Participants(active, force.Realm);
+            if (string.Equals(force.GuildName, active.Target.OwningGuild, StringComparison.Ordinal))
+                return active.Defenders;
+            return !string.IsNullOrEmpty(active.AttackerGuild) &&
+                   string.Equals(force.GuildName, active.AttackerGuild, StringComparison.Ordinal)
+                ? active.Attackers
+                : active.ThirdRealm;
+        }
         public static bool ResponseReserve(long id) => unchecked((ulong)id * 2654435761UL) % 100 < 30;
 
         public static bool CanRedirectDefense(eRealm previousDefender, eRealm nextDefender,
@@ -115,6 +133,7 @@ namespace DOL.GS
                         alarm.Player.Client?.Account?.Name ?? alarm.Player.Name, alarm.Tick);
                     var active = Events.GetValueOrDefault(pair.Key);
                     if (active == null) continue;
+                    active.AttackerGuild ??= alarm.Player.Guild?.Name;
                     if (firstAlarm)
                     {
                         string text = $"Your attack on {alarm.Keep.Name} has raised the alarm! {GlobalConstants.RealmToName(alarm.Keep.Realm)} is mustering its forces.";
@@ -154,13 +173,14 @@ namespace DOL.GS
             lock (Sync)
             {
                 foreach (var candidate in forces)
-                foreach (var active in Events.Values.Where(e => e.BattleStarted && Participants(e, candidate.Force.Realm).ContainsKey(candidate.Force.GroupId)))
+                foreach (var active in Events.Values.Where(e => e.BattleStarted && BucketOf(e, candidate.Force.GroupId) != null))
                 foreach (var bot in candidate.Members)
                 {
                     if (bot.CurrentRegionID == active.Target.RegionId &&
                         Vector2.DistanceSquared(new(bot.X, bot.Y), new(active.Target.X, active.Target.Y)) <= 9000 * 9000 &&
                         Math.Abs(bot.Z - active.Target.Z) <= 2000)
-                        active.Present[bot.DatabaseID] = (candidate.Force.GroupId, bot.Realm, now, bot, new(bot.X, bot.Y, bot.Z), bot.CurrentRegionID);
+                        active.Present[bot.DatabaseID] = (candidate.Force.GroupId,
+                            SideRealm(active, BucketOf(active, candidate.Force.GroupId)), now, bot, new(bot.X, bot.Y, bot.Z), bot.CurrentRegionID);
                     else active.Present.Remove(bot.DatabaseID);
                 }
                 foreach (var active in Events.Values.Where(e => e.BattleStarted && IsLatestDefenseFocus(e))
@@ -171,7 +191,7 @@ namespace DOL.GS
                                  Vector2.DistanceSquared(new(b.X, b.Y), new(active.Target.X, active.Target.Y)) : float.MaxValue)))
                     {
                         Force force = candidate.Force;
-                        if (Participants(active, force.Realm).ContainsKey(force.GroupId)) continue;
+                        if (BucketOf(active, force.GroupId) != null) continue;
                         if (ReleasedForces.ContainsKey(force.GroupId) ||
                             CarrierEvents.Values.Any(c => c.Participants.Values.Any(r => r.ContainsKey(force.GroupId)))) continue;
                         // Keep a deterministic 30% reserve of whole warbands;
@@ -184,15 +204,16 @@ namespace DOL.GS
                         if (candidate.Members.Any(b => b.Group != null && b.Group.GetMembersInTheGroup().Any(m =>
                             m is not GameBot member || member.Level != 50 || member.IsPlayerLedGroup ||
                             !member.IsAutonomousWorldBot || !AutonomousObjectiveAssignments.Is(member, eAutonomousObjectiveKind.RvR)))) continue;
-                        var previous = Events.Values.FirstOrDefault(e => Participants(e, force.Realm).ContainsKey(force.GroupId));
+                        var previous = Events.Values.FirstOrDefault(e => BucketOf(e, force.GroupId) != null);
                         if (previous != null && (!previous.DefenseReaction || !active.DefenseReaction ||
                             !CanRedirectDefense(previous.DefenderRealm, active.DefenderRealm,
                                 previous.PlayerAccount, active.PlayerAccount, previous.LastPressureTick, active.LastPressureTick))) continue;
-                        int cap = active.DefenseReaction ? ResponseCap(force.Realm == active.DefenderRealm) : Capacity(active);
-                        if (!TryJoin(Participants(active, force.Realm), force, cap)) continue;
+                        Dictionary<string, int> side = ResponseBucket(active, force);
+                        int cap = active.DefenseReaction ? ResponseCap(ReferenceEquals(side, active.Defenders)) : Capacity(active);
+                        if (!TryJoin(side, force, cap)) continue;
                         if (previous != null)
                         {
-                            Participants(previous, force.Realm).Remove(force.GroupId);
+                            BucketOf(previous, force.GroupId)?.Remove(force.GroupId);
                             previous.Slots.Remove(force.GroupId);
                             foreach (long id in force.MemberIds) previous.Present.Remove(id);
                         }

@@ -299,6 +299,8 @@ namespace DOL.UnitTests
             Assert.That(bot.GetSpecList().All(spec => spec.Level <= 7), Is.True);
         }
 
+        private static int BasePool(GameBot bot) => bot.CalculateMaxMana(bot.Level, bot.GetBaseStat(bot.CharacterClass.ManaStat));
+
         [Test]
         public void RealAutonomousConstructorRetainsSavedLevelAndReconstructsAfterLevelChange()
         {
@@ -306,15 +308,16 @@ namespace DOL.UnitTests
                 ClassId=(int)eCharacterClass.Wizard, RaceId=(int)eRace.Briton, Level=6, Health=12, Mana=9, Endurance=20 };
             var first = new GameBot(record); _constructed.Add(first);
             Assert.That(first.Level, Is.EqualTo(6)); Assert.That(first.Intelligence, Is.EqualTo(71));
-            Assert.That(first.MaxMana, Is.EqualTo(51)); Assert.That(first.Mana, Is.EqualTo(9));
+            // Base pool from level and Intelligence; starter gear may add its capped item bonus on top.
+            Assert.That(BasePool(first), Is.EqualTo(51)); Assert.That(first.MaxMana, Is.GreaterThanOrEqualTo(51)); Assert.That(first.Mana, Is.EqualTo(9));
             first.Level = 10;
             Invoke(first, "ApplyLevelStatGrowth", 10);
-            Assert.That(first.Intelligence, Is.EqualTo(75)); Assert.That(first.MaxMana, Is.EqualTo(75));
+            Assert.That(first.Intelligence, Is.EqualTo(75)); Assert.That(BasePool(first), Is.EqualTo(75));
             Assert.That(first.Mana, Is.EqualTo(9)); Assert.That(first.Health, Is.EqualTo(12));
             var saved = JsonSerializer.Deserialize<OfflineWorldBotRecord>(JsonSerializer.Serialize(first.PrepareAutonomousStateSnapshot()));
             var reloaded = new GameBot(saved); _constructed.Add(reloaded);
             Assert.That(reloaded.Level, Is.EqualTo(10)); Assert.That(Stats(reloaded), Is.EqualTo(Stats(first)));
-            Assert.That(reloaded.MaxMana, Is.EqualTo(75)); Assert.That(reloaded.Mana, Is.EqualTo(9));
+            Assert.That(BasePool(reloaded), Is.EqualTo(75)); Assert.That(reloaded.Mana, Is.EqualTo(9));
         }
 
         [Test]

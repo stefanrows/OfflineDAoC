@@ -90,7 +90,7 @@ public sealed partial class AutonomousWorldBotController
         {
             AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Objective);
             SetRvrStatus(bot, "Holding siege rally", keep.Name,
-                $"{(bot.Realm == order.Defender ? "Holding an interior defensive post" : "Holding the realm's separated defensive camp")}; " +
+                $"{(order.Side == AutonomousRvrEventLayer.RallySide.Defender ? "Holding an interior defensive post" : "Holding the realm's separated defensive camp")}; " +
                 $"attackers advance when their recruited force is ready after at least three minutes; no enemy attendance requirement; " +
                 $"preparation deadline in {Math.Max(0, (int)Math.Ceiling(TimeSpan.FromMilliseconds(order.RemainingMilliseconds).TotalMinutes))}m " +
                 $"({(keep.IsRelic ? 192 : 128)} cap per realm; actual fighting can start the battle earlier)");
@@ -100,7 +100,7 @@ public sealed partial class AutonomousWorldBotController
         var destination = _rvrDestination with { X = (int)post.X, Y = (int)post.Y, Z = (int)post.Z };
         if (bot.CurrentRegionID != keep.Region)
             TravelRvrObjective(bot, destination);
-        else if (bot.Realm == order.Defender)
+        else if (order.Side == AutonomousRvrEventLayer.RallySide.Defender)
             TravelToDefensivePost(bot, keep, post);
         else
         {
@@ -112,7 +112,7 @@ public sealed partial class AutonomousWorldBotController
             else IssueVariedRvrPath(bot, post);
         }
         SetRvrStatus(bot, "Traveling to siege rally", keep.Name,
-            bot.Realm == order.Defender ? "Entering the friendly keep to take a defensive post" :
+            order.Side == AutonomousRvrEventLayer.RallySide.Defender ? "Entering the friendly keep to take a defensive post" :
                 "Joining this realm's separate rally camp outside the keep");
         return true;
     }
@@ -135,7 +135,7 @@ public sealed partial class AutonomousWorldBotController
         // doorway and use the native door operation, never a wall shortcut.
         foreach (var door in keep.Doors.Values.OrderBy(bot.GetDistanceTo))
         {
-            if (door.Realm != bot.Realm || Math.Abs(door.Z - bot.Z) > 500) continue;
+            if (!AutonomousRvrTravel.IsFriendlyDoor(bot, door) || Math.Abs(door.Z - bot.Z) > 500) continue;
             if (bot.IsWithinRadius(door, WorldMgr.INTERACT_DISTANCE))
             {
                 if (AutonomousRvrTravel.TraverseFriendlyDoor(bot, post)) return true;

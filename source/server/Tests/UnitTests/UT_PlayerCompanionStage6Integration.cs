@@ -302,7 +302,8 @@ public sealed class UT_PlayerCompanionStage6Integration
         Assert.Multiple(() =>
         {
             Assert.That(unknown, Does.Contain("rejuvenation (Rejuvenation (healer))"));
-            Assert.That(manualOnly, Does.Contain("has no automatic builds"));
+            // Since 0.96.0 every class has builds; an unusable one is refused by runtime validation.
+            Assert.That(manualOnly, Does.Contain("build is unavailable for Build Necro"));
             Assert.That(recruitMessage, Does.Contain("is not a Cleric build"));
             Assert.That(recruited, Is.Null);
             Assert.That(PlayerCompanionRoster.TryGetRoster(owner, out var roster) ? roster.Count : -1, Is.EqualTo(2));

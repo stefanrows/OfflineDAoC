@@ -26,7 +26,8 @@ namespace DOL.GS
                 if (bot.Group == null || !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) continue;
                 string force = bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}";
                 if (!targets.TryGetValue(force, out string target)) continue;
-                string key = $"{target}/{bot.Realm}";
+                // One roster per guild on the objective: crews mix realms on Camlann.
+                string key = $"{target}/{bot.Guild?.GuildID ?? bot.Realm.ToString()}";
                 if (!grouped.TryGetValue(key, out var members)) grouped[key] = members = new();
                 members.Add(bot);
             }

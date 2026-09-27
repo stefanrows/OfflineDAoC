@@ -39,14 +39,16 @@ namespace DOL.GS
                 victim == null || !owner.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE))
                 return 0;
 
-            int rewards = 0;
-            foreach (GameBot companion in owner.Group.GetMembersInTheGroup().OfType<GameBot>())
-            {
-                if (companion.Owner == owner &&
-                    TryRewardPve(companion, victim, Random.Shared.NextDouble()))
-                    rewards++;
-            }
-            return rewards;
+            // One kill, one drop: a single eligible companion of this owner
+            // rolls for the item (owner decision 2026-09-27; also keeps the
+            // kill from queuing one database write per companion).
+            GameBot[] eligible = owner.Group.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(companion => companion.Owner == owner && IsEligible(companion, victim))
+                .ToArray();
+            if (eligible.Length == 0)
+                return 0;
+            GameBot chosen = eligible[Random.Shared.Next(eligible.Length)];
+            return TryRewardPve(chosen, victim, Random.Shared.NextDouble()) ? 1 : 0;
         }
 
         public static bool TryRewardPvp(GameBot companion, GamePlayer victim)
@@ -210,6 +212,7 @@ namespace DOL.GS
 
             long soldCopper = 0;
             long creditedMoney = 0;
+            int soldItems = 0;
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
             lock (inventory.Lock)
             {
@@ -222,16 +225,25 @@ namespace DOL.GS
                     return false;
 
                 eInventorySlot backpack = inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
-                DbInventoryItem candidate = null;
+                List<DbInventoryItem> sold = [];
                 if (backpack == eInventorySlot.Invalid)
                 {
-                    candidate = FindSurplusForSpace(companion, inventory, out soldCopper);
-                    if (candidate == null)
+                    // A full backpack is cleared in one go, like a player who
+                    // finally visits a merchant: up to two bags of the worst
+                    // earned, unlocked items, so the next drops land freely.
+                    sold = FindSurplusBatch(companion, inventory, ClearBatchSlots, out soldCopper);
+                    while (sold.Count > 0 &&
+                           companion.Owner.GetCurrentMoney() > PlayerCompanionRoster.MaximumOwnerMoney - soldCopper)
+                    {
+                        DbInventoryItem last = sold[^1];
+                        soldCopper -= AutonomousBotEconomy.CalculateStandardVendorSaleCopper(last);
+                        sold.RemoveAt(sold.Count - 1);
+                    }
+                    if (sold.Count == 0)
                         return false;
-                    backpack = (eInventorySlot)candidate.SlotPosition;
-                    if (companion.Owner.GetCurrentMoney() > PlayerCompanionRoster.MaximumOwnerMoney - soldCopper)
-                        return false;
+                    backpack = (eInventorySlot)sold[0].SlotPosition;
                 }
+                DbInventoryItem candidate = sold.Count > 0 ? sold[0] : null;
 
                 PlayerCompanionRecord record = companion.PlayerCompanionRecord;
                 GamePlayer owner = companion.Owner;
@@ -245,8 +257,14 @@ namespace DOL.GS
                 var originalItems = inventory.AllItems.Select(existing =>
                     (Item: existing, Slot: existing.SlotPosition, OwnerId: existing.OwnerID)).ToArray();
 
-                if (candidate != null && !inventory.RemoveItemWithoutDbDeletion(candidate))
-                    return false;
+                foreach (DbInventoryItem surplus in sold)
+                {
+                    if (!inventory.RemoveItemWithoutDbDeletion(surplus))
+                    {
+                        RestoreInventory(inventory, originalItems);
+                        return false;
+                    }
+                }
                 if (!inventory.AddItemWithoutDbAddition(backpack, item))
                 {
                     RestoreInventory(inventory, originalItems);
@@ -263,7 +281,8 @@ namespace DOL.GS
                     owner.DBCharacter.Gold = Money.GetGold(creditedMoney);
                     owner.DBCharacter.Platinum = Money.GetPlatinum(creditedMoney);
                     owner.DBCharacter.Mithril = Money.GetMithril(creditedMoney);
-                    PlayerCompanionRoster.SetEquipmentItemFlags(record, candidate.ObjectId, string.Empty);
+                    foreach (DbInventoryItem surplus in sold)
+                        PlayerCompanionRoster.SetEquipmentItemFlags(record, surplus.ObjectId, string.Empty);
                 }
                 record.UpdatedUtc = DateTime.UtcNow.ToString("O");
                 record.Dirty = true;
@@ -275,7 +294,8 @@ namespace DOL.GS
                 IEnumerable<DataObject> updates = candidate == null
                     ? [record]
                     : [record, owner.DBCharacter];
-                IEnumerable<DataObject> deletes = candidate == null ? [] : [candidate];
+                IEnumerable<DataObject> deletes = sold;
+                soldItems = sold.Count;
                 if (!database.InsertUpdateAndDeleteObjectsAtomically(inserts, updates, deletes))
                 {
                     RestoreInventory(inventory, originalItems);
@@ -291,6 +311,7 @@ namespace DOL.GS
                 }
             }
 
+            int soldCount = soldItems;
             if (soldCopper > 0)
                 companion.Owner.SetCurrentMoneyAfterAtomicPersistence(creditedMoney);
             companion.RefreshItemBonuses();
@@ -300,11 +321,28 @@ namespace DOL.GS
 
             companion.Owner.Out.SendMessage(
                 soldCopper > 0
-                    ? $"{companion.Name} received {item.Name} from a {source} encounter; surplus gear sold for {Money.GetString(soldCopper)}."
+                    ? $"{companion.Name} received {item.Name} from a {source} encounter; a full backpack was cleared, {soldCount} surplus items sold for {Money.GetString(soldCopper)}."
                     : $"{companion.Name} received {item.Name} from a {source} encounter.",
                 DOL.GS.PacketHandler.eChatType.CT_Loot,
                 DOL.GS.PacketHandler.eChatLoc.CL_SystemWindow);
             return true;
+        }
+
+        /// <summary>Backpack slots a full companion frees at once: two bags of eight.</summary>
+        public const int ClearBatchSlots = 16;
+
+        /// <summary>The worst sellable surplus items, up to <paramref name="count"/>, worst first.</summary>
+        internal static List<DbInventoryItem> FindSurplusBatch(GameBot companion, BotInventory inventory, int count,
+            out long copper)
+        {
+            List<DbInventoryItem> items = inventory.AllItems
+                .Where(item => CanSellForSpace(companion, item))
+                .OrderBy(AutonomousBotEconomy.EquipmentValue)
+                .ThenBy(item => item.Price)
+                .Take(Math.Max(1, count))
+                .ToList();
+            copper = items.Sum(item => (long)AutonomousBotEconomy.CalculateStandardVendorSaleCopper(item));
+            return items;
         }
 
         internal static DbInventoryItem FindSurplusForSpace(GameBot companion, BotInventory inventory,

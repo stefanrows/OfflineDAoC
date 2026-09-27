@@ -29,6 +29,9 @@ namespace DOL.GS.Tests
         private sealed class TestServer : GameServer
         {
             public override GameServerConfiguration Configuration => new() { ServerType = EGameServerType.GST_Normal };
+            // GameObject's static constructor reads the quest cache; give it an empty database.
+            protected override DOL.Database.IObjectDatabase DataBaseImpl =>
+                DispatchProxy.Create<DOL.Database.IObjectDatabase, DOL.UnitTests.UT_UnobservedConcentration.EmptyReads>();
         }
 
         // Only actor inputs are doubled. Roster selection, attendance rebasing,

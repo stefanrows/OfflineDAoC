@@ -9,7 +9,9 @@ namespace DOL.GS
     {
         private sealed record Lease(WeakReference<GameBot> Bot, long Until, BotSiegeKind Kind);
         private static readonly object Gate = new();
-        private static readonly Dictionary<(ushort Region, string Keep, eRealm Realm, int Slot), Lease> Jobs = new();
+        private static readonly Dictionary<(ushort Region, string Keep, string Side, int Slot), Lease> Jobs = new();
+        /// <summary>Camlann: one siege-job pool per guild, not per realm.</summary>
+        private static string SideOf(GameBot bot) => bot.Guild?.GuildID ?? "realm-" + (int)bot.Realm;
         public static int Slots(int present) => present < 8 ? 0 : present < 24 ? 2 : present < 64 ? 4 : 6;
         public static bool CanOperate(eCharacterClass characterClass) => characterClass is
             eCharacterClass.Armsman or eCharacterClass.Mercenary or eCharacterClass.Paladin or eCharacterClass.Reaver or eCharacterClass.Scout or
@@ -29,7 +31,7 @@ namespace DOL.GS
                 long now = GameLoop.GameLoopTime;
                 foreach (var key in Jobs.Where(p => p.Value.Until < now || !p.Value.Bot.TryGetTarget(out GameBot b) || !b.IsAlive ||
                     b.ObjectState != GameObject.eObjectState.Active).Select(p => p.Key).ToArray()) Jobs.Remove(key);
-                var existing = Jobs.FirstOrDefault(p => p.Key.Keep == keep && p.Key.Realm == bot.Realm &&
+                var existing = Jobs.FirstOrDefault(p => p.Key.Keep == keep && p.Key.Side == SideOf(bot) &&
                     p.Key.Region == region && p.Value.Bot.TryGetTarget(out GameBot b) && b == bot);
                 if (existing.Value != null)
                 {
@@ -39,7 +41,7 @@ namespace DOL.GS
                 }
                 for (int index = 0; index < Math.Min(Slots(present), attacking ? 6 : 4); index++)
                 {
-                    var key = (region, keep, bot.Realm, index);
+                    var key = (region, keep, SideOf(bot), index);
                     if (Jobs.ContainsKey(key)) continue;
                     kind = index < 2 ? (attacking ? BotSiegeKind.Ram : BotSiegeKind.Ballista) :
                         index < 4 ? (index == 2 ? BotSiegeKind.Catapult : BotSiegeKind.Trebuchet) : BotSiegeKind.Ballista;

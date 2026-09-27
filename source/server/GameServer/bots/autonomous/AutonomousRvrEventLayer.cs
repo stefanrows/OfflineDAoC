@@ -40,6 +40,8 @@ public static partial class AutonomousRvrEventLayer
         public required LiveObjective Target;
         public required eRealm AttackerRealm;
         public required eRealm DefenderRealm;
+        /// <summary>Camlann: the guild that opened the assault; its guild's warbands are the attackers.</summary>
+        public string AttackerGuild;
         public required bool RelicKeep;
         public required long ExpiresTick;
         public bool BattleStarted;
@@ -249,9 +251,12 @@ public static partial class AutonomousRvrEventLayer
                 if (target.UnderAttack) active.AttackObserved = true;
                 // The attacking commitment raises the alarm before combat. Defenders
                 // form next; the third realm joins after both primary forces exist.
+                // Camlann sides are guilds: the opener's guild attacks, the owner's
+                // guild defends, every other guild contests on its own. The realm
+                // byte only decides for realm-owned, guildless objectives.
                 bool ownsTarget = OwnsObjective(force, target);
-                bool attacksTarget = !ownsTarget && force.Realm == active.AttackerRealm;
-                bool defendsTarget = ownsTarget || (!string.IsNullOrEmpty(target.OwningGuild) && force.Realm == active.DefenderRealm);
+                bool attacksTarget = !ownsTarget && SameAttackingSide(force, active);
+                bool defendsTarget = ownsTarget;
                 if (!attacksTarget && !defendsTarget && !RealmEventPolicy.CanRecruitRealm(
                     defendsTarget, active.AttackObserved || active.BattleStarted,
                     active.Attackers.Values.Sum(), active.Defenders.Values.Sum(), Capacity(active)))
@@ -316,6 +321,7 @@ public static partial class AutonomousRvrEventLayer
                     Target = selected,
                     AttackerRealm = force.Realm,
                     DefenderRealm = selected.OwningRealm,
+                    AttackerGuild = force.GuildName,
                     RelicKeep = selected.IsRelicKeep,
                     ExpiresTick = nowTick + RealmEventPolicy.RecruitmentMilliseconds(Random.Shared.NextDouble()),
                     CreatedTick = nowTick,
@@ -336,6 +342,30 @@ public static partial class AutonomousRvrEventLayer
                 "No major assault selected; roaming a live frontier objective.");
         }
     }
+
+    private static bool SameAttackingSide(Force force, ActiveEvent active) =>
+        string.IsNullOrEmpty(active.AttackerGuild)
+            ? force.Realm == active.AttackerRealm
+            : string.Equals(force.GuildName, active.AttackerGuild, StringComparison.Ordinal);
+
+    /// <summary>The bucket a force is registered in, or null. Lookups go by force, never by the asking bot's realm:
+    /// Camlann crews mix realms, so a member's realm says nothing about its side.</summary>
+    private static Dictionary<string, int> BucketOf(ActiveEvent active, string forceId) =>
+        forceId == null ? null :
+        active.Attackers.ContainsKey(forceId) ? active.Attackers :
+        active.Defenders.ContainsKey(forceId) ? active.Defenders :
+        active.ThirdRealm.ContainsKey(forceId) ? active.ThirdRealm : null;
+
+    /// <summary>The side-realm a registered force counts under in attendance.</summary>
+    private static eRealm SideRealm(ActiveEvent active, Dictionary<string, int> bucket) =>
+        ReferenceEquals(bucket, active.Attackers) ? active.AttackerRealm :
+        ReferenceEquals(bucket, active.Defenders) ? active.DefenderRealm : OtherRealm(active);
+
+    public enum RallySide { Attacker, Defender, Contester }
+
+    private static RallySide SideOf(ActiveEvent active, Dictionary<string, int> bucket) =>
+        ReferenceEquals(bucket, active.Attackers) ? RallySide.Attacker :
+        ReferenceEquals(bucket, active.Defenders) ? RallySide.Defender : RallySide.Contester;
 
     private static Plan ToPlan(Intent Intent, LiveObjective target, bool shared, string reason) =>
         new(Intent, target.Id, target.Name, target.RegionId, target.X, target.Y, target.Z, shared, reason);
@@ -422,10 +452,15 @@ public static partial class AutonomousRvrEventLayer
         }
     }
 
-    public sealed record RallyOrder(string TargetId, eRealm Attacker, eRealm Defender, int[] Slots, long RemainingMilliseconds);
+    public sealed record RallyOrder(string TargetId, eRealm Attacker, eRealm Defender, int[] Slots, long RemainingMilliseconds,
+        RallySide Side = RallySide.Attacker);
 
     private static eRealm OtherRealm(ActiveEvent active) =>
         new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia }.First(realm => realm != active.AttackerRealm && realm != active.DefenderRealm);
+
+    /// <summary>The third wing's realm for camp orientation; also defined for guildless (realm None) defenders.</summary>
+    public static eRealm ContesterRealm(eRealm attacker, eRealm defender) =>
+        new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia }.First(realm => realm != attacker && realm != defender);
 
     private static Dictionary<string, int> Participants(ActiveEvent active, eRealm realm) =>
         realm == active.AttackerRealm ? active.Attackers : realm == active.DefenderRealm ? active.Defenders : active.ThirdRealm;
@@ -435,9 +470,9 @@ public static partial class AutonomousRvrEventLayer
         lock (Sync)
         {
             Expire(nowTick);
-            var active = Events.Values.FirstOrDefault(entry => !entry.BattleStarted && Participants(entry, realm).ContainsKey(forceId));
+            var active = Events.Values.FirstOrDefault(entry => !entry.BattleStarted && BucketOf(entry, forceId) != null);
             if (active == null) return null;
-            var participants = Participants(active, realm);
+            var participants = BucketOf(active, forceId);
             int count = participants[forceId];
             // Reuse freed posts even when differently sized warbands leave
             // gaps. Exact 128 attendance must not depend on divisibility by eight.
@@ -448,7 +483,8 @@ public static partial class AutonomousRvrEventLayer
                 slots = Enumerable.Range(0, Capacity(active)).Where(slot => !used.Contains(slot)).Take(count).ToArray();
                 active.Slots[forceId] = slots;
             }
-            return new(active.TargetId, active.AttackerRealm, active.DefenderRealm, slots, active.ExpiresTick - nowTick);
+            return new(active.TargetId, active.AttackerRealm, active.DefenderRealm, slots, active.ExpiresTick - nowTick,
+                SideOf(active, participants));
         }
     }
 
@@ -471,8 +507,8 @@ public static partial class AutonomousRvrEventLayer
     {
         lock (Sync)
         {
-            var active = Events.Values.FirstOrDefault(entry => entry.ExpiresTick > nowTick && Participants(entry, realm).ContainsKey(forceId));
-            return active == null ? null : ToPlan(realm == active.DefenderRealm ? Intent.DefendEvent :
+            var active = Events.Values.FirstOrDefault(entry => entry.ExpiresTick > nowTick && BucketOf(entry, forceId) != null);
+            return active == null ? null : ToPlan(ReferenceEquals(BucketOf(active, forceId), active.Defenders) ? Intent.DefendEvent :
                 active.RelicKeep ? Intent.AssaultRelicKeep : Intent.AssaultKeep, active.Target, true,
                 active.BattleStarted ? "Return to the ongoing siege" : "Assemble at the physical siege rally");
         }
@@ -496,7 +532,8 @@ public static partial class AutonomousRvrEventLayer
         {
             foreach (var active in Events.Values)
             {
-                if (active.ExpiresTick <= nowTick || !Participants(active, bot.Realm).ContainsKey(force)) continue;
+                Dictionary<string, int> bucket = BucketOf(active, force);
+                if (active.ExpiresTick <= nowTick || bucket == null) continue;
                 if (active.BattleStarted)
                 {
                     // Real combat is intentional participation, even without a kill.
@@ -511,13 +548,13 @@ public static partial class AutonomousRvrEventLayer
                         Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), staged.Position) <=
                             AutonomousRvrRally.ArrivalRadius * AutonomousRvrRally.ArrivalRadius)
                         return true;
-                    if (IsHoldingSiegeDefense(bot.Realm == active.DefenderRealm, bot.CurrentRegionID == active.Target.RegionId,
+                    if (IsHoldingSiegeDefense(ReferenceEquals(bucket, active.Defenders), bot.CurrentRegionID == active.Target.RegionId,
                         Vector2.DistanceSquared(new(bot.X, bot.Y), new(active.Target.X, active.Target.Y)),
                         Math.Abs(bot.Z - active.Target.Z))) return true;
                     continue;
                 }
                 if (active.Present.TryGetValue(bot.DatabaseID, out var present) &&
-                    present.Force == force && present.Realm == bot.Realm && ReferenceEquals(present.Bot, bot) &&
+                    present.Force == force && ReferenceEquals(present.Bot, bot) &&
                     present.Tick <= nowTick && nowTick - present.Tick <= AttendanceFreshnessMilliseconds &&
                     bot.CurrentRegionID == present.Region &&
                     Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), present.Position) <=
@@ -544,8 +581,9 @@ public static partial class AutonomousRvrEventLayer
         lock (Sync)
         {
             Expire(nowTick);
-            if (!Events.TryGetValue(targetId, out var active) ||
-                !Participants(active, realm).ContainsKey(forceId)) return;
+            if (!Events.TryGetValue(targetId, out var active) || BucketOf(active, forceId) is not { } bucket) return;
+            // Attendance counts under the force's side, whatever realm this member was born in.
+            realm = SideRealm(active, bucket);
             if (inPosition) active.Present[botId] = (forceId, realm, nowTick, bot, position, bot?.CurrentRegionID ?? 0);
             else active.Present.Remove(botId);
             if (active.BattleStarted) return;

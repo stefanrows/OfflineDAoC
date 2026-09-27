@@ -16,16 +16,32 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+31. **Companion loot: fewer drops, no endlessly full backpacks.** Aaron,
+    2026-09-27: one companion gets a reward per kill instead of every
+    companion; when a companion's backpack is full, clear room in one go
+    (e.g. sell two bags' worth of the worst unlocked items) instead of
+    selling one item per drop. Respect [Keep] and manual locks. Also relieves
+    the kill lag of bug 42.
+    Source 0.99.0: one random eligible companion per owner rolls per kill;
+    a full backpack sells up to 16 of the worst earned, unlocked items at once
+    ([Keep], starter, player-supplied and legacy items are never sold);
+    the owner's money cap still limits the batch. Check pending: drops and
+    backpack clearing while levelling.
+
 30. **Camlann guild cohesion and encounter memory.** Source 0.98.0: nearby
     autonomous guildmates who are not busy answer a guildmate's fight by
     their Sociability (decision stable for 30 s); guilds keep an in-memory,
     one-hour win/loss tally against other guilds that makes a crew bolder or
     warier (appetite x0.6-1.3); persisted grudges still decide whom a guild
-    hunts. RvR healers heal only their own guild's keep guards. Still open
-    from the realm-leftover review: the RvR event layer, rally posts, siege
-    attendance and planning counts still group forces by realm byte (see
-    CAMLANN_PVP_REVIEW.md). Real-client checks pending: guild help in the
-    frontier, guard healing at a guild keep.
+    hunts. RvR healers heal only their own guild's keep guards. Source 0.99.0
+    finishes the realm-leftover review: siege sides are guilds (the opener's
+    guild attacks, the owner's guild defends, other guilds contest), rally
+    orders, keep plans, attendance and inactivity protection look up the
+    force instead of each member's realm, rally posts, friendly doors, siege
+    engines and job pools follow the guild, and RvR warbands already in the
+    frontier may gather at their guild keep or their realm's border keep.
+    Carrier escorts and realm event notices still use realms. Real-client
+    checks pending: guild help, guard healing, a guild siege gathering.
 
 29. **Varied RvR roaming.** Source 0.98.0 replaces the fixed west-to-east camp
     loop with weighted wandering: keeps, frontier clearings, enemy sightings

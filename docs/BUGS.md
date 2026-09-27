@@ -6,6 +6,18 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+## Fixed in source; installation verification pending
+
+44. **Companion inventory window jumps back to the top after taking an item.**
+    Reported by Aaron on 0.96.0: after dragging an item out of a companion's
+    **[Open inventory]** window, the window scrolls to the top, so taking
+    several items from the lower backpack means scrolling down every time.
+    Expected: the window keeps its scroll position. Cause: after every move
+    the server re-sent all 100 slots with the house-vault window type, which
+    the client treats as opening the window. Fixed in source 0.99.0: only
+    opening uses that type; moves send a slot update. Real-client check
+    pending: take several items from the lower backpack in a row.
+
 42. **Every player kill freezes the server for about 0.4-6 s (companion gear
     rewards).** Reported on 0.89.0/0.91.0-dev by Aaron: "when several mobs die
     at once it almost always lags". Evidence from the installed logs: 524 of
@@ -23,7 +35,14 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     plus WAL makes each connection close checkpoint and fsync, which is slow on
     Windows. Several simultaneous deaths queue behind each other.
     Workaround: none short of fewer companions or a lower XP rate.
-    **Questions for Stefan (owner decision):**
+    **Decision 2026-09-27 (Aaron):** only one companion receives an item per
+    kill, and a full backpack must not keep filling up (see task 31).
+    Source 0.99.0 rolls once per kill per owner for one random eligible
+    companion (one database write instead of up to seven), and a full backpack
+    sells up to 16 surplus items in the same write. The per-write cost itself
+    (options A-C below) is unchanged. Real-client check pending: kill lag with
+    several mobs dying at once.
+    **Original questions for Stefan (owner decision):**
     - Is one item per companion per kill intended, and should the chance really
       scale to 100 % with the XP rate?
     - Aaron's proposal: a **loot pool per fight** instead of per-companion
@@ -35,21 +54,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
       the kill but persist the grant off the game loop; (B) keep one SQLite
       connection open (pooling) to stop checkpoint-per-close; (C) batch all
       grants of one tick in one transaction.
-
-38. **Server unit tests fail in bulk depending on filter and order.** On 0.80.0, `dotnet test source/server/Tests/Tests.csproj -c Release --filter "FullyQualifiedName~Companion|FullyQualifiedName~Bomb|FullyQualifiedName~BotBrain|FullyQualifiedName~Style|FullyQualifiedName~Taunt|FullyQualifiedName~BotCombat|FullyQualifiedName~Tank"` fails 133 tests with `TypeInitializationException: The type initializer for 'DOL.GS.GameObject' threw` (inner NullReferenceException). Other filters pass or fail intermittently (19 tests), and `UT_BotWeaponStats` alone fails 4. Likely a test touches `GameObject` before any `EpicTestServerScope` exists, which poisons the type for the whole run. Impact: suite results depend on selection and order; product code unaffected. Not yet investigated.
-
-33. **Launcher BotGoalsSettings tests cannot construct the control.** On 0.76.0, `BotGoalsSettingsTests` fails in SetUp with `MissingMethodException: Constructor on type 'OfflineDaoc.Launcher.BotGoalsSettingsControl' not found` for LegacyFileExplainsMappingBeforeRewriting, MeasuredRecommendationAndPanelRenderWithoutLaunchingServer, MixTotalAndServerStateGateSaving and PresetAndWorldShapeSaveAndUndo. Reproduce with `tools/dev/winnet.sh test source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj -c Release`. Expected: the fixture creates the control with its current constructor. Impact: the population-settings tests do not run; the launcher itself is unaffected. Likely the test still reflects an older constructor signature; not yet investigated.
-
-26. **World-speed status publication intermittently fails.** Installed 0.73.0 logged three `UnauthorizedAccessException` failures while replacing the status file during the 2026-09-26 observation. Later snapshots resumed and simulation kept progressing. Expected: continuous dashboard status updates; actual: transient publication failures. Root cause and gameplay impact are unconfirmed; concurrent diagnostic readers are a possible confound. Workaround: wait for the next status update. No fix included in 0.74.0.
-
-27. **Missing NPC template 5232525.** Installed 0.73.0 logged one missing-template error during the 2026-09-26 autonomous session. Expected: the requested NPC template resolves; actual: lookup failed. The spawning caller and gameplay impact remain unidentified; no template was guessed or added. Reproduction beyond the observed log event and workaround are unknown.
-
-5. **Some helmets render oversized or glitched.** Expected: equipped helmets display at the correct scale and appearance. Actual: some helmets appear oversized and visually buggy; the affected items and viewing context have not been recorded. Affected version and workaround were not provided. Source audit 2026-09-26: helmet packets send the item's model and normal texture/effect fields without a demonstrated scale or field error. No item-specific repair is justified until an affected item ID, wearer race/gender, client version, and screenshot or packet capture identify the failing model.
-
-
-18. **Hasteners still fail to give speed at Galpen.** Reproduce by using a Galpen hastener as a Troll. Expected: the allied player receives the speed effect when eligible. Actual: the hastener says `EN SpeedBlockedRealm` and gives no speed. The 0.71.0 source fix added realm-aware checks; this report suggests it may not cover the Galpen/Troll case, but the installed version, combat state, and other active speed effects were not provided.
-
-## Fixed in source; installation verification pending
 
 43. **Companion bombers PBAoE from the edge of the pile, not its centre.**
     Reported by Aaron on 0.96.0 while levelling with two Suppression
@@ -133,5 +137,27 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
 
 ## Finished
+
+38. **Server unit tests fail in bulk depending on filter and order.** On 0.80.0, `dotnet test source/server/Tests/Tests.csproj -c Release --filter "FullyQualifiedName~Companion|FullyQualifiedName~Bomb|FullyQualifiedName~BotBrain|FullyQualifiedName~Style|FullyQualifiedName~Taunt|FullyQualifiedName~BotCombat|FullyQualifiedName~Tank"` fails 133 tests with `TypeInitializationException: The type initializer for 'DOL.GS.GameObject' threw` (inner NullReferenceException). Other filters pass or fail intermittently (19 tests), and `UT_BotWeaponStats` alone fails 4. Likely a test touches `GameObject` before any `EpicTestServerScope` exists, which poisons the type for the whole run. Impact: suite results depend on selection and order; product code unaffected. Not yet investigated.
+
+33. **Launcher BotGoalsSettings tests cannot construct the control.** On 0.76.0, `BotGoalsSettingsTests` fails in SetUp with `MissingMethodException: Constructor on type 'OfflineDaoc.Launcher.BotGoalsSettingsControl' not found` for LegacyFileExplainsMappingBeforeRewriting, MeasuredRecommendationAndPanelRenderWithoutLaunchingServer, MixTotalAndServerStateGateSaving and PresetAndWorldShapeSaveAndUndo. Reproduce with `tools/dev/winnet.sh test source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj -c Release`. Expected: the fixture creates the control with its current constructor. Impact: the population-settings tests do not run; the launcher itself is unaffected. Likely the test still reflects an older constructor signature; not yet investigated.
+
+26. **World-speed status publication intermittently fails.** Installed 0.73.0 logged three `UnauthorizedAccessException` failures while replacing the status file during the 2026-09-26 observation. Later snapshots resumed and simulation kept progressing. Expected: continuous dashboard status updates; actual: transient publication failures. Root cause and gameplay impact are unconfirmed; concurrent diagnostic readers are a possible confound. Workaround: wait for the next status update. No fix included in 0.74.0.
+
+27. **Missing NPC template 5232525.** Installed 0.73.0 logged one missing-template error during the 2026-09-26 autonomous session. Expected: the requested NPC template resolves; actual: lookup failed. The spawning caller and gameplay impact remain unidentified; no template was guessed or added. Reproduction beyond the observed log event and workaround are unknown.
+
+5. **Some helmets render oversized or glitched.** Expected: equipped helmets display at the correct scale and appearance. Actual: some helmets appear oversized and visually buggy; the affected items and viewing context have not been recorded. Affected version and workaround were not provided. Source audit 2026-09-26: helmet packets send the item's model and normal texture/effect fields without a demonstrated scale or field error. No item-specific repair is justified until an affected item ID, wearer race/gender, client version, and screenshot or packet capture identify the failing model.
+
+
+18. **Hasteners still fail to give speed at Galpen.** Reproduce by using a Galpen hastener as a Troll. Expected: the allied player receives the speed effect when eligible. Actual: the hastener says `EN SpeedBlockedRealm` and gives no speed. The 0.71.0 source fix added realm-aware checks; this report suggests it may not cover the Galpen/Troll case, but the installed version, combat state, and other active speed effects were not provided.
+    **Fixed in source 0.99.0 (tests only).** Cause: `UT_AutonomousLootFlow`
+    touched `SkillBase` first without language strings; the static
+    constructor failed silently and poisoned every later test (18 vs 84
+    failures by order). An assembly `[SetUpFixture]` now initializes logging,
+    language, `GameObject` and `SkillBase` once; the logger tolerates missing
+    initialization; stale expectations (0.95.0 mana discounts, 0.96.0 builds,
+    frontier-garrison spawn count, an optional parameter) were updated; the
+    buff pet pass no longer scans the realm when nothing is affordable. Full
+    server suite: 2,272 passed, 1 skipped (needs database class data).
 
 None.

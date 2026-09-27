@@ -35,7 +35,7 @@ public static class AutonomousRvrRally
         int memberIndex, out Vector3 point)
     {
         int slot = order.Slots[memberIndex];
-        if (bot.Realm == order.Defender)
+        if (order.Side == AutonomousRvrEventLayer.RallySide.Defender)
             return TryDefenderPost(bot, keep, slot, out point);
         point = default;
         var nav = PathfindingProvider.Instance;
@@ -44,7 +44,7 @@ public static class AutonomousRvrRally
         int orientation = Orientations.GetOrAdd((keep.KeepID,order.Attacker,order.Defender), _ => ChooseOrientation(keep,order.Attacker));
         for (int variation = 0; variation < PostVariations; variation++)
         {
-            bool primary = bot.Realm == order.Attacker;
+            bool primary = order.Side == AutonomousRvrEventLayer.RallySide.Attacker;
             Vector3 raw = AttackerPost(center, OrientationFor(orientation, primary), primary, slot, variation);
             Zone zone = WorldMgr.GetRegion(keep.Region)?.GetZone((int)raw.X, (int)raw.Y);
             if (zone == null || !AutonomousRealmBoundary.Allows(bot.Realm, keep.Region, zone.ID) ||
@@ -94,7 +94,7 @@ public static class AutonomousRvrRally
         if (regionId == 1 && keepId == 50) return 4 | (2 << 3); // west / south
         if (regionId == 1 && keepId == 58) return 0 | (6 << 3); // east / north
         int cap = relic ? 192 : 128;
-        eRealm other=(eRealm)(6-(int)attacker-(int)defender);
+        eRealm other=AutonomousRvrEventLayer.ContesterRealm(attacker, defender);
         var a=AutonomousFrontierTransport.Destination(attacker,regionId)?.Location;
         var b=AutonomousFrontierTransport.Destination(other,regionId)?.Location;
         int preferred=a==null || b==null ? keepId%8 :
@@ -142,7 +142,10 @@ public static class AutonomousRvrRally
         int gateHeight = keep.Doors.Values.Where(door => door.IsAttackableDoor).Select(door => door.Z).DefaultIfEmpty(keep.Z).Min();
         var entry = keep.Doors.Values.Where(door => door.IsAttackableDoor).OrderByDescending(door => door.GetDistanceTo(lord)).FirstOrDefault();
         int insideRadius = entry == null ? 1800 : entry.GetDistanceTo(lord);
-        var guards = keep.Guards.Values.Where(guard => guard.Realm == bot.Realm &&
+        // The keep's own guards anchor the posts; on Camlann the keep belongs
+        // to the defending guild, whose members come from every realm.
+        bool ownKeep = keep.Guild != null ? bot.Guild == keep.Guild : true;
+        var guards = keep.Guards.Values.Where(guard => ownKeep && (keep.Guild != null || guard.Realm == bot.Realm) &&
             guard.GetDistanceTo(lord) < 2400 && (protectObjective ? guard == lord : ranged ? guard is GuardArcher && guard.Z > gateHeight + 100 :
                 support ? guard == lord : guard == lord ||
                     guard is GuardFighter or GuardFighterRK && guard.GetDistanceTo(lord) < insideRadius - 100))

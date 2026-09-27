@@ -8,6 +8,14 @@ namespace DOL.GS;
 /// <summary>Route variation is a connected waypoint, not steering noise.</summary>
 public static class AutonomousRvrTravel
 {
+    /// <summary>A keep door this bot may use: its own guild's keep, or a realm door without a guild owner.</summary>
+    public static bool IsFriendlyDoor(GameBot bot, GameDoorBase door)
+    {
+        if (door is GameKeepDoor keepDoor && keepDoor.Component?.Keep is { } keep && keep.Guild != null)
+            return bot?.Guild != null && keep.Guild == bot.Guild;
+        return door != null && bot != null && door.Realm == bot.Realm;
+    }
+
     public static bool TraverseFriendlyDoor(GameBot bot, Vector3 destination)
     {
         if (!AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||

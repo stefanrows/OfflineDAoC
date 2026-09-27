@@ -310,7 +310,7 @@ namespace DOL.UnitTests
             Field(typeof(GameLiving), caster, "m_controlledBrain", new IControlledBrain[] { petBrain });
             var spell = new Spell(new DbSpell { Type = "StrengthBuff", Target = target, Range = 1500, Value = 10 }, 1);
             object selected = typeof(BotBrain).GetMethod("FindMissingMaintenanceTarget", Hidden)
-                .Invoke(caster.Brain, new object[] { spell });
+                .Invoke(caster.Brain, new object[] { spell, true });
             Assert.That(selected, Is.SameAs(own));
             Assert.That(BotGroupPetBuffTargets.Enumerate(caster, spell), Is.Empty);
         }

@@ -4724,6 +4724,11 @@ namespace DOL.AI.Brain
             for (int pass = 0; pass < 2; pass++)
             {
                 bool includePets = pass == 1;
+                // Nothing affordable: the pet pass could cast nothing, so skip
+                // its realm-wide member scan (it also ran before any gate).
+                if (includePets && !spells.Any(spell => spell != null && spell.Level <= Body.Level &&
+                        Body.Mana >= BotBody.PowerCost(spell) && BotBody.CanAffordConcentration(spell)))
+                    break;
                 // Missing member coverage also blocks the pet pass when power or
                 // concentration temporarily prevents a member cast.
                 if (includePets && !Body.InCombat && spells.Any(spell =>

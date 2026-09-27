@@ -148,42 +148,42 @@ namespace DOL.Logging
 
         private void EnqueueMessage(ELogLevel level, string message)
         {
-            _queueProcessor.EnqueueMessage(LogEntryFactory.Create(this, level, message));
+            _queueProcessor?.EnqueueMessage(LogEntryFactory.Create(this, level, message));
         }
 
         private void EnqueueMessage(ELogLevel level, Exception exception)
         {
-            _queueProcessor.EnqueueMessage(LogEntryFactory.Create(this, level, string.Empty, exception));
+            _queueProcessor?.EnqueueMessage(LogEntryFactory.Create(this, level, string.Empty, exception));
         }
 
         private void EnqueueMessage(ELogLevel level, string message, Exception exception)
         {
-            _queueProcessor.EnqueueMessage(LogEntryFactory.Create(this, level, message, exception));
+            _queueProcessor?.EnqueueMessage(LogEntryFactory.Create(this, level, message, exception));
         }
 
         private void EnqueueMessage(ELogLevel level, string message, params ReadOnlySpan<object> args)
         {
-            _queueProcessor.EnqueueMessage(LogEntryFactory.Create(this, level, message, args));
+            _queueProcessor?.EnqueueMessage(LogEntryFactory.Create(this, level, message, args));
         }
 
         private void TryEnqueueMessage(ELogLevel level, string message)
         {
-            _queueProcessor.TryEnqueueMessage(LogEntryFactory.Create(this, level, message));
+            _queueProcessor?.TryEnqueueMessage(LogEntryFactory.Create(this, level, message));
         }
 
         private void TryEnqueueMessage(ELogLevel level, Exception exception)
         {
-            _queueProcessor.TryEnqueueMessage(LogEntryFactory.Create(this, level, string.Empty, exception));
+            _queueProcessor?.TryEnqueueMessage(LogEntryFactory.Create(this, level, string.Empty, exception));
         }
 
         private void TryEnqueueMessage(ELogLevel level, string message, Exception exception)
         {
-            _queueProcessor.TryEnqueueMessage(LogEntryFactory.Create(this, level, message, exception));
+            _queueProcessor?.TryEnqueueMessage(LogEntryFactory.Create(this, level, message, exception));
         }
 
         private void TryEnqueueMessage(ELogLevel level, string message, params ReadOnlySpan<object> args)
         {
-            _queueProcessor.TryEnqueueMessage(LogEntryFactory.Create(this, level, message, args));
+            _queueProcessor?.TryEnqueueMessage(LogEntryFactory.Create(this, level, message, args));
         }
     }
 

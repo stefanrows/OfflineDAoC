@@ -59,7 +59,8 @@ namespace DOL.UnitTests
         [Test]
         public void EmbeddedIdCatalogIsBoundedAndComplete()
         {
-            Assert.That(AutonomousClassic165RestoredSpawnCatalog.Count, Is.EqualTo(2_273));
+            // 2,273 classic spawns plus 4,851 frontier-garrison spawns (1e5f042).
+            Assert.That(AutonomousClassic165RestoredSpawnCatalog.Count, Is.EqualTo(7_124));
         }
 
         [Test, Explicit("Generated source-evidence manifest verification")]

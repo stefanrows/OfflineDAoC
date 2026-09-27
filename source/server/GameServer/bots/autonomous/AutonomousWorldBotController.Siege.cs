@@ -3,12 +3,17 @@ using System.Linq;
 using System.Numerics;
 using DOL.Database;
 using DOL.GS.Keeps;
+using DOL.GS.ServerRules;
 using DOL.GS.Spells;
 
 namespace DOL.GS
 {
     public sealed partial class AutonomousWorldBotController
     {
+        /// <summary>An engine on our side: run by an ally, or unowned and of our realm (abandoned own engines).</summary>
+        private static bool FriendlyEngine(GameBot bot, GameSiegeWeapon engine) =>
+            engine.Owner is GameLiving owner ? owner == bot || PvpCombatant.AreAllied(bot, owner) : engine.Realm == bot.Realm;
+
         private string _siegeJobKeep;
         private BotSiegeKind _siegeKind;
         private int _siegeSlot;
@@ -97,8 +102,9 @@ namespace DOL.GS
             var nearby = bot.GetNPCsInRadius(6000).ToArray();
             var engines = nearby.OfType<GameSiegeWeapon>().Where(w => w.IsAlive && w.ObjectState == GameObject.eObjectState.Active).ToArray();
             bool enemyEngines = engines.Any(w => BotSiegeRuntime.LegalEnemy(bot, w));
-            int present = nearby.OfType<GameBot>().Count(b => b.IsAlive && b.Realm == bot.Realm) +
-                bot.GetPlayersInRadius(6000).Count(p => p.IsAlive && p.Realm == bot.Realm);
+            // Camlann: our side is our guild and its allies, from any realm.
+            int present = nearby.OfType<GameBot>().Count(b => b.IsAlive && (b == bot || PvpCombatant.AreAllied(bot, b))) +
+                bot.GetPlayersInRadius(6000).Count(p => p.IsAlive && PvpCombatant.AreAllied(bot, p));
             if (!AutonomousSiegeJobs.TryAcquire(bot, _siegeJobKeep, present, attacking && door!=null, enemyEngines, out _siegeKind, out _siegeSlot))
             { _siegeNextAttempt = now + 10_000; return false; }
             if (now>=_siegeNextTopup)
@@ -145,7 +151,7 @@ namespace DOL.GS
             _siegeWeapon = owned;
             if (owned == null)
             {
-                GameSiegeWeapon abandoned = engines.Where(w => w.Realm == bot.Realm && w.Owner == null &&
+                GameSiegeWeapon abandoned = engines.Where(w => FriendlyEngine(bot, w) && w.Owner == null &&
                     BotSiegeRuntime.Kind(w) == _siegeKind && (w.Health > w.DecayedHp || w.TimesRepaired<=3 && BotSiegeRuntime.Item(bot,BotSiegeRuntime.RepairKit)!=null) && InSiegeRange(w, target))
                     .OrderBy(bot.GetDistanceTo).FirstOrDefault();
                 if (abandoned != null)
@@ -198,7 +204,7 @@ namespace DOL.GS
             {
                 // Working player engines count too. Broken engines retain their native decay,
                 // but do not count as functioning firepower and are never deleted here.
-                int active = engines.Count(w => w.Realm == bot.Realm && w.Health > w.DecayedHp &&
+                int active = engines.Count(w => FriendlyEngine(bot, w) && w.Health > w.DecayedHp &&
                     (BotSiegeRuntime.Kind(w) == _siegeKind || _siegeKind is BotSiegeKind.Catapult or BotSiegeKind.Trebuchet && w is GameSiegeCatapult) &&
                     (w is not GameSiegeRam || w.IsWithinRadius(target, 600)));
                 if (active >= 2) { _siegeNextAttempt = now + 10_000; return false; }
@@ -218,7 +224,7 @@ namespace DOL.GS
                 {
                     // Recheck the shared cap immediately before consuming any kit.
                     if (target.GetNPCsInRadius(_siegeKind == BotSiegeKind.Ram ? (ushort)650 : (ushort)6000)
-                        .OfType<GameSiegeWeapon>().Count(w => w.IsAlive && w.Realm == bot.Realm && w.Health > w.DecayedHp &&
+                        .OfType<GameSiegeWeapon>().Count(w => w.IsAlive && FriendlyEngine(bot, w) && w.Health > w.DecayedHp &&
                             (BotSiegeRuntime.Kind(w) == _siegeKind || _siegeKind is BotSiegeKind.Catapult or BotSiegeKind.Trebuchet && w is GameSiegeCatapult)) >= 2) return false;
                     DbInventoryItem kit = BotSiegeRuntime.Item(bot, kitId);
                     SpellLine line = SkillBase.GetSpellLine(GlobalSpellsLines.Item_Effects);

@@ -12,6 +12,41 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.99.0] - 2026-09-27
+
+### Added
+
+- RvR warbands already in the frontier may gather at their own guild keep or
+  their realm's border keep instead of walking back to a town first.
+
+### Changed
+
+- Companion PvE loot: one kill gives one roll to one random eligible
+  companion per owner, instead of a roll for every companion.
+- A companion with a full backpack sells up to 16 of its worst earned,
+  unlocked items at once instead of one item per drop; [Keep], starter,
+  player-supplied and legacy items are never sold.
+- Siege sides on Camlann are guilds: the guild that opens an assault
+  attacks, the keep owner's guild defends, and other guilds contest on their
+  own. Rally orders, keep plans, attendance, rally posts, friendly doors,
+  siege engines and siege jobs follow the guild instead of each member's
+  realm, so mixed-realm guild warbands gather and fight as one force.
+
+### Fixed
+
+- The companion inventory window no longer jumps back to the top after an
+  item is moved (bug 44).
+- Mixed-realm guild warbands no longer lose their siege rally, plan or
+  attendance for members born in another realm; a hostile guild that shares
+  a keep's realm is no longer recruited as its defender.
+- Server unit tests no longer fail by run order (bug 38); stale expectations
+  were updated and the buff pet pass skips its realm scan when nothing is
+  affordable.
+
+### Removed
+
+- None.
+
 ## [0.98.0] - 2026-09-27
 
 ### Added

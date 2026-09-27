@@ -86,6 +86,8 @@ namespace DOL.UnitTests
         [TestCase(10, eXPSource.Player)]
         public void AutonomousKillAwardUsesBotRate(double rate, eXPSource source)
         {
+            // Kill awards consult the server rules (RvR XP scaling).
+            using var server = new EpicTestServerScope();
             Properties.BOT_XP_RATE = rate;
             Properties.XP_RATE = 3;
             RewardBot bot = (RewardBot)RuntimeHelpers.GetUninitializedObject(typeof(RewardBot));

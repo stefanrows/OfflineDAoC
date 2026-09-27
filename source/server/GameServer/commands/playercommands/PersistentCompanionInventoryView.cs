@@ -85,10 +85,15 @@ namespace DOL.GS.Commands
             _owner.ActiveInventoryObject?.RemoveObserver(_owner);
             _owner.ActiveInventoryObject = this;
             AddObserver(_owner);
-            Refresh();
+            Refresh(open: true);
         }
 
-        public void Refresh()
+        /// <summary>
+        /// Re-sends every slot. Only opening uses the house-vault window type:
+        /// sent again after a move it made the client re-open the window and
+        /// jump back to the top (bug 44), so updates are slot-only.
+        /// </summary>
+        public void Refresh(bool open = false)
         {
             if (!ReferenceEquals(_owner.ActiveInventoryObject, this))
                 return;
@@ -97,7 +102,7 @@ namespace DOL.GS.Commands
             var slots = new Dictionary<int, DbInventoryItem>(VaultSize);
             for (int slot = (int)FirstClientSlot; slot <= (int)LastClientSlot; slot++)
                 slots[slot] = items.GetValueOrDefault(slot);
-            _owner.Out.SendInventoryItemsUpdate(slots, eInventoryWindowType.HouseVault);
+            _owner.Out.SendInventoryItemsUpdate(slots, open ? eInventoryWindowType.HouseVault : eInventoryWindowType.Update);
         }
 
         public override bool CanHandleMove(GamePlayer player, eInventorySlot fromSlot, eInventorySlot toSlot) =>
