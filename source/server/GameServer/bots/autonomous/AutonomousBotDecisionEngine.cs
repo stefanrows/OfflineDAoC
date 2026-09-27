@@ -476,7 +476,9 @@ public static class AutonomousFormation
         // at 30% of the former radius (70% closer to their leader).
         int formerDistance = dungeonOrTightInterior ? 90 + hash % 90 : 210 + hash % 310;
         int minimumDistance = dungeonOrTightInterior ? 40 : 60;
-        int distance = Math.Max(minimumDistance, (int)Math.Round(formerDistance * 0.30));
+        // A little more room than before (55 % instead of 30 % of the old
+        // radius) so companions spread around their player instead of crowding.
+        int distance = Math.Max(minimumDistance, (int)Math.Round(formerDistance * (dungeonOrTightInterior ? 0.30 : 0.55)));
         int angle = (hash / 17) % 360;
         return new(distance, angle);
     }

@@ -181,6 +181,7 @@ public static partial class AutonomousBotGroupCoordinator
                 if (_lastMaintenanceTick == now) return;
                 Interlocked.Exchange(ref _lastMaintenanceTick, now);
                 RemoveBrokenSessions();
+                ExpireStalledTargetChoices(now);
                 TryFormGroups();
             }
         }

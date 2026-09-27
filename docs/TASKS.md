@@ -15,11 +15,6 @@ When a task is done and its required verification is complete, move it out of it
     attempts reached a camp, 0 kills); raids need 200 simultaneous level-50
     GroupPve bots and never start; bots never spend seals; money is flat.
 
-33. **Bots stack in Jordheim at the vault keeper.** Aaron, 2026-09-27: many
-    bots stand in one spot next to the vault keeper. In town they should sell
-    their items, buy what they need, then find a group, go solo, or return to
-    their group. Cause under investigation.
-
 7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
    the level XP curve and XP awarded at different levels to determine whether
    the slowdown is expected progression or an unintended drop in rewards, then
@@ -29,6 +24,17 @@ When a task is done and its required verification is complete, move it out of it
    save has no XP-award history, so it cannot confirm when the slowdown began.
 
 ## Implemented in source; installation verification pending
+
+33. **Bots stack in Jordheim at the vault keeper.** Aaron, 2026-09-27: many
+    bots stand in one spot next to the vault keeper. In town they should sell
+    their items, buy what they need, then find a group, go solo, or return to
+    their group. Cause: releases outside the own realm and watchdog recoveries
+    all landed on one capital coordinate (Jordheim: beside Jarl Yuliwyf, the
+    vault keeper); parties then sat in "Choosing group target" with no timer
+    while non-leaders froze. Source 0.103.0 spreads capital arrivals, ends
+    target choice after five minutes, walks members back to their leader, and
+    sends bots to a merchant at 70 % backpack. Buying consumables and grouped
+    town visits remain for task 34. Check pending: capitals after deaths.
 
 35. **Smooth, individual group travel and field backfill.** Aaron on 0.101.0:
     groups walk jerkily in lines; groups should keep refilling (nearby

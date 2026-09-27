@@ -1166,7 +1166,8 @@ namespace DOL.GS
             }
             if (release == null && IsAutonomousWorldBot)
             {
-                var capital = AutonomousStuckWatchdog.SafeCapitalFor(Realm);
+                var capital = AutonomousStuckWatchdog.SpreadAround(AutonomousStuckWatchdog.SafeCapitalFor(Realm),
+                    DatabaseID > 0 ? DatabaseID : ObjectID);
                 releaseRegion = capital.RegionId;
                 release = new Point3D(capital.X, capital.Y, capital.Z);
             }

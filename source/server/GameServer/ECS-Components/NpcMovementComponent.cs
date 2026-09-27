@@ -970,6 +970,10 @@ namespace DOL.GS
             if (!_autonomousPathFailurePending || _autonomousPathFailureStatus == PathfindingStatus.PartialPathFound)
             {
                 _autonomousTravelArrival = Owner is GameBot { IsAutonomousWorldBot: true };
+                // Decide the next leg now. Waiting for the next planning turn
+                // (2.5-6.5 s for a standing bot) made every waypoint a visible stop.
+                if (_autonomousTravelArrival && Owner.Brain is DOL.AI.ABrain arrivedBrain)
+                    arrivedBrain.NextThinkTick = GameLoop.GameLoopTime;
             }
         }
 

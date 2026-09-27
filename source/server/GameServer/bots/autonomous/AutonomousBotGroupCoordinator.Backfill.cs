@@ -26,6 +26,31 @@ namespace DOL.GS
 
         private static bool IsTransferring(GameBot bot) => TransferringMembers.Contains(MemberKey(bot));
 
+        public const int TargetChoiceTimeoutMilliseconds = 5 * 60_000;
+        private static readonly ConditionalWeakTable<Session, StrongBox<long>> ChoosingSince = new();
+
+        /// <summary>
+        /// A party that cannot agree on a target for five minutes breaks up
+        /// instead of standing in town forever; its members pick new work.
+        /// </summary>
+        private static void ExpireStalledTargetChoices(long now)
+        {
+            foreach (Session session in Sessions.Values.ToArray())
+            {
+                StrongBox<long> since = ChoosingSince.GetValue(session, _ => new StrongBox<long>(0));
+                if (session.Ending || session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve ||
+                    session.Phase != "Choosing group target")
+                {
+                    since.Value = 0;
+                    continue;
+                }
+                if (since.Value == 0)
+                    since.Value = now;
+                else if (now - since.Value >= TargetChoiceTimeoutMilliseconds)
+                    FinishGroupTask(session, "No shared target was chosen within five minutes");
+            }
+        }
+
         private static bool FieldActive(Session session) =>
             !session.Ending && session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
             session.TaskClock.HasStarted && !session.Recovery.IsRegrouping &&

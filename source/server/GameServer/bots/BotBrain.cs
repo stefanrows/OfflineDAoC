@@ -1158,6 +1158,8 @@ namespace DOL.AI.Brain
                 out _);
         }
 
+        private long _leaderMoveStartTick;
+
         private void FollowFormation(bool ambientWander = false)
         {
             // The traveling-performer preflight may already have issued this
@@ -1196,6 +1198,33 @@ namespace DOL.AI.Brain
             AutonomousFormation.Offset formation = ambientWander
                 ? AutonomousFormation.ForIdleWander(BotBody.Name, tightInterior, (int)(GameLoop.GameLoopTime / IDLE_WANDER_CYCLE_MS))
                 : AutonomousFormation.For(BotBody.Name, tightInterior);
+            // Follow like a person: ignore the leader's first steps, trail in a
+            // /stick line on a long speed run, and spread out when stopping.
+            if (companionTravel && !ambientWander && !tightInterior)
+            {
+                long now = GameLoop.GameLoopTime;
+                bool leaderMoving = leader.movementComponent != null && leader.IsMoving;
+                short leaderSpeed = leader.movementComponent == null ? (short)0 : leader.CurrentSpeed;
+                if (leaderMoving) { if (_leaderMoveStartTick == 0) _leaderMoveStartTick = now; }
+                else _leaderMoveStartTick = 0;
+                CompanionFollowStyle style = CompanionFollowStyle.Choose(leaderMoving,
+                    _leaderMoveStartTick == 0 ? 0 : now - _leaderMoveStartTick, leaderSpeed,
+                    Body.GetDistanceTo(leader), formation.Distance, Body.IsMoving);
+                if (style == CompanionFollowStyle.Hold)
+                    return;
+                if (style == CompanionFollowStyle.Stick)
+                {
+                    int place = Math.Max(0, Body.GroupIndex - 1);
+                    int trailDistance = CompanionFollowStyle.StickDistance(place);
+                    Point2D trail = leader.GetPointFromHeading((ushort)((leader.Heading + 2048) & 0xFFF), trailDistance);
+                    Vector3 stick = CompanionFollowPolicy.FormationDestination(BotBody, new(trail.X, trail.Y, leader.Z));
+                    short stickSpeed = (short)Math.Max(1, leaderSpeed + (Body.GetDistanceTo(leader) > trailDistance + 80 ? 40 : 0));
+                    CompanionFollowPolicy.BeginFormation(BotBody, stick);
+                    if (AutonomousGroupMotion.ShouldResteer(BotBody, stick, stickSpeed, now))
+                        Body.PathTo(stick, stickSpeed);
+                    return;
+                }
+            }
             double radians = formation.AngleDegrees * Math.PI / 180d;
             var destination = new Point3D(
                 leader.X + (int)Math.Round(Math.Cos(radians) * formation.Distance),
@@ -1824,9 +1853,12 @@ namespace DOL.AI.Brain
             // Consider only merchants the bot can actually interact with and
             // prefer the nearest one; the normal sale/range checks remain the
             // final authority.
+            // Seal and other currency merchants price items in their currency,
+            // not copper; the copper vendor path must never buy from them.
             GameMerchant merchant = bot.GetNPCsInRadius(interactionRadius)
                 .OfType<GameMerchant>()
-                .Where(candidate => candidate.IsWithinRadius(bot, interactionRadius))
+                .Where(candidate => candidate is not GameItemCurrencyMerchant &&
+                                    candidate.IsWithinRadius(bot, interactionRadius))
                 .OrderBy(candidate => bot.GetDistanceTo(candidate))
                 .FirstOrDefault();
             if (merchant == null)

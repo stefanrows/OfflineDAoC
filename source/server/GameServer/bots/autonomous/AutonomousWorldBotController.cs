@@ -459,6 +459,12 @@ namespace DOL.GS
                     }
                     if (_groupDirective?.IsDynamic == true)
                     {
+                        // A member far from its leader (e.g. released to another
+                        // capital) walks back to it instead of freezing in place.
+                        GameBot waitingFor = _groupDirective.Leader;
+                        if (waitingFor != null && waitingFor != bot && waitingFor.IsAlive &&
+                            (waitingFor.CurrentRegionID != bot.CurrentRegionID || !bot.IsWithinRadius(waitingFor, 1_500)))
+                            return FollowDynamicGroupLeader(bot, _groupDirective);
                         bot.StopMovingOnPath();
                         bot.StopMoving();
                         SetStatus(bot, "Holding group formation", _groupDirective.SharedGoal,

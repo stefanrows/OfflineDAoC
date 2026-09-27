@@ -414,6 +414,15 @@ namespace DOL.GS;
             bot?.Inventory != null &&
             bot.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack) == eInventorySlot.Invalid;
 
+        /// <summary>Time for a merchant visit: the backpack is at least 70 % full (28 of 40 slots).</summary>
+        public static bool NeedsMerchant(GameBot bot)
+        {
+            if (bot?.Inventory == null) return false;
+            int used = bot.Inventory.AllItems.Count(item =>
+                item.SlotPosition >= (int)eInventorySlot.FirstBackpack && item.SlotPosition <= (int)eInventorySlot.LastBackpack);
+            return used * 10 >= (eInventorySlot.LastBackpack - eInventorySlot.FirstBackpack + 1) * 7;
+        }
+
     private static eInventorySlot ResolveEquipmentSlot(GameBot bot, DbInventoryItem item,
         bool ignoreCompanionSlotLocks = false, int? companionPairTieBreak = null)
     {

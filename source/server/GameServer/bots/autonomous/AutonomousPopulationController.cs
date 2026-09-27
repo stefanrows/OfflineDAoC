@@ -359,7 +359,8 @@ public static class AutonomousPopulationController
 
     private static void PlaceAtCapitalFallback(GameBot bot, OfflineWorldBotRecord record)
     {
-        AutonomousStuckWatchdog.CapitalLocation capital = AutonomousStuckWatchdog.SafeCapitalFor((eRealm)record.Realm);
+        AutonomousStuckWatchdog.CapitalLocation capital = AutonomousStuckWatchdog.SpreadAround(
+            AutonomousStuckWatchdog.SafeCapitalFor((eRealm)record.Realm), record.BotId);
         bot.CurrentRegionID = capital.RegionId;
         bot.X = capital.X;
         bot.Y = capital.Y;

@@ -83,6 +83,25 @@ public static class AutonomousStuckWatchdog
     };
 
     /// <summary>Returns the capital anchor corrected onto the loaded navigation mesh.</summary>
+    /// <summary>
+    /// A personal spot 300-800 units around the capital anchor, snapped to a
+    /// connected floor. Everyone released to the capital used to land on the
+    /// same coordinate (in Jordheim right beside the vault keeper) and stack.
+    /// </summary>
+    public static CapitalLocation SpreadAround(CapitalLocation capital, long key)
+    {
+        ulong spread = unchecked((ulong)key);
+        double angle = (spread % 360) * Math.PI / 180d;
+        int radius = 300 + (int)(spread / 360 % 500);
+        Vector3 anchor = new((float)(capital.X + Math.Cos(angle) * radius),
+            (float)(capital.Y + Math.Sin(angle) * radius), capital.Z);
+        Zone zone = WorldMgr.GetRegion(capital.RegionId)?.GetZone((int)anchor.X, (int)anchor.Y);
+        if (zone == null || !PathfindingProvider.Instance.IsAvailable ||
+            !AutonomousRendezvousNavigation.TryChoosePoint(PathfindingProvider.Instance, zone, anchor, out Vector3 floor))
+            return capital;
+        return capital with { X = (int)floor.X, Y = (int)floor.Y, Z = (int)floor.Z };
+    }
+
     public static CapitalLocation SafeCapitalFor(eRealm realm)
     {
         CapitalLocation capital = CapitalFor(realm);
@@ -392,6 +411,8 @@ public static class AutonomousStuckWatchdog
             WorldMgr.GetRegion(bot.CurrentRegionID)?.GetZone(bind.X, bind.Y)?.ID == bot.CurrentZone.ID)
             capital = new CapitalLocation(bot.CurrentZone.Description, bot.CurrentRegionID,
                 bind.X, bind.Y, bind.Z, bot.Heading);
+        if (capital.RegionId != bot.CurrentRegionID || capital.X != bot.X)
+            capital = SpreadAround(capital, bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID);
         if (capital.RegionId == 0)
             return false;
 

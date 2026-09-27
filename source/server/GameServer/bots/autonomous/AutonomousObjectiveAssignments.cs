@@ -522,7 +522,8 @@ public static class AutonomousObjectiveAssignments
         if (bot?.PersistentRecord == null || bot.Group != null)
             return false;
         BetweenTaskPlan plan = RollBetweenTaskPlan(bot.HasSpendableAutonomousTrainingPoints,
-            AutonomousBotEconomy.IsBackpackFull(bot), Random.Shared.NextDouble(), Random.Shared.NextDouble());
+            // Sell in town before the bags are completely full, like a player would.
+            AutonomousBotEconomy.NeedsMerchant(bot), Random.Shared.NextDouble(), Random.Shared.NextDouble());
         bool downtime = Random.Shared.NextDouble() < AutonomousPlayerBehavior.TownBreakChance(
             AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord), bot.PersistentRecord.Patience);
         if (!plan.Train && !plan.Unload && !downtime) return false;

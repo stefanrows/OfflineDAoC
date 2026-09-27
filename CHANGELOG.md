@@ -12,6 +12,35 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.103.0] - 2026-09-27
+
+### Added
+
+- Companions follow like a groupmate: they ignore your first steps, trail in
+  a /stick line behind you on a long speed run, and otherwise keep a looser,
+  more spread-out spot around you.
+
+### Changed
+
+- Bots released to their capital (or recovered there) get a personal spot
+  300-800 units around the anchor instead of one shared coordinate.
+- A PvE party that cannot choose a target for five minutes breaks up;
+  members far from their party leader walk back to it instead of freezing.
+- Bots visit a merchant once their backpack is 70 % full, not only when it is
+  completely full.
+
+### Fixed
+
+- Autonomous bots, solo or grouped, no longer stand still for 2.5-6.5 s at
+  every waypoint: arriving on a travel leg wakes them to choose the next leg.
+- Bots stacked on one spot next to the Jordheim vault keeper (and the matching
+  anchors in Camelot and Tir na Nog) after dying in foreign zones.
+- A bot at a seal merchant can no longer buy seal gear for copper.
+
+### Removed
+
+- None.
+
 ## [0.102.0] - 2026-09-27
 
 ### Added
