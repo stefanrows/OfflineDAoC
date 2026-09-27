@@ -16,6 +16,11 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+38. **Companion Manager tab for companions in the group.** Aaron,
+    2026-09-27: next to Roster and Recruit, an Active tab showing only the
+    companions currently in the group. Source 0.113.0: server tab plus an
+    XML-only click link (game.dll unchanged, offline client test passes).
+    Real-client check pending.
 37. **One companion roster for all characters of an account.** Aaron,
     2026-09-27: his character Ked should level with the same companions as
     Nova and join Nova's guild North Bomb. Source 0.112.0: the roster is

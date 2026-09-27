@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.113.0] - 2026-09-27
+
+### Added
+
+- Companion Manager: an **Active** tab next to Roster and Recruit lists only
+  the roster companions currently in the player's group, with the same
+  detail panel (overview, training and tactics, gear) as Roster. The tab is
+  a new plain text link in the Custom8 window XML; the patched game.dll is
+  byte-identical, so the tab needs only the new `custom8_window.xml` in both
+  UI skins. Clients with the old XML keep working without the tab. The
+  selected tab is named in the status line; the Active link itself is not
+  highlighted (task 38).
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.112.0] - 2026-09-27
 
 ### Added

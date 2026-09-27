@@ -5,7 +5,8 @@ using static DOL.GS.CompanionManagerProtocol;
 
 namespace DOL.GS.Commands
 {
-    public enum CompanionManagerTab { Roster, Recruit }
+    /// <summary>Active lists only the roster companions currently in the player's group.</summary>
+    public enum CompanionManagerTab { Roster, Recruit, Active }
 
     public enum CompanionManagerDetailTab { Overview, Training, Gear }
 
@@ -31,6 +32,7 @@ namespace DOL.GS.Commands
         public CompanionManagerDetailTab DetailTab { get; set; }
         public CompanionManagerListState Roster { get; } = new();
         public CompanionManagerListState Recruit { get; } = new();
+        public CompanionManagerListState Active { get; } = new();
         public string Query { get; set; } = string.Empty;
         public int DetailOffset { get; set; }
         public string SelectedItemId { get; set; }
@@ -51,7 +53,15 @@ namespace DOL.GS.Commands
         internal Action[] ActionHandlers { get; } = new Action[Actions];
         internal PersistentCompanionInventoryView Bag { get; set; }
 
-        public CompanionManagerListState Current => Tab == CompanionManagerTab.Roster ? Roster : Recruit;
+        public CompanionManagerListState Current => Tab switch
+        {
+            CompanionManagerTab.Recruit => Recruit,
+            CompanionManagerTab.Active => Active,
+            _ => Roster,
+        };
+
+        /// <summary>Roster and Active both list owned companions and share their detail panel.</summary>
+        public bool ShowsCompanions => Tab != CompanionManagerTab.Recruit;
 
         /// <summary>Letters, digits, spaces, apostrophes, and hyphens; at most 24 characters.</summary>
         public static string NormalizeQuery(string text)

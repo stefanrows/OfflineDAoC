@@ -113,8 +113,12 @@ namespace DOL.GS.Commands
                     session.Tab = CompanionManagerTab.Recruit;
                     session.DetailOffset = 0;
                     break;
+                case ControlTabActive:
+                    session.Tab = CompanionManagerTab.Active;
+                    session.DetailOffset = 0;
+                    break;
                 case ControlDetailOverview or ControlDetailTraining or ControlDetailGear:
-                    if (session.Tab == CompanionManagerTab.Roster)
+                    if (session.ShowsCompanions)
                     {
                         session.DetailTab = control switch
                         {
@@ -199,8 +203,10 @@ namespace DOL.GS.Commands
         {
             var view = new CompanionManagerView();
             bool loaded = PlayerCompanionRoster.TryGetRoster(player, out List<PlayerCompanionRecord> roster);
-            bool rosterTab = session.Tab == CompanionManagerTab.Roster;
-            IReadOnlyList<CompanionManagerEntry> all = rosterTab ? RosterEntries(roster) : RecruitEntries(roster);
+            bool rosterTab = session.ShowsCompanions;
+            bool activeTab = session.Tab == CompanionManagerTab.Active;
+            IReadOnlyList<CompanionManagerEntry> all = !rosterTab ? RecruitEntries(roster)
+                : RosterEntries(activeTab ? roster.Where(record => InPlayerGroup(player, record)) : roster);
             IReadOnlyList<CompanionManagerEntry> filtered = session.Filter(all);
             IReadOnlyList<CompanionManagerEntry> companions = filtered;
             // The group row ignores search and filters and always leads the roster list.
@@ -226,8 +232,9 @@ namespace DOL.GS.Commands
             PlayerCompanionRecord selectedRecord = rosterTab
                 ? roster.FirstOrDefault(record => RecordKey(record) == list.SelectedKey)
                 : null;
-            view.Toggles[ToggleTabRoster] = ($"Roster ({roster.Count}/{PlayerCompanionRoster.MaximumRosterSize})", rosterTab);
-            view.Toggles[ToggleTabRecruit] = ("Recruit", !rosterTab);
+            view.Toggles[ToggleTabRoster] = ($"Roster ({roster.Count}/{PlayerCompanionRoster.MaximumRosterSize})",
+                session.Tab == CompanionManagerTab.Roster);
+            view.Toggles[ToggleTabRecruit] = ("Recruit", session.Tab == CompanionManagerTab.Recruit);
             bool detailTabs = rosterTab && selectedRecord != null;
             view.Toggles[ToggleDetailOverview] = (detailTabs ? "Overview" : null, session.DetailTab == CompanionManagerDetailTab.Overview);
             view.Toggles[ToggleDetailTraining] = (detailTabs ? "Training & Tactics" : null, session.DetailTab == CompanionManagerDetailTab.Training);
@@ -294,12 +301,14 @@ namespace DOL.GS.Commands
             view.DetailCanScrollUp = session.DetailOffset > 0;
             view.DetailCanScrollDown = session.DetailOffset + DetailLines < lines.Count;
             view.ListIndicator = filtered.Count == 0
-                ? (rosterTab && all.Count == 0 ? "Roster empty" : "No matches")
+                ? (activeTab && all.Count == 0 ? "None in group" : rosterTab && all.Count == 0 ? "Roster empty" : "No matches")
                 : $"{list.Offset + 1}-{list.Offset + visible.Count} of {filtered.Count}";
             string search = session.Query.Length == 0
                 ? "[Search] finds a name or class"
                 : $"Search \"{session.Query}\": {filtered.Count} found";
-            view.Status = rosterTab
+            view.Status = activeTab
+                ? $"Active: companions in your group ({all.Count}) | {search}"
+                : rosterTab
                 ? $"Your companions | {search}"
                 : $"Story companions and new companions | {search}";
             view.Message = session.Message;
@@ -320,6 +329,11 @@ namespace DOL.GS.Commands
         }
 
         private static string RecordKey(PlayerCompanionRecord record) => "c:" + record.CompanionId;
+
+        private static bool InPlayerGroup(GamePlayer player, PlayerCompanionRecord record) =>
+            record.IsActive && player.Group != null &&
+            PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out GameBot companion) &&
+            companion.Group == player.Group;
 
         private static IReadOnlyList<CompanionManagerEntry> RosterEntries(IEnumerable<PlayerCompanionRecord> roster) =>
             roster.Select(record => new CompanionManagerEntry(RecordKey(record), (eRealm)record.Realm,

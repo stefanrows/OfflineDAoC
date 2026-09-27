@@ -48,6 +48,7 @@ namespace DOL.GS
         public const int ControlReady = 0xBE;
         public const int ControlTabRoster = 0x30;
         public const int ControlTabRecruit = 0x31;
+        public const int ControlTabActive = 0x32;
         public const int ControlDetailOverview = 0x38;
         public const int ControlDetailTraining = 0x39;
         public const int ControlDetailGear = 0x3A;

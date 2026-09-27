@@ -111,6 +111,13 @@ TOGGLES = (
     ("RoleBuffer", 0x4B, 240, 66, 56),
     ("RoleAttacker", 0x4C, 298, 66, 70),
 )
+# Tabs added after the 0.32 layout: fixed text with a click area and no label
+# adapter, so the patched game.dll stays byte-identical. The server marks the
+# selected tab through the status line instead of a highlight.
+# protocol name, text, control, x, y, width
+TAB_LINKS = (
+    ("TabActive", "Active", 0x32, 196, 28, 90),
+)
 # protocol name, text, control, x, y, width
 STATIC_LINKS = (
     ("Search", "[Search]", SEARCH_CONTROL, 448, 28, 60),
@@ -170,7 +177,7 @@ def layout_constants():
     for index, (name, control, *_rest) in enumerate(TOGGLES):
         values["Control" + name] = control
         values["Toggle" + name] = index
-    for name, _text, control, *_rest in STATIC_LINKS:
+    for name, _text, control, *_rest in TAB_LINKS + STATIC_LINKS:
         values["Control" + name] = control
     return values
 
@@ -508,6 +515,8 @@ def window():
         x, y = 312 + 106 * (action % 3), 352 + 18 * (action // 3)
         _label(panel, x, y, WIDTH_ACTION, GOLD, LABEL_ACTION_BASE + 2 * action, characters=32)
         _label(panel, x, y, WIDTH_ACTION, DISABLED, LABEL_ACTION_BASE + 2 * action + 1, characters=32)
+    for _name, text, _control, x, y, width in TAB_LINKS:
+        _label(panel, x, y, width, MUTED, text=text, characters=32)
     for name, text, _control, x, y, width in STATIC_LINKS:
         if name in SCROLL_LINK_LABELS:
             _label(panel, x, y, width, LINK, SCROLL_LINK_LABELS[name], characters=16)
@@ -516,6 +525,8 @@ def window():
 
     # Click areas after every label, matching the raid's z-order.
     for name, control, x, y, width in TOGGLES:
+        _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name))
+    for name, _text, control, x, y, width in TAB_LINKS:
         _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name))
     for row in range(ROWS):
         _click(panel, 12, 112 + 20 * row, 286, CONTROL_ROW_BASE + row, f"Companion row {row + 1}", 18)
