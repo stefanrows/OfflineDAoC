@@ -124,7 +124,7 @@ public class UT_PlayerCompanionGearRewards
     [Test]
     public void AutomaticPlansHaveBudgetSafeTargetsAtEveryLevel()
     {
-        Assert.That(CompanionBuildPlanCatalog.GetEnabledPlans(), Has.Count.EqualTo(118));
+        Assert.That(CompanionBuildPlanCatalog.GetEnabledPlans(), Has.Count.EqualTo(119));
         foreach (CompanionBuildPlan plan in CompanionBuildPlanCatalog.GetEnabledPlans())
         {
             Dictionary<string, int> previous = null;
@@ -181,7 +181,7 @@ public class UT_PlayerCompanionGearRewards
     {
         IReadOnlyCollection<CompanionBuildPlan> plans = CompanionBuildPlanCatalog.GetEnabledPlans();
         IGrouping<eCharacterClass, CompanionBuildPlan>[] classes = plans.GroupBy(plan => plan.CharacterClass).ToArray();
-        Assert.That(plans, Has.Count.EqualTo(118));
+        Assert.That(plans, Has.Count.EqualTo(119));
         Assert.That(classes, Has.Length.EqualTo(39));
 
         foreach (IGrouping<eCharacterClass, CompanionBuildPlan> group in classes)
@@ -275,7 +275,7 @@ public class UT_PlayerCompanionGearRewards
     public void OwnerExampleBuildsAreOffered()
     {
         Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Healer).Select(plan => plan.Name),
-            Is.EquivalentTo(new[] { "Tri-spec", "Mending (healer)", "Augmentation (buffer)", "Pacification (crowd control)" }));
+            Is.EquivalentTo(new[] { "Tri-spec", "Mending (healer)", "Augmentation (buffer)", "Pacification (crowd control)", "Mending with cure mez" }));
         Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Spiritmaster).Select(plan => plan.Name),
             Is.EquivalentTo(new[] { "Darkness (pet caster)", "Suppression (bomb)", "Summoning (pet)" }));
     }

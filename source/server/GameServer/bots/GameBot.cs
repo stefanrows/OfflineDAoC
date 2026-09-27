@@ -1749,8 +1749,9 @@ namespace DOL.GS
                         AwardCompanionSpecPoints((byte)(reachedLevel - 1), (byte)reachedLevel);
                         if (!IsManualCompanionTraining &&
                             CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID,
-                                PlayerCompanionRecord.TrainingPlanId, out CompanionBuildPlan plan))
-                            TryApplyAutomaticCompanionPlanAtLevel(plan, reachedLevel, out _);
+                                PlayerCompanionRecord.TrainingPlanId, out CompanionBuildPlan plan) &&
+                            !TryApplyAutomaticCompanionPlanAtLevel(plan, reachedLevel, out _))
+                            RealignAutomaticCompanionSchedule(skillsGranted: true);
                     }
                 }
 
@@ -1977,6 +1978,39 @@ namespace DOL.GS
             RefreshCompanionSkills();
             ActivateSelectedBuildWeaponIfAlreadyEquipped();
             message = $"{Name} is following the {plan.Name} build ({plan.Role}); spent {pointsNeeded} points, {m_leftOverSpecPoints} remain." + SelectedBuildWeaponHint();
+            return true;
+        }
+
+        /// <summary>
+        /// Puts an automatic companion back on its plan's schedule for its
+        /// level when the saved allocation differs, e.g. after the schedule
+        /// learned to train breakpoints first. Free and trainer-free, like a
+        /// build switch; the owner's saved role and plan are kept.
+        /// </summary>
+        private bool RealignAutomaticCompanionSchedule(bool skillsGranted)
+        {
+            if (!IsPersistentPlayerCompanion || IsManualCompanionTraining || PlayerCompanionRecord == null ||
+                !CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID,
+                    PlayerCompanionRecord.TrainingPlanId, out CompanionBuildPlan plan) ||
+                CharacterClass.SpecPointsMultiplier != plan.ExpectedSpecPointsMultiplier ||
+                !CompanionBuildPlanCatalog.TryValidateRuntimePlan((eCharacterClass)CharacterClass.ID, plan, out _))
+                return false;
+
+            List<Specialization> trainable = GetSpecList().Where(spec => spec.Trainable).ToList();
+            var specs = trainable.ToDictionary(spec => spec.KeyName, StringComparer.OrdinalIgnoreCase);
+            if (plan.TargetAllocations.Any(rank => !specs.ContainsKey(rank.Specialization)) ||
+                !plan.TryGetSwitchedAllocation(specs.Keys, Level, CharacterClass.SpecPointsMultiplier,
+                    out Dictionary<string, int> allocation, out int unspentPoints) ||
+                trainable.All(spec => spec.Level == allocation[spec.KeyName]))
+                return false;
+
+            // Clears abilities, styles, and spells of the old ranks before retraining.
+            if (skillsGranted)
+                ResetCompanionSpecializations();
+            foreach (Specialization specialization in trainable)
+                specialization.Level = allocation[specialization.KeyName];
+            m_leftOverSpecPoints = unspentPoints;
+            PlayerCompanionRecord.Dirty = true;
             return true;
         }
 
@@ -2894,6 +2928,7 @@ namespace DOL.GS
                 }
                 m_leftOverSpecPoints = Math.Max(0, PlayerCompanionRecord.UnspentSpecPoints);
                 _lastAutonomousTrainedLevel = (byte)Math.Clamp(PlayerCompanionRecord.LastTrainedLevel, 1, Level);
+                RealignAutomaticCompanionSchedule(skillsGranted: false);
             }
             RefreshSpecDependantSkills(false);
             SetBotSpells();

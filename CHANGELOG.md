@@ -12,6 +12,41 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.97.0] - 2026-09-27
+
+### Added
+
+- Healer companion build `support` (Mending 42 / Augmentation 24 /
+  Pacification 23): a main healer with celerity, group resists, and a second
+  cure mez, so the pac Healer is not the only one who can demez.
+
+### Changed
+
+- Automatic companion builds now level breakpoint-first, as players did:
+  Skald Battlesongs follows the character level to 43 (speed 5), the
+  Augmentation Shaman reaches Cave 27 (instant area disease) by about level
+  43, the shield Thanes reach Stormcalling 34 and Shields 42 (Slam), and the
+  Pacification Healer reaches 38 (instant area stun). Points are saved for the
+  next breakpoint instead of being spread thin. Level-50 targets are
+  unchanged, and existing automatic companions are retrained to the new
+  schedule for free when they next load or level.
+- Companion bombers hold their first PBAoE on an enemy player clump for up to
+  2.5 s while a group Healer has an area stun ready, then bomb the stunned
+  pile (stun, then bomb).
+- Roster companions now assist their owner's PvP target like an assist train
+  and defend group members against attackers, as temporary helpers already
+  did.
+
+### Fixed
+
+- Companion bombers run into the middle of the pile before bombing instead of
+  casting from half the spell radius away, where linear falloff cost about half
+  the damage (bug 43). A blocked run bombs from where it stands after 3 s.
+
+### Removed
+
+- None.
+
 ## [0.96.0] - 2026-09-27
 
 ### Added

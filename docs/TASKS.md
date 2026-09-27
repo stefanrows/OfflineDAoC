@@ -6,6 +6,49 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+25. **Companion auto-levelling hits the key spell breakpoints.** Aaron's
+    level-45 group showed the proportional schedule (`target * level / 50`)
+    lands on dead levels: Skald Battlesongs 40 (speed 5 needs 43), Shaman
+    Cave 23 (instant AE disease needs 27), Thane Shields 35 (Slam needs 42).
+    Players levelled breakpoint-first. Plans get ordered milestones that are
+    trained as soon as the character level allows, and automatic companions
+    are realigned for free to the corrected schedule. The level-50 end state
+    of every plan stays unchanged.
+
+26. **Stun → bomb and owner assist for player-led companions.** A Healer with
+    an area stun ready opens on a clump; companion bombers wait briefly for
+    the stun, then run into the centre and bomb. Companions assist the
+    owner's target in RvR as well as PvE (persistent roster companions
+    currently miss the PvP focus logic because `CompanionPvpEngagement.Leader`
+    only accepts temporary helpers). Healers and mezzers are a preferred, not
+    a forced, target choice.
+
+27. **RvR group doctrine for autonomous warbands.** Every warband derives a
+    doctrine from its real composition (bomb group, assist train, melee train,
+    stealth pack, caster duo, pickup group with one healer and slow speed,
+    zerg/keep raid party, and more; see `docs/RVR_GROUP_DOCTRINE.md`).
+    Imperfect groups are normal and still roam and fight. The doctrine drives
+    opener, target habits, formation and retreat appetite.
+
+28. **Human-like RvR combat habits.** Bots understand their role rather than
+    act perfectly: soft priority for enemy healers and mezzers, per-bot target
+    stickiness with occasional switching or scattering, engaging without a
+    ready stun, and retreat as a risk-weighted option (a group that sees a
+    chance may stay in). Assist trains follow a caller when the doctrine has
+    one.
+
+29. **Varied RvR roaming.** Replace the fixed west-to-east camp loop with
+    weighted wandering between frontier hotspots (keeps, border keeps,
+    frontier camps) that differs by leader personality and doctrine, with
+    lingering, scouting and a default doctrine the group falls back on when
+    it disagrees. Travel and fight formations follow the group's roles.
+
+30. **Camlann guild cohesion and encounter memory.** Guildmates in the same
+    area help each other; groups remember recent encounters (who beat whom,
+    who fled) and let that shape grudges and avoidance. PvP happens at every
+    group size. Realm-based leftovers in rally/siege/guard-healing code are
+    reviewed for Camlann guild ownership.
+
 7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
    the level XP curve and XP awarded at different levels to determine whether
    the slowdown is expected progression or an unintended drop in rewards, then

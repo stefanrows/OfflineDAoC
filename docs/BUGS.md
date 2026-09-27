@@ -6,6 +6,17 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+43. **Companion bombers PBAoE from the edge of the pile, not its centre.**
+    Reported by Aaron on 0.96.0 while levelling with two Suppression
+    Spiritmasters: the bombers often cast outside the pack instead of running
+    into the middle. Cause (code-read): `BotBrain.ApproachForOffensiveSpell`
+    follows the focus mob to `min(160, radius/2)` (150 units for a radius-300
+    Soul spell) and casts from wherever that leaves the caster, while
+    `SpellHandler` applies linear falloff `1 - distance/radius` from the
+    caster. A mob at 150 takes about half damage; the far side of the pile
+    takes almost none. Fix planned in 0.97.0: move to the pile's centre
+    (the tank the mobs are beating on) before the first bomb.
+
 42. **Every player kill freezes the server for about 0.4-6 s (companion gear
     rewards).** Reported on 0.89.0/0.91.0-dev by Aaron: "when several mobs die
     at once it almost always lags". Evidence from the installed logs: 524 of

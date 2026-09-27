@@ -3110,6 +3110,10 @@ namespace DOL.AI.Brain
                 return false;
 
             int bombRange = CompanionBombApproachRange(target);
+            if (bombRange > 0 && TryMoveToBombCentre(target))
+                return true;
+            if (bombRange > 0 && _bombCentreApproach.IsInPositionFor(target))
+                return false;
             if (bombRange > 0)
             {
                 int desiredBombDistance = Math.Max(80, Math.Min(160, bombRange / 2));
@@ -3604,6 +3608,8 @@ namespace DOL.AI.Brain
                     ResetBombWait();
                 else if (ShouldWaitForBombTank(bombTarget, readyBombs[0]))
                     return true;
+                else if (ShouldWaitForAreaStun(bombTarget, readyBombs[0]))
+                    return true;
                 else if (ShouldHoldForBombVolley(bombTarget, readyBombs[0]))
                     return true;
 
@@ -3721,6 +3727,10 @@ namespace DOL.AI.Brain
                 {
                     Spell preferredBomb = readyBombs[0];
                     if (!Body.IsWithinRadius(bombTarget, preferredBomb.Radius))
+                        return false;
+                    // Run into the middle before the first bomb; the approach
+                    // gives up after a short time so a blocked path still bombs.
+                    if (!IsAtBombCentre(bombTarget, preferredBomb))
                         return false;
 
                     Spell[] bombsInRange = readyBombs
@@ -3885,6 +3895,38 @@ namespace DOL.AI.Brain
         private void ResetBombWait()
         {
             _bombTankWait.Reset();
+            _bombStunWait.Reset();
+        }
+
+        private readonly CompanionBombTankWait _bombStunWait = new();
+
+        /// <summary>
+        /// Stun, then bomb: a bomber standing in an enemy player clump holds
+        /// its first PBAoE briefly while a group Healer has an area stun ready,
+        /// because damage does not break a stun and the stunned clump cannot
+        /// run out of the radius. Once anyone in the pile is stunned, or no
+        /// stun is coming within the grace period, it bombs anyway.
+        /// </summary>
+        private bool ShouldWaitForAreaStun(GameLiving target, Spell bomb)
+        {
+            if (!BotPvpCrowdControl.PlayerLike(target) || Body.Group == null ||
+                !_bombCentreApproach.IsInPositionFor(target))
+            {
+                _bombStunWait.Reset();
+                return false;
+            }
+
+            GameLiving[] pile = CompanionBombingPolicy.PullTargets(BotBody, target, bomb, Body);
+            bool stunComing = pile.Length > 0 && !pile.Any(enemy => enemy.IsStunned) &&
+                Body.Group.GetMembersInTheGroup().OfType<GameBot>().Any(healer => healer != Body &&
+                    healer.IsAlive && healer.CurrentRegionID == Body.CurrentRegionID &&
+                    healer.IsWithinRadius(target, 1_800) && CompanionBombingPolicy.HasReadyAreaStun(healer));
+            if (!stunComing)
+            {
+                _bombStunWait.Reset();
+                return false;
+            }
+            return _bombStunWait.ShouldWait(target, GameLoop.GameLoopTime);
         }
 
         /// <summary>
@@ -3910,6 +3952,36 @@ namespace DOL.AI.Brain
 
         // Bombers farther than this are not worth waiting for.
         private const int CompanionBombVolleyReach = 1500;
+
+        private readonly CompanionBombCentreApproach _bombCentreApproach = new();
+
+        private bool IsAtBombCentre(GameLiving target, Spell bomb)
+        {
+            if (!CompanionBombingPolicy.TryGetPileCentre(BotBody, target, bomb, out Vector3 centre))
+                return true;
+            float distance = Vector3.Distance(new Vector3(Body.X, Body.Y, Body.Z), centre);
+            return _bombCentreApproach.Arrived(target, distance, CompanionBombingPolicy.CentreTolerance(bomb),
+                GameLoop.GameLoopTime);
+        }
+
+        /// <summary>Paths into the pile's centre; false once there or when the approach gave up.</summary>
+        private bool TryMoveToBombCentre(GameLiving target)
+        {
+            Spell[] readyBombs = ReadyCompanionBombs(target);
+            if (readyBombs.Length == 0 || Body.CurrentZone == null ||
+                !CompanionBombingPolicy.TryGetPileCentre(BotBody, target, readyBombs[0], out Vector3 centre) ||
+                IsAtBombCentre(target, readyBombs[0]))
+                return false;
+
+            Vector3 origin = new(Body.X, Body.Y, Body.Z);
+            Vector3 destination = PathfindingProvider.Instance.GetMoveAlongSurface(Body.CurrentZone, origin, centre,
+                PathfindingProvider.Instance.DefaultFilters) ?? centre;
+            Body.StopAttack();
+            Body.StopFollowing();
+            if (_bombCentreApproach.ShouldRepath(destination, Body.IsMoving))
+                Body.PathTo(destination, Body.MaxSpeed);
+            return true;
+        }
 
         private int CompanionBombApproachRange(GameLiving target)
         {

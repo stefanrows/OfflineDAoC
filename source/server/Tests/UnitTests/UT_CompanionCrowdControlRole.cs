@@ -54,6 +54,7 @@ public class UT_CompanionCrowdControlRole
     [TestCase("mending", BotPveGroupRole.Healer, false)]
     [TestCase("augmentation", BotPveGroupRole.Buffer, false)]
     [TestCase("pacification", BotPveGroupRole.CrowdControl, false)]
+    [TestCase("support", BotPveGroupRole.Healer, false)]
     public void HealerBuildsFollowTheOwnersRoleMapping(string key, BotPveGroupRole role, bool addControl)
     {
         Assert.That(CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Healer, key, out CompanionBuildPlan plan), Is.True);

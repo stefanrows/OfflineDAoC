@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace DOL.GS
 {
@@ -98,6 +99,44 @@ namespace DOL.GS
                 .Cast<GameLiving>().ToArray();
         }
 
+        /// <summary>
+        /// A PBAoE hits hardest at its caster's feet and fades to nothing at the
+        /// edge, so a bomber runs into the middle of the pile. The pile is the
+        /// focus mob plus every pull target around it, which in PvE is the
+        /// knot of mobs beating on the tank.
+        /// </summary>
+        public static bool TryGetPileCentre(GameBot bot, GameLiving target, Spell spell, out Vector3 centre)
+        {
+            centre = default;
+            GameLiving[] pile = PullTargets(bot, target, spell, target);
+            if (pile.Length < MinimumTargets(bot))
+                return false;
+            centre = Centroid(pile.Append(target).Distinct().Select(member => new Vector3(member.X, member.Y, member.Z)));
+            return true;
+        }
+
+        public static Vector3 Centroid(IEnumerable<Vector3> points)
+        {
+            Vector3 sum = Vector3.Zero;
+            int count = 0;
+            foreach (Vector3 point in points)
+            {
+                sum += point;
+                count++;
+            }
+            return count == 0 ? Vector3.Zero : sum / count;
+        }
+
+        /// <summary>A group Healer who could open with an area stun right now.</summary>
+        public static bool HasReadyAreaStun(GameBot healer) =>
+            healer?.CharacterClass?.ID == (int)eCharacterClass.Healer && !healer.IsIncapacitated &&
+            (healer.Spells ?? []).Any(spell => spell?.SpellType == eSpellType.Stun && spell.Radius > 0 &&
+                spell.Level <= healer.Level && healer.Mana >= healer.PowerCost(spell) &&
+                healer.GetSkillDisabledDuration(spell) <= 0);
+
+        /// <summary>Close enough to the centre that the whole pile takes near-full damage.</summary>
+        public static int CentreTolerance(Spell spell) => System.Math.Clamp((spell?.Radius ?? 0) / 6, 30, 60);
+
         public static bool HasSufficientPull(GameBot bot, GameLiving target, Spell spell, GameLiving center) =>
             PullTargets(bot, target, spell, center).Length >= MinimumTargets(bot);
 
@@ -119,6 +158,55 @@ namespace DOL.GS
                 return BotPartyRoles.IsTank(bot);
             return member is GamePlayer player && player.CharacterClass != null &&
                 BotPartyRoles.For((eCharacterClass)player.CharacterClass.ID) == BotPartyRole.Tank;
+        }
+    }
+
+    /// <summary>
+    /// One bomber's run into the pile. It counts as in position within the
+    /// tolerance (with some slack once there, so a drifting pile does not
+    /// start a new run), or after a short give-up time so a blocked path or a
+    /// kiting pile still gets bombed from where the bomber stands.
+    /// </summary>
+    internal sealed class CompanionBombCentreApproach
+    {
+        public const int GiveUpMilliseconds = 3000;
+        private object _target;
+        private long _startedTick;
+        private bool _inPosition;
+        private Vector3 _lastDestination;
+        private bool _hasDestination;
+
+        public bool Arrived(object target, float distance, int tolerance, long now)
+        {
+            if (!ReferenceEquals(_target, target))
+            {
+                _target = target;
+                _startedTick = now;
+                _inPosition = false;
+                _hasDestination = false;
+            }
+
+            int allowed = _inPosition ? tolerance * 2 : tolerance;
+            if (distance <= allowed || now - _startedTick >= GiveUpMilliseconds)
+                _inPosition = true;
+            else if (_inPosition)
+            {
+                // The pile moved away after arrival: a new, short run.
+                _inPosition = false;
+                _startedTick = now;
+            }
+            return _inPosition;
+        }
+
+        public bool IsInPositionFor(object target) => _inPosition && ReferenceEquals(_target, target);
+
+        public bool ShouldRepath(Vector3 destination, bool moving)
+        {
+            if (moving && _hasDestination && Vector3.Distance(_lastDestination, destination) < 40)
+                return false;
+            _lastDestination = destination;
+            _hasDestination = true;
+            return true;
         }
     }
 

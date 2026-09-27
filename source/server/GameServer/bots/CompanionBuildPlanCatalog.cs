@@ -120,6 +120,8 @@ namespace DOL.GS
                 ("Augmentation", 50), ("Mending", 20)),
             Variant(eCharacterClass.Healer, 10, "pacification", "Pacification (crowd control)", "crowd control",
                 ("Pacification", 44), ("Mending", 30), ("Augmentation", 8)),
+            Variant(eCharacterClass.Healer, 10, "support", "Mending with cure mez", "main healer with celerity, resists, and a second cure mez",
+                ("Mending", 42), ("Augmentation", 24), ("Pacification", 23)),
             Original(eCharacterClass.Hunter, 20, "spear", "Spear and Beastcraft", "pet and ranged/melee hybrid",
                 ("Beastcraft", 50), ("Spear", 44), ("Stealth", 36), ("Composite Bow", 9)),
             Variant(eCharacterClass.Hunter, 20, "archery", "Archery", "ranged damage with a pet",
@@ -268,8 +270,34 @@ namespace DOL.GS
         {
             (BotPveGroupRole primaryRole, bool crowdControlDuty) = GroupRole(characterClass, key);
             return new(id, characterClass, key, name, role, primaryRole, crowdControlDuty, expectedMultiplier,
-                targets.Select(target => new CompanionBuildRank(target.Specialization, target.Level)).ToArray());
+                targets.Select(target => new CompanionBuildRank(target.Specialization, target.Level)).ToArray(),
+                Milestones(characterClass, key));
         }
+
+        /// <summary>
+        /// Breakpoints a player of the era trained first while levelling, in
+        /// order. A line is raised toward its breakpoint as soon as the
+        /// character level allows (from <c>FromLevel</c>), and points are saved
+        /// for it rather than spread thin, the way a Skald kept Battlesongs at
+        /// his level until speed 5 at 43. Level-50 targets are unchanged.
+        /// </summary>
+        private static CompanionBuildMilestone[] Milestones(eCharacterClass characterClass, string key) =>
+            (characterClass, key) switch
+            {
+                // Speed 5 and War Howl at Battlesongs 43.
+                (eCharacterClass.Skald, _) => [new("Battlesongs", 43, 1)],
+                // Cure poison/disease early; instant AE disease (Mold Cloud) at Cave 27.
+                (eCharacterClass.Shaman, "augmentation") => [new("Mending", 7, 20), new("Subterranean", 27, 38)],
+                // Instant Ram at Stormcalling 34, Slam at Shields 42.
+                (eCharacterClass.Thane, "stormcalling") => [new("Stormcalling", 34, 30), new("Shields", 42, 40)],
+                (eCharacterClass.Thane, "melee") => [new("Shields", 42, 40)],
+                // Instant AE mez at Pacification 36 and instant AE stun at 38. The tri-spec
+                // default stays proportional: its budget cannot also keep heals up.
+                (eCharacterClass.Healer, "pacification") => [new("Pacification", 38, 29)],
+                // Celerity, then cure mez (Cleanse Mind) on the Pacification base line at 23.
+                (eCharacterClass.Healer, "support") => [new("Augmentation", 18, 30), new("Pacification", 23, 35)],
+                _ => [],
+            };
 
         /// <summary>
         /// The group role a build applies when it is chosen. The owner's Healer
@@ -285,6 +313,7 @@ namespace DOL.GS
                 (eCharacterClass.Healer, "mending") => (BotPveGroupRole.Healer, false),
                 (eCharacterClass.Healer, "augmentation") => (BotPveGroupRole.Buffer, false),
                 (eCharacterClass.Healer, "pacification") => (BotPveGroupRole.CrowdControl, false),
+                (eCharacterClass.Healer, "support") => (BotPveGroupRole.Healer, false),
                 (eCharacterClass.Sorcerer, "balanced") => (BotPveGroupRole.CrowdControl, false),
                 (eCharacterClass.Sorcerer, "matter") => (BotPveGroupRole.Attacker, false),
                 (eCharacterClass.Bard, "nurture") => (BotPveGroupRole.Buffer, false),
@@ -472,11 +501,15 @@ namespace DOL.GS
         public bool CrowdControlDuty { get; }
         public int ExpectedSpecPointsMultiplier { get; }
         public IReadOnlyList<CompanionBuildRank> TargetAllocations { get; }
+        /// <summary>Ordered levelling breakpoints; empty for a purely proportional schedule.</summary>
+        public IReadOnlyList<CompanionBuildMilestone> Milestones { get; }
 
         internal CompanionBuildPlan(string id, eCharacterClass characterClass, string key, string name, string role,
             BotPveGroupRole primaryRole, bool crowdControlDuty, int expectedSpecPointsMultiplier,
-            IReadOnlyList<CompanionBuildRank> targetAllocations)
+            IReadOnlyList<CompanionBuildRank> targetAllocations,
+            IReadOnlyList<CompanionBuildMilestone> milestones = null)
         {
+            Milestones = milestones ?? [];
             Id = id;
             CharacterClass = characterClass;
             Key = key;
@@ -490,53 +523,94 @@ namespace DOL.GS
 
         /// <summary>
         /// Creates the full recommended allocation from level 1 through the
-        /// requested level. Each earned point trains the eligible next rank
-        /// with the least proportional progress toward its level-50 target.
-        /// Candidate order breaks ties, and a rank is never bought early.
+        /// requested level. Each level first raises the plan's milestones in
+        /// order (a line never above the character level); if the next
+        /// milestone rank is not yet affordable the points are saved for it.
+        /// The rest trains the eligible next rank with the least proportional
+        /// progress toward its level-50 target; a plan with milestones then
+        /// spends leftovers the same way up to the character level so no line
+        /// falls behind while points were saved. Candidate order breaks ties.
         /// </summary>
         public IReadOnlyDictionary<string, int> GetTargetsAtLevel(int targetLevel, int specPointsMultiplier)
         {
             int throughLevel = Math.Clamp(targetLevel, 1, 50);
             var levels = TargetAllocations.ToDictionary(rank => rank.Specialization, _ => 1,
                 StringComparer.OrdinalIgnoreCase);
+            var finalTargets = TargetAllocations.ToDictionary(rank => rank.Specialization, rank => rank.Level,
+                StringComparer.OrdinalIgnoreCase);
             int available = -1;
 
             for (int level = 1; level <= throughLevel; level++)
             {
                 available += AwardPointsAtLevel(level, specPointsMultiplier);
-                while (true)
-                {
-                    int selectedIndex = -1;
-                    double leastProgress = double.MaxValue;
-                    int selectedCost = 0;
-                    for (int index = 0; index < TargetAllocations.Count; index++)
-                    {
-                        CompanionBuildRank target = TargetAllocations[index];
-                        int current = levels[target.Specialization];
-                        int levelTarget = Math.Min(target.Level, Math.Max(1, target.Level * level / 50));
-                        int nextCost = current + 1;
-                        if (current >= levelTarget || available < nextCost)
-                            continue;
+                if (!TrainMilestones(levels, finalTargets, level, ref available))
+                    continue;
 
-                        double progress = (double)(current - 1) / Math.Max(1, target.Level - 1);
-                        if (progress < leastProgress)
-                        {
-                            selectedIndex = index;
-                            selectedCost = nextCost;
-                            leastProgress = progress;
-                        }
-                    }
-
-                    if (selectedIndex < 0)
-                        break;
-
-                    string key = TargetAllocations[selectedIndex].Specialization;
-                    levels[key]++;
-                    available -= selectedCost;
-                }
+                TrainProportionally(levels, level, catchUp: false, ref available);
+                if (Milestones.Count > 0)
+                    TrainProportionally(levels, level, catchUp: true, ref available);
             }
 
             return levels;
+        }
+
+        /// <returns>False while points are being saved for an unaffordable milestone rank.</returns>
+        private bool TrainMilestones(Dictionary<string, int> levels, IReadOnlyDictionary<string, int> finalTargets,
+            int level, ref int available)
+        {
+            foreach (CompanionBuildMilestone milestone in Milestones)
+            {
+                if (level < milestone.FromLevel ||
+                    !finalTargets.TryGetValue(milestone.Specialization, out int finalTarget))
+                    continue;
+
+                int cap = Math.Min(Math.Min(milestone.Level, finalTarget), level);
+                while (levels[milestone.Specialization] < cap)
+                {
+                    int nextCost = levels[milestone.Specialization] + 1;
+                    if (available < nextCost)
+                        return false;
+                    levels[milestone.Specialization]++;
+                    available -= nextCost;
+                }
+            }
+            return true;
+        }
+
+        private void TrainProportionally(Dictionary<string, int> levels, int level, bool catchUp, ref int available)
+        {
+            while (true)
+            {
+                int selectedIndex = -1;
+                double leastProgress = double.MaxValue;
+                int selectedCost = 0;
+                for (int index = 0; index < TargetAllocations.Count; index++)
+                {
+                    CompanionBuildRank target = TargetAllocations[index];
+                    int current = levels[target.Specialization];
+                    int levelTarget = catchUp
+                        ? Math.Min(target.Level, level)
+                        : Math.Min(target.Level, Math.Max(1, target.Level * level / 50));
+                    int nextCost = current + 1;
+                    if (current >= levelTarget || available < nextCost)
+                        continue;
+
+                    double progress = (double)(current - 1) / Math.Max(1, target.Level - 1);
+                    if (progress < leastProgress)
+                    {
+                        selectedIndex = index;
+                        selectedCost = nextCost;
+                        leastProgress = progress;
+                    }
+                }
+
+                if (selectedIndex < 0)
+                    return;
+
+                string key = TargetAllocations[selectedIndex].Specialization;
+                levels[key]++;
+                available -= selectedCost;
+            }
         }
 
         public int GetRequiredPointsAtLevel(int targetLevel, int specPointsMultiplier)
@@ -599,4 +673,7 @@ namespace DOL.GS
     }
 
     public sealed record CompanionBuildRank(string Specialization, int Level);
+
+    /// <summary>A levelling breakpoint: train <paramref name="Specialization"/> toward <paramref name="Level"/> from character level <paramref name="FromLevel"/>.</summary>
+    public sealed record CompanionBuildMilestone(string Specialization, int Level, int FromLevel);
 }

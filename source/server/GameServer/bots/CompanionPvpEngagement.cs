@@ -7,7 +7,11 @@ using DOL.GS.ServerRules;
 
 namespace DOL.GS
 {
-    /// <summary>Human-led temporary companions only; no PvE or autonomous AI policy.</summary>
+    /// <summary>
+    /// Player-led companions (temporary helpers and the owner's roster) assist
+    /// their human leader's PvP target like an assist train and defend group
+    /// members; no PvE or autonomous AI policy.
+    /// </summary>
     public static class CompanionPvpEngagement
     {
         private sealed class State
@@ -35,7 +39,8 @@ namespace DOL.GS
 
         public static GamePlayer Leader(GameLiving actor)
         {
-            if (Character(actor) is not GameBot { IsTemporaryGroupHelper: true, IsAutonomousWorldBot: false } bot) return null;
+            if (Character(actor) is not GameBot { IsAutonomousWorldBot: false } bot ||
+                !bot.IsTemporaryGroupHelper && !bot.IsPersistentPlayerCompanion) return null;
             GamePlayer leader = bot.PlayerGroupLeader ?? bot.Owner;
             return leader != null && bot.Group != null && bot.Group == leader.Group &&
                 bot.Group.IsInTheGroup(bot) && bot.Group.IsInTheGroup(leader) ? leader : null;
