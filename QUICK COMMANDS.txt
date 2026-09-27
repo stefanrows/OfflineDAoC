@@ -28,8 +28,9 @@ On the launcher, click + Lv.1 or + Lv.50 under a faction:
 
 /petpull
   Target an enemy: your pet goes in alone. Companions hold, keep a heal-over-time on
-  the pet and peel adds, then join in once the pull sits on the pet (target under 75%),
-  or at once if the pet drops below 45% or dies.
+  the pet and peel adds; an Animist plants mushrooms in front of the group. Set the pet
+  passive to bring the pull back: they join in once it is beside you, or at once if it
+  drops below 45% or dies. While you pet pull, your pet gets pet-useful buffs first.
 
 /train <line> <level>
   Trains a specialization to the chosen level using your available specialization

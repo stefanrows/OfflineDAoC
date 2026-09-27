@@ -1425,7 +1425,9 @@ namespace DOL.AI.Brain
                 // their ordinary defence so they peel adds that reach the group.
                 if (BotBody.IsRecoveryResting)
                     BotBody.WakeTemporaryCompanionRest();
-                if (!Body.IsCasting && !TryHealOverTimeOnPulledPet() && !CheckHeals())
+                if (!Body.IsCasting && !TryHealOverTimeOnPulledPet() && !CheckHeals() &&
+                    !(CompanionPetPull.TryGetCampFront(AssistedPlayer, out Vector3 campFront) &&
+                      BotAnimistPolicy.PlantPetPullField(BotBody, campFront, ref _nextDeployablePetTick)))
                     CheckSpells(eCheckSpellType.Defensive);
                 return;
             }
@@ -2355,7 +2357,8 @@ namespace DOL.AI.Brain
             if (spell.Target == eSpellTarget.GROUP)
             {
                 IEnumerable<GameLiving> members = Body.Group?.GetMembersInTheGroup() ?? [Body];
-                return members.Any(member => member.IsAlive && Body.IsWithinRadius(member, Math.Max(350, spell.Range)) && NeedsUpkeep(member, spell)) ||
+                return PetPullBuffTarget(spell, Math.Max(350, spell.Range)) != null ||
+                       members.Any(member => member.IsAlive && Body.IsWithinRadius(member, Math.Max(350, spell.Range)) && NeedsUpkeep(member, spell)) ||
                        includePets && FindMissingPartyPetBuffTarget(spell) != null
                     ? Body
                     : null;
@@ -2387,6 +2390,9 @@ namespace DOL.AI.Brain
             long now = GameLoop.GameLoopTime;
             int range = Math.Max(minimumRange, spell.CalculateEffectiveRange(Body));
             IEnumerable<GameLiving> members = spell.Target == eSpellTarget.REALM ? AutonomousRealmRaid.SupportMembers(BotBody) : group?.GetMembersInTheGroup() ?? [Body];
+            if (PetPullBuffTarget(spell, range) is GameNPC pullPet &&
+                !(claims?.IsReserved(pullPet, family, now) ?? false))
+                return pullPet;
             if (IsGroupedShamanEnduranceBuff(BotBody, spell))
             {
                 GameLiving groupTarget = BotBuffReservations<GameLiving>.Choose(
@@ -2430,6 +2436,19 @@ namespace DOL.AI.Brain
             {
                 if (shared && !cast) claims.Release(Body, target, family);
             }
+        }
+
+        /// <summary>
+        /// /petpull: while the leader pulls with the pet, that pet is the group's
+        /// tank and gets every buff that works on pets before anyone else.
+        /// </summary>
+        private GameNPC PetPullBuffTarget(Spell spell, int range)
+        {
+            if (BotBody?.IsPlayerLedGroup != true || !CompanionPetPull.HelpsPet(spell) ||
+                CompanionPetPull.SessionPet(AssistedPlayer) is not GameNPC pet ||
+                !Body.IsWithinRadius(pet, range) || !NeedsUpkeep(pet, spell))
+                return null;
+            return BotGroupPetBuffTargets.Enumerate(BotBody, spell).Contains(pet) ? pet : null;
         }
 
         private GameLiving FindMissingPartyPetBuffTarget(Spell spell)

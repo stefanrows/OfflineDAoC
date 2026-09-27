@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using DOL.AI.Brain;
 
@@ -142,6 +143,41 @@ namespace DOL.GS
             state.NextField = now + 6500;
             nextDeployable = now + Math.Max(750, field.Spell.CastTime + 250);
             activity = $"Planting field turret: {field.Spell.Name}";
+            return true;
+        }
+
+        /// <summary>
+        /// /petpull: plant field turrets in front of the waiting group while the
+        /// pet is out pulling, so it drags the pack into them. Up to three at a time.
+        /// </summary>
+        public static bool PlantPetPullField(GameBot bot, Vector3 front, ref long nextDeployable)
+        {
+            if (!AppliesTo(bot) || !bot.IsAlive || bot.IsCasting || bot.IsCrowdControlled ||
+                bot.castingComponent?.HasPendingSkillRequests == true || bot.CurrentRegion == null) return false;
+            long now = GameLoop.GameLoopTime;
+            if (now < nextDeployable) return false;
+            State state = States.GetOrCreateValue(bot);
+            var point = new Point3D((int)front.X, (int)front.Y, (int)front.Z);
+            int nearby = bot.CurrentRegion.GetNPCsInRadius(point, 400).Count(npc => npc is TurretFnfPet turret &&
+                turret.IsAlive && turret.ObjectState == GameObject.eObjectState.Active && turret.Owner == bot);
+            if (!FieldReady(now, state.NextField, bot.Mana, bot.MaxMana, nearby) ||
+                !AutonomousPetSupport.CanDeployFieldTurret(bot, null)) return false;
+            var fieldSummons = AutonomousPetSupport.KnownSpells(bot)
+                .Where(entry => AutonomousPetSupport.IsAnimistFieldTurret(entry.Spell.SpellType) &&
+                    AutonomousPetSupport.CanCast(bot, entry.Spell) &&
+                    bot.IsWithinRadius(point, entry.Spell.CalculateEffectiveRange(bot)))
+                .ToArray();
+            if (AutonomousPetSupport.SelectedAnimistPlanLine(bot) is string animistLine)
+            {
+                var focusedFields = fieldSummons.Where(entry => string.Equals(entry.Line?.Spec,
+                    animistLine, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (focusedFields.Length > 0)
+                    fieldSummons = focusedFields;
+            }
+            var field = AutonomousPetSupport.ChooseWeightedByRank(fieldSummons, bot.IsEndgameCompanion);
+            if (field.Spell == null || !Cast(bot, null, field.Spell, field.Line)) return false;
+            state.NextField = now + 4000;
+            nextDeployable = now + Math.Max(750, field.Spell.CastTime + 250);
             return true;
         }
 

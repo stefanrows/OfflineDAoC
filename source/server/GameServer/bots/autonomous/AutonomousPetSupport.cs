@@ -1826,7 +1826,17 @@ public static class AutonomousPetSupport
         int range = Math.Max(100, spell.CalculateEffectiveRange(owner));
         Vector3 ownerPosition = new(owner.X, owner.Y, owner.Z);
         Vector3 desired;
-        if (combatTarget != null)
+        if (owner is GameBot { PlayerGroupLeader: GamePlayer leader } &&
+            CompanionPetPull.TryGetCampFront(leader, out Vector3 campFront))
+        {
+            // /petpull: a grove in front of the waiting group, where the pet brings the pack.
+            double angle = Random.Shared.NextDouble() * Math.PI * 2;
+            float radius = Random.Shared.Next(40, 111);
+            desired = campFront + new Vector3((float)Math.Cos(angle) * radius, (float)Math.Sin(angle) * radius, 0);
+            if (Vector3.Distance(ownerPosition, desired) > range - 40)
+                desired = ownerPosition + Vector3.Normalize(desired - ownerPosition) * (range - 40);
+        }
+        else if (combatTarget != null)
         {
             Vector3 target = new(combatTarget.X, combatTarget.Y, combatTarget.Z);
             Vector3 backTowardOwner = ownerPosition - target;

@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using DOL.AI.Brain;
 using DOL.GS.PacketHandler;
@@ -9,18 +10,22 @@ namespace DOL.GS
     /// player's pet goes in alone and takes the pack while the companions hold.
     /// A heal-over-time on the pet (the Mentalist HoT drew no aggro) is the only
     /// heal it gets until the pull is on it; loose adds that reach the group are
-    /// peeled by the tanks through the ordinary group defence. The group opens
-    /// once the pet has held for a while and its target is worn down, and at
-    /// once when the pet gets low or dies.
+    /// peeled by the tanks through the ordinary group defence. The player then
+    /// sets the pet passive and it runs back to camp with the pack; the group
+    /// opens once the passive pet is back beside the player, and at once when
+    /// the pet gets low or dies. While pet pulling, the pet is the group's tank
+    /// and gets its buffs first.
     /// </summary>
     public static class CompanionPetPull
     {
-        /// <summary>Veterans waited for the biggest mob to drop to 70-75 % before the first AoE.</summary>
-        public const int EngageHealthPercent = 75;
         public const int PetDangerHealthPercent = 45;
-        public const long MinimumHoldMilliseconds = 3_000;
-        public const long MaximumHoldMilliseconds = 10_000;
+        /// <summary>"Back at camp": the passive pet is this close to its owner.</summary>
+        public const int ReturnedRadius = 400;
+        /// <summary>Safety net when the pet is never set passive.</summary>
+        public const long MaximumHoldMilliseconds = 60_000;
         public const long ContactTimeoutMilliseconds = 30_000;
+        /// <summary>The group counts as pet pulling this long after the last /petpull.</summary>
+        public const long SessionMilliseconds = 10 * 60_000;
         /// <summary>After the release the pet stays a heal target until the fight has been quiet this long.</summary>
         public const long QuietEndMilliseconds = 8_000;
 
@@ -28,13 +33,41 @@ namespace DOL.GS
         {
             public GameNPC Pet;
             public GameLiving Target;
+            public Vector3 PullFrom;
             public long Started;
             public long Contact;
             public long LastFight;
             public bool Released;
         }
 
+        private sealed class Session { public long LastPull; }
+
         private static readonly ConditionalWeakTable<GamePlayer, State> States = new();
+        private static readonly ConditionalWeakTable<GamePlayer, Session> Sessions = new();
+
+        /// <summary>The leader pulls with the pet: companions buff that pet before the group.</summary>
+        public static GameNPC SessionPet(GamePlayer leader)
+        {
+            if (leader == null || !Sessions.TryGetValue(leader, out Session session) ||
+                GameLoop.GameLoopTime - session.LastPull >= SessionMilliseconds)
+                return null;
+            GameNPC pet = leader.ControlledBrain?.Body;
+            return pet?.IsAlive == true && pet.ObjectState == GameObject.eObjectState.Active ? pet : null;
+        }
+
+        /// <summary>
+        /// Buffs that do something on a pet: only strength, constitution,
+        /// dexterity and quickness count among stat buffs (no other concentration
+        /// buff affects pets), plus damage add, shields, ablative, resists and HoTs.
+        /// </summary>
+        public static bool HelpsPet(Spell spell) => spell != null && spell.SpellType is
+            eSpellType.StrengthBuff or eSpellType.ConstitutionBuff or eSpellType.DexterityBuff or
+            eSpellType.StrengthConstitutionBuff or eSpellType.DexterityQuicknessBuff or
+            eSpellType.DamageAdd or eSpellType.DamageShield or eSpellType.AblativeArmor or
+            eSpellType.HealOverTime or eSpellType.HealthRegenBuff or
+            eSpellType.BodyResistBuff or eSpellType.ColdResistBuff or eSpellType.EnergyResistBuff or
+            eSpellType.HeatResistBuff or eSpellType.MatterResistBuff or eSpellType.SpiritResistBuff or
+            eSpellType.BodySpiritEnergyBuff or eSpellType.HeatColdMatterBuff or eSpellType.AllMagicResistBuff;
 
         public static string Begin(GamePlayer player, GameLiving target)
         {
@@ -46,11 +79,13 @@ namespace DOL.GS
 
             PlayerLedPullCoordinator.CancelForLeader(player);
             long now = GameLoop.GameLoopTime;
-            States.AddOrUpdate(player, new State { Pet = pet, Target = target, Started = now, LastFight = now });
+            States.AddOrUpdate(player, new State { Pet = pet, Target = target, Started = now, LastFight = now,
+                PullFrom = new Vector3(target.X, target.Y, target.Z) });
+            Sessions.GetOrCreateValue(player).LastPull = now;
             brain.Attack(target);
-            return $"Pet pull: {pet.Name} goes in alone. Companions hold, HoT your pet, and peel adds; " +
-                   $"damage starts once the pull sits on the pet (target under {EngageHealthPercent}%) " +
-                   $"or at once if your pet drops below {PetDangerHealthPercent}%.";
+            return $"Pet pull: {pet.Name} goes in alone. Companions hold, HoT your pet, and peel adds. " +
+                   "Set your pet passive to bring the pull back; damage starts once it is beside you " +
+                   $"(or at once if your pet drops below {PetDangerHealthPercent}%).";
         }
 
         public static void Cancel(GamePlayer player) => States.Remove(player);
@@ -86,21 +121,42 @@ namespace DOL.GS
                 return false;
             }
 
-            long held = now - state.Contact;
-            bool worn = held >= MinimumHoldMilliseconds && target?.IsAlive == true && target.HealthPercent <= EngageHealthPercent;
+            bool home = leader.ControlledBrain?.AggressionState == eAggressionState.Passive &&
+                pet.IsWithinRadius(leader, ReturnedRadius);
             bool danger = pet.HealthPercent < PetDangerHealthPercent;
-            if (!worn && !danger && held < MaximumHoldMilliseconds && target?.IsAlive == true)
+            if (!home && !danger && now - state.Contact < MaximumHoldMilliseconds && target?.IsAlive == true)
                 return true;
 
             state.Released = true;
             state.LastFight = now;
             Tell(leader, danger
                 ? $"{pet.Name} is in trouble: companions engage now."
-                : "The pull sits on your pet: companions engage.");
+                : "The pull is at camp: companions engage.");
             if (target?.IsAlive == true)
                 PlayerLedPullCoordinator.LeaderEngaged(leader, target);
             return false;
         }
+
+        /// <summary>
+        /// While the pull runs: the spot just in front of the waiting group,
+        /// toward the pull, where the returning pet drags the pack. An Animist
+        /// plants its mushrooms there.
+        /// </summary>
+        public static bool TryGetCampFront(GamePlayer leader, out Vector3 front)
+        {
+            front = default;
+            if (!TryGetState(leader, out State state) || state.Released)
+                return false;
+            var camp = new Vector3(leader.X, leader.Y, leader.Z);
+            Vector3 toward = state.PullFrom - camp;
+            toward.Z = 0;
+            if (toward.LengthSquared() < 1)
+                return false;
+            front = camp + Vector3.Normalize(toward) * CampFrontDistance;
+            return true;
+        }
+
+        public const int CampFrontDistance = 180;
 
         /// <summary>The pulling pet while its pull lasts, as a heal target for the companions.</summary>
         public static GameNPC Pet(GamePlayer leader) =>

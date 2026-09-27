@@ -12,6 +12,36 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.115.0] - 2026-09-27
+
+### Added
+
+- `/petpull`: an Animist companion plants its field turrets in front of the
+  waiting group, toward the pull, so the returning pet drags the pack
+  through the mushrooms.
+- `/petpull`: for ten minutes after the last pet pull, the pulling pet is the
+  group's tank and companions give it every buff that works on pets before
+  anyone else: strength, constitution, dexterity and quickness buffs, damage
+  add, damage and ablative shields, resists and heal-over-time. Armor, haste
+  and acuity buffs stay with the group (no other concentration buff affects
+  pets). Without a pet pull the buff order is unchanged.
+
+### Changed
+
+- `/petpull` now opens the fight the 1.65 way: the player sets the pet
+  passive and it brings the pull back to camp; companions engage once the
+  passive pet is within 400 units of the player. The 75 % target-health
+  release is gone; the release when the pet drops below 45 % or dies, or
+  when the player attacks, stays, with a 60 s safety release (task 39).
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.114.0] - 2026-09-27
 
 ### Added
