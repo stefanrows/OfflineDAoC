@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.112.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Persistent companions belong to the account instead of one character:
+  every character of an account sees and can invite the same companion
+  roster, with their levels, builds, equipment and guild. Each record keeps
+  the character that recruited it; the 78-companion roster limit and name
+  lookups now count the whole account. One account is never online on two
+  characters at once, so a companion is never invited twice (task 37).
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.111.0] - 2026-09-27
 
 ### Added

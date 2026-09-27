@@ -16,6 +16,12 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+37. **One companion roster for all characters of an account.** Aaron,
+    2026-09-27: his character Ked should level with the same companions as
+    Nova and join Nova's guild North Bomb. Source 0.112.0: the roster is
+    shared by every character of the account (records keep their recruiting
+    character; the 78 limit counts the whole account). Ked was added to
+    North Bomb directly in the local database. Real-client check pending.
 36. **Companions sprint on the stick in RvR.** Aaron, 2026-09-27: when the
     group runs with sprint and an endurance buff, the companions sticking
     behind should sprint too. Source 0.111.0: on a stick run behind a

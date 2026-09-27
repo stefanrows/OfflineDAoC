@@ -1027,6 +1027,33 @@ namespace DOL.GS
             return specs;
         }
 
+        /// <summary>
+        /// Companions belong to the account: every character of the owner's
+        /// account shares one roster. A record keeps the character that
+        /// recruited it as OwnerCharacterId; one account is never online on two
+        /// characters at once, so a companion cannot be invited twice.
+        /// </summary>
+        internal static HashSet<string> SharedOwnerIds(GamePlayer owner)
+        {
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            if (!string.IsNullOrWhiteSpace(owner?.ObjectId))
+                ids.Add(owner.ObjectId);
+            foreach (DbCoreCharacter character in owner?.Client?.Account?.Characters ?? [])
+            {
+                if (!string.IsNullOrWhiteSpace(character?.ObjectId))
+                    ids.Add(character.ObjectId);
+            }
+            return ids;
+        }
+
+        private static IEnumerable<PlayerCompanionRecord> SelectSharedRecords(GamePlayer owner)
+        {
+            HashSet<string> ids = SharedOwnerIds(owner);
+            return GameServer.Database.SelectObjects<PlayerCompanionRecord>(
+                    DB.Column(nameof(PlayerCompanionRecord.OwnerCharacterId)).IsIn(ids))
+                .Where(record => ids.Contains(record.OwnerCharacterId));
+        }
+
         public static bool TryGetRoster(GamePlayer owner, out List<PlayerCompanionRecord> records)
         {
             records = new List<PlayerCompanionRecord>();
@@ -1035,8 +1062,7 @@ namespace DOL.GS
 
             try
             {
-                records = GameServer.Database.SelectObjects<PlayerCompanionRecord>(
-                        DB.Column(nameof(PlayerCompanionRecord.OwnerCharacterId)).IsEqualTo(owner.ObjectId))
+                records = SelectSharedRecords(owner)
                     .OrderBy(record => record.CreatedUtc, StringComparer.Ordinal)
                     .ThenBy(record => record.CompanionId, StringComparer.Ordinal)
                     .ToList();
@@ -1952,17 +1978,13 @@ namespace DOL.GS
             {
                 if (Guid.TryParse(nameOrId, out Guid companionGuid))
                 {
-                    return GameServer.Database.SelectObjects<PlayerCompanionRecord>(
-                            DB.Column(nameof(PlayerCompanionRecord.OwnerCharacterId)).IsEqualTo(owner.ObjectId))
-                        .FirstOrDefault(record => string.Equals(record.OwnerCharacterId, owner.ObjectId, StringComparison.Ordinal) &&
-                                                  Guid.TryParse(record.CompanionId, out Guid storedGuid) &&
+                    return SelectSharedRecords(owner)
+                        .FirstOrDefault(record => Guid.TryParse(record.CompanionId, out Guid storedGuid) &&
                                                   storedGuid == companionGuid);
                 }
 
-                List<PlayerCompanionRecord> nameMatches = GameServer.Database.SelectObjects<PlayerCompanionRecord>(
-                        DB.Column(nameof(PlayerCompanionRecord.OwnerCharacterId)).IsEqualTo(owner.ObjectId))
-                    .Where(record => string.Equals(record.OwnerCharacterId, owner.ObjectId, StringComparison.Ordinal) &&
-                                     string.Equals(record.Name, nameOrId.Trim(), StringComparison.OrdinalIgnoreCase))
+                List<PlayerCompanionRecord> nameMatches = SelectSharedRecords(owner)
+                    .Where(record => string.Equals(record.Name, nameOrId.Trim(), StringComparison.OrdinalIgnoreCase))
                     .Take(2)
                     .ToList();
                 return nameMatches.Count == 1 ? nameMatches[0] : null;
