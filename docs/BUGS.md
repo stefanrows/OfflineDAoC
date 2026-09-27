@@ -8,6 +8,23 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+47. **Companions crowd onto the player in dungeons (DF).** Reported by Aaron
+    on 0.105.0: in Darkness Falls the companions stood almost exactly where
+    he stood. Cause: the indoor formation radius was 40-54 units, less than
+    a body width, and indoors they also jumped after every first step.
+    Fixed in source 0.106.0: indoors they keep 90-160 units (a step or two)
+    and ignore the leader's first steps like outdoors. Real-client check
+    pending: companions spread around the player in DF.
+
+46. **Healer speed replaces the skald's speed song.** Reported by Aaron on
+    0.105.0: the buff bar showed Flow of Movement instead of Heavenly Song of
+    Travel. Cause: the healer's new support build (Augmentation) maintained
+    its own weaker speed pulse (131 vs 204), which replaced the song. Fixed in
+    source 0.106.0: a bot does not run a speed that a living groupmate bot
+    covers with a stronger one, and ends its own weaker speed pulse. Real-client
+    check pending: Heavenly Song of Travel in the buff bar with the healer
+    grouped.
+
 45. **Bots never got their top spec spells (Skald stuck on speed 4).**
     Reported by Aaron on 0.99.0: the buff bar showed Magnificent Song of
     Travel (speed 4) although Freunborg has Battlesongs 46. Cause:

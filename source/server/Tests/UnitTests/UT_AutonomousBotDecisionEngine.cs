@@ -162,7 +162,7 @@ public class UT_AutonomousBotDecisionEngine
         {
             // 0.103.0: companions spread out more in the open (55 % of the old radius).
             Assert.That(outside.Distance, Is.InRange(115, 287));
-            Assert.That(inside.Distance, Is.InRange(40, 54));
+            Assert.That(inside.Distance, Is.InRange(90, 161));
             Assert.That(outside.AngleDegrees, Is.EqualTo(inside.AngleDegrees));
         });
     }

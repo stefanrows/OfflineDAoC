@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.106.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Indoors (dungeons such as Darkness Falls) companions keep a step or two
+  away from their player instead of standing on top of them, and they ignore
+  the player's first steps there as well.
+
+### Fixed
+
+- A healer no longer runs its own weaker speed when a groupmate skald, bard
+  or minstrel has a stronger speed song; the healer's speed replaced the song.
+
+### Removed
+
+- None.
+
 ## [0.105.0] - 2026-09-27
 
 ### Added

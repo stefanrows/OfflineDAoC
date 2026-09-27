@@ -476,10 +476,12 @@ public static class AutonomousFormation
         // Keep player-led party members in the same loose circular formation, but
         // at 30% of the former radius (70% closer to their leader).
         int formerDistance = dungeonOrTightInterior ? 90 + hash % 90 : 210 + hash % 310;
-        int minimumDistance = dungeonOrTightInterior ? 40 : 60;
+        // Indoors a groupmate still stands a step or two apart (not inside
+        // the player): at least 90 units, up to about 160.
+        int minimumDistance = dungeonOrTightInterior ? 90 : 60;
         // A little more room than before (55 % instead of 30 % of the old
         // radius) so companions spread around their player instead of crowding.
-        int distance = Math.Max(minimumDistance, (int)Math.Round(formerDistance * (dungeonOrTightInterior ? 0.30 : 0.55)));
+        int distance = Math.Max(minimumDistance, (int)Math.Round(formerDistance * (dungeonOrTightInterior ? 0.90 : 0.55)));
         int angle = (hash / 17) % 360;
         return new(distance, angle);
     }

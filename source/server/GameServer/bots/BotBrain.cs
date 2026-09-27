@@ -1200,7 +1200,7 @@ namespace DOL.AI.Brain
                 : AutonomousFormation.For(BotBody.Name, tightInterior);
             // Follow like a person: ignore the leader's first steps, trail in a
             // /stick line on a long speed run, and spread out when stopping.
-            if (companionTravel && !ambientWander && !tightInterior)
+            if (companionTravel && !ambientWander)
             {
                 long now = GameLoop.GameLoopTime;
                 bool leaderMoving = leader.movementComponent != null && leader.IsMoving;
@@ -1957,6 +1957,10 @@ namespace DOL.AI.Brain
                 .ToList();
             bool traveling = IsMaintenanceTraveling();
             known.RemoveAll(spell => SkipsOutOfCombatUpkeep(spell, traveling));
+            // A healer does not run its weaker speed when the group's skald,
+            // bard or minstrel sings a stronger one; it would replace the song.
+            EndSpeedCoveredByGroupmate();
+            known.RemoveAll(spell => spell.SpellType == eSpellType.SpeedEnhancement && GroupmateHasStrongerSpeed(spell));
             if (known.Count == 0)
                 return false;
 
@@ -4395,9 +4399,40 @@ namespace DOL.AI.Brain
              bot.PersistentRecord?.Activity?.Contains("travel", StringComparison.OrdinalIgnoreCase) == true ||
              bot.PersistentRecord?.Activity?.Contains("walking", StringComparison.OrdinalIgnoreCase) == true);
 
+        /// <summary>Another living groupmate knows a stronger speed than this one.</summary>
+        private bool GroupmateHasStrongerSpeed(Spell speed)
+        {
+            if (Body?.Group == null || speed == null)
+                return false;
+            foreach (GameLiving member in Body.Group.GetMembersInTheGroup())
+            {
+                if (member == Body || member is not GameBot mate || !mate.IsAlive)
+                    continue;
+                if ((mate.MiscSpells ?? []).Concat(mate.InstantMiscSpells ?? [])
+                    .Any(spell => spell != null && spell.SpellType == eSpellType.SpeedEnhancement &&
+                                  spell.Level <= mate.Level && spell.Value > speed.Value))
+                    return true;
+            }
+            return false;
+        }
+
+        private void EndSpeedCoveredByGroupmate()
+        {
+            if (Body?.effectListComponent == null)
+                return;
+            foreach (ECSPulseEffect pulse in Body.effectListComponent.GetPulseEffects()
+                         .Where(effect => effect?.SpellHandler?.Spell is Spell active &&
+                                          active.SpellType == eSpellType.SpeedEnhancement &&
+                                          GroupmateHasStrongerSpeed(active))
+                         .ToList())
+                pulse.End();
+        }
+
         protected bool CheckDefensiveSpells(Spell spell)
         {
             if (spell.SpellType == eSpellType.SpeedEnhancement && spell.IsPulsing && !IsMaintenanceTraveling())
+                return false;
+            if (spell.SpellType == eSpellType.SpeedEnhancement && GroupmateHasStrongerSpeed(spell))
                 return false;
             if (!CanCastDefensiveSpell(spell))
                 return false;
