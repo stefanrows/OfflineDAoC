@@ -1215,8 +1215,14 @@ namespace DOL.AI.Brain
                     ? (short)Math.Clamp(Body.MaxSpeed * 2 / 5, 60, Body.MaxSpeed)
                     : Body.MaxSpeed;
                 _ambientWanderMovement = ambientWander;
+                // Re-issue only when the slot really moved or the pace changed;
+                // a fresh order every AI turn restarted the walk visibly.
                 if (companionTravel && !ambientWander)
-                    Body.PathTo(destination, speed);
+                {
+                    if (AutonomousGroupMotion.ShouldResteer(BotBody, new(destination.X, destination.Y, destination.Z),
+                            speed, GameLoop.GameLoopTime))
+                        Body.PathTo(destination, speed);
+                }
                 else
                     Body.WalkTo(destination, speed);
             }
@@ -1965,6 +1971,10 @@ namespace DOL.AI.Brain
                     continue;
                 }
 
+                // A marching group does not stop for a cast-time buff; it waits
+                // for the leader's next pause (instant and mobile casts still go).
+                if (spell.CastTime > 0 && AutonomousGroupMotion.GroupTraveling(bot))
+                    continue;
                 GameObject previousTarget = bot.TargetObject;
                 if (spell.CastTime > 0)
                 {
@@ -2472,7 +2482,7 @@ namespace DOL.AI.Brain
                     ? eAutonomousThinkMode.PlayerLed
                     : BotBody?.IsRecoveryResting == true
                         ? eAutonomousThinkMode.Resting
-                        : Body?.IsMoving == true
+                        : Body?.IsMoving == true || AutonomousGroupMotion.GroupTraveling(BotBody)
                             ? eAutonomousThinkMode.Travel
                             : eAutonomousThinkMode.Planning;
 

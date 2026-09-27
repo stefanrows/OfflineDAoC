@@ -194,7 +194,7 @@ public static class AutonomousRvrDoctrineRuntime
     {
         RvrDoctrine doctrine = For(bot);
         if (doctrine == null || doctrine.Travel == RvrTravelShape.Clump || bot.Group?.LivingLeader is not GameLiving leader ||
-            leader == bot || !leader.IsMoving)
+            leader == bot || !AutonomousGroupMotion.RecentlyMoving(bot.Group, leader))
             return null;
         GameBot[] followers = bot.Group.GetMembersInTheGroup().OfType<GameBot>()
             .Where(member => member != leader && member.IsAlive)
@@ -204,9 +204,9 @@ public static class AutonomousRvrDoctrineRuntime
         int slot = Array.IndexOf(followers, bot);
         if (slot < 0)
             return null;
-        Point2D ahead = leader.GetPointFromHeading(leader.Heading, 100);
-        Vector2 forward = new(ahead.X - leader.X, ahead.Y - leader.Y);
-        return AutonomousRvrDoctrineGeometry.TravelSlot(doctrine.Travel, slot, followers.Length, center, forward);
+        Vector2 forward = AutonomousGroupMotion.SmoothedForward(bot.Group, leader);
+        return AutonomousRvrDoctrineGeometry.TravelSlot(doctrine.Travel, slot, followers.Length, center, forward,
+            bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID);
     }
 
     // ----------------------------------------------------------------- retreat
@@ -313,15 +313,21 @@ public static class AutonomousRvrDoctrineGeometry
     /// is the leader's unit direction of travel. Column is a two-file line
     /// behind the leader; Loose spreads members wide around and behind.
     /// </summary>
-    public static Vector3 TravelSlot(RvrTravelShape shape, int slot, int count, Vector3 leader, Vector2 forward)
+    public static Vector3 TravelSlot(RvrTravelShape shape, int slot, int count, Vector3 leader, Vector2 forward,
+        long memberKey = 0)
     {
         if (forward.LengthSquared() < 0.0001f)
             forward = new Vector2(0, 1);
         forward = Vector2.Normalize(forward);
         Vector2 right = new(forward.Y, -forward.X);
+        // A loose, staggered march: each member keeps its own lane and gap,
+        // so the group reads as people walking together, not a queue.
+        ulong personal = unchecked((ulong)memberKey);
+        float lane = (slot % 2 == 0 ? 1 : -1) * (55 + (int)(personal % 90));
+        float gap = 95 + slot * 48 + (int)(personal / 90 % 45);
         Vector2 offset = shape switch
         {
-            RvrTravelShape.Column => -forward * (110 + slot / 2 * 85) + right * (slot % 2 == 0 ? 45 : -45),
+            RvrTravelShape.Column => -forward * gap + right * lane,
             RvrTravelShape.Loose => Loose(slot, Math.Max(1, count), forward, right),
             _ => Vector2.Zero,
         };

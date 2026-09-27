@@ -238,3 +238,22 @@ public sealed class UT_AutonomousRvrLfg
         Assert.That(AutonomousRvrLfg.IsWipe(1, 8, true), Is.True);
     }
 }
+
+[TestFixture]
+public sealed class UT_AutonomousGroupMotion
+{
+    [Test]
+    public void FollowersMatchTheLeaderWithAPersonalStrideAndCatchUpWhenBehind()
+    {
+        short near = AutonomousGroupMotion.FollowSpeed(1, 200, 250, 30);
+        short other = AutonomousGroupMotion.FollowSpeed(5, 200, 250, 30);
+        short behind = AutonomousGroupMotion.FollowSpeed(1, 200, 250, 400);
+        Assert.Multiple(() =>
+        {
+            Assert.That(near, Is.InRange(190, 210), "In the slot: the leader's pace, give or take a stride.");
+            Assert.That(near, Is.Not.EqualTo(other), "Members do not march in lockstep.");
+            Assert.That(behind, Is.GreaterThan(near), "Behind: catch up.");
+            Assert.That(AutonomousGroupMotion.FollowSpeed(1, 200, 100, 2_000), Is.LessThanOrEqualTo(130), "Never absurdly fast.");
+        });
+    }
+}

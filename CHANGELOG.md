@@ -12,6 +12,39 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.102.0] - 2026-09-27
+
+### Added
+
+- RvR warbands keep recruiting after they leave: nearby roaming guildmates
+  join, guildmates waiting LFG at the border keep are invited and run out to
+  the group, and two small groups of one guild that meet in the field merge
+  into one without ending anyone's RvR tour.
+
+### Changed
+
+- Group travel is smooth: followers aim at a slot around where the leader is
+  about to be, keep walking while the leader walks, re-steer only when the
+  slot really moved, and match the leader's pace with a small personal stride
+  and catch-up. The march is a loose staggered column with smoothed turns
+  instead of a two-file queue.
+- A walking group no longer stops for cast-time buffs; they wait for the
+  leader's next pause. Followers of a moving leader think at travel cadence.
+- The leader waits for stragglers only past 700 units and walks on once all
+  are within 400, instead of stopping and starting at a single 500 limit.
+- Player companions look half a second ahead and only re-issue a walk when
+  their slot really moved, so they no longer stop-start several times a
+  second.
+
+### Fixed
+
+- Followers no longer walk to where the leader was, stop, and wait seconds
+  for their next decision (stop-go conga lines).
+
+### Removed
+
+- None.
+
 ## [0.101.0] - 2026-09-27
 
 ### Added

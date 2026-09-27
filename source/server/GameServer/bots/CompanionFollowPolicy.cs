@@ -119,9 +119,10 @@ namespace DOL.GS
         {
             float length = velocity.Length();
             if (!float.IsFinite(length) || length < 1 || leaderSpeed <= 0) return point;
-            // A fifth of a second, never more than 80 units. This bridges the
-            // decision interval without chasing a point the player just left.
-            return point + velocity / length * Math.Min(80, Math.Min(length, leaderSpeed) * 0.2f);
+            // Half a second, never more than 200 units: longer than one AI
+            // turn, so a companion in its slot keeps walking instead of
+            // arriving, stopping and restarting several times a second.
+            return point + velocity / length * Math.Min(200, Math.Min(length, leaderSpeed) * 0.5f);
         }
 
         public static Vector3 FormationDestination(GameBot bot, Vector3 point)

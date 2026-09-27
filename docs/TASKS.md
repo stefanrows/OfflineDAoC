@@ -6,6 +6,20 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+34. **Level-50 life between RvR tours and raid sign-ups.** Aaron,
+    2026-09-27: level-50 bots mostly take a town break (sell loot, buy what
+    they need) and sometimes run Darkness Falls, spending seals at the DF seal
+    merchants; they sign up for raids on the side, and when a raid's start
+    time comes, the signed-up bots leave RvR or PvE and gather for it, as
+    players did. Context: level-50 PvE today mostly fails (22 of 705 goal
+    attempts reached a camp, 0 kills); raids need 200 simultaneous level-50
+    GroupPve bots and never start; bots never spend seals; money is flat.
+
+33. **Bots stack in Jordheim at the vault keeper.** Aaron, 2026-09-27: many
+    bots stand in one spot next to the vault keeper. In town they should sell
+    their items, buy what they need, then find a group, go solo, or return to
+    their group. Cause under investigation.
+
 7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
    the level XP curve and XP awarded at different levels to determine whether
    the slowdown is expected progression or an unintended drop in rewards, then
@@ -15,6 +29,12 @@ When a task is done and its required verification is complete, move it out of it
    save has no XP-award history, so it cannot confirm when the slowdown began.
 
 ## Implemented in source; installation verification pending
+
+35. **Smooth, individual group travel and field backfill.** Aaron on 0.101.0:
+    groups walk jerkily in lines; groups should keep refilling (nearby
+    guildmates, border-keep LFG, merging small groups). Source 0.102.0: see
+    CHANGELOG. Checks pending: group walking, companions following, groups
+    growing in the field.
 
 32. **RvR groups form and stay together.** Aaron on 0.100.0: "almost only
     single bots running around". Cause from code and his log: leaders found

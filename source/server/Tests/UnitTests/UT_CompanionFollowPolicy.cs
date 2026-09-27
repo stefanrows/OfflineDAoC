@@ -56,9 +56,9 @@ namespace DOL.UnitTests
         [Test]
         public void PredictionIsShortBoundedAndTracksActualMotionNotFacing()
         {
-            Assert.That(CompanionFollowPolicy.Predict(Vector3.Zero, new(0, 390, 0), 390), Is.EqualTo(new Vector3(0, 78, 0)));
-            Assert.That(CompanionFollowPolicy.Predict(Vector3.Zero, new(10000, 0, 0), 390), Is.EqualTo(new Vector3(78, 0, 0)));
-            Assert.That(CompanionFollowPolicy.Predict(Vector3.Zero, new(10000, 0, 0), 3000), Is.EqualTo(new Vector3(80, 0, 0)));
+            Assert.That(CompanionFollowPolicy.Predict(Vector3.Zero, new(0, 390, 0), 390), Is.EqualTo(new Vector3(0, 195, 0))); // half a second ahead (0.102.0)
+            Assert.That(CompanionFollowPolicy.Predict(Vector3.Zero, new(10000, 0, 0), 390), Is.EqualTo(new Vector3(195, 0, 0)));
+            Assert.That(CompanionFollowPolicy.Predict(Vector3.Zero, new(10000, 0, 0), 3000), Is.EqualTo(new Vector3(200, 0, 0)));
             Assert.That(CompanionFollowPolicy.Predict(new(1, 2, 3), Vector3.Zero, 390), Is.EqualTo(new Vector3(1, 2, 3)));
         }
     }

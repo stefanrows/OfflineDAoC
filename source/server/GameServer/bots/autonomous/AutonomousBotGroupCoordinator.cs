@@ -531,6 +531,8 @@ public static partial class AutonomousBotGroupCoordinator
         }
     }
 
+    private static readonly ConditionalWeakTable<Group, StrongBox<bool>> CohesionWait = new();
+
     public static bool IsCohesive(Directive directive)
     {
         if (AutonomousRealmRaid.GetView(directive?.Leader?.Group) != null) return true;
@@ -539,8 +541,15 @@ public static partial class AutonomousBotGroupCoordinator
         if (directive.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
             (directive.SoftMeetupStarted || directive.HasReturningMembers))
             return PresentPveMembers(BotMembers(directive.Leader.Group), directive.Leader, CohesionRadius).Length >= 2;
-        return BotMembers(directive.Leader.Group).Where(member => member.IsAlive)
-            .All(member => member.CurrentRegionID == directive.Leader.CurrentRegionID && member.GetDistanceTo(directive.Leader) <= CohesionRadius);
+        // Hysteresis: a leader that is waiting resumes once everyone is within
+        // 400; a walking group only stops when someone falls back past 700.
+        // One fixed radius made the leader stop and start every few seconds.
+        StrongBox<bool> waiting = CohesionWait.GetValue(directive.Leader.Group, _ => new StrongBox<bool>(false));
+        int radius = waiting.Value ? 400 : 700;
+        bool together = BotMembers(directive.Leader.Group).Where(member => member.IsAlive)
+            .All(member => member.CurrentRegionID == directive.Leader.CurrentRegionID && member.GetDistanceTo(directive.Leader) <= radius);
+        waiting.Value = !together;
+        return together;
     }
 
     public static bool IsRecovering(GameBot bot)
@@ -1222,8 +1231,9 @@ public static partial class AutonomousBotGroupCoordinator
                         WriteSessionMetadata(session, remaining);
                     }
                 }
-                AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(bot,
-                    "Left autonomous party; choosing independent work");
+                if (!IsTransferring(bot))
+                    AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(bot,
+                        "Left autonomous party; choosing independent work");
             }
         }
     }
@@ -1306,6 +1316,8 @@ public static partial class AutonomousBotGroupCoordinator
             .ThenBy(MemberKey)
             .ToArray();
         FillAssemblingParties(available, objectiveKind, ref availableGroupSlots);
+        if (objectiveKind == eAutonomousObjectiveKind.RvR)
+            BackfillFieldWarbands(available, ref availableGroupSlots);
         // A single free seat can complete an assembling party even though it
         // cannot create a new one. Apply the two-member gate after backfilling.
         if (objectiveKind != eAutonomousObjectiveKind.RvR && availableGroupSlots < 2)
@@ -2309,8 +2321,9 @@ public static partial class AutonomousBotGroupCoordinator
             string afterGroupReason = session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve && session.IsCrossRealmPve
                 ? reason + "; cross-realm PvE group ended; remain at current location and resume matchmaking"
                 : reason + "; choosing independent work";
-            AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(member,
-                afterGroupReason, forceSoloPve: returnToSolo);
+            if (!IsTransferring(member))
+                AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(member,
+                    afterGroupReason, forceSoloPve: returnToSolo);
         }
     }
 

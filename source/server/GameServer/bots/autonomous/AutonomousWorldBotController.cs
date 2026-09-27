@@ -1359,7 +1359,9 @@ namespace DOL.GS
                 return true;
 
             bool tight = leader.CurrentRegion?.IsDungeon == true || leader.CurrentZone?.IsDungeon == true;
-            Vector3 formation = AutonomousBotGroupCoordinator.FormationPoint(bot, new(leader.X, leader.Y, leader.Z), tight);
+            // Aim around where the leader is about to be, not where it was.
+            Vector3 formation = AutonomousBotGroupCoordinator.FormationPoint(bot,
+                leader.IsMoving && !tight ? AutonomousGroupMotion.PredictLeader(leader) : new(leader.X, leader.Y, leader.Z), tight);
             if (bot.CurrentRegionID != leader.CurrentRegionID)
             {
                 // Never teleport a persistent group member to catch its leader.
@@ -1375,6 +1377,12 @@ namespace DOL.GS
                     bot.StopMovingOnPath();
                     bot.StopMoving();
                 }
+            }
+            else if (leader.IsMoving && !tight &&
+                     Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), formation) < 2_500 * 2_500)
+            {
+                // Walk with the leader: steer smoothly, match its pace, never stop mid-march.
+                AutonomousGroupMotion.FollowMovingLeader(bot, leader, formation);
             }
             else if (Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), formation) > 95 * 95)
             {
@@ -1417,6 +1425,8 @@ namespace DOL.GS
                     return true;
                 }
             }
+            if (bot.Group != null || _rvrLfgGaveUp)
+                bot.TempProperties.RemoveProperty(AutonomousBotGroupCoordinator.LfgProperty);
             if (bot.Group != null)
             {
                 // After this group ends, look for the next one at the keep again.
@@ -2507,6 +2517,8 @@ namespace DOL.GS
                 if (!AutonomousRestPolicy.IsFullyRecovered(bot.HealthPercent, bot.ManaPercent, bot.EndurancePercent,
                         bot.MaxMana > 0) && !BotRestRecovery.BlocksRest(bot))
                     bot.BeginRecoveryRest();
+                // Visible to warbands already out in the field, which invite and wait.
+                bot.TempProperties.SetProperty(AutonomousBotGroupCoordinator.LfgProperty, true);
                 SetRvrStatus(bot, $"LFG at {keep.Name}", "Join a guild warband before heading out",
                     "Waiting at the border keep for a group");
                 return true;
