@@ -6,49 +6,6 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
-25. **Companion auto-levelling hits the key spell breakpoints.** Aaron's
-    level-45 group showed the proportional schedule (`target * level / 50`)
-    lands on dead levels: Skald Battlesongs 40 (speed 5 needs 43), Shaman
-    Cave 23 (instant AE disease needs 27), Thane Shields 35 (Slam needs 42).
-    Players levelled breakpoint-first. Plans get ordered milestones that are
-    trained as soon as the character level allows, and automatic companions
-    are realigned for free to the corrected schedule. The level-50 end state
-    of every plan stays unchanged.
-
-26. **Stun → bomb and owner assist for player-led companions.** A Healer with
-    an area stun ready opens on a clump; companion bombers wait briefly for
-    the stun, then run into the centre and bomb. Companions assist the
-    owner's target in RvR as well as PvE (persistent roster companions
-    currently miss the PvP focus logic because `CompanionPvpEngagement.Leader`
-    only accepts temporary helpers). Healers and mezzers are a preferred, not
-    a forced, target choice.
-
-27. **RvR group doctrine for autonomous warbands.** Every warband derives a
-    doctrine from its real composition (bomb group, assist train, melee train,
-    stealth pack, caster duo, pickup group with one healer and slow speed,
-    zerg/keep raid party, and more; see `docs/RVR_GROUP_DOCTRINE.md`).
-    Imperfect groups are normal and still roam and fight. The doctrine drives
-    opener, target habits, formation and retreat appetite.
-
-28. **Human-like RvR combat habits.** Bots understand their role rather than
-    act perfectly: soft priority for enemy healers and mezzers, per-bot target
-    stickiness with occasional switching or scattering, engaging without a
-    ready stun, and retreat as a risk-weighted option (a group that sees a
-    chance may stay in). Assist trains follow a caller when the doctrine has
-    one.
-
-29. **Varied RvR roaming.** Replace the fixed west-to-east camp loop with
-    weighted wandering between frontier hotspots (keeps, border keeps,
-    frontier camps) that differs by leader personality and doctrine, with
-    lingering, scouting and a default doctrine the group falls back on when
-    it disagrees. Travel and fight formations follow the group's roles.
-
-30. **Camlann guild cohesion and encounter memory.** Guildmates in the same
-    area help each other; groups remember recent encounters (who beat whom,
-    who fled) and let that shape grudges and avoidance. PvP happens at every
-    group size. Realm-based leftovers in rally/siege/guard-healing code are
-    reviewed for Camlann guild ownership.
-
 7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
    the level XP curve and XP awarded at different levels to determine whether
    the slowdown is expected progression or an unintended drop in rewards, then
@@ -58,6 +15,59 @@ When a task is done and its required verification is complete, move it out of it
    save has no XP-award history, so it cannot confirm when the slowdown began.
 
 ## Implemented in source; installation verification pending
+
+30. **Camlann guild cohesion and encounter memory.** Source 0.98.0: nearby
+    autonomous guildmates who are not busy answer a guildmate's fight by
+    their Sociability (decision stable for 30 s); guilds keep an in-memory,
+    one-hour win/loss tally against other guilds that makes a crew bolder or
+    warier (appetite x0.6-1.3); persisted grudges still decide whom a guild
+    hunts. RvR healers heal only their own guild's keep guards. Still open
+    from the realm-leftover review: the RvR event layer, rally posts, siege
+    attendance and planning counts still group forces by realm byte (see
+    CAMLANN_PVP_REVIEW.md). Real-client checks pending: guild help in the
+    frontier, guard healing at a guild keep.
+
+29. **Varied RvR roaming.** Source 0.98.0 replaces the fixed west-to-east camp
+    loop with weighted wandering: keeps, frontier clearings, enemy sightings
+    and recent fight spots (in-memory heat, 12 minutes) weighted by the
+    group's doctrine, distance and the last five spots visited. Groups now
+    linger at a spot from arrival (doctrine time scaled by Patience) instead
+    of leaving on arrival, and do not re-plan every minute while walking to a
+    roaming spot. Travel formation follows the doctrine: two-file column
+    (melee front, healers middle, casters back), clump, or a loose fan.
+    Checks pending: watch several warbands for distinct routes and lingering.
+
+28. **Human-like RvR combat habits.** Source 0.98.0: autonomous RvR bots pick
+    targets by habit (stick time from Patience, caller's target by the
+    doctrine's follow chance, otherwise weighted toward healers, mezzers,
+    wounded enemies and whoever is on their own healers, with random spread);
+    fight appetite from doctrine, leader Aggression and recent history with a
+    small chance to dare a bigger group; retreat is a decision (healer dead,
+    half down, outnumbered, doctrine bias, RiskTolerance, 15 % stay anyway)
+    that runs 2,200 units away for 25-40 s while only self-defense continues.
+    Checks pending: fights look human, retreats end and regroup.
+
+27. **RvR group doctrine for autonomous warbands.** Source 0.98.0 derives one
+    of 14 doctrines from each warband's real classes (see
+    [RVR_GROUP_DOCTRINE.md](RVR_GROUP_DOCTRINE.md)), including imperfect
+    pickup groups. Group sizes still come from the existing warband rolls
+    (solo, pairs, 3-5, 8); keep raids above 8 remain several 8-member parties
+    in one siege event. Checks pending as for 28-29.
+
+26. **Stun → bomb and owner assist for player-led companions.** Source
+    0.97.0: companion bombers hold their first PBAoE on an enemy player clump
+    up to 2.5 s while a group Healer has an area stun ready; roster
+    companions use the PvP assist/defence engagement (owner's target, 30 s
+    focus, threat memory). Real-client checks pending: RvR fight with the
+    Midgard bomb group.
+
+25. **Companion auto-levelling hits the key spell breakpoints.** Source
+    0.97.0: plans carry ordered milestones (Skald Battlesongs 43, Shaman
+    Mending 7 and Cave 27, Thane Stormcalling 34 and Shields 42, pac Healer
+    Pacification 38, new Healer `support` build with Augmentation 18 and
+    Pacification 23); points are saved for the next breakpoint; existing
+    automatic companions are retrained for free when they load or level.
+    Check pending: Aaron's level-45 companions after loading.
 
 8. **All-class companion builds and caster area damage.** Source 0.96.0
    provides 118 static career/skill-checked plans for all 39 Classic + SI

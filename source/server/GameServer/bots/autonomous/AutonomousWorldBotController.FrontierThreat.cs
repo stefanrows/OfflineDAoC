@@ -28,7 +28,9 @@ public sealed partial class AutonomousWorldBotController
 
         var nav = PathfindingProvider.Instance;
         if (!nav.IsAvailable || !nav.HasNavmesh(bot.CurrentZone)) return false;
-        bool mayHunt = AutonomousPvpOpportunityPolicy.MayHunt(bot);
+        // A retreating group only defends itself; it does not turn to chase.
+        bool mayHunt = AutonomousPvpOpportunityPolicy.MayHunt(bot) &&
+            !AutonomousRvrDoctrineRuntime.IsRetreating(bot, out _);
         bool InOurFight(GameLiving target) => BotPvpCrowdControl.IsInFightWith(bot, target, null);
         bool Eligible(GameLiving target) => target != bot && !target.IsStealthed &&
             (siegeFighter || InOurFight(target) ||
@@ -90,6 +92,7 @@ public sealed partial class AutonomousWorldBotController
         if (!brain.HasAggro) return false;
         AutonomousDefensivePull.OnThreat(bot, enemy);
         AutonomousBotGroupCoordinator.MarkCombatObserved(bot.Group);
+        AutonomousRvrHeat.Record(bot);
         brain.FSM.SetCurrentState(eFSMStateType.AGGRO);
         return true;
     }

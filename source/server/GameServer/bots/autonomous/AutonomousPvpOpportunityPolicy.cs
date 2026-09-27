@@ -63,7 +63,10 @@ public static class AutonomousPvpOpportunityPolicy
             identity.EffectiveLevel > actor.Level + PreferredLevelDifference) return false;
         (int ownCount, int ownLevel) = VisibleParty(actor);
         (int count, int level) = VisibleParty(identity);
-        return !IsVisiblyStronger(ownCount, ownLevel, count, level);
+        // An RvR group's doctrine and its leader's nerve decide the odds it
+        // takes; everyone else keeps the plain "not visibly stronger" rule.
+        return AutonomousRvrDoctrineRuntime.AcceptsFight(actor, ownCount, ownLevel, count, level, identity) ??
+            !IsVisiblyStronger(ownCount, ownLevel, count, level);
     }
 
     public static (int Count, int AverageLevel) VisibleParty(GameLiving living)

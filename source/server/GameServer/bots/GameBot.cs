@@ -1015,6 +1015,8 @@ namespace DOL.GS
 
                 PersistentRecord.DeathCount++;
                 AutonomousPvpEngagementTracker.RecordDeath(_lastDeathWasPvp);
+                if (_lastDeathWasPvp)
+                    AutonomousGuildEncounterMemory.RecordDeath(this, killer, WorldSimulationClock.UtcNow);
                 // Only PvP-minded actors hit the "losing" wall. A leveler who is
                 // ganked stays a leveler; its PvE task is not a PvP retreat.
                 if (_lastDeathWasPvp &&

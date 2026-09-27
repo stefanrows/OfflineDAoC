@@ -12,6 +12,47 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.98.0] - 2026-09-27
+
+### Added
+
+- Autonomous RvR warbands read a doctrine from their real classes: 14 group
+  systems of the 1.65 era, from solo assassin, stealth pack and caster duo
+  to small-man, assist train, bomb group, melee train, pickup group, gank
+  squad and keep raid party (docs/RVR_GROUP_DOCTRINE.md). Imperfect groups
+  are normal and still roam and fight.
+- Guildmates nearby who are not busy come to help a guildmate under attack,
+  depending on their sociability.
+- Guilds remember recent wins and losses against other guilds for an hour and
+  take bolder or more careful fights against them.
+
+### Changed
+
+- RvR bots choose targets like people: they stick to a target for a while,
+  follow the caller in called groups most of the time, otherwise lean toward
+  enemy healers and mezzers, wounded enemies and whoever is on their healers,
+  with some spread.
+- Fight appetite follows doctrine and the leader's personality; a group may
+  dare a bigger group now and then.
+- A losing group may retreat (healer dead, half down, clearly outnumbered)
+  and run about 2,200 units away for 25-40 s before regrouping; some groups
+  stay in anyway.
+- Roaming groups wander between keeps, frontier clearings, enemy sightings
+  and recent fight spots instead of one fixed loop, linger at a spot from
+  arrival, and march in a doctrine formation (two-file column, clump, or
+  loose fan) with melee in front, healers in the middle and casters behind.
+- RvR healers heal the keep guards of their own guild's keep, not every guard
+  of their realm.
+
+### Fixed
+
+- Roaming RvR groups no longer leave a patrol spot the moment they reach it
+  after a long walk.
+
+### Removed
+
+- The fixed west-to-east camp loop for Roamer warbands.
+
 ## [0.97.0] - 2026-09-27
 
 ### Added

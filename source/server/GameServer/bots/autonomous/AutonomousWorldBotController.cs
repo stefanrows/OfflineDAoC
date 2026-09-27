@@ -1560,12 +1560,16 @@ namespace DOL.GS
                  AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) is not (AutonomousPlayerType.Hunter or AutonomousPlayerType.Roamer) &&
                  !BotSiegeRuntime.Assigned(bot)) ||
                 (_rvrIntent == AutonomousRvrEventLayer.Intent.Roam && atPatrol &&
-                 (AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) != AutonomousPlayerType.Hunter ||
-                  _hunterPatrolArrivedTick > 0 && GameLoop.GameLoopTime - _hunterPatrolArrivedTick >= 180_000)))
+                 _hunterPatrolArrivedTick > 0 && GameLoop.GameLoopTime - _hunterPatrolArrivedTick >= RvrLingerMilliseconds(bot)))
             {
                 _rvrDestination = ChooseRvrDestination(bot);
                 _hunterPatrolArrivedTick = 0;
-                _nextRvrPlanReview = GameLoop.GameLoopTime + 45_000 + bot.ObjectID % 15_000;
+                _rvrLingerMs = AutonomousRvrDoctrine.LingerMilliseconds(AutonomousRvrDoctrineRuntime.For(bot),
+                    Random.Shared.NextDouble());
+                // A group on its way to a roaming spot does not re-plan every
+                // minute and zig-zag; joining events is still checked.
+                _nextRvrPlanReview = GameLoop.GameLoopTime + bot.ObjectID % 15_000 +
+                    (_rvrIntent == AutonomousRvrEventLayer.Intent.Roam ? 150_000 : 45_000);
                 _campStartedTick = GameLoop.GameLoopTime;
                 _patrolDestination = null;
                 _rvrApproachDestination = null;
@@ -1650,9 +1654,11 @@ namespace DOL.GS
                 return true;
             }
             PatrolRvr(bot);
-            bool hunterPatrol = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.Hunter;
-            if (hunterPatrol ? _hunterPatrolArrivedTick > 0 && GameLoop.GameLoopTime - _hunterPatrolArrivedTick > 180_000
-                : GameLoop.GameLoopTime - _campStartedTick > 90_000)
+            // Linger at the spot like players did: the timer runs from arrival,
+            // not from when the spot was chosen, so a long walk is not wasted.
+            if (_hunterPatrolArrivedTick > 0
+                ? GameLoop.GameLoopTime - _hunterPatrolArrivedTick > RvrLingerMilliseconds(bot)
+                : GameLoop.GameLoopTime - _campStartedTick > 360_000)
             {
                 _rvrDestination = null;
                 _rvrApproachDestination = null;
@@ -1752,6 +1758,11 @@ namespace DOL.GS
                 GameLiving carrier = candidates.FirstOrDefault(GameRelic.IsPlayerCarryingRelic);
                 if (carrier != null) return carrier;
             }
+            // The group's doctrine decides like a player would: follow the
+            // caller, lean toward healers and mezzers, keep some spread.
+            GameLiving habitual = AutonomousRvrDoctrineRuntime.Choose(bot, candidates, bot.TargetObject as GameLiving);
+            if (habitual != null)
+                return habitual;
             return candidates[AutonomousRvrStaging.TargetIndex(actorKey, candidates.Length, warbandSize)];
         }
 
@@ -1919,6 +1930,88 @@ namespace DOL.GS
             return IssuePath(bot, _rvrTravelWaypoint.Value, continuation);
         }
 
+        private int _rvrLingerMs;
+        private readonly Queue<string> _recentRoamIds = new();
+
+        private int RvrLingerMilliseconds(GameBot bot)
+        {
+            if (_rvrLingerMs <= 0)
+                _rvrLingerMs = AutonomousRvrDoctrine.LingerMilliseconds(AutonomousRvrDoctrineRuntime.For(bot),
+                    Random.Shared.NextDouble());
+            return _rvrLingerMs;
+        }
+
+        /// <summary>
+        /// Wandering between frontier hotspots instead of a fixed loop: every
+        /// group weighs keeps, clearings, enemy sightings and recent fights by
+        /// its doctrine, prefers places within a sensible walk, avoids the last
+        /// few spots it visited, and then rolls, so no two groups walk alike.
+        /// </summary>
+        private CampDestination ChooseRoamDestination(GameBot bot, List<CampDestination> choices)
+        {
+            RvrRoamTaste taste = AutonomousRvrDoctrineRuntime.For(bot)?.Roam ?? new RvrRoamTaste(1, 1, 1, 1);
+            var pool = new List<(CampDestination Destination, double Weight)>();
+            foreach (CampDestination choice in choices)
+            {
+                double kind = choice.Id.StartsWith("rvr-camp-", StringComparison.Ordinal) ? taste.Clearings :
+                    choice.Id.StartsWith("rvr-keep-", StringComparison.Ordinal) ? taste.Keeps :
+                    choice.Id.StartsWith("rvr-enemy-", StringComparison.Ordinal) ? taste.Enemies : 0;
+                if (kind > 0)
+                    pool.Add((choice, kind * RoamDistanceWeight(bot, choice) * RoamRecencyWeight(choice.Id)));
+            }
+
+            Zone zone = bot.CurrentZone;
+            var nav = PathfindingProvider.Instance;
+            if (zone != null && nav.IsAvailable)
+            {
+                int index = 0;
+                foreach (AutonomousRvrHeat.Spot spot in AutonomousRvrHeat.Recent(bot.CurrentRegionID, WorldSimulationClock.UtcNow))
+                {
+                    Zone spotZone = bot.CurrentRegion?.GetZone((int)spot.Position.X, (int)spot.Position.Y);
+                    Vector3? floor = spotZone == null ? null :
+                        nav.GetClosestPoint(spotZone, spot.Position, 64, 64, 96, nav.DefaultFilters);
+                    if (!floor.HasValue || !IsFrontierRegionPoint(bot.CurrentRegionID, (int)floor.Value.X, (int)floor.Value.Y))
+                        continue;
+                    string id = $"rvr-heat-{bot.CurrentRegionID}-{(int)floor.Value.X / 500}-{(int)floor.Value.Y / 500}";
+                    CampDestination destination = new(id, "the sound of fighting", spotZone.Description ?? "frontier",
+                        bot.CurrentRegionID, (int)floor.Value.X, (int)floor.Value.Y, (int)floor.Value.Z, 1, false, true);
+                    pool.Add((destination, taste.RecentFights * spot.Heat * RoamDistanceWeight(bot, destination) *
+                        RoamRecencyWeight(id)));
+                    if (++index >= 8) break;
+                }
+            }
+
+            double total = pool.Sum(entry => entry.Weight);
+            if (pool.Count == 0 || total <= 0)
+                return null;
+            double pick = Random.Shared.NextDouble() * total;
+            CampDestination chosen = pool[^1].Destination;
+            foreach ((CampDestination destination, double weight) in pool)
+            {
+                pick -= weight;
+                if (pick < 0)
+                {
+                    chosen = destination;
+                    break;
+                }
+            }
+            _recentRoamIds.Enqueue(chosen.Id);
+            while (_recentRoamIds.Count > 5)
+                _recentRoamIds.Dequeue();
+            return chosen;
+        }
+
+        // A walk of a few minutes is normal; the far side of the frontier is not.
+        private static double RoamDistanceWeight(GameBot bot, CampDestination destination)
+        {
+            if (destination.RegionId != bot.CurrentRegionID)
+                return 0.35;
+            double distance = Distance(bot.X, bot.Y, destination.X, destination.Y);
+            return distance < 1_500 ? 0.3 : 1 / (1 + distance / 25_000);
+        }
+
+        private double RoamRecencyWeight(string id) => _recentRoamIds.Contains(id) ? 0.15 : 1;
+
         private CampDestination ChooseRvrDestination(GameBot bot)
         {
             HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
@@ -2061,17 +2154,11 @@ namespace DOL.GS
             bot.TempProperties.SetProperty("RvrDefendingKeep",
                 _rvrIntent == AutonomousRvrEventLayer.Intent.DefendEvent && plan.TargetId.StartsWith("rvr-keep-") &&
                 int.TryParse(plan.TargetId.Substring(9), out int defendingKeep) ? defendingKeep : -1);
-            if (leaderType == AutonomousPlayerType.Roamer && plan is { IsSharedEvent: false, Intent: AutonomousRvrEventLayer.Intent.Roam })
+            if (plan is { IsSharedEvent: false, Intent: AutonomousRvrEventLayer.Intent.Roam })
             {
-                CampDestination[] loop = choices.Where(choice => choice.Id.StartsWith("rvr-camp-", StringComparison.Ordinal))
-                    .OrderBy(choice => choice.RegionId).ThenBy(choice => choice.X).ThenBy(choice => choice.Y).ToArray();
-                if (loop.Length > 0)
-                {
-                    int previous = Array.FindIndex(loop, choice => choice.Id == _rvrDestination?.Id);
-                    int next = AutonomousPlayerBehavior.NextLoopIndex(loop.Length, previous,
-                        _groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID);
-                    return loop[next];
-                }
+                CampDestination roam = ChooseRoamDestination(bot, choices);
+                if (roam != null)
+                    return roam;
             }
             return choices.FirstOrDefault(destination => destination.Id == plan?.TargetId) ??
                 (plan == null ? null : new CampDestination(plan.TargetId, plan.Name, plan.Name,

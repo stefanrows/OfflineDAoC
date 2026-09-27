@@ -999,7 +999,9 @@ public static partial class AutonomousBotGroupCoordinator
 
     public static Vector3 FormationPoint(GameBot bot, Vector3 center, bool tight)
     {
-        Vector3 desired = DesiredFormationPoint(bot, center, tight);
+        // RvR groups on the move keep their doctrine's marching order.
+        Vector3 desired = AutonomousRvrDoctrineRuntime.TravelFormationPoint(bot, center) ??
+            DesiredFormationPoint(bot, center, tight);
         Zone zone = bot?.CurrentRegion?.GetZone((int)center.X, (int)center.Y);
         return zone != null && PathfindingProvider.Instance.IsAvailable
             ? AutonomousNavigationSurface.MoveAlongGround(PathfindingProvider.Instance,

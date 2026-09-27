@@ -379,7 +379,28 @@ namespace DOL.AI.Brain
 
         protected virtual GameLiving CalculateNextAttackTarget()
         {
-            return CleanUpAggroListAndGetHighestModifiedThreat();
+            GameLiving highest = CleanUpAggroListAndGetHighestModifiedThreat();
+            return ApplyRvrCombatHabits(highest) ?? highest;
+        }
+
+        /// <summary>
+        /// Autonomous RvR warbands pick among the enemy players they are
+        /// fighting by their doctrine (caller, healers and mezzers first, some
+        /// stickiness and spread) instead of pure threat order.
+        /// </summary>
+        private GameLiving ApplyRvrCombatHabits(GameLiving highest)
+        {
+            if (highest == null || !BotPvpCrowdControl.PlayerLike(highest) ||
+                !AutonomousRvrDoctrineRuntime.Applies(BotBody))
+                return null;
+            GameLiving[] enemies = AggroList.Keys
+                .Where(living => living != null && living.IsAlive && BotPvpCrowdControl.PlayerLike(living) &&
+                    !ShouldBeIgnoredFromAggroList(living) && GameServer.ServerRules.IsAllowedToAttack(Body, living, true))
+                .ToArray();
+            GameLiving chosen = AutonomousRvrDoctrineRuntime.Choose(BotBody, enemies, Body.TargetObject as GameLiving);
+            if (chosen != null && !AggroList.ContainsKey(chosen))
+                AddToAggroList(chosen, 1);
+            return chosen;
         }
 
         public virtual bool CanAggroTarget(GameLiving target)
@@ -506,6 +527,10 @@ namespace DOL.AI.Brain
         /// </summary>
         public static void NotifyNearbyGroupBots(GameLiving victim, AttackData ad)
         {
+            if (ad?.Attacker is GameLiving guildAttacker && guildAttacker.IsAlive)
+                foreach (GameBot guildmate in AutonomousGuildCohesion.Helpers(victim, guildAttacker))
+                    (guildmate.Brain as BotBrain)?.OnGuildmateAttacked(victim, guildAttacker);
+
             GameLiving groupMember = GroupMemberForCombat(victim);
             // Attached sub-pets also enlist their human-led raid in PvP. The
             // existing autonomous and PvE membership rules stay unchanged.
@@ -541,6 +566,26 @@ namespace DOL.AI.Brain
                         helper.CurrentRegionID == victim.CurrentRegionID && helper.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS) &&
                         helper.Brain is BotBrain helperBrain)
                         helperBrain.OnGroupMemberAttacked(victim, ad);
+        }
+
+        /// <summary>A guildmate outside this bot's group is attacked nearby: go and help.</summary>
+        public void OnGuildmateAttacked(GameLiving victim, GameLiving attacker)
+        {
+            if (Body == null || !Body.IsAlive || victim.CurrentRegionID != Body.CurrentRegionID ||
+                Body.CurrentZone == null || !Body.IsWithinRadius(victim, AutonomousGuildCohesion.HelpRadius) ||
+                !GameServer.ServerRules.IsAllowedToAttack(Body, attacker, true) ||
+                !PathfindingProvider.Instance.HasLineOfSight(Body.CurrentZone, new(Body.X, Body.Y, Body.Z),
+                    new(victim.X, victim.Y, victim.Z), PathfindingProvider.Instance.DefaultFilters))
+                return;
+            AutonomousDefensivePull.OnThreat(BotBody, attacker);
+            AddToAggroList(attacker, attacker.EffectiveLevel * 10);
+            if (!HasAggro)
+                return;
+            if (BotBody?.IsRecoveryResting == true)
+                BotBody.WakeRecoveryRest();
+            NextThinkTick = GameLoop.GameLoopTime;
+            if (FSM.GetState(eFSMStateType.AGGRO) != FSM.GetCurrentState())
+                FSM.SetCurrentState(eFSMStateType.AGGRO);
         }
 
         public void OnGroupMemberAttacked(GameLiving victim, AttackData ad)
@@ -1268,6 +1313,15 @@ namespace DOL.AI.Brain
             }
 
             CompanionPvpEngagement.Observe(BotBody);
+
+            // A losing RvR group may decide to break off; while it runs, its
+            // members neither fight nor chase.
+            if (BotBody?.IsAutonomousWorldBot == true && !BotBody.IsPlayerLedGroup)
+            {
+                AutonomousRvrDoctrineRuntime.EvaluateRetreat(BotBody);
+                if (AutonomousRvrDoctrineRuntime.TryRunRetreat(this))
+                    return;
+            }
 
             // Frontier enemies take priority over rally/follow/rest and optional
             // buffs, even on a PvE task. Horse travel above stays authoritative.
@@ -5096,8 +5150,9 @@ namespace DOL.AI.Brain
                 GameLiving support = RelicMgr.GetRelics().Select(relic => relic.CurrentCarrier)
                     .Concat(Body.GetNPCsInRadius(2000).OfType<DOL.GS.Keeps.GameKeepGuard>().Cast<GameLiving>())
                     .Where(living => living?.IsAlive == true &&
-                        (living is DOL.GS.Keeps.GameKeepGuard
-                            ? living.Realm == Body.Realm
+                        (living is DOL.GS.Keeps.GameKeepGuard guard
+                            // Camlann keeps belong to guilds: heal our own guild's guards only.
+                            ? BotBody.Guild != null && guard.Component?.Keep?.Guild == BotBody.Guild
                             : PvpCombatant.AreAllied(Body, living)) && living.HealthPercent < 85 &&
                         living.CurrentRegion == Body.CurrentRegion && CanHealRelicCarrier(living) &&
                         PathfindingProvider.Instance.HasLineOfSight(Body.CurrentZone, new(Body.X, Body.Y, Body.Z),
