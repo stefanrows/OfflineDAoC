@@ -1,13 +1,22 @@
 # Companion build research and Stage 3 validation
 
-Status: Stage 1 source research and Stage 3 runtime validation cover all 39
-classes. Companion Manager M1a (0.34.0) adds build choice: 57
-project-recommended builds are enabled for 35 classes, and four classes remain
-manual-only with documented blockers. The original 33 plans keep their IDs and
-stay each class's default build. The enabled plan set and its exact targets are
-recorded in `CompanionBuildPlanCatalog.cs` and summarized below. The owner
-marked Stage 3 real-client acceptance complete on 2026-09-24; the M1a builds
-passed offline checks only. Updated 2026-09-24.
+Status: the current catalog contains 118 plans for all 39 Classic + SI classes;
+every class has at least three choices. The original 33 `general-pve-v1-*`
+default IDs remain unchanged, and formerly manual-only classes now have a
+selectable default. The current catalog and each realm's expansion evidence are
+recorded in `CompanionBuildPlanCatalog.cs` and
+[Albion](COMPANION_BUILD_EXPANSION_ALBION.md),
+[Midgard](COMPANION_BUILD_EXPANSION_MIDGARD.md), and
+[Hibernia](COMPANION_BUILD_EXPANSION_HIBERNIA.md) notes. Updated 2026-09-27.
+
+The complete source and acceptance plan for selected-build skill use and
+caster ranged AoE is in [COMPANION_BUILD_AOE_PLAN.md](COMPANION_BUILD_AOE_PLAN.md).
+
+The 57 plans for 35 classes and four manual-only classes mentioned in the M1a
+section below are the historical 0.34.0 snapshot. They are not the current
+catalog totals. The earlier source tables and M1a plan list remain in this file
+as research history; their point-in-time blocker statements are superseded by
+the current expansion notes.
 
 These 1.65-era sources support review of companion build recommendations; they
 do not establish retail-era popularity or historical practice. The source set
@@ -25,22 +34,28 @@ or automatic respecialization.
 
 ## Candidate point and skill checks
 
+The checks in the next two historical sections describe the original Stage 3
+and M1a source review. The current expansion checks are summarized in the
+realm-specific notes linked at the top of this document. A valid specialization
+allocation does not by itself prove that the companion's combat profile uses
+each learned spell, style, weapon mode, or pet behavior; that integration is
+tracked separately until complete.
+
 For a specialization trained to rank n, the server's point cost is
 n(n+1)/2 - 1, since the line starts at rank 1. The level-50 budgets below use
 the companion training loop in GameBot and each class's SpecPointsMultiplier,
 with no autotrain points: 1,494 for multiplier 10, 2,223 for 15, 2,979 for 20,
 3,253 for 22, and 3,706 for 25.
 
-The 39 class career catalogs and all 108 ranked lines in the 34 numeric
-endgame candidates were cross-referenced with the public OpenDAoC database
-dump's class career, ability, spell-line, spell, and style tables. The named
-lines and active skill tiers exist in that snapshot; Parry and Stealth are
-passive lines. Those 34 candidates' endgame point totals fit their no-autotrain
-level-50 budgets. This is a static upstream-reference check. The three
-Blademaster, Hero, and Warrior forum candidates have calculated point totals,
-but their exact ranked skill tiers have not passed that reference check.
-Animist and Wizard lacked numeric endgame candidates here; M1a added
-forum-excerpt candidates below.
+The original M1a source audit cross-referenced its candidate class careers and
+ranked lines against the public OpenDAoC database dump. That historical audit
+did not validate the later Blademaster, Hero, and Warrior additions. The
+current realm-specific expansion notes instead record the new plans' local
+static class-career, ranked-skill, and no-autotrain point checks. In
+particular, Animist, Blademaster, Hero, Necromancer, Warrior, and Wizard now
+have selectable defaults. Source paths for Death Servant summon and command
+exist, but real-client behavior is unverified; the current Necromancer plans
+do not specialize in Death Servant for farming.
 
 The class career and skill records used by the server are loaded by SkillBase.
 The public upstream snapshot supported the original static candidate audit;
@@ -79,17 +94,17 @@ not automatic line respec, so the cited route is not directly usable as an
 automatic plan.
 
 The source tables below preserve historical candidate notes; their validation
-columns describe those source candidates, not the selected schedules. The
-enabled project plans and the six manual-only blockers are listed separately.
+columns describe those candidates as reviewed for the original M1a set, not the
+current 118 selected plans. The original 33 defaults are listed separately.
 
-## Enabled project-recommended plans
+## Original 33 default plans (M1a foundation)
 
-All 33 schedules passed per-level budget, monotonicity, no-overlevel, and
-level-50 target checks. Fixture validation matched all 105 allocation targets
-to runtime class careers; 90 targets had ranked ability, spell, or style data,
-while 15 are career-only lines (Parry, Stealth, or Scout/Hunter/Ranger bow
-lines). Runtime data is checked again when automatic mode is enabled. IDs are
-stable and versioned as `general-pve-v1-<class>`.
+These 33 original schedules passed per-level budget, monotonicity,
+no-overlevel, and level-50 target checks. The original fixture validation
+matched all 105 allocation targets to runtime class careers; later realm
+expansions added the additional plans documented above. Runtime data is checked
+again when automatic mode is enabled. The original IDs remain stable as
+`general-pve-v1-<class>`.
 
 | Class | Role | Level-50 target allocations |
 | --- | --- | --- |
@@ -127,14 +142,14 @@ stable and versioned as `general-pve-v1-<class>`.
 | Valewalker | Melee and spell hybrid | Scythe 50, Arboreal Path 38, Parry 20 |
 | Warden | Defensive melee and group support | Nurture 49, Regrowth 33, Blades 25, Parry 14 |
 
-These are the original Stage 3 plans. Each is now its class's default build
+These are the original Stage 3 plans. Each remains its class's default build
 and carries a build name; see [Build choice (M1a)](#build-choice-m1a) for the
 names and the added builds.
 
 | Manual-only class | Blocker |
 | --- | --- |
 | Blademaster, Hero, Warrior | Dated forum candidates still need role and ranked-skill review. |
-| Necromancer | Numeric farming target depends on unsupported Death Servant companion combat; no substitute profile was validated. |
+| Necromancer | The Death Servant farming allocation is not in the current plans; source summon and command paths exist but need real-client verification. |
 
 ## Albion
 
@@ -147,7 +162,7 @@ names and the added builds.
 | Infiltrator | Keep weapon and Envenom near level; use spare points in Dual Wield. The guide suggests player Stealth autotrain. Assassin. | 50 Thrust, 44 Critical Strike, 36 Stealth, 36 Envenom, 14 Dual Wield: 3,697/3,706 (M25). Slash is an alternate weapon choice. | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html) | Static endgame career/rank and point-budget pass; numeric level route missing. |
 | Mercenary | Keep Dual Wield at level, then train the weapon line. Dual-wield damage with an optional shield stun. | 50 Dual Wield, 42 Shields, 36 Slash, 16 Parry: 2,976/2,979 (M20). Thrust or Crush can replace Slash. | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html) | Static endgame career/rank and point-budget pass; numeric level route missing. |
 | Minstrel | Either train Instruments for early songs or follow the guide's autotrain route; its charm route calls out level 24. Song, charm, and group utility. | The guide's 50 Instruments/44 Thrust costs 2,263/2,223 without autotrain. Companion candidate: 50 Instruments, 43 Thrust, 2,219/2,223 (M15). | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html) | Static endgame pass; level-24 autotrain/charm evidence is human-only. |
-| Necromancer | A 2014 Uthgard forum discussion recommends Deathsight for leveling and Death Servant 50 for farming. Pet caster and solo farmer. | A cited farm variant is 48–50 Deathsight, 9 Painworking, 18 Death Servant: 1,389–1,488/1,494 (M10). The current BotSpec choices omit Death Servant, so this is not yet an automatic-plan candidate. | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html); [2014 discussion](https://www.uthgard.net/forum/viewtopic.php?p=331300) | Static endgame career/rank and point-budget pass; numeric level route missing. |
+| Necromancer | A 2014 Uthgard forum discussion recommends Deathsight for leveling and Death Servant 50 for farming. Pet caster and solo farmer. | A cited farm variant is 48–50 Deathsight, 9 Painworking, 18 Death Servant: 1,389–1,488/1,494 (M10). The current three plans omit Death Servant; its source summon/command paths need real-client verification before a farming build is offered. | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html); [2014 discussion](https://www.uthgard.net/forum/viewtopic.php?p=331300) | Static endgame career/rank and point-budget pass; numeric level route missing. |
 | Paladin | Keep a weapon line around level while adding Shields and Chants. Defensive tank and group support. | 46 Chants, 44 Thrust, 42 Shields: 2,971/2,979 (M20). | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html) | Static endgame career/rank and point-budget pass; numeric level route missing. |
 | Reaver | The guide uses Flexible autotrain to afford its endgame split. Shield control and melee pressure. | Source: 50 Flexible, 42 Shields, 41 Soulrending, 6 Parry, which costs 3,056/2,979 without autotrain. Companion candidate: 50 Flexible, 42 Shields, 39 Soulrending, 5 Parry: 2,969/2,979 (M20). | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html) | Static endgame career/rank and point-budget pass; numeric level route missing. |
 | Scout | Level with a melee weapon and Shield or focus Bow; the guide also describes player Bow autotrain. Ranged damage and scouting. | 50 Longbows, 42 Shields, 35 Stealth, 18 Slash: 2,975/2,979 (M20). Thrust is an alternate weapon line. | [Albion guide](https://uthgard.blogspot.com/p/albion-class-guide.html) | Static endgame career/rank and point-budget pass; numeric level route missing. |
@@ -195,21 +210,26 @@ names and the added builds.
 - The three realm guides cover 38 classes; the 2014 Necromancer discussion supplies a separate source. These community sources are emulator recommendations, not evidence of retail-era popularity.
 - Four source templates needed companion-specific no-autotrain adjustments: Minstrel, Reaver, Runemaster, and Ranger. The selected schedules derive from reviewed research inputs; no `BotSpec` profile is used as an automatic plan.
 - The Theurgist source calls its line Air; the server career key is Wind Magic.
-- Animist and Wizard lacked numeric endgame candidates in this source set; M1a found forum excerpts with numbers (see [Build choice (M1a)](#build-choice-m1a)). Blademaster, Hero, and Warrior forum candidates need an AI role decision and exact ranked-skill validation.
+- Animist and Wizard lacked numeric endgame candidates in the original source set; M1a found forum excerpts with numbers (see [Build choice (M1a)](#build-choice-m1a)). Later realm notes document the Blademaster, Hero, and Warrior expansions and their local checks.
 - Sorcerer, Ranger, Nightshade, and Armsman have partial numeric leveling sources. Healer has a longer sourced route, but its respecialization and half-level steps do not map to the current companion progression path. Minstrel's level-24 note relies on human autotrain. Other 33 classes have only relative focus guidance.
-- The source candidates' point and route findings above remain research evidence, not a claim that every cited route is usable by companions. The selected plans have separate runtime and per-level validation recorded in the table above.
-- The 33 enabled schedules are project recommendations through level 50, not sourced historical per-level builds. They spend the normal no-autotrain companion budget and do not respec automatically.
-- Runtime validation covers the enabled plans only. The six listed manual-only classes remain gated pending better build or combat-profile evidence. The owner marked Stage 3 real-client leveling and restart acceptance complete on 2026-09-24; detailed observations were not supplied.
+- The source candidates' point and route findings above remain research evidence, not a claim that every cited route is usable by companions. Static career, ranked-skill, and point checks for current plans are recorded in the realm expansion notes. The server checks class multiplier and learned-plan eligibility before applying a plan; observed skill use remains a separate gameplay check.
+- The 33 original schedules are project recommendations through level 50, not sourced historical per-level builds. They spend the normal no-autotrain companion budget and do not respec automatically.
+- The current 118-plan catalog replaces the original manual-only class gates. Necromancer plans use Deathsight and Painworking allocations. Source paths for Death Servant summon and command exist, but their behavior and the expanded plans have not been verified in a real client; none of these three plans specializes in Death Servant farming. The owner marked Stage 3 real-client leveling and restart acceptance complete on 2026-09-24; that acceptance covered the earlier catalog and does not certify the expanded builds.
 
-This record extends Stage 1's source research with the selected Stage 3 plans, offline checks, and class-specific blockers.
+This record preserves the original Stage 1 source research and Stage 3 plan snapshot alongside the current realm expansion notes.
 
 ## Build choice (M1a)
+
+This section is the historical 0.34.0 snapshot. Its original totals and
+manual-only decisions are retained for provenance; current availability and
+validation are described at the top of this file and in the realm expansion
+notes.
 
 The owner asked for the most popular builds of each class at the 1.65 patch
 level (Classic + SI), with a build choice per companion. This section records
 the 24 builds added in 0.34.0 and the evidence for each. It follows the rules
 above: sources are cited, project numbers are labelled, and a class without
-evidence stays manual-only.
+evidence stayed manual-only in that release snapshot.
 
 **Evidence limits.** On 2026-09-24 the Uthgard forum returned HTTP 500
 ("Unable to connect to the database") and the Internet Archive rate-limited
@@ -262,7 +282,7 @@ default build of their class. Their command keys and names are:
 | Shadowblade | `leftaxe` | Left axe assassin |
 | Shaman | `augmentation` | Augmentation (buffer) |
 | Skald | `battlesongs` | Battlesongs and hammer |
-| Spiritmaster | `darkness` | Darkness (bomb) |
+| Spiritmaster | `darkness` | Darkness (pet caster) |
 | Thane | `stormcalling` | Stormcalling and shield |
 | Bard | `nurture` | Nurture (support) |
 | Champion | `valor` | Valor and shield |
@@ -281,8 +301,8 @@ tri-spec that reaches the first Celerity.
 
 ### Added builds
 
-IDs are `<key>-v1-<class>`. Wizard and Animist were manual-only; their first
-listed build is now the class default.
+IDs are `<key>-v1-<class>`. Wizard and Animist had no enabled default before
+M1a; their first listed plan established each class's default at that stage.
 
 | Class | Key and name | Role | Level-50 targets (points / budget) | Label | Source |
 | --- | --- | --- | --- | --- | --- |
@@ -311,7 +331,7 @@ listed build is now the class default.
 | Eldritch | `light` Light (single target) | Ranged single-target damage | Light 46, Mana 28 (1,485/1,494) | Sourced | Hibernia guide: "46 Light, 28 Mana". |
 | Ranger | `archery` Archery | Ranged damage with self-buffs | Recurve Bow 35, Pathfinding 40, Piercing 39, Stealth 33, Celtic Dual 19 (2,976/2,979) | Adjusted | Hibernia guide hybrid bow: "40 Pathfinding, 39 Pierce, 35 Bow, 35 Stealth, 18 Celtic Dual" costs 3,026. Stealth drops to 33, and Celtic Dual rises to 19 to spend the remainder. |
 
-### Not added
+### Not added in the M1a snapshot
 
 - Weapon-only swaps (for example a Hammer Berserker or a Slash Infiltrator)
   change only which weapon line is trained. They are left out so each list
@@ -321,14 +341,17 @@ listed build is now the class default.
   useful companion build.
 - The Shadowblade high-Critical-Strike opener, a Smite Cleric, a solo Warden,
   and Mentalism healer builds have no numeric source in this set.
-- Blademaster, Hero, Warrior, and Necromancer keep their blockers above.
+- Blademaster, Hero, Warrior, and Necromancer remained manual-only at the M1a
+  snapshot. The later expansion notes supersede those catalog blockers. The
+  Necromancer's Death Servant farming allocation is not represented; source
+  summon/command paths are present but need real-client verification.
 
 ### Role mapping
 
-Each build carries a role description. Applying a build's role to the
-companion's party role, and the new Crowd control role for the Pacification
-Healer and similar builds, is M1c in the
-[Companion Manager roadmap](COMPANION_MANAGER_ROADMAP.md).
+Current build roles are assigned in `CompanionBuildPlanCatalog.cs` and checked
+for class legality by unit coverage. Selecting a role still depends on the
+combat profile honoring the saved build for weapon, spell, and pet actions; that
+cross-cutting integration remains open while implementation is in progress.
 
 ## Sources
 

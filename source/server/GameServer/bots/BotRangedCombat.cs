@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using DOL.Database;
 
 namespace DOL.GS
@@ -157,6 +158,58 @@ namespace DOL.GS
 
             return stance == eBotStance.Ranged ||
                    stance == eBotStance.Auto && !targetInMeleeRange;
+        }
+
+        /// <summary>
+        /// Automatic persistent archer builds use a bow in Auto stance only
+        /// when the selected plan actually emphasizes its class bow line.
+        /// Explicit Ranged stance remains an owner override, while manually
+        /// trained companions and autonomous/helper bots retain the shared
+        /// class policy.
+        /// </summary>
+        public static bool ShouldUseRangedWeapon(
+            GameBot bot,
+            eBotStance stance,
+            bool targetInMeleeRange,
+            bool hasUsableRangedWeapon)
+        {
+            if (bot?.CharacterClass == null)
+                return false;
+
+            eCharacterClass characterClass = (eCharacterClass)bot.CharacterClass.ID;
+            bool standardChoice = ShouldUseRangedWeapon(characterClass, stance,
+                targetInMeleeRange, hasUsableRangedWeapon);
+            if (!standardChoice || stance != eBotStance.Auto ||
+                bot is not { IsPersistentPlayerCompanion: true } ||
+                !string.Equals(bot.PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) ||
+                !CompanionBuildPlanCatalog.TryGetPlanById(characterClass,
+                    bot.PlayerCompanionRecord.TrainingPlanId, out CompanionBuildPlan plan))
+                return standardChoice;
+
+            return PlanTrainsRangedWeapon(characterClass, plan.TargetAllocations);
+        }
+
+        public static bool PlanTrainsRangedWeapon(
+            eCharacterClass characterClass,
+            System.Collections.Generic.IEnumerable<CompanionBuildRank> allocations,
+            int minimumRank = 30)
+        {
+            if (allocations == null)
+                return false;
+
+            string line = characterClass switch
+            {
+                eCharacterClass.Scout => Specs.Longbow,
+                eCharacterClass.Hunter => Specs.CompositeBow,
+                eCharacterClass.Ranger => Specs.RecurveBow,
+                _ => string.Empty,
+            };
+            int focusRank = characterClass == eCharacterClass.Scout
+                ? Math.Max(minimumRank, 40)
+                : minimumRank;
+            return !string.IsNullOrEmpty(line) && allocations.Any(rank =>
+                string.Equals(rank.Specialization, line, StringComparison.OrdinalIgnoreCase) &&
+                rank.Level >= focusRank);
         }
 
         public static bool ShouldCloseToRangedRange(

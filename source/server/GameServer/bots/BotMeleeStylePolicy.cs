@@ -8,8 +8,14 @@ namespace DOL.GS
     /// <summary>Shared companion/world-bot selection; native openings and costs remain authoritative.</summary>
     public static class BotMeleeStylePolicy
     {
-        public static bool IsEligible(Style style) => style != null &&
-            style.OpeningRequirementType != Style.eOpening.Positional && !style.StealthRequirement;
+        public static bool IsEligible(Style style) => IsEligible(style, isStealthed: false);
+
+        private static bool IsEligible(Style style, bool isStealthed) => style != null &&
+            ((style.OpeningRequirementType != Style.eOpening.Positional && !style.StealthRequirement) ||
+             IsEligibleStealthOpener(style, isStealthed));
+
+        public static bool IsEligibleStealthOpener(Style style, bool isStealthed) =>
+            style?.StealthRequirement == true && isStealthed;
 
         public static bool Better(Style candidate, Style current) => current == null ||
             candidate.GrowthRate > current.GrowthRate ||
@@ -20,11 +26,31 @@ namespace DOL.GS
                 ? bot.Inventory.GetItem(eInventorySlot.LeftHandWeapon) : bot.ActiveWeapon;
 
         public static bool Usable(GameBot bot, Style style, AttackData lastAttack) =>
-            IsEligible(style) && style.Level <= bot.Level &&
+            bot != null && IsEligible(style) && style.Level <= bot.Level &&
             MatchesWeapon(style, bot.ActiveWeapon, bot.Inventory.GetItem(eInventorySlot.LeftHandWeapon), bot.ActiveWeaponSlot) &&
             StyleProcessor.CheckEnduranceCost(bot, Weapon(bot, style), style) &&
             bot.CheckStyleStun(style) &&
             StyleProcessor.CanUseStyle(lastAttack, bot, style, Weapon(bot, style));
+
+        private static bool UsableStealthOpener(GameBot bot, Style style, AttackData lastAttack) =>
+            bot != null && IsEligibleStealthOpener(style, bot.IsStealthed) &&
+            BotRvrAmbush.CanUseStealthOpener(bot, bot.TargetObject as GameLiving) &&
+            style.Level <= bot.Level &&
+            MatchesWeapon(style, bot.ActiveWeapon, bot.Inventory.GetItem(eInventorySlot.LeftHandWeapon), bot.ActiveWeaponSlot) &&
+            StyleProcessor.CheckEnduranceCost(bot, Weapon(bot, style), style) &&
+            bot.CheckStyleStun(style) &&
+            StyleProcessor.CanUseStyle(lastAttack, bot, style, Weapon(bot, style));
+
+        public static Style SelectStealthOpener(GameBot bot, AttackData lastAttack)
+        {
+            if (bot?.IsStealthed != true || bot.Styles == null ||
+                !BotRvrAmbush.CanUseStealthOpener(bot, bot.TargetObject as GameLiving))
+                return null;
+
+            return bot.Styles.Where(style => style?.StealthRequirement == true &&
+                    UsableStealthOpener(bot, style, lastAttack))
+                .Aggregate((Style)null, (best, candidate) => Better(candidate, best) ? candidate : best);
+        }
 
         /// <summary>
         /// Highest available taunt that the wielded weapons can execute. Picking
@@ -65,7 +91,8 @@ namespace DOL.GS
                 return null;
             // Preserve a deliberate tank taunt, but revalidate at the actual swing.
             Style queued = bot.styleComponent.NextCombatStyle;
-            if (preserveQueued && Usable(bot, queued, lastAttack)) return queued;
+            if (preserveQueued && (Usable(bot, queued, lastAttack) ||
+                                   UsableStealthOpener(bot, queued, lastAttack))) return queued;
             Style best = null;
             Style anytime = null;
             foreach (Style style in bot.Styles)

@@ -127,9 +127,17 @@ namespace DOL.GS
                 turret.IsAlive && turret.ObjectState == GameObject.eObjectState.Active && turret.Owner == bot);
             if (!FieldReady(now, state.NextField, bot.Mana, bot.MaxMana, nearby) ||
                 !AutonomousPetSupport.CanDeployFieldTurret(bot, encounterTarget)) return false;
-            var field = AutonomousPetSupport.ChooseWeightedByRank(spells.Where(entry =>
+            var fieldSummons = spells.Where(entry =>
                 AutonomousPetSupport.IsAnimistFieldTurret(entry.Spell.SpellType) &&
-                bot.IsWithinRadius(encounterTarget, entry.Spell.CalculateEffectiveRange(bot))), bot.IsEndgameCompanion);
+                bot.IsWithinRadius(encounterTarget, entry.Spell.CalculateEffectiveRange(bot))).ToArray();
+            if (AutonomousPetSupport.SelectedAnimistPlanLine(bot) is string animistLine)
+            {
+                var focusedFields = fieldSummons.Where(entry => string.Equals(entry.Line?.Spec,
+                    animistLine, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (focusedFields.Length > 0)
+                    fieldSummons = focusedFields;
+            }
+            var field = AutonomousPetSupport.ChooseWeightedByRank(fieldSummons, bot.IsEndgameCompanion);
             if (field.Spell == null || !Cast(bot, encounterTarget, field.Spell, field.Line)) return false;
             state.NextField = now + 6500;
             nextDeployable = now + Math.Max(750, field.Spell.CastTime + 250);

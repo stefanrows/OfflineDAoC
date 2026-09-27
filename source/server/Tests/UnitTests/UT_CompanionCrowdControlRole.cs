@@ -78,8 +78,34 @@ public class UT_CompanionCrowdControlRole
             .Where(plan => plan.PrimaryRole == BotPveGroupRole.CrowdControl || plan.CrowdControlDuty)
             .Select(plan => plan.Id), Is.EquivalentTo(new[]
         {
-            "general-pve-v1-healer", "pacification-v1-healer", "general-pve-v1-sorcerer", "music-v1-bard",
+            "general-pve-v1-healer", "pacification-v1-healer", "general-pve-v1-sorcerer",
+            "music-v1-bard", "battle-v1-bard", "mentalism-v1-mentalist",
         }));
+    }
+
+    [Test]
+    public void SmiteClericAndNatureDruidCanFillAttackerRole()
+    {
+        Assert.That(CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Cleric, "smite", out CompanionBuildPlan smite), Is.True);
+        Assert.That(CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Druid, "nature", out CompanionBuildPlan nature), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(smite.PrimaryRole, Is.EqualTo(BotPveGroupRole.Attacker));
+            Assert.That(BotPartyRoles.CanFill(eCharacterClass.Cleric, BotPveGroupRole.Attacker), Is.True);
+            Assert.That(nature.PrimaryRole, Is.EqualTo(BotPveGroupRole.Attacker));
+            Assert.That(BotPartyRoles.CanFill(eCharacterClass.Druid, BotPveGroupRole.Attacker), Is.True);
+        });
+    }
+
+    [TestCase("automatic", "battle-v1-bard", "attacker", true)]
+    [TestCase("manual", "battle-v1-bard", "attacker", false)]
+    [TestCase("automatic", "battle-v1-bard", "buffer", false)]
+    [TestCase("automatic", "nurture-v1-bard", "attacker", false)]
+    public void BardMeleeBehaviorRequiresMatchingAutomaticBuildAndRole(
+        string mode, string planId, string savedRole, bool expected)
+    {
+        Assert.That(BotPartyRoles.HasSelectedAutomaticBuildRole(eCharacterClass.Bard,
+            mode, planId, savedRole, BotPveGroupRole.Attacker), Is.EqualTo(expected));
     }
 
     [Test]

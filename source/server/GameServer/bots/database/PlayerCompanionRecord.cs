@@ -98,6 +98,11 @@ namespace DOL.GS
         [DataElement(AllowDbNull = true, Varchar = 16)]
         public string BombUsePreference { get; set; } = CompanionBombingPolicy.Auto;
 
+        // Additive companion combat preference; null or an invalid legacy value
+        // resolves to the default three-enemy threshold.
+        [DataElement(AllowDbNull = true, Varchar = 8)]
+        public string RangedAoePreference { get; set; } = CompanionRangedAoePolicy.DefaultChoice;
+
         [DataElement(AllowDbNull = false)]
         public int AppearanceSize { get; set; }
 

@@ -124,7 +124,7 @@ public class UT_PlayerCompanionGearRewards
     [Test]
     public void AutomaticPlansHaveBudgetSafeTargetsAtEveryLevel()
     {
-        Assert.That(CompanionBuildPlanCatalog.GetEnabledPlans(), Has.Count.EqualTo(57));
+        Assert.That(CompanionBuildPlanCatalog.GetEnabledPlans(), Has.Count.EqualTo(118));
         foreach (CompanionBuildPlan plan in CompanionBuildPlanCatalog.GetEnabledPlans())
         {
             Dictionary<string, int> previous = null;
@@ -154,16 +154,68 @@ public class UT_PlayerCompanionGearRewards
     }
 
     [Test]
-    public void UnsupportedClassesHavePreciseManualOnlyBlockers()
+    public void EveryEnabledBuildPassesRuntimeCareerRankAndMultiplierValidation()
     {
-        foreach (eCharacterClass characterClass in new[]
-                 {
-                     eCharacterClass.Necromancer, eCharacterClass.Blademaster, eCharacterClass.Hero,
-                     eCharacterClass.Warrior,
-                 })
+        IReadOnlyCollection<CompanionBuildPlan> plans = CompanionBuildPlanCatalog.GetEnabledPlans();
+        Assert.That(plans.Select(plan => plan.CharacterClass).Distinct(), Has.Count.EqualTo(39));
+
+        foreach (CompanionBuildPlan plan in plans)
         {
-            Assert.That(CompanionBuildPlanCatalog.TryGetEnabledPlan(characterClass, out _), Is.False);
-            Assert.That(CompanionBuildPlanCatalog.GetBlocker(characterClass), Is.Not.Empty);
+            Assert.That(CompanionBuildPlanCatalog.TryValidateRuntimePlan(
+                plan.CharacterClass, plan, out string rankBlocker), Is.True,
+                $"{plan.Id}: {rankBlocker}");
+            Assert.That(CompanionBuildPlanCatalog.TryValidateRuntimeBuild(
+                plan.CharacterClass, plan, out string buildBlocker), Is.True,
+                $"{plan.Id}: {buildBlocker}");
+        }
+
+        Assert.That(CompanionBuildPlanCatalog.TryFindPlan(
+            eCharacterClass.Healer, "mending", out CompanionBuildPlan healerPlan), Is.True);
+        Assert.That(CompanionBuildPlanCatalog.TryValidateRuntimePlan(
+            eCharacterClass.Shaman, healerPlan, out string blocker), Is.False);
+        Assert.That(blocker, Does.Contain("not an enabled build for this class"));
+    }
+
+    [Test]
+    public void AllClassicAndSiClassesHaveThreeBuildsAndAnAvailableDefault()
+    {
+        IReadOnlyCollection<CompanionBuildPlan> plans = CompanionBuildPlanCatalog.GetEnabledPlans();
+        IGrouping<eCharacterClass, CompanionBuildPlan>[] classes = plans.GroupBy(plan => plan.CharacterClass).ToArray();
+        Assert.That(plans, Has.Count.EqualTo(118));
+        Assert.That(classes, Has.Length.EqualTo(39));
+
+        foreach (IGrouping<eCharacterClass, CompanionBuildPlan> group in classes)
+        {
+            Assert.That(group.Count(), Is.GreaterThanOrEqualTo(3),
+                $"{group.Key} has fewer than three build choices.");
+            Assert.That(CompanionBuildPlanCatalog.TryGetEnabledPlan(group.Key, out string defaultId), Is.True,
+                $"{group.Key} has no default build.");
+            Assert.That(defaultId, Is.EqualTo(group.First().Id),
+                $"{group.Key} default is not the first catalog plan.");
+            Assert.That(CompanionBuildPlanCatalog.TryGetPlanById(group.Key, defaultId, out _), Is.True,
+                $"{group.Key} default ID is not selectable.");
+        }
+    }
+
+    [Test]
+    public void ClassesWithoutLegacyGeneralDefaultsHaveStableSelectablePlans()
+    {
+        (eCharacterClass CharacterClass, string DefaultId)[] newlySupportedClasses =
+        {
+            (eCharacterClass.Animist, "creeping-v1-animist"),
+            (eCharacterClass.Blademaster, "group-v1-blademaster"),
+            (eCharacterClass.Hero, "shield-v1-hero"),
+            (eCharacterClass.Necromancer, "general-pve-v1-necromancer"),
+            (eCharacterClass.Warrior, "general-pve-v1-warrior"),
+            (eCharacterClass.Wizard, "fire-v1-wizard"),
+        };
+        foreach ((eCharacterClass characterClass, string expectedId) in newlySupportedClasses)
+        {
+            Assert.That(CompanionBuildPlanCatalog.TryGetEnabledPlan(characterClass, out string defaultId), Is.True);
+            Assert.That(defaultId, Is.EqualTo(expectedId), $"{characterClass} default ID changed.");
+            Assert.That(CompanionBuildPlanCatalog.TryGetPlanById(characterClass, defaultId, out _), Is.True);
+            Assert.That(CompanionBuildPlanCatalog.GetPlans(characterClass), Has.Count.EqualTo(3));
+            Assert.That(CompanionBuildPlanCatalog.GetBlocker(characterClass), Does.StartWith("3 available builds"));
         }
     }
 
@@ -196,7 +248,7 @@ public class UT_PlayerCompanionGearRewards
     {
         IReadOnlyCollection<CompanionBuildPlan> plans = CompanionBuildPlanCatalog.GetEnabledPlans();
         Assert.That(plans.Select(plan => plan.Id).Distinct().Count(), Is.EqualTo(plans.Count));
-        Assert.That(plans.Select(plan => plan.CharacterClass).Distinct().Count(), Is.EqualTo(35));
+        Assert.That(plans.Select(plan => plan.CharacterClass).Distinct().Count(), Is.EqualTo(39));
         foreach (IGrouping<eCharacterClass, CompanionBuildPlan> group in plans.GroupBy(plan => plan.CharacterClass))
         {
             Assert.That(group.Select(plan => plan.Key).Distinct().Count(), Is.EqualTo(group.Count()),
@@ -216,7 +268,7 @@ public class UT_PlayerCompanionGearRewards
         Assert.That(CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Healer, "summoning", out _), Is.False);
         Assert.That(CompanionBuildPlanCatalog.TryFindPlan(eCharacterClass.Healer, " ", out _), Is.False);
         Assert.That(CompanionBuildPlanCatalog.TryGetPlanById(eCharacterClass.Healer, "general-pve-v1-shaman", out _), Is.False);
-        Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Necromancer), Is.Empty);
+        Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Necromancer), Has.Count.EqualTo(3));
     }
 
     [Test]
@@ -225,7 +277,7 @@ public class UT_PlayerCompanionGearRewards
         Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Healer).Select(plan => plan.Name),
             Is.EquivalentTo(new[] { "Tri-spec", "Mending (healer)", "Augmentation (buffer)", "Pacification (crowd control)" }));
         Assert.That(CompanionBuildPlanCatalog.GetPlans(eCharacterClass.Spiritmaster).Select(plan => plan.Name),
-            Is.EquivalentTo(new[] { "Darkness (bomb)", "Suppression", "Summoning (pet)" }));
+            Is.EquivalentTo(new[] { "Darkness (pet caster)", "Suppression (bomb)", "Summoning (pet)" }));
     }
 
     [Test]

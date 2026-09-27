@@ -949,6 +949,24 @@ public static class AutonomousPetSupport
         eSpellType.SummonAnimistPet or
         eSpellType.SummonNecroPet;
 
+    internal static string SelectedAnimistPlanLine(GameBot owner)
+    {
+        if (owner is not { IsPersistentPlayerCompanion: true } ||
+            !string.Equals(owner.PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) ||
+            owner.CharacterClass?.ID != (int)eCharacterClass.Animist ||
+            !CompanionBuildPlanCatalog.TryGetPlanById(eCharacterClass.Animist,
+                owner.PlayerCompanionRecord.TrainingPlanId, out _))
+            return null;
+
+        return owner.BotSpec?.SpecType switch
+        {
+            eSpecType.ArborealAnimist => "Arboreal Path",
+            eSpecType.CreepingAnimist => "Creeping Path",
+            eSpecType.VerdantAnimist => "Verdant Path",
+            _ => null,
+        };
+    }
+
     internal static (Spell Spell, SpellLine Line) ChooseMainPetSummon(
         GameLiving owner,
         IEnumerable<(Spell Spell, SpellLine Line)> available)
@@ -960,14 +978,38 @@ public static class AutonomousPetSupport
         if (summons.Length == 0)
             return default;
 
+        if (owner is GameBot animist && SelectedAnimistPlanLine(animist) is string animistLine)
+        {
+            var focusedSummons = summons.Where(entry => string.Equals(entry.Line?.Spec,
+                animistLine, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (focusedSummons.Length > 0)
+                summons = focusedSummons;
+        }
+
         if (owner is GameBot enchanter && IsPlayerLedCompanion(enchanter) &&
             (eCharacterClass)enchanter.CharacterClass.ID == eCharacterClass.Enchanter)
         {
-            (Spell Spell, SpellLine Line)[] healingPets = summons
-                .Where(entry => IsUnderhillAllySummon(entry.Spell))
-                .ToArray();
-            if (healingPets.Length > 0)
-                return ChooseWeightedByRank(healingPets, highestRankOnly: true);
+            bool automaticPlan = enchanter.IsPersistentPlayerCompanion &&
+                string.Equals(enchanter.PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                CompanionBuildPlanCatalog.TryGetPlanById(eCharacterClass.Enchanter,
+                    enchanter.PlayerCompanionRecord.TrainingPlanId, out _);
+            bool petFocusPlan = !automaticPlan || enchanter.BotSpec?.SpecType == eSpecType.EnchantmentEnchanter;
+            if (petFocusPlan)
+            {
+                (Spell Spell, SpellLine Line)[] healingPets = summons
+                    .Where(entry => IsUnderhillAllySummon(entry.Spell))
+                    .ToArray();
+                if (healingPets.Length > 0)
+                    return ChooseWeightedByRank(healingPets, highestRankOnly: true);
+            }
+            else
+            {
+                (Spell Spell, SpellLine Line)[] ordinaryPets = summons
+                    .Where(entry => !IsUnderhillAllySummon(entry.Spell))
+                    .ToArray();
+                if (ordinaryPets.Length > 0)
+                    summons = ordinaryPets;
+            }
         }
 
         bool chooseHighestRank = owner is GameBot bot &&
@@ -1023,6 +1065,29 @@ public static class AutonomousPetSupport
         {
             return currentPet.SummonOwnerLevel > 0 && owner.Level > currentPet.SummonOwnerLevel &&
                    ProjectedPetLevel(owner, desiredSummon) > currentPet.Level;
+        }
+
+        if (owner is GameBot animist && SelectedAnimistPlanLine(animist) is string selectedAnimistLine)
+        {
+            string desiredLine = KnownSpells(owner)
+                .FirstOrDefault(entry => entry.Spell?.ID == desiredSummon.ID).Line?.Spec;
+            string currentLine = KnownSpells(owner)
+                .FirstOrDefault(entry => entry.Spell?.ID == currentPet.SummonSpellID).Line?.Spec;
+            if (string.Equals(desiredLine, selectedAnimistLine, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(currentLine, selectedAnimistLine, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        if (owner is GameBot selectedEnchanter && selectedEnchanter.IsPersistentPlayerCompanion &&
+            (eCharacterClass)selectedEnchanter.CharacterClass.ID == eCharacterClass.Enchanter &&
+            string.Equals(selectedEnchanter.PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+            CompanionBuildPlanCatalog.TryGetPlanById(eCharacterClass.Enchanter,
+                selectedEnchanter.PlayerCompanionRecord.TrainingPlanId, out _))
+        {
+            bool petFocusPlan = selectedEnchanter.BotSpec?.SpecType == eSpecType.EnchantmentEnchanter;
+            if (IsUnderhillAllySummon(desiredSummon) == petFocusPlan &&
+                IsUnderhillAllyPet(currentPet) != petFocusPlan)
+                return true;
         }
 
         if ((eCharacterClass)owner.CharacterClass.ID == eCharacterClass.Enchanter &&

@@ -58,8 +58,10 @@ background, personality, and dialogue. Browse them with
 `/companions cast [realm] [page]`; recruit each once per owner with
 `/companions recruit authored <name> [build]`. Generated recruitment by class remains
 available. New generated recruits receive a saved personality template. Existing
-records keep their previous identity and class behavior. The catalog's preferred
-build is the validated class default build where available; four classes remain manual-only.
+records keep their previous identity and class behavior. The current catalog
+contains 118 plans across all 39 Classic + SI classes, with at least three
+choices and a selectable default for every class. The original 33
+`general-pve-v1-*` default IDs remain stable.
 
 `/companions profile <name>` shows identity, background, preferred build, role,
 stance, and a short line of dialogue. `/companions role <name> tank|healer|buffer|attacker|cc` saves a class-legal
@@ -88,12 +90,17 @@ safe area shout is unavailable. Temporary helpers and autonomous gamebots do
 not use this companion area-taunt decision.
 
 The roster preserves the existing generated level-1 equipment as a one-time,
-protected starter loadout. Persistent inventory is saved across benching and
-restart. Persistent recruits earn PvE progression while actively adventuring
-with an eligible owner; benched companions do not gain catch-up XP. New recruits
-use automatic training only when their class has an enabled runtime-validated
-plan; all pre-existing records stay manual. The catalog has 57
-project-recommended builds for 35 classes and four manual-only classes.
+protected starter loadout; fresh recruits receive gear aligned with their
+selected build. Switching an existing companion build only activates an
+already-equipped compatible item. Owner-supplied gear and manual equipment
+locks are preserved; incompatible or locked weapons need owner adjustment
+before the companion can use that build's weapon line. Persistent inventory
+is saved across benching and restart. Persistent recruits earn PvE progression while actively adventuring
+with an eligible owner; benched companions do not gain catch-up XP. All 39
+Classic + SI classes now have an enabled default whose lines and ranks are
+checked against the local static class and skill data. New recruits use
+automatic training by default; all pre-existing records stay manual until their
+owner selects a build.
 `/companions recruit <class> [build]` picks a build at recruitment; without one,
 the class default build is used. Authored characters and
 their once-per-owner recruitment rules are Stage 5.
@@ -179,14 +186,38 @@ requires a compatible trainer unless `ALLOW_TRAIN_ANYWHERE` is enabled. The
 menu exposes the same training, mode, plan, and respec services.
 `/companions respec` requires owner full-skill respec eligibility, honors
 `FREE_RESPEC`, confirms before resetting, and resets only the selected
-companion. The 57 enabled builds carry stable versioned IDs and are checked
-against the local runtime career and skill tables. A changed or missing plan
+companion. The 118 enabled builds carry stable versioned IDs. Before applying
+a build, the catalog checks its specialization ranks against local career and
+skill tables and checks the class point multiplier. A changed or missing plan
 never changes saved allocations; earned points stay manual until a valid plan
 is explicitly selected. `/companions build <name>` lists a companion's builds;
 `/companions build <name> <build>` switches builds and automatic training. The
 switch is free, needs no trainer or respec eligibility, resets that companion's
 specializations, and retrains the new build to its current level. See
 [Build choice (M1a)](COMPANION_BUILD_RESEARCH.md#build-choice-m1a).
+
+The pre-application data check confirms each plan's class multiplier,
+specialization careers, and available ranked skills. It does not by itself
+make the combat profile select every learned weapon mode, style, spell, or pet
+behavior. The selected-build skill-use and caster AoE plan is in
+[COMPANION_BUILD_AOE_PLAN.md](COMPANION_BUILD_AOE_PLAN.md); source implementation is complete in 0.96.0; installation and real-client
+verification remain pending in [TASKS.md](TASKS.md). Necromancer plans use Deathsight
+and Painworking, not a Death Servant farming allocation. Source paths for
+Death Servant summon and commands exist, but real-client behavior is
+unverified. Harmful servant `PetSpell` wrappers with a zero range
+`ENEMY`-target area damage payload use the same saved ranged-AoE threshold
+and safety checks centered on the servant. This is separate from
+ordinary ranged AoE, which excludes PBAoE and cones, and it does not
+make the current Necromancer builds Death Servant farming builds.
+
+The companion manager also offers a separate saved Ranged AoE threshold:
+Off, 2+ through 8+, or the 3+ default. It switches learned ranged area damage
+after that many eligible enemies are in the blast. Committed mobs and hostile
+guards from the selected hostile keep count; the policy refuses a cast that
+would hit idle bystanders, unrelated guards, players, or protected mezzes.
+Ordinary ranged AoE excludes PBAoE and cones. Necromancer servant area
+wrappers use the same threshold centered on the servant. See the linked plan
+for source status and real-client acceptance.
 
 ## PvP kill rewards for persistent companions
 

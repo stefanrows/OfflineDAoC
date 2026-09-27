@@ -429,6 +429,11 @@ namespace DOL.GS.Commands
                             "bomb-use:" + bombChoice,
                             () => SetBombUse(player, session, id, nextBombChoice)));
                     }
+                    string rangedAoeChoice = CompanionRangedAoePolicy.Choice(current);
+                    string nextRangedAoeChoice = CompanionRangedAoePolicy.NextChoice(rangedAoeChoice);
+                    lines.Add(new Line($"Ranged AoE: {CompanionRangedAoePolicy.ChoiceLabel(rangedAoeChoice)} (click to cycle)",
+                        "ranged-aoe:" + rangedAoeChoice,
+                        () => SetRangedAoe(player, session, id, nextRangedAoeChoice)));
                     lines.Add(new Line(string.Empty));
                     if (live)
                     {
@@ -961,6 +966,12 @@ namespace DOL.GS.Commands
         private static void SetBombUse(GamePlayer player, CompanionManagerSession session, string id, string value)
         {
             PlayerCompanionRoster.TrySetBombUsePreference(player, id, value, out string message);
+            Report(player, session, message);
+        }
+
+        private static void SetRangedAoe(GamePlayer player, CompanionManagerSession session, string id, string value)
+        {
+            PlayerCompanionRoster.TrySetRangedAoePreference(player, id, value, out string message);
             Report(player, session, message);
         }
 

@@ -672,6 +672,46 @@ namespace DOL.GS
             }
         }
 
+        public static bool TrySetRangedAoePreference(GamePlayer owner, string nameOrId, string value,
+            out string message)
+        {
+            message = "That companion name or ID is not in your roster.";
+            if (owner == null)
+                return false;
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                    return false;
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) &&
+                    active?.PlayerCompanionRecord != null)
+                    record = active.PlayerCompanionRecord;
+
+                if (!CompanionRangedAoePolicy.TryNormalizeChoice(value, out string normalized))
+                {
+                    message = "Choose Off or a ranged AoE threshold from 2 through 8 enemies.";
+                    return false;
+                }
+
+                string previous = record.RangedAoePreference;
+                string previousUpdatedUtc = record.UpdatedUtc;
+                record.RangedAoePreference = normalized;
+                record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                record.Dirty = true;
+                if (!SaveRecord(record))
+                {
+                    record.RangedAoePreference = previous;
+                    record.UpdatedUtc = previousUpdatedUtc;
+                    record.Dirty = true;
+                    message = "The ranged AoE preference could not be saved; the previous setting remains active.";
+                    return false;
+                }
+
+                message = $"{record.Name}: ranged AoE set to {CompanionRangedAoePolicy.ChoiceLabel(normalized)}.";
+                return true;
+            }
+        }
+
         public static List<PlayerCompanionRecord> GetRoster(GamePlayer owner)
         {
             return TryGetRoster(owner, out List<PlayerCompanionRecord> records)

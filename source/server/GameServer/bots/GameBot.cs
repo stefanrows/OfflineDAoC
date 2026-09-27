@@ -1824,6 +1824,54 @@ namespace DOL.GS
              !CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID,
                  PlayerCompanionRecord.TrainingPlanId, out _));
 
+        internal bool HasSelectedAutomaticCompanionPlan => IsPersistentPlayerCompanion &&
+            string.Equals(PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+            CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID,
+                PlayerCompanionRecord.TrainingPlanId, out _);
+
+        private bool ApplySelectedCompanionBuildProfile(CompanionBuildPlan plan)
+        {
+            if (!IsPersistentPlayerCompanion || !BotLifetimeBuild.ConfigureForCompanionPlan(BotSpec, plan))
+                return false;
+
+            PlayerCompanionRecord.SerializedBuildPlan = BotLifetimeBuild.Encode(BotSpec);
+            PlayerCompanionRecord.Dirty = true;
+            return true;
+        }
+
+        private void ActivateSelectedBuildWeaponIfAlreadyEquipped()
+        {
+            if (!HasSelectedAutomaticCompanionPlan || Inventory == null || BotSpec == null)
+                return;
+
+            eInventorySlot plannedSlot = PrimaryWeaponUsesTwoHands
+                ? eInventorySlot.TwoHandWeapon
+                : eInventorySlot.RightHandWeapon;
+            if (BotWeaponStats.FitsConfiguredSlot(this, Inventory.GetItem(plannedSlot), plannedSlot))
+                SwitchWeapon(plannedSlot == eInventorySlot.TwoHandWeapon
+                    ? eActiveWeaponSlot.TwoHanded : eActiveWeaponSlot.Standard);
+        }
+
+        private string SelectedBuildWeaponHint()
+        {
+            if (!HasSelectedAutomaticCompanionPlan || Inventory == null || BotSpec == null)
+                return string.Empty;
+
+            eObjectType planned = BotWeaponStats.PrimaryType(BotSpec.WeaponOneType,
+                BotSpec.WeaponTwoType, PrimaryWeaponUsesTwoHands);
+            if (planned == 0 || !BotWeaponStats.IsMeleeWeapon(planned))
+                return string.Empty;
+
+            eInventorySlot slot = PrimaryWeaponUsesTwoHands
+                ? eInventorySlot.TwoHandWeapon
+                : eInventorySlot.RightHandWeapon;
+            if (BotWeaponStats.FitsConfiguredSlot(this, Inventory.GetItem(slot), slot))
+                return string.Empty;
+
+            string slotName = slot == eInventorySlot.TwoHandWeapon ? "two-handed" : "right-hand";
+            return $" Equip a matching {planned} weapon in the {slotName} slot for this build; existing equipment was preserved.";
+        }
+
         internal bool TryEnableAutomaticCompanionPlan(CompanionBuildPlan plan, out string message)
         {
             message = "The automatic plan could not be applied.";
@@ -1896,6 +1944,8 @@ namespace DOL.GS
             string previousMode = PlayerCompanionRecord.TrainingMode;
             string previousPlan = PlayerCompanionRecord.TrainingPlanId;
             string previousSerializedSpecs = PlayerCompanionRecord.SerializedSpecs;
+            string previousSerializedBuildPlan = PlayerCompanionRecord.SerializedBuildPlan;
+            string previousBotBuildPlan = BotLifetimeBuild.Encode(BotSpec);
             int previousRecordPoints = PlayerCompanionRecord.UnspentSpecPoints;
             foreach ((Specialization specialization, int target) in plannedChanges)
             {
@@ -1904,6 +1954,7 @@ namespace DOL.GS
             }
             PlayerCompanionRecord.TrainingMode = "automatic";
             PlayerCompanionRecord.TrainingPlanId = plan.Id;
+            ApplySelectedCompanionBuildProfile(plan);
             PlayerCompanionRecord.Dirty = true;
 
             if (!PlayerCompanionRoster.SaveProgress(this))
@@ -1914,7 +1965,9 @@ namespace DOL.GS
                 PlayerCompanionRecord.TrainingMode = previousMode;
                 PlayerCompanionRecord.TrainingPlanId = previousPlan;
                 PlayerCompanionRecord.SerializedSpecs = previousSerializedSpecs;
+                PlayerCompanionRecord.SerializedBuildPlan = previousSerializedBuildPlan;
                 PlayerCompanionRecord.UnspentSpecPoints = previousRecordPoints;
+                BotLifetimeBuild.Restore(BotSpec, previousBotBuildPlan);
                 PlayerCompanionRecord.Dirty = true;
                 RefreshCompanionSkills();
                 message = $"{Name}'s automatic plan could not be saved; their prior allocations and mode were restored.";
@@ -1922,7 +1975,8 @@ namespace DOL.GS
             }
 
             RefreshCompanionSkills();
-            message = $"{Name} is following the {plan.Name} build ({plan.Role}); spent {pointsNeeded} points, {m_leftOverSpecPoints} remain.";
+            ActivateSelectedBuildWeaponIfAlreadyEquipped();
+            message = $"{Name} is following the {plan.Name} build ({plan.Role}); spent {pointsNeeded} points, {m_leftOverSpecPoints} remain." + SelectedBuildWeaponHint();
             return true;
         }
 
@@ -1980,6 +2034,8 @@ namespace DOL.GS
             string previousMode = PlayerCompanionRecord.TrainingMode;
             string previousPlan = PlayerCompanionRecord.TrainingPlanId;
             string previousSerializedSpecs = PlayerCompanionRecord.SerializedSpecs;
+            string previousSerializedBuildPlan = PlayerCompanionRecord.SerializedBuildPlan;
+            string previousBotBuildPlan = BotLifetimeBuild.Encode(BotSpec);
             int previousRecordPoints = PlayerCompanionRecord.UnspentSpecPoints;
             string previousRole = PlayerCompanionRecord.TacticalRole;
 
@@ -1991,6 +2047,7 @@ namespace DOL.GS
             PlayerCompanionRecord.TrainingMode = "automatic";
             PlayerCompanionRecord.TrainingPlanId = plan.Id;
             PlayerCompanionRecord.TacticalRole = BotPartyRoles.RoleValue(plan.PrimaryRole);
+            ApplySelectedCompanionBuildProfile(plan);
             PlayerCompanionRecord.Dirty = true;
 
             if (!PlayerCompanionRoster.SaveProgress(this))
@@ -2001,8 +2058,10 @@ namespace DOL.GS
                 PlayerCompanionRecord.TrainingMode = previousMode;
                 PlayerCompanionRecord.TrainingPlanId = previousPlan;
                 PlayerCompanionRecord.SerializedSpecs = previousSerializedSpecs;
+                PlayerCompanionRecord.SerializedBuildPlan = previousSerializedBuildPlan;
                 PlayerCompanionRecord.UnspentSpecPoints = previousRecordPoints;
                 PlayerCompanionRecord.TacticalRole = previousRole;
+                BotLifetimeBuild.Restore(BotSpec, previousBotBuildPlan);
                 PlayerCompanionRecord.Dirty = true;
                 RefreshCompanionSkills();
                 message = $"{Name}'s build change could not be saved; their previous build and allocations were restored.";
@@ -2010,7 +2069,8 @@ namespace DOL.GS
             }
 
             RefreshCompanionSkills();
-            message = $"{Name} now follows the {plan.Name} build ({plan.Role}; role {BotPartyRoles.GroupRoleLabel(plan.PrimaryRole).ToLowerInvariant()}) and was retrained to level {Level}: {FormatBuildRanks(plan, allocation)}. {m_leftOverSpecPoints} points remain.";
+            ActivateSelectedBuildWeaponIfAlreadyEquipped();
+            message = $"{Name} now follows the {plan.Name} build ({plan.Role}; role {BotPartyRoles.GroupRoleLabel(plan.PrimaryRole).ToLowerInvariant()}) and was retrained to level {Level}: {FormatBuildRanks(plan, allocation)}. {m_leftOverSpecPoints} points remain." + SelectedBuildWeaponHint();
             return true;
         }
 
@@ -2825,6 +2885,13 @@ namespace DOL.GS
                     PlayerCompanionRecord.SerializedBuildPlan = BotLifetimeBuild.Encode(BotSpec);
                     PlayerCompanionRecord.Dirty = true;
                 }
+                if (string.Equals(PlayerCompanionRecord.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                    CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)CharacterClass.ID,
+                        PlayerCompanionRecord.TrainingPlanId, out CompanionBuildPlan selectedPlan) &&
+                    ApplySelectedCompanionBuildProfile(selectedPlan))
+                {
+                    PlayerCompanionRecord.Dirty = true;
+                }
                 m_leftOverSpecPoints = Math.Max(0, PlayerCompanionRecord.UnspentSpecPoints);
                 _lastAutonomousTrainedLevel = (byte)Math.Clamp(PlayerCompanionRecord.LastTrainedLevel, 1, Level);
             }
@@ -3423,7 +3490,8 @@ namespace DOL.GS
         {
             if (IsAutonomousWorldBot && !string.IsNullOrWhiteSpace(PersistentRecord?.SerializedBuildPlan))
                 return; // A saved lifetime build is not a maintenance-time respec opportunity.
-            if (CharacterClass?.ID != (int)eCharacterClass.Bonedancer || BotSpec == null)
+            if (CharacterClass?.ID != (int)eCharacterClass.Bonedancer || BotSpec == null ||
+                IsPersistentPlayerCompanion && !IsManualCompanionTraining)
                 return;
 
             bool alreadyFocused = BotSpec.SpecLines.Count == 2 &&
@@ -4766,6 +4834,17 @@ namespace DOL.GS
         // prevents ordinary GameNPC and real-player equipment from changing.
         internal bool EnsureBotWeaponReady()
         {
+            // An automatic player-selected build may no longer match an old
+            // loadout. Repairing it by moving or replacing items here could
+            // displace equipment that the owner deliberately kept. Build
+            // switches activate a compatible item only when it is already in
+            // the planned slot; otherwise defer equipment alignment.
+            if (HasSelectedAutomaticCompanionPlan)
+            {
+                ActivateSelectedBuildWeaponIfAlreadyEquipped();
+                return false;
+            }
+
             bool changed = EnsureAutonomousStarterWeapon();
             if (changed && IsAutonomousWorldBot)
             {

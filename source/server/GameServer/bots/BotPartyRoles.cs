@@ -38,6 +38,17 @@ namespace DOL.GS
         };
 
         /// <summary>
+        /// True only when an automatic saved build and the companion's current
+        /// tactical role both select the role declared by that build.
+        /// </summary>
+        public static bool HasSelectedAutomaticBuildRole(eCharacterClass characterClass,
+            string trainingMode, string planId, string savedRole, BotPveGroupRole expectedRole) =>
+            string.Equals(trainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
+            TryParseRole(savedRole, out BotPveGroupRole role) && role == expectedRole &&
+            CompanionBuildPlanCatalog.TryGetPlanById(characterClass, planId, out CompanionBuildPlan plan) &&
+            plan.PrimaryRole == expectedRole;
+
+        /// <summary>
         /// Classes with a single-target, non-pulsing mesmerize line that the
         /// companion add-control policy can use in PvE.
         /// </summary>
@@ -93,7 +104,8 @@ namespace DOL.GS
         public static bool IsHybridSupport(eCharacterClass characterClass) => characterClass is
             eCharacterClass.Warden or eCharacterClass.Paladin or eCharacterClass.Shaman or eCharacterClass.Friar or
             eCharacterClass.Sorcerer or eCharacterClass.Mentalist or
-            eCharacterClass.Bard or eCharacterClass.Minstrel or eCharacterClass.Skald;
+            eCharacterClass.Bard or eCharacterClass.Minstrel or eCharacterClass.Skald or
+            eCharacterClass.Cleric or eCharacterClass.Druid;
 
         public static string DefaultPreference(eCharacterClass characterClass) => For(characterClass) switch
         {

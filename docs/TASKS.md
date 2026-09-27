@@ -16,6 +16,25 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+8. **All-class companion builds and caster area damage.** Source 0.96.0
+   provides 118 static career/skill-checked plans for all 39 Classic + SI
+   classes, at least three per class, with existing defaults preserved. The
+   selected automatic build now drives learned specialization, weapon/style,
+   spell, pet, and combat-role paths. A saved per-companion ranged-AoE choice
+   (Off, 2+ through 8+, default 3+) counts engaged mobs and hostile guards
+   belonging to the same hostile keep; a cast is refused if its area would hit
+   an idle bystander, unrelated guard, player, illegal target, or protected
+   mezz. Necromancer servant area wrappers use that threshold around the
+   servant's payload center. Fresh recruits receive plan-aligned starter gear;
+   switching an existing companion only activates compatible gear already
+   equipped and preserves owner gear and manual locks. Static and runtime-contract
+   test coverage was added. CoreServer and the test assembly compiled in Release
+   with zero errors; automated tests were not run. Installation and real-client
+   verification remain pending: exercise representative builds and learned
+   skills, default and saved selection behavior, existing gear and
+   locks, AoE thresholds against mobs and same-keep hostile guards, and all
+   safety exclusions. See [the implementation and acceptance plan](COMPANION_BUILD_AOE_PLAN.md).
+
 24. **Companions rebuff far too often.** Reported by Aaron on 0.92.0. Source
     0.93.0: player-led companions keep only long buffs (5 min or longer, or
     concentration) up out of combat and refresh them in their last minute;

@@ -12,6 +12,38 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.96.0] - 2026-09-27
+
+### Added
+
+- Expanded companion builds to at least three researched plans for all 39
+  Classic + SI classes (118 plans total), retaining the original default IDs.
+- Added a saved per-companion ranged-AoE threshold from Off or 2+ through 8+,
+  defaulting to 3+ enemies.
+
+### Changed
+
+- Automatic builds now drive companion specialization and combat profiles
+  from the selected plan. Fresh recruits receive matching starter gear;
+  existing owner-supplied items and manual equipment locks are preserved.
+- Ranged area damage counts committed mobs and hostile guards from the same
+  keep, and refuses casts that would hit bystanders, players, or protected
+  mezzes. Harmful Necromancer servant area wrappers use the same threshold and
+  safety checks at the servant-centered payload area.
+
+### Fixed
+
+- Made build roles follow their class-legal plan mapping and allowed Attacker
+  Smite Clerics to use offense without the random low-mana throttle, while
+  preserving the support role path.
+- Corrected Spiritmaster build labels so Suppression, not Darkness, is identified
+  as the PBAoE bomb specialization.
+
+### Removed
+
+- Removed stale manual-only build blockers; every Classic + SI class now has
+  an available default and at least three build choices.
+
 ## [0.95.0] - 2026-09-27
 
 ### Added

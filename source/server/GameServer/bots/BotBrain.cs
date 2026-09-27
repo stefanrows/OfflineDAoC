@@ -823,12 +823,31 @@ namespace DOL.AI.Brain
         private bool UsesMinstrelHybridCombat => BotBody?.IsAutonomousWorldBot == true &&
             BotBody.CharacterClass?.ID == (int)eCharacterClass.Minstrel;
 
+        private static bool UsesBardBattleBuild(GameBot bot)
+        {
+            PlayerCompanionRecord record = bot?.PlayerCompanionRecord;
+            return bot?.IsPersistentPlayerCompanion == true &&
+                bot.CharacterClass?.ID == (int)eCharacterClass.Bard && record != null &&
+                CompanionBuildPlanCatalog.TryGetPlanById(eCharacterClass.Bard,
+                    record.TrainingPlanId, out CompanionBuildPlan plan) &&
+                BotPartyRoles.HasSelectedAutomaticBuildRole(eCharacterClass.Bard,
+                    record.TrainingMode, plan.Id, record.TacticalRole, BotPveGroupRole.Attacker) &&
+                plan.TargetAllocations.Any(rank => string.Equals(rank.Specialization, "Blunt",
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool HasPlayerLedAttackerRole(GameBot bot) =>
+            CompanionBombingPolicy.IsPlayerLedCompanion(bot) &&
+            BotPartyRoles.TryParseRole(bot.PlayerCompanionRecord?.TacticalRole, out BotPveGroupRole role) &&
+            role == BotPveGroupRole.Attacker;
+
         // A grouped Bard's endurance pulse needs its instrument to stay active;
-        // its combat turn therefore runs the ordinary group-support actions.
+        // support Bards therefore run their ordinary group-support actions.
         private bool HoldsExclusiveSupportRole() =>
             (BotBody?.CharacterClass?.ID == (int)eCharacterClass.Bard &&
              BotBody.Group?.MemberCount > 1 &&
-             HasBardEnduranceSong(BotBody)) ||
+             HasBardEnduranceSong(BotBody) &&
+             !UsesBardBattleBuild(BotBody)) ||
             (BotPartyRoles.IsSupport(BotBody) &&
              ((eCharacterClass?)BotBody?.CharacterClass?.ID != eCharacterClass.Minstrel ||
               RecentDirectAttacker() is not GameLiving attacker ||
@@ -1953,12 +1972,14 @@ namespace DOL.AI.Brain
             bool immediateCombat = !bot.IsEnhancedResting && (bot.InCombat || HasAggro || bot.IsAttacking);
             bool bardCombatSong = immediateCombat && groupedSupport &&
                 (eCharacterClass)bot.CharacterClass.ID == eCharacterClass.Bard &&
-                HasBardEnduranceSong(bot);
+                HasBardEnduranceSong(bot) &&
+                !UsesBardBattleBuild(bot);
 
-            // Grouped Bards with endurance songs stay on their instrument and
-            // use the ordinary healing/control support turn. Solo Bards and
-            // Skalds retain their weapon behavior; Minstrels retain their
-            // existing hybrid and ranged combat rules.
+            // Grouped support Bards with endurance songs stay on their
+            // instrument and use the ordinary healing/control support turn.
+            // The selected battle build drops the pulse for melee weapon use.
+            // Solo Bards and Skalds retain their weapon behavior; Minstrels
+            // retain their existing hybrid and ranged combat rules.
             bool minstrelAtRange = !groupedSupport && !UsesMinstrelHybridCombat && (eCharacterClass)bot.CharacterClass.ID == eCharacterClass.Minstrel &&
                                     !IsUnderImmediateMeleePressure();
             if (immediateCombat && !bardCombatSong && !minstrelAtRange)
@@ -2823,7 +2844,25 @@ namespace DOL.AI.Brain
                 if (Body.TargetObject is GameLiving ambushTarget && TryApproachAmbush(ambushTarget))
                     return;
                 if (Body.IsStealthed)
-                    Body.Stealth(false);
+                {
+                    GameLiving stealthTarget = Body.TargetObject as GameLiving;
+                    AttackData lastAttack = Body.attackComponent?.attackAction?.LastAttackData;
+                    bool openerAttempted = lastAttack?.Style?.StealthRequirement == true &&
+                        lastAttack.Target == stealthTarget;
+                    if (openerAttempted)
+                    {
+                        Body.Stealth(false);
+                    }
+                    else
+                    {
+                        bool openerQueued = Body.attackComponent?.AttackState == true &&
+                            Body.styleComponent.NextCombatStyle?.StealthRequirement == true;
+                        if (!openerQueued && stealthTarget != null && TryStartStealthOpener(stealthTarget))
+                            return;
+                        if (!openerQueued)
+                            Body.Stealth(false);
+                    }
+                }
 
                 if (Body.TargetObject is GameLiving pullTarget && pullTarget == ActiveOrderedPullTarget &&
                     ApproachPlayerLedPullTarget(pullTarget))
@@ -2938,7 +2977,7 @@ namespace DOL.AI.Brain
                                                  !BotRangedCombat.UsesAutonomousBowPositioning(BotBody);
 
                         bool useRanged = BotRangedCombat.ShouldUseRangedWeapon(
-                            (eCharacterClass)BotBody.CharacterClass.ID,
+                            BotBody,
                             stance,
                             targetForcesMelee,
                             hasRangedCombatWeapon);
@@ -3003,9 +3042,33 @@ namespace DOL.AI.Brain
             if (Body.IsStealthed) Body.Stealth(false);
         }
 
+        private bool TryStartStealthOpener(GameLiving target)
+        {
+            if (!BotBody.HasSelectedAutomaticCompanionPlan || !BotBody.IsPlayerLedGroup ||
+                !BotPoisonSupply.IsAssassin((eCharacterClass)BotBody.CharacterClass.ID) ||
+                !Body.IsWithinRadius(target, Body.MeleeAttackRange) ||
+                !CompanionEngagementMode.Allows(BotBody, target) ||
+                !BotRvrAmbush.CanUseStealthOpener(BotBody, target) ||
+                !SwitchToUsableMeleeWeapon())
+                return false;
+
+            Style opener = BotMeleeStylePolicy.SelectStealthOpener(BotBody,
+                Body.attackComponent.attackAction.LastAttackData);
+            if (opener == null)
+                return false;
+
+            Body.styleComponent.NextCombatStyle = opener;
+            Body.styleComponent.NextCombatBackupStyle = null;
+            Body.styleComponent.NextCombatStyleTime = GameLoop.GameLoopTime;
+            Body.StartAttack(target);
+            return Body.attackComponent.AttackState;
+        }
+
         private bool TryApproachAmbush(GameLiving target)
         {
-            if (!BotRvrAmbush.CanApproach(BotBody, target)) return false;
+            if (!BotRvrAmbush.CanApproach(BotBody, target) &&
+                !(BotBody.IsPersistentPlayerCompanion && BotBody.IsPlayerLedGroup &&
+                  BotRvrAmbush.CanContinueApproach(BotBody, target))) return false;
             int range = Body.MeleeAttackRange;
             if (BotRangedCombat.IsDedicatedArcher((eCharacterClass)BotBody.CharacterClass.ID) &&
                 BotRangedCombat.CanUse(BotBody, BotBody.Inventory.GetItem(eInventorySlot.DistanceWeapon)))
@@ -3172,9 +3235,34 @@ namespace DOL.AI.Brain
                 return;
 
             Body.TargetObject = target;
-            foreach (Spell spell in Body.InstantHarmfulSpells
-                         .Where(spell => spell != null && spell.Level <= Body.Level)
-                         .OrderByDescending(spell => spell.Level))
+            IEnumerable<Spell> instantSpells = Body.InstantHarmfulSpells
+                .Where(spell => spell != null && spell.Level <= Body.Level)
+                .OrderByDescending(spell => spell.Level);
+            bool rangedAoeReady = ReadyCompanionBombs(target).Length == 0 &&
+                CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                instantSpells.Any(spell => CompanionRangedAoePolicy.IsRangedDamageSpell(spell) &&
+                    CanCastOffensiveSpell(spell));
+            if (rangedAoeReady)
+            {
+                foreach (Spell spell in instantSpells
+                             .Where(CompanionRangedAoePolicy.IsRangedDamageSpell)
+                             .OrderByDescending(spell => spell.Level)
+                             .ThenByDescending(spell => spell.Damage))
+                {
+                    if (CheckInstantOffensiveSpells(spell))
+                        return;
+                }
+
+                // The committed cluster still meets its configured damage
+                // threshold. Do not substitute a single-target damage instant
+                // if the area cast loses its final readiness check; retain CC.
+                instantSpells = instantSpells.Where(spell =>
+                    CompanionRangedAoePolicy.IsRangedDamageSpell(spell) ||
+                    !BotCasterPriority.IsDamage(spell) ||
+                    BotBody.CrowdControlSpells?.Any(control => control.ID == spell.ID) == true);
+            }
+
+            foreach (Spell spell in instantSpells)
             {
                 if (CheckInstantOffensiveSpells(spell))
                     break;
@@ -3519,7 +3607,8 @@ namespace DOL.AI.Brain
                 else if (ShouldHoldForBombVolley(bombTarget, readyBombs[0]))
                     return true;
 
-                if (BotBody.CharacterClass.ID == (int)eCharacterClass.Cleric)
+                if (BotBody.CharacterClass.ID == (int)eCharacterClass.Cleric &&
+                    !HasPlayerLedAttackerRole(BotBody))
                 {
                     if (!Util.Chance(Math.Max(5, Body.ManaPercent - 50)))
                         return false;
@@ -3533,6 +3622,44 @@ namespace DOL.AI.Brain
                         instantOffense = instantOffense.Where(spell => CompanionBombingPolicy.IsBombSpell(BotBody, spell));
                     else if (UsesMinstrelHybridCombat)
                         instantOffense = instantOffense.OrderByDescending(BotCasterPriority.IsDamage);
+
+                    bool rangedAoeReady = readyBombs.Length == 0 &&
+                        CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) && Body.CanCastHarmfulSpells &&
+                        Body.HarmfulSpells.Any(spell => CompanionRangedAoePolicy.IsRangedDamageSpell(spell) &&
+                            CanCastOffensiveSpell(spell));
+                    if (rangedAoeReady)
+                    {
+                        // Hold single-target damage instants for the selected
+                        // cluster's AoE; retain control instants if one was
+                        // explicitly included in the class's CC kit.
+                        instantOffense = instantOffense.Where(spell =>
+                            CompanionRangedAoePolicy.IsRangedDamageSpell(spell) ||
+                            BotBody.CrowdControlSpells?.Any(control => control.ID == spell.ID) == true);
+                    }
+
+                    // Once a committed mob cluster meets the saved threshold,
+                    // instant ranged damage AoE takes precedence over ordinary
+                    // damage instants. Heals, PvP CC, PvE add control, and ready
+                    // bombs have already had their opportunity above.
+                    if (readyBombs.Length == 0 && CompanionBombingPolicy.IsPlayerLedCompanion(BotBody))
+                    {
+                        bool meleePressure = Body.IsBeingInterruptedByOther &&
+                            Body.IsWithinRadius(Body.TargetObject, Body.MeleeAttackRange + 35);
+                        Spell[] instantAreaSpells = Body.InstantHarmfulSpells
+                            .Where(spell => CompanionRangedAoePolicy.IsRangedDamageSpell(spell) &&
+                                BotCasterPriority.AllowInstant(spell, PrefersCurrentSpellRange(), meleePressure) &&
+                                CanCastOffensiveSpell(spell) &&
+                                !CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, Body.TargetObject as GameLiving))
+                            .OrderByDescending(spell => spell.Level)
+                            .ThenByDescending(spell => spell.Damage)
+                            .ToArray();
+                        foreach (Spell spell in instantAreaSpells)
+                        {
+                            if (CheckInstantOffensiveSpells(spell))
+                                return true;
+                        }
+                    }
+
                     foreach (Spell spell in instantOffense)
                     {
                         bool meleePressure = Body.IsBeingInterruptedByOther &&
@@ -3608,6 +3735,21 @@ namespace DOL.AI.Brain
                     }
                 }
 
+                // Check cluster damage before the bolt fallback so a caster's
+                // ordinary single-target kit cannot hide a legal ranged AoE.
+                // The earlier CC and bomb paths retain priority.
+                if (readyBombs.Length == 0 && spellsToCast.Count == 0 &&
+                    Body.CanCastHarmfulSpells && CompanionBombingPolicy.IsPlayerLedCompanion(BotBody))
+                {
+                    foreach (Spell spell in Body.HarmfulSpells.Where(CompanionRangedAoePolicy.IsRangedDamageSpell)
+                                 .OrderByDescending(spell => spell.Level)
+                                 .ThenByDescending(spell => spell.Damage))
+                    {
+                        if (CanCastOffensiveSpell(spell))
+                            spellsToCast.Add(spell);
+                    }
+                }
+
                 if (BotBody.CanCastBolts && spellsToCast.Count < 1)
                 {
                     foreach (Spell spell in BotBody.BoltSpells)
@@ -3641,6 +3783,8 @@ namespace DOL.AI.Brain
                     // its refusal for a reason to abandon ranged combat.
                     spellsToCast.RemoveAll(spell =>
                         !CompanionBombingPolicy.IsBombSpell(BotBody, spell) &&
+                            !(CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                              CompanionRangedAoePolicy.IsRangedDamageSpell(spell)) &&
                             !NeedsOffensiveSpellApplication((GameLiving)Body.TargetObject, spell) ||
                         CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, Body.TargetObject as GameLiving));
                     if (spellsToCast.Count == 0) return Body.IsCasting;
@@ -3649,12 +3793,53 @@ namespace DOL.AI.Brain
                         spellsToCast.RemoveAll(spell => spell.Range <= Body.MeleeAttackRange);
                     if (PrefersCurrentSpellRange() && spellsToCast.Exists(BotCasterPriority.IsDamage))
                         spellsToCast.RemoveAll(spell => !BotCasterPriority.IsDamage(spell));
-                    Spell spellToCast = readyBombs.Length > 0 && spellsToCast.All(spell =>
+                    bool controlSelected = BotBody.CrowdControlSpells?.Any(control =>
+                        spellsToCast.Any(candidate => candidate?.ID == control.ID)) == true;
+                    if (readyBombs.Length == 0 && !controlSelected)
+                    {
+                        Spell[] rangedAoeSpells = spellsToCast
+                            .Where(spell => CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                                CompanionRangedAoePolicy.IsRangedDamageSpell(spell))
+                            .ToArray();
+                        if (rangedAoeSpells.Length > 0)
+                        {
+                            // A selected cluster switches from single-target
+                            // pressure to ranged area damage. Heals, CC, and
+                            // the earlier bomb path have already had priority.
+                            spellsToCast.Clear();
+                            spellsToCast.AddRange(rangedAoeSpells);
+                        }
+                    }
+                    bool rangedAoeSelected = readyBombs.Length == 0 && spellsToCast.Count > 0 &&
+                        CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                        spellsToCast.All(CompanionRangedAoePolicy.IsRangedDamageSpell);
+                    Spell planDamageSpell = null;
+                    if (readyBombs.Length == 0 && !controlSelected && !rangedAoeSelected &&
+                        BotBody.HasSelectedAutomaticCompanionPlan &&
+                        CompanionBuildPlanCatalog.TryGetPlanById((eCharacterClass)BotBody.CharacterClass.ID,
+                            BotBody.PlayerCompanionRecord.TrainingPlanId, out CompanionBuildPlan selectedPlan))
+                    {
+                        GameLiving applicationTarget = Body.TargetObject as GameLiving;
+                        planDamageSpell = BotCasterPriority.ChooseDurationApplication(spellsToCast,
+                            spell => applicationTarget != null && LivingHasEffect(applicationTarget, spell));
+                        if (planDamageSpell == null)
+                        {
+                            IEnumerable<Spell> eligibleDamage = spellsToCast.Where(spell =>
+                                !BotCasterPriority.IsDurationDamageOrDebuff(spell) ||
+                                applicationTarget == null || !LivingHasEffect(applicationTarget, spell));
+                            planDamageSpell = BotCasterPriority.ChoosePlanDamageSpell(eligibleDamage,
+                                spell => ResolveKnownSpellLine(spell)?.Spec, selectedPlan.TargetAllocations);
+                        }
+                    }
+
+                    Spell spellToCast = rangedAoeSelected
+                        ? spellsToCast.OrderByDescending(spell => spell.Level).ThenByDescending(spell => spell.Damage).First()
+                        : readyBombs.Length > 0 && spellsToCast.All(spell =>
                             CompanionBombingPolicy.IsBombSpell(BotBody, spell))
                         ? spellsToCast.OrderByDescending(spell => spell.Level).First()
-                        : BotBody.IsEndgameCompanion
-                        ? TemporaryCompanionBalance.HighestSpell(spellsToCast)
-                        : spellsToCast[Util.Random(spellsToCast.Count - 1)];
+                        : planDamageSpell ?? (BotBody.IsEndgameCompanion
+                            ? TemporaryCompanionBalance.HighestSpell(spellsToCast)
+                            : spellsToCast[Util.Random(spellsToCast.Count - 1)]);
 
                     if (spellToCast.Uninterruptible || !Body.IsBeingInterrupted)
                         casted = CheckOffensiveSpells(spellToCast);
@@ -3758,9 +3943,19 @@ namespace DOL.AI.Brain
             // AutonomousPetSupport. Keeping them out of this combat selector
             // prevents a second cooldown/queue from recasting buffs or treating
             // one-shot power transfer as idle upkeep.
-            commands = commands.Where(spell => spell.IsHarmful &&
-                Body.IsWithinRadius(target, Math.Max(1, spell.CalculateEffectiveRange(Body))) &&
-                ServantPayloadNeedsApplication(target, spell));
+            commands = commands.Where(spell =>
+            {
+                if (!spell.IsHarmful ||
+                    !Body.IsWithinRadius(target, Math.Max(1, spell.CalculateEffectiveRange(Body))) ||
+                    !ServantPayloadNeedsApplication(target, spell))
+                    return false;
+
+                Spell payload = SkillBase.GetSpellByID(spell.SubSpellID);
+                return !CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) ||
+                    !CompanionRangedAoePolicy.IsDamageAreaPayload(payload) ||
+                    CompanionRangedAoePolicy.CanCastServantAreaCommand(
+                        BotBody, target, servantBrain.Body, spell, payload);
+            });
 
             // The normal spell construction already reduced each line to its
             // learned, level-valid ranks. Prefer the highest legal commands but
@@ -3817,15 +4012,27 @@ namespace DOL.AI.Brain
 
         protected bool CanCastOffensiveSpell(Spell spell)
         {
-            if (spell == null || spell.Level > Body.Level || Body.TargetObject is not GameLiving target || !target.IsAlive ||
-                BotSpellPower.BlocksAttackerRotation(BotBody, spell) ||
-                !CompanionBombingPolicy.IsBombSpell(BotBody, spell) && !NeedsOffensiveSpellApplication(target, spell) ||
-                Body.GetSkillDisabledDuration(spell) > 0 || Body.Mana < BotBody.PowerCost(spell))
+            if (spell == null || spell.Level > Body.Level || Body.TargetObject is not GameLiving target || !target.IsAlive)
                 return false;
 
             if (CompanionBombingPolicy.IsBombSpell(BotBody, spell))
-                return CompanionBombingPolicy.HasSufficientPull(BotBody, target, spell, Body) &&
+                return !BotSpellPower.BlocksAttackerRotation(BotBody, spell) &&
+                    Body.GetSkillDisabledDuration(spell) <= 0 && Body.Mana >= BotBody.PowerCost(spell) &&
+                    CompanionBombingPolicy.HasSufficientPull(BotBody, target, spell, Body) &&
                     Body.IsWithinRadius(target, spell.Radius);
+
+            if (CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                CompanionRangedAoePolicy.IsRangedDamageSpell(spell))
+                return CompanionRangedAoePolicy.CanCast(BotBody, target, spell);
+
+            if (BotBody.HasSelectedAutomaticCompanionPlan &&
+                BotCasterPriority.IsDurationDamageOrDebuff(spell) && LivingHasEffect(target, spell))
+                return false;
+
+            if (BotSpellPower.BlocksAttackerRotation(BotBody, spell) ||
+                !NeedsOffensiveSpellApplication(target, spell) ||
+                Body.GetSkillDisabledDuration(spell) > 0 || Body.Mana < BotBody.PowerCost(spell))
+                return false;
 
             if (spell.CastTime > 0 && spell.Target is eSpellTarget.ENEMY or eSpellTarget.AREA or eSpellTarget.CONE)
             {
@@ -3867,12 +4074,33 @@ namespace DOL.AI.Brain
             bool casted = false;
 
             if (Body.TargetObject is GameLiving living &&
-                (CompanionBombingPolicy.IsBombSpell(BotBody, spell) || NeedsOffensiveSpellApplication(living, spell)))
+                (CompanionBombingPolicy.IsBombSpell(BotBody, spell) ||
+                 (CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                  CompanionRangedAoePolicy.IsRangedDamageSpell(spell)) ||
+                 NeedsOffensiveSpellApplication(living, spell)))
             {
-                casted = Body.CastSpell(spell, m_mobSpellLine);
+                if (CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                    CompanionRangedAoePolicy.IsRangedDamageSpell(spell))
+                    casted = CompanionRangedAoePolicy.CanCast(BotBody, living, spell) &&
+                        CastRangedAoeSpell(spell, living);
+                else
+                    casted = Body.CastSpell(spell, m_mobSpellLine);
             }
 
             return casted;
+        }
+
+        private bool CastRangedAoeSpell(Spell spell, GameLiving center)
+        {
+            if (spell?.Target == eSpellTarget.AREA)
+            {
+                // SpellHandler selects AREA targets from GroundTarget at cast
+                // completion, so use the same focus point used by the policy.
+                Body.SetGroundTarget(center.X, center.Y, center.Z);
+                Body.GroundTargetInView = true;
+            }
+
+            return Body.CastSpell(spell, m_mobSpellLine);
         }
 
         protected virtual bool CheckInstantDefensiveSpells(Spell spell)
@@ -3941,6 +4169,14 @@ namespace DOL.AI.Brain
             if (spell == null || Body.Mana < BotBody.PowerCost(spell) ||
                 spell.HasRecastDelay && Body.GetSkillDisabledDuration(spell) > 0)
                 return false;
+
+            if (CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
+                CompanionRangedAoePolicy.IsRangedDamageSpell(spell))
+            {
+                return Body.TargetObject is GameLiving focus &&
+                    CompanionRangedAoePolicy.CanCast(BotBody, focus, spell) &&
+                    CastRangedAoeSpell(spell, focus);
+            }
 
             bool castSpell = false;
 

@@ -61,7 +61,7 @@ passed offline checks only; the owner check below closes them.
 
 **Goal:** choose a named build per companion, such as Healer "Mending
 (healer)", "Tri-spec", "Augmentation (buffer)", or "Pacification (crowd
-control)", or Spiritmaster "Darkness (bomb)", "Suppression", or "Summoning
+control)", or Spiritmaster "Darkness (pet caster)", "Suppression (bomb)", or "Summoning
 (pet)". In automatic mode the companion trains
 along that build at every level. Manual training and respec remain available.
 
