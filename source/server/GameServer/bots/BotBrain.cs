@@ -1842,10 +1842,10 @@ namespace DOL.AI.Brain
                                 !BotSongTwistPolicy.IsReservedPulse(bot, spell))
                 .DistinctBy(spell => spell.ID)
                 .ToList();
+            bool traveling = IsMaintenanceTraveling();
+            known.RemoveAll(spell => SkipsOutOfCombatUpkeep(spell, traveling));
             if (known.Count == 0)
                 return false;
-
-            bool traveling = IsMaintenanceTraveling();
 
             // Native helpful pulses replace one another. Recasting every
             // missing child alternated caster speed and bladeturn indefinitely,
@@ -1974,6 +1974,16 @@ namespace DOL.AI.Brain
                              bot.PersistentRecord?.Activity?.Contains("travel", StringComparison.OrdinalIgnoreCase) == true ||
                              bot.PersistentRecord?.Activity?.Contains("walking", StringComparison.OrdinalIgnoreCase) == true;
 
+            // Player-led performers stay quiet out of combat except for the
+            // speed song while the group travels; twisting every chant wasted power.
+            bool travelSpeedOnly = bot.IsPlayerLedGroup && !immediateCombat;
+            if (travelSpeedOnly && !traveling)
+            {
+                StopTwistedSong();
+                _nextSongTwistTick = GameLoop.GameLoopTime + 1_000;
+                return false;
+            }
+
             List<Spell> songs = (bot.MiscSpells ?? [])
                 .Concat(bot.InstantMiscSpells ?? [])
                 .Where(spell => spell != null && spell.IsPulsing && !spell.IsHarmful &&
@@ -1981,6 +1991,7 @@ namespace DOL.AI.Brain
                                 bot.Mana >= bot.PowerCost(spell))
                 .DistinctBy(spell => spell.ID)
                 .Where(spell => !bardCombatSong || spell.SpellType == eSpellType.EnduranceRegenBuff)
+                .Where(spell => !travelSpeedOnly || spell.SpellType == eSpellType.SpeedEnhancement)
                 .Where(spell => spell.SpellType != eSpellType.SpeedEnhancement || !immediateCombat && (traveling || groupedSupport))
                 .OrderByDescending(spell => spell.SpellType == eSpellType.SpeedEnhancement && !immediateCombat)
                 .ThenByDescending(spell => groupedSupport && spell.Target is eSpellTarget.GROUP or eSpellTarget.REALM)
@@ -2176,18 +2187,18 @@ namespace DOL.AI.Brain
                 if (!includePets)
                     return null;
                 GameLiving pet = Body.ControlledBrain?.Body;
-                return pet?.IsAlive == true && Body.IsWithinRadius(pet, Math.Max(350, spell.Range)) && !LivingHasEffect(pet, spell)
+                return pet?.IsAlive == true && Body.IsWithinRadius(pet, Math.Max(350, spell.Range)) && NeedsUpkeep(pet, spell)
                     ? pet
                     : null;
             }
 
             if (spell.Target == eSpellTarget.SELF)
-                return LivingHasEffect(Body, spell) ? null : Body;
+                return NeedsUpkeep(Body, spell) ? Body : null;
 
             if (spell.Target == eSpellTarget.GROUP)
             {
                 IEnumerable<GameLiving> members = Body.Group?.GetMembersInTheGroup() ?? [Body];
-                return members.Any(member => member.IsAlive && Body.IsWithinRadius(member, Math.Max(350, spell.Range)) && !LivingHasEffect(member, spell)) ||
+                return members.Any(member => member.IsAlive && Body.IsWithinRadius(member, Math.Max(350, spell.Range)) && NeedsUpkeep(member, spell)) ||
                        includePets && FindMissingPartyPetBuffTarget(spell) != null
                     ? Body
                     : null;
@@ -2224,21 +2235,21 @@ namespace DOL.AI.Brain
                 GameLiving groupTarget = BotBuffReservations<GameLiving>.Choose(
                     group.GetMembersInTheGroup(),
                     target => target.IsAlive && Body.IsWithinRadius(target, range) &&
-                        !LivingHasEffect(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
+                        NeedsUpkeep(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
                 if (groupTarget != null)
                     return groupTarget;
             }
             GameLiving memberTarget = BotBuffReservations<GameLiving>.Choose(
                 members,
                 target => target.IsAlive && Body.IsWithinRadius(target, range) &&
-                    !LivingHasEffect(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
+                    NeedsUpkeep(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
             if (memberTarget != null || !includePets)
                 return memberTarget;
 
             return BotBuffReservations<GameLiving>.Choose(
                 BotGroupPetBuffTargets.Enumerate(BotBody, spell),
                 target => target.IsAlive && Body.IsWithinRadius(target, range) &&
-                    !LivingHasEffect(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
+                    NeedsUpkeep(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
         }
 
         private bool CastCoordinatedBuff(Spell spell, bool? queued = null)
@@ -2249,7 +2260,7 @@ namespace DOL.AI.Brain
                 !spell.IsPulsing && IsMaintainableClassBuff(spell);
             BotBuffReservations<GameLiving> claims = shared ? BuffClaims.GetValue(AutonomousRealmRaid.SupportScope(BotBody), _ => new()) : null;
             int family = shared ? (int)EffectHelper.GetEffectFromSpell(spell) : 0;
-            if (shared && (LivingHasEffect(target, spell) ||
+            if (shared && (!NeedsUpkeep(target, spell) ||
                 !claims.TryReserve(Body, target, family, GameLoop.GameLoopTime, spell.CastTime)))
                 return false;
             bool cast = false;
@@ -2267,10 +2278,34 @@ namespace DOL.AI.Brain
         private GameLiving FindMissingPartyPetBuffTarget(Spell spell)
         {
             GameNPC pet = BotGroupPetBuffTargets.Enumerate(BotBody, spell)
-                .FirstOrDefault(candidate => !LivingHasEffect(candidate, spell));
+                .FirstOrDefault(candidate => NeedsUpkeep(candidate, spell));
             // Native group spells fan out from the caster; realm buffs target one pet.
             return pet == null ? null : spell.Target == eSpellTarget.GROUP ? Body : pet;
         }
+
+        /// <summary>
+        /// The buff is missing, or (player-led companion, out of combat) it is a long
+        /// buff this caster could refresh and it runs out within the minute.
+        /// </summary>
+        private bool NeedsUpkeep(GameLiving target, Spell spell) =>
+            !LivingHasEffect(target, spell) || LongBuffExpiresSoon(target, spell);
+
+        private bool LongBuffExpiresSoon(GameLiving target, Spell spell)
+        {
+            if (BotBody?.IsPlayerLedGroup != true || Body.InCombat || target?.effectListComponent == null || spell == null ||
+                !BotBuffTimingPolicy.IsLongBuff(spell.Duration, spell.Concentration > 0))
+                return false;
+            ECSGameEffect own = target.effectListComponent.GetEffects()
+                .FirstOrDefault(effect => effect?.SpellHandler?.Spell?.ID == spell.ID);
+            return own != null && BotBuffTimingPolicy.ExpiresSoon(own.GetRemainingTimeForClient(), own.IsConcentrationEffect());
+        }
+
+        /// <summary>Player-led companions keep only long buffs (and travel speed) up out of combat.</summary>
+        private bool SkipsOutOfCombatUpkeep(Spell spell, bool traveling) =>
+            BotBody?.IsPlayerLedGroup == true && IsMaintainableClassBuff(spell) &&
+            !BotBuffTimingPolicy.MaintainOutOfCombat(
+                BotBuffTimingPolicy.IsLongBuff(spell.Duration, spell.Concentration > 0),
+                spell.SpellType == eSpellType.SpeedEnhancement, traveling);
 
         internal static bool TryEquipRealInstrument(GameLiving bot, int requiredInstrument)
         {
@@ -4339,6 +4374,8 @@ namespace DOL.AI.Brain
                 {
                     if (Body.InCombat && IsMaintainableClassBuff(spell) &&
                         spell.SpellType != eSpellType.CelerityBuff)
+                        continue;
+                    if (!Body.InCombat && SkipsOutOfCombatUpkeep(spell, IsMaintenanceTraveling()))
                         continue;
                     // Caster-pet classes maintain their pets through AutonomousPetSupport.
                     if (BotBody?.CharacterClass != null &&

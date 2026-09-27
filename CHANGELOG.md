@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.93.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Player-led companions buff less and waste less power. Out of combat they
+  keep only long buffs (5 minutes or longer, or concentration buffs) and
+  refresh them in their last minute; short buffs are no longer kept up out of
+  combat, and speed only while the group travels. Group pets get only long
+  buffs.
+- Player-led Skalds no longer twist every chant out of combat: they sing the
+  speed song while the group travels and stay quiet while it stands or rests.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.92.0] - 2026-09-27
 
 ### Added

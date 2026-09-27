@@ -16,6 +16,13 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+24. **Companions rebuff far too often.** Reported by Aaron on 0.92.0. Source
+    0.93.0: player-led companions keep only long buffs (5 min or longer, or
+    concentration) up out of combat and refresh them in their last minute;
+    short buffs are not maintained out of combat; speed only while traveling;
+    player-led Skalds sing only the speed song while the group travels.
+    Real-client check pending: buff frequency and power use after a pull.
+
 23. **Companion inventory like your own.** Source 0.92.0 adds worn slots
     (positions 1-19) and the backpack (21-60) to the companion inventory
     window with drag-to-equip from the owner's backpack, **[Info]** and a

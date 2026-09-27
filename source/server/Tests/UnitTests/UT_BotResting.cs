@@ -197,6 +197,33 @@ namespace DOL.UnitTests
                 "Suppressed regeneration (disease) stays suppressed.");
         }
 
+        [TestCase(10 * 60 * 1000, false, true)]  // 10 min buff
+        [TestCase(5 * 60 * 1000, false, true)]   // exactly 5 min
+        [TestCase(60 * 1000, false, false)]      // 1 min buff is short
+        [TestCase(0, true, true)]                // concentration buffs stay up
+        public void LongBuffsStartAtFiveMinutes(int duration, bool concentration, bool expected)
+        {
+            Assert.That(BotBuffTimingPolicy.IsLongBuff(duration, concentration), Is.EqualTo(expected));
+        }
+
+        [TestCase(true, false, false, true)]    // long buff out of combat
+        [TestCase(false, false, false, false)]  // short buff never out of combat
+        [TestCase(false, true, true, true)]     // speed while the group travels
+        [TestCase(true, true, false, false)]    // speed while standing
+        public void OutOfCombatUpkeepOnlyForLongBuffsAndTravelSpeed(bool isLong, bool isSpeed, bool traveling, bool expected)
+        {
+            Assert.That(BotBuffTimingPolicy.MaintainOutOfCombat(isLong, isSpeed, traveling), Is.EqualTo(expected));
+        }
+
+        [TestCase(59_000, false, true)]
+        [TestCase(61_000, false, false)]
+        [TestCase(10_000, true, false)]   // concentration never expires
+        [TestCase(0, false, false)]       // no timer: nothing to refresh
+        public void LongBuffIsRefreshedInItsLastMinute(long remaining, bool concentration, bool expected)
+        {
+            Assert.That(BotBuffTimingPolicy.ExpiresSoon(remaining, concentration), Is.EqualTo(expected));
+        }
+
         [Test]
         public void TemporaryCompanionDoesNotRestWhenAlreadyFull()
         {
