@@ -8,6 +8,18 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+54. **Companions occasionally hang at the Darkness Falls entrance stairs.**
+    Reported by Aaron on 2026-09-28 (0.115.0): single companions stay at the
+    tall entrance steps that a player simply walks down. The bug 12 stair
+    links load (no DF navigation warning, repaired mesh cached), so the steps
+    are linked, but any follow path that still fails left the companion
+    standing: with a formation order, NoPath/PartialPath only paused and
+    turned it toward its slot, while native pets are placed at their owner's
+    feet out of combat. Exact failing positions are not logged. Fixed in
+    source 0.116.0: after 2 s of failed follow paths, out of combat and
+    within 1,024 units, the companion joins the floor beneath its leader.
+    Real-client check at the DF entrances pending.
+
 53. **Bomber companions burn their power on debuffs.** Reported by Aaron on
     2026-09-27 (playing on Stefan's server, version not confirmed): a
     Suppression Spiritmaster bomber ran out of power quickly. Cause: pure

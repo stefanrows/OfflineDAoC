@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.116.0] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Companions no longer stay behind where the navigation mesh cannot follow
+  their player, such as the tall steps at the Darkness Falls entrance that a
+  player walks down almost like a drop. When a following companion's paths
+  to its leader keep failing for 2 s, it joins the leader on the floor at
+  the leader's feet, the way native pets already do, if both are out of
+  combat and within 1,024 units. Companions in combat and autonomous
+  gamebots keep their existing behavior (bug 54).
+
+### Removed
+
+- None.
+
 ## [0.115.0] - 2026-09-27
 
 ### Added

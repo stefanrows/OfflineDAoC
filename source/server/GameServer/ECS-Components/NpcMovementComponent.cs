@@ -38,6 +38,7 @@ namespace DOL.GS
         private long _nextAutonomousClientCorrectionTick;
         private bool _forceReliableBroadcast;
         private bool _autonomousPathFailurePending;
+        private long _companionPathFailSince;
         private PathfindingStatus _autonomousPathFailureStatus;
         private Vector3 _autonomousPathFailureDestination;
         private bool _autonomousTravelArrival;
@@ -710,6 +711,11 @@ namespace DOL.GS
                 {
                     if (IsPersistentAutonomous(this) || CompanionFollowPolicy.HasFormationOrder(Owner as GameBot))
                     {
+                        // A companion that cannot path to its leader, e.g. down steps
+                        // the mesh does not connect (the Darkness Falls entrance), joins
+                        // the leader the way native pets do once paths keep failing.
+                        if (!IsPersistentAutonomous(this) && TeleportCompanionToLeader(this))
+                            break;
                         PauseMovement(this, destination);
                         break;
                     }
@@ -772,6 +778,37 @@ namespace DOL.GS
                 return true;
             }
 
+            static bool TeleportCompanionToLeader(NpcMovementComponent component)
+            {
+                const int MAX_TELEPORT_TRIGGER_RANGE = 1024;
+                const int MAX_FLOOR_SEARCH_DEPTH = 1024;
+                const int MIN_TELEPORT_DISTANCE = 128;
+                const long FAILED_PATH_GRACE = 2_000;
+
+                long now = GameLoop.GameLoopTime;
+                if (component._companionPathFailSince == 0)
+                    component._companionPathFailSince = now;
+                if (component.Owner is not GameBot { PlayerGroupLeader: GamePlayer leader } companion ||
+                    now - component._companionPathFailSince < FAILED_PATH_GRACE ||
+                    companion.InCombat || leader.InCombat || !leader.IsAlive ||
+                    leader.CurrentRegion != companion.CurrentRegion ||
+                    DragonCombatGeometry.IsRecoveringFromThrow(leader) ||
+                    !companion.IsWithinRadius(leader, MAX_TELEPORT_TRIGGER_RANGE))
+                    return false;
+
+                Vector3 leaderPos = new(leader.X, leader.Y, leader.Z);
+                Vector3? floor = PathfindingProvider.Instance.GetFloorBeneath(leader.CurrentZone, leaderPos,
+                    MAX_FLOOR_SEARCH_DEPTH, PathfindingProvider.Instance.DefaultFilters);
+                if (!floor.HasValue || companion.IsWithinRadius(floor.Value, MIN_TELEPORT_DISTANCE))
+                    return false;
+
+                component._companionPathFailSince = 0;
+                component._ownerPosition = floor.Value;
+                component.UpdateMovement(0);
+                component._pathfinder.ForceReplot = true;
+                return true;
+            }
+
             static bool TeleportPetToFloorBeneathOwner(NpcMovementComponent component, ControlledMobBrain petBrain)
             {
                 const int MAX_TELEPORT_TRIGGER_RANGE = 1024;
@@ -821,6 +858,7 @@ namespace DOL.GS
 
         private void ClearAutonomousPathFailure()
         {
+            _companionPathFailSince = 0;
             _autonomousPathFailurePending = false;
             _autonomousPathFailureStatus = PathfindingStatus.NotSet;
             _autonomousPathFailureDestination = default;
