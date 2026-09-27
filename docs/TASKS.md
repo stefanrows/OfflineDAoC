@@ -16,6 +16,12 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+39. **/petpull for Enchanter pet pulls.** Aaron, 2026-09-27: send the pet in,
+    Mentalist HoT on it, healers careful until aggro is built, tanks peel
+    adds. Researched against 1.65 focus-pull practice (Uthgard, FreddysHouse,
+    Allakhazam). Source 0.114.0: see CHANGELOG. Not modelled: the Enchanter's
+    focus damage shield and passive/"go to" pet handling (the pet attacks its
+    target). Real-client check pending.
 38. **Companion Manager tab for companions in the group.** Aaron,
     2026-09-27: next to Roster and Recruit, an Active tab showing only the
     companions currently in the group. Source 0.113.0: server tab plus an

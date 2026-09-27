@@ -133,12 +133,21 @@ namespace DOL.GS
         public static void OnAttack(GameLiving actor, AttackData attack)
         {
             if (attack?.Target is not GameLiving target || attack.Attacker != actor || !attack.CausesCombat) return;
-            if (actor is GamePlayer player) { LeaderEngaged(player, target); return; }
+            if (actor is GamePlayer player)
+            {
+                CompanionPetPull.OnLeaderAttack(player);
+                LeaderEngaged(player, target);
+                return;
+            }
             // Do not resolve a companion's pet through GetPlayerOwner: that would
             // mistake a bot's pet for a human-initiated override of the tank gate.
             if (actor is GameNPC { Brain: ControlledMobBrain { Owner: GamePlayer petOwner } } &&
                 petOwner.ControlledBrain?.Body == actor)
-            { LeaderEngaged(petOwner, target); return; }
+            {
+                // During /petpull the pet's first swings are the pull, not the signal to engage.
+                if (!CompanionPetPull.IsHolding(petOwner)) LeaderEngaged(petOwner, target);
+                return;
+            }
             if (actor is not GameBot tank || tank.Group == null || !attack.IsMeleeAttack ||
                 !States.TryGetValue(tank.Group, out GroupState state)) return;
             Order order = Volatile.Read(ref state.Pending);
@@ -177,6 +186,7 @@ namespace DOL.GS
             if ((player.IsAttacking || player.IsCasting && player.castingComponent?.SpellHandler?.Spell?.IsHarmful == true) &&
                 player.TargetObject is GameLiving target && ValidEnemy(player, target)) return target;
             if (player.ControlledBrain is ControlledMobBrain brain && brain.Owner == player &&
+                !CompanionPetPull.IsHolding(player) &&
                 brain.Body?.IsAlive == true && brain.Body.CurrentRegionID == player.CurrentRegionID &&
                 player.IsWithinRadius(brain.Body, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS))
             {

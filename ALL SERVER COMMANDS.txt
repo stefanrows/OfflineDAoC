@@ -1,6 +1,6 @@
-OFFLINE DAOC 0.113.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.114.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
-287 command registrations read from the shipped server assemblies.
+288 command registrations read from the shipped server assemblies.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
 not an RvR team; ungrouped, unguilded or unallied player-shaped actors can be hostile.
 Normal commands can still have level, realm, cooldown or state requirements.
@@ -618,6 +618,11 @@ NORMAL PLAYER COMMANDS
   Changes your account password
   /password <current_password> <new_password>
   Handler: DOL.GS.Commands.PasswordCommand
+
+/petpull
+  Sends your pet alone into your target; companions hold, HoT the pet and peel adds until the pull sits on it
+  /petpull
+  Handler: DOL.GS.Commands.PetPullCommandHandler
 
 /played
   Returns the age of the character

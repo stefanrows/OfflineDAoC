@@ -390,6 +390,24 @@ namespace DOL.GS.Commands
         }
     }
 
+    [CmdAttribute("&petpull", ePrivLevel.Player,
+        "Sends your pet alone into your target; companions hold, HoT the pet and peel adds until the pull sits on it", "/petpull")]
+    public sealed class PetPullCommandHandler : AbstractCommandHandler, ICommandHandler
+    {
+        public void OnCommand(GameClient client, string[] args)
+        {
+            GamePlayer player = client.Player;
+            if (player.TargetObject is not GameLiving target || !target.IsAlive)
+            {
+                DisplayMessage(client, "Select a living enemy first, then type /petpull.");
+                return;
+            }
+            if (!GameServer.ServerRules.IsAllowedToAttack(player, target, false))
+                return;
+            DisplayMessage(client, CompanionPetPull.Begin(player, target));
+        }
+    }
+
     [CmdAttribute("&pull", ePrivLevel.Player, "Orders party bots and their pets to engage your target", "/pull")]
     public sealed class PullGroupCommandHandler : AbstractCommandHandler, ICommandHandler
     {

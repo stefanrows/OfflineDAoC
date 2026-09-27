@@ -595,6 +595,9 @@ namespace DOL.AI.Brain
             GameLiving groupMember = GroupMemberForCombat(victim);
             if (CompanionPvpEngagement.RecordThreat(BotBody, victim, ad))
                 groupMember = CompanionPvpEngagement.Character(victim);
+            // A /petpull pet takes the pack alone until the pull sits on it.
+            if (victim != groupMember && groupMember is GamePlayer petOwner && CompanionPetPull.IsHolding(petOwner))
+                return;
             bool sisterParty = groupMember is GameBot other && other.Group != group &&
                 AutonomousRealmRaid.SameExpedition(BotBody, other);
             if (group == null || groupMember == null || (!sisterParty && (groupMember.Group != group || !group.IsInTheGroup(groupMember))) ||
@@ -1414,6 +1417,18 @@ namespace DOL.AI.Brain
             if (BotBody?.IsTemporaryGroupHelper == true &&
                 (BotBody.TryReturnTemporaryCompanionToLeader() || TryResurrectCompanionOwner()))
                 return;
+
+            if (!IsTankClass && CompanionPetPull.IsHolding(AssistedPlayer) && !HasAggro)
+            {
+                // The pet owns the pull. Hold damage, keep a heal-over-time on
+                // the pet (no aggro), and heal only the group. Tanks keep running
+                // their ordinary defence so they peel adds that reach the group.
+                if (BotBody.IsRecoveryResting)
+                    BotBody.WakeTemporaryCompanionRest();
+                if (!Body.IsCasting && !TryHealOverTimeOnPulledPet() && !CheckHeals())
+                    CheckSpells(eCheckSpellType.Defensive);
+                return;
+            }
 
             if (PlayerLedPullCoordinator.IsWaiting(BotBody))
             {
@@ -4012,7 +4027,9 @@ namespace DOL.AI.Brain
 
             // Once the tank holds the pull or a groupmate has bombed, the fight
             // is on: the next mob of the same fight gets no fresh wait.
-            if (CompanionBombingPolicy.TankHasAggro(BotBody, target, spell) ||
+            // A released /petpull already sits on the pet, which holds it like a tank.
+            if (CompanionPetPull.IsReleased(AssistedPlayer) ||
+                CompanionBombingPolicy.TankHasAggro(BotBody, target, spell) ||
                 Body.Group != null && CompanionBombVolley.For(Body.Group).ChainOpen(GameLoop.GameLoopTime))
             {
                 _bombTankWait.Finish(target);
@@ -5227,6 +5244,24 @@ namespace DOL.AI.Brain
                     }
                 }
 
+                // /petpull: once the pull sits on the pet, every companion heals
+                // it like a group member (persistent companions otherwise leave pets alone).
+                GameNPC pulledPet = !BotBody.IsTemporaryGroupHelper && CompanionPetPull.IsReleased(AssistedPlayer)
+                    ? CompanionPetPull.Pet(AssistedPlayer) : null;
+                if (pulledPet?.IsAlive == true && pulledPet.Health < pulledPet.MaxHealth &&
+                    Body.IsWithinRadius(pulledPet, GROUP_DEFENSE_ASSIST_RADIUS))
+                {
+                    amountToHeal += pulledPet.MaxHealth - pulledPet.Health;
+                    if (pulledPet.HealthPercent < 65 || IsHealer && pulledPet.HealthPercent < 80)
+                    {
+                        numNeedHealing++;
+                        if (pulledPet.HealthPercent < 40)
+                            numEmergency++;
+                        if (spellTarget == null || pulledPet.HealthPercent < spellTarget.HealthPercent)
+                            spellTarget = pulledPet;
+                    }
+                }
+
                 // A player-led bot party exists to support its player leader.  When the
                 // leader needs a heal, prefer that player over autonomous bot members;
                 // healthy leaders do not prevent the healer from tending the rest.
@@ -5466,6 +5501,23 @@ namespace DOL.AI.Brain
             }
 
             return startedCasting || isCastingHeal;
+        }
+
+        /// <summary>/petpull: a heal-over-time on the pulling pet before the group opens.</summary>
+        private bool TryHealOverTimeOnPulledPet()
+        {
+            Spell hot = BotBody.HealOverTime;
+            GameNPC pet = CompanionPetPull.Pet(AssistedPlayer);
+            if (pet == null || !pet.InCombat || !CheckHealSpell(hot) || LivingHasEffect(pet, hot) ||
+                !BotBody.IsWithinRadius(pet, BotBody.castingComponent.CalculateSpellRange(hot)))
+                return false;
+
+            GameObject oldTarget = BotBody.TargetObject;
+            BotBody.TargetObject = pet;
+            bool started = BotBody.CastSpell(hot, m_mobSpellLine, false);
+            if (!started || hot.IsInstantCast)
+                BotBody.TargetObject = oldTarget;
+            return started;
         }
 
         private bool CanHealRelicCarrier(GameLiving carrier)

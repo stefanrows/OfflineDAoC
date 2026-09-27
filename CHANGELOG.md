@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.114.0] - 2026-09-27
+
+### Added
+
+- `/petpull`, the 1.65 Enchanter pet pull: with an enemy targeted, the
+  player's pet goes in alone and takes the pack. Companions hold their
+  damage and do not defend the pet, companions with a heal-over-time keep it
+  on the pet (the Mentalist HoT drew no aggro), healers heal only the group,
+  and tanks peel adds that reach the group. The group opens once the pet has
+  held for 3 s and its target is under 75 % health (after 10 s at the
+  latest), at once if the pet drops below 45 % or dies, or when the player
+  attacks. After the release every companion heals the pet like a group
+  member until the fight has been quiet for 8 s; bombers skip their tank
+  wait for that pull (task 39).
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.113.0] - 2026-09-27
 
 ### Added

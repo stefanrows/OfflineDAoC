@@ -26,6 +26,11 @@ On the launcher, click + Lv.1 or + Lv.50 under a faction:
   Orders your companion group and pets to engage your selected enemy. When possible,
   a tank makes first contact before the rest of the group joins the fight.
 
+/petpull
+  Target an enemy: your pet goes in alone. Companions hold, keep a heal-over-time on
+  the pet and peel adds, then join in once the pull sits on the pet (target under 75%),
+  or at once if the pet drops below 45% or dies.
+
 /train <line> <level>
   Trains a specialization to the chosen level using your available specialization
   points. Select a valid trainer for your class first.

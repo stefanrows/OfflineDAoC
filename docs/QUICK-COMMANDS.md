@@ -46,6 +46,7 @@ keep up. Each server start selects 1× again.
 | Command | What it does |
 |---|---|
 | `/grind` | Start automated grinding with a companion-bot group, including for AFK use. |
+| `/petpull` | Enchanter-style pet pull: target an enemy and your pet goes in alone. Companions hold their damage, keep a heal-over-time on the pet and peel adds that reach the group; they open up once the pull sits on the pet (target under 75%) or at once if the pet drops below 45% or dies. |
 | `/pull` | Order your companion group and pets to engage your selected enemy. When possible, a tank makes first contact before the rest of the group joins the fight. |
 | `/train <line> <level>` | Train a specialization to the chosen level using your available specialization points. Select a valid trainer for your class first. |
 | `/companions` | Open the Companion Manager window, if its client extension is installed. Without it, you get one line of command guidance. |
