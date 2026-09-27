@@ -266,4 +266,56 @@ public class UT_PlayerCompanionGearRewards
         Assert.That(restored, Is.EqualTo(original));
         Assert.That(restoredPoints, Is.EqualTo(originalPoints));
     }
+
+    [Test]
+    public void ManualMarkIsNotAHardLock()
+    {
+        var record = new PlayerCompanionRecord { CompanionId = "mark" };
+        PlayerCompanionRoster.SetEquipmentSlotMark(record, eInventorySlot.HeadArmor, eCompanionSlotMark.Manual);
+
+        Assert.That(PlayerCompanionRoster.GetEquipmentSlotMark(record, eInventorySlot.HeadArmor), Is.EqualTo(eCompanionSlotMark.Manual));
+        Assert.That(PlayerCompanionRoster.IsEquipmentSlotLocked(record, eInventorySlot.HeadArmor), Is.False);
+
+        PlayerCompanionRoster.SetEquipmentSlotMark(record, eInventorySlot.HeadArmor, eCompanionSlotMark.None);
+        Assert.That(PlayerCompanionRoster.GetEquipmentSlotMark(record, eInventorySlot.HeadArmor), Is.EqualTo(eCompanionSlotMark.None));
+    }
+
+    [Test]
+    public void LegacyLockStaysHard()
+    {
+        var record = new PlayerCompanionRecord { CompanionId = "legacy" };
+        PlayerCompanionRoster.SetEquipmentSlotLocked(record, eInventorySlot.Cloak, true);
+
+        Assert.That(PlayerCompanionRoster.GetEquipmentSlotMark(record, eInventorySlot.Cloak), Is.EqualTo(eCompanionSlotMark.Locked));
+        Assert.That(PlayerCompanionRoster.IsEquipmentSlotLocked(record, eInventorySlot.Cloak), Is.True);
+    }
+
+    [TestCase(0, 100, 8)]
+    [TestCase(0, 800, 40)]
+    [TestCase(0, 801, 41)]
+    [TestCase(50, 800, 50)]
+    public void ManualChoiceNeedsAClearMargin(int callerMinimum, int removedValue, int expected)
+    {
+        Assert.That(AutonomousBotEconomy.ManualChoiceMinimum(callerMinimum, removedValue), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void MarginUsesAllRemovedItems()
+    {
+        // A two-hander removing a manual weapon (400) and shield (400) needs more than 40, not 20.
+        Assert.That(AutonomousBotEconomy.ManualChoiceMinimum(0, 400 + 400), Is.EqualTo(40));
+    }
+
+    [Test]
+    public void PairPrefersUnmarkedSlotOverManualChoice()
+    {
+        Assert.That(AutonomousBotEconomy.ChooseCompanionPairSlot(
+            eInventorySlot.LeftRing, 10, false, eInventorySlot.RightRing, 30, false,
+            40, false, 0, firstManual: true, secondManual: false), Is.EqualTo(eInventorySlot.RightRing),
+            "The owner's ring stays while the other side can take the upgrade.");
+        Assert.That(AutonomousBotEconomy.ChooseCompanionPairSlot(
+            eInventorySlot.LeftRing, 10, false, eInventorySlot.RightRing, 30, true,
+            40, false, 0, firstManual: true, secondManual: false), Is.EqualTo(eInventorySlot.LeftRing),
+            "With the other side hard-locked, the manual side is the only candidate.");
+    }
 }

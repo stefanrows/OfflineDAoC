@@ -246,6 +246,18 @@ namespace DOL.GS;
 
             DbInventoryItem equipped = bot.Inventory.GetItem(equipSlot);
             DbInventoryItem[] displaced = DisplacedWeapons(bot.Inventory, equipSlot);
+            if (!ignoreCompanionSlotLocks && bot.IsPersistentPlayerCompanion)
+            {
+                PlayerCompanionRecord record = bot.PlayerCompanionRecord;
+                if (displaced.Any(worn => PlayerCompanionRoster.IsEquipmentSlotLocked(record, (eInventorySlot)worn.SlotPosition)))
+                    return false;
+                // An owner's manual choice gives way only to a clearly better item.
+                if (PlayerCompanionRoster.GetEquipmentSlotMark(record, equipSlot) == eCompanionSlotMark.Manual ||
+                    displaced.Any(worn => PlayerCompanionRoster.GetEquipmentSlotMark(record,
+                        (eInventorySlot)worn.SlotPosition) == eCompanionSlotMark.Manual))
+                    minimumImprovement = ManualChoiceMinimum(minimumImprovement,
+                        EquipmentValue(equipped) + displaced.Sum(EquipmentValue));
+            }
             int focusBonus = 0;
             if (bot.CharacterClass?.IsFocusCaster == true &&
                 item.Object_Type == (int)eObjectType.Staff)
@@ -269,6 +281,13 @@ namespace DOL.GS;
             };
             return conflicting.Select(inventory.GetItem).Where(item => item != null).ToArray();
         }
+
+        /// <summary>
+        /// Minimum improvement to replace an owner's manual choice: at least 8 and
+        /// 5% of everything the move removes, so near-equal loot never undoes it.
+        /// </summary>
+        public static int ManualChoiceMinimum(int minimumImprovement, int removedValue) =>
+            Math.Max(Math.Max(minimumImprovement, MinimumEquipmentUpgrade), (int)Math.Ceiling(removedValue * 0.05));
 
         /// <summary>
         /// Compares against everything the move removes, not only the target
@@ -432,15 +451,20 @@ namespace DOL.GS;
         DbInventoryItem secondItem = bot.Inventory.GetItem(second);
         bool firstLocked = PlayerCompanionRoster.IsEquipmentSlotLocked(bot.PlayerCompanionRecord, first);
         bool secondLocked = PlayerCompanionRoster.IsEquipmentSlotLocked(bot.PlayerCompanionRecord, second);
+        bool firstManual = PlayerCompanionRoster.GetEquipmentSlotMark(bot.PlayerCompanionRecord, first) == eCompanionSlotMark.Manual;
+        bool secondManual = PlayerCompanionRoster.GetEquipmentSlotMark(bot.PlayerCompanionRecord, second) == eCompanionSlotMark.Manual;
         return ChooseCompanionPairSlot(first, firstItem?.Level, firstLocked, second, secondItem?.Level,
             secondLocked, item.Level, ignoreCompanionSlotLocks,
-            companionPairTieBreak ?? Random.Shared.Next());
+            companionPairTieBreak ?? Random.Shared.Next(), firstManual, secondManual);
     }
 
-    /// <summary>Selects a companion accessory slot by vacancy, item-level deficit, and locks.</summary>
+    /// <summary>
+    /// Selects a companion accessory slot by vacancy, item-level deficit, and locks. An
+    /// unmarked slot is preferred over the owner's manual choice.
+    /// </summary>
     public static eInventorySlot ChooseCompanionPairSlot(eInventorySlot first, int? firstLevel,
         bool firstLocked, eInventorySlot second, int? secondLevel, bool secondLocked, int incomingLevel,
-        bool ignoreLocks, int tieBreak)
+        bool ignoreLocks, int tieBreak, bool firstManual = false, bool secondManual = false)
     {
         var choices = new List<(eInventorySlot Slot, int? Level)>(2);
         if (ignoreLocks || !firstLocked)
@@ -449,6 +473,12 @@ namespace DOL.GS;
             choices.Add((second, secondLevel));
         if (choices.Count == 0)
             return eInventorySlot.Invalid;
+        if (!ignoreLocks)
+        {
+            var unmarked = choices.Where(choice => !(choice.Slot == first ? firstManual : secondManual)).ToList();
+            if (unmarked.Count > 0)
+                choices = unmarked;
+        }
 
         var missing = choices.Where(choice => choice.Level == null).ToArray();
         if (missing.Length > 0)

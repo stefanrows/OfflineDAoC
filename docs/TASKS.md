@@ -16,6 +16,14 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+23. **Companion inventory like your own.** Source 0.92.0 adds worn slots
+    (positions 1-19) and the backpack (21-60) to the companion inventory
+    window with drag-to-equip from the owner's backpack, **[Info]** and a
+    slimmer slot view in the Gear tab, and manual choices that give way only to
+    clearly better earned loot. Real-client checks pending: vault grid
+    columns and ring/wrist pairs side by side, dragging from your backpack
+    onto a worn slot, the **[Info]** window, and the swap chat line.
+
 22. **Companions rest with a sitting player.** Source 0.90.0 lets roster
     companions start fast recovery for any missing health, power, or endurance
     while their player-leader sits, and finish to full. Before, they rested only

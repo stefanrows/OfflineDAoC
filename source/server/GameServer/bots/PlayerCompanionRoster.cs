@@ -13,6 +13,16 @@ using DOL.Logging;
 namespace DOL.GS
 {
 
+    /// <summary>Owner mark on a companion's worn slot.</summary>
+    public enum eCompanionSlotMark
+    {
+        None,
+        /// <summary>Owner equipped it; a clearly better earned item may replace it.</summary>
+        Manual,
+        /// <summary>Owner locked it; never replaced automatically.</summary>
+        Locked,
+    }
+
     /// <summary>Owns the durable roster of companions recruited by player characters.</summary>
     public static class PlayerCompanionRoster
     {
@@ -50,15 +60,20 @@ namespace DOL.GS
             }
         }
 
-        public static bool IsEquipmentSlotLocked(PlayerCompanionRecord record, eInventorySlot slot)
+        public static eCompanionSlotMark GetEquipmentSlotMark(PlayerCompanionRecord record, eInventorySlot slot)
         {
             if (record == null)
-                return false;
+                return eCompanionSlotMark.None;
             lock (record)
-                return ParseEquipmentState(record.SerializedEquipmentState).ContainsKey("s:" + (int)slot);
+            {
+                if (!ParseEquipmentState(record.SerializedEquipmentState).TryGetValue("s:" + (int)slot, out string value))
+                    return eCompanionSlotMark.None;
+                // Unknown values from other versions stay protective.
+                return value == "M" ? eCompanionSlotMark.Manual : eCompanionSlotMark.Locked;
+            }
         }
 
-        public static bool SetEquipmentSlotLocked(PlayerCompanionRecord record, eInventorySlot slot, bool locked)
+        public static bool SetEquipmentSlotMark(PlayerCompanionRecord record, eInventorySlot slot, eCompanionSlotMark mark)
         {
             if (record == null)
                 return false;
@@ -66,14 +81,21 @@ namespace DOL.GS
             {
                 Dictionary<string, string> state = ParseEquipmentState(record.SerializedEquipmentState);
                 string key = "s:" + (int)slot;
-                if (locked)
-                    state[key] = "L";
-                else
+                if (mark == eCompanionSlotMark.None)
                     state.Remove(key);
+                else
+                    state[key] = mark == eCompanionSlotMark.Manual ? "M" : "L";
                 WriteEquipmentState(record, state);
                 return true;
             }
         }
+
+        /// <summary>True for a hard lock only; a manual choice can still be upgraded with a margin.</summary>
+        public static bool IsEquipmentSlotLocked(PlayerCompanionRecord record, eInventorySlot slot) =>
+            GetEquipmentSlotMark(record, slot) == eCompanionSlotMark.Locked;
+
+        public static bool SetEquipmentSlotLocked(PlayerCompanionRecord record, eInventorySlot slot, bool locked) =>
+            SetEquipmentSlotMark(record, slot, locked ? eCompanionSlotMark.Locked : eCompanionSlotMark.None);
 
         public static bool TryApplyEquipmentMutation(GameBot companion, Func<bool> mutation, out string error,
             int requiredFreeBackpackSlots = 0, string excludeItemId = null)
@@ -1757,7 +1779,7 @@ namespace DOL.GS
             var replacements = inventory.EquippedItems
                 .Where(item => item != null && item.Level < companion.Level - 3 &&
                     GetEquipmentItemFlags(record, item.ObjectId).Contains('S') &&
-                    !IsEquipmentSlotLocked(record, (eInventorySlot)item.SlotPosition) &&
+                    GetEquipmentSlotMark(record, (eInventorySlot)item.SlotPosition) == eCompanionSlotMark.None &&
                     ((eInventorySlot)item.SlotPosition is eInventorySlot.HeadArmor or eInventorySlot.HandsArmor or
                         eInventorySlot.FeetArmor or eInventorySlot.TorsoArmor or eInventorySlot.LegsArmor or
                         eInventorySlot.ArmsArmor or eInventorySlot.RightHandWeapon or
@@ -1766,12 +1788,12 @@ namespace DOL.GS
                 .ToList();
             foreach (eInventorySlot slot in new[] { eInventorySlot.HeadArmor, eInventorySlot.HandsArmor,
                 eInventorySlot.FeetArmor, eInventorySlot.TorsoArmor, eInventorySlot.LegsArmor, eInventorySlot.ArmsArmor })
-                if (inventory.GetItem(slot) == null && !IsEquipmentSlotLocked(record, slot))
+                if (inventory.GetItem(slot) == null && GetEquipmentSlotMark(record, slot) == eCompanionSlotMark.None)
                     replacements.Add((slot, null));
             if (companion.BestShieldLevel > 0 &&
                 companion.BotSpec?.SpecType is eSpecType.OneHandAndShield or eSpecType.DualWieldAndShield &&
                 inventory.GetItem(eInventorySlot.LeftHandWeapon) == null &&
-                !IsEquipmentSlotLocked(record, eInventorySlot.LeftHandWeapon))
+                GetEquipmentSlotMark(record, eInventorySlot.LeftHandWeapon) == eCompanionSlotMark.None)
                 replacements.Add((eInventorySlot.LeftHandWeapon, null));
             if (replacements.Count == 0)
                 return false;

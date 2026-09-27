@@ -4799,8 +4799,10 @@ namespace DOL.GS
                 _ => 0,
             };
 
+            var replacedManual = new List<DbInventoryItem>();
             bool equipped = PlayerCompanionRoster.TryApplyEquipmentMutation(this, () =>
             {
+                replacedManual.Clear();
                 if (!AutonomousBotEconomy.TryGetEquipmentUpgrade(this, item, out eInventorySlot currentTarget,
                         minimumImprovement: 0, companionPairTieBreak: pairTieBreak) || currentTarget != target ||
                     PlayerCompanionRoster.IsEquipmentSlotLocked(PlayerCompanionRecord, target))
@@ -4816,6 +4818,16 @@ namespace DOL.GS
                     .Where(entry => entry.Item != null).ToArray();
                 if (displaced.Any(entry => PlayerCompanionRoster.IsEquipmentSlotLocked(PlayerCompanionRecord, entry.Slot)))
                     return false;
+
+                // The margin was checked above; the owner's choice gives way and its mark is cleared.
+                foreach (eInventorySlot slot in conflictingSlots.Append(target))
+                {
+                    if (PlayerCompanionRoster.GetEquipmentSlotMark(PlayerCompanionRecord, slot) != eCompanionSlotMark.Manual)
+                        continue;
+                    if (Inventory.GetItem(slot) is DbInventoryItem worn)
+                        replacedManual.Add(worn);
+                    PlayerCompanionRoster.SetEquipmentSlotMark(PlayerCompanionRecord, slot, eCompanionSlotMark.None);
+                }
 
                 eInventorySlot source = (eInventorySlot)item.SlotPosition;
                 List<eInventorySlot> emptySlots = Enumerable.Range((int)eInventorySlot.FirstBackpack,
@@ -4835,6 +4847,10 @@ namespace DOL.GS
             }, out _, requiredFreeBackpackSlots, item.ObjectId);
             if (!equipped)
                 return false;
+
+            if (replacedManual.Count > 0 && Owner is GamePlayer owner)
+                owner.Out.SendMessage($"{Name} swapped your {string.Join(" and ", replacedManual.Select(old => old.Name))} " +
+                    $"for the better {item.Name}.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 
             RefreshItemBonuses();
             UpdateNPCEquipmentAppearance();
@@ -4973,7 +4989,8 @@ namespace DOL.GS
 
                 if (!Inventory.MoveItem((eInventorySlot)item.SlotPosition, target, Math.Max(1, item.Count)))
                     return false;
-                PlayerCompanionRoster.SetEquipmentSlotLocked(PlayerCompanionRecord, target, true);
+                if (!PlayerCompanionRoster.IsEquipmentSlotLocked(PlayerCompanionRecord, target))
+                    PlayerCompanionRoster.SetEquipmentSlotMark(PlayerCompanionRecord, target, eCompanionSlotMark.Manual);
                 return true;
             }, out _, requiredFreeBackpackSlots, item.ObjectId);
             if (!equipped)

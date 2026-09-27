@@ -356,7 +356,7 @@ namespace DOL.GS.Commands
             foreach (DbInventoryItem item in equipped.Skip(page * PageSize).Take(PageSize))
             {
                 eInventorySlot slot = (eInventorySlot)item.SlotPosition;
-                bool locked = PlayerCompanionRoster.IsEquipmentSlotLocked(companion.PlayerCompanionRecord, slot);
+                bool locked = PlayerCompanionRoster.GetEquipmentSlotMark(companion.PlayerCompanionRecord, slot) != eCompanionSlotMark.None;
                 lines.Add(Link($"{slot}: {item.Name} ({(locked ? "locked" : "unlocked")})",
                     () => ShowItem(companionId, item.ObjectId, page, fromEquipment: true)));
             }
@@ -434,7 +434,7 @@ namespace DOL.GS.Commands
             string flags = PlayerCompanionRoster.GetEquipmentItemFlags(companion.PlayerCompanionRecord, item.ObjectId);
             bool inBackpack = item.SlotPosition is >= (int)eInventorySlot.FirstBackpack and <= (int)eInventorySlot.LastBackpack;
             eInventorySlot equippedSlot = (eInventorySlot)item.SlotPosition;
-            bool locked = !inBackpack && PlayerCompanionRoster.IsEquipmentSlotLocked(companion.PlayerCompanionRecord, equippedSlot);
+            bool locked = !inBackpack && PlayerCompanionRoster.GetEquipmentSlotMark(companion.PlayerCompanionRecord, equippedSlot) != eCompanionSlotMark.None;
             bool saleEligible = inBackpack && PlayerCompanionGearRewards.CanSellForSpace(companion, item);
             string transferBlocker = inBackpack ? string.Empty : "equipped items cannot be transferred";
             bool returnEligible = inBackpack && PlayerCompanionRoster.CanReturnItemToOwner(item,

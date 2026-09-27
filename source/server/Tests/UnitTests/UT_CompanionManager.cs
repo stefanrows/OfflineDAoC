@@ -329,4 +329,71 @@ public sealed class UT_CompanionManager
                 "an unusable item fits nowhere");
         });
     }
+
+    [Test]
+    public void GiveAndEquipRejectsUnusableBeforeTransfer()
+    {
+        Assert.That(PersistentCompanionGear.CanGiveForSlot(eInventorySlot.Invalid, eInventorySlot.HeadArmor, true, out string unusable), Is.False);
+        Assert.That(unusable, Does.Contain("cannot use"));
+        Assert.That(PersistentCompanionGear.CanGiveForSlot(eInventorySlot.TorsoArmor, eInventorySlot.HeadArmor, true, out string wrongSlot), Is.False);
+        Assert.That(wrongSlot, Does.Contain("does not fit"));
+        Assert.That(PersistentCompanionGear.CanGiveForSlot(eInventorySlot.HeadArmor, eInventorySlot.HeadArmor, false, out _), Is.False);
+        Assert.That(PersistentCompanionGear.CanGiveForSlot(eInventorySlot.LeftRing, eInventorySlot.RightRing, true, out _), Is.True);
+    }
+
+    [Test]
+    public void InventoryWindowPutsWornSlotsFirstThenBackpack()
+    {
+        Assert.That(PersistentCompanionInventoryView.WornPosition(eInventorySlot.HeadArmor), Is.EqualTo(1));
+        Assert.That(PersistentCompanionInventoryView.WornPosition(eInventorySlot.Mythical), Is.EqualTo(19));
+        Assert.That(PersistentCompanionInventoryView.WornPosition(eInventorySlot.RightRing),
+            Is.EqualTo(PersistentCompanionInventoryView.WornPosition(eInventorySlot.LeftRing) + 1));
+        Assert.That(PersistentCompanionInventoryView.BackpackFirstPosition, Is.EqualTo(21));
+        Assert.That(PersistentCompanionInventoryView.BackpackFirstPosition + 39, Is.LessThanOrEqualTo(100));
+    }
+
+    [TestCase(PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.MoveKind.GiveAndEquip)]
+    [TestCase(PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.MoveKind.UnequipToOwner)]
+    [TestCase(PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.MoveKind.Equip)]
+    [TestCase(PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.MoveKind.Unequip)]
+    [TestCase(PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.MoveKind.Refused)]
+    [TestCase(PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.MoveKind.WithinCompanion)]
+    [TestCase(PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.MoveKind.GiveToCompanion)]
+    [TestCase(PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.MoveKind.ReturnToOwner)]
+    [TestCase(PersistentCompanionInventoryView.Area.Other, PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.MoveKind.Refused)]
+    public void InventoryWindowRoutesEachDrag(PersistentCompanionInventoryView.Area from,
+        PersistentCompanionInventoryView.Area to, PersistentCompanionInventoryView.MoveKind expected)
+    {
+        Assert.That(PersistentCompanionInventoryView.ClassifyMove(from, to), Is.EqualTo(expected));
+    }
+
+    [TestCase(PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.Area.CompanionBackpack)]
+    [TestCase(PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.Area.OwnerBackpack)]
+    [TestCase(PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.Area.OwnerBackpack)]
+    public void ShiftRightClickSendsItemToTheOtherSide(PersistentCompanionInventoryView.Area from,
+        PersistentCompanionInventoryView.Area expected)
+    {
+        Assert.That(PersistentCompanionInventoryView.TargetArea(from, PersistentCompanionInventoryView.Area.Other,
+            toGeneralHousing: true), Is.EqualTo(expected));
+        Assert.That(PersistentCompanionInventoryView.TargetArea(from, PersistentCompanionInventoryView.Area.Worn,
+            toGeneralHousing: false), Is.EqualTo(PersistentCompanionInventoryView.Area.Worn));
+    }
+
+    [TestCase(0, 1)]  // the incoming item needs one slot; a replaced item takes its place
+    [TestCase(1, 2)]  // a one-hander also pushes out a worn two-hander
+    [TestCase(2, 3)]  // a two-hander pushes out both hands
+    public void GivingNeedsRoomForTheItemAndEveryDisplacedWeapon(int displacedWeapons, int expected)
+    {
+        Assert.That(PersistentCompanionGear.FreeSlotsNeededToGive(displacedWeapons), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void FailedGiveTellsWhereTheItemIs()
+    {
+        Assert.That(PersistentCompanionGear.GiveFailedMessage("Axe", "Freya", returned: true, "busy"),
+            Does.Contain("came back to you"));
+        string stuck = PersistentCompanionGear.GiveFailedMessage("Axe", "Freya", returned: false, "busy");
+        Assert.That(stuck, Does.Not.Contain("came back"));
+        Assert.That(stuck, Does.Contain("Freya's backpack"));
+    }
 }

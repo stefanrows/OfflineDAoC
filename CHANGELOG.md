@@ -12,6 +12,41 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.92.0] - 2026-09-27
+
+### Added
+
+- The companion inventory window (Companion Manager **[Open inventory]**)
+  shows the worn slots at positions 1-19 in character-sheet order and the
+  backpack at 21-60. Drag an item from your own backpack onto a worn slot to
+  hand it over and equip it in one step; drag a worn item to your backpack to
+  take it back (starter gear stays in the companion's backpack). Item info
+  works on every position.
+- **[Info]** in the Gear tab opens the native item info window for a worn or
+  selected backpack item. Worn slots show their inventory window position.
+
+### Changed
+
+- **[Equip + lock]** is now **[Equip]**: an item you equip is marked as your
+  choice (`*`) and is replaced only when the companion earns an item that is
+  clearly better (more than 8 points and 5% of what it replaces). You get a
+  chat line when that happens, and your item goes to its backpack, still
+  yours. **[Lock slot]** keeps a slot fixed as before; existing locks stay
+  locks.
+- **[Open bag]** is now **[Open inventory]**, and the companion's backpack
+  moved from window positions 1-40 to 21-60.
+- A clicked worn slot in the Gear tab shows only the worn item and its
+  actions; the lists of fitting items are gone, because equipping is done by
+  dragging in the inventory window.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.91.0] - 2026-09-27
 
 ### Added

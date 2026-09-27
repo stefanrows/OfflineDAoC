@@ -111,124 +111,9 @@ namespace DOL.GS.PacketHandler.Client.v168
 						// Delve() and you're done, spells, charges and everything else.
 
 						// Let the player class create the appropriate item to delve
-						caption = invItem.Name;
-
-                        if (RealmExchangeBroker.IsExchangeOwnerLot(invItem.OwnerLot))
-                            objectInfo.Add(RealmExchangeExpiry.Describe(invItem, WorldSimulationClock.UtcNow));
-
-						if (client.Player.DelveItem(invItem, objectInfo))
-							break;
-
-						#region Old Delve
-						
-
-						//**********************************
-						//show crafter name
-						//**********************************
-						if (invItem.IsCrafted)
-						{
-							objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CrafterName", invItem.Creator));
-							objectInfo.Add(" ");
-						}
-						else if (!string.IsNullOrEmpty(invItem.Description))
-						{
-							objectInfo.Add(invItem.Description);
-							objectInfo.Add(" ");
-						}
-
-						if (invItem.Object_Type >= (int)eObjectType.GenericWeapon
-							&& invItem.Object_Type <= (int)eObjectType._LastWeapon
-							|| invItem.Object_Type == (int)eObjectType.Instrument)
-						{
-							WriteUsableClasses(objectInfo, invItem, client);
-							WriteMagicalBonuses(objectInfo, invItem, client, false);
-                        WriteClassicWeaponInfos(objectInfo, invItem, client);
-						}
-
-						if (invItem.Object_Type >= (int)eObjectType.Cloth && invItem.Object_Type <= (int)eObjectType.Scale)
-						{
-							WriteUsableClasses(objectInfo, invItem, client);
-							WriteMagicalBonuses(objectInfo, invItem, client, false);
-							WriteClassicArmorInfos(objectInfo, invItem, client);
-						}
-
-						if (invItem.Object_Type == (int)eObjectType.Shield)
-						{
-							WriteUsableClasses(objectInfo, invItem, client);
-							WriteMagicalBonuses(objectInfo, invItem, client, false);
-							WriteClassicShieldInfos(objectInfo, invItem, client);
-						}
-
-						if (invItem.Object_Type == (int)eObjectType.Magical
-							|| invItem.Object_Type == (int)eObjectType.AlchemyTincture
-							|| invItem.Object_Type == (int)eObjectType.SpellcraftGem)
-						{
-							WriteMagicalBonuses(objectInfo, invItem, client, false);
-						}
-
-						//***********************************
-						//shows info for Poison Potions
-						//***********************************
-						if (invItem.Object_Type == (int)eObjectType.Poison)
-							WritePoisonInfo(objectInfo, invItem, client);
-
-						if (invItem.Object_Type == (int)eObjectType.Magical && invItem.Item_Type == (int)eInventorySlot.FirstBackpack) // potion
-							WritePotionInfo(objectInfo, invItem, client);
-						else if (invItem.CanUseEvery > 0)
-						{
-							// Items with a reuse timer (aka cooldown).
-							objectInfo.Add(" ");
-
-							int minutes = invItem.CanUseEvery / 60;
-							int seconds = invItem.CanUseEvery % 60;
-
-							if (minutes == 0)
-								objectInfo.Add($"Can use item every: {seconds} sec");
-							else
-								objectInfo.Add($"Can use item every: {minutes}:{seconds:00} min");
-
-							// objectInfo.Add(String.Format("Can use item every: {0:00}:{1:00}", minutes, seconds));
-
-							int cooldown = invItem.CanUseAgainIn;
-
-							if (cooldown > 0)
-							{
-								minutes = cooldown / 60;
-								seconds = cooldown % 60;
-
-								if (minutes == 0)
-									objectInfo.Add($"Can use again in: {seconds} sec");
-								else
-									objectInfo.Add($"Can use again in: {minutes}:{seconds:00} min");
-							}
-						}
-
-						if (!invItem.IsDropable || !invItem.IsPickable || invItem.IsIndestructible)
-							objectInfo.Add(" ");
-
-						if (!invItem.IsPickable)
-							objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CannotTraded"));
-
-						if (!invItem.IsDropable)
-							objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CannotSold"));
-
-						if (invItem.IsIndestructible)
-							objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CannotDestroyed"));
-
-
-						if (invItem.BonusLevel > 0)
-						{
-							objectInfo.Add(" ");
-							objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.BonusLevel", invItem.BonusLevel));
-
-						}
-
-						//Add admin info
-						if (client.Account.PrivLevel > 1)
-							WriteTechnicalInfo(objectInfo, client, invItem);
+						caption = WriteInventoryItemInfo(client, invItem, objectInfo);
 						break;
 
-						#endregion Old Delve
 					}
 					#endregion
 					#region Spell
@@ -1005,6 +890,128 @@ namespace DOL.GS.PacketHandler.Client.v168
 				client.Out.SendCustomTextWindow(caption, objectInfo);
 			else if ((objectType < 24 || objectType > 28) && objectType < 150) // only warn for non v1.110+ objects
 				log.Warn($"DetailDisplayHandler no info for objectID {objectId} of type {objectType}. Item: {item?.Id_nb ?? (invItem?.Id_nb ?? "null")}, client: {client}");
+		}
+
+		/// <summary>The classic item delve text, shared by inventory clicks and the Companion Manager.</summary>
+		public string WriteInventoryItemInfo(GameClient client, DbInventoryItem invItem, List<string> objectInfo)
+		{
+			string caption = invItem.Name;
+
+            if (RealmExchangeBroker.IsExchangeOwnerLot(invItem.OwnerLot))
+                objectInfo.Add(RealmExchangeExpiry.Describe(invItem, WorldSimulationClock.UtcNow));
+
+			if (client.Player.DelveItem(invItem, objectInfo))
+				return caption;
+
+			#region Old Delve
+			
+
+			//**********************************
+			//show crafter name
+			//**********************************
+			if (invItem.IsCrafted)
+			{
+				objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CrafterName", invItem.Creator));
+				objectInfo.Add(" ");
+			}
+			else if (!string.IsNullOrEmpty(invItem.Description))
+			{
+				objectInfo.Add(invItem.Description);
+				objectInfo.Add(" ");
+			}
+
+			if (invItem.Object_Type >= (int)eObjectType.GenericWeapon
+				&& invItem.Object_Type <= (int)eObjectType._LastWeapon
+				|| invItem.Object_Type == (int)eObjectType.Instrument)
+			{
+				WriteUsableClasses(objectInfo, invItem, client);
+				WriteMagicalBonuses(objectInfo, invItem, client, false);
+            WriteClassicWeaponInfos(objectInfo, invItem, client);
+			}
+
+			if (invItem.Object_Type >= (int)eObjectType.Cloth && invItem.Object_Type <= (int)eObjectType.Scale)
+			{
+				WriteUsableClasses(objectInfo, invItem, client);
+				WriteMagicalBonuses(objectInfo, invItem, client, false);
+				WriteClassicArmorInfos(objectInfo, invItem, client);
+			}
+
+			if (invItem.Object_Type == (int)eObjectType.Shield)
+			{
+				WriteUsableClasses(objectInfo, invItem, client);
+				WriteMagicalBonuses(objectInfo, invItem, client, false);
+				WriteClassicShieldInfos(objectInfo, invItem, client);
+			}
+
+			if (invItem.Object_Type == (int)eObjectType.Magical
+				|| invItem.Object_Type == (int)eObjectType.AlchemyTincture
+				|| invItem.Object_Type == (int)eObjectType.SpellcraftGem)
+			{
+				WriteMagicalBonuses(objectInfo, invItem, client, false);
+			}
+
+			//***********************************
+			//shows info for Poison Potions
+			//***********************************
+			if (invItem.Object_Type == (int)eObjectType.Poison)
+				WritePoisonInfo(objectInfo, invItem, client);
+
+			if (invItem.Object_Type == (int)eObjectType.Magical && invItem.Item_Type == (int)eInventorySlot.FirstBackpack) // potion
+				WritePotionInfo(objectInfo, invItem, client);
+			else if (invItem.CanUseEvery > 0)
+			{
+				// Items with a reuse timer (aka cooldown).
+				objectInfo.Add(" ");
+
+				int minutes = invItem.CanUseEvery / 60;
+				int seconds = invItem.CanUseEvery % 60;
+
+				if (minutes == 0)
+					objectInfo.Add($"Can use item every: {seconds} sec");
+				else
+					objectInfo.Add($"Can use item every: {minutes}:{seconds:00} min");
+
+				// objectInfo.Add(String.Format("Can use item every: {0:00}:{1:00}", minutes, seconds));
+
+				int cooldown = invItem.CanUseAgainIn;
+
+				if (cooldown > 0)
+				{
+					minutes = cooldown / 60;
+					seconds = cooldown % 60;
+
+					if (minutes == 0)
+						objectInfo.Add($"Can use again in: {seconds} sec");
+					else
+						objectInfo.Add($"Can use again in: {minutes}:{seconds:00} min");
+				}
+			}
+
+			if (!invItem.IsDropable || !invItem.IsPickable || invItem.IsIndestructible)
+				objectInfo.Add(" ");
+
+			if (!invItem.IsPickable)
+				objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CannotTraded"));
+
+			if (!invItem.IsDropable)
+				objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CannotSold"));
+
+			if (invItem.IsIndestructible)
+				objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.CannotDestroyed"));
+
+
+			if (invItem.BonusLevel > 0)
+			{
+				objectInfo.Add(" ");
+				objectInfo.Add(LanguageMgr.GetTranslation(client.Account.Language, "DetailDisplayHandler.HandlePacket.BonusLevel", invItem.BonusLevel));
+
+			}
+
+			//Add admin info
+			if (client.Account.PrivLevel > 1)
+				WriteTechnicalInfo(objectInfo, client, invItem);
+			#endregion Old Delve
+			return caption;
 		}
 
 		public static void WriteStyleInfo(List<string> objectInfo, Style style, GameClient client)

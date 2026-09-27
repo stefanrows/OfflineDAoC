@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DOL.Database;
+using DOL.GS.PacketHandler.Client.v168;
 
 namespace DOL.GS.Commands
 {
@@ -73,7 +74,8 @@ namespace DOL.GS.Commands
                 message = "That item is not a legal choice, its slot is protected, or the companion is busy.";
                 return false;
             }
-            message = $"{item.Name} is equipped in the {SlotName(slot)} slot, which is locked against automatic replacement.";
+            message = $"{item.Name} is equipped in the {SlotName(slot)} slot. It stays until you change it or " +
+                      $"{companion.Name} finds something clearly better.";
             return true;
         }
 
@@ -159,9 +161,126 @@ namespace DOL.GS.Commands
             bool transferred = PlayerCompanionRoster.TryTransferItem(owner, companionId, itemId, toCompanion: false,
                 out message);
             if (transferred)
-                owner.Out.SendInventorySlotsUpdate(Enumerable.Range((int)eInventorySlot.FirstBackpack, 40)
-                    .Select(slot => (eInventorySlot)slot).ToArray());
+                RefreshOwnerBackpack(owner);
             return transferred;
+        }
+
+        /// <summary>Pure pre-check for handing an owner item to a worn slot, before anything moves.</summary>
+        public static bool CanGiveForSlot(eInventorySlot resolved, eInventorySlot slot, bool transferable, out string blocker)
+        {
+            blocker = resolved == eInventorySlot.Invalid ? "the companion cannot use that item"
+                : !FitsSlot(resolved, slot) ? $"it does not fit the {SlotName(slot)} slot"
+                : !transferable ? "that item cannot be traded"
+                : string.Empty;
+            return blocker.Length == 0;
+        }
+
+        /// <summary>The owner's backpack items the companion could wear in <paramref name="slot"/>, best first.</summary>
+        public static IReadOnlyList<DbInventoryItem> OwnerItemsFitting(GamePlayer owner, GameBot companion, eInventorySlot slot) =>
+            owner?.Inventory == null || companion == null
+                ? Array.Empty<DbInventoryItem>()
+                : owner.Inventory.AllItems.Where(IsBackpack)
+                    .Where(item => PlayerCompanionRoster.CanTransferItem(item, out _) &&
+                                   FitsSlot(companion.GetManualEquipmentSlot(item), slot))
+                    .OrderByDescending(AutonomousBotEconomy.EquipmentValue)
+                    .ThenBy(item => item.SlotPosition)
+                    .ToArray();
+
+        /// <summary>Owner item to the companion, then equipped in <paramref name="slot"/>; handed back if the equip fails.</summary>
+        public static bool TryGiveAndEquip(GamePlayer owner, string companionId, string ownerItemId, eInventorySlot slot,
+            out string message)
+        {
+            DbInventoryItem item = owner?.Inventory?.AllItems.FirstOrDefault(entry => entry.ObjectId == ownerItemId);
+            if (item == null || !IsBackpack(item) ||
+                !PlayerCompanionRoster.TryGetActiveCompanionById(owner, companionId, out GameBot companion) ||
+                companion.Inventory == null)
+            {
+                message = "Choose an item from your backpack while the companion is near you.";
+                return false;
+            }
+            if (!CanGiveForSlot(companion.GetManualEquipmentSlot(item), slot,
+                    PlayerCompanionRoster.CanTransferItem(item, out _), out string blocker))
+            {
+                message = $"{item.Name}: {blocker}.";
+                return false;
+            }
+            // Check room before anything moves, so a full backpack never triggers a surplus sale.
+            int needed = FreeSlotsNeededToGive(DisplacedWeaponCount(companion, slot));
+            int free = Enumerable.Range((int)eInventorySlot.FirstBackpack,
+                    (int)eInventorySlot.LastBackpack - (int)eInventorySlot.FirstBackpack + 1)
+                .Count(backpack => companion.Inventory.GetItem((eInventorySlot)backpack) == null);
+            if (free < needed)
+            {
+                message = $"{companion.Name}'s backpack needs {needed} free slot{(needed == 1 ? string.Empty : "s")} " +
+                          $"for {item.Name} and what it takes off; it has {free}.";
+                return false;
+            }
+            if (!PlayerCompanionRoster.TryTransferItem(owner, companionId, ownerItemId, toCompanion: true, out message))
+                return false;
+            if (TryEquip(owner, companionId, ownerItemId, slot, out message))
+            {
+                RefreshOwnerBackpack(owner);
+                return true;
+            }
+            string reason = message;
+            bool returned = PlayerCompanionRoster.TryTransferItem(owner, companionId, ownerItemId, toCompanion: false, out _);
+            RefreshOwnerBackpack(owner);
+            message = GiveFailedMessage(item.Name, companion.Name, returned, reason);
+            return false;
+        }
+
+        /// <summary>The incoming item needs a slot; each weapon the equip pushes out needs one more.</summary>
+        public static int FreeSlotsNeededToGive(int displacedWeapons) => 1 + displacedWeapons;
+
+        public static string GiveFailedMessage(string itemName, string companionName, bool returned, string reason) =>
+            returned
+                ? $"{itemName} was not equipped and came back to you: {reason}"
+                : $"{itemName} was not equipped and is in {companionName}'s backpack; take it back from the Gear tab. {reason}";
+
+        private static int DisplacedWeaponCount(GameBot companion, eInventorySlot slot)
+        {
+            eInventorySlot[] conflicting = slot switch
+            {
+                eInventorySlot.TwoHandWeapon => [eInventorySlot.RightHandWeapon, eInventorySlot.LeftHandWeapon],
+                eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon => [eInventorySlot.TwoHandWeapon],
+                _ => [],
+            };
+            return conflicting.Count(worn => companion.Inventory.GetItem(worn) != null);
+        }
+
+        /// <summary>Worn item to the owner when they may take it; otherwise it stays in the companion's backpack.</summary>
+        public static bool TryUnequipToOwner(GamePlayer owner, string companionId, eInventorySlot slot, string expectedItemId,
+            out string message)
+        {
+            if (!TryUnequip(owner, companionId, slot, expectedItemId, out message))
+                return false;
+            if (!PlayerCompanionRoster.TryGetActiveCompanionById(owner, companionId, out GameBot companion) ||
+                companion.Inventory?.AllItems.FirstOrDefault(entry => entry.ObjectId == expectedItemId) is not DbInventoryItem item ||
+                !PlayerCompanionRoster.CanReturnItemToOwner(item, companion.PlayerCompanionRecord, out _))
+            {
+                message += " It stays in the companion's backpack because it cannot be handed over.";
+                return true;
+            }
+            if (TryReturnToOwner(owner, companionId, expectedItemId, out string returned))
+                message = $"{item.Name} is unequipped and back in your backpack.";
+            else
+                message += $" {returned}";
+            return true;
+        }
+
+        private static void RefreshOwnerBackpack(GamePlayer owner) =>
+            owner.Out.SendInventorySlotsUpdate(Enumerable.Range((int)eInventorySlot.FirstBackpack, 40)
+                .Select(slot => (eInventorySlot)slot).ToArray());
+
+        /// <summary>Opens the same item info window a player gets by delving their own item.</summary>
+        public static void ShowItemInfo(GamePlayer player, DbInventoryItem item)
+        {
+            if (player?.Client == null || item == null)
+                return;
+            var info = new List<string>();
+            string caption = new DetailDisplayHandler().WriteInventoryItemInfo(player.Client, item, info);
+            if (info.Count > 0)
+                player.Out.SendCustomTextWindow(caption, info);
         }
 
         public static string DescribeFlags(string flags)
