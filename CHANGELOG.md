@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.110.0] - 2026-09-27
+
+### Added
+
+- None.
+
+### Changed
+
+- Player-led companions ration pure debuffs (strength, strength/constitution,
+  dexterity, combat speed, resistance and similar debuffs without damage):
+  each debuff type is cast at most once per fight, area debuffs at most
+  twice. The budget renews once the companion has been out of combat for
+  5 s after its last debuff. Damage spells with a debuff component, snares,
+  and damage over time are unchanged; autonomous gamebots keep their
+  rotation (bug 53).
+
+### Fixed
+
+- A Suppression Spiritmaster companion no longer drains its power by
+  re-applying up to four instant debuffs to every mob of a pull and again
+  whenever they expired: at level 50 one full set cost about 113 power, as
+  much as seven bombs (bug 53).
+
+### Removed
+
+- None.
+
 ## [0.109.0] - 2026-09-27
 
 ### Added

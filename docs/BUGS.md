@@ -8,6 +8,19 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+53. **Bomber companions burn their power on debuffs.** Reported by Aaron on
+    2026-09-27 (playing on Stefan's server, version not confirmed): a
+    Suppression Spiritmaster bomber ran out of power quickly. Cause: pure
+    debuffs (instant strength, strength/constitution area, combat speed and
+    dexterity debuffs) are applied to every mob that lacks them, before the
+    ordinary damage rotation and whenever no bomb is ready, and again after
+    each 60 s expiry. Debuffs pay full power (the caster discount covers
+    damage only): one set cost about 113 power at level 50, about seven
+    bombs. Expected: debuff once or twice per fight. Fixed in source
+    0.110.0: player-led companions cast each pure debuff type at most once
+    per fight, area debuffs at most twice; the budget renews after 5 s out
+    of combat. Installation and real-client verification pending.
+
 52. **Companions can stand idle after the build expansion.** Reported
     2026-09-27, Paladin given as an example; installed version and equipment
     not yet confirmed. Source regression in 0.96.0 (`1a50ffb`): automatic

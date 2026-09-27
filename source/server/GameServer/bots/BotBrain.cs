@@ -26,6 +26,7 @@ namespace DOL.AI.Brain
         public GameBot BotBody => Body as GameBot;
         private long _nextPoisonSupplyTick;
         private readonly CompanionBombTankWait _bombTankWait = new();
+        private readonly CompanionDebuffBudget _debuffBudget = new();
 
         #region IControlledBrain Implementation
 
@@ -3901,6 +3902,7 @@ namespace DOL.AI.Brain
                             !(CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
                               CompanionRangedAoePolicy.IsRangedDamageSpell(spell)) &&
                             !NeedsOffensiveSpellApplication((GameLiving)Body.TargetObject, spell) ||
+                        !DebuffBudgetAllows(spell) ||
                         CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, Body.TargetObject as GameLiving));
                     if (spellsToCast.Count == 0) return Body.IsCasting;
                     if (PrefersCurrentSpellRange() &&
@@ -4249,7 +4251,7 @@ namespace DOL.AI.Brain
 
         protected virtual bool CheckOffensiveSpells(Spell spell)
         {
-            if (spell == null || Body.Mana < BotBody.PowerCost(spell))
+            if (spell == null || Body.Mana < BotBody.PowerCost(spell) || !DebuffBudgetAllows(spell))
                 return false;
 
             if (spell.NeedInstrument && !TryEquipRealInstrument(BotBody, spell.InstrumentRequirement))
@@ -4271,7 +4273,24 @@ namespace DOL.AI.Brain
                     casted = Body.CastSpell(spell, m_mobSpellLine);
             }
 
+            RecordDebuffCast(spell, casted);
             return casted;
+        }
+
+        /// <summary>Player-led companions ration pure debuffs per fight; autonomous bots keep their rotation.</summary>
+        private bool DebuffBudgetAllows(Spell spell)
+        {
+            if (!CompanionBombingPolicy.IsPlayerLedCompanion(BotBody))
+                return true;
+
+            _debuffBudget.EndFightIfIdle(Body.InCombat, GameLoop.GameLoopTime);
+            return _debuffBudget.Allows(spell);
+        }
+
+        private void RecordDebuffCast(Spell spell, bool casted)
+        {
+            if (casted && CompanionBombingPolicy.IsPlayerLedCompanion(BotBody))
+                _debuffBudget.Record(spell, GameLoop.GameLoopTime);
         }
 
         private bool CastRangedAoeSpell(Spell spell, GameLiving center)
@@ -4351,7 +4370,8 @@ namespace DOL.AI.Brain
         protected virtual bool CheckInstantOffensiveSpells(Spell spell)
         {
             if (spell == null || Body.Mana < BotBody.PowerCost(spell) ||
-                spell.HasRecastDelay && Body.GetSkillDisabledDuration(spell) > 0)
+                spell.HasRecastDelay && Body.GetSkillDisabledDuration(spell) > 0 ||
+                !DebuffBudgetAllows(spell))
                 return false;
 
             if (CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
@@ -4398,7 +4418,9 @@ namespace DOL.AI.Brain
 
             if (castSpell)
             {
-                return Body.CastSpell(spell, m_mobSpellLine);
+                bool started = Body.CastSpell(spell, m_mobSpellLine);
+                RecordDebuffCast(spell, started);
+                return started;
             }
 
             return false;
