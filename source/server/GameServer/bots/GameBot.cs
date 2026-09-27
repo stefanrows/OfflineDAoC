@@ -446,8 +446,10 @@ namespace DOL.GS
             int maxEndurance = MaxEndurance;
             // GameBots have lightweight free-running travel. Endurance is a
             // combat resource for styles/abilities and is never consumed merely
-            // because a persistent bot or /spawn companion is moving quickly.
-            if (Endurance >= maxEndurance)
+            // because a persistent bot or /spawn companion is moving quickly;
+            // only an explicit sprint costs endurance, as it does a player.
+            bool sprintDrain = IsSprinting && IsMoving;
+            if (Endurance >= maxEndurance && !sprintDrain)
             {
                 Endurance = maxEndurance;
                 return 0;
@@ -455,6 +457,9 @@ namespace DOL.GS
 
             int regen = GetModified(eProperty.EnduranceRegenerationAmount);
             if (IsEnhancedResting) regen = BotRestRecovery.RecoveryAmount(regen, maxEndurance);
+            if (sprintDrain)
+                regen = CompanionSprint.SprintingRegen(regen, GetModified(eProperty.FatigueConsumption),
+                    Endurance, maxEndurance);
             if (regen != 0)
                 ChangeEndurance(this, eEnduranceChangeType.Regenerate, regen);
 
@@ -1439,6 +1444,7 @@ namespace DOL.GS
 
                 ECSGameEffectFactory.Create(new ECSGameEffectInitParams(this, 0, 1),
                     static (in ECSGameEffectInitParams i) => new SprintECSGameEffect(i));
+                StartEnduranceRegeneration();
                 return true;
             }
             else

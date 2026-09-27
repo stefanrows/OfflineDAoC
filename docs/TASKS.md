@@ -16,6 +16,13 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Implemented in source; installation verification pending
 
+36. **Companions sprint on the stick in RvR.** Aaron, 2026-09-27: when the
+    group runs with sprint and an endurance buff, the companions sticking
+    behind should sprint too. Source 0.111.0: on a stick run behind a
+    sprinting leader each companion turns on sprint and pays the player's
+    endurance cost; sprint ends with the leader's sprint, the run, or the
+    fight. The stick pace is unchanged (companions already matched the
+    leader's speed). Real-client check pending.
 34. **Level-50 life between RvR tours and raid sign-ups.** Aaron,
     2026-09-27: level-50 bots mostly take a town break (sell loot, buy what
     they need) and sometimes run Darkness Falls, spending seals at the DF seal

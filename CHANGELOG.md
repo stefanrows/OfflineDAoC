@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.111.0] - 2026-09-27
+
+### Added
+
+- Companions sprint on a stick run while their leader sprints: when the
+  leader runs a speed run long enough for the companions to fall into the
+  stick line and turns on sprint, each companion sprints as well, and stops
+  when the leader stops sprinting, stops running, or the fight starts. A
+  sprinting companion pays the player's endurance cost (5 per second before
+  an endurance regeneration buff); without sprint, companion travel still
+  costs no endurance (task 36).
+
+### Changed
+
+- None.
+
+### Fixed
+
+- The sprint effect's name no longer requires a player owner.
+
+### Removed
+
+- None.
+
 ## [0.110.0] - 2026-09-27
 
 ### Added

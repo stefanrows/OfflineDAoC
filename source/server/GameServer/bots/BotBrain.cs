@@ -1160,6 +1160,15 @@ namespace DOL.AI.Brain
         }
 
         private long _leaderMoveStartTick;
+        private long _stickSprintTick;
+
+        /// <summary>Sprint ends when the stick run does (combat, a stop, a slower leader).</summary>
+        private void EndStickSprint()
+        {
+            if (BotBody?.IsSprinting == true &&
+                GameLoop.GameLoopTime - _stickSprintTick > ThinkInterval * 2 + 500)
+                BotBody.Sprint(false);
+        }
 
         private void FollowFormation(bool ambientWander = false)
         {
@@ -1211,6 +1220,14 @@ namespace DOL.AI.Brain
                 CompanionFollowStyle style = CompanionFollowStyle.Choose(leaderMoving,
                     _leaderMoveStartTick == 0 ? 0 : now - _leaderMoveStartTick, leaderSpeed,
                     Body.GetDistanceTo(leader), formation.Distance, Body.IsMoving);
+                // Sprint along while the leader sprints on a stick run.
+                if (CompanionSprint.ShouldSprint(style == CompanionFollowStyle.Stick, leader.IsSprinting))
+                {
+                    _stickSprintTick = now;
+                    BotBody.Sprint(true);
+                }
+                else if (BotBody.IsSprinting)
+                    BotBody.Sprint(false);
                 if (style == CompanionFollowStyle.Hold)
                     return;
                 if (style == CompanionFollowStyle.Stick)
@@ -1314,6 +1331,7 @@ namespace DOL.AI.Brain
             AutonomousSummonActivity.RecoverOwner(BotBody);
             BotAnimistPolicy.RestoreEncounterTarget(BotBody);
             ObserveLeaderActivity();
+            EndStickSprint();
             BotBody?.WakeRecoveryRestIfCombatBlocked();
             BotBody?.EnsureAutonomousRecoveryTimers();
 
