@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.90.1] - 2026-09-27
+
+### Added
+
+- Bug #42 in `docs/BUGS.md`: every player kill freezes the server for about
+  0.4-6 s because each companion gets a synchronously saved gear reward, with
+  questions for the owner (per-companion rolls vs. a loot pool per fight).
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.90.0] - 2026-09-27
 
 ### Added
