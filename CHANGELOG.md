@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.134.0] - 2026-09-28
+
+### Fixed
+
+- Generated charm pets of Sorcerer, Minstrel and Mentalist bots (and of
+  players using the generated charm) no longer come back as wild aggressive
+  mobs after they die. Their body kept the mob template's respawn timer and
+  lost its pet marker on death, so phantom magi, savage dragonflies and
+  similar Shrouded Isles mobs respawned at the hub bindstones and killed bots
+  there: 47 % of all PvE kills in an eleven-hour run. Existing ghost camps
+  disappear at the next server start.
+
+### Added
+
+- A second safe circle at Castle Sauvage (1,500 units) and Svasud Faste
+  (1,800 units) covers the fallback teleporter landing and the outer
+  bindstones, for players and bots alike (Camlann decision 7, option b). The
+  road between the outer bindstones and Castle Sauvage stays open for PvP.
+
 ## [0.133.1] - 2026-09-28
 
 ### Changed

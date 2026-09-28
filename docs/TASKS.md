@@ -72,7 +72,12 @@ Agent sessions on items 45–48: take the role and context from
       expiry instead of an empty one (advisor 48 cause e), so an RvR tour no
       longer ends at once after a restart or raid transfer. Side effect after
       a restart: groupless GroupPve members re-queue for up to 20 minutes
-      instead of being marked PvE completed. Package B remains open.
+      instead of being marked PvE completed.
+    - **Package B (collateral PvP in BotBrain) dropped by Aaron on 2026-09-28**
+      (decision C, option a): the 11-hour live run of 0.125.0 showed 25,623
+      targeted versus 2,180 collateral PvP deaths, so the advisor's collateral
+      hypothesis did not hold once the border hubs were safe. Re-measure after
+      24 hours before reconsidering.
 
 48. **Advisor, then build: real RvR with roaming groups.** Aaron, 2026-09-28:
     he still sees no bot groups in RvR. First a read-only advisor pass: how
