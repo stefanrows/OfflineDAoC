@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.122.0] - 2026-09-28
+
+### Fixed
+
+- The live bot dashboard snapshot and the world-speed status file no longer
+  fail when another program briefly holds the published file open: both
+  publishers retry the atomic replace for about a quarter second before
+  warning, and the launcher reads the world-speed status with delete sharing.
+  Bug 26, listed as finished, was still occurring and is fixed the same way.
+
 ## [0.121.0] - 2026-09-28
 
 ### Changed
