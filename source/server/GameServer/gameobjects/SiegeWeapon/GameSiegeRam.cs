@@ -103,6 +103,7 @@ namespace DOL.GS
 
 		public override void Fire()
 		{
+			PruneWorldBotRiders();
 			GameLiving target = (TargetObject as GameLiving);
 			if(target != null && !target.IsAlive)
 			{
@@ -205,6 +206,54 @@ namespace DOL.GS
 				}
 			}
 			return false;
+		}
+
+		/// <summary>Riders of either kind: players and seated bots.</summary>
+		public int PassengerCount => RiderCount;
+
+		/// <summary>
+		/// An autonomous world bot rides the ram run by an operator of its own
+		/// warband (task 48, siege slice 1). Uses the same seats, riding packets
+		/// and reload/damage bonus as player-led companions; companions keep
+		/// <see cref="BoardCompanion"/>.
+		/// </summary>
+		public bool BoardWorldBot(GameBot bot)
+		{
+			if (bot?.IsAlive != true || !bot.IsAutonomousWorldBot || bot.IsPlayerLedGroup ||
+			    Owner is not GameBot operatorBot || operatorBot == bot || bot.Group == null || bot.Group != operatorBot.Group ||
+			    !bot.IsWithinRadius(this, 350) || bot.CurrentRegionID != CurrentRegionID ||
+			    ObjectState != eObjectState.Active || !IsAlive)
+				return false;
+			lock (_companionRiders)
+			{
+				if (_companionRiders.ContainsKey(bot)) return true;
+				for (int slot = 0; slot < System.Math.Min(MAX_PASSENGERS, Riders?.Length ?? 0); slot++)
+				{
+					if (Riders[slot] != null || _companionRiders.ContainsValue(slot)) continue;
+					bot.StopAttack();
+					bot.StopFollowing();
+					bot.StopMovingOnPath();
+					if (!bot.MoveInRegion(CurrentRegionID, X, Y, Z, Heading, true)) return false;
+					_companionRiders.Add(bot, slot);
+					bot.CompanionRam = this;
+					foreach (GamePlayer viewer in bot.GetPlayersInRadius(WorldMgr.VISIBILITY_DISTANCE))
+						viewer.Out.SendRiding(bot, this, false);
+					UpdateRamStatus();
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/// <summary>A world-bot rider that left its seat (fighting, moved, died)
+		/// no longer speeds the ram. Player-led companions are not touched.</summary>
+		private void PruneWorldBotRiders()
+		{
+			foreach (GameBot bot in CompanionRiders)
+				if (bot.IsAutonomousWorldBot && !bot.IsPlayerLedGroup &&
+				    (!bot.IsAlive || bot.ObjectState != eObjectState.Active || bot.CurrentRegionID != CurrentRegionID ||
+				     bot.IsAttacking || !bot.IsWithinRadius(this, 120)))
+					DismountCompanion(bot);
 		}
 
 		public void DismountCompanion(GameBot bot)

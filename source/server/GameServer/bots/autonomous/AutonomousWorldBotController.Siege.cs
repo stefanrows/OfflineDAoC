@@ -30,6 +30,111 @@ namespace DOL.GS
         private Vector3? _siegeMoveTo;
         private long _siegeMoveStarted, _siegeNextMove, _siegeMoveRepath;
         private string _siegePreSupplyKeep;
+        private GameNPC[] _siegeScanNpcs;
+        private GamePlayer[] _siegeScanPlayers;
+        private long _siegeScanUntil, _siegeRideCheck;
+        /// <summary>The ram this caster is walking to; keeps the walk going every think.</summary>
+        private GameSiegeRam _siegeRideTarget;
+        /// <summary>The operator's 6,000-unit scans are reused for this long.</summary>
+        private const long SiegeScanReuseMilliseconds = 2_000;
+
+        /// <summary>
+        /// Siege work for a force committed to an automatic keep assault (task 48,
+        /// siege slice 1): casters ride their group's ram, operators buy a ram at
+        /// the hub before the march and place and operate it within 6,000 units
+        /// of the keep. Everything else leaves the turn to FindRvrTarget.
+        /// </summary>
+        private bool TryRunSiegeWork(GameBot bot)
+        {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.SiegeJob);
+            long now = GameLoop.GameLoopTime;
+            if (_rvrIntent != AutonomousRvrEventLayer.Intent.AssaultKeep || !_rvrSharedEvent ||
+                _rvrDestination?.Id?.StartsWith("rvr-keep-", StringComparison.Ordinal) != true)
+            {
+                if (bot.CompanionRam is { } previousRam) StopRiding(bot, previousRam, "no keep assault");
+                _siegeRideTarget = null;
+                if (_siegeJobKeep != null) ReleaseSiegeJob(bot);
+                return false;
+            }
+            if (TryRideSiegeRam(bot, now)) return true;
+            if (!AutonomousSiegeJobs.Eligible(bot)) return false;
+            bool inRegion = bot.CurrentRegionID == _rvrDestination.RegionId;
+            double distance = inRegion ? Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) : double.PositiveInfinity;
+            // A 2003 group bought its ram at the border keep, not at the gate.
+            bool canBuyBeforeMarch = _siegePreSupplyKeep != _rvrDestination.Id &&
+                (!IsInFrontier(bot) || PvpCombatant.IsSafeBorderHub(bot.CurrentRegionID, bot.X, bot.Y));
+            if (!AutonomousSiegeDoctrine.ShouldRunSiegeJob(_rvrIntent, _rvrSharedEvent, inRegion, distance,
+                    _siegeSupplyItem != null, canBuyBeforeMarch)) return false;
+            return TryRunSiegeJob(bot);
+        }
+
+        private bool TryRideSiegeRam(GameBot bot, long now)
+        {
+            GameSiegeRam riding = bot.CompanionRam;
+            if (riding != null && riding.CompanionRiderSlot(bot) < 0) { bot.CompanionRam = null; riding = null; }
+            GameSiegeRam ram = riding;
+            if (ram == null)
+            {
+                if (!AutonomousSiegeDoctrine.RidesRam(bot) || bot.Group == null || bot.InCombat) { _siegeRideTarget = null; return false; }
+                // A ram already chosen stays the goal on every think while it is
+                // valid; only a fresh search is throttled.
+                bool remembered = _siegeRideTarget is { IsAlive: true, ObjectState: GameObject.eObjectState.Active } known &&
+                    known.CurrentRegion == bot.CurrentRegion && bot.IsWithinRadius(known, AutonomousSiegeDoctrine.RamBoardSearchRadius);
+                if (!AutonomousSiegeDoctrine.ShouldSearchForRam(remembered, now, _siegeRideCheck)) return false;
+                ram = remembered ? _siegeRideTarget : bot.Group.GetMembersInTheGroup().OfType<GameBot>().Where(member => member != bot)
+                    .SelectMany(AutonomousSiegeOwnership.All).OfType<GameSiegeRam>()
+                    .Where(r => r.CurrentRegion == bot.CurrentRegion && bot.IsWithinRadius(r, AutonomousSiegeDoctrine.RamBoardSearchRadius))
+                    .OrderBy(bot.GetDistanceTo).FirstOrDefault();
+                _siegeRideTarget = ram;
+                if (ram == null) { _siegeRideCheck = now + 5_000; return false; }
+            }
+            GameKeepDoor gate = ram.TargetObject as GameKeepDoor;
+            bool onGate = ram.IsAlive && ram.ObjectState == GameObject.eObjectState.Active &&
+                gate is { IsAlive: true, State: eDoorState.Closed };
+            bool sameGroup = ram.Owner is GameBot operatorBot && operatorBot != bot && operatorBot.IsAlive &&
+                operatorBot.Group != null && operatorBot.Group == bot.Group;
+            bool attacked = bot.GetNPCsInRadius(450).Any(n => n.IsAlive && n.TargetObject == bot && n.IsAttacking) ||
+                bot.GetPlayersInRadius(450).Any(p => p.IsAttacking && p.TargetObject == bot);
+            if (!AutonomousSiegeDoctrine.ShouldRide(AutonomousSiegeDoctrine.RidesRam(bot), sameGroup, onGate,
+                    riding != null, ram.PassengerCount, ram.MAX_PASSENGERS, attacked))
+            {
+                if (riding != null) StopRiding(bot, riding, attacked ? "attacked in melee" : "gate down or operator gone");
+                _siegeRideTarget = null; _siegeRideCheck = now + 5_000;
+                return false;
+            }
+            bot.TempProperties.SetProperty("SiegeJobUntil", now + 15_000);
+            if (riding != null)
+            {
+                bot.StopMovingOnPath(); bot.StopMoving();
+                SiegeStatus(bot, "Riding the siege ram", gate);
+                return true;
+            }
+            if (!bot.IsWithinRadius(ram, AutonomousSiegeDoctrine.RamBoardRadius))
+            {
+                if (!IssuePath(bot, new(ram.X, ram.Y, ram.Z), preciseArrival: true))
+                {
+                    // No route to this ram: give it up and wait for a fresh search.
+                    _siegeRideTarget = null; _siegeRideCheck = now + 5_000;
+                    bot.TempProperties.SetProperty("SiegeJobUntil", 0L);
+                    return false;
+                }
+                SiegeStatus(bot, "Moving to ride the siege ram", gate);
+                return true;
+            }
+            _siegeRideTarget = null;
+            if (!ram.BoardWorldBot(bot)) { bot.TempProperties.SetProperty("SiegeJobUntil", 0L); _siegeRideCheck = now + 5_000; return false; }
+            if (Log.IsInfoEnabled) Log.Info($"RVR_SIEGE action=ride bot={bot.Name} keep={_rvrDestination?.Id} engine={ram.ObjectID} " +
+                $"operator={(ram.Owner as GameBot)?.Name} riders={ram.PassengerCount}/{ram.MAX_PASSENGERS}");
+            SiegeStatus(bot, "Riding the siege ram", gate);
+            return true;
+        }
+
+        private void StopRiding(GameBot bot, GameSiegeRam ram, string reason)
+        {
+            ram.DismountCompanion(bot);
+            bot.TempProperties.SetProperty("SiegeJobUntil", 0L);
+            if (Log.IsInfoEnabled) Log.Info($"RVR_SIEGE action=dismount bot={bot.Name} keep={_rvrDestination?.Id} engine={ram.ObjectID} reason=\"{reason}\"");
+        }
 
         public static long SiegeSupplyBudget(bool playerResponse) => playerResponse ? 180_000L : 600_000L;
 
@@ -37,7 +142,8 @@ namespace DOL.GS
         {
             // Reserve against the destination, not the origin region: responders
             // from several towns must share one bounded equipment assignment pool.
-            if (IsInFrontier(bot) || !_rvrSharedEvent || _rvrDestination == null ||
+            if (IsInFrontier(bot) && !PvpCombatant.IsSafeBorderHub(bot.CurrentRegionID, bot.X, bot.Y) ||
+                !_rvrSharedEvent || _rvrDestination == null ||
                 _siegePreSupplyKeep == _rvrDestination.Id || now < _siegeNextAttempt ||
                 !AutonomousSiegeJobs.Eligible(bot) ||
                 !AutonomousRvrEventLayer.IsTargetActive(_rvrDestination.Id, now)) return false;
@@ -45,7 +151,10 @@ namespace DOL.GS
                 .FirstOrDefault(k => _rvrDestination.Id == $"rvr-keep-{k.KeepID}" && AutonomousRvrKeepPolicy.IsSiegeObjective(k));
             if (keep == null) return false;
             if (_siegeJobKeep != null && _siegeJobKeep != _rvrDestination.Id) ReleaseSiegeJob(bot);
-            if (!AutonomousSiegeJobs.TryAcquire(bot, _rvrDestination.Id, 64, keep.Guild == null || keep.Guild != bot.Guild, true,
+            // Equipment for the force actually marching (eight: two rams), not a
+            // notional army: a full warband brought one or two rams in 2003.
+            if (!AutonomousSiegeJobs.TryAcquire(bot, _rvrDestination.Id, Math.Max(1, (int)(bot.Group?.MemberCount ?? 1)),
+                keep.Guild == null || keep.Guild != bot.Guild, false,
                 out var kind, out var slot, _rvrDestination.RegionId))
             { _siegeNextAttempt = now + 10_000; return false; }
             _siegeJobKeep = _siegePreSupplyKeep = _rvrDestination.Id;
@@ -99,12 +208,21 @@ namespace DOL.GS
             if (now < _siegeNextAttempt) return false;
             if (_siegeMoveTo.HasValue && _siegeWeapon != null)
                 return ContinueSiegeMove(bot,now);
-            var nearby = bot.GetNPCsInRadius(6000).ToArray();
+            if (_siegeScanNpcs == null || now >= _siegeScanUntil)
+            {
+                // Bounded local scans, reused for two seconds: an operator
+                // thinks every turn, the siege picture does not change that fast.
+                _siegeScanNpcs = bot.GetNPCsInRadius(6000).ToArray();
+                _siegeScanPlayers = bot.GetPlayersInRadius(6000).ToArray();
+                _siegeScanUntil = now + SiegeScanReuseMilliseconds;
+            }
+            var nearby = _siegeScanNpcs;
             var engines = nearby.OfType<GameSiegeWeapon>().Where(w => w.IsAlive && w.ObjectState == GameObject.eObjectState.Active).ToArray();
             bool enemyEngines = engines.Any(w => BotSiegeRuntime.LegalEnemy(bot, w));
             // Camlann: our side is our guild and its allies, from any realm.
-            int present = nearby.OfType<GameBot>().Count(b => b.IsAlive && (b == bot || PvpCombatant.AreAllied(bot, b))) +
-                bot.GetPlayersInRadius(6000).Count(p => p.IsAlive && PvpCombatant.AreAllied(bot, p));
+            int present = nearby.OfType<GameBot>().Count(b => b.IsAlive && b.ObjectState == GameObject.eObjectState.Active &&
+                    (b == bot || PvpCombatant.AreAllied(bot, b))) + (nearby.Contains(bot) ? 0 : 1) +
+                _siegeScanPlayers.Count(p => p.IsAlive && PvpCombatant.AreAllied(bot, p));
             if (!AutonomousSiegeJobs.TryAcquire(bot, _siegeJobKeep, present, attacking && door!=null, enemyEngines, out _siegeKind, out _siegeSlot))
             { _siegeNextAttempt = now + 10_000; return false; }
             if (now>=_siegeNextTopup)
@@ -380,7 +498,7 @@ namespace DOL.GS
             foreach(var w in AutonomousSiegeOwnership.All(bot)) w.ReleaseControl();
             _siegeJobKeep=null; _siegeWeapon=null; _siegePosition=null; _siegeRepair=null; _siegeRepairUntil=0;
             _siegeSupplyItem=null; _siegeNoTargetSince=0;
-            _siegeMoveTo=null;
+            _siegeMoveTo=null; _siegeScanNpcs=null; _siegeScanPlayers=null;
         }
         private bool ContinueSiegeMove(GameBot bot,long now)
         {

@@ -35,6 +35,7 @@ public enum BotThinkPhase
     NavPathQuery,
     DeathRewards,
     CompanionGearGrant,
+    SiegeJob,
 }
 
 /// <summary>

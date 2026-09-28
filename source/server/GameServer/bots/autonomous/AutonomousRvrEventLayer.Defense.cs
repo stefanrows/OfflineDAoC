@@ -28,9 +28,19 @@ namespace DOL.GS
             if (!AutonomousRvrKeepPolicy.IsSiegeObjective(keep)) return;
             string id = $"rvr-keep-{keep.KeepID}";
             long now = GameLoop.GameLoopTime;
+            // A committed world-bot attacker (or its ram) damaging this keep is
+            // siege progress and presence at the walls.
+            if ((source is GameSiegeWeapon { Owner: GameBot operatorBot } ? operatorBot : source) is GameBot { IsAutonomousWorldBot: true } attackerBot &&
+                attackerBot.TempProperties.GetProperty<string>("RvrEventForce") is { Length: > 0 } attackerForce)
+                ReportBattleActivity(id, now, attackerForce);
             GamePlayer player = PlayerInstigator(source);
             if (source != null && player != null && keep.Guild != ServerRules.PvpCombatant.GuildOf(player))
+            {
                 KeepCombatPressure[id] = now;
+                // A human (or a companion/ram of one) attacking the keep is a real
+                // siege at the walls too; do not call the event off as absent.
+                ReportBattleActivity(id, now);
+            }
             if (player == null || keep.Guild == ServerRules.PvpCombatant.GuildOf(player)) return;
             if (DefenseAlarms.TryGetValue(id, out var previous) && now - previous.Tick < 1000) return;
             DefenseAlarms[id] = new(keep, player, now);

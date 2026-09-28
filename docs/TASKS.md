@@ -112,6 +112,24 @@ Agent sessions on items 45–48: take the role and context from
     (docs/CAMLANN.md decision 7). Point 6 (1.65 doctrine
     tuning) stays open. Cause e (empty RvR expiry) traced to the group task
     clock publishing an empty expiry while paused; not changed yet.
+    Point 6, siege slice 1 (`docs/night/ADVISOR_SIEGE.md`), implemented in
+    source; real-client and live-log check pending: world-bot siege work is
+    wired again for warbands committed to a keep assault. Operators (tanks,
+    melee fighters, Scouts and Rangers) buy a ram at the border hub or at
+    home before the march, place it at the outer gate and operate it within
+    6,000 units of the keep; casters
+    of the same group ride it; melee classes hit the outermost standing gate
+    (within 1,100 units of their approach) once no guard is in reach, then the
+    inner gate; healers stay free; the lord is only attacked after every gate
+    is down. Automatic assaults open only on claimable keeps (no relic keeps,
+    base level 50 only). March credit counts only approach inside the keep's
+    region (entering it once per member); a started automatic siege also
+    closes after 45 minutes without any attacker within 3,000 units, beside
+    the 15-minute no-progress rule. Only a whole one-guild warband of eight
+    opens a siege; smaller forces join only their own guild's siege, and only
+    whole warbands contest a stranger's siege. Garrison strength, one siege
+    per server and the temporary ×10 ram (task 55) are unchanged and remain
+    Aaron's decisions.
 
 ## Implemented in source; installation verification pending
 
