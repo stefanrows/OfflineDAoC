@@ -156,3 +156,44 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 3. Nach Release am Hub 2–5 min regruppieren, bevor die Warband erneut portet; ggf. Teleport-Frequenz pro Warband deckeln.
 4. Belagerung real machen (Task 48 Punkt 6): Rammen/Türen/Lord tatsächlich angreifen, sonst bleibt es bei 0 Eroberungen.
 5. Bug 56 Runde 2: `ExecuteRvr` und `StableNetworkCache` in Scheiben; Koordinator-Lock.
+
+## Abendrunde 2026-09-28 (18:00–20:40): Vorschläge 1–5, SSD-Umzug, Balance
+
+**TL;DR**
+- **Umzug auf die SSD:** alles liegt jetzt unter `C:\OfflineDAoC` (Repo, Install, Dev-Tools, Backups); `D:\OfflineDAoC` ist eine alte Kopie und kann gelöscht werden.
+- **Fünf Pakete gebaut, reviewt, gemergt:** 0.134.0 Hubs/Charm-Pets, 0.135.0 Belagerung Slice 1, 0.136.0 Roaming, 0.137.0 Perf Runde 2, 0.138.0 Balance.
+- **Live bis 0.136.0 bestätigt:** Hub-Tode 0, Teleports 690/h → ~96/h, erste Rammbock-Käufe seit dem 20.09.
+
+| | Version | Was du merkst |
+|---|---|---|
+| ✅ | 0.134.0 | Charm-Pets von Sorcerer/Minstrel/Mentalist-Bots respawnen nicht mehr als wilde Mobs am Bindstein (war 47 % aller PvE-Kills); zweiter Schutzkreis an den äußeren Bindsteinen von Castle Sauvage und Svasud (Entscheidung B/b) |
+| ✅ | 0.135.0 | Bot-Warbands belagern wieder: Rammbock kaufen, setzen, feuern; Nahkämpfer schlagen ans Tor, Caster reiten mit; Lord erst nach allen Toren; nur claimbare Keeps; leere Belagerung endet nach 45 min; nur eine volle Gilden-8er eröffnet |
+| ✅ | 0.136.0 | RvR-Bots meiden Namensmobs ≥55 und dichte Camps, kein Dungeon-Tunnel mehr (Alb/Mid porten über Zuhause), regruppieren vor dem Porten (75 s nach Release, eine Abfahrt pro Warband je 5 min) |
+| ✅ | 0.137.0 | ExecuteRvr-Spitzen waren SQLite-Lesezugriffe (Händlerlisten) im Denkschritt hinter langsamen HDD-Schreibzugriffen; jetzt Hintergrund-Refresh, Stallnetz-Neubau außerhalb der Runde, Stallsuche in Scheiben |
+| ✅ | 0.138.0 | Wardens-Keeps auf Level 1 (Wachen 52, Lord 63, Tor 10.000 HP), eine Belagerung pro Gilde (max. 6), 3 Keeps pro Gilde, Direktschaden-Zauber und Bolts auf Tore mit 50 % (wie 1.46) |
+
+**Live (0.136.0, 19:35–19:50, 1.184 Bots):** 0 Exceptions; Hub-PvE-Tode 0 (vorher 200–770/h); Geister-Mob-Kills 1 (vorher ~2.100/h); Teleports 24 in 15 min, keiner <75 s nach Release; 12 Rammbock-Käufe, 1 Belagerung gestartet, noch kein Tor-Treffer; 6 Mob-Umgehungen, 3 Abbrüche; NpcService Ø 4,5 ms.
+
+**Gelernt**
+- Die Hub-Tode kamen nicht von Frontier-Spawns (Advisor-Vermutung), sondern von leckenden Charm-Pets; die Landepunkte aus der Ausweichtabelle liegen außerhalb, die Teleport-Tabelle landet Spieler im Hub.
+- Bots hatten seit dem 20.09. gar keinen Belagerungscode aktiv (`TryRunSiegeJob` ohne Aufrufer, Camlann Tier 4).
+- Der SSD-Umzug allein senkte die ExecuteRvr-Spitze von 1.234 auf 255 ms.
+- BAF-Patchgeschichte 1.15–1.125 geprüft: Pet-Pull-BAF wurde nie geändert; Stefans 0.133.0-Fix (BAF aus beim gehaltenen Pet-Pull) ist eine Erleichterung gegenüber jeder Live-Version.
+- Deploy scheitert bei offenem Spiel-Client (`game.dll`); `server.sh update` prüft das jetzt vor dem Stopp.
+
+**Bitte im Spiel prüfen**
+
+| | Was | Wie |
+|---|---|---|
+| ❓ | Belagerung: Rammbock am Tor, Caster sitzen auf, Nahkämpfer stehen am Tor (nicht daneben) | einer Warband hinterher |
+| ❓ | Level-1-Keeps: Mauerhöhe niedriger, schweben Wachen? | ein ehemals Level-5-Keep ansehen |
+| ❓ | Nukes/Bolts treffen Tore mit halbem Schaden, DoT/CC nicht | selbst am Tor casten |
+| ❓ | Kein Geister-Mob mehr am Bindstein von Castle Sauvage | dort stehen |
+| ❓ | Petpull-BAF: willst du Stefans „BAF aus“ behalten oder 1.65-Adds auf die Gruppe? | Entscheidung mit Stefan |
+
+**Offen**
+- Tor-Treffer/`LordDefeated` live noch nicht gesehen (Truppen brauchen Marschzeit).
+- 308 snowshoe-bandit-Tode am Svasud-Bindstein unerklärt (BUGS 65).
+- Bug 56 Rest: SelectCamp/ZoneItineraryStep bis 1,1 s, erster synchroner Händler-/Netz-Load nach Start.
+- Relikt-Raids als eigener Modus (TASKS 56), Belagerung Slice 2 (Anmarschrouten, 89 Exterior-Route-Fehler).
+- NearestPorter ohne Realm-Filter; Rider im Spieler-Gruppen-Fall bleibt sitzen (Randfälle aus den Reviews).
