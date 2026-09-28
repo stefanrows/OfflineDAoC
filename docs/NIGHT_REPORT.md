@@ -197,3 +197,6 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 - Bug 56 Rest: SelectCamp/ZoneItineraryStep bis 1,1 s, erster synchroner Händler-/Netz-Load nach Start.
 - Relikt-Raids als eigener Modus (TASKS 56), Belagerung Slice 2 (Anmarschrouten, 89 Exterior-Route-Fehler).
 - NearestPorter ohne Realm-Filter; Rider im Spieler-Gruppen-Fall bleibt sitzen (Randfälle aus den Reviews).
+
+**Abschluss 20:50:** 0.139.0 (= Balance auf Stefans 0.138.0 Petpull-Fix) gebaut, getestet (Server 2.632, Launcher 127 grün), gepusht und um 20:47 installiert. Start ohne Exception; `FRONTIER_BALANCE_PROPERTY` setzte starting_keep_level 4→1 und guilds_claim_limit 1→3; 18 Wardens-Keeps auf Level 1 (`FRONTIER_WARDEN_KEEP_LEVEL`). Server läuft. Beobachtung der ersten Belagerung mit 10.000-HP-Toren steht aus.
+

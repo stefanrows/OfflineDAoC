@@ -12,6 +12,13 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.139.1] - 2026-09-28
+
+### Changed
+
+- Night report: closing note for the evening round (0.139.0 deployed, keep
+  levels and properties migrated at start). Documentation only.
+
 ## [0.139.0] - 2026-09-28
 
 ### Changed
