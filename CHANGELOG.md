@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.135.0] - 2026-09-28
+
+### Fixed
+
+- World-bot warbands can besiege keeps again. The siege job (buy a ram at the
+  hub, place it at the outer gate, fire it) had no caller since the Camlann
+  tier-4 rework on 2026-09-20, so in eleven hours nobody hit a door, no lord
+  was ever exposed and every siege waited out its four-hour timer.
+
+### Changed
+
+- At a keep, melee bots hit the closed outer gate when no guard is in reach,
+  then the inner gate; casters of the operator's group ride the ram; the lord
+  becomes a target only when every gate is down. Rams are operated by tanks,
+  melee fighters, Scouts and Rangers.
+- Only claimable keeps (base level 50, not portal or relic keeps) are chosen
+  for automatic sieges; automatic relic-keep assaults stop until relic raids
+  return as their own mode.
+- A siege nobody reaches closes after 45 minutes without an attacker within
+  3,000 units of the keep (porting back and forth no longer counts as
+  progress), which frees the server's single siege slot for another keep.
+- Only a whole one-guild warband of eight opens a siege; smaller forces join
+  only their own guild's siege. Players attacking a keep count as presence.
+
 ## [0.134.0] - 2026-09-28
 
 ### Fixed
