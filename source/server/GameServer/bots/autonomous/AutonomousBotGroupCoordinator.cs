@@ -150,6 +150,9 @@ public static partial class AutonomousBotGroupCoordinator
         public long NoCombatCasualtySinceTick { get; set; }
         public int CasualtiesWhileWaiting { get; set; }
         public HashSet<long> ReturningFromDeath { get; } = new();
+        // Death count when a member first fell away from the party; cleared
+        // once it is back beside the leader alive. See MaxFailedRejoinDeaths.
+        public Dictionary<long, int> RejoinDeathBaseline { get; } = new();
         public bool RosterReassessmentPending { get; set; }
         public string PhaseBeforeCasualty { get; set; } = string.Empty;
         public eAutonomousObjectiveKind ObjectiveKind { get; init; }
@@ -321,7 +324,7 @@ public static partial class AutonomousBotGroupCoordinator
             session.DungeonInteriorStagingPoint = default;
             session.DungeonArrivalHoldUntilTick = 0;
             session.DungeonArrivalCompletedCampId = string.Empty;
-            session.Phase = "Traveling";
+            SetWorkPhase(session, "Traveling");
             if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve)
                 session.TaskClock.BeginTravel(GameLoop.GameLoopTime, WorldSimulationClock.UtcNow);
             WriteSessionMetadata(session, members);
@@ -413,7 +416,7 @@ public static partial class AutonomousBotGroupCoordinator
                 Y = (int)Math.Round(point.Y),
                 Z = (int)Math.Round(point.Z)
             };
-            session.Phase = "Traveling";
+            SetWorkPhase(session, "Traveling");
             Log.Info("AUTONOMOUS_GROUP_CAMP_REPOSITIONED " + JsonSerializer.Serialize(new
             {
                 group = session.Id,
@@ -475,7 +478,7 @@ public static partial class AutonomousBotGroupCoordinator
             session.DungeonArrivalCompletedCampId = string.Empty;
             // Change the target, not the party or its already-running clock.
             if (!session.Recovery.IsRegrouping && !IsAssemblyPhase(session.Phase))
-                session.Phase = "Choosing group target";
+                SetWorkPhase(session, "Choosing group target");
             WriteSessionMetadata(session, BotMembers(session.Group));
         }
     }
@@ -500,9 +503,22 @@ public static partial class AutonomousBotGroupCoordinator
                     return;
                 StartTaskClock(session, members);
             }
-            session.Phase = "Grinding";
+            SetWorkPhase(session, "Grinding");
             WriteSessionMetadata(session, members);
         }
+    }
+
+    // Bug 29: members at the camp call MarkGrinding/PublishCamp on every AI
+    // pulse. Overwriting "Waiting for resurrection" made the next pulse log a
+    // fresh casualty and restart the 60-second release window, so a distant
+    // corpse was never released (1-2 hours per party in the 0.115.0 log).
+    // While a casualty hold is active, only remember the phase to resume.
+    private static void SetWorkPhase(Session session, string phase)
+    {
+        if (session.Phase == "Waiting for resurrection")
+            session.PhaseBeforeCasualty = phase;
+        else
+            session.Phase = phase;
     }
 
     public static void ReportTravelHold(GameBot leader, Directive directive)
@@ -1189,7 +1205,8 @@ public static partial class AutonomousBotGroupCoordinator
                         else
                         {
                             session.Camp = null;
-                            session.Phase = IsAssemblyPhase(session.Phase) ? session.Phase : "Choosing group target";
+                            if (!IsAssemblyPhase(session.Phase))
+                                SetWorkPhase(session, "Choosing group target");
                         }
                         Log.Info($"AUTONOMOUS_GROUP_ROSTER_REDUCED group={session.Id} removed=\"{bot.Name}\" " +
                                  $"remaining={remaining.Length} reassessAfterCombat={combat}");
@@ -1809,11 +1826,14 @@ public static partial class AutonomousBotGroupCoordinator
             FinishGroupTask(session, "No living group leader remains");
             return false;
         }
-        if (leader != null && session.ReturningFromDeath.Count > 0)
+        if (leader != null && (session.ReturningFromDeath.Count > 0 || session.RejoinDeathBaseline.Count > 0))
             foreach (GameBot member in members.Where(member => member.IsAlive &&
                 !member.IsOnStableMasterRoute && member.CurrentRegionID == leader.CurrentRegionID &&
                 member.GetDistanceTo(leader) <= CohesionRadius))
+            {
                 session.ReturningFromDeath.Remove(MemberKey(member));
+                session.RejoinDeathBaseline.Remove(MemberKey(member));
+            }
 
         // Only enrolled dragon/epic parties use simultaneous hub assembly.
         // Automatic and forced enrollment share this path. Never wait for a
@@ -1981,6 +2001,18 @@ public static partial class AutonomousBotGroupCoordinator
         }
         if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve && session.TaskClock.HasStarted)
         {
+            if (DropMembersAfterFailedRejoins(session, members))
+            {
+                if (session.Ending || !Sessions.ContainsKey(session.Group))
+                    return false;
+                members = BotMembers(session.Group);
+                leader = ChooseLeader(session, members);
+                if (members.Length < 2 || leader == null)
+                {
+                    FinishGroupTask(session, "Not enough active members remain for a group");
+                    return false;
+                }
+            }
             bool casualty = members.Any(member => !member.IsAlive);
             if (casualty)
             {
@@ -1997,7 +2029,11 @@ public static partial class AutonomousBotGroupCoordinator
                              $"dead=\"{string.Join(",", members.Where(member => !member.IsAlive).Select(member => member.Name))}\"");
                 }
                 session.RecoveringBetweenPulls = true;
-                if (groupCombatActive)
+                // Same scope as PveCorpseRecovery: a fight elsewhere in the
+                // party, or a stale combat flag on the corpse itself, is not
+                // a reason to keep this corpse waiting.
+                if (members.Where(member => !member.IsAlive)
+                    .Any(dead => CorpseRescuers(dead, members).Any(IsFighting)))
                     session.NoCombatCasualtySinceTick = 0;
                 else
                     session.NoCombatCasualtySinceTick = session.NoCombatCasualtySinceTick == 0
@@ -2015,8 +2051,13 @@ public static partial class AutonomousBotGroupCoordinator
                 else
                     session.ReturningFromDeath.Clear();
                 session.CasualtiesWhileWaiting = 0;
+                // A camp rejected or a member dropped during the hold leaves
+                // no camp; resume target selection so ReportNoAvailableCamp
+                // can still end a party that finds none.
                 session.Phase = session.PhaseBeforeCasualty is "Traveling" or "Grinding"
-                    ? session.PhaseBeforeCasualty : "Traveling";
+                    ? session.PhaseBeforeCasualty
+                    : session.PhaseBeforeCasualty == "Choosing group target" && session.Camp == null
+                        ? "Choosing group target" : "Traveling";
                 session.PhaseBeforeCasualty = string.Empty;
                 session.NoCombatCasualtySinceTick = 0;
                 GameBot[] readyCohort = session.ReturningFromDeath.Count > 0
@@ -2452,16 +2493,18 @@ public static partial class AutonomousBotGroupCoordinator
                 !session.TaskClock.HasStarted || IsAssemblyPhase(session.Phase))
                 return PveCorpseDisposition.NotManaged;
             GameBot[] members = BotMembers(session.Group);
-            // Expedition parties remain groups of eight, but a nearby sister
-            // party can keep this corpse safe and resurrect it. Distant fights
-            // must not keep an abandoned corpse waiting indefinitely.
-            GameBot[] rescuers = AutonomousRealmRaid.GetView(corpseGroup) == null ? members :
-                AutonomousRealmRaid.SupportMembers(deadBot).OfType<GameBot>()
-                    .Where(member => member.ObjectState == GameObject.eObjectState.Active &&
-                        member.CurrentRegionID == deadBot.CurrentRegionID &&
-                        member.IsWithinRadius(deadBot, WorldMgr.VISIBILITY_DISTANCE)).ToArray();
-            bool combat = rescuers.Any(member => member.IsAlive && (member.InCombat || member.IsAttacking ||
-                (member.Brain as BotBrain)?.HasAggro == true));
+            // Only living members near the corpse can guard or raise it. A
+            // corpse regions or a zone away from its party released at once in
+            // 2003; fights elsewhere in the party must not keep it waiting.
+            GameBot[] rescuers = CorpseRescuers(deadBot, members);
+            if (rescuers.Length == 0)
+            {
+                Log.Warn($"AUTONOMOUS_GROUP_REMOTE_CORPSE_RELEASE group={session.Id} bot=\"{deadBot.Name}\" " +
+                         $"corpse={deadBot.CurrentRegionID}:{deadBot.X},{deadBot.Y},{deadBot.Z} " +
+                         $"leader=\"{session.Leader?.Name}\" leaderRegion={session.Leader?.CurrentRegionID} action=release-and-rejoin");
+                return PveCorpseDisposition.ReleaseAndRejoin;
+            }
+            bool combat = rescuers.Any(IsFighting);
             if (combat)
             {
                 session.NoCombatCasualtySinceTick = 0;
@@ -2488,6 +2531,54 @@ public static partial class AutonomousBotGroupCoordinator
             return PveCorpseDisposition.ReleaseAndRejoin;
         }
     }
+
+    // Bug 29: a released member that dies again before it is back beside its
+    // leader (live 0.115.0: a Skald killed 33 times at the Svasud Faste bind
+    // while its leader waited in Albion) held the party until the shared task
+    // expired. After its first death plus this many further deaths without
+    // rejoining, the party drops it and plays on with the members it has; a
+    // pair ends and both bots return to ordinary matchmaking.
+    public const int MaxFailedRejoinDeaths = 2;
+
+    private static bool DropMembersAfterFailedRejoins(Session session, GameBot[] members)
+    {
+        bool dropped = false;
+        foreach (GameBot member in members.Where(member => !member.IsAlive))
+        {
+            long key = MemberKey(member);
+            int deaths = member.PersistentRecord?.DeathCount ?? 0;
+            if (!session.RejoinDeathBaseline.TryGetValue(key, out int baseline))
+            {
+                session.RejoinDeathBaseline[key] = deaths;
+                continue;
+            }
+            if (deaths - baseline < MaxFailedRejoinDeaths)
+                continue;
+            session.RejoinDeathBaseline.Remove(key);
+            session.ReturningFromDeath.Remove(key);
+            session.Group.RemoveMember(member, retainSingleRemainingMember: true);
+            Log.Warn($"AUTONOMOUS_GROUP_REJOIN_FAILED group={session.Id} bot=\"{member.Name}\" " +
+                     $"deathsWithoutRejoin={deaths - baseline + 1} corpse={member.CurrentRegionID}:{member.X},{member.Y},{member.Z} " +
+                     $"leaderRegion={session.Leader?.CurrentRegionID} action=drop-member remaining={BotMembers(session.Group).Length}");
+            AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(member,
+                "Choosing independent work after failing to rejoin the party");
+            dropped = true;
+            if (session.Ending)
+                break;
+        }
+        return dropped;
+    }
+
+    private static bool IsFighting(GameBot member) =>
+        member.IsAlive && (member.InCombat || member.IsAttacking || (member.Brain as BotBrain)?.HasAggro == true);
+
+    // Living, active party members in the corpse's region and within
+    // visibility range: the only ones who can reach it for a resurrection.
+    private static GameBot[] CorpseRescuers(GameBot deadBot, GameBot[] members) =>
+        members.Where(member => member != deadBot && member.IsAlive &&
+            member.ObjectState == GameObject.eObjectState.Active &&
+            member.CurrentRegionID == deadBot.CurrentRegionID &&
+            member.IsWithinRadius(deadBot, WorldMgr.VISIBILITY_DISTANCE)).ToArray();
 
     public static bool IsNamedRendezvousArea(AbstractArea area) =>
         area != null && area is not Area.BindArea &&
