@@ -47,7 +47,7 @@ public static partial class AutonomousRvrEventLayer
     public static void ReportBattleActivity(string targetId, long nowTick, string forceId = null)
     {
         if (string.IsNullOrWhiteSpace(targetId)) return;
-        lock (Sync)
+        using (EnterSync())
             if (Events.TryGetValue(targetId, out var active) &&
                 (forceId == null || active.Attackers.ContainsKey(forceId) || active.ThirdRealm.ContainsKey(forceId)))
             {
@@ -86,7 +86,7 @@ public static partial class AutonomousRvrEventLayer
         bool inCombat, long nowTick)
     {
         if (string.IsNullOrWhiteSpace(targetId) || string.IsNullOrWhiteSpace(forceId)) return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!Events.TryGetValue(targetId, out var active) || !active.BattleStarted ||
                 !(active.Attackers.ContainsKey(forceId) || active.ThirdRealm.ContainsKey(forceId))) return;
@@ -129,7 +129,7 @@ public static partial class AutonomousRvrEventLayer
     public static void AbandonTarget(string forceId, string targetId, long nowTick)
     {
         if (string.IsNullOrWhiteSpace(forceId) || string.IsNullOrWhiteSpace(targetId)) return;
-        lock (Sync)
+        using (EnterSync())
         {
             AbandonedTargets[(forceId, targetId)] = nowTick + AbandonedTargetMilliseconds;
             if (Events.TryGetValue(targetId, out var active))
@@ -153,7 +153,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static bool IsAbandoned(string forceId, string targetId, long nowTick)
     {
-        lock (Sync) return IsAbandonedLocked(forceId, targetId, nowTick);
+        using (EnterSync()) return IsAbandonedLocked(forceId, targetId, nowTick);
     }
 
     private static bool IsAbandonedLocked(string forceId, string targetId, long nowTick)
@@ -224,6 +224,9 @@ public static partial class AutonomousRvrEventLayer
     }
 
     private static readonly object Sync = new();
+    // Same monitor as a lock statement; the wait for it is timed as
+    // BOT_THINK_PROFILE phase RvrEventLockWait (bug 56 round 2).
+    private static BotThinkProfiler.MeasuredLock EnterSync() => BotThinkProfiler.Lock(Sync, BotThinkPhase.RvrEventLockWait);
     private static readonly Dictionary<string, ActiveEvent> Events = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, (long ExpiresTick, Dictionary<eRealm, Dictionary<string, int>> Participants)> CarrierEvents = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, LiveObjective> CarrierTargets = new(StringComparer.Ordinal);
@@ -235,7 +238,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static bool ForceStart(LiveObjective target, eRealm attacker, long now, out string reason)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             if (target == null || target.IsPortalKeep || target.IsRelicCarrier ||
                 attacker is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia) ||
@@ -261,7 +264,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static bool ResetCooldown(string id)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             if (Events.ContainsKey(id) || CarrierEvents.ContainsKey(id)) return false;
             Cooldowns.Remove(id);
@@ -271,12 +274,12 @@ public static partial class AutonomousRvrEventLayer
 
     public static long CooldownRemaining(string id, long now)
     {
-        lock (Sync) return Math.Max(0, Cooldowns.GetValueOrDefault(id) - now);
+        using (EnterSync()) return Math.Max(0, Cooldowns.GetValueOrDefault(id) - now);
     }
 
     public static Dictionary<string, string> ForceTargets()
     {
-        lock (Sync)
+        using (EnterSync())
         {
             var result = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var e in Events.Values)
@@ -344,7 +347,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static Plan ChooseOrJoin(Force force, IReadOnlyCollection<LiveObjective> objectives, long nowTick, double roll)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             // Defensive boundary: protected hubs cannot become new events,
             // reinforcements or reserve patrols, even if a caller supplies one.
@@ -381,7 +384,7 @@ public static partial class AutonomousRvrEventLayer
         if (force == null || string.IsNullOrWhiteSpace(force.GroupId) || force.Realm == eRealm.None || objectives == null)
             return null;
 
-        lock (Sync)
+        using (EnterSync())
         {
             Cleanup(nowTick, objectives);
             if ((force.AverageLevel < 50 || force.MinimumMemberLevel < 50) && !force.CampaignEligible)
@@ -611,7 +614,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static BattleNotice[] Snapshot()
     {
-        lock (Sync)
+        using (EnterSync())
         {
             Expire(GameLoop.GameLoopTime);
             return Events.Values.Where(entry => entry.ExpiresTick > GameLoop.GameLoopTime)
@@ -640,7 +643,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static RallyOrder GetRallyOrder(string forceId, eRealm realm, long nowTick)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             Expire(nowTick);
             var active = Events.Values.FirstOrDefault(entry => !entry.BattleStarted && BucketOf(entry, forceId) != null);
@@ -663,14 +666,14 @@ public static partial class AutonomousRvrEventLayer
 
     public static bool IsRallying(string forceId, long nowTick)
     {
-        lock (Sync)
+        using (EnterSync())
             return Events.Values.Any(entry => !entry.BattleStarted && entry.ExpiresTick > nowTick &&
                 (entry.Attackers.ContainsKey(forceId) || entry.Defenders.ContainsKey(forceId) || entry.ThirdRealm.ContainsKey(forceId)));
     }
 
     public static bool IsBattleForce(string forceId, long nowTick)
     {
-        lock (Sync)
+        using (EnterSync())
             return Events.Values.Any(entry => entry.BattleStarted && entry.ExpiresTick > nowTick &&
                 (entry.Attackers.ContainsKey(forceId) || entry.Defenders.ContainsKey(forceId) || entry.ThirdRealm.ContainsKey(forceId))) ||
                 CarrierEvents.Values.Any(entry => entry.ExpiresTick > nowTick && entry.Participants.Values.Any(realm => realm.ContainsKey(forceId)));
@@ -678,7 +681,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static Plan KeepPlan(string forceId, eRealm realm, long nowTick)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             var active = Events.Values.FirstOrDefault(entry => entry.ExpiresTick > nowTick && BucketOf(entry, forceId) != null &&
                 !IsAbandonedLocked(forceId, entry.TargetId, nowTick));
@@ -702,7 +705,7 @@ public static partial class AutonomousRvrEventLayer
             bot.ObjectState != GameObject.eObjectState.Active ||
             !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) return false;
         string force = bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}";
-        lock (Sync)
+        using (EnterSync())
         {
             foreach (var active in Events.Values)
             {
@@ -752,7 +755,7 @@ public static partial class AutonomousRvrEventLayer
     public static void ReportAttendance(string targetId, string forceId, eRealm realm, long botId, bool inPosition, long nowTick,
         GameBot bot = null, Vector3 position = default)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             Expire(nowTick);
             if (!Events.TryGetValue(targetId, out var active) || BucketOf(active, forceId) is not { } bucket) return;
@@ -770,7 +773,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static bool TryConsumeRelease(string forceId, long nowTick, out string reason)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             Expire(nowTick);
             return ReleasedForces.Remove(forceId, out reason);
@@ -779,7 +782,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static void ReportTravel(string targetId, string forceId, long memberId, double distance, bool arrived, long nowTick, GameBot bot = null)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             if (!Events.TryGetValue(targetId, out var active) || active.BattleStarted ||
                 !(active.Attackers.ContainsKey(forceId) || active.Defenders.ContainsKey(forceId) || active.ThirdRealm.ContainsKey(forceId))) return;
@@ -799,7 +802,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static void RemoveForce(string forceId)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             foreach (var active in Events.Values)
             {
@@ -819,7 +822,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static long CarrierRemainingMilliseconds(string targetId, long nowTick)
     {
-        lock (Sync)
+        using (EnterSync())
             return CarrierEvents.TryGetValue(targetId, out var active) ? Math.Max(0, active.ExpiresTick - nowTick) : 0;
     }
 
@@ -1034,7 +1037,7 @@ public static partial class AutonomousRvrEventLayer
     {
         if (string.IsNullOrWhiteSpace(forceId))
             return false;
-        lock (Sync)
+        using (EnterSync())
             return Events.Values.Any(active => active.ExpiresTick > nowTick &&
                        (active.Attackers.ContainsKey(forceId) || active.Defenders.ContainsKey(forceId) ||
                         active.ThirdRealm.ContainsKey(forceId))) ||
@@ -1045,7 +1048,7 @@ public static partial class AutonomousRvrEventLayer
     public static bool IsPlayerDefenseResponse(string targetId, long nowTick)
     {
         if (string.IsNullOrWhiteSpace(targetId)) return false;
-        lock (Sync)
+        using (EnterSync())
             return Events.TryGetValue(targetId, out var active) && active.ExpiresTick > nowTick &&
                 (active.DefenseReaction || !string.IsNullOrEmpty(active.PlayerAccount));
     }
@@ -1054,7 +1057,7 @@ public static partial class AutonomousRvrEventLayer
     {
         if (string.IsNullOrWhiteSpace(targetId))
             return false;
-        lock (Sync)
+        using (EnterSync())
             return (Events.TryGetValue(targetId, out ActiveEvent active) && active.ExpiresTick > nowTick) ||
                    (CarrierEvents.TryGetValue(targetId, out var carrier) && carrier.ExpiresTick > nowTick);
     }
@@ -1063,7 +1066,7 @@ public static partial class AutonomousRvrEventLayer
     {
         if (string.IsNullOrWhiteSpace(targetId))
             return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (Events.TryGetValue(targetId, out var active))
                 EndEvent(active, nowTick, "Keep captured: siege ended", winner);
@@ -1089,7 +1092,7 @@ public static partial class AutonomousRvrEventLayer
 
     public static void TransferToRelicCarrier(string keepId, string carrierId, long nowTick, LiveObjective carrierAnchor = null)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             if (!Events.TryGetValue(keepId, out var active) || active.ExpiresTick <= nowTick) return;
             if (!active.BattleStarted)

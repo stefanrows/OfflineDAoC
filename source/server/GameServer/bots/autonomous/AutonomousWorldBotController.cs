@@ -378,7 +378,7 @@ namespace DOL.GS
                     if (_rvrDestination == null && nowTick >= _nextRvrPlanReview)
                     {
                         _nextRvrPlanReview = nowTick + 45_000;
-                        _rvrDestination = ChooseRvrDestination(bot);
+                        _rvrDestination = ChooseRvrDestinationTimed(bot);
                         _hunterPatrolArrivedTick = 0;
                     }
                     if (AutonomousRvrEventLayer.IsBattleForce(eventForce, nowTick))
@@ -1512,7 +1512,7 @@ namespace DOL.GS
             // Siege work (buy, place and operate a ram, or ride it) comes before
             // ordinary keep targets for forces committed to a keep assault.
             if (TryRunSiegeWork(bot)) return true;
-            GameLiving enemy = FindRvrTarget(bot);
+            GameLiving enemy = FindRvrTargetTimed(bot);
             if (enemy != null)
             {
                 bot.StopMovingOnPath();
@@ -1619,7 +1619,7 @@ namespace DOL.GS
                 (_rvrIntent == AutonomousRvrEventLayer.Intent.Roam && atPatrol &&
                  _hunterPatrolArrivedTick > 0 && GameLoop.GameLoopTime - _hunterPatrolArrivedTick >= RvrLingerMilliseconds(bot)))
             {
-                _rvrDestination = ChooseRvrDestination(bot);
+                _rvrDestination = ChooseRvrDestinationTimed(bot);
                 _hunterPatrolArrivedTick = 0;
                 _rvrLingerMs = AutonomousRvrDoctrine.LingerMilliseconds(AutonomousRvrDoctrineRuntime.For(bot),
                     Random.Shared.NextDouble());
@@ -3734,10 +3734,11 @@ namespace DOL.GS
                 foreach (GameStableMaster expired in _failedBoardingMasters
                              .Where(pair => pair.Value <= GameLoop.GameLoopTime).Select(pair => pair.Key).ToArray())
                     _failedBoardingMasters.Remove(expired);
-                _pendingStableChoice = AutonomousStableRoutePlanner.FindBest(bot, waypoint,
+                if (!ContinueStableRouteSearch(bot, waypoint,
                     _failedBoardingMasters.Count == 0 ? null : _failedBoardingMasters.Keys.ToHashSet(),
                     expedition == null && _groupDirective?.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
-                    AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase));
+                    AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase), out _pendingStableChoice))
+                    return false;
                 _pendingStableWaypoint = waypoint;
                 _boardingProgressPosition = new(bot.X, bot.Y, bot.Z);
                 _boardingProgressTick = GameLoop.GameLoopTime;
@@ -4312,6 +4313,7 @@ namespace DOL.GS
 
         private void ResetRouteOrderState()
         {
+            _stableSearch = null;
             _capitalTransit = null;
             _resolvedBoundaryStep = null;
             _resolvedBoundaryZone = null;

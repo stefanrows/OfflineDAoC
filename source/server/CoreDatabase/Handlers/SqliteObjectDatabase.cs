@@ -749,9 +749,19 @@ namespace DOL.Database.Handlers
             // even a SELECT connection can request a database lock here. Keep
             // that setup out of concurrent write transactions; the SELECT itself
             // still runs outside this gate. Writers already hold this reentrant lock.
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
             lock (WriteSerializationLock)
                 connection.Open();
+            ConnectionOpenObserver?.Invoke(System.Diagnostics.Stopwatch.GetTimestamp() - started);
         }
+
+        /// <summary>
+        /// Receives the Stopwatch ticks each connection open took, including the
+        /// wait for the write gate (bug 56: a SELECT on a brain turn queued behind
+        /// pending saves). The game server's bot-think profiler attributes it to
+        /// the running brain turn; it must be cheap and never throw.
+        /// </summary>
+        public static Action<long> ConnectionOpenObserver { get; set; }
 
         protected override void CloseConnection(DbConnection connection)
         {

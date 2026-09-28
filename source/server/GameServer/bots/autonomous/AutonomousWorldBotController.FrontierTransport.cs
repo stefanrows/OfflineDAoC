@@ -40,6 +40,7 @@ public sealed partial class AutonomousWorldBotController
 
     private bool TryFrontierTransport(GameBot bot, CampDestination destination)
     {
+        using var profile = BotThinkProfiler.Measure(BotThinkPhase.RvrFrontierTransport);
         if (bot.CurrentRegionID == destination.RegionId || bot.CurrentRegionID is not (1 or 100 or 200) ||
             destination.RegionId is not (1 or 100 or 200) || GameRelic.IsPlayerCarryingRelic(bot)) return false;
         var passage = AutonomousFrontierTransport.Destination(bot.Realm,destination.RegionId);

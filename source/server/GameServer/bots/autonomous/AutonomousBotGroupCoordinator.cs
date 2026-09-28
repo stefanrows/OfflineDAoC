@@ -30,6 +30,9 @@ public static partial class AutonomousBotGroupCoordinator
     public const long LeaderStagingTimeoutMilliseconds = 20 * 60_000L;
     public const long RemoteMeetupTimeoutMilliseconds = 45 * 60_000L;
     private static readonly object Sync = new();
+    // Same monitor as a lock statement; the wait for it is timed as
+    // BOT_THINK_PROFILE phase CoordinatorLockWait (bug 56 round 2).
+    private static BotThinkProfiler.MeasuredLock EnterSync() => BotThinkProfiler.Lock(Sync, BotThinkPhase.CoordinatorLockWait);
     private static readonly Dictionary<Group, Session> Sessions = new();
     // Callers hold Sync; the membership property is evaluated just once here.
     private static bool TryGetSession(Group group, out Session session)
@@ -186,10 +189,11 @@ public static partial class AutonomousBotGroupCoordinator
             // Tier 4 has no realm-wide keep defense or RvR rally pulse. PvE
             // expeditions remain owned by AutonomousRealmRaid.
             AutonomousObjectiveAssignments.ReconcileIfDue();
-            lock (Sync)
+            using (EnterSync())
             {
                 if (_lastMaintenanceTick == now) return;
                 Interlocked.Exchange(ref _lastMaintenanceTick, now);
+                using var maintenance = BotThinkProfiler.Measure(BotThinkPhase.CoordinatorMaintenance);
                 RemoveBrokenSessions();
                 ExpireStalledTargetChoices(now);
                 TryFormGroups();
@@ -206,7 +210,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     public static string RvrForceId(GameBot bot)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             return bot.Group != null && TryGetSession(bot.Group, out Session session) &&
                 session.ObjectiveKind == eAutonomousObjectiveKind.RvR ? session.Id : $"rvr-{bot.DatabaseID}";
@@ -220,8 +224,19 @@ public static partial class AutonomousBotGroupCoordinator
 
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.GroupCoordinatorPulse);
         PrepareCoordinatorTick();
-        lock (Sync)
+        // A solo bot has no session: only its own stale group metadata is
+        // cleared, exactly as inside the lock. Groups gain members only in the
+        // population maintenance, which runs before the parallel brain phase,
+        // so this turn cannot miss a new group. Solo world bots no longer queue
+        // on the population-wide lock every turn (bug 56 round 2).
+        if (bot.Group == null)
         {
+            ClearMetadata(bot, false);
+            return null;
+        }
+        using (EnterSync())
+        {
+            using var sessionWork = BotThinkProfiler.Measure(BotThinkPhase.CoordinatorSessionUpdate);
             if (bot.Group != null && TryGetSession(bot.Group, out Session currentSession))
             {
                 RemoveBrokenSession(currentSession.Group, currentSession);
@@ -317,7 +332,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.Group == null || camp == null)
             return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) ||
                 IsAssemblyPhase(session.Phase) || session.Recovery.IsRegrouping)
@@ -340,7 +355,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     public static void ReportNoAvailableCamp(GameBot bot)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             if (bot?.Group == null || !TryGetSession(bot.Group, out Session session) ||
                 session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve || session.Camp != null ||
@@ -367,7 +382,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.Group == null)
             return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Camp == null ||
                 session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve)
@@ -407,7 +422,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.Group == null)
             return false;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Camp?.Id != campId ||
                 session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve)
@@ -441,7 +456,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     public static HashSet<string> RejectedDungeonCamps(GameBot bot)
     {
-        lock (Sync)
+        using (EnterSync())
         {
             if (bot?.Group == null || !TryGetSession(bot.Group, out Session session))
                 return new(StringComparer.Ordinal);
@@ -459,7 +474,7 @@ public static partial class AutonomousBotGroupCoordinator
     public static void RejectUnreachableCamp(GameBot bot, string campId, string reason = "")
     {
         if (AutonomousRealmRaid.GetView(bot?.Group) != null) return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (bot?.Group == null || !TryGetSession(bot.Group, out Session session) || session.Camp?.Id != campId)
                 return;
@@ -494,7 +509,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.Group == null)
             return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Camp == null || session.Recovery.IsRegrouping)
                 return;
@@ -537,7 +552,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (leader?.Group == null || directive?.ObjectiveKind != eAutonomousObjectiveKind.GroupPve)
             return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(leader.Group, out Session session) || session.Id != directive.GroupId ||
                 leader != session.Leader || GameLoop.GameLoopTime < session.NextTravelHoldDiagnosticTick ||
@@ -586,7 +601,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.IsPlayerLedGroup || bot.Group == null)
             return false;
-        lock (Sync)
+        using (EnterSync())
             return TryGetSession(bot.Group, out Session session) && session.Recovery.IsRegrouping;
     }
 
@@ -594,7 +609,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.IsPlayerLedGroup || bot.Group == null)
             return false;
-        lock (Sync)
+        using (EnterSync())
             return TryGetSession(bot.Group, out Session session) && IsAssemblyPhase(session.Phase);
     }
 
@@ -603,7 +618,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (bot?.Group == null || directive == null ||
             !directive.RemoteMemberIds.Contains(MemberKey(bot)))
             return false;
-        lock (Sync)
+        using (EnterSync())
             return TryGetSession(bot.Group, out Session session) && session.Id == directive.GroupId &&
                 !session.Attendance.HasArrived(MemberKey(bot));
     }
@@ -623,7 +638,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (bot.Group == null)
             return false;
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.CoordinatorWatchdogCheck);
-        lock (Sync)
+        using (EnterSync())
         {
             // Membership can change between the brain thread and coordinator.
             // Capture once: a second property read could become null mid-check.
@@ -696,7 +711,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsPlayerLedGroup || bot.Group == null) return;
         if (AutonomousRealmRaid.GetView(bot.Group) != null) return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (TryGetSession(bot.Group, out Session session) && !session.Ending &&
                 session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve)
@@ -714,7 +729,7 @@ public static partial class AutonomousBotGroupCoordinator
             crossing.SourceRegion == crossing.TargetRegion)
             return true;
 
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Id != directive.GroupId)
                 return false;
@@ -755,7 +770,7 @@ public static partial class AutonomousBotGroupCoordinator
             crossing == null || crossing.SourceRegion == crossing.TargetRegion ||
             crossing.TargetRegion != directive.Camp.RegionId || bot == directive.Leader)
             return false;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Id != directive.GroupId)
                 return false;
@@ -800,7 +815,7 @@ public static partial class AutonomousBotGroupCoordinator
             bot.CurrentRegionID != directive.Camp.RegionId || directive.GroupCombatActive)
             return false;
 
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Id != directive.GroupId)
                 return false;
@@ -861,7 +876,7 @@ public static partial class AutonomousBotGroupCoordinator
         staging = default;
         if (bot?.Group == null || directive?.IsDynamic != true || directive.Camp?.IsDungeon != true)
             return false;
-        lock (Sync)
+        using (EnterSync())
         {
             return TryGetSession(bot.Group, out Session session) &&
                    session.Id == directive.GroupId &&
@@ -875,7 +890,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (bot?.Group == null || directive?.IsDynamic != true || directive.Camp?.IsDungeon != true ||
             bot.CurrentRegionID == directive.Camp.RegionId)
             return false;
-        lock (Sync)
+        using (EnterSync())
             return TryGetSession(bot.Group, out Session session) && session.Id == directive.GroupId &&
                 session.DungeonArrivalRegion == directive.Camp.RegionId &&
                 BotMembers(bot.Group).Any(member => member.CurrentRegionID == directive.Camp.RegionId);
@@ -884,7 +899,7 @@ public static partial class AutonomousBotGroupCoordinator
     public static void MarkCombatObserved(Group group)
     {
         if (group == null) return;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!Sessions.TryGetValue(group, out Session session)) return;
             session.CombatObserved = true;
@@ -907,7 +922,7 @@ public static partial class AutonomousBotGroupCoordinator
             reporter.IsAutonomousWorldBot != true || reporter.IsTemporaryGroupHelper)
             return false;
 
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(reporter.Group, out Session session))
                 return false;
@@ -981,7 +996,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.IsPlayerLedGroup || bot.Group == null)
             return true;
-        lock (Sync)
+        using (EnterSync())
         {
             Group group = bot.Group;
             if (group == null || !Sessions.TryGetValue(group, out Session session))
@@ -1082,7 +1097,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.Group != null)
         {
-            lock (Sync)
+            using (EnterSync())
             {
                 if (TryGetSession(bot.Group, out Session session) && session.Id == groupId &&
                     session.RendezvousSlots.TryGetValue(MemberKey(bot), out Vector3 slot))
@@ -1096,7 +1111,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.Group == null)
             return false;
-        lock (Sync)
+        using (EnterSync())
         {
             if (!TryGetSession(bot.Group, out Session session) || session.Id != groupId) return false;
             if (session.RaidMusterEvent != null && session.ExpeditionRouteRetry.TryGetValue(MemberKey(bot), out long retry) &&
@@ -1140,7 +1155,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (bot?.Group == null || string.IsNullOrWhiteSpace(groupId))
             return false;
-        lock (Sync)
+        using (EnterSync())
         {
             Group group = bot.Group;
             if (!Sessions.TryGetValue(group, out Session session) || session.Id != groupId ||
@@ -1201,7 +1216,7 @@ public static partial class AutonomousBotGroupCoordinator
     {
         if (living is not GameBot bot || !bot.IsAutonomousWorldBot || bot.IsTemporaryGroupHelper)
             return;
-        lock (Sync)
+        using (EnterSync())
         {
             ClearMetadata(bot, true);
             if (group != null && Sessions.TryGetValue(group, out Session session))
@@ -1281,7 +1296,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (group == null)
             return;
         AutonomousDefensivePull.Cancel(group);
-        lock (Sync)
+        using (EnterSync())
         {
             AutonomousRealmRaid.RemoveParty(group);
             if (Sessions.TryGetValue(group, out Session ending) && ending.ObjectiveKind == eAutonomousObjectiveKind.RvR)
@@ -2551,7 +2566,7 @@ public static partial class AutonomousBotGroupCoordinator
             return PveCorpseDisposition.NotManaged;
         if (AutonomousRealmRaid.GetView(corpseGroup) != null)
             return AutonomousRealmRaid.CorpseRecovery(deadBot);
-        lock (Sync)
+        using (EnterSync())
         {
             if (deadBot.Group != corpseGroup || !Sessions.TryGetValue(corpseGroup, out Session session) ||
                 session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve ||
@@ -2894,7 +2909,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     public static bool IsLevelFiftyPveGroup(Group group)
     {
-        lock (Sync)
+        using (EnterSync())
             return TryGetSession(group, out Session session) &&
                 AutonomousDefensivePull.UsesDefensivePull(session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve,
                     group.MemberCount, BotMembers(group).All(member => member.Level == 50));

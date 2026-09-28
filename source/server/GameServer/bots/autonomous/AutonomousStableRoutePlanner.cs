@@ -23,7 +23,7 @@ public static class AutonomousStableRouteLifecycle
 /// actual waypoint travel: this class only chooses which ticket to board first.
 /// After each ride the bot replans, allowing any number of useful connections.
 /// </summary>
-public static class AutonomousStableRoutePlanner
+public static partial class AutonomousStableRoutePlanner
 {
     public const short StableSpeed = 1500;
     private const int MaximumPathPoints = 5000;
@@ -32,9 +32,11 @@ public static class AutonomousStableRoutePlanner
     // master state is validated on every read below. The rebuild reads the
     // merchant lists from SQLite and proves each boarding corridor, so it must
     // neither run every five minutes on a brain turn nor block other regions.
+    // After the first build it refreshes on the background refresh thread; a
+    // brain turn keeps the previous network meanwhile (bug 56 round 2).
     private static readonly TimeSpan NetworkCacheLifetime = TimeSpan.FromMinutes(30);
     private static readonly AutonomousRefreshingCache<(ushort RegionId, eRealm Realm), Candidate[]> NetworkCache =
-        new(NetworkCacheLifetime);
+        new(NetworkCacheLifetime, refreshInBackground: true);
 
     public readonly record struct LegMetric(
         int Index,
@@ -176,80 +178,12 @@ public static class AutonomousStableRoutePlanner
         bool boundedMeetupApproach = false)
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.StableRouteFindBest);
-        if (bot?.CurrentRegion == null)
+        // The same plan as a sliced Search, run to the end in this turn.
+        Search search = BeginSearch(bot, goal, excludedBoardingMasters, boundedMeetupApproach, long.MaxValue);
+        if (search == null)
             return null;
-
-        List<Candidate> candidates = GetCandidates(bot);
-        if (candidates.Count == 0)
-            return null;
-
-        LegMetric[] metrics = candidates.Select((candidate, index) => new LegMetric(
-            index,
-            candidate.BoardingPoint.X,
-            candidate.BoardingPoint.Y,
-            candidate.End.X,
-            candidate.End.Y,
-            candidate.RideSeconds,
-            Math.Max(0L, (long)candidate.Ticket.Price))).ToArray();
-
-        long money = bot.DatabaseID > 0 ? AutonomousBotEconomy.GetMoney(bot.DatabaseID) : 0;
-        // Exclude only boarding here. A later horse can still reach that master
-        // without repeating this bot's failed walk from its current location.
-        HashSet<int> excluded = excludedBoardingMasters == null ? null : candidates
-            .Select((candidate, index) => (candidate, index))
-            .Where(entry => excludedBoardingMasters.Contains(entry.candidate.Master))
-            .Select(entry => entry.index).ToHashSet();
-
-        // A timed meetup must not spend most of its fifteen-minute attendance
-        // window walking away to a distant first horse (the Vuloch failures).
-        // Later network legs remain legal; outside assembly behavior is unchanged.
-        if (boundedMeetupApproach)
-            for (int i = 0; i < candidates.Count; i++)
-                if (!CanApproachStableDuringMeetup(Distance(bot.X, bot.Y,
-                        candidates[i].BoardingPoint.X, candidates[i].BoardingPoint.Y), bot.MaxSpeed))
-                    (excluded ??= []).Add(i);
-
-        // A stable on another disconnected surface can be closer in straight
-        // line than the reachable stable inside a fortress.  Exclude it only as
-        // this journey's first boarding leg after proving that both points are
-        // in the same zone but have no Detour corridor.  It remains available
-        // as a later horse-network destination.
-        Zone currentZone = bot.CurrentZone;
-        IPathfindingMgr nav = PathfindingProvider.Instance;
-        if (currentZone != null && nav.IsAvailable && nav.HasNavmesh(currentZone) &&
-            AutonomousNavigationSurface.TryFloor(nav, currentZone,
-                new(bot.X, bot.Y, bot.Z), out Vector3 currentFloor))
-        {
-            foreach ((Candidate candidate, int index) in candidates.Select((candidate, index) => (candidate, index)))
-            {
-                Zone boardingZone = bot.CurrentRegion.GetZone(
-                    (int)candidate.BoardingPoint.X, (int)candidate.BoardingPoint.Y);
-                bool sameZone = boardingZone == currentZone;
-                bool completeCorridor = !sameZone || AutonomousZoneItinerary.HasCompleteCorridor(
-                    nav, currentZone, currentFloor, candidate.BoardingPoint);
-                if (CanUseAsFirstBoardingLeg(sameZone, completeCorridor))
-                    continue;
-                (excluded ??= []).Add(index);
-            }
-        }
-        RouteDecision? decision = ChooseFirstLeg(
-            bot.X, bot.Y, goal.X, goal.Y, Math.Max(1, (int)bot.MaxSpeed), money, metrics, excluded);
-        if (!decision.HasValue)
-            return null;
-
-        Candidate selected = candidates[decision.Value.FirstLegIndex];
-        return new Choice(
-            selected.Master,
-            selected.Ticket,
-            CloneRoute(selected.Route),
-            TicketDestination(selected.Ticket),
-            selected.RideSeconds,
-            decision.Value.EstimatedSeconds,
-            decision.Value.DirectWalkSeconds,
-            decision.Value.HopCount,
-            decision.Value.PlannedPrice,
-            selected.BoardingPoint,
-            selected.InteractionPoint);
+        search.Continue(out Choice choice);
+        return choice;
     }
 
     public static bool CanUseAsFirstBoardingLeg(bool sameZone, bool completeCorridor) =>
