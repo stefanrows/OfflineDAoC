@@ -97,7 +97,9 @@ namespace DOL.GS
             State state = States.GetOrCreateValue(scope);
             int range = bot.castingComponent.CalculateSpellRange(spell);
             var candidates = AutonomousRealmRaid.SupportMembers(bot).Concat(AutonomousRealmRaid.SupportPets(bot, range)).Concat(
-                TemporaryCompanionPetHealing.TriageTargets(bot, range).Cast<GameLiving>()).Distinct().ToArray();
+                TemporaryCompanionPetHealing.TriageTargets(bot, range).Cast<GameLiving>())
+                .Where(target => !CompanionPetPull.IsHeldPullPet(bot.PlayerGroupLeader, target))
+                .Distinct().ToArray();
             lock (state.Sync)
             {
                 long now = GameLoop.GameLoopTime;

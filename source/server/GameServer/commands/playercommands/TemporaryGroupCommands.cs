@@ -391,7 +391,7 @@ namespace DOL.GS.Commands
     }
 
     [CmdAttribute("&petpull", ePrivLevel.Player,
-        "Pet pull mode for your group and squads: every pull starts with your pet's attack; companions hold, heal and buff the pet, and open once it is back beside you",
+        "Pet pull mode for your group and squads: every pull starts with your pet's attack; companions hold, keep a pet HoT and buffs, and open once it is back beside you",
         "/petpull [on|off]")]
     public sealed class PetPullCommandHandler : AbstractCommandHandler, ICommandHandler
     {

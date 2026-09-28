@@ -132,7 +132,10 @@ namespace DOL.GS
                 if (IsPartyControlledPet(companion, nearby, out _))
                     targets.Add(nearby);
             }
-            targets.RemoveWhere(target => !IsLegalHealingCandidate(companion, target));
+            // A held pet pull keeps direct heal threat off the waiting group.
+            // The pet still receives its HoT through the dedicated pull path.
+            targets.RemoveWhere(target => CompanionPetPull.IsHeldPullPet(player, target) ||
+                !IsLegalHealingCandidate(companion, target));
             return new List<GameNPC>(targets)
                 .OrderBy(target => HealingPriority(companion, target))
                 .ThenBy(target => target.HealthPercent)

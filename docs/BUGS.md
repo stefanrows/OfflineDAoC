@@ -142,7 +142,19 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     Installation and real-client verification pending: reproduce with a
     Necromancer pet and BAF mobs; verify the held pull does not recruit an
     ordinary BAF wave toward the group, and normal BAF still works with mode
-    off and fights without that pet among the attackers.
+    off and fights without that pet among the attackers. Installed 0.133.0
+    reduced, but did not eliminate, mobs turning toward the group during a
+    Necromancer pet pull. Source audit found further ways to cause this:
+    during the hold, tanks took attackers off the pet, and
+    direct pet heals gave the healer threat against each pet attacker;
+    temporary companion healers could also select the pet through their own
+    triage and shared-heal paths. A group heal on the Necromancer shade can
+    be redirected to the servant and generate the same threat. Source
+    follow-up 0.138.0 holds those direct actions until release, with a guard
+    at heal application, while preserving the non-aggro pet HoT and the
+    emergency release below 45% pet health. Real-client check pending:
+    confirm mobs remain on the pet before release, group-bound mobs can still
+    be intercepted, and companions heal and defend the pet after release.
 
 59. **Launcher BotGoalsSettings tests cannot construct the control.** Reopened
     2026-09-28 (formerly numbered 33 under Finished): the four

@@ -12,7 +12,7 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.138.0] - 2026-09-28
+## [0.139.0] - 2026-09-28
 
 ### Changed
 
@@ -30,6 +30,28 @@ package, not this fork's version.
 - The installed save's `starting_keep_level` (4) and `guilds_claim_limit`
   (1) are updated to 1 and 3 at the first start only while they still hold
   the shipped defaults. Relic raids stay off (task 56, later).
+
+## [0.138.0] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- During a held `/petpull`, companions keep a heal-over-time on the pet but
+  delay direct pet heals and tank peels until the pull is released. They still
+  intercept mobs already attacking or running toward the group.
+
+### Fixed
+
+- Pre-release companion heals and tank peels no longer draw some of the pet's
+  attackers toward the waiting group, including group heals redirected from a
+  Necromancer shade to its servant.
+
+### Removed
+
+- None.
 
 ## [0.137.0] - 2026-09-28
 
