@@ -8,11 +8,11 @@ Worktrees liegen unter `/mnt/d/OfflineDAoC-wt/<paket>`, Branches `night/<paket>`
 
 | Paket | Typ / Agent | Worktree | Status |
 |---|---|---|---|
-| Ked Co-Leader (GuildRank 1) | Orchestrator, beim ersten `server.sh update --no-start` | – | offen |
+| Ked Co-Leader (GuildRank 1) | Orchestrator, beim ersten `server.sh update --no-start` | – | Batch 1 (0.122.0) baut/testet seit 04:28; Deploy folgt |
 | Bug 56 BotBrain-Ticks langsam | daoc-developer (Opus), erst profilen | `bug56` | entwickelt 04:00 (Profil per dotnet-stack: 48 % Navmesh-Korridorprüfungen, 21 % Koordinator-Lock; Seitenschritt-Suche in 8-ms-Scheiben, Stall-Netz-Cache 30 min, Profiler `BOT_THINK_PROFILE`; 2340 Tests grün), Review ACCEPT 04:10 → ✅ gemergt als 0.120.0 |
 | Bug 57 `/tc` doppelt | daoc-bugfixer (Sonnet) | `bug57` | ✅ gemergt als 0.118.0 (ae5adf5), noch nicht deployt/gepusht |
-| Bug 58 Dashboard-Snapshot (+ Bug 26 Weltgeschwindigkeits-Statusdatei, gleiche Ursache) | daoc-bugfixer (Sonnet) | `bug58` | 58+26 entwickelt 03:40 (gemeinsamer Retry-Helfer, Launcher-Leser mit FileShare.Delete, 2331 Server-Tests grün); Runde 2 fertig 04:12 (Callback statt Timer, 10/10 Läufe grün), Nach-Review läuft |
-| Log-Check Bugs 20/25/28/29/30/33 | general-purpose (Sonnet), read-only | – | fertig 03:25: 25/28/30/33 bewiesen behoben, 20 seltener (24 von 164 Gruppen laufen ins 30-min-Limit), 29 tritt weiter auf |
+| Bug 58 Dashboard-Snapshot (+ Bug 26 Weltgeschwindigkeits-Statusdatei, gleiche Ursache) | daoc-bugfixer (Sonnet) | `bug58` | 58+26 entwickelt 03:40 (gemeinsamer Retry-Helfer, Launcher-Leser mit FileShare.Delete, 2331 Server-Tests grün); Runde 2 fertig 04:12, Nach-Review ACCEPT 04:23 → ✅ gemergt als 0.122.0 |
+| Log-Check Bugs 20/25/28/29/30/33 | general-purpose (Sonnet), read-only | – | ✅ fertig; BUGS.md aktualisiert 04:27: 25/28/30/33 → Finished, 20 bleibt pending, 29 gefixt; neu 59 (Launcher-Tests, ex-33), 60–63 |
 | Bug 29 Getrennte Gruppen warten auf Rez | daoc-bugfixer (Opus) | `bug29` | entwickelt 03:40 (Phase-Überschreiben, Rescuer-Radius, Drop nach 2 Rejoin-Toden; 2333 Tests grün), Review ACCEPT 03:50, Nachbesserungen erledigt → ✅ gemergt als 0.119.0 |
 | Task 47 Advisor (Bots leveln kaum) | daoc-advisor (Opus) | – | fertig 03:27, Bericht docs/night/ADVISOR_47.md |
 | Task 48 Advisor (echtes RvR) | daoc-advisor (Opus) | – | fertig 03:30, Bericht docs/night/ADVISOR_48.md |
