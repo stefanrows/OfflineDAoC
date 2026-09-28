@@ -5436,6 +5436,17 @@ namespace DOL.AI.Brain
                         }
                     }
                 }
+
+                // /petpull: once the fight is over and the group is fine, healers
+                // bring the owner's pet back to full health for the next pull.
+                if (IsHealer && spellTarget == null && !Body.InCombat &&
+                    CompanionPetPull.PetTopUpTarget(AssistedPlayer) is GameNPC topUpPet &&
+                    Body.IsWithinRadius(topUpPet, GROUP_DEFENSE_ASSIST_RADIUS))
+                {
+                    amountToHeal += topUpPet.MaxHealth - topUpPet.Health;
+                    numNeedHealing = Math.Max(1, numNeedHealing);
+                    spellTarget = topUpPet;
+                }
             }
             else
             {

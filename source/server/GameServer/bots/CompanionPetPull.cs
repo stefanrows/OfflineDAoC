@@ -381,6 +381,22 @@ namespace DOL.GS
 
         public static bool IsReleased(GamePlayer leader) => Current(leader)?.Released == true;
 
+        /// <summary>
+        /// After the fight (no pull left, owner and pet out of combat) healers top
+        /// the owner's pet up to full health before the next pull.
+        /// </summary>
+        public static GameNPC PetTopUpTarget(GamePlayer leader)
+        {
+            if (!IsModeOn(leader))
+                return null;
+            GameNPC pet = LivePet(leader);
+            return pet != null && NeedsTopUp(Current(leader) != null, leader.IsAlive && leader.InCombat, pet.InCombat,
+                pet.Health, pet.MaxHealth) ? pet : null;
+        }
+
+        public static bool NeedsTopUp(bool pullActive, bool ownerFighting, bool petFighting, int health, int maxHealth) =>
+            !pullActive && !ownerFighting && !petFighting && maxHealth > 0 && health < maxHealth;
+
         /// <summary>The held pet is getting hurt or swarmed: act before the release.</summary>
         public static bool PetInDanger(GamePlayer leader) => Current(leader) is { Released: false, Danger: true };
 

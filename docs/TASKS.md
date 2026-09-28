@@ -180,6 +180,13 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+58. **Pet pull: healers top the pet up after the fight.** Aaron, 2026-09-28.
+    Source 0.141.0: with `/petpull` on, once no pull is running and owner and
+    pet are out of combat, healer companions heal the owner's pet to full
+    when the group needs no heal. Installation and real-client check pending:
+    finish a pull with the pet hurt, confirm a healer tops it to 100% before
+    the next pull.
+
 57. **Pet pull: /stay, Animist grove, Mentalist pet HoT, /passive clears
     mushrooms, more pet buffs.** Aaron, 2026-09-28. Source 0.140.0:
     `/stay [on|off]` (pet pull mode only) keeps every companion of the force

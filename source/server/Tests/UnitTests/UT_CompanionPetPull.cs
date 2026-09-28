@@ -115,6 +115,16 @@ public sealed class UT_CompanionPetPull
     }
 
     [Test]
+    public void HealersTopThePetUpOnlyOnceTheFightIsOver()
+    {
+        Assert.That(CompanionPetPull.NeedsTopUp(false, false, false, 900, 1000), Is.True);
+        Assert.That(CompanionPetPull.NeedsTopUp(false, false, false, 1000, 1000), Is.False, "Already full");
+        Assert.That(CompanionPetPull.NeedsTopUp(true, false, false, 900, 1000), Is.False, "A pull is still running");
+        Assert.That(CompanionPetPull.NeedsTopUp(false, true, false, 900, 1000), Is.False, "The owner still fights");
+        Assert.That(CompanionPetPull.NeedsTopUp(false, false, true, 900, 1000), Is.False, "The pet still fights");
+    }
+
+    [Test]
     public void StayNeedsPetPullModeAndEndsWithIt()
     {
         Owner player = Make<Owner>();

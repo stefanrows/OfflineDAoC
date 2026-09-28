@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.141.0] - 2026-09-28
+
+### Changed
+
+- Pet pull mode: once a fight is over and the group needs no healing,
+  healer companions heal your pet back to full health before the next
+  pull (before: only while it was under 80%, and only for a few seconds
+  after the release).
+
 ## [0.140.0] - 2026-09-28
 
 ### Added
