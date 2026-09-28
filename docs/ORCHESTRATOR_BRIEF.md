@@ -143,3 +143,19 @@ what needs his check in game, and open decisions with options.
 
 Pick the model by difficulty. Game-loop AI, pathing, rewards or anything
 touching saves goes to Opus; test fixes and small scoped bugs go to Sonnet.
+
+**Usage limit.** Watch the session's usage and credit limit: every agent
+spends from the same budget.
+- Choose Sonnet or Haiku wherever they are enough, and do not run more
+  agents in parallel than the batch needs.
+- Keep a running progress log at the top of docs/NIGHT_REPORT.md: which
+  packages are done, in review or open, and their worktree branches. A
+  resumed session continues from that log.
+- When a limit warning appears or the budget runs low, bring the running
+  work to a safe point:
+  - commit work in progress on the worktree branches, never on `main`;
+  - leave `main` green and the server on a pushed version;
+  - update the log.
+- Then pause. When run under `/loop`, schedule the wakeup for shortly after
+  the reset time with ScheduleWakeup and continue from the log. Never abandon
+  a half-merged `main` or a stopped server.
