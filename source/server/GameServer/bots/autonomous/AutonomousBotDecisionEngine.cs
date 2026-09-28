@@ -217,7 +217,7 @@ public static class AutonomousBotDecisionEngine
     }
 
     public static Camp SelectWithinEnvironment(IEnumerable<Camp> camps, PveEnvironment environment,
-        Random random = null)
+        Random random = null, bool preferEvenCon = false)
     {
         Camp[] choices = camps?.Where(camp => camp != null &&
             (environment == PveEnvironment.Dungeon ? camp.IsDungeon : !camp.IsDungeon)).ToArray()
@@ -227,7 +227,8 @@ public static class AutonomousBotDecisionEngine
         random ??= Random.Shared;
         if (environment != PveEnvironment.Dungeon)
         {
-            int[] weights = choices.Select(OutdoorCampWeight).ToArray();
+            int[] weights = choices.Select(camp => OutdoorCampWeight(camp) *
+                (preferEvenCon ? SoloConWeight(camp.TypicalCon) : 1)).ToArray();
             int outdoorDraw = random.Next(weights.Sum());
             for (int index = 0; index < choices.Length; index++)
             {
@@ -256,8 +257,19 @@ public static class AutonomousBotDecisionEngine
         return regions[^1].Camps[^1];
     }
 
+    /// <summary>Solo levelers up to this level choose camps near where they stand.</summary>
+    public const int LocalSoloCampMaximumLevel = 35;
+    /// <summary>A 2003 soloer walked five to ten minutes to the next camp.</summary>
+    public const double LocalSoloTravelMinutes = 10;
+    public const double ExtendedSoloTravelMinutes = 20;
+
+    public static bool UsesLocalSoloCamps(int level) => level <= LocalSoloCampMaximumLevel;
+
     // Spend the first leveling hours in nearby, populated home zones. A distant
     // camp remains eligible when the local catalog has no XP-bearing option.
+    // From level 20 to about 35 the pool is every legal camp within ten
+    // minutes (then twenty) of the bot, weighted by travel time below; only
+    // when nothing legal is that close may a camp across the world win.
     public static Camp SelectLevelingCamp(IEnumerable<Camp> camps, ushort currentRegion,
         string currentZone, eRealm homeRealm, int level, Random random = null)
     {
@@ -266,7 +278,9 @@ public static class AutonomousBotDecisionEngine
         random ??= Random.Shared;
         Camp[] home = choices.Where(camp => (camp.Realm == homeRealm || camp.RegionId == AutonomousDarknessFallsPolicy.RegionId) &&
             camp.TravelMinutes <= 10).ToArray();
-        Camp[] pool = level < 20 && home.Length > 0 ? home : choices;
+        Camp[] pool = level < 20 && home.Length > 0 ? home
+            : level >= 20 && UsesLocalSoloCamps(level) ? NearbySoloPool(choices)
+            : choices;
         // Preserve the dungeon draw, but apply locality and distance inside
         // the chosen environment instead of letting remote empty cells win.
         PveEnvironment environment = SelectPveEnvironment(pool, 1, level, random);
@@ -276,7 +290,8 @@ public static class AutonomousBotDecisionEngine
         if (environment == PveEnvironment.Dungeon)
             return SelectWithinEnvironment(environmentPool, environment, random);
         double[] weights = environmentPool.Select(camp =>
-            OutdoorCampWeight(camp) * (camp.IsDungeon ? 1d : 1d / (1d + Math.Max(0, camp.TravelMinutes) / 5d)) *
+            OutdoorCampWeight(camp) * SoloConWeight(camp.TypicalCon) *
+            (camp.IsDungeon ? 1d : 1d / (1d + Math.Max(0, camp.TravelMinutes) / 5d)) *
             (camp.RegionId == currentRegion ? 2d : 1d) *
             (string.Equals(camp.ZoneName, currentZone, StringComparison.OrdinalIgnoreCase) ? 1.5d : 1d)).ToArray();
         double draw = random.NextDouble() * weights.Sum();
@@ -286,6 +301,33 @@ public static class AutonomousBotDecisionEngine
             if (draw < 0) return environmentPool[i];
         }
         return environmentPool[^1];
+    }
+
+    /// <summary>
+    /// A 2003 soloer hunted blue and yellow and dropped to green only when
+    /// hurt. A weight, not a filter: crowding and travel still decide.
+    /// </summary>
+    public static int SoloConWeight(ConColor typicalCon) =>
+        typicalCon is ConColor.BLUE or ConColor.YELLOW ? 2 : 1;
+
+    /// <summary>
+    /// Camps that justify leaving the current one after the con ceiling
+    /// recovered: above the old ceiling, not the same camp, and for local
+    /// soloers within the extended local travel budget. Empty means stay.
+    /// </summary>
+    public static Camp[] RecoveryReplanCandidates(IEnumerable<Camp> legal, ConColor minimumCon,
+        string previousCampId, int level) =>
+        legal?.Where(camp => camp != null && camp.TypicalCon >= minimumCon &&
+                             !string.Equals(camp.Id, previousCampId, StringComparison.OrdinalIgnoreCase) &&
+                             (!UsesLocalSoloCamps(level) || camp.TravelMinutes <= ExtendedSoloTravelMinutes))
+            .ToArray() ?? [];
+
+    private static Camp[] NearbySoloPool(Camp[] choices)
+    {
+        Camp[] near = choices.Where(camp => camp.TravelMinutes <= LocalSoloTravelMinutes).ToArray();
+        if (near.Length > 0) return near;
+        Camp[] extended = choices.Where(camp => camp.TravelMinutes <= ExtendedSoloTravelMinutes).ToArray();
+        return extended.Length > 0 ? extended : choices;
     }
 
     public static int OutdoorCampWeight(Camp camp)
@@ -339,7 +381,7 @@ public static class AutonomousBotDecisionEngine
                 !string.Equals(camp.MonsterName, failedMonsterName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         Camp[] pool = alternatives.Length > 0 ? alternatives : safest;
-        return level is >= 1 and < 20
+        return level >= 1 && UsesLocalSoloCamps(level)
             ? SelectLevelingCamp(pool, currentRegion, currentZone, homeRealm, level, random)
             : SelectUniformGrindCamp(pool, random);
     }

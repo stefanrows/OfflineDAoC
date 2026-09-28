@@ -78,7 +78,16 @@ namespace DOL.GS
         private bool _soloRvrBorderStaged;
         private Vector3? _soloRvrStagingPoint;
         private int _observedDeathCount = -1;
-        private int _deathDifficultySteps;
+        // Solo PvE con ceiling: a real PvE defeat lowers it at once, clean
+        // kills, a level-up or a new task bring it back one step at a time.
+        private readonly AutonomousSoloConfidence _soloConfidence = new();
+        private int _deathDifficultySteps => _soloConfidence.Steps;
+        private int _observedPveKills = -1;
+        private int _observedLevel = -1;
+        // One-shot: after a recovered step, look for a camp above the old
+        // ceiling at the next safe planning point; keep the camp if none.
+        private ConColor? _recoveryMinimumCon;
+        private (ConColor MinimumCon, string PreviousCampId)? _recoveryReplan;
         private Vector3 _lastRoutePosition;
         private long _lastRouteProgressTick;
         private int _routeStallReplans;
@@ -166,6 +175,11 @@ namespace DOL.GS
                     AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Reassigned, "Objective assignment changed");
                     ReleaseOwnedSiegeRams(bot);
                     _observedObjectiveAssignmentId = assignmentId;
+                    // A fresh task restores one step of confidence; its kill
+                    // counter starts again from the new objective's count.
+                    _observedPveKills = -1;
+                    if (_soloConfidence.RecoverStep())
+                        LogConfidenceRecovery(bot, "new-task");
                     _keepPlanning = null; _keepTravelPoints = null; _keepTravelKey = null;
                     _keepTravelLastPosition = null;
                     ResetTownIdle();
@@ -231,6 +245,7 @@ namespace DOL.GS
                     _pendingStableChoice = null;
                     _nextPlanTick = 0;
                 }
+                ObserveConfidenceRecovery(bot);
                 ObserveDeaths(bot);
 
                 // Every autonomous return uses the same navmesh controller,
@@ -430,6 +445,15 @@ namespace DOL.GS
                     _camp = FromSharedCamp(_groupDirective.Camp);
                     _reportedEmptySharedCampId = string.Empty;
                     BeginCampDiagnostics(bot);
+                }
+
+                if (_recoveryMinimumCon.HasValue)
+                {
+                    if (_camp != null && _groupDirective?.IsDynamic != true && !bot.IsOnStableMasterRoute &&
+                        AutonomousRealmRaid.GetView(bot.Group) == null)
+                        TryRecoveryReplan(bot);
+                    else if (_camp == null || _groupDirective?.IsDynamic == true)
+                        _recoveryMinimumCon = null;
                 }
 
                 if (_camp == null && GameServiceUtils.ShouldTick(_nextPlanTick))
@@ -2772,6 +2796,10 @@ namespace DOL.GS
             rejectedDungeons.UnionWith(_rejectedDungeonCamps.Keys);
             Dictionary<string, CampDestination> destinations = new(StringComparer.OrdinalIgnoreCase);
             List<AutonomousBotDecisionEngine.Camp> camps = new();
+            // Solo levelers up to about 35 hunt near where they stand, like a
+            // 2003 soloer walking to the next camp rather than across two zones.
+            bool localSoloCamps = !sharedGroup && AutonomousBotDecisionEngine.UsesLocalSoloCamps(planningLevel);
+            DbZonePoint[][] crossingEdges = localSoloCamps && bot.Level >= 20 ? new DbZonePoint[2][] : null;
 
             // The live world used to be regrouped by every individual bot.
             // With a large roster that meant thousands of full region/object
@@ -2822,7 +2850,9 @@ namespace DOL.GS
                         EstimateGroupCampTravelMinutes(member, cell.RegionId, cell.X, cell.Y)))
                     : !sharedGroup && bot.Level < 20
                         ? EstimateTravelMinutes(bot, cell.RegionId, cell.X, cell.Y)
-                        : 0;
+                        : crossingEdges != null
+                            ? EstimateLocalSoloTravelMinutes(bot, cell.RegionId, cell.X, cell.Y, crossingEdges)
+                            : 0;
                 camps.Add(new(
                     cell.Id,
                     cell.ZoneName,
@@ -2881,11 +2911,13 @@ namespace DOL.GS
             {
                 legal = legal.Where(camp => camp.LowestCon >= minimumTargetCon && camp.TypicalCon <= maximumTargetCon);
                 AutonomousBotDecisionEngine.Camp[] categoryCandidates = legal.ToArray();
-                environment = planningLevel < 20
+                // Local solo selection draws dungeon versus outdoor inside the
+                // nearby pool, so a far dungeon cannot force a long trip.
+                environment = localSoloCamps
                     ? AutonomousBotDecisionEngine.PveEnvironment.None
                     : AutonomousBotDecisionEngine.SelectPveEnvironment(
                         categoryCandidates, groupSize, planningLevel, Random.Shared, gearFarming);
-                if (planningLevel >= 20)
+                if (!localSoloCamps)
                     legal = categoryCandidates.Where(camp => environment == AutonomousBotDecisionEngine.PveEnvironment.Dungeon
                         ? camp.IsDungeon : !camp.IsDungeon);
             }
@@ -2932,11 +2964,21 @@ namespace DOL.GS
                     }
                 }
             }
+            if (_recoveryReplan is { } recovery && !sharedGroup)
+            {
+                // Only prey above the old ceiling justifies leaving the camp;
+                // the caller keeps the current camp when this pool is empty.
+                legalCells = AutonomousBotDecisionEngine.RecoveryReplanCandidates(legalCells,
+                    recovery.MinimumCon, recovery.PreviousCampId, planningLevel);
+                if (legalCells.Length == 0)
+                    return;
+            }
             // This is the deployed selection point for verified locations.
-            AutonomousBotDecisionEngine.Camp chosen = !sharedGroup && planningLevel < 20
+            AutonomousBotDecisionEngine.Camp chosen = localSoloCamps
                 ? AutonomousBotDecisionEngine.SelectLevelingCamp(legalCells, bot.CurrentRegionID,
                     bot.CurrentZone?.Description, bot.Realm, planningLevel, Random.Shared)
-                : AutonomousBotDecisionEngine.SelectWithinEnvironment(legalCells, environment, Random.Shared);
+                : AutonomousBotDecisionEngine.SelectWithinEnvironment(legalCells, environment, Random.Shared,
+                    preferEvenCon: !sharedGroup);
             if (localPickupGroup && environment != AutonomousBotDecisionEngine.PveEnvironment.Dungeon &&
                 !string.IsNullOrEmpty(_groupDirective.PreferredPickupCampId))
                 chosen = legalCells.FirstOrDefault(camp => camp.Id == _groupDirective.PreferredPickupCampId) ?? chosen;
@@ -2970,6 +3012,8 @@ namespace DOL.GS
             // for this camp only; never silently reject it as an empty camp.
             _camp = sharedGroup ? selected with { TargetLevel = chosen.AverageMobLevel }
                 : usedDeathFallback ? selected with { FallbackMaximumCon = chosen.TypicalCon } : selected;
+            if (_recoveryReplan.HasValue)
+                AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Reassigned, "Con ceiling recovered; moving to a harder camp");
             BeginCampDiagnostics(bot);
             _lastFailedCampId = string.Empty;
             _lastFailedTargetName = string.Empty;
@@ -3215,29 +3259,33 @@ namespace DOL.GS
                 _observedDeathCount = deathCount;
                 // DeathCount is a lifetime statistic, not defeats on this task.
                 // Only newly observed defeats lower the current route difficulty.
-                _deathDifficultySteps = 0;
+                _soloConfidence.Reset();
                 return;
             }
 
             if (deathCount <= _observedDeathCount)
                 return;
 
+            int newDeaths = deathCount - _observedDeathCount;
             if (_groupDirective?.IsDynamic == true)
             {
                 _observedDeathCount = deathCount;
                 _lastEngagedCon = null;
+                LogAutonomousDeath(bot, newDeaths, groupSize, "group");
                 SetStatus(bot, "Regrouping after defeat", _groupDirective.SharedGoal,
                     "The party will regroup before another pull; its original task deadline keeps running", bot.PersistentRecord?.TargetName ?? string.Empty, forceSave: true);
                 return;
             }
 
             _walkToCampAfterRelease = true;
-            // A player-shaped killer says nothing about the monster's difficulty.
+            // A player-shaped killer says nothing about the monster's difficulty,
+            // and neither does a gank that the camp mob merely finished off.
             // Replan without lowering the con ceiling or excluding the camp.
-            if (bot.LastDeathWasPvp)
+            if (bot.LastDeathCountsAsPvp)
             {
                 _observedDeathCount = deathCount;
                 _lastEngagedCon = null;
+                LogAutonomousDeath(bot, newDeaths, groupSize, "solo");
                 string pvpFailedTarget = _camp?.MonsterName ?? bot.PersistentRecord?.TargetName ?? "the previous target";
                 AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Defeated, "PvP defeat; PvE difficulty unchanged");
                 _camp = null;
@@ -3258,12 +3306,10 @@ namespace DOL.GS
             ConColor failedCon = _lastEngagedCon ?? MaximumTargetCon(groupSize);
             ConColor saferCon = (ConColor)Math.Max((int)ConColor.GREEN, (int)failedCon - 1);
             int requiredSteps = (int)naturalMaximum - (int)saferCon;
-            _deathDifficultySteps = Math.Clamp(
-                Math.Max(_deathDifficultySteps + deathCount - _observedDeathCount, requiredSteps),
-                0,
-                maximumSafetySteps);
+            _soloConfidence.RecordPveDefeat(newDeaths, requiredSteps, maximumSafetySteps);
             _observedDeathCount = deathCount;
             _lastEngagedCon = null;
+            LogAutonomousDeath(bot, newDeaths, groupSize, "solo");
 
             string failedTarget = _camp?.MonsterName ?? bot.PersistentRecord?.TargetName ?? "the previous target";
             AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Defeated, "Solo defeat caused a safer camp replan");
@@ -3288,6 +3334,140 @@ namespace DOL.GS
                 failedTarget,
                 forceSave: true);
         }
+
+        /// <summary>
+        /// Clean kills and level-ups give back one step of the solo PvE ceiling.
+        /// Integer comparisons only; runs every controller tick.
+        /// </summary>
+        private void ObserveConfidenceRecovery(GameBot bot)
+        {
+            int level = bot.Level;
+            if (_observedLevel < 0 || level < _observedLevel)
+                _observedLevel = level;
+            else if (level > _observedLevel)
+            {
+                _observedLevel = level;
+                ConColor ceilingBeforeLevel = MaximumSoloTargetCon();
+                if (_soloConfidence.RecoverStep())
+                    OnConfidenceRecovered(bot, "level-up", ceilingBeforeLevel);
+            }
+
+            int kills = Math.Max(0, bot.PersistentRecord?.ObjectivePveKills ?? 0);
+            if (_observedPveKills < 0 || kills < _observedPveKills)
+            {
+                _observedPveKills = kills;
+                return;
+            }
+            if (kills == _observedPveKills)
+                return;
+            int gained = kills - _observedPveKills;
+            _observedPveKills = kills;
+            ConColor ceilingBeforeKills = MaximumSoloTargetCon();
+            if (_soloConfidence.RecordKills(gained))
+                OnConfidenceRecovered(bot, "kills", ceilingBeforeKills);
+        }
+
+        /// <summary>
+        /// Camps only change at planning, and a solo task lasts 45–120 minutes.
+        /// A soloer who has earned back a harder con looks for prey above its
+        /// old ceiling at the next quiet moment (see TryRecoveryReplan) instead
+        /// of farming its fallback camp until the task ends.
+        /// </summary>
+        private void OnConfidenceRecovered(GameBot bot, string reason, ConColor ceilingBefore)
+        {
+            LogConfidenceRecovery(bot, reason);
+            if (_camp == null || _groupDirective?.IsDynamic == true || _rvrDestination != null ||
+                AutonomousRealmRaid.GetView(bot.Group) != null ||
+                AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
+                return;
+            _recoveryMinimumCon = (ConColor)Math.Min((int)ConColor.PURPLE, (int)ceilingBefore + 1);
+        }
+
+        /// <summary>
+        /// Runs out of combat with a current solo camp. Plans once with the
+        /// one-shot minimum con; a camp above the old ceiling within local
+        /// reach replaces the current one, otherwise the bot keeps its camp,
+        /// its attempt and its route untouched.
+        /// </summary>
+        private void TryRecoveryReplan(GameBot bot)
+        {
+            ConColor minimum = _recoveryMinimumCon.Value;
+            _recoveryMinimumCon = null;
+            CampDestination previous = _camp;
+            long previousPlanTick = _nextPlanTick;
+            string previousCampId = bot.PersistentRecord?.CurrentCampId;
+            _camp = null;
+            _recoveryReplan = (minimum, previous.Id);
+            try
+            {
+                SelectCamp(bot);
+            }
+            finally
+            {
+                _recoveryReplan = null;
+            }
+
+            if (_camp != null && !string.Equals(_camp.Id, previous.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                ResetRouteOrderState();
+                if (!bot.IsOnStableMasterRoute)
+                {
+                    bot.StopMovingOnPath();
+                    bot.StopMoving();
+                }
+                if (Log.IsInfoEnabled)
+                    Log.Info($"AUTONOMOUS_CON_RECOVERY_REPLAN bot={bot.Name} id={bot.DatabaseID} level={bot.Level} " +
+                             $"minimum_con={minimum} from=\"{previous.MonsterName}\" to=\"{_camp.MonsterName}\" " +
+                             $"camp={_camp.Id} region={_camp.RegionId}");
+                SetStatus(bot, "Moving on to tougher prey", "Find a reachable level-appropriate XP camp",
+                    $"Confidence restored to {MaximumSoloTargetCon().ToString().ToLowerInvariant()} targets",
+                    _camp.MonsterName, _camp.ZoneName, true);
+                return;
+            }
+
+            // Nothing harder nearby: nothing changed for this bot.
+            _camp = previous;
+            _nextPlanTick = previousPlanTick;
+            if (bot.PersistentRecord != null)
+                bot.PersistentRecord.CurrentCampId = previousCampId ?? string.Empty;
+        }
+
+        private void LogConfidenceRecovery(GameBot bot, string reason)
+        {
+            if (!Log.IsInfoEnabled)
+                return;
+            int groupSize = Math.Max(1, (int)(bot.Group?.MemberCount ?? 1));
+            Log.Info($"AUTONOMOUS_CON_RECOVERY bot={bot.Name} id={bot.DatabaseID} level={bot.Level} " +
+                     $"realm={bot.Realm} objective={AutonomousObjectiveAssignments.KindFor(bot)} reason={reason} " +
+                     $"steps={_soloConfidence.Steps} solo_max_con={MaximumSoloTargetCon()} " +
+                     $"max_con={MaximumTargetCon(groupSize)}");
+        }
+
+        /// <summary>
+        /// One line per observed autonomous world bot death: who killed it and
+        /// how, how the death was classified, and the resulting con ceiling.
+        /// </summary>
+        private void LogAutonomousDeath(GameBot bot, int newDeaths, int groupSize, string branch)
+        {
+            AutonomousDeathSnapshot death = bot.LastAutonomousDeath;
+            if (death == null || !Log.IsInfoEnabled)
+                return;
+            Log.Info($"AUTONOMOUS_BOT_DEATH bot={bot.Name} id={bot.DatabaseID} level={bot.Level} realm={bot.Realm} " +
+                     $"class=\"{bot.ClassName}\" objective={AutonomousObjectiveAssignments.KindFor(bot)} branch={branch} " +
+                     $"group_size={groupSize} region={death.RegionId} zone=\"{death.ZoneName}\" " +
+                     $"position={death.X},{death.Y},{death.Z} killer=\"{death.KillerName}\" killer_level={death.KillerLevel} " +
+                     $"killer_type={death.KillerType} killer_class=\"{death.KillerClass}\" killer_realm={death.KillerRealm} " +
+                     $"via_pet={death.ViaPet} area={death.AreaEffect} bot_was_target={death.TargetedVictim} " +
+                     $"classification={(death.CountsAsPvp ? "pvp" : "pve")} pvp_source={death.PvpSource} " +
+                     $"recent_pvp_attacker=\"{death.RecentPvpAttackerName}\" recent_pvp_type={death.RecentPvpAttackerType} " +
+                     $"new_deaths={newDeaths} steps={_soloConfidence.Steps} max_con={MaximumTargetCon(groupSize)} " +
+                     $"solo_max_con={MaximumSoloTargetCon()}");
+            // Logged once; do not keep the killer's name alive until the next death.
+            bot.ClearAutonomousDeathSnapshot();
+        }
+
+        private ConColor MaximumSoloTargetCon() =>
+            (ConColor)Math.Max((int)ConColor.GREEN, (int)NaturalMaximumTargetCon(1) - _soloConfidence.Steps);
 
         private static ConColor NaturalMaximumTargetCon(int groupSize) => groupSize switch
         {
@@ -4268,63 +4448,34 @@ namespace DOL.GS
             FindNextCrossing(realm, currentRegion, targetRegion, targetX, targetY, null);
 
         private static DbZonePoint FindNextCrossing(eRealm realm, ushort currentRegion, ushort targetRegion,
-            int targetX, int targetY, GameBot quarantineBot)
-        {
-            DbZonePoint[] points = ZonePoints()
+            int targetX, int targetY, GameBot quarantineBot) =>
+            FindNextCrossing(CrossingEdges(realm, currentRegion, targetRegion), currentRegion, targetRegion,
+                targetX, targetY, quarantineBot);
+
+        /// <summary>
+        /// Every usable zone-point edge for this realm and route, before the
+        /// goal cell's own entrance restriction. It depends on the target only
+        /// through the Darkness Falls rule, so a planning pass can reuse it.
+        /// </summary>
+        private static DbZonePoint[] CrossingEdges(eRealm realm, ushort currentRegion, ushort targetRegion) =>
+            ZonePoints()
                 .Where(point => IsAuthoritativeZonePointEdge(point) &&
                                 // DF is a destination, not a shortcut between the
                                 // three realm exits for unrelated world travel.
                                 (point.TargetRegion != AutonomousDarknessFallsPolicy.RegionId ||
                                  targetRegion == AutonomousDarknessFallsPolicy.RegionId ||
                                  currentRegion == AutonomousDarknessFallsPolicy.RegionId) &&
-                                AutonomousDungeonGoalCatalog.CanUseEntrance(point, targetRegion, targetX, targetY) &&
                                 IsRegionEdgeAccessible(realm, point.SourceRegion, point.TargetRegion) &&
                                 IsRegionPointAccessible(realm, point.SourceRegion, point.SourceX, point.SourceY) &&
                                 IsRegionPointAccessible(realm, point.TargetRegion, point.TargetX, point.TargetY))
                 .ToArray();
 
-            DbZonePoint direct = points.Where(point => point.SourceRegion == currentRegion &&
-                                                       (quarantineBot == null || !IsZonePointQuarantined(quarantineBot, point)) &&
-                                                       point.TargetRegion == targetRegion)
-                .OrderBy(point => DistanceSquared(point.TargetX, point.TargetY, targetX, targetY) +
-                                  (quarantineBot == null ? 0 :
-                                      DistanceSquared(point.SourceX, point.SourceY, quarantineBot.X, quarantineBot.Y)))
-                .FirstOrDefault();
-            if (direct != null)
-                return direct;
-
-            var previous = new Dictionary<ushort, DbZonePoint>();
-            var seen = new HashSet<ushort> { currentRegion };
-            var queue = new Queue<ushort>();
-            queue.Enqueue(currentRegion);
-            while (queue.Count > 0)
-            {
-                ushort region = queue.Dequeue();
-                IEnumerable<DbZonePoint> outgoing = points.Where(point => point.SourceRegion == region &&
-                    (quarantineBot == null || region != currentRegion || !IsZonePointQuarantined(quarantineBot, point)));
-                if (quarantineBot != null && region == currentRegion)
-                {
-                    outgoing = outgoing.OrderBy(point =>
-                        DistanceSquared(point.SourceX, point.SourceY, quarantineBot.X, quarantineBot.Y) +
-                        DistanceSquared(point.TargetX, point.TargetY, targetX, targetY));
-                }
-                foreach (DbZonePoint edge in outgoing)
-                {
-                    if (!seen.Add(edge.TargetRegion))
-                        continue;
-                    previous[edge.TargetRegion] = edge;
-                    if (edge.TargetRegion == targetRegion)
-                    {
-                        DbZonePoint first = edge;
-                        while (first.SourceRegion != currentRegion && previous.TryGetValue(first.SourceRegion, out DbZonePoint prior))
-                            first = prior;
-                        return first;
-                    }
-                    queue.Enqueue(edge.TargetRegion);
-                }
-            }
-            return null;
-        }
+        private static DbZonePoint FindNextCrossing(DbZonePoint[] edges, ushort currentRegion, ushort targetRegion,
+            int targetX, int targetY, GameBot quarantineBot) =>
+            AutonomousZoneCrossingSearch.FindFirstCrossing(edges, currentRegion, targetRegion, targetX, targetY,
+                point => AutonomousDungeonGoalCatalog.CanUseEntrance(point, targetRegion, targetX, targetY),
+                quarantineBot == null ? null : point => IsZonePointQuarantined(quarantineBot, point),
+                quarantineBot == null ? null : (quarantineBot.X, quarantineBot.Y));
 
         internal static IReadOnlyList<DbZonePoint> RealmEventCrossings() => ZonePoints();
 
@@ -4480,6 +4631,31 @@ namespace DOL.GS
                 ? Distance(crossing.TargetX, crossing.TargetY, x, y) / Math.Max(1d, bot.MaxSpeed) / 60d
                 : 6;
             return firstLeg + finalBias + 1;
+        }
+
+        /// <summary>
+        /// Same result as EstimateTravelMinutes for many camps in one planning
+        /// pass. Only the realm/route edge filter is shared (two variants: DF
+        /// goal or not); each cell still resolves its own crossing, so a goal
+        /// behind one particular dungeon entrance is estimated through it.
+        /// </summary>
+        private static double EstimateLocalSoloTravelMinutes(GameBot bot, ushort regionId, int x, int y,
+            DbZonePoint[][] edgesByDarknessFallsGoal)
+        {
+            double speed = Math.Max(1d, bot.MaxSpeed);
+            if (bot.CurrentRegionID == regionId)
+                return Distance(bot.X, bot.Y, x, y) / speed / 60d;
+            int variant = regionId == AutonomousDarknessFallsPolicy.RegionId ? 1 : 0;
+            DbZonePoint[] edges = edgesByDarknessFallsGoal[variant] ??=
+                CrossingEdges(bot.Realm, bot.CurrentRegionID, regionId);
+            DbZonePoint crossing = FindNextCrossing(edges, bot.CurrentRegionID, regionId, x, y, bot);
+            if (crossing == null)
+                return 9999;
+            double firstLeg = Distance(bot.X, bot.Y, crossing.SourceX, crossing.SourceY) / speed / 60d;
+            double finalLeg = crossing.TargetRegion == regionId
+                ? Distance(crossing.TargetX, crossing.TargetY, x, y) / speed / 60d
+                : 6;
+            return firstLeg + finalLeg + 1;
         }
 
         private static double EstimateGroupCampTravelMinutes(GameBot bot, ushort targetRegion,
