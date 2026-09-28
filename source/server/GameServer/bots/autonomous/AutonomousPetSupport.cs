@@ -254,6 +254,7 @@ public static class AutonomousPetSupport
         out string activity,
         Func<Spell, bool> spellAllowed = null)
     {
+        using var profile = BotThinkProfiler.Measure(BotThinkPhase.PetUpkeep);
         if (owner is GameBot animist && BotAnimistPolicy.AppliesTo(animist))
             return BotAnimistPolicy.Maintain(animist, combatTarget, ref nextDeployablePetTick, out activity, spellAllowed);
         activity = string.Empty;

@@ -3453,7 +3453,23 @@ namespace DOL.GS
 		/// Table of skills currently disabled
 		/// skill => disabletimeout (ticks) or 0 when endless
 		/// </summary>
-		private readonly Dictionary<KeyValuePair<int, Type>, KeyValuePair<long, Skill>> m_disabledSkills = new Dictionary<KeyValuePair<int, Type>, KeyValuePair<long, Skill>>();
+		private readonly Dictionary<KeyValuePair<int, Type>, KeyValuePair<long, Skill>> m_disabledSkills = new Dictionary<KeyValuePair<int, Type>, KeyValuePair<long, Skill>>(DisabledSkillKeyComparer.Instance);
+
+		/// <summary>
+		/// Same equality as the default KeyValuePair comparison (skill id and
+		/// exact skill type), without the reflection-based ValueType hashing
+		/// that showed up in every bot combat turn (bug 56).
+		/// </summary>
+		public sealed class DisabledSkillKeyComparer : IEqualityComparer<KeyValuePair<int, Type>>
+		{
+			public static readonly DisabledSkillKeyComparer Instance = new();
+
+			public bool Equals(KeyValuePair<int, Type> x, KeyValuePair<int, Type> y) =>
+				x.Key == y.Key && Equals(x.Value, y.Value);
+
+			public int GetHashCode(KeyValuePair<int, Type> key) =>
+				HashCode.Combine(key.Key, key.Value);
+		}
 		private readonly Lock _disabledSkillsLock = new();
 
 		/// <summary>

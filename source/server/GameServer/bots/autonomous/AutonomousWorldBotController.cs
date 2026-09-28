@@ -143,6 +143,7 @@ namespace DOL.GS
 
         public bool Tick(BotBrain brain)
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.WorldControllerTick);
             GameBot bot = brain?.BotBody;
             if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.IsPlayerLedGroup)
                 return false;
@@ -605,6 +606,7 @@ namespace DOL.GS
 
         private bool TravelAcrossRegions(GameBot bot)
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.TravelAcrossRegions);
             CampDestination camp = _camp;
             if (camp == null)
                 return true;
@@ -1181,6 +1183,7 @@ namespace DOL.GS
                 _pendingStableChoice = null;
                 _issuedRouteDestination = null;
                 _routeRecoveryWaypoint = null;
+                _pendingRecoverySearch = null;
                 _nextPlanTick = 0;
                 bot.StopMovingOnPath();
                 bot.StopMoving();
@@ -1414,6 +1417,7 @@ namespace DOL.GS
 
         private bool ExecuteRvr(BotBrain brain, GameBot bot)
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.ExecuteRvr);
             PvpCombatant.RelinquishOptionalSafety(bot);
             KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
                 .FirstOrDefault(point => point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null);
@@ -2716,6 +2720,7 @@ namespace DOL.GS
 
         private void SelectCamp(GameBot bot)
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.SelectCamp);
             if (_groupDirective?.IsDynamic == true && _groupDirective.Leader == bot &&
                 AutonomousRealmRaid.TryJoin(bot, out var raid))
             {
@@ -3608,6 +3613,7 @@ namespace DOL.GS
         private bool IssuePath(GameBot bot, Vector3 destination, Vector3? validatedContinuation = null,
             bool preciseArrival = false)
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.IssuePath);
             TryRepairNavigationFloor(bot);
             if (AutonomousRvrTravel.TraverseFriendlyDoor(bot, destination))
             {
@@ -3663,7 +3669,16 @@ namespace DOL.GS
                 _nextMoveOrderTick = 0;
                 _lastRoutePosition = current;
                 _lastRouteProgressTick = now;
+                _pendingRecoverySearch = null;
                 bot.ForcePathReplot();
+            }
+
+            if (_pendingRecoverySearch != null)
+            {
+                if (!destinationChanged && _pendingRecoverySearch.IsFor(current, destination))
+                    return ContinueLocalRouteRecovery(bot, current, destination, _pendingRecoveryStatus,
+                        _pendingRecoveryFailedDestination, _pendingRecoverySearch);
+                _pendingRecoverySearch = null;
             }
 
             if (bot.TryConsumeAutonomousPathFailure(out PathfindingStatus failureStatus, out Vector3 failedDestination) &&
@@ -3835,53 +3850,104 @@ namespace DOL.GS
                     new(current.X, current.Y), new(destination.X, destination.Y));
             }
             _routeStallReplans++;
-            if (AutonomousRouteRecoveryPolicy.ShouldAbandon(_routeStallReplans) ||
-                !TryFindLocalRecoveryWaypoint(bot, current, destination, failedDestination,
-                    _routeStallReplans, out Vector3 recovery))
-            {
-                Log.Warn($"AUTONOMOUS_ROUTE_RECOVERY bot={bot.Name} id={bot.DatabaseID} " +
-                         $"level={bot.Level} realm={bot.Realm} class=\"{bot.ClassName}\" " +
-                         $"goal=\"{bot.PersistentRecord?.CurrentGoal}\" target=\"{bot.PersistentRecord?.TargetName}\" " +
-                         $"region={bot.CurrentRegionID} position={bot.X},{bot.Y},{bot.Z} " +
-                         $"destination={(int)destination.X},{(int)destination.Y},{(int)destination.Z} " +
-                         $"failedDestination={(int)failedDestination.X},{(int)failedDestination.Y},{(int)failedDestination.Z} " +
-                         $"pathStatus={failureStatus} reason=\"three verified local recovery attempts failed; selecting a new goal\"");
-                RejectPendingBoarding(bot, "The boarding approach exhausted collision-safe recovery");
-                // Service and trainer interiors in the installed client meshes
-                // sometimes live on a disconnected decorative component.  Once
-                // three real path attempts prove that condition, place only this
-                // autonomous actor on a validated point beside the same NPC.  It
-                // can then complete the real interaction instead of retrying and
-                // logging the identical partial path every twenty seconds.
-                if (TryRecoverDisconnectedServiceApproach(bot))
-                    return true;
-                if (_trainingTrainer != null)
-                {
-                    RejectTrainerAnchor(bot, _trainingTrainer,
-                        "The trainer approach exhausted collision-safe recovery");
-                    return false;
-                }
+            _pendingRecoverySearch = null;
+            if (AutonomousRouteRecoveryPolicy.ShouldAbandon(_routeStallReplans))
+                return FinishFailedLocalRouteRecovery(bot, current, destination, failureStatus, failedDestination);
+            AutonomousLocalRecoverySearch search = CreateLocalRecoverySearch(bot, current, destination,
+                failedDestination, _routeStallReplans);
+            if (search == null)
+                return FinishFailedLocalRouteRecovery(bot, current, destination, failureStatus, failedDestination);
+            return ContinueLocalRouteRecovery(bot, current, destination, failureStatus, failedDestination, search);
+        }
 
-                // Capital egress already has a tightly-scoped authoritative
-                // zone-point recovery. Apply it to a physical-stall failure as
-                // well as an up-front corridor rejection.
-                if (_camp != null && TryRecoverBlockedCapitalEgress(bot, _camp))
-                    return true;
-                if (_groupDirective != null &&
-                    (AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase) ||
-                     _groupDirective.Phase == "Regrouping") &&
-                    AutonomousBotGroupCoordinator.ReportUnreachableRendezvous(bot, _groupDirective.GroupId,
-                        "The assigned formation route exhausted collision-safe recovery"))
-                {
-                    ResetRouteOrderState();
-                    return false;
-                }
-                if (TryEscapeTerminalRoutePocket(bot, current))
-                    return true;
-                AbandonCamp(bot, "The collision-safe route could not recover after three verified side steps");
+        // The side-step search runs in bounded slices (bug 56). While it is
+        // pending the stalled bot stands still and thinks again after 250 ms;
+        // the result and every later decision are those of the former
+        // single-turn search.
+        private AutonomousLocalRecoverySearch _pendingRecoverySearch;
+        private PathfindingStatus _pendingRecoveryStatus;
+        private Vector3 _pendingRecoveryFailedDestination;
+
+        private bool ContinueLocalRouteRecovery(
+            GameBot bot,
+            Vector3 current,
+            Vector3 destination,
+            PathfindingStatus failureStatus,
+            Vector3 failedDestination,
+            AutonomousLocalRecoverySearch search)
+        {
+            AutonomousLocalRecoverySearch.Outcome outcome;
+            Vector3 recovery;
+            using (BotThinkProfiler.Measure(BotThinkPhase.RouteRecoverySearch))
+                outcome = search.Continue(out recovery);
+            if (outcome == AutonomousLocalRecoverySearch.Outcome.Pending)
+            {
+                _pendingRecoverySearch = search;
+                _pendingRecoveryStatus = failureStatus;
+                _pendingRecoveryFailedDestination = failedDestination;
+                bot.StopMoving();
+                if (bot.Brain is BotBrain brain)
+                    brain.ThinkInterval = 250;
+                return true;
+            }
+            _pendingRecoverySearch = null;
+            if (outcome == AutonomousLocalRecoverySearch.Outcome.NotFound)
+                return FinishFailedLocalRouteRecovery(bot, search.Origin, destination, failureStatus, failedDestination);
+            return BeginLocalRecoveryWaypoint(bot, search.Origin, recovery);
+        }
+
+        private bool FinishFailedLocalRouteRecovery(
+            GameBot bot,
+            Vector3 current,
+            Vector3 destination,
+            PathfindingStatus failureStatus,
+            Vector3 failedDestination)
+        {
+            Log.Warn($"AUTONOMOUS_ROUTE_RECOVERY bot={bot.Name} id={bot.DatabaseID} " +
+                     $"level={bot.Level} realm={bot.Realm} class=\"{bot.ClassName}\" " +
+                     $"goal=\"{bot.PersistentRecord?.CurrentGoal}\" target=\"{bot.PersistentRecord?.TargetName}\" " +
+                     $"region={bot.CurrentRegionID} position={bot.X},{bot.Y},{bot.Z} " +
+                     $"destination={(int)destination.X},{(int)destination.Y},{(int)destination.Z} " +
+                     $"failedDestination={(int)failedDestination.X},{(int)failedDestination.Y},{(int)failedDestination.Z} " +
+                     $"pathStatus={failureStatus} reason=\"three verified local recovery attempts failed; selecting a new goal\"");
+            RejectPendingBoarding(bot, "The boarding approach exhausted collision-safe recovery");
+            // Service and trainer interiors in the installed client meshes
+            // sometimes live on a disconnected decorative component.  Once
+            // three real path attempts prove that condition, place only this
+            // autonomous actor on a validated point beside the same NPC.  It
+            // can then complete the real interaction instead of retrying and
+            // logging the identical partial path every twenty seconds.
+            if (TryRecoverDisconnectedServiceApproach(bot))
+                return true;
+            if (_trainingTrainer != null)
+            {
+                RejectTrainerAnchor(bot, _trainingTrainer,
+                    "The trainer approach exhausted collision-safe recovery");
                 return false;
             }
 
+            // Capital egress already has a tightly-scoped authoritative
+            // zone-point recovery. Apply it to a physical-stall failure as
+            // well as an up-front corridor rejection.
+            if (_camp != null && TryRecoverBlockedCapitalEgress(bot, _camp))
+                return true;
+            if (_groupDirective != null &&
+                (AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase) ||
+                 _groupDirective.Phase == "Regrouping") &&
+                AutonomousBotGroupCoordinator.ReportUnreachableRendezvous(bot, _groupDirective.GroupId,
+                    "The assigned formation route exhausted collision-safe recovery"))
+            {
+                ResetRouteOrderState();
+                return false;
+            }
+            if (TryEscapeTerminalRoutePocket(bot, current))
+                return true;
+            AbandonCamp(bot, "The collision-safe route could not recover after three verified side steps");
+            return false;
+        }
+
+        private bool BeginLocalRecoveryWaypoint(GameBot bot, Vector3 current, Vector3 recovery)
+        {
             bot.StopMoving();
             bot.ForcePathReplot();
             _routeRecoveryWaypoint = recovery;
@@ -3898,73 +3964,29 @@ namespace DOL.GS
         }
 
         private float _routeRecoveryArrivalRadius = 70;
-        private static bool TryFindLocalRecoveryWaypoint(
+        private static AutonomousLocalRecoverySearch CreateLocalRecoverySearch(
             GameBot bot,
             Vector3 current,
             Vector3 destination,
             Vector3 onwardDestination,
-            int attempt,
-            out Vector3 recovery)
+            int attempt)
         {
-            recovery = default;
             Zone zone = bot.CurrentZone;
-            if (zone == null || !PathfindingProvider.Instance.IsAvailable)
-                return false;
+            IPathfindingMgr nav = PathfindingProvider.Instance;
+            if (zone == null || !nav.IsAvailable)
+                return null;
 
-            // Recover along the existing corridor before trying geometric side
-            // steps. A direction drawn straight at the final target can point
-            // across a cliff/wall even when the real route is fully connected.
-            if (AutonomousCorridorRecovery.TryNextCorner(PathfindingProvider.Instance, zone,
-                    current, onwardDestination, out recovery))
-                return true;
-
-            Vector2 forward = new(destination.X - current.X, destination.Y - current.Y);
-            if (forward.LengthSquared() < 1f)
-                forward = new(0, 1);
-            else
-                forward = Vector2.Normalize(forward);
-
-            int[][] angleOrders =
-            [
-                [90, -90, 135, -135, 180, 45, -45],
-                [-90, 90, -135, 135, 180, -45, 45],
-                [135, -135, 90, -90, 180, 45, -45],
-            ];
-            int[] angles = angleOrders[Math.Clamp(attempt - 1, 0, angleOrders.Length - 1)];
-            float bestScore = float.MinValue;
-
-            foreach (float radius in new[] { 220f, 340f, 460f })
-            {
-                foreach (int degrees in angles)
-                {
-                    float radians = degrees * MathF.PI / 180f;
-                    Vector2 direction = new(
-                        forward.X * MathF.Cos(radians) - forward.Y * MathF.Sin(radians),
-                        forward.X * MathF.Sin(radians) + forward.Y * MathF.Cos(radians));
-                    Vector3 raw = new(current.X + direction.X * radius, current.Y + direction.Y * radius, current.Z);
-                    Vector3? surface = AutonomousNavigationSurface.MoveAlongGround(
-                        PathfindingProvider.Instance, zone, current, raw);
-                    if (!surface.HasValue || Vector3.DistanceSquared(current, surface.Value) < 80 * 80 ||
-                        !PathfindingProvider.Instance.HasLineOfSight(
-                            zone, current, surface.Value, PathfindingProvider.Instance.DefaultFilters))
-                        continue;
-
-                    Zone onwardZone = bot.CurrentRegion?.GetZone((int)onwardDestination.X, (int)onwardDestination.Y);
-                    if (onwardZone == zone && !AutonomousZoneItinerary.HasCompleteCorridor(
-                            PathfindingProvider.Instance, zone, surface.Value, onwardDestination))
-                        continue;
-
-                    Vector2 achieved = new(surface.Value.X - current.X, surface.Value.Y - current.Y);
-                    float lateral = MathF.Abs(forward.X * achieved.Y - forward.Y * achieved.X);
-                    float clearance = achieved.Length();
-                    float score = lateral * 2f + clearance;
-                    if (score <= bestScore)
-                        continue;
-                    bestScore = score;
-                    recovery = surface.Value;
-                }
-            }
-            return bestScore > float.MinValue;
+            Zone onwardZone = bot.CurrentRegion?.GetZone((int)onwardDestination.X, (int)onwardDestination.Y);
+            return new AutonomousLocalRecoverySearch(current, destination, attempt,
+                // Recover along the existing corridor before trying geometric side
+                // steps. A direction drawn straight at the final target can point
+                // across a cliff/wall even when the real route is fully connected.
+                () => AutonomousCorridorRecovery.TryNextCorner(nav, zone, current, onwardDestination,
+                    out Vector3 corner) ? corner : null,
+                raw => AutonomousNavigationSurface.MoveAlongGround(nav, zone, current, raw),
+                (from, to) => nav.HasLineOfSight(zone, from, to, nav.DefaultFilters),
+                surface => onwardZone != zone ||
+                    AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, surface, onwardDestination));
         }
 
         private bool TryEscapeTerminalRoutePocket(GameBot bot, Vector3 current)
@@ -4082,6 +4104,7 @@ namespace DOL.GS
             _nextMoveOrderTick = 0;
             _issuedRouteDestination = null;
             _routeRecoveryWaypoint = null;
+            _pendingRecoverySearch = null;
             _routeRecoveryBaselineDistance = -1f;
             _routeInterruptedByCombat = false;
             _lastRouteProgressTick = 0;
