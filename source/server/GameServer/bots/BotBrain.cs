@@ -540,33 +540,52 @@ namespace DOL.AI.Brain
             bool companionSubPet = pvpMember != groupMember && CompanionPvpEngagement.Enemy(pvpLeader, ad?.Attacker);
             if (companionSubPet) groupMember = pvpMember;
             Group group = groupMember?.Group;
-            if (group == null || ad?.Attacker is not GameLiving attacker ||
-                !attacker.IsAlive || !group.IsInTheGroup(groupMember))
+            if (ad?.Attacker is not GameLiving attacker || !attacker.IsAlive)
                 return;
 
-            // Record the encounter synchronously so even a very short roadside
-            // fight pauses autonomous travel for whole-party recovery afterward.
-            AutonomousBotGroupCoordinator.MarkCombatObserved(group);
-
-            foreach (GameLiving member in group.GetMembersInTheGroup())
+            if (group != null && group.IsInTheGroup(groupMember))
             {
-                if (member == victim || member is not GameBot bot ||
-                    companionSubPet && CompanionPvpEngagement.Leader(bot) != pvpLeader ||
-                    bot.Group != group || !group.IsInTheGroup(bot) ||
-                    !bot.IsAlive || bot.ObjectState != GameObject.eObjectState.Active ||
-                    bot.CurrentRegionID != victim.CurrentRegionID ||
-                    !bot.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS) ||
-                    bot.Brain is not BotBrain brain)
-                    continue;
+                // Record the encounter synchronously so even a very short roadside
+                // fight pauses autonomous travel for whole-party recovery afterward.
+                AutonomousBotGroupCoordinator.MarkCombatObserved(group);
 
-                brain.OnGroupMemberAttacked(victim, ad);
+                foreach (GameLiving member in group.GetMembersInTheGroup())
+                {
+                    if (member == victim || member is not GameBot bot ||
+                        companionSubPet && CompanionPvpEngagement.Leader(bot) != pvpLeader ||
+                        bot.Group != group || !group.IsInTheGroup(bot) ||
+                        !bot.IsAlive || bot.ObjectState != GameObject.eObjectState.Active ||
+                        bot.CurrentRegionID != victim.CurrentRegionID ||
+                        !bot.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS) ||
+                        bot.Brain is not BotBrain brain)
+                        continue;
+
+                    brain.OnGroupMemberAttacked(victim, ad);
+                }
+                if (groupMember is GameBot raidVictim)
+                    foreach (GameLiving member in AutonomousRealmRaid.ClaimNearbyDefenseBroadcast(raidVictim, GameLoop.GameLoopTime))
+                        if (member is GameBot helper && helper.Group != group && helper.IsAlive && helper.ObjectState == GameObject.eObjectState.Active && !helper.IsOnStableMasterRoute &&
+                            helper.CurrentRegionID == victim.CurrentRegionID && helper.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS) &&
+                            helper.Brain is BotBrain helperBrain)
+                            helperBrain.OnGroupMemberAttacked(victim, ad);
             }
-            if (groupMember is GameBot raidVictim)
-                foreach (GameLiving member in AutonomousRealmRaid.ClaimNearbyDefenseBroadcast(raidVictim, GameLoop.GameLoopTime))
-                    if (member is GameBot helper && helper.Group != group && helper.IsAlive && helper.ObjectState == GameObject.eObjectState.Active && !helper.IsOnStableMasterRoute &&
-                        helper.CurrentRegionID == victim.CurrentRegionID && helper.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS) &&
-                        helper.Brain is BotBrain helperBrain)
-                        helperBrain.OnGroupMemberAttacked(victim, ad);
+
+            // A squad defends its own members (its own Group, handled by the exact
+            // same mechanism above whenever the victim is one of them), the owner,
+            // and the owner's own group (task 44): the owner, or one of his own
+            // companions, being the victim also wakes every one of his squads, in
+            // the same radius as an ordinary group-defense reaction. This also
+            // covers an owner who has no own Group at all (only squads).
+            GamePlayer squadOwner = groupMember as GamePlayer ?? (groupMember as GameBot)?.Owner;
+            if (squadOwner != null)
+                foreach (GameBot squadBot in CompanionSquads.OwnerForceBots(squadOwner))
+                    if (squadBot != victim && squadBot.Group != group &&
+                        (!companionSubPet || CompanionPvpEngagement.Leader(squadBot) == pvpLeader) &&
+                        squadBot.IsAlive && squadBot.ObjectState == GameObject.eObjectState.Active &&
+                        squadBot.CurrentRegionID == victim.CurrentRegionID &&
+                        squadBot.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS) &&
+                        squadBot.Brain is BotBrain squadBrain)
+                        squadBrain.OnGroupMemberAttacked(victim, ad);
         }
 
         /// <summary>A guildmate outside this bot's group is attacked nearby: go and help.</summary>
@@ -600,7 +619,12 @@ namespace DOL.AI.Brain
                 return;
             bool sisterParty = groupMember is GameBot other && other.Group != group &&
                 AutonomousRealmRaid.SameExpedition(BotBody, other);
-            if (group == null || groupMember == null || (!sisterParty && (groupMember.Group != group || !group.IsInTheGroup(groupMember))) ||
+            // A squad member's own Group is its squad's, never the owner's, so it
+            // never equals the owner's or a sister squad's Group; owner-force
+            // membership stands in for plain Group equality there (task 44).
+            bool sameOwnerForce = !sisterParty && CompanionSquads.ShareOwnerForce(BotBody, groupMember);
+            if (group == null || groupMember == null ||
+                (!sisterParty && !sameOwnerForce && (groupMember.Group != group || !group.IsInTheGroup(groupMember))) ||
                 !group.IsInTheGroup(Body) ||
                 groupMember.CurrentRegionID != Body.CurrentRegionID ||
                 victim.CurrentRegionID != Body.CurrentRegionID ||
@@ -639,7 +663,7 @@ namespace DOL.AI.Brain
 
             if (HasAggro)
             {
-                if (sisterParty) AutonomousBotGroupCoordinator.MarkCombatObserved(group);
+                if (sisterParty || sameOwnerForce) AutonomousBotGroupCoordinator.MarkCombatObserved(group);
                 // Like a direct hit, a nearby group-defense event must wake a
                 // resting bot now, not wait for its next idle planning turn.
                 // Membership/range/attack legality were checked above.
@@ -2405,7 +2429,14 @@ namespace DOL.AI.Brain
             int family = (int)EffectHelper.GetEffectFromSpell(spell);
             long now = GameLoop.GameLoopTime;
             int range = Math.Max(minimumRange, spell.CalculateEffectiveRange(Body));
-            IEnumerable<GameLiving> members = spell.Target == eSpellTarget.REALM ? AutonomousRealmRaid.SupportMembers(BotBody) : group?.GetMembersInTheGroup() ?? [Body];
+            // A squad member's single-target realm buff also reaches the owner
+            // when he is missing it (task 44): AutonomousRealmRaid.SupportMembers
+            // otherwise only ever returns this bot's own squad Group.
+            IEnumerable<GameLiving> members = spell.Target == eSpellTarget.REALM
+                ? CompanionSquads.IsActiveSquadMember(BotBody) && BotBody.Owner is GamePlayer squadOwner
+                    ? AutonomousRealmRaid.SupportMembers(BotBody).Append(squadOwner)
+                    : AutonomousRealmRaid.SupportMembers(BotBody)
+                : group?.GetMembersInTheGroup() ?? [Body];
             if (PetPullBuffTarget(spell, range) is GameNPC pullPet &&
                 !(claims?.IsReserved(pullPet, family, now) ?? false))
                 return pullPet;
@@ -5328,6 +5359,33 @@ namespace DOL.AI.Brain
                     // altering its real emergency threshold.
                     numNeedHealing = Math.Max(1, numNeedHealing);
                 }
+
+                // A squad heals its own group first (everything above); only once
+                // that group is fine does it also cover the owner and his other
+                // squads (task 44). Group heals still only affect the caster's own
+                // group, so this never turns into a cross-squad group heal.
+                if (spellTarget == null && CompanionSquads.IsActiveSquadMember(BotBody) && BotBody.Owner is GamePlayer squadOwner)
+                {
+                    foreach (GameLiving member in CompanionSquads.OwnerForceBots(squadOwner).Cast<GameLiving>().Append(squadOwner))
+                    {
+                        if (member.Group == Body.Group || !member.IsAlive)
+                            continue;
+
+                        int squadDeficit = member.MaxHealth - member.Health;
+                        if (squadDeficit <= 0)
+                            continue;
+
+                        if (member.HealthPercent < 65 || (IsHealer && member.HealthPercent < 80))
+                        {
+                            amountToHeal += squadDeficit;
+                            numNeedHealing++;
+                            if (member.HealthPercent < 40)
+                                numEmergency++;
+                            if (spellTarget == null || member.HealthPercent < spellTarget.HealthPercent)
+                                spellTarget = member;
+                        }
+                    }
+                }
             }
             else
             {
@@ -5535,7 +5593,32 @@ namespace DOL.AI.Brain
                 }
             }
 
-            return startedCasting || isCastingHeal;
+            // A known-but-unaffordable resurrection still holds this caster off
+            // buffing (bug 55): rest/regen toward the best known rez instead of
+            // spending power on maintenance while someone waits dead.
+            return startedCasting || isCastingHeal || BlocksBuffsForPendingResurrection();
+        }
+
+        /// <summary>True while this caster knows a resurrection spell it cannot yet
+        /// afford and a dead member of its own group or owner force (task 44) is
+        /// waiting nearby: buffs and other maintenance wait for regen instead of
+        /// spending power that the best known rez will need (bug 55). A bot with no
+        /// resurrection spell is never held by this rule; other resurrectors handle it.</summary>
+        private bool BlocksBuffsForPendingResurrection()
+        {
+            Spell resurrection = BotBody.ResurrectionToCast();
+            if (Body.IsCasting || resurrection == null || BotBody.Mana >= BotBody.PowerCost(resurrection))
+                return false;
+
+            bool DeadNearby(IEnumerable<GameLiving> members) => members.Any(member =>
+                member != Body && !member.IsAlive && member.ObjectState == GameObject.eObjectState.Active &&
+                member.CurrentRegionID == Body.CurrentRegionID);
+
+            if (Body.Group != null && DeadNearby(Body.Group.GetMembersInTheGroup()))
+                return true;
+
+            return BotBody.Owner is GamePlayer owner &&
+                DeadNearby(CompanionSquads.OwnerForceBots(owner).Cast<GameLiving>().Append(owner));
         }
 
         /// <summary>/petpull: a heal-over-time on the pulling pet before the group opens.</summary>
@@ -5568,7 +5651,10 @@ namespace DOL.AI.Brain
             GameBot bot = BotBody;
             if (bot?.IsTemporaryGroupHelper != true) return false;
             GamePlayer owner = bot.Owner;
-            Spell resurrection = bot.ResurrectionSpell;
+            // The strongest currently affordable rank (bug 55); falls back to the
+            // best known one so the existing low-power rest-and-wait branch below
+            // still triggers when nothing is affordable yet.
+            Spell resurrection = bot.ResurrectionToCast();
             if (owner == null || owner.IsAlive || resurrection == null || owner.ObjectState != GameObject.eObjectState.Active ||
                 owner.CurrentRegionID != bot.CurrentRegionID ||
                 !TemporaryCompanionRecovery.CanPrioritizeOwnerResurrection(true, bot.IsAlive, owner.IsAlive,
@@ -5600,7 +5686,9 @@ namespace DOL.AI.Brain
 
         private bool TryResurrectGroupMember()
         {
-            Spell resurrection = BotBody.ResurrectionSpell;
+            // The strongest currently affordable rank (bug 55): in combat, cast
+            // whatever power allows rather than waiting on the best known rez.
+            Spell resurrection = BotBody.ResurrectionToCast();
             if (Body.Group != null)
             {
                 if (Body.IsCasting && Body.castingComponent.SpellHandler?.Spell?.SpellType == eSpellType.Resurrect)
@@ -5635,7 +5723,7 @@ namespace DOL.AI.Brain
                 .ThenBy(Body.GetDistanceTo)
                 .FirstOrDefault();
             if (deadMember == null)
-                return false;
+                return TryResurrectAcrossOwnerSquads(resurrection, range);
 
             if (!BotBody.IsWithinRadius(deadMember, range) || !BotGroupSupport.HasCorpseLineOfSight(BotBody, deadMember))
             {
@@ -5647,6 +5735,41 @@ namespace DOL.AI.Brain
             }
 
             // In-range corpses must obtain the shared reservation above.
+            return false;
+        }
+
+        /// <summary>Nobody in this bot's own squad needs (or can be) raised: reach
+        /// into the owner's other squads, or the owner himself, for a resurrector
+        /// (task 44). Out-of-combat only, exactly like the same-group path above;
+        /// <see cref="CompanionSquads.ReserveCrossSquadCorpse"/> keeps two squads
+        /// from casting on the same corpse.</summary>
+        private bool TryResurrectAcrossOwnerSquads(Spell resurrection, int range)
+        {
+            if (BotBody.Owner == null)
+                return false;
+
+            GameLiving corpse = CompanionSquads.ReserveCrossSquadCorpse(BotBody, resurrection);
+            if (corpse == null)
+                return false;
+
+            if (!BotBody.IsWithinRadius(corpse, range) || !BotGroupSupport.HasCorpseLineOfSight(BotBody, corpse))
+            {
+                Vector3 current = new(BotBody.X, BotBody.Y, BotBody.Z);
+                Vector3 desired = new(corpse.X, corpse.Y, corpse.Z);
+                AutonomousThreatAwarePathing.SafeStep step = AutonomousThreatAwarePathing.ChooseStep(BotBody, current, desired, 900);
+                BotBody.PathTo(step.Position, BotBody.MaxSpeed);
+                return true;
+            }
+
+            GameObject previous = BotBody.TargetObject;
+            BotBody.attackComponent.StopAttack();
+            BotBody.StopFollowing();
+            BotBody.StopMoving();
+            BotBody.TargetObject = corpse;
+            if (BotBody.CastSpell(resurrection, m_mobSpellLine, false))
+                return true;
+            BotBody.TargetObject = previous;
+            CompanionSquads.ReleaseCrossSquadReservation(BotBody);
             return false;
         }
 

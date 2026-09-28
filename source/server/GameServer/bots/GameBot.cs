@@ -1135,7 +1135,7 @@ namespace DOL.GS
             {
                 if (member == this || !member.IsAlive || member.CurrentRegionID != CurrentRegionID)
                     continue;
-                if (member is GameBot bot && bot.ResurrectionSpell != null && bot.Mana >= bot.PowerCost(bot.ResurrectionSpell))
+                if (member is GameBot bot && bot.BestAffordableResurrection() != null)
                     return true;
                 if (member is GamePlayer player && player.CharacterClass?.ID is
                     (int)eCharacterClass.Cleric or (int)eCharacterClass.Friar or
@@ -2529,6 +2529,25 @@ namespace DOL.GS
         public Spell CurePoisonGroup { get; protected set; }
         public Spell ResurrectionSpell { get; protected set; }
 
+        // Every known resurrection rank (bug 55), not just the strongest: an
+        // out-of-power caster may still afford a weaker rez while regenerating
+        // toward the best one.
+        public List<Spell> ResurrectionSpells { get; protected set; }
+
+        /// <summary>The strongest known resurrection spell this bot can currently
+        /// afford, or null if none is (bug 55): in combat, cast whatever is
+        /// affordable now rather than waiting on <see cref="ResurrectionSpell"/>.</summary>
+        /// <summary>Bug 55: in a fight the strongest resurrection power allows now;
+        /// out of combat only the best known one, waiting for the power it needs.</summary>
+        public Spell ResurrectionToCast() => InCombat
+            ? BestAffordableResurrection() ?? ResurrectionSpell
+            : ResurrectionSpell;
+
+        public Spell BestAffordableResurrection() =>
+            (ResurrectionSpells ?? Enumerable.Empty<Spell>()).Where(spell => Mana >= PowerCost(spell))
+                .OrderByDescending(spell => spell.Level).ThenByDescending(spell => spell.ResurrectHealth)
+                .FirstOrDefault();
+
         protected const int HEALTH_REGEN_PERIOD = 6000;
 
         public static double HealAmount(Spell spell, GameLiving target)
@@ -2583,6 +2602,7 @@ namespace DOL.GS
             CurePoison = null;
             CurePoisonGroup = null;
             ResurrectionSpell = null;
+            (ResurrectionSpells ??= new()).Clear();
 
             foreach (Spell spell in Spells)
             {
@@ -2592,6 +2612,7 @@ namespace DOL.GS
 
                 if (spell.SpellType == eSpellType.Resurrect)
                 {
+                    ResurrectionSpells.Add(spell);
                     if (ResurrectionSpell == null || spell.Level > ResurrectionSpell.Level ||
                         spell.Level == ResurrectionSpell.Level && spell.ResurrectHealth > ResurrectionSpell.ResurrectHealth)
                         ResurrectionSpell = spell;

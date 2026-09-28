@@ -42,8 +42,9 @@ namespace DOL.GS
             if (Character(actor) is not GameBot { IsAutonomousWorldBot: false } bot ||
                 !bot.IsTemporaryGroupHelper && !bot.IsPersistentPlayerCompanion) return null;
             GamePlayer leader = bot.PlayerGroupLeader ?? bot.Owner;
-            return leader != null && bot.Group != null && bot.Group == leader.Group &&
-                bot.Group.IsInTheGroup(bot) && bot.Group.IsInTheGroup(leader) ? leader : null;
+            // A squad member's own Group is its squad's, never the owner's (task 44):
+            // owner-force membership replaces plain Group equality.
+            return leader != null && CompanionSquads.SharesOwnerForce(bot, leader) ? leader : null;
         }
 
         public static bool Enemy(GamePlayer player, GameLiving target) => player != null &&
@@ -94,7 +95,9 @@ namespace DOL.GS
             GamePlayer leader = Leader(helper);
             GameLiving member = Character(victim);
             GameLiving enemy = attack?.Attacker;
-            if (leader == null || member?.Group != helper.Group || !helper.Group.IsInTheGroup(member) ||
+            // The victim belongs to the same owner's force as helper (task 44): the
+            // owner himself, his own group, or one of his companion squads.
+            if (leader == null || !CompanionSquads.IsOwnerForceMember(member, leader) ||
                 victim.CurrentRegionID != helper.CurrentRegionID || !helper.IsWithinRadius(victim, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) ||
                 attack == null || !Live(leader, enemy) ||
                 !GameServer.ServerRules.IsAllowedToAttack(leader, enemy, true)) return false;
@@ -144,8 +147,9 @@ namespace DOL.GS
                 focus = SelectNearby(helper, nearby, BotSiegeRuntime.Visible);
             }
             if (focus == null) return;
-            foreach (GameLiving member in leader.Group.GetMembersInTheGroup())
-                if (member is GameBot bot && Leader(bot) == leader && PlayerLedPullCoordinator.Available(bot, leader) &&
+            // The owner's whole force (task 44), not just the Group he stands in.
+            foreach (GameBot bot in CompanionSquads.OwnerForceBots(leader))
+                if (Leader(bot) == leader && PlayerLedPullCoordinator.Available(bot, leader) &&
                     bot.IsWithinRadius(focus, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) && bot.Brain is BotBrain brain)
                     brain.AssistPlayerAttack(focus);
         }
