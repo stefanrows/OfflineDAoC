@@ -100,6 +100,26 @@ Agent sessions on items 45–48: take the role and context from
     fights. Real-client/live-log check pending. Point 6 (1.65 doctrine
     tuning) stays open. Cause e (empty RvR expiry) traced to the group task
     clock publishing an empty expiry while paused; not changed yet.
+    Live re-measurement proposals 2 and 3 implemented in source
+    (docs/NIGHT_REPORT.md, 15:46): RvR bots stay out of the shared frontier
+    dungeons (Hall of the Corrupt, Summoner's Hall, Marfach Caverns, Dodens
+    Gruva) as destinations, hunting grounds and roads; a released warband
+    member rejoins a leader in another frontier through the porter instead
+    of walking that dungeon tunnel (Albion and Midgard port home first where
+    their foreign portal keep sells only the home medallion; relic carriers,
+    and forces whose porter fails, keep the tunnel as a last resort) (the
+    main way RvR bots met the
+    Archwizard, Black Lady and reanimated guardians; Hunters and dungeon
+    enemy targets were the rest); roaming and keep routes bend once,
+    navmesh-checked, at most 4,000 units out of the way and dropped after
+    40 s or a failed order, around
+    aggressive named monsters of level 55+, red or purple monsters and dense
+    camps (4+ aggressive monsters within 700 units); patrol spots skip such
+    camps; a warband or solo attacked by a red or purple monster (or a named
+    55+ above its level) breaks off and walks 2,800 units away instead of
+    fighting, keep guards and lords excepted; warbands regroup at the hub
+    before porting again (bug 66). New log lines `RVR_MOB_BYPASS` and
+    `RVR_MOB_DISENGAGE`. Real-client/live-log check pending.
 
 ## Implemented in source; installation verification pending
 

@@ -42,28 +42,40 @@ public sealed partial class AutonomousWorldBotController
     {
         if (bot.CurrentRegionID == destination.RegionId || bot.CurrentRegionID is not (1 or 100 or 200) ||
             destination.RegionId is not (1 or 100 or 200) || GameRelic.IsPlayerCarryingRelic(bot)) return false;
-        var passage = AutonomousFrontierTransport.Destination(bot.Realm,destination.RegionId);
-        if (passage == null) return false;
-        bool returningToPve = passage.Medallion == "home_necklace" &&
-            AutonomousObjectiveAssignments.Parse(bot.PersistentRecord?.ObjectiveKind) != eAutonomousObjectiveKind.RvR;
-        var party=AutonomousFrontierTransport.BoardingParty(bot, passage);
-        if(party.Any(GameRelic.IsPlayerCarryingRelic))
+        // A failed porter lets the RvR crossing search fall back to the
+        // dungeon road for a minute, so no force is stranded (last resort).
+        bool Unavailable()
         {
-            foreach(var member in party) member.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
+            bot.TempProperties.SetProperty(AutonomousFrontierTransport.PorterUnavailableKey, GameLoop.GameLoopTime + 60_000);
             return false;
         }
+        if (AutonomousFrontierTransport.Destination(bot.Realm,destination.RegionId) == null) return Unavailable();
         // A full backpack must not cancel every member's approach before the
         // owner can reach the real merchant and sell ordinary vendor trash.
         if (_frontierPorter?.ObjectState != GameObject.eObjectState.Active || _frontierPorter.CurrentRegion != bot.CurrentRegion)
         {
-            if (GameLoop.GameLoopTime < _nextPorterSearch) return false;
+            if (GameLoop.GameLoopTime < _nextPorterSearch) return Unavailable();
             _nextPorterSearch = GameLoop.GameLoopTime + 30_000;
             _frontierPorter = AutonomousFrontierTransport.NearestPorter(bot);
             _medallionMerchant = null;
             _frontierWaitingPoint = null;
             _nextWaitingPointSearch = 0;
         }
-        if (_frontierPorter == null) return false;
+        if (_frontierPorter == null) return Unavailable();
+        // Albion/Midgard portal keeps in a foreign frontier sell only the home
+        // medallion: port home first, then onward (two hops).
+        var passage = AutonomousFrontierTransport.ChoosePassage(bot.Realm, bot.CurrentRegionID, destination.RegionId,
+            medallion => AutonomousFrontierTransport.PorterSells(_frontierPorter, medallion),
+            medallion => AutonomousFrontierTransport.Ticket(bot, new(0, medallion, null)) != null);
+        if (passage == null) return Unavailable();
+        bool returningToPve = passage.Medallion == "home_necklace" &&
+            AutonomousObjectiveAssignments.Parse(bot.PersistentRecord?.ObjectiveKind) != eAutonomousObjectiveKind.RvR;
+        var party=AutonomousFrontierTransport.BoardingParty(bot, passage);
+        if(party.Any(GameRelic.IsPlayerCarryingRelic))
+        {
+            foreach(var member in party) member.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
+            return Unavailable();
+        }
         // Declare the transport intent before approaching its merchant. A
         // returning PvE bot may need its own portal-keep door to BUY the ticket.
         // Boarding still requires the real purchased medallion and all safety checks.
@@ -76,7 +88,7 @@ public sealed partial class AutonomousWorldBotController
                 _medallionMerchant = _frontierPorter.GetNPCsInRadius(3000).OfType<GameMerchant>()
                     .Where(npc => npc.TradeItems?.GetAllItems().Values.OfType<DbItemTemplate>().Any(item=>item.Id_nb==passage.Medallion)==true)
                     .OrderBy(_frontierPorter.GetDistanceTo).FirstOrDefault();
-            if (_medallionMerchant == null) return false;
+            if (_medallionMerchant == null) return Unavailable();
             if (!ApproachSupplyMerchant(bot, _medallionMerchant))
             {
                 SetRvrStatus(bot,"Collecting frontier medallion",destination.MonsterName,$"Walking to {_medallionMerchant.Name} for {passage.Medallion}");
@@ -97,12 +109,12 @@ public sealed partial class AutonomousWorldBotController
                 return true;
             }
             if (slot==eInventorySlot.Invalid || template.Price<0 || template.Price>0 && !AutonomousBotEconomy.TrySpend(bot.DatabaseID,template.Price))
-                return false; // Existing legal dungeon itinerary remains available.
+                return Unavailable(); // Existing legal dungeon itinerary remains available.
             var ticket = GameInventoryItem.Create(template);
             if (ticket == null || !bot.Inventory.AddItem(slot,ticket))
             {
                 if(template.Price>0) AutonomousBotEconomy.AddMoney(bot.DatabaseID,template.Price);
-                return false;
+                return Unavailable();
             }
             AutonomousBotEconomy.MarkInventoryChanged(bot);
             AutonomousBotStatusPersistence.Queue(bot,true);
@@ -120,11 +132,28 @@ public sealed partial class AutonomousWorldBotController
             SetRvrStatus(bot,"Finding teleporter waiting space",destination.MonsterName,"Waiting for a reachable spot clear of the teleporter");
             return true;
         }
+        // Solos only for their own release hold; warbands for the regroup window.
+        bool regrouping = passage.Medallion != "home_necklace" &&
+            AutonomousFrontierTransport.RecentRelease(bot, GameLoop.GameLoopTime) is long released &&
+            (party.Length > 1 || GameLoop.GameLoopTime - released < AutonomousFrontierTransport.ReleaseHoldMilliseconds);
         if (Vector3.Distance(new(bot.X,bot.Y,bot.Z),_frontierWaitingPoint.Value) > 40)
             IssuePath(bot,_frontierWaitingPoint.Value);
-        else { bot.StopMovingOnPath(); bot.StopMoving(); }
+        else
+        {
+            bot.StopMovingOnPath(); bot.StopMoving();
+            // Freshly released: sit and recover while the warband regroups.
+            if (regrouping && !BotRestRecovery.BlocksRest(bot) &&
+                !AutonomousRestPolicy.IsFullyRecovered(bot.HealthPercent, bot.ManaPercent, bot.EndurancePercent, bot.MaxMana > 0))
+                bot.BeginRecoveryRest();
+        }
         AutonomousFrontierTransport.WakeBoardingPorter(bot,
             bot.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey));
+        if (regrouping)
+        {
+            SetRvrStatus(bot,"Regrouping at the teleporter",destination.MonsterName,
+                $"At {_frontierPorter.Name}; released recently: recovering and waiting for the warband before porting to {passage.Location.Name}");
+            return true;
+        }
         SetRvrStatus(bot,"Boarding frontier teleporter",destination.MonsterName,
             AutonomousFrontierTransport.HasDefenderPriority(bot, passage)
                 ? $"At {_frontierPorter.Name}; priority defense departure to {passage.Location.Name}"

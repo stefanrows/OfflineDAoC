@@ -1368,6 +1368,16 @@ namespace DOL.GS
                 // Away from the actual crossing, follow the leader's corridor
                 // below rather than independently racing toward the dungeon.
             }
+            // A member released at its border hub rejoins a leader in another
+            // frontier through the real porter (and its regroup rule), never
+            // on foot through the shared frontier dungeons that link them.
+            if (directive.ObjectiveKind == eAutonomousObjectiveKind.RvR && directive.Camp == null &&
+                bot.CurrentRegionID != leader.CurrentRegionID &&
+                bot.CurrentRegionID is 1 or 100 or 200 && leader.CurrentRegionID is 1 or 100 or 200 &&
+                TryFrontierTransport(bot, new("frontier-passage", leader.CurrentZone?.Description ?? "frontier", "frontier",
+                    leader.CurrentRegionID, leader.X, leader.Y, leader.Z, 50, false, true)))
+                return true;
+
             // Warbands have no PvE camp. Follow the leader through a legal
             // region edge instead of issuing its coordinates in the wrong region.
             if (directive.Camp == null && bot.CurrentRegionID != leader.CurrentRegionID)
@@ -1975,6 +1985,11 @@ namespace DOL.GS
                 _rvrTravelGoal = destination;
                 _rvrTravelWaypoint = AutonomousRvrTravel.ChooseWaypoint(bot, destination);
             }
+            // Step around a named/far-above monster or a dense camp on the way.
+            // A failed bend is dropped and the ordinary order below is issued.
+            if (AutonomousRvrMobAvoidance.TryWalkBend(_rvrTravelWaypoint.Value, AvoidDangerousMobs(bot, _rvrTravelWaypoint.Value),
+                    bend => IssuePath(bot, bend), DropMobBypass))
+                return true;
             // ChooseWaypoint validates both legs when the final goal is in the
             // same zone. Continue that existing route without a full AI wake.
             // A changed goal or cross-zone route still needs its own planning.
@@ -2026,7 +2041,8 @@ namespace DOL.GS
                     Zone spotZone = bot.CurrentRegion?.GetZone((int)spot.Position.X, (int)spot.Position.Y);
                     Vector3? floor = spotZone == null ? null :
                         nav.GetClosestPoint(spotZone, spot.Position, 64, 64, 96, nav.DefaultFilters);
-                    if (!floor.HasValue || !IsFrontierRegionPoint(bot.CurrentRegionID, (int)floor.Value.X, (int)floor.Value.Y))
+                    if (!floor.HasValue || !IsFrontierRegionPoint(bot.CurrentRegionID, (int)floor.Value.X, (int)floor.Value.Y) ||
+                        AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID))
                         continue;
                     string id = $"rvr-heat-{bot.CurrentRegionID}-{(int)floor.Value.X / 500}-{(int)floor.Value.Y / 500}";
                     CampDestination destination = new(id, "the sound of fighting", spotZone.Description ?? "frontier",
@@ -2075,6 +2091,7 @@ namespace DOL.GS
         {
             HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
             GameLiving revengeTarget = AutonomousGuildGrudgeMemory.GetReachableTargets(bot, reachable, WorldSimulationClock.UtcNow)
+                .Where(target => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(target.CurrentRegionID))
                 .OrderBy(target => EstimateTravelMinutes(bot, target.CurrentRegionID, target.X, target.Y))
                 .FirstOrDefault();
             if (revengeTarget != null)
@@ -2101,7 +2118,8 @@ namespace DOL.GS
                          .Where(candidate => candidate.IsAlive && AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, candidate) &&
                                              AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, candidate) &&
                                              AutonomousObjectiveAssignments.Is(candidate, eAutonomousObjectiveKind.RvR) &&
-                                             reachable.Contains(candidate.CurrentRegionID) && IsInFrontier(candidate))
+                                             reachable.Contains(candidate.CurrentRegionID) && IsInFrontier(candidate) &&
+                                             !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(candidate.CurrentRegionID))
                          .OrderBy(candidate => unchecked((ulong)(candidate.DatabaseID ^ bot.DatabaseID * 397) * 11400714819323198485UL))
                          .Take(24))
             {
@@ -2120,7 +2138,7 @@ namespace DOL.GS
             {
                 GameLiving carrier = relic?.CurrentCarrier;
                 if (carrier == null && !relic.IsMounted && relic.ObjectState == GameObject.eObjectState.Active &&
-                    reachable.Contains(relic.CurrentRegionID))
+                    reachable.Contains(relic.CurrentRegionID) && !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(relic.CurrentRegionID))
                 {
                     string groundId = RelicObjectiveId(relic);
                     choices.Add(new(groundId, $"dropped {relic.Name}", relic.CurrentZone?.Description ?? "frontier",
@@ -2129,7 +2147,8 @@ namespace DOL.GS
                         relic.OriginalRealm, relic.CurrentRegionID, relic.X, relic.Y, relic.Z, false, 1, 0, 0, 0, true));
                     continue;
                 }
-                if (carrier == null || !carrier.IsAlive || !reachable.Contains(carrier.CurrentRegionID) || !IsInFrontier(carrier))
+                if (carrier == null || !carrier.IsAlive || !reachable.Contains(carrier.CurrentRegionID) || !IsInFrontier(carrier) ||
+                    AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(carrier.CurrentRegionID))
                     continue;
                 string id = RelicObjectiveId(relic);
                 CampDestination destination = new(id, $"active {relic.Name}",
@@ -2164,7 +2183,10 @@ namespace DOL.GS
             {
                 foreach (CampCatalogCell cell in CampCatalogSnapshot()
                     .Where(c => c.IsFrontier && !c.IsDungeon && c.LiveMobCount > 0 && reachable.Contains(c.RegionId) &&
-                        c.Zone != null && IsFrontierRegionPoint(c.RegionId, c.X, c.Y))
+                        c.Zone != null && IsFrontierRegionPoint(c.RegionId, c.X, c.Y) &&
+                        !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(c.RegionId) &&
+                        // A patrol spot is a clearing, not the Archwizard's hall or a crowded camp.
+                        AutonomousRvrMobAvoidance.IsSuitablePatrolCamp(bot.Level, c.Levels, c.LiveMobCount, c.MonsterName))
                     .OrderBy(cell => leaderType == AutonomousPlayerType.Roamer
                         ? HashCode.Combine(cell.Id, _groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID)
                         : Random.Shared.Next()).Take(24))
@@ -2238,6 +2260,10 @@ namespace DOL.GS
                 _rejectedDungeonCamps.Remove(id);
             CampDestination[] choices = CampCatalogSnapshot()
                 .Where(cell => !_rejectedDungeonCamps.ContainsKey("local-pvp-" + cell.Id) &&
+                    // Hunters keep Darkness Falls, never the shared frontier
+                    // dungeons, and never stand at a named or far-above camp.
+                    !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(cell.RegionId) &&
+                    !(cell.Levels?.Any(camp => AutonomousRvrMobAvoidance.IsAvoidedMob(level, camp, cell.MonsterName)) ?? false) &&
                     cell.LiveMobCount > 0 && (hunter
                     ? AutonomousPvpOpportunityPolicy.IsHunterHuntArea(
                         level, cell.Levels, cell.IsDungeon, cell.IsFrontier, PvpCombatant.IsSafeRegion(cell.RegionId),
@@ -4448,6 +4474,35 @@ namespace DOL.GS
 
         private static DbZonePoint FindNextCrossing(GameBot bot, ushort targetRegion, int targetX, int targetY)
         {
+            // An RvR force never uses the shared frontier dungeons as a road
+            // between frontiers (live: 470 level-50 deaths in 11 h to the
+            // Archwizard, Black Lady and guardians inside those dungeons).
+            // Relic parties (no porter) and forces whose porter failed keep the
+            // dungeon road as a last resort and, once on it, follow it through;
+            // other bots inside take the nearest exit.
+            if (AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
+            {
+                const string committedKey = "RvrTunnelCommittedGoal";
+                int committedGoal = bot.TempProperties.GetProperty<int>(committedKey, -1);
+                if (committedGoal >= 0 && (committedGoal != targetRegion ||
+                        !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID)))
+                {
+                    bot.TempProperties.RemoveProperty(committedKey); // outside again, or a new goal
+                    committedGoal = -1;
+                }
+                bool relicParty = GameRelic.IsPlayerCarryingRelic(bot) ||
+                    bot.Group?.GetMembersInTheGroup().Any(GameRelic.IsPlayerCarryingRelic) == true;
+                DbZonePoint crossing = AutonomousRvrMobAvoidance.ChooseRvrCrossing(
+                    CrossingEdges(bot.Realm, bot.CurrentRegionID, targetRegion), bot.CurrentRegionID, targetRegion,
+                    bot.X, bot.Y, relicParty,
+                    bot.TempProperties.GetProperty<long>(AutonomousFrontierTransport.PorterUnavailableKey) > GameLoop.GameLoopTime,
+                    committedGoal == targetRegion,
+                    edges => FindNextCrossing(edges as DbZonePoint[] ?? edges.ToArray(), bot.CurrentRegionID, targetRegion,
+                        targetX, targetY, bot), out bool commits);
+                if (commits)
+                    bot.TempProperties.SetProperty(committedKey, (int)targetRegion);
+                return crossing;
+            }
             return FindNextCrossing(bot.Realm, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
         }
 

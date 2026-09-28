@@ -19,13 +19,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     placement from the 0.72.0 frontier manifest versus hub geometry; RvR route
     and aggro avoidance).
 
-66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
-    0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
-    had about 94 per hour), 1,999 of them full eight-member parties; single
-    forces departed 160–191 times. Bots die in the field, release at their hub
-    (0.123.0) and board again at once. Expected: a 2003 group rezzed, buffed and
-    regrouped for a few minutes before porting back. Not yet investigated.
-
 64. **Player and companion overhead names sometimes do not appear.** Reported
     while source was 0.109.0; installed version and client build are
     unconfirmed. Seen after login, zoning, or when entities reappear or
@@ -88,6 +81,26 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
+    0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
+    had about 94 per hour), 1,999 of them full eight-member parties; single
+    forces departed 160–191 times. Bots die in the field, release at their hub
+    (0.123.0) and board again at once. Expected: a 2003 group rezzed, buffed and
+    regrouped for a few minutes before porting back. Investigation (04:41–15:46
+    log): `party=8` is the group size, not the number boarding; 5,979 of 7,558
+    departures moved one bot, and 3,646 of the 5,224 warband departures were a
+    single released member going back alone; 4,360 of 6,847 repeat departures
+    of a force came less than 3 minutes after its previous one. Fixed in
+    source: an autonomous RvR bot does not port out within 75 s of its own
+    release (it sits and recovers at the porter); a warband with a freshly
+    released member at the porter waits until all its members are alive and
+    within 1,500 units of the porter, or until the first of them has waited
+    3 minutes; a warband leaves at most once per 5 minutes (the rest of a
+    departure under way may follow for 20 s; a keep-defence call skips only
+    the cap); home passages are never held. The 0.123.0 one-minute muster is
+    unchanged. `RVR_FRONTIER_DEPARTURE` now logs `since_release_s` and
+    `force_gap_s`. Real-client and live-log check pending.
 
 67. **Mobs BAF toward the group during a held `/petpull`.** Reported on
     2026-09-28 while pet pulling as a Necromancer: mobs headed toward group
