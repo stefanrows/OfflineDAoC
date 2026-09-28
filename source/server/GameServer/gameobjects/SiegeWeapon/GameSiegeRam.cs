@@ -288,7 +288,8 @@ namespace DOL.GS
 		public override int CalcDamageToTarget(GameLiving target)
 		{
 			//return BaseDamage + (int)(((double)BaseDamage / 2.0) * (double)((double)CurrentRiders.Length / (double)MAX_PASSENGERS));
-			return BaseDamage + (BaseDamage/2 * RiderCount);
+			// TEMPORARY TESTING: Remove this 10x multiplier after Siege Ram testing.
+			return (BaseDamage + (BaseDamage / 2 * RiderCount)) * 10;
 		}
 
 		public override int BaseDamage

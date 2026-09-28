@@ -40,6 +40,8 @@ namespace DOL.GS.Commands
         public eInventorySlot SelectedSlot { get; set; } = eInventorySlot.Invalid;
         /// <summary>A build chosen in the detail panel; it applies only while <c>EntryKey</c> stays selected.</summary>
         public (string EntryKey, string PlanId) BuildChoice { get; set; }
+        /// <summary>Only the selected companion can receive a second-click delete confirmation.</summary>
+        public string DeleteConfirmationId { get; set; }
         public ushort Revision { get; private set; } = 1;
         public string Signature { get; private set; } = string.Empty;
         public ushort Region { get; set; }
@@ -124,6 +126,7 @@ namespace DOL.GS.Commands
             if (Current.SelectedKey != key)
             {
                 Current.SelectedKey = key;
+                DeleteConfirmationId = null;
                 DetailOffset = 0;
                 SelectedItemId = null;
                 SelectedSlot = eInventorySlot.Invalid;

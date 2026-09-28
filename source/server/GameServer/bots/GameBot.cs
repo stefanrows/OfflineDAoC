@@ -1730,6 +1730,7 @@ namespace DOL.GS
                 // Persistent companions never earn PvP XP (see GainExperience), but
                 // earn RvR realm points through the same award path as autonomous bots.
                 CompanionRealmPoints += amount;
+                RealmLevel = CompanionRealmAbilityTraining.RealmLevel(CompanionRealmPoints);
                 PlayerCompanionProgressPersistence.Queue(this);
             }
         }
@@ -3030,6 +3031,8 @@ namespace DOL.GS
             {
                 Experience = Math.Max(0, PlayerCompanionRecord.Experience);
                 CompanionRealmPoints = Math.Max(0, PlayerCompanionRecord.RealmPoints);
+                RealmLevel = CompanionRealmAbilityTraining.RealmLevel(CompanionRealmPoints);
+                CompanionRealmAbilityTraining.Restore(this);
             }
 
             Health = MaxHealth;

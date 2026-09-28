@@ -54,6 +54,11 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false)]
         public long RealmPoints { get; set; }
 
+        // Class-legal realm ability ranks (key|rank;...), independent of career
+        // specialization training. Existing companions begin with no purchases.
+        [DataElement(AllowDbNull = false)]
+        public string SerializedRealmAbilities { get; set; } = string.Empty;
+
         [DataElement(AllowDbNull = false)]
         public string SerializedSpecs { get; set; } = string.Empty;
 

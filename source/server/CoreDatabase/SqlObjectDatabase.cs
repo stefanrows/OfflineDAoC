@@ -133,6 +133,15 @@ namespace DOL.Database
             return UpdateAndDeleteObjectsAtomicallyCore(updateRows, deleteRows);
         }
 
+        /// <summary>Deletes persisted rows from one or more tables in one transaction.</summary>
+        public bool DeleteObjectsAtomically(IEnumerable<DataObject> deletes)
+        {
+            DataObject[] rows = deletes?.Distinct<DataObject>(ReferenceEqualityComparer.Instance).ToArray();
+            if (rows == null || rows.Length == 0 || rows.Any(row => row == null || !row.IsPersisted))
+                return false;
+            return UpdateAndDeleteObjectsAtomicallyCore([], rows);
+        }
+
         protected virtual bool UpdateAndDeleteObjectsAtomicallyCore(DataObject[] updates, DataObject[] deletes)
         {
             DbConnection connection = null;

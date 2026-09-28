@@ -42,6 +42,15 @@ recruits are named individuals with written backgrounds and dialogue, each
 available once per owning character. Both use the same persistent progression,
 gear, and player controls. Temporary `/spawn` helpers are a separate system.
 
+The Companion Manager roster marks generated recruits **Regular** and authored
+recruits **Story** in both the list and the selected companion's detail heading.
+On Overview, **[Delete]** opens a confirmation for that companion. Confirming
+permanently removes the saved companion and its disposable starter gear. If the
+companion carries earned, traded, or unclassified items, deletion is refused;
+invite the companion and clear those items first. An active companion is
+benched before deletion. Deleting a story companion makes that authored person
+available for recruitment again.
+
 An active, living recruit follows its owner through an accepted portal or
 region teleport, including same-region moves. Only that owner's companion in
 the current group relocates; ordinary group members keep their own position.
@@ -159,6 +168,15 @@ Joining a battlegroup with `/bg` brings an owner's live squad companions along
 automatically, and leaving takes them with him; `/bg who` lists them under their
 owner. A battlegroup's chat, loot, and treasurer features remain human-only, as
 before; a companion is never a battlegroup member of its own.
+
+## Enchanter companion pets
+
+Persistent Enchanter companions prefer the highest learned, castable
+Underhill Ally summon across their selected builds. If no Underhill Ally
+spell is available, they use the normal pet selection. An existing
+alternate pet is replaced only while the owner and pet are idle.
+Temporary `/spawn` helpers and autonomous world bots keep their
+existing selection rules.
 
 ## Pet pull mode (`/petpull`)
 
@@ -339,6 +357,10 @@ damage by a controlled pet credited to that player. Damage dealt by a
 persistent companion stays in the encounter's damage total but is not
 transferred to the owner as kill credit; the companion earns its own Realm
 Points (saved additively in `PlayerCompanionRecord.RealmPoints`) instead.
+The owner can spend the resulting realm ability points in the Companion
+Manager's Training & Tactics pane. Passive purchases use the same class list
+and rank costs as player training and persist separately from career skills;
+timed active abilities are not offered because companion AI cannot fire them.
 Consequently, a companion's damage can reduce the owner's percentage of a
 shared PvP reward while the companion earns its own share. Group membership
 alone does not award PvP progression to a companion or to an owner who has no

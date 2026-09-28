@@ -72,18 +72,18 @@ COMMAND_PREFIX = "&companions ui "
 SEARCH_PREFIX = "/companions find "
 OP_LABEL, OP_SHOW, OP_HIDE, OP_TOKEN = 1, 2, 3, 4
 
-WINDOW_WIDTH = 640
-WINDOW_HEIGHT = 420
+WINDOW_WIDTH = 720
+WINDOW_HEIGHT = 500
 ROWS = 12
 DETAIL_LINES = 11
 ACTIONS = 6
 # Label widths in pixels; the server fits text to them using arial11 advances.
-WIDTH_STATUS = 616
-WIDTH_MESSAGE = 556
+WIDTH_STATUS = 696
+WIDTH_MESSAGE = 636
 WIDTH_ROW_NAME = 110
 WIDTH_ROW_INFO = 158
-WIDTH_DETAIL = 312
-WIDTH_ACTION = 104
+WIDTH_DETAIL = 392
+WIDTH_ACTION = 128
 
 GOLD = (255, 210, 90)
 MUTED = (150, 150, 150)
@@ -120,16 +120,16 @@ TAB_LINKS = (
 )
 # protocol name, text, control, x, y, width
 STATIC_LINKS = (
-    ("Search", "[Search]", SEARCH_CONTROL, 448, 28, 60),
-    ("Clear", "[Clear]", 0x58, 512, 28, 52),
-    ("Refresh", "[Refresh]", 0x5E, 568, 28, 60),
-    ("ListUp", "[Up]", 0x50, 14, 358, 34),
-    ("ListDown", "[Down]", 0x51, 50, 358, 46),
-    ("ListPageUp", "[PgUp]", 0x52, 100, 358, 48),
-    ("ListPageDown", "[PgDn]", 0x53, 150, 358, 48),
-    ("DetailUp", "[Up]", 0x54, 312, 332, 34),
-    ("DetailDown", "[Down]", 0x55, 348, 332, 46),
-    ("Close", "[Close]", 0x5F, 572, 396, 56),
+    ("Search", "[Search]", SEARCH_CONTROL, 528, 28, 60),
+    ("Clear", "[Clear]", 0x58, 592, 28, 52),
+    ("Refresh", "[Refresh]", 0x5E, 648, 28, 60),
+    ("ListUp", "[Up]", 0x50, 14, 438, 34),
+    ("ListDown", "[Down]", 0x51, 50, 438, 46),
+    ("ListPageUp", "[PgUp]", 0x52, 100, 438, 48),
+    ("ListPageDown", "[PgDn]", 0x53, 150, 438, 48),
+    ("DetailUp", "[Up]", 0x54, 312, 410, 34),
+    ("DetailDown", "[Down]", 0x55, 348, 410, 46),
+    ("Close", "[Close]", 0x5F, 652, 476, 56),
 )
 
 LABEL_STATUS = 0
@@ -415,17 +415,24 @@ def build(image):
                          "searchText": search_text, "layout": layout_constants()}
 
 
-def _position(parent, x, y):
+def _position(parent, x, y, width, height, *, grow_width=False, grow_height=False,
+              anchor_right=False, anchor_bottom=False):
     position = ET.SubElement(parent, "Position")
-    ET.SubElement(position, "X").text = str(x)
-    ET.SubElement(position, "Y").text = str(y)
-    ET.SubElement(parent, "Alignment").text = ""
+    ET.SubElement(position, "X").text = str(WINDOW_WIDTH - x - width if anchor_right else x)
+    ET.SubElement(position, "Y").text = str(WINDOW_HEIGHT - y - height if anchor_bottom else y)
+    alignment = ET.SubElement(parent, "Alignment")
+    for enabled, name in ((grow_width, "GrowWidth"), (grow_height, "GrowHeight"),
+                          (anchor_right, "offsetright"), (anchor_bottom, "offsetbottom")):
+        if enabled:
+            ET.SubElement(alignment, name).text = "true"
 
 
-def _label(panel, x, y, width, color, adapter=None, text="", characters=64, height=16):
+def _label(panel, x, y, width, color, adapter=None, text="", characters=64, height=16,
+           *, grow_width=False, anchor_right=False, anchor_bottom=False):
     label = ET.SubElement(panel, "LabelDef")
     ET.SubElement(label, "ControlId").text = "1000"
-    _position(label, x, y)
+    _position(label, x, y, width, height, grow_width=grow_width,
+              anchor_right=anchor_right, anchor_bottom=anchor_bottom)
     rgba = ET.SubElement(label, "Color")
     for channel, value in zip("RGBA", (*color, 255)):
         ET.SubElement(rgba, channel).text = str(value)
@@ -441,17 +448,20 @@ def _label(panel, x, y, width, color, adapter=None, text="", characters=64, heig
         ET.SubElement(label, "Adapter").text = adapter_name(adapter)
 
 
-def _click(panel, x, y, width, control, caption, height=16):
+def _click(panel, x, y, width, control, caption, height=16, *, grow_width=False,
+           anchor_right=False, anchor_bottom=False):
     button = ET.SubElement(panel, "InvisibleButtonDef")
     ET.SubElement(button, "ControlId")
-    _position(button, x, y)
+    _position(button, x, y, width, height, grow_width=grow_width,
+              anchor_right=anchor_right, anchor_bottom=anchor_bottom)
     ET.SubElement(button, "Label").text = caption
     ET.SubElement(button, "OnClickEvent").text = click_event(control)
     ET.SubElement(button, "Width").text = str(width)
     ET.SubElement(button, "Height").text = str(height)
 
 
-def _image(panel, x, y, width, height, template, control=None):
+def _image(panel, x, y, width, height, template, control=None, *,
+           grow_width=False, grow_height=False):
     image = ET.SubElement(panel, "FullResizeImageDef")
     if control:
         ET.SubElement(image, "ControlId").text = control
@@ -459,14 +469,17 @@ def _image(panel, x, y, width, height, template, control=None):
     ET.SubElement(position, "X").text = str(x)
     ET.SubElement(position, "Y").text = str(y)
     alignment = ET.SubElement(image, "Alignment")
-    ET.SubElement(alignment, "TopLeft").text = "true"
+    if grow_width:
+        ET.SubElement(alignment, "GrowWidth").text = "true"
+    if grow_height:
+        ET.SubElement(alignment, "GrowHeight").text = "true"
     ET.SubElement(image, "TemplateName").text = template
     ET.SubElement(image, "Width").text = str(width)
     ET.SubElement(image, "Height").text = str(height)
 
 
 def window():
-    """Custom8 XML built only from controls proven by the installed raid window.
+    """Custom8 XML built from the installed raid window and stock resize behavior.
 
     Every interactive element is a label plus an InvisibleButtonDef with a
     custom OnClickEvent, exactly like the raid's member rows. State colours
@@ -476,52 +489,68 @@ def window():
     panel = ET.SubElement(root, "WindowTemplate")
     for key, value in (("Name", "custom8_window"), ("WindowId", "Custom8"), ("CloseButton", "true"),
                        ("MoveButton", "true"), ("TopRightResizeButton", "false"),
-                       ("BottomRightResizeButton", "false"), ("BottomLeftResizeButton", "false"),
-                       ("ResizeButtonOffsetX", "0"), ("ResizeButtonOffsetY", "0"), ("TitleWidth", "0"),
+                       ("BottomRightResizeButton", "true"), ("BottomLeftResizeButton", "false"),
+                       ("ResizeButtonOffsetX", "9"), ("ResizeButtonOffsetY", "0"), ("TitleWidth", "0"),
                        ("TitleHeight", "0"), ("Width", str(WINDOW_WIDTH)), ("Height", str(WINDOW_HEIGHT)),
-                       ("ResizeableWidth", "0"), ("ResizeableHeight", "0"), ("ResizeableTwoWayWidth", "0"),
-                       ("ResizeableTwoWayHeight", "0"), ("MinWidth", "0"), ("MinHeight", "0"),
+                       ("ResizeableWidth", "6"), ("ResizeableHeight", "6"), ("ResizeableTwoWayWidth", "0"),
+                       ("ResizeableTwoWayHeight", "0"), ("MinWidth", str(WINDOW_WIDTH)),
+                       ("MinHeight", str(WINDOW_HEIGHT)),
                        ("ContextTemplateName", None)):
         ET.SubElement(panel, key).text = value
-    _image(panel, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, "dlg_sm_title_noresize", "Background")
-    _image(panel, 8, 104, 294, 280, "dlg_lg_title_noresize")
-    _image(panel, 306, 104, 326, 286, "dlg_lg_title_noresize")
+    _image(panel, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, "dlg_background_resize", "Background",
+           grow_width=True, grow_height=True)
+    _image(panel, 8, 104, 294, 360, "dlg_background_resize", grow_height=True)
+    _image(panel, 306, 104, 406, 366, "dlg_background_resize",
+           grow_width=True, grow_height=True)
 
     _label(panel, 12, 6, 300, GOLD, text="Companion Manager", characters=32)
     _label(panel, 12, 48, 44, MUTED, text="Realm:", characters=8)
     _label(panel, 12, 66, 44, MUTED, text="Role:", characters=8)
-    _label(panel, 12, 86, WIDTH_STATUS, STATUS, LABEL_STATUS, characters=120)
-    _label(panel, 12, 396, WIDTH_MESSAGE, MESSAGE, LABEL_MESSAGE, characters=120)
+    _label(panel, 12, 86, WIDTH_STATUS, STATUS, LABEL_STATUS, characters=120, grow_width=True)
+    _label(panel, 12, 476, WIDTH_MESSAGE, MESSAGE, LABEL_MESSAGE, characters=120,
+           grow_width=True, anchor_bottom=True)
     for index, (name, _control, x, y, width) in enumerate(TOGGLES):
         _label(panel, x, y, width, MUTED, LABEL_TOGGLE_BASE + 2 * index, characters=32)
         _label(panel, x, y, width, GOLD, LABEL_TOGGLE_BASE + 2 * index + 1, characters=32)
     for row in range(ROWS):
-        y = 112 + 20 * row
+        y = 112 + 26 * row
         base = LABEL_ROW_BASE + ROW_STRIDE * row
         _label(panel, 14, y, 12, GOLD, base, characters=4)
         for realm in range(3):
             _label(panel, 28, y, WIDTH_ROW_NAME, REALM_COLORS[realm], base + 1 + realm, characters=32)
         _label(panel, 140, y, WIDTH_ROW_INFO, STATUS, base + 4, characters=40)
-    _label(panel, 202, 358, 94, STATUS, LABEL_LIST_INDICATOR, characters=24)
+    _label(panel, 202, 438, 94, STATUS, LABEL_LIST_INDICATOR, characters=24,
+           anchor_bottom=True)
     for realm in range(3):
-        _label(panel, 312, 130, WIDTH_DETAIL, REALM_COLORS[realm], LABEL_HEADER_BASE + realm, characters=48)
-    _label(panel, 312, 146, WIDTH_DETAIL, STATUS, LABEL_SUBHEADER, characters=80)
+        _label(panel, 312, 130, WIDTH_DETAIL, REALM_COLORS[realm], LABEL_HEADER_BASE + realm,
+               characters=48, grow_width=True)
+    _label(panel, 312, 148, WIDTH_DETAIL, STATUS, LABEL_SUBHEADER,
+           characters=80, grow_width=True)
     for line in range(DETAIL_LINES):
-        y = 166 + 15 * line
-        _label(panel, 312, y, WIDTH_DETAIL, TEXT, LABEL_DETAIL_BASE + 2 * line, characters=80)
-        _label(panel, 312, y, WIDTH_DETAIL, LINK, LABEL_DETAIL_BASE + 2 * line + 1, characters=80)
-    _label(panel, 400, 332, 222, STATUS, LABEL_DETAIL_INDICATOR, characters=32)
+        y = 176 + 20 * line
+        _label(panel, 312, y, WIDTH_DETAIL, TEXT, LABEL_DETAIL_BASE + 2 * line,
+               characters=80, grow_width=True)
+        _label(panel, 312, y, WIDTH_DETAIL, LINK, LABEL_DETAIL_BASE + 2 * line + 1,
+               characters=80, grow_width=True)
+    _label(panel, 400, 410, 302, STATUS, LABEL_DETAIL_INDICATOR,
+           characters=40, grow_width=True, anchor_bottom=True)
     for action in range(ACTIONS):
-        x, y = 312 + 106 * (action % 3), 352 + 18 * (action // 3)
-        _label(panel, x, y, WIDTH_ACTION, GOLD, LABEL_ACTION_BASE + 2 * action, characters=32)
-        _label(panel, x, y, WIDTH_ACTION, DISABLED, LABEL_ACTION_BASE + 2 * action + 1, characters=32)
+        x, y = 312 + 132 * (action % 3), 432 + 20 * (action // 3)
+        _label(panel, x, y, WIDTH_ACTION, GOLD, LABEL_ACTION_BASE + 2 * action,
+               characters=32, anchor_bottom=True)
+        _label(panel, x, y, WIDTH_ACTION, DISABLED, LABEL_ACTION_BASE + 2 * action + 1,
+               characters=32, anchor_bottom=True)
     for _name, text, _control, x, y, width in TAB_LINKS:
         _label(panel, x, y, width, MUTED, text=text, characters=32)
     for name, text, _control, x, y, width in STATIC_LINKS:
+        anchored_bottom = name.startswith("List") or name.startswith("Detail") or name == "Close"
+        anchored_right = name in ("Search", "Clear", "Refresh", "Close")
         if name in SCROLL_LINK_LABELS:
-            _label(panel, x, y, width, LINK, SCROLL_LINK_LABELS[name], characters=16)
+            _label(panel, x, y, width, LINK, SCROLL_LINK_LABELS[name], characters=16,
+                   anchor_right=anchored_right, anchor_bottom=anchored_bottom)
         else:
-            _label(panel, x, y, width, LINK, text=text, characters=16)
+            _label(panel, x, y, width, LINK, text=text, characters=16,
+                   anchor_right=anchored_right, anchor_bottom=anchored_bottom)
 
     # Click areas after every label, matching the raid's z-order.
     for name, control, x, y, width in TOGGLES:
@@ -529,14 +558,18 @@ def window():
     for name, _text, control, x, y, width in TAB_LINKS:
         _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name))
     for row in range(ROWS):
-        _click(panel, 12, 112 + 20 * row, 286, CONTROL_ROW_BASE + row, f"Companion row {row + 1}", 18)
+        _click(panel, 12, 112 + 26 * row, 286, CONTROL_ROW_BASE + row, f"Companion row {row + 1}", 20)
     for line in range(DETAIL_LINES):
-        _click(panel, 310, 166 + 15 * line, 316, CONTROL_DETAIL_BASE + line, f"Detail line {line + 1}", 15)
+        _click(panel, 310, 176 + 20 * line, 396, CONTROL_DETAIL_BASE + line,
+               f"Detail line {line + 1}", 18, grow_width=True)
     for action in range(ACTIONS):
-        x, y = 312 + 106 * (action % 3), 352 + 18 * (action // 3)
-        _click(panel, x, y, WIDTH_ACTION, CONTROL_ACTION_BASE + action, f"Action {action + 1}")
+        x, y = 312 + 132 * (action % 3), 432 + 20 * (action // 3)
+        _click(panel, x, y, WIDTH_ACTION, CONTROL_ACTION_BASE + action,
+               f"Action {action + 1}", anchor_bottom=True)
     for name, _text, control, x, y, width in STATIC_LINKS:
-        _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name))
+        _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name),
+               anchor_right=name in ("Search", "Clear", "Refresh", "Close"),
+               anchor_bottom=name.startswith("List") or name.startswith("Detail") or name == "Close")
     ET.indent(root)
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
 

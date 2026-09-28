@@ -52,6 +52,7 @@ command guidance. The accumulating NPC speech menu stays closed.
 | Details | Overview, Training & Tactics, and Gear tabs; the selected record and list position are kept per tab during refreshes. |
 | Gear | Worn slots and backpack items with item actions, plus the existing native companion bag for inspection and drag/drop. Benched gear is read-only. |
 | Builds (0.35.0) | Training & Tactics lists the class's builds as links with their role; selecting one and choosing **[Use build]** switches it. Recruit details list the builds with the class default preselected, and **[Recruit]**/**[Create]** use the selection. |
+| Realm abilities (0.131.0) | Overview shows earned RP, realm rank, and unspent RA points. Training & Tactics lists class-legal passive RAs with current rank and next-rank cost; a click buys one rank for an active or benched companion. Purchases are saved separately from career specialization points. Timed active RAs are withheld because companion AI does not activate them. |
 | Crowd control (0.36.0) | Training & Tactics offers the Crowd control role to Healer, Sorcerer, Bard, Mentalist, and Spiritmaster companions. Each build line says which role it sets. The roster's role filter keeps its four native buttons; a Crowd control filter needs a later client patch. |
 | Group orders (0.37.0) | A **Group orders** row leads the roster list, whatever the search and filters. It shows the group order (Aggressive, Defensive, Passive, or saved stances) as links, each grouped companion's effective stance with its saved stance when an order overrides it, and **[Pull]**, **[Invite all]**, **[Bench all]**, and **[Grind]**/**[Stop grind]**. A companion stays the default selection. |
 | Worn slots (0.38.0) | Replaced in 0.39.0. The companion bag window showed the worn slots at positions 51-69; the owner found it unintuitive. |
@@ -72,8 +73,11 @@ training and gear. `/spawn` helpers are temporary.” Visible labels say
 unchanged. Names use restrained realm colors, the selected row has a gold `>`
 marker, and active tabs and filters are gold. Roles are text (`Tank`, `Healer`,
 `Buffer`, `Attacker`); the client has no proven icon adapter for this window.
-The window is 640×420 and fits the smallest shipped layout (`default800.ini`,
-800×600).
+Source 0.129.0 enlarges the default window from 640×420 to 720×500, still
+within the smallest shipped layout (`default800.ini`, 800×600). The XML uses
+the stock lower-right resize handle, resizable backgrounds, wider detail text,
+and bottom-aligned controls. Installation and real-client resize checks remain
+pending in task 52; the generated `game.dll` is unchanged.
 
 ## What the 2026-09-23 probes proved
 
@@ -182,6 +186,7 @@ differences; **[Refresh]** resends everything.
 | Build switch | `PlayerCompanionRoster.TrySelectBuild` (free, no trainer, resets and retrains) |
 | Training mode | `TrySetManualTrainingMode` / `TrySetAutomaticTrainingMode` |
 | Train one rank | Rechecks active companion, class trainer (`CanUseCompanionTrainer`), line, and rank; `SaveProgress` with queued retry |
+| Buy passive RA rank | `PlayerCompanionRoster.TrySpendRealmAbility` rechecks ownership, class, rank, point cost, and saved allocation before buying exactly one rank |
 | Respecialize | `PlayerCompanionCommandHandler.TryBeginCompanionRespec` and the existing confirmation dialog |
 | Open companion bag | `PersistentCompanionInventoryView.Open` for an active companion |
 | Equip, lock, keep, unequip, return | `PersistentCompanionGear`, now shared with the legacy menu; every call re-resolves the item and slot and uses `TryApplyEquipmentMutation` or `TryTransferItem` |

@@ -87,12 +87,12 @@ namespace DOL.GS
         public const int ToggleRoleAttacker = 13;
         public const int ToggleCount = 14;
 
-        public const int WidthStatus = 616;
-        public const int WidthMessage = 556;
+        public const int WidthStatus = 696;
+        public const int WidthMessage = 636;
         public const int WidthRowName = 110;
         public const int WidthRowInfo = 158;
-        public const int WidthDetail = 312;
-        public const int WidthAction = 104;
+        public const int WidthDetail = 392;
+        public const int WidthAction = 128;
 
         // Advance widths of the client's arial11 bitmap font (ui/fonts/arial11b.tga),
         // measured from its glyph width markers for '!' through '~'. Space is 3.

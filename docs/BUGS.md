@@ -45,6 +45,28 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     next fight kills it again. Task 48 makes the three border hubs safe, which
     should remove this loop; verify after deployment. Related: bug 29.
 
+5. **Some helmets render oversized or glitched.** The supplied screenshots
+    (2026-09-28) show Eilis, a level-47 Elf female Enchanter from Hibernia,
+    wearing a level-46, quality-95 Matterbender Cloth Cap. A read-only lookup
+    of the installed save found a likely match: a level-49 Hibernian Elf
+    Enchanter named Eilis wears the same level-46 / quality-95 cap. It has
+    model 825 and Realm Midgard; its saved appearance size is 50. The level-47
+    screenshot and this saved record are a strong, but not conclusive, match.
+    The local `game.dll` metadata reports 1.127, but the screenshot's client
+    process is unverified.
+    Source maps the ordinary Midgard cloth cap to model 825 and the ordinary
+    Hibernian cloth cap to 826 (the wizard-hat variants are 1280 and 1279).
+    The equipment packet sends the stored item model, texture and effect
+    fields without a realm conversion or helmet-scale field. Current companion
+    reward generation uses the companion's realm; owner-to-companion transfers
+    preserve the original item template. The leading explanation is that this
+    Hibernian Elf is wearing a cross-realm Midgard model. The item's origin and
+    the model's rendered fit still need confirmation in the client. Reproduce
+    by viewing Eilis in-world with this cap equipped. Expected: the cap fits
+    the wearer's head at normal scale. Actual: the helmet appears oversized or
+    visually glitched. The reported impact is cosmetic; no gameplay effect or
+    workaround was reported. Installed server version is unknown.
+
 ## Fixed in source; installation verification pending
 
 59. **Launcher BotGoalsSettings tests cannot construct the control.** Reopened
@@ -472,9 +494,6 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 38. **Server unit tests fail in bulk depending on filter and order.** On 0.80.0, `dotnet test source/server/Tests/Tests.csproj -c Release --filter "FullyQualifiedName~Companion|FullyQualifiedName~Bomb|FullyQualifiedName~BotBrain|FullyQualifiedName~Style|FullyQualifiedName~Taunt|FullyQualifiedName~BotCombat|FullyQualifiedName~Tank"` fails 133 tests with `TypeInitializationException: The type initializer for 'DOL.GS.GameObject' threw` (inner NullReferenceException). Other filters pass or fail intermittently (19 tests), and `UT_BotWeaponStats` alone fails 4. Likely a test touches `GameObject` before any `EpicTestServerScope` exists, which poisons the type for the whole run. Impact: suite results depend on selection and order; product code unaffected. Not yet investigated.
 
 27. **Missing NPC template 5232525.** Installed 0.73.0 logged one missing-template error during the 2026-09-26 autonomous session. Expected: the requested NPC template resolves; actual: lookup failed. The spawning caller and gameplay impact remain unidentified; no template was guessed or added. Reproduction beyond the observed log event and workaround are unknown.
-
-5. **Some helmets render oversized or glitched.** Expected: equipped helmets display at the correct scale and appearance. Actual: some helmets appear oversized and visually buggy; the affected items and viewing context have not been recorded. Affected version and workaround were not provided. Source audit 2026-09-26: helmet packets send the item's model and normal texture/effect fields without a demonstrated scale or field error. No item-specific repair is justified until an affected item ID, wearer race/gender, client version, and screenshot or packet capture identify the failing model.
-
 
 18. **Hasteners still fail to give speed at Galpen.** Reproduce by using a Galpen hastener as a Troll. Expected: the allied player receives the speed effect when eligible. Actual: the hastener says `EN SpeedBlockedRealm` and gives no speed. The 0.71.0 source fix added realm-aware checks; this report suggests it may not cover the Galpen/Troll case, but the installed version, combat state, and other active speed effects were not provided.
     **Fixed in source 0.99.0 (tests only).** Cause: `UT_AutonomousLootFlow`

@@ -12,6 +12,168 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.132.0] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- Siege Rams deal 10x their rider-adjusted damage for temporary testing; the
+  source comment marks the multiplier for removal after testing.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.131.0] - 2026-09-28
+
+### Added
+
+- The Companion Manager now shows each companion's earned Realm Points, realm
+  rank, and unspent realm ability points. Its Training & Tactics pane lets the
+  owner buy one class-legal passive realm ability rank at a time for active or
+  benched companions; purchases persist across sessions.
+
+### Changed
+
+- Companion realm rank now follows earned Realm Points when awards arrive and
+  when the companion is loaded.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.130.0] - 2026-09-28
+
+### Added
+
+- The Companion Manager labels roster entries as Regular or Story and offers a
+  two-click permanent delete action on each companion's Overview. Deletion
+  removes the roster record and disposable starter gear together, while earned,
+  traded, or unclassified items block deletion.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.129.1] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- Bug 5 now records that generated cloth-cap models vary by realm and the
+  equipment packet sends the stored model unchanged; a cross-realm model
+  mismatch is the leading explanation, pending client visual confirmation.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.129.0] - 2026-09-28
+
+### Added
+
+- The Companion Manager window can be enlarged by dragging its lower-right
+  resize handle; its list and detail panels, background, and bottom controls
+  remain aligned as the window grows.
+
+### Changed
+
+- The default Companion Manager size is 720×500 instead of 640×420. Its rows
+  and detail lines have more space, and the detail text area is wider.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.128.1] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- Bug 5 now records the Matterbender Cloth Cap and Elf female Enchanter
+  shown in the supplied oversized-helmet screenshots; server/client versions
+  and the item template ID remain unknown.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.128.0] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- Persistent Enchanter companions now prefer the highest learned Underhill
+  Ally pet across builds, falling back to normal pet selection when it is
+  unavailable. An existing alternate pet is replaced only while idle.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.127.0] - 2026-09-28
+
+### Added
+
+- `/gc join <guild name>` lets a character join a guild at rank 0 when another
+  character on the same account already holds rank 0 in that guild.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.126.0] - 2026-09-28
 
 ### Added

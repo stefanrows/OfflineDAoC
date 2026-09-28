@@ -107,14 +107,17 @@ namespace DOL.GS.Commands
             {
                 case ControlTabRoster:
                     session.Tab = CompanionManagerTab.Roster;
+                    session.DeleteConfirmationId = null;
                     session.DetailOffset = 0;
                     break;
                 case ControlTabRecruit:
                     session.Tab = CompanionManagerTab.Recruit;
+                    session.DeleteConfirmationId = null;
                     session.DetailOffset = 0;
                     break;
                 case ControlTabActive:
                     session.Tab = CompanionManagerTab.Active;
+                    session.DeleteConfirmationId = null;
                     session.DetailOffset = 0;
                     break;
                 case ControlDetailOverview or ControlDetailTraining or ControlDetailGear:
@@ -126,6 +129,7 @@ namespace DOL.GS.Commands
                             ControlDetailGear => CompanionManagerDetailTab.Gear,
                             _ => CompanionManagerDetailTab.Overview,
                         };
+                        session.DeleteConfirmationId = null;
                         session.DetailOffset = 0;
                     }
                     break;
@@ -219,6 +223,7 @@ namespace DOL.GS.Commands
                 !(groupRow && list.SelectedKey == GroupKey))
             {
                 list.SelectedKey = companions.FirstOrDefault()?.Key ?? all.FirstOrDefault()?.Key;
+                session.DeleteConfirmationId = null;
                 session.DetailOffset = 0;
                 session.SelectedItemId = null;
                 session.SelectedSlot = eInventorySlot.Invalid;
@@ -343,7 +348,7 @@ namespace DOL.GS.Commands
         private static IReadOnlyList<CompanionManagerEntry> RosterEntries(IEnumerable<PlayerCompanionRecord> roster) =>
             roster.Select(record => new CompanionManagerEntry(RecordKey(record), (eRealm)record.Realm,
                 (eCharacterClass)record.ClassId, record.Name,
-                $"L{record.Level} {(eCharacterClass)record.ClassId}, {(record.IsActive ? "active" : "benched")}{SquadLabel(record)}",
+                $"{(record.RecruitType == "authored" || !string.IsNullOrEmpty(record.AuthoredRecruitKey) ? "Story" : "Regular")} L{record.Level} {(eCharacterClass)record.ClassId}, {(record.IsActive ? "active" : "benched")}{SquadLabel(record)}",
                 (record.IsActive ? "0:" : "1:") + record.Name)).ToArray();
 
         private static CompanionManagerEntry GroupEntry(GamePlayer player) =>
@@ -391,7 +396,8 @@ namespace DOL.GS.Commands
             eCharacterClass characterClass = (eCharacterClass)current.ClassId;
             view.Header = current.Name;
             view.HeaderRealm = (eRealm)current.Realm;
-            view.Subheader = $"Level {current.Level} {characterClass} - {(eRace)current.RaceId} {(eGender)current.GenderId} - " +
+            view.Subheader = (current.RecruitType == "authored" || !string.IsNullOrEmpty(current.AuthoredRecruitKey) ? "Story" : "Regular") +
+                             $" - Level {current.Level} {characterClass} - {(eRace)current.RaceId} {(eGender)current.GenderId} - " +
                              TemporaryGroupClassCatalog.RealmName((eRealm)current.Realm);
             string role = string.IsNullOrWhiteSpace(current.TacticalRole)
                 ? BotPartyRoles.DefaultPreference(characterClass) : current.TacticalRole;
@@ -399,6 +405,16 @@ namespace DOL.GS.Commands
             string stance = string.IsNullOrWhiteSpace(current.EngagementPreference) ? "aggressive" : current.EngagementPreference;
             bool automatic = string.Equals(current.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase);
             int unspent = live ? companion.UnspentSpecPoints : current.UnspentSpecPoints;
+            long realmPoints = live ? companion.CompanionRealmPoints : current.RealmPoints;
+            var realmAbilities = CompanionRealmAbilityTraining.ClassAbilities(current.ClassId);
+            int realmPointPool = CompanionRealmAbilityTraining.PointPool(live ? companion.Level : current.Level, realmPoints);
+            var realmAllocations = CompanionRealmAbilityTraining.ReadAllocations(
+                current.SerializedRealmAbilities, realmAbilities, realmPointPool);
+            int unspentRealmPoints = CompanionRealmAbilityTraining.UnspentPoints(
+                realmPointPool, realmAllocations, realmAbilities);
+
+            if (session.DetailTab == CompanionManagerDetailTab.Overview && session.DeleteConfirmationId == id)
+                AddText(lines, $"Permanently delete {current.Name}? Level, training and starter gear will be lost. Earned or unknown items block deletion.");
 
             switch (session.DetailTab)
             {
@@ -406,7 +422,10 @@ namespace DOL.GS.Commands
                     CompanionBuildPlan currentBuild = automatic &&
                         CompanionBuildPlanCatalog.TryGetPlanById(characterClass, current.TrainingPlanId, out CompanionBuildPlan saved)
                         ? saved : null;
+                    int realmAbilitySection = 0;
                     AddText(lines, $"Training: {(!automatic ? "manual" : currentBuild != null ? $"automatic, {currentBuild.Name} build" : $"automatic, plan {current.TrainingPlanId}")}; {unspent} unspent points.");
+                    lines.Add(new Line($"RR {CompanionRealmAbilityTraining.RealmLevel(realmPoints)} | {realmPoints:N0} RP | {unspentRealmPoints} RA pts [Buy]",
+                        "ra:jump", () => session.DetailOffset = realmAbilitySection));
                     IReadOnlyList<CompanionBuildPlan> builds = CompanionBuildPlanCatalog.GetPlans(characterClass);
                     CompanionBuildPlan chosen = null;
                     if (builds.Count > 0)
@@ -470,6 +489,26 @@ namespace DOL.GS.Commands
                     }
                     else
                         AddText(lines, "Invite this companion to train or respecialize.");
+                    realmAbilitySection = lines.Count;
+                    lines.Add(new Line(string.Empty));
+                    lines.Add(new Line("Passive realm abilities (click to buy one rank):"));
+                    lines.Add(new Line("  Back to Training & Tactics", "ra:top", () => session.DetailOffset = 0));
+                    foreach (var ability in realmAbilities.OrderBy(ability => ability.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        int rank = realmAllocations.TryGetValue(ability.KeyName, out int purchased) ? purchased : 0;
+                        if (rank >= ability.MaxLevel)
+                        {
+                            lines.Add(new Line($"  {ability.Name}: {rank}/{ability.MaxLevel} (maximum)"));
+                            continue;
+                        }
+                        int cost = ability.CostForUpgrade(rank);
+                        string abilityKey = ability.KeyName;
+                        string label = $"  {ability.Name}: {rank} -> {rank + 1}/{ability.MaxLevel} ({cost} points)";
+                        lines.Add(cost >= 0 && cost <= unspentRealmPoints
+                            ? new Line(label, $"ra:{abilityKey}:{rank + 1}",
+                                () => SpendRealmAbility(player, session, id, abilityKey))
+                            : new Line(label));
+                    }
                     if (builds.Count > 0)
                     {
                         bool switchable = chosen != null && chosen != currentBuild;
@@ -493,6 +532,7 @@ namespace DOL.GS.Commands
                         : $"XP: {current.Experience:N0} / {GamePlayer.GetExperienceAmountForLevel(current.Level):N0}"));
                     AddText(lines, $"Training: {(!automatic ? "manual" : CompanionBuildPlanCatalog.TryGetPlanById(characterClass,
                         current.TrainingPlanId, out CompanionBuildPlan build) ? $"automatic, {build.Name} build" : "automatic")}; {unspent} unspent points.");
+                    lines.Add(new Line($"RR {CompanionRealmAbilityTraining.RealmLevel(realmPoints)} | {realmPoints:N0} RP | {unspentRealmPoints} RA pts unspent"));
                     lines.Add(new Line($"Role: {roleLabel}; stance: {stance}."));
                     lines.Add(new Line(string.Empty));
                     CompanionCharacterCatalog.Character authored = CompanionCharacterCatalog.Find(current.AuthoredRecruitKey);
@@ -504,7 +544,7 @@ namespace DOL.GS.Commands
                     else
                     {
                         string personality = string.IsNullOrWhiteSpace(current.PersonalityKey) ? "steady" : current.PersonalityKey;
-                        AddText(lines, $"Generated companion with a {personality} temperament and a newly created identity.");
+                        AddText(lines, $"Regular companion with a {personality} temperament and a newly created identity.");
                         AddText(lines, CompanionPersonality.Dialogue(current, "profile"));
                     }
                     break;
@@ -518,6 +558,16 @@ namespace DOL.GS.Commands
                     : new Choice("[Invite]", true, "invite", () => Report(player, session,
                         Run(PlayerCompanionRoster.TryInvite, player, id))));
                 choices.Add(new Choice("[Open inventory]", live, "bag", () => OpenBag(player, session, id)));
+            }
+            if (session.DetailTab == CompanionManagerDetailTab.Overview)
+            {
+                bool confirming = session.DeleteConfirmationId == id;
+                choices.Add(new Choice(confirming ? "[Confirm delete]" : "[Delete]", true,
+                    confirming ? "confirm-delete:" + id : "delete:" + id,
+                    () => DeleteCompanion(player, session, id)));
+                if (confirming)
+                    choices.Add(new Choice("[Cancel]", true, "cancel-delete:" + id,
+                        () => session.DeleteConfirmationId = null));
             }
         }
 
@@ -947,6 +997,26 @@ namespace DOL.GS.Commands
             return message;
         }
 
+        private static void DeleteCompanion(GamePlayer player, CompanionManagerSession session, string id)
+        {
+            if (session.DetailTab != CompanionManagerDetailTab.Overview ||
+                session.Current.SelectedKey != "c:" + id)
+            {
+                session.DeleteConfirmationId = null;
+                Report(player, session, "Select the companion on Overview before deleting.");
+                return;
+            }
+            if (session.DeleteConfirmationId != id)
+            {
+                session.DeleteConfirmationId = id;
+                Report(player, session, "Confirm deletion of this companion, or cancel.");
+                return;
+            }
+            session.DeleteConfirmationId = null;
+            PlayerCompanionRoster.TryDelete(player, id, out string message);
+            Report(player, session, message);
+        }
+
         private static void Gear(GamePlayer player, CompanionManagerSession session, GearOperation operation)
         {
             operation(out string message);
@@ -1027,6 +1097,12 @@ namespace DOL.GS.Commands
             Report(player, session, saved
                 ? $"{companion.Name} trained {spec.Name} to {spec.Level}; spent {spent} points, {companion.UnspentSpecPoints} remain."
                 : $"{companion.Name} trained {spec.Name} to {spec.Level}, but the save failed. Another save attempt is queued.");
+        }
+
+        private static void SpendRealmAbility(GamePlayer player, CompanionManagerSession session, string id, string abilityKey)
+        {
+            PlayerCompanionRoster.TrySpendRealmAbility(player, id, abilityKey, out string message);
+            Report(player, session, message);
         }
 
         private static void UseBuild(GamePlayer player, CompanionManagerSession session, string id, string planId)

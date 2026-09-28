@@ -103,6 +103,52 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+55. **Temporarily increase Siege Ram damage for testing.** Source 0.132.0
+    multiplies the rider-adjusted Siege Ram damage by 10; a source comment
+    marks the multiplier for removal after testing. Installation and real-client
+    check pending: compare Siege Ram hits against the prior damage at different
+    rider counts and confirm the displayed damage matches the applied damage.
+
+54. **Spend companion RA points through the manager.** Source 0.131.0 shows
+    each companion's earned RP, realm rank and unspent RA points. Training &
+    Tactics buys one class-legal passive RA rank per click, for active or
+    benched companions, and saves the allocation across logout and reinvite.
+    Timed active RAs remain unavailable because companion AI does not use them.
+    Installation and real-client check pending: earn RP, buy a passive rank,
+    verify its effect and remaining points, bench/reinvite and relog, and
+    confirm that purchases cannot exceed the earned pool.
+
+53. **Delete companions and identify regular recruits in the manager.** Source
+    0.130.0 labels roster entries and details Regular or Story. Overview has
+    [Delete] followed by [Confirm delete] or [Cancel]. Deletion removes the
+    saved companion and starter gear in one transaction; earned, traded, or
+    unclassified items must be cleared first. Installation and real-client
+    check pending: identify both types, cancel and confirm deletion, verify an
+    active companion leaves its group, and confirm protected gear blocks it.
+
+52. **Larger, adjustable Companion Manager window.** Source 0.129.0 grows
+    the default client XML layout to 720×500 and enables the stock lower-right
+    resize handle, with expanding backgrounds and aligned bottom controls.
+    Installation and real-client check pending: open the manager at 800×600,
+    drag it larger and confirm both skins keep text, hit areas, panels and
+    close/scroll controls aligned.
+
+51. **Prefer Underhill Ally for Enchanter companions.** Source 0.128.0
+    makes persistent Enchanter companions choose their highest learned,
+    castable Underhill Ally across builds and replace an alternate idle
+    main pet. If no Ally is available, normal pet selection remains.
+    Real-client check pending: confirm automatic Light, Mana and
+    Enchantment builds and manual companions choose Ally when learned,
+    fallback before it is learned, and defer pet replacement during combat.
+
+50. **Join an account-owned guild as guild leader.** Source 0.127.0 adds
+    `/gc join <guild name>` for an unguilded character when another
+    character on the same account holds rank 0 in that guild. The new
+    character joins at rank 0 through the normal guild membership path.
+    Installation and real-client checks pending: join from a same-account
+    alt, confirm rank and guild display after relog, and confirm an
+    account without a rank 0 guild character cannot join.
+
 49. **Remove an owned companion from a former guild.** Source 0.126.0 adds
     `/companions guild leave <name>` for active or benched saved companions,
     including when the owner is no longer in that guild. It saves the

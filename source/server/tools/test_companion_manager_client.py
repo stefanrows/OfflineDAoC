@@ -268,7 +268,8 @@ for skin in ("atlantis", "isles"):
                                "Width", "Height", "ResizeableWidth", "ResizeableHeight",
                                "ResizeableTwoWayWidth", "ResizeableTwoWayHeight", "MinWidth", "MinHeight",
                                "ContextTemplateName", "FullResizeImageDef", "ControlId", "Position", "X", "Y",
-                               "Alignment", "TopLeft", "TemplateName", "LabelDef", "Color", "R", "G", "B", "A",
+                               "Alignment", "TopLeft", "GrowWidth", "GrowHeight", "offsetright",
+                               "offsetbottom", "TemplateName", "LabelDef", "Color", "R", "G", "B", "A",
                                "FontName", "ColorAdapter", "MaxCharacters", "Data", "EndAligned",
                                "TextCentered", "Adapter", "InvisibleButtonDef", "Label", "OnClickEvent"}, element.tag
 assert b"custom8_window.xml" in (args.stage / "uimain.xml").read_bytes()

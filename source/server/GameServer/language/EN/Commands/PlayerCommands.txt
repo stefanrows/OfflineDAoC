@@ -381,6 +381,7 @@ Scripts.Player.Guild.Help.GuildGMPurge:			'/gc purge <Name>' Purge a guild compl
 Scripts.Player.Guild.Help.GuildGMRemovePlayer:		'/gc removeplayer <player> from <guild>' to remove player from a guild	
 Scripts.Player.Guild.Help.GuildGMRename:		'/gc rename <OldName> to <NewName' Rename guild from OldName to NewName	
 Scripts.Player.Guild.Help.GuildInfo:			'/gc info' to show information on the guild	
+Scripts.Player.Guild.Help.GuildJoin:			'/gc join <guild name>' to join as rank 0 when another character on your account is rank 0 there
 Scripts.Player.Guild.Help.GuildInvite:			'/gc invite [name]' to invite targeted player to join the guild	
 Scripts.Player.Guild.Help.GuildLeader:			'/gc leader [name]' to set leader successor	
 Scripts.Player.Guild.Help.GuildList:			'/gc list' to show all guild in your realm	
@@ -422,6 +423,12 @@ Scripts.Player.Guild.AllianceNotLeader:			You have to be the leader guild of the
 Scripts.Player.Guild.AllianceNotMember:			You must be in an alliance to do that.	
 Scripts.Player.Guild.AlreadyInGuildName:		{0} is already a member of a guild.	
 Scripts.Player.Guild.AlreadyInGuild:			They are already a member of a guild.	
+Scripts.Player.Guild.JoinAlreadyMember:		You already belong to a guild.
+Scripts.Player.Guild.JoinDead:			You cannot join a guild while dead.
+Scripts.Player.Guild.JoinFailed:			Could not join that guild.
+Scripts.Player.Guild.JoinNotAllowed:		This character is not allowed to join that guild.
+Scripts.Player.Guild.JoinRequiresLeader:		Another character on your account must hold rank 0 in that guild.
+Scripts.Player.Guild.JoinSuccess:			You joined {0} as a guild leader (rank 0).
 Scripts.Player.Guild.AMotdSet:				You have set the alliance motd for the guild.	
 Scripts.Player.Guild.BannerAlready:			Your guild already has a banner.	
 Scripts.Player.Guild.BannerBought:			You have purchased a guild banner for {0} bounty points.	

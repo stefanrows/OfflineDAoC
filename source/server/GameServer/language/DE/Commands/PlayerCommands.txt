@@ -324,6 +324,12 @@ Scripts.Player.Guild.AllianceNotLeader:			Ihr müßt der Anführer der Allianz s
 Scripts.Player.Guild.AllianceNotMember:			Um das zu tun, müßtet Ihr erstmal in einer Allianz sein.
 Scripts.Player.Guild.AlreadyInGuildName:		{0} gehört bereits einer Gilde an.
 Scripts.Player.Guild.AlreadyInGuild:			Die gehören bereits einer Gilde an.
+Scripts.Player.Guild.JoinAlreadyMember:		Ihr seid bereits Mitglied einer Gilde.
+Scripts.Player.Guild.JoinDead:			Ihr könnt einer Gilde nicht beitreten, während Ihr tot seid.
+Scripts.Player.Guild.JoinFailed:			Der Gilde konnte nicht beigetreten werden.
+Scripts.Player.Guild.JoinNotAllowed:		Dieser Charakter darf dieser Gilde nicht beitreten.
+Scripts.Player.Guild.JoinRequiresLeader:		Ein anderer Charakter Eures Kontos muss in dieser Gilde Rang 0 haben.
+Scripts.Player.Guild.JoinSuccess:			Ihr seid {0} als Gildenanführer (Rang 0) beigetreten.
 Scripts.Player.Guild.AMotdSet:				Ihr habt die Willkommensnachricht für diese Gilde geändert.
 Scripts.Player.Guild.BannerAlready:			Eure Gilde hat schon ein Banner.
 Scripts.Player.Guild.BannerBought:			Ihr habt ein Gildenbanner für {0} Kopfgeldpunkte erworben.
@@ -416,6 +422,7 @@ Scripts.Player.Guild.Help.GuildGMPurge:			/gc purge <Name> - löscht eine Gilde 
 Scripts.Player.Guild.Help.GuildGMRemovePlayer:		/gc removeplayer <player> from <guild> - entfernt einen Spieler aus der Gilde	
 Scripts.Player.Guild.Help.GuildGMRename:		/gc rename <OldName> to <NewName - benennt eine Gilde um
 Scripts.Player.Guild.Help.GuildInfo:			/gc info - Anzeige der Gildeninformationen
+Scripts.Player.Guild.Help.GuildJoin:			/gc join <Gildenname> - Tritt als Rang 0 bei, wenn ein anderer Charakter Eures Kontos dort Rang 0 hat
 Scripts.Player.Guild.Help.GuildInvite:			/gc invite [name] -  Spieler in die Gilde einladen, ohne Namensangabe wird anvisierter Spieler eingeladen
 Scripts.Player.Guild.Help.GuildLeader:			/gc leader [name] - einen neuen Gildenanführer ernennen
 Scripts.Player.Guild.Help.GuildList:			/gc list - Anzeige aller Gilden im Reich

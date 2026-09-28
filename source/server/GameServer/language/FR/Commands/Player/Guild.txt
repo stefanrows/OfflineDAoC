@@ -23,6 +23,12 @@ Scripts.Player.Guild.AllianceNotLeader:			Vous devez être la guilde du chef de 
 Scripts.Player.Guild.AllianceNotMember:			Vous devez être dans une alliance pour le faire.	
 Scripts.Player.Guild.AlreadyInGuildName:		{0} est un membre de votre guilde.	
 Scripts.Player.Guild.AlreadyInGuild:			Il est déjà membre d'une guilde.	
+Scripts.Player.Guild.JoinAlreadyMember:		Vous appartenez déjà à une guilde.
+Scripts.Player.Guild.JoinDead:			Vous ne pouvez pas rejoindre une guilde en étant mort.
+Scripts.Player.Guild.JoinFailed:			Impossible de rejoindre cette guilde.
+Scripts.Player.Guild.JoinNotAllowed:		Ce personnage ne peut pas rejoindre cette guilde.
+Scripts.Player.Guild.JoinRequiresLeader:		Un autre personnage de votre compte doit y avoir le rang 0.
+Scripts.Player.Guild.JoinSuccess:			Vous avez rejoint {0} comme chef de guilde (rang 0).
 Scripts.Player.Guild.AMotdSet:				Vous avez mis le message d'alliance à jour.	
 Scripts.Player.Guild.BannerAlready:			Votre guilde possède déjà une bannière.	
 Scripts.Player.Guild.BannerBought:			Vous avez acheté une bannière de guilde pour {0} points de mérite.	
@@ -114,6 +120,7 @@ Scripts.Player.Guild.Help.GuildGMPurge:			'/gc purge <Name>' Purge complétement
 Scripts.Player.Guild.Help.GuildGMRemovePlayer:		'/gc removeplayer <player> from <guild>' Retire un joueur de la guilde.	
 Scripts.Player.Guild.Help.GuildGMRename:		'/gc rename <OldName> to <NewName' Renomme une guilde <ancien nom> <nouveau nom>.	
 Scripts.Player.Guild.Help.GuildInfo:			'/gc info' Liste des informations de cette guilde.	
+Scripts.Player.Guild.Help.GuildJoin:			'/gc join <nom de guilde>' Rejoint au rang 0 si un autre personnage du compte y est rang 0.
 Scripts.Player.Guild.Help.GuildInvite:			'/gc invite [joueur]' Invite un joueur à rejoindre la guilde.	
 Scripts.Player.Guild.Help.GuildLeader:			'/gc leader [joueur]' Choisi le nouveau chef de guilde.	
 Scripts.Player.Guild.Help.GuildList:			'/gc list' Informe le joueur de toutes les guildes sur le royaume.	

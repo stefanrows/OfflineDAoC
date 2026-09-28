@@ -304,6 +304,61 @@ namespace DOL.GS.Commands
 						GuildMgr.GetGuildByName(guildname).RemovePlayer("gamemaster", ClientService.Instance.GetPlayerByExactName(playername));
 						break;
 					}
+					case "join":
+					{
+						if (client.Player.Guild != null)
+						{
+							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.JoinAlreadyMember"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						if (args.Length < 3)
+						{
+							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildJoin"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						if (!client.Player.IsAlive)
+						{
+							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.JoinDead"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						string guildName = String.Join(" ", args, 2, args.Length - 2);
+						Guild guild = GuildMgr.GetGuildByName(guildName);
+						if (guild == null)
+						{
+							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.GuildNotExist"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						bool accountHasGuildLeader = DOLDB<DbCoreCharacter>.SelectObjects(
+							DB.Column("AccountName").IsEqualTo(client.Account.Name)
+								.And(DB.Column("GuildID").IsEqualTo(guild.GuildID))
+								.And(DB.Column("GuildRank").IsEqualTo((ushort)0)))
+							.Any(character => !string.Equals(character.Name, client.Player.Name, StringComparison.OrdinalIgnoreCase));
+						if (!accountHasGuildLeader)
+						{
+							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.JoinRequiresLeader"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						if (!GameServer.ServerRules.IsAllowedToJoinGuild(client.Player, guild))
+						{
+							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.JoinNotAllowed"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						DbGuildRank leaderRank = guild.GetRankByID(0);
+						if (leaderRank == null || !guild.AddPlayer(client.Player, leaderRank))
+						{
+							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.JoinFailed"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
+
+						client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.JoinSuccess", guild.Name), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
+						break;
+					}
 					case "invite":
 					{
 						if (client.Player.Guild == null)
@@ -2483,6 +2538,7 @@ namespace DOL.GS.Commands
 			client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildEdit"), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
 			client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildLeader"), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
 			client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildAccept"), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
+			client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildJoin"), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
 			client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildInvite"), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
 			client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildWho"), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);
 			client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.Help.GuildList"), eChatType.CT_Guild, eChatLoc.CL_SystemWindow);

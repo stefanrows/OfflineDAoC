@@ -607,6 +607,71 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
+    public void CompanionManagerMarksRegularRecruitsAndRequiresConfirmationBeforeDeletion()
+    {
+        Owner owner = NewOwner("delete-owner", eRealm.Midgard);
+        Assert.That(PlayerCompanionRoster.TryRecruit(owner, eRealm.Midgard, eCharacterClass.Berserker,
+            out PlayerCompanionRecord regular, out string recruited), Is.True, recruited);
+        Assert.That(PlayerCompanionRoster.TryRecruitAuthored(owner, "Kiri", out PlayerCompanionRecord story,
+            out recruited), Is.True, recruited);
+
+        CompanionManager.Open(owner);
+        CompanionManager.TryGetSession(owner, out CompanionManagerSession session);
+        int row = Array.IndexOf(session.RowKeys, "c:" + regular.CompanionId);
+        Assert.That(row, Is.GreaterThanOrEqualTo(0));
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + row * CompanionManagerProtocol.RowStride + 4],
+            Does.StartWith("Regular"));
+        Click(owner, session, CompanionManagerProtocol.ControlRowBase + row);
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelSubheader], Does.StartWith("Regular"));
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 4], Is.EqualTo("[Delete]"));
+
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 2);
+        Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(2));
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 4], Is.EqualTo("[Confirm delete]"));
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 3);
+        Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(2));
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 2);
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase + 2);
+        Assert.That(PlayerCompanionRoster.GetRoster(owner).Select(record => record.CompanionId),
+            Is.EqualTo(new[] { story.CompanionId }));
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelSubheader], Does.StartWith("Story"));
+    }
+
+    [Test]
+    public void DeletingCompanionProtectsEarnedItemsAndRemovesOnlyStarterItems()
+    {
+        Owner owner = NewOwner("delete-gear-owner", eRealm.Albion);
+        Assert.That(PlayerCompanionRoster.TryRecruit(owner, eRealm.Albion, eCharacterClass.Cleric,
+            out PlayerCompanionRecord record, out string recruited), Is.True, recruited);
+        string inventoryOwner = PlayerCompanionRoster.InventoryOwnerId(record.CompanionId);
+        var template = new DbItemTemplate { Id_nb = "companion-delete-test", Name = "Test gear" };
+        GameInventoryItem starter = GameInventoryItem.Create(new DbItemUnique(template));
+        starter.OwnerID = inventoryOwner;
+        starter.AllowDelete = true;
+        starter.SlotPosition = (int)eInventorySlot.HeadArmor;
+        GameInventoryItem earned = GameInventoryItem.Create(new DbItemUnique(template));
+        earned.OwnerID = inventoryOwner;
+        earned.AllowDelete = true;
+        earned.SlotPosition = (int)eInventorySlot.FirstBackpack;
+        Assert.That(_database.AddObject(starter), Is.True, "starter item");
+        Assert.That(_database.AddObject(earned), Is.True, "earned item");
+        PlayerCompanionRoster.SetEquipmentItemFlags(record, starter.ObjectId, "S");
+        PlayerCompanionRoster.SetEquipmentItemFlags(record, earned.ObjectId, "E");
+        Assert.That(_database.SaveObject(record), Is.True);
+
+        Assert.That(PlayerCompanionRoster.TryDelete(owner, record.CompanionId, out string blocked), Is.False);
+        Assert.That(blocked, Does.Contain("items"));
+        Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(1));
+        Assert.That(_database.FindObjectByKey<DbInventoryItem>(starter.ObjectId), Is.Not.Null);
+        Assert.That(_database.FindObjectByKey<DbInventoryItem>(earned.ObjectId), Is.Not.Null);
+
+        Assert.That(_database.DeleteObject(earned), Is.True);
+        Assert.That(PlayerCompanionRoster.TryDelete(owner, record.CompanionId, out string deleted), Is.True, deleted);
+        Assert.That(PlayerCompanionRoster.GetRoster(owner), Is.Empty);
+        Assert.That(_database.FindObjectByKey<DbInventoryItem>(starter.ObjectId), Is.Null);
+    }
+
+    [Test]
     public void CompanionManagerListsBuildsAndAppliesOnlyTheChosenOne()
     {
         Owner owner = NewOwner("manager-build-owner", eRealm.Midgard);
@@ -783,6 +848,8 @@ public sealed class UT_PlayerCompanionStage6Integration
         SqliteObjectDatabase database = new($"Data Source={path};Version=3;Pooling=False;");
         database.RegisterDataObject(typeof(PlayerCompanionRecord));
         database.RegisterDataObject(typeof(DbInventoryItem));
+        database.RegisterDataObject(typeof(DbItemTemplate));
+        database.RegisterDataObject(typeof(DbItemUnique));
         // GameObject initializes its process-wide data-quest cache against the active server database.
         database.RegisterDataObject(typeof(DbDataQuest));
         return database;

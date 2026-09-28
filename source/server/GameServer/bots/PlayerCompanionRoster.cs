@@ -864,6 +864,88 @@ namespace DOL.GS
             }
         }
 
+        /// <summary>Purchase exactly one class realm ability rank for an owned companion.</summary>
+        public static bool TrySpendRealmAbility(GamePlayer owner, string companionId, string abilityKey,
+            out string message)
+        {
+            message = "That companion is not in your roster.";
+            if (owner == null || string.IsNullOrWhiteSpace(abilityKey))
+                return false;
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, companionId);
+                if (record == null)
+                    return false;
+                GameBot live = ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) &&
+                               active?.Owner == owner && active.ObjectState == GameObject.eObjectState.Active
+                    ? active : null;
+                // Progress saves use the live bot's record. Update that same instance
+                // so a queued XP/RP save cannot overwrite the new allocation.
+                if (live?.PlayerCompanionRecord != null)
+                    record = live.PlayerCompanionRecord;
+                lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                lock (record)
+                {
+                    long realmPoints = live?.CompanionRealmPoints ?? record.RealmPoints;
+                    var abilities = CompanionRealmAbilityTraining.ClassAbilities(record.ClassId);
+                    var ability = abilities.FirstOrDefault(candidate => candidate.KeyName == abilityKey);
+                    if (ability == null)
+                    {
+                        message = "That realm ability is unavailable for this companion's class.";
+                        return false;
+                    }
+                    int pool = CompanionRealmAbilityTraining.PointPool(live?.Level ?? record.Level, realmPoints);
+                    var allocations = CompanionRealmAbilityTraining.ReadAllocations(
+                        record.SerializedRealmAbilities, abilities, pool);
+                    if (!string.IsNullOrEmpty(record.SerializedRealmAbilities) &&
+                        record.SerializedRealmAbilities != CompanionRealmAbilityTraining.Serialize(allocations))
+                    {
+                        message = "This companion's saved realm abilities need review before more points can be spent.";
+                        return false;
+                    }
+                    int rank = allocations.TryGetValue(abilityKey, out int current) ? current : 0;
+                    if (rank >= ability.MaxLevel)
+                    {
+                        message = $"{ability.Name} is already at its maximum rank.";
+                        return false;
+                    }
+                    int cost = ability.CostForUpgrade(rank);
+                    int unspent = CompanionRealmAbilityTraining.UnspentPoints(pool, allocations, abilities);
+                    if (cost < 0 || cost > unspent)
+                    {
+                        message = $"{ability.Name} rank {rank + 1} costs {cost} realm ability points; {unspent} remain.";
+                        return false;
+                    }
+                    allocations[abilityKey] = rank + 1;
+                    string previous = record.SerializedRealmAbilities;
+                    string previousUpdated = record.UpdatedUtc;
+                    long previousPoints = record.RealmPoints;
+                    record.SerializedRealmAbilities = CompanionRealmAbilityTraining.Serialize(allocations);
+                    record.RealmPoints = Math.Max(record.RealmPoints, realmPoints);
+                    record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                    record.Dirty = true;
+                    if (!SaveRecord(record))
+                    {
+                        record.SerializedRealmAbilities = previous;
+                        record.RealmPoints = previousPoints;
+                        record.UpdatedUtc = previousUpdated;
+                        record.Dirty = true;
+                        message = "The realm ability purchase could not be saved. No points were spent.";
+                        return false;
+                    }
+                    if (live != null)
+                    {
+                        ability.Level = rank + 1;
+                        if (rank > 0)
+                            live.RemoveAbility(abilityKey);
+                        live.AddAbility(ability, false);
+                    }
+                    message = $"{record.Name} learned {ability.Name} rank {rank + 1}; spent {cost} realm ability points, {unspent - cost} remain.";
+                    return true;
+                }
+            }
+        }
+
         public static string AutomaticTrainingBlocker(eCharacterClass characterClass) =>
             CompanionBuildPlanCatalog.GetBlocker(characterClass);
 
@@ -1594,6 +1676,96 @@ namespace DOL.GS
                     ClientService.CreateObjectForPlayers(active);
 
                 message = $"{record.Name} left {formerGuildName}. Their roster membership was saved.";
+                return true;
+            }
+        }
+
+        /// <summary>Removes a saved companion and its starter kit after protecting all other items.</summary>
+        public static bool TryDelete(GamePlayer owner, string nameOrId, out string message)
+        {
+            message = "That companion name or ID is not in your roster.";
+            if (owner == null)
+                return false;
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                    return false;
+                if (GameServer.Database is not SqlObjectDatabase database)
+                {
+                    message = "Companion deletion requires transactional database support.";
+                    return false;
+                }
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot otherOwner) &&
+                    otherOwner != null && otherOwner.Owner != owner)
+                {
+                    message = $"{record.Name} is active with another character on this account. Bench them there first.";
+                    return false;
+                }
+
+                // Only the disposable starter kit can be removed with the record.
+                // Unknown item provenance is protected just like earned and traded gear.
+                DbInventoryItem[] items;
+                try
+                {
+                    items = GameServer.Database.SelectObjects<DbInventoryItem>(
+                        DB.Column(nameof(DbInventoryItem.OwnerID)).IsEqualTo(InventoryOwnerId(record.CompanionId))).ToArray();
+                }
+                catch (Exception exception)
+                {
+                    Log.Error($"Could not inspect inventory before deleting companion {record.CompanionId}.", exception);
+                    message = "The companion inventory could not be checked. Nothing was deleted.";
+                    return false;
+                }
+                if (items.Any(item => !string.Equals(GetEquipmentItemFlags(record, item.ObjectId), "S", StringComparison.Ordinal)))
+                {
+                    message = $"{record.Name} has earned, traded, or unclassified items. Return or clear those items before deleting this companion; nothing was deleted.";
+                    return false;
+                }
+
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) && active?.Owner == owner)
+                {
+                    // Save and remove the live actor first. If deletion fails, the
+                    // saved companion remains benched and can be invited again.
+                    if (!TryBench(owner, record.CompanionId, out message))
+                        return false;
+                    record = FindOwnedRecord(owner, record.CompanionId);
+                    if (record == null)
+                    {
+                        message = "The companion was benched, but the saved roster could not be reloaded. Nothing was deleted.";
+                        return false;
+                    }
+                }
+
+                lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                {
+                    // Recheck after benching: the last live inventory save may have
+                    // introduced an item that was not in the first database read.
+                    try
+                    {
+                        items = GameServer.Database.SelectObjects<DbInventoryItem>(
+                            DB.Column(nameof(DbInventoryItem.OwnerID)).IsEqualTo(InventoryOwnerId(record.CompanionId))).ToArray();
+                    }
+                    catch (Exception exception)
+                    {
+                        Log.Error($"Could not recheck inventory before deleting companion {record.CompanionId}.", exception);
+                        message = "The final inventory check failed. Nothing was deleted.";
+                        return false;
+                    }
+                    if (items.Any(item => !string.Equals(GetEquipmentItemFlags(record, item.ObjectId), "S", StringComparison.Ordinal)))
+                    {
+                        message = $"{record.Name} has protected items after its final save. Nothing was deleted.";
+                        return false;
+                    }
+                    if (!database.DeleteObjectsAtomically(items.Cast<DataObject>().Append(record)))
+                    {
+                        message = $"{record.Name} could not be deleted. The saved companion remains in your roster.";
+                        return false;
+                    }
+                }
+
+                message = $"{record.Name} was permanently deleted from your roster.";
                 return true;
             }
         }

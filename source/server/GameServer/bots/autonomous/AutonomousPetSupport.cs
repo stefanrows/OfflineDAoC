@@ -994,16 +994,14 @@ public static class AutonomousPetSupport
                 string.Equals(enchanter.PlayerCompanionRecord?.TrainingMode, "automatic", StringComparison.OrdinalIgnoreCase) &&
                 CompanionBuildPlanCatalog.TryGetPlanById(eCharacterClass.Enchanter,
                     enchanter.PlayerCompanionRecord.TrainingPlanId, out _);
-            bool petFocusPlan = !automaticPlan || enchanter.BotSpec?.SpecType == eSpecType.EnchantmentEnchanter;
-            if (petFocusPlan)
-            {
-                (Spell Spell, SpellLine Line)[] healingPets = summons
-                    .Where(entry => IsUnderhillAllySummon(entry.Spell))
-                    .ToArray();
-                if (healingPets.Length > 0)
-                    return ChooseWeightedByRank(healingPets, highestRankOnly: true);
-            }
-            else
+            bool prefersUnderhillAlly = enchanter.IsPersistentPlayerCompanion || !automaticPlan ||
+                enchanter.BotSpec?.SpecType == eSpecType.EnchantmentEnchanter;
+            (Spell Spell, SpellLine Line)[] underhillAllyPets = summons
+                .Where(entry => IsUnderhillAllySummon(entry.Spell))
+                .ToArray();
+            if (prefersUnderhillAlly && underhillAllyPets.Length > 0)
+                return ChooseWeightedByRank(underhillAllyPets, highestRankOnly: true);
+            if (!prefersUnderhillAlly)
             {
                 (Spell Spell, SpellLine Line)[] ordinaryPets = summons
                     .Where(entry => !IsUnderhillAllySummon(entry.Spell))
