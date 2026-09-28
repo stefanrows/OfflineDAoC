@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.123.0] - 2026-09-28
+
+### Added
+
+- Castle Sauvage, Svasud Faste and Druim Ligen are safe hubs within about
+  3,500 units, for players and bots alike (Camlann decision 7): nobody can be
+  attacked inside, and nobody inside can be hit from the edge. Before, 82 % of
+  all bot deaths happened at these hubs.
+- Warbands board the frontier porter together: a group waits up to a minute
+  for members near the porter, then leaves with whoever is ready; the
+  departure log names the party size and who was left behind.
+
+### Changed
+
+- The keep-route planner uses the same door rule as the doors themselves, so
+  portal keeps are passable for every realm and bots no longer freeze inside
+  the enemy portal keeps of Odin's Gate (76 level-50 RvR bots were stuck there
+  with 519 failed exterior routes in 3.4 hours).
+- When any member of a warband fails a keep route three times, the whole
+  warband calls that keep off for 20 minutes and roams from where it stands;
+  an automatic siege nobody makes progress toward closes after 15 minutes
+  instead of blocking every other assault for hours. Marching toward the
+  keep, porting over and reaching the walls count as progress.
+- RvR world bots killed by an enemy in the frontier release at their own
+  realm's hub, and bots still under release immunity do not pick fights.
+
 ## [0.122.0] - 2026-09-28
 
 ### Fixed
