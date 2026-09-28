@@ -53,6 +53,25 @@ Agent sessions on items 45–48: take the role and context from
     vs travel/rest/idle/stuck/dead (live save via `playable-dev/dbquery.py`,
     `runtime/logs/server-console.log`), rank proven vs suspected root causes
     with evidence. Then an implementation agent fixes the proven causes.
+    - **Package C implemented in source (group time at camp); live-log check
+      pending.** Two advisor premises did not hold in the 0.115.0 log. D1, the
+      task clock running during matchmaking: the shared clock already started
+      at the camp; task starts spread evenly over 45–120 min, and the
+      54-minute party was a short roll. D3, reassignment in flight: the
+      allocation pass never touched grouped bots. The "Reassigned before
+      arrival" endings were normal party ends, and only the leader ever
+      logged an arrival. Changes: a party within 2,500 units of its camp that
+      fought or gained experience in the last 10 minutes starts its full task
+      when the 30-minute travel window closes instead of disbanding; a party
+      merely looping near the camp still ends. Pickup parties prefer outdoor
+      camps within about 10 minutes of the meeting point. Members' camp
+      arrival and party ends are logged truthfully
+      (`AUTONOMOUS_GROUP_TRAVEL_DEADLINE_AT_CAMP`, "Group task ended: ...").
+      Members of a party still meeting up or travelling carry a real future
+      expiry instead of an empty one (advisor 48 cause e), so an RvR tour no
+      longer ends at once after a restart or raid transfer. Side effect after
+      a restart: groupless GroupPve members re-queue for up to 20 minutes
+      instead of being marked PvE completed. Package B remains open.
 
 48. **Advisor, then build: real RvR with roaming groups.** Aaron, 2026-09-28:
     he still sees no bot groups in RvR. First a read-only advisor pass: how

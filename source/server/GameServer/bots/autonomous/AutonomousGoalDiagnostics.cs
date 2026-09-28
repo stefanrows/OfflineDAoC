@@ -193,6 +193,20 @@ namespace DOL.GS
             catch { }
         }
 
+        // Party members follow their leader and never run the camp-work branch
+        // that records arrival; the coordinator marks them when the party is at
+        // its camp. Diagnostic only.
+        public static void Arrive(GameBot bot)
+        {
+            if (bot?.GoalDiagnosticAttempt is { ArrivedUtc: null } attempt)
+                attempt.Arrive(DateTime.UtcNow);
+        }
+
+        // A dissolved party is not a reassignment in flight. Label the end by the
+        // shared task: a spent clock is Expired, anything else a group change.
+        public static GoalAttemptEnd GroupTaskEndReason(bool taskExpired) =>
+            taskExpired ? GoalAttemptEnd.Expired : GoalAttemptEnd.GroupChanged;
+
         public static void End(GameBot bot, GoalAttemptEnd reason, string detail,
             (int Region, int X, int Y, int Z)? failurePosition = null)
         {

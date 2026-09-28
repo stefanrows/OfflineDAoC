@@ -49,6 +49,39 @@ public static class AutonomousPickupPlanning
         return reachable.ToArray();
     }
 
+    // Task 47 package C: a 2003 party took the camp a few minutes from where it
+    // met, not one 25 minutes across the zone. Camps within ten minutes count
+    // double, and every minute of road lowers the draw like the solo local pool.
+    // All candidates are already in the rendezvous region (or a dungeon entered
+    // from it), so there is no separate same-region factor here.
+    public const double PreferredGroupCampTravelMinutes = 10;
+
+    public static double GroupCampLocalityWeight(double travelMinutes) =>
+        !double.IsFinite(travelMinutes) || travelMinutes < 0
+            ? 0
+            : (travelMinutes <= PreferredGroupCampTravelMinutes ? 2d : 1d) / (1d + travelMinutes / 5d);
+
+    /// <summary>Weighted outdoor draw for a local pickup party; crowding and depletion keep their weight.</summary>
+    public static AutonomousBotDecisionEngine.Camp SelectNearbyGroupCamp(
+        IEnumerable<AutonomousBotDecisionEngine.Camp> camps, Random random = null)
+    {
+        AutonomousBotDecisionEngine.Camp[] choices = camps?.Where(camp => camp != null && !camp.IsDungeon &&
+            WithinGroupCampTravelBudget(camp.TravelMinutes)).ToArray() ?? [];
+        if (choices.Length == 0)
+            return null;
+        random ??= Random.Shared;
+        double[] weights = choices.Select(camp => AutonomousBotDecisionEngine.OutdoorCampWeight(camp) *
+            GroupCampLocalityWeight(camp.TravelMinutes)).ToArray();
+        double draw = random.NextDouble() * weights.Sum();
+        for (int index = 0; index < choices.Length; index++)
+        {
+            draw -= weights[index];
+            if (draw < 0)
+                return choices[index];
+        }
+        return choices[^1];
+    }
+
     public static double SlowestMemberTravelMinutes(IEnumerable<double> memberTravelMinutes)
     {
         if (memberTravelMinutes == null)
