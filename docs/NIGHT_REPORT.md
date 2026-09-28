@@ -113,3 +113,46 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 - Bug 56 Rest: NavPathQuery in TravelAcrossRegions/ZoneItineraryStep (bis 220 ms pro Runde), Koordinator-Lock; Reaper-Ticks bei Spieler-Kills noch nicht live gemessen (kein Spieler online).
 - Werkzeug: `playable-dev/dbquery.py` scheitert bei laufendem Server am WAL („disk I/O error") und überschreibt seinen Snapshot; `server.sh` stellt das Launcher-Fenster jetzt vor jedem Klick wieder her (war minimiert → STOP-Knopf unauffindbar).
 - Automatisierte Tests liefen (Server 2447, Launcher 127, alle grün); Real-Client-Prüfung ist deine.
+
+## Live-Nachmessung 15:46 (0.125.0, 11 h Laufzeit, 1.210 Bots, kein Spieler online)
+
+**TL;DR**
+- **Leveln zieht an:** 165 Bots zwischen Level 30 und 41 (um 03:19 waren es 3, keiner über 32).
+- **RvR findet im Feld statt:** 229 RvR-Bots lebend im Frontier (vorher 50), 5 statt 76 im Portal-Keep gefangen, 92 % der PvP-Tode sind gezielte 50er-gegen-50er-Kämpfe.
+- **Aber:** PvE-Tode ~3× häufiger (Mobs an den Hubs und benannte Frontier-Mobs), Ticks schwanken stundenweise, 0 Keep-Eroberungen.
+
+| | Messwert | vorher (0.115.0) | jetzt (0.125.0, 11 h) |
+|---|---|---|---|
+| ✅ | Exceptions | 2 pro Lauf | 0 |
+| ✅ | Bots Level 30–49 / max. Level unter 50 | 3 / 32 | 165 / 41 |
+| ✅ | RvR-Bots lebend im Frontier-Feld | 50 | 229 |
+| ✅ | im gegnerischen Portal-Keep gefangen | 76 | 5 |
+| ✅ | RvR-Datensätze ohne Ablaufzeit | 183 | 0 |
+| ✅ | gescheiterte Keep-Routen | 519 / 3,4 h | 66 / 11 h, 20× sauber aufgegeben |
+| ✅ | Frontier-Teleports als Gruppe (≥3) | 2 von 320 | 5.191 von 7.560 (1.999× volle 8er) |
+| ✅ | 8er-RvR-Gruppen gebildet | 4 / 3,4 h | 13 / 11 h (+ 130× 2er, 98× 3er, 50× 4er) |
+| ✅ | PvP-Tode: gezielt vs. kollateral | 65 % kollateral | 92 % gezielt (25.623 vs. 2.180); 78 % sind 45+ gegen 45+ |
+| ✅ | PvP-Tode pro Stunde | 4.300–5.400 | ~2.500 |
+| ✅ | Anteil Tode an den drei Hubs | 82 % | 10 % (alle PvE, siehe unten) |
+| ✅ | Bug 29: längste Rez-Warteschleife pro Gruppe | 2.700 Zeilen, 1 h 43 min | 20 Zeilen; 905 Fern-Leichen sofort freigegeben, 49 Drops |
+| ✅ | 47 C: Gruppen starten Task an der Reise-Deadline | – | 18× |
+| ⚠️ | PvE-Tode pro Stunde | ~770 | 1.250 (05 h) → 3.660 (14 h), steigend |
+| ⚠️ | Con-Grenze GRÜN bei Solo-Toden | 70 % | 22 % (05–06 h) → 39 % (14–15 h), rutscht wieder ab |
+| ⚠️ | lange BotBrain-Ticks pro Stunde | 5.000–5.750 | 1.400–2.500, aber Spitzen 5.000 (06 h, 10 h); Median 42 ms, p99 1.189 ms, 455 über 1 s |
+| ⚠️ | Camp-Reise-Timeouts (Bug 20) | ~7/h | ~7,6/h, unverändert |
+| 🔴 | Keep-Eroberungen | 0 | 0; 3 Belagerungen gestartet, 33× „Siege defended: four-hour timer" |
+
+**Neue Befunde**
+- **Mobs an den Hubs:** 5.492 Tode innerhalb der Schutzzonen, alle PvE (phantom magi 735, savage dragonfly 519, thrawn ogre thresher 411, snowshoe bandit 307 …). Die Zonen schützen vor Spielern, nicht vor den restaurierten Frontier-Spawns um die Grenzburgen. Steigt über den Tag (206/h → 770/h).
+- **RvR-50er sterben an benannten Frontier-Mobs:** 7.614 PvE-Tode von 50ern, Top-Killer „Illusion of Aidon the Archwizard" (Lvl 75, 589×), „Black Lady" (65, 457×), „reanimated guardian" (58, 337×). Ein 2003er 8er lief um solche Mobs herum.
+- **Leveller-PvE-Tode:** 17.768 der 27.277 PvE-Tode sind Level 20–34 (SoloPve 14.547). Die Con-Erholung schickt Bots zu Blau/Gelb (2.604 Camp-Wechsel), wo sie häufiger sterben; die Grenze rutscht im Tagesverlauf wieder Richtung Grün. Netto leveln sie trotzdem deutlich schneller (siehe Tabelle) – das Verhältnis Kills/Tode braucht 24 h Daten.
+- **Porter-Karussell:** 7.560 Frontier-Teleports in 11 h (vorher 94/h, jetzt ~690/h); einzelne Warbands porten 160–191× (alle 3–4 min): sterben im Feld → Release am Hub → sofort wieder porten. Menschlicher wäre eine Pause am Hub (rezzen, buffen, regruppieren, 2–5 min).
+- **Tick-Spitzen:** neue Hotspots `ExecuteRvr` (einzelne Runden 260–480 ms, 42 s Summe in den Spitzenstunden) und `StableNetworkCache` (30-min-Neubau ~1 s, wie vom Reviewer erwartet). Bug 56 ergänzt; neue Bugs 65 und 66 erfasst.
+- **PvP-Tode am Teleporter-Landepunkt Castle Sauvage:** 116 (außerhalb der Schutzzone), Zone Forest Sauvage insgesamt 7.163 PvP-Tode → die Radius-Entscheidung bleibt offen.
+
+**Vorschläge (nichts davon gebaut)**
+1. Frontier-Spawns im Hub-Radius entfernen oder Bots am Hub Mobs meiden lassen (Ursache der 10 %).
+2. RvR-Bots meiden benannte Mobs ≥ Lvl 55 und Mob-Camps auf der Route (Aggro-Radius umgehen).
+3. Nach Release am Hub 2–5 min regruppieren, bevor die Warband erneut portet; ggf. Teleport-Frequenz pro Warband deckeln.
+4. Belagerung real machen (Task 48 Punkt 6): Rammen/Türen/Lord tatsächlich angreifen, sonst bleibt es bei 0 Eroberungen.
+5. Bug 56 Runde 2: `ExecuteRvr` und `StableNetworkCache` in Scheiben; Koordinator-Lock.

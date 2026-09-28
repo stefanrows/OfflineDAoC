@@ -12,6 +12,14 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.132.1] - 2026-09-28
+
+### Changed
+
+- Night report: live re-measurement after eleven hours on 0.125.0 (levelling,
+  RvR presence, ticks, deaths) with follow-up proposals; bugs 65 and 66
+  recorded, bug 56 extended with the new hot spots. Documentation only.
+
 ## [0.132.0] - 2026-09-28
 
 ### Added

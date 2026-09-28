@@ -6,6 +6,26 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+65. **Bots die to mobs inside the border hubs and RvR bots die to named
+    frontier mobs.** Live 0.125.0, 2026-09-28 04:41–15:46 (11 h, 1,210 bots):
+    5,492 deaths inside the 3,500-unit safe hubs, all PvE (phantom magi 735,
+    savage dragonfly 519, thrawn ogre thresher 411, snowshoe bandit 307), rising
+    from about 200 to 770 per hour; the safe area blocks players, not the
+    restored frontier spawns around the border keeps. Separately 7,614 level-50
+    PvE deaths, mostly to named frontier mobs: Illusion of Aidon the Archwizard
+    (level 75, 589), Black Lady (65, 457), reanimated guardian (58, 337).
+    Expected: no ordinary mob camps in a hub courtyard, and roaming warbands
+    walk around named mobs far above their level. Not yet investigated (spawn
+    placement from the 0.72.0 frontier manifest versus hub geometry; RvR route
+    and aggro avoidance).
+
+66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
+    0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
+    had about 94 per hour), 1,999 of them full eight-member parties; single
+    forces departed 160–191 times. Bots die in the field, release at their hub
+    (0.123.0) and board again at once. Expected: a 2003 group rezzed, buffed and
+    regrouped for a few minutes before porting back. Not yet investigated.
+
 64. **Player and companion overhead names sometimes do not appear.** Reported
     while source was 0.109.0; installed version and client build are
     unconfirmed. Seen after login, zoning, or when entities reappear or
@@ -180,6 +200,13 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
       a median of 253 ms. Companions also show single turns of 1-2 s that do
       not coincide with slow SQL. Both are now timed; the group-coordinator
       lock and keep-route slices remain as they were.
+    - Live 0.125.0, 11 h (2026-09-28): long BotBrain ticks 1,400–2,500 per
+      hour in most hours, median 42 ms, but spikes of about 5,000 per hour
+      (06:00, 10:00), p99 1,189 ms and 455 ticks over one second. New hot
+      spots in `BOT_THINK_SLOW`: `ExecuteRvr` single turns of 260–480 ms
+      (about 42 s total in the spike hours) and the 30-minute
+      `StableNetworkCache` rebuild (about 1 s, one turn per region and realm).
+      Next round: slice ExecuteRvr and the cache rebuild; coordinator lock.
     - Live measurement pending: compare the hourly count and median of
       `Long NpcService.Tick ... BotBrain`, `SERVER_WORK stage=NpcService`
       and the `BOT_THINK_PROFILE` phase `RouteRecoverySearch` (expected
