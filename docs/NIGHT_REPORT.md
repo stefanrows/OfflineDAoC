@@ -44,4 +44,63 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 - Live-Messung 0.122.0 nach 17 min mit voller Population (1.210 Bots, 04:21–04:38): 0 Exceptions, 0 Statusdatei-Fehler, 0 lange Reaper-Ticks (aber auch keine Spieler-Kills). Lange BotBrain-Ticks 22–39/min (vorher ~85), Median 41 ms (vorher 94–122), p95 257 ms, Max 1.699 ms (ein Ausreißer; vorher 3.967). NpcService Ø 5,9 ms (vorher 12–15), p95 17 ms (vorher ~60) → Bug 56 live etwa 2,5–3× besser, Rest siehe Hotspots. Con-Erholung: 23 Schritte (16 neue Aufgabe, 5 Level-up, 2 Kills), 7 Camp-Wechsel zu härterer Beute. Tode: 698 in 17 min, davon 495 PvP; bot_was_target=True bei 406, False (kollateral) bei 89, area=True 69 → die „fast alles kollateral"-Hypothese des Advisors trifft so nicht zu; die meisten PvP-Tode sind gezielte Angriffe (Paket B neu bewerten: eher Hub-Gemetzel als Flächenzauber; Task 48 macht die Hubs sicher). Bug 29: keine RESURRECTION_WAIT-Schleifen. RVR_KEEP_ROUTE_FAILED 49 in 17 min (0.122.0 hat den 48-Fix noch nicht).
 - 04:39: Batch 1 (bis 4ceb48e = 0.122.0) nach `stefanrows/OfflineDAoC` `main` gepusht. Batch 2 (0.125.0: 48, 59, 47C, 46) Build grün, Server-Tests 2447/1 übersprungen, Launcher 127/127; `server.sh update` (Deploy + Neustart) läuft seit 04:39.
 
-- (wird am Ende geschrieben)
+## Zusammenfassung für Aaron
+
+**TL;DR**
+- **9 Pakete gepusht (0.118.0 → 0.125.0), Server läuft lokal auf 0.125.0, Ked ist Co-Leader.**
+- **Bot-Ticks live ~3× schneller, /tc geht, Leveln und RvR haben ihre bewiesenen Ursachen behoben.**
+- **Offen für dich: Real-Client-Checks (Tabelle unten) und 3 Entscheidungen.**
+
+### Was jetzt anders ist
+
+| | Version | Was du merkst |
+|---|---|---|
+| ✅ | 0.118.0 | `/tc` teleportiert zuverlässig zur Realm Exchange; kein Startfehler mehr (Bug 57) |
+| ✅ | 0.119.0 | Bot-PvE-Gruppen warten nicht mehr stundenlang auf eine Leiche zwei Zonen weiter; wer dreimal auf dem Rückweg stirbt, fliegt raus (Bug 29) |
+| ✅ | 0.120.0 | Weniger Server-Ruckler: festgefahrene Bots suchen ihren Ausweichweg in Häppchen; Minuten-Profil `BOT_THINK_PROFILE` im Log (Bug 56) |
+| ✅ | 0.121.0 | Solo-Weltbots trauen sich nach Toden wieder an Blau/Gelb, leveln bis 35 in der Nähe, und jeder Bot-Tod steht als Logzeile mit Killer (Task 47 A) |
+| ✅ | 0.122.0 | Dashboard- und Weltgeschwindigkeits-Statusdatei fallen nicht mehr aus (Bugs 58, 26) |
+| ✅ | 0.123.0 | Castle Sauvage, Svasud Faste, Druim Ligen sind sichere Zonen (3.500 Einheiten, auch für dich); Bots kommen aus den Portal-Keeps raus; Warbands geben unerreichbare Keeps auf und porten gemeinsam (Task 48, Punkte 1–5) |
+| ✅ | 0.123.1 | Launcher-Testsuite grün (Bug 59) |
+| ✅ | 0.124.0 | PvE-Gruppen kurz vor dem Camp starten ihren Task statt sich aufzulösen; Camps nahe am Treffpunkt (Task 47 C) |
+| ✅ | 0.125.0 | `/petpull` ist ein Gruppenmodus: einmal an, dann normal mit dem Pet pullen (Task 46) |
+
+### Ked
+✅ GuildRank 9 → 1 in North Bomb, Backup `playable-backups/opendaoc.pre-ked-rank-20260928-041813.db`. Bitte im Spiel prüfen, ob Rang 1 einladen darf (Rang-Rechte der Gilde).
+
+### Live gemessen (0.122.0, 17 min, 1.210 Bots)
+
+| Messwert | vorher (0.115.0) | jetzt |
+|---|---|---|
+| lange Bot-Ticks pro Minute | ~85 | 22–39 |
+| Tick-Median | 94–122 ms | 41 ms |
+| NpcService Ø / p95 | 12–15 ms / ~60 ms | 5,9 ms / 17 ms |
+| Exceptions im Lauf | 2 | 0 |
+
+### Bitte im Spiel prüfen
+
+| | Was | Wie |
+|---|---|---|
+| ❓ | `/petpull` an, Pet schicken, Gruppe wartet, Tank taunted ein Add vom Pet | Enchanter/SM-Gruppe am Camp |
+| ❓ | Sichere Hubs: du bist an Castle Sauvage / Svasud / Druim Ligen unangreifbar (3.500 Einheiten) | hinstellen, angreifen lassen |
+| ❓ | Teleporter-Landepunkt Castle Sauvage liegt ~9.000 Einheiten vom Hub-Zentrum, Svasud ~4.000 → außerhalb der Schutzzone | hinporten, schauen, ob das der Burghof ist |
+| ❓ | RvR-Gruppen im Feld (Emain, Odin's, Hadrian's) nach 1–2 h Laufzeit | `/who`, Launcher Active Groups |
+| ❓ | Bot-Level steigen schneller (vorher ~0,5 Level/Bot-Stunde) | Launcher Active Population nach ein paar Stunden |
+| ❓ | Ked kann einladen | `/gc invite` |
+
+### Entscheidungen für dich
+
+| | Frage | Optionen |
+|---|---|---|
+| ❓ | Spielstand auf die SSD? Die DB liegt auf der 5.400-rpm-HDD D:, langsame SQL-Anweisungen brauchen im Median 253 ms; lange Reaper-Ticks bei deinen Kills in DF (Ø 425 ms) hängen daran | a) DB auf SSD umziehen b) so lassen c) erst Reaper-Ursache mit dem neuen Profil bestätigen |
+| ❓ | Schutzradius der Hubs vergrößern, damit der Teleporter-Landepunkt drin liegt? | a) Radius auf ~10.000 b) zweiter Kreis am Landepunkt c) so lassen |
+| ❓ | Task 47 Paket B (Kollateral-PvP in BotBrain): die Live-Zahlen zeigen 406 gezielte vs. 89 kollaterale PvP-Tode in 17 min → eher Hub-Gemetzel (durch 0.123.0 adressiert) als Flächenzauber | a) B streichen und nach 24 h neu messen b) B trotzdem bauen |
+
+### Nicht gemacht / offen
+- Task 45 (Lastcheck Battlegroups) braucht zwei echte Spieler mit je 5 Squads → nur die Bot-Last wurde gemessen (siehe oben).
+- Task 47 Paket B (Kollateral-PvP), Task 48 Punkt 6 (1.65-Feinschliff: Milegates, Rasten, Stealther-Paare, Doktrin) → erst wenn Gruppen draußen sind.
+- Bug 20 (Camp-Reise-Timeouts) bleibt pending, 85 % erreichen ihr Camp; 47 C sollte den Rest senken.
+- Neue Bugs 60–63 nur erfasst (Spell-Daten-Fehler beim Start, Epic-Raid-Hub-Route Albion, NULL-Styles, Bindstein = RvR-Sammelpunkt).
+- Bug 56 Rest: NavPathQuery in TravelAcrossRegions/ZoneItineraryStep (bis 220 ms pro Runde), Koordinator-Lock; Reaper-Ticks bei Spieler-Kills noch nicht live gemessen (kein Spieler online).
+- Werkzeug: `playable-dev/dbquery.py` scheitert bei laufendem Server am WAL („disk I/O error") und überschreibt seinen Snapshot; `server.sh` stellt das Launcher-Fenster jetzt vor jedem Klick wieder her (war minimiert → STOP-Knopf unauffindbar).
+- Automatisierte Tests liefen (Server 2447, Launcher 127, alle grün); Real-Client-Prüfung ist deine.
