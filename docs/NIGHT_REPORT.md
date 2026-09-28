@@ -10,7 +10,7 @@ Worktrees liegen unter `/mnt/d/OfflineDAoC-wt/<paket>`, Branches `night/<paket>`
 |---|---|---|---|
 | Ked Co-Leader (GuildRank 1) | Orchestrator, beim ersten `server.sh update --no-start` | – | offen |
 | Bug 56 BotBrain-Ticks langsam | daoc-developer (Opus), erst profilen | `bug56` | gestartet |
-| Bug 57 `/tc` doppelt | daoc-bugfixer (Sonnet) | `bug57` | ACCEPT 03:30 → wird als 0.118.0 in `main` gemergt |
+| Bug 57 `/tc` doppelt | daoc-bugfixer (Sonnet) | `bug57` | ✅ gemergt als 0.118.0 (ae5adf5), noch nicht deployt/gepusht |
 | Bug 58 Dashboard-Snapshot (+ Bug 26 Weltgeschwindigkeits-Statusdatei, gleiche Ursache) | daoc-bugfixer (Sonnet) | `bug58` | 58 entwickelt 03:29 (Retry um File.Move, Test, 2330 grün); 26 nachbeauftragt (Server-Retry + Launcher-Leser FileShare.Delete) |
 | Log-Check Bugs 20/25/28/29/30/33 | general-purpose (Sonnet), read-only | – | fertig 03:25: 25/28/30/33 bewiesen behoben, 20 seltener (24 von 164 Gruppen laufen ins 30-min-Limit), 29 tritt weiter auf |
 | Bug 29 Getrennte Gruppen warten auf Rez | daoc-bugfixer (Opus) | `bug29` | gestartet |
@@ -20,7 +20,7 @@ Worktrees liegen unter `/mnt/d/OfflineDAoC-wt/<paket>`, Branches `night/<paket>`
 | Task 47 Build A (Con-Erholung, lokale Solo-Camps, Todes-Logzeile) | daoc-developer (Opus) | `task47` | gestartet 03:32 |
 | Task 47 Build B (Gruppen-Taskuhr ab Camp-Ankunft) | daoc-developer | – | wartet auf Merge von Bug 29 (Coordinator) |
 | Task 47 Build C (Kollateral-PvP in BotBrain) | daoc-developer | – | wartet auf 56 und auf die Todes-Logzeile |
-| Task 48 Build (Hubs sicher, Portal-Keep-Türen, Aufgeben nach 3 Fehlversuchen, gemeinsam porten, Release-Verhalten) | daoc-developer (Opus) | `task48` | Worktree wird angelegt |
+| Task 48 Build (Hubs sicher, Portal-Keep-Türen, Aufgeben nach 3 Fehlversuchen, gemeinsam porten, Release-Verhalten) | daoc-developer (Opus) | `task48` | gestartet 03:36 |
 | Task 45 Lastcheck | Orchestrator, Live-Server | – | offen |
 
 Regeln aus dem Brief: pro fertigem Bug/Task ein MINOR-Bump, Pins in Gleichschritt,
