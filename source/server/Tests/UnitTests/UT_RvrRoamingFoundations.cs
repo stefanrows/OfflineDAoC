@@ -277,14 +277,16 @@ public sealed class UT_RvrRoamingFoundations
         }
         Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + 1), Is.True, "still marching at 30 minutes");
 
-        // The march stalls (route back-off): nothing closer, no port.
-        for (int minute = 32; minute <= 44; minute += 2)
+        // The army reaches the walls at minute 32 (within 3,000 units, so the
+        // 45-minute absence rule never applies), then stalls there: nothing
+        // closer, no port. Only the 15-minute no-progress rule can close it.
+        for (int minute = 32; minute <= 46; minute += 2)
         {
-            AutonomousRvrEventLayer.ReportMarch(target.Id, "marching", 1, 100, new(100_000, 127_000, 0), false, start + minute * 60_000L);
+            AutonomousRvrEventLayer.ReportMarch(target.Id, "marching", 1, 100, new(100_000, 102_000, 0), false, start + minute * 60_000L);
             Sweep(start + minute * 60_000L);
         }
-        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + 1), Is.True, "fourteen idle minutes");
-        Sweep(start + 45 * 60_000L);
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + 1), Is.True, "fourteen idle minutes, well past 45 since the start");
+        Sweep(start + 47 * 60_000L);
         Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + 1), Is.False, "fifteen idle minutes close it");
     }
 
@@ -324,16 +326,16 @@ public sealed class UT_RvrRoamingFoundations
             AutonomousRvrEventLayer.ReportMarch(target.Id, "pacer", 30, 1, new(x, 477504, 0), false, start + minute * 60_000L);
             AutonomousRvrEventLayer.ReportMarch(target.Id, "replanner", 31, 100,
                 new(100_000, minute % 2 == 0 ? 120_000 : 121_000, 0), false, start + minute * 60_000L);
-            if (minute == 17)
+            if (minute == 14)
             {
                 Sweep(start + minute * 60_000L);
                 Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + 1), Is.True,
-                    "three pacing credits (minutes 1-3) carry it to minute 17");
+                    "fourteen minutes after the siege opened");
             }
         }
         Sweep(start + 18 * 60_000L);
         Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + 1), Is.False,
-            "no further credit from pacing or the repeated segment: closed 15 minutes after minute 3");
+            "siege slice 1: pacing in another region earns no march credit at all, so it closed 15 minutes after opening");
     }
 
     [Test]

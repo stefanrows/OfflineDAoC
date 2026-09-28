@@ -6,8 +6,11 @@ Guild PvP recruitment can use validated town-teleporter routes across regions.
 New parties have two minutes to fill spare seats before leaving assembly;
 recruitment does not refill a party already fighting, grinding or recovering.
 Hybrid and KeepWarrior leaders favor eight-member parties. Hunters retain
-small-party behavior. New automatic assaults require a full party, healing
-support and siege supplies; smaller forces may reinforce an existing battle.
+small-party behavior. New automatic assaults require a full party of eight
+from one guild, healing support and siege supplies, and only open on keeps a
+guild can claim (no relic keeps, base level 50). Smaller forces may reinforce
+only their own guild's siege; a stranger guild contests it only with a whole
+warband.
 Eligible guildmates can coordinate their next task with a waiting PvP cohort,
 without interrupting active tasks or mandatory PvE recovery. This improves
 formation opportunities; it does not establish successful live keep captures
@@ -15,6 +18,23 @@ or repair every frontier route. Installation and gameplay validation are pending
 CoreServer and Windows launcher Release builds passed on 2026-09-26.
 Automated tests were not run under the local project workflow; live acceptance
 requires a separately authorized deployment and a new population observation.
+
+## Autonomous siege flow (task 48, siege slice 1)
+
+A committed warband's siege operators (tanks, melee fighters, Scouts and
+Rangers) buy a ram at the border hub or at
+home before marching, place it at the outer gate and operate it once they are
+within 6,000 units of the keep (`RVR_SIEGE action=purchase|deployed|hit`).
+Casters of the same group ride the ram (`action=ride|dismount`); each rider
+adds damage and shortens the reload. Melee classes clear reachable guards,
+then hit the outermost standing gate, then the inner gate. Healers stay free.
+The lord becomes a target only after every gate is down; its death leaves the
+claim steward, where the crew leader claims with eight grouped guildmates.
+An automatic siege closes after 15 minutes without attacker progress, or
+after 45 minutes without any attacker within 3,000 units of the keep
+(`RVR_SIEGE_IDLE_CLOSED reason=no_progress|absent`). Only approach inside the
+keep's region counts as progress. Source only; real-client and live-log
+check pending.
 
 ## World and capture rules
 

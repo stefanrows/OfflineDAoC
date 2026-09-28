@@ -1509,8 +1509,9 @@ namespace DOL.GS
                 _nextRvrPlanReview = 0;
             }
 
-            // Tier 4 crews roam and hunt living unallied actors. Keep and relic
-            // contesting, including siege-kit work, begins in Tier 5.
+            // Siege work (buy, place and operate a ram, or ride it) comes before
+            // ordinary keep targets for forces committed to a keep assault.
+            if (TryRunSiegeWork(bot)) return true;
             GameLiving enemy = FindRvrTarget(bot);
             if (enemy != null)
             {
@@ -1739,7 +1740,8 @@ namespace DOL.GS
             // safely continues its live frontier patrol.
             if (_rvrIntent is not (AutonomousRvrEventLayer.Intent.AssaultKeep or AutonomousRvrEventLayer.Intent.AssaultRelicKeep))
                 return null; // Roamers still retaliate through normal aggro; they do not initiate an unregistered siege.
-            bool closedDoor = FindClosedEnemyDoor(bot, _rvrDestination?.Id) != null;
+            GameKeepDoor nearestClosedDoor = FindClosedEnemyDoor(bot, _rvrDestination?.Id);
+            bool closedDoor = nearestClosedDoor != null;
             var keepNavigation=AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance,bot);
             // Staged assault: outer/inner guards first, then the real lord only
             // after a real gate opens.  The lord's normal death pipeline is the
@@ -1761,8 +1763,32 @@ namespace DOL.GS
                 .ToArray();
             // Both attacking realms seek the native capture, not an endless
             // guard patrol. Nearby PvP is handled first by the threat scan.
-            if (!closedDoor && guards.OfType<GuardLord>().FirstOrDefault() is { } exposedLord) return exposedLord;
-            return SelectDistributedRvrTarget(bot, guards.Cast<GameLiving>().ToArray());
+            // Without a guard to fight, melee classes hit the outermost standing
+            // gate (the ram's target too), then the inner gate once the outer
+            // falls. The lord is never a target while any gate stands.
+            GuardLord lord = guards.OfType<GuardLord>().FirstOrDefault();
+            GameKeepDoor gate = closedDoor && guards.Length == 0 ? OutermostClosedEnemyDoor(nearestClosedDoor) : null;
+            switch (AutonomousSiegeDoctrine.PickKeepTarget(closedDoor, lord != null, guards.Length - (lord != null ? 1 : 0),
+                        gate == null ? double.PositiveInfinity : bot.GetDistanceTo(gate),
+                        AutonomousSiegeDoctrine.CanMeleeDoor(bot), BotSiegeRuntime.HoldingPosition(bot)))
+            {
+                case AutonomousSiegeDoctrine.KeepTarget.Lord: return lord;
+                case AutonomousSiegeDoctrine.KeepTarget.Guard: return SelectDistributedRvrTarget(bot, guards.Cast<GameLiving>().ToArray());
+                case AutonomousSiegeDoctrine.KeepTarget.Door:
+                    return GameServer.ServerRules.IsAllowedToAttack(bot, gate, true) ? gate : null;
+                default: return null;
+            }
+        }
+
+        /// <summary>The standing gate farthest from the keep's centre, from the
+        /// keep's own door list (no region scan).</summary>
+        private static GameKeepDoor OutermostClosedEnemyDoor(GameKeepDoor anyClosedDoor)
+        {
+            AbstractGameKeep keep = anyClosedDoor?.Component?.Keep;
+            if (keep == null) return anyClosedDoor;
+            return AutonomousSiegeDoctrine.Outermost(keep.Doors.Values
+                .Where(door => door.IsAlive && door.IsAttackableDoor && door.State == eDoorState.Closed),
+                door => new Vector2(door.X, door.Y), new Vector2(keep.X, keep.Y)) ?? anyClosedDoor;
         }
 
         private bool HandleDungeonArrivalHold(BotBrain brain, GameBot bot, string reason)
@@ -2152,7 +2178,7 @@ namespace DOL.GS
                     keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,
                     keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0,
                     keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed),
-                    OwningGuild: keep.Guild?.Name));
+                    OwningGuild: keep.Guild?.Name, Claimable: AutonomousRvrKeepPolicy.IsClaimableKeep(keep)));
             }
 
             // Roaming is not limited to the road between keeps. Reuse the
@@ -2206,7 +2232,8 @@ namespace DOL.GS
                     warband.Length, averageLevel, healers, siegeReady,
                     (unchecked((ulong)(_groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID)) * 2654435761UL % 100) < (ulong)roamReservePercent,
                     warband.Select(member => member.DatabaseID).ToArray(), minimumLevel,
-                    bot.Guild?.Name, AutonomousPlayerBehavior.CanStartCampaign(leaderType, minimumLevel, warband.Length)),
+                    bot.Guild?.Name, AutonomousPlayerBehavior.CanStartCampaign(leaderType, minimumLevel, warband.Length),
+                    AutonomousSiegeDoctrine.IsSingleGuild(bot.Guild, warband.Select(member => member.Guild))),
                 objectives, GameLoop.GameLoopTime, Random.Shared.NextDouble());
             _rvrSharedEvent = plan?.IsSharedEvent == true;
             _rvrIntent = plan?.Intent ?? AutonomousRvrEventLayer.Intent.Roam;
