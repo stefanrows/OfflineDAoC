@@ -57,11 +57,22 @@ internal static class WorldSpeedProtocol
                 return null;
             }
 
-            string json = File.ReadAllText(path);
-            if (json.Length > 32_768)
+            string json;
+            // Open with FileShare.ReadWrite | FileShare.Delete, like the
+            // live bot dashboard reader, so this read never blocks the
+            // server's own atomic File.Move replacing this file while we
+            // hold it open.
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                       FileShare.ReadWrite | FileShare.Delete))
             {
-                unavailableReason = "World speed status is invalid.";
-                return null;
+                if (stream.Length > 32_768)
+                {
+                    unavailableReason = "World speed status is invalid.";
+                    return null;
+                }
+
+                using var reader = new StreamReader(stream);
+                json = reader.ReadToEnd();
             }
 
             WorldSpeedStatus? status = JsonSerializer.Deserialize<WorldSpeedStatus>(json, JsonOptions);

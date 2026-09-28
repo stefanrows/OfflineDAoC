@@ -98,11 +98,18 @@ public static class AutonomousBotDashboard
         }
     }
 
-    private static bool Publish(bool running, string requestId)
+    private static bool Publish(bool running, string requestId) => Publish(running, requestId, null);
+
+    /// <param name="onRetryAttemptFailed">
+    /// Test-only hook forwarded to <see cref="AtomicFilePublish.MoveWithRetry"/>;
+    /// production callers always pass null.
+    /// </param>
+    private static bool Publish(bool running, string requestId, Action<int> onRetryAttemptFailed)
     {
         if (Interlocked.Exchange(ref _writing, 1) != 0)
             return false;
 
+        string temporaryPath = FilePath + ".tmp";
         try
         {
             BotStatus[] bots = running
@@ -112,17 +119,33 @@ public static class AutonomousBotDashboard
                     .ToArray()
                 : [];
             var snapshot = new Snapshot(DateTime.UtcNow, running, requestId, bots);
-            string temporaryPath = FilePath + ".tmp";
             using (var stream = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write,
                        FileShare.Read, 64 * 1024, FileOptions.SequentialScan))
             {
                 JsonSerializer.Serialize(stream, snapshot);
             }
-            File.Move(temporaryPath, FilePath, true);
+
+            // A concurrent reader without delete sharing (the local launcher
+            // briefly opening an older handle, an indexer or an antivirus
+            // scan) can make File.Move throw IOException or
+            // UnauthorizedAccessException for a few milliseconds. Retry with
+            // a short backoff instead of dropping this snapshot and logging
+            // a warning for what is normally a transient hold.
+            AtomicFilePublish.MoveWithRetry(temporaryPath, FilePath, onAttemptFailed: onRetryAttemptFailed);
             return true;
         }
         catch (Exception exception)
         {
+            try
+            {
+                if (File.Exists(temporaryPath))
+                    File.Delete(temporaryPath);
+            }
+            catch
+            {
+                // Keep the original publish failure as the useful error.
+            }
+
             Log.Warn("Live bot dashboard snapshot failed", exception);
             return false;
         }

@@ -6,16 +6,24 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+## Fixed in source; installation verification pending
+
 58. **The live bot dashboard snapshot fails intermittently.** Every 30–60
     minutes the log shows `Live bot dashboard snapshot failed
     System.UnauthorizedAccessException: Access to the path is denied` at
     `AutonomousBotDashboard.Publish` (`File.Move` over the published file,
-    AutonomousBotDashboard.cs:121), most likely while the launcher is
-    reading it. Impact: the launcher shows a stale snapshot for one cycle.
-    Expected: publishing retries or replaces the file safely without a
-    warning.
-
-## Fixed in source; installation verification pending
+    AutonomousBotDashboard.cs:121). Cause: a reader that briefly holds the
+    destination file open without delete sharing (an antivirus scan or file
+    indexer are the likely candidates; the launcher's own reader already
+    opens the file with `FileShare.ReadWrite | FileShare.Delete`, so it is
+    not itself the blocker) makes the atomic `File.Move` throw for the few
+    milliseconds the hold lasts. Reproduced with a unit test that opens the
+    published file with `FileShare.Read` only and releases it shortly after
+    `Publish` starts. Fix: `Publish` retries the move up to six times with a
+    short growing backoff (25 ms per attempt, roughly a quarter second total)
+    before giving up and logging the warning, so a lock released within that
+    window no longer drops the snapshot for a cycle. Real-client check
+    pending.
 
 57. **`/tc` was registered twice.** `TeleportToExchangeCommand` claims `&tc`
     as its own command (teleport to the capital's Realm Exchange), and
@@ -321,6 +329,28 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 30. **One free population seat cannot fill an assembling PvE party.** Source audit after the 0.74.0 party-size decline found a minimum-two free-seat return before the backfill pass. Source 0.75.0 permits that pass with one free seat and applies the two-seat gate only to new-party creation. This is one confirmed source defect, not an established explanation for the whole observed decline. Live roster-size verification pending.
 
+26. **World-speed status publication intermittently fails.** Reopened: this
+    was marked Finished without a fix. The currently running install logged
+    another `System.UnauthorizedAccessException: Access to the path is
+    denied` at `OfflineWorldSpeedControl.PublishStatus`
+    (OfflineWorldSpeedControl.cs:571) at 01:37:16 while replacing
+    `world-speed.status.json`, the same failure as the original 2026-09-26
+    report. Cause: same family as bug 58 (the live bot dashboard) — a reader
+    that briefly holds the destination file open without delete sharing (an
+    antivirus scan or file indexer are the likely candidates) makes the
+    atomic `File.Move` throw for the few milliseconds the hold lasts; the
+    launcher's own status reader (`WorldSpeedProtocol.ReadFreshStatus`) used
+    plain `File.ReadAllText`, which does not grant `FileShare.Delete`
+    either, so it could itself have been a contributing blocker. Fix:
+    `PublishStatus` now retries the move (via the new shared
+    `AtomicFilePublish.MoveWithRetry` helper, also used by bug 58's fix) up
+    to six times with a short growing backoff before giving up and logging
+    the error; the launcher's `WorldSpeedProtocol.ReadFreshStatus` now opens
+    the status file with `FileShare.ReadWrite | FileShare.Delete`, matching
+    the dashboard reader. Reproduced and covered by a unit test that locks
+    the status file with `FileShare.Read` and releases it during the retry
+    window. Real-client check pending.
+
 25. **Initial guild recruitment loses invitations and late PvE recruitment skips camp validation.** Source audit following the installed 0.73.0 observation found that invitations ignored existing partial parties and stopped when eight peers were waiting; late PvE joins checked the rendezvous but not whether the planned camp remained valid. Source 0.74.0 advertises bounded initial-party vacancies at safe task boundaries, removes the waiter cutoff, and repeats the camp usability check before a late join. Failed probes yield briefly to other candidates, and missing roles are recalculated after each join. Installation and sustained full-party/route verification remain pending; these source defects do not establish the cause of every observed travel failure.
 
 24. **PvP opponent evaluation throws when a group has no living nearby members.** Confirmed in the 0.72.0 live-session audit: `VisibleParty` filtered all members out and then called `Average`, interrupting NPC AI processing. Source 0.73.0 falls back to the resolved combatant's effective level for an empty visible group. Installation and sustained PvP observation remain pending.
@@ -361,8 +391,6 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 38. **Server unit tests fail in bulk depending on filter and order.** On 0.80.0, `dotnet test source/server/Tests/Tests.csproj -c Release --filter "FullyQualifiedName~Companion|FullyQualifiedName~Bomb|FullyQualifiedName~BotBrain|FullyQualifiedName~Style|FullyQualifiedName~Taunt|FullyQualifiedName~BotCombat|FullyQualifiedName~Tank"` fails 133 tests with `TypeInitializationException: The type initializer for 'DOL.GS.GameObject' threw` (inner NullReferenceException). Other filters pass or fail intermittently (19 tests), and `UT_BotWeaponStats` alone fails 4. Likely a test touches `GameObject` before any `EpicTestServerScope` exists, which poisons the type for the whole run. Impact: suite results depend on selection and order; product code unaffected. Not yet investigated.
 
 33. **Launcher BotGoalsSettings tests cannot construct the control.** On 0.76.0, `BotGoalsSettingsTests` fails in SetUp with `MissingMethodException: Constructor on type 'OfflineDaoc.Launcher.BotGoalsSettingsControl' not found` for LegacyFileExplainsMappingBeforeRewriting, MeasuredRecommendationAndPanelRenderWithoutLaunchingServer, MixTotalAndServerStateGateSaving and PresetAndWorldShapeSaveAndUndo. Reproduce with `tools/dev/winnet.sh test source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj -c Release`. Expected: the fixture creates the control with its current constructor. Impact: the population-settings tests do not run; the launcher itself is unaffected. Likely the test still reflects an older constructor signature; not yet investigated.
-
-26. **World-speed status publication intermittently fails.** Installed 0.73.0 logged three `UnauthorizedAccessException` failures while replacing the status file during the 2026-09-26 observation. Later snapshots resumed and simulation kept progressing. Expected: continuous dashboard status updates; actual: transient publication failures. Root cause and gameplay impact are unconfirmed; concurrent diagnostic readers are a possible confound. Workaround: wait for the next status update. No fix included in 0.74.0.
 
 27. **Missing NPC template 5232525.** Installed 0.73.0 logged one missing-template error during the 2026-09-26 autonomous session. Expected: the requested NPC template resolves; actual: lookup failed. The spawning caller and gameplay impact remain unidentified; no template was guessed or added. Reproduction beyond the observed log event and workaround are unknown.
 

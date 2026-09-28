@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using DOL.GS;
+using Newtonsoft.Json;
 using NUnit.Framework;
 
 namespace DOL.Tests.UnitTests;
@@ -149,5 +152,51 @@ public sealed class UT_OfflineWorldSpeedControl
             CreatedUtc = now.AddMinutes(-1),
             Multiplier = 2
         }, "current-session", acceptedIds, now, out _), Is.False);
+    }
+
+    [Test]
+    [NonParallelizable]
+    public void PublishStatusRetriesPastATransientLockOnTheDestinationFile()
+    {
+        Type controlType = typeof(OfflineWorldSpeedControl);
+        FieldInfo statusPathField = controlType.GetField("_statusPath", BindingFlags.Static | BindingFlags.NonPublic);
+        FieldInfo statusErrorField = controlType.GetField("_statusError", BindingFlags.Static | BindingFlags.NonPublic);
+        MethodInfo publishStatus = controlType.GetMethod("PublishStatus", BindingFlags.Static | BindingFlags.NonPublic,
+            null, new[] { typeof(Action<int>) }, null);
+
+        object previousStatusPath = statusPathField.GetValue(null);
+        object previousStatusError = statusErrorField.GetValue(null);
+        string statusPath = Path.Combine(AppContext.BaseDirectory, "world-speed.status.retry-test.json");
+        FileStream blockingHandle = null;
+        try
+        {
+            statusPathField.SetValue(null, statusPath);
+            File.WriteAllText(statusPath, "stale status held by another reader");
+
+            // Simulate a reader that opened the previously published status
+            // file without delete sharing (a naive reader, an indexer or an
+            // antivirus scan), which is what makes File.Move throw on
+            // Windows while the handle is open. Release it deterministically
+            // when the retry helper reports the first failed attempt, rather
+            // than racing a fixed delay against its backoff.
+            blockingHandle = new FileStream(statusPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            Action<int> onRetryAttemptFailed = _ => blockingHandle.Dispose();
+
+            publishStatus.Invoke(null, new object[] { onRetryAttemptFailed });
+
+            var statusError = (string)statusErrorField.GetValue(null);
+            Assert.That(statusError, Is.Null,
+                "PublishStatus should retry past a transient lock instead of recording a failure.");
+            WorldSpeedStatus status = JsonConvert.DeserializeObject<WorldSpeedStatus>(File.ReadAllText(statusPath));
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.SessionId, Is.Not.Null.And.Not.Empty);
+        }
+        finally
+        {
+            blockingHandle?.Dispose();
+            statusPathField.SetValue(null, previousStatusPath);
+            statusErrorField.SetValue(null, previousStatusError);
+            File.Delete(statusPath);
+        }
     }
 }
