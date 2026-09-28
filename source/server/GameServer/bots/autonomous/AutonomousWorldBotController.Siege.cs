@@ -280,7 +280,7 @@ namespace DOL.GS
         {
             // Attackers cannot place a ram/artillery piece by taking a path
             // through the very closed enemy gate they are supposed to breach.
-            var nav = AutonomousKeepApproachNavigation.ForRealm(PathfindingProvider.Instance,bot.CurrentRegion,bot.Realm);
+            var nav = AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance,bot);
             if (!nav.IsAvailable || !nav.HasNavmesh(bot.CurrentZone)) return null;
             float angle = MathF.Atan2(bot.Y - target.Y, bot.X - target.X);
             float radius = kind == BotSiegeKind.Ram ? 310 : kind == BotSiegeKind.Trebuchet ? 2600 : 1700;

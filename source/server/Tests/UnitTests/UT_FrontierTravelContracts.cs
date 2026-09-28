@@ -63,7 +63,10 @@ public class UT_FrontierTravelContracts
         Assert.That(AutonomousFrontierTransport.HasDefenderPriority(bot,AutonomousFrontierTransport.Destination(realm,home==100?(ushort)200:(ushort)100)),Is.False);
         bot.Group=new Group(bot);
         ((List<GameLiving>)typeof(Group).GetField("_groupMembers",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(bot.Group)).AddRange([bot,(Traveler)RuntimeHelpers.GetUninitializedObject(typeof(Traveler))]);
-        Assert.That(AutonomousFrontierTransport.BoardingParty(bot,passage),Is.EqualTo(new[]{bot}),"A missing warband member must not hold the defender");
+        // Task 48: the whole warband is the boarding party, but a member that is
+        // not near the porter (other region, dead, far away) is never waited for.
+        Assert.That(AutonomousFrontierTransport.BoardingParty(bot,passage),Has.Length.EqualTo(2));
+        Assert.That(AutonomousFrontierTransport.IsIncoming(true,false,false,double.PositiveInfinity),Is.False,"A missing warband member must not hold the defender");
         bot.PersistentRecord.ObjectiveKind="GroupPve";
         Assert.That(AutonomousFrontierTransport.HasDefenderPriority(bot,passage),Is.False,"PvE must not inherit priority");
         bot.PersistentRecord.ObjectiveKind="RvR";

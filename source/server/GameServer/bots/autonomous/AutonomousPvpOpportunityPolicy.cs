@@ -86,7 +86,10 @@ public static class AutonomousPvpOpportunityPolicy
     public static GameLiving Select(GameBot actor, IEnumerable<GameLiving> candidates,
         Func<GameLiving, GameLiving, bool> visible, bool retaliation = false)
     {
-        if (actor == null || candidates == null || PvpCombatant.IsSafeArea(actor))
+        // A bot fresh from release (or a zone change) does not open a fight
+        // while its PvP immunity lasts; the server rules would refuse it anyway.
+        if (actor == null || candidates == null || PvpCombatant.IsSafeArea(actor) ||
+            PvpCombatant.IsInvulnerableToAttack(actor))
             return null;
         DateTime nowUtc = WorldSimulationClock.UtcNow;
         GameLiving[] visibleCandidates = candidates

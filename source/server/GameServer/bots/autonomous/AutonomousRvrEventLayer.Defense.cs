@@ -208,6 +208,7 @@ namespace DOL.GS
                         if (previous != null && (!previous.DefenseReaction || !active.DefenseReaction ||
                             !CanRedirectDefense(previous.DefenderRealm, active.DefenderRealm,
                                 previous.PlayerAccount, active.PlayerAccount, previous.LastPressureTick, active.LastPressureTick))) continue;
+                        if (IsAbandonedLocked(force.GroupId, active.TargetId, now)) continue;
                         Dictionary<string, int> side = ResponseBucket(active, force);
                         int cap = active.DefenseReaction ? ResponseCap(ReferenceEquals(side, active.Defenders)) : Capacity(active);
                         if (!TryJoin(side, force, cap)) continue;

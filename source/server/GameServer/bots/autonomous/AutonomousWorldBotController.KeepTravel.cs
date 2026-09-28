@@ -15,6 +15,44 @@ public sealed partial class AutonomousWorldBotController
     private Vector3[] _keepTravelPoints;
     private RvrPlanningNavigation _keepPlanning;
 
+    /// <summary>A 2003 warband tried a keep route about three times, then
+    /// called it off and roamed from where it stood instead of porting home:
+    /// the group is already in the frontier, and a failed route to one keep
+    /// says nothing about the fights around it. The decision belongs to the
+    /// whole force (stored in the event layer), whichever member hit the wall.</summary>
+    public const int KeepRouteGiveUpFailures = 3;
+
+    public static bool ShouldAbandonKeepRoute(int consecutiveFailures) => consecutiveFailures >= KeepRouteGiveUpFailures;
+
+    private static string RvrForceOf(GameBot bot) =>
+        bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}";
+
+    /// <summary>Drop the keep objective after repeated route failures: the
+    /// force leaves the siege and will not rejoin or reopen this keep for
+    /// twenty minutes; the normal planner picks a roam target from the
+    /// current spot on the next turn.</summary>
+    private void AbandonKeepTarget(GameBot bot, CampDestination destination, string failure, long now)
+    {
+        string forceId = RvrForceOf(bot);
+        AutonomousRvrEventLayer.AbandonTarget(forceId, destination.Id, now);
+        ClearKeepObjective(bot);
+        SetRvrStatus(bot, "Keep route abandoned", destination.MonsterName,
+            $"{failure} {KeepRouteGiveUpFailures} times; the warband roams the frontier from here instead");
+        Log.Warn($"RVR_KEEP_ROUTE_ABANDONED bot=\"{bot.Name}\" id={bot.DatabaseID} realm={bot.Realm} " +
+            $"target=\"{destination.Id}\" region={bot.CurrentRegionID} force={forceId} reason=\"{failure}\" " +
+            $"avoidMs={AutonomousRvrEventLayer.AbandonedTargetMilliseconds}");
+    }
+
+    private void ClearKeepObjective(GameBot bot)
+    {
+        _keepTravelKey = null; _keepTravelPoints = null; _keepPlanning = null;
+        _keepTravelFailures = 0; _keepTravelRetry = 0;
+        _rvrDestination = null; _rvrApproachDestination = null;
+        _rvrTravelWaypoint = null; _patrolDestination = null;
+        _hunterPatrolArrivedTick = 0; _nextRvrPlanReview = 0;
+        bot.StopMovingOnPath(); bot.StopMoving();
+    }
+
     private static long KeepTravelGeometry(Region region, Zone destination, string targetId)
     {
         // A distant border door opening must not restart every defender's job.
@@ -23,7 +61,8 @@ public sealed partial class AutonomousWorldBotController
         // Ownership can change permission to traverse a closed friendly gate.
         foreach (var keep in GameServer.KeepManager.GetKeepsOfRegion(region.ID))
         {
-            stamp = unchecked(stamp * 31 + keep.KeepID * 7 + (int)keep.Realm);
+            stamp = unchecked(stamp * 31 + keep.KeepID * 7 + (int)keep.Realm +
+                StringComparer.Ordinal.GetHashCode(keep.Guild?.GuildID ?? string.Empty));
             if ($"rvr-keep-{keep.KeepID}" != targetId) continue;
             foreach (var door in keep.Doors.Values)
                 stamp = unchecked(stamp * 31 + (int)door.State * 7 + (door.IsAlive ? 1 : 0));
@@ -37,6 +76,14 @@ public sealed partial class AutonomousWorldBotController
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.KeepTravel);
         long now = GameLoop.GameLoopTime;
+        if (AutonomousRvrEventLayer.IsAbandoned(RvrForceOf(bot), destination.Id, now))
+        {
+            // Another member already called this keep off for the warband.
+            ClearKeepObjective(bot);
+            SetRvrStatus(bot, "Keep route abandoned", destination.MonsterName,
+                "The warband called this keep off; roaming the frontier from here instead");
+            return true;
+        }
         Vector3 current = new(bot.X, bot.Y, bot.Z);
         string key = $"{bot.PersistentRecord?.ObjectiveAssignmentId}:{bot.CurrentRegionID}:{bot.Realm}:{destination.Id}:{destination.X}:{destination.Y}:{destination.Z}";
         long geometry = KeepTravelGeometry(bot.CurrentRegion, bot.CurrentRegion.GetZone(destination.X,destination.Y),destination.Id);
@@ -61,8 +108,7 @@ public sealed partial class AutonomousWorldBotController
                 // roamer moves the search origin every slice and never finishes.
                 bot.StopMovingOnPath(); bot.StopMoving();
                 _keepPlanningOrigin = current;
-                _keepPlanning = new RvrPlanningNavigation(AutonomousKeepApproachNavigation.ForRealm(
-                    PathfindingProvider.Instance, bot.CurrentRegion, bot.Realm));
+                _keepPlanning = new RvrPlanningNavigation(AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance, bot));
             }
             _keepPlanning.BeginSlice();
             var planningWork = _keepPlanning;
@@ -104,7 +150,9 @@ public sealed partial class AutonomousWorldBotController
                     $"{failure}; retaining the siege and backing off before retrying");
                 Log.Warn($"RVR_KEEP_ROUTE_FAILED bot=\"{bot.Name}\" id={bot.DatabaseID} realm={bot.Realm} " +
                     $"target=\"{destination.Id}\" region={bot.CurrentRegionID} from={current} queries={queries} " +
-                    $"reason=\"{failure}\" retryMs={_keepTravelRetry-now}");
+                    $"reason=\"{failure}\" retryMs={_keepTravelRetry-now} failures={_keepTravelFailures}");
+                if (ShouldAbandonKeepRoute(_keepTravelFailures))
+                    AbandonKeepTarget(bot, destination, failure, now);
                 return true;
             }
         }
@@ -118,12 +166,21 @@ public sealed partial class AutonomousWorldBotController
             _keepTravelKey = null; _keepTravelPoints = null;
             return true;
         }
+        int reachedIndex = _keepTravelIndex;
         while (_keepTravelIndex < _keepTravelPoints.Length &&
             Vector3.DistanceSquared(current, _keepTravelPoints[_keepTravelIndex]) <= 80 * 80)
             _keepTravelIndex++;
+        // A reached road segment is approach progress only when it brings this
+        // member closer than before (the per-member best distance survives
+        // replans, so the same segment is never credited twice).
+        if (_keepTravelIndex > reachedIndex)
+            AutonomousRvrEventLayer.ReportMarch(destination.Id, RvrForceOf(bot), bot.DatabaseID, bot.CurrentRegionID,
+                current, bot.InCombat, now);
         if (_keepTravelIndex >= _keepTravelPoints.Length)
         {
             _rvrApproachDestination = _keepTravelPoints[^1];
+            // Standing at the assault approach keeps the siege event alive.
+            AutonomousRvrEventLayer.ReportBattleActivity(destination.Id, now, RvrForceOf(bot));
             return false;
         }
         Vector3 next = _keepTravelPoints[_keepTravelIndex];

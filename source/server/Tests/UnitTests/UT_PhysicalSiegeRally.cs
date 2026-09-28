@@ -67,6 +67,9 @@ public class UT_PhysicalSiegeRally
         long duration = AutonomousRvrEventLayer.Snapshot().Single().RemainingMilliseconds;
         Assert.That(duration, Is.EqualTo(AutonomousRvrEventLayer.BattleLifetimeMilliseconds));
         long deadline = now + duration;
+        // Task 48: a siege nobody reaches closes after fifteen idle minutes
+        // (UT_RvrRoamingFoundations). Keep this one attended to its four-hour cap.
+        AutonomousRvrEventLayer.ReportBattleActivity(target.Id, deadline - 2);
         Attend(target, forces, 8, deadline - 1);
         Assert.That(AutonomousRvrEventLayer.IsBattleForce(forces[0].GroupId, deadline - 1), Is.True);
         foreach (var force in forces)

@@ -107,8 +107,8 @@ public sealed partial class AutonomousWorldBotController
             AutonomousBotEconomy.MarkInventoryChanged(bot);
             AutonomousBotStatusPersistence.Queue(bot,true);
         }
-        // Ordinary warbands retain their shared departure. Committed siege
-        // responders board independently; defenders receive a bounded priority slice.
+        // Warbands, siege responders included, muster up to a minute and then
+        // board together; defenders receive a bounded priority slice.
         if (!_frontierWaitingPoint.HasValue && GameLoop.GameLoopTime >= _nextWaitingPointSearch)
         {
             _nextWaitingPointSearch = GameLoop.GameLoopTime + 10_000;
@@ -129,7 +129,7 @@ public sealed partial class AutonomousWorldBotController
             AutonomousFrontierTransport.HasDefenderPriority(bot, passage)
                 ? $"At {_frontierPorter.Name}; priority defense departure to {passage.Location.Name}"
                 : AutonomousFrontierTransport.HasCommittedSiegePassage(bot, passage)
-                    ? $"At {_frontierPorter.Name}; boarding independently for the siege at the next departure to {passage.Location.Name}"
+                    ? $"At {_frontierPorter.Name}; boarding with the warband (up to a minute for stragglers) for the siege at {passage.Location.Name}"
                     : $"At {_frontierPorter.Name}; waiting for the warband and the native departure to {passage.Location.Name}");
         return true;
     }

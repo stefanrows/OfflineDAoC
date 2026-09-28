@@ -108,12 +108,52 @@ namespace DOL.GS.ServerRules
 				.Any(area => area.Keep?.IsPortalKeep == true))
 				return true;
 
+			// Camlann owner decision 7: the three border hubs are neutral safe
+			// hubs like the capitals, for humans and bots alike.
+			ushort regionId = living.CurrentRegionID;
+			if (IsBorderHubRegion(regionId) && IsSafeBorderHub(regionId, living.X, living.Y))
+				return true;
+
 			// A missing zone is not a safe area. All other safe locations are
 			// covered by the explicit region/portal-keep checks above.
 			return false;
 		}
 
 		public static bool IsSafeRegion(ushort regionId) => SafeRegions.Contains(regionId);
+
+		/// <summary>
+		/// Radius of the Castle Sauvage, Svasud Faste and Druim Ligen safe hubs.
+		/// Centres and radius are the imported `area` rows of the same names
+		/// (DOL.GS.Area+Circle, radius 3500), which AutonomousRvrStaging also
+		/// uses as its staging anchors. The frontier outside stays open PvP.
+		/// </summary>
+		public const int SafeBorderHubRadius = 3500;
+
+		private static readonly AutonomousRvrStaging.BorderKeep[] SafeBorderHubs =
+			new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia }
+				.Select(realm => AutonomousRvrStaging.TryGetBorderKeep(realm, out var hub) ? hub : default)
+				.Where(hub => hub.RegionId != 0).ToArray();
+
+		private static bool IsBorderHubRegion(ushort regionId)
+		{
+			foreach (AutonomousRvrStaging.BorderKeep hub in SafeBorderHubs)
+				if (hub.RegionId == regionId)
+					return true;
+			return false;
+		}
+
+		public static bool IsSafeBorderHub(ushort regionId, int x, int y)
+		{
+			foreach (AutonomousRvrStaging.BorderKeep hub in SafeBorderHubs)
+			{
+				if (hub.RegionId != regionId)
+					continue;
+				double dx = x - (double)hub.Position.X, dy = y - (double)hub.Position.Y;
+				if (dx * dx + dy * dy <= (double)SafeBorderHubRadius * SafeBorderHubRadius)
+					return true;
+			}
+			return false;
+		}
 
 		public static bool IsOldFrontier(GameLiving living) =>
 			living?.CurrentZone?.IsOF == true;

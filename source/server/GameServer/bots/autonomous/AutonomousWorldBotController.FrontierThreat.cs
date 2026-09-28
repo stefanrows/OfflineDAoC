@@ -22,6 +22,7 @@ public sealed partial class AutonomousWorldBotController
         GameLiving previousEngine = defending ? bot.TargetObject as GameSiegeWeapon ?? _siegeWeapon?.TargetObject as GameSiegeWeapon : null;
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.IsPlayerLedGroup ||
             !bot.IsAlive || bot.ObjectState != GameObject.eObjectState.Active || bot.IsReturningAfterRelease ||
+            bot.IsInvulnerableToAttack ||
             bot.IsOnStableMasterRoute || !IsInFrontier(bot) || IsSafeArea(bot) ||
             (brain.HasAggro || bot.InCombat || bot.IsAttacking) && previousEngine == null ||
             brain.FSM.GetCurrentState()?.StateType == eFSMStateType.PASSIVE ||

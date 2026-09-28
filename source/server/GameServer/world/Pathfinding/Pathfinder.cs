@@ -183,7 +183,7 @@ namespace DOL.GS
             (AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
              bot.TempProperties?.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey)
                  ?.Passage?.Medallion == "home_necklace") &&
-            door?.Component?.Keep != null && bot.Realm != eRealm.None && door.Realm == bot.Realm;
+            door?.Component?.Keep != null && bot.Realm != eRealm.None && AutonomousRvrTravel.CanPassKeep(bot, door.Component.Keep);
 
         private bool TryUsePathDoor()
         {

@@ -47,6 +47,29 @@ public static class AutonomousRvrStaging
         yield return keep.Position;
     }
 
+    /// <summary>
+    /// 1.65 players bound at their border keep, so a frontier death released
+    /// them there. Autonomous RvR bots killed by a player-shaped enemy inside an
+    /// Old Frontiers zone release at their own realm's safe hub, not at a
+    /// bindstone next to the enemy's arrival point and not at the capital.
+    /// The point is the nearest own-realm bindstone to the hub centre when it
+    /// lies inside the safe radius, otherwise the hub centre.
+    /// </summary>
+    public static bool TryFrontierPvpRelease(eRealm realm, bool autonomousRvr, bool pvpDeath, bool diedInFrontier,
+        out ushort region, out Point3D point)
+    {
+        region = 0;
+        point = null;
+        if (!autonomousRvr || !pvpDeath || !diedInFrontier || !TryGetBorderKeep(realm, out BorderKeep hub))
+            return false;
+        int x = (int)hub.Position.X, y = (int)hub.Position.Y;
+        Point3D bind = BotReleaseBindPoints.Nearest(hub.RegionId, x, y, realm);
+        region = hub.RegionId;
+        point = bind != null && DOL.GS.ServerRules.PvpCombatant.IsSafeBorderHub(hub.RegionId, bind.X, bind.Y)
+            ? bind : new Point3D(x, y, (int)hub.Position.Z);
+        return true;
+    }
+
     /// <summary>Every formed warband member may acquire a local RvR target;
     /// PvE parties retain their single tank-or-leader puller.</summary>
     public static bool UsesIndependentCombatActors(eAutonomousObjectiveKind objectiveKind) =>

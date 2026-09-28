@@ -1487,6 +1487,8 @@ namespace DOL.GS
                 _rvrSharedEvent = true;
                 _rvrIntent = committedPlan.Intent;
                 bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
+                AutonomousRvrEventLayer.ReportMarch(committedPlan.TargetId, forceId, bot.DatabaseID, bot.CurrentRegionID,
+                    new(bot.X, bot.Y, bot.Z), bot.InCombat, GameLoop.GameLoopTime);
             }
             var rally = AutonomousRvrEventLayer.GetRallyOrder(forceId, bot.Realm, GameLoop.GameLoopTime);
             if (rally != null) return HandleSiegeRally(bot, forceId, rally);
@@ -1738,7 +1740,7 @@ namespace DOL.GS
             if (_rvrIntent is not (AutonomousRvrEventLayer.Intent.AssaultKeep or AutonomousRvrEventLayer.Intent.AssaultRelicKeep))
                 return null; // Roamers still retaliate through normal aggro; they do not initiate an unregistered siege.
             bool closedDoor = FindClosedEnemyDoor(bot, _rvrDestination?.Id) != null;
-            var keepNavigation=AutonomousKeepApproachNavigation.ForRealm(PathfindingProvider.Instance,bot.CurrentRegion,bot.Realm);
+            var keepNavigation=AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance,bot);
             // Staged assault: outer/inner guards first, then the real lord only
             // after a real gate opens.  The lord's normal death pipeline is the
             // only mechanism that can capture/reset a keep.
@@ -2341,7 +2343,7 @@ namespace DOL.GS
                         current, _patrolDestination.Value))
                     _patrolDestination = center;
                 if(IsKeepOrKeepPatrolDestination(_rvrDestination) &&
-                    !AutonomousZoneItinerary.HasCompleteCorridor(AutonomousKeepApproachNavigation.ForRealm(PathfindingProvider.Instance,bot.CurrentRegion,bot.Realm),zone,current,_patrolDestination.Value))
+                    !AutonomousZoneItinerary.HasCompleteCorridor(AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance,bot),zone,current,_patrolDestination.Value))
                     _patrolDestination=center;
                 _nextMoveOrderTick = 0;
             }

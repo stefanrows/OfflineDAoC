@@ -34,8 +34,7 @@ namespace DOL.GS
                 {
                     bot.StopMovingOnPath(); bot.StopMoving();
                     _defensivePostOrigin = current;
-                    _defensivePostPlanning = new RvrPlanningNavigation(AutonomousKeepApproachNavigation.ForRealm(
-                        PathfindingProvider.Instance, bot.CurrentRegion, bot.Realm));
+                    _defensivePostPlanning = new RvrPlanningNavigation(AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance, bot));
                 }
                 var work = _defensivePostPlanning;
                 work.BeginSlice();

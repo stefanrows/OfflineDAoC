@@ -17,11 +17,66 @@ public static class AutonomousFrontierTransport
         .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegion == bot.CurrentRegion)
         .OrderBy(bot.GetDistanceTo).FirstOrDefault();
 
+    /// <summary>The warband that ports together. RvR groups, including those
+    /// answering a committed siege, board as one party (1.65: a group waited a
+    /// minute at the porter for its stragglers, then ported together).</summary>
     public static GameBot[] BoardingParty(GameBot bot, Passage passage) =>
-        HasCommittedSiegePassage(bot, passage) || passage.Medallion == "home_necklace" &&
+        passage.Medallion == "home_necklace" &&
         AutonomousObjectiveAssignments.Parse(bot.PersistentRecord?.ObjectiveKind) != eAutonomousObjectiveKind.RvR
             ? [bot] // Initial PvE meetups can have members returning from different frontiers.
             : bot.Group?.GetMembersInTheGroup().OfType<GameBot>().ToArray() ?? [bot];
+
+    /// <summary>How long a warband holds the departure for members on their way.</summary>
+    public const int MusterWaitMilliseconds = 60_000;
+    /// <summary>Members farther than this (about half a minute's run) from the
+    /// porter are not waited for; they follow on a later departure.</summary>
+    public const int MusterRadius = 6_000;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> Musters = new(StringComparer.Ordinal);
+
+    public enum BoardingDecision { Wait, Board }
+
+    /// <summary>Board once nobody is still on the way, or once the first ready
+    /// member has waited <see cref="MusterWaitMilliseconds"/>.</summary>
+    public static BoardingDecision DecideBoarding(int readyCount, int incomingCount, long musterStartedTick, long nowTick) =>
+        readyCount <= 0 ? BoardingDecision.Wait :
+        incomingCount <= 0 || nowTick - musterStartedTick >= MusterWaitMilliseconds ? BoardingDecision.Board : BoardingDecision.Wait;
+
+    /// <summary>A member worth waiting for: alive, same region, not yet across,
+    /// and close enough to arrive within the muster window.</summary>
+    public static bool IsIncoming(bool alive, bool sameRegion, bool alreadyAcross, double distanceToPorter) =>
+        alive && sameRegion && !alreadyAcross && distanceToPorter <= MusterRadius;
+
+    /// <summary>Tick the force's first ready member started waiting; stale
+    /// musters (older than five minutes) restart.</summary>
+    public static long MusterStart(string forceId, ushort region, long nowTick)
+    {
+        string key = $"{forceId}:{region}";
+        long started = Musters.AddOrUpdate(key, nowTick, (_, previous) => nowTick - previous > 5 * 60_000L ? nowTick : previous);
+        if (Musters.Count > 512)
+            foreach (var stale in Musters.Where(pair => nowTick - pair.Value > 5 * 60_000L).ToArray())
+                Musters.TryRemove(stale.Key, out _);
+        return started;
+    }
+
+    public static void EndMuster(string forceId, ushort region) => Musters.TryRemove($"{forceId}:{region}", out _);
+
+    /// <summary>
+    /// One porter pass for one warband: the members that board now, or none
+    /// while the force still waits (up to <see cref="MusterWaitMilliseconds"/>)
+    /// for members on their way. Ends the muster when it boards.
+    /// </summary>
+    public static T[] SelectBoarders<T>(T[] party, Func<T, bool> ready, Func<T, bool> incoming,
+        string forceId, ushort region, long nowTick, out T[] readyMembers, out int incomingCount)
+    {
+        readyMembers = party.Where(ready).ToArray();
+        var boarding = readyMembers;
+        incomingCount = party.Count(member => !boarding.Contains(member) && incoming(member));
+        long started = incomingCount > 0 ? MusterStart(forceId, region, nowTick) : nowTick;
+        if (DecideBoarding(readyMembers.Length, incomingCount, started, nowTick) == BoardingDecision.Wait)
+            return [];
+        EndMuster(forceId, region);
+        return readyMembers;
+    }
 
     private sealed class BoardingBatch
     {
@@ -175,10 +230,22 @@ public static class AutonomousFrontierTransport
             var request = bot.TempProperties.GetProperty<Request>(RequestKey);
             if (priority && !HasDefenderPriority(bot, request?.Passage)) continue;
             if (!Ready(bot,porter,request)) continue;
-            var group = BoardingParty(bot, request.Passage);
-            if (group.Any(member => member.CurrentRegionID != request.Passage.Region &&
-                (member.TempProperties.GetProperty<Request>(RequestKey) is not Request memberRequest ||
-                memberRequest.Passage.Region != request.Passage.Region || !Ready(member,porter,memberRequest)))) continue;
+            var party = BoardingParty(bot, request.Passage);
+            bool MemberReady(GameBot member) => member == bot ||
+                member.TempProperties.GetProperty<Request>(RequestKey) is Request memberRequest &&
+                memberRequest.Passage.Region == request.Passage.Region && Ready(member, porter, memberRequest);
+            var group = SelectBoarders(party,
+                member => member.CurrentRegionID != request.Passage.Region && MemberReady(member),
+                member => IsIncoming(member.IsAlive, member.CurrentRegion == porter.CurrentRegion,
+                    member.CurrentRegionID == request.Passage.Region,
+                    member.CurrentRegion == porter.CurrentRegion ? member.GetDistanceTo(porter) : double.PositiveInfinity),
+                request.ForceId, request.Passage.Region, GameLoop.GameLoopTime, out var ready, out int incoming);
+            if (group.Length == 0)
+            {
+                // Hold this warband's departure; later casts re-check it.
+                foreach (var waiting in ready) batch.Handled.Add(waiting);
+                continue;
+            }
             int departed=0;
             for (int index = 0; index < group.Length; index++)
             {
@@ -206,7 +273,7 @@ public static class AutonomousFrontierTransport
                 AutonomousBotStatusPersistence.Queue(member,true);
             }
             var log=DOL.Logging.LoggerManager.Create(typeof(AutonomousFrontierTransport));
-            if(departed>0 && log.IsInfoEnabled) log.Info($"RVR_FRONTIER_DEPARTURE force={request.ForceId} count={departed} porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\" region={request.Passage.Region}");
+            if(departed>0 && log.IsInfoEnabled) log.Info($"RVR_FRONTIER_DEPARTURE force={request.ForceId} count={departed} porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\" region={request.Passage.Region} party={party.Length} left_behind={incoming}");
             if (SliceFull(processed, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds)) break;
         }
         }

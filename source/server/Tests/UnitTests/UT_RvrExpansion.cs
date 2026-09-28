@@ -114,6 +114,8 @@ public sealed class UT_RvrExpansion
 
         Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(attacker, [objective], opened, 0)?.TargetId, Is.EqualTo(id));
         long deadline = opened + AutonomousRvrEventLayer.Snapshot().Single().RemainingMilliseconds;
+        // Task 48: only an attended siege lasts to its four-hour deadline.
+        AutonomousRvrEventLayer.ReportBattleActivity(id, deadline - 2);
         var later = AutonomousRvrEventLayer.ChooseOrJoin(defender, [objective],
             deadline - 1, 0);
 

@@ -8,12 +8,29 @@ namespace DOL.GS;
 /// <summary>Route variation is a connected waypoint, not steering noise.</summary>
 public static class AutonomousRvrTravel
 {
-    /// <summary>A keep door this bot may use: its own guild's keep, or a realm door without a guild owner.</summary>
+    /// <summary>A keep door this bot may use: any keep the runtime door rule
+    /// (<see cref="GameKeepDoor.TryTraverse"/>) would let it through, or a
+    /// realm door that is not part of a keep.</summary>
     public static bool IsFriendlyDoor(GameBot bot, GameDoorBase door)
     {
-        if (door is GameKeepDoor keepDoor && keepDoor.Component?.Keep is { } keep && keep.Guild != null)
-            return bot?.Guild != null && keep.Guild == bot.Guild;
+        if (door is GameKeepDoor keepDoor && keepDoor.Component?.Keep is { } keep)
+            return CanPassKeep(bot, keep);
         return door != null && bot != null && door.Realm == bot.Realm;
+    }
+
+    /// <summary>
+    /// The one keep-door hostility rule shared by the route planner, the mover
+    /// and the actual door traversal: <c>!KeepManager.IsEnemy(keep, bot)</c>.
+    /// Under Camlann that makes the Realm=0 portal keeps passable for everyone
+    /// and guild keeps passable for their own guild, group and alliance only.
+    /// Without a configured server (unit tests, tools) it falls back to
+    /// realm identity, the rule IsEnemy itself uses outside PvP.
+    /// </summary>
+    public static bool CanPassKeep(GameBot bot, AbstractGameKeep keep, IKeepManager manager = null)
+    {
+        if (bot == null || keep == null) return false;
+        manager ??= GameServer.Instance?.Configuration != null ? GameServer.KeepManager : null;
+        return manager != null ? !manager.IsEnemy(keep, bot) : bot.Realm != eRealm.None && keep.Realm == bot.Realm;
     }
 
     public static bool TraverseFriendlyDoor(GameBot bot, Vector3 destination)
@@ -21,7 +38,7 @@ public static class AutonomousRvrTravel
         if (!AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
             bot.TempProperties.GetProperty<long>("RvrDoorPassUntil") > GameLoop.GameLoopTime) return false;
         foreach (GameKeepDoor door in GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID)
-                     .Where(keep => bot.Guild != null && keep.Guild == bot.Guild).SelectMany(keep => keep.Doors.Values))
+                     .Where(keep => CanPassKeep(bot, keep)).SelectMany(keep => keep.Doors.Values))
         {
             if (!bot.IsWithinRadius(door, WorldMgr.INTERACT_DISTANCE) || Math.Abs(door.Z - bot.Z) > 160) continue;
             Vector2 toDoor = new(door.X - bot.X, door.Y - bot.Y);

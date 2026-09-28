@@ -22,6 +22,128 @@ public static partial class AutonomousRvrEventLayer
     public const int OrdinaryAssaultCap = 128;
     public const int RelicAssaultCap = 192;
     public const int RelicCarrierRealmCap = 192;
+    /// <summary>An automatic siege nobody reaches or fights at for this long is
+    /// called off (the rvr-keep-75 siege of 2026-09-28 sat at 0/0/0 for hours
+    /// and blocked every other assault meanwhile).</summary>
+    public const long IdleBattleMilliseconds = 15 * 60_000L;
+
+    public static bool IsIdleBattle(bool battleStarted, bool defenseReaction, bool playerLed, long lastActivityTick, long nowTick) =>
+        battleStarted && !defenseReaction && !playerLed && nowTick - lastActivityTick >= IdleBattleMilliseconds;
+
+    /// <summary>Live keep-combat probe; null-safe without a running world.</summary>
+    internal static Func<string, bool> TargetInCombat = targetId =>
+    {
+        if (targetId == null || !targetId.StartsWith("rvr-keep-", StringComparison.Ordinal) ||
+            !int.TryParse(targetId.AsSpan(9), out int keepId) || GameServer.Instance?.Configuration == null) return false;
+        var keep = GameServer.KeepManager?.GetKeepByID(keepId);
+        return keep?.CurrentRegion != null && keep.InCombat;
+    };
+
+    /// <summary>A participant reached the keep's assault approach or fought
+    /// there. With a force id only an attacking or third-realm force counts;
+    /// defenders holding their own walls do not keep an empty assault open.</summary>
+    public static void ReportBattleActivity(string targetId, long nowTick, string forceId = null)
+    {
+        if (string.IsNullOrWhiteSpace(targetId)) return;
+        lock (Sync)
+            if (Events.TryGetValue(targetId, out var active) &&
+                (forceId == null || active.Attackers.ContainsKey(forceId) || active.ThirdRealm.ContainsKey(forceId)))
+                active.LastActivityTick = Math.Max(active.LastActivityTick, nowTick);
+    }
+
+    /// <summary>Minimum real approach progress that counts as a marching army.</summary>
+    public const int MarchProgressUnits = 512;
+    /// <summary>Walking to the porter is short; a bot pacing at the hub must not
+    /// keep an empty siege alive, so each region visit away from the keep
+    /// earns at most this many march credits.</summary>
+    public const int MaxOffRegionCredits = 3;
+
+    /// <summary>
+    /// A committed attacking (or third-realm) member reports where it is while
+    /// the battle is on. Getting closer to the keep by <see cref="MarchProgressUnits"/>,
+    /// changing region (a frontier port), or covering that distance on the way
+    /// to the porter in another region (at most <see cref="MaxOffRegionCredits"/>
+    /// times per region visit) keeps the siege alive: a march from
+    /// Castle Sauvage to a far keep takes about as long as the idle window.
+    /// A bot standing in route back-off makes no progress and does not.
+    /// </summary>
+    public static void ReportMarch(string targetId, string forceId, long memberId, ushort region, Vector3 position,
+        bool inCombat, long nowTick)
+    {
+        if (string.IsNullOrWhiteSpace(targetId) || string.IsNullOrWhiteSpace(forceId)) return;
+        lock (Sync)
+        {
+            if (!Events.TryGetValue(targetId, out var active) || !active.BattleStarted ||
+                !(active.Attackers.ContainsKey(forceId) || active.ThirdRealm.ContainsKey(forceId))) return;
+            bool sameRegion = region == active.Target.RegionId;
+            double distance = sameRegion
+                ? Vector2.Distance(new(position.X, position.Y), new(active.Target.X, active.Target.Y))
+                : double.PositiveInfinity;
+            if (!active.Travel.TryGetValue(memberId, out var previous))
+            {
+                active.Travel[memberId] = (forceId, nowTick, distance, position, region);
+                return;
+            }
+            bool regionChange = region != previous.Region;
+            int credits = regionChange ? 0 : active.OffRegionCredits.GetValueOrDefault(memberId);
+            bool offRegionMove = !regionChange && !sameRegion && !inCombat && credits < MaxOffRegionCredits &&
+                Vector3.DistanceSquared(position, previous.Position) >= (float)MarchProgressUnits * MarchProgressUnits;
+            bool progress = regionChange || offRegionMove ||
+                sameRegion && distance <= previous.BestDistance - MarchProgressUnits;
+            if (regionChange) active.OffRegionCredits.Remove(memberId);
+            else if (offRegionMove) active.OffRegionCredits[memberId] = credits + 1;
+            if (!progress) return;
+            active.Travel[memberId] = (forceId, nowTick, Math.Min(distance, previous.BestDistance), position, region);
+            active.LastActivityTick = Math.Max(active.LastActivityTick, nowTick);
+        }
+    }
+
+    public const long AbandonedTargetMilliseconds = 20 * 60_000L;
+    private static readonly Dictionary<(string Force, string Target), long> AbandonedTargets = new();
+
+    /// <summary>
+    /// A force whose route to the objective failed repeatedly leaves the event
+    /// and does not rejoin, reserve or reopen that objective for twenty
+    /// minutes. Stored per force so every member of the warband honours it.
+    /// </summary>
+    public static void AbandonTarget(string forceId, string targetId, long nowTick)
+    {
+        if (string.IsNullOrWhiteSpace(forceId) || string.IsNullOrWhiteSpace(targetId)) return;
+        lock (Sync)
+        {
+            AbandonedTargets[(forceId, targetId)] = nowTick + AbandonedTargetMilliseconds;
+            if (Events.TryGetValue(targetId, out var active))
+            {
+                active.Attackers.Remove(forceId);
+                active.Defenders.Remove(forceId);
+                active.ThirdRealm.Remove(forceId);
+                active.Slots.Remove(forceId);
+                foreach (long id in active.Travel.Where(pair => pair.Value.Force == forceId).Select(pair => pair.Key).ToArray())
+                {
+                    active.Travel.Remove(id);
+                    active.OffRegionCredits.Remove(id);
+                }
+                foreach (long id in active.Present.Where(pair => pair.Value.Force == forceId).Select(pair => pair.Key).ToArray())
+                    active.Present.Remove(id);
+            }
+            if (CarrierEvents.TryGetValue(targetId, out var carrier))
+                foreach (var realm in carrier.Participants.Values) realm.Remove(forceId);
+        }
+    }
+
+    public static bool IsAbandoned(string forceId, string targetId, long nowTick)
+    {
+        lock (Sync) return IsAbandonedLocked(forceId, targetId, nowTick);
+    }
+
+    private static bool IsAbandonedLocked(string forceId, string targetId, long nowTick)
+    {
+        if (forceId == null || targetId == null || AbandonedTargets.Count == 0) return false;
+        if (!AbandonedTargets.TryGetValue((forceId, targetId), out long until)) return false;
+        if (until > nowTick) return true;
+        AbandonedTargets.Remove((forceId, targetId));
+        return false;
+    }
 
     public enum Intent { Roam, HuntEnemy, AssaultKeep, AssaultRelicKeep, DefendEvent }
 
@@ -50,10 +172,14 @@ public static partial class AutonomousRvrEventLayer
         public bool AttackObserved;
         public bool DefenseReaction;
         public long LastPressureTick;
+        /// <summary>Last proof that anyone fought at or reached this keep.</summary>
+        public long LastActivityTick;
         public string PlayerAccount;
         public readonly Dictionary<long, (string Force, eRealm Realm, long Tick, GameBot Bot, Vector3 Position, ushort Region)> Present = new();
         public readonly Dictionary<string, int[]> Slots = new(StringComparer.Ordinal);
         public readonly Dictionary<long, (string Force, long ProgressTick, double BestDistance, Vector3 Position, ushort Region)> Travel = new();
+        /// <summary>March credits a member earned in its current region away from the keep.</summary>
+        public readonly Dictionary<long, int> OffRegionCredits = new();
         public readonly Dictionary<string, int> Attackers = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> Defenders = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> ThirdRealm = new(StringComparer.Ordinal);
@@ -184,7 +310,13 @@ public static partial class AutonomousRvrEventLayer
         {
             // Defensive boundary: protected hubs cannot become new events,
             // reinforcements or reserve patrols, even if a caller supplies one.
-            Plan plan = ChooseCore(force, objectives?.Where(objective => !objective.IsPortalKeep).ToArray(), nowTick, roll);
+            // Objectives this force abandoned (repeated route failure) are
+            // invisible to its join, reserve and new-target choices.
+            if (AbandonedTargets.Count > 0)
+                foreach (var stale in AbandonedTargets.Where(pair => pair.Value <= nowTick).Select(pair => pair.Key).ToArray())
+                    AbandonedTargets.Remove(stale);
+            Plan plan = ChooseCore(force, objectives?.Where(objective => !objective.IsPortalKeep &&
+                (force == null || !IsAbandonedLocked(force.GroupId, objective.Id, nowTick))).ToArray(), nowTick, roll);
             if (force != null)
             {
                 if (plan?.IsSharedEvent == true && force.MemberIds != null && Events.TryGetValue(plan.TargetId, out var joined))
@@ -507,7 +639,8 @@ public static partial class AutonomousRvrEventLayer
     {
         lock (Sync)
         {
-            var active = Events.Values.FirstOrDefault(entry => entry.ExpiresTick > nowTick && BucketOf(entry, forceId) != null);
+            var active = Events.Values.FirstOrDefault(entry => entry.ExpiresTick > nowTick && BucketOf(entry, forceId) != null &&
+                !IsAbandonedLocked(forceId, entry.TargetId, nowTick));
             return active == null ? null : ToPlan(ReferenceEquals(BucketOf(active, forceId), active.Defenders) ? Intent.DefendEvent :
                 active.RelicKeep ? Intent.AssaultRelicKeep : Intent.AssaultKeep, active.Target, true,
                 active.BattleStarted ? "Return to the ongoing siege" : "Assemble at the physical siege rally");
@@ -653,6 +786,7 @@ public static partial class AutonomousRvrEventLayer
     {
         active.BattleStarted = true;
         active.ExpiresTick = nowTick + BattleLifetimeMilliseconds;
+        active.LastActivityTick = Math.Max(active.LastActivityTick, nowTick);
         RealmEventRecords.Progress(active.TargetId, "Battle", reason,
             active.Attackers.Values.Sum() + active.Defenders.Values.Sum() + active.ThirdRealm.Values.Sum(),
             Attendance(active, active.AttackerRealm, nowTick) + Attendance(active, active.DefenderRealm, nowTick) + Attendance(active, OtherRealm(active), nowTick));
@@ -677,6 +811,21 @@ public static partial class AutonomousRvrEventLayer
             RealmEventNotices.Queue(active.TargetId, active.DefenderRealm, RealmEventBanter.SiegeReminder(active.Target.Name, true));
             if (active.ThirdRealm.Count > 0) RealmEventNotices.Queue(active.TargetId, OtherRealm(active),
                 $"The armies at {active.Target.Name} have about twenty minutes left to muster. Keep watch for an opening, scouts.");
+        }
+        foreach (var active in Events.Values.Where(entry => entry.BattleStarted && !entry.DefenseReaction).ToArray())
+        {
+            if (active.LastPressureTick > active.LastActivityTick) active.LastActivityTick = active.LastPressureTick;
+            if (!IsIdleBattle(true, false, !string.IsNullOrEmpty(active.PlayerAccount), active.LastActivityTick, nowTick)) continue;
+            if (Attendance(active, active.AttackerRealm, nowTick) + Attendance(active, active.DefenderRealm, nowTick) +
+                Attendance(active, OtherRealm(active), nowTick) > 0 || SafeInCombat(active.TargetId))
+            {
+                active.LastActivityTick = nowTick;
+                continue;
+            }
+            var idleLog = DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrEventLayer));
+            if (idleLog.IsInfoEnabled) idleLog.Info($"RVR_SIEGE_IDLE_CLOSED target={active.TargetId} " +
+                $"idleMs={nowTick - active.LastActivityTick} assigned={active.Attackers.Values.Sum()}/{active.Defenders.Values.Sum()}/{active.ThirdRealm.Values.Sum()}");
+            EndEvent(active, nowTick, "Siege defended: no attacking force reached the keep for fifteen minutes");
         }
         foreach (var active in Events.Values.Where(entry => entry.ExpiresTick <= nowTick).ToArray())
         {
@@ -715,6 +864,12 @@ public static partial class AutonomousRvrEventLayer
             CarrierTargets.Remove(entry.Key);
             Cooldowns[entry.Key] = nowTick + TargetCooldownMilliseconds;
         }
+    }
+
+    private static bool SafeInCombat(string targetId)
+    {
+        try { return TargetInCombat?.Invoke(targetId) == true; }
+        catch (Exception) { return false; }
     }
 
     private static void EndEvent(ActiveEvent active, long nowTick, string reason, eRealm winner = eRealm.None)
@@ -784,6 +939,7 @@ public static partial class AutonomousRvrEventLayer
         {
             if (objectives.Any(target => target.Id == active.TargetId && target.UnderAttack))
             {
+                active.LastActivityTick = Math.Max(active.LastActivityTick, nowTick);
                 if (!active.AttackObserved)
                 {
                     active.AttackObserved = true;
