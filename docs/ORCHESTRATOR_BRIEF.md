@@ -46,17 +46,17 @@ options.
     SoloPve/GroupPve/RvR.
 - **Build from WSL with the Windows SDK** (Linux `dotnet` fails on the
   restore assets):
-  `OFFLINE_DAOC_ROOT=/mnt/d/OfflineDAoC/playable tools/dev/winnet.sh build source/server/CoreServer/CoreServer.csproj -c Release --no-restore`.
+  `OFFLINE_DAOC_ROOT=/mnt/c/OfflineDAoC/playable tools/dev/winnet.sh build source/server/CoreServer/CoreServer.csproj -c Release --no-restore`.
   Build the launcher the same way from
   `source/tools/OfflineDaoc.Launcher/OfflineDaoc.Launcher.csproj`. Tests:
   `tools/dev/winnet.sh test source/server/Tests/Tests.csproj -c Release`.
 - **Evidence from the live install, read-only:**
-  - `python3 /mnt/d/OfflineDAoC/playable-dev/dbquery.py [--cached] "SELECT ..."`
+  - `python3 /mnt/c/OfflineDAoC/playable-dev/dbquery.py [--cached] "SELECT ..."`
     queries a snapshot of the save.
-  - The server log is `/mnt/d/OfflineDAoC/playable/runtime/logs/server-console.log`
+  - The server log is `/mnt/c/OfflineDAoC/playable/runtime/logs/server-console.log`
     (over 100 MB). Search it with grep, tail or awk.
 - **Server control only through**
-  `/mnt/d/OfflineDAoC/playable-dev/server.sh status|stop|start|restart|update`,
+  `/mnt/c/OfflineDAoC/playable-dev/server.sh status|stop|start|restart|update`,
   and only after Aaron has said OK (standing OK for the night run below).
   Never kill processes by name.
 - **Files mix CRLF and LF line endings.** The Edit tool can silently rewrite a
@@ -108,7 +108,7 @@ options written down; do not guess.
   (guild rank 1, may invite) in his guild **North Bomb**. Do it while the
   server is stopped during `server.sh update --no-start`:
   1. Copy `playable/runtime/data/opendaoc.sqlite3.db` to
-     `/mnt/d/OfflineDAoC/playable-backups/` with a timestamp.
+     `/mnt/c/OfflineDAoC/playable-backups/` with a timestamp.
   2. Run `UPDATE dolcharacters SET GuildRank=1 WHERE
      DOLCharacters_ID='cd7d6ff9-daa6-435f-b787-93a9fe0a64e2' AND Name='Ked'`,
      guild id `8c511667-0a1e-4c5b-ad85-fe2421dfed0c`, and check that exactly

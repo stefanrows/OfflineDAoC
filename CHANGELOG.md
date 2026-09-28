@@ -12,6 +12,14 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.133.1] - 2026-09-28
+
+### Changed
+
+- Agent docs: the orchestrator brief and the advisor agent reference the
+  local checkout at its new SSD location (`C:\OfflineDAoC`). Documentation
+  only.
+
 ## [0.133.0] - 2026-09-28
 
 ### Added
