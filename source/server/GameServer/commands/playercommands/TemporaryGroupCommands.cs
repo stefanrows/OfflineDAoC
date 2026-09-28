@@ -391,20 +391,15 @@ namespace DOL.GS.Commands
     }
 
     [CmdAttribute("&petpull", ePrivLevel.Player,
-        "Sends your pet alone into your target; companions hold, HoT the pet and peel adds until the pull sits on it", "/petpull")]
+        "Pet pull mode for your group and squads: every pull starts with your pet's attack; companions hold, heal and buff the pet, and open once it is back beside you",
+        "/petpull [on|off]")]
     public sealed class PetPullCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         public void OnCommand(GameClient client, string[] args)
         {
             GamePlayer player = client.Player;
-            if (player.TargetObject is not GameLiving target || !target.IsAlive)
-            {
-                DisplayMessage(client, "Select a living enemy first, then type /petpull.");
-                return;
-            }
-            if (!GameServer.ServerRules.IsAllowedToAttack(player, target, false))
-                return;
-            DisplayMessage(client, CompanionPetPull.Begin(player, target));
+            bool? on = CompanionPetPull.ParseMode(args, CompanionPetPull.IsModeOn(player));
+            DisplayMessage(client, on.HasValue ? CompanionPetPull.SetMode(player, on.Value) : CompanionPetPull.Usage);
         }
     }
 

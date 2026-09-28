@@ -1464,6 +1464,9 @@ namespace DOL.AI.Brain
                 (BotBody.TryReturnTemporaryCompanionToLeader() || TryResurrectCompanionOwner()))
                 return;
 
+            if (!HasAggro && CompanionPetPull.IsHolding(AssistedPlayer) && TryAnswerPetPullThreat())
+                return;
+
             if (!IsTankClass && CompanionPetPull.IsHolding(AssistedPlayer) && !HasAggro)
             {
                 // The pet owns the pull. Hold damage, keep a heal-over-time on
@@ -3629,7 +3632,9 @@ namespace DOL.AI.Brain
         private bool TryPriorityTaunt(GameLiving target)
         {
             if (!IsTankClass || target?.TargetObject is not GameLiving victim || Body.Group == null ||
-                victim.Group != Body.Group || !Body.Group.IsInTheGroup(victim) ||
+                // The pet of a pet pull in danger counts like a group member (task 46).
+                !(victim.Group == Body.Group && Body.Group.IsInTheGroup(victim) ||
+                  victim == CompanionPetPull.Pet(AssistedPlayer)) ||
                 victim.CurrentRegionID != Body.CurrentRegionID ||
                 !Body.IsWithinRadius(victim, GROUP_DEFENSE_ASSIST_RADIUS))
                 return false;
@@ -5321,9 +5326,10 @@ namespace DOL.AI.Brain
                 }
 
                 // /petpull: once the pull sits on the pet, every companion heals
-                // it like a group member (persistent companions otherwise leave pets alone).
-                GameNPC pulledPet = !BotBody.IsTemporaryGroupHelper && CompanionPetPull.IsReleased(AssistedPlayer)
-                    ? CompanionPetPull.Pet(AssistedPlayer) : null;
+                // it like a group member (persistent companions otherwise leave pets alone);
+                // before that, healers heal it only while it is in danger (task 46).
+                GameNPC pulledPet = !BotBody.IsTemporaryGroupHelper
+                    ? CompanionPetPull.PetHealTarget(AssistedPlayer, IsHealer) : null;
                 if (pulledPet?.IsAlive == true && pulledPet.Health < pulledPet.MaxHealth &&
                     Body.IsWithinRadius(pulledPet, GROUP_DEFENSE_ASSIST_RADIUS))
                 {
@@ -5629,6 +5635,39 @@ namespace DOL.AI.Brain
 
             return BotBody.Owner is GamePlayer owner &&
                 DeadNearby(CompanionSquads.OwnerForceBots(owner).Cast<GameLiving>().Append(owner));
+        }
+
+        private long _nextPetPullAddScanTick;
+
+        /// <summary>
+        /// Pet pull mode, before the release (task 46): a tank takes an add off
+        /// the endangered pet, and attackers intercept adds that are on, or
+        /// running at, someone of the group. Nothing else is engaged.
+        /// </summary>
+        private bool TryAnswerPetPullThreat()
+        {
+            long now = GameLoop.GameLoopTime;
+            GameLiving threat = IsTankClass ? CompanionPetPull.TakeAddFromPet(AssistedPlayer, BotBody) : null;
+            bool fromPet = threat != null;
+            if (threat == null && !BotPartyRoles.IsSupport(BotBody) && now >= _nextPetPullAddScanTick)
+            {
+                _nextPetPullAddScanTick = now + 750;
+                threat = CompanionPetPull.IncomingAdd(AssistedPlayer, BotBody);
+            }
+            if (threat == null || !CanAggroTarget(threat))
+                return false;
+            if (fromPet)
+            {
+                _groupPeelTarget = threat;
+                _groupPeelPriority = 3;
+                _groupPeelUntil = now + 4_000;
+            }
+            if (BotBody.IsRecoveryResting)
+                BotBody.WakeRecoveryRest();
+            AddToAggroList(threat, Math.Max(100, threat.EffectiveLevel * 10));
+            FSM.SetCurrentState(eFSMStateType.AGGRO);
+            NextThinkTick = now;
+            return true;
         }
 
         /// <summary>/petpull: a heal-over-time on the pulling pet before the group opens.</summary>

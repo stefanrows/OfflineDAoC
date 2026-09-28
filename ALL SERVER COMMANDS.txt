@@ -621,8 +621,8 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.PasswordCommand
 
 /petpull
-  Sends your pet alone into your target; companions hold, HoT the pet and peel adds until the pull sits on it
-  /petpull
+  Pet pull mode for your group and squads: every pull starts with your pet's attack; companions hold, heal and buff the pet, and open once it is back beside you
+  /petpull [on|off]
   Handler: DOL.GS.Commands.PetPullCommandHandler
 
 /played
