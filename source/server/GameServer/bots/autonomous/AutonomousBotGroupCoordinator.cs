@@ -162,6 +162,12 @@ public static partial class AutonomousBotGroupCoordinator
         public long PublishedAttendanceRevision = -1;
         public long? PublishedDeadlineTick;
         public long PublishedRemaining;
+        // Task 47 package C: last pulse with party combat or an experience gain,
+        // and the throttle for marking members' camp arrival.
+        public long LastFightTick;
+        public long FightExperience;
+        public long NextArrivalRecordTick;
+        public DateTime PausedExpiryPublishedUtc;
     }
 
     /// <summary>Population-wide work belongs to one service phase, not every
@@ -503,6 +509,11 @@ public static partial class AutonomousBotGroupCoordinator
                     PresentPveMembers(members, leader, CohesionRadius).Length < 2)
                     return;
                 StartTaskClock(session, members);
+                if (GameLoop.GameLoopTime >= session.NextArrivalRecordTick)
+                {
+                    RecordCampArrival(members, leader, CohesionRadius);
+                    session.NextArrivalRecordTick = GameLoop.GameLoopTime + 5_000;
+                }
             }
             SetWorkPhase(session, "Grinding");
             WriteSessionMetadata(session, members);
@@ -878,6 +889,7 @@ public static partial class AutonomousBotGroupCoordinator
             if (!Sessions.TryGetValue(group, out Session session)) return;
             session.CombatObserved = true;
             session.RecoveringBetweenPulls = false;
+            session.LastFightTick = GameLoop.GameLoopTime;
         }
     }
 
@@ -1313,7 +1325,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (objectiveKind == eAutonomousObjectiveKind.GroupPve)
             foreach (Session timedOut in Sessions.Values.Where(session => session.ObjectiveKind == objectiveKind &&
                          session.TaskClock.HasTravelTimedOut(GameLoop.GameLoopTime)).ToArray())
-                FinishGroupTask(timedOut, "Party did not reach its camp within the 30-minute travel window", returnToSolo: true);
+                EndOrStartAtTravelDeadline(timedOut, BotMembers(timedOut.Group));
 
         GameBot[] population = AutonomousBotRegistry.Snapshot();
         GameBot[] activeRoster = population
@@ -1805,11 +1817,9 @@ public static partial class AutonomousBotGroupCoordinator
             }
         }
         if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
-            session.TaskClock.HasTravelTimedOut(GameLoop.GameLoopTime))
-        {
-            FinishGroupTask(session, "Party did not reach its camp within the 30-minute travel window", returnToSolo: true);
+            session.TaskClock.HasTravelTimedOut(GameLoop.GameLoopTime) &&
+            EndOrStartAtTravelDeadline(session, members))
             return false;
-        }
         if (raidView == null && session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve &&
             !HasRequiredPveComposition(session, members))
         {
@@ -1960,6 +1970,10 @@ public static partial class AutonomousBotGroupCoordinator
             session.Phase = "Choosing group target";
             Log.Info($"AUTONOMOUS_GROUP_ROSTER_REASSESSED group={session.Id} size={members.Length}");
         }
+        long partyExperience = members.Sum(member => member.Experience);
+        if (groupCombatActive || session.FightExperience != 0 && partyExperience > session.FightExperience)
+            session.LastFightTick = GameLoop.GameLoopTime;
+        session.FightExperience = partyExperience;
         if (groupCombatActive)
         {
             session.CombatObserved = true;
@@ -2187,6 +2201,46 @@ public static partial class AutonomousBotGroupCoordinator
                  $"expiresUtc={session.TaskClock.ExpiresUtc:O}");
     }
 
+    private static void RecordCampArrival(GameBot[] members, GameBot leader, int radius)
+    {
+        if (leader == null)
+            return;
+        foreach (GameBot member in PresentPveMembers(members, leader, radius))
+            AutonomousGoalDiagnostics.Arrive(member);
+    }
+
+    // Task 47 package C: returns true when the party was ended. A party whose
+    // leader and one more member stand within reach of the camp when the
+    // 30-minute travel window closes, and that fought or gained experience in
+    // the last 10 minutes, starts its full task instead.
+    private static bool EndOrStartAtTravelDeadline(Session session, GameBot[] members)
+    {
+        SharedCamp camp = session.Camp;
+        GameBot leader = members.Length > 0 ? ChooseLeader(session, members) : null;
+        if (camp != null && leader != null && AutonomousRealmRaid.GetView(session.Group) == null)
+        {
+            bool inRegion = leader.IsAlive && leader.CurrentRegionID == camp.RegionId;
+            double distance = inRegion
+                ? Vector3.Distance(new(leader.X, leader.Y, leader.Z), new(camp.X, camp.Y, camp.Z))
+                : double.PositiveInfinity;
+            int present = inRegion
+                ? PresentPveMembers(members, leader, AutonomousGroupTaskClock.TravelDeadlineCohesionRadius).Length
+                : 0;
+            bool fought = AutonomousGroupTaskClock.HasRecentFightProgress(GameLoop.GameLoopTime, session.LastFightTick);
+            if (AutonomousGroupTaskClock.ShouldStartAtTravelDeadline(inRegion, distance, present, fought))
+            {
+                Log.Info($"AUTONOMOUS_GROUP_TRAVEL_DEADLINE_AT_CAMP group={session.Id} size={members.Length} " +
+                         $"present={present} distanceToCamp={(int)distance} camp=\"{camp.MonsterName}\" zone=\"{camp.ZoneName}\"");
+                StartTaskClock(session, members);
+                RecordCampArrival(members, leader, AutonomousGroupTaskClock.TravelDeadlineCohesionRadius);
+                WriteSessionMetadata(session, members);
+                return false;
+            }
+        }
+        FinishGroupTask(session, "Party did not reach its camp within the 30-minute travel window", returnToSolo: true);
+        return true;
+    }
+
     private static void ExpelRendezvousNoShows(Session session, GameBot[] members)
     {
         long now = GameLoop.GameLoopTime;
@@ -2362,8 +2416,13 @@ public static partial class AutonomousBotGroupCoordinator
             }).ToArray()
         }));
         session.Group.DisbandGroup();
+        GoalAttemptEnd attemptEnd = AutonomousGoalDiagnostics.GroupTaskEndReason(
+            session.TaskClock.HasExpired(GameLoop.GameLoopTime));
         foreach (GameBot member in members)
         {
+            // Close the camp attempt with the party's real ending before the
+            // fresh solo assignment below reads as "Objective assignment changed".
+            AutonomousGoalDiagnostics.End(member, attemptEnd, "Group task ended: " + reason);
             ClearMetadata(member, true);
             if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve && session.TaskClock.HasExpired(GameLoop.GameLoopTime))
                 AutonomousObjectiveAssignments.MarkPveTaskCompleted(member);
@@ -2878,6 +2937,9 @@ public static partial class AutonomousBotGroupCoordinator
         bool remoteMeetupActive = session.RemoteMeetupDeadlineTick.HasValue &&
             members.Any(member => session.RemoteMemberIds.Contains(MemberKey(member)));
         bool incompleteMeetup = members.Any(member => !session.Attendance.HasArrived(MemberKey(member)));
+        DateTime utcNow = WorldSimulationClock.UtcNow;
+        bool pausedExpiryDue = session.TaskClock.IsPaused &&
+            AutonomousGroupTaskClock.NeedsPausedExpiryRefresh(session.PausedExpiryPublishedUtc, utcNow);
         // A member's AI pulse must not serialize/save all eight members again
         // just because one second elapsed. Only real phase/arrival/clock changes
         // invalidate this small per-session cache.
@@ -2885,18 +2947,28 @@ public static partial class AutonomousBotGroupCoordinator
             session.PublishedAttendanceRevision == session.Attendance.Revision &&
             session.PublishedDeadlineTick == session.TaskClock.DeadlineTick &&
             session.PublishedRemaining == session.TaskClock.PausedRemainingMilliseconds &&
-            session.PublishedMembers.SequenceEqual(members))
+            session.PublishedMembers.SequenceEqual(members) &&
+            !pausedExpiryDue)
             return;
         session.PublishedDirective = directive;
         session.PublishedMembers = members;
         session.PublishedAttendanceRevision = session.Attendance.Revision;
         session.PublishedDeadlineTick = session.TaskClock.DeadlineTick;
         session.PublishedRemaining = session.TaskClock.PausedRemainingMilliseconds;
+        if (pausedExpiryDue)
+            session.PausedExpiryPublishedUtc = utcNow;
+        string memberExpiry = session.TaskClock.MemberExpiresUtc(session.PausedExpiryPublishedUtc).ToString("O");
         foreach (GameBot member in members)
         {
             if (member.PersistentRecord == null) continue;
+            // Launcher metadata keeps "" while paused (it shows the paused
+            // remainder); the member record always carries a real future end.
             string expiry = session.TaskClock.IsPaused ? string.Empty : session.TaskClock.ExpiresUtc.ToString("O");
-            member.PersistentRecord.ObjectiveExpiresUtc = expiry;
+            if (member.PersistentRecord.ObjectiveExpiresUtc != memberExpiry)
+            {
+                member.PersistentRecord.ObjectiveExpiresUtc = memberExpiry;
+                member.MarkAutonomousStateDirty();
+            }
             // While running, serialize the fixed deadline, NOT the changing remaining
             // seconds. Paused remaining time and attendance only change on transitions.
             string metadataPhase = remoteMeetupActive && incompleteMeetup && session.Phase != "Leader staging" &&

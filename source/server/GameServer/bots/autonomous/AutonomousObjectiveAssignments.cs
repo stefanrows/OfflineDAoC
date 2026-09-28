@@ -175,8 +175,7 @@ public static class AutonomousObjectiveAssignments
             roster = roster.Where(bot => !IsBetweenPveTasks(bot)).ToArray();
             // Group/warband deadlines belong to the coordinator, not individual
             // members' old allocation timestamps. Snapshot once per allocation pass.
-            var groupOwned = roster.Where(bot => bot.Group != null &&
-                !bot.Group.GetMembersInTheGroup().Any(member => member is GamePlayer)).ToHashSet();
+            var groupOwned = roster.Where(IsOwnedByGroupCoordinator).ToHashSet();
             foreach (GameBot bot in roster.Where(bot => !groupOwned.Contains(bot)))
                 if (NormalizeLegacyTimedAssignment(bot.PersistentRecord, utcNow))
                 {
@@ -263,6 +262,15 @@ public static class AutonomousObjectiveAssignments
             }
         }
     }
+
+    /// <summary>
+    /// Task 47 package C: a member of a bot-only party is never reassigned by
+    /// this pass, whether the party is meeting up, travelling, camping or
+    /// between camps. Only the coordinator ends such a party (task expiry,
+    /// travel window, lost members); its members then get a fresh task.
+    /// </summary>
+    public static bool IsOwnedByGroupCoordinator(GameBot bot) =>
+        bot?.Group != null && !bot.Group.GetMembersInTheGroup().Any(member => member is GamePlayer);
 
     private static eAutonomousObjectiveKind PreferGuildInvitation(GameBot bot, eAutonomousObjectiveKind chosen,
         GameBot[] roster = null)

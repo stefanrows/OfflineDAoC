@@ -2984,6 +2984,11 @@ namespace DOL.GS
             if (localPickupGroup && environment != AutonomousBotDecisionEngine.PveEnvironment.Dungeon &&
                 !string.IsNullOrEmpty(_groupDirective.PreferredPickupCampId))
                 chosen = legalCells.FirstOrDefault(camp => camp.Id == _groupDirective.PreferredPickupCampId) ?? chosen;
+            // Task 47 package C: a pickup party prefers the camp near its meeting
+            // spot; the preferred pickup camp above still wins.
+            if (localPickupGroup && environment != AutonomousBotDecisionEngine.PveEnvironment.Dungeon &&
+                chosen?.Id != _groupDirective.PreferredPickupCampId)
+                chosen = AutonomousPickupPlanning.SelectNearbyGroupCamp(legalCells, Random.Shared) ?? chosen;
             bool usedDeathFallback = false;
             if (chosen == null && !sharedGroup && _deathDifficultySteps > 0)
             {
