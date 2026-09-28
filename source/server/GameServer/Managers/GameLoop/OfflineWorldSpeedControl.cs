@@ -539,7 +539,13 @@ namespace DOL.GS
             WakeWorker.Set();
         }
 
-        private static void PublishStatus()
+        private static void PublishStatus() => PublishStatus(null);
+
+        /// <param name="onRetryAttemptFailed">
+        /// Test-only hook forwarded to <see cref="AtomicFilePublish.MoveWithRetry"/>;
+        /// production callers always pass null.
+        /// </param>
+        private static void PublishStatus(Action<int> onRetryAttemptFailed)
         {
             string path;
             WorldSpeedStatus status;
@@ -568,7 +574,15 @@ namespace DOL.GS
             {
                 string contents = JsonConvert.SerializeObject(status, JsonSettings);
                 File.WriteAllText(tempPath, contents, new UTF8Encoding(false));
-                File.Move(tempPath, path, true);
+
+                // A concurrent reader without delete sharing (an antivirus
+                // scan, a file indexer, or a reader opened without
+                // FileShare.Delete) can make File.Move throw IOException or
+                // UnauthorizedAccessException for a few milliseconds. Retry
+                // with a short backoff instead of dropping this status
+                // update and logging an error for what is normally a
+                // transient hold.
+                AtomicFilePublish.MoveWithRetry(tempPath, path, onAttemptFailed: onRetryAttemptFailed);
                 lock (Gate)
                     _statusError = null;
             }

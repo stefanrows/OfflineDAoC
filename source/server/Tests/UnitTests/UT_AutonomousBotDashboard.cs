@@ -70,5 +70,51 @@ namespace DOL.UnitTests
                 File.Delete(temporaryPath);
             }
         }
+
+        [Test]
+        [NonParallelizable]
+        public void PublishRetriesPastATransientLockOnTheDestinationFile()
+        {
+            string requestId = Guid.NewGuid().ToString("N");
+            string responsePath = AutonomousBotDashboard.FilePath;
+            string requestPath = AutonomousBotDashboard.RequestPath;
+            string temporaryPath = responsePath + ".tmp";
+            FileStream blockingHandle = null;
+            try
+            {
+                File.Delete(responsePath);
+                File.Delete(requestPath);
+                File.Delete(temporaryPath);
+                File.WriteAllText(responsePath, "stale snapshot held by another reader");
+
+                // Simulate a reader that opened the previously published file
+                // without delete sharing (a naive reader, an indexer or an
+                // antivirus scan), which is what makes File.Move throw on
+                // Windows while the handle is open. Release it deterministically
+                // when the retry helper reports the first failed attempt,
+                // rather than racing a fixed delay against its backoff.
+                blockingHandle = new FileStream(responsePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                Action<int> onRetryAttemptFailed = _ => blockingHandle.Dispose();
+
+                MethodInfo publish = typeof(AutonomousBotDashboard).GetMethod("Publish",
+                    BindingFlags.Static | BindingFlags.NonPublic, null,
+                    new[] { typeof(bool), typeof(string), typeof(Action<int>) }, null);
+                var published = (bool)publish.Invoke(null, new object[] { true, requestId, onRetryAttemptFailed });
+
+                Assert.That(published, Is.True,
+                    "Publish should retry past a transient lock instead of failing the whole snapshot.");
+                AutonomousBotDashboard.Snapshot response = JsonSerializer.Deserialize<AutonomousBotDashboard.Snapshot>(
+                    File.ReadAllBytes(responsePath));
+                Assert.That(response.RequestId, Is.EqualTo(requestId));
+                Assert.That(File.Exists(temporaryPath), Is.False);
+            }
+            finally
+            {
+                blockingHandle?.Dispose();
+                File.Delete(responsePath);
+                File.Delete(requestPath);
+                File.Delete(temporaryPath);
+            }
+        }
     }
 }
