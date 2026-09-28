@@ -94,7 +94,10 @@ namespace DOL.GS.Keeps
 			string claimMessage = string.Format(LanguageMgr.GetTranslation(ServerProperties.Properties.SERV_LANGUAGE,
 				"PlayerManager.BroadcastClaim.Claimed", keep.Guild.Name, keep.Name));
 			
-			BroadcastMessage(claimMessage, eRealm.None);
+			// Camlann keeps belong to guilds, not realms: everyone hears the claim.
+			// (eRealm.None matched no player, so a successful claim was silent.)
+			foreach (GamePlayer player in ClientService.Instance.GetPlayers())
+				player.Out.SendMessage(claimMessage, eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 			
 			// if (ServerProperties.Properties.DISCORD_ACTIVE && (!string.IsNullOrEmpty(ServerProperties.Properties.DISCORD_WEBHOOK_ID)))
 			// {

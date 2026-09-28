@@ -76,6 +76,19 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+68. **`/gc claim` at the Keep Claim Steward shows nothing.** Reported
+    2026-09-28 on Stefan's server: standing at the steward after the lord
+    died, `/gc claim` printed no line and the steward stayed. Every refusal
+    in `CheckForClaim` sends a system message, so the silent paths left are an
+    exception (the `/gc` handler only logs it) or a dead/stunned player.
+    Separately, a successful claim was silent too: `BroadcastClaim` sent to
+    players of realm None, i.e. nobody. Source 0.141.1: the claim command
+    catches its own exception, tells the player and logs
+    `KEEP_CLAIM_FAILED` with the stack; every attempt logs
+    `KEEP_CLAIM_ATTEMPT` (keep, allowed, owner, lord state, steward); the claim
+    broadcast reaches every player. Root cause still open until a log line
+    from the affected server shows the exception or the attempt.
+
 66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
     0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
     had about 94 per hour), 1,999 of them full eight-member parties; single

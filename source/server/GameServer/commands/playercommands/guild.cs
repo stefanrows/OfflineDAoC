@@ -2064,9 +2064,18 @@ namespace DOL.GS.Commands
 							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.ClaimNotNear"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
 							return;
 						}
-						if (keep.CheckForClaim(client.Player))
+						// A failed claim must never be silent: the outer handler only logs exceptions.
+						try
 						{
-							keep.Claim(client.Player);
+							bool allowed = keep.CheckForClaim(client.Player);
+							if (allowed)
+								keep.Claim(client.Player);
+							log.Info($"KEEP_CLAIM_ATTEMPT player=\"{client.Player.Name}\" guild=\"{client.Player.Guild.Name}\" keep=\"{keep.Name}\" keepId={keep.KeepID} allowed={allowed} owner=\"{keep.Guild?.Name}\" lordDefeated={keep.DBKeep?.LordDefeated} steward={keep.ClaimPoint != null}");
+						}
+						catch (Exception e)
+						{
+							log.Error($"KEEP_CLAIM_FAILED player=\"{client.Player.Name}\" keep=\"{keep.Name}\" keepId={keep.KeepID}", e);
+							client.Out.SendMessage($"Claiming {keep.Name} failed with a server error ({e.GetType().Name}). The server log has the details (KEEP_CLAIM_FAILED).", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 						}
 
 						break;

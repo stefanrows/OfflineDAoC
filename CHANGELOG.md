@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.141.1] - 2026-09-28
+
+### Fixed
+
+- A successful keep claim is announced to every player ("<guild> has
+  claimed <keep>!"); before, the announcement reached nobody.
+- `/gc claim` no longer fails without a word: a server error during the
+  claim is shown to the player and logged as `KEEP_CLAIM_FAILED`, and each
+  claim attempt is logged as `KEEP_CLAIM_ATTEMPT` (bug 68).
+
 ## [0.141.0] - 2026-09-28
 
 ### Changed
