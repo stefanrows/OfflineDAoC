@@ -1177,6 +1177,12 @@ namespace DOL.GS
 
             Point3D release = FindNearestBindPoint();
             ushort releaseRegion = _deathRegionId;
+            // Frontier PvP deaths of RvR world bots release at their own border hub.
+            if (IsAutonomousWorldBot && AutonomousRvrStaging.TryFrontierPvpRelease(Realm,
+                    !IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR), _lastDeathWasPvp,
+                    WorldMgr.GetRegion(_deathRegionId)?.GetZone(_deathLocation.X, _deathLocation.Y)?.IsOF == true,
+                    out ushort hubRegion, out Point3D hubRelease))
+                (releaseRegion, release) = (hubRegion, hubRelease);
             if (IsAutonomousWorldBot && release != null)
             {
                 Zone releaseZone = WorldMgr.GetRegion(releaseRegion)?.GetZone(release.X, release.Y);

@@ -64,6 +64,22 @@ Agent sessions on items 45–48: take the role and context from
     keeps, milegates and bridges, zergs around keep takes, solo/duo
     stealthers, resting and regrouping, realm-balanced presence; human-like,
     not perfect.
+    Advisor report: `docs/night/ADVISOR_48.md` (causes a–f, build plan 1–6).
+    Points 1–5 implemented in source: Castle Sauvage, Svasud Faste and Druim
+    Ligen are safe hubs within 3,500 units for humans and bots (no attacks
+    into or out of them); the keep-route planner and mover use the runtime
+    door rule, so portal keeps are passable for every realm and guild keeps
+    for their own guild; when any member of a warband fails the route to a
+    keep three times, the whole warband leaves that siege, will not rejoin or
+    reopen that keep for 20 minutes, and roams from where it stands; an
+    automatic siege closes after 15 minutes without attacker progress
+    (getting closer, porting over, reaching the walls or fighting at the
+    keep); warbands wait up to a minute at the
+    porter for nearby members and then port together; frontier PvP deaths of
+    RvR world bots release at their own hub, and immune bots do not open
+    fights. Real-client/live-log check pending. Point 6 (1.65 doctrine
+    tuning) stays open. Cause e (empty RvR expiry) traced to the group task
+    clock publishing an empty expiry while paused; not changed yet.
 
 ## Implemented in source; installation verification pending
 

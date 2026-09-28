@@ -558,6 +558,11 @@ namespace DOL.GS.Keeps
 			return IsEnemy(keep, (GameLiving)target, checkGroup);
 		}
 
+		/// <summary>Camlann keep hostility applies on the PvP server type. Tests
+		/// and planners without a configured server fall back to realm identity.</summary>
+		protected virtual bool IsPvpServer =>
+			GameServer.Instance?.Configuration?.ServerType == EGameServerType.GST_PvP;
+
 		public virtual bool IsEnemy(AbstractGameKeep keep, GameLiving target, bool checkGroup)
 		{
 			// Real players do not implement IGamePlayer; only gamebots do.
@@ -570,7 +575,7 @@ namespace DOL.GS.Keeps
 			if (keep == null || client?.Account?.PrivLevel != 1)
 				return false;
 
-			if (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvP)
+			if (IsPvpServer)
 			{
 				if (keep.IsPortalKeep)
 					return false;

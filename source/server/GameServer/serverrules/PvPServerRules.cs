@@ -157,6 +157,14 @@ namespace DOL.GS.ServerRules
 						return false;
 					}
 
+					// A radius hub (border keep) must also protect a defender
+					// standing inside it from an attacker just outside the edge.
+					if (PvpCombatant.IsSafeArea(defender))
+					{
+						if (quiet == false) MessageToLiving(attacker, defender.Name + " is in a safe zone and can't be attacked there.");
+						return false;
+					}
+
 
 					// Players with safety flag can not attack other players. Sub-10
 					// autonomous bots carry the same implicit flag.
