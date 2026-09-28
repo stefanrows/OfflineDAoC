@@ -17,14 +17,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     profile which BotBrain paths are expensive and fix the causes, not the
     warning threshold.
 
-57. **`/tc` is registered twice.** Every server start logs `LoadCommands
-    ArgumentException: An item with the same key has already been added. Key:
-    &tc`. `TeleportToExchangeCommand` (`/tc`, teleport to the capital's
-    Realm Exchange) and the alias list of `scripts/commands/TransferCorpse.cs`
-    both claim `&tc`, so load order decides which command wins and the rest
-    of the loser's aliases are skipped. Expected: `/tc` teleports to the
-    Realm Exchange and the corpse-transfer command keeps its other names.
-
 58. **The live bot dashboard snapshot fails intermittently.** Every 30–60
     minutes the log shows `Live bot dashboard snapshot failed
     System.UnauthorizedAccessException: Access to the path is denied` at
@@ -35,6 +27,29 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     warning.
 
 ## Fixed in source; installation verification pending
+
+57. **`/tc` was registered twice.** `TeleportToExchangeCommand` claims `&tc`
+    as its own command (teleport to the capital's Realm Exchange), and
+    `scripts/commands/TransferCorpse.cs` also listed `&tc` as an alias of its
+    own `&transfercorpse` command. `ScriptMgr.LoadCommands` adds a type's
+    primary command first and its aliases after; whichever of the two loaded
+    second hit the duplicate key on `Dictionary.Add` and logged
+    `ArgumentException: An item with the same key has already been added.
+    Key: &tc`, silently dropping that alias (proven both ways: this key
+    collision reproduces regardless of load order). Cause confirmed by
+    reading `ScriptMgr.LoadCommands` and both command classes; `&tc` had no
+    other role in `TransferCorpse`, so removing it from that alias list keeps
+    `/tc` on the Realm Exchange command and leaves `/transfercorpse` (its
+    only other name) unaffected. `ALL SERVER COMMANDS.txt` no longer lists
+    `/transfercorpse (aliases: /tc)`. Added
+    `UT_PlayerCommandAvailability.NoCommandHandlerRegistersADuplicateCommandKey`,
+    which scans every `ICommandHandler` type across the loaded assemblies for
+    a command key claimed by more than one handler; it fails with this exact
+    collision before the fix and passes after. Full server test suite: 2330
+    passed, 1 skipped (pre-existing, unrelated), 0 failed. Real-client check
+    pending: confirm `/tc` still teleports to the Realm Exchange,
+    `/transfercorpse` still moves a dead player to a claimed keep, and the
+    startup log no longer shows the `LoadCommands` `&tc` exception.
 
 55. **Companions buff before resurrecting a dead player.** Reported by Aaron
     on 0.116.0 (2026-09-28). Cause: resurrection only tried the strongest

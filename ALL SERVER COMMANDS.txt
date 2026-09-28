@@ -1008,7 +1008,7 @@ NORMAL PLAYER COMMANDS
   e.g. /train Dual Wield 50
   Handler: DOL.GS.Commands.TrainCommandHandler
 
-/transfercorpse (aliases: /tc)
+/transfercorpse
   /transfercorpse <Keep name> ie: /transfercorpse dun crauchon
   Handler: DOL.GS.Commands.transfercorpseCommandHandler
 

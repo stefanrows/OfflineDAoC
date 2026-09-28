@@ -5,7 +5,6 @@ namespace DOL.GS.Commands
 {
     [CmdAttribute(
         "&transfercorpse",
-        new string[] {"&tc"},
         ePrivLevel.Player, // Set to player.
         "/transfercorpse <Keep name> ie: /transfercorpse dun crauchon")]
     public class transfercorpseCommandHandler : AbstractCommandHandler, ICommandHandler
