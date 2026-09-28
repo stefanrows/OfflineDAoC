@@ -18,7 +18,8 @@ public sealed class BotGoalsSettingsTests
         _stopped = true;
         var type = Assembly.Load("OfflineDAoC").GetType("OfflineDaoc.Launcher.BotGoalsSettingsControl")!;
         _panel = (Control)Activator.CreateInstance(type, Path.Combine(_folder, BotGoalSettings.FileName),
-            (Func<bool>)(() => _stopped))!;
+            Path.Combine(_folder, "world-speed.status.json"), Path.Combine(_folder, "population-mix.request.json"),
+            (Func<bool>)(() => _stopped), (Func<int>)(() => 0))!;
     }
 
     [TearDown] public void Cleanup()

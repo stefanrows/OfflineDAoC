@@ -350,6 +350,9 @@ public sealed class LauncherPresentationTests
             Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
             using var form = (Form)Activator.CreateInstance(mainFormType)!;
             mainFormType.GetField("_database", HiddenInstance)!.SetValue(form, path);
+            // Independent of whether a real local server happens to be running on
+            // this machine: stub the "server is running" guard PersistXpRate checks.
+            mainFormType.GetField("_persistXpRateServerRunningOverride", HiddenInstance)!.SetValue(form, (bool?)false);
             MethodInfo persist = mainFormType.GetMethod("PersistXpRate", HiddenInstance)!;
             persist.Invoke(form, new object[] { "xp_rate", 3d });
             persist.Invoke(form, new object[] { "bot_xp_rate", 10d });

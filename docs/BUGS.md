@@ -6,14 +6,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-59. **Launcher BotGoalsSettings tests cannot construct the control.** On 0.76.0, `BotGoalsSettingsTests` fails in SetUp with `MissingMethodException: Constructor on type 'OfflineDaoc.Launcher.BotGoalsSettingsControl' not found` for LegacyFileExplainsMappingBeforeRewriting, MeasuredRecommendationAndPanelRenderWithoutLaunchingServer, MixTotalAndServerStateGateSaving and PresetAndWorldShapeSaveAndUndo. Reproduce with `tools/dev/winnet.sh test source/tools/OfflineDaoc.Launcher.Tests/OfflineDaoc.Launcher.Tests.csproj -c Release`. Expected: the fixture creates the control with its current constructor. Impact: the population-settings tests do not run; the launcher itself is unaffected. Likely the test still reflects an older constructor signature; not yet investigated.
-    Reopened 2026-09-28 (formerly numbered 33 under Finished): the four
-    `BotGoalsSettingsTests` still fail with the same `MissingMethodException`
-    on 0.117.0 (launcher suite 122 passed, 5 failed). The fifth failure,
-    `PlayerAndBotRatesPersistIndependently`, is environmental: `PersistXpRate`
-    refuses while `FindExactServerProcess()` sees the real local server
-    running, so the test fails whenever the installed server is up.
-
 60. **`Ability 'ConfusionImmunity' unknown` is logged 939 times per run.**
     Seen in the installed 0.115.0 log (2026-09-27/28, 3 h 26 min) from
     `DOL.GS.SkillBase`, together with 240 `LineXSpell Spell Adding Error`
@@ -43,6 +35,39 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     should remove this loop; verify after deployment. Related: bug 29.
 
 ## Fixed in source; installation verification pending
+
+59. **Launcher BotGoalsSettings tests cannot construct the control.** Reopened
+    2026-09-28 (formerly numbered 33 under Finished): the four
+    `BotGoalsSettingsTests` (LegacyFileExplainsMappingBeforeRewriting,
+    MeasuredRecommendationAndPanelRenderWithoutLaunchingServer,
+    MixTotalAndServerStateGateSaving, PresetAndWorldShapeSaveAndUndo) failed
+    in SetUp with `MissingMethodException: Constructor on type
+    'OfflineDaoc.Launcher.BotGoalsSettingsControl' not found` on 0.117.0
+    (launcher suite 122 passed, 5 failed). Cause: `BotGoalsSettingsControl`'s
+    constructor grew from two parameters to five (`path`,
+    `worldSpeedStatusPath`, `mixRequestPath`, `serverStopped`, `rosterCount`,
+    added for the live population-mix and world-speed features), but the test
+    fixture's `Activator.CreateInstance` call still passed only the original
+    two, so .NET could no longer resolve any constructor overload. Fix: the
+    fixture now passes all five arguments, with the two new path parameters
+    pointing at files under its temp folder (both protocol readers already
+    treat a missing file as "no live data", so the extra paths do not need to
+    exist) and a `rosterCount` stub returning 0.
+    The fifth failure, `PlayerAndBotRatesPersistIndependently`, was
+    environmental: `MainForm.PersistXpRate` refuses whenever
+    `IsServerRunning()` (a TCP listener check on port 10300) or
+    `FindExactServerProcess()` sees a real local server, which is true
+    whenever the owner's installed server happens to be running — confirmed
+    live during this fix (`CoreServer.exe` listening on port 10300). Fix:
+    added a private `_persistXpRateServerRunningOverride` field that
+    `PersistXpRate` consults before probing the port or process; production
+    code never sets it, so live behavior is unchanged, and the test sets it to
+    `false` via reflection (the same pattern the file already uses for other
+    private fields) so the assertion no longer depends on machine state.
+    Launcher test suite: 127 passed, 0 failed, run while the local server was
+    live on port 10300 (confirmed via `CoreServer.exe`), the failing case.
+    Real-client check pending (the launcher itself was not changed in
+    behavior; this is a test-only fix plus one inert seam field).
 
 58. **The live bot dashboard snapshot fails intermittently.** Every 30–60
     minutes the log shows `Live bot dashboard snapshot failed
