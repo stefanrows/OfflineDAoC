@@ -160,6 +160,49 @@ automatically, and leaving takes them with him; `/bg who` lists them under their
 owner. A battlegroup's chat, loot, and treasurer features remain human-only, as
 before; a companion is never a battlegroup member of its own.
 
+## Pet pull mode (`/petpull`)
+
+`/petpull` switches a mode for the owner's whole force, his own group and his
+companion squads (task 46; it replaced the one-pull command of task 39).
+`/petpull` toggles, `/petpull on|off` sets it; the reply states the mode. The
+mode lives on the logged-in character object, so it ends at logout and is not
+saved. Temporary `/spawn` helpers in the group follow it too, because every
+player-led bot resolves the owner (`PlayerGroupLeader`); autonomous world bots
+never see it.
+
+While the mode is on, the 1.65 pet-puller routine runs on every pull:
+
+- **Start.** A pull starts when the player's own pet engages: an attack order
+  (`ControlledMobBrain.OrderedAttackTarget`), the pet attacking, or the pet in
+  combat. `PlayerLedPullCoordinator.LeaderEngaged` holds while the pull is on
+  the pet, so the pet order no longer sends the companions in. While a released
+  pull is still being killed, only an order onto a fresh monster that is not in
+  combat (a chain pull) starts the next one. An order onto a monster that is
+  already in combat (for example a `/pull` whose tank sent the pet in) and pets
+  sent at enemy players (RvR had no pet pulls) start no pet pull.
+- **Hold.** Companions do no real damage. Non-tanks keep a heal-over-time on the
+  pet and heal the group; an Animist plants turrets at the camp front toward the
+  pull. Attackers intercept only adds that are on, or running at, someone of the
+  owner's force (never the pulling pet's own attackers); support companions do
+  not go for adds that are still on their way. Tanks keep their ordinary peel of
+  adds on the group.
+- **Pet in danger.** Under 70 % health, or under 90 % with three or more live
+  attackers (a fresh pack pull is the pet's job), healers heal the pet before the release and each tank taunts one attacker off
+  it (an add first; the pet's own target only when nothing else is on it; no
+  two tanks take the same one). The player gets one line when this starts.
+- **Release.** The pull is at camp when the pet is within 400 units of the player
+  and set passive (or never left camp); the group also opens at once when the
+  pet drops below 45 % or dies, when the player attacks (any harmful player
+  spell that lands counts, even a mez on an add), or after 60 s of contact. A pet that never makes contact within 30 s cancels only that pull.
+  After the release every companion heals the pet; the pull ends once the fight
+  has been quiet for 8 s, and the mode stays on.
+- **Buffs.** While the mode is on, buffs that work on pets (strength,
+  constitution, dexterity, quickness, damage add, shields, ablative, resists,
+  heal-over-time) go to the pet before the group.
+
+Code: `CompanionPetPull` (mode and pull state), `PlayerLedPullCoordinator`
+(engage guard), `BotBrain` (hold branch, pet-danger taunt and heal).
+
 ## Death recovery and raids
 
 Persistent companions use the existing GameBot corpse-recovery behavior. Their

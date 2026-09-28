@@ -117,6 +117,9 @@ namespace DOL.GS
 
         public static void LeaderEngaged(GamePlayer player, GameLiving target)
         {
+            // Pet pull mode (task 46): the pet's attack order or cast starts a pet
+            // pull; the companions hold until it is released, then this runs again.
+            if (CompanionPetPull.IsHolding(player)) return;
             CompanionEngagementMode.RememberPull(player, target);
             // An owner who fields only companion squads has no own Group at all
             // (task 44); only the own-group tank-contact gate below needs one.
@@ -146,8 +149,9 @@ namespace DOL.GS
             if (actor is GameNPC { Brain: ControlledMobBrain { Owner: GamePlayer petOwner } } &&
                 petOwner.ControlledBrain?.Body == actor)
             {
-                // During /petpull the pet's first swings are the pull, not the signal to engage.
-                if (!CompanionPetPull.IsHolding(petOwner)) LeaderEngaged(petOwner, target);
+                // In pet pull mode the pet's first swings are the pull, not the
+                // signal to engage (LeaderEngaged holds while the pull is on the pet).
+                LeaderEngaged(petOwner, target);
                 return;
             }
             if (actor is not GameBot tank || tank.Group == null || !attack.IsMeleeAttack ||

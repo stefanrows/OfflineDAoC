@@ -29,23 +29,6 @@ Agent sessions on items 45–48: take the role and context from
 45. **Battlegroup load check.** Measure server tick and pathing cost with two
     owners and 5 companion groups each in RvR before calling tasks 42–44 done.
 
-46. **Pet pull as a group mode, not a pull command.** Aaron, 2026-09-28:
-    `/petpull` should switch a mode on or off for the whole group (companions in
-    his group and his squads) instead of starting one pull; while it is on, the
-    player pulls with his pet the normal way (pet attack) and every pull runs
-    as a pet pull. Rework `CompanionPetPull` so a pull starts when the pet
-    engages, not from a command target. Behavior while the mode is on:
-    - The pet is the priority: heals and buffs go to it first, and it must not
-      die. If it gets into danger, tanks take some aggro off it (taunt) and
-      healers heal it, even before the release.
-    - No real damage until the pet is back (set passive and beside the
-      player), as today.
-    - Before that, companions only intercept adds that are on a group member
-      or on their way to one; nothing else is engaged.
-    Keep the Mentalist HoT, Animist mushrooms at the camp front and pet buff
-    priority from 0.114.0/0.115.0; update commands docs. Replaces the command
-    semantics of task 39.
-
 47. **Advisor, then build: world bots barely level.** Aaron, 2026-09-28:
     levelling "barely works". First a read-only advisor pass (autonomous world
     bot population; also note whether TASKS item 7 is the same cause):
@@ -66,6 +49,19 @@ Agent sessions on items 45–48: take the role and context from
     not perfect.
 
 ## Implemented in source; installation verification pending
+
+46. **Pet pull as a group mode, not a pull command.** Aaron, 2026-09-28:
+    `/petpull` (toggle) or `/petpull on|off` switches pet pull mode for the
+    owner's group and squads; it ends at logout. Every pull then starts with
+    the pet's own engage (attack order, pet attacking or in combat), not with a
+    command target; the pet order no longer sends companions in. Companions
+    hold real damage until the passive pet is back within 400 units, intercept
+    only adds on or running at someone of the group, keep the HoT, Animist camp
+    front and pet buff priority; if the pet is hurt (under 70 %, or under 90 % with
+    three or more attackers), healers heal it and each tank taunts one add off it
+    before the release. Release (pet under 45 %, pet dead, player attacks, 60 s)
+    ends that pull, not the mode; a fresh pet order after it starts the next
+    one (chain pull). Implemented in source; real-client check pending.
 
 44. **Battlegroup combat in RvR and PvE raids.** All companion groups assist
     the battlegroup leader's (or their owner's) target, heal their own group
@@ -106,7 +102,8 @@ Agent sessions on items 45–48: take the role and context from
     follow-up): release once the passive pet is back at the player, Animist
     mushrooms in front of the group, pet-useful buffs to the pet first while
     pet pulling. Not modelled: the Enchanter's focus damage shield. Real-client
-    check pending.
+    check pending. Command semantics replaced by task 46: `/petpull` is now a
+    group mode, and a pull starts with the pet's own attack.
 38. **Companion Manager tab for companions in the group.** Aaron,
     2026-09-27: next to Roster and Recruit, an Active tab showing only the
     companions currently in the group. Source 0.113.0: server tab plus an
