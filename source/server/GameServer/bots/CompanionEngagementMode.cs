@@ -65,9 +65,13 @@ namespace DOL.GS
                 if (actor is GameBot bot)
                 {
                     GamePlayer leader = bot.PlayerGroupLeader ?? bot.Owner;
+                    // Owner resolution, not "same group as the owner": a squad
+                    // member's own Group is its squad's, never the owner's
+                    // (task 42). Keep the liveness check that the companion is
+                    // genuinely still in whichever group it belongs to.
                     return (bot.IsTemporaryGroupHelper || bot.IsPersistentPlayerCompanion) &&
                         !bot.IsAutonomousWorldBot && leader != null && bot.Group != null &&
-                        bot.Group == leader.Group ? bot : null;
+                        bot.Group.IsInTheGroup(bot) ? bot : null;
                 }
                 actor = (actor as GameNPC)?.Brain is IControlledBrain controlled ? controlled.Owner : null;
             }

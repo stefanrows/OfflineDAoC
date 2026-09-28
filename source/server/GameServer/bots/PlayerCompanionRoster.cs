@@ -32,6 +32,11 @@ namespace DOL.GS
         private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
         private static readonly ConcurrentDictionary<string, GameBot> ActiveCompanions = new(StringComparer.OrdinalIgnoreCase);
 
+        // Task 42 companion squads: process-local, like every other runtime Group,
+        // rebuilt from PlayerCompanionRecord.SquadIndex/IsSquadLeader on login.
+        // Index 0 is unused (squad 0 means "the owner's own group").
+        private static readonly ConcurrentDictionary<GamePlayer, Group[]> ActiveSquads = new();
+
         public static string GetEquipmentItemFlags(PlayerCompanionRecord record, string itemId)
         {
             if (record == null || string.IsNullOrWhiteSpace(itemId))
@@ -738,6 +743,33 @@ namespace DOL.GS
 
         public static bool TryGetActiveCompanionById(GamePlayer owner, string companionId, out GameBot companion) =>
             TryGetActiveCompanion(owner, companionId, out companion);
+
+        /// <summary>Every live companion currently owned by <paramref name="owner"/>,
+        /// whether in his own group or in one of his squads (task 42). This is the
+        /// "owner resolution, not group membership" primitive: prefer it over reading
+        /// <c>owner.Group</c>'s members wherever a caller means "all of this owner's
+        /// companions."</summary>
+        public static List<GameBot> GetActiveCompanions(GamePlayer owner)
+        {
+            if (owner == null)
+                return new List<GameBot>();
+
+            return ActiveCompanions.Values
+                .Where(companion => companion != null && companion.Owner == owner &&
+                                     companion.ObjectState == GameObject.eObjectState.Active)
+                .ToList();
+        }
+
+        /// <summary>Only the members (leader included) of one of the owner's squads.</summary>
+        public static List<GameBot> GetSquadCompanions(GamePlayer owner, int squadIndex)
+        {
+            if (!CompanionSquadFormation.IsValidSquadIndex(squadIndex))
+                return new List<GameBot>();
+
+            return GetActiveCompanions(owner)
+                .Where(companion => companion.PlayerCompanionRecord?.SquadIndex == squadIndex)
+                .ToList();
+        }
 
         public static bool TryMatchOwnedCompanionPrefix(GamePlayer owner, string[] arguments, int startIndex,
             int endExclusive, out PlayerCompanionRecord record, out int consumedTokens)
@@ -1659,7 +1691,18 @@ namespace DOL.GS
 
             lock (owner)
             {
-                foreach (PlayerCompanionRecord record in roster.Where(entry => entry.IsActive))
+                // Squad-assigned companions (task 42) restore straight into their own
+                // squad Group, leader first per squad, so they never compete with the
+                // owner's own group capacity below.
+                foreach (PlayerCompanionRecord record in roster
+                             .Where(entry => entry.IsActive && entry.SquadIndex > 0)
+                             .OrderBy(entry => entry.SquadIndex)
+                             .ThenByDescending(entry => entry.IsSquadLeader))
+                {
+                    RestoreSquadCompanion(owner, record);
+                }
+
+                foreach (PlayerCompanionRecord record in roster.Where(entry => entry.IsActive && entry.SquadIndex <= 0))
                 {
                     if (owner.Group != null && owner.Group.MemberCount >= owner.Group.MaximumMemberCount)
                     {
@@ -1684,6 +1727,29 @@ namespace DOL.GS
             }
         }
 
+        private static void RestoreSquadCompanion(GamePlayer owner, PlayerCompanionRecord record)
+        {
+            if (!TryInvite(owner, record, out string message))
+            {
+                record.IsActive = false;
+                record.Dirty = true;
+                SaveRecord(record);
+                Log.Warn($"Could not restore active squad companion {record.CompanionId} for {owner.Name}: {message}");
+                owner.Out.SendMessage($"{record.Name} stayed in your roster but could not rejoin squad {record.SquadIndex}. Use /companions invite {record.Name} after correcting the issue.",
+                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                return;
+            }
+
+            if (!ActiveCompanions.TryGetValue(record.CompanionId, out GameBot companion))
+                return;
+
+            if (!TryPlaceInSquad(owner, record, companion, out string placementError))
+            {
+                owner.Out.SendMessage($"{record.Name} rejoined your group but could not return to squad {record.SquadIndex}: {placementError}",
+                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            }
+        }
+
         public static void OnOwnerQuit(GameBot companion)
         {
             if (companion?.IsPersistentPlayerCompanion != true)
@@ -1694,6 +1760,7 @@ namespace DOL.GS
             companion.SuppressRosterBenchOnGroupRemoval = true;
             ActiveCompanions.TryRemove(companion.PlayerCompanionRecord.CompanionId, out _);
             companion.Delete();
+            PruneOwnerSquadsIfEmpty(companion.Owner);
         }
 
         public static void OnGroupMemberRemoved(GameBot companion)
@@ -1722,13 +1789,460 @@ namespace DOL.GS
             if (companion == null)
                 return;
 
+            GamePlayer owner = companion.Owner;
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            Group previousGroup = companion.Group;
+            bool wasSquadLeader = record != null && record.SquadIndex > 0 && record.IsSquadLeader;
+
             companion.SuppressRosterBenchOnGroupRemoval = true;
-            ActiveCompanions.TryRemove(companion.PlayerCompanionRecord.CompanionId, out _);
-            if (companion.Group != null)
-                companion.Group.RemoveMember(companion);
+            ActiveCompanions.TryRemove(record.CompanionId, out _);
+            if (previousGroup != null)
+                previousGroup.RemoveMember(companion);
             companion.RemoveFromWorld();
             companion.Delete();
+
+            // The companion leaving its squad's Group (bench, quit, or removal)
+            // may have left that squad without a leader; hand it to whoever
+            // Group.RemoveMember already elected and refresh follow targets.
+            if (wasSquadLeader)
+            {
+                record.IsSquadLeader = false;
+                record.Dirty = true;
+                SaveRecord(record);
+            }
+            if (previousGroup != null)
+                ReconcileSquadLeadership(owner, previousGroup);
+            PruneOwnerSquadsIfEmpty(owner);
         }
+
+        #region Companion squads (task 42/43)
+
+        private static Group GetLiveSquadGroup(Group[] slots, int squadIndex)
+        {
+            Group group = slots[squadIndex];
+            return group != null && group.MemberCount > 0 ? group : null;
+        }
+
+        /// <summary>Live squad Group for an owner and squad index, or null if that squad
+        /// currently has no active members.</summary>
+        public static Group GetLiveSquadGroup(GamePlayer owner, int squadIndex)
+        {
+            if (owner == null || !CompanionSquadFormation.IsValidSquadIndex(squadIndex) ||
+                !ActiveSquads.TryGetValue(owner, out Group[] slots))
+                return null;
+
+            lock (slots)
+                return GetLiveSquadGroup(slots, squadIndex);
+        }
+
+        private static void PruneOwnerSquadsIfEmpty(GamePlayer owner)
+        {
+            if (owner == null || !ActiveSquads.TryGetValue(owner, out Group[] slots))
+                return;
+
+            lock (slots)
+            {
+                for (int index = 1; index < slots.Length; index++)
+                {
+                    if (GetLiveSquadGroup(slots, index) != null)
+                        return;
+                    slots[index] = null;
+                }
+            }
+
+            ActiveSquads.TryRemove(owner, out _);
+        }
+
+        /// <summary>Follow orders for one member of a live squad: the leader marches
+        /// behind the owner at its squad's offset band; every other member sticks to
+        /// its squad leader at the ordinary companion follow distance (task 43).</summary>
+        private static void ApplySquadFollowTarget(GameBot bot, int squadIndex, bool isLeader)
+        {
+            if (bot?.ObjectState != GameObject.eObjectState.Active || bot.Owner == null)
+                return;
+
+            if (isLeader)
+            {
+                (int min, int max) = CompanionSquadFormation.LeaderFollowBand(squadIndex);
+                bot.Follow(bot.Owner, min, max);
+            }
+            else if (bot.SquadFollowAnchor is GameBot leader)
+                bot.Follow(leader, BotManager.FOLLOW_DISTANCE, BotManager.MAX_FOLLOW_DISTANCE);
+        }
+
+        /// <summary>Re-issues the correct Follow() order for an owned bot after it has
+        /// been relocated (portal/region transfer) or moved between groups: its
+        /// squad's leader band if it leads a squad, its squad leader at ordinary
+        /// distance if it is a squad member, or the owner at ordinary distance
+        /// otherwise (temporary helpers and ordinary companions alike, task 42/43).</summary>
+        public static void RefreshFollowOrder(GameBot companion)
+        {
+            if (companion?.Owner == null || companion.ObjectState != GameObject.eObjectState.Active)
+                return;
+
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            if (record != null && record.SquadIndex > 0)
+            {
+                ApplySquadFollowTarget(companion, record.SquadIndex, record.IsSquadLeader);
+                return;
+            }
+
+            companion.Follow(companion.Owner, BotManager.FOLLOW_DISTANCE, BotManager.MAX_FOLLOW_DISTANCE);
+        }
+
+        /// <summary>Refreshes every live member's leader-of-record, follow anchor and
+        /// follow order for one squad Group after a membership or leadership change.
+        /// Safe to call on the owner's own group too (a no-op there, since its leader
+        /// is never a GameBot).</summary>
+        private static void ReconcileSquadLeadership(GamePlayer owner, Group group)
+        {
+            if (owner == null || group == null || group.MemberCount == 0)
+                return;
+
+            GameBot leaderBot = group.LivingLeader as GameBot;
+            foreach (GameLiving member in group.GetMembersInTheGroup())
+            {
+                if (member is not GameBot bot || bot.PlayerCompanionRecord is not PlayerCompanionRecord record ||
+                    record.SquadIndex <= 0)
+                {
+                    continue;
+                }
+
+                bool isLeader = ReferenceEquals(member, leaderBot);
+                bot.SquadFollowAnchor = isLeader ? null : leaderBot;
+                if (record.IsSquadLeader != isLeader)
+                {
+                    record.IsSquadLeader = isLeader;
+                    record.Dirty = true;
+                    SaveRecord(record);
+                }
+                ApplySquadFollowTarget(bot, record.SquadIndex, isLeader);
+            }
+        }
+
+        /// <summary>Moves a live companion from its current Group into
+        /// <paramref name="targetGroup"/> without benching it, reusing
+        /// <see cref="GameBot.SuppressRosterBenchOnGroupRemoval"/> so
+        /// <see cref="Group.RemoveMember"/>'s roster-bench hook does not fire for this
+        /// controlled, intra-roster move (task 42). Falls back to a real bench if the
+        /// move itself fails, so the companion is never left outside the tracked
+        /// lifecycle.</summary>
+        private static bool TryMoveCompanionToGroup(GameBot companion, Group targetGroup)
+        {
+            if (companion == null || targetGroup == null)
+                return false;
+
+            Group previousGroup = companion.Group;
+            if (previousGroup == targetGroup)
+                return true;
+
+            GamePlayer owner = companion.Owner;
+            companion.SuppressRosterBenchOnGroupRemoval = true;
+            try
+            {
+                if (previousGroup != null)
+                {
+                    previousGroup.RemoveMember(companion);
+                    ReconcileSquadLeadership(owner, previousGroup);
+                }
+
+                if (companion.Group != null || !targetGroup.AddMember(companion))
+                {
+                    companion.SuppressRosterBenchOnGroupRemoval = false;
+                    BenchActiveActor(companion, notifyOwner: true);
+                    return false;
+                }
+            }
+            finally
+            {
+                companion.SuppressRosterBenchOnGroupRemoval = false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Places an already-active companion into its recorded squad,
+        /// creating that squad's Group if this is its first live member. The first
+        /// companion to arrive in an empty squad becomes its leader, matching the
+        /// record if possible and correcting it otherwise.</summary>
+        private static bool TryPlaceInSquad(GamePlayer owner, PlayerCompanionRecord record, GameBot companion,
+            out string message)
+        {
+            int squadIndex = record.SquadIndex;
+            if (!CompanionSquadFormation.IsValidSquadIndex(squadIndex))
+            {
+                message = "That squad number is invalid.";
+                return false;
+            }
+
+            Group[] slots = ActiveSquads.GetOrAdd(owner, _ => new Group[CompanionSquadFormation.MaxSquadCount + 1]);
+            Group squadGroup;
+            lock (slots)
+            {
+                squadGroup = GetLiveSquadGroup(slots, squadIndex);
+                if (squadGroup == null)
+                {
+                    squadGroup = new Group(companion);
+                    if (!GroupMgr.AddGroup(squadGroup))
+                    {
+                        message = "A squad group could not be created.";
+                        return false;
+                    }
+                    slots[squadIndex] = squadGroup;
+                }
+            }
+
+            if (!TryMoveCompanionToGroup(companion, squadGroup))
+            {
+                message = $"{record.Name} could not join squad {squadIndex}.";
+                return false;
+            }
+
+            ReconcileSquadLeadership(owner, squadGroup);
+            message = string.Empty;
+            return true;
+        }
+
+        public static bool TrySquadAdd(GamePlayer owner, int squadIndex, string nameOrId, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            if (!CompanionSquadFormation.IsValidSquadIndex(squadIndex))
+            {
+                message = $"Squad number must be between 1 and {CompanionSquadFormation.MaxSquadCount}.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                {
+                    message = "That companion name or ID is not in your roster. Type /companions list to see names.";
+                    return false;
+                }
+
+                if (record.SquadIndex == squadIndex)
+                {
+                    message = $"{record.Name} is already in squad {squadIndex}.";
+                    return true;
+                }
+
+                if (owner.CurrentRegion == null || owner.CurrentZone == null)
+                {
+                    message = "You must be in the world before assigning a companion to a squad.";
+                    return false;
+                }
+
+                if (!ActiveCompanions.TryGetValue(record.CompanionId, out GameBot companion) ||
+                    companion?.ObjectState != GameObject.eObjectState.Active)
+                {
+                    if (!TryInvite(owner, record, out message))
+                        return false;
+                    if (!ActiveCompanions.TryGetValue(record.CompanionId, out companion))
+                    {
+                        message = $"{record.Name} could not be reached after joining.";
+                        return false;
+                    }
+                }
+
+                int previousSquadIndex = record.SquadIndex;
+                record.SquadIndex = squadIndex;
+                record.IsSquadLeader = false;
+                record.Dirty = true;
+                if (!SaveRecord(record))
+                {
+                    record.SquadIndex = previousSquadIndex;
+                    message = $"{record.Name}'s squad assignment could not be saved.";
+                    return false;
+                }
+
+                if (!TryPlaceInSquad(owner, record, companion, out string placementError))
+                {
+                    record.SquadIndex = previousSquadIndex;
+                    record.Dirty = true;
+                    SaveRecord(record);
+                    message = placementError;
+                    return false;
+                }
+
+                message = record.IsSquadLeader
+                    ? $"{record.Name} leads squad {squadIndex}."
+                    : $"{record.Name} joined squad {squadIndex}.";
+                BattleGroupCompanionSync.Resync(owner);
+                return true;
+            }
+        }
+
+        public static bool TrySquadRemove(GamePlayer owner, int squadIndex, string nameOrId, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                {
+                    message = "That companion name or ID is not in your roster. Type /companions list to see names.";
+                    return false;
+                }
+
+                if (record.SquadIndex != squadIndex || squadIndex <= 0)
+                {
+                    message = $"{record.Name} is not in squad {squadIndex}.";
+                    return false;
+                }
+
+                record.SquadIndex = 0;
+                record.IsSquadLeader = false;
+                record.Dirty = true;
+                SaveRecord(record);
+
+                if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot companion) &&
+                    companion?.Owner == owner)
+                {
+                    BenchActiveActor(companion, notifyOwner: false);
+                }
+
+                message = $"{record.Name} left squad {squadIndex} and was benched.";
+                BattleGroupCompanionSync.Resync(owner);
+                return true;
+            }
+        }
+
+        public static bool TrySquadLead(GamePlayer owner, int squadIndex, string nameOrId, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                {
+                    message = "That companion name or ID is not in your roster. Type /companions list to see names.";
+                    return false;
+                }
+
+                if (record.SquadIndex != squadIndex || squadIndex <= 0)
+                {
+                    message = $"{record.Name} is not in squad {squadIndex}.";
+                    return false;
+                }
+
+                if (!ActiveCompanions.TryGetValue(record.CompanionId, out GameBot companion) ||
+                    companion?.Owner != owner || companion.ObjectState != GameObject.eObjectState.Active)
+                {
+                    message = $"{record.Name} must be active to lead squad {squadIndex}.";
+                    return false;
+                }
+
+                Group squadGroup = companion.Group;
+                if (squadGroup == null || squadGroup != GetLiveSquadGroup(owner, squadIndex))
+                {
+                    message = $"{record.Name} is not currently with squad {squadIndex}.";
+                    return false;
+                }
+
+                if (squadGroup.LivingLeader == companion)
+                {
+                    message = $"{record.Name} already leads squad {squadIndex}.";
+                    return true;
+                }
+
+                if (!squadGroup.MakeLeader(companion))
+                {
+                    message = $"{record.Name} could not be made squad {squadIndex}'s leader.";
+                    return false;
+                }
+
+                ReconcileSquadLeadership(owner, squadGroup);
+                message = $"{record.Name} now leads squad {squadIndex}.";
+                return true;
+            }
+        }
+
+        public static bool TrySquadDisband(GamePlayer owner, int squadIndex, out string message)
+        {
+            if (owner == null)
+            {
+                message = "Your character could not be found.";
+                return false;
+            }
+
+            if (!CompanionSquadFormation.IsValidSquadIndex(squadIndex))
+            {
+                message = $"Squad number must be between 1 and {CompanionSquadFormation.MaxSquadCount}.";
+                return false;
+            }
+
+            lock (owner)
+            {
+                if (!TryGetRoster(owner, out List<PlayerCompanionRecord> roster))
+                {
+                    message = "Your companion roster could not be loaded. Try again later.";
+                    return false;
+                }
+
+                List<PlayerCompanionRecord> squadRecords = roster.Where(record => record.SquadIndex == squadIndex).ToList();
+                if (squadRecords.Count == 0)
+                {
+                    message = $"Squad {squadIndex} is already empty.";
+                    return true;
+                }
+
+                foreach (PlayerCompanionRecord record in squadRecords)
+                {
+                    if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot companion) && companion?.Owner == owner)
+                        BenchActiveActor(companion, notifyOwner: false);
+
+                    record.SquadIndex = 0;
+                    record.IsSquadLeader = false;
+                    record.Dirty = true;
+                    SaveRecord(record);
+                }
+
+                message = $"Squad {squadIndex} was disbanded; {squadRecords.Count} companion(s) were benched.";
+                BattleGroupCompanionSync.Resync(owner);
+                return true;
+            }
+        }
+
+        public static string FormatSquadList(GamePlayer owner)
+        {
+            if (owner == null || !TryGetRoster(owner, out List<PlayerCompanionRecord> roster))
+                return "Your companion roster could not be loaded. Try again later.";
+
+            List<PlayerCompanionRecord> assigned = roster.Where(record => record.SquadIndex > 0).ToList();
+            if (assigned.Count == 0)
+                return "You have no companion squads. Use /companions squad <1-5> add <name>.";
+
+            var lines = new List<string>();
+            foreach (var squad in assigned.GroupBy(record => record.SquadIndex).OrderBy(group => group.Key))
+            {
+                string members = string.Join(", ", squad.OrderByDescending(record => record.IsSquadLeader)
+                    .ThenBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(record => record.IsSquadLeader
+                        ? $"{record.Name} (leader{(record.IsActive ? string.Empty : ", benched")})"
+                        : $"{record.Name}{(record.IsActive ? string.Empty : " (benched)")}"));
+                lines.Add($"Squad {squad.Key}: {members}");
+            }
+
+            return string.Join(" | ", lines);
+        }
+
+        #endregion
 
         private static bool InitializeInventory(GameBot companion, PlayerCompanionRecord record)
         {

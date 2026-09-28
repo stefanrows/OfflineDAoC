@@ -330,15 +330,20 @@ namespace DOL.GS.Commands
 
         private static string RecordKey(PlayerCompanionRecord record) => "c:" + record.CompanionId;
 
+        // "Active" means owned and currently live, not "in the owner's own
+        // group": a squad companion (task 42) is just as active.
         private static bool InPlayerGroup(GamePlayer player, PlayerCompanionRecord record) =>
-            record.IsActive && player.Group != null &&
-            PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out GameBot companion) &&
-            companion.Group == player.Group;
+            record.IsActive &&
+            PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _);
+
+        private static string SquadLabel(PlayerCompanionRecord record) =>
+            record.SquadIndex <= 0 ? string.Empty
+                : record.IsSquadLeader ? $", squad {record.SquadIndex} leader" : $", squad {record.SquadIndex}";
 
         private static IReadOnlyList<CompanionManagerEntry> RosterEntries(IEnumerable<PlayerCompanionRecord> roster) =>
             roster.Select(record => new CompanionManagerEntry(RecordKey(record), (eRealm)record.Realm,
                 (eCharacterClass)record.ClassId, record.Name,
-                $"L{record.Level} {(eCharacterClass)record.ClassId}, {(record.IsActive ? "active" : "benched")}",
+                $"L{record.Level} {(eCharacterClass)record.ClassId}, {(record.IsActive ? "active" : "benched")}{SquadLabel(record)}",
                 (record.IsActive ? "0:" : "1:") + record.Name)).ToArray();
 
         private static CompanionManagerEntry GroupEntry(GamePlayer player) =>
@@ -545,10 +550,14 @@ namespace DOL.GS.Commands
             }
             lines.Add(new Line(string.Empty));
 
-            GameBot[] members = player.Group?.GetMembersInTheGroup().OfType<GameBot>()
+            // The owner's own group (covers temporary helpers too) plus any of his
+            // squad companions (task 42), who are never in that same Group.
+            GameBot[] members = (player.Group?.GetMembersInTheGroup().OfType<GameBot>() ?? Enumerable.Empty<GameBot>())
+                .Concat(PlayerCompanionRoster.GetActiveCompanions(player).Where(bot => bot.PlayerCompanionRecord?.SquadIndex > 0))
                 .Where(bot => (bot.PlayerGroupLeader ?? bot.Owner) == player &&
                               (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && !bot.IsAutonomousWorldBot)
-                .ToArray() ?? Array.Empty<GameBot>();
+                .Distinct()
+                .ToArray();
             if (members.Length == 0)
                 AddText(lines, "No companions are in your group. [Invite all] invites benched companions shown in the list.");
             else

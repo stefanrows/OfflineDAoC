@@ -788,11 +788,14 @@ namespace DOL.GS
                 long now = GameLoop.GameLoopTime;
                 if (component._companionPathFailSince == 0)
                     component._companionPathFailSince = now;
-                if (component.Owner is not GameBot { PlayerGroupLeader: GamePlayer leader } companion ||
+                // A squad leader (task 42/43) joins the owner here, same as any other
+                // companion; a squad member joins its own squad leader instead, via
+                // FollowAnchor, never the owner directly.
+                if (component.Owner is not GameBot companion || companion.FollowAnchor is not GameLiving leader ||
                     now - component._companionPathFailSince < FAILED_PATH_GRACE ||
                     companion.InCombat || leader.InCombat || !leader.IsAlive ||
                     leader.CurrentRegion != companion.CurrentRegion ||
-                    DragonCombatGeometry.IsRecoveringFromThrow(leader) ||
+                    (leader is GamePlayer leaderPlayer && DragonCombatGeometry.IsRecoveringFromThrow(leaderPlayer)) ||
                     !companion.IsWithinRadius(leader, MAX_TELEPORT_TRIGGER_RANGE))
                     return false;
 

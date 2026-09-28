@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using DOL.GS.PacketHandler;
@@ -383,6 +384,19 @@ namespace DOL.GS.Commands
 
                             client.Out.SendMessage(text.ToString(), eChatType.CT_System, eChatLoc.CL_SystemWindow);
                             //TODO: make function formatstring                        
+
+                            // Task 42: list each owner's live squad companions under him.
+                            if (mybattlegroup.CompanionsByOwner.TryGetValue(player, out List<GameBot> companions) &&
+                                companions.Count > 0)
+                            {
+                                foreach (GameBot companion in companions)
+                                {
+                                    text.Length = 0;
+                                    text.Append("     <Companion> ");
+                                    text.Append(companion.Name);
+                                    client.Out.SendMessage(text.ToString(), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                                }
+                            }
                         }
                     }
                     break;

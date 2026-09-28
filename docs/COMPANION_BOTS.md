@@ -105,6 +105,43 @@ owner selects a build.
 the class default build is used. Authored characters and
 their once-per-owner recruitment rules are Stage 5.
 
+## Companion squads and battlegroups
+
+An owner may organize up to 5 companion-led squads besides his own group, so two
+owners can share one battlegroup (`/bg`) while each keeps his own companions under
+his own control. `/companions squad <1-5> add <name>` moves a companion into that
+squad, spawning it first if it is benched; the first companion to join an empty
+squad becomes its leader. `/companions squad <1-5> remove <name>` benches it and
+returns it to the owner's own group next time it is invited. `/companions squad
+<1-5> lead <name>` makes an existing squad member the new leader.
+`/companions squad <1-5> disband` benches every member. `/companions squad list`
+shows every squad, its leader, and its members. A companion's squad assignment
+and leader flag are saved on its `PlayerCompanionRecord` and restored at the
+owner's next login, independent of whether it is currently active.
+
+A companion stays in the world while it is in the owner's own group or in one of
+his squads; moving it between those groups (including promoting or replacing a
+squad leader) never benches or deletes it. Every reward, follow, and order system
+that used to require "in the owner's own group" (experience copy, personal gear
+rolls, group orders such as `/aggressive`/`/defensive`/`/passive`, region/portal
+follow, and the Companion Manager's Active tab) now resolves the owner directly,
+so it applies the same way to squad companions.
+
+A squad's leader marches behind the owner at its own standoff distance (200-400
+units, farther out per squad number, so squads fan out rather than stack); its
+members follow their own squad leader at the ordinary companion follow distance.
+When a squad's leader is removed, benched, or logs out with the owner, its
+remaining members promote a new leader automatically. Squad member combat is
+minimal for now: members still fight under the owner's group orders and pull
+coordination the same way an ordinary companion does; a squad leader-specific
+assist target and full battlegroup-wide combat coordination are task 44, not yet
+implemented.
+
+Joining a battlegroup with `/bg` brings an owner's live squad companions along
+automatically, and leaving takes them with him; `/bg who` lists them under their
+owner. A battlegroup's chat, loot, and treasurer features remain human-only, as
+before; a companion is never a battlegroup member of its own.
+
 ## Death recovery and raids
 
 Persistent companions use the existing GameBot corpse-recovery behavior. Their

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading;
@@ -169,20 +170,28 @@ public static class TemporaryGroupStableTravel
         if (DragonCombatGeometry.IsDisplacing(player))
             return 0;
         bool hasConfirmedTransfer = explicitMoveTo || HasPendingPlayerTransfer(player);
-        if (player?.ObjectState is not GameObject.eObjectState.Active || !player.IsAlive || player.Group == null || player.CurrentZone == null ||
+        // An owner may command squads (task 42) without being in a group of his
+        // own, so this no longer requires player.Group.
+        if (player?.ObjectState is not GameObject.eObjectState.Active || !player.IsAlive || player.CurrentZone == null ||
             !hasConfirmedTransfer)
             return 0;
 
         int relocated = 0;
         int ordinal = 0;
-        foreach (GameBot bot in player.Group.GetMembersInTheGroup().OfType<GameBot>())
+        // The owner's own group (covers temporary helpers too) plus every one of his
+        // squad companions (task 42), who are never in that same Group.
+        IEnumerable<GameBot> ownedBots = (player.Group?.GetMembersInTheGroup().OfType<GameBot>() ?? Enumerable.Empty<GameBot>())
+            .Concat(PlayerCompanionRoster.GetActiveCompanions(player))
+            .Distinct();
+        foreach (GameBot bot in ownedBots)
         {
             if (!bot.IsAlive || bot.ObjectState != GameObject.eObjectState.Active)
                 continue; // Dead helpers retain their corpse/recovery timer.
+            bool sharesGroupOrSquad = bot.Group != null && bot.Group.IsInTheGroup(bot);
             bool needsRelocation = ShouldRelocateForOwnerTransfer(
                     hasConfirmedTransfer,
                     bot.IsTemporaryGroupHelper,
-                    bot.Group == player.Group,
+                    sharesGroupOrSquad,
                     bot.PlayerGroupLeader == player,
                     bot.CurrentRegionID,
                     player.CurrentRegionID,
@@ -190,7 +199,7 @@ public static class TemporaryGroupStableTravel
                     player.CurrentZone.ID);
             bool ownedCompanion = ShouldRelocatePersistentCompanionForOwnerTransfer(
                 hasConfirmedTransfer, bot.IsPersistentPlayerCompanion,
-                bot.Group == player.Group, bot.Owner == player);
+                sharesGroupOrSquad, bot.Owner == player);
             if (!needsRelocation && !ownedCompanion)
                 continue;
 
@@ -206,7 +215,10 @@ public static class TemporaryGroupStableTravel
                 continue;
 
             bot.EnterPlayerLedGroup(player);
-            bot.Follow(player, BotManager.FOLLOW_DISTANCE, BotManager.MAX_FOLLOW_DISTANCE);
+            // A squad leader keeps its owner offset band and a squad member keeps
+            // following its own squad leader (task 43); everyone else follows the
+            // owner at the ordinary companion distance.
+            PlayerCompanionRoster.RefreshFollowOrder(bot);
             if (bot.Brain is BotBrain brain)
                 brain.FSM.SetCurrentState(eFSMStateType.FOLLOW);
             relocated++;
@@ -227,17 +239,20 @@ public static class TemporaryGroupStableTravel
             return false;
 
         GamePlayer player = bot.Owner;
+        // A squad companion (task 42) is never in the owner's own Group; being
+        // properly grouped at all (own group or squad) is what matters here.
+        bool sharesGroupOrSquad = bot.Group != null && bot.Group.IsInTheGroup(bot);
         bool helper = ShouldRelocateForOwnerTransfer(
                 true,
                 bot.IsTemporaryGroupHelper,
-                bot.Group == player.Group,
+                sharesGroupOrSquad,
                 bot.PlayerGroupLeader == player,
                 bot.CurrentRegionID,
                 player.CurrentRegionID,
                 bot.CurrentZone?.ID ?? 0,
                 player.CurrentZone?.ID ?? 0);
         bool ownedCompanion = ShouldRelocatePersistentCompanionForOwnerTransfer(
-            true, bot.IsPersistentPlayerCompanion, bot.Group == player.Group, bot.Owner == player);
+            true, bot.IsPersistentPlayerCompanion, sharesGroupOrSquad, bot.Owner == player);
         if (!helper && !ownedCompanion)
             return false;
 

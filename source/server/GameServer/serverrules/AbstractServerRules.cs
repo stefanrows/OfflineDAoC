@@ -1436,9 +1436,11 @@ namespace DOL.GS.ServerRules
             if (companion?.IsPersistentPlayerCompanion != true || owner == null || !owner.GainXP || killedNpc == null)
                 return false;
 
+            // Owner resolution, not "same group as the owner": a companion in one
+            // of the owner's squads (task 42) is never in the owner's own Group.
             return companion.ObjectState == GameObject.eObjectState.Active &&
-                   owner.ObjectState == GameObject.eObjectState.Active && owner.Group != null &&
-                   companion.Group == owner.Group && companion.Group.IsInTheGroup(companion) &&
+                   owner.ObjectState == GameObject.eObjectState.Active &&
+                   companion.Group != null && companion.Group.IsInTheGroup(companion) &&
                    owner.IsWithinRadius(killedNpc, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
                    companion.IsWithinRadius(killedNpc, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
                    !companion.IsObjectGreyCon(killedNpc);
@@ -1762,7 +1764,9 @@ namespace DOL.GS.ServerRules
         private static void AwardPersistentCompanionsOnNpcKill(GamePlayer owner, GameNPC killedNpc,
             GainedExperienceEventArgs arguments, HashSet<GameBot> ownerAwardedCompanions)
         {
-            if (owner?.Group == null || killedNpc == null || arguments?.XPSource != eXPSource.NPC ||
+            // An owner may command squads (task 42) without being grouped
+            // himself, so this no longer requires owner.Group.
+            if (owner == null || killedNpc == null || arguments?.XPSource != eXPSource.NPC ||
                 !owner.GainXP ||
                 owner.ObjectState != GameObject.eObjectState.Active ||
                 !owner.IsWithinRadius(killedNpc, WorldMgr.MAX_EXPFORKILL_DISTANCE))
@@ -1770,9 +1774,9 @@ namespace DOL.GS.ServerRules
                 return;
             }
 
-            foreach (GameBot companion in owner.Group.GetMembersInTheGroup().OfType<GameBot>())
+            foreach (GameBot companion in PlayerCompanionRoster.GetActiveCompanions(owner))
             {
-                if (companion.Owner != owner || !IsEligibleActivePlayerCompanion(companion, killedNpc))
+                if (!IsEligibleActivePlayerCompanion(companion, killedNpc))
                 {
                     continue;
                 }

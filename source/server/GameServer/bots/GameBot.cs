@@ -42,6 +42,18 @@ namespace DOL.GS
         internal GameSiegeRam CompanionRam { get; set; }
         private readonly HashSet<GameLiving> _temporaryCompanionProtectedMembers = new();
         public bool IsPlayerLedGroup => PlayerGroupLeader != null;
+
+        /// <summary>Set only on a companion squad member (task 42/43); the squad's leader
+        /// companion. Null for ordinary companions and for squad leaders themselves, who
+        /// keep marching/following relative to <see cref="PlayerGroupLeader"/> (the owner).
+        /// Ownership, XP, group orders and every other "who owns this companion" decision
+        /// must keep using <see cref="Owner"/> or <see cref="PlayerGroupLeader"/>, never this
+        /// property.</summary>
+        internal GameBot SquadFollowAnchor { get; set; }
+
+        /// <summary>Who this companion marches/follows behind: its squad leader for a squad
+        /// member, otherwise the owner (same as <see cref="PlayerGroupLeader"/>).</summary>
+        public GameLiving FollowAnchor => (GameLiving)SquadFollowAnchor ?? PlayerGroupLeader;
         internal void RememberTemporaryCompanionGroup(IEnumerable<GameLiving> members)
         {
             if (!IsTemporaryGroupHelper || members == null)
