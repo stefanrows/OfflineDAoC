@@ -130,6 +130,13 @@ Agent sessions on items 45–48: take the role and context from
     whole warbands contest a stranger's siege. Garrison strength, one siege
     per server and the temporary ×10 ram (task 55) are unchanged and remain
     Aaron's decisions.
+    Aaron decided on 2026-09-28 evening: (1) lower the Warden garrison to
+    about guards 52–55 / lord 60–65 (1.65 unclaimed keeps were level 1, not
+    level 5); (2) one siege per guild instead of one per server, and large
+    guilds may hold several keeps at once (raise `guilds_claim_limit`);
+    (3) keep the ×10 ram until the first capture is in the log; (4) relic
+    raids return later as their own mode. Build as the next package after
+    the bug 56 round 2 merge (same event-layer files).
     Live re-measurement proposals 2 and 3 implemented in source
     (docs/NIGHT_REPORT.md, 15:46): RvR bots stay out of the shared frontier
     dungeons (Hall of the Corrupt, Summoner's Hall, Marfach Caverns, Dodens

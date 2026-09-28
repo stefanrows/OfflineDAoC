@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.137.0] - 2026-09-28
+
+### Changed
+
+- Fewer server stutters from RvR bots: the ExecuteRvr and stable-network
+  spikes were bot turns waiting on SQLite reads (merchant lists behind slow
+  saves). Merchant lists and the stable-master network now refresh on a
+  background worker while callers keep the old value, world bots run the
+  stable-route corridor scan in short slices, solo bots skip the group
+  coordinator lock, and lock waits and database opens appear in the minute
+  profile. Bot decisions are unchanged.
+
 ## [0.136.0] - 2026-09-28
 
 ### Changed
