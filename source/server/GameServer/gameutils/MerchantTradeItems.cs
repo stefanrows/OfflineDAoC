@@ -51,6 +51,8 @@ namespace DOL.GS
 		public MerchantTradeItems(string itemsListId)
 		{
 			m_itemsListID = itemsListId;
+			_databaseItems = new BackgroundRefreshedValue<Hashtable>(LoadDatabaseItems,
+				DatabaseItemsCacheLifetimeMilliseconds, DatabaseItemsRetryMilliseconds);
 		}
 
 		/// <summary>
@@ -71,9 +73,14 @@ namespace DOL.GS
 		/// </summary>
 		protected HybridDictionary m_usedItemsTemplates = new HybridDictionary();
 		private readonly Lock _lock = new();
-		private Hashtable _databaseItemsCache;
-		private long _databaseItemsCacheExpiresTick;
+		// Bug 56 round 2: the list is read from SQLite once, then refreshed every
+		// five minutes on the background refresh thread. A brain turn or trade
+		// window used to wait here for the SELECT, and on the old hard disk a
+		// SELECT queued behind every pending save (one write gate); bots at a
+		// frontier porter or stable master stalled 0.3-1 s at once.
+		private readonly BackgroundRefreshedValue<Hashtable> _databaseItems;
 		private const int DatabaseItemsCacheLifetimeMilliseconds = 5 * 60_000;
+		private const int DatabaseItemsRetryMilliseconds = 30_000;
 
 		#endregion
 
@@ -228,31 +235,11 @@ namespace DOL.GS
 			try
 			{
 				Hashtable allItems = new Hashtable();
+				// A published list is never modified; a refresh swaps in a new one.
+				Hashtable databaseItems = _databaseItems.Get(GameLoop.GameLoopTime);
 				lock (_lock)
 				{
-					long now = GameLoop.GameLoopTime;
-					if (_databaseItemsCache == null || now >= _databaseItemsCacheExpiresTick)
-					{
-						_databaseItemsCache = new Hashtable();
-						if (!string.IsNullOrEmpty(m_itemsListID))
-						{
-							var itemList = DOLDB<DbMerchantItem>.SelectObjects(DB.Column("ItemListID").IsEqualTo(m_itemsListID));
-							foreach (DbMerchantItem merchantitem in itemList)
-							{
-								DbItemTemplate item = GameServer.Database.FindObjectByKey<DbItemTemplate>(merchantitem.ItemTemplateID);
-								if (item == null)
-									continue;
-								int absoluteSlot = merchantitem.PageNumber * MAX_ITEM_IN_TRADEWINDOWS + merchantitem.SlotPosition;
-								if (_databaseItemsCache[absoluteSlot] == null)
-									_databaseItemsCache.Add(absoluteSlot, item);
-								else
-									log.ErrorFormat("two merchant items on same page/slot: listID={0} page={1} slot={2}", m_itemsListID, merchantitem.PageNumber, merchantitem.SlotPosition);
-							}
-						}
-						_databaseItemsCacheExpiresTick = now + DatabaseItemsCacheLifetimeMilliseconds;
-					}
-
-					foreach (DictionaryEntry de in _databaseItemsCache)
+					foreach (DictionaryEntry de in databaseItems)
 						allItems[de.Key] = de.Value;
 					foreach (DictionaryEntry de in m_usedItemsTemplates)
 					{
@@ -267,6 +254,27 @@ namespace DOL.GS
 					log.Error("Loading merchant items list (" + m_itemsListID + "):", e);
 				return new HybridDictionary();
 			}
+		}
+
+		private Hashtable LoadDatabaseItems()
+		{
+			Hashtable items = new Hashtable();
+			if (string.IsNullOrEmpty(m_itemsListID))
+				return items;
+			using var profile = BotThinkProfiler.Measure(BotThinkPhase.MerchantItemsLoad);
+			var itemList = DOLDB<DbMerchantItem>.SelectObjects(DB.Column("ItemListID").IsEqualTo(m_itemsListID));
+			foreach (DbMerchantItem merchantitem in itemList)
+			{
+				DbItemTemplate item = GameServer.Database.FindObjectByKey<DbItemTemplate>(merchantitem.ItemTemplateID);
+				if (item == null)
+					continue;
+				int absoluteSlot = merchantitem.PageNumber * MAX_ITEM_IN_TRADEWINDOWS + merchantitem.SlotPosition;
+				if (items[absoluteSlot] == null)
+					items.Add(absoluteSlot, item);
+				else
+					log.ErrorFormat("two merchant items on same page/slot: listID={0} page={1} slot={2}", m_itemsListID, merchantitem.PageNumber, merchantitem.SlotPosition);
+			}
+			return items;
 		}
 
 		/// <summary>

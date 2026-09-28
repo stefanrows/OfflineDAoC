@@ -36,6 +36,31 @@ public enum BotThinkPhase
     DeathRewards,
     CompanionGearGrant,
     SiegeJob,
+    // Bug 56 round 2: finer phases for the RvR turn, the coordinator lock and
+    // synchronous database access on a brain turn.
+    /// <summary>ChooseRvrDestination: objective list, event choice, roam pick.</summary>
+    RvrChooseDestination,
+    /// <summary>FindRvrTarget: keep guards, gates and the lord.</summary>
+    RvrKeepTarget,
+    /// <summary>Frontier porter, medallion merchant and boarding.</summary>
+    RvrFrontierTransport,
+    /// <summary>Waiting to enter the RvR event layer lock.</summary>
+    RvrEventLockWait,
+    /// <summary>Waiting to enter the group coordinator lock.</summary>
+    CoordinatorLockWait,
+    /// <summary>Pulse work while holding the coordinator lock.</summary>
+    CoordinatorSessionUpdate,
+    /// <summary>Population-wide group maintenance (formation, backfill).</summary>
+    CoordinatorMaintenance,
+    /// <summary>A merchant list read from SQLite (first load or background refresh).</summary>
+    MerchantItemsLoad,
+    /// <summary>Opening a SQLite connection, including the wait for the write gate.
+    /// Nested like NavPathQuery: the same milliseconds also count in the enclosing
+    /// phase (for example MerchantItemsLoad or StableNetworkCache); do not add
+    /// phase totals of the minute line together.</summary>
+    DatabaseOpen,
+    /// <summary>One slice of the stable-route first-leg corridor checks.</summary>
+    StableRouteSearchSlice,
 }
 
 /// <summary>
@@ -51,7 +76,7 @@ public static class BotThinkProfiler
     public const long SlowThinkMilliseconds = 100;
     public const long PublishIntervalMilliseconds = 60_000;
     public const int SlowExamplesPerWindow = 5;
-    private const int TopPhases = 12;
+    private const int TopPhases = 16; // round 2 added ten phases
 
     private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
     private static readonly int PhaseCount = Enum.GetValues<BotThinkPhase>().Length;
@@ -63,6 +88,56 @@ public static class BotThinkProfiler
 
     private static Window _window = new(PhaseCount, Environment.TickCount64);
     private static long _nextPublishMilliseconds = Environment.TickCount64 + PublishIntervalMilliseconds;
+
+    static BotThinkProfiler()
+    {
+        // Only opens on a brain thread count: the persistence and refresh
+        // threads open connections all the time and would drown the signal.
+        DOL.Database.Handlers.SqliteObjectDatabase.ConnectionOpenObserver =
+            ticks => RecordInTurn(BotThinkPhase.DatabaseOpen, ticks);
+    }
+
+    /// <summary>Adds an already measured duration (Stopwatch ticks) to a phase.</summary>
+    public static void Add(BotThinkPhase phase, long elapsedStopwatchTicks) => Record(phase, elapsedStopwatchTicks);
+
+    /// <summary>Like <see cref="Add"/>, but only while this thread runs a brain turn.</summary>
+    public static void RecordInTurn(BotThinkPhase phase, long elapsedStopwatchTicks)
+    {
+        if (_turnDepth > 0)
+            Record(phase, elapsedStopwatchTicks);
+    }
+
+    /// <summary>True while this thread is inside a timed brain turn.</summary>
+    public static bool InTurn => _turnDepth > 0;
+
+    /// <summary>Enters <paramref name="gate"/> and adds any time spent waiting
+    /// for it to <paramref name="waitPhase"/>. Exit with Monitor.Exit.</summary>
+    public static void EnterMeasured(object gate, BotThinkPhase waitPhase)
+    {
+        if (Monitor.TryEnter(gate))
+            return;
+        long started = Stopwatch.GetTimestamp();
+        Monitor.Enter(gate);
+        Record(waitPhase, Stopwatch.GetTimestamp() - started);
+    }
+
+    /// <summary>A <c>using</c>-scoped lock that measures its wait.</summary>
+    public readonly struct MeasuredLock : IDisposable
+    {
+        private readonly object _gate;
+
+        internal MeasuredLock(object gate) => _gate = gate;
+
+        public void Dispose() => Monitor.Exit(_gate);
+    }
+
+    /// <summary>Use as <c>using (BotThinkProfiler.Lock(gate, phase))</c> in place
+    /// of <c>lock (gate)</c>; same monitor, same reentrancy.</summary>
+    public static MeasuredLock Lock(object gate, BotThinkPhase waitPhase)
+    {
+        EnterMeasured(gate, waitPhase);
+        return new MeasuredLock(gate);
+    }
 
     public readonly record struct SlowTurn(string Bot, string Kind, long Milliseconds, int Interval, string Phases);
 

@@ -261,7 +261,47 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
       spots in `BOT_THINK_SLOW`: `ExecuteRvr` single turns of 260–480 ms
       (about 42 s total in the spike hours) and the 30-minute
       `StableNetworkCache` rebuild (about 1 s, one turn per region and realm).
-      Next round: slice ExecuteRvr and the cache rebuild; coordinator lock.
+    - Round 2 cause (log of the 0.125.0 run, 04:41–18:18, top five slow turns
+      per minute): 515 turns with `ExecuteRvr` of 200 ms or more, 486 of them
+      without any sub-phase that explains even 30 % of the time, and without
+      path queries; the 149 slow `StableNetworkCache` rebuilds spent 129 s,
+      again with almost no path queries (the corridor part stayed under 20 ms).
+      Both waited for SQLite: a merchant list (`MerchantTradeItems`) reloaded
+      its SELECT every five minutes on the brain thread while holding the
+      merchant's lock, and every SQLite connection open waits for the single
+      write gate, which the slow saves on the old 5,400 rpm disk held for
+      hundreds of milliseconds. Every RvR bot without a frontier medallion reads
+      the porter merchant's list each turn (7,560 frontier teleports in 11 h),
+      and the stable network rebuild reads every stable master's list. After the
+      move to the SSD the same first 48 minutes show `ExecuteRvr` peaks of at
+      most 255 ms in 3 minutes (0.125.0 on the HDD: 1,234 ms, 16 minutes).
+    - Round 2, fixed in source (real-client and live check pending; behavior
+      unchanged, only cost and timing): merchant lists load once and then
+      refresh in the background on one low-priority worker thread, keeping the
+      old list meanwhile; the 30-minute stable network rebuild runs on that
+      worker and bots keep the previous network (only the first build per
+      region and realm still runs in a turn). The first-leg corridor checks of
+      a world bot's stable-route plan run in 8 ms slices, one per turn, with
+      the same checks and the same choice; the bot keeps walking and thinks
+      again after 250 ms. Solo world bots no longer take the group-coordinator
+      lock in `Pulse`. New `BOT_THINK_PROFILE` phases: `RvrChooseDestination`,
+      `RvrKeepTarget`, `RvrFrontierTransport`, `RvrEventLockWait`,
+      `CoordinatorLockWait`, `CoordinatorSessionUpdate` (lock held in Pulse),
+      `CoordinatorMaintenance`, `MerchantItemsLoad`, `DatabaseOpen` (connection
+      open including the write-gate wait, brain turns only; nested, so its
+      time also counts in the enclosing phase such as `MerchantItemsLoad`) and
+      `StableRouteSearchSlice`; the minute line lists 16 phases. A pending
+      stable-route search starts over when the bot is more than 1,000 units from
+      its start, the goal moves, or the route state resets. Tests:
+      `UT_BotThinkCostBoundsRound2`.
+    - Round 2 live check: `ExecuteRvr` and `StableNetworkCache` maxima per
+      minute well under 100 ms after the first half hour; `DatabaseOpen` and
+      `MerchantItemsLoad` rare in `BOT_THINK_SLOW`; `StableRouteSearchSlice`
+      max about 8 ms plus one corridor check; compare `CoordinatorLockWait`
+      with `GroupCoordinatorPulse` to decide whether the coordinator lock needs
+      a per-session split. Still open: the SSD-run peaks of 150–255 ms in
+      `ExecuteRvr` (the new phases should name them) and `SelectCamp` /
+      `ZoneItineraryStep` path queries of up to 1.1 s.
     - Live measurement pending: compare the hourly count and median of
       `Long NpcService.Tick ... BotBrain`, `SERVER_WORK stage=NpcService`
       and the `BOT_THINK_PROFILE` phase `RouteRecoverySearch` (expected
