@@ -24,6 +24,11 @@ internal sealed partial class MainForm : Form
     private readonly string _clientDirectory;
     private readonly string _clientConnector;
     private readonly string _logsDirectory;
+    // Test-only seam: when set, PersistXpRate uses this instead of probing the
+    // real server port/process, so its unit test does not depend on whether an
+    // actual game server happens to be running on the machine. Production code
+    // never assigns this field, so live behavior is unchanged.
+    private bool? _persistXpRateServerRunningOverride;
     private readonly BindingSource _botSource = new();
     private readonly List<BotRow> _bots = [];
     private readonly BindingSource _auctionSource = new();
@@ -1999,7 +2004,8 @@ internal sealed partial class MainForm : Form
     {
         if (key is not ("xp_rate" or "bot_xp_rate") || multiplier is not (1 or 2 or 3 or 5 or 10))
             throw new InvalidOperationException("Unsupported experience-rate selection.");
-        if (IsServerRunning() || FindExactServerProcess() is not null)
+        bool serverRunning = _persistXpRateServerRunningOverride ?? (IsServerRunning() || FindExactServerProcess() is not null);
+        if (serverRunning)
             throw new InvalidOperationException("The server started before the rate could be saved. Stop it and try again.");
         if (!File.Exists(_database))
             throw new InvalidOperationException("The prepared world database is missing.");
