@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.126.0] - 2026-09-28
+
+### Added
+
+- `/companions guild leave <name>` removes an owned active or benched
+  companion from their guild, including after the owner has left it.
+
+### Changed
+
+- Recorded intermittent missing overhead names for players and companions
+  after login, zoning, or reappearing as bug 64; the source cause remains
+  unconfirmed.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.125.0] - 2026-09-28
 
 ### Changed

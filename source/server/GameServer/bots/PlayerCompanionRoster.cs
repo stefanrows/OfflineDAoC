@@ -1534,6 +1534,70 @@ namespace DOL.GS
             return false;
         }
 
+        public static bool TryLeaveGuild(GamePlayer owner, string nameOrId, out string message)
+        {
+            message = "That companion name or ID is not in your roster.";
+            if (owner == null)
+                return false;
+
+            lock (owner)
+            {
+                PlayerCompanionRecord record = FindOwnedRecord(owner, nameOrId);
+                if (record == null)
+                    return false;
+
+                ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active);
+                if (active?.Owner == owner && active.PlayerCompanionRecord != null)
+                    record = active.PlayerCompanionRecord;
+                else
+                    active = null;
+
+                if (string.IsNullOrWhiteSpace(record.GuildId))
+                {
+                    message = $"{record.Name} is not in a guild.";
+                    return false;
+                }
+
+                string formerGuildId = record.GuildId;
+                string formerGuildName = GuildMgr.GetGuildByGuildID(formerGuildId)?.Name ?? "the guild";
+                int formerRank = record.GuildRank;
+                string formerUpdatedUtc = record.UpdatedUtc;
+                lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                lock (record)
+                {
+                    record.GuildId = string.Empty;
+                    record.GuildRank = 9;
+                    record.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                    record.Dirty = true;
+                    if (!SaveRecord(record))
+                    {
+                        record.GuildId = formerGuildId;
+                        record.GuildRank = formerRank;
+                        record.UpdatedUtc = formerUpdatedUtc;
+                        record.Dirty = true;
+                        message = $"{record.Name} could not leave the guild because the roster save failed.";
+                        return false;
+                    }
+
+                    if (active != null)
+                    {
+                        Guild guild = active.Guild;
+                        if (guild != null)
+                            guild.RemoveBotMember(active);
+                        active.Guild = null;
+                        active.GuildRank = null;
+                        active.GuildName = string.Empty;
+                    }
+                }
+
+                if (active?.ObjectState is GameObject.eObjectState.Active)
+                    ClientService.CreateObjectForPlayers(active);
+
+                message = $"{record.Name} left {formerGuildName}. Their roster membership was saved.";
+                return true;
+            }
+        }
+
         public static bool TryBench(GamePlayer owner, string nameOrId, out string message)
         {
             if (owner == null)

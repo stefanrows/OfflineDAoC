@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -68,6 +68,15 @@ namespace DOL.GS.Commands
                     break;
                 case "bench":
                     UpdateCompanion(client, player, args, invite: false);
+                    break;
+                case "guild":
+                    if (args.Length >= 4 && args[2].Equals("leave", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PlayerCompanionRoster.TryLeaveGuild(player, string.Join(' ', args.Skip(3)), out string guildMessage);
+                        DisplayMessage(client, guildMessage);
+                    }
+                    else
+                        DisplayMessage(client, "Use /companions guild leave <name> to remove your companion from their guild.");
                     break;
                 case "squad":
                     SquadCommand(client, player, args);
@@ -579,7 +588,7 @@ namespace DOL.GS.Commands
         private void ShowUsage(GameClient client)
         {
             DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }

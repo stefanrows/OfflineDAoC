@@ -6,6 +6,17 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+64. **Player and companion overhead names sometimes do not appear.** Reported
+    while source was 0.109.0; installed version and client build are
+    unconfirmed. Seen after login, zoning, or when entities reappear or
+    visibility refreshes. Expected: nearby player and companion name labels
+    remain visible whenever their models are visible. Actual: entity models
+    appear but some overhead labels are intermittently absent. Exact scope and
+    workaround are unknown. Source audit on 2026-09-27 found player names in
+    `SendPlayerCreate` and companion names in `SendNPCCreate`; no shared
+    hide condition was found in those packet paths. A client/packet capture is
+    needed to locate whether a create was omitted or ignored.
+
 60. **`Ability 'ConfusionImmunity' unknown` is logged 939 times per run.**
     Seen in the installed 0.115.0 log (2026-09-27/28, 3 h 26 min) from
     `DOL.GS.SkillBase`, together with 240 `LineXSpell Spell Adding Error`

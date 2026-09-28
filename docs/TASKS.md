@@ -103,6 +103,13 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+49. **Remove an owned companion from a former guild.** Source 0.126.0 adds
+    `/companions guild leave <name>` for active or benched saved companions,
+    including when the owner is no longer in that guild. It saves the
+    roster membership and clears the active bot guild. Installation and
+    real-client check pending: remove Eydis from Odins, confirm the
+    guild display updates, and confirm she remains guildless after relog.
+
 46. **Pet pull as a group mode, not a pull command.** Aaron, 2026-09-28:
     `/petpull` (toggle) or `/petpull on|off` switches pet pull mode for the
     owner's group and squads; it ends at logout. Every pull then starts with
