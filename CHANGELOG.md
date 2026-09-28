@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.118.0] - 2026-09-28
+
+### Fixed
+
+- `/tc` is registered once again: the corpse-transfer command dropped its
+  `&tc` alias, so `/tc` reliably teleports to the capital's Realm Exchange and
+  the server start no longer logs the `LoadCommands` duplicate-key error. A
+  test now fails if two command handlers ever claim the same key.
+
 ## [0.117.0] - 2026-09-28
 
 ### Added
