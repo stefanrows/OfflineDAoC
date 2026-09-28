@@ -12,6 +12,21 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.125.0] - 2026-09-28
+
+### Changed
+
+- `/petpull` is now a group mode instead of a one-off command: `/petpull`
+  toggles it (`/petpull on|off` sets it) for your companions and squads.
+  While it is on, you pull the normal way with your pet, and every pull runs
+  as a pet pull: companions hold their damage until the passive pet is back
+  beside you, heal and buff the pet first, tanks taunt an add off a swarmed
+  or hurt pet, and only adds on the group or heading for it are engaged. A
+  release ends that one pull, not the mode; the next pet attack is the next
+  pull. Fights you open yourself, orders onto monsters already in combat and
+  orders onto enemy players never count as pet pulls. The Mentalist HoT, the
+  Animist camp front and the pet buff priority stay as before.
+
 ## [0.124.0] - 2026-09-28
 
 ### Changed
