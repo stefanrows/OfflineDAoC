@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.124.0] - 2026-09-28
+
+### Changed
+
+- Autonomous PvE parties that are within reach of their camp when the
+  30-minute travel window closes, and fought or gained experience in the last
+  ten minutes, start their full task instead of disbanding (dungeon parties
+  fighting their way in no longer get broken up). A party merely idling near
+  the camp still ends.
+- Pickup parties prefer outdoor camps within about ten minutes of their
+  meeting point.
+- Members of a group that is still meeting up or travelling carry a real
+  future task expiry instead of an empty one, so RvR tours no longer end at
+  once after a restart or raid transfer. Party ends and members' camp
+  arrivals are logged truthfully.
+
 ## [0.123.1] - 2026-09-28
 
 ### Fixed
