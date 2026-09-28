@@ -1775,12 +1775,13 @@ namespace DOL.GS
             // guard patrol. Nearby PvP is handled first by the threat scan.
             // Without a guard to fight, melee classes hit the outermost standing
             // gate (the ram's target too), then the inner gate once the outer
-            // falls. The lord is never a target while any gate stands.
+            // falls; casters without a free ram seat nuke it. The lord is never
+            // a target while any gate stands.
             GuardLord lord = guards.OfType<GuardLord>().FirstOrDefault();
             GameKeepDoor gate = closedDoor && guards.Length == 0 ? OutermostClosedEnemyDoor(nearestClosedDoor) : null;
             switch (AutonomousSiegeDoctrine.PickKeepTarget(closedDoor, lord != null, guards.Length - (lord != null ? 1 : 0),
                         gate == null ? double.PositiveInfinity : bot.GetDistanceTo(gate),
-                        AutonomousSiegeDoctrine.CanMeleeDoor(bot), BotSiegeRuntime.HoldingPosition(bot)))
+                        CanWorkGate(bot), BotSiegeRuntime.HoldingPosition(bot)))
             {
                 case AutonomousSiegeDoctrine.KeepTarget.Lord: return lord;
                 case AutonomousSiegeDoctrine.KeepTarget.Guard: return SelectDistributedRvrTarget(bot, guards.Cast<GameLiving>().ToArray());

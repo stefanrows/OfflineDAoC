@@ -128,15 +128,8 @@ Agent sessions on items 45–48: take the role and context from
     the 15-minute no-progress rule. Only a whole one-guild warband of eight
     opens a siege; smaller forces join only their own guild's siege, and only
     whole warbands contest a stranger's siege. Garrison strength, one siege
-    per server and the temporary ×10 ram (task 55) are unchanged and remain
-    Aaron's decisions.
-    Aaron decided on 2026-09-28 evening: (1) lower the Warden garrison to
-    about guards 52–55 / lord 60–65 (1.65 unclaimed keeps were level 1, not
-    level 5); (2) one siege per guild instead of one per server, and large
-    guilds may hold several keeps at once (raise `guilds_claim_limit`);
-    (3) keep the ×10 ram until the first capture is in the log; (4) relic
-    raids return later as their own mode. Build as the next package after
-    the bug 56 round 2 merge (same event-layer files).
+    per server and the temporary ×10 ram (task 55) were left to Aaron's
+    decisions (taken on 2026-09-28, see the siege balance below).
     Live re-measurement proposals 2 and 3 implemented in source
     (docs/NIGHT_REPORT.md, 15:46): RvR bots stay out of the shared frontier
     dungeons (Hall of the Corrupt, Summoner's Hall, Marfach Caverns, Dodens
@@ -157,6 +150,33 @@ Agent sessions on items 45–48: take the role and context from
     fighting, keep guards and lords excepted; warbands regroup at the hub
     before porting again (bug 66). New log lines `RVR_MOB_BYPASS` and
     `RVR_MOB_DISENGAGE`. Real-client/live-log check pending.
+    Siege balance, owner decisions of 2026-09-28 evening (advisor causes d, f,
+    g; slice 3), implemented in source; real-client and live-log check
+    pending (details in docs/FRONTIER_CAMPAIGN.md, "Siege balance"):
+    1a) keeps the Frontier Wardens hold are set to keep level 1 at every
+    server start, like a 1.65 unclaimed keep: outer door 10,000 HP (was
+    50,000), guards 52 (was 59), lord 63 (was 70) with the unchanged 1.6
+    multiplier, so no Warden-only multiplier was needed; guild-claimed and
+    relic keeps are untouched; `starting_keep_level` is 1 and a claim still
+    raises a keep to level 5. 2b) at most one automatic siege per attacking
+    guild instead of one per server, with a server-wide safety cap of six;
+    `guilds_claim_limit` is 3 (was 1 in the save). Both property rows move on
+    the next server start by a startup database update, only while they
+    still hold the old shipped value. 3) The ×10 ram (task 55) is unchanged.
+    4a) Relic raids stay off; later mode recorded as item 56. 5) As since
+    1.46, single-target direct-damage spells and bolts hit keep doors at half
+    effect after the door's level toughness; DoTs, debuffs, crowd control and
+    area spells still do not; a caster with no free seat on its group's ram
+    nukes the gate. Live check: `FRONTIER_WARDEN_KEEP_LEVEL` and
+    `FRONTIER_BALANCE_PROPERTY` lines at start, `Keep.Level` 1 for the Warden
+    keeps, two or more automatic sieges of different guilds at once, a first
+    `LordDefeated` and guild claim.
+
+56. **Relic-raid mode for world bots (idea, not authorized).** Aaron,
+    2026-09-28 (decision 4a on item 48): relic raids stay off for now. A later
+    mode would let a guild that holds a keep raid a relic keep and escort the
+    relic home as in 1.65. Do not build it before Aaron asks; the relic
+    carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
 ## Implemented in source; installation verification pending
 

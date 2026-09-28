@@ -91,8 +91,12 @@ public class UT_PhysicalSiegeRally
         Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(forces[0], [], now + 1, 1)?.TargetId, Is.EqualTo(target.Id));
         var independent = target with { Id = target.Id + "-other", OwningRealm = eRealm.Albion };
         var otherRealm = forces[0] with { GroupId = "independent", Realm = eRealm.Midgard };
-        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(otherRealm, [independent], now + 2, 0), Is.Null);
+        // Owner decision 2b (2026-09-28): sieges are limited per attacking side,
+        // not per server, so the other side opens its own siege; the committed
+        // force keeps its event either way.
+        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(otherRealm, [independent], now + 2, 0)?.TargetId, Is.EqualTo(independent.Id));
         Assert.That(AutonomousRvrEventLayer.IsForceCommitted(forces[0].GroupId, now + 2), Is.True);
+        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(forces[0], [], now + 3, 1)?.TargetId, Is.EqualTo(target.Id));
     }
 
     [Test]

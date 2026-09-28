@@ -7,10 +7,10 @@ namespace DOL.GS
 {
     /// <summary>
     /// How an autonomous warband works a keep gate, as a decent 2003 group did:
-    /// one or two operators bring rams from the hub, the casters (whose spells
-    /// cannot hurt a door) ride the ram to speed it up, melee classes hit the
-    /// same gate once the guards in reach are dead, healers stay free, and the
-    /// lord is only attacked after every gate is down. Pure rules, so they can
+    /// one or two operators bring rams from the hub, the casters ride the ram to
+    /// speed it up (or nuke the gate when no seat is free), melee classes hit
+    /// the same gate once the guards in reach are dead, healers stay free, and
+    /// the lord is only attacked after every gate is down. Pure rules, so they can
     /// be tested without a running world.
     /// </summary>
     public static class AutonomousSiegeDoctrine
@@ -32,8 +32,9 @@ namespace DOL.GS
 
         /// <summary>
         /// Target order at a keep: the lord once every gate is down, otherwise any
-        /// reachable guard, otherwise (melee classes only, not while operating an
-        /// engine) the outermost standing gate within <see cref="DoorMeleeReach"/>.
+        /// reachable guard, otherwise (classes that work the gate, see
+        /// <see cref="CanDamageDoor"/>, not while operating an engine) the
+        /// outermost standing gate within <see cref="DoorMeleeReach"/>.
         /// </summary>
         public static KeepTarget PickKeepTarget(bool anyGateClosed, bool lordTargetable, int otherGuards,
             double gateDistance, bool canMeleeDoor, bool operatingEngine)
@@ -44,8 +45,9 @@ namespace DOL.GS
                 ? KeepTarget.Door : KeepTarget.None;
         }
 
-        /// <summary>Spells have no effect on keep doors (SpellHandler), so pure
-        /// casters do not melee them; the main healers and the Bard stay free to heal.</summary>
+        /// <summary>Pure casters do not melee a door (they nuke it, see
+        /// <see cref="CanNukeDoor(eCharacterClass)"/>); the main healers and the
+        /// Bard stay free to heal.</summary>
         public static bool CanMeleeDoor(eCharacterClass characterClass) =>
             characterClass != eCharacterClass.Unknown && !IsPureCaster(characterClass) && characterClass is not
                 (eCharacterClass.Cleric or eCharacterClass.Healer or eCharacterClass.Shaman or
@@ -54,9 +56,19 @@ namespace DOL.GS
         public static bool CanMeleeDoor(GameBot bot) =>
             bot?.CharacterClass != null && CanMeleeDoor((eCharacterClass)bot.CharacterClass.ID);
 
-        /// <summary>Casters cannot damage the gate themselves; on the ram each
-        /// rider adds damage and shortens the reload.</summary>
+        /// <summary>Casters ride their group's ram first: on the ram each rider
+        /// adds damage and shortens the reload.</summary>
         public static bool RidesRam(eCharacterClass characterClass) => IsPureCaster(characterClass);
+
+        /// <summary>Since 1.46 direct-damage spells hurt a door at half effect
+        /// (Keeps.KeepDoorSpellPolicy). A pure caster nukes the gate when no seat
+        /// on its group's ram is free (owner decision 5, 2026-09-28).</summary>
+        public static bool CanNukeDoor(eCharacterClass characterClass) => IsPureCaster(characterClass);
+
+        /// <summary>Whether this class works the gate itself: melee classes always,
+        /// pure casters only while no seat on their group's ram is free.</summary>
+        public static bool CanDamageDoor(eCharacterClass characterClass, bool freeRamSeat) =>
+            CanMeleeDoor(characterClass) || CanNukeDoor(characterClass) && !freeRamSeat;
 
         public static bool RidesRam(GameBot bot) =>
             bot?.CharacterClass != null && RidesRam((eCharacterClass)bot.CharacterClass.ID);

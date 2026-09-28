@@ -68,6 +68,23 @@ namespace DOL.GS
             return TryRunSiegeJob(bot);
         }
 
+        /// <summary>Melee classes, and pure casters with no free seat on a ram of
+        /// their group near them, work the gate (owner decision 5, 2026-09-28).</summary>
+        private static bool CanWorkGate(GameBot bot)
+        {
+            if (bot?.CharacterClass == null) return false;
+            var characterClass = (eCharacterClass)bot.CharacterClass.ID;
+            if (AutonomousSiegeDoctrine.CanMeleeDoor(characterClass)) return true;
+            if (!AutonomousSiegeDoctrine.CanNukeDoor(characterClass)) return false;
+            bool freeSeat = bot.Group != null && bot.Group.GetMembersInTheGroup().OfType<GameBot>().Where(member => member != bot)
+                .SelectMany(AutonomousSiegeOwnership.All).OfType<GameSiegeRam>()
+                .Any(ram => ram.IsAlive && ram.CurrentRegion == bot.CurrentRegion &&
+                    bot.IsWithinRadius(ram, AutonomousSiegeDoctrine.RamBoardSearchRadius) &&
+                    ram.TargetObject is GameKeepDoor { IsAlive: true, State: eDoorState.Closed } &&
+                    ram.PassengerCount < ram.MAX_PASSENGERS);
+            return AutonomousSiegeDoctrine.CanDamageDoor(characterClass, freeSeat);
+        }
+
         private bool TryRideSiegeRam(GameBot bot, long now)
         {
             GameSiegeRam riding = bot.CompanionRam;

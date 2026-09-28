@@ -1923,7 +1923,10 @@ namespace DOL.GS.Spells
 
 		private bool IsTargetAffectedBySpellType(GameLiving target)
 		{
-			if (target is GameKeepDoor or GameKeepComponent && Spell.SpellType is not eSpellType.SiegeDirectDamage and not eSpellType.SiegeArrow && !IsSummoningSpell)
+			// Doors: siege spells, and since 1.46 single-target damage spells at reduced effect (KeepDoorSpellPolicy).
+			// Walls and other keep components stay siege-only.
+			if (!IsSummoningSpell && (target is GameKeepDoor && !KeepDoorSpellPolicy.AffectsKeepDoor(Spell.SpellType) ||
+				target is GameKeepComponent && Spell.SpellType is not eSpellType.SiegeDirectDamage and not eSpellType.SiegeArrow))
 			{
 				MessageToCaster($"Your spell has no effect on the {target.Name}.", eChatType.CT_SpellResisted);
 				return false;

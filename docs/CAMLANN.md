@@ -162,6 +162,16 @@ These are settled. Do not reopen them without the owner.
    teleporter, and the existing Albion, Midgard, and Hibernian leveling-town
    destinations. Leveling towns remain dangerous PvP territory; capitals and
    portal keeps remain safe hubs. Battlegrounds stay closed.
+10. **Siege balance (2026-09-28, docs/TASKS.md item 48):** (1a) keeps the
+    Frontier Wardens hold stand like a 1.65 unclaimed keep at keep level 1
+    (door 10,000 HP, guards 52, lord 63), set at every server start;
+    `starting_keep_level` is 1; claimed keeps keep the existing claim level 5.
+    (2b) At most one automatic siege per attacking guild, a server-wide safety
+    cap of 6; `guilds_claim_limit` 3. (3) The temporary ×10 ram stays. (4a)
+    Relic raids stay off; a relic-raid mode is a later idea. (5) As since
+    1.46, single-target direct-damage spells and bolts hit keep doors at half
+    effect; DoTs, debuffs and crowd control still do not. Details:
+    docs/FRONTIER_CAMPAIGN.md, "Siege balance".
 
 ## Contract
 
@@ -646,7 +656,8 @@ relic bonuses apply to that guild only; stacking is uncapped (decision 3).
    claimer (bot-aware rank); count grouped `GameBot`s toward `claim_num` (8,
    towers 4). The player's companions count.
 5. `guilds_claim_limit`: raise it above 1 so a guild can hold a keep plus
-   relic keeps. The Tier 5 default is 3.
+   relic keeps. The Tier 5 default is 3. Existing saves still carried 1 until
+   the startup property update of owner decision 10 (2026-09-28).
 6. `PvPServerRules.ResetKeep` must accept a `GameBot` killer and a bot-owned
    pet killer, not only `GamePlayer`. Its "leader realm" display realm is
    cosmetic.
