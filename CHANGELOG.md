@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.121.0] - 2026-09-28
+
+### Changed
+
+- Solo world bots regain their nerve: after a PvE death the target
+  difficulty still drops one step, but it now recovers one step after about
+  ten kills without dying, on a level-up and on a new task, and a solo bot
+  then moves to a harder camp within local reach ("Moving on to tougher
+  prey") when one exists. Before, the ceiling only reset with a server
+  restart, so most sub-50 bots were farming green mobs for a quarter of the
+  experience.
+- A death counts as PvP for that ceiling when an enemy player, companion or
+  world bot damaged the bot in the last 30 seconds, even if a mob landed the
+  killing blow.
+- Solo world bots up to level 35 pick levelling camps within about ten
+  minutes of travel (then twenty, then anywhere), and solo camp choice
+  weights blue and yellow camps twice as high as green ones.
+
+### Added
+
+- One structured `AUTONOMOUS_BOT_DEATH` log line per world-bot death
+  (killer, type, class, area effect, whether the bot was the killer's target,
+  PvP/PvE classification and the resulting con ceiling), plus
+  `AUTONOMOUS_CON_RECOVERY` lines, so levelling and collateral-PvP deaths can
+  be measured live.
+
 ## [0.120.0] - 2026-09-28
 
 ### Changed
