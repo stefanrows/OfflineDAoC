@@ -1182,7 +1182,10 @@ namespace DOL.AI.Brain
             if (!ambientWander)
                 _ambientWanderMovement = false;
 
-            GamePlayer leader = AssistedPlayer;
+            // A squad member's follow anchor (task 42/43) is its squad leader
+            // companion rather than the owner AssistedPlayer resolves to; every
+            // other companion's anchor is still the owner, same as before.
+            GameLiving leader = BotBody.FollowAnchor;
             if (leader == null || leader.CurrentRegion != Body.CurrentRegion)
             {
                 _ambientWanderMovement = false;
@@ -1195,9 +1198,18 @@ namespace DOL.AI.Brain
             if (companionTravel) Body.StopFollowing();
             if (CompanionRaid.IsMember(BotBody))
             {
+                // Raid membership is a separate, owner-only formation (task 44 is
+                // full squad combat, not this); a raid member's anchor is always
+                // the human owner, never a squad leader.
+                if (leader is not GamePlayer raidLeader)
+                {
+                    _ambientWanderMovement = false;
+                    return;
+                }
+
                 // Stable, distinct slots for all 39 companions. Surface projection
                 // and PathTo keep nearby slots from becoming walks through walls.
-                var raidPoint = TemporaryGroupStableTravel.FormationPoint(leader, Math.Max(0, Body.GroupIndex - 1));
+                var raidPoint = TemporaryGroupStableTravel.FormationPoint(raidLeader, Math.Max(0, Body.GroupIndex - 1));
                 raidPoint = CompanionFollowPolicy.FormationDestination(BotBody, raidPoint);
                 _ambientWanderMovement = false;
                 var point = new Point3D((int)raidPoint.X, (int)raidPoint.Y, (int)raidPoint.Z);
@@ -1223,8 +1235,12 @@ namespace DOL.AI.Brain
                 CompanionFollowStyle style = CompanionFollowStyle.Choose(leaderMoving,
                     _leaderMoveStartTick == 0 ? 0 : now - _leaderMoveStartTick, leaderSpeed,
                     Body.GetDistanceTo(leader), formation.Distance, Body.IsMoving);
-                // Sprint along while the leader sprints on a stick run.
-                if (CompanionSprint.ShouldSprint(style == CompanionFollowStyle.Stick, leader.IsSprinting))
+                // Sprint along while the leader sprints on a stick run. GamePlayer and
+                // GameBot each declare IsSprinting themselves, not through GameLiving.
+                bool leaderSprinting = leader is GamePlayer sprintingPlayer
+                    ? sprintingPlayer.IsSprinting
+                    : leader is GameBot sprintingBot && sprintingBot.IsSprinting;
+                if (CompanionSprint.ShouldSprint(style == CompanionFollowStyle.Stick, leaderSprinting))
                 {
                     _stickSprintTick = now;
                     BotBody.Sprint(true);

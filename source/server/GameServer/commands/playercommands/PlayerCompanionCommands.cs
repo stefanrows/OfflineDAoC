@@ -7,7 +7,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -68,6 +68,9 @@ namespace DOL.GS.Commands
                     break;
                 case "bench":
                     UpdateCompanion(client, player, args, invite: false);
+                    break;
+                case "squad":
+                    SquadCommand(client, player, args);
                     break;
                 case "reset":
                     ResetCompanions(client, player, args);
@@ -258,6 +261,60 @@ namespace DOL.GS.Commands
             else
                 PlayerCompanionRoster.TryBench(player, companionName, out message);
             DisplayMessage(client, message);
+        }
+
+        // /companions squad <1-5> add|remove|lead <name> | /companions squad <1-5> disband | /companions squad list
+        private void SquadCommand(GameClient client, GamePlayer player, string[] args)
+        {
+            if (args.Length >= 3 && args[2].Equals("list", StringComparison.OrdinalIgnoreCase))
+            {
+                DisplayMessage(client, PlayerCompanionRoster.FormatSquadList(player));
+                return;
+            }
+
+            if (args.Length < 4 || !int.TryParse(args[2], out int squadIndex) ||
+                !CompanionSquadFormation.IsValidSquadIndex(squadIndex))
+            {
+                DisplayMessage(client, $"Use /companions squad <1-{CompanionSquadFormation.MaxSquadCount}> add|remove|lead <name>, /companions squad <1-{CompanionSquadFormation.MaxSquadCount}> disband, or /companions squad list.");
+                return;
+            }
+
+            string squadAction = args[3].ToLowerInvariant();
+            switch (squadAction)
+            {
+                case "disband":
+                    PlayerCompanionRoster.TrySquadDisband(player, squadIndex, out string disbandMessage);
+                    DisplayMessage(client, disbandMessage);
+                    break;
+                case "add":
+                case "remove":
+                case "lead":
+                    if (args.Length < 5)
+                    {
+                        DisplayMessage(client, $"Use /companions squad {squadIndex} {squadAction} <name>.");
+                        break;
+                    }
+
+                    string companionName = string.Join(' ', args.Skip(4));
+                    string squadMessage;
+                    switch (squadAction)
+                    {
+                        case "add":
+                            PlayerCompanionRoster.TrySquadAdd(player, squadIndex, companionName, out squadMessage);
+                            break;
+                        case "remove":
+                            PlayerCompanionRoster.TrySquadRemove(player, squadIndex, companionName, out squadMessage);
+                            break;
+                        default:
+                            PlayerCompanionRoster.TrySquadLead(player, squadIndex, companionName, out squadMessage);
+                            break;
+                    }
+                    DisplayMessage(client, squadMessage);
+                    break;
+                default:
+                    DisplayMessage(client, $"Use /companions squad <1-{CompanionSquadFormation.MaxSquadCount}> add|remove|lead <name>, /companions squad <1-{CompanionSquadFormation.MaxSquadCount}> disband, or /companions squad list.");
+                    break;
+            }
         }
 
         private void ResetCompanions(GameClient client, GamePlayer player, string[] args)
@@ -522,7 +579,7 @@ namespace DOL.GS.Commands
         private void ShowUsage(GameClient client)
         {
             DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name>.");
+            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list.");
             DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
         }
     }

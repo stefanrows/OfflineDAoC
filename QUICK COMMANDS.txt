@@ -54,6 +54,14 @@ On the launcher, click + Lv.1 or + Lv.50 under a faction:
   Companions engage nearby threats while staying near you, letting you pull mobs
   back to the group. Useful for harder content.
 
+/companions squad 1 add X
+  X = a companion's name. Moves it into companion-led squad 1 (1-5), spawning it
+  first if benched. The first companion in an empty squad leads it; a squad leader
+  marches behind you at its own standoff distance, and squad members follow their
+  own leader. /companions squad 1 remove X, /companions squad 1 lead X, and
+  /companions squad 1 disband manage membership, leadership, and bulk removal.
+  /companions squad list shows every squad.
+
 These controls apply to your companions, not autonomous gamebots.
 /spawn 40 and /spawn 80 are not raid-size commands; use /raid 40 or /raid 80.
 See docs/PLAY.md for setup and docs/LLM-QUICKSTART.md for modifying your own version.

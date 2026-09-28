@@ -110,6 +110,17 @@ namespace DOL.GS
         [DataElement(AllowDbNull = true, Varchar = 8)]
         public string RangedAoePreference { get; set; } = CompanionRangedAoePolicy.DefaultChoice;
 
+        // Additive companion-squad assignment (task 42). 0 means the companion
+        // belongs to the owner's own group, same as every pre-existing record.
+        // 1-5 is a companion-led squad index; IsSquadLeader marks that squad's
+        // leader. Both persist independently of IsActive/benching so a benched
+        // squad member returns to the same squad at the owner's next login.
+        [DataElement(AllowDbNull = false)]
+        public int SquadIndex { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public bool IsSquadLeader { get; set; }
+
         [DataElement(AllowDbNull = false)]
         public int AppearanceSize { get; set; }
 

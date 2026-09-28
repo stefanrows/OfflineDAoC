@@ -58,6 +58,11 @@ keep up. Each server start selects 1× again.
 | `/companions role <name> <role>` | Set a class-legal tank, healer, buffer, attacker, or `cc` (crowd control) job. A crowd control companion mezzes extra monsters that are not the group's target; other companions leave mezzed monsters alone. |
 | `/companions stance <name> aggressive|defensive|passive` | Set an individual's saved engagement preference. Group commands override it until `/companions group default`. |
 | `/companions reset [name]` | Recreate all active persistent companions beside you, or bring one roster member back by name, even if dead or benched. Saved progress and gear are retained. |
+| `/companions squad <1-5> add <name>` | Move a companion into that companion-led squad (spawning it first if it is benched). The first companion in an empty squad leads it; its leader marches behind you at its own standoff distance (200-400 units, farther per squad number), and its members follow their own leader. |
+| `/companions squad <1-5> remove <name>` | Take a companion out of that squad and bench it. |
+| `/companions squad <1-5> lead <name>` | Make an existing squad member its new leader. |
+| `/companions squad <1-5> disband` | Bench every member of that squad. |
+| `/companions squad list` | Show every squad, its leader, and its members. |
 | `/spawn` | Open the menu of valid companion bots to summon. |
 | `/spawn X` | Summon a companion by class name from your realm instead of using the menu; useful for macros. |
 | `/spawn Realm X` | Summon a named class from another realm, such as `/spawn Midgard Healer`. |

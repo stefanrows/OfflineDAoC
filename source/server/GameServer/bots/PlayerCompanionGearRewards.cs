@@ -35,15 +35,17 @@ namespace DOL.GS
 
         internal static int AwardPvePartyGear(GamePlayer owner, GameNPC victim)
         {
-            if (owner?.ObjectState != GameObject.eObjectState.Active || !owner.GainXP || owner.Group == null ||
+            // An owner may command squads (task 42) without being grouped
+            // himself, so this no longer requires owner.Group.
+            if (owner?.ObjectState != GameObject.eObjectState.Active || !owner.GainXP ||
                 victim == null || !owner.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE))
                 return 0;
 
             // One kill, one drop: a single eligible companion of this owner
             // rolls for the item (owner decision 2026-09-27; also keeps the
             // kill from queuing one database write per companion).
-            GameBot[] eligible = owner.Group.GetMembersInTheGroup().OfType<GameBot>()
-                .Where(companion => companion.Owner == owner && IsEligible(companion, victim))
+            GameBot[] eligible = PlayerCompanionRoster.GetActiveCompanions(owner)
+                .Where(companion => IsEligible(companion, victim))
                 .ToArray();
             if (eligible.Length == 0)
                 return 0;
@@ -101,14 +103,16 @@ namespace DOL.GS
             int rewards = 0;
             foreach (GamePlayer owner in owners)
             {
-                if (owner?.ObjectState != GameObject.eObjectState.Active || owner.Group == null ||
+                // An owner may command squads (task 42) without being grouped
+                // himself, so this no longer requires owner.Group.
+                if (owner?.ObjectState != GameObject.eObjectState.Active ||
                     !owner.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE) ||
                     owner.IsObjectGreyCon(victim) || PvpCombatant.AreAllied(owner, victim))
                     continue;
 
-                foreach (GameBot companion in owner.Group.GetMembersInTheGroup().OfType<GameBot>())
+                foreach (GameBot companion in PlayerCompanionRoster.GetActiveCompanions(owner))
                 {
-                    if (companion.Owner == owner && TryRewardPvp(companion, victim, cycle))
+                    if (TryRewardPvp(companion, victim, cycle))
                         rewards++;
                 }
             }
@@ -147,14 +151,15 @@ namespace DOL.GS
             return Grant(companion, victim, "PvP");
         }
 
+        // Owner resolution, not "same group as the owner": a companion in one of
+        // the owner's squads (task 42) is never in the owner's own Group.
         private static bool IsEligible(GameBot companion, GameLiving victim)
         {
             GamePlayer owner = companion?.Owner;
             return companion?.IsPersistentPlayerCompanion == true &&
                    companion.ObjectState == GameObject.eObjectState.Active &&
                    owner?.ObjectState == GameObject.eObjectState.Active && owner.GainXP &&
-                   owner.Group != null && companion.Group == owner.Group &&
-                   owner.Group.IsInTheGroup(companion) && victim != null &&
+                   companion.Group != null && companion.Group.IsInTheGroup(companion) && victim != null &&
                    companion.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
                    owner.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
                    companion.Realm != victim.Realm &&
@@ -167,8 +172,7 @@ namespace DOL.GS
             return companion?.IsPersistentPlayerCompanion == true &&
                    companion.ObjectState == GameObject.eObjectState.Active &&
                    owner?.ObjectState == GameObject.eObjectState.Active &&
-                   owner.Group != null && companion.Group == owner.Group &&
-                   owner.Group.IsInTheGroup(companion) && victim != null &&
+                   companion.Group != null && companion.Group.IsInTheGroup(companion) && victim != null &&
                    victim.ObjectState == GameObject.eObjectState.Active &&
                    companion.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
                    owner.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&

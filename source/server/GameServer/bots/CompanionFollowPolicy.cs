@@ -13,7 +13,7 @@ namespace DOL.GS
 
         public sealed class State
         {
-            public GamePlayer Leader;
+            public GameLiving Leader;
             public Vector3 LastLeaderPosition, FormationPoint, LeaderVelocity;
             public bool Observed, BuffsBlocked;
             public long BuffsAfter, FormationUntil, LastObservation;
@@ -31,16 +31,25 @@ namespace DOL.GS
             }
         }
 
+        // A companion's own group and its follow anchor's group are the same
+        // instance for ordinary companions and for squad leaders following the
+        // owner directly. A squad member's anchor is its squad leader, who
+        // shares the same squad Group, so the same "grouped together" check
+        // holds there too; only the "anchor == owner" case needs ownership
+        // instead of group equality, since a squad leader's own Group is the
+        // squad, never the owner's group (task 42/43).
         public static bool Applies(GameBot bot) => bot is { IsAutonomousWorldBot: false, IsPlayerLedGroup: true } &&
-            bot.PlayerGroupLeader is { IsAlive: true, ObjectState: GameObject.eObjectState.Active } leader &&
-            bot.Group != null && bot.Group == leader.Group && bot.CurrentRegion == leader.CurrentRegion;
+            bot.FollowAnchor is { IsAlive: true, ObjectState: GameObject.eObjectState.Active } leader &&
+            bot.Group != null && bot.Group.IsInTheGroup(bot) &&
+            (leader is GamePlayer owner ? bot.Owner == owner : bot.Group == leader.Group) &&
+            bot.CurrentRegion == leader.CurrentRegion;
 
         private static State For(GameBot bot)
         {
             State state = States.GetOrCreateValue(bot);
-            if (state.Leader != bot.PlayerGroupLeader)
+            if (state.Leader != bot.FollowAnchor)
             {
-                state.Leader = bot.PlayerGroupLeader;
+                state.Leader = bot.FollowAnchor;
                 state.Observed = false;
                 state.LeaderVelocity = Vector3.Zero;
                 state.BuffsAfter = state.FormationUntil = 0;
@@ -52,7 +61,7 @@ namespace DOL.GS
         public static bool WaitingForLeaderToStop(GameBot bot)
         {
             if (!Applies(bot)) return false;
-            var leader = bot.PlayerGroupLeader;
+            var leader = bot.FollowAnchor;
             return For(bot).Observe(new(leader.X, leader.Y, leader.Z), leader.IsMoving, GameLoop.GameLoopTime);
         }
 
@@ -128,7 +137,7 @@ namespace DOL.GS
         public static Vector3 FormationDestination(GameBot bot, Vector3 point)
         {
             if (!Applies(bot)) return point;
-            var leader = bot.PlayerGroupLeader;
+            var leader = bot.FollowAnchor;
             if (leader.IsMoving) point = Predict(point, For(bot).LeaderVelocity, leader.MaxSpeed);
             Vector3 origin = new(leader.X, leader.Y, leader.Z);
             if (leader.CurrentZone == null) return point;
@@ -146,22 +155,29 @@ namespace DOL.GS
             return (int)Math.Clamp(Math.Round(Math.Max(normal, leaderSpeed) * (1 + catchup)), 0, short.MaxValue);
         }
 
+        // GamePlayer and GameBot each declare IsOnHorse themselves rather than through a
+        // shared GameLiving member, so the follow anchor (owner or squad leader) needs a
+        // small type check here.
+        private static bool IsOnHorse(GameLiving living) =>
+            living is GamePlayer player ? player.IsOnHorse : living is GameBot bot && bot.IsOnHorse;
+
         public static short SpeedLimit(GameBot bot, short normal)
         {
             bool regrouping = CompanionEngagementMode.ShouldRegroup(bot);
+            GameLiving anchor = bot.FollowAnchor;
             if (!Applies(bot) || !States.TryGetValue(bot, out State state) ||
                 GameLoop.GameLoopTime >= state.FormationUntil || normal <= 0 || !bot.IsAlive ||
                 bot.IsOnStableMasterRoute || bot.IsRecoveryResting || !regrouping && bot.InCombat || bot.IsAttacking ||
                 bot.IsCrowdControlled || bot.IsDiseased || bot.HealthPercent < 33 ||
-                bot.Brain is BotBrain { HasAggro: true } || !regrouping && bot.PlayerGroupLeader.InCombat ||
-                !regrouping && bot.PlayerGroupLeader.IsAttacking || bot.PlayerGroupLeader.IsOnHorse ||
-                bot.IsStealthed || bot.PlayerGroupLeader.IsStealthed ||
-                GameRelic.IsPlayerCarryingRelic(bot) || GameRelic.IsPlayerCarryingRelic(bot.PlayerGroupLeader) ||
+                bot.Brain is BotBrain { HasAggro: true } || !regrouping && anchor.InCombat ||
+                !regrouping && anchor.IsAttacking || IsOnHorse(anchor) ||
+                bot.IsStealthed || anchor.IsStealthed ||
+                GameRelic.IsPlayerCarryingRelic(bot) || GameRelic.IsPlayerCarryingRelic(anchor) ||
                 bot.effectListComponent?.ContainsEffectForEffectType(eEffect.MovementSpeedDebuff) == true ||
                 bot.BuffBonusMultCategory1.Get((int)eProperty.MaxSpeed) < 1 ||
                 (bot.IsCasting || bot.castingComponent?.HasPendingSkillRequests == true) && !BotSongTwistPolicy.HasMobileSongCast(bot))
                 return normal;
-            return (short)CalculateSpeed(normal, bot.PlayerGroupLeader.MaxSpeed,
+            return (short)CalculateSpeed(normal, anchor.MaxSpeed,
                 Vector3.Distance(new(bot.X, bot.Y, bot.Z), state.FormationPoint));
         }
     }

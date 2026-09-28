@@ -37,6 +37,13 @@ namespace DOL.GS
         GamePlayer battlegroupTreasurer = null;
         int battlegroupLootTypeThreshold = 0;
 
+        // Additive companion tracking (task 42): each battlegroup owner's live squad
+        // companions, kept beside (not inside) m_battlegroupMembers so every existing
+        // GamePlayer-keyed loop above stays exactly as it was. A companion never
+        // becomes a battlegroup "member" of its own; it rides along with its owner.
+        protected readonly Dictionary<GamePlayer, List<GameBot>> _battlegroupCompanionsByOwner = new();
+        protected readonly Lock _battlegroupCompanionsLock = new();
+
 		/// <summary>
 		/// constructor of battlegroup
 		/// </summary>
@@ -107,6 +114,8 @@ namespace DOL.GS
 				m_battlegroupMembers.Add(player,leader);
 
                 player.isInBG = true; //Xarik: Player is in BG
+                // Task 42: an owner's live squad companions join his battlegroup with him.
+                BattleGroupCompanionSync.Resync(player);
 			}
 			return true;
 		}
@@ -358,6 +367,8 @@ namespace DOL.GS
 				var leader = IsBGLeader(player);
 				m_battlegroupMembers.Remove(player);
 				player.TempProperties.RemoveProperty(BATTLEGROUP_PROPERTY);
+				// Task 42: his squad companions leave the battlegroup with him.
+				RemoveOwnerCompanions(player);
 				player.isInBG = false; //Xarik: Player is no more in the BG
                 player.Out.SendMessage("You leave the battle group.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				foreach(GamePlayer member in Members.Keys)
@@ -390,5 +401,63 @@ namespace DOL.GS
 			}
 			return true;
 		}
+
+        /// <summary>Replaces one owner's tracked companions with his current live squad
+        /// roster (task 42), or clears them if he is not (or no longer) a member. Call
+        /// after any battlegroup join/leave and after any squad membership change.</summary>
+        public void SyncOwnerCompanions(GamePlayer owner, IEnumerable<GameBot> liveSquadCompanions)
+        {
+            if (owner == null)
+                return;
+
+            lock (_battlegroupCompanionsLock)
+            {
+                if (!IsInTheBattleGroup(owner))
+                {
+                    _battlegroupCompanionsByOwner.Remove(owner);
+                    return;
+                }
+
+                _battlegroupCompanionsByOwner[owner] = liveSquadCompanions?.Where(bot => bot != null).ToList()
+                    ?? new List<GameBot>();
+            }
+        }
+
+        public void RemoveOwnerCompanions(GamePlayer owner)
+        {
+            if (owner == null)
+                return;
+
+            lock (_battlegroupCompanionsLock)
+                _battlegroupCompanionsByOwner.Remove(owner);
+        }
+
+        /// <summary>Every battlegroup member's tracked companions, owner by owner. Each
+        /// owner keeps control of only his own (task 42); this is read-only reporting
+        /// for listings such as /bg who.</summary>
+        public Dictionary<GamePlayer, List<GameBot>> CompanionsByOwner
+        {
+            get
+            {
+                lock (_battlegroupCompanionsLock)
+                    return _battlegroupCompanionsByOwner.ToDictionary(pair => pair.Key, pair => new List<GameBot>(pair.Value));
+            }
+        }
 	}
+
+    /// <summary>Keeps a battlegroup's tracked companions in step with an owner's live
+    /// companion squads (task 42). A no-op when the owner is not in a battlegroup.</summary>
+    public static class BattleGroupCompanionSync
+    {
+        public static void Resync(GamePlayer owner)
+        {
+            if (owner?.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY) is BattleGroup battleGroup)
+                battleGroup.SyncOwnerCompanions(owner, CollectOwnerSquadCompanions(owner));
+        }
+
+        internal static List<GameBot> CollectOwnerSquadCompanions(GamePlayer owner) =>
+            PlayerCompanionRoster.GetActiveCompanions(owner)
+                .Where(bot => bot.PlayerCompanionRecord?.SquadIndex > 0)
+                .ToList();
+    }
 }
