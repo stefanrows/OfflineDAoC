@@ -1234,6 +1234,7 @@ namespace DOL.GS
             Endurance = Math.Max(0, MaxEndurance / 3);
             IsReturningAfterRelease = returnToParty;
             if (returnToParty) AutonomousRealmRaid.RejoinAfterRelease(this);
+            AutonomousFrontierTransport.NoteRelease(this); // regroup before re-porting (bug 66)
             _nextReturnRoleplayTick = GameLoop.GameLoopTime + Util.Random(45_000, 90_000);
             Brain?.FSM?.SetCurrentState(eFSMStateType.FOLLOW);
             Brain?.Start();

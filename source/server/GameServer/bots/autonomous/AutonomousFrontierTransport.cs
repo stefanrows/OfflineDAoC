@@ -60,13 +60,103 @@ public static class AutonomousFrontierTransport
 
     public static void EndMuster(string forceId, ushort region) => Musters.TryRemove($"{forceId}:{region}", out _);
 
+    // ---- Regroup after release (docs/BUGS.md 66) ---------------------------
+    // Live 0.125.0: 7,558 departures in 11 h, single warbands every 3-4 min,
+    // 70 % of their departures one member alone. A 2003 group that lost
+    // people in the field released to the border keep, rezzed, rebuffed and
+    // went back out together a few minutes later.
+
+    /// <summary>Nobody boards within this time of their own release (60-90 s).</summary>
+    public const int ReleaseHoldMilliseconds = 75_000;
+    /// <summary>A warband whose member released waits up to this long (from the
+    /// first waiting member's release) for everyone alive to gather.</summary>
+    public const int RegroupWindowMilliseconds = 180_000;
+    /// <summary>"Gathered": alive, in the porter's region and this close to it.</summary>
+    public const int RegroupRadius = 1_500;
+    /// <summary>At most one outbound departure per warband in this time.</summary>
+    public const int ForceDepartureIntervalMilliseconds = 300_000;
+    /// <summary>Members of the same departure split over transfer slices, or a
+    /// straggler of that muster, may still follow within this time.</summary>
+    public const int DepartureContinuationMilliseconds = 20_000;
+    public const string ReleaseTickKey = "RvrReleaseTick";
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> Departures = new(StringComparer.Ordinal);
+
+    public enum RegroupDecision { Board, ReleaseHold, Regroup, DepartureCap }
+
+    /// <summary>
+    /// Whether the members ready at the porter may leave now. Home passages
+    /// are never held. Every bot waits <see cref="ReleaseHoldMilliseconds"/>
+    /// after its own release. A warband with a released member at the porter
+    /// waits until all its members are alive and gathered, or until the first
+    /// of them has waited <see cref="RegroupWindowMilliseconds"/>. A warband
+    /// leaves at most once per <see cref="ForceDepartureIntervalMilliseconds"/>
+    /// (continuations of that departure excepted); a keep-defence call skips
+    /// only this cap. Solo bots are held only by their own release.
+    /// </summary>
+    public static RegroupDecision DecideRegroup(bool outbound, bool warband, long? earliestReadyRelease,
+        long? latestReadyRelease, bool partyGathered, long? lastForceDeparture, bool defenderPriority, long nowTick)
+    {
+        if (!outbound)
+            return RegroupDecision.Board;
+        if (latestReadyRelease is long latest && nowTick - latest < ReleaseHoldMilliseconds)
+            return RegroupDecision.ReleaseHold;
+        if (!warband)
+            return RegroupDecision.Board;
+        if (lastForceDeparture is long current && nowTick - current <= DepartureContinuationMilliseconds)
+            return RegroupDecision.Board; // the rest of a departure already under way
+        if (earliestReadyRelease is long earliest && nowTick - earliest < RegroupWindowMilliseconds && !partyGathered)
+            return RegroupDecision.Regroup;
+        if (!defenderPriority && lastForceDeparture is long last &&
+            nowTick - last > DepartureContinuationMilliseconds && nowTick - last < ForceDepartureIntervalMilliseconds)
+            return RegroupDecision.DepartureCap;
+        return RegroupDecision.Board;
+    }
+
+    /// <summary>Records a departure; a continuation keeps its original start.</summary>
+    public static void RecordDeparture(string forceId, long nowTick)
+    {
+        if (string.IsNullOrEmpty(forceId)) return;
+        Departures.AddOrUpdate(forceId, nowTick,
+            (_, previous) => nowTick - previous <= DepartureContinuationMilliseconds ? previous : nowTick);
+        if (Departures.Count > 1024)
+            foreach (var stale in Departures.Where(pair => nowTick - pair.Value > 2L * ForceDepartureIntervalMilliseconds).ToArray())
+                Departures.TryRemove(stale.Key, out _);
+    }
+
+    public static long? LastDeparture(string forceId) =>
+        !string.IsNullOrEmpty(forceId) && Departures.TryGetValue(forceId, out long tick) ? tick : null;
+
+    public static void ForgetDeparture(string forceId) => Departures.TryRemove(forceId ?? string.Empty, out _);
+
+    /// <summary>The release tick that still matters for boarding, or null.</summary>
+    public static long? RecentRelease(long? releaseTick, long nowTick) =>
+        releaseTick is long tick && tick > 0 && nowTick - tick < RegroupWindowMilliseconds ? tick : null;
+
+    /// <summary>Stamped when an autonomous RvR bot releases (any cause).</summary>
+    public static void NoteRelease(GameBot bot)
+    {
+        if (bot?.IsAutonomousWorldBot == true && !bot.IsTemporaryGroupHelper &&
+            AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
+            bot.TempProperties.SetProperty(ReleaseTickKey, Math.Max(1, GameLoop.GameLoopTime));
+    }
+
+    public static long? RecentRelease(GameBot bot, long nowTick)
+    {
+        long tick = bot?.TempProperties.GetProperty<long>(ReleaseTickKey) ?? 0;
+        return RecentRelease(tick > 0 ? tick : null, nowTick);
+    }
+
+    private static bool Gathered(GameBot[] party, OFTeleporter porter) =>
+        party.All(member => member.IsAlive && member.CurrentRegion == porter.CurrentRegion &&
+            member.IsWithinRadius(porter, RegroupRadius));
+
     /// <summary>
     /// One porter pass for one warband: the members that board now, or none
     /// while the force still waits (up to <see cref="MusterWaitMilliseconds"/>)
     /// for members on their way. Ends the muster when it boards.
     /// </summary>
     public static T[] SelectBoarders<T>(T[] party, Func<T, bool> ready, Func<T, bool> incoming,
-        string forceId, ushort region, long nowTick, out T[] readyMembers, out int incomingCount)
+        string forceId, ushort region, long nowTick, out T[] readyMembers, out int incomingCount, bool endMuster = true)
     {
         readyMembers = party.Where(ready).ToArray();
         var boarding = readyMembers;
@@ -74,7 +164,8 @@ public static class AutonomousFrontierTransport
         long started = incomingCount > 0 ? MusterStart(forceId, region, nowTick) : nowTick;
         if (DecideBoarding(readyMembers.Length, incomingCount, started, nowTick) == BoardingDecision.Wait)
             return [];
-        EndMuster(forceId, region);
+        if (endMuster)
+            EndMuster(forceId, region);
         return readyMembers;
     }
 
@@ -140,7 +231,10 @@ public static class AutonomousFrontierTransport
     public static bool PassageMatchesSiege(GameBot bot, Passage passage)
     {
         var plan=ActiveSiegePlan(bot);
-        return plan==null || plan.RegionId==passage?.Region;
+        // The home hop of a two-hop passage toward the siege is allowed.
+        return plan==null || plan.RegionId==passage?.Region ||
+            passage?.Medallion=="home_necklace" && passage.Region==HomeRegion(bot.Realm) &&
+            bot.CurrentRegionID!=plan.RegionId && bot.CurrentRegionID!=passage.Region;
     }
     public static bool HasCommittedSiegePassage(GameBot bot, Passage passage) =>
         ActiveSiegePlan(bot) is { } plan && plan.RegionId==passage?.Region;
@@ -162,6 +256,45 @@ public static class AutonomousFrontierTransport
         (eRealm.Hibernia, 200) => new(200,"home_necklace",new("Home Hib",200,334386,420071,5184)),
         _ => null,
     };
+
+    public static ushort HomeRegion(eRealm realm) => realm switch
+    {
+        eRealm.Albion => 1, eRealm.Midgard => 100, eRealm.Hibernia => 200, _ => 0,
+    };
+
+    /// <summary>
+    /// The passage to take from a porter toward <paramref name="targetRegion"/>.
+    /// Albion and Midgard portal keeps in a foreign frontier sell only the
+    /// home medallion; there the force ports home first and onward from its
+    /// own hub (two hops), as players did. Null when neither is on sale and
+    /// no ticket is already held.
+    /// </summary>
+    public static Passage ChoosePassage(eRealm realm, ushort currentRegion, ushort targetRegion,
+        Func<string, bool> sells, Func<string, bool> holds = null)
+    {
+        Passage direct = Destination(realm, targetRegion);
+        if (direct == null)
+            return null;
+        if (holds?.Invoke(direct.Medallion) == true || sells(direct.Medallion))
+            return direct;
+        ushort home = HomeRegion(realm);
+        if (home == 0 || currentRegion == home || targetRegion == home)
+            return null;
+        Passage homeward = Destination(realm, home);
+        return homeward != null && (holds?.Invoke(homeward.Medallion) == true || sells(homeward.Medallion)) ? homeward : null;
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> PorterStock = new(StringComparer.Ordinal);
+
+    /// <summary>Whether a merchant within 3,000 units of the porter sells the medallion (cached; merchants are static).</summary>
+    public static bool PorterSells(OFTeleporter porter, string medallion) =>
+        porter != null && PorterStock.GetOrAdd($"{porter.InternalID}:{porter.CurrentRegionID}:{porter.X}:{porter.Y}:{medallion}", _ =>
+            porter.GetNPCsInRadius(3000).OfType<GameMerchant>().Any(npc =>
+                npc.TradeItems?.GetAllItems().Values.OfType<DbItemTemplate>().Any(item => item.Id_nb == medallion) == true));
+
+    /// <summary>Set when a bot could not use a porter toward another frontier;
+    /// its crossing search may then fall back to the dungeon road.</summary>
+    public const string PorterUnavailableKey = "RvrPorterUnavailableUntil";
 
     public static DbInventoryItem Ticket(GameBot bot, Passage passage) => bot.Inventory.AllItems
         .FirstOrDefault(item => item.SlotPosition >= (int)eInventorySlot.FirstBackpack &&
@@ -239,13 +372,27 @@ public static class AutonomousFrontierTransport
                 member => IsIncoming(member.IsAlive, member.CurrentRegion == porter.CurrentRegion,
                     member.CurrentRegionID == request.Passage.Region,
                     member.CurrentRegion == porter.CurrentRegion ? member.GetDistanceTo(porter) : double.PositiveInfinity),
-                request.ForceId, request.Passage.Region, GameLoop.GameLoopTime, out var ready, out int incoming);
+                request.ForceId, request.Passage.Region, GameLoop.GameLoopTime, out var ready, out int incoming, endMuster: false);
             if (group.Length == 0)
             {
                 // Hold this warband's departure; later casts re-check it.
                 foreach (var waiting in ready) batch.Handled.Add(waiting);
                 continue;
             }
+            long nowTick = GameLoop.GameLoopTime;
+            long?[] releases = group.Select(member => RecentRelease(member, nowTick)).Where(tick => tick.HasValue).ToArray();
+            long? lastDeparture = LastDeparture(request.ForceId);
+            var regroup = DecideRegroup(request.Passage.Medallion != "home_necklace", party.Length > 1,
+                releases.Length > 0 ? releases.Min() : null, releases.Length > 0 ? releases.Max() : null,
+                Gathered(party, porter), lastDeparture, HasDefenderPriority(bot, request.Passage), nowTick);
+            if (regroup != RegroupDecision.Board)
+            {
+                // Rez, rebuff and regroup at the hub; later casts re-check it.
+                foreach (var waiting in group) batch.Handled.Add(waiting);
+                continue;
+            }
+            // Only a real departure ends the muster; a regroup hold keeps its clock.
+            EndMuster(request.ForceId, request.Passage.Region);
             int departed=0;
             for (int index = 0; index < group.Length; index++)
             {
@@ -267,13 +414,19 @@ public static class AutonomousFrontierTransport
                 departed++;
                 member.Inventory.RemoveItem(ticket);
                 member.TempProperties.RemoveProperty(RequestKey);
+                member.TempProperties.RemoveProperty(ReleaseTickKey);
                 member.ForcePathReplot();
                 AutonomousBotEconomy.MarkInventoryChanged(member);
                 AutonomousStuckWatchdog.MarkProgress(member,eAutonomousProgressKind.Movement);
                 AutonomousBotStatusPersistence.Queue(member,true);
             }
             var log=DOL.Logging.LoggerManager.Create(typeof(AutonomousFrontierTransport));
-            if(departed>0 && log.IsInfoEnabled) log.Info($"RVR_FRONTIER_DEPARTURE force={request.ForceId} count={departed} porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\" region={request.Passage.Region} party={party.Length} left_behind={incoming}");
+            if (departed > 0 && request.Passage.Medallion != "home_necklace")
+                RecordDeparture(request.ForceId, nowTick);
+            // since_release_s: seconds since the latest release among those
+            // leaving (-1 none); force_gap_s: since this force's previous
+            // departure (-1 first); both measure the regroup rule live.
+            if(departed>0 && log.IsInfoEnabled) log.Info($"RVR_FRONTIER_DEPARTURE force={request.ForceId} count={departed} porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\" region={request.Passage.Region} party={party.Length} left_behind={incoming} since_release_s={(releases.Length > 0 ? (nowTick - releases.Max().Value) / 1000 : -1)} force_gap_s={(lastDeparture is long gap ? (nowTick - gap) / 1000 : -1)}");
             if (SliceFull(processed, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds)) break;
         }
         }

@@ -26,6 +26,7 @@ public static class AutonomousRvrDoctrineRuntime
         public long RetreatUntil;
         public Vector3 RetreatPoint;
         public long NextRetreatCheck;
+        public long NextMobCheck;
     }
 
     private sealed class HabitState
@@ -35,6 +36,8 @@ public static class AutonomousRvrDoctrineRuntime
     }
 
     private static readonly ConditionalWeakTable<Group, GroupState> Groups = new();
+    /// <summary>Disengage state of RvR bots without a group.</summary>
+    private static readonly ConditionalWeakTable<GameBot, GroupState> Solos = new();
     private static readonly ConditionalWeakTable<GameBot, HabitState> Habits = new();
     private const int DoctrineRefreshMilliseconds = 60_000;
     private const int CallerRange = 2_000;
@@ -214,7 +217,10 @@ public static class AutonomousRvrDoctrineRuntime
     public static bool IsRetreating(GameBot bot, out Vector3 point)
     {
         point = default;
-        if (!Applies(bot) || bot.Group == null || !Groups.TryGetValue(bot.Group, out GroupState state))
+        if (!Applies(bot))
+            return false;
+        GroupState state;
+        if (bot.Group == null ? !Solos.TryGetValue(bot, out state) : !Groups.TryGetValue(bot.Group, out state))
             return false;
         lock (state)
         {
@@ -229,6 +235,8 @@ public static class AutonomousRvrDoctrineRuntime
     /// </summary>
     public static void EvaluateRetreat(GameBot leader)
     {
+        if (EvaluateMobDisengage(leader))
+            return;
         if (!Applies(leader) || leader.Group?.LivingLeader != leader || leader.CurrentZone == null ||
             !leader.InCombatInLast(10_000))
             return;
@@ -265,6 +273,72 @@ public static class AutonomousRvrDoctrineRuntime
             state.RetreatUntil = now + 25_000 + Random.Shared.Next(15_000);
         }
     }
+
+    /// <summary>How far a warband runs from a monster it will not fight.</summary>
+    public const int MobDisengageDistance = 2_800;
+    private const int MobDisengageCheckMilliseconds = 2_000;
+    private const int MobDisengageRadius = 1_800;
+
+    /// <summary>
+    /// A 2003 group attacked by a monster far above it (red or purple con, or
+    /// a named monster of level 55+ above its level) broke off and walked on
+    /// instead of fighting it. The leader (or a solo bot) decides; the group
+    /// uses the ordinary retreat run, away from the monster. Keep guards and
+    /// lords never trigger this, and a live PvP fight is left to the PvP
+    /// retreat rule.
+    /// </summary>
+    public static bool EvaluateMobDisengage(GameBot bot)
+    {
+        if (!Applies(bot) || !bot.IsAlive || bot.CurrentZone == null ||
+            bot.Group != null && bot.Group.LivingLeader != bot)
+            return false;
+        // The leader decides for the group when any member was hit recently.
+        if (!bot.InCombatInLast(5_000) &&
+            bot.Group?.GetMembersInTheGroup().Any(member => member.IsAlive && member.InCombatInLast(5_000)) != true)
+            return false;
+        GroupState state = bot.Group == null ? Solos.GetOrCreateValue(bot) : State(bot.Group);
+        long now = GameLoop.GameLoopTime;
+        lock (state)
+        {
+            if (now < state.NextMobCheck || now < state.RetreatUntil)
+                return false;
+            state.NextMobCheck = now + MobDisengageCheckMilliseconds;
+        }
+
+        HashSet<GameLiving> ours = bot.Group?.GetMembersInTheGroup().ToHashSet() ?? [bot];
+        GameNPC[] attackers = bot.GetNPCsInRadius(MobDisengageRadius)
+            .Where(npc => npc.TargetObject is GameLiving victim && ours.Contains(victim) &&
+                AutonomousRvrMobAvoidance.IsPveMonster(bot, npc) &&
+                AutonomousRvrMobAvoidance.ShouldDisengage(victim.Level, npc.EffectiveLevel, npc.Name))
+            .ToArray();
+        if (attackers.Length == 0)
+            return false;
+        bool pvpFight = bot.GetPlayersInRadius(MobDisengageRadius).Cast<GameLiving>()
+            .Concat(bot.GetNPCsInRadius(MobDisengageRadius).OfType<GameBot>())
+            .Any(enemy => enemy.IsAlive && enemy.InCombat && !ours.Contains(enemy) && PvpCombatant.IsPlayerShaped(enemy) &&
+                GameServer.ServerRules.IsAllowedToAttack(bot, enemy, true));
+        if (pvpFight)
+            return false;
+
+        Vector3 here = new(bot.X, bot.Y, bot.Z);
+        Vector3 threat = AutonomousRvrDoctrineGeometry.Centroid(attackers.Select(npc => new Vector3(npc.X, npc.Y, npc.Z)));
+        Vector3 away = AutonomousRvrDoctrineGeometry.AwayFrom(here, threat, MobDisengageDistance);
+        Vector3 point = PathfindingProvider.Instance.GetMoveAlongSurface(bot.CurrentZone, here, away,
+            PathfindingProvider.Instance.DefaultFilters) ?? away;
+        lock (state)
+        {
+            state.RetreatPoint = point;
+            state.RetreatUntil = now + 20_000 + Random.Shared.Next(10_000);
+        }
+        GameNPC strongest = attackers.OrderByDescending(npc => npc.EffectiveLevel).First();
+        if (Log.IsInfoEnabled)
+            Log.Info($"RVR_MOB_DISENGAGE bot=\"{bot.Name}\" id={bot.DatabaseID} level={bot.Level} group_size={ours.Count} " +
+                $"mob=\"{strongest.Name}\" mob_level={strongest.EffectiveLevel} attackers={attackers.Length} region={bot.CurrentRegionID} " +
+                $"zone=\"{bot.CurrentZone.Description}\" position={bot.X},{bot.Y},{bot.Z}");
+        return true;
+    }
+
+    private static readonly DOL.Logging.Logger Log = DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrDoctrineRuntime));
 
     /// <summary>
     /// A member of a retreating group breaks off and runs to the rally point.

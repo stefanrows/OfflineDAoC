@@ -192,6 +192,10 @@ public sealed partial class AutonomousWorldBotController
             // No teleport, wall shortcut, or fresh cross-region chord.
             if (!bot.IsMoving) bot.WalkTo(next, bot.MaxSpeed);
         }
+        // Bend around a named/far-above monster, then resume the road; a
+        // failed bend falls through to the road order and its failure path.
+        else if (AutonomousRvrMobAvoidance.TryWalkBend(next, AvoidDangerousMobs(bot, next), bend => IssuePath(bot, bend), DropMobBypass))
+        { }
         else if (!IssuePath(bot, next, preciseArrival: true))
         {
             _keepTravelPoints = null; _keepPlanning = null;
