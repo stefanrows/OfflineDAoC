@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.133.0] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Mobs attacked by the controlled pet during a held `/petpull` no longer
+  trigger ordinary group BAF, even when a group member is selected by
+  threat. Normal BAF remains available outside the held pet pull.
+
+### Removed
+
+- None.
+
 ## [0.132.1] - 2026-09-28
 
 ### Changed

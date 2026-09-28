@@ -167,7 +167,11 @@ Agent sessions on items 45–48: take the role and context from
     three or more attackers), healers heal it and each tank taunts one add off it
     before the release. Release (pet under 45 %, pet dead, player attacks, 60 s)
     ends that pull, not the mode; a fresh pet order after it starts the next
-    one (chain pull). Implemented in source; real-client check pending.
+    one (chain pull). Source 0.133.0 also suppresses ordinary group BAF for a
+    mob actually attacked by the pulling pet while that pull is held, even
+    if threat selects a group member; mode-off fights and fights without the
+    held pulling pet among the attackers retain normal BAF. Real-client check
+    pending.
 
 44. **Battlegroup combat in RvR and PvE raids.** All companion groups assist
     the battlegroup leader's (or their owner's) target, heal their own group

@@ -89,6 +89,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+67. **Mobs BAF toward the group during a held `/petpull`.** Reported on
+    2026-09-28 while pet pulling as a Necromancer: mobs headed toward group
+    members, though the expected pull remained on the pet and usually did
+    not group. Cause: a mob attacked by the owner's controlled pull pet can
+    select a group member as its highest-threat target;
+    `StandardMobBrain.BringFriends` then applies ordinary group BAF. Source
+    fix 0.133.0 checks the mob's attacker tracker for the exact controlled
+    pet whose owner has an active held pet pull, disables BAF for that mob,
+    and returns before normal group BAF calculation. Mode-off fights and
+    fights without the held pulling pet among the attackers keep normal BAF.
+    Installation and real-client verification pending: reproduce with a
+    Necromancer pet and BAF mobs; verify the held pull does not recruit an
+    ordinary BAF wave toward the group, and normal BAF still works with mode
+    off and fights without that pet among the attackers.
+
 59. **Launcher BotGoalsSettings tests cannot construct the control.** Reopened
     2026-09-28 (formerly numbered 33 under Finished): the four
     `BotGoalsSettingsTests` (LegacyFileExplainsMappingBeforeRewriting,

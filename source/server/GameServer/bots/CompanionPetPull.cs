@@ -141,6 +141,21 @@ namespace DOL.GS
             bot?.IsPlayerLedGroup == true && IsHolding(bot.PlayerGroupLeader);
 
         /// <summary>
+        /// Whether the mob's attacker list includes the exact pet on its owner's active, held pull.
+        /// </summary>
+        public static bool HasHeldPullPetAttacker(IEnumerable<GameLiving> attackers) =>
+            attackers?.Any(IsHeldPullPetAttacker) == true;
+
+        private static bool IsHeldPullPetAttacker(GameLiving attacker)
+        {
+            if (attacker is not GameNPC pet || pet.Brain is not IControlledBrain controlledPetBrain)
+                return false;
+
+            GamePlayer owner = controlledPetBrain.GetPlayerOwner();
+            return owner != null && IsHolding(owner) && Pet(owner) == pet;
+        }
+
+        /// <summary>
         /// The player's own attack opens the fight for everyone; the mode stays on.
         /// A fight the player opens himself is no pet pull: his pet assisting him
         /// must not make the companions hold.

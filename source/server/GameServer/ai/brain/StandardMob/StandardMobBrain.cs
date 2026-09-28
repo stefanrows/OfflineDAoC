@@ -776,6 +776,16 @@ namespace DOL.AI.Brain
             if (!CanBaf)
                 return;
 
+            // A held pet pull keeps this mob's encounter on the controlled pet.
+            // Check every recorded attacker because threat may already have
+            // selected a group member as the target.
+            if (CompanionPetPull.HasHeldPullPetAttacker(
+                    Body.attackComponent.AttackerTracker.Attackers))
+            {
+                CanBaf = false;
+                return;
+            }
+
             // BaF only happens if the NPC has a faction, and if it was attacked (no BAF on body pull).
             if (Body.Faction == null || Body.attackComponent.AttackerTracker.Count == 0)
             {

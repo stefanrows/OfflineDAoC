@@ -411,6 +411,28 @@ public sealed class UT_CompanionPetPull
     }
 
     [Test]
+    public void OnlyTheOwnersHeldPullPetQualifiesForBafSuppression()
+    {
+        SetTick(1_000_000);
+        (Owner owner, Npc pet, PetBrain brain) = OwnerWithPet();
+        Npc unrelated = Make<Npc>();
+        Npc target = FarMonster();
+        const BindingFlags hidden = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(ControlledMobBrain).GetField("m_owner", hidden).SetValue(brain, owner);
+        typeof(GameNPC).GetField("m_ownBrain", hidden).SetValue(pet, brain);
+
+        CompanionPetPull.SetMode(owner, true);
+        brain.OrderedAttackTarget = target;
+        Assert.That(CompanionPetPull.HasHeldPullPetAttacker(new GameLiving[] { unrelated, pet }), Is.True);
+        Assert.That(CompanionPetPull.HasHeldPullPetAttacker(new GameLiving[] { unrelated }), Is.False);
+
+        CompanionPetPull.OnLeaderAttack(owner);
+        Assert.That(CompanionPetPull.HasHeldPullPetAttacker(new GameLiving[] { pet }), Is.False,
+            "A released pull uses normal BAF");
+        CompanionPetPull.SetMode(owner, false);
+    }
+
+    [Test]
     public void SquadCompanionsFollowTheirOwnersMode()
     {
         SetTick(1_000_000);
