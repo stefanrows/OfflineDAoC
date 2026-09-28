@@ -149,6 +149,18 @@ namespace DOL.GS
         private long _pvpInvulnerabilityTick;
         private bool _lastDeathWasPvp;
         public bool LastDeathWasPvp => _lastDeathWasPvp;
+        // Killer-based PvP plus a gank a mob finished off (hostile player-shaped
+        // damage within the last 30 s). Only the PvE con ceiling reads this.
+        private bool _lastDeathCountsAsPvp;
+        public bool LastDeathCountsAsPvp => _lastDeathCountsAsPvp;
+        public AutonomousDeathSnapshot LastAutonomousDeath { get; private set; }
+        internal void ClearAutonomousDeathSnapshot() => LastAutonomousDeath = null;
+        private GameLiving _lastHitAttacker;
+        private long _lastHitTick;
+        private bool _lastHitArea;
+        private bool _lastHitTargeted;
+        private GameLiving _lastHostilePlayerAttacker;
+        private long _lastHostilePlayerHitTick;
 
         /// <summary>
         /// PvP release/zone immunity for a bot. Bots do not have a real client
@@ -1018,6 +1030,18 @@ namespace DOL.GS
         {
             CompanionRam?.DismountCompanion(this);
             _lastDeathWasPvp = PvpCombatant.Resolve(killer as GameLiving) != null;
+            long deathTick = GameLoop.GameLoopTime;
+            _lastDeathCountsAsPvp = AutonomousDeathAttribution.CountsAsPvp(_lastDeathWasPvp,
+                _lastHostilePlayerHitTick, deathTick);
+            if (IsAutonomousWorldBot && !IsTemporaryGroupHelper)
+                LastAutonomousDeath = AutonomousDeathAttribution.Capture(this, killer, deathTick,
+                    _lastHitAttacker, _lastHitTick, _lastHitArea, _lastHitTargeted,
+                    _lastHostilePlayerAttacker, _lastHostilePlayerHitTick);
+            // Evidence belongs to this life only; drop the references at once.
+            _lastHitAttacker = null;
+            _lastHitTick = 0;
+            _lastHostilePlayerAttacker = null;
+            _lastHostilePlayerHitTick = 0;
             AutonomousPetSupport.CancelPendingCharm(this);
             _deathTick = GameLoop.GameLoopTime;
             _deathRegionId = CurrentRegionID;
@@ -1049,8 +1073,10 @@ namespace DOL.GS
                     PersistentRecord.ObjectiveExpiresUtc = WorldSimulationClock.UtcNow.ToString("O");
                 GoalDiagnosticAttempt?.Died();
                 PersistentRecord.TargetName = (TargetObject as GameLiving)?.Name ?? killer?.Name ?? string.Empty;
-                PersistentRecord.Activity = _lastDeathWasPvp ? "Defeated by a player" : "Defeated; reassessing target difficulty";
-                PersistentRecord.ObjectiveProgress = _lastDeathWasPvp
+                PersistentRecord.Activity = _lastDeathWasPvp ? "Defeated by a player"
+                    : _lastDeathCountsAsPvp ? "Defeated after a player attack"
+                    : "Defeated; reassessing target difficulty";
+                PersistentRecord.ObjectiveProgress = _lastDeathCountsAsPvp
                     ? "A PvP defeat does not lower the PvE target difficulty"
                     : "The next grind target will be a lower con, never below green";
                 MarkAutonomousStateDirty();
@@ -3489,6 +3515,9 @@ namespace DOL.GS
             if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
                 return;
 
+            if (IsAutonomousWorldBot && !IsTemporaryGroupHelper)
+                RecordAutonomousDeathEvidence(ad);
+
             // Notify BotBrain of the attack so it can add aggro and transition to combat state
             if (Brain is BotBrain botBrain)
                 botBrain.OnAttackedByEnemy(ad);
@@ -3500,6 +3529,28 @@ namespace DOL.GS
 
             BotBrain.NotifyNearbyGroupBots(this, ad);
             base.OnAttackedByEnemy(ad);
+        }
+
+        /// <summary>
+        /// Keeps the last damaging hit and the last hostile player-shaped hit
+        /// (fields only, no allocation). OnAttackedByEnemy runs before the
+        /// damage is dealt, so the killing blow is the last hit recorded.
+        /// </summary>
+        private void RecordAutonomousDeathEvidence(AttackData ad)
+        {
+            if (ad?.Attacker == null || ad.Attacker == this || ad.Damage + ad.CriticalDamage <= 0)
+                return;
+            long now = GameLoop.GameLoopTime;
+            bool hostilePlayerShaped = AutonomousDeathAttribution.IsHostilePlayerShapedDamage(this, ad, out GameLiving identity);
+            _lastHitAttacker = ad.Attacker;
+            _lastHitTick = now;
+            _lastHitArea = AutonomousDeathAttribution.IsAreaEffect(ad);
+            _lastHitTargeted = ad.Attacker.TargetObject == this || identity?.TargetObject == this;
+            if (hostilePlayerShaped)
+            {
+                _lastHostilePlayerAttacker = identity;
+                _lastHostilePlayerHitTick = now;
+            }
         }
 
         #endregion

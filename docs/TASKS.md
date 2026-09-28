@@ -16,6 +16,10 @@ Agent sessions on items 45–48: take the role and context from
    on 2026-09-26: installed save settings show `rates.xp_rate=10`; saved
    characters are levels 19 and 36. The server was not running locally, and the
    save has no XP-award history, so it cannot confirm when the slowdown began.
+   Advisor finding for item 47 (2026-09-28): the player curve is faithful to
+   1.65 (`XPLevel` in GamePlayer.cs); same-level kills per level at 10x are
+   about 10 at 25, 13 at 30, 19 at 39, then 41 at 40 and 88 at 49. The real
+   wall is at 40, not 30, and it is not the cause of slow world-bot levelling.
 
 40. **Companion battlegroups: goal and plan.** Aaron, 2026-09-28: Aaron and
     Stefan share one battlegroup (`/bg`); each brings 2–3 (up to 5) groups of
@@ -53,6 +57,21 @@ Agent sessions on items 45–48: take the role and context from
     vs travel/rest/idle/stuck/dead (live save via `playable-dev/dbquery.py`,
     `runtime/logs/server-console.log`), rank proven vs suspected root causes
     with evidence. Then an implementation agent fixes the proven causes.
+    Advisor report: `docs/night/ADVISOR_47.md` (root causes A–E, packages A–C).
+    - **Package A implemented in source; real-client/live-log check pending.**
+      Solo con ceiling recovers one step after 10 clean kills, on level-up and
+      on a new task (a real PvE death still lowers it at once). After a
+      recovered step a solo bot moves to a camp above its old ceiling if one
+      is within local reach, and otherwise keeps its camp. Solo camp choice
+      weights blue/yellow camps twice as high as green ones. A death counts
+      as PvP, leaving the ceiling alone, when a non-allied player, companion or
+      bot damaged the bot within 30 s even if a mob finished it. Solo bots up to
+      level 35 pick camps within 10 (then 20) minutes' travel, weighted by
+      distance, region and crowding. One `AUTONOMOUS_BOT_DEATH` log line per
+      observed death (killer type/level/class, pet/area/target flags,
+      classification, resulting ceiling) and `AUTONOMOUS_CON_RECOVERY` per
+      recovered step. Packages B (collateral PvP in BotBrain) and C (group
+      time at camp) remain open.
 
 48. **Advisor, then build: real RvR with roaming groups.** Aaron, 2026-09-28:
     he still sees no bot groups in RvR. First a read-only advisor pass: how

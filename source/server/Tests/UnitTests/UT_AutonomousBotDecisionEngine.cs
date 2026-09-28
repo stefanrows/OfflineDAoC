@@ -480,6 +480,137 @@ public class UT_AutonomousBotDecisionEngine
         });
     }
 
+    [Test]
+    public void SoloLevelerUpTo35PrefersSameRegionCampOverFartherCrossRegionCamp()
+    {
+        // Equal con, equal crowding: only locality differs.
+        var local = Camp("local", eRealm.Albion, ConColor.YELLOW, true) with
+        { ZoneName = "Here", RegionId = 1, TravelMinutes = 4 };
+        var crossRegion = Camp("cross-region", eRealm.Albion, ConColor.YELLOW, true) with
+        { ZoneName = "Far", RegionId = 2, TravelMinutes = 25 };
+        var options = new[] { crossRegion, local };
+
+        Assert.Multiple(() =>
+        {
+            foreach (int level in new[] { 20, 27, 35 })
+                foreach (double sample in new[] { 0.0, 0.3, 0.6, 0.99 })
+                    Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp(options, 1, "Here",
+                        eRealm.Albion, level, new FixedRandom(sample)).Id, Is.EqualTo("local"),
+                        $"level {level}, draw {sample}");
+            // Nothing legal nearby: the far camp stays usable rather than no goal.
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([crossRegion], 1, "Here",
+                eRealm.Albion, 30, new FixedRandom(0)).Id, Is.EqualTo("cross-region"));
+            // Death fallback uses the same local choice for mid-level soloers.
+            Assert.That(AutonomousBotDecisionEngine.SelectSafestAvailableAfterDeath(options, "", "",
+                new FixedRandom(0.99), 1, "Here", eRealm.Albion, 30).Id, Is.EqualTo("local"));
+        });
+    }
+
+    [Test]
+    public void SoloLocalPoolWidensToTwentyMinutesBeforeTheWholeWorld()
+    {
+        var twelve = Camp("twelve", eRealm.Albion, ConColor.YELLOW, true) with { RegionId = 2, TravelMinutes = 12 };
+        var fifty = Camp("fifty", eRealm.Albion, ConColor.YELLOW, true) with { RegionId = 3, TravelMinutes = 50 };
+
+        foreach (double sample in new[] { 0.0, 0.5, 0.99 })
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([fifty, twelve], 1, "Here",
+                eRealm.Albion, 28, new FixedRandom(sample)).Id, Is.EqualTo("twelve"));
+    }
+
+    [Test]
+    public void LocalSoloCampRangeEndsAboutLevel35()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.UsesLocalSoloCamps(1), Is.True);
+            Assert.That(AutonomousBotDecisionEngine.UsesLocalSoloCamps(20), Is.True);
+            Assert.That(AutonomousBotDecisionEngine.UsesLocalSoloCamps(35), Is.True);
+            Assert.That(AutonomousBotDecisionEngine.UsesLocalSoloCamps(36), Is.False);
+            Assert.That(AutonomousBotDecisionEngine.UsesLocalSoloCamps(50), Is.False);
+        });
+    }
+
+    [Test]
+    public void RecoveryReplanLandsOnHigherConCampWhenOneExistsLocally()
+    {
+        // Ceiling was green, recovered to blue: the green camp it stands in is
+        // still legal, but only prey above green justifies leaving it.
+        var current = Camp("current-green", eRealm.Albion, ConColor.GREEN, true) with
+        { ZoneName = "Here", TravelMinutes = 0 };
+        var otherGreen = Camp("other-green", eRealm.Albion, ConColor.GREEN, true) with
+        { ZoneName = "Here", TravelMinutes = 1 };
+        var nearBlue = Camp("near-blue", eRealm.Albion, ConColor.BLUE, true) with
+        { ZoneName = "Next", TravelMinutes = 6 };
+        var farBlue = Camp("far-blue", eRealm.Albion, ConColor.BLUE, true) with
+        { RegionId = 2, TravelMinutes = 40 };
+
+        var candidates = AutonomousBotDecisionEngine.RecoveryReplanCandidates(
+            [current, otherGreen, nearBlue, farBlue], ConColor.BLUE, "current-green", 24);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidates.Select(camp => camp.Id), Is.EqualTo(new[] { "near-blue" }));
+            foreach (double sample in new[] { 0.0, 0.5, 0.99 })
+                Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp(candidates, 1, "Here",
+                    eRealm.Albion, 24, new FixedRandom(sample)).Id, Is.EqualTo("near-blue"));
+            // Beyond the local range, distance does not disqualify a harder camp.
+            Assert.That(AutonomousBotDecisionEngine.RecoveryReplanCandidates(
+                [current, farBlue], ConColor.BLUE, "current-green", 40).Select(camp => camp.Id),
+                Is.EqualTo(new[] { "far-blue" }));
+        });
+    }
+
+    [Test]
+    public void RecoveryReplanFindsNothingWhenNoHarderCampIsLocal()
+    {
+        var current = Camp("current-green", eRealm.Albion, ConColor.GREEN, true) with { TravelMinutes = 0 };
+        var otherGreen = Camp("other-green", eRealm.Albion, ConColor.GREEN, true) with { TravelMinutes = 2 };
+        var farBlue = Camp("far-blue", eRealm.Albion, ConColor.BLUE, true) with { RegionId = 2, TravelMinutes = 40 };
+        var sameCampNowBlue = Camp("current-green", eRealm.Albion, ConColor.BLUE, true) with { TravelMinutes = 0 };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.RecoveryReplanCandidates(
+                [current, otherGreen, farBlue], ConColor.BLUE, "current-green", 24), Is.Empty,
+                "Empty means the bot keeps its camp and its attempt");
+            Assert.That(AutonomousBotDecisionEngine.RecoveryReplanCandidates(
+                [sameCampNowBlue], ConColor.BLUE, "current-green", 24), Is.Empty,
+                "Never 'replan' to the camp it is already in");
+        });
+    }
+
+    [Test]
+    public void SoloSelectionFavoursBlueAndYellowOverGreenAsAWeight()
+    {
+        var green = Camp("green", eRealm.Albion, ConColor.GREEN, true) with { ZoneName = "Here", TravelMinutes = 2 };
+        var blue = Camp("blue", eRealm.Albion, ConColor.BLUE, true) with { ZoneName = "Here", TravelMinutes = 2 };
+        var yellow = Camp("yellow", eRealm.Albion, ConColor.YELLOW, true) with { ZoneName = "Here", TravelMinutes = 2 };
+        var crowdedYellow = yellow with { Id = "crowded-yellow", OutdoorPopulation = 4 };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.SoloConWeight(ConColor.GREEN), Is.EqualTo(1));
+            Assert.That(AutonomousBotDecisionEngine.SoloConWeight(ConColor.BLUE), Is.EqualTo(2));
+            Assert.That(AutonomousBotDecisionEngine.SoloConWeight(ConColor.YELLOW), Is.EqualTo(2));
+            // Equal weights would give green for this draw (0.4 of 2); with the
+            // con weight green holds only a third of the draw.
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([green, blue], 1, "Here",
+                eRealm.Albion, 25, new FixedRandom(0.4)).Id, Is.EqualTo("blue"));
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([green, blue], 1, "Here",
+                eRealm.Albion, 25, new FixedRandom(0.2)).Id, Is.EqualTo("green"), "A weight, not a filter");
+            // Crowding still matters: an open green beats a crowded yellow.
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([green, crowdedYellow], 1, "Here",
+                eRealm.Albion, 25, new FixedRandom(0.5)).Id, Is.EqualTo("green"));
+            // Level 36+ solo selection gets the same weight; groups do not.
+            Assert.That(AutonomousBotDecisionEngine.SelectWithinEnvironment([yellow, green],
+                AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(150), preferEvenCon: true).Id,
+                Is.EqualTo("yellow"));
+            Assert.That(AutonomousBotDecisionEngine.SelectWithinEnvironment([yellow, green],
+                AutonomousBotDecisionEngine.PveEnvironment.Outdoor, new IndexRandom(150)).Id,
+                Is.EqualTo("green"));
+        });
+    }
+
     private static AutonomousBotDecisionEngine.State State() =>
         new(eRealm.Albion, 20, 100, 100, 100, 20, 0, 0, 0, 0, 5, string.Empty, 1, false, false, false);
 
