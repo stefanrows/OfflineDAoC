@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.136.0] - 2026-09-28
+
+### Changed
+
+- RvR warbands walk like a 2003 group: routes bend once around named
+  monsters of level 55 and above, red or purple monsters and dense camps;
+  a warband attacked by such a monster breaks off instead of fighting it
+  (keep guards and lords excepted); the shared frontier dungeons (Hall of
+  the Corrupt, Summoner's Hall, Marfach Caverns, Dodens Gruva) are no longer
+  used as destinations, hunting grounds or shortcuts. A released member
+  rejoins a leader in another frontier through the porter; Albion and
+  Midgard forces port home first where their foreign portal keep sells only
+  the home medallion; relic carriers and forces without a porter route keep
+  the dungeon road as a last resort and walk it through.
+- Warbands regroup before porting back: nobody ports within 75 seconds of
+  its own release, a warband waits until its members are alive and gathered
+  at the porter (at most three minutes), and a warband leaves at most once
+  per five minutes. Before, single released members re-ported every three to
+  four minutes (about 690 departures per hour).
+
 ## [0.135.0] - 2026-09-28
 
 ### Fixed
