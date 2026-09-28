@@ -6,6 +6,14 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+55. **Companions buff before resurrecting a dead player.** Reported by Aaron
+    on 0.116.0 (2026-09-28): when he or another player dies, companions often
+    buff everything first and resurrect afterwards. Expected: in combat, try to
+    resurrect at once, with the best resurrection the current power allows (a
+    strong rez with plenty of power, a small one when low). Out of combat, wait
+    until there is power for the best resurrection, resurrect, then buff. Not
+    yet investigated; overlaps with the squad resurrection work of task 44.
+
 ## Fixed in source; installation verification pending
 
 54. **Companions occasionally hang at the Darkness Falls entrance stairs.**

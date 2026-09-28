@@ -14,6 +14,63 @@ When a task is done and its required verification is complete, move it out of it
    characters are levels 19 and 36. The server was not running locally, and the
    save has no XP-award history, so it cannot confirm when the slowdown began.
 
+40. **Companion battlegroups: goal and plan.** Aaron, 2026-09-28: Aaron and
+    Stefan share one battlegroup (`/bg`); each brings 2–3 (up to 5) groups of
+    his own companions and they run RvR or PvE raids with it. Companions should
+    look like normal players, like the autonomous bots, but are only logged in
+    while their owner has them in his group or battlegroup. Delivered as tasks
+    41–45; keep the existing `player_companions` storage (converting companions
+    into autonomous world bots would pull them into crew guilds, objective
+    reassignment, bot XP rates and population login).
+
+41. **Companions appear as players, with Realm Points.** Show active companions
+    in `/who` and in the launcher's Active Population list (today: dash), with
+    level, class, guild, zone and Realm Points; `/send` to a companion reaches
+    its owner or gets a short in-character reply; companion names are unique
+    against real characters and world bots for new recruits. Companions earn
+    Realm Points (and realm rank) in RvR like autonomous bots, saved additively
+    on `player_companions`; XP rules stay as they are.
+
+42. **Battlegroups with companion groups.** `/bg` accepts companions and
+    companion-led groups. An owner forms up to 5 companion groups, each led by
+    a chosen companion, and brings them into his battlegroup; two human owners
+    (Aaron and Stefan) can share one battlegroup. Companions stay logged in
+    while they are in their owner's group or in a group of his battlegroup and
+    are benched when that ends or the owner quits. Owner-bound behavior (XP
+    copy, gear rewards, portal/region follow, orders) resolves the owner, not
+    "same group as the owner". Group assignment is saved per companion.
+
+43. **Battlegroup march formation.** Each companion group leader follows its
+    owner at a small offset (about 2–4 body lengths, one slot per group) and its
+    members follow that leader; portals and region changes bring every group
+    along; stick runs sprint (task 36).
+
+44. **Battlegroup combat in RvR and PvE raids.** All companion groups assist
+    the battlegroup leader's (or their owner's) target, heal their own group
+    first, share resurrection reservations across groups, and obey
+    `/passive`, `/defensive`, `/aggressive` and `/petpull` holds from their
+    owner. Keep the 1.65 feel: no perfect focus-fire.
+
+45. **Battlegroup load check.** Measure server tick and pathing cost with two
+    owners and 5 companion groups each in RvR before calling tasks 42–44 done.
+
+46. **Pet pull as a group mode, not a pull command.** Aaron, 2026-09-28:
+    `/petpull` should switch a mode on or off for the whole group (companions in
+    his group and his squads) instead of starting one pull; while it is on, the
+    player pulls with his pet the normal way (pet attack) and every pull runs
+    as a pet pull. Rework `CompanionPetPull` so a pull starts when the pet
+    engages, not from a command target. Behavior while the mode is on:
+    - The pet is the priority: heals and buffs go to it first, and it must not
+      die. If it gets into danger, tanks take some aggro off it (taunt) and
+      healers heal it, even before the release.
+    - No real damage until the pet is back (set passive and beside the
+      player), as today.
+    - Before that, companions only intercept adds that are on a group member
+      or on their way to one; nothing else is engaged.
+    Keep the Mentalist HoT, Animist mushrooms at the camp front and pet buff
+    priority from 0.114.0/0.115.0; update commands docs. Replaces the command
+    semantics of task 39.
+
 ## Implemented in source; installation verification pending
 
 39. **/petpull for Enchanter pet pulls.** Aaron, 2026-09-27: send the pet in,
