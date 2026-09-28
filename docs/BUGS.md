@@ -6,6 +6,34 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+56. **Bot AI ticks are slow and stall the NPC service.** Seen in the
+    installed 0.115.0 log on 2026-09-27/28 (about 600 world bots, 17:58–03:09):
+    43,914 `Long NpcService.Tick` warnings, 99.7 % of them `BotBrain`; about
+    5,000 per hour. Tick time: median 94 ms, 95th percentile 224 ms, 99th
+    percentile 687 ms, maximum 3,967 ms; 179 ticks took over one second.
+    Separately, 1,165 `Long ReaperService.Tick` warnings on NPC deaths (for
+    example Darkness Falls mobs, region 249). Impact: server stutter; possibly
+    slows world-bot levelling and RvR (tasks 47–48). Not yet investigated:
+    profile which BotBrain paths are expensive and fix the causes, not the
+    warning threshold.
+
+57. **`/tc` is registered twice.** Every server start logs `LoadCommands
+    ArgumentException: An item with the same key has already been added. Key:
+    &tc`. `TeleportToExchangeCommand` (`/tc`, teleport to the capital's
+    Realm Exchange) and the alias list of `scripts/commands/TransferCorpse.cs`
+    both claim `&tc`, so load order decides which command wins and the rest
+    of the loser's aliases are skipped. Expected: `/tc` teleports to the
+    Realm Exchange and the corpse-transfer command keeps its other names.
+
+58. **The live bot dashboard snapshot fails intermittently.** Every 30–60
+    minutes the log shows `Live bot dashboard snapshot failed
+    System.UnauthorizedAccessException: Access to the path is denied` at
+    `AutonomousBotDashboard.Publish` (`File.Move` over the published file,
+    AutonomousBotDashboard.cs:121), most likely while the launcher is
+    reading it. Impact: the launcher shows a stale snapshot for one cycle.
+    Expected: publishing retries or replaces the file safely without a
+    warning.
+
 ## Fixed in source; installation verification pending
 
 55. **Companions buff before resurrecting a dead player.** Reported by Aaron

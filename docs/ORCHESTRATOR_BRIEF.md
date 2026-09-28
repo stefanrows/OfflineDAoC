@@ -115,9 +115,19 @@ options written down; do not guess.
      one row changed.
   3. `server.sh start`.
   4. Confirm in the save that Ked has GuildRank 1.
-- Bugs: triage docs/BUGS.md for items whose cause is not fixed in source
-  ("not yet investigated", "not claimed fixed", open problems in pending
-  items), and any bug found while watching the live server (record it first).
+- Bugs Aaron chose on 2026-09-28 (docs/BUGS.md):
+  - **56**, slow bot AI ticks: Opus. Profile before changing anything. The
+    fix must also be measured on the live server afterwards.
+  - **57**, `/tc` registered twice: Sonnet.
+  - **58**, dashboard snapshot fails: Sonnet.
+  - **Log check of bugs 20, 25, 28, 29, 30 and 33** (world-bot groups,
+    travel, Darkness Falls; fixed in source but never verified): prove them
+    from the live log and the save. Move each proven one to Finished with the
+    evidence. Reopen any that still occur, with numbers, and fix it if the
+    cause is clear.
+  - Record any new bug seen while watching the live server first. Fix it
+    only if it is severe (a crash, freeze or data loss); otherwise leave it
+    for Aaron.
 - Tasks: 46 (pet pull as a group mode), 47 and 48 (advisor pass first, then
   build), 45 (load check with the new battlegroup code).
 
