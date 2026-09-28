@@ -9,18 +9,18 @@ Worktrees liegen unter `/mnt/d/OfflineDAoC-wt/<paket>`, Branches `night/<paket>`
 | Paket | Typ / Agent | Worktree | Status |
 |---|---|---|---|
 | Ked Co-Leader (GuildRank 1) | Orchestrator, beim ersten `server.sh update --no-start` | – | offen |
-| Bug 56 BotBrain-Ticks langsam | daoc-developer (Opus), erst profilen | `bug56` | gestartet |
+| Bug 56 BotBrain-Ticks langsam | daoc-developer (Opus), erst profilen | `bug56` | entwickelt 04:00 (Profil per dotnet-stack: 48 % Navmesh-Korridorprüfungen, 21 % Koordinator-Lock; Seitenschritt-Suche in 8-ms-Scheiben, Stall-Netz-Cache 30 min, Profiler `BOT_THINK_PROFILE`; 2340 Tests grün), Review läuft (Opus); Merge mit main konfliktfrei außer BUGS.md |
 | Bug 57 `/tc` doppelt | daoc-bugfixer (Sonnet) | `bug57` | ✅ gemergt als 0.118.0 (ae5adf5), noch nicht deployt/gepusht |
-| Bug 58 Dashboard-Snapshot (+ Bug 26 Weltgeschwindigkeits-Statusdatei, gleiche Ursache) | daoc-bugfixer (Sonnet) | `bug58` | 58+26 entwickelt 03:40 (gemeinsamer Retry-Helfer, Launcher-Leser mit FileShare.Delete, 2331 Server-Tests grün), Review läuft (Sonnet) |
+| Bug 58 Dashboard-Snapshot (+ Bug 26 Weltgeschwindigkeits-Statusdatei, gleiche Ursache) | daoc-bugfixer (Sonnet) | `bug58` | 58+26 entwickelt 03:40 (gemeinsamer Retry-Helfer, Launcher-Leser mit FileShare.Delete, 2331 Server-Tests grün); Review REJECT 03:58 (Runde 1/2: neuer Test flackert 1/20 gegen die Wanduhr, Tmp-Datei-Aufräumen uneinheitlich) → zurück beim Fixer |
 | Log-Check Bugs 20/25/28/29/30/33 | general-purpose (Sonnet), read-only | – | fertig 03:25: 25/28/30/33 bewiesen behoben, 20 seltener (24 von 164 Gruppen laufen ins 30-min-Limit), 29 tritt weiter auf |
 | Bug 29 Getrennte Gruppen warten auf Rez | daoc-bugfixer (Opus) | `bug29` | entwickelt 03:40 (Phase-Überschreiben, Rescuer-Radius, Drop nach 2 Rejoin-Toden; 2333 Tests grün), Review ACCEPT 03:50, Nachbesserungen erledigt → ✅ gemergt als 0.119.0 |
 | Task 47 Advisor (Bots leveln kaum) | daoc-advisor (Opus) | – | fertig 03:27, Bericht docs/night/ADVISOR_47.md |
 | Task 48 Advisor (echtes RvR) | daoc-advisor (Opus) | – | fertig 03:30, Bericht docs/night/ADVISOR_48.md |
-| Task 46 Pet-Pull als Gruppenmodus | daoc-developer (Opus) | `task46` | wartet auf 56 (beide BotBrain.cs) |
-| Task 47 Build A (Con-Erholung, lokale Solo-Camps, Todes-Logzeile) | daoc-developer (Opus) | `task47` | entwickelt 03:45 (12 neue Tests, 2341 grün; Zusatz: Solo-Bot wechselt nach Con-Erholung das Camp), Review läuft (Opus) |
-| Task 47 Build B (Gruppen-Taskuhr ab Camp-Ankunft) | daoc-developer | – | wartet auf Merge von Bug 29 (Coordinator) |
-| Task 47 Build C (Kollateral-PvP in BotBrain) | daoc-developer | – | wartet auf 56 und auf die Todes-Logzeile |
-| Task 48 Build (Hubs sicher, Portal-Keep-Türen, Aufgeben nach 3 Fehlversuchen, gemeinsam porten, Release-Verhalten) | daoc-developer (Opus) | `task48` | gestartet 03:36 |
+| Task 46 Pet-Pull als Gruppenmodus | daoc-developer (Opus) | `task46` | gestartet 04:08 (Basis 0.119.0) |
+| Task 47 Build A (Con-Erholung, lokale Solo-Camps, Todes-Logzeile) | daoc-developer (Opus) | `task47` | entwickelt 03:45; Review REJECT 03:55 (Runde 1/2: Camp-Wechsel nach Erholung landet wieder auf Grün, Kreuzungs-Cache pro Region ignoriert Dungeon-Eingänge) → zurück beim Entwickler, plus Con-Gewichtung Gelb/Blau vor Grün |
+| Task 47 Build C (Gruppen-Taskuhr ab Camp-Ankunft, Camps nahe Treffpunkt, keine Umplanung unterwegs) + RvR-Ablaufzeit bei pausierter Uhr (Advisor 48 Ursache e) | daoc-developer (Opus) | `task47c` | gestartet 04:08 |
+| Task 47 Build B (Kollateral-PvP in BotBrain) | daoc-developer | – | wartet auf Live-Daten der Todes-Logzeile aus Paket A |
+| Task 48 Build (Hubs sicher, Portal-Keep-Türen, Aufgeben nach 3 Fehlversuchen, gemeinsam porten, Release-Verhalten) | daoc-developer (Opus) | `task48` | entwickelt 04:05 (39 neue Tests, 2369 grün; Hubs 3.500 Einheiten sicher, Türregel = KeepManager.IsEnemy, Aufgeben nach 3 Fehlversuchen, Leerlauf-Belagerung nach 15 min zu, 60 s gemeinsam porten, Release am eigenen Hub), Review läuft (Opus) |
 | Task 45 Lastcheck | Orchestrator, Live-Server | – | offen |
 
 Regeln aus dem Brief: pro fertigem Bug/Task ein MINOR-Bump, Pins in Gleichschritt,
@@ -37,6 +37,8 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 - Task 48 (Advisor): von 366 RvR-Bots sind nur 50 lebend im Frontier-Feld, fast alle solo; 76 stecken in den gegnerischen Portal-Keeps in Odin's Gate fest (Routenplaner hält Portal-Keep-Türen für feindlich, Realm=0), 110 stehen an den Grenz-Hubs, wo 82 % aller Tode passieren, weil die Hubs entgegen CAMLANN-Entscheidung 7 nicht als sicher gelten. 0 Keep-Eroberungen je, 318 von 320 Frontier-Teleports solo. Entscheidung: Build nach Advisor-Plan 1–5 (sichere Hubs, Türenlogik, Aufgeben, gemeinsam porten, Release-Verhalten); Punkt 6 (1.65-Feinschliff) erst, wenn Gruppen überhaupt draußen sind.
 - Werkzeug-Hinweis: `playable-dev/dbquery.py` scheitert bei laufendem Server am Live-WAL mit „disk I/O error" und überschreibt dabei den Snapshot; die Agenten haben mit Lesekopien im Scratchpad gearbeitet. Für Aaron notieren (Werkzeug außerhalb des Repos).
 - Launcher-Testsuite auf diesem PC: 4 Fehler = Bug 33 (steht in Finished, tritt aber weiter auf → zurück nach Open), 1 Fehler `PlayerAndBotRatesPersistIndependently` nur, weil der echte Server läuft (Prozesserkennung); für die Nacht kein Blocker, aber notieren.
+- Bug 56 (Profil): 81 % der langsamen Ticks kommen von Weltbots im Planungsmodus; ein festgefahrener Bot (Leofismund) blockierte 53 min lang mit ~160 ms pro Runde den ganzen NPC-Service. Reaper-Hänger: 875 von 876 sind Kills von Ked in DF (Ø 425 ms), Nova Ø 1,4 s → Verdacht synchrone SQLite-Schreibzugriffe (Companion-Gear-Belohnung) auf der 5.400-rpm-HDD D: (Median 253 ms pro langsamer SQL-Anweisung). **Entscheidung für Aaron:** Spielstand auf die SSD umziehen? Koordinator-Lock-Umbau und Stallplaner-Slicing bleiben offen bis der Minuten-Log sie bestätigt.
+- Task 48 (Build): offene Frage für Aaron: Der Landepunkt des Allrealm-Teleporters bei Castle Sauvage (583913,487012) und die Bindsteine dort liegen ~9.000 Einheiten vom Hub-Zentrum, also außerhalb des 3.500er-Schutzradius (Svasud ~4.000). Der Entwickler hat den Radius ohne Kartenbeleg nicht vergrößert → Real-Client-Blick nötig. Menschen im Hub sind jetzt ebenfalls unangreifbar (Entscheidung 7).
 
 ## Zusammenfassung für Aaron
 
