@@ -11,13 +11,13 @@ Worktrees liegen unter `/mnt/d/OfflineDAoC-wt/<paket>`, Branches `night/<paket>`
 | Ked Co-Leader (GuildRank 1) | Orchestrator, beim ersten `server.sh update --no-start` | – | offen |
 | Bug 56 BotBrain-Ticks langsam | daoc-developer (Opus), erst profilen | `bug56` | gestartet |
 | Bug 57 `/tc` doppelt | daoc-bugfixer (Sonnet) | `bug57` | ✅ gemergt als 0.118.0 (ae5adf5), noch nicht deployt/gepusht |
-| Bug 58 Dashboard-Snapshot (+ Bug 26 Weltgeschwindigkeits-Statusdatei, gleiche Ursache) | daoc-bugfixer (Sonnet) | `bug58` | 58 entwickelt 03:29 (Retry um File.Move, Test, 2330 grün); 26 nachbeauftragt (Server-Retry + Launcher-Leser FileShare.Delete) |
+| Bug 58 Dashboard-Snapshot (+ Bug 26 Weltgeschwindigkeits-Statusdatei, gleiche Ursache) | daoc-bugfixer (Sonnet) | `bug58` | 58+26 entwickelt 03:40 (gemeinsamer Retry-Helfer, Launcher-Leser mit FileShare.Delete, 2331 Server-Tests grün), Review läuft (Sonnet) |
 | Log-Check Bugs 20/25/28/29/30/33 | general-purpose (Sonnet), read-only | – | fertig 03:25: 25/28/30/33 bewiesen behoben, 20 seltener (24 von 164 Gruppen laufen ins 30-min-Limit), 29 tritt weiter auf |
-| Bug 29 Getrennte Gruppen warten auf Rez | daoc-bugfixer (Opus) | `bug29` | gestartet |
+| Bug 29 Getrennte Gruppen warten auf Rez | daoc-bugfixer (Opus) | `bug29` | entwickelt 03:40 (Phase-Überschreiben, Rescuer-Radius, Drop nach 2 Rejoin-Toden; 2333 Tests grün), Review ACCEPT 03:50, Nachbesserungen erledigt → ✅ gemergt als 0.119.0 |
 | Task 47 Advisor (Bots leveln kaum) | daoc-advisor (Opus) | – | fertig 03:27, Bericht docs/night/ADVISOR_47.md |
 | Task 48 Advisor (echtes RvR) | daoc-advisor (Opus) | – | fertig 03:30, Bericht docs/night/ADVISOR_48.md |
 | Task 46 Pet-Pull als Gruppenmodus | daoc-developer (Opus) | `task46` | wartet auf 56 (beide BotBrain.cs) |
-| Task 47 Build A (Con-Erholung, lokale Solo-Camps, Todes-Logzeile) | daoc-developer (Opus) | `task47` | gestartet 03:32 |
+| Task 47 Build A (Con-Erholung, lokale Solo-Camps, Todes-Logzeile) | daoc-developer (Opus) | `task47` | entwickelt 03:45 (12 neue Tests, 2341 grün; Zusatz: Solo-Bot wechselt nach Con-Erholung das Camp), Review läuft (Opus) |
 | Task 47 Build B (Gruppen-Taskuhr ab Camp-Ankunft) | daoc-developer | – | wartet auf Merge von Bug 29 (Coordinator) |
 | Task 47 Build C (Kollateral-PvP in BotBrain) | daoc-developer | – | wartet auf 56 und auf die Todes-Logzeile |
 | Task 48 Build (Hubs sicher, Portal-Keep-Türen, Aufgeben nach 3 Fehlversuchen, gemeinsam porten, Release-Verhalten) | daoc-developer (Opus) | `task48` | gestartet 03:36 |
@@ -36,6 +36,7 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 - Task 47 (Advisor): Bots leveln ~0,5 Level/Bot-Stunde, keiner über 32; nur 22 % der Zeit im Kampf, 6 % am Camp. Hauptursache bewiesen: die Solo-Con-Obergrenze sinkt nach jedem PvE-Tod und erholt sich nur beim Neustart → 323 von 462 Bots jagen Grün (25–45 % XP). Dazu: Solo-Ziele ab 20 in fremden Regionen (Hälfte stirbt unterwegs), Gruppen erreichen nur 12 % ihrer Camps, ~4.700 PvP-Tode von Levelern in 3,4 h fast alle „kollateral". Task 7 ist eine andere Ursache (1.65-Kurve, Wand ab 40) → wird als erwartetes Verhalten dokumentiert. Entscheidung: XP-Rate nicht anheben; Plan in 3 Paketen (A jetzt, B nach Bug 29, C nach Bug 56).
 - Task 48 (Advisor): von 366 RvR-Bots sind nur 50 lebend im Frontier-Feld, fast alle solo; 76 stecken in den gegnerischen Portal-Keeps in Odin's Gate fest (Routenplaner hält Portal-Keep-Türen für feindlich, Realm=0), 110 stehen an den Grenz-Hubs, wo 82 % aller Tode passieren, weil die Hubs entgegen CAMLANN-Entscheidung 7 nicht als sicher gelten. 0 Keep-Eroberungen je, 318 von 320 Frontier-Teleports solo. Entscheidung: Build nach Advisor-Plan 1–5 (sichere Hubs, Türenlogik, Aufgeben, gemeinsam porten, Release-Verhalten); Punkt 6 (1.65-Feinschliff) erst, wenn Gruppen überhaupt draußen sind.
 - Werkzeug-Hinweis: `playable-dev/dbquery.py` scheitert bei laufendem Server am Live-WAL mit „disk I/O error" und überschreibt dabei den Snapshot; die Agenten haben mit Lesekopien im Scratchpad gearbeitet. Für Aaron notieren (Werkzeug außerhalb des Repos).
+- Launcher-Testsuite auf diesem PC: 4 Fehler = Bug 33 (steht in Finished, tritt aber weiter auf → zurück nach Open), 1 Fehler `PlayerAndBotRatesPersistIndependently` nur, weil der echte Server läuft (Prozesserkennung); für die Nacht kein Blocker, aber notieren.
 
 ## Zusammenfassung für Aaron
 

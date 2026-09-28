@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.119.0] - 2026-09-28
+
+### Fixed
+
+- Autonomous PvE parties no longer wait for an hour or more on one group
+  member who died far away or in another region. The group's camp activity
+  no longer restarts the resurrection wait, only living members near the
+  corpse count as rescuers, a corpse with no rescuer nearby releases at once,
+  and a member who dies twice more on the way back is dropped so the rest of
+  the party keeps hunting. A party that loses its camp during such a wait
+  picks a new target instead of idling out its travel window.
+
 ## [0.118.0] - 2026-09-28
 
 ### Fixed
