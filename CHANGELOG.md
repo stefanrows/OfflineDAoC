@@ -12,6 +12,41 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.117.0] - 2026-09-28
+
+### Added
+
+- Companion squads for battlegroups: `/companions squad <1-5> add|remove|lead
+  <name>`, `disband` and `list` form up to five companion-led groups beside
+  your own. Squad leaders march in a staggered fan 200–400 units behind you
+  and their members follow them; portals and region changes bring every
+  squad along. Assignments are saved and restored at login.
+- `/bg` shows each owner's companions and takes them along, so two players
+  can share one battlegroup with their own companion squads.
+- Companions appear like players: in `/who`, in the launcher's Active
+  Population list (with Realm Points and "With <owner>"), and `/send` to a
+  companion reaches its owner and gets a short reply.
+- Companions earn Realm Points in RvR by the autonomous-bot formula (no PvP
+  XP, no loot ownership); saved in a new additive column.
+
+### Changed
+
+- Squad members fight with their owner: they assist his target, join his
+  pulls and pet pulls, defend him, his group and his other squads, heal and
+  resurrect across his squads once their own group is fine, and obey
+  `/passive`, `/defensive` and `/aggressive`.
+- New companion recruits need a name no real character or world bot uses.
+
+### Fixed
+
+- Companions buffed before resurrecting a dead player (bug 55). In combat
+  they now resurrect at once with the strongest rank their power allows; out
+  of combat they save power for their best resurrection, then buff.
+
+### Removed
+
+- None.
+
 ## [0.116.0] - 2026-09-28
 
 ### Added

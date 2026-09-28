@@ -26,34 +26,6 @@ Agent sessions on items 45–48: take the role and context from
     into autonomous world bots would pull them into crew guilds, objective
     reassignment, bot XP rates and population login).
 
-41. **Companions appear as players, with Realm Points.** Show active companions
-    in `/who` and in the launcher's Active Population list (today: dash), with
-    level, class, guild, zone and Realm Points; `/send` to a companion reaches
-    its owner or gets a short in-character reply; companion names are unique
-    against real characters and world bots for new recruits. Companions earn
-    Realm Points (and realm rank) in RvR like autonomous bots, saved additively
-    on `player_companions`; XP rules stay as they are.
-
-42. **Battlegroups with companion groups.** `/bg` accepts companions and
-    companion-led groups. An owner forms up to 5 companion groups, each led by
-    a chosen companion, and brings them into his battlegroup; two human owners
-    (Aaron and Stefan) can share one battlegroup. Companions stay logged in
-    while they are in their owner's group or in a group of his battlegroup and
-    are benched when that ends or the owner quits. Owner-bound behavior (XP
-    copy, gear rewards, portal/region follow, orders) resolves the owner, not
-    "same group as the owner". Group assignment is saved per companion.
-
-43. **Battlegroup march formation.** Each companion group leader follows its
-    owner at a small offset (about 2–4 body lengths, one slot per group) and its
-    members follow that leader; portals and region changes bring every group
-    along; stick runs sprint (task 36).
-
-44. **Battlegroup combat in RvR and PvE raids.** All companion groups assist
-    the battlegroup leader's (or their owner's) target, heal their own group
-    first, share resurrection reservations across groups, and obey
-    `/passive`, `/defensive`, `/aggressive` and `/petpull` holds from their
-    owner. Keep the 1.65 feel: no perfect focus-fire.
-
 45. **Battlegroup load check.** Measure server tick and pathing cost with two
     owners and 5 companion groups each in RvR before calling tasks 42–44 done.
 
@@ -94,6 +66,38 @@ Agent sessions on items 45–48: take the role and context from
     not perfect.
 
 ## Implemented in source; installation verification pending
+
+44. **Battlegroup combat in RvR and PvE raids.** All companion groups assist
+    the battlegroup leader's (or their owner's) target, heal their own group
+    first, share resurrection reservations across groups, and obey
+    `/passive`, `/defensive`, `/aggressive` and `/petpull` holds from their
+    owner. Keep the 1.65 feel: no perfect focus-fire.
+    Source 0.117.0; installation and real-client checks pending.
+
+43. **Battlegroup march formation.** Each companion group leader follows its
+    owner at a small offset (about 2–4 body lengths, one slot per group) and its
+    members follow that leader; portals and region changes bring every group
+    along; stick runs sprint (task 36).
+    Source 0.117.0; installation and real-client checks pending.
+
+42. **Battlegroups with companion groups.** `/bg` accepts companions and
+    companion-led groups. An owner forms up to 5 companion groups, each led by
+    a chosen companion, and brings them into his battlegroup; two human owners
+    (Aaron and Stefan) can share one battlegroup. Companions stay logged in
+    while they are in their owner's group or in a group of his battlegroup and
+    are benched when that ends or the owner quits. Owner-bound behavior (XP
+    copy, gear rewards, portal/region follow, orders) resolves the owner, not
+    "same group as the owner". Group assignment is saved per companion.
+    Source 0.117.0; installation and real-client checks pending.
+
+41. **Companions appear as players, with Realm Points.** Show active companions
+    in `/who` and in the launcher's Active Population list (today: dash), with
+    level, class, guild, zone and Realm Points; `/send` to a companion reaches
+    its owner or gets a short in-character reply; companion names are unique
+    against real characters and world bots for new recruits. Companions earn
+    Realm Points (and realm rank) in RvR like autonomous bots, saved additively
+    on `player_companions`; XP rules stay as they are.
+    Source 0.117.0; installation and real-client checks pending.
 
 39. **/petpull for Enchanter pet pulls.** Aaron, 2026-09-27: send the pet in,
     Mentalist HoT on it, healers careful until aggro is built, tanks peel
