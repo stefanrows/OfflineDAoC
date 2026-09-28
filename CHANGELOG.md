@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.123.1] - 2026-09-28
+
+### Fixed
+
+- The launcher test suite is green again: the population-settings fixture
+  passes the control's current constructor arguments, and the XP-rate
+  persistence test no longer fails while a real local server is running.
+  Launcher behaviour is unchanged.
+
 ## [0.123.0] - 2026-09-28
 
 ### Added
