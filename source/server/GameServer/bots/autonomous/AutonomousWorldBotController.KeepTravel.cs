@@ -35,6 +35,7 @@ public sealed partial class AutonomousWorldBotController
     /// endpoint, so existing combat and patrol decisions retain control there.</returns>
     private bool FollowKeepTravel(GameBot bot, CampDestination destination)
     {
+        using var profile = BotThinkProfiler.Measure(BotThinkPhase.KeepTravel);
         long now = GameLoop.GameLoopTime;
         Vector3 current = new(bot.X, bot.Y, bot.Z);
         string key = $"{bot.PersistentRecord?.ObjectiveAssignmentId}:{bot.CurrentRegionID}:{bot.Realm}:{destination.Id}:{destination.X}:{destination.Y}:{destination.Z}";

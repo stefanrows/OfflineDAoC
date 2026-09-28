@@ -28,9 +28,13 @@ public static class AutonomousStableRoutePlanner
     public const short StableSpeed = 1500;
     private const int MaximumPathPoints = 5000;
     private const int MaximumBoardingDistance = 500;
-    private static readonly TimeSpan NetworkCacheLifetime = TimeSpan.FromMinutes(5);
-    private static readonly object NetworkCacheLock = new();
-    private static readonly Dictionary<(ushort RegionId, eRealm Realm), CandidateCache> NetworkCache = new();
+    // Stable masters, tickets and horse routes are static world data; live
+    // master state is validated on every read below. The rebuild reads the
+    // merchant lists from SQLite and proves each boarding corridor, so it must
+    // neither run every five minutes on a brain turn nor block other regions.
+    private static readonly TimeSpan NetworkCacheLifetime = TimeSpan.FromMinutes(30);
+    private static readonly AutonomousRefreshingCache<(ushort RegionId, eRealm Realm), Candidate[]> NetworkCache =
+        new(NetworkCacheLifetime);
 
     public readonly record struct LegMetric(
         int Index,
@@ -69,8 +73,6 @@ public static class AutonomousStableRoutePlanner
         double RideSeconds,
         Vector3 BoardingPoint,
         Vector3 InteractionPoint);
-
-    private sealed record CandidateCache(DateTime ExpiresUtc, Candidate[] Candidates);
 
     /// <summary>
     /// Dijkstra over route endpoints. Walking connects the bot, every ticket
@@ -173,6 +175,7 @@ public static class AutonomousStableRoutePlanner
     public static Choice FindBest(GameBot bot, Vector3 goal, IReadOnlySet<GameStableMaster> excludedBoardingMasters = null,
         bool boundedMeetupApproach = false)
     {
+        using var profile = BotThinkProfiler.Measure(BotThinkPhase.StableRouteFindBest);
         if (bot?.CurrentRegion == null)
             return null;
 
@@ -287,21 +290,16 @@ public static class AutonomousStableRoutePlanner
     private static List<Candidate> GetCandidates(GameBot bot)
     {
         var key = (bot.CurrentRegionID, bot.Realm);
-        DateTime now = DateTime.UtcNow;
-        CandidateCache cache;
-        lock (NetworkCacheLock)
-        {
-            if (!NetworkCache.TryGetValue(key, out cache) || cache.ExpiresUtc <= now)
-            {
-                cache = new CandidateCache(now + NetworkCacheLifetime,
-                    BuildCandidates(bot.CurrentRegion, bot.Realm).ToArray());
-                NetworkCache[key] = cache;
-            }
-        }
+        Region region = bot.CurrentRegion;
+        eRealm realm = bot.Realm;
+        Candidate[] network;
+        using (BotThinkProfiler.Measure(BotThinkPhase.StableNetworkCache))
+            network = NetworkCache.Get(key, Environment.TickCount64,
+                () => BuildCandidates(region, realm).ToArray());
 
         // Masters can be removed between cache rebuilds; live state validation
         // is cheap and prevents choosing a stale boarding point.
-        return cache.Candidates
+        return network
             .Where(candidate => candidate.Master?.ObjectState is GameObject.eObjectState.Active &&
                                 candidate.Master.CurrentRegion == bot.CurrentRegion)
             .ToList();

@@ -6,17 +6,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-56. **Bot AI ticks are slow and stall the NPC service.** Seen in the
-    installed 0.115.0 log on 2026-09-27/28 (about 600 world bots, 17:58–03:09):
-    43,914 `Long NpcService.Tick` warnings, 99.7 % of them `BotBrain`; about
-    5,000 per hour. Tick time: median 94 ms, 95th percentile 224 ms, 99th
-    percentile 687 ms, maximum 3,967 ms; 179 ticks took over one second.
-    Separately, 1,165 `Long ReaperService.Tick` warnings on NPC deaths (for
-    example Darkness Falls mobs, region 249). Impact: server stutter; possibly
-    slows world-bot levelling and RvR (tasks 47–48). Not yet investigated:
-    profile which BotBrain paths are expensive and fix the causes, not the
-    warning threshold.
-
 58. **The live bot dashboard snapshot fails intermittently.** Every 30–60
     minutes the log shows `Live bot dashboard snapshot failed
     System.UnauthorizedAccessException: Access to the path is denied` at
@@ -50,6 +39,49 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     pending: confirm `/tc` still teleports to the Realm Exchange,
     `/transfercorpse` still moves a dead player to a claimed keep, and the
     startup log no longer shows the `LoadCommands` `&tc` exception.
+56. **Bot AI ticks are slow and stall the NPC service.** Seen in the
+    installed 0.115.0 log on 2026-09-27/28 (about 600 world bots): 43,914
+    `Long NpcService.Tick` warnings, 99.7 % of them `BotBrain`, about 5,000
+    per hour; median 94 ms, 95th percentile 224 ms, maximum 3,967 ms. The
+    game loop fell to about 1,500 of 1,800 ticks per minute (NpcService
+    average 12-15 ms, 95th percentile tick 60 ms).
+    - Profile (session from 2026-09-27 23:54, 19,849 slow bot ticks): 81 %
+      came from world bots in planning mode (think interval 8-12 s, median
+      122 ms). 80 read-only `dotnet-stack` samples of the running server
+      caught 42 brain turns: 20 in Detour corridor checks (11 in the stalled
+      route side-step search, 5 keep-route slices, 3 stable-route planning
+      with one SQLite read, 1 zone-point approach), 12 waiting on locks (9 on
+      the group coordinator lock, 3 on crowd-control claims), 3 in
+      reflection-based hashing of disabled-skill keys, 7 other. In most
+      samples the whole NPC service waited for one worker doing a corridor
+      search. Bot Leofismund alone logged 1,876 slow ticks of about 160 ms
+      while stuck on a route for 53 minutes. Nothing like bug 31 (per-tick
+      SQLite saves) was found.
+    - Fixed in source: the side-step search of a stalled route now runs in
+      8 ms slices across brain turns (same candidates, order and choice; the
+      bot stands still and thinks again after 250 ms). The stable-network
+      cache no longer rebuilds under one global lock: it is kept 30 minutes,
+      refreshed by one bot while the others use the old copy, and a first
+      build blocks only its own region and realm. Disabled-skill lookups use
+      an explicit key comparer. Solo bots skip the group-coordinator lock in
+      the stuck watchdog check.
+    - New always-on timing: once per minute the log shows
+      `BOT_THINK_PROFILE` (turns, time, turns over 25/100/1,000 ms, top phases
+      with total/count/max) and up to five `BOT_THINK_SLOW` lines with the
+      slowest turns and their own phase breakdown. `DeathRewards` and
+      `CompanionGearGrant` time the reward work of NPC deaths.
+    - Still open: 1,165 `Long ReaperService.Tick` warnings come almost only
+      from kills by real players with companions (Ked in Darkness Falls,
+      average 425 ms; Nova, average 1,432 ms). Suspected cause: synchronous
+      SQLite writes on the reward path (companion gear drops and loot) on
+      the D: drive, a 5,400 rpm hard disk where 499 slow SQL statements took
+      a median of 253 ms. Companions also show single turns of 1-2 s that do
+      not coincide with slow SQL. Both are now timed; the group-coordinator
+      lock and keep-route slices remain as they were.
+    - Live measurement pending: compare the hourly count and median of
+      `Long NpcService.Tick ... BotBrain`, `SERVER_WORK stage=NpcService`
+      and the `BOT_THINK_PROFILE` phase `RouteRecoverySearch` (expected
+      maximum well under 100 ms) with the numbers above.
 
 55. **Companions buff before resurrecting a dead player.** Reported by Aaron
     on 0.116.0 (2026-09-28). Cause: resurrection only tried the strongest

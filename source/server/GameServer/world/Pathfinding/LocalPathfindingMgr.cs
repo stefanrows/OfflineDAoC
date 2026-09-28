@@ -341,6 +341,7 @@ namespace DOL.GS
 
         public override PathfindingResult GetPathStraight(Zone zone, Vector3 start, Vector3 end, EDtPolyFlags[] filters, Span<WrappedPathfindingNode> destination)
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.NavPathQuery);
             if (!TryGetQuery(zone, out NavMeshQuery query))
                 return new(PathfindingStatus.NoPathFound, 0);
 

@@ -15,6 +15,7 @@ public sealed partial class AutonomousWorldBotController
     // It starts real combat without replacing the bot's durable task or event.
     public bool TryEngageFrontierThreat(BotBrain brain)
     {
+        using var profile = BotThinkProfiler.Measure(BotThinkPhase.FrontierThreat);
         GameBot bot = brain?.BotBody;
         bool defending = AutonomousRvrDefense.IsCommittedDefender(bot);
         bool siegeFighter = AutonomousRvrDefense.IsCommittedSiegeFighter(bot);

@@ -195,6 +195,7 @@ namespace DOL.GS
 
         private static bool Grant(GameBot companion, GameLiving victim, string source)
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.CompanionGearGrant);
             if (companion.Inventory is not BotInventory inventory || companion.Owner?.DBCharacter == null)
                 return false;
 

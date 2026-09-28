@@ -102,6 +102,7 @@ namespace DOL.GS
             IPathfindingMgr nav, out AutonomousZoneBoundaryRouting.Step step, Func<Zone, bool> allowed = null)
         {
             step = default;
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.ZoneItineraryStep);
             if (region == null || from == null || to == null || from == to || !nav.HasNavmesh(from)) return false;
             // Lough Gur's direct eastern seam reaches a Sheeroe cliff pocket.
             // The real connected road goes south through Bog of Cullen before

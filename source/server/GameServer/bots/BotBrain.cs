@@ -1357,6 +1357,12 @@ namespace DOL.AI.Brain
 
         public override void Think()
         {
+            using (BotThinkProfiler.Turn(Body))
+                ThinkCore();
+        }
+
+        private void ThinkCore()
+        {
             if (CompanionFollowPolicy.ObserveAndCancelBuffs(BotBody))
             {
                 _nextMaintenanceBuffTick = 0;
@@ -1431,7 +1437,7 @@ namespace DOL.AI.Brain
                 {
                     ThinkInterval = AutonomousFidelityPolicy.IntervalMilliseconds(eAutonomousThinkMode.Combat,
                         CurrentFidelity(), AutonomousBotRegistry.PopulationForBrainTick);
-                    FSM.Think();
+                    using (BotThinkProfiler.Measure(BotThinkPhase.CombatFsm)) FSM.Think();
                     return;
                 }
             }
@@ -1489,15 +1495,18 @@ namespace DOL.AI.Brain
                 Body.IsWithinRadius(leaderTarget, GROUP_DEFENSE_ASSIST_RADIUS))
                 AssistPlayerAttack(leaderTarget);
 
-            if (BotBody?.TryApplyEndgameCompanionUpgrade() == true)
-                return;
+            using (BotThinkProfiler.Measure(BotThinkPhase.CompanionUpgrades))
+            {
+                if (BotBody?.TryApplyEndgameCompanionUpgrade() == true)
+                    return;
 
-            if (BotBody?.TryApplyPendingPersistentCompanionUpgrade() == true)
-                return;
+                if (BotBody?.TryApplyPendingPersistentCompanionUpgrade() == true)
+                    return;
 
-            if (BotBody?.IsPersistentPlayerCompanion == true &&
-                PlayerCompanionRoster.UpgradeStarterEquipment(BotBody))
-                return;
+                if (BotBody?.IsPersistentPlayerCompanion == true &&
+                    PlayerCompanionRoster.UpgradeStarterEquipment(BotBody))
+                    return;
+            }
 
             WakeNearbyNaturalAggroBrains();
 
@@ -1581,7 +1590,7 @@ namespace DOL.AI.Brain
                 if (dungeonPull.CurrentRegion == Body.CurrentRegion &&
                     FSM.GetCurrentState()?.StateType == eFSMStateType.AGGRO)
                 {
-                    FSM.Think();
+                    using (BotThinkProfiler.Measure(BotThinkPhase.CombatFsm)) FSM.Think();
                     return;
                 }
             }
@@ -1657,7 +1666,7 @@ namespace DOL.AI.Brain
                     return;
             }
 
-            FSM.Think();
+            using (BotThinkProfiler.Measure(BotThinkPhase.CombatFsm)) FSM.Think();
         }
 
         private bool TryHoldForNecromancerServantSelfBuff()
@@ -2010,6 +2019,7 @@ namespace DOL.AI.Brain
 
         private bool TryMaintainTravelAndClassBuffs()
         {
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.ClassBuffs);
             GameBot bot = BotBody;
             if (CompanionFollowPolicy.WaitingForLeaderToStop(bot)) return false;
             if (bot == null || !bot.IsAlive || bot.IsOnStableMasterRoute || bot.InCombat || HasAggro ||

@@ -44,6 +44,7 @@ namespace DOL.GS
             }
 
             GameLoop.ExecuteForEach(_list, lastValidIndex + 1, TickInternal);
+            BotThinkProfiler.PublishIfDue(Environment.TickCount64);
 
             if (Diagnostics.CheckServiceObjectCount)
                 Diagnostics.PrintServiceObjectCount(ServiceName, ref EntityCount, _list.Count);

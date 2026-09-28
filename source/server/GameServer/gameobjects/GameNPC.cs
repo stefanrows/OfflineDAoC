@@ -2922,7 +2922,8 @@ namespace DOL.GS
 					player.Out.SendMessage($"{GetName(0, true)} dies!", eChatType.CT_PlayerDied, eChatLoc.CL_SystemWindow);
 
 				// Deal out experience, realm points, loot... Based on server rules.
-				GameServer.ServerRules.OnNpcKilled(this, killer);
+				using (BotThinkProfiler.Measure(BotThinkPhase.DeathRewards))
+					GameServer.ServerRules.OnNpcKilled(this, killer);
 			}
 
 			if (!RetainGroupWhenDead)

@@ -212,6 +212,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper)
             return null;
 
+        using var profile = BotThinkProfiler.Measure(BotThinkPhase.GroupCoordinatorPulse);
         PrepareCoordinatorTick();
         lock (Sync)
         {
@@ -606,6 +607,11 @@ public static partial class AutonomousBotGroupCoordinator
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper ||
             bot.IsPlayerLedGroup)
             return false;
+        // Solo bots have no session. This runs every brain turn; do not queue
+        // every solo world bot on the population-wide lock (bug 56 profile).
+        if (bot.Group == null)
+            return false;
+        using var profile = BotThinkProfiler.Measure(BotThinkPhase.CoordinatorWatchdogCheck);
         lock (Sync)
         {
             // Membership can change between the brain thread and coordinator.
