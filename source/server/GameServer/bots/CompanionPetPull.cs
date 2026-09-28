@@ -69,6 +69,14 @@ namespace DOL.GS
         {
             public bool On;
             public Pull Current;
+            /// <summary>/stay: the force holds its spots at camp while the mode is on.</summary>
+            public bool Stay;
+            public ushort StayRegion;
+            public Vector3 StayCenter;
+            public Vector3 StayFacing;
+            /// <summary>Where the last pull came from: the stayed camp faces that way.</summary>
+            public Vector3? LastPullFrom;
+            public readonly Dictionary<GameBot, Vector3> Anchors = new();
         }
 
         private static readonly ConditionalWeakTable<GamePlayer, Mode> Modes = new();
@@ -104,6 +112,8 @@ namespace DOL.GS
             {
                 mode.On = on;
                 mode.Current = null;
+                if (!on)
+                    ClearStay(mode);
                 // Switched on in the middle of a fight: that fight is already
                 // open, so it counts as a released pull and the next pet engage
                 // after it starts the first real pet pull.
@@ -122,6 +132,141 @@ namespace DOL.GS
                    "heal-over-time and buffs on your pet, only take adds that come at the group, and open once it is beside you " +
                    $"(or at once if it drops below {PetDangerHealthPercent}% or you attack)." +
                    (hasPet ? string.Empty : " Summon your pet first.");
+        }
+
+        #endregion
+
+        #region Stay
+
+        public const string StayUsage =
+            "Usage: /stay [on|off]. In pet pull mode your companions hold their current spots until /stay off, /petpull off or /passive.";
+
+        /// <summary>A staying companion further than this from its spot walks back to it.</summary>
+        public const int StaySlack = 35;
+
+        public static bool IsStaying(GamePlayer leader) => StayMode(leader) != null;
+
+        /// <summary>True while this companion of a pet-pulling owner's force holds its spot.</summary>
+        public static bool StaysFor(GameBot bot) =>
+            bot?.IsPlayerLedGroup == true && IsStaying(bot.PlayerGroupLeader);
+
+        /// <summary>The owner's live pet while the force stays: the Mentalist keeps its HoT on it.</summary>
+        public static GameNPC StayPet(GamePlayer leader) => IsStaying(leader) ? LivePet(leader) : null;
+
+        /// <summary>Starts or ends /stay and returns the reply.</summary>
+        public static string SetStay(GamePlayer player, bool on)
+        {
+            if (player == null)
+                return StayUsage;
+            if (!on)
+                return EndStay(player)
+                    ? "Stay is OFF: companions follow you again."
+                    : "Stay is already off.";
+            if (!IsModeOn(player))
+                return "Stay works in pet pull mode only: type /petpull on first.";
+            Mode mode = Modes.GetOrCreateValue(player);
+            GameBot[] force = CompanionSquads.OwnerForceBots(player)
+                .Where(bot => bot.IsAlive && bot.CurrentRegionID == player.CurrentRegionID).ToArray();
+            double heading = player.Heading * Point2D.HEADING_TO_RADIAN;
+            lock (mode)
+            {
+                mode.Stay = true;
+                mode.StayRegion = player.CurrentRegionID;
+                mode.StayCenter = new Vector3(player.X, player.Y, player.Z);
+                mode.StayFacing = new Vector3(-(float)Math.Sin(heading), (float)Math.Cos(heading), 0);
+                mode.Anchors.Clear();
+                foreach (GameBot bot in force)
+                    mode.Anchors[bot] = new Vector3(bot.X, bot.Y, bot.Z);
+            }
+            return "Stay is ON: your companions hold their spots. An Animist keeps its main turret and damage mushrooms up " +
+                   "in front of the camp, a Mentalist keeps its heal-over-time on your pet. /stay off, /petpull off or /passive ends it.";
+        }
+
+        /// <summary>Ends /stay; false when it was not on.</summary>
+        public static bool EndStay(GamePlayer player)
+        {
+            if (player == null || !Modes.TryGetValue(player, out Mode mode))
+                return false;
+            lock (mode)
+            {
+                bool was = mode.Stay;
+                ClearStay(mode);
+                return was;
+            }
+        }
+
+        private static void ClearStay(Mode mode)
+        {
+            mode.Stay = false;
+            mode.Anchors.Clear();
+        }
+
+        private static Mode StayMode(GamePlayer leader)
+        {
+            if (leader == null || !Modes.TryGetValue(leader, out Mode mode))
+                return null;
+            bool left;
+            lock (mode)
+            {
+                if (!mode.On || !mode.Stay)
+                    return null;
+                left = leader.CurrentRegionID != mode.StayRegion;
+                if (left)
+                    ClearStay(mode);
+            }
+            if (left)
+                Tell(leader, "Stay ended: you left the region. Companions follow you again.");
+            return left ? null : mode;
+        }
+
+        /// <summary>
+        /// The spot this companion holds while its owner's force stays: where it
+        /// stood at /stay, or where it first stands after that (a late joiner).
+        /// </summary>
+        public static bool TryGetStayAnchor(GameBot bot, out Vector3 anchor)
+        {
+            anchor = default;
+            if (bot?.IsPlayerLedGroup != true || !bot.IsAlive)
+                return false;
+            Mode mode = StayMode(bot.PlayerGroupLeader);
+            if (mode == null || bot.CurrentRegionID != mode.StayRegion)
+                return false;
+            lock (mode)
+            {
+                if (!mode.Anchors.TryGetValue(bot, out anchor))
+                    mode.Anchors[bot] = anchor = new Vector3(bot.X, bot.Y, bot.Z);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Where an Animist plants: in front of the stayed camp toward the last
+        /// pull (else the way the player faced at /stay); without /stay, the camp
+        /// front of a held pull.
+        /// </summary>
+        public static bool TryGetGroveFront(GamePlayer leader, out Vector3 front)
+        {
+            Mode mode = StayMode(leader);
+            if (mode == null)
+                return TryGetCampFront(leader, out front);
+            Vector3 center;
+            Vector3 toward;
+            lock (mode)
+            {
+                center = mode.StayCenter;
+                toward = StayDirection(center, mode.LastPullFrom, mode.StayFacing);
+            }
+            front = center + toward * CampFrontDistance;
+            return true;
+        }
+
+        public static Vector3 StayDirection(Vector3 center, Vector3? lastPullFrom, Vector3 facing)
+        {
+            Vector3 toward = lastPullFrom is Vector3 from ? from - center : facing;
+            toward.Z = 0;
+            if (toward.LengthSquared() < 1)
+                toward = new Vector3(facing.X, facing.Y, 0);
+            return toward.LengthSquared() < 0.0001f ? Vector3.UnitY : Vector3.Normalize(toward);
         }
 
         #endregion
@@ -197,13 +342,15 @@ namespace DOL.GS
 
         /// <summary>
         /// Buffs that do something on a pet: only strength, constitution,
-        /// dexterity and quickness count among stat buffs (no other concentration
-        /// buff affects pets), plus damage add, shields, ablative, resists and HoTs.
+        /// dexterity and quickness count among stat buffs, plus base and spec
+        /// armor factor (the pet armor calculation adds both), damage add,
+        /// shields, ablative, defensive procs (the Cleric heal proc), resists and HoTs.
         /// </summary>
         public static bool HelpsPet(Spell spell) => spell != null && spell.SpellType is
             eSpellType.StrengthBuff or eSpellType.ConstitutionBuff or eSpellType.DexterityBuff or
             eSpellType.StrengthConstitutionBuff or eSpellType.DexterityQuicknessBuff or
             eSpellType.DamageAdd or eSpellType.DamageShield or eSpellType.AblativeArmor or
+            eSpellType.BaseArmorFactorBuff or eSpellType.SpecArmorFactorBuff or eSpellType.DefensiveProc or
             eSpellType.HealOverTime or eSpellType.HealthRegenBuff or
             eSpellType.BodyResistBuff or eSpellType.ColdResistBuff or eSpellType.EnergyResistBuff or
             eSpellType.HeatResistBuff or eSpellType.MatterResistBuff or eSpellType.SpiritResistBuff or
@@ -369,6 +516,7 @@ namespace DOL.GS
             if (mode.On && (pull == null || pull.Released) && TryStart(leader, pull, now) is Pull started)
             {
                 mode.Current = pull = started;
+                mode.LastPullFrom = started.PullFrom;
                 string petName = started.Pet.Name;
                 after += () => Tell(leader,
                     $"Pet pull: {petName} takes the pull. Companions hold until it is back beside you.");

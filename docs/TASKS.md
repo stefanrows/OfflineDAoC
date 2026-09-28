@@ -180,6 +180,22 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+57. **Pet pull: /stay, Animist grove, Mentalist pet HoT, /passive clears
+    mushrooms, more pet buffs.** Aaron, 2026-09-28. Source 0.140.0:
+    `/stay [on|off]` (pet pull mode only) keeps every companion of the force
+    on its spot; an Animist holds one main turret plus damage mushrooms
+    (Forest's series, no tanglers) up to the turret caps in front of the camp
+    toward the last pull and replants down to 10% power; a Mentalist keeps
+    its HoT on the owner's pet, also out of combat. `/stay off`,
+    `/petpull off`, `/passive`, logout or a region change end it. `/passive`
+    (always) makes Animists delete all their mushrooms and main turret.
+    Druid/Cleric base and spec AF and the Cleric heal proc now count as pet
+    buffs (the pet armor calculation adds both AF kinds; group spells reach
+    group members' pets). Installation and real-client check pending: stay
+    and walk away, count mushrooms (10 around the grove), watch replanting and
+    the HoT between pulls, `/passive` clears the grove, AF and heal proc land
+    on the pet.
+
 55. **Temporarily increase Siege Ram damage for testing.** Source 0.132.0
     multiplies the rider-adjusted Siege Ram damage by 10; a source comment
     marks the multiplier for removal after testing. Installation and real-client

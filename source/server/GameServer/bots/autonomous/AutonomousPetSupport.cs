@@ -1143,6 +1143,9 @@ public static class AutonomousPetSupport
         pet?.NPCTemplate?.Name?.Contains("Underhill Ally", StringComparison.OrdinalIgnoreCase) == true ||
         pet?.Name?.Contains("Underhill Ally", StringComparison.OrdinalIgnoreCase) == true;
 
+    /// <summary>A field turret whose payload deals damage (no tangler, no buff or heal turret).</summary>
+    public static bool IsDamageFieldTurret(Spell summon) => FieldTurretCombatPriority(summon) == 3;
+
     public static bool IsAnimistFieldTurret(eSpellType type) => type is
         eSpellType.SummonAnimistFnF or
         eSpellType.SummonAnimistFnFCustom or
@@ -1853,9 +1856,9 @@ public static class AutonomousPetSupport
         Vector3 ownerPosition = new(owner.X, owner.Y, owner.Z);
         Vector3 desired;
         if (owner is GameBot { PlayerGroupLeader: GamePlayer leader } &&
-            CompanionPetPull.TryGetCampFront(leader, out Vector3 campFront))
+            CompanionPetPull.TryGetGroveFront(leader, out Vector3 campFront))
         {
-            // /petpull: a grove in front of the waiting group, where the pet brings the pack.
+            // /petpull and /stay: a grove in front of the waiting group, where the pet brings the pack.
             double angle = Random.Shared.NextDouble() * Math.PI * 2;
             float radius = Random.Shared.Next(40, 111);
             desired = campFront + new Vector3((float)Math.Cos(angle) * radius, (float)Math.Sin(angle) * radius, 0);

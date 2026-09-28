@@ -100,6 +100,12 @@ namespace DOL.GS
             if (!bot.IsAlive || leader?.IsAlive != true || bot.CurrentRegionID != leader.CurrentRegionID) return false;
             ReturnState state = Returns.GetOrCreateValue(bot);
             if (Effective(bot) == eCompanionEngagementMode.Passive) return true;
+            // /stay: the force holds its camp even when the owner walks off.
+            if (CompanionPetPull.StaysFor(bot))
+            {
+                state.Returning = false;
+                return false;
+            }
             if (bot.IsWithinRadius(leader, RegroupDistance)) state.Returning = false;
             else if (!bot.IsWithinRadius(leader, RecallDistance)) state.Returning = true;
             return state.Returning;

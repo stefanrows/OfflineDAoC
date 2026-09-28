@@ -1295,6 +1295,9 @@ namespace DOL.GS
                 return false;
             if (!afterRevival && GameLoop.GameLoopTime < _nextCompanionRecallTick)
                 return false;
+            // /stay: a companion holding camp is not pulled after an owner who walked off.
+            if (!afterRevival && !IsReturningAfterRelease && CompanionPetPull.StaysFor(this))
+                return false;
             _nextCompanionRecallTick = GameLoop.GameLoopTime + TemporaryCompanionRecovery.CheckIntervalMilliseconds;
             bool sameGroup = Group != null && Group == Owner.Group && Group.IsInTheGroup(this) && Group.IsInTheGroup(Owner);
             if (!TemporaryCompanionRecovery.ShouldRecall(true, IsAlive, ObjectState == eObjectState.Active,

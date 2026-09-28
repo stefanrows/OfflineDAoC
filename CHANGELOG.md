@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.140.0] - 2026-09-28
+
+### Added
+
+- `/stay [on|off]` in pet pull mode: companions of your group and squads
+  hold the spots they stand on instead of following you; tanks still meet
+  adds at camp and walk back afterwards. An Animist keeps one main turret
+  and as many damage mushrooms (Forest's series, no tanglers) as the turret
+  caps allow in front of the camp and replants expired ones down to 10%
+  power; a Mentalist keeps its heal-over-time on your pet, also out of
+  combat. `/stay off`, `/petpull off`, `/passive`, logout or leaving the
+  region end it.
+
+### Changed
+
+- `/passive` makes every Animist companion take down all its mushrooms,
+  main turret included; it plants nothing while passive.
+- Pet pull buffs: Druid and Cleric armor factor buffs (base and spec) and
+  the Cleric heal proc now go on the pulling pet first, like damage add and
+  damage shield already did.
+
 ## [0.139.1] - 2026-09-28
 
 ### Changed

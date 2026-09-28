@@ -100,13 +100,39 @@ public sealed class UT_CompanionPetPull
     }
 
     [Test]
+    public void StayGroveFacesTheLastPullElseThePlayersFacing()
+    {
+        var camp = new System.Numerics.Vector3(1000, 1000, 50);
+        var facing = new System.Numerics.Vector3(0, 1, 0);
+
+        var towardPull = CompanionPetPull.StayDirection(camp, new System.Numerics.Vector3(1000 + 900, 1000, 400), facing);
+        Assert.That(towardPull.X, Is.EqualTo(1f).Within(0.001f));
+        Assert.That(towardPull.Z, Is.EqualTo(0f), "The grove stays level with the camp");
+
+        Assert.That(CompanionPetPull.StayDirection(camp, null, facing), Is.EqualTo(facing));
+        Assert.That(CompanionPetPull.StayDirection(camp, camp, facing), Is.EqualTo(facing),
+            "A pull from the camp itself gives no direction");
+    }
+
+    [Test]
+    public void StayNeedsPetPullModeAndEndsWithIt()
+    {
+        Owner player = Make<Owner>();
+        Assert.That(CompanionPetPull.SetStay(player, true), Does.Contain("/petpull on"));
+        Assert.That(CompanionPetPull.IsStaying(player), Is.False);
+        Assert.That(CompanionPetPull.SetStay(player, false), Does.Contain("already off"));
+        Assert.That(CompanionPetPull.EndStay(player), Is.False);
+    }
+
+    [Test]
     public void OnlyBuffsThatWorkOnPetsGetPetPriority()
     {
         foreach (eSpellType type in new[] { eSpellType.StrengthConstitutionBuff, eSpellType.DexterityQuicknessBuff,
-                     eSpellType.StrengthBuff, eSpellType.DamageAdd, eSpellType.DamageShield, eSpellType.HealOverTime })
+                     eSpellType.StrengthBuff, eSpellType.DamageAdd, eSpellType.DamageShield, eSpellType.HealOverTime,
+                     eSpellType.BaseArmorFactorBuff, eSpellType.SpecArmorFactorBuff, eSpellType.DefensiveProc })
             Assert.That(CompanionPetPull.HelpsPet(NewSpell(type)), Is.True, type.ToString());
 
-        // No other concentration buff affects pets: armor, haste and acuity stay with the group.
+        // Haste, acuity and the generic armor buff stay with the group.
         foreach (eSpellType type in new[] { eSpellType.ArmorFactorBuff, eSpellType.CombatSpeedBuff, eSpellType.AcuityBuff })
             Assert.That(CompanionPetPull.HelpsPet(NewSpell(type)), Is.False, type.ToString());
     }

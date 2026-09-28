@@ -403,6 +403,19 @@ namespace DOL.GS.Commands
         }
     }
 
+    [CmdAttribute("&stay", ePrivLevel.Player,
+        "In pet pull mode: companions hold their spots at camp, an Animist keeps its mushrooms up, a Mentalist its HoT on your pet",
+        "/stay [on|off]")]
+    public sealed class StayCommandHandler : AbstractCommandHandler, ICommandHandler
+    {
+        public void OnCommand(GameClient client, string[] args)
+        {
+            GamePlayer player = client.Player;
+            bool? on = CompanionPetPull.ParseMode(args, CompanionPetPull.IsStaying(player));
+            DisplayMessage(client, on.HasValue ? CompanionPetPull.SetStay(player, on.Value) : CompanionPetPull.StayUsage);
+        }
+    }
+
     [CmdAttribute("&pull", ePrivLevel.Player, "Orders party bots and their pets to engage your target", "/pull")]
     public sealed class PullGroupCommandHandler : AbstractCommandHandler, ICommandHandler
     {

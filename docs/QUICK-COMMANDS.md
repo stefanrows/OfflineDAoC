@@ -47,6 +47,7 @@ keep up. Each server start selects 1× again.
 |---|---|
 | `/grind` | Start automated grinding with a companion-bot group, including for AFK use. |
 | `/petpull [on\|off]` | Pet pull mode for your group and your squads (no argument toggles; it ends when you log out). While it is on, every pull starts with your pet's normal attack: the pet goes in alone, companions wait at camp, keep a heal-over-time and their pet buffs on it, and only take adds that are on or running at someone of the group; an Animist plants mushrooms in front of the group. If the pet gets hurt or swarmed, set it passive to bring it back: direct pet heals and tank peels wait until the pull is released. Companions open up once the pet is beside you, or at once if it drops below 45%, dies or you attack. The next pet attack starts the next pull. |
+| `/stay [on\|off]` | Only in pet pull mode (no argument toggles). Your companions hold the spots they stand on instead of following you; tanks still meet adds at camp and walk back. An Animist keeps one main turret and as many damage mushrooms as the caps allow (10 around the grove) in front of the camp, toward your last pull, and replants them down to 10% power; a Mentalist keeps its heal-over-time on your pet, also out of combat. `/stay off`, `/petpull off`, `/passive`, logout or leaving the region end it. |
 | `/pull` | Order your companion group and pets to engage your selected enemy. When possible, a tank makes first contact before the rest of the group joins the fight. |
 | `/train <line> <level>` | Train a specialization to the chosen level using your available specialization points. Select a valid trainer for your class first. |
 | `/companions` | Open the Companion Manager window, if its client extension is installed. Without it, you get one line of command guidance. |
@@ -70,7 +71,7 @@ keep up. Each server start selects 1× again.
 | `/raid 80` | Enable an 80-member companion raid. Use **before** `/spawn`. Requires level 50; the total includes you. |
 | `/aggressive` | Companions assist your attacks and defend the party. They break off and return if left far behind. |
 | `/defensive` | Companions engage threats near you and return if left far behind. |
-| `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Choose another mode to resume fighting. |
+| `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Animists take down all their mushrooms (main turret included) and plant none while passive; `/stay` ends. Choose another mode to resume fighting. |
 | Companion Manager: Group orders | The first roster row sets these orders, shows each companion's effective stance, and offers Pull, Invite all, Bench all, and Grind. |
 | Companion Manager: Realm abilities | Select a companion, open Training & Tactics, then scroll to Passive realm abilities. Each click buys one rank; Overview shows earned RP and unspent RA points. |
 

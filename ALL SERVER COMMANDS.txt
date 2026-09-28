@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.139.1 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.140.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 288 command registrations read from the shipped server assemblies.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -612,7 +612,7 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.OnlineCommandHandler
 
 /passive
-  Recall companions and hold combat until another mode is chosen
+  Recall companions and hold combat until another mode is chosen; Animists take down all their mushrooms and /stay ends
   /passive
   Handler: DOL.GS.Commands.CompanionPassiveCommand
 
@@ -909,6 +909,11 @@ NORMAL PLAYER COMMANDS
   Be startled
   /startled
   Handler: DOL.GS.Commands.EmoteCommandHandler
+
+/stay
+  In pet pull mode: companions hold their spots at camp, an Animist keeps its mushrooms up, a Mentalist its HoT on your pet
+  /stay [on|off]
+  Handler: DOL.GS.Commands.StayCommandHandler
 
 /stats
   Displays player statistics

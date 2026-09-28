@@ -1197,6 +1197,21 @@ namespace DOL.AI.Brain
                 BotBody.Sprint(false);
         }
 
+        private void HoldStaySpot(Vector3 spot)
+        {
+            _ambientWanderMovement = false;
+            Body.StopFollowing();
+            if (BotBody.IsSprinting)
+                BotBody.Sprint(false);
+            if (Vector3.Distance(new Vector3(Body.X, Body.Y, Body.Z), spot) > CompanionPetPull.StaySlack)
+            {
+                if (AutonomousGroupMotion.ShouldResteer(BotBody, spot, Body.MaxSpeed, GameLoop.GameLoopTime))
+                    Body.PathTo(spot, Body.MaxSpeed);
+            }
+            else if (Body.IsMoving)
+                Body.StopMoving();
+        }
+
         private void FollowFormation(bool ambientWander = false)
         {
             // The traveling-performer preflight may already have issued this
@@ -1205,6 +1220,13 @@ namespace DOL.AI.Brain
                 return;
             if (!ambientWander)
                 _ambientWanderMovement = false;
+
+            // /stay: the companion holds its own spot at camp instead of following.
+            if (CompanionPetPull.TryGetStayAnchor(BotBody, out Vector3 stayAnchor))
+            {
+                HoldStaySpot(stayAnchor);
+                return;
+            }
 
             // A squad member's follow anchor (task 42/43) is its squad leader
             // companion rather than the owner AssistedPlayer resolves to; every
@@ -1462,6 +1484,14 @@ namespace DOL.AI.Brain
 
             if (BotBody?.IsTemporaryGroupHelper == true &&
                 (BotBody.TryReturnTemporaryCompanionToLeader() || TryResurrectCompanionOwner()))
+                return;
+
+            // /stay: an Animist keeps its grove full, a Mentalist its HoT on the owner's pet.
+            if (BotAnimistPolicy.TryGetStayGroveFront(BotBody, out Vector3 groveFront) &&
+                BotAnimistPolicy.MaintainStayGrove(BotBody, groveFront, ref _nextDeployablePetTick))
+                return;
+            if (!Body.IsCasting && BotBody.CharacterClass?.ID == (int)eCharacterClass.Mentalist &&
+                CompanionPetPull.StaysFor(BotBody) && TryHealOverTimeOnPet(CompanionPetPull.StayPet(AssistedPlayer), false))
                 return;
 
             if (!HasAggro && CompanionPetPull.IsHolding(AssistedPlayer) && TryAnswerPetPullThreat())
@@ -5667,11 +5697,13 @@ namespace DOL.AI.Brain
         }
 
         /// <summary>/petpull: a heal-over-time on the pulling pet before the group opens.</summary>
-        private bool TryHealOverTimeOnPulledPet()
+        private bool TryHealOverTimeOnPulledPet() => TryHealOverTimeOnPet(CompanionPetPull.Pet(AssistedPlayer), true);
+
+        /// <summary>A heal-over-time on the owner's pet; /stay keeps it up out of combat too.</summary>
+        private bool TryHealOverTimeOnPet(GameNPC pet, bool inCombatOnly)
         {
             Spell hot = BotBody.HealOverTime;
-            GameNPC pet = CompanionPetPull.Pet(AssistedPlayer);
-            if (pet == null || !pet.InCombat || !CheckHealSpell(hot) || LivingHasEffect(pet, hot) ||
+            if (pet == null || inCombatOnly && !pet.InCombat || !CheckHealSpell(hot) || LivingHasEffect(pet, hot) ||
                 !BotBody.IsWithinRadius(pet, BotBody.castingComponent.CalculateSpellRange(hot)))
                 return false;
 

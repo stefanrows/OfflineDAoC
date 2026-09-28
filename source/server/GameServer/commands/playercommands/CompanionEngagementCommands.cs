@@ -26,6 +26,11 @@ namespace DOL.GS.Commands
         {
             CompanionEngagementMode.Set(player, eCompanionEngagementMode.Passive);
             PlayerLedPullCoordinator.CancelForLeader(player);
+            // Passive also ends /stay, and every Animist takes down its mushrooms.
+            CompanionPetPull.EndStay(player);
+            foreach (GameBot bot in CompanionSquads.OwnerForceBots(player).ToArray())
+                if (bot.PlayerGroupLeader == player || bot.Owner == player)
+                    BotAnimistPolicy.ReleaseGrove(bot);
             if (player.Group != null)
                 foreach (GameBot bot in player.Group.GetMembersInTheGroup().OfType<GameBot>())
                     if (bot.PlayerGroupLeader == player && bot.Brain is BotBrain brain)
