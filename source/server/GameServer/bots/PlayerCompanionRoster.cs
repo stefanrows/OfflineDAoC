@@ -1797,7 +1797,7 @@ namespace DOL.GS
             companion.SuppressRosterBenchOnGroupRemoval = true;
             ActiveCompanions.TryRemove(record.CompanionId, out _);
             if (previousGroup != null)
-                previousGroup.RemoveMember(companion);
+                previousGroup.RemoveMember(companion, retainSingleRemainingMember: IsSquadGroup(previousGroup));
             companion.RemoveFromWorld();
             companion.Delete();
 
@@ -1927,6 +1927,11 @@ namespace DOL.GS
         /// controlled, intra-roster move (task 42). Falls back to a real bench if the
         /// move itself fails, so the companion is never left outside the tracked
         /// lifecycle.</summary>
+        // A squad is a companion-only group: unlike an ordinary group it keeps
+        // its last member instead of dissolving (which would bench that member).
+        private static bool IsSquadGroup(Group group) =>
+            group != null && !group.GetMembersInTheGroup().OfType<GamePlayer>().Any();
+
         private static bool TryMoveCompanionToGroup(GameBot companion, Group targetGroup)
         {
             if (companion == null || targetGroup == null)
@@ -1942,7 +1947,7 @@ namespace DOL.GS
             {
                 if (previousGroup != null)
                 {
-                    previousGroup.RemoveMember(companion);
+                    previousGroup.RemoveMember(companion, retainSingleRemainingMember: IsSquadGroup(previousGroup));
                     ReconcileSquadLeadership(owner, previousGroup);
                 }
 
