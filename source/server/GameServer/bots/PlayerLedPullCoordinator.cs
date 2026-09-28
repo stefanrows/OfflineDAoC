@@ -118,9 +118,11 @@ namespace DOL.GS
         public static void LeaderEngaged(GamePlayer player, GameLiving target)
         {
             CompanionEngagementMode.RememberPull(player, target);
-            if (player?.Group == null || !player.Group.IsInTheGroup(player) || !ValidEnemy(player, target)) return;
+            // An owner who fields only companion squads has no own Group at all
+            // (task 44); only the own-group tank-contact gate below needs one.
+            if (player == null || player.Group != null && !player.Group.IsInTheGroup(player) || !ValidEnemy(player, target)) return;
             CompanionPvpEngagement.Order(player, target);
-            if (States.TryGetValue(player.Group, out GroupState state))
+            if (player.Group != null && States.TryGetValue(player.Group, out GroupState state))
             {
                 Order order = Volatile.Read(ref state.Pending);
                 if (order != null && Volatile.Read(ref order.Finished) == 0 && order.Leader != player) return;
@@ -201,10 +203,14 @@ namespace DOL.GS
 
         private static void Engage(GamePlayer player, GameLiving target, bool orderHumanPet)
         {
-            if (player?.Group == null || !ValidEnemy(player, target)) return;
-            foreach (GameLiving member in player.Group.GetMembersInTheGroup())
+            if (player == null || !ValidEnemy(player, target)) return;
+            // The owner's whole force (task 44): his own group and every one of his
+            // companion squads, not just the Group object he happens to stand in. An
+            // owner who fields only squads (no personal companions) has no own Group
+            // at all, so this must not require one.
+            foreach (GameBot bot in CompanionSquads.OwnerForceBots(player))
             {
-                if (member is GameBot bot && bot.PlayerGroupLeader == player && Available(bot, player) &&
+                if (bot.PlayerGroupLeader == player && Available(bot, player) &&
                     bot.IsWithinRadius(target, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) && bot.Brain is BotBrain brain)
                     brain.AssistPlayerAttack(target);
             }
@@ -213,7 +219,7 @@ namespace DOL.GS
 
         public static bool Available(GameBot bot, GamePlayer player) => bot != null && player?.IsAlive == true &&
             bot.IsAlive && bot.ObjectState == GameObject.eObjectState.Active &&
-            bot.Group == player.Group && bot.Group?.IsInTheGroup(bot) == true &&
+            CompanionSquads.SharesOwnerForce(bot, player) &&
             bot.CurrentRegionID == player.CurrentRegionID && bot.IsWithinRadius(player, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) &&
             !bot.IsOnStableMasterRoute && !bot.IsReturningAfterRelease;
 

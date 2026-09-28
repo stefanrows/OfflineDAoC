@@ -16,6 +16,29 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+55. **Companions buff everyone first and resurrect a dead player afterwards.**
+    Reported by Aaron: player-led companions with a known resurrection spell
+    kept casting buffs while a dead group/squad member waited. Cause:
+    `TryResurrectGroupMember`/`TryResurrectCompanionOwner` only ever tried the
+    single strongest known resurrection rank; when that rank was not
+    affordable they returned `false` exactly like "nothing to do here", so
+    `CheckHeals()` fell through and the companion moved straight on to
+    `CheckSpells(Defensive)` buff maintenance instead of saving power for the
+    rez. Fixed in source (unreleased): `GameBot` now also tracks every known
+    resurrection rank and exposes `BestAffordableResurrection()` (the
+    strongest rank current power allows, weakest when power is low, matching
+    `ResurrectionSpell`'s existing "best known" meaning for
+    `HasViableResurrector`/`TemporaryCompanionRecovery`); `BotBrain` uses it to
+    pick the spell to attempt, and `CheckHeals()` now also returns `true`
+    (blocking buffs/maintenance for that tick) whenever a known rez is not yet
+    affordable and a dead member of the caster's own group or owner force
+    (squads, task 44) is waiting, so the companion rests/regens toward the
+    best rez instead of spending power on buffs. A companion with no
+    resurrection spell is unaffected; this is scoped to player-led companions
+    and temporary helpers, not autonomous world bots. Unit tests cover the
+    affordable-rank selection (`UT_CompanionResurrectionPriority.cs`).
+    Real-client verification of the in-game ordering remains pending.
+
 54. **Companions occasionally hang at the Darkness Falls entrance stairs.**
     Reported by Aaron on 2026-09-28 (0.115.0): single companions stay at the
     tall entrance steps that a player simply walks down. The bug 12 stair

@@ -131,11 +131,29 @@ A squad's leader marches behind the owner at its own standoff distance (200-400
 units, farther out per squad number, so squads fan out rather than stack); its
 members follow their own squad leader at the ordinary companion follow distance.
 When a squad's leader is removed, benched, or logs out with the owner, its
-remaining members promote a new leader automatically. Squad member combat is
-minimal for now: members still fight under the owner's group orders and pull
-coordination the same way an ordinary companion does; a squad leader-specific
-assist target and full battlegroup-wide combat coordination are task 44, not yet
-implemented.
+remaining members promote a new leader automatically.
+
+Squad members fight with the owner (task 44). A squad member's own Group is its
+squad's, never the owner's, so `CompanionSquads.SharesOwnerForce`/`OwnerForceBots`
+generalize every gate that used to compare Group equality against the owner's own
+Group: `PlayerLedPullCoordinator.Available`/`Engage`, `CompanionPvpEngagement.Leader`/
+`Observe` (the RvR assist train), and the owner's attack broadcast
+(`BotBrain.NotifyNearbyGroupBots`/`OnGroupMemberAttacked`). In practice a
+squad member assists the owner's PvE and RvR target exactly like a companion in
+his own group, including `/petpull` holds, and defends its own squad, the owner,
+and the owner's own group within the usual radius; squads also defend each other.
+A squad heals its own members first and, once that squad is fine, also covers the
+owner and his other squads; group heals still only reach the caster's own group.
+Out of combat, a squad with nobody left to raise reaches into the owner's other
+squads, or the owner himself, for a resurrector, using the same reservation
+pattern as ordinary group rez so two squads cannot cast on the same corpse. A
+squad member's single-target realm buff also reaches the owner when he is
+missing it; group buffs stay scoped to the caster's own group. `/aggressive`,
+`/defensive`, and `/passive` group orders already resolve the owner directly
+(task 42) and apply to squads unchanged. The owner's own-group tank-contact wait
+gate for a manual `/pull` (the ordered pull's tank-contact handshake) stays scoped
+to his own group; squads assist immediately instead of waiting on that gate, the
+same way healers and buffers already do when no tank is available.
 
 Joining a battlegroup with `/bg` brings an owner's live squad companions along
 automatically, and leaving takes them with him; `/bg who` lists them under their
