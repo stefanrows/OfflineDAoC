@@ -6,6 +6,9 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+Agent sessions on items 45–48: take the role and context from
+[ORCHESTRATOR_BRIEF.md](ORCHESTRATOR_BRIEF.md) first.
+
 7. **Investigate the perceived XP slowdown from level 30 with 10x XP.** Check
    the level XP curve and XP awarded at different levels to determine whether
    the slowdown is expected progression or an unintended drop in rewards, then
