@@ -2,9 +2,11 @@
 
 ## Fortschrittslog (für eine fortgesetzte Session: hier weitermachen)
 
-Start 03:14 CEST. Stand bei Start: `main` = 0.117.0 (a04e02a), Install läuft
-0.115.0 (Build 2026-09-27 23:52), Server läuft, kein Spieler eingeloggt.
-Worktrees liegen unter `/mnt/d/OfflineDAoC-wt/<paket>`, Branches `night/<paket>`.
+Start 03:14 CEST, Ende 05:00 CEST. **Endstand: `main` = 0.125.0 gepusht, Install
+läuft 0.125.0 (Start 04:41), Server läuft, Ked GuildRank 1.** Alle Worktrees und
+`night/*`-Branches sind entfernt; nichts ist halb gemergt. (Zeitangaben in der
+Tabelle sind teils ~20 min zu spät notiert; die Reihenfolge stimmt.)
+Stand bei Start: `main` = 0.117.0 (a04e02a), Install 0.115.0, kein Spieler eingeloggt.
 
 | Paket | Typ / Agent | Worktree | Status |
 |---|---|---|---|
@@ -42,7 +44,9 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 - Task 48 (Build): offene Frage für Aaron: Der Landepunkt des Allrealm-Teleporters bei Castle Sauvage (583913,487012) und die Bindsteine dort liegen ~9.000 Einheiten vom Hub-Zentrum, also außerhalb des 3.500er-Schutzradius (Svasud ~4.000). Der Entwickler hat den Radius ohne Kartenbeleg nicht vergrößert → Real-Client-Blick nötig. Menschen im Hub sind jetzt ebenfalls unangreifbar (Entscheidung 7).
 - Live-Messung 0.122.0 (Start 04:21, erste 5 min, Population noch im Aufbau): 0 Exceptions, kein `&tc`-Fehler mehr (Bug 57 ✅ live), keine Statusdatei-Fehler (58/26). Lange BotBrain-Ticks ~17/min (vorher ~85/min), Median 37 ms (vorher 94–122), Max 280 ms (vorher 3.967); NpcService Ø 3,2–3,7 ms (vorher 12–15), p95 15 ms (vorher ~60). `BOT_THINK_PROFILE`: RouteRecoverySearch max 15 ms (Ziel <100 ✅). Verbleibende Hotspots: NavPathQuery in TravelAcrossRegions (167 ms/146 Abfragen in einer Runde) und ZoneItineraryStep (219 ms/96 Abfragen) → Folgearbeit für Bug 56. Con-Erholung: erste `AUTONOMOUS_CON_RECOVERY reason=new-task`; 13 Tode geloggt (11 PvE, 2 PvP), Con-Grenzen Blau/Gelb (nach Neustart erwartbar). Bug 29: 0 RESURRECTION_WAIT-Zeilen bisher.
 - Live-Messung 0.122.0 nach 17 min mit voller Population (1.210 Bots, 04:21–04:38): 0 Exceptions, 0 Statusdatei-Fehler, 0 lange Reaper-Ticks (aber auch keine Spieler-Kills). Lange BotBrain-Ticks 22–39/min (vorher ~85), Median 41 ms (vorher 94–122), p95 257 ms, Max 1.699 ms (ein Ausreißer; vorher 3.967). NpcService Ø 5,9 ms (vorher 12–15), p95 17 ms (vorher ~60) → Bug 56 live etwa 2,5–3× besser, Rest siehe Hotspots. Con-Erholung: 23 Schritte (16 neue Aufgabe, 5 Level-up, 2 Kills), 7 Camp-Wechsel zu härterer Beute. Tode: 698 in 17 min, davon 495 PvP; bot_was_target=True bei 406, False (kollateral) bei 89, area=True 69 → die „fast alles kollateral"-Hypothese des Advisors trifft so nicht zu; die meisten PvP-Tode sind gezielte Angriffe (Paket B neu bewerten: eher Hub-Gemetzel als Flächenzauber; Task 48 macht die Hubs sicher). Bug 29: keine RESURRECTION_WAIT-Schleifen. RVR_KEEP_ROUTE_FAILED 49 in 17 min (0.122.0 hat den 48-Fix noch nicht).
-- 04:39: Batch 1 (bis 4ceb48e = 0.122.0) nach `stefanrows/OfflineDAoC` `main` gepusht. Batch 2 (0.125.0: 48, 59, 47C, 46) Build grün, Server-Tests 2447/1 übersprungen, Launcher 127/127; `server.sh update` (Deploy + Neustart) läuft seit 04:39.
+- 04:39: Batch 1 (bis 4ceb48e = 0.122.0) nach `stefanrows/OfflineDAoC` `main` gepusht. Batch 2 (0.125.0: 48, 59, 47C, 46) Build grün, Server-Tests 2447/1 übersprungen, Launcher 127/127; Deploy 04:40 (Backup `deploy-20260928-044025`), Start 04:41.
+- Live-Messung 0.125.0 (04:41–04:57, 16 min, 1.210 Bots): 0 Exceptions, 0 Statusdatei-Fehler. RVR_KEEP_ROUTE_FAILED **0** (0.122.0: 49 in 17 min; 0.115.0: 519 in 3,4 h). Frontier-Teleports: 29 von 39 Abfahrten mit Gruppe ≥3 (party=3: 4, 4: 7, 6: 10, 7: 5, 8: 3; vorher 2 von 320). Tode 251 in 16 min (0.122.0: 698 in 17 min), davon PvP 84 (vorher 495); Tode in den drei Hubs 6 von 251 (vorher 82 %). Bug 29: 3 Fern-Leichen sofort freigegeben (REMOTE_CORPSE_RELEASE), keine Warteschleife. Ticks: Median 40 ms, p95 154, Max 622, NpcService Ø 5,2 ms. 47C: 12 Gruppen-Tasks gestartet, noch kein Deadline-Start (erwartungsgemäß erst nach 30 min). 47A: 12 Erholungen, 3 Camp-Wechsel.
+- 05:00: Rest (0.123.0–0.125.0 + Bericht) gepusht; Server bleibt auf 0.125.0 laufen.
 
 ## Zusammenfassung für Aaron
 
@@ -68,14 +72,19 @@ Log aktualisieren, Wakeup nach dem Reset planen.
 ### Ked
 ✅ GuildRank 9 → 1 in North Bomb, Backup `playable-backups/opendaoc.pre-ked-rank-20260928-041813.db`. Bitte im Spiel prüfen, ob Rang 1 einladen darf (Rang-Rechte der Gilde).
 
-### Live gemessen (0.122.0, 17 min, 1.210 Bots)
+### Live gemessen (0.122.0 17 min, 0.125.0 16 min, je 1.210 Bots)
 
-| Messwert | vorher (0.115.0) | jetzt |
+| Messwert | vorher (0.115.0) | jetzt (0.125.0) |
 |---|---|---|
-| lange Bot-Ticks pro Minute | ~85 | 22–39 |
-| Tick-Median | 94–122 ms | 41 ms |
-| NpcService Ø / p95 | 12–15 ms / ~60 ms | 5,9 ms / 17 ms |
+| lange Bot-Ticks pro Minute | ~85 | 20–36 |
+| Tick-Median / Max | 94–122 ms / 3.967 ms | 40 ms / 622 ms |
+| NpcService Ø / p95 | 12–15 ms / ~60 ms | 5,2 ms / 18 ms |
 | Exceptions im Lauf | 2 | 0 |
+| gescheiterte Keep-Routen | 519 in 3,4 h | 0 in 16 min |
+| Frontier-Teleports als Gruppe (≥3) | 2 von 320 | 29 von 39 |
+| Bot-Tode pro Minute (PvP) | ~75 (PvP ~29/min) | ~16 (PvP ~5/min) |
+| Anteil der Tode an den drei Hubs | 82 % | 2 % |
+| Warteschleifen auf Fern-Leichen | 10 Gruppen, bis 1 h 43 min | 0 (3 Sofort-Freigaben) |
 
 ### Bitte im Spiel prüfen
 
