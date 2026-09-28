@@ -57,7 +57,7 @@ options.
     (over 100 MB). Search it with grep, tail or awk.
 - **Server control only through**
   `/mnt/d/OfflineDAoC/playable-dev/server.sh status|stop|start|restart|update`,
-  and only after Aaron has said OK. Never start, stop or deploy on your own.
+  and only after Aaron has said OK (standing OK for the night run below).
   Never kill processes by name.
 - **Files mix CRLF and LF line endings.** The Edit tool can silently rewrite a
   whole file's line endings. Check `git diff --stat` after each edit and use
@@ -77,17 +77,69 @@ options.
 
 ## State on 2026-09-28
 
-- 0.116.0 is on GitHub; Aaron's install runs 0.115.0.
-- Local `main` holds, unpushed:
-  - Task 41: companions show in `/who` and the launcher list, earn Realm
-    Points, answer `/send`, and new recruits need unique names.
-  - Tasks 42–43: companion squads, companions in battlegroups, march
-    formation.
-  - Tracker items 40–48 and bug 55.
-- Still in progress: task 44 (squad combat) and bug 55 (resurrect before
-  buffing), then the version bump and push.
+- 0.117.0 is on GitHub (companion squads and battlegroups, companions as
+  players with Realm Points, squad combat, resurrect before buffing); Aaron's
+  install still runs 0.115.0.
 - Open for the night:
   - 46: pet pull as a group mode.
   - 47: advisor pass, then build, for world-bot levelling.
   - 48: advisor pass, then build, for real RvR.
-  - 45: load check. This needs a running server, so ask Aaron first.
+  - 45: load check on the running local server.
+
+## Night run (Aaron, 2026-09-28)
+
+The orchestrator runs on Fable with permission bypass. Aaron is asleep, so no
+questions reach him: when something is unclear, learn instead of assuming.
+Read the code, the live save and the log, and research DAoC 1.65 (class
+guides, patch notes, Herald archives, freeshard documentation) until the
+answer is grounded. Record in the report what you learned and why you decided
+as you did. Anything that still needs Aaron's decision stays open with the
+options written down; do not guess.
+
+**Authorized for this night:**
+- Stop, update, start and restart the local server at any time with
+  `playable-dev/server.sh`, and watch it live: the log, the save through
+  `dbquery.py`, `/who`-style observation. Only the orchestrator controls the
+  server; subagents never do.
+- Push every tested and accepted result to `stefanrows/OfflineDAoC` `main`.
+
+**Goal:** fix as many known bugs as possible, plus tasks 45–48.
+- Bugs: triage docs/BUGS.md for items whose cause is not fixed in source
+  ("not yet investigated", "not claimed fixed", open problems in pending
+  items), and any bug found while watching the live server (record it first).
+- Tasks: 46 (pet pull as a group mode), 47 and 48 (advisor pass first, then
+  build), 45 (load check with the new battlegroup code).
+
+**Rhythm: develop several, then test and accept together.**
+1. Plan the packages and pick an agent type for each (see below). Run agents
+   in parallel only when they touch different files.
+2. Each package gets its own worktree. When it reports, a `daoc-reviewer`
+   checks it. Send a rejected package back to its developer with the
+   defects; stop after two rounds and leave it open with the findings.
+3. Merge the accepted packages into local `main` one by one. Each finished
+   bug or task gets its own MINOR version bump and changelog entry, with the
+   version pins in lockstep. Build the server and launcher, then run the full
+   server and launcher test suites.
+4. Deploy the batch with `server.sh update`, watch the server live for about
+   15 minutes (errors, long ticks, the behavior you changed), then push.
+   If the batch breaks something, fix it or revert that package before
+   pushing; never push a red build or red tests.
+5. Repeat with the next batch.
+
+**At the end:** run a full build and all tests, push, and leave the local
+server running on the pushed version. Write a German summary for Aaron in
+docs/NIGHT_REPORT.md: what was fixed and pushed, what was rejected and why,
+what needs his check in game, and open decisions with options.
+
+**Agent types (in `.claude/agents/`, model and effort preset):**
+
+| Agent | Model / effort | Use for |
+|---|---|---|
+| `daoc-advisor` | Opus, high, read-only | Root-cause analysis and build plans (47, 48, unclear bugs) |
+| `daoc-developer` | Opus, high | Features and AI changes following a plan (46, 48 build) |
+| `daoc-bugfixer` | Sonnet, high | One well-scoped bug with a clear reproduction |
+| `daoc-reviewer` | Opus, high, read-only | Acceptance before merge |
+| `Explore` | Haiku | Quick lookups |
+
+Pick the model by difficulty. Game-loop AI, pathing, rewards or anything
+touching saves goes to Opus; test fixes and small scoped bugs go to Sonnet.
