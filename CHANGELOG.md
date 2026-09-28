@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.138.0] - 2026-09-28
+
+### Changed
+
+- NPC-held (Frontier Wardens) frontier keeps start at keep level 1 like an
+  unclaimed 1.65 keep: guards 52, lord 63, outer door 10,000 hit points
+  (before: level 5 with guards 59, lord 70 and 50,000). Guild-claimed keeps
+  keep their level and upgrade path. Wall height shown in the client drops
+  accordingly.
+- Each guild may run its own siege (at most six automatic sieges server-wide)
+  and claim up to three keeps; before, one siege per server and one keep per
+  guild.
+- Direct-damage spells and bolts hit keep doors at half effect after door
+  toughness, as in patch 1.46; damage-over-time, debuffs, crowd control and
+  area spells do not. Bot casters without a ram seat nuke the gate.
+- The installed save's `starting_keep_level` (4) and `guilds_claim_limit`
+  (1) are updated to 1 and 3 at the first start only while they still hold
+  the shipped defaults. Relic raids stay off (task 56, later).
+
 ## [0.137.0] - 2026-09-28
 
 ### Changed
