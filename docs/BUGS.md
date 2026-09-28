@@ -241,6 +241,37 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 29. **Separated PvE parties can wait on combat or arrivals in another region.** The 0.74.0 observation caught safe members paused by a distant party member's combat; source also only recognized arrivals immediately across the leader's next region edge, ignoring members already in the final camp region. Source 0.75.0 scopes ordinary combat/recovery holds to nearby living members and permits leaders to advance toward members at the destination region. Actual routes, combat defense and existing deadlines remain required. Installation, multi-edge travel and combat/recovery verification pending; other travel failures are not claimed fixed.
 
+    **Still occurring on installed 0.115.0 (live log, run from 2026-09-27 23:54).**
+    Group `1e7771ca…-2b4d33-166` waited in West Downs (region 1) while its
+    Skald Sivildrid kept dying at the Svasud Faste bind in region 100:
+    75 travel holds, 37 resurrection waits and 40 `release-and-rejoin`
+    timeouts (33 at the same corpse spot) from 01:21 to 03:04. The task
+    started 01:00:52 and expired 03:04:53 with no camp. Five other parties
+    (`c0e34e19…-134`, `1e7771ca…-270`, `1e7771ca…-087`, `ab173b5f…-142`,
+    `91108e2d…-266`) logged 508–2,700 resurrection waits each for one corpse
+    20,000–125,000 units from the camp, with no timeout at all; `-134` waited
+    1 h 46 min for its dead leader until the task expired.
+    Causes proven in `AutonomousBotGroupCoordinator.cs`:
+    - Members at the camp call `MarkGrinding`/`PublishCamp` on every AI pulse
+      and overwrote the "Waiting for resurrection" phase. The next pulse
+      counted a new casualty and reset the 60-second release window, so the
+      corpse was never released (a new wait every 7 s on average).
+    - The corpse hold and its combat check used every party member, in any
+      region, and even a stale combat flag on the corpse itself.
+    - A released member that died again on its way back had no limit; the
+      post-wipe regroup waited for it until the task expired.
+    Source fix (no version yet): camp pulses only record the phase to
+    resume during a casualty hold; a corpse with no living member in its
+    region within visibility range releases at once
+    (`AUTONOMOUS_GROUP_REMOTE_CORPSE_RELEASE`); combat only holds a corpse
+    when it happens near that corpse; after the first death plus two more
+    deaths without getting back to the leader, the party drops the member
+    (`AUTONOMOUS_GROUP_REJOIN_FAILED`) and plays on; a pair ends and both
+    return to matchmaking. Tests: `UT_AutonomousSeparatedPartyResurrection`.
+    Not fixed: bots dying repeatedly at a bind point used as an RvR staging
+    spot, and a regroup that waits for a member who never dies and never
+    arrives. Real-client / live-log check pending.
+
 30. **One free population seat cannot fill an assembling PvE party.** Source audit after the 0.74.0 party-size decline found a minimum-two free-seat return before the backfill pass. Source 0.75.0 permits that pass with one free seat and applies the two-seat gate only to new-party creation. This is one confirmed source defect, not an established explanation for the whole observed decline. Live roster-size verification pending.
 
 25. **Initial guild recruitment loses invitations and late PvE recruitment skips camp validation.** Source audit following the installed 0.73.0 observation found that invitations ignored existing partial parties and stopped when eight peers were waiting; late PvE joins checked the rendezvous but not whether the planned camp remained valid. Source 0.74.0 advertises bounded initial-party vacancies at safe task boundaries, removes the waiter cutoff, and repeats the camp usability check before a late join. Failed probes yield briefly to other candidates, and missing roles are recalculated after each join. Installation and sustained full-party/route verification remain pending; these source defects do not establish the cause of every observed travel failure.
