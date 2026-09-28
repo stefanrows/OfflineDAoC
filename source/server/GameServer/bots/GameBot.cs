@@ -2445,7 +2445,7 @@ namespace DOL.GS
                     servant.BotReleaseReason = !servant.IsAlive ? "death" : reason.ToString();
                 necromancerPetDied = CharacterClass?.ID == (int)eCharacterClass.Necromancer &&
                                       petBody != null && !petBody.IsAlive;
-                bool syntheticCharm = petBody?.TempProperties.GetProperty<bool>(AutonomousPetSupport.SyntheticCharmPetProperty) == true;
+                bool syntheticCharm = AutonomousPetSupport.IsSyntheticCharm(petBody);
                 // Let the summon effect perform its normal release cleanup.
                 // This removes caster/pet effects and, for a Bonedancer
                 // commander, releases every sub-pet before deleting the body.

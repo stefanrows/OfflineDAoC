@@ -410,8 +410,7 @@ namespace DOL.GS.Spells
             if (ServerProperties.Properties.SPELL_CHARM_NAMED_CHECK != 0 &&
                 !string.IsNullOrEmpty(charmMob.Name) && char.IsUpper(charmMob.Name[0]))
                 return false;
-            bool syntheticCandidate = charmMob.TempProperties.GetProperty<bool>(
-                AutonomousPetSupport.SyntheticCharmPetProperty);
+            bool syntheticCandidate = AutonomousPetSupport.IsSyntheticCharm(charmMob);
             eCharacterClass characterClass = (eCharacterClass)casterBot.CharacterClass.ID;
             int intendedLevel = syntheticCandidate
                 ? AutonomousPetSupport.GeneratedCharmTargetLevel(characterClass, casterBot.Level)

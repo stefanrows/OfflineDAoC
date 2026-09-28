@@ -6,18 +6,12 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-65. **Bots die to mobs inside the border hubs and RvR bots die to named
-    frontier mobs.** Live 0.125.0, 2026-09-28 04:41–15:46 (11 h, 1,210 bots):
-    5,492 deaths inside the 3,500-unit safe hubs, all PvE (phantom magi 735,
-    savage dragonfly 519, thrawn ogre thresher 411, snowshoe bandit 307), rising
-    from about 200 to 770 per hour; the safe area blocks players, not the
-    restored frontier spawns around the border keeps. Separately 7,614 level-50
-    PvE deaths, mostly to named frontier mobs: Illusion of Aidon the Archwizard
-    (level 75, 589), Black Lady (65, 457), reanimated guardian (58, 337).
-    Expected: no ordinary mob camps in a hub courtyard, and roaming warbands
-    walk around named mobs far above their level. Not yet investigated (spawn
-    placement from the 0.72.0 frontier manifest versus hub geometry; RvR route
-    and aggro avoidance).
+65b. **RvR bots die to named frontier mobs far above their level.** Split
+    from 65. Live 0.125.0, 2026-09-28 04:41–15:46: 7,614 level-50 PvE deaths,
+    mostly to named frontier mobs: Illusion of Aidon the Archwizard (level 75,
+    589), Black Lady (65, 457), reanimated guardian (58, 337). Expected:
+    roaming warbands walk around named mobs far above their level. Not yet
+    investigated (RvR route and aggro avoidance).
 
 66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
     0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
@@ -88,6 +82,40 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+65. **Bots die to mobs inside the border hubs.** Live 0.125.0, 2026-09-28
+    04:41–15:46 (11 h, 1,210 bots): 5,508 deaths inside the 3,500-unit safe
+    hubs, 4,997 of them PvE (phantom magi 739, savage dragonfly 522, thrawn
+    ogre thresher 412, snowshoe bandit 308, orc lure 275, defiled skeleton 270,
+    pollen spore 250), rising from about 200 to 770 per hour. Cause: not the
+    world data. The save has no hostile spawn within any hub radius (only
+    guards, merchants, trainers and ambient critters), and the 0.72.0
+    frontier restore placed none there. The killers are generated charm
+    pets: Sorcerer, Minstrel and Mentalist bots create a body from a real mob
+    row of their realm's template regions (Sorcerer and Minstrel: Albion
+    regions 1–62, killers here from Shrouded Isles region 51; Mentalist:
+    Hibernia regions 180–224, killers here from 181 and 200) next to themselves while idle, typically at the hub
+    bindstone. That body keeps the template row's respawn interval. When the
+    pet or an uncharmed candidate died, GameNPC death wiped the pet tag and
+    started the respawn; the deferred charm stop and the owner's cleanup then
+    no longer recognised it, and it came back as an ordinary aggressive
+    template mob (template level spread, aggro range 500) at its creation
+    spot, respawning there until the next server restart. 1,590 of the hub
+    deaths are on the Castle Sauvage bindstone (585891,476614) itself. The same
+    leak made 13,523 of 28,962 PvE mob kills in the run (47 %) come from mobs
+    that have no spawn in that region, rising from 201 to 2,101 per hour.
+    Fix in source: a generated charm body carries no respawn and keeps its
+    identity after death (a weak table besides the tag), so death, the charm
+    stop and owner cleanup delete it; human players' generated charms use the
+    same path. The ghost camps live only in server memory, so no save
+    migration is needed; the next server start clears the existing ones.
+    Not explained: the 308 snowshoe bandit deaths on the Svasud Faste hub
+    bindstone (765147,668315); no generated-charm class uses Midgard
+    templates, and the bandit camp lies about 21,000 units away. Measure after
+    deployment. Verification: `AUTONOMOUS_BOT_DEATH` lines with
+    `classification=pve` inside the hub radius should drop toward 0 per hour,
+    and PvE kills by mobs without a spawn in that region should stay near 0
+    over a whole day. Real-client check pending.
 
 67. **Mobs BAF toward the group during a held `/petpull`.** Reported on
     2026-09-28 while pet pulling as a Necromancer: mobs headed toward group

@@ -18,7 +18,7 @@ namespace DOL.GS
             // Generated GameBot charm companions have an explicit lifecycle:
             // death, release, region teardown, or owner teardown ends them.
             // They do not expire on the native 65,535-second charm sentinel.
-            if (charmNpc.TempProperties.GetProperty<bool>(AutonomousPetSupport.SyntheticCharmPetProperty))
+            if (AutonomousPetSupport.IsSyntheticCharm(charmNpc))
             {
                 Duration = long.MaxValue;
                 ExpireTick = long.MaxValue;
@@ -69,7 +69,8 @@ namespace DOL.GS
             ControlledMobBrain oldBrain = SpellHandler.Caster.ControlledBrain as ControlledMobBrain;
             SpellHandler.Caster.RemoveControlledBrain(oldBrain);
             bool keepSongAlive = false;
-            bool syntheticAutonomousPet = charmNpc.TempProperties.GetProperty<bool>(AutonomousPetSupport.SyntheticCharmPetProperty);
+            // The deferred stop can run after GameNPC death wiped the tag.
+            bool syntheticAutonomousPet = AutonomousPetSupport.IsSyntheticCharm(charmNpc);
 
             if (oldBrain != null)
             {

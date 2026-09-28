@@ -143,7 +143,19 @@ These are settled. Do not reopen them without the owner.
 6. **Grey targets:** autonomous bots **rarely** start fights with targets that
    con grey to them (tunable, opportunistic, or only when threatened).
 7. **Portal keeps:** Castle Sauvage, Svasud Faste, and Druim Ligen become
-   **neutral safe hubs**, like the capitals.
+   **neutral safe hubs**, like the capitals. Each hub is safe within 3,500
+   units of its keep. A second safe circle covers the outer bindstones and
+   the code-fallback teleporter landing next to them (owner decision B,
+   option b, 2026-09-28). The bindstones are the reason: in the shipped save
+   the Teleport rows land players inside the hubs (about 1,000 units from the
+   keep); the outer landings exist only in `AllRealmsTeleportFallbacks`.
+   Castle Sauvage: centre 584340,486620, radius 1,500 (bindstones
+   584770,486230 and 584638,486320, fallback landing 583913,487012). Svasud
+   Faste: centre 764890,672960, radius 1,800 (bindstone 764082,672416,
+   fallback landing 765694,673509). Druim Ligen needs none: its teleporter
+   destination and bindstone are inside the hub. The road between landing and keep stays
+   open PvP at Castle Sauvage; at Svasud Faste the landing circle touches the
+   hub circle. Humans are protected in both circles like bots.
 8. **Kill reward:** XP + RP for player-shaped kills, con loss on PvP death, no
    coin or item drop.
 9. **Teleporter travel:** every realm can use every capital, portal-keep
@@ -353,7 +365,9 @@ layer also marks all realm NPCs as guildmates.
    - Regions `10`, `101`, `201` (capitals), `2`, `102`, `202` (housing),
      `21`, `129`, `221` (no-PvP newbie dungeons).
    - The three portal keeps as **areas** (radius around each keep, owner
-     decision 7). Their guards become `PEACE` or non-aggressive.
+     decision 7), plus the teleporter-landing circles of Castle Sauvage and
+     Svasud Faste (decision B, option b). Their guards become `PEACE` or
+     non-aggressive.
    - Replace `m_unsafeRegions = { 163 }` with zone-level OF frontier detection
      for `/safety`.
 6. **Immunity for bots.** Bot victims get the same post-release and zone
