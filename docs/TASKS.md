@@ -71,6 +71,25 @@ When a task is done and its required verification is complete, move it out of it
     priority from 0.114.0/0.115.0; update commands docs. Replaces the command
     semantics of task 39.
 
+47. **Advisor, then build: world bots barely level.** Aaron, 2026-09-28:
+    levelling "barely works". First a read-only advisor pass (autonomous world
+    bot population; also note whether TASKS item 7 is the same cause):
+    quantify level distribution, XP over time, how many bots actually fight
+    vs travel/rest/idle/stuck/dead (live save via `playable-dev/dbquery.py`,
+    `runtime/logs/server-console.log`), rank proven vs suspected root causes
+    with evidence. Then an implementation agent fixes the proven causes.
+
+48. **Advisor, then build: real RvR with roaming groups.** Aaron, 2026-09-28:
+    he still sees no bot groups in RvR. First a read-only advisor pass: how
+    many online bots hold the RvR objective per level bracket and realm, how
+    many are actually in the frontiers vs travelling/staging/in town, RvR
+    group sizes, task starts/ends/failures and why; ranked root causes with
+    evidence. Then build toward "real RvR/PvP" as a 2003 player knew it:
+    8-man groups with tank/healer/CC roaming, meeting enemy groups, fights at
+    keeps, milegates and bridges, zergs around keep takes, solo/duo
+    stealthers, resting and regrouping, realm-balanced presence; human-like,
+    not perfect.
+
 ## Implemented in source; installation verification pending
 
 39. **/petpull for Enchanter pet pulls.** Aaron, 2026-09-27: send the pet in,
