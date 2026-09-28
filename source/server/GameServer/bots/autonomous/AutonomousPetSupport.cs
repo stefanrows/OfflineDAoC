@@ -29,6 +29,11 @@ public static class AutonomousPetSupport
     private static readonly ConcurrentDictionary<eCharacterClass, Spell> GeneratedCharmSpells = new();
     private static readonly ConcurrentDictionary<(eCharacterClass Class, int SpellId), Spell> PlayerGeneratedCharmSpells = new();
     private static readonly ConditionalWeakTable<GameBot, BonedancerMinionSpellCache> BonedancerMinionSpells = new();
+    // Identity of every generated charm body for its whole lifetime.
+    // GameNPC death wipes TempProperties before the charm effect's deferred
+    // stop runs, so the tag alone cannot identify a dead pet.
+    private static readonly ConditionalWeakTable<GameNPC, object> SyntheticCharmBodies = new();
+    private static readonly object SyntheticCharmBodyMarker = new();
     private sealed record PendingCharm(GameNPC Mob, long ExpiresAtTick);
     private sealed class PermanentGeneratedCharmSpell : Spell
     {
@@ -223,8 +228,7 @@ public static class AutonomousPetSupport
 
     public static void CompleteSyntheticCharm(GameLiving owner, GameNPC mob)
     {
-        if (owner == null || mob == null ||
-            mob.TempProperties.GetProperty<bool>(SyntheticCharmPetProperty) != true)
+        if (owner == null || !IsSyntheticCharm(mob))
             return;
 
         if (PendingCharms.TryGetValue(owner, out PendingCharm pending) && pending.Mob == mob)
@@ -1399,7 +1403,7 @@ public static class AutonomousPetSupport
         mob.Z = (int)location.Z;
         mob.Realm = eRealm.None;
         mob.Level = (byte)targetLevel;
-        mob.TempProperties.SetProperty(SyntheticCharmPetProperty, true);
+        MarkSyntheticCharmBody(mob);
         if (mob.Brain is IOldAggressiveBrain aggressive)
         {
             aggressive.AggroLevel = 0;
@@ -1415,9 +1419,32 @@ public static class AutonomousPetSupport
         return true;
     }
 
+    /// <summary>
+    /// Tags a generated charm body and removes its template respawn. The body
+    /// is loaded from a real mob row (Shrouded Isles, frontier or dungeon
+    /// templates), so it inherits that row's respawn interval. When such a
+    /// pet or candidate died, GameNPC death restarted it as an ordinary
+    /// aggressive template mob at the spot where it was created, usually next
+    /// to its owner at a border keep bindstone, and it kept respawning there
+    /// until the server restarted (bug 65).
+    /// </summary>
+    public static void MarkSyntheticCharmBody(GameNPC mob)
+    {
+        if (mob == null)
+            return;
+        mob.TempProperties.SetProperty(SyntheticCharmPetProperty, true);
+        mob.RespawnInterval = -1;
+        SyntheticCharmBodies.AddOrUpdate(mob, SyntheticCharmBodyMarker);
+    }
+
+    /// <summary>True for a generated charm body, alive or dead.</summary>
+    public static bool IsSyntheticCharm(GameNPC mob) =>
+        mob != null && (mob.TempProperties.GetProperty<bool>(SyntheticCharmPetProperty) ||
+                        SyntheticCharmBodies.TryGetValue(mob, out _));
+
     private static void DeleteSyntheticCharm(GameNPC mob)
     {
-        if (mob?.TempProperties.GetProperty<bool>(SyntheticCharmPetProperty) != true)
+        if (!IsSyntheticCharm(mob))
             return;
         if (mob.ObjectState is GameObject.eObjectState.Active)
             mob.RemoveFromWorld();

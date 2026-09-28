@@ -97,7 +97,14 @@ Agent sessions on items 45–48: take the role and context from
     keep); warbands wait up to a minute at the
     porter for nearby members and then port together; frontier PvP deaths of
     RvR world bots release at their own hub, and immune bots do not open
-    fights. Real-client/live-log check pending. Point 6 (1.65 doctrine
+    fights. Real-client/live-log check pending. Decision B (teleporter
+    landing outside the hub radius) taken by the owner on 2026-09-28: option
+    b, a second safe circle. Implemented in source, real-client check
+    pending: the outer bindstones and code-fallback landing of Castle Sauvage
+    (radius 1,500) and Svasud Faste (radius 1,800) are safe for humans and
+    bots. In the shipped save the Teleport rows already land players inside
+    the hubs; Druim Ligen's landing and bindstone are inside its hub too
+    (docs/CAMLANN.md decision 7). Point 6 (1.65 doctrine
     tuning) stays open. Cause e (empty RvR expiry) traced to the group task
     clock publishing an empty expiry while paused; not changed yet.
 

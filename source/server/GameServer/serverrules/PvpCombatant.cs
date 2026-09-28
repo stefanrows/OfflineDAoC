@@ -109,9 +109,11 @@ namespace DOL.GS.ServerRules
 				return true;
 
 			// Camlann owner decision 7: the three border hubs are neutral safe
-			// hubs like the capitals, for humans and bots alike.
+			// hubs like the capitals, for humans and bots alike, together with
+			// the teleporter landings and bindstones outside their radius.
 			ushort regionId = living.CurrentRegionID;
-			if (IsBorderHubRegion(regionId) && IsSafeBorderHub(regionId, living.X, living.Y))
+			if (IsBorderHubRegion(regionId) &&
+				(IsSafeBorderHub(regionId, living.X, living.Y) || IsSafeHubLanding(regionId, living.X, living.Y)))
 				return true;
 
 			// A missing zone is not a safe area. All other safe locations are
@@ -150,6 +152,43 @@ namespace DOL.GS.ServerRules
 					continue;
 				double dx = x - (double)hub.Position.X, dy = y - (double)hub.Position.Y;
 				if (dx * dx + dy * dy <= (double)SafeBorderHubRadius * SafeBorderHubRadius)
+					return true;
+			}
+			return false;
+		}
+
+		public readonly record struct SafeHubLanding(ushort RegionId, int X, int Y, int Radius, string Name);
+
+		/// <summary>
+		/// Camlann decision 7, option b (owner, 2026-09-28): a second safe
+		/// circle around a hub's outer bindstones and the code-fallback
+		/// teleporter landing next to them, both outside the 3,500-unit keep
+		/// radius. The bindstones are the reason: in the shipped save the
+		/// Teleport rows land players inside the hubs (Castle Sauvage
+		/// 584151,477177, Svasud Faste 767242,669591); the landings below come
+		/// only from AllRealmsTeleportFallbacks. Each centre is the midpoint of
+		/// the fallback landing and the bindstones; the radius covers both plus
+		/// the 750-unit bind radius. The road to the keep stays open PvP.
+		/// Druim Ligen needs none: its teleporter destination (334342,419994)
+		/// and its only bindstone (333220,420510) already lie inside the hub.
+		/// </summary>
+		public static readonly SafeHubLanding[] SafeHubLandings =
+		{
+			// Bindstones 584770,486230 and 584638,486320; fallback landing 583913,487012.
+			new(1, 584340, 486620, 1500, "Castle Sauvage outer bindstones"),
+			// Bindstone 764082,672416; fallback landing 765694,673509. About 4,000 units
+			// from the keep centre, so this circle touches the hub circle.
+			new(100, 764890, 672960, 1800, "Svasud Faste outer bindstone"),
+		};
+
+		public static bool IsSafeHubLanding(ushort regionId, int x, int y)
+		{
+			foreach (SafeHubLanding landing in SafeHubLandings)
+			{
+				if (landing.RegionId != regionId)
+					continue;
+				double dx = x - (double)landing.X, dy = y - (double)landing.Y;
+				if (dx * dx + dy * dy <= (double)landing.Radius * landing.Radius)
 					return true;
 			}
 			return false;
