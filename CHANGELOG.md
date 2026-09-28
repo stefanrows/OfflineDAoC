@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.120.0] - 2026-09-28
+
+### Changed
+
+- World-bot AI turns cost less: a bot whose route stalled now searches its
+  side-step over several short turns (standing still for a few seconds at
+  most) instead of checking 21 corridors in one turn, and the stable-master
+  network is cached for 30 minutes and refreshed in the background instead of
+  being rebuilt every 5 minutes under one global lock. Decisions are unchanged.
+- The server logs a one-line bot think profile every minute
+  (`BOT_THINK_PROFILE`, plus up to five `BOT_THINK_SLOW` lines naming the
+  slowest turns and their phases) so slow AI phases can be measured live.
+
+### Fixed
+
+- Skill cooldown lookups no longer hash through boxed value types, and a
+  world bot without a group no longer waits on the group coordinator lock
+  for its watchdog check.
+
 ## [0.119.0] - 2026-09-28
 
 ### Fixed
