@@ -104,6 +104,17 @@ options written down; do not guess.
 - Push every tested and accepted result to `stefanrows/OfflineDAoC` `main`.
 
 **Goal:** fix as many known bugs as possible, plus tasks 45–48.
+- First deployment of the night: make Aaron's character **Ked** co-leader
+  (guild rank 1, may invite) in his guild **North Bomb**. Do it while the
+  server is stopped during `server.sh update --no-start`:
+  1. Copy `playable/runtime/data/opendaoc.sqlite3.db` to
+     `/mnt/d/OfflineDAoC/playable-backups/` with a timestamp.
+  2. Run `UPDATE dolcharacters SET GuildRank=1 WHERE
+     DOLCharacters_ID='cd7d6ff9-daa6-435f-b787-93a9fe0a64e2' AND Name='Ked'`,
+     guild id `8c511667-0a1e-4c5b-ad85-fe2421dfed0c`, and check that exactly
+     one row changed.
+  3. `server.sh start`.
+  4. Confirm in the save that Ked has GuildRank 1.
 - Bugs: triage docs/BUGS.md for items whose cause is not fixed in source
   ("not yet investigated", "not claimed fixed", open problems in pending
   items), and any bug found while watching the live server (record it first).
