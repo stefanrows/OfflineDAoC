@@ -924,6 +924,11 @@ namespace DOL.GS.Keeps
 		}
 
 
+		/// <summary>Guard level: base level plus keep level times the guard level multiplier
+		/// (a level-50 keep at level 1 with 1.6: guards 52, lord 63; at level 5: 59 and 70).</summary>
+		public static byte GuardLevelFor(byte baseLevel, int keepLevel, double multiplier) =>
+			(byte)(baseLevel + (keepLevel * multiplier));
+
 		public virtual void SetGuardLevel(GameKeepGuard guard)
 		{
 			if (guard is FrontierHastener)
@@ -944,7 +949,7 @@ namespace DOL.GS.Keeps
 						multiplier = ServerProperties.Properties.TOWER_GUARD_LEVEL_MULTIPLIER;
 				}
 
-				guard.Level = (byte)(GetBaseLevel(guard) + (bonusLevel * multiplier));
+				guard.Level = GuardLevelFor(GetBaseLevel(guard), bonusLevel, multiplier);
 				guard.Health = guard.MaxHealth;
 			}
 

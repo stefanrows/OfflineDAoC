@@ -245,6 +245,14 @@ namespace DOL.GS.Keeps
                 }
             }
 
+            // Direct-damage spells reach a door at half effect (KeepDoorSpellPolicy, since 1.46).
+            if (attackData.AttackType is AttackData.eAttackType.Spell)
+            {
+                double spellFactor = KeepDoorSpellPolicy.DoorDamageFactor(attackData.SpellHandler?.Spell?.SpellType);
+                baseDamage = (int) (baseDamage * spellFactor);
+                criticalDamage = (int) (criticalDamage * spellFactor);
+            }
+
             attackData.Damage = baseDamage;
             attackData.StyleDamage = styleDamage;
             attackData.CriticalDamage = criticalDamage;

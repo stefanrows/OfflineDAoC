@@ -26,7 +26,8 @@ Rangers) buy a ram at the border hub or at
 home before marching, place it at the outer gate and operate it once they are
 within 6,000 units of the keep (`RVR_SIEGE action=purchase|deployed|hit`).
 Casters of the same group ride the ram (`action=ride|dismount`); each rider
-adds damage and shortens the reload. Melee classes clear reachable guards,
+adds damage and shortens the reload. A caster with no free seat on its
+group's ram nukes the gate instead. Melee classes clear reachable guards,
 then hit the outermost standing gate, then the inner gate. Healers stay free.
 The lord becomes a target only after every gate is down; its death leaves the
 claim steward, where the crew leader claims with eight grouped guildmates.
@@ -35,6 +36,58 @@ after 45 minutes without any attacker within 3,000 units of the keep
 (`RVR_SIEGE_IDLE_CLOSED reason=no_progress|absent`). Only approach inside the
 keep's region counts as progress. Source only; real-client and live-log
 check pending.
+
+## Siege balance (task 48, owner decisions of 2026-09-28)
+
+Source only; real-client and live-log check pending.
+
+- **Warden keeps stand like a 1.65 unclaimed keep.** At every server start a
+  frontier keep held by the Frontier Wardens (base level 50, no relic keep) is
+  set to keep level 1 (`FRONTIER_WARDEN_KEEP_LEVEL keep=... from=5 to=1` in the
+  log; no line once it is at 1). Guild-claimed keeps and relic keeps are not
+  touched. A released or reset keep also drops to `starting_keep_level`, now 1.
+  Claiming still raises the keep to `starting_keep_claim_level` (5), the
+  existing upgrade path; `/gc upgrade` stays disabled.
+
+  | Keep | Level | Outer door HP | Guards | Lord |
+  |---|---|---|---|---|
+  | Warden-held (unclaimed) | 1 | 10,000 | 52 | 63 |
+  | Guild-claimed | 5 | 50,000 | 59 | 70 |
+  | Relic keep (unchanged) | 10 | 180,000 (relic gate) | 76–77 | 90 |
+
+  Door HP = base level 50 × `keep_doors_base_health` 200 × keep level
+  (`keep_doors_health_upgrade_modifier` 1). Guard level = 51 + 1.6 × keep
+  level, lord 62 + 1.6 × keep level (`keep_guard_level_multiplier` 1.6,
+  unchanged). All keep positions in the save sit at height 0 and the guards
+  spawn from the mob table, so level 1 removes no guard or banner. Keep level
+  1 does lower the wall height sent to the client (height 0 instead of 2) for
+  the 17 Warden keeps that stood at level 5, and for Dun Crauchon (level 4,
+  height 1); a real-client look at the walls and the wall guards on them is
+  pending.
+- **One automatic siege per guild, not per server.** A guild runs at most one
+  automatic siege of its own; its other warbands may reinforce it or roam.
+  Other guilds may open their own sieges at the same time, up to a
+  server-wide safety cap of 6 attacking sieges (defense responses do not
+  count). Guildless and launcher-forced sieges count per realm. An active
+  relic-carrier event still pauses new sieges.
+- **A guild may hold three keeps.** `guilds_claim_limit` is 3 (was 1 in the
+  save); the steward, `/gc claim` and crew leaders use the same native limit
+  check. A guild at its limit can still take a keep; it cannot claim it.
+- **Damage spells hit doors, as since 1.46.** Single-target direct damage and
+  bolts hurt a keep door at half effect after the door's level toughness
+  (5 % less per keep level): a 400 nuke deals 190 to a level-1 door and 150 to
+  a level-5 door. Damage over time, debuffs, crowd control, lifedrains, damage
+  spells with a debuff rider, and area spells do not affect doors; walls stay
+  siege-only. Players, companions and bots alike. Bots no longer cast
+  non-damage spells at a door.
+- **Unchanged:** the temporary ×10 Siege Ram (task 55); relic raids stay off
+  (docs/TASKS.md, relic-raid mode idea).
+
+The server applies both property changes itself on the next start: a startup
+database update moves `starting_keep_level` 4 → 1 and `guilds_claim_limit`
+1 → 3 only while the row still holds the old shipped value as both value and
+default (`FRONTIER_BALANCE_PROPERTY key=... from=... to=...`). A value an
+operator set later stays.
 
 ## World and capture rules
 

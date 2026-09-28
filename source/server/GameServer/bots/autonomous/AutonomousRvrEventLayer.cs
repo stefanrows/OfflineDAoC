@@ -64,7 +64,7 @@ public static partial class AutonomousRvrEventLayer
     /// <see cref="AttackerPresenceRadius"/> of for this long is called off, even
     /// while members still report march progress somewhere. A 1.65 keep take
     /// lasted 10-40 minutes; a force that has not reached the walls after
-    /// 45 minutes has given up. This frees the server's one siege slot.</summary>
+    /// 45 minutes has given up. This frees its guild's siege slot.</summary>
     public const long AbsentAttackerMilliseconds = 45 * 60_000L;
 
     public static bool IsAbandonedByAttackers(bool battleStarted, bool defenseReaction, bool playerLed,
@@ -243,8 +243,8 @@ public static partial class AutonomousRvrEventLayer
             { reason = "Choose an enemy capturable keep and an attacking realm."; return false; }
             if (Events.ContainsKey(target.Id) || OnCooldown(target.Id, now))
             { reason = "This objective already has an event or an active cooldown."; return false; }
-            if (Events.Values.Any(active => !active.DefenseReaction) || CarrierEvents.Count != 0)
-            { reason = "A keep/relic event is already recruiting or fighting. Reinforce it before opening another."; return false; }
+            if (!MayOpenSiegeLocked(null, attacker))
+            { reason = "This realm already runs a forced siege, a relic event is active, or the server-wide siege cap is reached. Reinforce it before opening another."; return false; }
             Events[target.Id] = new ActiveEvent
             {
                 TargetId = target.Id, Target = target, AttackerRealm = attacker,
@@ -461,9 +461,11 @@ public static partial class AutonomousRvrEventLayer
                         target, true, "Third-realm force contesting the siege under its own participation cap.");
             }
 
-            // Concentrate the available siege forces on one objective. Realms
-            // waiting for their alarm retain roaming, not a second empty rally.
-            if (Events.Values.Any(active => !active.DefenseReaction) || CarrierEvents.Count != 0)
+            // One automatic siege per attacking guild (owner decision 2b): a
+            // guild already besieging keeps its other warbands roaming unless
+            // they joined above; other guilds open their own, up to the
+            // server-wide safety cap (AutonomousRvrEventLayer.SiegeCap.cs).
+            if (!MayOpenSiegeLocked(force.GuildName, force.Realm))
                 return ReservePlan(force, objectives);
 
             bool hasEnemy = objectives.Any(objective => objective.Kind == Intent.HuntEnemy && objective.EnemyCount > 0);

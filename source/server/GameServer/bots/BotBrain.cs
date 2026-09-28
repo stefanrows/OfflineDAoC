@@ -4373,6 +4373,11 @@ namespace DOL.AI.Brain
             if (spell.NeedInstrument && !TryEquipRealInstrument(BotBody, spell.InstrumentRequirement))
                 return false;
 
+            // A door takes only single-target direct-damage (and siege) spells; no debuff, CC or area spell on a gate.
+            if (Body.TargetObject is DOL.GS.Keeps.GameKeepDoor &&
+                !DOL.GS.Keeps.KeepDoorSpellPolicy.WorthCastingAtDoor(spell.SpellType, spell.Radius))
+                return false;
+
             bool casted = false;
 
             if (Body.TargetObject is GameLiving living &&

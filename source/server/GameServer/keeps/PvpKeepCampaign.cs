@@ -7,12 +7,36 @@ namespace DOL.GS.Keeps
     // Stationary world defenders, never part of the autonomous population.
     public static class PvpKeepCampaign
     {
+        private static readonly DOL.Logging.Logger log = DOL.Logging.LoggerManager.Create(typeof(PvpKeepCampaign));
         public const string GarrisonName = "Frontier Wardens";
         public const int GuardRealmPoints = 25;
         public const int CaptureRealmPoints = 1500;
         public static bool Applies(AbstractGameKeep keep) => GameServer.ServerRules is PvPServerRules &&
             keep != null && !keep.IsPortalKeep && keep.CurrentZone?.IsOF == true;
         public static bool IsGarrison(Guild guild) => guild?.Name == GarrisonName;
+
+        /// <summary>Owner decision 1a (2026-09-28): a keep the Frontier Wardens
+        /// hold stands like a 1.65 unclaimed keep, at door/wood level 1 (door
+        /// 50 x 200 = 10,000 HP; guards 52, lord 63 with the 1.6 guard
+        /// multiplier). Only a claiming guild raises it (starting_keep_claim_level).</summary>
+        public const byte WardenKeepLevel = 1;
+
+        /// <summary>The level a Warden-held keep is set to at server start, or null
+        /// to leave it: only ordinary claimable keeps (base level 50, no relic
+        /// keep) held by the garrison, never a guild-claimed or relic keep.</summary>
+        public static byte? WardenStartLevel(bool heldByGarrison, int baseLevel, bool isRelic, int level) =>
+            heldByGarrison && baseLevel == 50 && !isRelic && level != WardenKeepLevel ? WardenKeepLevel : null;
+
+        public static void ApplyWardenStartLevel(AbstractGameKeep keep)
+        {
+            if (!Applies(keep) || !IsGarrison(keep.Guild)) return;
+            keep.StopChangeLevelTimer();
+            byte? level = WardenStartLevel(true, keep.BaseLevel, keep.IsRelic, keep.Level);
+            if (level == null) return;
+            byte previous = keep.Level;
+            keep.ChangeLevel(level.Value);
+            log.Info($"FRONTIER_WARDEN_KEEP_LEVEL keep={keep.KeepID} name={keep.Name} from={previous} to={keep.Level}");
+        }
 
         public static void Initialize(AbstractGameKeep keep)
         {
@@ -25,6 +49,7 @@ namespace DOL.GS.Keeps
                 keep.SaveIntoDatabase();
                 foreach (GameKeepGuard guard in keep.Guards.Values) guard.ChangeGuild();
             }
+            ApplyWardenStartLevel(keep);
             EnsureClaimPoint(keep);
         }
 

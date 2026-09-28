@@ -1441,8 +1441,10 @@ namespace DOL.GS.ServerProperties
 
 		/// <summary>
 		/// The level keeps start at when not claimed - please note only levels 4 and 5 are supported correctly at this time
+		/// (upstream note). Offline fork: 1, like a 1.65 unclaimed keep (owner decision 2026-09-28). The frontier keeps
+		/// here spawn their guards from the mob table and every keep position sits at height 0, so level 1 removes no guard.
 		/// </summary>
-		[ServerProperty("keeps", "starting_keep_level", "The level an unclaimed keep starts at.", 4)]
+		[ServerProperty("keeps", "starting_keep_level", "The level an unclaimed keep starts at.", 1)]
 		public static int STARTING_KEEP_LEVEL;
 
 		/// <summary>
