@@ -161,6 +161,11 @@ namespace DOL.GS.Spells
             if (target.EffectList.GetOfType<NecromancerShadeEffect>() != null && target.ControlledBrain?.Body is NecromancerPet necromancerPet)
                 target = necromancerPet;
 
+            // A group heal on the shade also lands on the servant. During a held
+            // pet pull, that would give the servant's attackers healer threat.
+            if (Caster is GameBot companion && CompanionPetPull.IsHeldPullPet(companion.PlayerGroupLeader, target))
+                return false;
+
             int effectiveAmount = target.ChangeHealth(Caster, eHealthChangeType.Spell, (int) amount);
 
             if (effectiveAmount <= 0)

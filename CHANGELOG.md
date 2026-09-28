@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.138.0] - 2026-09-28
+
+### Added
+
+- None.
+
+### Changed
+
+- During a held `/petpull`, companions keep a heal-over-time on the pet but
+  delay direct pet heals and tank peels until the pull is released. They still
+  intercept mobs already attacking or running toward the group.
+
+### Fixed
+
+- Pre-release companion heals and tank peels no longer draw some of the pet's
+  attackers toward the waiting group, including group heals redirected from a
+  Necromancer shade to its servant.
+
+### Removed
+
+- None.
+
 ## [0.137.0] - 2026-09-28
 
 ### Changed

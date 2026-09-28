@@ -18,9 +18,9 @@ namespace DOL.GS
     /// During a pull the companions do no real damage. They keep a
     /// heal-over-time on the pet (the Mentalist HoT drew no aggro), heal the
     /// group, and intercept only adds that are on a group member or running at
-    /// one. If the pet gets into danger (health falling or several attackers),
-    /// healers heal it and tanks taunt adds off it before the release. The pull
-    /// is released once the passive pet is back beside the player, at once when
+    /// one. Direct pet heals and tank peels wait until the pull is released so
+    /// attackers stay on the pet. The pull is released once the passive pet is
+    /// back beside the player, at once when
     /// the pet drops below <see cref="PetDangerHealthPercent"/> or dies, when the
     /// player attacks, or after <see cref="MaximumHoldMilliseconds"/>. A release
     /// ends that pull, not the mode; the pet's next engage starts the next one.
@@ -31,7 +31,7 @@ namespace DOL.GS
     public static class CompanionPetPull
     {
         public const int PetDangerHealthPercent = 45;
-        /// <summary>Below this the pet is "getting hurt": healers heal it and tanks take adds off it.</summary>
+        /// <summary>Below this the pet is getting hurt; warn the owner while companions keep the hold.</summary>
         public const int PetWarningHealthPercent = 70;
         /// <summary>This many live attackers on the pet count as danger once it has lost some health.</summary>
         public const int PetWarningAttackers = 3;
@@ -63,7 +63,6 @@ namespace DOL.GS
             public bool Danger;
             public bool DangerTold;
             public long DangerCheckedAt = -DangerCheckMilliseconds;
-            public readonly Dictionary<GameBot, GameLiving> TauntClaims = new();
         }
 
         private sealed class Mode
@@ -119,8 +118,8 @@ namespace DOL.GS
             if (!on)
                 return "Pet pull mode is OFF. Companions fight your pet's targets at once again.";
             return "Pet pull mode is ON for your group and squads: every pull now starts with your pet's attack. " +
-                   "Send your pet in, then set it passive to bring the pull back; companions wait at camp, keep your pet " +
-                   "healed and buffed, only take adds that come at the group, and open once your pet is beside you " +
+                   "Send your pet in, then set it passive to bring the pull back; companions wait at camp, keep a " +
+                   "heal-over-time and buffs on your pet, only take adds that come at the group, and open once it is beside you " +
                    $"(or at once if it drops below {PetDangerHealthPercent}% or you attack)." +
                    (hasPet ? string.Empty : " Summon your pet first.");
         }
@@ -134,6 +133,15 @@ namespace DOL.GS
         {
             Pull pull = Current(leader);
             return pull != null && !pull.Released;
+        }
+
+        /// <summary>True only for this owner's pulling pet while the group is still holding.</summary>
+        public static bool IsHeldPullPet(GamePlayer leader, GameLiving candidate)
+        {
+            if (leader == null || candidate is not GameNPC)
+                return false;
+            Pull pull = Current(leader);
+            return pull != null && !pull.Released && pull.Pet == candidate;
         }
 
         /// <summary>True while a companion of this owner's force must hold for the pet (squads follow the owner).</summary>
@@ -152,7 +160,7 @@ namespace DOL.GS
                 return false;
 
             GamePlayer owner = controlledPetBrain.GetPlayerOwner();
-            return owner != null && IsHolding(owner) && Pet(owner) == pet;
+            return IsHeldPullPet(owner, pet);
         }
 
         /// <summary>
@@ -230,15 +238,13 @@ namespace DOL.GS
         public static bool PetInDanger(GamePlayer leader) => Current(leader) is { Released: false, Danger: true };
 
         /// <summary>
-        /// The pet as a heal target: every companion heals it after the release;
-        /// before it, only healers and only while it is in danger.
+        /// The pet as a direct-heal target after the group opens. During the hold,
+        /// direct healing would put the healer on each pet attacker's aggro list.
         /// </summary>
-        public static GameNPC PetHealTarget(GamePlayer leader, bool healer)
+        public static GameNPC PetHealTarget(GamePlayer leader)
         {
             Pull pull = Current(leader);
-            if (pull == null)
-                return null;
-            return pull.Released || healer && pull.Danger ? pull.Pet : null;
+            return pull?.Released == true ? pull.Pet : null;
         }
 
         public static bool IsDanger(int healthPercent, int attackers) =>
@@ -260,45 +266,6 @@ namespace DOL.GS
             if (ordered != null)
                 return !ordered.InCombat && (firstPull || ordered != previousTarget);
             return firstPull && petEngaged;
-        }
-
-        /// <summary>
-        /// A tank takes one attacker off the endangered pet: never one another
-        /// tank already took, preferably an add rather than the pet's own
-        /// target (the pet keeps the pull), the pet's target only when nothing
-        /// else is on it. Null when the pet is not in danger.
-        /// </summary>
-        public static GameLiving TakeAddFromPet(GamePlayer leader, GameBot tank)
-        {
-            if (tank == null || leader == null || !Modes.TryGetValue(leader, out Mode mode))
-                return null;
-            Pull pull = Current(leader);
-            if (pull == null || pull.Released || !pull.Danger)
-                return null;
-            GameLiving[] attackers = AttackersOf(pull.Pet)
-                .Where(attacker => tank.IsWithinRadius(attacker, BotBrain.GROUP_DEFENSE_ASSIST_RADIUS) &&
-                                   GameServer.ServerRules.IsAllowedToAttack(tank, attacker, true))
-                .ToArray();
-            lock (mode)
-            {
-                if (pull.TauntClaims.TryGetValue(tank, out GameLiving held) && held.IsAlive &&
-                    held.TargetObject == pull.Pet)
-                    return held;
-                pull.TauntClaims.Remove(tank);
-                GameLiving chosen = ChooseAddToTake(attackers, pull.Pet.TargetObject as GameLiving,
-                    candidate => pull.TauntClaims.ContainsValue(candidate), attacker => tank.GetDistanceTo(attacker));
-                if (chosen != null)
-                    pull.TauntClaims[tank] = chosen;
-                return chosen;
-            }
-        }
-
-        public static GameLiving ChooseAddToTake(IEnumerable<GameLiving> attackers, GameLiving petTarget,
-            Func<GameLiving, bool> claimed, Func<GameLiving, int> distance)
-        {
-            GameLiving[] open = attackers.Where(attacker => attacker?.IsAlive == true && !claimed(attacker)).ToArray();
-            return open.Where(attacker => attacker != petTarget).OrderBy(attacker => distance(attacker)).FirstOrDefault() ??
-                   open.FirstOrDefault(attacker => attacker == petTarget);
         }
 
         /// <summary>
@@ -451,14 +418,12 @@ namespace DOL.GS
             {
                 pull.DangerCheckedAt = now;
                 pull.Danger = IsDanger(pet.HealthPercent, AttackersOf(pet).Count());
-                if (!pull.Danger)
-                    pull.TauntClaims.Clear();
             }
             if (pull.Danger && !pull.DangerTold)
             {
                 pull.DangerTold = true;
                 string petName = pet.Name;
-                after += () => Tell(leader, $"{petName} is in danger: healers heal it and tanks take adds off it.");
+                after += () => Tell(leader, $"{petName} is in danger: set it passive to bring the pull back. Companions hold until release.");
             }
 
             // A pull that never left camp is at camp as soon as it lands on the pet.

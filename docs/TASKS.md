@@ -220,15 +220,17 @@ Agent sessions on items 45–48: take the role and context from
     command target; the pet order no longer sends companions in. Companions
     hold real damage until the passive pet is back within 400 units, intercept
     only adds on or running at someone of the group, keep the HoT, Animist camp
-    front and pet buff priority; if the pet is hurt (under 70 %, or under 90 % with
-    three or more attackers), healers heal it and each tank taunts one add off it
-    before the release. Release (pet under 45 %, pet dead, player attacks, 60 s)
+    front and pet buff priority. If the pet is hurt (under 70 %, or under 90 %
+    with three or more attackers), the owner gets a warning; direct pet heals
+    and tank peels wait until release so they do not draw the pet's attackers
+    toward the group. Release (pet under 45 %, pet dead, player attacks, 60 s)
     ends that pull, not the mode; a fresh pet order after it starts the next
     one (chain pull). Source 0.133.0 also suppresses ordinary group BAF for a
     mob actually attacked by the pulling pet while that pull is held, even
     if threat selects a group member; mode-off fights and fights without the
-    held pulling pet among the attackers retain normal BAF. Real-client check
-    pending.
+    held pulling pet among the attackers retain normal BAF. Source 0.138.0
+    also closes the remaining pre-release companion heal and peel paths after
+    a residual group-aggro report on installed 0.133.0. Real-client check pending.
 
 44. **Battlegroup combat in RvR and PvE raids.** All companion groups assist
     the battlegroup leader's (or their owner's) target, heal their own group

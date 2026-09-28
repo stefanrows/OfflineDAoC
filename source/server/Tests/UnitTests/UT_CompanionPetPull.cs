@@ -284,7 +284,7 @@ public sealed class UT_CompanionPetPull
         SetTick(1_012_000);
         Assert.That(CompanionPetPull.IsHolding(owner), Is.False);
         Assert.That(CompanionPetPull.IsReleased(owner), Is.True);
-        Assert.That(CompanionPetPull.PetHealTarget(owner, false), Is.SameAs(pet), "After the release everyone heals the pet");
+        Assert.That(CompanionPetPull.PetHealTarget(owner), Is.SameAs(pet), "After the release everyone heals the pet");
         Assert.That(CompanionPetPull.IsModeOn(owner), Is.True, "A release ends the pull, not the mode");
 
         // The fight ends; the next pet attack starts the next pull.
@@ -327,7 +327,7 @@ public sealed class UT_CompanionPetPull
     }
 
     [Test]
-    public void PetInDangerIsHealedByHealersBeforeTheReleaseAndReleasesBelowTheLimit()
+    public void PetInDangerKeepsDirectHealsOffUntilTheEmergencyRelease()
     {
         SetTick(1_000_000);
         (Owner owner, Npc pet, PetBrain brain) = OwnerWithPet();
@@ -337,18 +337,23 @@ public sealed class UT_CompanionPetPull
         pet.Fighting = true;
         Assert.That(CompanionPetPull.IsHolding(owner), Is.True);
         Assert.That(CompanionPetPull.PetInDanger(owner), Is.False);
-        Assert.That(CompanionPetPull.PetHealTarget(owner, true), Is.Null, "Healers leave the healthy pet to the HoT");
+        Assert.That(CompanionPetPull.PetHealTarget(owner), Is.Null, "The held pet gets only the HoT");
+        Assert.That(CompanionPetPull.IsHeldPullPet(owner, pet), Is.True);
 
         pet.Wounds = 40;
         SetTick(1_001_000);
         Assert.That(CompanionPetPull.IsHolding(owner), Is.True, "Hurt, not yet critical: still held");
         Assert.That(CompanionPetPull.PetInDanger(owner), Is.True);
-        Assert.That(CompanionPetPull.PetHealTarget(owner, true), Is.SameAs(pet));
-        Assert.That(CompanionPetPull.PetHealTarget(owner, false), Is.Null, "Only healers heal it before the release");
+        Assert.That(CompanionPetPull.PetHealTarget(owner), Is.Null,
+            "A direct heal would move the pet's attackers to the healer");
+        Assert.That(CompanionPetPull.IsHeldPullPet(owner, pet), Is.True);
 
         pet.Wounds = 100 - CompanionPetPull.PetDangerHealthPercent + 1;
         SetTick(1_002_000);
         Assert.That(CompanionPetPull.IsHolding(owner), Is.False);
+        Assert.That(CompanionPetPull.IsHeldPullPet(owner, pet), Is.False);
+        Assert.That(CompanionPetPull.PetHealTarget(owner), Is.SameAs(pet),
+            "The emergency release lets companions heal the pet");
         Assert.That(CompanionPetPull.IsModeOn(owner), Is.True);
         CompanionPetPull.SetMode(owner, false);
     }
@@ -363,23 +368,6 @@ public sealed class UT_CompanionPetPull
         Assert.That(CompanionPetPull.IsDanger(CompanionPetPull.PetSwarmedHealthPercent - 1,
             CompanionPetPull.PetWarningAttackers - 1), Is.False);
         Assert.That(CompanionPetPull.IsDanger(CompanionPetPull.PetWarningHealthPercent - 1, 1), Is.True);
-    }
-
-    [Test]
-    public void TanksTakeAnAddOffThePetAndLeaveItsOwnTarget()
-    {
-        Npc petTarget = Make<Npc>(), nearAdd = Make<Npc>(), farAdd = Make<Npc>();
-        nearAdd.PositionX = 100;
-        farAdd.PositionX = 900;
-        GameLiving[] attackers = [petTarget, farAdd, nearAdd];
-        int Distance(GameLiving living) => ((Npc)living).PositionX;
-
-        Assert.That(CompanionPetPull.ChooseAddToTake(attackers, petTarget, _ => false, Distance), Is.SameAs(nearAdd));
-        Assert.That(CompanionPetPull.ChooseAddToTake(attackers, petTarget, add => add == nearAdd, Distance), Is.SameAs(farAdd),
-            "A second tank takes a different add");
-        Assert.That(CompanionPetPull.ChooseAddToTake([petTarget], petTarget, _ => false, Distance), Is.SameAs(petTarget),
-            "Alone on the pet, the pull itself is taunted off");
-        Assert.That(CompanionPetPull.ChooseAddToTake([petTarget], petTarget, add => add == petTarget, Distance), Is.Null);
     }
 
     [Test]
