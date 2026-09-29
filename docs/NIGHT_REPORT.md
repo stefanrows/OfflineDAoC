@@ -1,3 +1,28 @@
+# Nacht/Tag 2026-09-29 (Orchestrator: Fable, `/loop`) — RvR-Bots nach 2003-Vorbild
+
+**TL;DR**
+- **10 Verhaltenspakete 0.146.0 → 0.157.0, alle live: RvR-Tode/h 1.763 → 790, Hotspot-Konzentration 54 % → 13 %, Wiedersterben 73 % → 42 %.**
+- **Jedes Paket folgt einem belegten Prinzip aus 319 Forum-Zitaten (Wissensbasis auf E:, nicht im Repo).**
+- **Offen: Speed-Song nur 6–12 % der Reisezeit aktiv (Task 69 pending), Launcher-Dialog (Bug 70).**
+
+| Version | Verhalten | Prinzip |
+|---|---|---|
+| 0.146.0 | Hub-Fächer, Aufbruchsfrieden, Routen Straße/Flanke/Deckung, Logzeilen RVR_ROUTE_CHOSEN/ROAM_PICK/RETREAT | P3 erst raus, dann jagen |
+| 0.147.0 | Gefahren-Gedächtnis 60 min (Vorsichtige meiden, Mutige kommen größer zurück), Rast 1–5 min abseits der Straße, Rückzug zu passierbarem Keep/Hub; Routen-Fix (Bodensuche ±4.096) | P5, P6, P7 |
+| 0.148.0 | Beobachten statt Reinrennen: Halt außerhalb 2.200, Add bei 3/2/1 von 8 am Boden, Nachzügler, Push bei CC, sonst gehen | P2, P4 |
+| 0.149.0 | Heiler je Spec: Smite/Natur nur mit zweitem Heiler, Pac/Höhle CC vor Heilung, Bomb-Stun, kein Barden-Nahkampf | P1, P8 |
+| 0.150.0 | Hub-Frieden in der Angriffsregel (Eigenrealm-Bots im 6-km-Band greifen sich nicht an) | P3 |
+| 0.151.0 | Stealther lauern getarnt neben der Straße, weiche Ziele, Absetzen; Assist in 1–2 s; Interrupt-Gewicht; kein DoT/AoE auf Gemezzte | P4, P9–P11 |
+| 0.152.0 | PvE: Pets ziehen Orange, Caster rasten bis 75 % Power, Mez-Gruppe vs. Pet-Massenpull, Camp-Wechsel bei Rivale/Wipe | P12, P13 |
+| 0.156.0 | Aufbruchsfrieden 8 min, Band 7,5 km (Bandrand-Fleischwolf 6,3 km vor Sauvage) | P3 |
+| 0.157.0 | Speed-Klasse bevorzugt (Heiler zuerst), Speed unterwegs, Leader wartet, Sprint schließt Lücken, nie Schritttempo; Tempo-Bugs (Laufbefehl, Low-HP-Bremse) | P6 |
+
+Messfenster je 1 h (`E:\daoc-knowledge\tools\rvr_metrics.py`): Baseline 0.139 21:40–00:40, 0.146.0 11:40–12:30, 0.152.0 14:45–15:45, 0.157.0 17:00–18:00. Details, Baseline, Killer-Analyse und Wellenprotokoll auf E:.
+
+Gelernt: Der 0.146.0-Aufbruchsfrieden (nur Erstangriff) half nicht (Svasud 35 % → 45 %); erst der Frieden in der Angriffserlaubnis (Assist, Flächenschaden, „Vergeltung") brach den Fleischwolf, der dann zum Bandrand wanderte (0.156.0). Routen fielen zu 90 % zurück, weil die Bodensuche das Frontier-Relief nicht fand. Zwei Tempo-Bugs erklären das „Schritttempo": Laufbefehle behielten ihr Starttempo, und die NPC-Verlangsamung unter 33 % HP traf spielerförmige Bots.
+
+Nicht geprüft: echter Client (Fächer-Abgang, Rast abseits der Straße, Beobachten am Hügel, Stealth-Opener, Speed-Song). Launcher-Testprojekt lief nicht (Linux-SDK). Bug 70 (Launcher-Dialog) offen.
+
 # Nachtlauf 2026-09-28 (Orchestrator: Fable, `/loop`)
 
 ## Fortschrittslog (für eine fortgesetzte Session: hier weitermachen)

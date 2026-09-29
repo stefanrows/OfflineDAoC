@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.157.1] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- Night/day report for 2026-09-29 in `docs/NIGHT_REPORT.md`: the ten RvR/PvE
+  behaviour packages 0.146.0–0.157.0 with their principles and the measured
+  before/after numbers (RvR deaths per hour 1,763 → 790, hotspot share
+  54 % → 13 %).
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.157.0] - 2026-09-29
 
 ### Changed
