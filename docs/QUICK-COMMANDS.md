@@ -73,7 +73,7 @@ keep up. Each server start selects 1× again.
 | `/defensive` | Companions engage threats near you and return if left far behind. |
 | `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Animists take down all their mushrooms (main turret included) and plant none while passive; `/stay` ends. Choose another mode to resume fighting. |
 | Companion Manager: Group orders | The first roster row sets these orders, shows each companion's effective stance, and offers Pull, Invite all, Bench all, and Grind. |
-| Companion Manager: Realm abilities | Select a companion, open Training & Tactics, then scroll to Passive realm abilities. Each click buys one rank; Overview shows earned RP and unspent RA points. |
+| Companion Manager: Realm abilities | Select a companion, open Training & Tactics, then click [Realm abilities] (or use the link in Overview). The balance stays visible while scrolling; [Buy] purchases one affordable rank and the result appears at the top. |
 
 `/spawn 40` and `/spawn 80` are **not** the raid-size commands. Use `/raid` first.
 These modes control your companions, not autonomous gamebots. All three modes recall a companion beyond 2100 units until it reaches 650 units from you.
@@ -83,7 +83,8 @@ These modes control your companions, not autonomous gamebots. All three modes re
 | Command | What it does |
 |---|---|
 | `/safety off` | Permanently turn off the under-level-10 PvP safety flag. Capitals, housing and portal-keep hubs remain sanctuaries; leveling towns and the Old Frontiers are dangerous. |
-| `/gc form <guild name>` | Found your guild near a registrar, alone or as group leader. Other human group members confirm; owned companions in the group join automatically. Companions and recruited bots can join the guild and count toward its keep claims. |
+| `/gc form <guild name>` | Found your guild near a registrar, alone or as group leader. Other human group members confirm; owned companions in the group join automatically. Companions and recruited bots can join the guild; Camlann keep claims no longer require a group. |
+| `/gc claim` | After defeating an Old Frontiers keep lord, stand beside its Keep Claim Steward and claim for your guild with claim rank. No group is required; guild keep limits still apply. |
 | `/gc invite <bot or companion>` | Invite a targeted or named autonomous bot or your own active companion when you have the guild invite rank. Your companion joins immediately and displays the chosen guild emblem on their equipped cloak and shield. |
 | `/companions guild leave <name>` | Remove one of your own saved companions from their guild, even if you have left it. Works for active and benched companions. |
 | `/relics` | Inspect the current guild-owned keep and relic state. Relic bonuses belong to the carrying guild, not a realm. |

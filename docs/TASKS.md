@@ -420,8 +420,10 @@ Agent sessions on items 45–48: take the role and context from
     each companion's earned RP, realm rank and unspent RA points. Training &
     Tactics buys one class-legal passive RA rank per click, for active or
     benched companions, and saves the allocation across logout and reinvite.
+    Source 0.155.0 moves purchases to a focused view with a persistent point
+    balance and visible costs, shortages and purchase results (bug 70).
     Timed active RAs remain unavailable because companion AI does not use them.
-    Installation and real-client check pending: earn RP, buy a passive rank,
+    Real-client check pending: earn RP, buy a passive rank,
     verify its effect and remaining points, bench/reinvite and relog, and
     confirm that purchases cannot exceed the earned pool.
 

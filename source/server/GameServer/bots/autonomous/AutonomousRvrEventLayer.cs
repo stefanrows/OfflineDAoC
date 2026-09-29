@@ -180,9 +180,9 @@ public static partial class AutonomousRvrEventLayer
         bool Claimable = true);
 
     /// <summary>
-    /// Only a whole warband of eight from one guild opens a keep siege: a claim
-    /// needs eight grouped members of one guild at the Keep Claim Steward, and a
-    /// 2003 guild took its own full group to a keep. Smaller or mixed forces may
+    /// Only a whole warband of eight from one guild opens an autonomous keep
+    /// siege. This is an AI commitment rule; the steward claim itself no longer
+    /// has a group-size requirement. Smaller or mixed forces may
     /// reinforce an existing siege only on the opener's side (same guild); they
     /// do not contest a stranger's siege as a third party.
     /// </summary>

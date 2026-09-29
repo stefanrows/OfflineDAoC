@@ -12,7 +12,7 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.154.0] - 2026-09-29
+## [0.157.0] - 2026-09-29
 
 ### Changed
 
@@ -52,7 +52,7 @@ package, not this fork's version.
 - Autonomous RvR bots no longer slow to a crawl below a third of their
   health (a monster rule), and the on-foot habit after a PvE release no
   longer carries into RvR. Companions are unchanged.
-## [0.153.0] - 2026-09-29
+## [0.156.0] - 2026-09-29
 
 ### Changed
 
@@ -68,6 +68,35 @@ package, not this fork's version.
   groups and other realms are unaffected, as before.
 - `RVR_HUB_PEACE` adds `by_rule=band:<n>,recent:<n>`, splitting the refused
   attack checks between the band and the departure clock.
+## [0.155.0] - 2026-09-29
+
+### Fixed
+
+- Companion realm ability training now opens a focused list with the earned RP,
+  realm rank and remaining points visible while scrolling. Each ability shows
+  its next rank and cost, or the point shortage; purchases update the balance
+  and show their result at the top of the manager.
+
+## [0.154.0] - 2026-09-29
+
+### Fixed
+
+- Restore the Keep Claim Steward from a defeated keep's saved lord position when
+  a player enters the keep or attempts to claim after a server restart. Record
+  steward spawn failures in the server log.
+- Let human guild members pass the keep claim check; it previously returned
+  silently because it required the bot-only `IGamePlayer` interface.
+
+## [0.153.0] - 2026-09-29
+
+### Fixed
+
+- A defeated Old Frontiers keep lord now unlocks guild claiming immediately, even
+  if later siege damage refreshes the keep's five-minute combat timer. A guild
+  member with claim rank may claim alone beside the steward; guild limits still
+  apply.
+- `/gc claim` repeats an exact refusal in the main chat and records that reason
+  in `KEEP_CLAIM_ATTEMPT`, so a rejected claim is visible and diagnosable.
 
 ## [0.152.0] - 2026-09-29
 

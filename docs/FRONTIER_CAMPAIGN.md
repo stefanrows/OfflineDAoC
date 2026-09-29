@@ -30,7 +30,7 @@ adds damage and shortens the reload. A caster with no free seat on its
 group's ram nukes the gate instead. Melee classes clear reachable guards,
 then hit the outermost standing gate, then the inner gate. Healers stay free.
 The lord becomes a target only after every gate is down; its death leaves the
-claim steward, where the crew leader claims with eight grouped guildmates.
+claim steward, where the crew leader claims for its guild.
 An automatic siege closes after 15 minutes without attacker progress, or
 after 45 minutes without any attacker within 3,000 units of the keep
 (`RVR_SIEGE_IDLE_CLOSED reason=no_progress|absent`). Only approach inside the
@@ -100,9 +100,9 @@ their relics are initially held by the Wardens.
 
 A living lord blocks claiming, including `/gc claim`. Killing it leaves a
 peaceful **Keep Claim Steward** at its position. Interact with the steward or
-use `/gc claim` while beside it. Native guild rank, group presence (normally
-8 for a keep), and guild ownership limits still apply. Companions count toward
-the group. Autonomous crew leaders approach the same steward and claim for
+use `/gc claim` while beside it. Guild claim rank and ownership limits still
+apply, but Camlann claims have no group-size requirement. Autonomous crew
+leaders approach the same steward and claim for
 their guild; ordinary members of pure managed autonomous guilds receive native
 claim permission. Human-managed guild ranks are not changed.
 

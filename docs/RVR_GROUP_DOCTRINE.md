@@ -172,7 +172,7 @@ for a fight; nobody fought at their own door. Two rules do that here
   `RVR_HUB_PEACE` counts refused attack checks per hub every five minutes
   (`stray` = hits stopped at damage time), and the engage summary's
   `hub_band=` counts new fights that still start inside a band.
-- **Departure clock and wider band (0.153.0).** The 0.152.0 live log moved
+- **Departure clock and wider band (0.156.0).** The 0.152.0 live log moved
   the grinder to the band edge: 316 deaths (18 %) in one Forest Sauvage cell
   6.3 km from Castle Sauvage, Albion on Albion only. The peace now also
   holds while *either* bot left its own hub's safe circle (keep circle or
@@ -197,7 +197,7 @@ straight approach. Legs under 3,500 units are walked directly.
 Evidence (P6, thinking/GROUP_PLAY.md): every 2003 8-man had an "essential
 speed class", kept speed up by twisting songs while travelling, and groups
 without speed ("speed 4") stayed near keeps and milegates. Autonomous RvR
-world bots only (0.154.0); companions and player-led groups are unchanged.
+world bots only (0.157.0); companions and player-led groups are unchanged.
 
 - **Recruiting speed.** When a group of three or more forms or backfills
   and has no Bard, Skald or Minstrel, a speed class gets a strong weight
