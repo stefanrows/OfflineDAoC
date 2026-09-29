@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.157.2] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- `docs/TASKS.md` cleaned up: 54 tasks from 0.61.0–0.143.0 that were still
+  waiting for a real-client check move to Finished as accepted through use;
+  task 7 (XP wall, already answered) and task 40 (goal delivered as 41–44)
+  leave Open. Nine tasks from 0.144.0–0.157.0 stay pending.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.157.1] - 2026-09-29
 
 ### Added
