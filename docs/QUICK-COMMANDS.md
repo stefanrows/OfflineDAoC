@@ -73,7 +73,7 @@ keep up. Each server start selects 1× again.
 | `/defensive` | Companions engage threats near you and return if left far behind. |
 | `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Animists take down all their mushrooms (main turret included) and plant none while passive; `/stay` ends. Choose another mode to resume fighting. |
 | Companion Manager: Group orders | The first roster row sets these orders, shows each companion's effective stance, and offers Pull, Invite all, Bench all, and Grind. |
-| Companion Manager: Realm abilities | Select a companion, open Training & Tactics, then scroll to Passive realm abilities. Each click buys one rank; Overview shows earned RP and unspent RA points. |
+| Companion Manager: Realm abilities | Select a companion, open Training & Tactics, then click [Realm abilities] (or use the link in Overview). The balance stays visible while scrolling; [Buy] purchases one affordable rank and the result appears at the top. |
 
 `/spawn 40` and `/spawn 80` are **not** the raid-size commands. Use `/raid` first.
 These modes control your companions, not autonomous gamebots. All three modes recall a companion beyond 2100 units until it reaches 650 units from you.

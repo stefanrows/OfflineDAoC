@@ -35,6 +35,7 @@ namespace DOL.GS.Commands
         public CompanionManagerListState Active { get; } = new();
         public string Query { get; set; } = string.Empty;
         public int DetailOffset { get; set; }
+        public bool RealmAbilityView { get; set; }
         public string SelectedItemId { get; set; }
         /// <summary>The worn slot opened in the Gear tab, or Invalid.</summary>
         public eInventorySlot SelectedSlot { get; set; } = eInventorySlot.Invalid;
@@ -128,6 +129,7 @@ namespace DOL.GS.Commands
                 Current.SelectedKey = key;
                 DeleteConfirmationId = null;
                 DetailOffset = 0;
+                RealmAbilityView = false;
                 SelectedItemId = null;
                 SelectedSlot = eInventorySlot.Invalid;
             }

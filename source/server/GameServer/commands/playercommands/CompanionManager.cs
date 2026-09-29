@@ -107,16 +107,19 @@ namespace DOL.GS.Commands
             {
                 case ControlTabRoster:
                     session.Tab = CompanionManagerTab.Roster;
+                    session.RealmAbilityView = false;
                     session.DeleteConfirmationId = null;
                     session.DetailOffset = 0;
                     break;
                 case ControlTabRecruit:
                     session.Tab = CompanionManagerTab.Recruit;
+                    session.RealmAbilityView = false;
                     session.DeleteConfirmationId = null;
                     session.DetailOffset = 0;
                     break;
                 case ControlTabActive:
                     session.Tab = CompanionManagerTab.Active;
+                    session.RealmAbilityView = false;
                     session.DeleteConfirmationId = null;
                     session.DetailOffset = 0;
                     break;
@@ -129,6 +132,7 @@ namespace DOL.GS.Commands
                             ControlDetailGear => CompanionManagerDetailTab.Gear,
                             _ => CompanionManagerDetailTab.Overview,
                         };
+                        session.RealmAbilityView = false;
                         session.DeleteConfirmationId = null;
                         session.DetailOffset = 0;
                     }
@@ -225,6 +229,7 @@ namespace DOL.GS.Commands
                 list.SelectedKey = companions.FirstOrDefault()?.Key ?? all.FirstOrDefault()?.Key;
                 session.DeleteConfirmationId = null;
                 session.DetailOffset = 0;
+                session.RealmAbilityView = false;
                 session.SelectedItemId = null;
                 session.SelectedSlot = eInventorySlot.Invalid;
             }
@@ -316,6 +321,8 @@ namespace DOL.GS.Commands
                 : rosterTab
                 ? $"Your companions | {search}"
                 : $"Story companions and new companions | {search}";
+            if (rosterTab && session.RealmAbilityView && !string.IsNullOrEmpty(session.Message))
+                view.Status = session.Message;
             view.Message = session.Message;
 
             bool changed = session.CommitView(string.Join('|', keys));
@@ -378,6 +385,7 @@ namespace DOL.GS.Commands
         {
             if (record == null)
             {
+                session.RealmAbilityView = false;
                 view.Header = roster.Count == 0 ? "Your roster is empty" : "No companion selected";
                 AddText(lines, roster.Count == 0
                     ? "Open Recruit to add a story companion or create a new one."
@@ -419,13 +427,52 @@ namespace DOL.GS.Commands
             switch (session.DetailTab)
             {
                 case CompanionManagerDetailTab.Training:
+                    if (session.RealmAbilityView)
+                    {
+                        view.Subheader = $"Realm abilities | RR {CompanionRealmAbilityTraining.RealmLevel(realmPoints)} | {realmPoints:N0} RP | {unspentRealmPoints} points left";
+                        lines.Add(new Line("Buy one rank per click. Your points update above."));
+                        lines.Add(new Line("[Back to Training & Tactics]", "ra:back", () =>
+                        {
+                            session.RealmAbilityView = false;
+                            session.DetailOffset = 0;
+                        }));
+                        if (realmAbilities.Count == 0)
+                            lines.Add(new Line("No passive realm abilities are available for this class."));
+                        foreach (var ability in realmAbilities.OrderBy(ability => ability.Name, StringComparer.OrdinalIgnoreCase))
+                        {
+                            int rank = realmAllocations.TryGetValue(ability.KeyName, out int purchased) ? purchased : 0;
+                            if (rank >= ability.MaxLevel)
+                            {
+                                lines.Add(new Line($"  {ability.Name}: rank {rank}/{ability.MaxLevel} (maximum)"));
+                                continue;
+                            }
+                            int cost = ability.CostForUpgrade(rank);
+                            string abilityKey = ability.KeyName;
+                            string label = $"  {ability.Name}: rank {rank} > {rank + 1}/{ability.MaxLevel} ({cost} pts)";
+                            lines.Add(cost < 0
+                                ? new Line(label + " - unavailable")
+                                : cost <= unspentRealmPoints
+                                    ? new Line(label + " [Buy]", $"ra:{abilityKey}:{rank + 1}",
+                                        () => SpendRealmAbility(player, session, id, abilityKey))
+                                    : new Line(label + $" - need {cost - unspentRealmPoints} more"));
+                        }
+                        choices.Add(new Choice("[Back to training]", true, "ra:back:action", () =>
+                        {
+                            session.RealmAbilityView = false;
+                            session.DetailOffset = 0;
+                        }));
+                        break;
+                    }
                     CompanionBuildPlan currentBuild = automatic &&
                         CompanionBuildPlanCatalog.TryGetPlanById(characterClass, current.TrainingPlanId, out CompanionBuildPlan saved)
                         ? saved : null;
-                    int realmAbilitySection = 0;
                     AddText(lines, $"Training: {(!automatic ? "manual" : currentBuild != null ? $"automatic, {currentBuild.Name} build" : $"automatic, plan {current.TrainingPlanId}")}; {unspent} unspent points.");
-                    lines.Add(new Line($"RR {CompanionRealmAbilityTraining.RealmLevel(realmPoints)} | {realmPoints:N0} RP | {unspentRealmPoints} RA pts [Buy]",
-                        "ra:jump", () => session.DetailOffset = realmAbilitySection));
+                    lines.Add(new Line($"[Realm abilities] RR {CompanionRealmAbilityTraining.RealmLevel(realmPoints)} | {unspentRealmPoints} points left",
+                        "ra:open", () =>
+                        {
+                            session.RealmAbilityView = true;
+                            session.DetailOffset = 0;
+                        }));
                     IReadOnlyList<CompanionBuildPlan> builds = CompanionBuildPlanCatalog.GetPlans(characterClass);
                     CompanionBuildPlan chosen = null;
                     if (builds.Count > 0)
@@ -489,26 +536,6 @@ namespace DOL.GS.Commands
                     }
                     else
                         AddText(lines, "Invite this companion to train or respecialize.");
-                    realmAbilitySection = lines.Count;
-                    lines.Add(new Line(string.Empty));
-                    lines.Add(new Line("Passive realm abilities (click to buy one rank):"));
-                    lines.Add(new Line("  Back to Training & Tactics", "ra:top", () => session.DetailOffset = 0));
-                    foreach (var ability in realmAbilities.OrderBy(ability => ability.Name, StringComparer.OrdinalIgnoreCase))
-                    {
-                        int rank = realmAllocations.TryGetValue(ability.KeyName, out int purchased) ? purchased : 0;
-                        if (rank >= ability.MaxLevel)
-                        {
-                            lines.Add(new Line($"  {ability.Name}: {rank}/{ability.MaxLevel} (maximum)"));
-                            continue;
-                        }
-                        int cost = ability.CostForUpgrade(rank);
-                        string abilityKey = ability.KeyName;
-                        string label = $"  {ability.Name}: {rank} -> {rank + 1}/{ability.MaxLevel} ({cost} points)";
-                        lines.Add(cost >= 0 && cost <= unspentRealmPoints
-                            ? new Line(label, $"ra:{abilityKey}:{rank + 1}",
-                                () => SpendRealmAbility(player, session, id, abilityKey))
-                            : new Line(label));
-                    }
                     if (builds.Count > 0)
                     {
                         bool switchable = chosen != null && chosen != currentBuild;
@@ -532,7 +559,13 @@ namespace DOL.GS.Commands
                         : $"XP: {current.Experience:N0} / {GamePlayer.GetExperienceAmountForLevel(current.Level):N0}"));
                     AddText(lines, $"Training: {(!automatic ? "manual" : CompanionBuildPlanCatalog.TryGetPlanById(characterClass,
                         current.TrainingPlanId, out CompanionBuildPlan build) ? $"automatic, {build.Name} build" : "automatic")}; {unspent} unspent points.");
-                    lines.Add(new Line($"RR {CompanionRealmAbilityTraining.RealmLevel(realmPoints)} | {realmPoints:N0} RP | {unspentRealmPoints} RA pts unspent"));
+                    lines.Add(new Line($"[Realm abilities] RR {CompanionRealmAbilityTraining.RealmLevel(realmPoints)} | {realmPoints:N0} RP | {unspentRealmPoints} points left",
+                        "ra:open:overview", () =>
+                        {
+                            session.DetailTab = CompanionManagerDetailTab.Training;
+                            session.RealmAbilityView = true;
+                            session.DetailOffset = 0;
+                        }));
                     lines.Add(new Line($"Role: {roleLabel}; stance: {stance}."));
                     lines.Add(new Line(string.Empty));
                     CompanionCharacterCatalog.Character authored = CompanionCharacterCatalog.Find(current.AuthoredRecruitKey);

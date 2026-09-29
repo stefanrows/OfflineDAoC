@@ -76,6 +76,18 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+70. **Companion realm ability spending appears to do nothing.** Reported
+    2026-09-29: clicking Augmented Dexterity did not visibly explain the
+    purchase or show the remaining points, and further spending was unclear.
+    Installed version and whether the first purchase saved are unconfirmed.
+    Expected: the rank, cost and remaining balance update after each click,
+    and unaffordable ranks explain why they cannot be bought. Source 0.155.0
+    opens realm abilities in a focused Training view with a fixed balance,
+    explicit Buy/shortage labels and a purchase result at the top. Real-client
+    verification pending: buy successive affordable ranks for
+    active and benched companions, confirm the effect and saved balance after
+    reinvite/relog, and confirm unaffordable ranks stay disabled.
+
 69. **Player-led group falls behind during speed-song runs.** Reported
     2026-09-29 while running with Bard speed without sprint; installed
     version and whether other speed sources show the same issue are unknown.

@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.155.0] - 2026-09-29
+
+### Fixed
+
+- Companion realm ability training now opens a focused list with the earned RP,
+  realm rank and remaining points visible while scrolling. Each ability shows
+  its next rank and cost, or the point shortage; purchases update the balance
+  and show their result at the top of the manager.
+
 ## [0.154.0] - 2026-09-29
 
 ### Fixed
