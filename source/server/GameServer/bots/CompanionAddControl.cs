@@ -31,6 +31,9 @@ namespace DOL.GS
         /// <summary>A harmful area spell centered here would wake a protected mezz.</summary>
         public static bool BreaksProtectedMezz(GameBot bot, Spell spell, GameLiving caster, GameLiving target)
         {
+            if (spell != null && spell.IsHarmful && spell.SpellType != eSpellType.Mesmerize &&
+                AutonomousRvrDoctrineRuntime.Applies(bot))
+                return BreaksPvpMezz(bot, spell, caster, target);
             if (spell == null || spell.Radius <= 0 || !spell.IsHarmful || spell.SpellType == eSpellType.Mesmerize ||
                 !AppliesMezzProtection(bot))
                 return false;
@@ -43,6 +46,30 @@ namespace DOL.GS
                     return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// CC discipline for autonomous RvR bots (P11): no DoT on a mezzed
+        /// enemy player or bot, and no area spell that would catch one, unless
+        /// it is the assist target (the caller's target, or its own when it
+        /// leads or roams alone).
+        /// </summary>
+        private static bool BreaksPvpMezz(GameBot bot, Spell spell, GameLiving caster, GameLiving target)
+        {
+            GameLiving assist = AutonomousRvrDoctrineRuntime.AssistTarget(bot);
+            bool dot = spell.SpellType is eSpellType.DamageOverTime or eSpellType.DamageOverTimeNoVariance;
+            bool targetMezzed = target != null && target.IsMezzed && BotPvpCrowdControl.PlayerLike(target);
+            if (spell.Radius <= 0)
+                return AutonomousRvrCombatHabits.HoldsForMezz(false, dot, targetMezzed, target == assist, 0);
+            GameLiving center = spell.Target == eSpellTarget.SELF || spell.Range <= 0 ? caster : target;
+            if (center == null)
+                return false;
+            ushort radius = (ushort)System.Math.Clamp(spell.Radius, 1, ushort.MaxValue);
+            int others = center.GetPlayersInRadius(radius).Cast<GameLiving>()
+                .Concat(center.GetNPCsInRadius(radius).OfType<GameBot>())
+                .Count(enemy => enemy != target && enemy != assist && enemy.IsAlive && enemy.IsMezzed &&
+                    GameServer.ServerRules.IsAllowedToAttack(bot, enemy, true));
+            return AutonomousRvrCombatHabits.HoldsForMezz(true, dot, targetMezzed, target == assist, others);
         }
 
         /// <summary>

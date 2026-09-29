@@ -30,7 +30,7 @@ namespace DOL.GS
 
         /// <summary>Checks a stealth-required assassin style against its current target.</summary>
         public static bool CanUseStealthOpener(GameBot bot, GameLiving target) => bot?.IsStealthed == true &&
-            HasSelectedAutomaticPlayerLedPlan(bot) &&
+            (HasSelectedAutomaticPlayerLedPlan(bot) || AutonomousRvrStealthLoop.Applies(bot)) &&
             bot.CharacterClass != null &&
             BotPoisonSupply.IsAssassin((eCharacterClass)bot.CharacterClass.ID) &&
             (bot.GetSpecializationByName(Specs.Stealth)?.Level ?? 0) > 0 &&

@@ -180,6 +180,29 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+67. **RvR wave 5: stealther loop, assist discipline, interrupts.** Aaron,
+    2026-09-29 (P9, P4, P10, P11). Implemented in source; real-client check
+    pending. Autonomous RvR assassins in stealth doctrines roam and wait
+    stealthed (leader or solo 600-1,200 beside the road), open with their
+    stealth style on a soft victim only, leave after one kill, a second
+    attacker or below 40 % health (run 300-600, hide again after the 10 s
+    combat timer, new roaming spot); stealthed world bots move at player
+    stealth speed. Damage dealers in called groups take the caller's target
+    after 1-2 s unless their own is below 30 % (5-15 % miss the call by
+    Patience); archers, melee in reach and instant casters lean toward a
+    casting caster or healer; no DoT or AoE on a mezzed non-assist enemy.
+    Check in `server-console.log`: `RVR_STEALTH_OPEN bot=... doctrine=...
+    target=... target_class=... reason=lone|back_line|resting|last_in_line|straggler
+    dist=...` with mostly caster/healer classes and no Armsman/Warrior/Hero
+    in `back_line`; `RVR_STEALTH_BREAK bot=... reason=kill|friends|low_hp
+    seconds=...` shortly after each open, seconds mostly under 30;
+    `RVR_ASSIST_SWITCH switches=... ignored=... median_delay_ms=...` every
+    five minutes in group fights with the median between 1000 and 2500 and
+    `ignored` about a tenth of `switches`; assassin share of PvP kills
+    (`AUTONOMOUS_BOT_DEATH killer_class`) above the 6.2 % baseline; in game
+    an Infiltrator/Shadowblade/Nightshade bot is invisible while it roams;
+    companions unchanged.
+
 66. **RvR wave 6: hub-band peace.** Aaron, 2026-09-29 ("you leave the door
     first, then you hunt"). Implemented in source; real-client check
     pending. Same-realm autonomous world bots cannot attack each other while

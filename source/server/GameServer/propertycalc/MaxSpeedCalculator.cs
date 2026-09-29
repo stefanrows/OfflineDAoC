@@ -143,6 +143,14 @@ namespace DOL.GS.PropertyCalc
                     speedIncrease *= 0.2 + healthPercent * (0.8 / 0.33); // 33% HP = full speed, 0% HP = 20% speed
             }
 
+            // An autonomous world bot moves stealthed at the player's stealth
+            // speed (same formula as above); companions keep their old speed.
+            if (living is GameBot { IsAutonomousWorldBot: true, IsPlayerLedGroup: false, IsStealthed: true } stealthBot)
+            {
+                double stealthSpec = Math.Min(stealthBot.GetModifiedSpecLevel(Specs.Stealth), stealthBot.Level);
+                speedIncrease *= 0.3 + (stealthSpec + 10) * 0.3 / (stealthBot.Level + 10);
+            }
+
             if (living is GameBot && GameRelic.IsPlayerCarryingRelic(living))
                 speedIncrease = Math.Min(speedIncrease, 1.0);
             return (int) Math.Round(maxSpeedBase * speedIncrease);

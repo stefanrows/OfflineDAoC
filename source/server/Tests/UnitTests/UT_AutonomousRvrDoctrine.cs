@@ -310,4 +310,120 @@ public sealed class UT_AutonomousRaidSchedule
                 199, true), Is.False, "Automatic raids keep their 200 head count.");
         });
     }
+
+    // ------------------------------------------------ wave 5: assist, interrupts, CC discipline
+
+    [Test]
+    public void ACastingEnemyCasterDrawsInterruptersButNotEveryone()
+    {
+        RvrClassTraits cleric = AutonomousRvrDoctrine.TraitsOf(eCharacterClass.Cleric);
+        RvrClassTraits armsman = AutonomousRvrDoctrine.TraitsOf(eCharacterClass.Armsman);
+        RvrTargetView idle = new(cleric, 800, 100, false, false, false);
+        RvrTargetView casting = idle with { IsCasting = true };
+        RvrChooser archer = new(false, true);
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrCombatHabits.Weight(casting, null, archer) /
+                        AutonomousRvrCombatHabits.Weight(idle, null, archer),
+                Is.EqualTo(AutonomousRvrCombatHabits.CastingBonus).Within(1e-9));
+            Assert.That(AutonomousRvrCombatHabits.Weight(casting, null, default),
+                Is.EqualTo(AutonomousRvrCombatHabits.Weight(idle, null, default)), "No interrupter, no bonus.");
+            RvrTargetView castingTank = new(armsman, 800, 100, false, false, false, IsCasting: true);
+            Assert.That(AutonomousRvrCombatHabits.Weight(castingTank, null, archer),
+                Is.EqualTo(AutonomousRvrCombatHabits.Weight(castingTank with { IsCasting = false }, null, archer)),
+                "Only casters and healers are interrupt targets.");
+        });
+    }
+
+    [Test]
+    public void TheCallerLeansOnCastersAndACastingCasterMakesAMemberLookAgain()
+    {
+        RvrTargetView tank = new(AutonomousRvrDoctrine.TraitsOf(eCharacterClass.Armsman), 300, 100, false, false, false);
+        RvrTargetView wizard = new(AutonomousRvrDoctrine.TraitsOf(eCharacterClass.Wizard), 300, 100, false, false, false);
+        Assert.That(AutonomousRvrCombatHabits.Weight(wizard, null, new RvrChooser(true, false)) /
+                    AutonomousRvrCombatHabits.Weight(wizard, null, default),
+            Is.EqualTo(AutonomousRvrCombatHabits.CallerCasterBonus).Within(1e-9));
+        Assert.That(AutonomousRvrCombatHabits.Weight(tank, null, new RvrChooser(true, false)),
+            Is.EqualTo(AutonomousRvrCombatHabits.Weight(tank, null, default)));
+
+        RvrTargetView[] views = [tank, wizard with { IsCasting = true }];
+        // Holding the tank: without a reason to look again it stays.
+        Assert.That(AutonomousRvrCombatHabits.Choose(views, 0, true, null, 0, 0.99, new RvrChooser(false, true)), Is.EqualTo(0));
+        // Looking again: a weighted pick in which the current target still counts double.
+        Assert.That(AutonomousRvrCombatHabits.Choose(views, 0, true, null, 0, 0.99, new RvrChooser(false, true), true), Is.EqualTo(1));
+        Assert.That(AutonomousRvrCombatHabits.Choose(views, 0, true, null, 0, 0.0, new RvrChooser(false, true), true), Is.EqualTo(0));
+    }
+
+    [Test]
+    public void DamageDealersSwitchToTheCallAfterOneToTwoSeconds()
+    {
+        Assert.That(AutonomousRvrCombatHabits.SwitchDelayMilliseconds(0), Is.EqualTo(1_000));
+        Assert.That(AutonomousRvrCombatHabits.SwitchDelayMilliseconds(0.5), Is.EqualTo(1_500));
+        Assert.That(AutonomousRvrCombatHabits.SwitchDelayMilliseconds(1), Is.EqualTo(2_000));
+        Assert.That(AutonomousRvrCombatHabits.SwitchDelayMilliseconds(7), Is.EqualTo(2_000));
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrCombatHabits.RespondToCall(true, true, false, 80, 900, 1_400, false), Is.EqualTo(RvrCallResponse.Wait));
+            Assert.That(AutonomousRvrCombatHabits.RespondToCall(true, true, false, 80, 1_400, 1_400, false), Is.EqualTo(RvrCallResponse.Switch));
+            Assert.That(AutonomousRvrCombatHabits.RespondToCall(true, true, false, 29, 5_000, 1_400, false), Is.EqualTo(RvrCallResponse.Finish),
+                "Below 30 % the own target is finished first.");
+            Assert.That(AutonomousRvrCombatHabits.RespondToCall(true, true, false, 80, 5_000, 1_400, true), Is.EqualTo(RvrCallResponse.Ignore));
+            Assert.That(AutonomousRvrCombatHabits.RespondToCall(true, true, true, 80, 5_000, 1_400, false), Is.EqualTo(RvrCallResponse.None));
+            Assert.That(AutonomousRvrCombatHabits.RespondToCall(false, true, false, 80, 5_000, 1_400, false), Is.EqualTo(RvrCallResponse.None),
+                "Supports are not bound to the call.");
+        });
+    }
+
+    [TestCase(eCharacterClass.Armsman, true)]
+    [TestCase(eCharacterClass.Wizard, true)]
+    [TestCase(eCharacterClass.Scout, true)]
+    [TestCase(eCharacterClass.Infiltrator, true)]
+    [TestCase(eCharacterClass.Cleric, false)]
+    [TestCase(eCharacterClass.Sorcerer, false)]
+    [TestCase(eCharacterClass.Minstrel, false)]
+    [TestCase(eCharacterClass.Skald, false)]
+    [TestCase(eCharacterClass.Shaman, false)]
+    public void OnlyDamageDealersRideTheAssistTrain(eCharacterClass characterClass, bool expected)
+    {
+        Assert.That(AutonomousRvrCombatHabits.IsDamageDealer(AutonomousRvrDoctrine.TraitsOf(characterClass)), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void PatienceSetsTheChanceToIgnoreACallBetweenFiveAndFifteenPercent()
+    {
+        Assert.That(AutonomousRvrCombatHabits.IgnoreCallChance(15), Is.EqualTo(0.15).Within(1e-9));
+        Assert.That(AutonomousRvrCombatHabits.IgnoreCallChance(0), Is.EqualTo(0.15).Within(1e-9));
+        Assert.That(AutonomousRvrCombatHabits.IgnoreCallChance(50), Is.EqualTo(0.10).Within(1e-9));
+        Assert.That(AutonomousRvrCombatHabits.IgnoreCallChance(85), Is.EqualTo(0.05).Within(1e-9));
+        Assert.That(AutonomousRvrCombatHabits.IgnoreCallChance(100), Is.EqualTo(0.05).Within(1e-9));
+        // Injected rolls: a roll below the chance ignores.
+        Random random = new(1234);
+        int ignored = 0;
+        for (int index = 0; index < 10_000; index++)
+            if (random.NextDouble() < AutonomousRvrCombatHabits.IgnoreCallChance(50))
+                ignored++;
+        Assert.That(ignored, Is.InRange(850, 1_150));
+    }
+
+    [Test]
+    public void TheMedianDelayIsTheMiddleSample()
+    {
+        Assert.That(AutonomousRvrCombatHabits.Median([]), Is.Zero);
+        Assert.That(AutonomousRvrCombatHabits.Median([1_900, 1_100, 1_500]), Is.EqualTo(1_500));
+        Assert.That(AutonomousRvrCombatHabits.Median([1_000, 2_000]), Is.EqualTo(1_500));
+    }
+
+    [Test]
+    public void NobodyDotsOrAoesAMezzedEnemyThatIsNotTheAssistTarget()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrCombatHabits.HoldsForMezz(false, true, true, false, 0), Is.True, "DoT on a mezzed non-assist.");
+            Assert.That(AutonomousRvrCombatHabits.HoldsForMezz(false, true, true, true, 0), Is.False, "The assist target may be hit.");
+            Assert.That(AutonomousRvrCombatHabits.HoldsForMezz(false, false, true, false, 0), Is.False, "Single nukes are a target question.");
+            Assert.That(AutonomousRvrCombatHabits.HoldsForMezz(true, false, false, true, 1), Is.True, "AoE would catch a mezzed bystander.");
+            Assert.That(AutonomousRvrCombatHabits.HoldsForMezz(true, false, true, true, 0), Is.False);
+            Assert.That(AutonomousRvrCombatHabits.HoldsForMezz(true, true, true, false, 0), Is.True);
+        });
+    }
 }

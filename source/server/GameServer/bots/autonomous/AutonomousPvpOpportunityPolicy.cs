@@ -92,13 +92,18 @@ public static class AutonomousPvpOpportunityPolicy
     }
 
     public static GameLiving Select(GameBot actor, IEnumerable<GameLiving> candidates,
+        Func<GameLiving, GameLiving, bool> visible, bool retaliation = false) =>
+        Suitable(actor, candidates, visible, retaliation).FirstOrDefault();
+
+    /// <summary>Every opponent <see cref="Select"/> would accept, best first.</summary>
+    public static GameLiving[] Suitable(GameBot actor, IEnumerable<GameLiving> candidates,
         Func<GameLiving, GameLiving, bool> visible, bool retaliation = false)
     {
         // A bot fresh from release (or a zone change) does not open a fight
         // while its PvP immunity lasts; the server rules would refuse it anyway.
         if (actor == null || candidates == null || PvpCombatant.IsSafeArea(actor) ||
             PvpCombatant.IsInvulnerableToAttack(actor))
-            return null;
+            return [];
         DateTime nowUtc = WorldSimulationClock.UtcNow;
         GameLiving[] visibleCandidates = candidates
             .Where(target => target != null && target != actor && target.IsAlive &&
@@ -118,7 +123,6 @@ public static class AutonomousPvpOpportunityPolicy
             .OrderByDescending(target => grudges.Contains(target))
             .ThenBy(target => LevelsPreferred(actor.Level, PvpCombatant.Resolve(target)?.Level ?? target.EffectiveLevel) ? 0 : 1)
             .ThenBy(actor.GetDistanceTo)
-            .FirstOrDefault();
-
+            .ToArray();
     }
 }

@@ -1632,7 +1632,11 @@ namespace DOL.GS
                 _hunterPatrolArrivedTick = GameLoop.GameLoopTime;
                 AutonomousRvrDoctrineRuntime.NoteWaypoint(bot, new(bot.X, bot.Y, bot.Z));
             }
-            if (_rvrDestination == null || _rvrDestination.RegionId == 0 ||
+            // After a stealther's break-off the roaming spot changes, so it
+            // does not walk back into the friends of its last victim.
+            bool stealthReplan = AutonomousRvrStealthLoop.TakeReplan(bot) &&
+                _rvrIntent == AutonomousRvrEventLayer.Intent.Roam && !_rvrSharedEvent;
+            if (stealthReplan || _rvrDestination == null || _rvrDestination.RegionId == 0 ||
                 (bot.Level >= 20 && !_rvrSharedEvent && GameLoop.GameLoopTime >= _nextRvrPlanReview &&
                  AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) is not (AutonomousPlayerType.Hunter or AutonomousPlayerType.Roamer) &&
                  !BotSiegeRuntime.Assigned(bot)) ||
@@ -1732,7 +1736,9 @@ namespace DOL.GS
                     "Engaging reachable enemies; advancing through gates only after a real breach");
                 return true;
             }
-            PatrolRvr(bot);
+            bool stealthWaiting = HoldStealthWaitSpot(bot);
+            if (!stealthWaiting)
+                PatrolRvr(bot);
             // Linger at the spot like players did: the timer runs from arrival,
             // not from when the spot was chosen, so a long walk is not wasted.
             if (_hunterPatrolArrivedTick > 0
@@ -1745,8 +1751,9 @@ namespace DOL.GS
                     "No opposing force arrived at this patrol point; choosing another live objective");
                 return true;
             }
-            SetRvrStatus(bot, $"Searching near {_rvrDestination.MonsterName}",
-                "Roam active frontier keeps, relic routes, and enemy forces", "Scanning for hostile players and crews", _rvrDestination.MonsterName);
+            if (!stealthWaiting)
+                SetRvrStatus(bot, $"Searching near {_rvrDestination.MonsterName}",
+                    "Roam active frontier keeps, relic routes, and enemy forces", "Scanning for hostile players and crews", _rvrDestination.MonsterName);
             return true;
         }
 
@@ -1890,7 +1897,12 @@ namespace DOL.GS
             IEnumerable<GameLiving> candidates = bot.GetPlayersInRadius(ImmediateTargetSearchRadius).Cast<GameLiving>()
                 .Concat(bot.GetNPCsInRadius(ImmediateTargetSearchRadius)
                     .Where(PvpCombatant.IsPlayerShaped).Cast<GameLiving>());
-            GameLiving opponent = AutonomousPvpOpportunityPolicy.Select(bot, candidates, BotSiegeRuntime.Visible);
+            // A stealth-doctrine assassin opens only on a soft victim (P9).
+            GameLiving opponent = AutonomousRvrStealthLoop.Applies(bot)
+                ? AutonomousRvrStealthLoop.TryPick(bot,
+                    AutonomousPvpOpportunityPolicy.Suitable(bot, candidates, BotSiegeRuntime.Visible), null,
+                    out GameLiving victim) ? victim : null
+                : AutonomousPvpOpportunityPolicy.Select(bot, candidates, BotSiegeRuntime.Visible);
             bool atHuntingGround = _rvrDestination != null && bot.CurrentRegionID == _rvrDestination.RegionId &&
                 Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= 2_000;
             if ((opponent != null || atHuntingGround) &&

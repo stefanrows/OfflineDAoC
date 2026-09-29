@@ -73,7 +73,12 @@ public sealed partial class AutonomousWorldBotController
                 new(bot.X, bot.Y, bot.Z), new(target.X, target.Y, target.Z), nav.DefaultFilters));
         var visibleTargets=visible.ToArray();
         var operatorThreats=visibleTargets.Where(target=>target.IsAttacking && IsHeldByAlliedOperator(target)).ToArray();
-        GameLiving enemy = decided != null && Eligible(decided) ? decided :
+        // A stealth-doctrine assassin waits for a soft victim instead of the
+        // nearest enemy; it still answers anyone already fighting it.
+        GameLiving victim = null;
+        bool stealthHunt = !(decided != null && Eligible(decided)) && operatorThreats.Length == 0 &&
+            AutonomousRvrStealthLoop.TryPick(bot, visibleTargets, InOurFight, out victim);
+        GameLiving enemy = decided != null && Eligible(decided) ? decided : stealthHunt ? victim :
             SelectDistributedRvrTarget(bot, operatorThreats.Length>0 ? operatorThreats : visibleTargets);
         if (enemy == null || !Eligible(enemy)) return false;
         if (previousEngine != null && enemy is GameSiegeWeapon) return false;

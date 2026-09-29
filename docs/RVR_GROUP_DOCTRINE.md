@@ -241,6 +241,55 @@ to that one target), so members join the fight the leader opened. The same
 leader does not observe again for 30 s after an add, 60 s after leaving and
 90 s after moving on.
 
+## Stealther loop
+
+Evidence (P9): stealthers waited "pretty damn close to the main path" and
+at milegates for "that lone victim", opened with Perforate Artery then
+Creeping Death about 5 s later, took one kill "(don't be greedy)" and left;
+assassins hid again about 6 s after an attack, others about 10 s [D10949,
+D13053, D5653, D5231, D10941, D8409, D6118].
+
+Autonomous RvR Infiltrators, Shadowblades and Nightshades in a solo
+assassin, stealth pack or gank squad doctrine roam stealthed and at the
+player stealth speed (a group member drops stealth when its visible leader
+walks off more than 300 ahead, and hides again once the leader hides or
+stands). A solo assassin or pack leader waits at its roaming spot 600-1,200
+units beside the road it came in on (the hotspot list has no milegate or
+portal-exit spots yet). It opens only on a soft victim, best first: a caster
+or healer at the edge of its group, a sitting, resting or rezzing enemy (at
+the edge, or in a party of up to 3), a
+lone walker (no friend within 1,500), the last of a moving column, a
+straggler (over 1,200 from the next friend or below 30 %); never a tank, or
+anyone in the middle of a group. Anyone already fighting it is answered as
+before. The opener is the class's stealth style from the normal style pick,
+then the normal chain. It breaks off after the kill, when a second enemy
+hits it or below 40 % health (these two at most once per 30 s; after a
+break it no longer runs for low health from an enemy in melee range, it
+fights): a 300-600 run turned 20-60
+degrees from the threat, hide again when out of combat for the restealth
+delay (6 s assassins, 10 s others, never sooner than the server's 10 s
+combat timer, so 10 s here; after 20 s without success it hunts again
+anyway), then a new roaming spot. Log:
+`RVR_STEALTH_OPEN` and `RVR_STEALTH_BREAK` per event.
+
+## Assist and interrupts
+
+Evidence (P4, P10, P11): "/assist" took 1-2 s to pick up a target [D4274];
+the MA takes casters and healers first [D6422]; any hit interrupts a cast
+with a 3 s lock [D14122]; "DON'T BREAK MEZ" [O233, D5086].
+
+In groups with a caller, a damage dealer (not a healer, mezzer, area
+stunner or speed class) takes the caller's new target after a rolled 1-2 s,
+unless its own target is below 30 %; it misses a call with 15 % chance at
+Patience 15 down to 5 % at Patience 85. The caller weighs casters, healers
+and mezzers x1.4 more. Archers, melee within 350 and bots with an instant
+spell weigh a casting enemy caster or healer x1.8 and look again once a
+second when one starts casting in reach (their current target still counts
+double). No autonomous RvR bot puts a DoT on a mezzed enemy, or an area
+spell over one, unless it is the assist target (the caller's target, or its
+own when it leads or roams alone). Log: `RVR_ASSIST_SWITCH switches=...
+ignored=... median_delay_ms=...` every five minutes.
+
 ## After a fight
 
 Evidence: "just 2 minutes to rebuff and reg" (1-2 min normal, about 5 after

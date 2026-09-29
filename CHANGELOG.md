@@ -12,6 +12,40 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.151.0] - 2026-09-29
+
+### Added
+
+- Stealther loop for autonomous RvR assassins (Infiltrator, Shadowblade,
+  Nightshade in a solo-assassin, stealth-pack or gank-squad doctrine). They
+  now roam and wait stealthed; a solo assassin or pack leader waits at its
+  roaming spot 600-1,200 units beside the road instead of walking circles.
+  They open only on a soft victim: a caster or healer at the edge of its
+  group, a resting or rezzing enemy, a lone walker, the last of a passing
+  column or a straggler; never the tank or caster in the middle of a group.
+  The opener is the class's own stealth style (Perforate Artery, Backstab
+  and so on), which world bots could not use before; the chain follows
+  through the normal style choice. After one kill, when a second enemy joins
+  in, or below 40 % health they run 300-600 units off at an angle, hide
+  again once the server's 10 s combat timer allows, and roam on elsewhere.
+  Stealthed world bots now move at the player stealth speed.
+- Assist discipline: in groups with a caller, melee, archers and nukers
+  take the caller's new target after 1-2 s (the /assist delay players
+  reported in 2003), unless their own target is below 30 % health; each
+  one misses a call now and then (5-15 % by Patience). The caller leans
+  harder on casters and healers. Healers, mezzers and speed classes keep
+  doing their own job.
+- Interrupts: archers, melee in reach and bots with an instant spell lean
+  toward an enemy caster or healer who is casting right now.
+- New log lines: `RVR_STEALTH_OPEN`, `RVR_STEALTH_BREAK`, and every five
+  minutes `RVR_ASSIST_SWITCH switches=... ignored=... median_delay_ms=...`.
+
+### Changed
+
+- Autonomous RvR bots no longer put a damage-over-time spell on a mezzed
+  enemy, or an area spell over one, unless it is the group's assist target.
+  Companions and player-led groups are unchanged.
+
 ## [0.150.0] - 2026-09-29
 
 ### Changed

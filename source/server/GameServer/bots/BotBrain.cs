@@ -1449,6 +1449,8 @@ namespace DOL.AI.Brain
                 AutonomousRvrDoctrineRuntime.EvaluateRetreat(BotBody);
                 if (AutonomousRvrDoctrineRuntime.TryRunRetreat(this))
                     return;
+                if (AutonomousRvrStealthLoop.Update(this))
+                    return;
                 if (AutonomousSealShopping.TryRun(this))
                     return;
             }
@@ -3296,12 +3298,13 @@ namespace DOL.AI.Brain
         {
             // Idle is not a reason to hide (and slow travel). Stealth belongs to
             // the approach to a legal enemy player/bot, not random PvE pauses.
-            if (Body.IsStealthed) Body.Stealth(false);
+            if (Body.IsStealthed && !AutonomousRvrStealthLoop.KeepsStealth(BotBody)) Body.Stealth(false);
         }
 
         private bool TryStartStealthOpener(GameLiving target)
         {
-            if (!BotBody.HasSelectedAutomaticCompanionPlan || !BotBody.IsPlayerLedGroup ||
+            if (!(BotBody.HasSelectedAutomaticCompanionPlan && BotBody.IsPlayerLedGroup ||
+                  AutonomousRvrStealthLoop.Applies(BotBody)) ||
                 !BotPoisonSupply.IsAssassin((eCharacterClass)BotBody.CharacterClass.ID) ||
                 !Body.IsWithinRadius(target, Body.MeleeAttackRange) ||
                 !CompanionEngagementMode.Allows(BotBody, target) ||

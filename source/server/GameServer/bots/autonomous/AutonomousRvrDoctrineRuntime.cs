@@ -38,6 +38,13 @@ public static class AutonomousRvrDoctrineRuntime
     {
         public GameLiving Target;
         public long ChosenAt;
+        /// <summary>The caller's target this bot last saw, and how it answers it.</summary>
+        public GameLiving Call;
+        public long CallAt;
+        public int CallDelay;
+        public bool CallIgnored;
+        public bool CallAnswered;
+        public long NextCasterScan;
     }
 
     private static readonly ConditionalWeakTable<Group, GroupState> Groups = new();
@@ -122,6 +129,28 @@ public static class AutonomousRvrDoctrineRuntime
     }
 
     /// <summary>
+    /// The target a member may hit even while it is mezzed: the caller's
+    /// current target, or its own when it leads (or roams alone).
+    /// </summary>
+    public static GameLiving AssistTarget(GameBot bot)
+    {
+        if (!Applies(bot))
+            return null;
+        GameLiving caller = CallerTarget(bot);
+        if (caller != null)
+            return caller;
+        return bot.Group == null || bot.Group.LivingLeader == bot ? bot.TargetObject as GameLiving : null;
+    }
+
+    /// <summary>The class traits of a living, pets read as their owner's class.</summary>
+    public static RvrClassTraits ClassTraits(GameLiving living) => living == null ? RvrClassTraits.None : TraitsOf(living);
+
+    /// <summary>Instant harmful spells reach roughly bow range; enough to interrupt a caster.</summary>
+    private const int InterruptReach = 1_500;
+    private const int MeleeInterruptReach = 350;
+    private const int CasterScanMilliseconds = 1_000;
+
+    /// <summary>
     /// Picks a target from <paramref name="candidates"/> by the group's habits.
     /// Returns null when the habits do not apply, so callers keep their own rule.
     /// </summary>
@@ -143,6 +172,61 @@ public static class AutonomousRvrDoctrineRuntime
         int patience = bot.PersistentRecord?.Patience ?? 50;
         bool keep = held != null && now - habit.ChosenAt < AutonomousRvrDoctrine.StickMilliseconds(doctrine, patience);
 
+        // Assist discipline (P4): a damage dealer picks up the caller's new
+        // target after the /assist delay of 1-2 s, unless it is about to kill
+        // its own; now and then it misses the call. Supports are not bound.
+        RvrClassTraits own = TraitsOf(bot);
+        if (caller != null && AutonomousRvrCombatHabits.IsDamageDealer(own))
+        {
+            if (caller != habit.Call)
+            {
+                habit.Call = caller;
+                habit.CallAt = now;
+                habit.CallDelay = AutonomousRvrCombatHabits.SwitchDelayMilliseconds(Random.Shared.NextDouble());
+                habit.CallIgnored = Random.Shared.NextDouble() < AutonomousRvrCombatHabits.IgnoreCallChance(patience);
+                habit.CallAnswered = false;
+            }
+            RvrCallResponse response = AutonomousRvrCombatHabits.RespondToCall(true, held != null, held == caller,
+                held?.HealthPercent ?? 100, now - habit.CallAt, habit.CallDelay, habit.CallIgnored);
+            switch (response)
+            {
+                case RvrCallResponse.Switch:
+                    if (!habit.CallAnswered)
+                        AssistSwitchStats.Switched((int)Math.Min(int.MaxValue, now - habit.CallAt));
+                    habit.CallAnswered = true;
+                    habit.Target = caller;
+                    habit.ChosenAt = now;
+                    return caller;
+                case RvrCallResponse.Wait:
+                case RvrCallResponse.Finish:
+                    return held;
+                case RvrCallResponse.Ignore:
+                    if (!habit.CallAnswered)
+                        AssistSwitchStats.Ignored();
+                    habit.CallAnswered = true;
+                    break;
+            }
+        }
+
+        // Interrupt awareness (P10): an archer, a melee in reach or an instant
+        // caster notices an enemy caster starting a spell and may turn to it.
+        bool archer = own.HasFlag(RvrClassTraits.Archer);
+        bool instant = bot.InstantHarmfulSpells?.Any(spell => spell != null && spell.Level <= bot.Level) == true;
+        bool melee = own.HasFlag(RvrClassTraits.Melee);
+        bool canInterrupt = archer || instant || melee;
+        int reach = archer || instant ? InterruptReach : MeleeInterruptReach;
+        bool reconsider = false;
+        if (keep && canInterrupt && held?.IsCasting != true && now >= habit.NextCasterScan)
+        {
+            habit.NextCasterScan = now + CasterScanMilliseconds;
+            foreach (GameLiving caster in CastingEnemyCasters(bot, pool, reach))
+            {
+                if (!pool.Contains(caster))
+                    pool.Add(caster);
+                reconsider = true;
+            }
+        }
+
         DateTime nowUtc = WorldSimulationClock.UtcNow;
         HashSet<GameLiving> ours = bot.Group?.GetMembersInTheGroup().ToHashSet() ?? [bot];
         RvrTargetView[] views = pool.Select(target => new RvrTargetView(
@@ -153,11 +237,13 @@ public static class AutonomousRvrDoctrineRuntime
                 target.TargetObject is GameLiving victim && ours.Contains(victim) && victim != bot &&
                     (IsHealer(victim) || TraitsOf(victim).HasFlag(RvrClassTraits.Caster)),
                 AutonomousGuildGrudgeMemory.IsActiveTarget(bot, target, nowUtc),
-                PvpCombatant.Resolve(target) != target))
+                PvpCombatant.Resolve(target) != target,
+                target.IsCasting))
             .ToArray();
 
+        bool isCaller = doctrine.HasCaller && bot.Group?.LivingLeader == bot;
         int index = AutonomousRvrCombatHabits.Choose(views, held == null ? -1 : pool.IndexOf(held), keep, doctrine,
-            Random.Shared.NextDouble(), Random.Shared.NextDouble());
+            Random.Shared.NextDouble(), Random.Shared.NextDouble(), new RvrChooser(isCaller, canInterrupt), reconsider);
         if (index < 0)
             return null;
         GameLiving chosen = pool[index];
@@ -167,6 +253,70 @@ public static class AutonomousRvrDoctrineRuntime
             habit.ChosenAt = now;
         }
         return chosen;
+    }
+
+    /// <summary>
+    /// Enemy casters and healers within <paramref name="reach"/> that are
+    /// casting now and belong to a group we are already fighting.
+    /// </summary>
+    private static IEnumerable<GameLiving> CastingEnemyCasters(GameBot bot, List<GameLiving> pool, int reach)
+    {
+        HashSet<Group> fighting = pool.Select(target => PvpCombatant.Resolve(target)?.Group)
+            .Where(group => group != null).ToHashSet();
+        return bot.GetPlayersInRadius((ushort)reach).Cast<GameLiving>()
+            .Concat(bot.GetNPCsInRadius((ushort)reach).OfType<GameBot>())
+            .Where(enemy => enemy != bot && enemy.IsAlive && enemy.IsCasting && !enemy.IsStealthed &&
+                enemy.ObjectState == GameObject.eObjectState.Active && PvpCombatant.IsPlayerShaped(enemy) &&
+                (pool.Contains(enemy) || enemy.Group != null && fighting.Contains(enemy.Group)) &&
+                AutonomousRvrCombatHabits.IsCasterClass(TraitsOf(enemy)) &&
+                GameServer.ServerRules.IsAllowedToAttack(bot, enemy, true))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Five-minute counter of assist switches: how many damage dealers took
+    /// the caller's new target, how many ignored it, and the median delay.
+    /// </summary>
+    private static class AssistSwitchStats
+    {
+        private const long WindowMilliseconds = 300_000;
+        private static readonly object Sync = new();
+        private static readonly List<int> Delays = [];
+        private static int _ignored;
+        private static long _windowEnd;
+
+        public static void Switched(int delayMilliseconds)
+        {
+            lock (Sync)
+            {
+                Delays.Add(delayMilliseconds);
+                FlushIfDue();
+            }
+        }
+
+        public static void Ignored()
+        {
+            lock (Sync)
+            {
+                _ignored++;
+                FlushIfDue();
+            }
+        }
+
+        private static void FlushIfDue()
+        {
+            long now = GameLoop.GameLoopTime;
+            if (_windowEnd == 0)
+                _windowEnd = now + WindowMilliseconds;
+            if (now < _windowEnd)
+                return;
+            if (Log.IsInfoEnabled)
+                Log.Info($"RVR_ASSIST_SWITCH switches={Delays.Count} ignored={_ignored} " +
+                    $"median_delay_ms={AutonomousRvrCombatHabits.Median(Delays)}");
+            Delays.Clear();
+            _ignored = 0;
+            _windowEnd = now + WindowMilliseconds;
+        }
     }
 
     // ---------------------------------------------------------- fight appetite
