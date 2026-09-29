@@ -91,8 +91,17 @@ public static class AutonomousHubDeparture
     {
         None,
         Band,
-        RecentDeparture
+        RecentDeparture,
+        Bind
     }
+
+    /// <summary>Bug 63: radius of the same-realm peace around a realm's own
+    /// bindstones, where released bots otherwise kill each other in a loop.</summary>
+    public const int BindPeaceRadius = 2_500;
+
+    /// <summary>Whether the living stands near one of its own realm's bindstones.</summary>
+    public static bool NearOwnBind(GameLiving living) => living != null &&
+        BotReleaseBindPoints.IsNearOwnBind(living.CurrentRegionID, living.X, living.Y, living.Realm, BindPeaceRadius);
 
     /// <summary>Per-realm band circles (index = (int)eRealm, 1..3): the keep
     /// circle at 7,500 and each outer landing at its radius + 2,500. Built once;
@@ -239,6 +248,8 @@ public static class AutonomousHubDeparture
         // Band first (cheap geometry); the clock is read only outside it.
         if (InHubBand(first) || InHubBand(second))
             rule = HubPeaceRule.Band;
+        else if (NearOwnBind(first) || NearOwnBind(second))
+            rule = HubPeaceRule.Bind;
         else if (RecentlyDeparted((GameBot)first, nowUtc) || RecentlyDeparted((GameBot)second, nowUtc))
             rule = HubPeaceRule.RecentDeparture;
         return rule != HubPeaceRule.None;
@@ -254,6 +265,7 @@ public static class AutonomousHubDeparture
     private static readonly PaddedCounter[] PeaceBlocked = new PaddedCounter[4];
     private static readonly PaddedCounter[] PeaceStray = new PaddedCounter[4];
     private static readonly PaddedCounter[] PeaceRecent = new PaddedCounter[4];
+    private static readonly PaddedCounter[] PeaceBind = new PaddedCounter[4];
     private static long _nextPeaceLogTick;
     public const long PeaceLogIntervalMilliseconds = 300_000;
 
@@ -271,6 +283,8 @@ public static class AutonomousHubDeparture
         Interlocked.Increment(ref (damageTime ? PeaceStray : PeaceBlocked)[index].Value);
         if (!damageTime && rule == HubPeaceRule.RecentDeparture)
             Interlocked.Increment(ref PeaceRecent[index].Value);
+        if (!damageTime && rule == HubPeaceRule.Bind)
+            Interlocked.Increment(ref PeaceBind[index].Value);
     }
 
     /// <summary>
@@ -289,11 +303,14 @@ public static class AutonomousHubDeparture
             Interlocked.Exchange(ref PeaceStray[3].Value, 0);
         int recent = Interlocked.Exchange(ref PeaceRecent[1].Value, 0) + Interlocked.Exchange(ref PeaceRecent[2].Value, 0) +
             Interlocked.Exchange(ref PeaceRecent[3].Value, 0);
+        int bind = Interlocked.Exchange(ref PeaceBind[1].Value, 0) + Interlocked.Exchange(ref PeaceBind[2].Value, 0) +
+            Interlocked.Exchange(ref PeaceBind[3].Value, 0);
         int blocked = alb + mid + hib;
         // A drain racing an increment could see the rule count first; clamp.
         recent = Math.Min(recent, blocked);
+        bind = Math.Min(bind, blocked - recent);
         return $"RVR_HUB_PEACE window_s={PeaceLogIntervalMilliseconds / 1000} blocked={blocked} " +
-            $"by_hub=Svasud:{mid},Sauvage:{alb},Druim:{hib} by_rule=band:{blocked - recent},recent:{recent} stray={stray}";
+            $"by_hub=Svasud:{mid},Sauvage:{alb},Druim:{hib} by_rule=band:{blocked - recent - bind},recent:{recent},bind:{bind} stray={stray}";
     }
 
     /// <summary>Writes RVR_HUB_PEACE once per five minutes.</summary>

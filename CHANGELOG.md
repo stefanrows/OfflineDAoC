@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.159.0] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Same-realm autonomous world bots no longer kill each other in a loop at
+  their own realm's bindstones (bug 63): the hub peace now also holds within
+  2,500 units of a realm's own bindstone. Live 0.158.0 (20:40–22:21): 3,437
+  RvR/PvE deaths at the Mularn, Connacht and Cotswold binds, one bot 86 times.
+  `RVR_HUB_PEACE` gains `by_rule=...,bind:N`.
+
+### Removed
+
+- None.
+
 ## [0.158.0] - 2026-09-29
 
 ### Added

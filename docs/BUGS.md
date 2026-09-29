@@ -70,14 +70,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     the affected NPCs or bots. Expected: no null styles in a bot's style list
     and Bladeturn handled by an effect class. Not yet investigated.
 
-63. **Bots die repeatedly at a bindstone that is also an RvR rendezvous.**
-    Seen in the installed 0.115.0 log (3 h 26 min): the Midgard skald
-    Sivildrid died 33 of 40 times at the Svasud Faste bind (100: 765147,668315),
-    where RvR groups gather, and other bots (Sigiarfrid, Yrenborg, Livardis)
-    show the same spot. Each release returns the bot to the same bind and the
-    next fight kills it again. Task 48 makes the three border hubs safe, which
-    should remove this loop; verify after deployment. Related: bug 29.
-
 5. **Some helmets render oversized or glitched.** The supplied screenshots
     (2026-09-28) show Eilis, a level-47 Elf female Enchanter from Hibernia,
     wearing a level-46, quality-95 Matterbender Cloth Cap. A read-only lookup
@@ -101,6 +93,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+63. **Bots die repeatedly at a bindstone that is also an RvR rendezvous.**
+    Seen in the installed 0.115.0 log (3 h 26 min): the Midgard skald
+    Sivildrid died 33 of 40 times at the Svasud Faste bind (100: 765147,668315),
+    where RvR groups gather, and other bots (Sigiarfrid, Yrenborg, Livardis)
+    show the same spot. Each release returns the bot to the same bind and the
+    next fight kills it again. Task 48 makes the three border hubs safe, which
+    should remove this loop; verify after deployment. Related: bug 29.
+    Recurred massively on live 0.158.0 (2026-09-29 20:40–22:21, continuous
+    RvR): 1,879 deaths at the Mularn bind (100: 803816,726487), 1,188 at the
+    Connacht bind (200: 313218,469162) and 370 at the Cotswold bind
+    (1: 560491,511708), 89 % same-realm; one bot died 86 times. Fixed in
+    source 0.159.0: same-realm autonomous world bots cannot attack each other
+    within 2,500 units of their realm's own bindstones (the hub-peace rule).
+    Check: `RVR_HUB_PEACE ... bind:N` non-zero; no bind cell above a few
+    percent of bot deaths.
 
 73. **RvR group members do not help a mate who is attacked.** Aaron,
     2026-09-29, in game on 0.157.1. Cause: a group mate that is notified of

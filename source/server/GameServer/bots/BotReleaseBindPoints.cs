@@ -43,6 +43,23 @@ namespace DOL.GS
                 (int)System.Math.Round(floor.Value.Y), (int)System.Math.Round(floor.Value.Z));
         }
 
+        /// <summary>
+        /// Whether a point lies within <paramref name="radius"/> of one of the
+        /// realm's own bindstones in that region (bug 63: bind-point peace).
+        /// </summary>
+        public static bool IsNearOwnBind(ushort region, float x, float y, eRealm realm, int radius)
+        {
+            if (realm == eRealm.None || !Regions.TryGetValue(region, out Bind[] points)) return false;
+            float limit = (float)radius * radius;
+            foreach (Bind bind in points)
+            {
+                if (bind.Realm != realm) continue;
+                float dx = x - bind.Point.X, dy = y - bind.Point.Y;
+                if (dx * dx + dy * dy <= limit) return true;
+            }
+            return false;
+        }
+
         public static Point3D? Nearest(ushort region, int x, int y, eRealm realm = eRealm.None,
             ushort preferredZone = 0)
         {
