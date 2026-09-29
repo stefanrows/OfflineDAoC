@@ -12,6 +12,53 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.152.0] - 2026-09-29
+
+### Changed
+
+- Solo world bots pick camps by class: pet casters (Necromancer,
+  Bonedancer, Theurgist, Animist, Enchanter, Cabalist, Spiritmaster) look
+  for orange mobs, and so do casters that know a root or snare; other
+  casters look for yellow, melee and hybrids for yellow or blue, stealthers
+  and Clerics/Healers for blue. Pet casters and rooting casters may now solo
+  orange at all from level 5; everyone else keeps the yellow ceiling. A defeat still
+  lowers the ceiling and clean kills still earn it back.
+- After a solo fight a world bot rests only as long as a 2003 player did:
+  casters and healers to about 75 % power and 60 % health, melee to about
+  80 % health and half endurance, hybrids and stealthers also to half power
+  (each bot a few points off), instead of always sitting to full, and
+  they do not sit down again while above those marks.
+- Autonomous PvE groups pull by composition. A Sorcerer, Mentalist or Bard
+  makes a mez group: the puller brings one mob, crowd-control classes mez
+  the adds and nobody hits a mezzed add or drops an area spell on it (the
+  add control companions already had). Two or more pet classes make a
+  mass-pull group: outdoors, the pull also brings idle mobs of the same
+  kind within 600 units of the target, on the same floor and in sight, not
+  nearer to another party than to the camp, min(6, 2 + pets) in all, and
+  never after a recent wipe. Other groups pull one at a time (PBAoE casters
+  and the Healer's area stun do not count yet: world bots do not use them
+  in PvE).
+- Autonomous PvE groups leave a camp when another party of three or more
+  that was already fighting there when they arrived keeps fighting for
+  three minutes (the later arrival yields), when they have levelled
+  out of it (grey to the highest member, or green to the average without a
+  recent wipe), or after a wipe, and do not return to it for 15 minutes.
+  Enemy-realm players within 2,000 units of the group, at least blue to
+  its average level, make the leader walk the group 300-600 units away and
+  hold; after 90 seconds of their presence the group leaves. A soloer
+  leaves a camp that a group was working before it arrived, after three
+  minutes.
+  Companions and player-led groups are unchanged.
+
+### Added
+
+- Log lines `PVE_PULL_STYLE group=... style=mez_group|mass_pull|single
+  mezzer=... bombers=... pets=... max_pull=...` when a group's style is set
+  or changes, `PVE_CAMP_LEAVE group=... reason=rival|outgrown|wipe|enemy
+  camp=...`, `PVE_CAMP_ENEMY ... action=shift`, and every ten minutes
+  `PVE_REST window_s=600 rests=... avg_power_pct_at_pull=...
+  avg_hp_pct_at_pull=... pulls=...` for solo world bots.
+
 ## [0.151.0] - 2026-09-29
 
 ### Added

@@ -20,7 +20,8 @@ namespace DOL.AI.Brain
         /// </summary>
         private bool TryPveAddControl()
         {
-            if (!BotPartyRoles.HasCrowdControlDuty(BotBody) || BotBody.Stance == eBotStance.Passive ||
+            if (!(BotPartyRoles.HasCrowdControlDuty(BotBody) || AutonomousPveCampRuntime.HasAutonomousMezDuty(BotBody)) ||
+                BotBody.Stance == eBotStance.Passive ||
                 BotBody.CrowdControlSpells == null || Body.IsCasting || Body.IsIncapacitated ||
                 Body.castingComponent?.HasPendingSkillRequests == true || GameLoop.GameLoopTime < _nextPveControl)
                 return false;

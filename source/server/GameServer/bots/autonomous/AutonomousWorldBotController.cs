@@ -2572,6 +2572,8 @@ namespace DOL.GS
 
         private bool WorkCamp(BotBrain brain, GameBot bot)
         {
+            // Wave 7: leave a rival's, outgrown or enemy-held camp before pulling.
+            if (TryPveCampPlay(bot)) return true;
             if (HoldBeforeNewGroupPull(brain, bot)) return true;
             if (bot.GoalDiagnosticAttempt is { ArrivedUtc: null } attempt)
                 attempt.Arrive(DateTime.UtcNow);
@@ -2610,9 +2612,12 @@ namespace DOL.GS
                 _lastEngagedCon = ConLevels.GetConColor(bot.GetConLevel(target));
                 AutonomousBotGroupCoordinator.MarkCombatObserved(bot.Group);
                 brain.AddToAggroList(target, Math.Max(25, target.EffectiveLevel * 10));
+                int massPulled = _groupDirective?.IsDynamic == true ? TryMassPull(bot, brain, target) : 0;
+                if (_groupDirective?.IsDynamic != true)
+                    RecordSoloPull(bot);
                 brain.CommitDungeonPull(target);
                 brain.FSM.SetCurrentState(eFSMStateType.AGGRO);
-                SetStatus(bot, $"Pulling {target.Name}", GoalText(),
+                SetStatus(bot, massPulled > 0 ? $"Pulling {target.Name} and {massPulled} more" : $"Pulling {target.Name}", GoalText(),
                     $"Selected level {target.EffectiveLevel} {target.Name} at the live camp", target.Name, _camp.ZoneName);
                 AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Objective);
                 return false;
@@ -2868,8 +2873,14 @@ namespace DOL.GS
         {
             bool usesPower = bot.MaxMana > 0;
             bool combatBlocked = BotRestRecovery.BlocksRest(bot);
-            bool fullyRecovered = AutonomousRestPolicy.IsFullyRecovered(
-                bot.HealthPercent, bot.ManaPercent, bot.EndurancePercent, usesPower);
+            // Wave 7: a soloer rests to its archetype's habit (casters about
+            // 75 % power, melee about 80 % health) before the next pull, not
+            // to full, and does not sit down again while above it.
+            bool soloHabit = _groupDirective?.IsDynamic != true;
+            bool fullyRecovered = soloHabit
+                ? ReadyForNextSoloPull(bot, usesPower)
+                : AutonomousRestPolicy.IsFullyRecovered(
+                    bot.HealthPercent, bot.ManaPercent, bot.EndurancePercent, usesPower);
             if (requireFullRecovery && !fullyRecovered && combatBlocked)
             {
                 bot.WakeRecoveryRest();
@@ -2877,7 +2888,7 @@ namespace DOL.GS
             }
             // This method is reached at the camp (or a cleared dungeon rest
             // point), so an outstanding patrol is cancelled when recovery starts.
-            bool shouldRest = requireFullRecovery
+            bool shouldRest = requireFullRecovery || soloHabit
                 ? !combatBlocked && !fullyRecovered
                 : AutonomousRestPolicy.ShouldRest(true, false, combatBlocked, bot.IsRecoveryResting,
                     bot.HealthPercent, bot.ManaPercent, bot.EndurancePercent, usesPower);
@@ -2889,6 +2900,8 @@ namespace DOL.GS
             }
 
             _restingCamp = _camp;
+            if (soloHabit && !bot.IsRecoveryResting)
+                RecordSoloRest();
             bot.BeginRecoveryRest();
             SetStatus(bot, "Resting between pulls", GoalText(),
                 $"At the live camp: HP {bot.HealthPercent}% • power {bot.ManaPercent}% • endurance {bot.EndurancePercent}%");
@@ -2990,6 +3003,8 @@ namespace DOL.GS
                 ? _groupDirective.PreferredLevelBonus : 0;
             int highestMemberLevel = sharedGroup
                 ? bot.Group.GetMembersInTheGroup().Max(member => member.EffectiveLevel) : bot.EffectiveLevel;
+            if (!sharedGroup)
+                RefreshSoloArchetype(bot);
             ConColor maximumTargetCon = MaximumTargetCon(groupSize);
             ConColor naturalMaximumTargetCon = NaturalMaximumTargetCon(groupSize);
             // Normal groups start at yellow-or-better, but every death retry is
@@ -3191,9 +3206,10 @@ namespace DOL.GS
             // This is the deployed selection point for verified locations.
             AutonomousBotDecisionEngine.Camp chosen = localSoloCamps
                 ? AutonomousBotDecisionEngine.SelectLevelingCamp(legalCells, bot.CurrentRegionID,
-                    bot.CurrentZone?.Description, bot.Realm, planningLevel, Random.Shared)
+                    bot.CurrentZone?.Description, bot.Realm, planningLevel, Random.Shared,
+                    sharedGroup ? null : _preferredSoloCon)
                 : AutonomousBotDecisionEngine.SelectWithinEnvironment(legalCells, environment, Random.Shared,
-                    preferEvenCon: !sharedGroup);
+                    preferEvenCon: !sharedGroup, preferredCon: sharedGroup ? null : _preferredSoloCon);
             if (localPickupGroup && environment != AutonomousBotDecisionEngine.PveEnvironment.Dungeon &&
                 !string.IsNullOrEmpty(_groupDirective.PreferredPickupCampId))
                 chosen = legalCells.FirstOrDefault(camp => camp.Id == _groupDirective.PreferredPickupCampId) ?? chosen;
@@ -3689,12 +3705,13 @@ namespace DOL.GS
         private ConColor MaximumSoloTargetCon() =>
             (ConColor)Math.Max((int)ConColor.GREEN, (int)NaturalMaximumTargetCon(1) - _soloConfidence.Steps);
 
-        private static ConColor NaturalMaximumTargetCon(int groupSize) => groupSize switch
+        // Solo: yellow, or orange for pet casters and casters with root/snare (wave 7).
+        private ConColor NaturalMaximumTargetCon(int groupSize) => groupSize switch
         {
             >= 6 => ConColor.PURPLE,
             >= 4 => ConColor.RED,
             >= 2 => ConColor.ORANGE,
-            _ => ConColor.YELLOW,
+            _ => _naturalSoloCeiling,
         };
 
         private ConColor MaximumTargetCon(int groupSize) =>

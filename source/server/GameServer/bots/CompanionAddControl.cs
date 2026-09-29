@@ -15,9 +15,13 @@ namespace DOL.GS
     {
         public const int ScanRadius = 1500;
 
-        /// <summary>Only companions in a player-led group protect mezzes; autonomous bots keep their rules.</summary>
+        /// <summary>
+        /// Companions in a player-led group protect mezzes, and (wave 7) so do
+        /// autonomous world bots whose PvE party plays as a mez group.
+        /// </summary>
         public static bool AppliesMezzProtection(GameBot bot) =>
-            bot?.IsPlayerLedGroup == true && bot.Group != null;
+            bot?.IsPlayerLedGroup == true && bot.Group != null ||
+            AutonomousPveCampRuntime.MezGroupProtects(bot);
 
         /// <summary>True when this companion must not hit a monster because it is mesmerized.</summary>
         public static bool ProtectsMezz(GameBot bot, GameLiving target)
