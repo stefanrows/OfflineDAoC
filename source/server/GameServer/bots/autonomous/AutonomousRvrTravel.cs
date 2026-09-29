@@ -79,24 +79,44 @@ public static class AutonomousRvrTravel
         return opened;
     }
 
-    public static Vector3 ChooseWaypoint(GameBot bot, Vector3 destination)
+    /// <summary>
+    /// The next waypoint of a roaming leg for <paramref name="variant"/> (see
+    /// <see cref="AutonomousRvrRoutePolicy.ChooseRoute"/>), checked against the
+    /// bot's own zone and navmesh. Without navigation or on a short leg the
+    /// destination itself is returned.
+    /// </summary>
+    public static RvrRouteChoice ChooseRoute(GameBot bot, Vector3 destination, RvrRouteVariant variant,
+        Random random = null, Vector3? heat = null, Vector3? hubCentre = null,
+        float hubSafeRadius = AutonomousRvrRoutePolicy.KeepSafeRadius)
     {
         Vector3 start = new(bot.X, bot.Y, bot.Z);
-        Vector2 delta = new(destination.X - start.X, destination.Y - start.Y);
-        float distance = delta.Length();
         Zone zone = bot.CurrentZone;
         var nav = PathfindingProvider.Instance;
-        if (distance < 3500 || zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone)) return destination;
-        Vector2 direction = delta / distance;
-        float side = ((bot.DatabaseID % 7) - 3) * 200;
-        Vector3 raw = start + new Vector3(direction.X * 2400 - direction.Y * side,
-            direction.Y * 2400 + direction.X * side, 0);
-        if (bot.CurrentRegion.GetZone((int)raw.X, (int)raw.Y) != zone ||
-            !AutonomousNavigationSurface.TryFloor(nav, zone, raw, out Vector3 floor) ||
-            Math.Abs(floor.Z - raw.Z) > 256 ||
-            !AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, start, floor) ||
-            (bot.CurrentRegion.GetZone((int)destination.X, (int)destination.Y) == zone &&
-             !AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, floor, destination))) return destination;
-        return floor;
+        RvrRouteProbe probe = zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) ? null : new(
+            (raw, range) =>
+            {
+                if (range <= 128)
+                    return AutonomousNavigationSurface.TryFloor(nav, zone, raw, out Vector3 floor) ? floor : null;
+                Vector3? wide = nav.GetClosestPoint(zone, raw, 64, 64, range, nav.DefaultFilters);
+                return wide is { } w && float.IsFinite(w.X) && float.IsFinite(w.Y) && float.IsFinite(w.Z) ? w : null;
+            },
+            raw => bot.CurrentRegion.GetZone((int)raw.X, (int)raw.Y) == zone,
+            (from, to) => AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, from, to),
+            bot.CurrentRegion.GetZone((int)destination.X, (int)destination.Y) == zone);
+        return AutonomousRvrRoutePolicy.ChooseRoute(start, destination, variant, probe, random ?? Random.Shared,
+            heat, hubCentre, hubSafeRadius);
     }
+
+    /// <summary>
+    /// Whether the bot stands in its own realm's safe border hub: the keep
+    /// circle or one of the hub's outer bindstone landings, with that circle.
+    /// </summary>
+    public static bool IsInOwnSafeHub(GameLiving living, out AutonomousHubDeparture.SafeAnchor anchor)
+    {
+        anchor = default;
+        return living != null && IsInOwnSafeHub(living.Realm, living.CurrentRegionID, living.X, living.Y, out anchor);
+    }
+
+    public static bool IsInOwnSafeHub(eRealm realm, ushort regionId, int x, int y, out AutonomousHubDeparture.SafeAnchor anchor) =>
+        AutonomousHubDeparture.TryGetSafeAnchor(realm, regionId, x, y, out anchor);
 }

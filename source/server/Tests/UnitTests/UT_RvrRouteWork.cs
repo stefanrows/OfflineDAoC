@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using DOL.GS;
@@ -122,5 +123,211 @@ public class UT_RvrRouteWork
     {
         var nav = new Navigation(); var work = new RvrPlanningNavigation(nav); work.BeginSlice();
         Assert.That(work.GetClosestPoint(null, Vector3.Zero, work.DefaultFilters), Is.EqualTo(Vector3.UnitY));
+    }
+    // ---- Wave 1 (P3): route variants and the hub-exit fan ------------------
+
+    private static double Share(RvrDoctrineKind kind, RvrLeaderTraits traits, RvrRouteVariant variant, Random random)
+    {
+        const int rolls = 20_000;
+        int hits = 0;
+        for (int i = 0; i < rolls; i++)
+            if (AutonomousRvrRoutePolicy.PickVariant(kind, traits, random.NextDouble()) == variant) hits++;
+        return hits / (double)rolls;
+    }
+
+    [TestCase(RvrDoctrineKind.SoloAssassin)]
+    [TestCase(RvrDoctrineKind.StealthPack)]
+    [TestCase(RvrDoctrineKind.GankSquad)]
+    public void StealthDoctrinesLeaveTheRoadMostOfTheTime(RvrDoctrineKind kind)
+    {
+        double road = Share(kind, RvrLeaderTraits.Neutral, RvrRouteVariant.Road, new Random(4711));
+        Assert.That(road, Is.LessThanOrEqualTo(0.3));
+        Assert.That(road, Is.EqualTo(0.2).Within(0.02));
+    }
+
+    [TestCase(RvrDoctrineKind.AssistTrain)]
+    [TestCase(RvrDoctrineKind.MeleeTrain)]
+    [TestCase(RvrDoctrineKind.KeepRaid)]
+    public void TrainsAndRaidsMostlyWalkTheRoad(RvrDoctrineKind kind) =>
+        Assert.That(Share(kind, RvrLeaderTraits.Neutral, RvrRouteVariant.Road, new Random(17)), Is.EqualTo(0.7).Within(0.02));
+
+    [Test]
+    public void OtherDoctrinesSplitFiftyThirtyTwenty()
+    {
+        (double road, double flank, double cover) = AutonomousRvrRoutePolicy.Weights(RvrDoctrineKind.SmallMan, RvrLeaderTraits.Neutral);
+        Assert.Multiple(() =>
+        {
+            Assert.That(road, Is.EqualTo(0.5).Within(1e-9));
+            Assert.That(flank, Is.EqualTo(0.3).Within(1e-9));
+            Assert.That(cover, Is.EqualTo(0.2).Within(1e-9));
+            Assert.That(Share(RvrDoctrineKind.PickupGroup, RvrLeaderTraits.Neutral, RvrRouteVariant.Cover, new Random(99)),
+                Is.EqualTo(0.2).Within(0.02));
+        });
+    }
+
+    [Test]
+    public void CautiousLeaderShiftsTwentyPercentToCover()
+    {
+        var cautious = new RvrLeaderTraits(50, 30, 50);
+        (double road, double flank, double cover) = AutonomousRvrRoutePolicy.Weights(RvrDoctrineKind.SmallMan, cautious);
+        (double stealthRoad, _, double stealthCover) = AutonomousRvrRoutePolicy.Weights(RvrDoctrineKind.SoloAssassin, cautious);
+        Assert.Multiple(() =>
+        {
+            Assert.That(road, Is.EqualTo(0.3).Within(1e-9));
+            Assert.That(flank, Is.EqualTo(0.3).Within(1e-9));
+            Assert.That(cover, Is.EqualTo(0.4).Within(1e-9));
+            Assert.That(stealthRoad, Is.EqualTo(0).Within(1e-9));
+            Assert.That(stealthCover, Is.EqualTo(0.6).Within(1e-9));
+            Assert.That(AutonomousRvrRoutePolicy.Weights(RvrDoctrineKind.SmallMan, new RvrLeaderTraits(50, 40, 50)).Road,
+                Is.EqualTo(0.5).Within(1e-9), "40 is not cautious");
+        });
+    }
+
+    private static RvrRouteProbe OpenGround(Func<Vector3, bool> zone = null, Func<Vector3, Vector3, bool> corridor = null) =>
+        new((raw, _) => raw, zone ?? (_ => true), corridor ?? ((_, _) => true), true);
+
+    [Test]
+    public void ChooseRouteFallsBackToTheDestinationWithoutNavigationOrOnAShortLeg()
+    {
+        Vector3 destination = new(20_000, 0, 0);
+        RvrRouteChoice noNav = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, destination, RvrRouteVariant.Flank, null, new Random(1));
+        RvrRouteChoice shortLeg = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(3_000, 0, 0), RvrRouteVariant.Cover,
+            OpenGround(), new Random(1));
+        Assert.Multiple(() =>
+        {
+            Assert.That(noNav.Waypoint, Is.EqualTo(destination));
+            Assert.That(noNav.Fallback, Is.True);
+            Assert.That(shortLeg.Waypoint, Is.EqualTo(new Vector3(3_000, 0, 0)));
+            Assert.That(shortLeg.Variant, Is.EqualTo(RvrRouteVariant.Road));
+        });
+    }
+
+    [Test]
+    public void RoadIsStraightAheadWithoutASideOffset()
+    {
+        RvrRouteChoice road = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(20_000, 0, 0), RvrRouteVariant.Road,
+            OpenGround(), new Random(3));
+        Assert.That(road.Waypoint, Is.EqualTo(new Vector3(2_400, 0, 0)));
+        Assert.That(road.Fallback, Is.False);
+    }
+
+    [Test]
+    public void FlankViaLiesBesideTheMiddleOfTheLeg()
+    {
+        for (int seed = 0; seed < 50; seed++)
+        {
+            RvrRouteChoice flank = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(10_000, 0, 0), RvrRouteVariant.Flank,
+                OpenGround(), new Random(seed));
+            Assert.That(flank.Variant, Is.EqualTo(RvrRouteVariant.Flank));
+            Assert.That(flank.Waypoint.X, Is.InRange(4_000f, 6_000f));
+            Assert.That(Math.Abs(flank.Waypoint.Y), Is.InRange(1_200f, 2_400f));
+        }
+    }
+
+    [Test]
+    public void CoverViaLiesOnTheSideAwayFromTheLatestFight()
+    {
+        Vector3 heatLeft = new(5_000, 3_000, 0); // left of an eastward leg (+Y)
+        for (int seed = 0; seed < 30; seed++)
+        {
+            RvrRouteChoice cover = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(10_000, 0, 0), RvrRouteVariant.Cover,
+                OpenGround(), new Random(seed), heat: heatLeft);
+            Assert.That(cover.Waypoint.Y, Is.LessThan(-1_000f));
+        }
+        // A fight far away does not steer the route; it behaves like Flank.
+        bool sawBothSides = Enumerable.Range(0, 40).Select(seed => AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero,
+                new(10_000, 0, 0), RvrRouteVariant.Cover, OpenGround(), new Random(seed), heat: new(5_000, 40_000, 0)).Waypoint.Y > 0)
+            .Distinct().Count() == 2;
+        Assert.That(sawBothSides, Is.True);
+    }
+
+    [Test]
+    public void RejectedViaPointFallsBackToRoadThenToTheDestination()
+    {
+        // Only the straight line (Y == 0) is walkable.
+        RvrRouteChoice onlyRoad = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(10_000, 0, 0), RvrRouteVariant.Flank,
+            OpenGround(zone: point => Math.Abs(point.Y) < 1), new Random(5));
+        RvrRouteChoice nothing = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(10_000, 0, 0), RvrRouteVariant.Flank,
+            OpenGround(corridor: (_, _) => false), new Random(5));
+        Assert.Multiple(() =>
+        {
+            Assert.That(onlyRoad.Waypoint, Is.EqualTo(new Vector3(2_400, 0, 0)));
+            Assert.That(onlyRoad.Variant, Is.EqualTo(RvrRouteVariant.Road));
+            Assert.That(onlyRoad.Fallback, Is.True);
+            Assert.That(nothing.Waypoint, Is.EqualTo(new Vector3(10_000, 0, 0)));
+            Assert.That(nothing.Fallback, Is.True);
+        });
+    }
+
+    [Test]
+    public void HubFanPointLiesOutsideTheSafeRingOnAForwardBearing()
+    {
+        Vector3 hub = new(766_235, 669_173, 0);
+        Vector3 start = hub + new Vector3(300, 0, 0);
+        Vector3 destination = hub + new Vector3(30_000, 0, 0);
+        var bearings = new System.Collections.Generic.HashSet<int>();
+        for (int seed = 0; seed < 60; seed++)
+        {
+            RvrRouteChoice fan = AutonomousRvrRoutePolicy.ChooseRoute(start, destination, RvrRouteVariant.HubFan,
+                OpenGround(), new Random(seed), hubCentre: hub);
+            float radius = Vector2.Distance(new(fan.Waypoint.X, fan.Waypoint.Y), new(hub.X, hub.Y));
+            double bearing = Math.Atan2(fan.Waypoint.Y - hub.Y, fan.Waypoint.X - hub.X) * 180 / Math.PI;
+            Assert.That(fan.Variant, Is.EqualTo(RvrRouteVariant.HubFan));
+            Assert.That(radius, Is.InRange(4_499f, 6_001f));
+            Assert.That(Math.Abs(bearing), Is.LessThanOrEqualTo(120.01));
+            bearings.Add((int)Math.Floor(bearing / 30));
+        }
+        Assert.That(bearings.Count, Is.GreaterThanOrEqualTo(6), "groups fan out, not one corridor");
+    }
+
+    [Test]
+    public void HubFanTriesFourBearingsThenLeavesTheRouteToTheCaller()
+    {
+        Vector3 hub = Vector3.Zero;
+        int probes = 0;
+        RvrRouteChoice fan = AutonomousRvrRoutePolicy.ChooseRoute(new(100, 0, 0), new(30_000, 0, 0), RvrRouteVariant.HubFan,
+            OpenGround(zone: point => { if (Vector2.Distance(new(point.X, point.Y), Vector2.Zero) > 4_000) { probes++; return false; } return true; }),
+            new Random(8), hubCentre: hub);
+        Assert.Multiple(() =>
+        {
+            Assert.That(probes, Is.EqualTo(AutonomousRvrRoutePolicy.HubFanAttempts));
+            Assert.That(fan.Variant, Is.EqualTo(RvrRouteVariant.HubFan));
+            Assert.That(fan.Fallback, Is.True);
+            Assert.That(fan.Waypoint, Is.EqualTo(new Vector3(30_000, 0, 0)), "no Road step is computed and discarded");
+        });
+    }
+
+    [TestCase(eRealm.Midgard, 766_235, 669_173, ExpectedResult = true, TestName = "Svasud keep circle starts the fan")]
+    [TestCase(eRealm.Midgard, 764_890, 672_960, ExpectedResult = true, TestName = "Svasud outer bindstone landing starts the fan")]
+    [TestCase(eRealm.Midgard, 766_235, 676_173, ExpectedResult = false, TestName = "7,000 out of Svasud is the frontier")]
+    [TestCase(eRealm.Albion, 766_235, 669_173, ExpectedResult = false, TestName = "Another realm's hub is not home")]
+    public bool HubFanStartsOnlyInsideTheOwnSafeHub(eRealm realm, int x, int y) =>
+        AutonomousRvrTravel.IsInOwnSafeHub(realm, 100, x, y, out _);
+
+    [Test]
+    public void HubFanFromTheSauvageLandingStartsBeyondTheLandingEdge()
+    {
+        Assert.That(AutonomousRvrTravel.IsInOwnSafeHub(eRealm.Albion, 1, 584_340, 486_620,
+            out AutonomousHubDeparture.SafeAnchor landing), Is.True);
+        Vector3 centre = new(landing.Centre.X, landing.Centre.Y, 0);
+        for (int seed = 0; seed < 30; seed++)
+        {
+            RvrRouteChoice fan = AutonomousRvrRoutePolicy.ChooseRoute(centre, centre + new Vector3(0, 30_000, 0),
+                RvrRouteVariant.HubFan, OpenGround(), new Random(seed), hubCentre: centre, hubSafeRadius: landing.Radius);
+            Assert.That(Vector2.Distance(new(fan.Waypoint.X, fan.Waypoint.Y), landing.Centre), Is.InRange(2_499f, 4_001f));
+        }
+    }
+
+    [Test]
+    public void HubFanSearchesTheFloorWellBelowARaisedHub()
+    {
+        // Svasud Faste sits on a rise: the land 5,000 out is 800 lower.
+        Vector3 hub = new(0, 0, 5_000);
+        var probe = new RvrRouteProbe((raw, range) => range >= 800 ? raw with { Z = 4_200 } : null,
+            _ => true, (_, _) => true, true);
+        RvrRouteChoice fan = AutonomousRvrRoutePolicy.ChooseRoute(hub, new(30_000, 0, 4_000), RvrRouteVariant.HubFan,
+            probe, new Random(2), hubCentre: hub);
+        Assert.That(fan.Fallback, Is.False);
+        Assert.That(fan.Waypoint.Z, Is.EqualTo(4_200f));
     }
 }

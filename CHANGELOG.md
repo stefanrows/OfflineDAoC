@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.142.0] - 2026-09-29
+
+### Added
+
+- RvR groups now leave their border keep in different directions: a group
+  (or solo RvR bot) setting out from Castle Sauvage, Svasud Faste or Druim
+  Ligen first walks to a random point 1,000-2,500 units beyond the edge of
+  the safe area it leaves (keep or outer bindstone), on the side of its goal, instead of every group taking the same shortest corridor.
+- Departure truce: for up to three minutes after leaving the safe hub, and
+  within 2,500 units of its edge, an autonomous RvR bot does not start a fight with
+  a same-realm autonomous RvR bot that is also just leaving. Answering an
+  attack is always allowed; players, companions and other realms are not
+  affected.
+- Route variety on the way: each new destination rolls a road, flank or
+  cover route by the group's doctrine. Stealth groups mostly leave the road,
+  assist trains, melee trains and keep raids mostly keep to it, a cautious
+  leader prefers cover away from the latest fighting. Keep assaults and siege
+  rallies keep their straight approach.
+- New log lines `RVR_ROUTE_CHOSEN`, `RVR_ROAM_PICK`, `RVR_RETREAT` and
+  `RVR_HUB_TRUCE` to measure where groups go, why they retreat and how often
+  the truce holds.
+
+### Changed
+
+- The straight road route no longer bends by a fixed per-bot offset; a
+  leader no longer walks the same bend to every destination.
+
 ## [0.141.1] - 2026-09-28
 
 ### Fixed

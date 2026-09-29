@@ -109,7 +109,7 @@ public sealed partial class AutonomousWorldBotController
             if (leader != null && leader != bot && leader.IsAlive && leader.CurrentRegionID == bot.CurrentRegionID &&
                 Vector3.DistanceSquared(new(leader.X, leader.Y, leader.Z), post) > 2200 * 2200)
                 FollowDynamicGroupLeader(bot, _groupDirective);
-            else IssueVariedRvrPath(bot, post);
+            else IssueVariedRvrPath(bot, post, allowVariants: false);
         }
         SetRvrStatus(bot, "Traveling to siege rally", keep.Name,
             order.Side == AutonomousRvrEventLayer.RallySide.Defender ? "Entering the friendly keep to take a defensive post" :

@@ -180,6 +180,24 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+59. **RvR wave 1: hub fan, departure truce, route variety.** Aaron,
+    2026-09-29 (P3, "you leave the door before you hunt"). Source 0.142.0:
+    a group leader or solo RvR bot leaving its own border hub first walks to
+    a random point 1,000-2,500 units beyond the safe circle it leaves (keep or
+    outer bindstone landing; within 120 degrees of its goal);
+    each new destination rolls a road, flank or cover route by doctrine
+    (keep assaults and siege rallies unchanged); a departing bot (outside the
+    safe hub, at most 2,500 units beyond the circle it left, left it under
+    180 s ago)
+    does not open a fight on a same-realm autonomous bot that is departing
+    too; retaliation stays allowed. Installation and live check pending, from
+    `server-console.log`: `RVR_ROUTE_CHOSEN` shows `variant=hub_fan` for hub
+    exits with mostly `fallback=false` and varied `via=` points;
+    `RVR_HUB_TRUCE` appears at Svasud/Sauvage/Druim Ligen; `RVR_ROAM_PICK`
+    and `RVR_RETREAT` are logged; the share of RvR PvP deaths 3,500-4,500
+    from Svasud Faste's centre falls clearly below the 34 % baseline, and
+    groups still reach the frontier (no stuck fan points).
+
 58. **Pet pull: healers top the pet up after the fight.** Aaron, 2026-09-28.
     Source 0.141.0: with `/petpull` on, once no pull is running and owner and
     pet are out of combat, healer companions heal the owner's pet to full

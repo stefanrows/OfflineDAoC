@@ -1702,7 +1702,9 @@ namespace DOL.GS
                 // force is actually roaming inside the frontier.
                 if (IsInFrontier(bot) && TryBeginFasterStableRoute(bot, destination, _rvrDestination.ZoneName))
                     return true;
-                IssueVariedRvrPath(bot, destination);
+                // Keep assaults and defense keep their straight approach.
+                IssueVariedRvrPath(bot, destination, !_rvrSharedEvent &&
+                    _rvrIntent is AutonomousRvrEventLayer.Intent.Roam or AutonomousRvrEventLayer.Intent.HuntEnemy);
                 SetRvrStatus(bot, $"Roaming toward {_rvrDestination.MonsterName}",
                     "Roam active frontier keeps, relic routes, and enemy forces", "Following a reachable PvP patrol route", _rvrDestination.MonsterName);
                 return true;
@@ -2004,20 +2006,35 @@ namespace DOL.GS
 
         private Vector3? _rvrTravelWaypoint;
         private Vector3 _rvrTravelGoal;
-        private bool IssueVariedRvrPath(GameBot bot, Vector3 destination)
+        private RvrRouteVariant _rvrRouteVariant;
+        // 0 = fresh destination, 1 = hub fan walked, 2 = variant used, Road from here on.
+        private int _rvrRouteStage;
+
+        /// <param name="allowVariants">False for keep-assault and siege-rally
+        /// approaches, which keep their proven straight approach.</param>
+        private bool IssueVariedRvrPath(GameBot bot, Vector3 destination, bool allowVariants = true)
         {
-            if (!_rvrTravelWaypoint.HasValue || Vector3.DistanceSquared(_rvrTravelGoal, destination) > 500 * 500 ||
-                Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), _rvrTravelWaypoint.Value) < 180 * 180)
+            bool newGoal = !_rvrTravelWaypoint.HasValue || Vector3.DistanceSquared(_rvrTravelGoal, destination) > 500 * 500;
+            if (newGoal || Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), _rvrTravelWaypoint.Value) < 180 * 180)
             {
+                if (newGoal)
+                {
+                    // Rolled once per destination, not fixed per bot, so the
+                    // same leader does not walk the same bend forever.
+                    RvrDoctrine doctrine = AutonomousRvrDoctrineRuntime.For(bot);
+                    _rvrRouteVariant = doctrine == null ? RvrRouteVariant.Road :
+                        AutonomousRvrRoutePolicy.PickVariant(doctrine.Kind, LeaderTraits(bot), Random.Shared.NextDouble());
+                    _rvrRouteStage = allowVariants ? 0 : 2;
+                }
                 _rvrTravelGoal = destination;
-                _rvrTravelWaypoint = AutonomousRvrTravel.ChooseWaypoint(bot, destination);
+                _rvrTravelWaypoint = PlanRvrLeg(bot, destination);
             }
             // Step around a named/far-above monster or a dense camp on the way.
             // A failed bend is dropped and the ordinary order below is issued.
             if (AutonomousRvrMobAvoidance.TryWalkBend(_rvrTravelWaypoint.Value, AvoidDangerousMobs(bot, _rvrTravelWaypoint.Value),
                     bend => IssuePath(bot, bend), DropMobBypass))
                 return true;
-            // ChooseWaypoint validates both legs when the final goal is in the
+            // ChooseRoute validates both legs when the final goal is in the
             // same zone. Continue that existing route without a full AI wake.
             // A changed goal or cross-zone route still needs its own planning.
             Vector3? continuation = _rvrTravelGoal == destination && _rvrTravelWaypoint.Value != destination &&
@@ -2027,6 +2044,69 @@ namespace DOL.GS
                     ? destination : null;
             return IssuePath(bot, _rvrTravelWaypoint.Value, continuation);
         }
+
+        private Vector3 PlanRvrLeg(GameBot bot, Vector3 destination)
+        {
+            if (_rvrRouteStage == 0 && AutonomousRvrTravel.IsInOwnSafeHub(bot, out AutonomousHubDeparture.SafeAnchor hub))
+            {
+                // Leaving the own border hub (keep circle or bindstone landing):
+                // fan out on a random bearing beyond that circle's edge first.
+                _rvrRouteStage = 1;
+                RvrRouteChoice fan = AutonomousRvrTravel.ChooseRoute(bot, destination, RvrRouteVariant.HubFan,
+                    hubCentre: new(hub.Centre.X, hub.Centre.Y, bot.Z), hubSafeRadius: hub.Radius);
+                LogRouteChoice(bot, RvrRouteVariant.HubFan, fan);
+                if (!fan.Fallback)
+                    return fan.Waypoint;
+            }
+            if (_rvrRouteStage <= 1)
+            {
+                _rvrRouteStage = 2;
+                Vector3? heat = null;
+                if (_rvrRouteVariant == RvrRouteVariant.Cover)
+                    foreach (AutonomousRvrHeat.Spot spot in AutonomousRvrHeat.Recent(bot.CurrentRegionID, WorldSimulationClock.UtcNow))
+                    {
+                        heat = spot.Position; // newest first
+                        break;
+                    }
+                RvrRouteChoice choice = AutonomousRvrTravel.ChooseRoute(bot, destination, _rvrRouteVariant, heat: heat);
+                LogRouteChoice(bot, _rvrRouteVariant, choice);
+                return choice.Waypoint;
+            }
+            return AutonomousRvrTravel.ChooseRoute(bot, destination, RvrRouteVariant.Road).Waypoint;
+        }
+
+        private static RvrLeaderTraits LeaderTraits(GameBot bot) =>
+            (bot.Group?.LivingLeader as GameBot ?? bot).PersistentRecord is { } record
+                ? new(record.Aggression, record.RiskTolerance, record.Patience)
+                : RvrLeaderTraits.Neutral;
+
+        private void LogRouteChoice(GameBot bot, RvrRouteVariant requested, RvrRouteChoice choice)
+        {
+            if (!Log.IsInfoEnabled)
+                return;
+            RvrDoctrine doctrine = AutonomousRvrDoctrineRuntime.For(bot);
+            string destination = _rvrDestination == null ? "none" : $"{_rvrDestination.Id}/{_rvrDestination.MonsterName}";
+            Log.Info($"RVR_ROUTE_CHOSEN bot=\"{bot.Name}\" id={bot.DatabaseID} group_size={bot.Group?.MemberCount ?? 1} " +
+                $"doctrine={doctrine?.Kind.ToString() ?? "none"} variant={AutonomousRvrRoutePolicy.Label(requested)} " +
+                $"dest=\"{destination}\" leg_len={(int)choice.LegLength} via={(int)choice.Waypoint.X},{(int)choice.Waypoint.Y} " +
+                $"fallback={(choice.Fallback ? "true" : "false")}");
+        }
+
+        private void LogRoamPick(GameBot bot, CampDestination pick, string kind, double weight, int pool)
+        {
+            if (!Log.IsInfoEnabled || pick == null)
+                return;
+            RvrDoctrine doctrine = AutonomousRvrDoctrineRuntime.For(bot);
+            Log.Info($"RVR_ROAM_PICK bot=\"{bot.Name}\" group_size={bot.Group?.MemberCount ?? 1} " +
+                $"doctrine={doctrine?.Kind.ToString() ?? "none"} pick=\"{pick.Id}/{pick.MonsterName}\" kind={kind} " +
+                $"weight={weight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} pool={pool}");
+        }
+
+        internal static string RoamKind(string id) =>
+            id.StartsWith("rvr-keep-", StringComparison.Ordinal) ? "keep" :
+            id.StartsWith("rvr-camp-", StringComparison.Ordinal) ? "camp" :
+            id.StartsWith("rvr-enemy-", StringComparison.Ordinal) ? "enemy" :
+            id.StartsWith("rvr-heat-", StringComparison.Ordinal) ? "heat" : "other";
 
         private int _rvrLingerMs;
         private readonly Queue<string> _recentRoamIds = new();
@@ -2085,15 +2165,18 @@ namespace DOL.GS
                 return null;
             double pick = Random.Shared.NextDouble() * total;
             CampDestination chosen = pool[^1].Destination;
+            double chosenWeight = pool[^1].Weight;
             foreach ((CampDestination destination, double weight) in pool)
             {
                 pick -= weight;
                 if (pick < 0)
                 {
                     chosen = destination;
+                    chosenWeight = weight;
                     break;
                 }
             }
+            LogRoamPick(bot, chosen, RoamKind(chosen.Id), chosenWeight, pool.Count);
             _recentRoamIds.Enqueue(chosen.Id);
             while (_recentRoamIds.Count > 5)
                 _recentRoamIds.Dequeue();
@@ -2127,8 +2210,10 @@ namespace DOL.GS
                 _rvrSharedEvent = false;
                 _rvrIntent = AutonomousRvrEventLayer.Intent.HuntEnemy;
                 bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
-                return new(targetId, revengeTarget.Name, revengeTarget.CurrentZone?.Description ?? "frontier",
+                CampDestination revenge = new(targetId, revengeTarget.Name, revengeTarget.CurrentZone?.Description ?? "frontier",
                     revengeTarget.CurrentRegionID, revengeTarget.X, revengeTarget.Y, revengeTarget.Z, 1, false, true);
+                LogRoamPick(bot, revenge, "grudge", 1, 1);
+                return revenge;
             }
 
             AutonomousPlayerType type = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord);

@@ -280,6 +280,20 @@ public static class AutonomousRvrDoctrine
         return pressure >= 0.6 && stayRoll >= 0.15;
     }
 
+    /// <summary>
+    /// The main pressure behind a retreat, for the log: <c>healer_dead</c>,
+    /// <c>half_down</c>, <c>outnumbered</c>, or <c>doctrine</c> when only the
+    /// doctrine's own caution (and small pressure) tipped it.
+    /// </summary>
+    public static string RetreatReason(int aliveMembers, int formedMembers, int aliveHealers, int formedHealers,
+        int enemiesNear)
+    {
+        if (formedHealers > 0 && aliveHealers == 0) return "healer_dead";
+        if (formedMembers > 0 && aliveMembers * 2 <= formedMembers) return "half_down";
+        if (enemiesNear > aliveMembers) return "outnumbered";
+        return "doctrine";
+    }
+
     /// <summary>How long a member keeps its target before it may switch.</summary>
     public static int StickMilliseconds(RvrDoctrine doctrine, int patience) =>
         (int)Math.Round((doctrine?.StickSeconds ?? 12) * (0.6 + Math.Clamp(patience, 0, 100) / 100d) * 1000);

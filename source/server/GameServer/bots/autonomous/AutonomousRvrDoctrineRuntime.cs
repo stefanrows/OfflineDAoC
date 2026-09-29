@@ -267,11 +267,19 @@ public static class AutonomousRvrDoctrineRuntime
         Vector3 away = AutonomousRvrDoctrineGeometry.AwayFrom(here, threat, 2_200);
         Vector3 point = PathfindingProvider.Instance.GetMoveAlongSurface(leader.CurrentZone, here, away,
             PathfindingProvider.Instance.DefaultFilters) ?? away;
+        int formed, formedHealers;
         lock (state)
         {
             state.RetreatPoint = point;
             state.RetreatUntil = now + 25_000 + Random.Shared.Next(15_000);
+            formed = state.FormedMembers;
+            formedHealers = state.FormedHealers;
         }
+        if (Log.IsInfoEnabled)
+            Log.Info($"RVR_RETREAT group=\"{leader.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{leader.DatabaseID}"}\" " +
+                $"doctrine={state.Doctrine?.Kind.ToString() ?? "none"} " +
+                $"reason={AutonomousRvrDoctrine.RetreatReason(alive, formed, healersAlive, formedHealers, enemies.Length)} " +
+                $"alive={alive}/{formed} healers={healersAlive} enemies={enemies.Length} point={(int)point.X},{(int)point.Y}");
     }
 
     /// <summary>How far a warband runs from a monster it will not fight.</summary>

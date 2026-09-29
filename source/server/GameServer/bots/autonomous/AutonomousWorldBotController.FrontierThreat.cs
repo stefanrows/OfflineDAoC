@@ -17,6 +17,8 @@ public sealed partial class AutonomousWorldBotController
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.FrontierThreat);
         GameBot bot = brain?.BotBody;
+        // Note when an RvR bot leaves its border hub (departure truce).
+        AutonomousHubDeparture.Observe(bot, WorldSimulationClock.UtcNow);
         bool defending = AutonomousRvrDefense.IsCommittedDefender(bot);
         bool siegeFighter = AutonomousRvrDefense.IsCommittedSiegeFighter(bot);
         GameLiving previousEngine = defending ? bot.TargetObject as GameSiegeWeapon ?? _siegeWeapon?.TargetObject as GameSiegeWeapon : null;

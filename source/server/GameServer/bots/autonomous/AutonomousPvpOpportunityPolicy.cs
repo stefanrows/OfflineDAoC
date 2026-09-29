@@ -61,6 +61,9 @@ public static class AutonomousPvpOpportunityPolicy
         if (identity == null) return false;
         if (AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) == AutonomousPlayerType.Hunter &&
             identity.EffectiveLevel > actor.Level + PreferredLevelDifference) return false;
+        // Departure truce: two same-realm groups leaving the same border hub
+        // move out first and do not jump each other at its edge (P3).
+        if (AutonomousHubDeparture.TruceApplies(actor, target, WorldSimulationClock.UtcNow)) return false;
         (int ownCount, int ownLevel) = VisibleParty(actor);
         (int count, int level) = VisibleParty(identity);
         // An RvR group's doctrine and its leader's nerve decide the odds it

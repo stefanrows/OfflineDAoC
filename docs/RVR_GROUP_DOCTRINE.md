@@ -83,6 +83,38 @@ one healer means picking on solos and duos and retreating at the first add.
   border keep, recover, go again.
 - **Deaths inside a group** do not end a bot's RvR tour.
 
+## Leaving the hub
+
+A 2003 group formed up at the portal keep and moved *out* before it looked
+for a fight; nobody fought at their own door. Two rules do that here
+(owner decision 2026-09-29, task 59):
+
+- **Hub fan.** A leader (or solo RvR bot) that sets out from its own border
+  hub first walks to a random point 1,000-2,500 units beyond the edge of the
+  safe circle it stands in (4,500-6,000 from the keep centre; measured from
+  the outer bindstone landing when it starts there), on a bearing within 120
+  degrees of its goal, so groups leave by different sides instead of one
+  corridor. The point must be walkable and connected;
+  after four failed bearings the group takes the road. Followers keep their
+  formation behind the leader.
+- **Departure truce.** A bot is *departing* while it is outside the safe hub
+  (keep circle and outer bindstone landing), left it less than 180 seconds
+  ago, and is at most 2,500 units beyond the edge of the circle it left:
+  6,000 from the keep centre, or 2,500 past the landing's edge (Castle
+  Sauvage's landing lies about 9,100 units from its keep). A departing
+  autonomous RvR bot does not start a fight with a same-realm autonomous RvR
+  bot that is departing too. Answering an attack on itself or its group is
+  always allowed; players, companions and other realms are not affected.
+
+**Route variants.** Each new destination rolls one route: *road* (the
+straight way), *flank* (one via-point 1,200-2,400 to the side at 40-60 % of
+the leg) or *cover* (the same, on the side away from the latest fighting
+within 6,000 units). Stealth doctrines leave the road 80 % of the time;
+assist trains, melee trains and keep raids keep to it 70 % of the time;
+everyone else 50/30/20. A cautious leader (RiskTolerance below 40) moves a
+fifth of the chances to cover. Keep assaults and siege rallies keep their
+straight approach. Legs under 3,500 units are walked directly.
+
 ## Camlann and guilds
 
 Guildmates in the area help each other when attacked. Guild grudges (already

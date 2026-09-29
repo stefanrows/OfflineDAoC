@@ -481,4 +481,82 @@ public sealed class UT_RvrRoamingFoundations
         Assert.That(AutonomousPvpOpportunityPolicy.Select(hunter, new GameLiving[] { prey }, (_, _) => true), Is.Null);
         Assert.That(new PvPServerRules().IsAllowedToAttack(hunter, prey, true), Is.False);
     }
+    // ---- Wave 1 (P3): departure truce and the retreat log ------------------
+
+    private static readonly DateTime T0 = new(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+
+    [Test]
+    public void DepartureStartsWhenTheBotLeavesTheSafeHub()
+    {
+        Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Midgard, 100, 766_235, 669_173,
+            out AutonomousHubDeparture.SafeAnchor keep), Is.True);
+        var track = new AutonomousHubDeparture.Track();
+        Assert.That(track.Observe(null, T0).LeftUtc, Is.Null, "never seen inside: not departing");
+        Assert.That(track.Observe(keep, T0.AddSeconds(5)).LeftUtc, Is.Null);
+        var left = track.Observe(null, T0.AddSeconds(10));
+        Assert.That(left.LeftUtc, Is.EqualTo(T0.AddSeconds(10)));
+        Assert.That(left.From, Is.EqualTo(keep));
+        Assert.That(track.Observe(null, T0.AddSeconds(30)).LeftUtc, Is.EqualTo(T0.AddSeconds(10)), "the crossing time stays");
+        Assert.That(track.Observe(keep, T0.AddSeconds(40)).LeftUtc, Is.Null, "back inside resets it");
+    }
+
+    [TestCase(4_000, 60, ExpectedResult = true, TestName = "Just outside and one minute out is departing")]
+    [TestCase(5_990, 179, ExpectedResult = true, TestName = "Edge of the band before expiry is departing")]
+    [TestCase(4_000, 180, ExpectedResult = false, TestName = "Departure expires after 180 seconds")]
+    [TestCase(6_500, 30, ExpectedResult = false, TestName = "Beyond 6,000 units is the open frontier")]
+    [TestCase(3_400, 30, ExpectedResult = false, TestName = "Inside the safe radius is not departing")]
+    public bool DepartingIsABandAndAWindow(int distance, int secondsSinceLeaving) =>
+        AutonomousHubDeparture.IsDeparting(false, distance, PvpCombatant.SafeBorderHubRadius, T0,
+            T0.AddSeconds(secondsSinceLeaving));
+
+    [Test]
+    public void DepartingNeedsAKnownCrossing() =>
+        Assert.That(AutonomousHubDeparture.IsDeparting(false, 4_000, PvpCombatant.SafeBorderHubRadius, null, T0), Is.False);
+
+    [Test]
+    public void CastleSauvageLandingHasItsOwnDepartureBand()
+    {
+        // The Sauvage bindstone landing lies about 9,100 units from the keep
+        // centre, beyond the keep's 6,000 band; it is measured from itself.
+        Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Albion, 1, 584_340, 486_620,
+            out AutonomousHubDeparture.SafeAnchor landing), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(landing.Radius, Is.EqualTo(1_500));
+            Assert.That(landing.HubName, Is.EqualTo("Castle Sauvage"));
+            Assert.That(AutonomousHubDeparture.IsDeparting(false, 2_500, landing.Radius, T0, T0.AddSeconds(30)), Is.True);
+            Assert.That(AutonomousHubDeparture.IsDeparting(false, 4_500, landing.Radius, T0, T0.AddSeconds(30)), Is.False);
+            Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Midgard, 1, 584_340, 486_620, out _), Is.False,
+                "another realm's landing is not home");
+        });
+    }
+
+    [TestCase(true, true, true, true, true, false, ExpectedResult = true, TestName = "Two departing same-realm bots keep the truce")]
+    [TestCase(true, true, true, true, true, true, ExpectedResult = false, TestName = "Retaliation is always allowed")]
+    [TestCase(true, false, true, true, true, false, ExpectedResult = false, TestName = "Cross-realm targets are unaffected")]
+    [TestCase(false, true, true, true, true, false, ExpectedResult = false, TestName = "Humans and companions are unaffected")]
+    [TestCase(true, true, true, true, false, false, ExpectedResult = false, TestName = "A target already out hunting is fair game")]
+    [TestCase(true, true, true, false, true, false, ExpectedResult = false, TestName = "A hunter already out may attack departing bots")]
+    [TestCase(true, true, false, true, true, false, ExpectedResult = false, TestName = "Different hubs do not share a truce")]
+    public bool TruceRule(bool autonomousRvr, bool sameRealm, bool sameHub, bool attackerDeparting, bool targetDeparting,
+        bool retaliation) =>
+        AutonomousHubDeparture.TruceApplies(autonomousRvr, sameRealm, sameHub, attackerDeparting, targetDeparting, retaliation);
+
+    [Test]
+    public void LiveTruceIgnoresHumansAndOtherRealms()
+    {
+        var mid = RvrBot(eRealm.Midgard);
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousHubDeparture.TruceApplies(mid, new HubPlayer { Realm = eRealm.Midgard }, T0), Is.False);
+            Assert.That(AutonomousHubDeparture.TruceApplies(mid, RvrBot(eRealm.Albion), T0), Is.False);
+        });
+    }
+
+    [TestCase(8, 8, 0, 2, 3, ExpectedResult = "healer_dead")]
+    [TestCase(4, 8, 1, 2, 3, ExpectedResult = "half_down")]
+    [TestCase(6, 8, 2, 2, 9, ExpectedResult = "outnumbered")]
+    [TestCase(8, 8, 2, 2, 4, ExpectedResult = "doctrine")]
+    public string RetreatReasonNamesTheMainPressure(int alive, int formed, int healers, int formedHealers, int enemies) =>
+        AutonomousRvrDoctrine.RetreatReason(alive, formed, healers, formedHealers, enemies);
 }
