@@ -4,8 +4,8 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed class BotGoalsSettingsControl : UserControl
 {
-    private static readonly string[] PresetNames = ["Camlann 2003", "Peaceful", "Bloodbath", "Keep Wars", "Custom"];
-    private static readonly string[] DangerNames = ["Mild", "Authentic", "Full Camlann"];
+    private static readonly string[] PresetNames = ["Classic PvP", "Peaceful", "Bloodbath", "Keep Wars", "Custom"];
+    private static readonly string[] DangerNames = ["Mild", "Authentic", "Aggressive"];
     private static readonly string[] ShapeNames = ["Fresh launch", "Established live server"];
     private static readonly string[] TypeNames = ["Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "Keep warrior"];
     private const string TypeMixHint = "\n\nHigher values give this type more weight for new bots. Existing saved types stay as they are until you apply the mix while the server is running. Keep all six sliders at 100% total.";
@@ -73,7 +73,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _danger.Items.AddRange(DangerNames);
         _worldShape.Items.AddRange(ShapeNames);
         body.Controls.Add(ChoiceRow("Preset", _preset,
-            "Quick starting mixes: Camlann 2003 is balanced; Peaceful favors leveling and mild danger; Bloodbath favors Hunters and Roamers with Full Camlann danger; Keep Wars favors Keep warriors and Roamers. Selecting a preset replaces the six percentages and danger. Choose Custom to edit them. Saving a preset changes future type assignments; use Apply mix to existing bots for a live rebalance."));
+            "Quick starting mixes: Classic PvP is balanced; Peaceful favors leveling and mild danger; Bloodbath favors Hunters and Roamers with Aggressive danger; Keep Wars favors Keep warriors and Roamers. Selecting a preset replaces the six percentages and danger. Choose Custom to edit them. Saving a preset changes future type assignments; use Apply mix to existing bots for a live rebalance."));
         var mixHeading = new Label { Text = "Player-type mix — total must equal 100%", AutoSize = true,
             Margin = new Padding(3, 13, 3, 4), ForeColor = DaocTheme.GoldLight };
         _toolTips.SetToolTip(mixHeading,
@@ -106,7 +106,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
         }
         body.Controls.Add(_total);
         body.Controls.Add(ChoiceRow("Danger in leveling zones", _danger,
-            "Changes hunting tendency for existing and new Hunters after saving and restarting the server. Mild reduces hunting and disables attacks on much lower-level (grey-con) targets. Authentic uses normal hunting and excludes targets over 20 levels lower. Full Camlann increases hunting and grey-target attacks, including rare attacks on targets over 20 levels lower. It does not convert other bot types into Hunters. Choose Custom to edit."));
+            "Changes hunting tendency for existing and new Hunters after saving and restarting the server. Mild reduces hunting and disables attacks on much lower-level (grey-con) targets. Authentic uses normal hunting and excludes targets over 20 levels lower. Aggressive increases hunting and grey-target attacks, including rare attacks on targets over 20 levels lower. It does not convert other bot types into Hunters. Choose Custom to edit."));
         body.Controls.Add(ChoiceRow("World shape", _worldShape,
             "Once saved, this is used when you add a crew through the launcher. Fresh launch creates every added bot at level 1; Established live server gives the new crew a spread of levels from 1 to 50. Existing bots keep their levels and progress, and Add Lv.50 remains a separate option."));
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 8, 3, 3),

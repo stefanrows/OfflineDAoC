@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.142.0"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.146.0"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -168,9 +168,9 @@ public sealed class LauncherPresentationTests
         using var form = (Form)Activator.CreateInstance(mainFormType)!;
         IReadOnlyList<Control> controls = Descendants(form).ToList();
 
-        Assert.That(form.Text, Is.EqualTo("Offline DAoC — Camlann 1.65 Old Frontiers"));
-        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("OFFLINE DAoC — CAMLANN", StringComparison.Ordinal)), Is.True);
-        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("CAMLANN POPULATION", StringComparison.Ordinal)), Is.True);
+        Assert.That(form.Text, Is.EqualTo("Offline DAoC — PvP & Co-op"));
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("OFFLINE DAoC — PVP & CO-OP", StringComparison.Ordinal)), Is.True);
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("PVP BOT POPULATION", StringComparison.Ordinal)), Is.True);
         string versionText = "VERSION " + mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue();
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains(versionText, StringComparison.Ordinal)), Is.True);
         Label version = controls.OfType<Label>().Single(label => label.Text == versionText);

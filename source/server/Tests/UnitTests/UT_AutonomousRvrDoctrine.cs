@@ -271,6 +271,10 @@ public sealed class UT_CompanionFollowStyle
             Assert.That(CompanionFollowStyle.Choose(true, 2_000, 191, 150, 200, false), Is.EqualTo(CompanionFollowStyle.Spread));
             Assert.That(CompanionFollowStyle.Choose(true, 4_000, 390, 300, 200, true), Is.EqualTo(CompanionFollowStyle.Stick),
                 "A long run with speed: /stick behind the player.");
+            Assert.That(CompanionFollowStyle.Choose(true, 500, 390, 300, 200, false), Is.EqualTo(CompanionFollowStyle.Stick),
+                "A speed run must not give the leader several seconds of head start.");
+            Assert.That(CompanionFollowStyle.Choose(true, 500, 191, 150, 200, false), Is.EqualTo(CompanionFollowStyle.Hold),
+                "Normal walking still ignores the first steps.");
             Assert.That(CompanionFollowStyle.Choose(false, 0, 0, 150, 200, false), Is.EqualTo(CompanionFollowStyle.Spread));
             Assert.That(CompanionFollowStyle.StickDistance(2), Is.GreaterThan(CompanionFollowStyle.StickDistance(0)));
         });

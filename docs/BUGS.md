@@ -76,6 +76,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+69. **Player-led group falls behind during speed-song runs.** Reported
+    2026-09-29 while running with Bard speed without sprint; installed
+    version and whether other speed sources show the same issue are unknown.
+    Repro: run continuously with companions under a Bard speed song.
+    Expected: companions close the initial gap and keep pace. Actual: the
+    group appears to lose the player. Source investigation found the fast
+    follow style waited 3 s to engage, following a possible 1.5 s hold,
+    and then requested at most 40 extra speed; a song-speed head start
+    therefore took many seconds to recover. Source fix 0.145.0 starts the
+    stick route after 0.5 s and uses the existing bounded 20% catch-up
+    allowance by 300 units behind its slot. Workaround before install:
+    pause briefly after starting a fast run. Installation and real-client
+    verification pending: check Bard and other speed effects with a full
+    group on straight and turning routes, without and with sprint.
+
 68. **`/gc claim` at the Keep Claim Steward shows nothing.** Reported
     2026-09-28 on Stefan's server: standing at the steward after the lord
     died, `/gc claim` printed no line and the steward stayed. Every refusal
@@ -331,6 +346,35 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
       `Long NpcService.Tick ... BotBrain`, `SERVER_WORK stage=NpcService`
       and the `BOT_THINK_PROFILE` phase `RouteRecoverySearch` (expected
       maximum well under 100 ms) with the numbers above.
+    - High-population live investigation, 2026-09-29 (reported 6,241 bots
+      online): the server registry reached 6,210 active world bots. During the
+      08:15–08:32 ramp from 1,223 to 6,210, the 95th-percentile logical tick
+      rose from 33 ms to roughly 60–90 ms against a 33 ms budget. At 6,210,
+      the loop completed about 1,200–1,500 instead of 1,800 ticks/minute;
+      world-speed status showed about 0.78–0.83x with one client connected.
+      `NpcService` averaged 19–28 ms/tick, with 10–19 ms spent waiting for
+      workers. Roughly 1,900–2,000 bots were fighting, with 16,000–19,000
+      new PvP engagements and about 1,000 PvP deaths per logical minute.
+      Forty read-only managed-stack snapshots caught 19 active BotBrain
+      stacks: 13 were in navigation/corridor work, including
+      `AutonomousZoneItinerary.CalculateCompleteCorridor` ->
+      `LocalPathfindingMgr.PathStraight`. A logged turn made 563 path queries
+      in 443 ms. The seam-candidate and town-route callers can still make many
+      corridor checks in one turn despite the sliced recovery/stable searches.
+      Two snapshots caught `BotBrain.TryHandleAutonomousRealmExchange` ->
+      `AutonomousBotEconomy.TryList`: one waited on a monitor, another was
+      inside a synchronous item save/SQLite connection close. `TryList` takes
+      the Exchange transaction and status-write locks on the NPC worker;
+      background status and clock saves use the same write gate.
+      `DatabaseOpen` measures connection opening only, so it does not account
+      for the outer lock wait or the rest of that transaction. This is a
+      confirmed blocking path and a plausible source of the 1–3.7 s bot turns
+      with only 3–6 ms attributed to `DatabaseOpen`; the snapshots do not
+      prove every such turn uses it. Next: measure the Exchange lock and full
+      transaction, move durable listing work off NPC workers without changing
+      item/coin outcomes, and bound ordinary itinerary seam checks across
+      turns without changing route choice. No source fix or deployment yet;
+      post-fix live and real-client verification remain pending.
 
 55. **Companions buff before resurrecting a dead player.** Reported by Aaron
     on 0.116.0 (2026-09-28). Cause: resurrection only tried the strongest

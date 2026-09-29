@@ -37,5 +37,18 @@ namespace DOL.UnitTests
                 new[] { new Song(1, 0, 0, 5000), new Song(2, 0, 2000, 0) }), Is.Zero);
             Assert.That(BotSongTwistPolicy.Choose(1, 0, new[] { new Song(1, 0, 0, 0) }), Is.EqualTo(1));
         }
+
+        [Test]
+        public void TravelingBardCyclesEnduranceEvenWithShortSpeedChild()
+        {
+            Song[] songs = { new(4101, 3000, 0, 6000), new(4111, 3000, 0, 0) };
+            Assert.That(BotSongTwistPolicy.Choose(4101, 4101, songs), Is.Zero);
+            Assert.That(BotSongTwistPolicy.ChooseBardTravel(4101, 4101, songs), Is.EqualTo(4111));
+            Assert.That(BotSongTwistPolicy.ChooseBardTravel(4101, 4111, songs), Is.EqualTo(4101));
+            Assert.That(BotSongTwistPolicy.ChooseBardTravel(4101, 4101,
+                new[] { new Song(4101, 3000, 0, 6000), new Song(4111, 3000, 0, 9000) }), Is.Zero);
+            Assert.That(BotSongTwistPolicy.ChooseBardTravel(4101, 4101,
+                new[] { new Song(4101, 3000, 0, 2000), new Song(4111, 3000, 0, 0) }), Is.Zero);
+        }
     }
 }

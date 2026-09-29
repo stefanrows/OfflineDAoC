@@ -90,5 +90,26 @@ namespace DOL.GS
             }
             return 0;
         }
+
+        public static int ChooseBardTravel(int speedId, int activeId, IReadOnlyList<Song> songs)
+        {
+            int chosen = Choose(speedId, activeId, songs);
+            if (chosen != 0 || activeId != speedId)
+                return chosen;
+
+            Song speed = songs.FirstOrDefault(song => song.Id == speedId);
+            Song endurance = songs.FirstOrDefault(song => song.Id != speedId);
+            if (speed.Id == 0 || endurance.Id == 0 || speed.CooldownMilliseconds > 0 ||
+                endurance.CooldownMilliseconds > 0)
+                return 0;
+
+            // A short speed child should not suppress endurance for an entire
+            // sprint. Let endurance start while speed lasts through its cast,
+            // then return to speed as soon as that song becomes active.
+            int roundTrip = Math.Max(0, endurance.CastMilliseconds) +
+                            Math.Max(0, speed.CastMilliseconds) + 1000;
+            return speed.RemainingMilliseconds > Math.Max(0, endurance.CastMilliseconds) &&
+                   endurance.RemainingMilliseconds <= roundTrip ? endurance.Id : 0;
+        }
     }
 }

@@ -88,7 +88,7 @@ public static class ImportEngine
     public static ImportSummary Inspect(string folder)
     {
         if(IsCamlannRuntime(folder))
-            throw new InvalidOperationException("Progress import is disabled for the Camlann full-PvP world. Start this installation normally so its one-time world reset can create a fresh save; Normal saves and accounts cannot be imported.");
+            throw new InvalidOperationException("Progress import is disabled for the PvP & Co-op world. Start this installation normally so its one-time world reset can create a fresh save; Normal saves and accounts cannot be imported.");
         using var c=Open(Path.Combine(LocateRuntime(folder),"data","opendaoc.sqlite3.db"),true);
         var tables=Tables(c);
         foreach(var t in new[]{"Account","DOLCharacters","offline_world_bots","Inventory","ItemUnique","ItemTemplate"})
@@ -101,7 +101,7 @@ public static class ImportEngine
         string old=LocateRuntime(oldFolder),current=LocateRuntime(newFolder);
         if(string.Equals(old,current,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Old and new folders must be different.");
         if(IsCamlannRuntime(old) || IsCamlannRuntime(current))
-            throw new InvalidOperationException("Progress import is disabled for the Camlann full-PvP world. Its one-time world reset creates a fresh save; Normal saves and accounts cannot be imported.");
+            throw new InvalidOperationException("Progress import is disabled for the PvP & Co-op world. Its one-time world reset creates a fresh save; Normal saves and accounts cannot be imported.");
         CheckClosed(old,current);
         string oldDb=Path.Combine(old,"data","opendaoc.sqlite3.db"),newDb=Path.Combine(current,"data","opendaoc.sqlite3.db");
         string credentials=Path.Combine(old,"account.txt");
