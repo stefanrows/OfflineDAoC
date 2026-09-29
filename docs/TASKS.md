@@ -6,6 +6,26 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+69. **RvR groups roam with a speed class and move as one body.** Aaron,
+    2026-09-29 (live 0.152.0): bots seen running at normal speed, some at
+    walking pace, and groups not roaming together. Findings (read-only):
+    recruitment never prefers a speed class — `AutonomousBotGroupCoordinator`
+    weighs only `MaxSpeed`, the `RvrClassTraits.Speed` flag exists in
+    `AutonomousRvrDoctrine.cs` but only shapes the doctrine label; released
+    bots deliberately walk to their camp (`_walkToCampAfterRelease`,
+    AutonomousWorldBotController.cs ~3516/3919); stealthed world bots move at
+    player stealth speed since 0.151.0; Bard travel songs (0.143.0) and the
+    "speed only while travelling" rule at BotBrain.cs ~2226 are gated to
+    player-led groups. Evidence (KB): "essential speed class" for every 8-man,
+    speed kept up by song twisting while travelling, groups without speed stay
+    near keeps and milegates (thinking/GROUP_PLAY.md, MENTAL_MODELS P6).
+    Desired: every RvR group of 3+ tries to recruit one Bard/Skald/Minstrel
+    (Healer aug speed as fallback) before leaving the hub; the speed class
+    keeps speed up whenever the group travels out of combat (autonomous groups
+    too); members hold formation at the song's speed instead of drifting; RvR
+    bots never use the walk-after-release pace; log `RVR_SPEED_STATE` (group,
+    speed class present, share of travel time under speed). Not started.
+
 Agent sessions on items 45–48: take the role and context from
 [ORCHESTRATOR_BRIEF.md](ORCHESTRATOR_BRIEF.md) first.
 

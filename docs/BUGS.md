@@ -6,6 +6,17 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+70. **Launcher shows a .NET exception dialog "The given key was not present in
+    the dictionary" after the 0.151.0 deploy.** Aaron, 2026-09-29 ~14:15, first
+    launcher run of the 0.145.1+ launcher build (Stefan's PvP & Co-op naming and
+    splash asset, merged today) together with server 0.151.0. The server is not
+    affected (0 exceptions, port open). Expected: no dialog. Actual: a WinForms
+    unhandled-exception dialog; "Weiter" continues. Stack trace not captured yet;
+    MainForm changes in 0.145.x are text-only, no string-keyed dictionary lookup
+    found in the launcher sources, so the source may be the new splash asset
+    loader or a snapshot/status parser. Next step: click "Details" and paste the
+    stack trace; check `playable/runtime/logs/` for a launcher log.
+
 65b. **RvR bots die to named frontier mobs far above their level.** Split
     from 65. Live 0.125.0, 2026-09-28 04:41–15:46: 7,614 level-50 PvE deaths,
     mostly to named frontier mobs: Illusion of Aidon the Archwizard (level 75,
