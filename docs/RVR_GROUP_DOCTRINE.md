@@ -75,6 +75,50 @@ one healer means picking on solos and duos and retreating at the first add.
   clump for bomb groups, loose for stealthers); melee on the edges, healers in
   the middle, casters behind.
 
+## Support by spec
+
+Evidence (P1, P8): the best-attested gate for a healer doing anything but
+healing is a second healer in the group: "In a zerg fight, you can get away
+with smiting if you have another cleric in your group to cover heals. In 8v8
+there is no way" (D7668). Cave Shamans and pac Healers put CC first:
+"Healing is nice, but CC is better" (D5086). Friars that "do not follow the
+/assist train are the smart ones" (D7634); a group Bard gives up melee for
+its songs (D5113). No source gives an HP or power number; the ones below are
+priors.
+
+Autonomous RvR world bots in a group only (companions and player-led groups
+keep their behaviour):
+
+- **Smite Cleric, nature Druid**: smite or nuke the leader's current PvP
+  target (the Druid also sends its pet) only while a second heal-spec healer
+  (not a smiter, cave Shaman, pac Healer, staff Friar or battle Warden) is
+  within 2,000 units, free to act and above 20 % power, the lowest living
+  member is at 70-80 % health or more (rolled per bot and fight), nobody is mezzed, diseased or poisoned, and the bot
+  has at least 50 % power. One fight in three (30 %, rolled once per fight)
+  the bot stays on heals anyway. Heals still come first when the ordinary
+  heal check wants to top someone up.
+- **Pac Healer, cave (Subterranean) Shaman**: when an enemy that can still be
+  mezzed or stunned is hitting or casting at a group mate, CC comes before
+  heals, without needing a second healer, unless a mate is below 40 % health
+  or needs a cure. Otherwise they follow the smite rule (the Shaman keeps its
+  usual attack when nobody needs a heal).
+- **Staff Friar, battle Warden**: unchanged; they already melee the assist
+  target and step out to heal when someone drops below 80 %.
+- **Heal specs** (rejuv/enhance Cleric, mend/aug Healer, regrowth/nurture
+  Druid): unchanged.
+- **Healer area stun**: now also for autonomous Healers in a bomb-group
+  doctrine (player-led groups as before).
+- **Bard**: a grouped autonomous RvR Bard never melees, even before it has an
+  endurance song.
+
+Every five minutes the server logs one line. Counts are episodes per bot, not
+ticks: offense and control count only when a cast or pet order actually
+happened, heal_only when a Cleric, Druid or Healer falls back to heals: `RVR_SUPPORT_OFFENSE window_s=300 offense=n control=n
+heal_only=n by_class=Cleric:offense/control,...` (only classes with offense
+or control), plus `RVR_HEALER_AREA_STUN window_s=300 casts=n` when a stun was
+cast. The window closes with the next support turn after five minutes, so
+`window_s` can be larger than 300.
+
 ## Forming up, dying, regrouping
 
 - **Form-up:** group seekers wait at their realm's border keep (the portal

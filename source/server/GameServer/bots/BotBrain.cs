@@ -921,6 +921,7 @@ namespace DOL.AI.Brain
              BotBody.Group?.MemberCount > 1 &&
              HasBardEnduranceSong(BotBody) &&
              !UsesBardBattleBuild(BotBody)) ||
+            IsAutonomousRvrGroupBard() ||
             (BotPartyRoles.IsSupport(BotBody) &&
              ((eCharacterClass?)BotBody?.CharacterClass?.ID != eCharacterClass.Minstrel ||
               RecentDirectAttacker() is not GameLiving attacker ||
@@ -2960,8 +2961,7 @@ namespace DOL.AI.Brain
                 }
                 else if (_brain.IsHealer)
                 {
-                    if (!_brain.CheckHeals())
-                        _brain.AttackMostWanted();
+                    _brain.PerformHybridHealerTurn();
                 }
                 else
                     _brain.AttackMostWanted();
@@ -3539,7 +3539,7 @@ namespace DOL.AI.Brain
             if (!UsesDefensiveOnlyPet) Body.ControlledBrain?.Disengage();
             // A support companion's own mezz is harmful but is not an attack.
             if (Body.IsCasting && Body.castingComponent?.SpellHandler?.Spell?.IsHarmful == true &&
-                !PvpControlInFlight && !PveControlInFlight && !HealerAreaStunInFlight)
+                !PvpControlInFlight && !PveControlInFlight && !HealerAreaStunInFlight && !SupportOffenseInFlight)
                 Body.StopCurrentSpellcast();
         }
 
@@ -3548,6 +3548,8 @@ namespace DOL.AI.Brain
             if (CompanionFollowPolicy.SendsDruidPet(BotBody))
                 TryCommandCompanionDruidPet(CalculateNextAttackTarget());
             HoldSupportCombat();
+            if (TryAutonomousRvrSupportTurn())
+                return;
             bool bombStun = BotBody.IsPlayerLedGroup && BombGroupReadyForStun() && TryHealerAreaStun();
             if (!bombStun && !CheckHeals() && !TryHealerAreaStun() && !TryPvpCrowdControl() && !TryPveAddControl())
                 CheckSpells(eCheckSpellType.Defensive);

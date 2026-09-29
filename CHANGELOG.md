@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.149.0] - 2026-09-29
+
+### Added
+
+- Support by spec for autonomous RvR groups: a smite Cleric or nature Druid
+  smites/nukes the leader's target (the Druid also sends its pet) only while
+  a second heal-spec healer nearby can cast, the group is at 70-80 % health
+  or more (per bot), nobody needs a cure and it has half its power; one fight in three it stays on heals
+  anyway. Pac Healers and cave Shamans mez/stun whoever is hitting a group
+  mate before healing, unless a mate is below 40 %. Companions and
+  player-led groups are unchanged.
+- New log lines every five minutes: `RVR_SUPPORT_OFFENSE` and
+  `RVR_HEALER_AREA_STUN`.
+
+### Changed
+
+- Autonomous Healers in an RvR bomb group now use their area stun (before:
+  player-led groups only).
+- Grouped autonomous RvR Bards never melee, even before they have an
+  endurance song.
+
 ## [0.148.0] - 2026-09-29
 
 ### Added

@@ -20,14 +20,18 @@ namespace DOL.AI.Brain
 
         private bool TryHealerAreaStun()
         {
-            if (BotBody?.IsPlayerLedGroup != true ||
-                BotBody.CharacterClass?.ID != (int)eCharacterClass.Healer ||
+            if (BotBody?.CharacterClass?.ID != (int)eCharacterClass.Healer ||
                 Body.Group == null || Body.IsCasting || Body.IsIncapacitated ||
                 Body.castingComponent?.HasPendingSkillRequests == true ||
                 GameLoop.GameLoopTime < _nextHealerAreaStun)
                 return false;
 
             _nextHealerAreaStun = GameLoop.GameLoopTime + 2_000;
+            // Player-led groups as before; autonomous RvR Healers only in a bomb
+            // group. Checked after the throttle so the group lookup runs every 2 s.
+            if (!AutonomousRvrSupportOffense.AllowsHealerAreaStun(true, BotBody.IsPlayerLedGroup,
+                    BotBody.IsPlayerLedGroup ? null : AutonomousRvrDoctrineRuntime.For(BotBody)?.Kind))
+                return false;
             Spell[] spells = (Body.Spells ?? []).Where(spell =>
                     spell?.SpellType == eSpellType.Stun && spell.Radius > 0 &&
                     spell.Target is eSpellTarget.ENEMY or eSpellTarget.AREA &&
@@ -82,6 +86,7 @@ namespace DOL.AI.Brain
                     }
                     _healerAreaStunSpellId = spell.ID;
                     _healerAreaStunCastUntil = GameLoop.GameLoopTime + spell.CastTime + 2_000;
+                    RecordRvrHealerAreaStun();
                     return true;
                 }
             }

@@ -180,6 +180,22 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+65. **RvR wave 4: support by spec.** Aaron, 2026-09-29 (P1 "roles are
+    fluid by spec", P8 "support jobs before the assist train"). Implemented
+    in source; real-client check pending. Autonomous RvR groups only: smite
+    Cleric and nature Druid attack the leader's target only behind a second
+    heal-spec healer within 2,000 who can cast, group at 70-80 % or more,
+    no cure needed, own power 50 % or more, and not in the 30 % of fights where they stay on heals;
+    pac Healer and cave Shaman CC a group mate's attacker before healing
+    unless a mate is below 40 %; Healer area stun for autonomous bomb groups;
+    grouped autonomous Bards never melee. Check in `server-console.log`:
+    `RVR_SUPPORT_OFFENSE window_s=... offense=... control=... heal_only=...
+    by_class=...` about every five minutes while RvR groups fight, with
+    `heal_only` well above `offense`, `Cleric:`/`Druid:` offense only in
+    bigger groups, `Healer:`/`Shaman:` mostly control; `RVR_HEALER_AREA_STUN
+    casts=...` only when a bomb group fought; no smiting Cleric in a group
+    with one healer, no Bard in melee, companions unchanged.
+
 64. **RvR wave 3: observe before engaging.** Aaron, 2026-09-29 (P2, "let
     the battle develop a moment before showing your hand"). Source 0.148.0:
     a roaming RvR leader or solo RvR bot that sees two or more enemy parties
