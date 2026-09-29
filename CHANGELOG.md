@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.154.0] - 2026-09-29
+
+### Fixed
+
+- Restore the Keep Claim Steward from a defeated keep's saved lord position when
+  a player enters the keep or attempts to claim after a server restart. Record
+  steward spawn failures in the server log.
+- Let human guild members pass the keep claim check; it previously returned
+  silently because it required the bot-only `IGamePlayer` interface.
+
 ## [0.153.0] - 2026-09-29
 
 ### Fixed

@@ -103,9 +103,15 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     be claimed despite later siege damage refreshing its five-minute combat
     timer, removes the Camlann group-size requirement at the owner's request,
     and repeats the exact refusal in main chat and the attempt log. Version
-    0.153.0 was installed on 2026-09-29; a real-client retry, including a solo
-    guild claim, remains pending. If rejected, use the new `refusal` field to
-    identify the remaining check. Successful claim broadcast was fixed
+    0.153.0 was installed on 2026-09-29. After restart, the saved keep 80
+    remained neutral with `LordDefeated=True`, but later attempt logs showed
+    `steward=False`; the steward disappeared instead of moving. The empty
+    refusal exposed a separate source error: a human `GamePlayer` was cast to
+    the bot-only `IGamePlayer` interface and rejected before any claim check.
+    Source 0.154.0 restores a missing steward from the saved lord position on
+    keep entry or claim attempt, logs spawn failures, and accepts a human's
+    packet output. Installation and real-client verification remain pending,
+    including a solo guild claim. Successful claim broadcast was fixed
     earlier in source 0.141.1.
 
 66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live

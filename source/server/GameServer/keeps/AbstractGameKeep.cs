@@ -610,33 +610,41 @@ namespace DOL.GS.Keeps
 		public virtual bool CheckForClaim(GameLiving player, out string refusal)
 		{
 			refusal = null;
-			IGamePlayer playerLike = player as IGamePlayer;
+			IPacketLib output = player switch
+			{
+				GamePlayer human => human.Out,
+				IGamePlayer bot => bot.Out,
+				_ => null,
+			};
 			Guild playerGuild = ServerRules.PvpCombatant.GuildOf(player);
-			if (playerLike == null || playerLike.Out == null || playerGuild == null)
+			if (output == null || playerGuild == null)
 				return false;
+
+			// Restore a defeated keep's steward if startup could not place it.
+			PvpKeepCampaign.EnsureClaimPoint(this);
 
             if (PvpKeepCampaign.Applies(this) && (!DBKeep.LordDefeated || ClaimPoint == null ||
                 !player.IsAlive || !player.IsWithinRadius(ClaimPoint, WorldMgr.INTERACT_DISTANCE)))
             {
-                return RejectClaim(playerLike, "Defeat the keep lord, then approach the Keep Claim Steward to claim this keep.", out refusal);
+                return RejectClaim(output, "Defeat the keep lord, then approach the Keep Claim Steward to claim this keep.", out refusal);
             }
 			// A defeated lord unlocks the PvP steward even if later siege damage
 			// refreshes the keep combat timer.
 			if (InCombat && !(PvpKeepCampaign.Applies(this) && DBKeep.LordDefeated))
 			{
 				log.DebugFormat("KEEPWARNING: {0} attempted to claim {1} while in combat.", player.Name, Name);
-				return RejectClaim(playerLike, Name + " is under attack and can't be claimed.", out refusal);
+				return RejectClaim(output, Name + " is under attack and can't be claimed.", out refusal);
 			}
 
 			if (IsPortalKeep)
 			{
-				return RejectClaim(playerLike, "Portal keeps cannot be claimed.", out refusal);
+				return RejectClaim(output, "Portal keeps cannot be claimed.", out refusal);
 			}
 			
 			// Disabled check on DBKeep.BaseLevel to allow claiming of BG keeps
 			if (this.DBKeep.BaseLevel != 50 && !ServerProperties.Properties.ALLOW_BG_CLAIM)
 			{
-				return RejectClaim(playerLike, "This keep is not able to be claimed.", out refusal);
+				return RejectClaim(output, "This keep is not able to be claimed.", out refusal);
 			}
 
 			bool hasClaimRank = player switch
@@ -647,23 +655,23 @@ namespace DOL.GS.Keeps
 			};
 			if (!hasClaimRank)
 			{
-				return RejectClaim(playerLike, "You do not have permission to claim for your guild.", out refusal);
+				return RejectClaim(output, "You do not have permission to claim for your guild.", out refusal);
 			}
 			if (this.Guild != null)
 			{
-				return RejectClaim(playerLike, "The keep is already claimed.", out refusal);
+				return RejectClaim(output, "The keep is already claimed.", out refusal);
 			}
 			switch (ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
 			{
 				case 0:
 					{
-						return RejectClaim(playerLike, "Keep claiming is disabled!", out refusal);
+						return RejectClaim(output, "Keep claiming is disabled!", out refusal);
 					}
 				case 1:
 					{
 						if (playerGuild.ClaimedKeeps.Count == 1)
 						{
-							return RejectClaim(playerLike, "Your guild already owns a keep.", out refusal);
+							return RejectClaim(output, "Your guild already owns a keep.", out refusal);
 						}
 						break;
 					}
@@ -671,7 +679,7 @@ namespace DOL.GS.Keeps
 					{
 						if (playerGuild.ClaimedKeeps.Count >= ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
 						{
-							return RejectClaim(playerLike, "Your guild already owns the limit of keeps (" + ServerProperties.Properties.GUILDS_CLAIM_LIMIT + ")", out refusal);
+							return RejectClaim(output, "Your guild already owns the limit of keeps (" + ServerProperties.Properties.GUILDS_CLAIM_LIMIT + ")", out refusal);
 						}
 						break;
 					}
@@ -700,15 +708,15 @@ namespace DOL.GS.Keeps
 
 			if (count < needed)
 			{
-				return RejectClaim(playerLike, "Not enough group members are near the keep. You have " + count + "/" + needed + ".", out refusal);
+				return RejectClaim(output, "Not enough group members are near the keep. You have " + count + "/" + needed + ".", out refusal);
 			}
 			return true;
 		}
 
-		private static bool RejectClaim(IGamePlayer playerLike, string message, out string refusal)
+		private static bool RejectClaim(IPacketLib output, string message, out string refusal)
 		{
 			refusal = message;
-			playerLike.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+			output.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
 			return false;
 		}
 
@@ -1264,6 +1272,8 @@ namespace DOL.GS.Keeps
 		{
 			RegionPlayerEventArgs regionPlayerEventArgs = args as RegionPlayerEventArgs;
 			GamePlayer player = regionPlayerEventArgs.Player;
+			if (DBKeep.LordDefeated && Area?.IsContaining(player, false) == true)
+				PvpKeepCampaign.EnsureClaimPoint(this);
 			player.Out.SendKeepInfo(this);
 			foreach(GameKeepComponent keepComponent in this.KeepComponents)
 			{

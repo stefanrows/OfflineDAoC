@@ -57,9 +57,19 @@ namespace DOL.GS.Keeps
         {
             if (!Applies(keep) || !keep.DBKeep.LordDefeated || keep.IsRelic || keep.ClaimPoint != null) return;
             GuardLord lord = keep.Guards.Values.OfType<GuardLord>().FirstOrDefault();
-            if (lord == null) return;
-            keep.ClaimPoint = new KeepClaimPoint(keep, lord);
-            if (!keep.ClaimPoint.AddToWorld()) keep.ClaimPoint = null;
+            if (lord == null)
+            {
+                log.Warn($"KEEP_CLAIM_STEWARD_MISSING keep={keep.KeepID} reason=no_lord_position");
+                return;
+            }
+            KeepClaimPoint steward = new KeepClaimPoint(keep, lord);
+            if (!steward.AddToWorld())
+            {
+                log.Warn($"KEEP_CLAIM_STEWARD_MISSING keep={keep.KeepID} reason=spawn_failed region={steward.CurrentRegionID} x={steward.X} y={steward.Y} z={steward.Z}");
+                return;
+            }
+            keep.ClaimPoint = steward;
+            log.Info($"KEEP_CLAIM_STEWARD_READY keep={keep.KeepID} region={steward.CurrentRegionID} x={steward.X} y={steward.Y} z={steward.Z}");
         }
 
         public static void DefeatLord(GuardLord lord)
