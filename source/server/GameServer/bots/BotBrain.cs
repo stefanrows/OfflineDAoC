@@ -1193,9 +1193,16 @@ namespace DOL.AI.Brain
         /// <summary>Sprint ends when the stick run does (combat, a stop, a slower leader).</summary>
         private void EndStickSprint()
         {
+            // An autonomous RvR world bot's sprint belongs to the group speed
+            // rules (AutonomousRvrSpeed), not to the companion stick run.
             if (BotBody?.IsSprinting == true &&
-                GameLoop.GameLoopTime - _stickSprintTick > ThinkInterval * 2 + 500)
+                AutonomousRvrSpeed.StickCleanupEndsSprint(true, GameLoop.GameLoopTime - _stickSprintTick,
+                    ThinkInterval * 2 + 500, AutonomousRvrDoctrineRuntime.Applies(BotBody)))
+            {
                 BotBody.Sprint(false);
+                if (BotBody.IsAutonomousWorldBot)
+                    BotBody.OnMaxSpeedChange();
+            }
         }
 
         private void HoldStaySpot(Vector3 spot)
@@ -2135,7 +2142,10 @@ namespace DOL.AI.Brain
 
                 // A marching group does not stop for a cast-time buff; it waits
                 // for the leader's next pause (instant and mobile casts still go).
-                if (spell.CastTime > 0 && AutonomousGroupMotion.GroupTraveling(bot))
+                if (spell.CastTime > 0 && AutonomousGroupMotion.GroupTraveling(bot) &&
+                    !AutonomousRvrSpeed.CastsSpeedOnTheMarch(AutonomousRvrDoctrineRuntime.Applies(bot),
+                        spell.SpellType == eSpellType.SpeedEnhancement && spell.Target == eSpellTarget.GROUP,
+                        bot.InCombat || HasAggro))
                     continue;
                 GameObject previousTarget = bot.TargetObject;
                 if (spell.CastTime > 0)
@@ -2223,7 +2233,11 @@ namespace DOL.AI.Brain
 
             // Player-led performers stay quiet while parked. During travel,
             // Bards twist endurance with speed to offset sprint's drain.
-            bool travelSpeedOnly = bot.IsPlayerLedGroup && !immediateCombat;
+            // A travelling autonomous RvR group's performer sings only its
+            // speed the same way (P6); parked it keeps its usual songs.
+            bool travelSpeedOnly = bot.IsPlayerLedGroup && !immediateCombat ||
+                AutonomousRvrSpeed.FocusTravelSongs(groupedSupport && AutonomousRvrDoctrineRuntime.Applies(bot),
+                    traveling, immediateCombat);
             bool bardTravelSongs = traveling && !immediateCombat &&
                 (eCharacterClass)bot.CharacterClass.ID == eCharacterClass.Bard;
             if (travelSpeedOnly && !traveling)

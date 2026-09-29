@@ -2368,6 +2368,18 @@ namespace DOL.GS
 
         #region IGamePlayer — Stealth
 
+        /// <summary>
+        /// A travelling autonomous RvR bot picks up a new max speed (speed
+        /// song, sprint, stealth) on the order it is already walking; before,
+        /// the order kept the speed it was given until the next re-issue.
+        /// </summary>
+        public override void OnMaxSpeedChange()
+        {
+            if (AutonomousRvrDoctrineRuntime.Applies(this))
+                movementComponent?.RetuneFullSpeedOrder();
+            base.OnMaxSpeedChange();
+        }
+
         public override void Stealth(bool goStealth)
         {
             if (IsStealthed == goStealth)

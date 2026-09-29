@@ -1522,8 +1522,9 @@ public static partial class AutonomousBotGroupCoordinator
                 pickupDestination = new(null, rally, rallyName, rallyRegion);
                 // Invite through actual town routes, even when guildmates are on
                 // different continents. Bound expensive probes on this pass.
+                // Probe a missing healer, tank and speed class first (P6).
                 compatiblePool = eligibleCandidates
-                    .OrderBy(candidate => PickupRolePriority(leader, null, candidate))
+                    .OrderBy(candidate => RvrRecruitmentPriority([leader], candidate, largestAllowed))
                     .ThenBy(candidate => candidate.CurrentRegionID == rallyRegion ? 0 : 1)
                     .ThenBy(FormationWaitStartedUtc)
                     .Take(12 - rvrRouteChecks)
@@ -1640,7 +1641,8 @@ public static partial class AutonomousBotGroupCoordinator
             {
                 // Select support before filling damage slots, using the same
                 // class-aware roster builder as PvE without assigning PvE work.
-                TryBuildPveRoster(leader, compatiblePool, out compatible, out _, maximumSize: rolledSize);
+                TryBuildPveRoster(leader, compatiblePool, out compatible, out _,
+                    preferredRemote: RvrSpeedPick(leader, compatiblePool, rolledSize), maximumSize: rolledSize);
                 if (compatible.Length != rolledSize - 1)
                 {
                     LogFormationBlocked(leader, objectiveKind, $"Only {compatible.Length} of {rolledSize - 1} requested compatible guildmates are available");
@@ -2248,6 +2250,8 @@ public static partial class AutonomousBotGroupCoordinator
         Log.Info($"AUTONOMOUS_GROUP_TASK_STARTED group={session.Id} objective={session.ObjectiveKind} " +
                  $"size={members.Length} remainingSeconds={session.TaskClock.RemainingMilliseconds(GameLoop.GameLoopTime) / 1000} " +
                  $"expiresUtc={session.TaskClock.ExpiresUtc:O}");
+        if (session.ObjectiveKind == eAutonomousObjectiveKind.RvR)
+            AutonomousRvrSpeed.LogDeparture(session.Id, members);
     }
 
     private static void RecordCampArrival(GameBot[] members, GameBot leader, int radius)
@@ -2872,6 +2876,20 @@ public static partial class AutonomousBotGroupCoordinator
             if (preferred != null && members.Count < desiredSize)
                 members.Add(preferred);
         }
+    }
+
+    /// <summary>
+    /// The speed an RvR group of three or more takes first (P6): a Bard,
+    /// Skald or Minstrel, else a Healer who knows the group speed; null when
+    /// the leader already brings speed, the group is small or nobody fits.
+    /// </summary>
+    private static GameBot RvrSpeedPick(GameBot leader, GameBot[] pool, int plannedSize)
+    {
+        if (plannedSize < AutonomousRvrSpeed.MinimumSpeedGroupSize || AutonomousRvrSpeed.ProvidesSpeed(leader))
+            return null;
+        GameBot[] candidates = pool.Where(candidate => candidate != leader && candidate?.CharacterClass != null).ToArray();
+        return candidates.FirstOrDefault(candidate => AutonomousRvrSpeed.IsSpeedClass((eCharacterClass)candidate.CharacterClass.ID)) ??
+            candidates.FirstOrDefault(AutonomousRvrSpeed.ProvidesSpeed);
     }
 
     private static bool TryAssignPveRoles(GameBot[] members, GameBot leader,

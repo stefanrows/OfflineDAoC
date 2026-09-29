@@ -87,7 +87,7 @@ namespace DOL.GS
                         Lfg: candidate.TempProperties.GetProperty<bool>(LfgProperty)))
                     .Where(entry => entry.Nearby || entry.Lfg)
                     .OrderBy(entry => entry.Nearby ? 0 : 1)
-                    .ThenBy(entry => RecruitmentRolePriority(members, entry.Bot))
+                    .ThenBy(entry => RvrRecruitmentPriority(members, entry.Bot, maximum))
                     .ToList();
 
                 bool changed = false;

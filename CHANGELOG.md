@@ -12,6 +12,46 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.154.0] - 2026-09-29
+
+### Changed
+
+- Autonomous RvR groups roam with a speed class (task 69). A group of three
+  or more that has no Bard, Skald or Minstrel strongly prefers one when it
+  forms and backfills, right after a missing healer and before a missing
+  tank (a Healer with the augmentation speed is the fallback); a group
+  still leaves without one under the usual wait rules.
+  The server logs `RVR_SPEED_STATE group=… speed_class=<class|none>
+  members=n` when a group sets out.
+- While an autonomous RvR group travels out of combat, its performer sings
+  only its speed (a Bard twists endurance with it, as for player-led
+  groups) and recasts it when it drops; a Healer who is the group's speed
+  stops once on the march to start it. No speed in combat, as before.
+- The group moves as one body: the leader stands about 6 seconds (±25 %)
+  when a member (within 4,000) falls more than 1,200 behind out of combat,
+  until everyone is within 600, then walks about 10 seconds (±25 %) before
+  waiting again, and walks on without a member it already waited for three
+  times; members sprint to close a gap of more than 150 to their slot while
+  they have endurance, and a member ahead of its leader never runs faster
+  than the leader.
+- Groups of three or more without speed favour roaming spots within 8,000
+  of a keep, tower or border hub (weight 1.35, others 0.8), like 2003
+  groups without speed that stayed near keeps and milegates.
+- Every five minutes: `RVR_SPEED_TRAVEL window_s=300 groups=n with_speed=n
+  travel_under_speed_pct=n leader_holds=n`.
+
+### Fixed
+
+- A travelling world bot kept the speed of the order it was walking when a
+  speed song landed or ended, so a group under speed ran at normal speed
+  until its next order; autonomous RvR bots now pick up the new speed at
+  once.
+- An autonomous world bot's sprint now makes it 30 % faster, as for a
+  player (before it only cost endurance), applied after the relic
+  carrier cap in the same order as for players.
+- Autonomous RvR bots no longer slow to a crawl below a third of their
+  health (a monster rule), and the on-foot habit after a PvE release no
+  longer carries into RvR. Companions are unchanged.
 ## [0.153.0] - 2026-09-29
 
 ### Changed
