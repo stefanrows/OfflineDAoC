@@ -29,7 +29,11 @@ public sealed record RvrRouteProbe(
     Func<Vector3, Vector3, bool> Corridor,
     bool DestinationInZone);
 
-public readonly record struct RvrRouteChoice(Vector3 Waypoint, RvrRouteVariant Variant, bool Fallback, float LegLength);
+/// <param name="Reason">Why the last candidate was rejected (<c>none</c> when
+/// the chosen via-point passed): short_leg, no_nav, no_hub, zone, floor,
+/// corridor_a, corridor_b or budget.</param>
+public readonly record struct RvrRouteChoice(Vector3 Waypoint, RvrRouteVariant Variant, bool Fallback, float LegLength,
+    string Reason = "none");
 
 /// <summary>
 /// Route variety for autonomous RvR groups (P3: you leave the door before you
@@ -43,8 +47,24 @@ public static class AutonomousRvrRoutePolicy
     public const float MinimumLegLength = 3_500;
     /// <summary>The Road via-point lies this far ahead on the straight line.</summary>
     public const float RoadStep = 2_400;
-    public const float FlankMinimumOffset = 1_200;
-    public const float FlankMaximumOffset = 2_400;
+    /// <summary>Side distances tried for a Flank or Cover via-point, widest
+    /// first; the first one that is walkable and connected wins.</summary>
+    public static readonly float[] FlankOffsets = [2_000, 1_200, 600];
+    public const float FlankMinimumOffset = 600;
+    public const float FlankMaximumOffset = 2_000;
+    /// <summary>
+    /// The bend is placed within this much of the leg. Most roaming legs are
+    /// 30-200 km long and cross zones; 40-60 % of the whole leg lies in
+    /// another zone, where no via-point can be checked.
+    /// </summary>
+    public const float LocalLegLength = 8_000;
+    /// <summary>The second leg (via-point to destination) is only checked
+    /// when it is this short; the navmesh is undirected, so a via-point
+    /// connected to the start reaches whatever the start reaches.</summary>
+    public const float SecondLegCheckLength = 8_000;
+    /// <summary>Navigation queries (floor probes and path checks) one
+    /// ChooseRoute call may spend.</summary>
+    public const int QueryBudget = 6;
     public const double FlankMinimumFraction = 0.4;
     public const double FlankMaximumFraction = 0.6;
     /// <summary>A heat spot farther than this from the leg does not shape a Cover route.</summary>
@@ -58,9 +78,9 @@ public static class AutonomousRvrRoutePolicy
     public const float HubFanMaximumRadius = KeepSafeRadius + HubFanMaximumMargin;
     /// <summary>Vertical search range for a fan point: hubs such as Svasud
     /// Faste sit on a rise well above the land around them.</summary>
-    public const float HubFanFloorRange = 1_024;
-    /// <summary>Bearings tried for the hub fan before falling back to Road.</summary>
-    public const int HubFanAttempts = 4;
+    public const float HubFanFloorRange = 4_096;
+    /// <summary>Bearings tried for the hub fan before giving the route back to the caller.</summary>
+    public const int HubFanAttempts = 3;
     /// <summary>
     /// The fan bearing lies within this many degrees of the destination's
     /// direction: groups leave by different sides of the hub, but nobody walks
@@ -68,8 +88,13 @@ public static class AutonomousRvrRoutePolicy
     /// </summary>
     public const double HubFanHalfArcDegrees = 120;
     /// <summary>Vertical search range for off-road via-points on hills.</summary>
-    public const float OffRoadFloorRange = 512;
-    private const float RoadFloorRange = 128;
+    /// <summary>
+    /// Vertical search range for via-points. The frontier's height varies by
+    /// thousands of units within a few km (Svasud Faste 5,700, the hills south
+    /// of it 8,000+); on the installed Uppland meshes a +-512 search found a
+    /// floor for 46 % of random points 1.5-6 km out, +-4,096 for 97 %.
+    /// </summary>
+    public const float OffRoadFloorRange = 4_096;
 
     public static bool IsStealthDoctrine(RvrDoctrineKind kind) =>
         kind is RvrDoctrineKind.SoloAssassin or RvrDoctrineKind.StealthPack or RvrDoctrineKind.GankSquad;
@@ -115,12 +140,14 @@ public static class AutonomousRvrRoutePolicy
     };
 
     /// <summary>
-    /// The next waypoint toward <paramref name="destination"/>. Road keeps the
-    /// earlier behaviour (a straight-ahead point 2,400 out, no side offset);
-    /// Flank and Cover add one via-point to the side; HubFan leaves a hub on a
-    /// random bearing 4,500-6,000 from its centre. A via-point that fails the
-    /// floor, zone or corridor checks falls back to Road, and Road falls back
-    /// to the destination itself.
+    /// The next waypoint toward <paramref name="destination"/>. Road is a
+    /// straight-ahead point 2,400 out; Flank and Cover add one via-point 600-
+    /// 2,000 to the side at 40-60 % of the next 8,000 units; HubFan leaves a
+    /// hub on a random bearing beyond its safe circle. A candidate must lie in
+    /// the actor's zone, have a floor and a path from the start. A rejected
+    /// Flank/Cover falls back to Road, Road to the destination itself; a
+    /// rejected HubFan returns the destination and lets the caller plan the
+    /// rolled route. At most <see cref="QueryBudget"/> navigation queries.
     /// </summary>
     public static RvrRouteChoice ChooseRoute(Vector3 start, Vector3 destination, RvrRouteVariant variant,
         RvrRouteProbe probe, Random random, Vector3? heat = null, Vector3? hubCentre = null,
@@ -129,10 +156,15 @@ public static class AutonomousRvrRoutePolicy
         Vector2 delta = new(destination.X - start.X, destination.Y - start.Y);
         float leg = delta.Length();
         if (probe == null || leg < MinimumLegLength)
-            return new(destination, RvrRouteVariant.Road, variant != RvrRouteVariant.Road, leg);
+            return new(destination, RvrRouteVariant.Road, variant != RvrRouteVariant.Road, leg,
+                probe == null ? "no_nav" : "short_leg");
         random ??= Random.Shared;
         Vector2 direction = delta / leg;
         Vector2 perpendicular = new(-direction.Y, direction.X);
+        var check = new Check(start, destination, probe);
+        // Queries kept back so Road can still be tried after a failed bend:
+        // floor and first leg, plus the second leg when it will be checked.
+        int roadCost = 2 + (probe.DestinationInZone && leg - RoadStep <= SecondLegCheckLength ? 1 : 0);
 
         switch (variant)
         {
@@ -141,9 +173,9 @@ public static class AutonomousRvrRoutePolicy
                 // A failed fan returns at once; the caller plans the rolled
                 // route next, so no Road fallback is computed and discarded.
                 if (!hubCentre.HasValue)
-                    return new(destination, RvrRouteVariant.HubFan, true, leg);
+                    return new(destination, RvrRouteVariant.HubFan, true, leg, "no_hub");
                 double baseAngle = Math.Atan2(direction.Y, direction.X);
-                for (int attempt = 0; attempt < HubFanAttempts; attempt++)
+                for (int attempt = 0; attempt < HubFanAttempts && check.Budget > 0; attempt++)
                 {
                     double angle = baseAngle + (random.NextDouble() * 2 - 1) * HubFanHalfArcDegrees * Math.PI / 180;
                     float radius = hubSafeRadius + HubFanMinimumMargin +
@@ -153,38 +185,75 @@ public static class AutonomousRvrRoutePolicy
                     // Height guess toward the goal, like Flank; the wide probe finds the real floor.
                     float along = Math.Clamp(Vector2.Distance(new(start.X, start.Y), point) / leg, 0, 1);
                     Vector3 raw = new(point.X, point.Y, start.Z + (destination.Z - start.Z) * along);
-                    if (TryVia(start, destination, raw, HubFanFloorRange, probe, out Vector3 via))
-                        return new(via, RvrRouteVariant.HubFan, false, leg);
+                    if (check.TryVia(raw, HubFanFloorRange, out Vector3 via))
+                        return new(via, RvrRouteVariant.HubFan, false, leg, "none");
                 }
-                return new(destination, RvrRouteVariant.HubFan, true, leg);
+                return new(destination, RvrRouteVariant.HubFan, true, leg, check.Reason);
             }
             case RvrRouteVariant.Flank:
             case RvrRouteVariant.Cover:
             {
+                float local = Math.Min(leg, LocalLegLength);
                 double fraction = FlankMinimumFraction + random.NextDouble() * (FlankMaximumFraction - FlankMinimumFraction);
-                float offset = FlankMinimumOffset + (float)random.NextDouble() * (FlankMaximumOffset - FlankMinimumOffset);
                 float side = random.NextDouble() < 0.5 ? -1 : 1;
-                Vector2 anchor = new Vector2(start.X, start.Y) + direction * (float)(leg * fraction);
+                Vector2 anchor = new Vector2(start.X, start.Y) + direction * (float)(local * fraction);
                 if (variant == RvrRouteVariant.Cover && heat.HasValue &&
                     Vector2.Distance(anchor, new(heat.Value.X, heat.Value.Y)) <= CoverHeatRange)
                 {
                     float heatSide = CoverSide(start, direction, heat.Value);
                     if (heatSide != 0) side = heatSide;
                 }
-                Vector2 point = anchor + perpendicular * side * offset;
-                float z = start.Z + (destination.Z - start.Z) * (float)fraction;
-                if (TryVia(start, destination, new(point.X, point.Y, z), OffRoadFloorRange, probe, out Vector3 via))
-                    return new(via, variant, false, leg);
+                float z = start.Z + (destination.Z - start.Z) * (float)(local * fraction / leg);
+                foreach (float offset in FlankOffsets)
+                {
+                    // A bend costs about what Road costs; try it only if Road stays affordable.
+                    if (check.Budget < 2 * roadCost) break;
+                    Vector2 point = anchor + perpendicular * side * offset;
+                    if (check.TryVia(new(point.X, point.Y, z), OffRoadFloorRange, out Vector3 via))
+                        return new(via, variant, false, leg, "none");
+                }
                 break;
             }
         }
 
-        // Road: today's straight-ahead point, now without a per-bot side offset.
-        Vector3 road = start + new Vector3(direction.X * RoadStep, direction.Y * RoadStep, 0);
+        // Road: a straight-ahead point, height guessed along the leg.
+        Vector3 road = start + new Vector3(direction.X * RoadStep, direction.Y * RoadStep,
+            (destination.Z - start.Z) * RoadStep / leg);
         bool fallback = variant != RvrRouteVariant.Road;
-        return TryVia(start, destination, road, RoadFloorRange, probe, out Vector3 roadVia)
-            ? new(roadVia, RvrRouteVariant.Road, fallback, leg)
-            : new(destination, RvrRouteVariant.Road, true, leg);
+        if (check.Budget >= roadCost && check.TryVia(road, OffRoadFloorRange, out Vector3 roadVia))
+            return new(roadVia, RvrRouteVariant.Road, fallback, leg, fallback ? check.Reason : "none");
+        // Out of budget: report the check that rejected the last candidate tried.
+        return new(destination, RvrRouteVariant.Road, true, leg, check.Reason == "none" ? "budget" : check.Reason);
+    }
+
+    /// <summary>One ChooseRoute call's candidate checks, query budget and
+    /// the reason the last candidate was rejected.</summary>
+    private sealed class Check(Vector3 start, Vector3 destination, RvrRouteProbe probe)
+    {
+        public int Budget = QueryBudget;
+        public string Reason = "none";
+
+        public bool TryVia(Vector3 raw, float floorRange, out Vector3 via)
+        {
+            via = destination;
+            if (!probe.SameZone(raw)) { Reason = "zone"; return false; }
+            if (Budget <= 0) { Reason = "budget"; return false; }
+            Budget--;
+            Vector3? floor = probe.Floor(raw, floorRange);
+            if (!floor.HasValue || Math.Abs(floor.Value.Z - raw.Z) > Math.Max(256, floorRange)) { Reason = "floor"; return false; }
+            if (Budget <= 0) { Reason = "budget"; return false; }
+            Budget--;
+            if (!probe.Corridor(start, floor.Value)) { Reason = "corridor_a"; return false; }
+            if (probe.DestinationInZone &&
+                Vector2.Distance(new(floor.Value.X, floor.Value.Y), new(destination.X, destination.Y)) <= SecondLegCheckLength)
+            {
+                if (Budget <= 0) { Reason = "budget"; return false; }
+                Budget--;
+                if (!probe.Corridor(floor.Value, destination)) { Reason = "corridor_b"; return false; }
+            }
+            via = floor.Value;
+            return true;
+        }
     }
 
     /// <summary>+1 or -1: the side of the leg (along the left-hand
@@ -194,19 +263,5 @@ public static class AutonomousRvrRoutePolicy
         Vector2 toHeat = new(heat.X - start.X, heat.Y - start.Y);
         float cross = direction.X * toHeat.Y - direction.Y * toHeat.X;
         return cross > 0 ? -1 : cross < 0 ? 1 : 0;
-    }
-
-    private static bool TryVia(Vector3 start, Vector3 destination, Vector3 raw, float floorRange,
-        RvrRouteProbe probe, out Vector3 via)
-    {
-        via = destination;
-        if (!probe.SameZone(raw)) return false;
-        Vector3? floor = probe.Floor(raw, floorRange);
-        if (!floor.HasValue || Math.Abs(floor.Value.Z - raw.Z) > Math.Max(256, floorRange) ||
-            !probe.Corridor(start, floor.Value) ||
-            probe.DestinationInZone && !probe.Corridor(floor.Value, destination))
-            return false;
-        via = floor.Value;
-        return true;
     }
 }

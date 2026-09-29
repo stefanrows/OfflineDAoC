@@ -219,6 +219,12 @@ Agent sessions on items 45–48: take the role and context from
     and `RVR_RETREAT` are logged; the share of RvR PvP deaths 3,500-4,500
     from Svasud Faste's centre falls clearly below the 34 % baseline, and
     groups still reach the frontier (no stuck fan points).
+    Source 0.147.0 fix after the first live run (about 90 % of off-road
+    via-points fell back): `RVR_ROUTE_CHOSEN` now carries
+    `reason=short_leg|no_nav|no_hub|zone|floor|corridor_a|corridor_b|budget|none`.
+    Check that `fallback=true` drops to roughly 20-30 % of flank, cover and
+    road lines, not counting `reason=short_leg`, and that most remaining
+    reasons are `corridor_a` from bots standing inside a keep.
 
 61. **Refresh the PvP & Co-op startup splash.** Source 0.144.0 adds an original
     breached-milegate battle with a mixed-realm party defending against a

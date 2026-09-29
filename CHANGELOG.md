@@ -36,6 +36,18 @@ package, not this fork's version.
   zone or a keep the group may pass (or the last roaming spot) instead of just away, and the group chooses a new
   destination afterwards instead of walking back into the same fight.
 
+### Fixed
+
+- RvR route variety now actually happens: about 90 % of flank, cover and
+  hub-fan bends (and most road points) were thrown away because the floor
+  search looked only 128-512 units up and down, while the frontier's height
+  changes by thousands of units within a few kilometres. Bends are now
+  searched 4,096 units up and down, placed within the next 8 km of a long
+  trip (not halfway along a 100 km leg in another zone), tried at three side
+  distances, and accepted when a real path reaches them within 1.5 times the
+  straight distance. `RVR_ROUTE_CHOSEN` names the rejecting check with
+  `reason=`.
+
 ## [0.146.0] - 2026-09-29
 
 ### Added

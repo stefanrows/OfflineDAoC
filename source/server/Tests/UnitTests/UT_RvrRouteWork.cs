@@ -219,8 +219,9 @@ public class UT_RvrRouteWork
             RvrRouteChoice flank = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(10_000, 0, 0), RvrRouteVariant.Flank,
                 OpenGround(), new Random(seed));
             Assert.That(flank.Variant, Is.EqualTo(RvrRouteVariant.Flank));
-            Assert.That(flank.Waypoint.X, Is.InRange(4_000f, 6_000f));
-            Assert.That(Math.Abs(flank.Waypoint.Y), Is.InRange(1_200f, 2_400f));
+            // 40-60 % of the next 8,000 units, the widest side distance first.
+            Assert.That(flank.Waypoint.X, Is.InRange(3_200f, 4_800f));
+            Assert.That(Math.Abs(flank.Waypoint.Y), Is.EqualTo(2_000f).Within(0.5f));
         }
     }
 
@@ -254,8 +255,10 @@ public class UT_RvrRouteWork
             Assert.That(onlyRoad.Waypoint, Is.EqualTo(new Vector3(2_400, 0, 0)));
             Assert.That(onlyRoad.Variant, Is.EqualTo(RvrRouteVariant.Road));
             Assert.That(onlyRoad.Fallback, Is.True);
+            Assert.That(onlyRoad.Reason, Is.EqualTo("zone"));
             Assert.That(nothing.Waypoint, Is.EqualTo(new Vector3(10_000, 0, 0)));
             Assert.That(nothing.Fallback, Is.True);
+            Assert.That(nothing.Reason, Is.EqualTo("corridor_a"));
         });
     }
 
@@ -329,5 +332,133 @@ public class UT_RvrRouteWork
             probe, new Random(2), hubCentre: hub);
         Assert.That(fan.Fallback, Is.False);
         Assert.That(fan.Waypoint.Z, Is.EqualTo(4_200f));
+    }
+    // ---- Wave 1b: why via-points fell back, and the bounded retry ----------
+
+    private sealed class CountingProbe
+    {
+        public int Floors, Corridors;
+        public Func<Vector3, float, Vector3?> Floor = (raw, _) => raw;
+        public Func<Vector3, Vector3, bool> Corridor = (_, _) => true;
+        public Func<Vector3, bool> Zone = _ => true;
+        public bool DestinationInZone = true;
+        public RvrRouteProbe Probe => new((raw, range) => { Floors++; return Floor(raw, range); }, Zone,
+            (a, b) => { Corridors++; return Corridor(a, b); }, DestinationInZone);
+    }
+
+    [Test]
+    public void FlankTriesThreeSideDistancesWidestFirst()
+    {
+        var probe = new CountingProbe();
+        var tried = new System.Collections.Generic.List<float>();
+        probe.Floor = (raw, _) => { tried.Add(Math.Abs(raw.Y)); return Math.Abs(raw.Y) < 700 ? raw : null; };
+        RvrRouteChoice flank = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(20_000, 0, 0), RvrRouteVariant.Flank,
+            probe.Probe, new Random(4));
+        Assert.Multiple(() =>
+        {
+            Assert.That(tried, Is.EqualTo(new[] { 2_000f, 1_200f, 600f }).Within(0.5f));
+            Assert.That(flank.Variant, Is.EqualTo(RvrRouteVariant.Flank));
+            Assert.That(flank.Fallback, Is.False);
+            Assert.That(Math.Abs(flank.Waypoint.Y), Is.EqualTo(600f).Within(0.5f));
+        });
+    }
+
+    [TestCase(RvrRouteVariant.Flank)]
+    [TestCase(RvrRouteVariant.Cover)]
+    [TestCase(RvrRouteVariant.HubFan)]
+    [TestCase(RvrRouteVariant.Road)]
+    public void OneRouteChoiceSpendsAtMostSixNavigationQueries(RvrRouteVariant variant)
+    {
+        var failing = new CountingProbe { Corridor = (_, _) => false };
+        AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(6_000, 0, 0), variant, failing.Probe, new Random(1),
+            hubCentre: Vector3.Zero);
+        var noFloor = new CountingProbe { Floor = (_, _) => null };
+        AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(6_000, 0, 0), variant, noFloor.Probe, new Random(1),
+            hubCentre: Vector3.Zero);
+        Assert.That(failing.Floors + failing.Corridors, Is.LessThanOrEqualTo(AutonomousRvrRoutePolicy.QueryBudget));
+        Assert.That(noFloor.Floors + noFloor.Corridors, Is.LessThanOrEqualTo(AutonomousRvrRoutePolicy.QueryBudget));
+    }
+
+    [Test]
+    public void ALongCrossZoneLegBendsNearTheStartAndSkipsTheFarCheck()
+    {
+        // 80 km legs are normal; 40-60 % of them lies zones away.
+        var probe = new CountingProbe();
+        RvrRouteChoice flank = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(80_000, 0, 0), RvrRouteVariant.Flank,
+            probe.Probe, new Random(2));
+        Assert.Multiple(() =>
+        {
+            Assert.That(flank.Fallback, Is.False);
+            Assert.That(flank.Waypoint.X, Is.LessThanOrEqualTo(AutonomousRvrRoutePolicy.LocalLegLength));
+            Assert.That(probe.Corridors, Is.EqualTo(1), "only start to via-point; the 76 km remainder is not queried");
+        });
+    }
+
+    [Test]
+    public void ReasonNamesTheRejectingCheck()
+    {
+        var farWall = new CountingProbe { Corridor = (from, _) => from == Vector3.Zero };
+        RvrRouteChoice secondLeg = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(6_000, 0, 0), RvrRouteVariant.Flank,
+            farWall.Probe, new Random(3));
+        var cliffs = new CountingProbe { Floor = (_, _) => null };
+        RvrRouteChoice floor = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(6_000, 0, 0), RvrRouteVariant.Road,
+            cliffs.Probe, new Random(3));
+        Assert.Multiple(() =>
+        {
+            Assert.That(secondLeg.Reason, Is.EqualTo("corridor_b"));
+            Assert.That(floor.Reason, Is.EqualTo("floor"));
+            Assert.That(AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(2_000, 0, 0), RvrRouteVariant.Flank,
+                new CountingProbe().Probe, new Random(3)).Reason, Is.EqualTo("short_leg"));
+            Assert.That(AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(9_000, 0, 0), RvrRouteVariant.Flank,
+                null, new Random(3)).Reason, Is.EqualTo("no_nav"));
+            Assert.That(AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(9_000, 0, 0), RvrRouteVariant.HubFan,
+                new CountingProbe().Probe, new Random(3)).Reason, Is.EqualTo("no_hub"));
+            Assert.That(AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(9_000, 0, 0), RvrRouteVariant.Flank,
+                new CountingProbe().Probe, new Random(3)).Reason, Is.EqualTo("none"));
+        });
+    }
+
+    private sealed class DetourNavigation : PathfindingMgrBase
+    {
+        public Vector3[] Corners = [];
+        public override bool IsAvailable => true;
+        public override bool HasNavmesh(Zone zone) => true;
+        public override PathfindingResult GetPathStraight(Zone zone, Vector3 start, Vector3 end,
+            EDtPolyFlags[] filters, Span<WrappedPathfindingNode> destination)
+        {
+            int n = 0;
+            destination[n++] = new(start, 0);
+            foreach (Vector3 corner in Corners) destination[n++] = new(corner, 0);
+            destination[n++] = new(end, 0);
+            return new(PathfindingStatus.PathFound, n);
+        }
+    }
+
+    [Test]
+    public void ViaPathMayWindButNotDetourFarAround()
+    {
+        var nav = new DetourNavigation();
+        Vector3 to = new(4_000, 0, 0);
+        Assert.That(AutonomousRvrTravel.HasPathWithin(nav, null, Vector3.Zero, to, 1.5f), Is.True, "straight");
+        nav.Corners = [new(2_000, 1_500, 0)];
+        Assert.That(AutonomousRvrTravel.HasPathWithin(nav, null, Vector3.Zero, to, 1.5f), Is.True, "over a hill: 5,000 of 6,300");
+        nav.Corners = [new(0, 4_000, 0), new(4_000, 4_000, 0)];
+        Assert.That(AutonomousRvrTravel.HasPathWithin(nav, null, Vector3.Zero, to, 1.5f), Is.False, "around a lake: 12,000");
+    }
+    [TestCase(20_000, TestName = "Road stays affordable after failed bends on a long leg")]
+    [TestCase(6_000, TestName = "Road stays affordable after failed bends with a checked second leg")]
+    public void RoadIsStillTriedAfterEveryBendFails(int legLength)
+    {
+        // Every bend is cut off; only the straight line connects.
+        var probe = new CountingProbe { Corridor = (a, b) => Math.Abs(a.Y) < 1 && Math.Abs(b.Y) < 1 };
+        RvrRouteChoice choice = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(legLength, 0, 0), RvrRouteVariant.Flank,
+            probe.Probe, new Random(6));
+        Assert.Multiple(() =>
+        {
+            Assert.That(choice.Variant, Is.EqualTo(RvrRouteVariant.Road));
+            Assert.That(choice.Waypoint, Is.EqualTo(new Vector3(2_400, 0, 0)));
+            Assert.That(choice.Reason, Is.EqualTo("corridor_a"));
+            Assert.That(probe.Floors + probe.Corridors, Is.LessThanOrEqualTo(AutonomousRvrRoutePolicy.QueryBudget));
+        });
     }
 }

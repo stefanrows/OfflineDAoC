@@ -95,21 +95,75 @@ public static class AutonomousRvrTravel
     }
 
     /// <summary>The bot's own zone and navmesh as route checks; null without navigation.</summary>
-    private static RvrRouteProbe Probe(GameBot bot, Vector3 destination)
+    private static RvrRouteProbe Probe(GameBot bot, Vector3 destination) =>
+        Probe(PathfindingProvider.Instance, bot.CurrentRegion, bot.CurrentZone, destination);
+
+    /// <summary>Route checks for an actor standing in <paramref name="zone"/>; null without navigation.</summary>
+    public static RvrRouteProbe Probe(IPathfindingMgr nav, Region region, Zone zone, Vector3 destination)
     {
-        Zone zone = bot.CurrentZone;
-        var nav = PathfindingProvider.Instance;
-        return zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) ? null : new(
+        return zone == null || region == null || !nav.IsAvailable || !nav.HasNavmesh(zone) ? null : new(
             (raw, range) =>
             {
                 if (range <= 128)
                     return AutonomousNavigationSurface.TryFloor(nav, zone, raw, out Vector3 floor) ? floor : null;
-                Vector3? wide = nav.GetClosestPoint(zone, raw, 64, 64, range, nav.DefaultFilters);
+                Vector3? wide = nav.GetClosestPoint(zone, raw, ViaFloorHorizontalRange, ViaFloorHorizontalRange,
+                    range, nav.DefaultFilters);
                 return wide is { } w && float.IsFinite(w.X) && float.IsFinite(w.Y) && float.IsFinite(w.Z) ? w : null;
             },
-            raw => bot.CurrentRegion.GetZone((int)raw.X, (int)raw.Y) == zone,
-            (from, to) => AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, from, to),
-            bot.CurrentRegion.GetZone((int)destination.X, (int)destination.Y) == zone);
+            raw => region.GetZone((int)raw.X, (int)raw.Y) == zone,
+            (from, to) => HasPathWithin(nav, zone, from, to, ViaPathDetourFactor),
+            region.GetZone((int)destination.X, (int)destination.Y) == zone);
+    }
+
+    /// <summary>Horizontal search box for a via-point's floor: enough to step
+    /// off a rock or tree hole, not enough to jump to another hillside.</summary>
+    public const float ViaFloorHorizontalRange = 192;
+    /// <summary>A via-point is accepted when the real path to it is at most
+    /// this many times the straight distance (plus a small allowance).</summary>
+    public const float ViaPathDetourFactor = 1.5f;
+    private const float ViaPathAllowance = 300;
+    private const int ViaPathSegments = 4;
+
+    /// <summary>
+    /// Whether a navmesh path from <paramref name="from"/> reaches
+    /// <paramref name="to"/> no longer than <paramref name="factor"/> times the
+    /// straight distance. Follows at most four partial Detour results, so one
+    /// check is a small, bounded number of native path queries.
+    /// </summary>
+    public static bool HasPathWithin(IPathfindingMgr nav, Zone zone, Vector3 from, Vector3 to, float factor)
+    {
+        float straight = Vector2.Distance(new(from.X, from.Y), new(to.X, to.Y));
+        float limit = straight * factor + ViaPathAllowance;
+        WrappedPathfindingNode[] nodes = System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Rent(512);
+        try
+        {
+            Vector3 current = from;
+            float length = 0;
+            for (int segment = 0; segment < ViaPathSegments; segment++)
+            {
+                PathfindingResult result = nav.GetPathStraight(zone, current, to, nav.DefaultFilters, nodes);
+                if (result.NodeCount < 1 || result.NodeCount > nodes.Length ||
+                    result.Status is not (PathfindingStatus.PathFound or PathfindingStatus.PartialPathFound))
+                    return false;
+                Vector3 previous = current;
+                for (int i = 0; i < result.NodeCount; i++)
+                {
+                    Vector3 node = nodes[i].Position;
+                    length += Vector2.Distance(new(previous.X, previous.Y), new(node.X, node.Y));
+                    previous = node;
+                }
+                if (length > limit)
+                    return false;
+                Vector3 last = nodes[result.NodeCount - 1].Position;
+                if (Vector3.DistanceSquared(last, to) <= 48 * 48)
+                    return true;
+                if (result.Status != PathfindingStatus.PartialPathFound || Vector3.DistanceSquared(last, current) < 1)
+                    return false;
+                current = last;
+            }
+            return false;
+        }
+        finally { System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Return(nodes); }
     }
 
     /// <summary>

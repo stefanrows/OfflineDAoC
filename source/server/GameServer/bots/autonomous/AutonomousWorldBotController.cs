@@ -2041,8 +2041,10 @@ namespace DOL.GS
             if (AutonomousRvrMobAvoidance.TryWalkBend(_rvrTravelWaypoint.Value, AvoidDangerousMobs(bot, _rvrTravelWaypoint.Value),
                     bend => IssuePath(bot, bend), DropMobBypass))
                 return true;
-            // ChooseRoute validates both legs when the final goal is in the
-            // same zone. Continue that existing route without a full AI wake.
+            // ChooseRoute checks the path to the via-point, and the second leg
+            // only when the goal is in the same zone and within 8 km; the
+            // navmesh is undirected, so a connected via-point reaches the rest.
+            // Continue that existing route without a full AI wake.
             // A changed goal or cross-zone route still needs its own planning.
             Vector3? continuation = _rvrTravelGoal == destination && _rvrTravelWaypoint.Value != destination &&
                 bot.CurrentZone != null &&
@@ -2109,7 +2111,7 @@ namespace DOL.GS
             Log.Info($"RVR_ROUTE_CHOSEN bot=\"{bot.Name}\" id={bot.DatabaseID} group_size={bot.Group?.MemberCount ?? 1} " +
                 $"doctrine={doctrine?.Kind.ToString() ?? "none"} variant={AutonomousRvrRoutePolicy.Label(requested)} " +
                 $"dest=\"{destination}\" leg_len={(int)choice.LegLength} via={(int)choice.Waypoint.X},{(int)choice.Waypoint.Y} " +
-                $"fallback={(choice.Fallback ? "true" : "false")}");
+                $"fallback={(choice.Fallback ? "true" : "false")} reason={choice.Reason}");
         }
 
         private void LogRoamPick(GameBot bot, CampDestination pick, string kind, double weight, int pool,
