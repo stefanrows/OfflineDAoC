@@ -3619,7 +3619,8 @@ namespace DOL.AI.Brain
                     (member.InCombat || member.IsAttacking))
                 .Select(member => member.TargetObject as GameLiving)
                 .Where(candidate => CanDefendAgainst(candidate) &&
-                    Body.IsWithinRadius(candidate, GROUP_DEFENSE_ASSIST_RADIUS))
+                    Body.IsWithinRadius(candidate, GROUP_DEFENSE_ASSIST_RADIUS) &&
+                    !CompanionAddControl.ProtectsMezz(BotBody, candidate))
                 .OrderBy(candidate => Body.GetDistanceTo(candidate))
                 .FirstOrDefault();
             if (target == null)

@@ -180,6 +180,30 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+68. **PvE wave 7: camp play.** Aaron, 2026-09-29 (P12 "the camp, not the
+    mob, is the unit of PvE", P13 "pull size follows control capacity";
+    docs/PVE_BOT_PLAY.md). Implemented in source; real-client check
+    pending. Autonomous world bots only: solo camp con by class (pet
+    casters and rooting casters orange, other casters yellow, melee and
+    hybrids yellow/blue, stealthers and Clerics/Healers blue); solo rest
+    after a fight to about 75 % power (casters) or 80 % health (melee)
+    instead of full; groups with a Sorcerer/Mentalist/Bard pull one mob
+    and mez adds nobody touches, groups with two or more pet classes
+    mass-pull up to min(6, 2 + pets) same-kind mobs outdoors (not after a
+    wipe); groups leave a camp after 3 minutes of a rival party that was
+    there first, when outgrown, after a wipe (15-minute memory), and walk
+    300-600 units away from threatening enemy-realm players (leave after
+    90 s of their presence). Check in `server-console.log`:
+    `PVE_PULL_STYLE group=... style=...` once per group at camp with a mix
+    of `mez_group`, `mass_pull` (pet groups only) and `single`;
+    `PVE_CAMP_LEAVE ... reason=...` with some `rival`, `outgrown` and
+    `wipe` but not a flood for the same camp; `PVE_REST window_s=600
+    rests=... avg_power_pct_at_pull=...` every ten minutes with power at
+    pull roughly 70-85 and health roughly 75-95. In game: a mez group's
+    mezzed add stays asleep until the first mob dies; a pet group brings
+    several mobs of the same kind at once, never through a wall; a Necromancer world bot hunts orange;
+    companions behave as before.
+
 66. **RvR wave 6: hub-band peace.** Aaron, 2026-09-29 ("you leave the door
     first, then you hunt"). Implemented in source; real-client check
     pending. Same-realm autonomous world bots cannot attack each other while

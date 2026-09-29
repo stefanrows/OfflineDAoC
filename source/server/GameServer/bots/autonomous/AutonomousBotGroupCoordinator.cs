@@ -505,6 +505,32 @@ public static partial class AutonomousBotGroupCoordinator
         }
     }
 
+    /// <summary>
+    /// Wave 7: the leader gives up the party's camp (rival at the spawn,
+    /// outgrown, enemy players). Same effect as a rejected route, with a
+    /// shorter memory; the task, roster and clock are kept.
+    /// </summary>
+    public static void LeaveCampByChoice(GameBot bot, string campId, string reason, long memoryMilliseconds)
+    {
+        if (AutonomousRealmRaid.GetView(bot?.Group) != null) return;
+        using (EnterSync())
+        {
+            if (bot?.Group == null || !TryGetSession(bot.Group, out Session session) || session.Camp?.Id != campId ||
+                session.ObjectiveKind != eAutonomousObjectiveKind.GroupPve ||
+                ChooseLeader(session, BotMembers(session.Group)) != bot)
+                return;
+            session.RejectedDungeonCamps[campId] = GameLoop.GameLoopTime + Math.Max(0, memoryMilliseconds);
+            session.Camp = null;
+            session.DungeonArrivalRegion = 0;
+            session.DungeonInteriorStagingPoint = default;
+            session.DungeonArrivalHoldUntilTick = 0;
+            session.DungeonArrivalCompletedCampId = string.Empty;
+            if (!session.Recovery.IsRegrouping && !IsAssemblyPhase(session.Phase))
+                SetWorkPhase(session, "Choosing group target");
+            WriteSessionMetadata(session, BotMembers(session.Group));
+        }
+    }
+
     public static void MarkGrinding(GameBot bot)
     {
         if (bot?.Group == null)
@@ -2114,6 +2140,14 @@ public static partial class AutonomousBotGroupCoordinator
                     members.Length, session.WipePenalty, session.Camp?.TargetLevel ?? 0)
                 : Math.Min(2, session.WipePenalty + 1);
             session.PreferredLevelBonus = RollPreferredLevelBonus(members.Length) - session.WipePenalty;
+            if (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve && session.Camp != null &&
+                AutonomousRealmRaid.GetView(session.Group) == null)
+            {
+                // Wave 7: a wiped party does not walk back into the same camp.
+                session.RejectedDungeonCamps[session.Camp.Id] =
+                    GameLoop.GameLoopTime + AutonomousPveCampWatch.ReturnMemoryMilliseconds;
+                Log.Info($"PVE_CAMP_LEAVE group={session.Id} reason=wipe camp={session.Camp.Id}");
+            }
             session.Camp = null;
             session.DungeonArrivalRegion = 0;
             session.DungeonInteriorStagingPoint = default;

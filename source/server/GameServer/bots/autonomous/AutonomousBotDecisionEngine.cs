@@ -217,7 +217,7 @@ public static class AutonomousBotDecisionEngine
     }
 
     public static Camp SelectWithinEnvironment(IEnumerable<Camp> camps, PveEnvironment environment,
-        Random random = null, bool preferEvenCon = false)
+        Random random = null, bool preferEvenCon = false, ConColor? preferredCon = null)
     {
         Camp[] choices = camps?.Where(camp => camp != null &&
             (environment == PveEnvironment.Dungeon ? camp.IsDungeon : !camp.IsDungeon)).ToArray()
@@ -228,7 +228,7 @@ public static class AutonomousBotDecisionEngine
         if (environment != PveEnvironment.Dungeon)
         {
             int[] weights = choices.Select(camp => OutdoorCampWeight(camp) *
-                (preferEvenCon ? SoloConWeight(camp.TypicalCon) : 1)).ToArray();
+                (preferEvenCon ? SoloConWeight(camp.TypicalCon, preferredCon) : 1)).ToArray();
             int outdoorDraw = random.Next(weights.Sum());
             for (int index = 0; index < choices.Length; index++)
             {
@@ -271,7 +271,7 @@ public static class AutonomousBotDecisionEngine
     // minutes (then twenty) of the bot, weighted by travel time below; only
     // when nothing legal is that close may a camp across the world win.
     public static Camp SelectLevelingCamp(IEnumerable<Camp> camps, ushort currentRegion,
-        string currentZone, eRealm homeRealm, int level, Random random = null)
+        string currentZone, eRealm homeRealm, int level, Random random = null, ConColor? preferredCon = null)
     {
         Camp[] choices = camps?.Where(camp => camp != null).ToArray() ?? [];
         if (choices.Length == 0) return null;
@@ -290,7 +290,7 @@ public static class AutonomousBotDecisionEngine
         if (environment == PveEnvironment.Dungeon)
             return SelectWithinEnvironment(environmentPool, environment, random);
         double[] weights = environmentPool.Select(camp =>
-            OutdoorCampWeight(camp) * SoloConWeight(camp.TypicalCon) *
+            OutdoorCampWeight(camp) * SoloConWeight(camp.TypicalCon, preferredCon) *
             (camp.IsDungeon ? 1d : 1d / (1d + Math.Max(0, camp.TravelMinutes) / 5d)) *
             (camp.RegionId == currentRegion ? 2d : 1d) *
             (string.Equals(camp.ZoneName, currentZone, StringComparison.OrdinalIgnoreCase) ? 1.5d : 1d)).ToArray();
@@ -309,6 +309,10 @@ public static class AutonomousBotDecisionEngine
     /// </summary>
     public static int SoloConWeight(ConColor typicalCon) =>
         typicalCon is ConColor.BLUE or ConColor.YELLOW ? 2 : 1;
+
+    /// <summary>Wave 7: the soloer's archetype con when known (AutonomousPveArchetype).</summary>
+    public static int SoloConWeight(ConColor typicalCon, ConColor? preferredCon) =>
+        preferredCon.HasValue ? AutonomousPveArchetype.ConWeight(typicalCon, preferredCon.Value) : SoloConWeight(typicalCon);
 
     /// <summary>
     /// Camps that justify leaving the current one after the con ceiling
