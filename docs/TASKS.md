@@ -186,6 +186,7 @@ Agent sessions on items 45–48: take the role and context from
     together at song speed, its Skald/Minstrel/Bard sings speed while it
     moves, a straggler catches up at a sprint, the leader briefly stops for
     one far behind; companions and player-led groups behave as before.
+    Live log 0.157.1 (2026-09-29 18:41–20:04): speed class in 14 of 23 groups of 5+ (20 of 45 overall); travel_under_speed_pct averages about 30 (0–58), up from 6–12 but below the 50+ target. Stays pending.
 
 68. **PvE wave 7: camp play.** Aaron, 2026-09-29 (P12 "the camp, not the
     mob, is the unit of PvE", P13 "pull size follows control capacity";
@@ -210,6 +211,7 @@ Agent sessions on items 45–48: take the role and context from
     mezzed add stays asleep until the first mob dies; a pet group brings
     several mobs of the same kind at once, never through a wall; a Necromancer world bot hunts orange;
     companions behave as before.
+    Live log 0.157.1 (2026-09-29 18:41–20:04): pull styles mixed (25 single, 21 mez_group, 7 mass_pull), but PVE_REST shows power 93–97 % at pull (target 70–85) and camps are left only after wipe/enemy, never rival/outgrown. Follow-up in BUGS.md 72. Stays pending.
 
 67. **RvR wave 5: stealther loop, assist discipline, interrupts.** Aaron,
     2026-09-29 (P9, P4, P10, P11). Implemented in source; real-client check
@@ -233,8 +235,110 @@ Agent sessions on items 45–48: take the role and context from
     (`AUTONOMOUS_BOT_DEATH killer_class`) above the 6.2 % baseline; in game
     an Infiltrator/Shadowblade/Nightshade bot is invisible while it roams;
     companions unchanged.
+    Live log 0.157.1 (2026-09-29 18:41–20:04): stealth opens only on lone targets and breaks mostly within 30 s, but assassins scored 2.7 % of PvP kills, below the 6.2 % baseline; RVR_ASSIST_SWITCH logged only 4 windows. Follow-up in BUGS.md 71. Stays pending.
 
-66. **RvR wave 6: hub-band peace.** Aaron, 2026-09-29 ("you leave the door
+65. **RvR wave 4: support by spec.** Aaron, 2026-09-29 (P1 "roles are
+    fluid by spec", P8 "support jobs before the assist train"). Implemented
+    in source; real-client check pending. Autonomous RvR groups only: smite
+    Cleric and nature Druid attack the leader's target only behind a second
+    heal-spec healer within 2,000 who can cast, group at 70-80 % or more,
+    no cure needed, own power 50 % or more, and not in the 30 % of fights where they stay on heals;
+    pac Healer and cave Shaman CC a group mate's attacker before healing
+    unless a mate is below 40 %; Healer area stun for autonomous bomb groups;
+    grouped autonomous Bards never melee. Check in `server-console.log`:
+    `RVR_SUPPORT_OFFENSE window_s=... offense=... control=... heal_only=...
+    by_class=...` about every five minutes while RvR groups fight, with
+    `heal_only` well above `offense`, `Cleric:`/`Druid:` offense only in
+    bigger groups, `Healer:`/`Shaman:` mostly control; `RVR_HEALER_AREA_STUN
+    casts=...` only when a bomb group fought; no smiting Cleric in a group
+    with one healer, no Bard in melee, companions unchanged.
+    Live log 0.157.1 (2026-09-29 18:41–20:04): heal_only dominates, Healer/Shaman control appears, smite Cleric/nature Druid offense never fired (0). Bard melee is not in the log; in-game check pending.
+
+63. **RvR wave 2: danger memory, rest after a fight, retreat with a
+    destination.** Aaron, 2026-09-29 (P5-P7). Source 0.147.0: the group
+    leader's guild (or the guildless leader) remembers for 60 minutes where it died or retreated
+    (1,500-unit cells, at most 24) and weighs roam picks and fight heat there
+    by the leader (careful 0.2-0.5, bold 1.3 only with one more member than it
+    lost, else 0.6); revenge hunts need two thirds of the lost group size;
+    cover routes avoid the worst remembered place. A roaming RvR group sits
+    after a fight (leader quiet 8 s, anyone dead or below 70 %) until 90 % or
+    a 60-300 s cap (Patience and a +-15 % roll), first moving 600-1,200 off the
+    road; stealth doctrines hide again, relic escorts never sit. A PvP retreat
+    runs toward the nearest border hub or landing in the zone or a passable
+    keep (else the last roam spot) and forces a new destination afterwards.
+    Installation and live check pending, from `server-console.log`:
+    `RVR_DANGER_RECORD` after RvR deaths (at most one per cell per minute);
+    `RVR_ROAM_PICK ... danger_factor=` below 1 for careful groups near their
+    loss places; `RVR_GROUP_PAUSE ... reason=rest|after_retreat` followed by
+    `RVR_GROUP_PAUSE_END ... reason=recovered` in most cases, `cap` or
+    `attacked` sometimes (`relic` when a member picks one up), and no group standing still for more than five
+    minutes; `RVR_RETREAT ... anchor=hub|keep|waypoint` more often than
+    `anchor=away`, followed by a fresh `RVR_ROAM_PICK`; `RVR_GRUDGE_GATE` when a
+    small group skips a revenge trip.
+    Live log 0.157.1 (2026-09-29 18:41–20:04): rest pauses end recovered 18 of 22 (longest ~5 min) as expected, but 62 of 77 retreats use anchor=away instead of hub/keep and only 7 of 1,193 roam picks carry danger_factor below 1. Stays pending.
+
+61. **Refresh the PvP & Co-op startup splash.** Source 0.144.0 adds an original
+    breached-milegate battle with a mixed-realm party defending against a
+    rival guild. The 2880×2160 master and 800×600 preview include a short
+    description of rival guilds, besieged keeps and allies; the client archive
+    keeps eight uncompressed 1024×768 TGA frames under the legacy internal
+    name. Offline extraction and image checks passed. Installation and
+    real-client check pending: confirm the new image appears during startup,
+    text is readable at the active resolution, and no black splash occurs.
+
+
+## Finished
+
+62. **Done — RvR wave 1: hub fan, departure truce, route variety.** Aaron,
+    2026-09-29 (P3, "you leave the door before you hunt"). Source 0.146.0:
+    a group leader or solo RvR bot leaving its own border hub first walks to
+    a random point 1,000-2,500 units beyond the safe circle it leaves (keep or
+    outer bindstone landing; within 120 degrees of its goal);
+    each new destination rolls a road, flank or cover route by doctrine
+    (keep assaults and siege rallies unchanged); a departing bot (outside the
+    safe hub, at most 2,500 units beyond the circle it left, left it under
+    180 s ago)
+    does not open a fight on a same-realm autonomous bot that is departing
+    too; retaliation stays allowed. Installation and live check pending, from
+    `server-console.log`: `RVR_ROUTE_CHOSEN` shows `variant=hub_fan` for hub
+    exits with mostly `fallback=false` and varied `via=` points;
+    `RVR_HUB_TRUCE` appears at Svasud/Sauvage/Druim Ligen; `RVR_ROAM_PICK`
+    and `RVR_RETREAT` are logged; the share of RvR PvP deaths 3,500-4,500
+    from Svasud Faste's centre falls clearly below the 34 % baseline, and
+    groups still reach the frontier (no stuck fan points).
+    Source 0.147.0 fix after the first live run (about 90 % of off-road
+    via-points fell back): `RVR_ROUTE_CHOSEN` now carries
+    `reason=short_leg|no_nav|no_hub|zone|floor|corridor_a|corridor_b|budget|none`.
+    Check that `fallback=true` drops to roughly 20-30 % of flank, cover and
+    road lines, not counting `reason=short_leg`, and that most remaining
+    reasons are `corridor_a` from bots standing inside a keep.
+    Live log 0.157.1 (2026-09-29 18:41–20:04): 65 hub-fan exits; flank/cover/road via-points fall back in 19 % (target 20–30 %). Done: accepted from the live log.
+
+64. **Done — RvR wave 3: observe before engaging.** Aaron, 2026-09-29 (P2, "let
+    the battle develop a moment before showing your hand"). Source 0.148.0:
+    a roaming RvR leader or solo RvR bot that sees two or more enemy parties
+    (two or more members, or fighting other players) or a running fight
+    within 5,000, with nobody in its group fighting, holds 2,200-2,600 from
+    the nearest enemy and decides every 3 s: engage when appetite accepts,
+    add at 3 of 8 seen dead (2 bold, 1 when clearly bigger), push on a
+    mezzer (Aggression above 55), take a straggler (small doctrines), leave
+    when charged, flanked or seen, else move on after 30-110 s (Patience);
+    15 % of holds break the rule. Installation and live check pending, from
+    `server-console.log`: `RVR_OBSERVE group=... doctrine=... parties=...
+    fight_ongoing=... nearest=... ours=...` near busy fights (not at the hub
+    edge, not for keep raids or relic escorts), each followed within about
+    two and a half minutes by one `RVR_OBSERVE_DECISION ... decision=...`
+    with a mix of `third_party`, `leave`, `roam_on` and `attacked`, and
+    `straggler` only for small groups; `third_party` mostly with
+    `enemy_down=` at or above 3 of 8 (2 for `bold=true`); a `leave` followed
+    by `RVR_RETREAT ... reason=observe_leave`; no group standing still for
+    more than 150 s while it watches; groups no longer walking straight into
+    a fight they declined; no `RVR_OBSERVE` right after a won fight against a
+    fleeing lone survivor; `RVR_DANGER_RECORD` after an observe leave only
+    when it was charged, flanked or seen.
+    Live log 0.157.1 (2026-09-29 18:41–20:04): 229 decisions (107 roam_on, 52 leave, 45 attacked, 16 third_party, 6 straggler); one hold over 150 s. third_party mostly against 0/1 seen enemies, not after 3 of 8 down. Done: accepted from the live log.
+
+66. **Done — RvR wave 6: hub-band peace.** Aaron, 2026-09-29 ("you leave the door
     first, then you hunt"). Implemented in source; real-client check
     pending. Same-realm autonomous world bots cannot attack each other while
     either stands within 6,000 of its own border hub's keep centre (or
@@ -258,102 +362,7 @@ Agent sessions on items 45–48: take the role and context from
     bot PvP deaths; `RVR_HUB_PEACE ... by_rule=band:...,recent:...` shows
     both counts non-zero while groups leave the hubs; same-realm fights
     still happen out on the frontier after the first minutes.
-
-65. **RvR wave 4: support by spec.** Aaron, 2026-09-29 (P1 "roles are
-    fluid by spec", P8 "support jobs before the assist train"). Implemented
-    in source; real-client check pending. Autonomous RvR groups only: smite
-    Cleric and nature Druid attack the leader's target only behind a second
-    heal-spec healer within 2,000 who can cast, group at 70-80 % or more,
-    no cure needed, own power 50 % or more, and not in the 30 % of fights where they stay on heals;
-    pac Healer and cave Shaman CC a group mate's attacker before healing
-    unless a mate is below 40 %; Healer area stun for autonomous bomb groups;
-    grouped autonomous Bards never melee. Check in `server-console.log`:
-    `RVR_SUPPORT_OFFENSE window_s=... offense=... control=... heal_only=...
-    by_class=...` about every five minutes while RvR groups fight, with
-    `heal_only` well above `offense`, `Cleric:`/`Druid:` offense only in
-    bigger groups, `Healer:`/`Shaman:` mostly control; `RVR_HEALER_AREA_STUN
-    casts=...` only when a bomb group fought; no smiting Cleric in a group
-    with one healer, no Bard in melee, companions unchanged.
-
-64. **RvR wave 3: observe before engaging.** Aaron, 2026-09-29 (P2, "let
-    the battle develop a moment before showing your hand"). Source 0.148.0:
-    a roaming RvR leader or solo RvR bot that sees two or more enemy parties
-    (two or more members, or fighting other players) or a running fight
-    within 5,000, with nobody in its group fighting, holds 2,200-2,600 from
-    the nearest enemy and decides every 3 s: engage when appetite accepts,
-    add at 3 of 8 seen dead (2 bold, 1 when clearly bigger), push on a
-    mezzer (Aggression above 55), take a straggler (small doctrines), leave
-    when charged, flanked or seen, else move on after 30-110 s (Patience);
-    15 % of holds break the rule. Installation and live check pending, from
-    `server-console.log`: `RVR_OBSERVE group=... doctrine=... parties=...
-    fight_ongoing=... nearest=... ours=...` near busy fights (not at the hub
-    edge, not for keep raids or relic escorts), each followed within about
-    two and a half minutes by one `RVR_OBSERVE_DECISION ... decision=...`
-    with a mix of `third_party`, `leave`, `roam_on` and `attacked`, and
-    `straggler` only for small groups; `third_party` mostly with
-    `enemy_down=` at or above 3 of 8 (2 for `bold=true`); a `leave` followed
-    by `RVR_RETREAT ... reason=observe_leave`; no group standing still for
-    more than 150 s while it watches; groups no longer walking straight into
-    a fight they declined; no `RVR_OBSERVE` right after a won fight against a
-    fleeing lone survivor; `RVR_DANGER_RECORD` after an observe leave only
-    when it was charged, flanked or seen.
-
-63. **RvR wave 2: danger memory, rest after a fight, retreat with a
-    destination.** Aaron, 2026-09-29 (P5-P7). Source 0.147.0: the group
-    leader's guild (or the guildless leader) remembers for 60 minutes where it died or retreated
-    (1,500-unit cells, at most 24) and weighs roam picks and fight heat there
-    by the leader (careful 0.2-0.5, bold 1.3 only with one more member than it
-    lost, else 0.6); revenge hunts need two thirds of the lost group size;
-    cover routes avoid the worst remembered place. A roaming RvR group sits
-    after a fight (leader quiet 8 s, anyone dead or below 70 %) until 90 % or
-    a 60-300 s cap (Patience and a +-15 % roll), first moving 600-1,200 off the
-    road; stealth doctrines hide again, relic escorts never sit. A PvP retreat
-    runs toward the nearest border hub or landing in the zone or a passable
-    keep (else the last roam spot) and forces a new destination afterwards.
-    Installation and live check pending, from `server-console.log`:
-    `RVR_DANGER_RECORD` after RvR deaths (at most one per cell per minute);
-    `RVR_ROAM_PICK ... danger_factor=` below 1 for careful groups near their
-    loss places; `RVR_GROUP_PAUSE ... reason=rest|after_retreat` followed by
-    `RVR_GROUP_PAUSE_END ... reason=recovered` in most cases, `cap` or
-    `attacked` sometimes (`relic` when a member picks one up), and no group standing still for more than five
-    minutes; `RVR_RETREAT ... anchor=hub|keep|waypoint` more often than
-    `anchor=away`, followed by a fresh `RVR_ROAM_PICK`; `RVR_GRUDGE_GATE` when a
-    small group skips a revenge trip.
-
-62. **RvR wave 1: hub fan, departure truce, route variety.** Aaron,
-    2026-09-29 (P3, "you leave the door before you hunt"). Source 0.146.0:
-    a group leader or solo RvR bot leaving its own border hub first walks to
-    a random point 1,000-2,500 units beyond the safe circle it leaves (keep or
-    outer bindstone landing; within 120 degrees of its goal);
-    each new destination rolls a road, flank or cover route by doctrine
-    (keep assaults and siege rallies unchanged); a departing bot (outside the
-    safe hub, at most 2,500 units beyond the circle it left, left it under
-    180 s ago)
-    does not open a fight on a same-realm autonomous bot that is departing
-    too; retaliation stays allowed. Installation and live check pending, from
-    `server-console.log`: `RVR_ROUTE_CHOSEN` shows `variant=hub_fan` for hub
-    exits with mostly `fallback=false` and varied `via=` points;
-    `RVR_HUB_TRUCE` appears at Svasud/Sauvage/Druim Ligen; `RVR_ROAM_PICK`
-    and `RVR_RETREAT` are logged; the share of RvR PvP deaths 3,500-4,500
-    from Svasud Faste's centre falls clearly below the 34 % baseline, and
-    groups still reach the frontier (no stuck fan points).
-    Source 0.147.0 fix after the first live run (about 90 % of off-road
-    via-points fell back): `RVR_ROUTE_CHOSEN` now carries
-    `reason=short_leg|no_nav|no_hub|zone|floor|corridor_a|corridor_b|budget|none`.
-    Check that `fallback=true` drops to roughly 20-30 % of flank, cover and
-    road lines, not counting `reason=short_leg`, and that most remaining
-    reasons are `corridor_a` from bots standing inside a keep.
-
-61. **Refresh the PvP & Co-op startup splash.** Source 0.144.0 adds an original
-    breached-milegate battle with a mixed-realm party defending against a
-    rival guild. The 2880×2160 master and 800×600 preview include a short
-    description of rival guilds, besieged keeps and allies; the client archive
-    keeps eight uncompressed 1024×768 TGA frames under the legacy internal
-    name. Offline extraction and image checks passed. Installation and
-    real-client check pending: confirm the new image appears during startup,
-    text is readable at the active resolution, and no black splash occurs.
-
-## Finished
+    Live log 0.157.1 (2026-09-29 18:41–20:04): 0 RvR bot PvP deaths in the Svasud cell (was 42 %); no cell near a hub above 10 %. Largest hotspot moved to Vale of Mularn (155 of those kills by the owner's own character). Done: accepted from the live log.
 
 Bulk close on 2026-09-29 (0.157.2): entries ending in "Closed 2026-09-29
 as accepted through use" were implemented in source 0.61.0–0.143.0 and have

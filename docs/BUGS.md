@@ -6,6 +6,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+72. **PvE world bots still rest to near full before pulling.** Live log
+    0.157.1, 2026-09-29 18:41–20:04, task 68: every `PVE_REST` window shows
+    93–97 % power and 96–99 % health at pull (target 70–85 % power for
+    casters, 80 % health for melee); `PVE_CAMP_LEAVE` gives only `wipe` (11)
+    and `enemy` (3), never `rival` or `outgrown`. Expected: solo bots stop
+    resting at the class threshold; groups leave outgrown or contested camps.
+    Not yet investigated (rest threshold may not reach the regen/sit path).
+
+71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
+    2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
+    `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
+    Nightshade scored 39 of 1,419 PvP kills (2.7 %), below the 6.2 %
+    baseline. `RVR_ASSIST_SWITCH` appeared in only 4 five-minute windows.
+    Expected: assassin share at or above the baseline. Not yet investigated.
+
 70. **Launcher shows a .NET exception dialog "The given key was not present in
     the dictionary" after the 0.151.0 deploy.** Aaron, 2026-09-29 ~14:15, first
     launcher run of the 0.145.1+ launcher build (Stefan's PvP & Co-op naming and

@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.157.3] - 2026-09-29
+
+### Added
+
+- `docs/BUGS.md` 71 (RvR stealthers kill less than before wave 5) and 72
+  (PvE world bots still rest to near full) from the 0.157.1 live log.
+
+### Changed
+
+- `docs/TASKS.md`: tasks 62, 64 and 66 finished on the 0.157.1 live log;
+  tasks 63, 65, 67, 68 and 69 carry their live-log result and stay pending.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.157.2] - 2026-09-29
 
 ### Added
