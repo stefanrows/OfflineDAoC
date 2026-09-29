@@ -230,8 +230,9 @@ namespace DOL.GS.ServerRules
 		/// <summary>
 		/// Damage-time guard for every autonomous-PvP block that must hold even
 		/// where an attack path skips the normal target check: sub-10 safety
-		/// and the hub-band peace between same-realm autonomous world bots
-		/// (wave 6; PvPServerRules checks the peace after its alliance check).
+		/// and the hub peace between same-realm autonomous world bots (wave 6
+		/// band, wave 6b eight-minute departure clock; PvPServerRules checks
+		/// the peace after its alliance check).
 		/// TakeDamage and OnAttackedByEnemy ask it so a DoT, a projectile in
 		/// flight or a bypassing path neither hurts nor starts a retaliation.
 		/// Only TakeDamage passes <paramref name="countStray"/>, so one stopped

@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.153.0] - 2026-09-29
+
+### Changed
+
+- The hub peace between same-realm world bots now also holds for eight
+  minutes after either bot left its own hub's safe circle, wherever it is,
+  and the keep band grows from 6,000 to 7,500 around the keep centre (outer
+  bindstone landings unchanged). A bot that walks back into a safe circle
+  loses its clock; one never seen inside has none. Reason: in the 0.152.0
+  live log (one hour) the grinder moved to the band edge, a cell in Forest
+  Sauvage 6.3 km from Castle Sauvage held 316 deaths (18 % of RvR bot
+  deaths), all Albion killed by Albion: groups leaving the hub a few
+  minutes apart met just outside 6,000. Humans, companions, player-led
+  groups and other realms are unaffected, as before.
+- `RVR_HUB_PEACE` adds `by_rule=band:<n>,recent:<n>`, splitting the refused
+  attack checks between the band and the departure clock.
+
 ## [0.152.0] - 2026-09-29
 
 ### Changed

@@ -172,6 +172,16 @@ for a fight; nobody fought at their own door. Two rules do that here
   `RVR_HUB_PEACE` counts refused attack checks per hub every five minutes
   (`stray` = hits stopped at damage time), and the engage summary's
   `hub_band=` counts new fights that still start inside a band.
+- **Departure clock and wider band (0.153.0).** The 0.152.0 live log moved
+  the grinder to the band edge: 316 deaths (18 %) in one Forest Sauvage cell
+  6.3 km from Castle Sauvage, Albion on Albion only. The peace now also
+  holds while *either* bot left its own hub's safe circle (keep circle or
+  bindstone landing) less than eight minutes ago, wherever it stands: groups
+  that leave the same door within minutes of each other are one wave that
+  travels out before it hunts. The keep band grows to 7,500 (landings keep
+  radius + 2,500). Walking back into a safe circle clears the clock; a bot
+  never seen inside has none. This is a rule, not a personality habit.
+  `RVR_HUB_PEACE` adds `by_rule=band:<n>,recent:<n>`.
 
 **Route variants.** Each new destination rolls one route: *road* (the
 straight way), *flank* (one via-point 1,200-2,400 to the side at 40-60 % of

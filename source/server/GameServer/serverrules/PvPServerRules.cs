@@ -148,12 +148,14 @@ namespace DOL.GS.ServerRules
 					return false;
 				}
 
-				// Hub-band peace between same-realm autonomous world bots (wave 6),
-				// after the alliance check so group AoE and aggro scans over
-				// groupmates are neither refused twice nor counted.
-				if (!duel && AutonomousHubDeparture.HubPeaceApplies(attacker, defender, out eRealm peaceRealm))
+				// Hub-band peace between same-realm autonomous world bots (wave 6,
+				// plus the 8-minute departure clock of wave 6b), after the alliance
+				// check so group AoE and aggro scans over groupmates are neither
+				// refused twice nor counted.
+				if (!duel && AutonomousHubDeparture.HubPeaceApplies(attacker, defender, out eRealm peaceRealm,
+					out AutonomousHubDeparture.HubPeaceRule peaceRule))
 				{
-					AutonomousHubDeparture.CountPeaceBlocked(peaceRealm, false);
+					AutonomousHubDeparture.CountPeaceBlocked(peaceRealm, false, peaceRule);
 					return false;
 				}
 
