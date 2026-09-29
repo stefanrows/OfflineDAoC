@@ -182,6 +182,49 @@ everyone else 50/30/20. A cautious leader (RiskTolerance below 40) moves a
 fifth of the chances to cover. Keep assaults and siege rallies keep their
 straight approach. Legs under 3,500 units are walked directly.
 
+## Speed and travel
+
+Evidence (P6, thinking/GROUP_PLAY.md): every 2003 8-man had an "essential
+speed class", kept speed up by twisting songs while travelling, and groups
+without speed ("speed 4") stayed near keeps and milegates. Autonomous RvR
+world bots only (0.154.0); companions and player-led groups are unchanged.
+
+- **Recruiting speed.** When a group of three or more forms or backfills
+  and has no Bard, Skald or Minstrel, a speed class gets a strong weight
+  (3): after a missing healer (4), before a missing tank (1); a Healer who
+  knows the augmentation group speed is the fallback (weight 1). It is not a requirement: the
+  group still leaves under the form-up wait rules above.
+- **Speed while travelling.** While the group travels out of combat (roam
+  legs, hub fan, regroup, moving to a spot) the performer sings only its
+  speed, a Bard twisting endurance with it; parked it keeps its usual
+  songs; in combat no speed. A Healer who is the group's speed stops once
+  on the march to start its pulse (other cast-time buffs still wait for a
+  stop). A bot walking an order picks up a new max speed at once (song,
+  sprint, stealth) instead of keeping the order's old speed.
+- **One body.** Before each roam leg the leader checks its members (alive,
+  same region, within 4,000; farther ones are rejoining). If one is more
+  than 1,200 behind out of combat it stands until everyone is within 600,
+  at most about 6 s, then walks about 10 s before it waits again (both
+  ±25 %); after three waits for the same member that did not close up it
+  walks on without it until that member catches up. Keep
+  assaults, siege rallies and retreats do not wait. Members sprint to
+  close a gap of more than 150 to their slot while they have 20 %
+  endurance (stop at 80 or 10 %); a world bot's sprint is +30 % like a
+  player's. A member ahead of its leader never runs faster than the
+  leader.
+- **No walking pace.** RvR bots keep full speed below a third of health
+  (the monster slow-down does not apply to them) and never use the
+  on-foot habit after a PvE release.
+- **No-speed habit.** A group of three or more without speed weights
+  roaming spots within 8,000 of a keep, tower or border hub by 1.35 and
+  others by 0.8.
+
+`RVR_SPEED_STATE group=<id> speed_class=<class|none> members=<n>` is logged
+when a group sets out; every five minutes `RVR_SPEED_TRAVEL window_s=300
+groups=n with_speed=n travel_under_speed_pct=n leader_holds=n` (leader
+travel sampled every 2 s; `travel_under_speed_pct` is the share of samples
+with a speed buff on the leader).
+
 ## Observe before engaging
 
 Evidence: "let the battle develop a moment before showing your hand"; the

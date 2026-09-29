@@ -139,7 +139,11 @@ namespace DOL.GS.PropertyCalc
 
                 double healthPercent = living.Health / (double) living.MaxHealth;
 
-                if (healthPercent < 0.33)
+                // A player does not slow down when hurt; neither does an
+                // autonomous RvR world bot (companions keep the monster rule).
+                if (healthPercent < 0.33 && !(living is GameBot hurtBot &&
+                        AutonomousRvrSpeed.KeepsPaceAtLowHealth(hurtBot.IsAutonomousWorldBot, hurtBot.IsPlayerLedGroup,
+                            AutonomousObjectiveAssignments.Is(hurtBot, eAutonomousObjectiveKind.RvR))))
                     speedIncrease *= 0.2 + healthPercent * (0.8 / 0.33); // 33% HP = full speed, 0% HP = 20% speed
             }
 
@@ -153,6 +157,12 @@ namespace DOL.GS.PropertyCalc
 
             if (living is GameBot && GameRelic.IsPlayerCarryingRelic(living))
                 speedIncrease = Math.Min(speedIncrease, 1.0);
+
+            // An autonomous world bot's sprint is as fast as a player's (+30 %),
+            // applied after the relic cap in the same order as the player path
+            // above; companions keep their old stick pace.
+            if (living is GameBot { IsAutonomousWorldBot: true, IsPlayerLedGroup: false, IsSprinting: true })
+                speedIncrease *= SPRINT;
             return (int) Math.Round(maxSpeedBase * speedIncrease);
         }
     }

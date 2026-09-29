@@ -87,6 +87,27 @@ namespace DOL.GS
                 !members.Any(member => member.CharacterClass != null && BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID)),
                 !members.Any(member => member.CharacterClass != null && BotPartyRoles.For((eCharacterClass)member.CharacterClass.ID) == BotPartyRole.Tank));
 
+        /// <summary>
+        /// RvR recruitment order (lower first): a missing healer first (4),
+        /// then a speed class when a group of three or more has none (3, P6),
+        /// then a missing tank (1). A Healer with the augmentation speed counts
+        /// as the fallback speed. A weight only: the group still leaves without one.
+        /// </summary>
+        private static int RvrRecruitmentPriority(IReadOnlyCollection<GameBot> members, GameBot candidate, int plannedSize)
+        {
+            if (candidate?.CharacterClass == null)
+                return 0;
+            eCharacterClass candidateClass = (eCharacterClass)candidate.CharacterClass.ID;
+            bool candidateKnowsSpeed = candidateClass == eCharacterClass.Healer && AutonomousRvrSpeed.KnowsGroupSpeed(candidate);
+            return -AutonomousRvrSpeed.RvrRecruitmentWeight(
+                BotPartyRoles.IsHealingClass(candidateClass),
+                !members.Any(member => member.CharacterClass != null && BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID)),
+                BotPartyRoles.For(candidateClass) == BotPartyRole.Tank,
+                !members.Any(member => member.CharacterClass != null && BotPartyRoles.For((eCharacterClass)member.CharacterClass.ID) == BotPartyRole.Tank),
+                AutonomousRvrSpeed.RecruitmentSpeedBonus(candidateClass, candidateKnowsSpeed,
+                    AutonomousRvrSpeed.HasSpeed(members), plannedSize));
+        }
+
         private static bool CanReachRecruitmentPoint(GameBot candidate, ushort region, Vector3 point)
         {
             if (candidate.InCombat || candidate.IsAttacking || candidate.IsOnStableMasterRoute)
@@ -135,7 +156,9 @@ namespace DOL.GS
                     if (availableSlots <= 0 || members.Length >= maximum || probes >= 8) break;
                     // Re-evaluate missing roles after each addition, so filling
                     // healing does not keep every healer ahead of the missing tank.
-                    GameBot candidate = candidates.OrderBy(candidate => RecruitmentRolePriority(members, candidate)).First();
+                    GameBot candidate = candidates.OrderBy(candidate => session.ObjectiveKind == eAutonomousObjectiveKind.RvR
+                        ? RvrRecruitmentPriority(members, candidate, maximum)
+                        : RecruitmentRolePriority(members, candidate)).First();
                     candidates.Remove(candidate);
                     probes++;
                     attempted++;

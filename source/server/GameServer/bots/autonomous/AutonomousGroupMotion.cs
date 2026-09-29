@@ -117,7 +117,19 @@ public static class AutonomousGroupMotion
         float distance = Vector3.Distance(new Vector3(bot.X, bot.Y, bot.Z), slot);
         long key = bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID;
         short speed = FollowSpeed(key, Math.Max(leader.CurrentSpeed, (short)1), bot.MaxSpeed, distance);
+        // An RvR member under a speed song never runs past its leader.
+        if (AutonomousRvrDoctrineRuntime.Applies(bot))
+            speed = AutonomousRvrSpeed.CapFollowerSpeed(speed, leader.CurrentSpeed, IsAhead(bot, leader));
         if (ShouldResteer(bot, slot, speed, GameLoop.GameLoopTime))
             bot.PathTo(slot, speed);
+    }
+
+    /// <summary>The bot stands in front of the leader along the leader's heading.</summary>
+    private static bool IsAhead(GameLiving bot, GameLiving leader)
+    {
+        Point2D ahead = leader.GetPointFromHeading(leader.Heading, 100);
+        Vector2 forward = new(ahead.X - leader.X, ahead.Y - leader.Y);
+        Vector2 offset = new(bot.X - leader.X, bot.Y - leader.Y);
+        return Vector2.Dot(forward, offset) > 0;
     }
 }

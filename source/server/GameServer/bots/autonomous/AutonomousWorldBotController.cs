@@ -1406,6 +1406,9 @@ namespace DOL.GS
             // Aim around where the leader is about to be, not where it was.
             Vector3 formation = AutonomousBotGroupCoordinator.FormationPoint(bot,
                 leader.IsMoving && !tight ? AutonomousGroupMotion.PredictLeader(leader) : new(leader.X, leader.Y, leader.Z), tight);
+            // An RvR member sprints to close a gap to its slot (P6).
+            if (directive.ObjectiveKind == eAutonomousObjectiveKind.RvR && bot.CurrentRegionID == leader.CurrentRegionID)
+                AutonomousRvrSpeed.UpdateFollowerSprint(bot, Vector3.Distance(new(bot.X, bot.Y, bot.Z), formation));
             if (bot.CurrentRegionID != leader.CurrentRegionID)
             {
                 // Never teleport a persistent group member to catch its leader.
@@ -1454,6 +1457,8 @@ namespace DOL.GS
         {
             using var profile = BotThinkProfiler.Measure(BotThinkPhase.ExecuteRvr);
             PvpCombatant.RelinquishOptionalSafety(bot);
+            // The on-foot habit after a PvE release never carries into RvR.
+            _walkToCampAfterRelease = false;
             KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
                 .FirstOrDefault(point => point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null);
             if (claimPoint != null && bot.Guild != null && !bot.InCombat &&
@@ -1534,6 +1539,7 @@ namespace DOL.GS
             {
                 bot.StopMovingOnPath();
                 bot.StopMoving();
+                AutonomousRvrSpeed.EndSprintForCombat(bot);
                 bot.TargetObject = enemy;
                 AutonomousBotGroupCoordinator.MarkCombatObserved(bot.Group);
                 brain.AddToAggroList(enemy, Math.Max(100, enemy.EffectiveLevel * 12));
@@ -1701,6 +1707,22 @@ namespace DOL.GS
                 if (Vector2.DistanceSquared(new(bot.X,bot.Y),new(defendedKeep.X,defendedKeep.Y))>3500*3500)
                     return TravelToDefensivePost(bot,defendedKeep,new(defendedKeep.X,defendedKeep.Y,defendedKeep.Z));
                 return HoldDefensiveKeepPost(bot, defendedKeep);
+            }
+            // A roaming group moves as one body (P6): before a roam leg the
+            // leader waits a few seconds for a member more than 1,200 behind.
+            // Keep assaults, siege rallies and defense do not wait.
+            if (dynamicWarband && _groupDirective.Leader == bot && !_rvrSharedEvent &&
+                Vector2.Distance(new(bot.X, bot.Y), new(destination.X, destination.Y)) > 650)
+            {
+                if (AutonomousRvrSpeed.ShouldLeaderHold(bot))
+                {
+                    bot.StopMovingOnPath();
+                    bot.StopMoving();
+                    SetRvrStatus(bot, "Waiting for the group", "Roam active frontier keeps, relic routes, and enemy forces",
+                        "A member fell behind; the group closes up before moving on", _rvrDestination.MonsterName);
+                    return true;
+                }
+                AutonomousRvrSpeed.NoteTravel(bot);
             }
             if (IsKeepOrKeepPatrolDestination(_rvrDestination))
             {
@@ -2184,6 +2206,13 @@ namespace DOL.GS
             // avoided by a careful leader and revisited by a bold one only bigger.
             double Danger(CampDestination destination) =>
                 AutonomousRvrDangerMemory.FactorFor(bot, destination.RegionId, destination.X, destination.Y, nowUtc);
+            // P6: a group of three or more without speed stays nearer keeps and hubs.
+            bool groupHasSpeed = AutonomousRvrSpeed.GroupHasSpeed(bot.Group);
+            int groupSize = (int)(bot.Group?.MemberCount ?? 1);
+            bool noSpeedHabit = !groupHasSpeed && groupSize >= AutonomousRvrSpeed.MinimumSpeedGroupSize;
+            double SpeedHabit(CampDestination destination) => !noSpeedHabit ? 1.0 :
+                AutonomousRvrSpeed.NoSpeedRoamFactor(false, groupSize,
+                    AutonomousRvrSpeed.NearestAnchorDistance(destination.RegionId, destination.X, destination.Y));
             foreach (CampDestination choice in choices)
             {
                 double kind = choice.Id.StartsWith("rvr-camp-", StringComparison.Ordinal) ? taste.Clearings :
@@ -2192,7 +2221,8 @@ namespace DOL.GS
                 if (kind > 0)
                 {
                     double danger = Danger(choice);
-                    pool.Add((choice, kind * RoamDistanceWeight(bot, choice) * RoamRecencyWeight(choice.Id) * danger, danger));
+                    pool.Add((choice, kind * RoamDistanceWeight(bot, choice) * RoamRecencyWeight(choice.Id) * danger *
+                        SpeedHabit(choice), danger));
                 }
             }
 
@@ -2214,7 +2244,7 @@ namespace DOL.GS
                         bot.CurrentRegionID, (int)floor.Value.X, (int)floor.Value.Y, (int)floor.Value.Z, 1, false, true);
                     double danger = Danger(destination);
                     pool.Add((destination, taste.RecentFights * spot.Heat * RoamDistanceWeight(bot, destination) *
-                        RoamRecencyWeight(id) * danger, danger));
+                        RoamRecencyWeight(id) * danger * SpeedHabit(destination), danger));
                     if (++index >= 8) break;
                 }
             }
@@ -3915,8 +3945,11 @@ namespace DOL.GS
                 !AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase)) return false;
             if (GameRelic.IsPlayerCarryingRelic(bot))
                 return false;
+            bool walkAfterRelease = AutonomousRvrSpeed.WalksAfterRelease(_walkToCampAfterRelease,
+                AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR),
+                _groupDirective?.ObjectiveKind == eAutonomousObjectiveKind.RvR);
             if (_camp != null && _groupDirective?.IsDynamic != true &&
-                (_walkToCampAfterRelease || bot.Level < 20 && _soloCampStableRides >= 2))
+                (walkAfterRelease || bot.Level < 20 && _soloCampStableRides >= 2))
                 return false;
             if (bot.CurrentRegion == null)
                 return false;

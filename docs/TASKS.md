@@ -180,6 +180,33 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+69. **RvR groups roam with a speed class and move as one body.** Aaron,
+    2026-09-29 (live 0.152.0: bots at normal speed, some at walking pace,
+    groups not roaming together; P6 "a retreat/travel is a speed-class
+    decision"; docs/RVR_GROUP_DOCTRINE.md "Speed and travel"). Implemented
+    in source; installation and real-client check pending. Autonomous RvR
+    world bots only: forming and backfilling groups of 3+ strongly prefer a
+    Bard/Skald/Minstrel when none is in, after a missing healer (Healer with augmentation speed as
+    fallback; still leaves without one); the performer sings only speed
+    while the group travels out of combat (Bard twists endurance), a speed
+    Healer stops once on the march to start its speed; the leader waits up
+    to about 6 s when a member (within 4,000) falls over 1,200 behind, until
+    all are within 600, and gives up on a member after three waits; members sprint (now +30 % for world bots) to close a gap
+    over 150; a member ahead of the leader never outruns it; a travelling
+    bot picks up a new max speed (song, sprint) at once instead of keeping
+    its order's old speed; RvR bots keep full pace below a third of health
+    and never use the on-foot habit after a PvE release; groups without
+    speed favour spots within 8,000 of a keep/tower/hub. Check in
+    `server-console.log`: `RVR_SPEED_STATE group=... speed_class=...
+    members=...` at each departure, most 5+ groups with a class, not
+    `none`; `RVR_SPEED_TRAVEL window_s=300 groups=... with_speed=...
+    travel_under_speed_pct=... leader_holds=...` every five minutes with
+    `with_speed` close to `groups` and `travel_under_speed_pct` well above 0
+    (roughly 50+ when most groups have speed) and `leader_holds` a few, not
+    one per group per minute. In game: a roaming world-bot group runs
+    together at song speed, its Skald/Minstrel/Bard sings speed while it
+    moves, a straggler catches up at a sprint, the leader briefly stops for
+    one far behind; companions and player-led groups behave as before.
 68. **PvE wave 7: camp play.** Aaron, 2026-09-29 (P12 "the camp, not the
     mob, is the unit of PvE", P13 "pull size follows control capacity";
     docs/PVE_BOT_PLAY.md). Implemented in source; real-client check

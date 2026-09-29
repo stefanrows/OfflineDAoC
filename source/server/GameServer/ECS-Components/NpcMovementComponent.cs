@@ -32,6 +32,7 @@ namespace DOL.GS
         private Vector3 _positionForClient;
         private bool _needsBroadcastUpdate = true;
         private short _currentMovementDesiredSpeed;
+        private bool _fullSpeedRequest;
         private int? _groundTravelArrivalMilliseconds;
         private PathVisualization _pathVisualization;
         private long _lastPositionUpdateTick = -1;
@@ -232,6 +233,7 @@ namespace DOL.GS
         {
             _seamContinuation = null;
             _movementRequest.Set(MovementRequestType.Walk, destination, speed);
+            _fullSpeedRequest = Owner is GameBot && speed >= MaxSpeed;
             SetFlag(MovementState.Request);
             AddToServiceObjectStore();
         }
@@ -240,6 +242,7 @@ namespace DOL.GS
         {
             _seamContinuation = null;
             _movementRequest.Set(MovementRequestType.Path, destination, speed);
+            _fullSpeedRequest = Owner is GameBot && speed >= MaxSpeed;
             SetFlag(MovementState.Request);
             AddToServiceObjectStore();
         }
@@ -412,6 +415,21 @@ namespace DOL.GS
         {
             if (IsDestinationValid && !IsAtDestination)
                 WalkToInternal(new(_destination.X, _destination.Y, _destination.Z), _currentMovementDesiredSpeed);
+        }
+
+        /// <summary>
+        /// An order given at full speed keeps full speed when the max speed
+        /// changes later (a speed song lands, a sprint starts): the stored
+        /// order speed follows the new max before the movement restarts. Orders
+        /// at an explicit lower pace keep that pace.
+        /// </summary>
+        public void RetuneFullSpeedOrder()
+        {
+            short max = MaxSpeed;
+            if (!_fullSpeedRequest || max <= 0 || max == _currentMovementDesiredSpeed)
+                return;
+            _currentMovementDesiredSpeed = max;
+            _movementRequest.Set(_movementRequest.Type, _movementRequest.Destination, max);
         }
 
         public void TurnTo(GameObject target, int duration = 0)
