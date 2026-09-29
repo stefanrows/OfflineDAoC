@@ -64,6 +64,11 @@ public static class AutonomousPvpOpportunityPolicy
         // Departure truce: two same-realm groups leaving the same border hub
         // move out first and do not jump each other at its edge (P3).
         if (AutonomousHubDeparture.TruceApplies(actor, target, WorldSimulationClock.UtcNow)) return false;
+        // Observe before engaging (P2): the leader's add or straggler call
+        // commits the group to that party or target; while it still watches,
+        // nobody opens a fight on his own.
+        if (AutonomousRvrObserve.IsCommittedTarget(actor, identity)) return true;
+        if (AutonomousRvrObserve.IsObserving(actor)) return false;
         (int ownCount, int ownLevel) = VisibleParty(actor);
         (int count, int level) = VisibleParty(identity);
         // An RvR group's doctrine and its leader's nerve decide the odds it

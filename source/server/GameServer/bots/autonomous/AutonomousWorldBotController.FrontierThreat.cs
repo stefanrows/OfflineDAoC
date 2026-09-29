@@ -35,10 +35,15 @@ public sealed partial class AutonomousWorldBotController
         // A retreating group only defends itself; it does not turn to chase.
         bool mayHunt = AutonomousPvpOpportunityPolicy.MayHunt(bot) &&
             !AutonomousRvrDoctrineRuntime.IsRetreating(bot, out _);
+        // While the leader watches a fight (P2) nobody opens one on his own;
+        // self-defence (InOurFight) still answers. The leader's decision hands
+        // over the one target to open with.
+        bool observing = AutonomousRvrObserve.IsObserving(bot);
+        GameLiving decided = AutonomousRvrObserve.TakeEngageTarget(bot);
         bool InOurFight(GameLiving target) => BotPvpCrowdControl.IsInFightWith(bot, target, null);
         bool Eligible(GameLiving target) => target != bot && !target.IsStealthed &&
-            (siegeFighter || InOurFight(target) ||
-                mayHunt && AutonomousPvpOpportunityPolicy.SuitableOpponent(bot, target)) &&
+            (siegeFighter || InOurFight(target) || target == decided ||
+                mayHunt && !observing && AutonomousPvpOpportunityPolicy.SuitableOpponent(bot, target)) &&
             target.ObjectState == GameObject.eObjectState.Active &&
             AutonomousRvrTargetPolicy.IsEligible(
                 AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, target) || target is GameSiegeWeapon or GameKeepGuard,
@@ -68,7 +73,8 @@ public sealed partial class AutonomousWorldBotController
                 new(bot.X, bot.Y, bot.Z), new(target.X, target.Y, target.Z), nav.DefaultFilters));
         var visibleTargets=visible.ToArray();
         var operatorThreats=visibleTargets.Where(target=>target.IsAttacking && IsHeldByAlliedOperator(target)).ToArray();
-        GameLiving enemy = SelectDistributedRvrTarget(bot, operatorThreats.Length>0 ? operatorThreats : visibleTargets);
+        GameLiving enemy = decided != null && Eligible(decided) ? decided :
+            SelectDistributedRvrTarget(bot, operatorThreats.Length>0 ? operatorThreats : visibleTargets);
         if (enemy == null || !Eligible(enemy)) return false;
         if (previousEngine != null && enemy is GameSiegeWeapon) return false;
 

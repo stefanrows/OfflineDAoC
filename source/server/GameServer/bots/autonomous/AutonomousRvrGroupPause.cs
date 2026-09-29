@@ -190,6 +190,24 @@ public static class AutonomousRvrGroupPause
         }
     }
 
+    /// <summary>Ends a running rest at once (an observe decision to engage).</summary>
+    public static void EndPause(GameBot leader, string reason)
+    {
+        if (leader?.Group == null || !Groups.TryGetValue(leader.Group, out State state))
+            return;
+        lock (state)
+        {
+            if (!state.Active)
+                return;
+            long now = GameLoop.GameLoopTime;
+            state.Active = false;
+            state.LastEndTick = now;
+            if (Log.IsInfoEnabled)
+                Log.Info($"RVR_GROUP_PAUSE_END group=\"{leader.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{leader.DatabaseID}"}\" " +
+                    $"seconds={(now - state.StartTick) / 1000} reason={reason}");
+        }
+    }
+
     /// <summary>A member as the rule sees it.</summary>
     public static RvrPauseMember View(GameLiving member) => new(member.IsAlive, member.HealthPercent,
         member.ManaPercent, member.MaxMana > 0,
@@ -236,7 +254,8 @@ public static class AutonomousRvrGroupPause
                 return;
             }
 
-            if (relicInGroup)
+            // Observing and resting exclude each other: a watching group does not sit down.
+            if (relicInGroup || AutonomousRvrObserve.IsObserving(leader))
                 return;
             bool fought = groupLastCombat > state.LastEndTick && groupLastCombat > 0;
             bool quietGroup = near.All(member => !member.IsAlive || !member.InCombatInLast(QuietMilliseconds));

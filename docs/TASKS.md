@@ -180,6 +180,29 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+64. **RvR wave 3: observe before engaging.** Aaron, 2026-09-29 (P2, "let
+    the battle develop a moment before showing your hand"). Source 0.148.0:
+    a roaming RvR leader or solo RvR bot that sees two or more enemy parties
+    (two or more members, or fighting other players) or a running fight
+    within 5,000, with nobody in its group fighting, holds 2,200-2,600 from
+    the nearest enemy and decides every 3 s: engage when appetite accepts,
+    add at 3 of 8 seen dead (2 bold, 1 when clearly bigger), push on a
+    mezzer (Aggression above 55), take a straggler (small doctrines), leave
+    when charged, flanked or seen, else move on after 30-110 s (Patience);
+    15 % of holds break the rule. Installation and live check pending, from
+    `server-console.log`: `RVR_OBSERVE group=... doctrine=... parties=...
+    fight_ongoing=... nearest=... ours=...` near busy fights (not at the hub
+    edge, not for keep raids or relic escorts), each followed within about
+    two and a half minutes by one `RVR_OBSERVE_DECISION ... decision=...`
+    with a mix of `third_party`, `leave`, `roam_on` and `attacked`, and
+    `straggler` only for small groups; `third_party` mostly with
+    `enemy_down=` at or above 3 of 8 (2 for `bold=true`); a `leave` followed
+    by `RVR_RETREAT ... reason=observe_leave`; no group standing still for
+    more than 150 s while it watches; groups no longer walking straight into
+    a fight they declined; no `RVR_OBSERVE` right after a won fight against a
+    fleeing lone survivor; `RVR_DANGER_RECORD` after an observe leave only
+    when it was charged, flanked or seen.
+
 63. **RvR wave 2: danger memory, rest after a fight, retreat with a
     destination.** Aaron, 2026-09-29 (P5-P7). Source 0.147.0: the group
     leader's guild (or the guildless leader) remembers for 60 minutes where it died or retreated

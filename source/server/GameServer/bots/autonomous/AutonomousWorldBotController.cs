@@ -1509,6 +1509,9 @@ namespace DOL.GS
             HandleFinishedRvrRetreat(bot);
             if (!battleActive && TryRvrGroupPause(brain, bot))
                 return true;
+            HandleRvrObserveOutcome(bot);
+            if (!battleActive && TryRvrObserveHold(brain, bot))
+                return true;
             if (!battleActive && !(dynamicWarband && _groupDirective.GroupCombatActive) && HoldBeforeNewGroupPull(brain, bot))
                 return true;
             // Native keep/relic events remove resolved objectives immediately.
@@ -2022,8 +2025,17 @@ namespace DOL.GS
         private bool IssueVariedRvrPath(GameBot bot, Vector3 destination, bool allowVariants = true)
         {
             bool newGoal = !_rvrTravelWaypoint.HasValue || Vector3.DistanceSquared(_rvrTravelGoal, destination) > 500 * 500;
-            if (newGoal || Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), _rvrTravelWaypoint.Value) < 180 * 180)
+            if (_rvrObserveReplan && !newGoal && allowVariants)
             {
+                // Roaming on past a watched fight: the next leg goes round it.
+                _rvrObserveReplan = false;
+                _rvrRouteVariant = RvrRouteVariant.Cover;
+                _rvrRouteStage = 1;
+                _rvrTravelWaypoint = PlanRvrLeg(bot, destination);
+            }
+            else if (newGoal || Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), _rvrTravelWaypoint.Value) < 180 * 180)
+            {
+                _rvrObserveReplan = false;
                 if (newGoal)
                 {
                     // Rolled once per destination, not fixed per bot, so the
@@ -2089,6 +2101,8 @@ namespace DOL.GS
                         AutonomousRvrRoutePolicy.CoverHeatRange, nowUtc);
                     heat = AutonomousRvrDangerMemory.CoverThreat(heat, heatValue, danger?.Centre,
                         danger.HasValue ? nowUtc - danger.Value.LastUtc : TimeSpan.MaxValue);
+                    // A fight the group just chose to walk past beats both.
+                    heat = RvrObserveAvoidPoint() ?? heat;
                 }
                 RvrRouteChoice choice = AutonomousRvrTravel.ChooseRoute(bot, destination, _rvrRouteVariant, heat: heat);
                 LogRouteChoice(bot, _rvrRouteVariant, choice);

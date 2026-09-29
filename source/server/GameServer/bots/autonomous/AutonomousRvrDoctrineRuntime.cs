@@ -240,6 +240,9 @@ public static class AutonomousRvrDoctrineRuntime
     /// </summary>
     public static void EvaluateRetreat(GameBot leader)
     {
+        // Observe before engaging (P2) runs first, so the frontier scan in
+        // the same turn already sees the hold.
+        AutonomousRvrObserve.EvaluateLeader(leader);
         if (EvaluateMobDisengage(leader))
             return;
         if (!Applies(leader) || leader.Group?.LivingLeader != leader || leader.CurrentZone == null ||
@@ -271,8 +274,29 @@ public static class AutonomousRvrDoctrineRuntime
 
         Vector3 here = new(leader.X, leader.Y, leader.Z);
         Vector3 threat = AutonomousRvrDoctrineGeometry.Centroid(enemies.Select(enemy => new Vector3(enemy.X, enemy.Y, enemy.Z)));
-        // P6: a retreat runs toward help (own hub, landing or keep) or back to
-        // the last roam waypoint, and only falls back to "just away".
+        (Vector3 point, Vector3 target, string anchor) = StartPvpRetreat(leader, state, here, threat, now);
+        int formed, formedHealers;
+        lock (state)
+        {
+            formed = state.FormedMembers;
+            formedHealers = state.FormedHealers;
+        }
+        if (Log.IsInfoEnabled)
+            Log.Info($"RVR_RETREAT group=\"{leader.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{leader.DatabaseID}"}\" " +
+                $"doctrine={state.Doctrine?.Kind.ToString() ?? "none"} " +
+                $"reason={AutonomousRvrDoctrine.RetreatReason(alive, formed, healersAlive, formedHealers, enemies.Length)} " +
+                $"alive={alive}/{formed} healers={healersAlive} enemies={enemies.Length} point={(int)point.X},{(int)point.Y} " +
+                $"dest={(int)target.X},{(int)target.Y} anchor={anchor}");
+    }
+
+    /// <summary>
+    /// P6: a retreat runs toward help (own hub, landing or keep) or back to
+    /// the last roam waypoint, and only falls back to "just away". Sets the
+    /// run, bumps the group's retreat serial and records the danger.
+    /// </summary>
+    private static (Vector3 Point, Vector3 Target, string Anchor) StartPvpRetreat(GameBot leader, GroupState state,
+        Vector3 here, Vector3 threat, long now, bool recordDanger = true)
+    {
         Vector3? waypoint;
         lock (state)
             waypoint = state.LastWaypointRegion == leader.CurrentRegionID ? state.LastWaypoint : null;
@@ -280,23 +304,39 @@ public static class AutonomousRvrDoctrineRuntime
             RetreatAnchors(leader), waypoint);
         Vector3 point = PathfindingProvider.Instance.GetMoveAlongSurface(leader.CurrentZone, here, target,
             PathfindingProvider.Instance.DefaultFilters) ?? target;
-        int formed, formedHealers;
         lock (state)
         {
             state.RetreatPoint = point;
             state.RetreatUntil = now + 25_000 + Random.Shared.Next(15_000);
             state.PvpRetreatUntil = state.RetreatUntil;
             state.RetreatSerial++;
-            formed = state.FormedMembers;
-            formedHealers = state.FormedHealers;
         }
-        AutonomousRvrDangerMemory.RecordRetreat(leader, here, WorldSimulationClock.UtcNow);
+        if (recordDanger)
+            AutonomousRvrDangerMemory.RecordRetreat(leader, here, WorldSimulationClock.UtcNow);
+        return (point, target, anchor);
+    }
+
+    /// <summary>
+    /// An observing leader decided to leave (P2): the same retreat run as a
+    /// lost fight, away from the watched fight toward an anchor; the group
+    /// re-picks its destination when it ends. Only a leave forced by a threat
+    /// (charged, flanked, seen) writes a danger record.
+    /// </summary>
+    public static void BeginObserveRetreat(GameBot leader, Vector3 threat, bool recordDanger)
+    {
+        if (!Applies(leader) || leader.CurrentZone == null || leader.Group != null && leader.Group.LivingLeader != leader)
+            return;
+        GroupState state = leader.Group == null ? Solos.GetOrCreateValue(leader) : State(leader.Group);
+        long now = GameLoop.GameLoopTime;
+        lock (state)
+            if (now < state.RetreatUntil)
+                return;
+        Vector3 here = new(leader.X, leader.Y, leader.Z);
+        (Vector3 point, Vector3 target, string anchor) = StartPvpRetreat(leader, state, here, threat, now, recordDanger);
         if (Log.IsInfoEnabled)
             Log.Info($"RVR_RETREAT group=\"{leader.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{leader.DatabaseID}"}\" " +
-                $"doctrine={state.Doctrine?.Kind.ToString() ?? "none"} " +
-                $"reason={AutonomousRvrDoctrine.RetreatReason(alive, formed, healersAlive, formedHealers, enemies.Length)} " +
-                $"alive={alive}/{formed} healers={healersAlive} enemies={enemies.Length} point={(int)point.X},{(int)point.Y} " +
-                $"dest={(int)target.X},{(int)target.Y} anchor={anchor}");
+                $"doctrine={For(leader)?.Kind.ToString() ?? "none"} reason=observe_leave " +
+                $"point={(int)point.X},{(int)point.Y} dest={(int)target.X},{(int)target.Y} anchor={anchor}");
     }
 
     /// <summary>Safe places in the leader's region: every border hub there

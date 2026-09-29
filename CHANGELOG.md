@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.148.0] - 2026-09-29
+
+### Added
+
+- Observe before engaging: a roaming RvR group (or a solo RvR bot) that sees
+  two or more enemy groups, or a group fighting other players, within 5,000
+  units, while nobody in it is fighting, holds position and steps back to
+  2,200-2,600 units from the nearest enemy (off the road when it stood on it;
+  stealth groups watch stealthed). Lone enemies walking by and the heat of
+  its own last fight do not start a hold. Every 3 seconds the leader decides:
+  engage at once when the group would take that group on anyway, add on the
+  watched group once 3 of 8 are seen dead (2 for a bold leader, 1 for a
+  clearly bigger group), push in on a mezzer
+  (aggressive leaders), pick off a straggler (small and stealth groups),
+  leave when charged by a bigger group, seen up close or flanked by a third
+  group, or move on past the fight after 30-110 s depending on patience.
+  About one hold in seven a leader breaks the rule: the daring add early, the
+  careful leave early. Being attacked ends the hold at once.
+- New log lines `RVR_OBSERVE` and `RVR_OBSERVE_DECISION`; `RVR_RETREAT`
+  gains `reason=observe_leave`.
+
 ## [0.147.0] - 2026-09-29
 
 ### Added

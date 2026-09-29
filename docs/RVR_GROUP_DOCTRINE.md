@@ -120,6 +120,65 @@ everyone else 50/30/20. A cautious leader (RiskTolerance below 40) moves a
 fifth of the chances to cover. Keep assaults and siege rallies keep their
 straight approach. Legs under 3,500 units are walked directly.
 
+## Observe before engaging
+
+Evidence: "let the battle develop a moment before showing your hand"; the
+only counted add rule, "wait until at least THREE of the enemy group are
+down, then rush in" (two for a higher-rank crew, one for a clearly bigger
+group, never while all enemies are alive); groups held at milegate fights
+"waiting for the order to rush" and pushed "on good CC". Era ranges: passive
+stealth detection about 950, Druid root 1,875, archers 1,500-2,000, so the
+hold sits at 2,200.
+
+A party is an enemy group with two or more living members (stealthed ones
+included), or any enemy visibly attacking or casting at another player or
+bot; a lone enemy walking by is left to the ordinary fight appetite. When a
+roaming RvR leader (or solo RvR bot) sees two or more such parties within
+5,000 (under Camlann: anyone outside group, guild or battlegroup; the four
+nearest visible parties are examined), or one party plus a running fight (a
+party fighting other players, or fight heat younger than 60 s at a sighted
+party and not within 1,500 of our own fight of the last 90 s), and nobody in
+its group is fighting, the group holds. It is not a battle force, relic
+escort, siege crew, fresh from its hub (truce band), retreating or resting;
+holding and resting exclude each other. The leader steps back to 2,200 plus
+a random 0-400 from the nearest enemy when it stands closer than 2,200,
+600-1,200 to the side away from it when it stood on a road leg, and picks a
+new spot when the fight drifts within 1,800 of it; members gather around
+the hold point, face the fight and heal; stealth doctrines watch stealthed.
+Nobody opens a fight on their own while the group holds; being attacked
+ends the hold at once. "Down" counts members seen dead (a released one stays
+down until it stands alive near us again); stealthed members count as alive.
+Every 3 s the leader decides, in this order:
+
+- **Leave** (wave-2 retreat run with a danger record, then a new
+  destination): the watched party has closed in for 6 s and is bigger than
+  the group's appetite; a new party shows up within 2,500 or behind us; or
+  an enemy that is not busy stands within 950 and the group would not take
+  it on. Early or patient leaves (below) write no danger record.
+- **Imperfection:** one roll per hold; below 15 % a leader with
+  RiskTolerance under 50 leaves early, a daring one adds early on an engaged
+  party.
+- **Straggler** first for stealth doctrines, after the add rules for the
+  other small doctrines (caster duo, small-man): an enemy below 30 % health
+  or more than 1,200 from the rest of its party (then only when the group
+  would take on that party); never a mezzed target; only that target.
+- **Engage** the watched party at once, busy or not, when the normal
+  appetite already accepts it.
+- **Add** on the watched (engaged) party when ceil(3/8 of its size) are down (2 for
+  Aggression above 65, 1 when we are at least 1.5 times its survivors), and
+  never into survivors more than twice our number.
+- **Push on CC:** a leader with Aggression above 55 and a mezzer in the group
+  pushes into an engaged party without waiting for the count.
+- **Keep waiting** up to 60 s x Patience (x0.6 to x1.6) x a +-15 % roll, hard
+  cap 150 s [prior: no source gives seconds]; then careful leaders
+  (RiskTolerance under 40) leave and the others move on, the next leg bent
+  away from the fight (a destination within 2,200 of it is replaced).
+
+An add or push ends any rest and commits the group to that party for 45 s (a straggler call
+to that one target), so members join the fight the leader opened. The same
+leader does not observe again for 30 s after an add, 60 s after leaving and
+90 s after moving on.
+
 ## After a fight
 
 Evidence: "just 2 minutes to rebuff and reg" (1-2 min normal, about 5 after
