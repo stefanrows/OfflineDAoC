@@ -342,4 +342,194 @@ public sealed class UT_RvrRoamAvoidanceAndRegroup
         Assert.That(AutonomousFrontierTransport.RecentRelease(Now - Minute, Now), Is.EqualTo(Now - Minute));
         Assert.That(AutonomousFrontierTransport.RecentRelease((long?)null, Now), Is.Null);
     }
+
+    // ---- Wave 2 (C3, P5/P6): rest after a fight, retreat with a destination -----
+
+    private static RvrPauseMember Member(int health, int power = 100, bool alive = true, bool healer = false,
+        bool rez = false, bool hasPower = true) => new(alive, health, power, hasPower, healer, rez);
+
+    [Test]
+    public void GroupSitsAfterAFightWhenAnyoneIsBelowSeventyPercent()
+    {
+        RvrPauseMember[] hurt = [Member(100), Member(65)];
+        RvrPauseMember[] lowPower = [Member(100), Member(100, power: 60)];
+        RvrPauseMember[] fine = [Member(95), Member(75, power: 72)];
+        RvrPauseMember[] melee = [Member(100, power: 0, hasPower: false)];
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(RvrDoctrineKind.SmallMan, 8_000, true, hurt), Is.True);
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(RvrDoctrineKind.SmallMan, 8_000, true, lowPower), Is.True);
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(RvrDoctrineKind.SmallMan, 8_000, true, fine), Is.False,
+                "70 % and up walks on");
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(RvrDoctrineKind.SmallMan, 7_999, true, hurt), Is.False,
+                "the leader must be out of combat 8 s");
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(RvrDoctrineKind.SmallMan, 60_000, false, hurt), Is.False,
+                "no new fight since the last pause: no second pause");
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(null, 60_000, true, hurt), Is.False, "no doctrine, no rule");
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(RvrDoctrineKind.SmallMan, 8_000, true, melee), Is.False,
+                "a class without power is not low on power");
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(RvrDoctrineKind.SmallMan, 8_000, true,
+                [Member(100), Member(0, alive: false)]), Is.True, "a dead member needs a rez");
+        });
+    }
+
+    [TestCase(RvrDoctrineKind.SoloAssassin)]
+    [TestCase(RvrDoctrineKind.StealthPack)]
+    [TestCase(RvrDoctrineKind.GankSquad)]
+    public void StealthDoctrinesHideAgainInsteadOfSitting(RvrDoctrineKind kind)
+    {
+        RvrPauseMember[] hurt = [Member(30), Member(40)];
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrGroupPause.ShouldStart(kind, 20_000, true, hurt), Is.False);
+            Assert.That(AutonomousRvrGroupPause.ShouldRestealth(kind, 20_000, true), Is.True);
+            Assert.That(AutonomousRvrGroupPause.ShouldRestealth(RvrDoctrineKind.AssistTrain, 20_000, true), Is.False);
+        });
+    }
+
+    [Test]
+    public void RestLastsNinetySecondsPlusDeathAndHealerBonusesWithinFiveMinutes()
+    {
+        RvrPauseMember[] plain = [Member(50), Member(80)];
+        RvrPauseMember[] death = [Member(50), Member(0, alive: false)];
+        RvrPauseMember[] both = [Member(50), Member(0, alive: false), Member(90, power: 30, healer: true)];
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(plain, 50), Is.EqualTo(90));
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(death, 50), Is.EqualTo(150));
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(both, 50), Is.EqualTo(210));
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(both, 100), Is.EqualTo(273), "patient leader +30 %");
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(plain, 0), Is.EqualTo(63), "impatient leader -30 %");
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(both, 500), Is.LessThanOrEqualTo(300), "hard cap 5 min");
+        });
+    }
+
+    [Test]
+    public void RestEndsWhenRecoveredAttackedOrAtTheCap()
+    {
+        RvrPauseMember[] recovered = [Member(92, power: 95), Member(100, power: 0, hasPower: false)];
+        RvrPauseMember[] waitingForRez = [Member(95), Member(0, alive: false), Member(95, rez: true)];
+        RvrPauseMember[] noRezzer = [Member(95), Member(0, alive: false)];
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrGroupPause.IsRecovered(recovered), Is.True);
+            Assert.That(AutonomousRvrGroupPause.IsRecovered([Member(92, power: 89)]), Is.False);
+            Assert.That(AutonomousRvrGroupPause.IsRecovered(waitingForRez), Is.False, "the rezzer rezzes first");
+            Assert.That(AutonomousRvrGroupPause.IsRecovered(noRezzer), Is.True, "nobody can rez: the living decide");
+            Assert.That(AutonomousRvrGroupPause.EndReason(true, true, 1_000, 90), Is.EqualTo("attacked"));
+            Assert.That(AutonomousRvrGroupPause.EndReason(false, true, 1_000, 90), Is.EqualTo("recovered"));
+            Assert.That(AutonomousRvrGroupPause.EndReason(false, false, 90_000, 90), Is.EqualTo("cap"));
+            Assert.That(AutonomousRvrGroupPause.EndReason(false, false, 89_999, 90), Is.Null);
+        });
+    }
+
+    [Test]
+    public void RestMovesOffTheRoadAwayFromTheFight()
+    {
+        Vector3 here = new(10_000, 10_000, 0);
+        Vector3 fight = new(10_500, 9_000, 0); // right of a leg heading +Y
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrGroupPause.ShouldMoveOffRoad(here, fight, false), Is.True, "within 1,500 of the fight");
+            Assert.That(AutonomousRvrGroupPause.ShouldMoveOffRoad(here, new Vector3(13_000, 10_000, 0), false), Is.False);
+            Assert.That(AutonomousRvrGroupPause.ShouldMoveOffRoad(here, null, true), Is.True, "on a road leg");
+        });
+        Vector3[] spots = AutonomousRvrGroupPause.OffRoadCandidates(here, new Vector2(0, 1), fight, 0.5, 0.9);
+        Assert.Multiple(() =>
+        {
+            Assert.That(spots, Has.Length.EqualTo(2));
+            Assert.That(spots[0].X, Is.EqualTo(9_100).Within(0.5), "900 units to the side away from the fight");
+            Assert.That(spots[0].Y, Is.EqualTo(10_000).Within(0.5), "beside the leg, not along it");
+            Assert.That(spots[1].X, Is.EqualTo(10_900).Within(0.5), "the other side is the fallback");
+        });
+        Vector3 near = AutonomousRvrGroupPause.OffRoadCandidates(here, new Vector2(1, 0), null, 0, 0)[0];
+        Vector3 far = AutonomousRvrGroupPause.OffRoadCandidates(here, new Vector2(1, 0), null, 1, 0)[0];
+        Assert.That(Math.Abs(near.Y - here.Y), Is.EqualTo(600).Within(0.5));
+        Assert.That(Math.Abs(far.Y - here.Y), Is.EqualTo(1_200).Within(0.5));
+    }
+
+    [Test]
+    public void AFinishedRetreatForcesOneReplan()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrGroupPause.RetreatFinished(10_000, 20_000, 1, 0), Is.False, "still running");
+            Assert.That(AutonomousRvrGroupPause.RetreatFinished(20_000, 20_000, 1, 0), Is.True, "ended: replan");
+            Assert.That(AutonomousRvrGroupPause.RetreatFinished(30_000, 20_000, 1, 1), Is.False, "handled once only");
+            Assert.That(AutonomousRvrGroupPause.RetreatFinished(90_000, 80_000, 2, 1), Is.True, "the next retreat again");
+        });
+    }
+
+    [Test]
+    public void ARetreatAfterAWipeAndReformStillForcesAReplan()
+    {
+        // Old group: serial 3 handled. After the wipe the new group counts from 1.
+        int seen = AutonomousRvrGroupPause.SeenSerialAfterGroupChange(50_000, 0, 0);
+        Assert.That(seen, Is.EqualTo(0), "a new group without retreats starts at zero");
+        Assert.That(AutonomousRvrGroupPause.RetreatFinished(100_000, 90_000, 1, seen), Is.True,
+            "the first retreat of the re-formed group replans, although 1 < the old 3");
+        Assert.Multiple(() =>
+        {
+            int joinedAfter = AutonomousRvrGroupPause.SeenSerialAfterGroupChange(100_000, 90_000, 2);
+            Assert.That(AutonomousRvrGroupPause.RetreatFinished(100_000, 90_000, 2, joinedAfter), Is.False,
+                "joining a group whose retreat already ended keeps the destination");
+            int joinedDuring = AutonomousRvrGroupPause.SeenSerialAfterGroupChange(80_000, 90_000, 2);
+            Assert.That(AutonomousRvrGroupPause.RetreatFinished(80_000, 90_000, 2, joinedDuring), Is.False);
+            Assert.That(AutonomousRvrGroupPause.RetreatFinished(90_000, 90_000, 2, joinedDuring), Is.True,
+                "joining during a retreat replans when it ends");
+        });
+    }
+
+    [Test]
+    public void RestCapVariesByFifteenPercentAroundThePatienceValue()
+    {
+        RvrPauseMember[] plain = [Member(50), Member(80)];
+        RvrPauseMember[] both = [Member(50), Member(0, alive: false), Member(90, power: 30, healer: true)];
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(plain, 50, 0), Is.EqualTo(77).Within(1), "90 x 0.85");
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(plain, 50, 1), Is.EqualTo(104).Within(1), "90 x 1.15");
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(plain, 50, 0.5), Is.EqualTo(90));
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(plain, 0, 0), Is.EqualTo(60), "never under a minute");
+            Assert.That(AutonomousRvrGroupPause.CapSeconds(both, 100, 1), Is.EqualTo(300), "never over five minutes");
+        });
+    }
+
+    [Test]
+    public void RetreatRunsTowardTheOwnHubNotJustAway()
+    {
+        Vector3 here = new(20_000, 20_000, 0);
+        Vector3 enemies = new(22_000, 20_000, 0); // east of us
+        var hub = new AutonomousRvrDoctrineGeometry.RetreatAnchor(new Vector3(20_000, 30_000, 0), "hub");
+        var keep = new AutonomousRvrDoctrineGeometry.RetreatAnchor(new Vector3(18_000, 20_000, 0), "keep");
+        var behindEnemy = new AutonomousRvrDoctrineGeometry.RetreatAnchor(new Vector3(24_000, 20_000, 0), "hub");
+
+        (Vector3 toHub, string kind) = AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, enemies, [hub], null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(kind, Is.EqualTo("hub"));
+            Assert.That(toHub.X, Is.EqualTo(20_000).Within(0.5));
+            Assert.That(toHub.Y, Is.EqualTo(23_000).Within(0.5), "3,000 toward the hub, not all the way");
+        });
+
+        (Vector3 toKeep, string keepKind) = AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, enemies, [hub, keep], null);
+        Assert.That(keepKind, Is.EqualTo("keep"), "the nearest safe place wins");
+        Assert.That(toKeep, Is.EqualTo(keep.Point), "a keep closer than 3,000 is the destination itself");
+
+        (_, string blocked) = AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, enemies, [behindEnemy], null);
+        Assert.That(blocked, Is.EqualTo("away"), "nobody runs through the enemy to reach the hub");
+
+        (Vector3 back, string waypoint) = AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, enemies, [behindEnemy],
+            new Vector3(19_000, 19_000, 0));
+        Assert.That(waypoint, Is.EqualTo("waypoint"), "without a safe anchor, back to the last roam spot");
+        Assert.That(back, Is.EqualTo(new Vector3(19_000, 19_000, 0)));
+
+        (Vector3 away, string plain) = AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, enemies, [], null);
+        Assert.That(plain, Is.EqualTo("away"));
+        Assert.That(away.X, Is.EqualTo(17_800).Within(0.5), "the old 2,200 run away from the enemy");
+
+        var farHub = new AutonomousRvrDoctrineGeometry.RetreatAnchor(new Vector3(20_000, 40_000, 0), "hub");
+        Assert.That(AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, enemies, [farHub], null).Kind, Is.EqualTo("away"),
+            "a hub 20,000 away is out of range");
+    }
 }

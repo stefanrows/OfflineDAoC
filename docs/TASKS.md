@@ -180,6 +180,28 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+63. **RvR wave 2: danger memory, rest after a fight, retreat with a
+    destination.** Aaron, 2026-09-29 (P5-P7). Source 0.147.0: the group
+    leader's guild (or the guildless leader) remembers for 60 minutes where it died or retreated
+    (1,500-unit cells, at most 24) and weighs roam picks and fight heat there
+    by the leader (careful 0.2-0.5, bold 1.3 only with one more member than it
+    lost, else 0.6); revenge hunts need two thirds of the lost group size;
+    cover routes avoid the worst remembered place. A roaming RvR group sits
+    after a fight (leader quiet 8 s, anyone dead or below 70 %) until 90 % or
+    a 60-300 s cap (Patience and a +-15 % roll), first moving 600-1,200 off the
+    road; stealth doctrines hide again, relic escorts never sit. A PvP retreat
+    runs toward the nearest border hub or landing in the zone or a passable
+    keep (else the last roam spot) and forces a new destination afterwards.
+    Installation and live check pending, from `server-console.log`:
+    `RVR_DANGER_RECORD` after RvR deaths (at most one per cell per minute);
+    `RVR_ROAM_PICK ... danger_factor=` below 1 for careful groups near their
+    loss places; `RVR_GROUP_PAUSE ... reason=rest|after_retreat` followed by
+    `RVR_GROUP_PAUSE_END ... reason=recovered` in most cases, `cap` or
+    `attacked` sometimes (`relic` when a member picks one up), and no group standing still for more than five
+    minutes; `RVR_RETREAT ... anchor=hub|keep|waypoint` more often than
+    `anchor=away`, followed by a fresh `RVR_ROAM_PICK`; `RVR_GRUDGE_GATE` when a
+    small group skips a revenge trip.
+
 62. **RvR wave 1: hub fan, departure truce, route variety.** Aaron,
     2026-09-29 (P3, "you leave the door before you hunt"). Source 0.146.0:
     a group leader or solo RvR bot leaving its own border hub first walks to

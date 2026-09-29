@@ -27,6 +27,11 @@ public static class AutonomousRvrDoctrineRuntime
         public Vector3 RetreatPoint;
         public long NextRetreatCheck;
         public long NextMobCheck;
+        /// <summary>Counts PvP retreats; a controller replans once per finished one.</summary>
+        public int RetreatSerial;
+        public long PvpRetreatUntil;
+        public Vector3? LastWaypoint;
+        public ushort LastWaypointRegion;
     }
 
     private sealed class HabitState
@@ -240,6 +245,8 @@ public static class AutonomousRvrDoctrineRuntime
         if (!Applies(leader) || leader.Group?.LivingLeader != leader || leader.CurrentZone == null ||
             !leader.InCombatInLast(10_000))
             return;
+        if (leader.InCombatInLast(1_500))
+            AutonomousRvrGroupPause.NoteFight(leader);
         GroupState state = State(leader.Group);
         long now = GameLoop.GameLoopTime;
         lock (state)
@@ -264,22 +271,80 @@ public static class AutonomousRvrDoctrineRuntime
 
         Vector3 here = new(leader.X, leader.Y, leader.Z);
         Vector3 threat = AutonomousRvrDoctrineGeometry.Centroid(enemies.Select(enemy => new Vector3(enemy.X, enemy.Y, enemy.Z)));
-        Vector3 away = AutonomousRvrDoctrineGeometry.AwayFrom(here, threat, 2_200);
-        Vector3 point = PathfindingProvider.Instance.GetMoveAlongSurface(leader.CurrentZone, here, away,
-            PathfindingProvider.Instance.DefaultFilters) ?? away;
+        // P6: a retreat runs toward help (own hub, landing or keep) or back to
+        // the last roam waypoint, and only falls back to "just away".
+        Vector3? waypoint;
+        lock (state)
+            waypoint = state.LastWaypointRegion == leader.CurrentRegionID ? state.LastWaypoint : null;
+        (Vector3 target, string anchor) = AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, threat,
+            RetreatAnchors(leader), waypoint);
+        Vector3 point = PathfindingProvider.Instance.GetMoveAlongSurface(leader.CurrentZone, here, target,
+            PathfindingProvider.Instance.DefaultFilters) ?? target;
         int formed, formedHealers;
         lock (state)
         {
             state.RetreatPoint = point;
             state.RetreatUntil = now + 25_000 + Random.Shared.Next(15_000);
+            state.PvpRetreatUntil = state.RetreatUntil;
+            state.RetreatSerial++;
             formed = state.FormedMembers;
             formedHealers = state.FormedHealers;
         }
+        AutonomousRvrDangerMemory.RecordRetreat(leader, here, WorldSimulationClock.UtcNow);
         if (Log.IsInfoEnabled)
             Log.Info($"RVR_RETREAT group=\"{leader.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{leader.DatabaseID}"}\" " +
                 $"doctrine={state.Doctrine?.Kind.ToString() ?? "none"} " +
                 $"reason={AutonomousRvrDoctrine.RetreatReason(alive, formed, healersAlive, formedHealers, enemies.Length)} " +
-                $"alive={alive}/{formed} healers={healersAlive} enemies={enemies.Length} point={(int)point.X},{(int)point.Y}");
+                $"alive={alive}/{formed} healers={healersAlive} enemies={enemies.Length} point={(int)point.X},{(int)point.Y} " +
+                $"dest={(int)target.X},{(int)target.Y} anchor={anchor}");
+    }
+
+    /// <summary>Safe places in the leader's region: every border hub there
+    /// (under Camlann all three are neutral safe hubs) with its bindstone
+    /// landings, and keeps or towers the leader may pass (not hostile to it by
+    /// guild, alliance or garrison; realm alone decides nothing).</summary>
+    private static List<AutonomousRvrDoctrineGeometry.RetreatAnchor> RetreatAnchors(GameBot leader)
+    {
+        var anchors = new List<AutonomousRvrDoctrineGeometry.RetreatAnchor>();
+        ushort region = leader.CurrentRegionID;
+        foreach (eRealm realm in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
+            if (AutonomousRvrStaging.TryGetBorderKeep(realm, out AutonomousRvrStaging.BorderKeep hub) && hub.RegionId == region)
+                anchors.Add(new(hub.Position, "hub"));
+        foreach (PvpCombatant.SafeHubLanding landing in PvpCombatant.SafeHubLandings)
+            if (landing.RegionId == region)
+                anchors.Add(new(new(landing.X, landing.Y, leader.Z), "hub"));
+        foreach (DOL.GS.Keeps.AbstractGameKeep keep in GameServer.KeepManager.GetKeepsOfRegion(region))
+            if (AutonomousRvrTravel.CanPassKeep(leader, keep))
+                anchors.Add(new(new(keep.X, keep.Y, keep.Z), "keep"));
+        return anchors;
+    }
+
+    /// <summary>The group's PvP retreat counter and when the latest one ends.</summary>
+    public static bool TryGetRetreat(GameBot bot, out int serial, out long until)
+    {
+        serial = 0;
+        until = 0;
+        if (!Applies(bot) || bot.Group == null || !Groups.TryGetValue(bot.Group, out GroupState state))
+            return false;
+        lock (state)
+        {
+            serial = state.RetreatSerial;
+            until = state.PvpRetreatUntil;
+        }
+        return serial > 0;
+    }
+
+    /// <summary>The leader reached a roaming spot; a later retreat may run back here.</summary>
+    public static void NoteWaypoint(GameBot leader, Vector3 point)
+    {
+        if (!Applies(leader) || leader.Group?.LivingLeader != leader)
+            return;
+        GroupState state = State(leader.Group);
+        lock (state)
+        {
+            state.LastWaypoint = point;
+            state.LastWaypointRegion = leader.CurrentRegionID;
+        }
     }
 
     /// <summary>How far a warband runs from a monster it will not fight.</summary>
@@ -446,6 +511,63 @@ public static class AutonomousRvrDoctrineGeometry
             direction = new Vector2(1, 0);
         direction = Vector2.Normalize(direction) * distance;
         return new Vector3(from.X + direction.X, from.Y + direction.Y, from.Z);
+    }
+
+    public readonly record struct RetreatAnchor(Vector3 Point, string Kind);
+
+    /// <summary>How far a retreat runs toward an anchor at most (it stops at the anchor when closer).</summary>
+    public const float RetreatAnchorRun = 3_000;
+    /// <summary>Anchors or waypoints farther than this are not a retreat destination.</summary>
+    public const float RetreatAnchorRange = 15_000;
+    /// <summary>The plain run away from the enemy, as before.</summary>
+    public const float RetreatAwayRun = 2_200;
+
+    /// <summary>
+    /// Where a retreat heads (P6): the nearest own anchor (hub, landing, keep)
+    /// within 15,000 that does not lie toward the enemy, else the previous
+    /// roam waypoint on the same terms, else straight away 2,200 units. A
+    /// destination is followed at most 3,000 units per retreat.
+    /// </summary>
+    public static (Vector3 Target, string Kind) ChooseRetreatTarget(Vector3 here, Vector3 threat,
+        IReadOnlyList<RetreatAnchor> anchors, Vector3? waypoint)
+    {
+        Vector2 origin = new(here.X, here.Y);
+        Vector2 away = origin - new Vector2(threat.X, threat.Y);
+        bool hasThreatDirection = away.LengthSquared() >= 1;
+        if (hasThreatDirection)
+            away = Vector2.Normalize(away);
+
+        bool Usable(Vector3 point, out float distance)
+        {
+            Vector2 delta = new Vector2(point.X, point.Y) - origin;
+            distance = delta.Length();
+            if (distance > RetreatAnchorRange || distance < 1)
+                return false;
+            // Not toward the enemy: within 90 degrees of straight away.
+            return !hasThreatDirection || Vector2.Dot(delta / distance, away) >= 0;
+        }
+
+        Vector3 Toward(Vector3 point, float distance)
+        {
+            if (distance <= RetreatAnchorRun)
+                return point;
+            Vector2 step = (new Vector2(point.X, point.Y) - origin) / distance * RetreatAnchorRun;
+            return new Vector3(here.X + step.X, here.Y + step.Y, here.Z);
+        }
+
+        RetreatAnchor? best = null;
+        float bestDistance = float.MaxValue;
+        foreach (RetreatAnchor anchor in anchors ?? [])
+            if (Usable(anchor.Point, out float distance) && distance < bestDistance)
+            {
+                best = anchor;
+                bestDistance = distance;
+            }
+        if (best.HasValue)
+            return (Toward(best.Value.Point, bestDistance), best.Value.Kind);
+        if (waypoint.HasValue && Usable(waypoint.Value, out float waypointDistance))
+            return (Toward(waypoint.Value, waypointDistance), "waypoint");
+        return (AwayFrom(here, threat, RetreatAwayRun), "away");
     }
 
     /// <summary>A stable personal spot around <paramref name="centre"/> so a group does not stack on one point.</summary>

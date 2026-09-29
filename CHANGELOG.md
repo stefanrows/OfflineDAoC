@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.147.0] - 2026-09-29
+
+### Added
+
+- RvR groups remember for an hour where they lost people: a careful leader
+  stays away from the place, a bold one returns only with more members than
+  it lost there, and a revenge hunt waits until the group has at least two
+  thirds of the size it lost. Cover routes pass on the side away from the
+  worst remembered place.
+- Rest after a fight: a roaming RvR group with anyone dead or below 70 %
+  health or power sits down, heals, rezzes and regains power until everyone
+  is at 90 % or 1-5 minutes pass. It first moves off the road when it stands
+  on it or near the fight; any attack ends the rest. Stealth groups hide again
+  instead.
+- New log lines `RVR_DANGER_RECORD`, `RVR_GROUP_PAUSE`,
+  `RVR_GROUP_PAUSE_END` and `RVR_GRUDGE_GATE`; `RVR_ROAM_PICK` gains
+  `danger_factor`, `RVR_RETREAT` gains `dest` and `anchor`.
+
+### Changed
+
+- A PvP retreat now runs toward the nearest border hub or landing in the
+  zone or a keep the group may pass (or the last roaming spot) instead of just away, and the group chooses a new
+  destination afterwards instead of walking back into the same fight.
+
 ## [0.146.0] - 2026-09-29
 
 ### Added

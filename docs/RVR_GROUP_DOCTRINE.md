@@ -60,8 +60,13 @@ one healer means picking on solos and duos and retreating at the first add.
   Retaliation always stays allowed.
 - **Retreat as an option**: healer dead, half the group down, or clearly
   outnumbered makes a group *consider* leaving; RiskTolerance decides whether
-  it actually runs. A retreat is a short run back along the road, then a
-  regroup; it never blocks self-defense.
+  it actually runs. A retreat runs up to 3,000 units toward the nearest border
+  hub or bindstone landing in the zone (all three are neutral safe hubs under
+  Camlann) or a keep the group may pass (not hostile by guild, alliance or
+  garrison), whichever is nearest and not toward the enemy (else back to the
+  last roam spot, else 2,200 straight away); afterwards the leader picks a
+  new destination instead of walking back into the same fight. It never
+  blocks self-defense.
 - **Roaming**: weighted wandering between frontier hotspots (keeps, border
   keeps and frontier clearings), recent fight locations and the doctrine's
   favourite places, with a linger time from doctrine and Patience, never a
@@ -114,6 +119,43 @@ assist trains, melee trains and keep raids keep to it 70 % of the time;
 everyone else 50/30/20. A cautious leader (RiskTolerance below 40) moves a
 fifth of the chances to cover. Keep assaults and siege rallies keep their
 straight approach. Legs under 3,500 units are walked directly.
+
+## After a fight
+
+Evidence: "just 2 minutes to rebuff and reg" (1-2 min normal, about 5 after
+deaths and long cooldowns), and "sitting down to regenerate power is an
+invitation to be killed" (groups moved off the road or into their keep).
+
+When the leader has been out of combat 8 seconds and any member within
+3,000 is dead or below 70 % health or power, a roaming RvR group sits down:
+it heals, rezzes and regains power until every living member is at 90 %, or
+until a cap of 90 s (+60 s when someone is dead, +60 s when a healer is below
+half power; the leader's Patience scales this by up to 30 % and a random
+roll by up to 15 %, never less than 60 s or more than 5 minutes). A group
+escorting a relic does not sit. If the group stands on a road leg or within
+1,500 of the fight, the leader first leads it 600-1,200 units to the side
+away from the fight (walkable, connected spot; otherwise it rests in place).
+Any attack ends the rest at once; self-defense always comes first. Solo
+assassins, stealth packs and gank squads do not sit: they hide again.
+
+## Danger memory
+
+Evidence: groups stayed away from where they died "for a good hour" and came
+back "with twice the numbers"; plain avoidance of a place is only weakly
+attested.
+
+The group leader's guild (or, without a guild, the leader itself, so the
+memory survives a re-formed group) remembers for 60 minutes, fading linearly,
+the 1,500-unit cells where its RvR bots died or its leader called a retreat
+(a retreat counts half), with the size of the group that lost there; at most
+24 places each. A careful leader (RiskTolerance below 45, or a doctrine that
+retreats early) rates such a place 0.2-0.5 as a roaming destination; a bold
+one (Aggression above 65) goes back only with at least one more member than
+it lost there (x1.3, else x0.7); everyone else x0.6. Fight heat inside a
+remembered cell is rated the same way. A revenge hunt starts only with at
+least two thirds of the group size that was lost. Cover routes keep to the
+side away from the worst remembered place within 6,000 when it is fresher
+than the latest fight heat.
 
 ## Camlann and guilds
 

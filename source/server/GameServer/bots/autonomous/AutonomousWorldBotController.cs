@@ -340,7 +340,8 @@ namespace DOL.GS
                 // the bot when movement actually takes over.
                 bool recoveringAtCurrentCamp = _camp != null && ReferenceEquals(_restingCamp, _camp);
                 if (bot.IsRecoveryResting && !recoveringAtCurrentCamp && !_dungeonRouteResting &&
-                    _groupDirective?.Phase != "Regrouping" && !_townIdleUntilUtc.HasValue)
+                    _groupDirective?.Phase != "Regrouping" && !_townIdleUntilUtc.HasValue &&
+                    !AutonomousRvrGroupPause.IsPausing(bot, out _))
                     bot.WakeRecoveryRest();
 
                 if (bot.IsCasting && !BotSongTwistPolicy.HasMobileSongCast(bot))
@@ -1505,6 +1506,9 @@ namespace DOL.GS
             if (committedPlan == null && dynamicWarband && _groupDirective.Leader != bot && _groupDirective.Leader != null)
                 _rvrIntent = (AutonomousRvrEventLayer.Intent)_groupDirective.Leader.TempProperties
                     .GetProperty<int>("RvrWarbandIntent", (int)AutonomousRvrEventLayer.Intent.Roam);
+            HandleFinishedRvrRetreat(bot);
+            if (!battleActive && TryRvrGroupPause(brain, bot))
+                return true;
             if (!battleActive && !(dynamicWarband && _groupDirective.GroupCombatActive) && HoldBeforeNewGroupPull(brain, bot))
                 return true;
             // Native keep/relic events remove resolved objectives immediately.
@@ -1621,7 +1625,10 @@ namespace DOL.GS
                 Distance(bot.X, bot.Y, _rvrDestination.X, _rvrDestination.Y) <= CampArrivalRadius &&
                 (!_rvrDestination.IsDungeon || Math.Abs(bot.Z - _rvrDestination.Z) <= 160);
             if (atPatrol && _hunterPatrolArrivedTick == 0)
+            {
                 _hunterPatrolArrivedTick = GameLoop.GameLoopTime;
+                AutonomousRvrDoctrineRuntime.NoteWaypoint(bot, new(bot.X, bot.Y, bot.Z));
+            }
             if (_rvrDestination == null || _rvrDestination.RegionId == 0 ||
                 (bot.Level >= 20 && !_rvrSharedEvent && GameLoop.GameLoopTime >= _nextRvrPlanReview &&
                  AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) is not (AutonomousPlayerType.Hunter or AutonomousPlayerType.Roamer) &&
@@ -2063,11 +2070,24 @@ namespace DOL.GS
                 _rvrRouteStage = 2;
                 Vector3? heat = null;
                 if (_rvrRouteVariant == RvrRouteVariant.Cover)
-                    foreach (AutonomousRvrHeat.Spot spot in AutonomousRvrHeat.Recent(bot.CurrentRegionID, WorldSimulationClock.UtcNow))
+                {
+                    DateTime nowUtc = WorldSimulationClock.UtcNow;
+                    double heatValue = 0;
+                    foreach (AutonomousRvrHeat.Spot spot in AutonomousRvrHeat.Recent(bot.CurrentRegionID, nowUtc))
                     {
                         heat = spot.Position; // newest first
+                        heatValue = spot.Heat;
                         break;
                     }
+                    // The side away from the worst place this crew lost people,
+                    // unless the fight heat is fresher.
+                    Vector2 middle = new((bot.X + destination.X) / 2, (bot.Y + destination.Y) / 2);
+                    AutonomousRvrDangerMemory.Danger? danger = AutonomousRvrDangerMemory.Worst(
+                        AutonomousRvrDangerMemory.KeyFor(bot), bot.CurrentRegionID, middle,
+                        AutonomousRvrRoutePolicy.CoverHeatRange, nowUtc);
+                    heat = AutonomousRvrDangerMemory.CoverThreat(heat, heatValue, danger?.Centre,
+                        danger.HasValue ? nowUtc - danger.Value.LastUtc : TimeSpan.MaxValue);
+                }
                 RvrRouteChoice choice = AutonomousRvrTravel.ChooseRoute(bot, destination, _rvrRouteVariant, heat: heat);
                 LogRouteChoice(bot, _rvrRouteVariant, choice);
                 return choice.Waypoint;
@@ -2092,14 +2112,16 @@ namespace DOL.GS
                 $"fallback={(choice.Fallback ? "true" : "false")}");
         }
 
-        private void LogRoamPick(GameBot bot, CampDestination pick, string kind, double weight, int pool)
+        private void LogRoamPick(GameBot bot, CampDestination pick, string kind, double weight, int pool,
+            double dangerFactor = 1)
         {
             if (!Log.IsInfoEnabled || pick == null)
                 return;
             RvrDoctrine doctrine = AutonomousRvrDoctrineRuntime.For(bot);
             Log.Info($"RVR_ROAM_PICK bot=\"{bot.Name}\" group_size={bot.Group?.MemberCount ?? 1} " +
                 $"doctrine={doctrine?.Kind.ToString() ?? "none"} pick=\"{pick.Id}/{pick.MonsterName}\" kind={kind} " +
-                $"weight={weight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} pool={pool}");
+                $"weight={weight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} pool={pool} " +
+                $"danger_factor={dangerFactor.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
         }
 
         internal static string RoamKind(string id) =>
@@ -2128,14 +2150,22 @@ namespace DOL.GS
         private CampDestination ChooseRoamDestination(GameBot bot, List<CampDestination> choices)
         {
             RvrRoamTaste taste = AutonomousRvrDoctrineRuntime.For(bot)?.Roam ?? new RvrRoamTaste(1, 1, 1, 1);
-            var pool = new List<(CampDestination Destination, double Weight)>();
+            var pool = new List<(CampDestination Destination, double Weight, double Danger)>();
+            DateTime nowUtc = WorldSimulationClock.UtcNow;
+            // C2/P5/P7: a place where this crew lost people in the last hour is
+            // avoided by a careful leader and revisited by a bold one only bigger.
+            double Danger(CampDestination destination) =>
+                AutonomousRvrDangerMemory.FactorFor(bot, destination.RegionId, destination.X, destination.Y, nowUtc);
             foreach (CampDestination choice in choices)
             {
                 double kind = choice.Id.StartsWith("rvr-camp-", StringComparison.Ordinal) ? taste.Clearings :
                     choice.Id.StartsWith("rvr-keep-", StringComparison.Ordinal) ? taste.Keeps :
                     choice.Id.StartsWith("rvr-enemy-", StringComparison.Ordinal) ? taste.Enemies : 0;
                 if (kind > 0)
-                    pool.Add((choice, kind * RoamDistanceWeight(bot, choice) * RoamRecencyWeight(choice.Id)));
+                {
+                    double danger = Danger(choice);
+                    pool.Add((choice, kind * RoamDistanceWeight(bot, choice) * RoamRecencyWeight(choice.Id) * danger, danger));
+                }
             }
 
             Zone zone = bot.CurrentZone;
@@ -2154,8 +2184,9 @@ namespace DOL.GS
                     string id = $"rvr-heat-{bot.CurrentRegionID}-{(int)floor.Value.X / 500}-{(int)floor.Value.Y / 500}";
                     CampDestination destination = new(id, "the sound of fighting", spotZone.Description ?? "frontier",
                         bot.CurrentRegionID, (int)floor.Value.X, (int)floor.Value.Y, (int)floor.Value.Z, 1, false, true);
+                    double danger = Danger(destination);
                     pool.Add((destination, taste.RecentFights * spot.Heat * RoamDistanceWeight(bot, destination) *
-                        RoamRecencyWeight(id)));
+                        RoamRecencyWeight(id) * danger, danger));
                     if (++index >= 8) break;
                 }
             }
@@ -2166,17 +2197,19 @@ namespace DOL.GS
             double pick = Random.Shared.NextDouble() * total;
             CampDestination chosen = pool[^1].Destination;
             double chosenWeight = pool[^1].Weight;
-            foreach ((CampDestination destination, double weight) in pool)
+            double chosenDanger = pool[^1].Danger;
+            foreach ((CampDestination destination, double weight, double danger) in pool)
             {
                 pick -= weight;
                 if (pick < 0)
                 {
                     chosen = destination;
                     chosenWeight = weight;
+                    chosenDanger = danger;
                     break;
                 }
             }
-            LogRoamPick(bot, chosen, RoamKind(chosen.Id), chosenWeight, pool.Count);
+            LogRoamPick(bot, chosen, RoamKind(chosen.Id), chosenWeight, pool.Count, chosenDanger);
             _recentRoamIds.Enqueue(chosen.Id);
             while (_recentRoamIds.Count > 5)
                 _recentRoamIds.Dequeue();
@@ -2204,6 +2237,19 @@ namespace DOL.GS
                 .Where(target => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(target.CurrentRegionID))
                 .OrderBy(target => EstimateTravelMinutes(bot, target.CurrentRegionID, target.X, target.Y))
                 .FirstOrDefault();
+            if (revengeTarget != null)
+            {
+                // P7: the loser comes back with more people. A revenge trip
+                // needs at least two thirds of the group size that was lost.
+                int own = AutonomousRvrDangerMemory.LivingGroupSize(bot);
+                int lost = AutonomousRvrDangerMemory.LostGroupSize(AutonomousRvrDangerMemory.KeyFor(bot), WorldSimulationClock.UtcNow);
+                if (!AutonomousRvrDangerMemory.AllowsRevenge(own, lost))
+                {
+                    if (Log.IsInfoEnabled)
+                        Log.Info($"RVR_GRUDGE_GATE bot=\"{bot.Name}\" group_size={own} lost_size={lost} target=\"{revengeTarget.Name}\" result=roam");
+                    revengeTarget = null;
+                }
+            }
             if (revengeTarget != null)
             {
                 string targetId = AutonomousGuildGrudgeMemory.StableTargetId(revengeTarget);

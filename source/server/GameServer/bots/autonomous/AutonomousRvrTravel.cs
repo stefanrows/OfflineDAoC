@@ -90,9 +90,16 @@ public static class AutonomousRvrTravel
         float hubSafeRadius = AutonomousRvrRoutePolicy.KeepSafeRadius)
     {
         Vector3 start = new(bot.X, bot.Y, bot.Z);
+        return AutonomousRvrRoutePolicy.ChooseRoute(start, destination, variant, Probe(bot, destination),
+            random ?? Random.Shared, heat, hubCentre, hubSafeRadius);
+    }
+
+    /// <summary>The bot's own zone and navmesh as route checks; null without navigation.</summary>
+    private static RvrRouteProbe Probe(GameBot bot, Vector3 destination)
+    {
         Zone zone = bot.CurrentZone;
         var nav = PathfindingProvider.Instance;
-        RvrRouteProbe probe = zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) ? null : new(
+        return zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) ? null : new(
             (raw, range) =>
             {
                 if (range <= 128)
@@ -103,8 +110,29 @@ public static class AutonomousRvrTravel
             raw => bot.CurrentRegion.GetZone((int)raw.X, (int)raw.Y) == zone,
             (from, to) => AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, from, to),
             bot.CurrentRegion.GetZone((int)destination.X, (int)destination.Y) == zone);
-        return AutonomousRvrRoutePolicy.ChooseRoute(start, destination, variant, probe, random ?? Random.Shared,
-            heat, hubCentre, hubSafeRadius);
+    }
+
+    /// <summary>
+    /// The first candidate rest spot that has a walkable floor in the bot's
+    /// zone (hills allowed, like a Flank via-point) and a complete path from
+    /// the bot, or null: the group then rests where it stands.
+    /// </summary>
+    public static Vector3? FirstReachableOffRoad(GameBot bot, Vector3[] candidates)
+    {
+        Vector3 start = new(bot.X, bot.Y, bot.Z);
+        RvrRouteProbe probe = Probe(bot, start);
+        if (probe == null || candidates == null)
+            return null;
+        foreach (Vector3 raw in candidates)
+        {
+            if (!probe.SameZone(raw))
+                continue;
+            Vector3? floor = probe.Floor(raw, AutonomousRvrRoutePolicy.OffRoadFloorRange);
+            if (floor.HasValue && Math.Abs(floor.Value.Z - raw.Z) <= AutonomousRvrRoutePolicy.OffRoadFloorRange &&
+                probe.Corridor(start, floor.Value))
+                return floor.Value;
+        }
+        return null;
     }
 
     /// <summary>
