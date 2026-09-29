@@ -2067,10 +2067,12 @@ namespace DOL.GS.Commands
 						// A failed claim must never be silent: the outer handler only logs exceptions.
 						try
 						{
-							bool allowed = keep.CheckForClaim(client.Player);
+							bool allowed = keep.CheckForClaim(client.Player, out string refusal);
 							if (allowed)
 								keep.Claim(client.Player);
-							log.Info($"KEEP_CLAIM_ATTEMPT player=\"{client.Player.Name}\" guild=\"{client.Player.Guild.Name}\" keep=\"{keep.Name}\" keepId={keep.KeepID} allowed={allowed} owner=\"{keep.Guild?.Name}\" lordDefeated={keep.DBKeep?.LordDefeated} steward={keep.ClaimPoint != null}");
+							else
+								client.Out.SendMessage(refusal ?? "This keep cannot be claimed right now.", eChatType.CT_System, eChatLoc.CL_ChatWindow);
+							log.Info($"KEEP_CLAIM_ATTEMPT player=\"{client.Player.Name}\" guild=\"{client.Player.Guild.Name}\" keep=\"{keep.Name}\" keepId={keep.KeepID} allowed={allowed} refusal=\"{refusal}\" owner=\"{keep.Guild?.Name}\" lordDefeated={keep.DBKeep?.LordDefeated} steward={keep.ClaimPoint != null}");
 						}
 						catch (Exception e)
 						{

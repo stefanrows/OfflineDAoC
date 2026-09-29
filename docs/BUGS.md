@@ -91,18 +91,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     verification pending: check Bard and other speed effects with a full
     group on straight and turning routes, without and with sprint.
 
-68. **`/gc claim` at the Keep Claim Steward shows nothing.** Reported
-    2026-09-28 on Stefan's server: standing at the steward after the lord
-    died, `/gc claim` printed no line and the steward stayed. Every refusal
-    in `CheckForClaim` sends a system message, so the silent paths left are an
-    exception (the `/gc` handler only logs it) or a dead/stunned player.
-    Separately, a successful claim was silent too: `BroadcastClaim` sent to
-    players of realm None, i.e. nobody. Source 0.141.1: the claim command
-    catches its own exception, tells the player and logs
-    `KEEP_CLAIM_FAILED` with the stack; every attempt logs
-    `KEEP_CLAIM_ATTEMPT` (keep, allowed, owner, lord state, steward); the claim
-    broadcast reaches every player. Root cause still open until a log line
-    from the affected server shows the exception or the attempt.
+68. **`/gc claim` at the Keep Claim Steward shows nothing.** Reproduced
+    2026-09-29 at Fensalir Faste with an eight-member player/companion group.
+    Five installed-server `KEEP_CLAIM_ATTEMPT` lines selected keep 80 and
+    returned `allowed=False`; the owner was empty, the lord was defeated, and
+    the steward existed. The live save showed Ceovage had claim rank, an
+    eight-member claim requirement, and a three-keep guild limit with no
+    RAGE-owned keeps. The old log
+    omitted the refusal reason, so the exact failing predicate cannot be
+    established from this run. Source 0.153.0 lets a defeated-lord PvP keep
+    be claimed despite later siege damage refreshing its five-minute combat
+    timer, removes the Camlann group-size requirement at the owner's request,
+    and repeats the exact refusal in main chat and the attempt log. This still
+    needs installation and a real-client retry, including a solo guild claim.
+    If rejected, use the new `refusal` field
+    to identify the remaining check. Successful claim broadcast was fixed
+    earlier in source 0.141.1.
 
 66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
     0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0

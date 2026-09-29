@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.153.0] - 2026-09-29
+
+### Fixed
+
+- A defeated Old Frontiers keep lord now unlocks guild claiming immediately, even
+  if later siege damage refreshes the keep's five-minute combat timer. A guild
+  member with claim rank may claim alone beside the steward; guild limits still
+  apply.
+- `/gc claim` repeats an exact refusal in the main chat and records that reason
+  in `KEEP_CLAIM_ATTEMPT`, so a rejected claim is visible and diagnosable.
+
 ## [0.152.0] - 2026-09-29
 
 ### Changed

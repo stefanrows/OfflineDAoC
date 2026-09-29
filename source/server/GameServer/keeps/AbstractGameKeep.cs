@@ -604,6 +604,12 @@ namespace DOL.GS.Keeps
 
 		public virtual bool CheckForClaim(GameLiving player)
 		{
+			return CheckForClaim(player, out _);
+		}
+
+		public virtual bool CheckForClaim(GameLiving player, out string refusal)
+		{
+			refusal = null;
 			IGamePlayer playerLike = player as IGamePlayer;
 			Guild playerGuild = ServerRules.PvpCombatant.GuildOf(player);
 			if (playerLike == null || playerLike.Out == null || playerGuild == null)
@@ -612,27 +618,25 @@ namespace DOL.GS.Keeps
             if (PvpKeepCampaign.Applies(this) && (!DBKeep.LordDefeated || ClaimPoint == null ||
                 !player.IsAlive || !player.IsWithinRadius(ClaimPoint, WorldMgr.INTERACT_DISTANCE)))
             {
-                playerLike.Out.SendMessage("Defeat the keep lord, then approach the Keep Claim Steward to claim this keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-                return false;
+                return RejectClaim(playerLike, "Defeat the keep lord, then approach the Keep Claim Steward to claim this keep.", out refusal);
             }
-			if (InCombat)
+			// A defeated lord unlocks the PvP steward even if later siege damage
+			// refreshes the keep combat timer.
+			if (InCombat && !(PvpKeepCampaign.Applies(this) && DBKeep.LordDefeated))
 			{
-				playerLike.Out.SendMessage(Name + " is under attack and can't be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				log.DebugFormat("KEEPWARNING: {0} attempted to claim {1} while in combat.", player.Name, Name);
-				return false;
+				return RejectClaim(playerLike, Name + " is under attack and can't be claimed.", out refusal);
 			}
 
 			if (IsPortalKeep)
 			{
-				playerLike.Out.SendMessage("Portal keeps cannot be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-				return false;
+				return RejectClaim(playerLike, "Portal keeps cannot be claimed.", out refusal);
 			}
 			
 			// Disabled check on DBKeep.BaseLevel to allow claiming of BG keeps
 			if (this.DBKeep.BaseLevel != 50 && !ServerProperties.Properties.ALLOW_BG_CLAIM)
 			{
-				playerLike.Out.SendMessage("This keep is not able to be claimed.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-				return false;
+				return RejectClaim(playerLike, "This keep is not able to be claimed.", out refusal);
 			}
 
 			bool hasClaimRank = player switch
@@ -643,27 +647,23 @@ namespace DOL.GS.Keeps
 			};
 			if (!hasClaimRank)
 			{
-				playerLike.Out.SendMessage("You do not have permission to claim for your guild.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-				return false;
+				return RejectClaim(playerLike, "You do not have permission to claim for your guild.", out refusal);
 			}
 			if (this.Guild != null)
 			{
-				playerLike.Out.SendMessage("The keep is already claimed.",eChatType.CT_System,eChatLoc.CL_SystemWindow);
-				return false;
+				return RejectClaim(playerLike, "The keep is already claimed.", out refusal);
 			}
 			switch (ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
 			{
 				case 0:
 					{
-						playerLike.Out.SendMessage("Keep claiming is disabled!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-						return false;
+						return RejectClaim(playerLike, "Keep claiming is disabled!", out refusal);
 					}
 				case 1:
 					{
 						if (playerGuild.ClaimedKeeps.Count == 1)
 						{
-							playerLike.Out.SendMessage("Your guild already owns a keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-							return false;
+							return RejectClaim(playerLike, "Your guild already owns a keep.", out refusal);
 						}
 						break;
 					}
@@ -671,12 +671,16 @@ namespace DOL.GS.Keeps
 					{
 						if (playerGuild.ClaimedKeeps.Count >= ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
 						{
-							playerLike.Out.SendMessage("Your guild already owns the limit of keeps (" + ServerProperties.Properties.GUILDS_CLAIM_LIMIT + ")", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-							return false;
+							return RejectClaim(playerLike, "Your guild already owns the limit of keeps (" + ServerProperties.Properties.GUILDS_CLAIM_LIMIT + ")", out refusal);
 						}
 						break;
 					}
 			}
+
+			// In the Camlann campaign, a ranked guild member may claim alone once
+			// the lord is defeated and the steward is within reach.
+			if (PvpKeepCampaign.Applies(this))
+				return true;
 
 			int needed = ServerProperties.Properties.CLAIM_NUM;
 			if (this is GameKeepTower)
@@ -696,10 +700,16 @@ namespace DOL.GS.Keeps
 
 			if (count < needed)
 			{
-				playerLike.Out.SendMessage("Not enough group members are near the keep. You have " + count + "/" + needed + ".", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-				return false;
+				return RejectClaim(playerLike, "Not enough group members are near the keep. You have " + count + "/" + needed + ".", out refusal);
 			}
 			return true;
+		}
+
+		private static bool RejectClaim(IGamePlayer playerLike, string message, out string refusal)
+		{
+			refusal = message;
+			playerLike.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+			return false;
 		}
 
 		/// <summary>

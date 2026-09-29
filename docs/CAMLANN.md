@@ -132,8 +132,10 @@ These are settled. Do not reopen them without the owner.
 
 1. **Era:** 1.65 Old Frontiers, pre-ToA (above).
 2. **Player guild:** the player founds their own guild. No 8-player founding
-   requirement. Companions and recruited bots count toward claim size. The
-   player's guild holds keeps and relics exactly like a bot crew.
+   requirement. As of 2026-09-29, Camlann keep claims have no group-size
+   requirement either; a ranked guild member can claim alone after defeating
+   the lord and approaching the steward. The player's guild holds keeps and
+   relics exactly like a bot crew.
 3. **Relics:** faithful and **uncapped**. Relics mount in the carrying guild's
    own claimed keep, and the bonus applies to that guild only. A guild may hold
    all six. This is intentional, even though relic stacking hurt live PvP.
@@ -653,8 +655,9 @@ relic bonuses apply to that guild only; stacking is uncapped (decision 3).
 3. Replace the Atlas "lords are seal mobs" respawn logic with normal keep-lord
    respawn so a taken keep stays taken until someone else kills the lord.
 4. `CheckForClaim`: drop `player.Realm != this.Realm`; accept a `GameBot`
-   claimer (bot-aware rank); count grouped `GameBot`s toward `claim_num` (8,
-   towers 4). The player's companions count.
+   claimer (bot-aware rank). The former `claim_num` group-size gate (8 for
+   keeps, 4 for towers) was removed for Camlann Old Frontiers claims in
+   source 0.153.0 at the owner's request. Other rulesets retain that gate.
 5. `guilds_claim_limit`: raise it above 1 so a guild can hold a keep plus
    relic keeps. The Tier 5 default is 3. Existing saves still carried 1 until
    the startup property update of owner decision 10 (2026-09-28).
@@ -711,8 +714,8 @@ Rewrite `KeepRelicReset` / `KeepRelicResetPanel` so they no longer run
 
 - An unclaimed keep can be contested by two crews; a crew is friendly to its
   own claimed guards.
-- A bot killer can reset and claim a keep; companions count toward
-  `claim_num`.
+- A bot killer can reset and claim a keep; Camlann claims no longer use
+  `claim_num` after source 0.153.0.
 - A relic cannot be mounted by a guild without a keep, or before the claim
   delay.
 - The relic bonus reaches guild members and no one else (not same-realm
