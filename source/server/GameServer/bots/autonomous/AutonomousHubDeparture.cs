@@ -69,12 +69,33 @@ public static class AutonomousHubDeparture
     // PvPServerRules.IsAllowedToAttack and the damage-time guards): two
     // same-realm autonomous world bots may not fight at all while either of
     // them stands inside its own realm's hub band.
+    //
+    // Wave 6b (0.153.0): live 0.152.0 logs moved the grinder to the band
+    // edge: 316 deaths (18 %) in one cell of Forest Sauvage 6.3 km from the
+    // keep, Alb killed by Alb 100 %. Groups that left the hub a few minutes
+    // apart met just beyond 6,000. The keep band therefore grows to 7,500,
+    // and a second rule keeps the peace for 8 minutes after either bot left
+    // its own hub's safe circle: groups leaving the same door within minutes
+    // of each other are the same wave, travelling out before they hunt.
 
-    /// <summary>Hub band around the keep centre: safe radius + departure band.</summary>
-    public const int HubBandRadius = DepartureRadius;
+    /// <summary>Hub band around the keep centre (wave 6b: 6,000 -> 7,500).
+    /// The outer landings keep their radius + <see cref="DepartureBand"/>.</summary>
+    public const int HubBandRadius = 7_500;
+
+    /// <summary>How long after leaving its own hub's safe circle a bot stays
+    /// under the peace, wherever it is (wave 6b).</summary>
+    public static readonly TimeSpan RecentDepartureWindow = TimeSpan.FromMinutes(8);
+
+    /// <summary>Which rule refused a same-realm attack.</summary>
+    public enum HubPeaceRule
+    {
+        None,
+        Band,
+        RecentDeparture
+    }
 
     /// <summary>Per-realm band circles (index = (int)eRealm, 1..3): the keep
-    /// circle at 6,000 and each outer landing at its radius + 2,500. Built once;
+    /// circle at 7,500 and each outer landing at its radius + 2,500. Built once;
     /// the hub data are code constants.</summary>
     private static readonly SafeAnchor[][] HubBands = BuildHubBands();
 
@@ -146,6 +167,40 @@ public static class AutonomousHubDeparture
     public static bool HubPeaceApplies(bool bothAutonomousWorldBots, bool sameRealm, bool attackerInBand, bool targetInBand) =>
         bothAutonomousWorldBots && sameRealm && (attackerInBand || targetInBand);
 
+    /// <summary>
+    /// Pure peace rule with the departure clock: the band rule, or either side
+    /// left its own hub's safe circle less than eight minutes ago. The band
+    /// wins when both hold, so the diagnostics count the recent rule only
+    /// where it added protection.
+    /// </summary>
+    public static HubPeaceRule HubPeaceRuleFor(bool bothAutonomousWorldBots, bool sameRealm, bool attackerInBand,
+        bool targetInBand, bool attackerRecentlyLeft, bool targetRecentlyLeft)
+    {
+        if (!bothAutonomousWorldBots || !sameRealm)
+            return HubPeaceRule.None;
+        if (attackerInBand || targetInBand)
+            return HubPeaceRule.Band;
+        return attackerRecentlyLeft || targetRecentlyLeft ? HubPeaceRule.RecentDeparture : HubPeaceRule.None;
+    }
+
+    /// <summary>Pure clock: a leave time exists and lies less than
+    /// <see cref="RecentDepartureWindow"/> in the past.</summary>
+    public static bool RecentlyDeparted(DateTime? leftUtc, DateTime nowUtc) =>
+        leftUtc.HasValue && nowUtc >= leftUtc.Value && nowUtc - leftUtc.Value < RecentDepartureWindow;
+
+    /// <summary>Whether the bot left its own hub's safe circle less than eight
+    /// minutes ago. Reads the departure track only; a bot without one (never
+    /// seen inside its hub, or not an RvR bot) is not departing.</summary>
+    public static bool RecentlyDeparted(GameBot bot, DateTime nowUtc)
+    {
+        if (bot == null || !Tracks.TryGetValue(bot, out Track track))
+            return false;
+        DateTime? left;
+        lock (track)
+            left = track.LeftUtc;
+        return RecentlyDeparted(left, nowUtc);
+    }
+
     /// <summary>A free autonomous world bot: not a companion, helper or part
     /// of a human-led group, whose fights stay the human's decision.</summary>
     private static bool IsWorldBot(GameLiving living) => living is GameBot
@@ -163,9 +218,17 @@ public static class AutonomousHubDeparture
     public static bool HubPeaceApplies(GameLiving attacker, GameLiving target) =>
         HubPeaceApplies(attacker, target, out _);
 
-    public static bool HubPeaceApplies(GameLiving attacker, GameLiving target, out eRealm realm)
+    public static bool HubPeaceApplies(GameLiving attacker, GameLiving target, out eRealm realm) =>
+        HubPeaceApplies(attacker, target, WorldSimulationClock.UtcNow, out realm, out _);
+
+    public static bool HubPeaceApplies(GameLiving attacker, GameLiving target, out eRealm realm, out HubPeaceRule rule) =>
+        HubPeaceApplies(attacker, target, WorldSimulationClock.UtcNow, out realm, out rule);
+
+    public static bool HubPeaceApplies(GameLiving attacker, GameLiving target, DateTime nowUtc, out eRealm realm,
+        out HubPeaceRule rule)
     {
         realm = eRealm.None;
+        rule = HubPeaceRule.None;
         GameLiving first = PvpCombatant.Resolve(attacker);
         if (!IsWorldBot(first))
             return false;
@@ -173,7 +236,12 @@ public static class AutonomousHubDeparture
         if (second == first || !IsWorldBot(second) || first.Realm != second.Realm)
             return false;
         realm = first.Realm;
-        return HubPeaceApplies(true, true, InHubBand(first), InHubBand(second));
+        // Band first (cheap geometry); the clock is read only outside it.
+        if (InHubBand(first) || InHubBand(second))
+            rule = HubPeaceRule.Band;
+        else if (RecentlyDeparted((GameBot)first, nowUtc) || RecentlyDeparted((GameBot)second, nowUtc))
+            rule = HubPeaceRule.RecentDeparture;
+        return rule != HubPeaceRule.None;
     }
 
     // Counters for RVR_HUB_PEACE, index = (int)eRealm. Each sits on its own
@@ -185,15 +253,24 @@ public static class AutonomousHubDeparture
     }
     private static readonly PaddedCounter[] PeaceBlocked = new PaddedCounter[4];
     private static readonly PaddedCounter[] PeaceStray = new PaddedCounter[4];
+    private static readonly PaddedCounter[] PeaceRecent = new PaddedCounter[4];
     private static long _nextPeaceLogTick;
     public const long PeaceLogIntervalMilliseconds = 300_000;
 
     /// <summary>Counts one attack permission refused by the peace.</summary>
-    public static void CountPeaceBlocked(eRealm realm, bool damageTime)
+    public static void CountPeaceBlocked(eRealm realm, bool damageTime) =>
+        CountPeaceBlocked(realm, damageTime, HubPeaceRule.Band);
+
+    /// <summary>Counts one attack permission refused by the peace and, for
+    /// permission checks (not damage-time strays), which rule refused it.</summary>
+    public static void CountPeaceBlocked(eRealm realm, bool damageTime, HubPeaceRule rule)
     {
         int index = (int)realm;
-        if (index is >= 1 and <= 3)
-            Interlocked.Increment(ref (damageTime ? PeaceStray : PeaceBlocked)[index].Value);
+        if (index is not (>= 1 and <= 3))
+            return;
+        Interlocked.Increment(ref (damageTime ? PeaceStray : PeaceBlocked)[index].Value);
+        if (!damageTime && rule == HubPeaceRule.RecentDeparture)
+            Interlocked.Increment(ref PeaceRecent[index].Value);
     }
 
     /// <summary>
@@ -201,7 +278,8 @@ public static class AutonomousHubDeparture
     /// counts attack-permission checks refused between non-allied bots
     /// (target scans, swings, spell targets, AoE splash); "stray" counts hits
     /// stopped in TakeDamage because they bypassed the permission check or
-    /// were already in flight.
+    /// were already in flight. "by_rule" splits "blocked" into the hub band
+    /// and the eight-minute departure clock (wave 6b).
     /// </summary>
     public static string DrainPeaceLine()
     {
@@ -209,8 +287,13 @@ public static class AutonomousHubDeparture
             hib = Interlocked.Exchange(ref PeaceBlocked[3].Value, 0);
         int stray = Interlocked.Exchange(ref PeaceStray[1].Value, 0) + Interlocked.Exchange(ref PeaceStray[2].Value, 0) +
             Interlocked.Exchange(ref PeaceStray[3].Value, 0);
-        return $"RVR_HUB_PEACE window_s={PeaceLogIntervalMilliseconds / 1000} blocked={alb + mid + hib} " +
-            $"by_hub=Svasud:{mid},Sauvage:{alb},Druim:{hib} stray={stray}";
+        int recent = Interlocked.Exchange(ref PeaceRecent[1].Value, 0) + Interlocked.Exchange(ref PeaceRecent[2].Value, 0) +
+            Interlocked.Exchange(ref PeaceRecent[3].Value, 0);
+        int blocked = alb + mid + hib;
+        // A drain racing an increment could see the rule count first; clamp.
+        recent = Math.Min(recent, blocked);
+        return $"RVR_HUB_PEACE window_s={PeaceLogIntervalMilliseconds / 1000} blocked={blocked} " +
+            $"by_hub=Svasud:{mid},Sauvage:{alb},Druim:{hib} by_rule=band:{blocked - recent},recent:{recent} stray={stray}";
     }
 
     /// <summary>Writes RVR_HUB_PEACE once per five minutes.</summary>
@@ -234,7 +317,9 @@ public static class AutonomousHubDeparture
     public static readonly TimeSpan LogThrottle = TimeSpan.FromSeconds(60);
 
     /// <summary>Whether a bot was last seen inside the hub, which safe circle
-    /// it left, and when.</summary>
+    /// it left, and when. Entering any of the hub's safe circles again clears
+    /// the leave time, so the eight-minute peace clock restarts only on a real
+    /// departure; a bot never seen inside has no clock at all.</summary>
     public sealed class Track
     {
         public SafeAnchor? Inside;
@@ -265,6 +350,10 @@ public static class AutonomousHubDeparture
     }
 
     private static readonly ConditionalWeakTable<GameBot, Track> Tracks = new();
+
+    /// <summary>The bot's departure track, created on first use (tests and
+    /// diagnostics).</summary>
+    public static Track TrackOf(GameBot bot) => Tracks.GetOrCreateValue(bot);
     private static readonly ConditionalWeakTable<GameBot, StrongBox<DateTime>> TruceLogged = new();
     private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousHubDeparture));
 

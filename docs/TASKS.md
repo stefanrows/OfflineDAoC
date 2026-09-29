@@ -261,6 +261,15 @@ Agent sessions on items 45–48: take the role and context from
     falls to the few fights with humans or other realms; a human (or an
     Albion/Hibernia bot) can still attack a Mid bot near Svasud and it
     fights back; guards and companions unchanged.
+    Addendum (wave 6b, 2026-09-29): implemented in source, real-client check
+    pending. The 0.152.0 log moved the grinder to the band edge (316 deaths,
+    18 %, Alb on Alb, Forest Sauvage 6.3 km from Castle Sauvage). The peace
+    now also holds for 8 minutes after either bot left its own hub's safe
+    circle (re-entry clears the clock), and the keep band is 7,500. Check:
+    no 1,000 x 1,000 cell within 10 km of a hub holds more than 10 % of RvR
+    bot PvP deaths; `RVR_HUB_PEACE ... by_rule=band:...,recent:...` shows
+    both counts non-zero while groups leave the hubs; same-realm fights
+    still happen out on the frontier after the first minutes.
 
 65. **RvR wave 4: support by spec.** Aaron, 2026-09-29 (P1 "roles are
     fluid by spec", P8 "support jobs before the assist train"). Implemented

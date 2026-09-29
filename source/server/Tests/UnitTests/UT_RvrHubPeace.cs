@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Numerics;
 using System.Reflection;
@@ -172,7 +173,7 @@ public sealed class UT_RvrHubPeace
         });
 
         string line = AutonomousHubDeparture.DrainPeaceLine();
-        Assert.That(line, Is.EqualTo("RVR_HUB_PEACE window_s=300 blocked=1 by_hub=Svasud:1,Sauvage:0,Druim:0 stray=1"));
+        Assert.That(line, Is.EqualTo("RVR_HUB_PEACE window_s=300 blocked=1 by_hub=Svasud:1,Sauvage:0,Druim:0 by_rule=band:1,recent:0 stray=1"));
     }
 
     [Test]
@@ -248,6 +249,150 @@ public sealed class UT_RvrHubPeace
             Assert.That(AutonomousHubDeparture.HubPeaceApplies(hunter, PetOf(inside)), Is.True, "bot pet as target");
             Assert.That(AutonomousHubDeparture.HubPeaceApplies(PetOf(human), inside), Is.False, "human pet");
         });
+    }
+
+    // ---- Wave 6b: 7,500 keep band and the eight-minute departure clock ----
+
+    private static readonly DateTime T0 = new(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>Records a real departure: seen inside Svasud's keep circle,
+    /// then outside it at <paramref name="leftUtc"/>.</summary>
+    private static void Depart(GameBot bot, DateTime leftUtc)
+    {
+        Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Midgard, 100, SvasudX, SvasudY,
+            out AutonomousHubDeparture.SafeAnchor keep), Is.True);
+        var track = AutonomousHubDeparture.TrackOf(bot);
+        track.Observe(keep, leftUtc.AddMinutes(-1));
+        track.Observe(null, leftUtc);
+    }
+
+    [Test]
+    public void KeepBandReachesSevenAndAHalfThousand()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousHubDeparture.HubBandRadius, Is.EqualTo(7_500));
+            Assert.That(AutonomousHubDeparture.InHubBand(eRealm.Midgard, 100, SvasudX, SvasudY - 7_400), Is.True);
+            Assert.That(AutonomousHubDeparture.InHubBand(eRealm.Midgard, 100, SvasudX, SvasudY - 7_600), Is.False);
+            // The departure truce band stays at the safe edge + 2,500.
+            Assert.That(AutonomousHubDeparture.DepartureRadius, Is.EqualTo(6_000));
+        });
+    }
+
+    [TestCase(479, ExpectedResult = true, TestName = "Left 7:59 ago is still departing")]
+    [TestCase(480, ExpectedResult = false, TestName = "Eight minutes after leaving the clock has run out")]
+    [TestCase(481, ExpectedResult = false, TestName = "Left 8:01 ago may fight again")]
+    [TestCase(-5, ExpectedResult = false, TestName = "A leave time in the future does not count")]
+    public bool RecentDepartureClock(int secondsSinceLeaving) =>
+        AutonomousHubDeparture.RecentlyDeparted(T0, T0.AddSeconds(secondsSinceLeaving));
+
+    [Test]
+    public void NoLeaveTimeMeansNoRecentDeparture() =>
+        Assert.That(AutonomousHubDeparture.RecentlyDeparted((DateTime?)null, T0), Is.False);
+
+    [TestCase(true, true, true, false, true, false, ExpectedResult = AutonomousHubDeparture.HubPeaceRule.Band,
+        TestName = "The band wins when both rules hold")]
+    [TestCase(true, true, false, false, true, false, ExpectedResult = AutonomousHubDeparture.HubPeaceRule.RecentDeparture,
+        TestName = "A recent attacker departure blocks outside the band")]
+    [TestCase(true, true, false, false, false, true, ExpectedResult = AutonomousHubDeparture.HubPeaceRule.RecentDeparture,
+        TestName = "A recent target departure blocks outside the band")]
+    [TestCase(true, true, false, false, false, false, ExpectedResult = AutonomousHubDeparture.HubPeaceRule.None,
+        TestName = "Neither in the band nor recently departed may fight")]
+    [TestCase(true, false, false, false, true, true, ExpectedResult = AutonomousHubDeparture.HubPeaceRule.None,
+        TestName = "The departure clock ignores other realms")]
+    [TestCase(false, true, false, false, true, true, ExpectedResult = AutonomousHubDeparture.HubPeaceRule.None,
+        TestName = "The departure clock ignores humans and companions")]
+    public AutonomousHubDeparture.HubPeaceRule PeaceRuleWithClock(bool bothWorldBots, bool sameRealm,
+        bool attackerInBand, bool targetInBand, bool attackerRecent, bool targetRecent) =>
+        AutonomousHubDeparture.HubPeaceRuleFor(bothWorldBots, sameRealm, attackerInBand, targetInBand,
+            attackerRecent, targetRecent);
+
+    [Test]
+    public void RecentDepartureBlocksSameRealmBotsOutsideTheBandForEightMinutes()
+    {
+        var leaver = Bot(eRealm.Midgard, Frontier);
+        var other = Bot(eRealm.Midgard, (Frontier.X, Frontier.Y - 1_000));
+        Depart(leaver, T0);
+
+        bool blocked = AutonomousHubDeparture.HubPeaceApplies(other, leaver, T0.AddSeconds(479), out eRealm realm,
+            out AutonomousHubDeparture.HubPeaceRule rule);
+        Assert.Multiple(() =>
+        {
+            Assert.That(blocked, Is.True, "7:59 after leaving");
+            Assert.That(realm, Is.EqualTo(eRealm.Midgard));
+            Assert.That(rule, Is.EqualTo(AutonomousHubDeparture.HubPeaceRule.RecentDeparture));
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(leaver, other, T0.AddSeconds(479), out _, out _), Is.True,
+                "the leaver may not open either");
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(other, leaver, T0.AddSeconds(481), out _, out rule), Is.False,
+                "8:01 after leaving");
+            Assert.That(rule, Is.EqualTo(AutonomousHubDeparture.HubPeaceRule.None));
+        });
+    }
+
+    [Test]
+    public void ReenteringASafeCircleClearsTheDepartureClock()
+    {
+        var leaver = Bot(eRealm.Midgard, Frontier);
+        var other = Bot(eRealm.Midgard, (Frontier.X, Frontier.Y - 1_000));
+        Depart(leaver, T0);
+        Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Midgard, 100, SvasudX, SvasudY,
+            out AutonomousHubDeparture.SafeAnchor keep), Is.True);
+
+        var track = AutonomousHubDeparture.TrackOf(leaver);
+        track.Observe(keep, T0.AddMinutes(1));
+        Assert.Multiple(() =>
+        {
+            Assert.That(track.LeftUtc, Is.Null, "back inside: no clock");
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(other, leaver, T0.AddMinutes(2), out _, out _), Is.False,
+                "a bot that went back in carries no old clock out to the band edge");
+        });
+        // Leaving again starts a fresh eight minutes from the new crossing.
+        track.Observe(null, T0.AddMinutes(3));
+        Assert.That(AutonomousHubDeparture.HubPeaceApplies(other, leaver, T0.AddMinutes(10), out _, out _), Is.True);
+        Assert.That(AutonomousHubDeparture.HubPeaceApplies(other, leaver, T0.AddMinutes(11).AddSeconds(1), out _, out _),
+            Is.False);
+    }
+
+    [Test]
+    public void DepartureClockLeavesOtherRealmsHumansAndUntrackedBotsAlone()
+    {
+        var leaver = Bot(eRealm.Midgard, Frontier);
+        var albion = Bot(eRealm.Albion, (Frontier.X, Frontier.Y - 1_000));
+        var untracked = Bot(eRealm.Midgard, (Frontier.X, Frontier.Y - 2_000));
+        var untrackedToo = Bot(eRealm.Midgard, (Frontier.X, Frontier.Y - 3_000));
+        var human = new PeacePlayer { Realm = eRealm.Midgard, CurrentRegionID = 100 };
+        Depart(leaver, T0);
+        DateTime now = T0.AddMinutes(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(albion, leaver, now, out _, out _), Is.False, "cross-realm attacker");
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(leaver, albion, now, out _, out _), Is.False, "cross-realm target");
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(human, leaver, now, out _, out _), Is.False, "a human may attack");
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(leaver, human, now, out _, out _), Is.False, "the bot defends");
+            Assert.That(AutonomousHubDeparture.RecentlyDeparted(untracked, now), Is.False, "no track, no clock");
+            Assert.That(AutonomousHubDeparture.HubPeaceApplies(untracked, untrackedToo, now, out _, out _), Is.False,
+                "two bots without a track fight outside the band");
+        });
+    }
+
+    [Test]
+    public void AttackPermissionCountsTheDepartureRuleSeparately()
+    {
+        var rules = new PvPServerRules();
+        var leaver = Bot(eRealm.Midgard, Frontier);
+        var other = Bot(eRealm.Midgard, (Frontier.X, Frontier.Y - 1_000));
+        var inside = Bot(eRealm.Midgard, InBand);
+        Depart(leaver, WorldSimulationClock.UtcNow.AddMinutes(-1));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rules.IsAllowedToAttack(other, leaver, true), Is.False, "recent departure");
+            Assert.That(rules.IsAllowedToAttack(other, inside, true), Is.False, "band");
+            Assert.That(PvpCombatant.BlocksAutonomousPvp(other, leaver, countStray: true), Is.True, "damage-time guard");
+        });
+        Assert.That(AutonomousHubDeparture.DrainPeaceLine(), Is.EqualTo(
+            "RVR_HUB_PEACE window_s=300 blocked=2 by_hub=Svasud:2,Sauvage:0,Druim:0 by_rule=band:1,recent:1 stray=1"));
     }
 
     [Test]
