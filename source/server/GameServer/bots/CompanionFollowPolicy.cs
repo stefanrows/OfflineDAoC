@@ -151,7 +151,7 @@ namespace DOL.GS
         public static int CalculateSpeed(int normal, int leaderSpeed, double distanceFromSlot)
         {
             if (normal <= 0) return normal;
-            double catchup = Math.Clamp((distanceFromSlot - 60) / 900d, 0, 1) * 0.20;
+            double catchup = Math.Clamp((distanceFromSlot - 60) / 240d, 0, 1) * 0.20;
             return (int)Math.Clamp(Math.Round(Math.Max(normal, leaderSpeed) * (1 + catchup)), 0, short.MaxValue);
         }
 

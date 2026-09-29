@@ -1301,8 +1301,10 @@ namespace DOL.AI.Brain
                     int trailDistance = CompanionFollowStyle.StickDistance(place);
                     Point2D trail = leader.GetPointFromHeading((ushort)((leader.Heading + 2048) & 0xFFF), trailDistance);
                     Vector3 stick = CompanionFollowPolicy.FormationDestination(BotBody, new(trail.X, trail.Y, leader.Z));
-                    short stickSpeed = (short)Math.Max(1, leaderSpeed + (Body.GetDistanceTo(leader) > trailDistance + 80 ? 40 : 0));
                     CompanionFollowPolicy.BeginFormation(BotBody, stick);
+                    int allowedSpeed = Body.GetDistanceTo(stick) > 80
+                        ? Body.MaxSpeed : Math.Min(Body.MaxSpeed, leaderSpeed);
+                    short stickSpeed = (short)Math.Max(1, allowedSpeed);
                     if (AutonomousGroupMotion.ShouldResteer(BotBody, stick, stickSpeed, now))
                         Body.PathTo(stick, stickSpeed);
                     return;
@@ -2211,14 +2213,16 @@ namespace DOL.AI.Brain
                 return false;
             }
 
-            bool traveling = bot.IsMoving || bot.IsReturningAfterRelease ||
+            bool traveling = bot.IsMoving || bot.IsSprinting || bot.IsReturningAfterRelease ||
                              bot.Group?.LivingLeader?.IsMoving == true ||
                              bot.PersistentRecord?.Activity?.Contains("travel", StringComparison.OrdinalIgnoreCase) == true ||
                              bot.PersistentRecord?.Activity?.Contains("walking", StringComparison.OrdinalIgnoreCase) == true;
 
-            // Player-led performers stay quiet out of combat except for the
-            // speed song while the group travels; twisting every chant wasted power.
+            // Player-led performers stay quiet while parked. During travel,
+            // Bards twist endurance with speed to offset sprint's drain.
             bool travelSpeedOnly = bot.IsPlayerLedGroup && !immediateCombat;
+            bool bardTravelSongs = traveling && !immediateCombat &&
+                (eCharacterClass)bot.CharacterClass.ID == eCharacterClass.Bard;
             if (travelSpeedOnly && !traveling)
             {
                 StopTwistedSong();
@@ -2233,13 +2237,18 @@ namespace DOL.AI.Brain
                                 bot.Mana >= bot.PowerCost(spell))
                 .DistinctBy(spell => spell.ID)
                 .Where(spell => !bardCombatSong || spell.SpellType == eSpellType.EnduranceRegenBuff)
-                .Where(spell => !travelSpeedOnly || spell.SpellType == eSpellType.SpeedEnhancement)
+                .Where(spell => !bardTravelSongs ||
+                                spell.SpellType is eSpellType.SpeedEnhancement or eSpellType.EnduranceRegenBuff)
+                .Where(spell => !travelSpeedOnly || bardTravelSongs ||
+                                spell.SpellType == eSpellType.SpeedEnhancement)
                 .Where(spell => spell.SpellType != eSpellType.SpeedEnhancement || !immediateCombat && (traveling || groupedSupport))
                 .OrderByDescending(spell => spell.SpellType == eSpellType.SpeedEnhancement && !immediateCombat)
                 .ThenByDescending(spell => groupedSupport && spell.Target is eSpellTarget.GROUP or eSpellTarget.REALM)
                 .ThenByDescending(spell => spell.Value)
                 .ThenByDescending(spell => spell.Level)
                 .ToList();
+            if (bardTravelSongs)
+                songs = songs.DistinctBy(spell => spell.SpellType).ToList();
 
             if (bardCombatSong)
             {
@@ -2269,9 +2278,12 @@ namespace DOL.AI.Brain
                     effect.SpellHandler?.Spell is Spell activeSpell && activeSpell.IsPulsing &&
                     !activeSpell.IsHarmful && IsMaintainableClassBuff(activeSpell));
             _activeTwistedSongId = activePulse?.SpellHandler.Spell.ID ?? 0;
-            int chosenId = BotSongTwistPolicy.Choose(songs[0].ID, _activeTwistedSongId,
-                songs.Select(candidate => new BotSongTwistPolicy.Song(candidate.ID, candidate.CastTime,
-                    bot.GetSkillDisabledDuration(candidate), SongRemainingMilliseconds(candidate))).ToArray());
+            BotSongTwistPolicy.Song[] songStates = songs.Select(candidate =>
+                new BotSongTwistPolicy.Song(candidate.ID, candidate.CastTime,
+                    bot.GetSkillDisabledDuration(candidate), SongRemainingMilliseconds(candidate))).ToArray();
+            int chosenId = bardTravelSongs
+                ? BotSongTwistPolicy.ChooseBardTravel(songs[0].ID, _activeTwistedSongId, songStates)
+                : BotSongTwistPolicy.Choose(songs[0].ID, _activeTwistedSongId, songStates);
             Spell song = songs.FirstOrDefault(candidate => candidate.ID == chosenId);
 
             // Preserve the anchor. Only leave after its reuse clears and a real

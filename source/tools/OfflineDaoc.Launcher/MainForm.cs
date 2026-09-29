@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.141.1";
+    internal const string DisplayVersion = "0.145.1";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -126,7 +126,7 @@ internal sealed partial class MainForm : Form
     private readonly DataGridView _rvrObjectivesGrid = new();
     private readonly Label _rvrUpdated = new();
     private readonly ComboBox _rvrRealm = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-    private readonly TextBox _rvrSearch = new() { Width = 240, PlaceholderText = "Search Camlann frontier name, zone or task" };
+    private readonly TextBox _rvrSearch = new() { Width = 240, PlaceholderText = "Search frontier name, zone or task" };
     private RvrWorldSnapshot? _rvrWorld;
     private bool _rvrServerRunning;
     private string _rvrSortProperty = "Name";
@@ -185,7 +185,7 @@ internal sealed partial class MainForm : Form
         _clientConnector = Path.Combine(_clientDirectory, "connect.exe");
         _logsDirectory = Path.Combine(_root, "logs");
 
-        Text = "Offline DAoC — Camlann 1.65 Old Frontiers";
+        Text = "Offline DAoC — PvP & Co-op";
         MinimumSize = new Size(960, 620);
         Size = new Size(1100, 700);
         StartPosition = FormStartPosition.CenterScreen;
@@ -377,7 +377,7 @@ internal sealed partial class MainForm : Form
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
-            Text = "OFFLINE DAoC — CAMLANN",
+            Text = "OFFLINE DAoC — PVP & CO-OP",
             Font = new Font("Georgia", 28f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
             Location = new Point(52, 5),
@@ -385,7 +385,7 @@ internal sealed partial class MainForm : Form
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
-            Text = "CAMLANN 1.65  •  OLD FRONTIERS FULL-PVP  •  LIVING PLAYER BOTS",
+            Text = "OLD FRONTIERS 1.65  •  FULL-PVP WORLD  •  BOTS & CO-OP",
             Font = new Font("Georgia", 9f),
             ForeColor = Color.FromArgb(196, 145, 70),
             Location = new Point(55, 57),
@@ -477,7 +477,7 @@ internal sealed partial class MainForm : Form
             int batchSize = GetGenerationBatchSize();
             _generatingBot = true;
             SetRealmGenerationEnabled(false);
-            _footer.Text = $"Adding {batchSize} {realmName[0] + realmName[1..].ToLowerInvariant()} bot(s) to the Camlann crew roster…";
+            _footer.Text = $"Adding {batchSize} {realmName[0] + realmName[1..].ToLowerInvariant()} bot(s) to the crew roster…";
             try
             {
                 IReadOnlyList<BotCharacterGenerator.Identity> identities =
@@ -487,8 +487,8 @@ internal sealed partial class MainForm : Form
                 BotCharacterGenerator.Identity last = identities[^1];
                 SelectBot(last.Name);
                 _footer.Text = batchSize == 1
-                    ? $"Added {last.Name}, a {last.RaceName} {last.ClassName}, to the Camlann crew roster. Queued for staggered login."
-                    : $"Added all {batchSize} {realmName[0] + realmName[1..].ToLowerInvariant()} bots to the Camlann crew roster. All are queued for staggered login.";
+                    ? $"Added {last.Name}, a {last.RaceName} {last.ClassName}, to the crew roster. Queued for staggered login."
+                    : $"Added all {batchSize} {realmName[0] + realmName[1..].ToLowerInvariant()} bots to the crew roster. All are queued for staggered login.";
             }
             catch (Exception exception)
             {
@@ -529,7 +529,7 @@ internal sealed partial class MainForm : Form
         populationLayout.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "CAMLANN POPULATION  •  autonomous crews and solo roamers  •  realms are identity, not teams",
+            Text = "PVP BOT POPULATION  •  autonomous crews and solo roamers  •  realms are identity, not teams",
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = DaocTheme.GoldLight,
             BackColor = DaocTheme.StoneDark,
@@ -2358,8 +2358,8 @@ internal sealed partial class MainForm : Form
             column.HeaderCell.SortGlyphDirection = column.DataPropertyName == _rvrSortProperty
                 ? _rvrSortAscending ? SortOrder.Ascending : SortOrder.Descending : SortOrder.None;
         RenderRealmEvents();
-        _rvrUpdated.Text = _rvrWorld == null ? "CAMLANN FRONTIER EVENTS — awaiting the server's first snapshot"
-            : $"CAMLANN FRONTIER EVENTS  ·  {(_rvrServerRunning ? DateTime.UtcNow - _rvrWorld.UpdatedUtc > TimeSpan.FromMinutes(6) ? "Old snapshot" : "Snapshot" : "Server stopped — last known state")} {_rvrWorld.UpdatedUtc.ToLocalTime():g}  ·  Red: battle/drop  ·  Purple: relic carrier  ·  Gold: rally";
+        _rvrUpdated.Text = _rvrWorld == null ? "FRONTIER EVENTS — awaiting the server's first snapshot"
+            : $"FRONTIER EVENTS  ·  {(_rvrServerRunning ? DateTime.UtcNow - _rvrWorld.UpdatedUtc > TimeSpan.FromMinutes(6) ? "Old snapshot" : "Snapshot" : "Server stopped — last known state")} {_rvrWorld.UpdatedUtc.ToLocalTime():g}  ·  Red: battle/drop  ·  Purple: relic carrier  ·  Gold: rally";
     }
 
     private RvrWorldSnapshot? ReadRvrWorld()

@@ -4,14 +4,14 @@ namespace DOL.GS.Commands
 {
     [CmdAttribute("&level",
     ePrivLevel.Player,
-    "Disabled on the Camlann PvP server", "/level")]
+    "Disabled on the full-PvP server", "/level")]
     public class LevelCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         public void OnCommand(GameClient client, string[] args)
         {
             if (GameServer.Instance?.Configuration?.ServerType == EGameServerType.GST_PvP)
             {
-                DisplayMessage(client, "/level is disabled on the Camlann PvP server.");
+                DisplayMessage(client, "/level is disabled on the full-PvP server.");
                 return;
             }
 

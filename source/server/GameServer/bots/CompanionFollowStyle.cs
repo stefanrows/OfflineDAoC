@@ -13,7 +13,7 @@ namespace DOL.GS
 
         /// <summary>Speed above normal running (a speed song or buff).</summary>
         public const short SpeedRunThreshold = 250;
-        public const long StickAfterMilliseconds = 3_000;
+        public const long StickAfterMilliseconds = 500;
         public const long ReactAfterMilliseconds = 1_500;
         public const int ReactSlack = 220;
 

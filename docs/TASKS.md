@@ -180,6 +180,30 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+61. **Refresh the PvP & Co-op startup splash.** Source 0.144.0 adds an original
+    breached-milegate battle with a mixed-realm party defending against a
+    rival guild. The 2880×2160 master and 800×600 preview include a short
+    description of rival guilds, besieged keeps and allies; the client archive
+    keeps eight uncompressed 1024×768 TGA frames under the legacy internal
+    name. Offline extraction and image checks passed. Installation and
+    real-client check pending: confirm the new image appears during startup,
+    text is readable at the active resolution, and no black splash occurs.
+
+60. **Bard travel songs.** Source 0.143.0 selects speed and endurance
+    as the Bard travel pair for player-led companions and autonomous bots,
+    including sprint starts. Speed stays the anchor, and endurance is
+    recast when its child effect runs low. Installation and real-client
+    check pending: run and sprint with a Bard, confirm both buffs
+    cycle without interrupting follow and endurance holds up.
+
+59. **Name the player-facing world PvP & Co-op.** Source 0.142.0 replaces
+    Camlann branding in the launcher, population controls, frontier panels,
+    progress-import messages and the `/level` refusal. Historical documentation
+    and save-facing identifiers remain intact. Installation and real-client
+    check pending: confirm the launcher text fits at the active Windows DPI,
+    the progress importer explains the fresh-save policy, and `/level` shows
+    the updated message.
+
 58. **Pet pull: healers top the pet up after the fight.** Aaron, 2026-09-28.
     Source 0.141.0: with `/petpull` on, once no pull is running and owner and
     pet are out of combat, healer companions heal the owner's pet to full

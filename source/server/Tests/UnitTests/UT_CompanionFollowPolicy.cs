@@ -20,6 +20,8 @@ namespace DOL.UnitTests
             }
             Assert.That(CompanionFollowPolicy.CalculateSpeed(0, 390, 3000), Is.Zero);
             Assert.That(CompanionFollowPolicy.CalculateSpeed(500, 390, 0), Is.EqualTo(500));
+            Assert.That(CompanionFollowPolicy.CalculateSpeed(191, 390, 300), Is.EqualTo(468),
+                "A follower one short song-speed run behind needs the bounded full catch-up pace.");
         }
 
         [Test]

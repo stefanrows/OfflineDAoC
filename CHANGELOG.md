@@ -12,6 +12,112 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.145.1] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- Documented the live 6,210-bot performance investigation in bug 56, with
+  measured tick loss, navigation stack samples, and a synchronous Realm
+  Exchange listing stall path. The performance fix remains open.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.145.0] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- Player-led companions react to song-speed runs after half a second and
+  use their bounded catch-up speed on the stick route, so a running group
+  closes its gap instead of falling farther behind. Normal walking retains
+  its delayed first-step follow.
+
+### Removed
+
+- None.
+
+## [0.144.0] - 2026-09-29
+
+### Added
+
+- A 2880×2160 master splash illustration for the PvP & Co-op world, with
+  editable background artwork and an 800×600 preview.
+
+### Changed
+
+- The client startup splash now shows a mixed-realm party defending a breached
+  Old Frontiers milegate against a rival guild, with the exact "Offline DAoC"
+  and "PvP & Co-op" names
+  and the line "Rival guilds. Besieged keeps. Legends forged together."
+  The client archive retains its legacy 1024×768, eight-frame TGA format.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.143.0] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- Traveling Bards cycle speed and endurance songs, including while sprinting.
+  The speed song remains the anchor; combat song selection is unchanged.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.142.0] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- Player-facing launcher and progress-import naming now calls the world
+  "PvP & Co-op". The launcher banner describes the Old Frontiers full-PvP
+  setting, bots and co-op; population presets and frontier labels use plain
+  PvP wording. The `/level` refusal uses the same generic PvP wording.
+- Saved world markers, population setting values and backup paths keep their
+  existing names so current installations remain compatible.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.141.1] - 2026-09-28
 
 ### Fixed
