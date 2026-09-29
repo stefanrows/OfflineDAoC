@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.158.0] - 2026-09-29
+
+### Added
+
+- None.
+
+### Changed
+
+- Autonomous world bots play continuously (task 70): RvR tours no longer
+  end, a bot leaving an RvR group stays in RvR instead of owing a PvE task,
+  productive PvE parties keep renewing, and optional town breaks are gone.
+  Training and a full backpack still send a bot to town.
+- RvR groups are pickup groups across guilds and realms (task 71):
+  guildmates first, then the leader's realm, then any realm. Warband merges
+  and siege openings stay one-guild; group sizes stay mixed by player type.
+
+### Fixed
+
+- RvR group members help a mate who is attacked (bug 73): a helper no longer
+  drops its fight after 6 s while it is still running to the attacker.
+
+### Removed
+
+- Optional town downtime for autonomous world bots.
+
 ## [0.157.3] - 2026-09-29
 
 ### Added

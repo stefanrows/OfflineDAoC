@@ -510,6 +510,11 @@ namespace DOL.AI.Brain
 
         public const int GROUP_DEFENSE_ASSIST_RADIUS = 2000;
 
+        // Bug 73: a helper running up to 2,000 units to a mate's attacker is
+        // not yet in combat itself; it keeps its aggro while the mate is hit.
+        private const long GROUP_DEFENSE_HOLD_MILLISECONDS = 6_000;
+        private long _groupDefenseUntil;
+
         public static GameLiving GroupMemberForCombat(GameLiving living)
         {
             if (living is GamePlayer or GameBot) return living;
@@ -601,6 +606,7 @@ namespace DOL.AI.Brain
             AddToAggroList(attacker, attacker.EffectiveLevel * 10);
             if (!HasAggro)
                 return;
+            _groupDefenseUntil = GameLoop.GameLoopTime + GROUP_DEFENSE_HOLD_MILLISECONDS;
             if (BotBody?.IsRecoveryResting == true)
                 BotBody.WakeRecoveryRest();
             NextThinkTick = GameLoop.GameLoopTime;
@@ -663,6 +669,7 @@ namespace DOL.AI.Brain
 
             if (HasAggro)
             {
+                _groupDefenseUntil = GameLoop.GameLoopTime + GROUP_DEFENSE_HOLD_MILLISECONDS;
                 if (sisterParty || sameOwnerForce) AutonomousBotGroupCoordinator.MarkCombatObserved(group);
                 // Like a direct hit, a nearby group-defense event must wake a
                 // resting bot now, not wait for its next idle planning turn.
@@ -2951,7 +2958,8 @@ namespace DOL.AI.Brain
 
                 if (_brain.ActiveOrderedPullTarget == null &&
                     (!_brain.HasAggro || (!_brain.HasCommittedDungeonPull &&
-                        !_brain.Body.InCombatInLast(LEAVE_WHEN_OUT_OF_COMBAT_FOR) && GameServiceUtils.ShouldTick(_aggroEndTime))))
+                        !_brain.Body.InCombatInLast(LEAVE_WHEN_OUT_OF_COMBAT_FOR) && GameServiceUtils.ShouldTick(_aggroEndTime) &&
+                        GameLoop.GameLoopTime >= _brain._groupDefenseUntil)))
                 {
                     if (!_brain.Body.IsMezzed && !_brain.Body.IsStunned)
                     {

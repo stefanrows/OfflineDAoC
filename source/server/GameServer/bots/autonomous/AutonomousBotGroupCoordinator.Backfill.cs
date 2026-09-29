@@ -79,7 +79,6 @@ namespace DOL.GS
                 Vector3 leaderPosition = new(leader.X, leader.Y, leader.Z);
                 var candidates = available.Where(candidate => candidate.Group == null && candidate.IsAlive &&
                         AutonomousObjectiveAssignments.Is(candidate, eAutonomousObjectiveKind.RvR) &&
-                        AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
                         members.All(member => LevelsCompatible(member.Level, candidate.Level)))
                     .Select(candidate => (Bot: candidate,
                         Nearby: candidate.CurrentRegionID == leader.CurrentRegionID &&
@@ -87,6 +86,7 @@ namespace DOL.GS
                         Lfg: candidate.TempProperties.GetProperty<bool>(LfgProperty)))
                     .Where(entry => entry.Nearby || entry.Lfg)
                     .OrderBy(entry => entry.Nearby ? 0 : 1)
+                    .ThenBy(entry => RvrPickupOrder(leader, entry.Bot))
                     .ThenBy(entry => RvrRecruitmentPriority(members, entry.Bot, maximum))
                     .ToList();
 

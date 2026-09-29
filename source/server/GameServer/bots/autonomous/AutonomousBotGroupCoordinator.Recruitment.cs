@@ -20,7 +20,6 @@ namespace DOL.GS
             {
                 string reason = !candidate.IsAutonomousWorldBot || candidate.IsTemporaryGroupHelper || candidate.IsPlayerLedGroup
                     ? "excludedActor"
-                    : !AutonomousCrewManager.AreInSameCrew(leader, candidate) ? "otherGuild"
                     : candidate.Group != null ? "alreadyGrouped"
                     : !AutonomousObjectiveAssignments.Is(candidate, eAutonomousObjectiveKind.RvR) ? "otherTask"
                     : !LevelsCompatible(leader.Level, candidate.Level) ? "levelMismatch"
@@ -55,7 +54,6 @@ namespace DOL.GS
                 return false;
             return GameLoop.GameLoopTime < offer.Deadline && offer.Leader.Group == group &&
                 offer.Leader.IsAlive && !offer.Leader.IsPlayerLedGroup &&
-                AutonomousCrewManager.AreInSameCrew(candidate, offer.Leader) &&
                 RecruitmentTarget(candidate, eAutonomousObjectiveKind.RvR) >= offer.Maximum &&
                 offer.Members.Length < offer.Maximum &&
                 offer.Members.All(member => member.Group == group && LevelsCompatible(member.Level, candidate.Level));
@@ -77,6 +75,14 @@ namespace DOL.GS
             else
                 GuildRecruitmentOffers.TryRemove(session.Group, out _);
         }
+
+        /// <summary>
+        /// Task 71: RvR groups are pickup groups as on Camlann, where anyone could
+        /// group with anyone. Guildmates come first, then the leader's realm,
+        /// then any realm; the group itself makes them allies.
+        /// </summary>
+        private static int RvrPickupOrder(GameBot leader, GameBot candidate) =>
+            AutonomousCrewManager.AreInSameCrew(leader, candidate) ? 0 : leader.Realm == candidate.Realm ? 1 : 2;
 
         private static int RecruitmentTarget(GameBot leader, eAutonomousObjectiveKind kind) =>
             kind == eAutonomousObjectiveKind.GroupPve ? 8 :
@@ -144,9 +150,9 @@ namespace DOL.GS
                         AutonomousObjectiveAssignments.Is(candidate, session.ObjectiveKind) &&
                         members.All(member => LevelsCompatible(member.Level, candidate.Level)) &&
                         (session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve ||
-                         AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
                          RecruitmentTarget(candidate, session.ObjectiveKind) >= maximum))
-                    .OrderBy(candidate => candidate.CurrentRegionID == session.RendezvousRegion ? 0 : 1)
+                    .OrderBy(candidate => session.ObjectiveKind == eAutonomousObjectiveKind.RvR ? RvrPickupOrder(leader, candidate) : 0)
+                    .ThenBy(candidate => candidate.CurrentRegionID == session.RendezvousRegion ? 0 : 1)
                     .ThenBy(FormationWaitStartedUtc).ToList();
                 int shortlisted = candidates.Count;
                 int attempted = 0, routeRejected = 0, campRejected = 0, slotsRejected = 0, joinRejected = 0, added = 0;

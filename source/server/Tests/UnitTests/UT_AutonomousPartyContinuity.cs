@@ -6,10 +6,10 @@ namespace DOL.GS.Tests
     public sealed class UT_AutonomousPartyContinuity
     {
         [Test]
-        public void ProductivePartyMayContinueOnlyOnce()
+        public void ProductivePartyKeepsContinuing()
         {
             Assert.That(Eligible(renewals: 0), Is.True);
-            Assert.That(Eligible(renewals: 1), Is.False);
+            Assert.That(Eligible(renewals: 5), Is.True);
         }
 
         [Test]

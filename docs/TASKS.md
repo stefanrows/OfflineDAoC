@@ -159,6 +159,32 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+71. **RvR pickup groups across guilds and realms.** Aaron, 2026-09-29: "I
+    only see groups standing around; hardly any full groups form." Live
+    0.157.1 log: RvR groups formed after a median of 91 minutes on their
+    task and mostly with 2–3 members (51 of 67), because RvR recruitment took
+    only members of the leader's own guild. Owner decision: pickup groups
+    over all realms, as on Camlann where anyone could group with anyone;
+    group sizes stay mixed by player type. Source 0.158.0: new groups,
+    assembling groups, the recruitment offer and field backfill accept any
+    autonomous RvR bot, guildmates first, then the leader's realm, then other
+    realms. Warband merges and siege openings stay one-guild. Check:
+    `AUTONOMOUS_GROUP_FORMED ... objective=RvR` with a lower
+    `formationWaitSeconds` and more groups of 5+; mixed-realm groups travel
+    together and never attack each other.
+
+70. **Bots play continuously, no timed breaks.** Aaron, 2026-09-29: "no more
+    pauses, the time-limited RvR tour then a break or levelling; just keep
+    running." Source 0.158.0, autonomous world bots only: an RvR tour no
+    longer ends (solo roamers and whole warbands restart their clock and keep
+    roaming together); a bot whose RvR group ended goes straight back to RvR
+    and no longer owes a PvE task; productive PvE parties renew session after
+    session instead of once; optional town breaks (15–30 minutes, up to 35 %
+    for casual types) are gone. Training points and a full backpack still send
+    a bot to town. Check: `AUTONOMOUS_GROUP_TASK_RENEWED kind=RvR`, no
+    `Frontier tenure complete` or town-idle phases, RvR groups staying
+    together for hours.
+
 69. **RvR groups roam with a speed class and move as one body.** Aaron,
     2026-09-29 (live 0.152.0: bots at normal speed, some at walking pace,
     groups not roaming together; P6 "a retreat/travel is a speed-class

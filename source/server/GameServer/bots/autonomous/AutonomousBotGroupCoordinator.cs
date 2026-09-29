@@ -1359,7 +1359,7 @@ public static partial class AutonomousBotGroupCoordinator
         {
             if (AutonomousRealmRaid.TryConsumeRelease(expired.Group, out string releaseReason))
                 FinishGroupTask(expired, releaseReason);
-            else if (!TryContinuePveTask(expired, BotMembers(expired.Group)))
+            else if (!TryContinueTask(expired, BotMembers(expired.Group)))
                 FinishGroupTask(expired, "Shared group task expired");
         }
 
@@ -1425,8 +1425,8 @@ public static partial class AutonomousBotGroupCoordinator
                     rejectedPickupCamps, ref rendezvousChecks, out leader, out pickupDestination))
                 continue;
             LastFormationAttemptTick[MemberKey(leader)] = GameLoop.GameLoopTime;
-            // RvR still assembles same-crew forces; realm never defines an
-            // alliance on Camlann. PvE pickup candidates can be remote when a
+            // RvR forms pickup groups across guilds and realms (task 71); the
+            // group itself is the alliance on Camlann. PvE pickup candidates can be remote when a
             // town-teleporter route to this leader's region is available.
             int leaderSlots = availableGroupSlots - claimed.Count;
             int largestAllowed = Math.Min(8, leaderSlots);
@@ -1447,7 +1447,6 @@ public static partial class AutonomousBotGroupCoordinator
                 .Where(candidate => candidate != leader && !claimed.Contains(candidate) && candidate.Group == null &&
                                      AutonomousObjectiveAssignments.Is(candidate, objectiveKind) &&
                                      (objectiveKind == eAutonomousObjectiveKind.GroupPve ||
-                                      AutonomousCrewManager.AreInSameCrew(leader, candidate) &&
                                       // Anyone content in a group of four or more fills an open slot.
                                       RecruitmentTarget(candidate, objectiveKind) >= Math.Min(largestAllowed, 4)) &&
                                      LevelsCompatible(leader.Level, candidate.Level))
@@ -1524,7 +1523,8 @@ public static partial class AutonomousBotGroupCoordinator
                 // different continents. Bound expensive probes on this pass.
                 // Probe a missing healer, tank and speed class first (P6).
                 compatiblePool = eligibleCandidates
-                    .OrderBy(candidate => RvrRecruitmentPriority([leader], candidate, largestAllowed))
+                    .OrderBy(candidate => RvrPickupOrder(leader, candidate))
+                    .ThenBy(candidate => RvrRecruitmentPriority([leader], candidate, largestAllowed))
                     .ThenBy(candidate => candidate.CurrentRegionID == rallyRegion ? 0 : 1)
                     .ThenBy(FormationWaitStartedUtc)
                     .Take(12 - rvrRouteChecks)
@@ -1853,7 +1853,7 @@ public static partial class AutonomousBotGroupCoordinator
             !(session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
               AutonomousRvrEventLayer.IsForceCommitted(session.Id, GameLoop.GameLoopTime)))
         {
-            if (!TryContinuePveTask(session, members))
+            if (!TryContinueTask(session, members))
             {
                 FinishGroupTask(session, "Shared group task expired");
                 return false;

@@ -72,13 +72,6 @@ public static class AutonomousPlayerBehavior
             : AutonomousRvrStaging.RollWarbandSize(maximum, roll);
     }
 
-    public static double TownBreakChance(AutonomousPlayerType type, int patience) => type switch
-    {
-        AutonomousPlayerType.Casual => .35 + (100 - Math.Clamp(patience, 0, 100)) / 500d,
-        AutonomousPlayerType.Leveler => .12,
-        _ => AutonomousTownDowntime.StartChancePerEligibilityCheck,
-    };
-
     public static bool CanStartCampaign(AutonomousPlayerType type, int minimumLevel, int size) =>
         type == AutonomousPlayerType.KeepWarrior && minimumLevel >= 35 && size >= 8;
 

@@ -190,11 +190,10 @@ public static class AutonomousObjectiveAssignments
                 .ToArray();
             foreach (GameBot bot in expiredRvr)
             {
-                // Solo roaming retains its own clock. Warbands expire together.
-                // A level-50 veteran takes a town break instead of owing PvE.
-                if (bot.Level >= 50 && TryBeginBetweenTaskServices(bot, forceTownBreak: true))
-                    continue;
-                BeginPveIntermission(bot);
+                // Task 70: a solo roamer's tour never runs out; it keeps roaming.
+                bot.PersistentRecord.ObjectiveExpiresUtc = utcNow.Add(RollRvrTenure()).ToString("O");
+                bot.MarkAutonomousStateDirty();
+                AutonomousBotStatusPersistence.Queue(bot);
             }
             GameBot[] completedPve = roster.Where(bot => Parse(bot.PersistentRecord.ObjectiveKind) != eAutonomousObjectiveKind.RvR &&
                                                           !IsBetweenPveTasks(bot) &&
@@ -303,25 +302,6 @@ public static class AutonomousObjectiveAssignments
         return invitation ? eAutonomousObjectiveKind.RvR : chosen;
     }
 
-    private static void BeginPveIntermission(GameBot bot)
-    {
-        OfflineWorldBotRecord record = bot.PersistentRecord;
-        record.ObjectiveExpiresUtc = string.Empty;
-        record.ObjectivePveMode = string.Empty;
-        record.ObjectivePveKillTarget = 0;
-        record.ObjectivePveKills = 0;
-        record.ObjectiveRvrEligibleUtc = PveCompletionRequired;
-        record.ObjectiveAssignmentId = string.Empty;
-        record.ObjectivePhase = "Returning to PvE after frontier tour";
-        record.CurrentCampId = string.Empty;
-        record.TargetName = string.Empty;
-        record.TravelDestination = string.Empty;
-        record.ObjectiveProgress = "Frontier tenure complete; choosing a PvE objective";
-        TryBeginBetweenTaskServices(bot);
-        bot.MarkAutonomousStateDirty();
-        AutonomousBotStatusPersistence.Queue(bot);
-    }
-
     public static void BeginSoloAfterGroupTask(GameBot bot, string reason, bool forceSoloPve = false)
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Group != null || bot.PersistentRecord == null)
@@ -329,20 +309,16 @@ public static class AutonomousObjectiveAssignments
         AutonomousBotTypeMixControl.ApplyAtTaskBoundary(bot, taskJustCompleted: true);
         // Do not acquire the allocation lock from the group coordinator: the
         // allocation pass itself can remove group members. A fresh independent
-        // task resets only work, never progress/items. Every level must finish
-        // one PvE assignment after an RvR tour before becoming eligible again.
+        // task resets only work, never progress/items. Task 70: an RvR bot whose
+        // group ended goes straight back to RvR; nobody owes PvE or a town break.
         bool leavingRvr = Is(bot, eAutonomousObjectiveKind.RvR);
-        // Level-50 veterans went back out after a break in town (sell, buy,
-        // train), as Camlann players did; only levelling characters owe PvE.
-        bool veteran = bot.Level >= 50;
-        if (leavingRvr && !veteran)
-            bot.PersistentRecord.ObjectiveRvrEligibleUtc = PveCompletionRequired;
-        if (!forceSoloPve && TryBeginBetweenTaskServices(bot, forceTownBreak: leavingRvr && veteran))
+        bool mayRvr = IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow);
+        if (!forceSoloPve && TryBeginBetweenTaskServices(bot))
             return;
         Assign(bot, forceSoloPve ? eAutonomousObjectiveKind.SoloPve :
+                leavingRvr && mayRvr ? eAutonomousObjectiveKind.RvR :
                 PreferGuildInvitation(bot, AutonomousActivityScheduler.Choose(bot.PersistentRecord, WorldSimulationClock.UtcNow,
-                    Random.Shared.NextDouble(), mayRvr: (!leavingRvr || veteran) && IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow),
-                    danger: Danger)),
+                    Random.Shared.NextDouble(), mayRvr: mayRvr, danger: Danger)),
             CrewBucket(bot), GameLoop.GameLoopTime);
         bot.PersistentRecord.CurrentCampId = string.Empty;
         bot.PersistentRecord.TargetName = string.Empty;
@@ -531,19 +507,19 @@ public static class AutonomousObjectiveAssignments
 
     // Called only at a task boundary, never from loot handling. Entering this
     // durable phase commits to unloading even after the first slot is freed.
-    private static bool TryBeginBetweenTaskServices(GameBot bot, bool forceTownBreak = false)
+    private static bool TryBeginBetweenTaskServices(GameBot bot)
     {
         if (bot?.PersistentRecord == null || bot.Group != null)
             return false;
         BetweenTaskPlan plan = RollBetweenTaskPlan(bot.HasSpendableAutonomousTrainingPoints,
             // Sell in town before the bags are completely full, like a player would.
             AutonomousBotEconomy.NeedsMerchant(bot), Random.Shared.NextDouble(), Random.Shared.NextDouble());
-        bool downtime = forceTownBreak || Random.Shared.NextDouble() < AutonomousPlayerBehavior.TownBreakChance(
-            AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord), bot.PersistentRecord.Patience);
-        if (!plan.Train && !plan.Unload && !downtime) return false;
+        // Task 70: no optional town breaks between tasks any more; only real
+        // training and a full backpack send a bot to town.
+        if (!plan.Train && !plan.Unload) return false;
         OfflineWorldBotRecord record = bot.PersistentRecord;
         record.ObjectiveKind = eAutonomousObjectiveKind.SoloPve.ToString();
-        record.ObjectiveAssignmentId = BetweenTasksPrefix + (plan.Train ? "T" : "") + (plan.Unload ? "I" : "") + (downtime ? "D" : "") +
+        record.ObjectiveAssignmentId = BetweenTasksPrefix + (plan.Train ? "T" : "") + (plan.Unload ? "I" : "") +
             "-" + bot.DatabaseID + "-" + GameLoop.GameLoopTime;
         record.ObjectiveAssignedUtc = WorldSimulationClock.UtcNow.ToString("O");
         // A failed service route cannot trap the bot forever either. Existing
@@ -556,7 +532,7 @@ public static class AutonomousObjectiveAssignments
         record.TargetName = string.Empty;
         record.TravelDestination = string.Empty;
         record.ObjectiveProgress = "Task complete; " + (plan.Train ? "train earned specialization points; " : "") +
-            (plan.Unload ? "unload backpack; " : "") + (downtime ? "15-30 minute town break if reachable within the maintenance budget; " : "") + "then choose the next task";
+            (plan.Unload ? "unload backpack; " : "") + "then choose the next task";
         AutonomousBotEconomy.MarkInventoryChanged(bot);
         bot.MarkAutonomousStateDirty();
         AutonomousBotStatusPersistence.Queue(bot);

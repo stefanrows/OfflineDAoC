@@ -71,8 +71,6 @@ public sealed class UT_AutonomousPlayerBehavior
         {
             Assert.That(AutonomousActivityScheduler.Choose(hybrid, prime, .2), Is.EqualTo(eAutonomousObjectiveKind.RvR));
             Assert.That(AutonomousActivityScheduler.Choose(hybrid, offPeak, .2), Is.Not.EqualTo(eAutonomousObjectiveKind.RvR));
-            Assert.That(AutonomousPlayerBehavior.TownBreakChance(AutonomousPlayerType.Casual, 50),
-                Is.GreaterThan(AutonomousPlayerBehavior.TownBreakChance(AutonomousPlayerType.Leveler, 50)));
         });
     }
 

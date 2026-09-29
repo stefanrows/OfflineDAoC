@@ -126,11 +126,7 @@ public static class AutonomousBotDecisionEngine
         if (state.CanCraft && state.CraftingMaterialStacks >= 3 && random.NextDouble() < 0.16 && Find(services, eWorldServiceKind.CraftStation) is Service craft)
             return new(eAutonomousActivity.Craft, craft.Name, "Use owned materials at a reachable craft station.");
 
-        // Leisure is intentionally a very low-weight choice. Recovery, a nearly
-        // full backpack, training and crafting are all considered first, and the
-        // remaining 96.5% of ordinary decisions continue into grinding/RvR.
-        if (state.InSafeTown && random.NextDouble() < 0.035)
-            return new(eAutonomousActivity.TownDowntime, string.Empty, "Take a short optional break in a safe town before returning to progression.");
+        // Task 70: no optional town downtime; ordinary decisions continue into grinding/RvR.
 
         bool safer = state.DeathsAtCurrentCamp >= 2;
 

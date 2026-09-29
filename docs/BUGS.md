@@ -102,6 +102,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+73. **RvR group members do not help a mate who is attacked.** Aaron,
+    2026-09-29, in game on 0.157.1. Cause: a group mate that is notified of
+    the attack enters its fight state, but that state ended after 6 s unless
+    the helper itself had fought; a helper up to 2,000 units away needs about
+    10 s to reach the attacker, so it turned back to follow its leader
+    before arriving. Fixed in source 0.158.0: each attack on a nearby mate
+    keeps the helper's fight state for another 6 s. Applies to all bots
+    (autonomous groups and companions). Real-client check pending: attack
+    one member of a bot group and watch the others run in and fight.
+
 70. **Companion realm ability spending appears to do nothing.** Reported
     2026-09-29: clicking Augmented Dexterity did not visibly explain the
     purchase or show the remaining points, and further spending was unclear.
