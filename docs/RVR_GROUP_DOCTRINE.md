@@ -154,6 +154,24 @@ for a fight; nobody fought at their own door. Two rules do that here
   autonomous RvR bot does not start a fight with a same-realm autonomous RvR
   bot that is departing too. Answering an attack on itself or its group is
   always allowed; players, companions and other realms are not affected.
+- **Hub-band peace (0.150.0, supersedes the truce inside the band).** The
+  truce above only filtered opportunity picks; self-defence, assist, pets,
+  area splash and the cc-sweep never asked it, so one opener pulled two
+  8-man groups into a "retaliation" fight at the safe edge (0.146.0 live log:
+  770 of 1,847 bot PvP deaths in one cell outside Svasud Faste, 98 % Mid
+  killed by Mid). Now two same-realm autonomous world bots may not attack
+  each other at all while *either* stands in its own realm's hub band:
+  within 6,000 of the keep centre, or within the landing radius + 2,500 of an
+  outer bindstone landing. There is no retaliation exception. The rule lives
+  in the attack permission (`PvpCombatant.BlocksAutonomousPvp`, asked by
+  `PvPServerRules.IsAllowedToAttack` and again at damage time), so melee,
+  spells, pets, area splash, assist and retaliation are all covered. Humans,
+  companions, player-led groups, other realms, monsters and guards are not
+  affected; a bot attacked by any of them in the band defends normally. The
+  departure truce code stays but is redundant inside the band.
+  `RVR_HUB_PEACE` counts refused attack checks per hub every five minutes
+  (`stray` = hits stopped at damage time), and the engage summary's
+  `hub_band=` counts new fights that still start inside a band.
 
 **Route variants.** Each new destination rolls one route: *road* (the
 straight way), *flank* (one via-point 1,200-2,400 to the side at 40-60 % of

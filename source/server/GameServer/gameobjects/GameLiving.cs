@@ -1316,7 +1316,7 @@ namespace DOL.GS
 		/// <param name="criticalAmount">the amount of critical damage</param>
 		public override void TakeDamage(GameObject source, eDamageType damageType, int damageAmount, int criticalAmount)
 		{
-			if (source is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+			if (source is GameLiving attacker && PvpCombatant.BlocksAutonomousPvp(attacker, this, true))
 				return;
 
 			base.TakeDamage(source, damageType, damageAmount, criticalAmount);
@@ -1492,7 +1492,7 @@ namespace DOL.GS
 		/// <param name="ad">information about the attack</param>
 		public virtual void OnAttackedByEnemy(AttackData ad)
 		{
-			if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+			if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksAutonomousPvp(attacker, this))
 				return;
 
 			// Fire the event for registered handlers (like BotBrain)

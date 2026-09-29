@@ -81,8 +81,11 @@ public static class AutonomousBotRegistry
                      $"pvpDeaths={engagement.PvpDeaths} pveDeaths={engagement.PveDeaths}");
             // Key: start path|attacker band>victim band|attacker type:count.
             if (engagement.Fights > 0)
-                Log.Info($"AUTONOMOUS_PVP_ENGAGE_SUMMARY fights={engagement.Fights} top=\"{engagement.Top}\"");
+                Log.Info($"AUTONOMOUS_PVP_ENGAGE_SUMMARY fights={engagement.Fights} hub_band={engagement.HubBand} " +
+                         $"top=\"{engagement.Top}\"");
         }
+        // RVR_HUB_PEACE keeps its own five-minute window.
+        AutonomousHubDeparture.LogPeace(now);
     }
 
     // A failed cross-region AddToWorld can briefly leave an entry inactive.

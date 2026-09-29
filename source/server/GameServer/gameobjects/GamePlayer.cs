@@ -5058,7 +5058,7 @@ namespace DOL.GS
         /// <param name="ad">information about the attack</param>
         public override void OnAttackedByEnemy(AttackData ad)
         {
-            if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+            if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksAutonomousPvp(attacker, this))
                 return;
 
             if (IsOnHorse && ad.IsHit)
@@ -5202,7 +5202,7 @@ namespace DOL.GS
 
         public override void TakeDamage(GameObject source, eDamageType damageType, int damageAmount, int criticalAmount)
         {
-            if (source is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+            if (source is GameLiving attacker && PvpCombatant.BlocksAutonomousPvp(attacker, this, true))
                 return;
 
             if (TempProperties.GetProperty<bool>(DOL.GS.Commands.FlyCommandHandler.ActiveKey)) return;

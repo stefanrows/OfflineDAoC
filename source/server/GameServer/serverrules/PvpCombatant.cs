@@ -227,6 +227,27 @@ namespace DOL.GS.ServerRules
 				 IsSafetyProtected(second) && second is GameBot);
 		}
 
+		/// <summary>
+		/// Damage-time guard for every autonomous-PvP block that must hold even
+		/// where an attack path skips the normal target check: sub-10 safety
+		/// and the hub-band peace between same-realm autonomous world bots
+		/// (wave 6; PvPServerRules checks the peace after its alliance check).
+		/// TakeDamage and OnAttackedByEnemy ask it so a DoT, a projectile in
+		/// flight or a bypassing path neither hurts nor starts a retaliation.
+		/// Only TakeDamage passes <paramref name="countStray"/>, so one stopped
+		/// hit is counted once.
+		/// </summary>
+		public static bool BlocksAutonomousPvp(GameLiving attacker, GameLiving defender, bool countStray = false)
+		{
+			if (BlocksLowLevelAutonomousPvp(attacker, defender))
+				return true;
+			if (!AutonomousHubDeparture.HubPeaceApplies(attacker, defender, out eRealm realm))
+				return false;
+			if (countStray)
+				AutonomousHubDeparture.CountPeaceBlocked(realm, true);
+			return true;
+		}
+
 		/// <summary>Uses the native player flag and records the equivalent explicit
 		/// opt-in for autonomous actors, which otherwise never own a /safety flag.</summary>
 		public static void RelinquishOptionalSafety(GameLiving living)

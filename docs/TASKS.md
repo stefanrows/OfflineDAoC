@@ -180,6 +180,22 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+66. **RvR wave 6: hub-band peace.** Aaron, 2026-09-29 ("you leave the door
+    first, then you hunt"). Implemented in source; real-client check
+    pending. Same-realm autonomous world bots cannot attack each other while
+    either stands within 6,000 of its own border hub's keep centre (or
+    landing radius + 2,500 around an outer bindstone landing); enforced in
+    the attack permission, so AoE splash, pets, assist and retaliation are
+    covered. Reason: 770 of 1,847 bot PvP deaths (0.146.0) in one cell
+    outside Svasud Faste, 98 % Mid on Mid. Check in `server-console.log`:
+    the Svasud cell (x 764000-766000, y 664000-666000) holds under 10 % of
+    RvR bot PvP deaths; `RVR_HUB_PEACE ... blocked=... by_hub=Svasud:...`
+    shows non-zero counts about every five minutes while groups leave the
+    hubs, `stray` stays small; `AUTONOMOUS_PVP_ENGAGE_SUMMARY ... hub_band=`
+    falls to the few fights with humans or other realms; a human (or an
+    Albion/Hibernia bot) can still attack a Mid bot near Svasud and it
+    fights back; guards and companions unchanged.
+
 65. **RvR wave 4: support by spec.** Aaron, 2026-09-29 (P1 "roles are
     fluid by spec", P8 "support jobs before the assist train"). Implemented
     in source; real-client check pending. Autonomous RvR groups only: smite

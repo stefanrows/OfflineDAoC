@@ -3528,7 +3528,7 @@ namespace DOL.GS
 
         public override void OnAttackedByEnemy(AttackData ad)
         {
-            if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksLowLevelAutonomousPvp(attacker, this))
+            if (ad?.Attacker is GameLiving attacker && PvpCombatant.BlocksAutonomousPvp(attacker, this))
                 return;
 
             if (IsAutonomousWorldBot && !IsTemporaryGroupHelper)

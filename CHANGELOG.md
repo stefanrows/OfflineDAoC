@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.150.0] - 2026-09-29
+
+### Changed
+
+- Hub-band peace: two autonomous world bots of the same realm can no
+  longer fight each other while either of them stands within 6,000 units of
+  its own border hub's keep centre (Svasud Faste, Castle Sauvage, Druim
+  Ligen), or within 2,500 units beyond the edge of a hub's outer bindstone
+  landing. The rule sits in the attack permission itself, so melee, spells,
+  pets, area splash, group assist and retaliation are all covered. Reason:
+  in the 0.146.0 live log 770 of 1,847 bot PvP deaths happened in one cell
+  just outside Svasud Faste, 98 % of them Midgard bots killing Midgard bots,
+  and the departure truce from 0.146.0 fired only 41 times because only
+  opportunity picks asked it. Humans, companions, player-led groups, other
+  realms, monsters and guards are unchanged; a bot attacked by any of them
+  inside the band defends normally.
+
+### Added
+
+- New log line every five minutes: `RVR_HUB_PEACE window_s=300 blocked=...
+  by_hub=Svasud:...,Sauvage:...,Druim:... stray=...`, and a `hub_band=`
+  count of new fights inside a hub band in `AUTONOMOUS_PVP_ENGAGE_SUMMARY`.
+
 ## [0.149.0] - 2026-09-29
 
 ### Added

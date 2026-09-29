@@ -38,6 +38,7 @@ public static class AutonomousPvpEngagementTracker
     private static readonly ConcurrentDictionary<string, int> Engagements = new(StringComparer.Ordinal);
     private static int _pvpDeaths;
     private static int _pveDeaths;
+    private static int _hubBandFights;
 
     /// <summary>Marks the reason the actor is about to start a PvP fight.</summary>
     public static void Tag(GameLiving actor, string reason)
@@ -63,6 +64,9 @@ public static class AutonomousPvpEngagementTracker
             return;
 
         Initiated[(attacker, victim)] = now;
+        // Wave 6: a new fight with either side inside its own realm's hub band.
+        if (AutonomousHubDeparture.InHubBand(attacker) || AutonomousHubDeparture.InHubBand(victim))
+            Interlocked.Increment(ref _hubBandFights);
         string key = $"{Classify(ad.Attacker, attacker, victim, now)}|{LevelBand(attacker.Level)}>" +
                      $"{LevelBand(victim.Level)}|{TypeName(attacker)}";
         Engagements.AddOrUpdate(key, 1, (_, count) => count + 1);
@@ -92,7 +96,7 @@ public static class AutonomousPvpEngagementTracker
     }
 
     /// <summary>Returns and resets the minute's counters, and prunes old fight memory.</summary>
-    public static (int PvpDeaths, int PveDeaths, int Fights, string Top) Drain()
+    public static (int PvpDeaths, int PveDeaths, int Fights, string Top, int HubBand) Drain()
     {
         long now = GameLoop.GameLoopTime;
         foreach (var entry in LastHit.Where(pair => now - pair.Value > FightMemoryMilliseconds).ToArray())
@@ -108,7 +112,7 @@ public static class AutonomousPvpEngagementTracker
             .ToArray();
         string top = string.Join(";", counts.Take(SummaryEntries).Select(entry => $"{entry.Key}:{entry.Count}"));
         return (Interlocked.Exchange(ref _pvpDeaths, 0), Interlocked.Exchange(ref _pveDeaths, 0),
-            counts.Sum(entry => entry.Count), top);
+            counts.Sum(entry => entry.Count), top, Interlocked.Exchange(ref _hubBandFights, 0));
     }
 
     public static string LevelBand(int level) => level switch
