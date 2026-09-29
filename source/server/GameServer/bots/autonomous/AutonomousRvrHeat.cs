@@ -59,6 +59,10 @@ public static class AutonomousRvrHeat
         }
     }
 
+    /// <summary>Whether a spot from <see cref="Recent"/> was recorded less than <paramref name="age"/> ago.</summary>
+    public static bool IsYoungerThan(Spot spot, TimeSpan age) =>
+        spot.Heat > 1 - age.TotalMilliseconds / Lifetime.TotalMilliseconds;
+
     internal static void ResetForTests()
     {
         lock (Sync)
