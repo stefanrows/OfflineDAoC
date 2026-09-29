@@ -102,10 +102,10 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     established from this run. Source 0.153.0 lets a defeated-lord PvP keep
     be claimed despite later siege damage refreshing its five-minute combat
     timer, removes the Camlann group-size requirement at the owner's request,
-    and repeats the exact refusal in main chat and the attempt log. This still
-    needs installation and a real-client retry, including a solo guild claim.
-    If rejected, use the new `refusal` field
-    to identify the remaining check. Successful claim broadcast was fixed
+    and repeats the exact refusal in main chat and the attempt log. Version
+    0.153.0 was installed on 2026-09-29; a real-client retry, including a solo
+    guild claim, remains pending. If rejected, use the new `refusal` field to
+    identify the remaining check. Successful claim broadcast was fixed
     earlier in source 0.141.1.
 
 66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
