@@ -12,6 +12,50 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.161.0] - 2026-09-30
+
+### Added
+
+- A siege warband musters before it marches. After an automatic or forced keep
+  assault opens, each attacking warband first gathers on its leader (all
+  living members, or six of eight after four minutes, or half of them after
+  ten), then leaves together; a warband already near the keep leaves at once.
+  A warband that never comes together drops out with "Rally failed: the
+  warband never mustered" (bug 75).
+- A realm raid (dragon or epic dungeon) is one battlegroup: every party of the
+  raid is allied with every other party of it and cannot attack it, and the
+  bond ends when a party leaves or the raid ends (bug 74).
+- Log lines `RVR_SIEGE_MUSTER_DEPARTED` and `RVR_SIEGE_MUSTER_FAILED`.
+
+### Changed
+
+- On the march every member follows the leader (column order) until the leader
+  is at the keep; a member that died and released rejoins the group at the
+  leader instead of walking the road alone.
+- A mixed-realm warband uses one frontier passage (its leader's realm), so it
+  boards one porter and lands at one place instead of splitting over Odin Alb,
+  Odin Hib and Home Mid, one to three members per departure.
+- The siege's fifteen-minute idle and forty-five-minute absence clocks stand
+  still while a force is mustering and count from its departure.
+- A freshly formed warband finishes its own assembly before it opens or joins a
+  siege.
+- The automatic opener skips a keep whose exterior route failed three times
+  for a member: for an hour, doubling with each repeat up to eight hours; an
+  attacker reaching the walls clears it (keeps 51, 57, 102, 105, 106).
+
+### Fixed
+
+- Raid parties no longer kill each other (about half of all raider deaths in
+  the live log were kills by another party of the same raid) (bug 74).
+- Keep sieges no longer send members one by one to die alone at the walls: 36
+  sieges since 2026-09-26 had no capture, no ram deployment and no guard
+  fight (bug 75).
+
+### Removed
+
+- The "each assigned bot converges without formation staging" opening: bots no
+  longer travel to a siege individually.
+
 ## [0.160.0] - 2026-09-30
 
 ### Added

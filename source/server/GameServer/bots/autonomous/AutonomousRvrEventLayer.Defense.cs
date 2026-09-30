@@ -226,6 +226,7 @@ namespace DOL.GS
                         {
                             BucketOf(previous, force.GroupId)?.Remove(force.GroupId);
                             previous.Slots.Remove(force.GroupId);
+                            previous.Musters.Remove(force.GroupId);
                             foreach (long id in force.MemberIds) previous.Present.Remove(id);
                         }
                         foreach (GameBot bot in candidate.Members)

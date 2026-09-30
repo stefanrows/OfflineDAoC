@@ -231,9 +231,11 @@ public static class AutonomousFrontierTransport
     public static bool PassageMatchesSiege(GameBot bot, Passage passage)
     {
         var plan=ActiveSiegePlan(bot);
-        // The home hop of a two-hop passage toward the siege is allowed.
+        // The home hop of a two-hop passage toward the siege is allowed, and so is a
+        // passage to the region of the leader the warband is mustering on (bug 75).
         return plan==null || plan.RegionId==passage?.Region ||
-            passage?.Medallion=="home_necklace" && passage.Region==HomeRegion(bot.Realm) &&
+            passage!=null && bot.Group?.LivingLeader is GameBot lead && lead!=bot && lead.CurrentRegionID==passage.Region ||
+            passage?.Medallion=="home_necklace" && passage.Region==HomeRegion(PassageRealm(bot)) &&
             bot.CurrentRegionID!=plan.RegionId && bot.CurrentRegionID!=passage.Region;
     }
     public static bool HasCommittedSiegePassage(GameBot bot, Passage passage) =>
@@ -306,7 +308,7 @@ public static class AutonomousFrontierTransport
         bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
         bot.IsWithinRadius(porter, BoardingRadius) && !bot.InCombat && !bot.IsAttacking &&
         (bot.Brain as BotBrain)?.HasAggro != true && !GameRelic.IsPlayerCarryingRelic(bot) &&
-        CanBoardForObjective(bot.Realm, AutonomousObjectiveAssignments.KindFor(bot), request?.Passage) &&
+        CanBoardForObjective(bot.Realm, PassageRealm(bot), AutonomousObjectiveAssignments.KindFor(bot), request?.Passage) &&
         PassageMatchesSiege(bot,request?.Passage) &&
         request?.Porter == porter && request.ForceId == (bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}") &&
         Ticket(bot,request.Passage) != null;
@@ -318,6 +320,37 @@ public static class AutonomousFrontierTransport
         if (canonical == null || canonical.Medallion != passage.Medallion) return false;
         return objective == eAutonomousObjectiveKind.RvR || passage.Medallion == "home_necklace";
     }
+
+    // ---- One passage for a whole warband (bug 75) ---------------------------
+    // Camlann crews mix birth realms, and Destination(realm, region) differs per
+    // realm (Odin Alb, Odin Hib, Home Mid), so one force used to split over
+    // several porters, one to three members per departure. A warband on RvR
+    // work now takes the passage of its leader's realm: one medallion, one
+    // landing, boarding and arriving together (the guilds, not the birth
+    // realms, are the sides on Camlann).
+
+    /// <summary>The realm whose passage a bot uses: its leader's within a warband, else its own.</summary>
+    public static eRealm ForcePassageRealm(eRealm own, eRealm? leaderRealm, bool warbandOnRvr) =>
+        warbandOnRvr && leaderRealm is { } realm && realm != eRealm.None ? realm : own;
+
+    public static eRealm PassageRealm(GameBot bot)
+    {
+        if (bot == null) return eRealm.None;
+        bool warband = bot.IsAutonomousWorldBot && !bot.IsPlayerLedGroup && !bot.IsTemporaryGroupHelper &&
+            bot.Group != null && AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR);
+        eRealm? leader = warband && bot.Group.LivingLeader is GameBot { IsAutonomousWorldBot: true } lead ? lead.Realm : null;
+        return ForcePassageRealm(bot.Realm, leader, warband);
+    }
+
+    /// <summary>A member may also use the passage of its force's realm for an RvR objective.</summary>
+    public static bool CanBoardForObjective(eRealm own, eRealm forceRealm, eAutonomousObjectiveKind objective, Passage passage) =>
+        CanBoardForObjective(own, objective, passage) ||
+        objective == eAutonomousObjectiveKind.RvR && forceRealm != own && CanBoardForObjective(forceRealm, objective, passage);
+
+    /// <summary>Same medallion and landing: the members of one departure share a passage.</summary>
+    public static bool SamePassage(Passage first, Passage second) =>
+        first != null && second != null && first.Region == second.Region && first.Medallion == second.Medallion &&
+        first.Location?.Name == second.Location?.Name;
 
     public static void Depart(OFTeleporter porter)
     {
@@ -366,7 +399,7 @@ public static class AutonomousFrontierTransport
             var party = BoardingParty(bot, request.Passage);
             bool MemberReady(GameBot member) => member == bot ||
                 member.TempProperties.GetProperty<Request>(RequestKey) is Request memberRequest &&
-                memberRequest.Passage.Region == request.Passage.Region && Ready(member, porter, memberRequest);
+                SamePassage(memberRequest.Passage, request.Passage) && Ready(member, porter, memberRequest);
             var group = SelectBoarders(party,
                 member => member.CurrentRegionID != request.Passage.Region && MemberReady(member),
                 member => IsIncoming(member.IsAlive, member.CurrentRegion == porter.CurrentRegion,

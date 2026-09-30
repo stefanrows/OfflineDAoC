@@ -95,7 +95,10 @@ public static partial class AutonomousRvrEventLayer
                 ? Vector2.Distance(new(position.X, position.Y), new(active.Target.X, active.Target.Y))
                 : double.PositiveInfinity;
             if (distance <= AttackerPresenceRadius)
+            {
                 active.LastAttackerPresenceTick = Math.Max(active.LastAttackerPresenceTick, nowTick);
+                ClearKeepRouteBlockLocked(targetId);
+            }
             if (!active.Travel.TryGetValue(memberId, out var previous))
             {
                 active.Travel[memberId] = (forceId, nowTick, distance, position, region);
@@ -138,6 +141,7 @@ public static partial class AutonomousRvrEventLayer
                 active.Defenders.Remove(forceId);
                 active.ThirdRealm.Remove(forceId);
                 active.Slots.Remove(forceId);
+                active.Musters.Remove(forceId);
                 foreach (long id in active.Travel.Where(pair => pair.Value.Force == forceId).Select(pair => pair.Key).ToArray())
                 {
                     active.Travel.Remove(id);
@@ -221,6 +225,8 @@ public static partial class AutonomousRvrEventLayer
         public readonly Dictionary<string, int> Attackers = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> Defenders = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> ThirdRealm = new(StringComparer.Ordinal);
+        /// <summary>Attacking warbands that muster before they march (bug 75).</summary>
+        public readonly Dictionary<string, ForceMuster> Musters = new(StringComparer.Ordinal);
     }
 
     private static readonly object Sync = new();
@@ -256,7 +262,7 @@ public static partial class AutonomousRvrEventLayer
             };
             RealmEventNotices.Queue(target.Id, attacker, $"Warbands are marching on {target.Name}. Join the assault as you arrive!");
             RealmEventRecords.Begin(target.Id, target.Name, target.IsRelicKeep ? "Relic keep" : "Keep", GlobalConstants.RealmToName(attacker), "Forced continuous siege; defender: " + GlobalConstants.RealmToName(target.OwningRealm));
-            StartBattle(Events[target.Id], now, "forced assault opened; forces converge without formation staging");
+            StartBattle(Events[target.Id], now, "forced assault opened; each attacking warband musters on its leader, then marches together");
             reason = "Assault opened. Reinforcements travel immediately; existing battles and roaming reserves are preserved.";
             return true;
         }
@@ -371,6 +377,7 @@ public static partial class AutonomousRvrEventLayer
                     active.Defenders.Remove(force.GroupId);
                     active.ThirdRealm.Remove(force.GroupId);
                     active.Slots.Remove(force.GroupId);
+                    active.Musters.Remove(force.GroupId);
                 }
                 foreach (var entry in CarrierEvents.Where(entry => entry.Key != plan?.TargetId || plan?.IsSharedEvent != true))
                     foreach (var realm in entry.Value.Participants.Values) realm.Remove(force.GroupId);
@@ -473,10 +480,12 @@ public static partial class AutonomousRvrEventLayer
 
             bool hasEnemy = objectives.Any(objective => objective.Kind == Intent.HuntEnemy && objective.EnemyCount > 0);
             LiveObjective relic = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultRelicKeep && objective.IsRelicKeep && objective.Claimable &&
-                                                               !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick))
+                                                               !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick) &&
+                                                               !KeepRouteBlockedLocked(objective.Id, nowTick))
                 , SelectedRelics);
             LiveObjective keep = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultKeep && !objective.IsRelicKeep && objective.Claimable &&
-                                                              !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick))
+                                                              !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick) &&
+                                                              !KeepRouteBlockedLocked(objective.Id, nowTick))
                 , SelectedKeeps);
             Intent intent = ChooseIntent(force, hasEnemy, keep != null, relic != null, roll);
             LiveObjective selected = intent switch
@@ -507,7 +516,7 @@ public static partial class AutonomousRvrEventLayer
                 active.Attackers[force.GroupId] = force.MemberCount;
                 Events[selected.Id] = active;
                 RealmEventRecords.Begin(selected.Id, selected.Name, selected.IsRelicKeep ? "Relic keep" : "Keep", GlobalConstants.RealmToName(force.Realm), "Automatic continuous siege; defender: " + GlobalConstants.RealmToName(selected.OwningRealm));
-                StartBattle(active, nowTick, "automatic assault opened; each assigned bot converges without formation staging");
+                StartBattle(active, nowTick, "automatic assault opened; each attacking warband musters on its leader, then marches together");
                 RealmEventNotices.Queue(active.TargetId, force.Realm,
                     $"Warbands are marching on {selected.Name}. Reinforcements join the battle on arrival.");
                 (selected.IsRelicKeep ? SelectedRelics : SelectedKeeps).Add(selected.Id);
@@ -717,6 +726,8 @@ public static partial class AutonomousRvrEventLayer
                 {
                     // Real combat is intentional participation, even without a kill.
                     if (IsParticipatingInBattleCombat(bot)) return true;
+                    // Waiting on the leader for the warband to gather is not idling.
+                    if (active.Musters.TryGetValue(force, out var mustering) && !mustering.Departed) return true;
                     // The army may be waiting at its assigned rally post, or a
                     // defender may be holding an interior wall with no current
                     // attacker. Neither is an abandoned travel objective.
@@ -812,6 +823,7 @@ public static partial class AutonomousRvrEventLayer
                 active.Defenders.Remove(forceId);
                 active.ThirdRealm.Remove(forceId);
                 active.Slots.Remove(forceId);
+                active.Musters.Remove(forceId);
                 foreach (long id in active.Travel.Where(pair => pair.Value.Force == forceId).Select(pair => pair.Key).ToArray())
                     active.Travel.Remove(id);
                 foreach (long id in active.Present.Where(pair => pair.Value.Force == forceId).Select(pair => pair.Key).ToArray())
@@ -861,6 +873,11 @@ public static partial class AutonomousRvrEventLayer
         }
         foreach (var active in Events.Values.Where(entry => entry.BattleStarted && !entry.DefenseReaction).ToArray())
         {
+            ExpireMusters(active, nowTick);
+            if (!Events.ContainsKey(active.TargetId)) continue;
+            // A warband still gathering has not yet had a chance to march: the
+            // idle and absence clocks start when it departs (DepartLocked).
+            if (!AutonomousRvrSiegeMuster.IdleClocksRun(AnyMustering(active))) continue;
             if (IsAbandonedByAttackers(true, false, !string.IsNullOrEmpty(active.PlayerAccount), active.LastAttackerPresenceTick, nowTick))
             {
                 // Marching somewhere does not count here: nobody of the attacking

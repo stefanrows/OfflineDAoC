@@ -9,7 +9,7 @@ internal static class RvrEventTestState
     // every event created by the previous fixture.
     internal static void Clear()
     {
-        foreach (string name in new[] { "Events", "CarrierEvents", "CarrierTargets", "Cooldowns", "ReleasedForces", "SelectedKeeps", "SelectedRelics", "DefenseAlarms", "DefenseWarnings", "KeepCombatPressure", "AbandonedTargets" })
+        foreach (string name in new[] { "Events", "CarrierEvents", "CarrierTargets", "Cooldowns", "ReleasedForces", "SelectedKeeps", "SelectedRelics", "DefenseAlarms", "DefenseWarnings", "KeepCombatPressure", "AbandonedTargets", "KeepRouteBlocks" })
         {
             object value = typeof(AutonomousRvrEventLayer).GetField(name, BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
             value.GetType().GetMethod("Clear").Invoke(value, null);

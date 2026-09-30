@@ -35,6 +35,8 @@ public sealed partial class AutonomousWorldBotController
     {
         string forceId = RvrForceOf(bot);
         AutonomousRvrEventLayer.AbandonTarget(forceId, destination.Id, now);
+        // The opener also skips this keep for a while (an hour, doubling on repeats).
+        AutonomousRvrEventLayer.NoteKeepRouteFailure(destination.Id, now);
         ClearKeepObjective(bot);
         SetRvrStatus(bot, "Keep route abandoned", destination.MonsterName,
             $"{failure} {KeepRouteGiveUpFailures} times; the warband roams the frontier from here instead");

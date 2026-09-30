@@ -65,9 +65,15 @@ public sealed partial class AutonomousWorldBotController
         if (_frontierPorter == null) return Unavailable();
         // Albion/Midgard portal keeps in a foreign frontier sell only the home
         // medallion: port home first, then onward (two hops).
-        var passage = AutonomousFrontierTransport.ChoosePassage(bot.Realm, bot.CurrentRegionID, destination.RegionId,
-            medallion => AutonomousFrontierTransport.PorterSells(_frontierPorter, medallion),
-            medallion => AutonomousFrontierTransport.Ticket(bot, new(0, medallion, null)) != null);
+        // A warband takes the passage of its leader's realm so it boards and lands
+        // together (bug 75); a member falls back to its own only when this porter
+        // cannot serve the leader's.
+        bool Sells(string medallion) => AutonomousFrontierTransport.PorterSells(_frontierPorter, medallion);
+        bool Holds(string medallion) => AutonomousFrontierTransport.Ticket(bot, new(0, medallion, null)) != null;
+        eRealm passageRealm = AutonomousFrontierTransport.PassageRealm(bot);
+        var passage = AutonomousFrontierTransport.ChoosePassage(passageRealm, bot.CurrentRegionID, destination.RegionId, Sells, Holds);
+        if (passage == null && passageRealm != bot.Realm)
+            passage = AutonomousFrontierTransport.ChoosePassage(bot.Realm, bot.CurrentRegionID, destination.RegionId, Sells, Holds);
         if (passage == null) return Unavailable();
         bool returningToPve = passage.Medallion == "home_necklace" &&
             AutonomousObjectiveAssignments.Parse(bot.PersistentRecord?.ObjectiveKind) != eAutonomousObjectiveKind.RvR;

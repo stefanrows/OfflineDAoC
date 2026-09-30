@@ -62,7 +62,9 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     run.** Seen in the installed 0.115.0 log (3 h 26 min): the realm-raid rally
     path for the Albion epic event cannot route to its hub. Expected: the raid
     hub is reachable or the event is skipped instead of retried. Not yet
-    investigated.
+    investigated. Live 2026-09-30: four of four raids still ended "Staging
+    failed: 0 adventurers arrived"; the raiders also killed each other, which
+    is fixed separately (bug 74).
 
 62. **`SortStyles NULL style` and `Unhandled spell ... Bladeturn` warnings,
     about 1,967 per run.** Seen in the installed 0.115.0 log (3 h 26 min) from
@@ -93,6 +95,51 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+75. **Keep sieges never succeed: bots travel one by one and die alone.**
+    Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
+    ram deployments, door hits or keep-guard fights; the only `RVR_SIEGE`
+    actions were equipment, purchase, repair and supply timeouts. Causes: a
+    siege opened with "each assigned bot converges without formation staging",
+    so every member walked to the keep alone from wherever it stood (example:
+    Blendrake Faste, keep 78, 2026-09-30 12:04: the group formed 4 s before
+    the opening and its members were scattered); Camlann crews mix birth
+    realms and each member chose the porter passage of its own realm (Odin
+    Alb, Odin Hib, Home Mid), one to three members per departure; lone members
+    died 5 to 43 times on the way and the occasional arrival was killed by the
+    level 59-76 guards, so the siege job (within about 6,000 units) never ran;
+    the siege closed after 15 minutes without progress (about 5 real minutes
+    at 3x); and some keeps have no exterior route at all
+    (`RVR_KEEP_ROUTE_FAILED` for keep 51 386 times a week; 57, 102, 105, 106).
+    Fixed in source 0.161.0: an attacking warband musters on its leader (all
+    living members, six of eight after four minutes, half after ten minutes,
+    a warband that never gathers ends with "Rally failed: the warband never
+    mustered"), boards one porter through one passage (its leader's realm),
+    marches behind its leader in column order and fights the guards together;
+    a released member rejoins the leader; the idle and absence clocks count
+    from departure; a freshly formed warband finishes its assembly first; the
+    automatic opener skips keeps whose exterior route failed (one hour,
+    doubling to eight). Real-client check pending: watch a siege from opening
+    to the walls. Log: `RVR_SIEGE_MUSTER_DEPARTED` (present/alive/assigned),
+    `RVR_SIEGE_MUSTER_FAILED`, then ram and door actions at the keep; the same
+    force should show one `RVR_FRONTIER_DEPARTURE` with `count` equal to its
+    size and no `left_behind`.
+
+74. **Parties of one realm raid kill each other.** Live log 2026-09-30: four of
+    four scheduled or forced realm raids ended "Staging failed: 0 adventurers
+    arrived"; of the 260-340 raider deaths per rally about half were kills by
+    members of other parties of the same raid, never of the same party. Cause:
+    a raid recruits about fifteen eight-person parties of mixed realms and
+    guilds, and only the same group, guild or battlegroup counts as allied, so
+    the parties attacked each other in the full-PvP world. Owner: on the live
+    server raids always joined a battlegroup, and battlegroup members cannot
+    be attacked. Fixed in source 0.161.0: each raid owns one battlegroup; every
+    bot of a party carries it from the moment the party joins the raid until
+    the party leaves, a member drops out or the raid ends (an unrelated
+    battlegroup is never removed); bots already fighting a new ally drop the
+    target. Real-client check pending: during the next raid no raider should
+    be killed by a member of another party of the same raid. The "Staging
+    failed" outcome is not addressed here (see bug 61).
 
 63. **Bots die repeatedly at a bindstone that is also an RvR rendezvous.**
     Seen in the installed 0.115.0 log (3 h 26 min): the Midgard skald

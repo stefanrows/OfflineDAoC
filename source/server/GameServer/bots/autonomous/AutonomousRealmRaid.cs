@@ -52,6 +52,8 @@ namespace DOL.GS
             public readonly RealmRaidLootOwner.Ledger LootLedger = new();
             public readonly Dictionary<Group, Party> Parties = new();
             public GameLiving[] Support = [];
+            /// <summary>One battlegroup for the whole raid: its parties must never attack each other.</summary>
+            public readonly BattleGroup Battle = new();
         }
         private sealed class Party
         {
@@ -125,7 +127,9 @@ namespace DOL.GS
                         Party party = raid.Parties[group];
                         foreach (var alive in party.Members.Where(b => b.IsAlive)) party.CorpseSince.Remove(alive.DatabaseID);
                         if (party.Members.Any(b => !IsEligible(b) || b.Group != group || !AutonomousBotRegistry.Contains(b.DatabaseID)))
-                            RemoveParty(group);
+                        { RemoveParty(group); continue; }
+                        // Idempotent: repairs a property that was cleared by anything else.
+                        RealmRaidBattleGroup.Attach(raid.Battle, party.Members);
                     }
                     raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
                     int presentAtHub = raid.Parties.Values.Sum(p => PresentAtHub(raid, p));
@@ -217,10 +221,19 @@ namespace DOL.GS
                 Membership[leader.Group] = raid;
                 DefenseGroups[leader.Group] = 0;
                 raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
+                EnlistBattleGroup(raid, party);
                 UpdateView(raid, party);
                 view = party.View;
                 return true;
             }
+        }
+
+        // Called with the raid lock held. Other raid parties' bots are dropped from
+        // fights against the new allies too, not only the new party's own bots.
+        private static void EnlistBattleGroup(Raid raid, Party party)
+        {
+            RealmRaidBattleGroup.Attach(raid.Battle, party.Members);
+            RealmRaidBattleGroup.DropFightsAgainstAllies(raid.Support.OfType<GameBot>());
         }
 
         public static bool HasActiveEvent { get { lock (Sync) return Raids.Count > 0; } }
@@ -467,6 +480,7 @@ namespace DOL.GS
                 Membership[group] = raid;
                 DefenseGroups[group] = 0;
                 raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
+                EnlistBattleGroup(raid, party);
                 UpdateView(raid, party);
                 return true;
             }
@@ -773,6 +787,8 @@ namespace DOL.GS
                 if (Membership.Remove(group, out Raid raid))
                 {
                     DefenseGroups.TryRemove(group, out _);
+                    if (raid.Parties.TryGetValue(group, out Party leaving))
+                        RealmRaidBattleGroup.Detach(raid.Battle, leaving.Members);
                     raid.Parties.Remove(group);
                     raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
                 }
@@ -796,6 +812,7 @@ namespace DOL.GS
                 if (CompletedLoot.Count >= 32) CompletedLoot.Remove(CompletedLoot.MinBy(p => p.Value.Expires).Key);
                 CompletedLoot[final] = new(recipients, raid.LootLedger, now + 60_000);
             }
+            foreach (Party party in raid.Parties.Values) RealmRaidBattleGroup.Detach(raid.Battle, party.Members);
             foreach (Group group in raid.Parties.Keys) { Membership.Remove(group); DefenseGroups.TryRemove(group, out _); Released[group] = reason; }
             raid.Parties.Clear();
             raid.Support = [];

@@ -376,7 +376,11 @@ namespace DOL.GS
                 if (AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) && bot.Level == 50)
                 {
                     string eventForce = _groupDirective?.IsDynamic == true ? _groupDirective.GroupId : $"rvr-{bot.DatabaseID}";
-                    if (_rvrDestination == null && nowTick >= _nextRvrPlanReview)
+                    // A freshly formed warband finishes its own (bounded) assembly before
+                    // it may open or join a siege, so it does not set out scattered (bug 75).
+                    bool assemblingWarband = _groupDirective?.IsDynamic == true &&
+                        AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase);
+                    if (_rvrDestination == null && nowTick >= _nextRvrPlanReview && !assemblingWarband)
                     {
                         _nextRvrPlanReview = nowTick + 45_000;
                         _rvrDestination = ChooseRvrDestinationTimed(bot);
@@ -1453,6 +1457,20 @@ namespace DOL.GS
         private static AutonomousBotGroupCoordinator.SharedCamp ToSharedCamp(CampDestination camp) =>
             new(camp.Id, camp.MonsterName, camp.ZoneName, camp.RegionId, camp.X, camp.Y, camp.Z, camp.IsDungeon, camp.IsFrontier, camp.TargetLevel);
 
+        /// <summary>The warband leader tells the event layer who is at the muster.</summary>
+        private AutonomousRvrSiegeMuster.Phase ReportWarbandMuster(GameBot leader, string forceId,
+            AutonomousRvrEventLayer.Plan plan, out int alive, out int present)
+        {
+            GameBot[] members = leader.Group?.GetMembersInTheGroup().OfType<GameBot>().ToArray() ?? [leader];
+            alive = members.Count(member => member.IsAlive);
+            present = members.Count(member => member.IsAlive && !member.IsOnStableMasterRoute &&
+                (member == leader || member.CurrentRegionID == leader.CurrentRegionID &&
+                    member.GetDistanceTo(leader) <= AutonomousRvrSiegeMuster.PresentRadius));
+            bool skip = AutonomousRvrSiegeMuster.CanSkipMuster(leader.CurrentRegionID == plan.RegionId,
+                Vector2.Distance(new(leader.X, leader.Y), new(plan.X, plan.Y)));
+            return AutonomousRvrEventLayer.ReportMuster(forceId, alive, present, members.Length, skip, GameLoop.GameLoopTime);
+        }
+
         private bool ExecuteRvr(BotBrain brain, GameBot bot)
         {
             using var profile = BotThinkProfiler.Measure(BotThinkPhase.ExecuteRvr);
@@ -1506,6 +1524,15 @@ namespace DOL.GS
                 AutonomousRvrEventLayer.ReportMarch(committedPlan.TargetId, forceId, bot.DatabaseID, bot.CurrentRegionID,
                     new(bot.X, bot.Y, bot.Z), bot.InCombat, GameLoop.GameLoopTime);
             }
+            // Bug 75: an attacking warband musters on its leader, then marches behind it.
+            var musterPhase = AutonomousRvrSiegeMuster.Phase.None;
+            int musterAlive = 0, musterPresent = 0;
+            if (dynamicWarband && committedPlan is
+                    { Intent: AutonomousRvrEventLayer.Intent.AssaultKeep or AutonomousRvrEventLayer.Intent.AssaultRelicKeep } &&
+                !GameRelic.IsPlayerCarryingRelic(bot))
+                musterPhase = _groupDirective.Leader == bot
+                    ? ReportWarbandMuster(bot, forceId, committedPlan, out musterAlive, out musterPresent)
+                    : AutonomousRvrEventLayer.MusterPhaseOf(forceId);
             var rally = AutonomousRvrEventLayer.GetRallyOrder(forceId, bot.Realm, GameLoop.GameLoopTime);
             if (rally != null) return HandleSiegeRally(bot, forceId, rally);
             if (committedPlan == null && dynamicWarband && _groupDirective.Leader != bot && _groupDirective.Leader != null)
@@ -1549,10 +1576,44 @@ namespace DOL.GS
                 return false;
             }
 
+            // Mustering: the leader waits where it stands for the warband to come to
+            // it; the others join it (across a frontier by the one force passage).
+            if (musterPhase == AutonomousRvrSiegeMuster.Phase.Mustering && _groupDirective.Leader == bot)
+            {
+                bot.StopMovingOnPath();
+                bot.StopMoving();
+                AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Objective);
+                SetRvrStatus(bot, "Mustering the warband", committedPlan.Name,
+                    $"{musterPresent} of {musterAlive} living members are with the leader; the warband marches together once it has gathered");
+                return true;
+            }
+            // Marching: every member stays on the leader until the leader is at the
+            // keep, and a member that died and released rejoins the group (at the
+            // leader) instead of walking the road alone.
+            GameBot marchLeader = _groupDirective?.Leader;
+            bool marchFollow = musterPhase != AutonomousRvrSiegeMuster.Phase.None && dynamicWarband &&
+                marchLeader != null && marchLeader != bot && marchLeader.IsAlive &&
+                (musterPhase == AutonomousRvrSiegeMuster.Phase.Mustering || AutonomousRvrSiegeMuster.FollowsLeader(
+                    AutonomousRvrSiegeMuster.LeaderAtKeep(marchLeader.CurrentRegionID, new(marchLeader.X, marchLeader.Y),
+                        committedPlan.RegionId, new(committedPlan.X, committedPlan.Y)),
+                    bot.CurrentRegionID, marchLeader.CurrentRegionID,
+                    bot.CurrentRegionID == marchLeader.CurrentRegionID ? bot.GetDistanceTo(marchLeader) : double.PositiveInfinity));
+            // Never march alone while the warband musters: with the leader dead, hold
+            // until the coordinator names a new one (the muster itself is bounded).
+            if (musterPhase == AutonomousRvrSiegeMuster.Phase.Mustering && dynamicWarband && _groupDirective.Leader != bot &&
+                (marchLeader == null || !marchLeader.IsAlive) && !GameRelic.IsPlayerCarryingRelic(bot))
+            {
+                bot.StopMovingOnPath();
+                bot.StopMoving();
+                AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Objective);
+                SetRvrStatus(bot, "Mustering the warband", committedPlan.Name,
+                    "The leader is down; holding for the warband to regroup before marching");
+                return true;
+            }
             // The leader owns navigation and the single siege operator role.
             // Followers fight independently above, otherwise they keep the
             // warband together around that leader.
-            if (!battleActive && dynamicWarband && _groupDirective.Leader != bot && !GameRelic.IsPlayerCarryingRelic(bot))
+            if ((!battleActive || marchFollow) && dynamicWarband && _groupDirective.Leader != bot && !GameRelic.IsPlayerCarryingRelic(bot))
             {
                 int defendingId = _groupDirective.Leader?.TempProperties.GetProperty<int>("RvrDefendingKeep", -1) ?? -1;
                 AbstractGameKeep wallKeep = defendingId >= 0
@@ -1692,6 +1753,18 @@ namespace DOL.GS
                 return true;
             }
 
+            // On the march the leader waits for a member that falls behind, as a
+            // roaming group does (bounded: six seconds, three times per straggler).
+            if (musterPhase == AutonomousRvrSiegeMuster.Phase.Marching && _groupDirective.Leader == bot &&
+                !AutonomousRvrSiegeMuster.LeaderAtKeep(bot.CurrentRegionID, new(bot.X, bot.Y), _rvrDestination.RegionId,
+                    new(_rvrDestination.X, _rvrDestination.Y)) && AutonomousRvrSpeed.ShouldLeaderHold(bot))
+            {
+                bot.StopMovingOnPath();
+                bot.StopMoving();
+                SetRvrStatus(bot, "Waiting for the warband", _rvrDestination.MonsterName,
+                    "A member fell behind on the march; the warband closes up before moving on");
+                return true;
+            }
             if (bot.CurrentRegionID != _rvrDestination.RegionId)
             {
                 return TravelRvrObjective(bot,_rvrDestination);
