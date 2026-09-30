@@ -740,6 +740,8 @@ namespace DOL.GS.Keeps
 				GameBot bot => bot.Guild,
 				_ => null,
 			};
+			if (Guild != null && !Guild.ClaimedKeeps.Contains(this))
+				Guild.ClaimedKeeps.Add(this);
 			ClaimedAt = WorldSimulationClock.UtcNow;
             if (PvpKeepCampaign.Applies(this))
             {

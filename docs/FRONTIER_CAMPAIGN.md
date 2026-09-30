@@ -99,17 +99,21 @@ Relic temples remain shrine raid objectives rather than claimable guild keeps;
 their relics are initially held by the Wardens.
 
 A living lord blocks claiming, including `/gc claim`. Killing it leaves a
-peaceful **Keep Claim Steward** at its position. Interact with the steward or
-use `/gc claim` while beside it. Guild claim rank and ownership limits still
-apply, but Camlann claims have no group-size requirement. Autonomous crew
-leaders approach the same steward and claim for
-their guild; ordinary members of pure managed autonomous guilds receive native
-claim permission. Human-managed guild ranks are not changed.
+peaceful **Keep Claim Steward** at its position. Right-clicking the steward
+opens a confirmation dialog; the keep is claimed only after choosing Yes. You
+can also use `/gc claim` while beside it. Guild claim rank and ownership limits
+still apply, but Camlann claims have no group-size requirement. Autonomous crew
+leaders approach the same steward and claim for their guild; ordinary members
+of pure managed autonomous guilds receive native claim permission.
+Human-managed guild ranks are not changed.
 
 The defeated lord stays absent until a claim. The remaining garrison stops
 fighting during this claimable interval. Claiming restores the lord and makes
-the defenses belong to the winning guild. Unclaimed defeated keeps and claimed
-keeps survive server restarts. A voluntary guild release does not itself unlock
+the defenses belong to the winning guild. Gates destroyed during the siege
+remain open and damaged after a claim; the existing door repair timer repairs
+them by 5% every 30 minutes while the keep is out of combat, and they close
+automatically above 15% health. Unclaimed defeated keeps and claimed keeps
+survive server restarts. A voluntary guild release does not itself unlock
 a claim reward; another lord defeat is required. Capture RP has a persistent
 30-minute cooldown per keep. The launcher's explicit world/keep reset clears
 these states and restores garrisons on the next start.

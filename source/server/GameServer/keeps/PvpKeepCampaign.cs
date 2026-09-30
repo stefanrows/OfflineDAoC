@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using DOL.GS.PacketHandler;
 using DOL.GS.ServerRules;
 
 namespace DOL.GS.Keeps
@@ -134,11 +135,32 @@ namespace DOL.GS.Keeps
         public override bool Interact(GamePlayer player)
         {
             if (!base.Interact(player)) return false;
-            return TryClaim(player);
+            if (!Keep.CheckForClaim(player)) return true;
+
+            string guildName = PvpCombatant.GuildOf(player)?.Name ?? "your guild";
+            player.Out.SendCustomDialog(
+                $"Do you want to claim {Keep.Name} for {guildName}? Select Yes to claim it.",
+                new CustomDialogResponse(ClaimDialogResponse));
+            return true;
         }
+
+        private void ClaimDialogResponse(GamePlayer player, byte response)
+        {
+            if (response != 0x01) return;
+            TryClaim(player);
+        }
+
         public bool TryClaim(GameLiving player)
         {
-            if (!player.IsAlive || !player.IsWithinRadius(this, WorldMgr.INTERACT_DISTANCE) || !Keep.CheckForClaim(player)) return false;
+            if (player == null || !player.IsAlive || !player.IsWithinRadius(this, WorldMgr.INTERACT_DISTANCE))
+            {
+                if (player is GamePlayer human)
+                    human.Out.SendMessage("You must be alive and remain beside the steward to claim this keep.",
+                        eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                return false;
+            }
+
+            if (!Keep.CheckForClaim(player)) return false;
             Keep.Claim(player);
             return Keep.Guild == PvpCombatant.GuildOf(player);
         }

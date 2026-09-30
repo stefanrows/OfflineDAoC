@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.160.0] - 2026-09-30
+
+### Added
+
+- None.
+
+### Changed
+
+- Right-clicking a Keep Claim Steward now asks for confirmation; declining
+  leaves the keep unclaimed.
+- Breached Camlann keep doors remain open after a claim; the project guide now
+  describes their repair and automatic-close behavior.
+
+### Fixed
+
+- A guild's keep-claim message now includes the keep just claimed (bug 68).
+
+### Removed
+
+- None.
+
 ## [0.159.0] - 2026-09-29
 
 ### Added

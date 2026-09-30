@@ -147,28 +147,31 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     verification pending: check Bard and other speed effects with a full
     group on straight and turning routes, without and with sprint.
 
-68. **`/gc claim` at the Keep Claim Steward shows nothing.** Reproduced
-    2026-09-29 at Fensalir Faste with an eight-member player/companion group.
-    Five installed-server `KEEP_CLAIM_ATTEMPT` lines selected keep 80 and
-    returned `allowed=False`; the owner was empty, the lord was defeated, and
-    the steward existed. The live save showed Ceovage had claim rank, an
-    eight-member claim requirement, and a three-keep guild limit with no
-    RAGE-owned keeps. The old log
-    omitted the refusal reason, so the exact failing predicate cannot be
-    established from this run. Source 0.153.0 lets a defeated-lord PvP keep
-    be claimed despite later siege damage refreshing its five-minute combat
-    timer, removes the Camlann group-size requirement at the owner's request,
-    and repeats the exact refusal in main chat and the attempt log. Version
-    0.153.0 was installed on 2026-09-29. After restart, the saved keep 80
-    remained neutral with `LordDefeated=True`, but later attempt logs showed
-    `steward=False`; the steward disappeared instead of moving. The empty
-    refusal exposed a separate source error: a human `GamePlayer` was cast to
-    the bot-only `IGamePlayer` interface and rejected before any claim check.
-    Source 0.154.0 restores a missing steward from the saved lord position on
-    keep entry or claim attempt, logs spawn failures, and accepts a human's
-    packet output. Installation and real-client verification remain pending,
-    including a solo guild claim. Successful claim broadcast was fixed
-    earlier in source 0.141.1.
+68. **`/gc claim` and Keep Claim Steward confirmation/count behavior.**
+    Reproduced 2026-09-29 at Fensalir Faste with an eight-member
+    player/companion group. Five installed-server `KEEP_CLAIM_ATTEMPT` lines
+    selected keep 80 and returned `allowed=False`; the owner was empty, the
+    lord was defeated, and the steward existed. Source 0.153.0 lets a
+    defeated-lord PvP keep be claimed despite later siege damage refreshing
+    its five-minute combat timer, removes the Camlann group-size requirement,
+    and repeats the exact refusal in main chat and the attempt log. After a
+    restart, the saved keep remained neutral with `LordDefeated=True`, but
+    attempt logs showed `steward=False`; a human `GamePlayer` was also cast to
+    the bot-only `IGamePlayer` interface and rejected. Source 0.154.0 restores
+    a missing steward from the saved lord position and accepts a human's packet
+    output. The owner later confirmed claiming works, then reported that
+    right-clicking the steward claims immediately without confirmation and the
+    guild chat count is one low when claiming a second keep. Source inspection
+    found that the new keep was added to `Guild.ClaimedKeeps` only by
+    `LoadFromDatabase`, after `ClaimCore` had already sent the count. Fixed in
+    source 0.160.0: the steward asks for confirmation and checks eligibility
+    again after acceptance; `ClaimCore` records the keep before sending the
+    guild count. Broken gates remain open after a Camlann claim and follow the
+    existing repair behavior: 5% regeneration every 30 minutes out of combat,
+    then automatic closure above 15% health. Installation and real-client
+    verification pending: confirm decline leaves the keep neutral, acceptance
+    claims it, the second-keep message reports 2 of 3, `/gc claim` still works,
+    and damaged doors remain open until repaired.
 
 66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
     0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
