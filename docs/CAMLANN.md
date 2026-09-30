@@ -164,6 +164,10 @@ These are settled. Do not reopen them without the owner.
    teleporter, and the existing Albion, Midgard, and Hibernian leveling-town
    destinations. Leveling towns remain dangerous PvP territory; capitals and
    portal keeps remain safe hubs. Battlegrounds stay closed.
+   Frontier porters (owner, 2026-09-30, "Jeder nutzt jeden Porter"): a human
+   of any realm may use any frontier porter and lands at the porter's realm
+   landing; an autonomous RvR warband takes its leader's realm passage and
+   lands together (bugs 75, 76).
 10. **Siege balance (2026-09-28, docs/TASKS.md item 48):** (1a) keeps the
     Frontier Wardens hold stand like a 1.65 unclaimed keep at keep level 1
     (door 10,000 HP, guards 52, lord 63), set at every server start;

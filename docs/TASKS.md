@@ -172,6 +172,9 @@ Agent sessions on items 45–48: take the role and context from
     `AUTONOMOUS_GROUP_FORMED ... objective=RvR` with a lower
     `formationWaitSeconds` and more groups of 5+; mixed-realm groups travel
     together and never attack each other.
+    Follow-up: mixed warbands land together via the leader's realm passage
+    (Stefan 0.161.0, bug 75); stragglers and human porter use in 0.162.0
+    (bug 76).
 
 70. **Bots play continuously, no timed breaks.** Aaron, 2026-09-29: "no more
     pauses, the time-limited RvR tour then a break or levelling; just keep

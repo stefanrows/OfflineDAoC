@@ -13,6 +13,15 @@ public static class AutonomousFrontierTransport
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<OFTeleporter, byte> Porters = new();
     public static void Register(OFTeleporter porter) => Porters[porter] = 0;
     public static void Unregister(OFTeleporter porter) => Porters.TryRemove(porter, out _);
+    /// <summary>Whether another member of the force is already alive on the
+    /// far side of this passage; stragglers then follow at once (bug 74).</summary>
+    public static bool ForceAlreadyAcross(System.Collections.Generic.IEnumerable<GameBot> party, GameBot self, ushort destinationRegion) =>
+        party?.Any(member => member != null && member != self && member.IsAlive && member.CurrentRegionID == destinationRegion) == true;
+
+    /// <summary>A party of more than one realm (logged as <c>mixed</c>).</summary>
+    public static bool IsMixedRealm(System.Collections.Generic.IEnumerable<eRealm> realms) =>
+        realms?.Distinct().Skip(1).Any() == true;
+
     public static OFTeleporter NearestPorter(GameBot bot) => Porters.Keys
         .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegion == bot.CurrentRegion)
         .OrderBy(bot.GetDistanceTo).FirstOrDefault();
@@ -94,13 +103,15 @@ public static class AutonomousFrontierTransport
     /// only this cap. Solo bots are held only by their own release.
     /// </summary>
     public static RegroupDecision DecideRegroup(bool outbound, bool warband, long? earliestReadyRelease,
-        long? latestReadyRelease, bool partyGathered, long? lastForceDeparture, bool defenderPriority, long nowTick)
+        long? latestReadyRelease, bool partyGathered, long? lastForceDeparture, bool defenderPriority, long nowTick,
+        bool forceAlreadyAcross = false)
     {
         if (!outbound)
             return RegroupDecision.Board;
         if (latestReadyRelease is long latest && nowTick - latest < ReleaseHoldMilliseconds)
             return RegroupDecision.ReleaseHold;
-        if (!warband)
+        // A straggler whose force is already across follows at once (bug 74).
+        if (!warband || forceAlreadyAcross)
             return RegroupDecision.Board;
         if (lastForceDeparture is long current && nowTick - current <= DepartureContinuationMilliseconds)
             return RegroupDecision.Board; // the rest of a departure already under way
@@ -259,6 +270,34 @@ public static class AutonomousFrontierTransport
         _ => null,
     };
 
+    /// <summary>Medallions whose landing follows the porter's realm network.</summary>
+    public static bool IsFrontierMedallion(string medallion) => medallion is "hadrian_necklace" or "odin_necklace" or
+        "emain_necklace" or "home_necklace" or "snowdonia_necklace" or "vindsaul_necklace" or "druimcain_necklace";
+
+    /// <summary>
+    /// Where a human's frontier medallion lands at a porter of
+    /// <paramref name="porterRealm"/> (bug 74, owner 2026-09-30: every realm may
+    /// use every frontier porter and lands at that porter's landing). A
+    /// medallion for the porter's own frontier leads to its home portal keep;
+    /// an inner-keep medallion (Snowdonia, Vindsaul, Druim Cain) works only at
+    /// a porter of that realm.
+    /// </summary>
+    public static GameLocation PorterLanding(eRealm porterRealm, string medallion)
+    {
+        ushort home = HomeRegion(porterRealm);
+        return medallion switch
+        {
+            "hadrian_necklace" => Destination(porterRealm, 1)?.Location,
+            "odin_necklace" => Destination(porterRealm, 100)?.Location,
+            "emain_necklace" => Destination(porterRealm, 200)?.Location,
+            "home_necklace" when home != 0 => Destination(porterRealm, home)?.Location,
+            "snowdonia_necklace" when porterRealm == eRealm.Albion => new GameLocation("Snowdonia Alb", 1, 527608, 358918, 3083),
+            "vindsaul_necklace" when porterRealm == eRealm.Midgard => new GameLocation("Vindsaul Faste Mid", 100, 704916, 738544, 5704),
+            "druimcain_necklace" when porterRealm == eRealm.Hibernia => new GameLocation("Druim Cain Hib", 200, 421788, 486493, 1824),
+            _ => null,
+        };
+    }
+
     public static ushort HomeRegion(eRealm realm) => realm switch
     {
         eRealm.Albion => 1, eRealm.Midgard => 100, eRealm.Hibernia => 200, _ => 0,
@@ -400,9 +439,12 @@ public static class AutonomousFrontierTransport
             bool MemberReady(GameBot member) => member == bot ||
                 member.TempProperties.GetProperty<Request>(RequestKey) is Request memberRequest &&
                 SamePassage(memberRequest.Passage, request.Passage) && Ready(member, porter, memberRequest);
+            // Part of the force is already across: stragglers follow at once
+            // instead of mustering, regrouping or waiting out the force cap (bug 74).
+            bool forceAcross = ForceAlreadyAcross(party, null, request.Passage.Region);
             var group = SelectBoarders(party,
                 member => member.CurrentRegionID != request.Passage.Region && MemberReady(member),
-                member => IsIncoming(member.IsAlive, member.CurrentRegion == porter.CurrentRegion,
+                member => !forceAcross && IsIncoming(member.IsAlive, member.CurrentRegion == porter.CurrentRegion,
                     member.CurrentRegionID == request.Passage.Region,
                     member.CurrentRegion == porter.CurrentRegion ? member.GetDistanceTo(porter) : double.PositiveInfinity),
                 request.ForceId, request.Passage.Region, GameLoop.GameLoopTime, out var ready, out int incoming, endMuster: false);
@@ -417,7 +459,7 @@ public static class AutonomousFrontierTransport
             long? lastDeparture = LastDeparture(request.ForceId);
             var regroup = DecideRegroup(request.Passage.Medallion != "home_necklace", party.Length > 1,
                 releases.Length > 0 ? releases.Min() : null, releases.Length > 0 ? releases.Max() : null,
-                Gathered(party, porter), lastDeparture, HasDefenderPriority(bot, request.Passage), nowTick);
+                Gathered(party, porter), lastDeparture, HasDefenderPriority(bot, request.Passage), nowTick, forceAcross);
             if (regroup != RegroupDecision.Board)
             {
                 // Rez, rebuff and regroup at the hub; later casts re-check it.
@@ -454,12 +496,14 @@ public static class AutonomousFrontierTransport
                 AutonomousBotStatusPersistence.Queue(member,true);
             }
             var log=DOL.Logging.LoggerManager.Create(typeof(AutonomousFrontierTransport));
-            if (departed > 0 && request.Passage.Medallion != "home_necklace")
+            // A straggler's crossing is not a new force departure: the cap
+            // keeps counting from the force's own departure.
+            if (departed > 0 && request.Passage.Medallion != "home_necklace" && !forceAcross)
                 RecordDeparture(request.ForceId, nowTick);
             // since_release_s: seconds since the latest release among those
             // leaving (-1 none); force_gap_s: since this force's previous
             // departure (-1 first); both measure the regroup rule live.
-            if(departed>0 && log.IsInfoEnabled) log.Info($"RVR_FRONTIER_DEPARTURE force={request.ForceId} count={departed} porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\" region={request.Passage.Region} party={party.Length} left_behind={incoming} since_release_s={(releases.Length > 0 ? (nowTick - releases.Max().Value) / 1000 : -1)} force_gap_s={(lastDeparture is long gap ? (nowTick - gap) / 1000 : -1)}");
+            if(departed>0 && log.IsInfoEnabled) log.Info($"RVR_FRONTIER_DEPARTURE force={request.ForceId} count={departed} porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\" region={request.Passage.Region} party={party.Length} left_behind={incoming} since_release_s={(releases.Length > 0 ? (nowTick - releases.Max().Value) / 1000 : -1)} force_gap_s={(lastDeparture is long gap ? (nowTick - gap) / 1000 : -1)} porter_realm={porter.Realm} mixed={(IsMixedRealm(party.Select(member => member.Realm)) ? "true" : "false")} straggler={(forceAcross ? "true" : "false")}");
             if (SliceFull(processed, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds)) break;
         }
         }

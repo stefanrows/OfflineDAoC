@@ -100,7 +100,7 @@ public static class AutonomousHubDeparture
     public const int BindPeaceRadius = 2_500;
 
     /// <summary>Whether the living stands near one of its own realm's bindstones.</summary>
-    public static bool NearOwnBind(GameLiving living) => living != null &&
+    public static bool NearOwnBind(GameLiving living) => living?.CurrentRegion != null &&
         BotReleaseBindPoints.IsNearOwnBind(living.CurrentRegionID, living.X, living.Y, living.Realm, BindPeaceRadius);
 
     /// <summary>Per-realm band circles (index = (int)eRealm, 1..3): the keep

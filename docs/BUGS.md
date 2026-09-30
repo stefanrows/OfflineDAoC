@@ -96,6 +96,20 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+76. **Mixed-realm RvR warbands ping-pong between frontier porters.** Live
+    0.158.0, 2026-09-30 07:01–11:50: 66 of 116 warbands were mixed-realm
+    (task 71); a median of 111 porter departures per mixed warband in 5 hours
+    (56 for single-realm ones); only 9 of 8,586 warband departures left as a
+    whole party; at 17:37 366 RvR bots stood "Boarding frontier teleporter".
+    Stefan's 0.161.0 (bug 75) makes a warband take its leader's realm
+    passage, so members land together. Added in source 0.162.0: a straggler
+    whose force already has a member across boards at once instead of
+    waiting out the 5-minute departure cap, and does not reset that cap;
+    humans of any realm may use any frontier porter and land at the porter's
+    landing (owner, "Jeder nutzt jeden Porter"). Check:
+    `RVR_FRONTIER_DEPARTURE ... porter_realm= mixed= straggler=true`,
+    departures per warband well below 50 per 5 hours.
+
 75. **Keep sieges never succeed: bots travel one by one and die alone.**
     Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
     ram deployments, door hits or keep-guard fights; the only `RVR_SIEGE`

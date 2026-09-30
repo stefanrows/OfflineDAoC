@@ -398,7 +398,7 @@ public class UT_AutonomousBotDecisionEngine
     }
 
     [Test]
-    public void Choose_OrdinarySafeTownDecisionRemainsBiasedTowardGrinding()
+    public void Choose_SafeTownNeverPicksOptionalDowntime()
     {
         var state = State() with { InSafeTown = true };
         var camps = new[] { Camp("valid", eRealm.Albion, ConColor.BLUE, true) };
@@ -408,7 +408,7 @@ public class UT_AutonomousBotDecisionEngine
         Assert.Multiple(() =>
         {
             Assert.That(grind.Activity, Is.EqualTo(eAutonomousActivity.Grind));
-            Assert.That(breakTime.Activity, Is.EqualTo(eAutonomousActivity.TownDowntime));
+            Assert.That(breakTime.Activity, Is.EqualTo(eAutonomousActivity.Grind)); // task 70: no optional town breaks
         });
     }
 

@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.162.0] - 2026-09-30
+
+### Added
+
+- None.
+
+### Changed
+
+- Human players of any realm may use any frontier porter; a frontier
+  medallion lands at the porter's realm landing (bug 76, owner decision
+  "Jeder nutzt jeden Porter"). Inner-keep medallions (Snowdonia, Vindsaul,
+  Druim Cain) work at a porter of their realm.
+- `RVR_FRONTIER_DEPARTURE` gains `porter_realm=`, `mixed=` and `straggler=`.
+
+### Fixed
+
+- A straggler of a warband that already has a member across the porter
+  boards at once instead of waiting out the 5-minute departure cap, and its
+  crossing no longer restarts that cap (bug 76).
+- Bindstone peace no longer throws for actors without a region; tests
+  updated for the `bind:` peace counter and the removed town downtime.
+
+### Removed
+
+- None.
+
 ## [0.161.0] - 2026-09-30
 
 ### Added

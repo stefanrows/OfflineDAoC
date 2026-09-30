@@ -173,7 +173,7 @@ public sealed class UT_RvrHubPeace
         });
 
         string line = AutonomousHubDeparture.DrainPeaceLine();
-        Assert.That(line, Is.EqualTo("RVR_HUB_PEACE window_s=300 blocked=1 by_hub=Svasud:1,Sauvage:0,Druim:0 by_rule=band:1,recent:0 stray=1"));
+        Assert.That(line, Is.EqualTo("RVR_HUB_PEACE window_s=300 blocked=1 by_hub=Svasud:1,Sauvage:0,Druim:0 by_rule=band:1,recent:0,bind:0 stray=1"));
     }
 
     [Test]
@@ -392,7 +392,7 @@ public sealed class UT_RvrHubPeace
             Assert.That(PvpCombatant.BlocksAutonomousPvp(other, leaver, countStray: true), Is.True, "damage-time guard");
         });
         Assert.That(AutonomousHubDeparture.DrainPeaceLine(), Is.EqualTo(
-            "RVR_HUB_PEACE window_s=300 blocked=2 by_hub=Svasud:2,Sauvage:0,Druim:0 by_rule=band:1,recent:1 stray=1"));
+            "RVR_HUB_PEACE window_s=300 blocked=2 by_hub=Svasud:2,Sauvage:0,Druim:0 by_rule=band:1,recent:1,bind:0 stray=1"));
     }
 
     [Test]

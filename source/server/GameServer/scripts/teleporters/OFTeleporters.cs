@@ -66,15 +66,6 @@ namespace DOL.GS.Scripts
         //Re-Port every 45 seconds.
         private int ReportInterval = ServerProperties.Properties.OF_REPORT_INTERVAL;
 
-        //RvR medallions
-        private const string HadrianID = "hadrian_necklace";
-        private const string EmainID = "emain_necklace";
-        private const string OdinID = "odin_necklace";
-        private const string VindsaulID = "vindsaul_necklace";
-        private const string CainID = "druimcain_necklace";
-        private const string SnowdoniaID = "snowdonia_necklace";
-        private const string HomeID = "home_necklace";
-
         //QoL medallions
         private const string BindID = "bind_necklace";
         private const string CityID = "city_necklace";
@@ -205,7 +196,15 @@ namespace DOL.GS.Scripts
                     continue;
                 }
 
-                switch (player.Realm)
+                // Camlann (owner, 2026-09-30): every realm may use every
+                // frontier porter. A frontier medallion lands at this porter's
+                // landing (its realm network), whatever the player's realm;
+                // city, keep, battleground, DF and housing stay per player realm.
+                bool frontierMedallion = AutonomousFrontierTransport.IsFrontierMedallion(medallion?.Id_nb);
+                if (frontierMedallion)
+                    PortLocation = AutonomousFrontierTransport.PorterLanding(Realm, medallion.Id_nb);
+
+                switch (frontierMedallion ? eRealm.None : player.Realm)
                 {
                     case eRealm.Albion:
                     {
@@ -213,18 +212,6 @@ namespace DOL.GS.Scripts
                         {
                             switch (medallion.Id_nb)
                             {
-                                case OdinID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,100).Location;
-                                    break;
-                                case EmainID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,200).Location;
-                                    break;
-                                case SnowdoniaID:
-                                    PortLocation = new GameLocation("Snowdonia Alb", 1, 527608, 358918, 3083);
-                                    break;
-                                case HomeID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,1).Location;
-                                    break;
                                 case CityID:
                                     PortLocation = new GameLocation("City Alb", 10, 36226, 29820, 7971);
                                     break;
@@ -372,18 +359,6 @@ namespace DOL.GS.Scripts
                         {
                             switch (medallion.Id_nb)
                             {
-                                case HadrianID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,1).Location;
-                                    break;
-                                case EmainID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,200).Location;
-                                    break;
-                                case VindsaulID:
-                                    PortLocation = new GameLocation("Vindsaul Faste Mid", 100, 704916, 738544, 5704);
-                                    break;
-                                case HomeID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,100).Location;
-                                    break;
                                 case CityID:
                                     PortLocation = new GameLocation("City Mid", 101, 31746, 27429, 8792);
                                     break;
@@ -529,18 +504,6 @@ namespace DOL.GS.Scripts
                         {
                             switch (medallion.Id_nb)
                             {
-                                case OdinID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,100).Location;
-                                    break;
-                                case HadrianID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,1).Location;
-                                    break;
-                                case CainID:
-                                    PortLocation = new GameLocation("Druim Cain Hib", 200, 421788, 486493, 1824);
-                                    break;
-                                case HomeID:
-                                    PortLocation = AutonomousFrontierTransport.Destination(player.Realm,200).Location;
-                                    break;
                                 case CityID:
                                     PortLocation = new GameLocation("City Hib", 201, 34140, 32058, 8047);
                                     break;
