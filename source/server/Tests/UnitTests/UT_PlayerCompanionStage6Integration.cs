@@ -560,16 +560,17 @@ public sealed class UT_PlayerCompanionStage6Integration
         Assert.That(CompanionManager.TryGetSession(owner, out CompanionManagerSession session), Is.True);
         Assert.That(session.SentLabels[CompanionManagerProtocol.LabelListIndicator], Is.EqualTo("Roster empty"));
 
-        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "31");
+        Click(owner, session, CompanionManagerProtocol.ControlTabRecruit);
         Assert.That(session.Tab, Is.EqualTo(CompanionManagerTab.Recruit));
         Assert.That(session.Recruit.Realm, Is.EqualTo(eRealm.Midgard), "Recruit starts on the player's realm");
 
         CompanionManager.SetQuery(owner, "shaman");
         string generatedShaman = $"g:{(int)eRealm.Midgard}:{(int)eCharacterClass.Shaman}";
-        Assert.That(session.RowKeys.Where(key => key != null),
+        Assert.That(session.RowKeys.Where(key => key != null && !key.StartsWith(CompanionManagerSession.HeaderPrefix)),
             Is.EqualTo(new[] { "a:midgard-shaman-brakka", "a:midgard-shaman-kiri", generatedShaman }));
+        Assert.That(session.RowKeys[0], Does.StartWith(CompanionManagerSession.HeaderPrefix), "Candidates are sectioned by realm");
 
-        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "01");
+        Click(owner, session, CompanionManagerProtocol.ControlRowBase + 2);
         Assert.That(session.Recruit.SelectedKey, Is.EqualTo("a:midgard-shaman-kiri"));
         Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Recruit]"));
         string details = string.Join(' ', Enumerable.Range(CompanionManagerProtocol.LabelDetailBase,
@@ -579,11 +580,11 @@ public sealed class UT_PlayerCompanionStage6Integration
         Assert.That(session.SentLabels[CompanionManagerProtocol.LabelHeaderBase + 1], Is.EqualTo("Kiri"));
 
         ushort stale = (ushort)(session.Revision == 1 ? ushort.MaxValue : session.Revision - 1);
-        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(stale), "20");
+        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(stale), ActionControl);
         Assert.That(PlayerCompanionRoster.GetRoster(owner), Is.Empty, "A stale click must not recruit");
         Assert.That(session.Message, Does.Contain("nothing was done"));
 
-        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "20");
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase);
         PlayerCompanionRecord kiri = PlayerCompanionRoster.GetRoster(owner).Single();
         Assert.Multiple(() =>
         {
@@ -594,10 +595,10 @@ public sealed class UT_PlayerCompanionStage6Integration
             Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Invite]"));
         });
 
-        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "31");
+        Click(owner, session, CompanionManagerProtocol.ControlTabRecruit);
         Assert.That(session.Recruit.SelectedKey, Is.EqualTo("a:midgard-shaman-kiri"), "Selection is retained per tab");
         Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Open in roster]"));
-        CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), "20");
+        Click(owner, session, CompanionManagerProtocol.ControlActionBase);
         Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(1), "An authored person is recruited once");
         Assert.That(PlayerCompanionRoster.TryRecruitAuthored(owner, "Kiri", out _, out string duplicate), Is.False, duplicate);
 
@@ -619,8 +620,10 @@ public sealed class UT_PlayerCompanionStage6Integration
         CompanionManager.TryGetSession(owner, out CompanionManagerSession session);
         int row = Array.IndexOf(session.RowKeys, "c:" + regular.CompanionId);
         Assert.That(row, Is.GreaterThanOrEqualTo(0));
-        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + row * CompanionManagerProtocol.RowStride + 4],
-            Does.StartWith("Regular"));
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + row * CompanionManagerProtocol.RowStride + CompanionManagerProtocol.RowType],
+            Is.EqualTo("Regular"));
+        Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + row * CompanionManagerProtocol.RowStride + CompanionManagerProtocol.RowStateIdle],
+            Is.EqualTo("Bench"), "Benched companions get their own state column");
         Click(owner, session, CompanionManagerProtocol.ControlRowBase + row);
         Assert.That(session.SentLabels[CompanionManagerProtocol.LabelSubheader], Does.StartWith("Regular"));
         Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 4], Is.EqualTo("[Delete]"));
@@ -744,7 +747,7 @@ public sealed class UT_PlayerCompanionStage6Integration
         {
             Assert.That(session.SentLabels[CompanionManagerProtocol.LabelHeaderBase], Is.EqualTo("Group orders"));
             Assert.That(VisibleLinks(session), Does.Contain("  Saved stances: no group order (current)"));
-            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + 4], Is.EqualTo("order: saved stances"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + CompanionManagerProtocol.RowClass], Is.EqualTo("Saved stances"));
             Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Pull]"));
             Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 2], Is.EqualTo("[Invite all]"));
             Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase + 4], Is.EqualTo("[Bench all]"));
@@ -758,7 +761,7 @@ public sealed class UT_PlayerCompanionStage6Integration
                         order == eCompanionEngagementMode.Defensive, Is.True);
             Assert.That(VisibleLinks(session), Does.Contain("  Defensive: engage threats near you (current)")
                 .And.Contain("  Active Cleric: defensive (saved: aggressive)"), "The override is shown per companion");
-            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + 4], Is.EqualTo("order: defensive"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelRowBase + CompanionManagerProtocol.RowClass], Is.EqualTo("Defensive"));
         });
 
         Click(owner, session, CompanionManagerProtocol.ControlActionBase);
@@ -778,6 +781,8 @@ public sealed class UT_PlayerCompanionStage6Integration
         ClickLink(owner, session, "  Active Cleric: aggressive");
         Assert.That(session.Roster.SelectedKey, Is.EqualTo("c:" + active.CompanionId), "A member line opens that companion");
     }
+
+    private static string ActionControl => CompanionManagerProtocol.ControlActionBase.ToString("x2");
 
     private static void Click(Owner owner, CompanionManagerSession session, int control) =>
         CompanionManager.HandleClientControl(owner, CompanionManagerProtocol.FormatToken(session.Revision), control.ToString("x2"));
@@ -806,16 +811,83 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
+    public void CompanionManagerOrganisesTheRosterIntoSectionsWithSeparateStateColumns()
+    {
+        Owner owner = NewOwner("manager-sections-owner", eRealm.Albion);
+        QuietGroup group = GroupWithOwner(owner);
+        PlayerCompanionRecord Add(string name, eCharacterClass characterClass, eRealm realm, int level, bool active)
+        {
+            PlayerCompanionRecord record = NewRecord(owner.ObjectId, Guid.NewGuid().ToString(), name, characterClass);
+            record.Realm = (int)realm;
+            record.Level = level;
+            record.IsActive = active;
+            Assert.That(_database.AddObject(record), Is.True);
+            return record;
+        }
+
+        PlayerCompanionRecord live = Add("Livia", eCharacterClass.Cleric, eRealm.Albion, 20, true);
+        PlayerCompanionRecord high = Add("Hrolf", eCharacterClass.Thane, eRealm.Midgard, 50, false);
+        Add("Lowen", eCharacterClass.Druid, eRealm.Hibernia, 12, false);
+        AddDirect(group, NewCompanion(owner, live, eRealm.Albion));
+
+        CompanionManager.Open(owner);
+        CompanionManager.TryGetSession(owner, out CompanionManagerSession session);
+        string Label(int row, int offset) => session.SentLabels[CompanionManagerProtocol.LabelRowBase + row * CompanionManagerProtocol.RowStride + offset];
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.RowKeys[0], Is.EqualTo("group"));
+            Assert.That(Label(1, 0), Is.EqualTo("[-] In your group (1)"), "Active companions are their own section");
+            Assert.That(session.RowKeys[2], Is.EqualTo("c:" + live.CompanionId));
+            Assert.That(Label(2, CompanionManagerProtocol.RowLevel), Is.EqualTo("20"));
+            Assert.That(Label(2, CompanionManagerProtocol.RowClass), Is.EqualTo("Cleric"));
+            Assert.That(Label(2, CompanionManagerProtocol.RowStateActive), Is.EqualTo("Active"));
+            Assert.That(Label(3, 0), Is.EqualTo("[-] On the bench - Midgard (1)"), "Benched companions are sectioned by realm");
+            Assert.That(session.RowKeys[4], Is.EqualTo("c:" + high.CompanionId));
+            Assert.That(Label(4, CompanionManagerProtocol.RowStateIdle), Is.EqualTo("Bench"));
+            Assert.That(Label(4, CompanionManagerProtocol.RowStateActive), Is.Empty);
+            Assert.That(Label(5, 0), Is.EqualTo("[-] On the bench - Hibernia (1)"));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelStatus], Does.StartWith("3 companions: 1 active, 2 on the bench"));
+        });
+
+        Click(owner, session, CompanionManagerProtocol.ControlRowBase + 3);
+        Assert.Multiple(() =>
+        {
+            Assert.That(Label(3, 0), Is.EqualTo("[+] On the bench - Midgard (1)"), "A header click folds its section");
+            Assert.That(session.RowKeys[4], Is.EqualTo("h:Roster|bench:3"), "The next section moves up");
+            Assert.That(session.Roster.SelectedKey, Is.Not.Null.And.Not.StartWith("h:"));
+        });
+
+        Click(owner, session, CompanionManagerProtocol.ControlGroupLevel);
+        Click(owner, session, CompanionManagerProtocol.ControlSortName);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.Group, Is.EqualTo(CompanionManagerGroup.Level));
+            Assert.That(session.Sort, Is.EqualTo(CompanionManagerSort.Name));
+            Assert.That(Label(1, 0), Is.EqualTo("[-] Level 50 (1)"));
+            Assert.That(session.RowKeys[2], Is.EqualTo("c:" + high.CompanionId));
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelToggleBase + 2 * CompanionManagerProtocol.ToggleGroupLevel + 1], Is.EqualTo("Level"));
+        });
+
+        Click(owner, session, CompanionManagerProtocol.ControlRows16);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.RowCount, Is.EqualTo(16));
+            Assert.That(session.Message, Does.Contain("11 detail lines"));
+            Assert.That(session.Message, Does.Contain(CompanionManagerProtocol.WindowHeightFor(16).ToString()));
+        });
+    }
+
+    [Test]
     public void CompanionManagerSessionsAreScopedToTheirOwner()
     {
         Owner first = NewOwner("manager-first", eRealm.Albion);
         Owner second = NewOwner("manager-second", eRealm.Albion);
         CompanionManager.Open(first);
         CompanionManager.TryGetSession(first, out CompanionManagerSession firstSession);
-        CompanionManager.HandleClientControl(first, CompanionManagerProtocol.FormatToken(firstSession.Revision), "31");
+        Click(first, firstSession, CompanionManagerProtocol.ControlTabRecruit);
         string token = CompanionManagerProtocol.FormatToken(firstSession.Revision);
 
-        CompanionManager.HandleClientControl(second, token, "20");
+        CompanionManager.HandleClientControl(second, token, ActionControl);
         Assert.Multiple(() =>
         {
             Assert.That(PlayerCompanionRoster.GetRoster(first), Is.Empty);
@@ -826,8 +898,8 @@ public sealed class UT_PlayerCompanionStage6Integration
             Assert.That(secondSession.Message, Does.Contain("nothing was changed"));
         });
 
-        CompanionManager.HandleClientControl(first, "ZZZZ", "20");
-        CompanionManager.HandleClientControl(first, token, "c0");
+        CompanionManager.HandleClientControl(first, "ZZZZ", ActionControl);
+        CompanionManager.HandleClientControl(first, token, CompanionManagerProtocol.ControlLimit.ToString("x2"));
         Assert.That(PlayerCompanionRoster.GetRoster(first), Is.Empty, "Malformed controls are ignored");
     }
 

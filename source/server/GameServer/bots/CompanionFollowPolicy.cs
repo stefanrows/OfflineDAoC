@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using DOL.AI.Brain;
+using DOL.Logging;
 
 namespace DOL.GS
 {
@@ -9,14 +10,36 @@ namespace DOL.GS
     public static class CompanionFollowPolicy
     {
         public const int SettleMilliseconds = 600;
+        // A formation slot is 90-160 units indoors; this is clearly past it. Standing
+        // within StallRadius of one spot this long, that far from the leader, is a
+        // companion that cannot get down to them (e.g. the Darkness Falls entrance steps).
+        public const int LeftBehindDistance = 250;
+        public const int StallRadius = 48;
+        public const int StallMilliseconds = 4000;
+        private static readonly Logger log = LoggerManager.Create(typeof(CompanionFollowPolicy));
         private static readonly ConditionalWeakTable<GameBot, State> States = new();
 
         public sealed class State
         {
             public GameLiving Leader;
-            public Vector3 LastLeaderPosition, FormationPoint, LeaderVelocity;
+            public Vector3 LastLeaderPosition, FormationPoint, LeaderVelocity, StallAnchor;
             public bool Observed, BuffsBlocked;
-            public long BuffsAfter, FormationUntil, LastObservation;
+            public long BuffsAfter, FormationUntil, LastObservation, StallSince;
+
+            // True once the companion has stayed put, far from its leader, for
+            // StallMilliseconds. Judged on the companion's own movement, not on the gap,
+            // so one that trails a running leader but keeps walking is never rescued.
+            public bool Stalled(Vector3 position, float distanceToLeader, bool eligible, long now)
+            {
+                if (!eligible || distanceToLeader <= LeftBehindDistance ||
+                    StallSince == 0 || Vector3.DistanceSquared(position, StallAnchor) > StallRadius * StallRadius)
+                {
+                    StallSince = eligible && distanceToLeader > LeftBehindDistance ? now : 0;
+                    StallAnchor = position;
+                    return false;
+                }
+                return now - StallSince >= StallMilliseconds;
+            }
 
             public bool Observe(Vector3 position, bool moving, long now)
             {
@@ -56,6 +79,34 @@ namespace DOL.GS
                 state.BuffsBlocked = false;
             }
             return state;
+        }
+
+        // Path-independent rescue for a companion that stands still, far from its
+        // leader (e.g. atop the Darkness Falls entrance steps). The path-failure
+        // rescue only fires when the path query itself fails; a companion whose
+        // route over the stair links is valid but who still cannot get down never
+        // triggers it. Called once per follow turn.
+        public static bool RejoinIfLeftBehind(GameBot bot)
+        {
+            if (!Applies(bot)) return false;
+            GameLiving leader = bot.FollowAnchor;
+            Vector3 position = new(bot.X, bot.Y, bot.Z);
+            bool eligible = bot.IsAlive && !bot.InCombat && !bot.IsCasting && !bot.IsRecoveryResting &&
+                !bot.IsCrowdControlled && !bot.IsOnStableMasterRoute &&
+                bot.effectListComponent?.ContainsEffectForEffectType(eEffect.MovementSpeedDebuff) != true &&
+                leader.IsAlive && !leader.InCombat;
+            State state = For(bot);
+            if (!state.Stalled(position, Vector3.Distance(position, new(leader.X, leader.Y, leader.Z)), eligible,
+                    GameLoop.GameLoopTime))
+                return false;
+
+            // Another full stall window passes before any retry, whatever the outcome.
+            state.StallSince = 0;
+            if (bot.movementComponent?.TryJoinFollowAnchor() != true) return false;
+            log.Info($"COMPANION_LEFT_BEHIND_REJOIN bot=\"{bot.Name}\" leader=\"{leader.Name}\" " +
+                $"region={bot.CurrentRegionID} from={(int)position.X},{(int)position.Y},{(int)position.Z} " +
+                $"to={bot.X},{bot.Y},{bot.Z}");
+            return true;
         }
 
         public static bool WaitingForLeaderToStop(GameBot bot)

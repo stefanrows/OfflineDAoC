@@ -547,6 +547,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     source 0.116.0: after 2 s of failed follow paths, out of combat and
     within 1,024 units, the companion joins the floor beneath its leader.
     Real-client check at the DF entrances pending.
+    Reported again 2026-10-01 (screenshot, 0.167.0 source): some companions
+    still stay up on the entrance ledges while the group is at the bottom.
+    Cause: the 0.116.0 rescue ran only when the path query failed
+    (NoPath/PartialPath) and only while the brain's 750 ms formation order
+    was live; a companion with a valid path over the stair links that still
+    stalled never triggered it, and outside the formation order a partial
+    path only jumped it to the end of its own path. Fixed in source 0.168.0:
+    a path-independent watch in the follow turn. A player-led companion that
+    stays within 48 units of one spot for 4 s while more than 250 units from
+    its leader, with both out of combat, alive and the companion not casting,
+    resting, stunned, mezzed, snared or on a stable route, joins the floor
+    beneath its leader through the same teleport. It is judged on the
+    companion's own movement, so one trailing a running leader is not
+    moved. Logs `COMPANION_LEFT_BEHIND_REJOIN` with both positions. Unit
+    tests added; real-client check at all DF entrances pending.
 
 53. **Bomber companions burn their power on debuffs.** Reported by Aaron on
     2026-09-27 (playing on Stefan's server, version not confirmed): a

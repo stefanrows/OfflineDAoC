@@ -798,35 +798,16 @@ namespace DOL.GS
 
             static bool TeleportCompanionToLeader(NpcMovementComponent component)
             {
-                const int MAX_TELEPORT_TRIGGER_RANGE = 1024;
-                const int MAX_FLOOR_SEARCH_DEPTH = 1024;
-                const int MIN_TELEPORT_DISTANCE = 128;
                 const long FAILED_PATH_GRACE = 2_000;
 
                 long now = GameLoop.GameLoopTime;
                 if (component._companionPathFailSince == 0)
                     component._companionPathFailSince = now;
-                // A squad leader (task 42/43) joins the owner here, same as any other
-                // companion; a squad member joins its own squad leader instead, via
-                // FollowAnchor, never the owner directly.
-                if (component.Owner is not GameBot companion || companion.FollowAnchor is not GameLiving leader ||
-                    now - component._companionPathFailSince < FAILED_PATH_GRACE ||
-                    companion.InCombat || leader.InCombat || !leader.IsAlive ||
-                    leader.CurrentRegion != companion.CurrentRegion ||
-                    (leader is GamePlayer leaderPlayer && DragonCombatGeometry.IsRecoveringFromThrow(leaderPlayer)) ||
-                    !companion.IsWithinRadius(leader, MAX_TELEPORT_TRIGGER_RANGE))
-                    return false;
-
-                Vector3 leaderPos = new(leader.X, leader.Y, leader.Z);
-                Vector3? floor = PathfindingProvider.Instance.GetFloorBeneath(leader.CurrentZone, leaderPos,
-                    MAX_FLOOR_SEARCH_DEPTH, PathfindingProvider.Instance.DefaultFilters);
-                if (!floor.HasValue || companion.IsWithinRadius(floor.Value, MIN_TELEPORT_DISTANCE))
+                if (now - component._companionPathFailSince < FAILED_PATH_GRACE ||
+                    !component.TryJoinFollowAnchor())
                     return false;
 
                 component._companionPathFailSince = 0;
-                component._ownerPosition = floor.Value;
-                component.UpdateMovement(0);
-                component._pathfinder.ForceReplot = true;
                 return true;
             }
 
@@ -875,6 +856,40 @@ namespace DOL.GS
                 if (component.IsMoving)
                     component.UpdateMovement(0);
             }
+        }
+
+        /// <summary>
+        /// Places a player-led companion on the floor beneath its follow anchor, the way native
+        /// pets join their owner, when both are out of combat and within 1,024 units. Used once
+        /// follow paths keep failing and when a companion stalls far from its leader (steps the
+        /// mesh links but the companion cannot actually walk down, e.g. Darkness Falls).
+        /// </summary>
+        public bool TryJoinFollowAnchor()
+        {
+            const int MAX_TELEPORT_TRIGGER_RANGE = 1024;
+            const int MAX_FLOOR_SEARCH_DEPTH = 1024;
+            const int MIN_TELEPORT_DISTANCE = 128;
+
+            // A squad leader (task 42/43) joins the owner here, same as any other
+            // companion; a squad member joins its own squad leader instead, via
+            // FollowAnchor, never the owner directly.
+            if (Owner is not GameBot companion || companion.FollowAnchor is not GameLiving leader ||
+                companion.InCombat || leader.InCombat || !leader.IsAlive ||
+                leader.CurrentRegion != companion.CurrentRegion ||
+                (leader is GamePlayer leaderPlayer && DragonCombatGeometry.IsRecoveringFromThrow(leaderPlayer)) ||
+                !companion.IsWithinRadius(leader, MAX_TELEPORT_TRIGGER_RANGE))
+                return false;
+
+            Vector3 leaderPos = new(leader.X, leader.Y, leader.Z);
+            Vector3? floor = PathfindingProvider.Instance.GetFloorBeneath(leader.CurrentZone, leaderPos,
+                MAX_FLOOR_SEARCH_DEPTH, PathfindingProvider.Instance.DefaultFilters);
+            if (!floor.HasValue || companion.IsWithinRadius(floor.Value, MIN_TELEPORT_DISTANCE))
+                return false;
+
+            _ownerPosition = floor.Value;
+            UpdateMovement(0);
+            _pathfinder.ForceReplot = true;
+            return true;
         }
 
         private void ClearAutonomousPathFailure()

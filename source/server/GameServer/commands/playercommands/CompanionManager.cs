@@ -137,6 +137,25 @@ namespace DOL.GS.Commands
                         session.DetailOffset = 0;
                     }
                     break;
+                case >= ControlGroupSmart and <= ControlGroupNone:
+                    session.Group = (CompanionManagerGroup)(control - ControlGroupSmart);
+                    CompanionManagerPreferences.Save(player, session);
+                    list.Offset = 0;
+                    session.Message = GroupMessage(session.Group);
+                    break;
+                case >= ControlSortLevel and <= ControlSortClass:
+                    session.Sort = (CompanionManagerSort)(control - ControlSortLevel);
+                    CompanionManagerPreferences.Save(player, session);
+                    list.Offset = 0;
+                    break;
+                case >= ControlRows16 and <= ControlRows34:
+                    session.RowCount = RowSizes[control - ControlRows16];
+                    CompanionManagerPreferences.Save(player, session);
+                    session.Roster.Offset = session.Recruit.Offset = session.Active.Offset = 0;
+                    session.DetailOffset = 0;
+                    session.Message = $"Showing {session.RowCount} list rows and {session.DetailCount} detail lines - " +
+                        $"a window about {WindowHeightFor(session.RowCount)} pixels tall fits them.";
+                    break;
                 case >= ControlRealmAll and <= ControlRealmHibernia:
                     list.Realm = control switch
                     {
@@ -158,16 +177,16 @@ namespace DOL.GS.Commands
                     list.Offset++;
                     break;
                 case ControlListPageUp:
-                    list.Offset -= Rows;
+                    list.Offset -= session.RowCount;
                     break;
                 case ControlListPageDown:
-                    list.Offset += Rows;
+                    list.Offset += session.RowCount;
                     break;
                 case ControlDetailUp:
-                    session.DetailOffset -= DetailLines - 1;
+                    session.DetailOffset -= session.DetailCount - 1;
                     break;
                 case ControlDetailDown:
-                    session.DetailOffset += DetailLines - 1;
+                    session.DetailOffset += session.DetailCount - 1;
                     break;
                 case ControlClear:
                     session.Query = string.Empty;
@@ -182,7 +201,8 @@ namespace DOL.GS.Commands
                     Close(player);
                     return;
                 case >= ControlRowBase and < ControlRowBase + Rows:
-                    session.TrySelectRow(control - ControlRowBase, out _);
+                    if (!session.TryToggleSection(control - ControlRowBase))
+                        session.TrySelectRow(control - ControlRowBase, out _);
                     break;
                 case >= ControlDetailBase and < ControlDetailBase + DetailLines:
                     session.DetailActions[control - ControlDetailBase]?.Invoke();
@@ -199,10 +219,11 @@ namespace DOL.GS.Commands
         {
             var session = new CompanionManagerSession
             {
-                Message = "Select a companion. [Search] opens the chat line with /companions find.",
+                Message = "Select a companion. After enlarging the window, pick a Rows size above to fill it.",
             };
             session.Recruit.Realm = player.Realm is eRealm.Albion or eRealm.Midgard or eRealm.Hibernia
                 ? player.Realm : eRealm.Albion;
+            CompanionManagerPreferences.Load(player, session);
             return session;
         }
 
@@ -216,12 +237,15 @@ namespace DOL.GS.Commands
             IReadOnlyList<CompanionManagerEntry> all = !rosterTab ? RecruitEntries(roster)
                 : RosterEntries(activeTab ? roster.Where(record => InPlayerGroup(player, record)) : roster);
             IReadOnlyList<CompanionManagerEntry> filtered = session.Filter(all);
-            IReadOnlyList<CompanionManagerEntry> companions = filtered;
+            // Displayed order, ignoring folded sections: default selection and "Invite all" follow it.
+            IReadOnlyList<CompanionManagerEntry> companions = session.Arrange(filtered, expandAll: true)
+                .Where(line => !line.IsHeader).Select(line => line.Entry).ToArray();
+            IReadOnlyList<CompanionManagerLine> listLines = session.Arrange(filtered);
             // The group row ignores search and filters and always leads the roster list.
             bool groupRow = rosterTab && (roster.Count > 0 || player.Group != null);
             if (groupRow)
-                filtered = filtered.Prepend(GroupEntry(player)).ToArray();
-            IReadOnlyList<CompanionManagerEntry> visible = session.VisibleRows(filtered);
+                listLines = listLines.Prepend(new CompanionManagerLine(null, null, GroupEntry(player))).ToArray();
+            IReadOnlyList<CompanionManagerLine> visible = session.VisibleRows(listLines);
             CompanionManagerListState list = session.Current;
             if (list.SelectedKey == null || all.All(entry => entry.Key != list.SelectedKey) &&
                 !(groupRow && list.SelectedKey == GroupKey))
@@ -235,8 +259,14 @@ namespace DOL.GS.Commands
             }
             for (int row = 0; row < visible.Count; row++)
             {
-                CompanionManagerEntry entry = visible[row];
-                view.Rows[row] = (entry.Key == list.SelectedKey, entry.Realm, entry.Name, entry.Info);
+                if (visible[row].IsHeader)
+                {
+                    view.Rows[row] = new CompanionManagerView.RowView(visible[row].Header, false, eRealm.None, null, null, null, null, null, false);
+                    continue;
+                }
+                CompanionManagerEntry entry = visible[row].Entry;
+                view.Rows[row] = new CompanionManagerView.RowView(null, entry.Key == list.SelectedKey, entry.Realm, entry.Name,
+                    entry.LevelText, entry.ClassDisplay, entry.Origin, entry.State, entry.StateActive);
             }
 
             PlayerCompanionRecord selectedRecord = rosterTab
@@ -245,6 +275,13 @@ namespace DOL.GS.Commands
             view.Toggles[ToggleTabRoster] = ($"Roster ({roster.Count}/{PlayerCompanionRoster.MaximumRosterSize})",
                 session.Tab == CompanionManagerTab.Roster);
             view.Toggles[ToggleTabRecruit] = ("Recruit", session.Tab == CompanionManagerTab.Recruit);
+            view.Toggles[ToggleTabActive] = ($"Active ({roster.Count(record => InPlayerGroup(player, record))})", activeTab);
+            for (int group = 0; group < 5; group++)
+                view.Toggles[ToggleGroupSmart + group] = (GroupName((CompanionManagerGroup)group), (int)session.Group == group);
+            for (int sort = 0; sort < 3; sort++)
+                view.Toggles[ToggleSortLevel + sort] = (((CompanionManagerSort)sort).ToString(), (int)session.Sort == sort);
+            for (int size = 0; size < RowSizes.Length; size++)
+                view.Toggles[ToggleRows16 + size] = (RowSizes[size].ToString(), session.RowCount == RowSizes[size]);
             bool detailTabs = rosterTab && selectedRecord != null;
             view.Toggles[ToggleDetailOverview] = (detailTabs ? "Overview" : null, session.DetailTab == CompanionManagerDetailTab.Overview);
             view.Toggles[ToggleDetailTraining] = (detailTabs ? "Training & Tactics" : null, session.DetailTab == CompanionManagerDetailTab.Training);
@@ -273,15 +310,16 @@ namespace DOL.GS.Commands
             else
                 BuildRecruitDetail(player, session, roster, view, lines, choices);
 
-            session.DetailOffset = Math.Clamp(session.DetailOffset, 0, Math.Max(0, lines.Count - DetailLines));
+            int detailCount = session.DetailCount;
+            session.DetailOffset = Math.Clamp(session.DetailOffset, 0, Math.Max(0, lines.Count - detailCount));
             Array.Clear(session.DetailActions);
             Array.Clear(session.ActionHandlers);
             var keys = new List<string>(session.RowKeys.Select(key => key ?? string.Empty))
             {
-                session.Tab.ToString(), session.DetailTab.ToString(), list.SelectedKey ?? string.Empty,
+                session.Tab.ToString(), session.DetailTab.ToString(), list.SelectedKey ?? string.Empty, detailCount.ToString(),
                 session.SelectedItemId ?? string.Empty, session.SelectedSlot.ToString(),
             };
-            for (int line = 0; line < DetailLines; line++)
+            for (int line = 0; line < detailCount; line++)
             {
                 int index = session.DetailOffset + line;
                 if (index >= lines.Count)
@@ -305,21 +343,21 @@ namespace DOL.GS.Commands
                 keys.Add(choices[action].Key);
             }
 
-            view.DetailIndicator = lines.Count > DetailLines
-                ? $"Lines {session.DetailOffset + 1}-{Math.Min(lines.Count, session.DetailOffset + DetailLines)} of {lines.Count}"
+            view.DetailIndicator = lines.Count > detailCount
+                ? $"Lines {session.DetailOffset + 1}-{Math.Min(lines.Count, session.DetailOffset + detailCount)} of {lines.Count}"
                 : string.Empty;
             view.DetailCanScrollUp = session.DetailOffset > 0;
-            view.DetailCanScrollDown = session.DetailOffset + DetailLines < lines.Count;
+            view.DetailCanScrollDown = session.DetailOffset + detailCount < lines.Count;
             view.ListIndicator = filtered.Count == 0
                 ? (activeTab && all.Count == 0 ? "None in group" : rosterTab && all.Count == 0 ? "Roster empty" : "No matches")
-                : $"{list.Offset + 1}-{list.Offset + visible.Count} of {filtered.Count}";
+                : $"{list.Offset + 1}-{list.Offset + visible.Count} of {listLines.Count}";
             string search = session.Query.Length == 0
                 ? "[Search] finds a name or class"
                 : $"Search \"{session.Query}\": {filtered.Count} found";
             view.Status = activeTab
-                ? $"Active: companions in your group ({all.Count}) | {search}"
+                ? $"{all.Count} in your group | {search}"
                 : rosterTab
-                ? $"Your companions | {search}"
+                ? $"{roster.Count} companions: {roster.Count(record => record.IsActive)} active, {roster.Count(record => !record.IsActive)} on the bench | {search}"
                 : $"Story companions and new companions | {search}";
             if (rosterTab && session.RealmAbilityView && !string.IsNullOrEmpty(session.Message))
                 view.Status = session.Message;
@@ -348,36 +386,53 @@ namespace DOL.GS.Commands
             record.IsActive &&
             PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _);
 
-        private static string SquadLabel(PlayerCompanionRecord record) =>
-            record.SquadIndex <= 0 ? string.Empty
-                : record.IsSquadLeader ? $", squad {record.SquadIndex} leader" : $", squad {record.SquadIndex}";
+        private static string SquadState(PlayerCompanionRecord record) =>
+            record.SquadIndex <= 0 ? "Active" : record.IsSquadLeader ? $"Squad {record.SquadIndex} lead" : $"Squad {record.SquadIndex}";
+
+        private static bool IsStory(PlayerCompanionRecord record) =>
+            record.RecruitType == "authored" || !string.IsNullOrEmpty(record.AuthoredRecruitKey);
+
+        private static BotPveGroupRole RoleOf(eCharacterClass characterClass, string saved) =>
+            BotPartyRoles.TryParseRole(saved, out BotPveGroupRole role) ? role
+                : BotPartyRoles.TryParseRole(BotPartyRoles.DefaultPreference(characterClass), out role) ? role : BotPveGroupRole.Attacker;
 
         private static IReadOnlyList<CompanionManagerEntry> RosterEntries(IEnumerable<PlayerCompanionRecord> roster) =>
             roster.Select(record => new CompanionManagerEntry(RecordKey(record), (eRealm)record.Realm,
-                (eCharacterClass)record.ClassId, record.Name,
-                $"{(record.RecruitType == "authored" || !string.IsNullOrEmpty(record.AuthoredRecruitKey) ? "Story" : "Regular")} L{record.Level} {(eCharacterClass)record.ClassId}, {(record.IsActive ? "active" : "benched")}{SquadLabel(record)}",
-                (record.IsActive ? "0:" : "1:") + record.Name)).ToArray();
+                (eCharacterClass)record.ClassId, record.Name, record.Level, IsStory(record) ? "Story" : "Regular",
+                record.IsActive ? SquadState(record) : "Bench", record.IsActive, record.IsActive,
+                RoleOf((eCharacterClass)record.ClassId, record.TacticalRole))).ToArray();
 
         private static CompanionManagerEntry GroupEntry(GamePlayer player) =>
             new(GroupKey, player.Realm, eCharacterClass.Unknown, "Group orders",
-                "order: " + (CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order)
-                    ? order.ToString().ToLowerInvariant() : "saved stances") +
-                (PlayerCompanionGrind.IsActive(player) ? ", grinding" : string.Empty), string.Empty);
+                ClassText: CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order)
+                    ? char.ToUpperInvariant(order.ToString()[0]) + order.ToString()[1..].ToLowerInvariant() : "Saved stances",
+                State: PlayerCompanionGrind.IsActive(player) ? "Grinding" : string.Empty, StateActive: true);
 
         private static IReadOnlyList<CompanionManagerEntry> RecruitEntries(IEnumerable<PlayerCompanionRecord> roster)
         {
             HashSet<string> owned = roster.Select(record => record.AuthoredRecruitKey)
                 .Where(key => !string.IsNullOrEmpty(key)).ToHashSet(StringComparer.Ordinal);
             IEnumerable<CompanionManagerEntry> authored = CompanionCharacterCatalog.All.Select(entry =>
-                new CompanionManagerEntry("a:" + entry.Key, entry.Realm, entry.Class, entry.Name,
-                    $"{entry.Class}, {(owned.Contains(entry.Key) ? "recruited" : "story")}",
-                    $"{(int)entry.Realm}:{entry.Class}:0:{entry.Name}"));
+                new CompanionManagerEntry("a:" + entry.Key, entry.Realm, entry.Class, entry.Name, Origin: "Story",
+                    State: owned.Contains(entry.Key) ? "Recruited" : "Available", StateActive: !owned.Contains(entry.Key),
+                    Role: RoleOf(entry.Class, null)));
             IEnumerable<CompanionManagerEntry> generated = TemporaryGroupClassCatalog.All().Select(entry =>
                 new CompanionManagerEntry($"g:{(int)entry.Realm}:{(int)entry.CharacterClass}", entry.Realm,
-                    entry.CharacterClass, $"New {entry.CharacterClass}", "create a new person",
-                    $"{(int)entry.Realm}:{entry.CharacterClass}:1"));
+                    entry.CharacterClass, $"New {entry.CharacterClass}", Origin: "New", State: "Create", StateActive: true,
+                    Role: RoleOf(entry.CharacterClass, null)));
             return authored.Concat(generated).ToArray();
         }
+
+        private static string GroupName(CompanionManagerGroup group) => group.ToString();
+
+        private static string GroupMessage(CompanionManagerGroup group) => group switch
+        {
+            CompanionManagerGroup.Smart => "Smart: your group first, then the bench by realm. Click a section header to fold it.",
+            CompanionManagerGroup.Realm => "Grouped by realm. Click a section header to fold it.",
+            CompanionManagerGroup.Role => "Grouped by saved role (Tank, Healer, Buffer, Attacker). Click a header to fold it.",
+            CompanionManagerGroup.Level => "Grouped by level band, highest first. Click a section header to fold it.",
+            _ => "Grouping off: one plain list.",
+        };
 
         private static void BuildRosterDetail(GamePlayer player, CompanionManagerSession session,
             List<PlayerCompanionRecord> roster, PlayerCompanionRecord record, CompanionManagerView view,

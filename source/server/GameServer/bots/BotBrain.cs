@@ -1257,6 +1257,9 @@ namespace DOL.AI.Brain
             bool companionTravel = CompanionFollowPolicy.Applies(BotBody);
             // Do not run native owner-follow and formation orders concurrently.
             if (companionTravel) Body.StopFollowing();
+            // Stalled far from the leader whatever the path says (stairs it cannot walk down): join them.
+            if (companionTravel && !ambientWander && CompanionFollowPolicy.RejoinIfLeftBehind(BotBody))
+                return;
             if (CompanionRaid.IsMember(BotBody))
             {
                 // Raid membership is a separate, owner-only formation (task 44 is

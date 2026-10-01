@@ -15,6 +15,13 @@ click-to-target XML patch. See [Packaging](#packaging) and
 unchanged old builder still reproduced the installed 0.32.1 `game.dll`, and
 the companion, raid, and command server tests passed 318/318.
 
+**0.169.0 (offline only, owner check pending)** redesigns the window for large
+account-bound rosters: arial14 text, a sectioned list with level, class, type
+and state columns, grouping and sorting buttons, and a list size that fills a
+larger window. It rebuilds the manager `game.dll` (protocol 3) and the window
+XML, so the client files must be upgraded. See
+[Roster organisation, text size, and list size](#roster-organisation-text-size-and-list-size-01690).
+
 ## Real-client result, 2026-09-24 (0.32.0)
 
 The window opened and showed server text, so labels, the token, and show work
@@ -73,11 +80,67 @@ training and gear. `/spawn` helpers are temporary.” Visible labels say
 unchanged. Names use restrained realm colors, the selected row has a gold `>`
 marker, and active tabs and filters are gold. Roles are text (`Tank`, `Healer`,
 `Buffer`, `Attacker`); the client has no proven icon adapter for this window.
-Source 0.129.0 enlarges the default window from 640×420 to 720×500, still
-within the smallest shipped layout (`default800.ini`, 800×600). The XML uses
+Source 0.129.0 enlarged the default window from 640×420 to 720×500 (0.169.0
+supersedes it: 980×700, see below). The XML uses
 the stock lower-right resize handle, resizable backgrounds, wider detail text,
 and bottom-aligned controls. Installation and real-client resize checks remain
 pending in task 52; the generated `game.dll` is unchanged.
+
+## Roster organisation, text size, and list size (0.169.0)
+
+The owner's report: enlarging the window did not show more companions or
+detail lines, the 11-pixel text was hard to read, and an account-wide roster of
+dozens of companions across all three realms and every level was one
+unorganised list that mixed class, state, and level in a single line.
+
+**Why enlarging cannot add rows by itself.** The window is client XML. Every
+control sits at a fixed position, the number of label controls is built into
+`game.dll`, XML cannot hide a control, and the client never reports the window's
+size to the server. So rows exist or they do not; the server can only fill the
+ones it was told to. The fix is to build in many more rows (34 list rows, 29
+detail lines) and let the player choose how many the server fills with the
+**Rows** buttons (16, 22, 28, 34; the detail panel shows five fewer lines).
+Blank rows draw nothing, and the status message says how tall a window each
+choice needs (`204 + 22 × rows` pixels: 16 → 556, 22 → 688, 28 → 820, 34 →
+952). The default window is 980×700 and fits 22 rows. The choice, with the
+grouping and sorting below, is saved per account in the save's
+`offline_local_options` table (key `companion_manager.view.<account>`, value
+such as `group=Smart;sort=Level;rows=22`) so it survives closing the window and
+logging out. Nothing else about the window is saved, an unreadable value leaves
+the defaults, and a missing row is created on the first change.
+
+**Text size.** All text uses the client's registered `arial14` bitmap font
+(`ui/fonts/Arial14.tga`), about a third larger than `arial11`. No stock window
+uses it, so its first real-client rendering is part of the owner's check. The
+server fits and wraps text with its measured advances (the same method that
+reproduces the arial11 table exactly; a space has no glyph and is estimated at
+5 pixels, slightly generous). The Python test fails if the server's table and
+the builder's differ.
+
+**Organisation.** The list has columns: name (realm colour), level, class,
+type (Story, Regular, New), and state. State has its own colours: green
+**Active** (or **Squad N** / **Squad N lead**), grey **Bench**; Recruit shows
+**Available**, **Recruited**, or **Create**. Section headers split the list and
+a click on a header folds or unfolds its section (`[-]`/`[+]` with the count).
+
+| Control | Choices | Notes |
+| --- | --- | --- |
+| Group | **Smart** (default), Realm, Role, Level, None | Smart: **In your group** first, then **On the bench** by realm. Role uses the saved role. Level uses bands (50, 40-49, ...). Recruit shows realm sections for Smart and Realm, and none for Level. |
+| Sort | **Level** (highest first, default), Name, Class | Within each section. Recruit treats Level as Class. |
+| Rows | 16, 22, 28, 34 | How many list rows and (minus five) detail lines are filled. |
+
+The **Group orders** row still leads the Roster list, outside every section.
+Search now also matches Story, Regular, Active, and Bench. Active is a real
+tab with a count. Up, Down, PgUp and PgDn scroll list lines (headers included)
+by the chosen row count.
+
+**Geometry.** Window 980×700 (default and minimum), list pane 472 wide, detail
+pane growing with the window, row pitch 22. Controls use event IDs
+`0x700`–`0x7DF` (control numbers below `0xE0`; the client's own helpers use
+`0x7E0` and `0x7E1`). The window fits a 1024×768 client but no longer an
+800×600 one. Click areas for rows past the chosen size exist below the window
+edge; the real-client check should confirm they never catch clicks meant for
+the game world.
 
 ## What the 2026-09-23 probes proved
 
@@ -133,18 +196,25 @@ and the window shows the current query. `/companions find` with no text clears i
 
 **Event IDs.** Stock event names map to IDs up to about `0x246`; small client
 helpers return `0x7E0` and `0x7E1`. Manager click areas use the decimal event
-IDs `1792`–`1983` (`0x700`–`0x7BF`), which the stock `OnClickEvent` parser
+IDs `1792`–`2015` (`0x700`–`0x7DF`; `0x7BF` before 0.169.0), which the stock `OnClickEvent` parser
 accepts directly. (0.32.0 used names such as `CompMgr30`, which the parser
 rejects; see the real-client result above.) Every other ID continues to the
 raid handler unchanged.
 
-## Protocol version 2
+## Protocol version 3
+
+Version 3 (0.169.0) widens the label index to 16 bits (bytes 4-5, little
+endian) because the layout now has 440 label adapters. A version-2 client
+ignores every version-3 packet and a version-3 client ignores version 2, so a
+mismatched client and server fail closed: the window stays empty, the server
+prints its one guidance line after three seconds, and every `/companions`
+subcommand still works. Install the matching client files.
 
 Server to client uses fixed 128-byte DebugMode bodies: byte 0 is `0`, marker
-`0x43`, version `2`, then operation, label index, and NUL-terminated ASCII text
-from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 132
-label adapters (130 before 0.33.0; the 0.32.1 client ignores indexes 130 and
-131), `2` show (the client then sends control `be`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
+`0x43`, version `3`, then operation, a 16-bit label index (bytes 4-5), and
+NUL-terminated ASCII text
+from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 440
+label adapters (132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
 short bodies, bad terminators, unknown operations, and out-of-range indexes are
 ignored. Raid marker `0x52` and ordinary DebugMode packets pass through. An
 unpatched client sees only a DebugMode packet whose flag byte is `0`, as with
@@ -214,6 +284,24 @@ restore it first with the installer's `-RestoreBackup`, then rebuild. The patch 
 with `custom8_window.xml`
 `27d85bd6d192e574bff96d6898674c201863db36f5d4f67a7ab23fbf0f90bc64`). Earlier
 builds: 0.32.1 `3b6274dc…4d70890`, broken 0.32.0 `c36faf71…acf2ee`.
+
+**0.169.0 (protocol 3):** `game.dll`
+`49095c51e792200daf824f8a00880c70815a0cacbc37f452cf062cffacb3b63d`,
+`custom8_window.xml`
+`9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` (the 0.33.0
+`uimain.xml` is unchanged). The builder needs the raid-only baseline: assemble
+a folder with the baseline `game.dll` (`67dcf68a…`, kept in any
+`companion-manager-client-*` backup under `D:\Games\OfflineDAoC-backups`) and
+`ui/uimain.xml` (`637bf806…`) and pass it as `--client`. The built stage is kept
+at `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.169.0`.
+
+**Upgrading an installed 0.32.1 or 0.33.0 manager (0.169.0):** close the game,
+server, and launcher, then run `Install-CompanionManager.ps1 -InstallRoot
+<root> -Stage <stage>` (dry run) and again with `-Apply`. The installer detects
+the earlier manager `game.dll` and its `uimain.xml`, backs up `game.dll` and
+both window files to `companion-manager-upgrade-<stamp>`, and installs the new
+ones; `-RestoreBackup <that folder>` puts the earlier build back. The earlier
+restore-then-install route is no longer needed.
 
 `tools/dev/Install-CompanionManager.ps1 -InstallRoot <root> -Stage <stage>` is a
 dry run by default. With `-Apply` it checks every input and output hash,
@@ -289,7 +377,8 @@ installed, the owner checks in one session:
    proves the command path; a click should never print “No such command”.
 3. **[Search]** opens the chat line with `/companions find `; typing `sham` and
    pressing Enter filters the list to Shaman entries.
-4. The raid windows (`/raid 40`) still work, and the window fits at 800×600.
+4. The raid windows (`/raid 40`) still work, and the window fits at 800×600
+   (0.169.0 raised the window to 980×700: check at 1024×768 instead).
 
 If step 2 or 3 fails, stop and record the exact observation before building a
 reduced UI. After the gate passes, the Stage 6 checklist items below apply.

@@ -12,6 +12,92 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.169.0] - 2026-10-01
+
+### Added
+
+- Companion Manager roster organisation. The list now has columns (name in
+  the realm colour, level, class, type Story/Regular/New, state) and the
+  state is its own colour: green **Active** (or **Squad N**), grey **Bench**;
+  Recruit shows **Available**, **Recruited** or **Create**. **Group** buttons
+  split the list into sections with a count: **Smart** (default: your group
+  first, then the bench by realm), Realm, Role, Level bands, or None. **Sort**
+  buttons order each section by Level (highest first, default), Name or Class.
+  A click on a section header folds or unfolds it. Search also matches Story,
+  Regular, Active and Bench, and the Active tab shows its count.
+- **Rows** buttons (16, 22, 28, 34) choose how many list rows and detail
+  lines (five fewer) the window fills; the message line says how tall a window
+  each needs. Grouping, sorting and rows are remembered per account.
+- `Install-CompanionManager.ps1` upgrades an installed 0.32.1 or 0.33.0 manager
+  in place (backs up `game.dll` and both window files; `-RestoreBackup` puts
+  them back).
+
+### Changed
+
+- Companion Manager text is the client's `arial14` font, about a third larger
+  than before, and the window is 980×700 (it no longer fits an 800×600
+  client; 1024×768 is fine). Row and detail spacing follow the font.
+- Training & Tactics, Gear and the other detail pages use the extra lines of a
+  larger window instead of always showing 11.
+- The Group orders row shows its order in the class column.
+- Client protocol 3: label numbers are 16 bits (the layout has 440 label
+  adapters), and manager click controls run to `0xDF`. The client files must be
+  upgraded with this version's stage; an older client ignores the new packets,
+  the window stays empty, and `/companions` commands keep working.
+- The raid click-to-target XML builder also accepts a client with this
+  manager build.
+
+### Fixed
+
+- Enlarging the Companion Manager no longer leaves the list at 12 rows and the
+  detail panel at 11 lines: pick a larger **Rows** size to use the space (the
+  client cannot report the window size, so this is one click, not automatic).
+
+### Removed
+
+- The 800×600 fit of the Companion Manager window and the restore-then-install
+  upgrade route for the manager client.
+
+Verification: offline only. Native-client emulation (440 adapters, packets,
+clicks, raid passthrough), the companion server tests (420), an installer
+upgrade/restore round trip on a scratch copy, and a preview rendered from the
+window XML with the client's own `arial14` glyphs passed. The real client has
+never drawn `arial14`; installation and a real-client check are pending
+(TASKS item 75).
+
+## [0.168.0] - 2026-10-02
+
+### Fixed
+
+- Companions no longer stay stuck on the Darkness Falls entrance ledges
+  (bug 54, reported again). The 0.116.0 rescue only fired when the path query
+  itself failed, so a companion whose route over the stair links was valid but
+  who still could not get down was never helped. A new watch in the follow turn
+  is independent of the path result: a companion that stays put for 4 seconds
+  while more than 250 units from its leader, with both out of combat, now
+  joins the floor beneath the leader, like a native pet. Companions that are
+  fighting, casting, resting, stunned, mezzed, snared, on a stable route, or
+  still walking after a running leader are left alone. The server logs
+  `COMPANION_LEFT_BEHIND_REJOIN` with both positions.
+- Real-client check at all Darkness Falls entrances is pending.
+
+## [0.167.0] - 2026-10-02
+
+### Changed
+
+- Higher World Speed steps keep up better. Live 10× ran at about 6.7× because
+  a handful of heavy bot turns each held the whole tick at its barrier: stable
+  (horse) route planning alone was about a fifth of wall time. Above 1× the
+  plan now runs on a small background pool and the bot waits for it the same
+  way it waited for a sliced plan (about 25 ms real at 10×); the plan itself
+  and its choice are unchanged. At 1× the old in-turn planning is kept.
+  If the pool's queue is ever full, the bot plans in its own turn as before.
+- The achieved-speed reading is recomputed four times a second instead of
+  rescanning thousands of samples on every tick.
+- Real-client and live-population measurement of the new achieved speed is
+  pending; `SelectCamp` (about 20 ms per call), zone itinerary and path
+  issuing are still single-turn stalls (TASKS item 74).
+
 ## [0.166.0] - 2026-10-01
 
 ### Added

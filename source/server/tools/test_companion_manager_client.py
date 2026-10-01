@@ -125,10 +125,12 @@ assert len(labels) == LABELS + 240 and len(set(labels)) == len(labels), "Raid ad
 assert read32(manifest["activeFlag"]) == 0
 
 
-def packet(operation, index=0, text="", marker=0x43, version=2, length=128, terminator=0, raw_text=None):
+def packet(operation, index=0, text="", marker=0x43, version=builder.PROTOCOL_VERSION, length=128, terminator=0,
+           raw_text=None):
     setup()
     data = bytearray(128)
-    data[1:5] = bytes((marker, version, operation, index))
+    data[1:4] = bytes((marker, version, operation))
+    data[4:6] = struct.pack("<H", index)
     encoded = raw_text if raw_text is not None else text.encode("ascii")
     data[12:12 + len(encoded)] = encoded
     data[127] = terminator
@@ -146,12 +148,17 @@ def command():
 
 packet(1, layout["LabelStatus"], "Roster 2/78 - All realms")
 assert texts[adapter(layout["LabelStatus"])] == "Roster 2/78 - All realms"
+assert LABELS > 256, "The 16-bit index is what makes the high labels reachable"
 packet(1, LABELS - 1, "Last action")
 assert texts[adapter(LABELS - 1)] == "Last action"
+packet(1, 300, "A label past the old one-byte index")
+assert texts[adapter(300)] == "A label past the old one-byte index"
 before = dict(texts)
 packet(1, LABELS, "Out of range")
+packet(1, 0xFFFF, "Far out of range")
 packet(1, 0, "Bad terminator", terminator=1)
 packet(1, 0, "Probe version", version=1)
+packet(1, 0, "Version 2 client format", version=2)
 packet(1, 0, "Too short", length=127)
 assert texts == before, "Malformed manager packets must not change labels"
 
@@ -187,7 +194,8 @@ assert branch_calls[:3] == [0x6DDD8E, 0x6DDD7C, builder.CLICK_EVENT_MAPPER], [he
 assert image[pe.get_offset_from_rva(0x4E99E6 - 0x400000):][:5] == bytes.fromhex("e9 15 96 f9 01")
 
 assert stock_click_event("1840") == 0x730
-assert stock_click_event("1983") == 0x7BF
+assert stock_click_event(str(0x700 + builder.CONTROL_LIMIT - 1)) == 0x700 + builder.CONTROL_LIMIT - 1
+assert builder.CONTROL_LIMIT <= 0xE0, "0x7E0 and 0x7E1 are returned by the client's own helpers"
 assert stock_click_event("toggleattackmode") == 0x64, "stock names still resolve, case-insensitively"
 for unknown in ("CompMgr30", "RaidMember00", "CompanionProbeClick"):
     assert stock_click_event(unknown) == 0xFFFFFFFF, unknown
@@ -210,20 +218,22 @@ assert commands == [], "Clicks before the server shows the manager must not send
 packet(2)
 assert windows[-1] == (builder.CUSTOM8_WINDOW, 1)
 assert read32(manifest["activeFlag"]) == 1
-assert commands == ["&companions ui 0a9f be"], commands
+assert commands == [f"&companions ui 0a9f {builder.READY_CONTROL:02x}"], commands
 click(0x700 + layout["ControlRowBase"] + 5)
 assert commands[-1] == "&companions ui 0a9f 05"
 click(0x700 + layout["ControlActionBase"] + 3)
-assert commands[-1] == "&companions ui 0a9f 23"
+assert commands[-1] == f"&companions ui 0a9f {layout['ControlActionBase'] + 3:02x}"
 packet(4, text="1b2c")
 click(0x700 + layout["ControlTabRecruit"])
-assert commands[-1] == "&companions ui 1b2c 31"
+assert commands[-1] == f"&companions ui 1b2c {layout['ControlTabRecruit']:02x}"
 sent = len(commands)
 click(0x700 + builder.SEARCH_CONTROL)
 assert len(commands) == sent, "Search must stay in the client"
 assert chat == [("mode", builder.CHAT_INPUT_STATE, 1), ("text", builder.SEARCH_PREFIX)], chat
 assert click(0x600, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER
-assert click(0x7C0, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER
+assert click(0x700 + builder.CONTROL_LIMIT, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER
+click(0x700 + builder.CONTROL_LIMIT - 1)
+assert commands[-1] == f"&companions ui 1b2c {builder.CONTROL_LIMIT - 1:02x}"
 assert click(0x6FF, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER
 
 packet(3)
@@ -251,7 +261,9 @@ for skin in ("atlantis", "isles"):
     window = root.find("WindowTemplate")
     assert window.find("WindowId").text == "Custom8"
     width, height = int(window.find("Width").text), int(window.find("Height").text)
-    assert width <= 800 - 40 and height <= 600 - 60, "Window must fit the 800x600 client"
+    assert width <= 1024 - 40 and height <= 768 - 60, "Window must fit the 1024x768 client"
+    assert (width, height) == (builder.WINDOW_WIDTH, builder.WINDOW_HEIGHT)
+    assert {element.find("FontName").text for element in window.iter("LabelDef")} == {builder.FONT}
     adapters = [element.text for element in window.iter("Adapter")]
     assert sorted(adapters) == sorted(builder.adapter_name(index) for index in range(LABELS))
     for button in window.iter("InvisibleButtonDef"):
@@ -275,12 +287,47 @@ for skin in ("atlantis", "isles"):
 assert b"custom8_window.xml" in (args.stage / "uimain.xml").read_bytes()
 assert builder.SEARCH_CONTROL in controls and builder.READY_CONTROL not in controls
 
+# Geometry: the chosen list sizes must fit a window of the advertised height without overlap.
+for size in builder.ROW_SIZES:
+    height = builder.WINDOW_HEIGHT_BASE + builder.PITCH * size
+    assert builder.ROW_TOP + builder.PITCH * size <= height - 52, f"{size} rows run into the list pager"
+    last_detail = builder.DETAIL_TOP + builder.PITCH * (size - builder.DETAIL_RESERVE) - 4
+    assert last_detail <= height - 116 + 4, f"{size - builder.DETAIL_RESERVE} detail lines run into the scroll links"
+    assert size - builder.DETAIL_RESERVE <= builder.DETAIL_LINES
+assert builder.WINDOW_HEIGHT_BASE + builder.PITCH * builder.ROW_SIZES[1] <= builder.WINDOW_HEIGHT, "Default window fits the default size"
+assert builder.ROWS == builder.ROW_SIZES[-1] and builder.DETAIL_LINES == builder.ROWS - builder.DETAIL_RESERVE
+# Row columns stay inside the list pane and in order; toggles on one line never overlap or leave the window.
+columns = [(builder.COLUMN_NAME, builder.WIDTH_ROW_NAME), (builder.COLUMN_LEVEL, builder.WIDTH_ROW_LEVEL),
+           (builder.COLUMN_CLASS, builder.WIDTH_ROW_CLASS), (builder.COLUMN_TYPE, builder.WIDTH_ROW_TYPE),
+           (builder.COLUMN_STATE, builder.WIDTH_ROW_STATE)]
+for (x, width), (next_x, _next_width) in zip(columns, columns[1:]):
+    assert x + width <= next_x, "Row columns overlap"
+assert columns[-1][0] + columns[-1][1] <= builder.LIST_X + builder.LIST_WIDTH
+assert builder.COLUMN_MARK + builder.WIDTH_ROW_HEADER <= builder.LIST_X + builder.LIST_WIDTH
+by_line = {}
+for name, _control, x, y, width in builder.TOGGLES:
+    by_line.setdefault(y, []).append((x, x + width, name))
+for y, spans in by_line.items():
+    spans.sort()
+    for (_x0, end, name), (start, _end, next_name) in zip(spans, spans[1:]):
+        assert end <= start, f"{name} overlaps {next_name} at y={y}"
+    assert spans[-1][1] <= builder.WINDOW_WIDTH
+links = {name: (x, width) for name, _text, _control, x, _y, width in builder.STATIC_LINKS}
+tabs_end = max(x + width for name, _control, x, y, width in builder.TOGGLES if y == 30)
+assert links["Search"][0] >= tabs_end, "Top links overlap the tabs and row sizes"
+assert links["Refresh"][0] + links["Refresh"][1] <= builder.WINDOW_WIDTH
+assert links["Search"][0] + links["Search"][1] <= links["Clear"][0] <= links["Refresh"][0], "Top links overlap each other"
+for text in ("Roster (78/78)", "Active (99)", "Training & Tactics"):
+    assert builder.text_width(text) > 0
+
 # The server protocol constants must match the native layout.
 protocol = (Path(__file__).resolve().parents[1] / "GameServer/bots/CompanionManagerProtocol.cs").read_text(encoding="utf-8")
 declared = {name: int(value, 0) for name, value in
             re.findall(r"public const (?:int|byte) (\w+) = (0x[0-9A-Fa-f]+|\d+);", protocol)}
 for name, value in layout.items():
     assert declared.get(name) == value, f"CompanionManagerProtocol.{name} = {declared.get(name)}, native {value}"
+advances = re.search(r"Arial14Advances =\s*\{(.*?)\};", protocol, re.S).group(1)
+assert tuple(int(value) for value in re.findall(r"\d+", advances)) == builder.ARIAL14_ADVANCES, "Server font table differs"
 
 print(f"PASS (offline only): {LABELS} manager adapters registered before the unchanged raid adapters")
 print("PASS (offline only): versioned label/token/show/hide packets; malformed packets ignored")

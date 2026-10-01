@@ -64,6 +64,7 @@ namespace DOL.GS
         private static int _tickWriteIndex;
         private static int _tickSampleCount;
         private static double _achievedMultiplier;
+        private static long _lastAchievedScan;
 
         public static string SessionId => Volatile.Read(ref _sessionId);
         public static int SelectedMultiplier => Volatile.Read(ref _selectedMultiplier);
@@ -116,6 +117,7 @@ namespace DOL.GS
                     _tickWriteIndex = 0;
                     _tickSampleCount = 0;
                     Array.Clear(TickCompletionTimes);
+                    _lastAchievedScan = 0;
                 }
 
                 try
@@ -232,6 +234,12 @@ namespace DOL.GS
                 TickCompletionTimes[_tickWriteIndex] = now;
                 _tickWriteIndex = (_tickWriteIndex + 1) % TickCompletionTimes.Length;
                 _tickSampleCount = Math.Min(_tickSampleCount + 1, TickCompletionTimes.Length);
+
+                // The reading is a 10 s average; rescanning thousands of samples on every
+                // tick cost real time once ticks run at 10x and above.
+                if (now - _lastAchievedScan < Stopwatch.Frequency / 4)
+                    return;
+                _lastAchievedScan = now;
 
                 long cutoff = now - AchievementWindowSeconds * Stopwatch.Frequency;
                 long oldest = 0;

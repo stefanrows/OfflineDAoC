@@ -3,7 +3,8 @@
 The builder writes a fresh staging directory and never modifies the input
 client. It accepts only the verified raid-patched Windows x86 game.dll.
 
-Protocol version 2 replaces the failed probe paths:
+Protocol version 3 (16-bit label index in bytes 4-5, because the layout has more than
+256 label adapters; version 2 used one byte) replaces the failed probe paths:
 
 * Server to client: fixed 128-byte DebugMode bodies with marker 0x43 update
   registered label adapters, show or hide Custom8, and set the view token.
@@ -61,29 +62,71 @@ CLICK_EVENT_MAPPER = 0x4EA06F
 
 CUSTOM8_WINDOW = 0x75
 MARKER = 0x43
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 BODY_SIZE = 128
 TEXT_OFFSET = 12
 EVENT_BASE = 0x700
-CONTROL_LIMIT = 0xC0
-SEARCH_CONTROL = 0xB0
-READY_CONTROL = 0xBE
+# 0x700 + control must stay below 0x7E0, which the client's own helpers return.
+CONTROL_LIMIT = 0xE0
+SEARCH_CONTROL = 0xD0
+READY_CONTROL = 0xDD
 COMMAND_PREFIX = "&companions ui "
 SEARCH_PREFIX = "/companions find "
 OP_LABEL, OP_SHOW, OP_HIDE, OP_TOKEN = 1, 2, 3, 4
 
-WINDOW_WIDTH = 720
-WINDOW_HEIGHT = 500
-ROWS = 12
-DETAIL_LINES = 11
+# Window geometry. The text font is the client's registered "arial14" bitmap font
+# (ui/fonts/Arial14.tga, never used by the stock windows). It is roughly a third
+# larger than the earlier arial11 and is measured the same way, so the server can
+# fit text to the labels. Heights below are for the default window; every control
+# is positioned from the top-left and the window resizes with its grow/offset flags.
+FONT = "arial14"
+# Advance widths for '!' through '~', read from the glyph width markers of
+# ui/fonts/Arial14.tga (the same method that reproduces the arial11 table). A space
+# has no glyph; 5 is a deliberate slight overestimate (the font's em is 14).
+ARIAL14_ADVANCES = (
+    3, 6, 7, 8, 9, 9, 3, 4, 4, 6, 9, 3, 5, 3, 4, 8, 5, 8, 8, 8, 8, 8, 8, 8, 8, 3, 3, 8, 8, 8, 9, 15,
+    10, 9, 9, 9, 8, 8, 10, 9, 3, 8, 9, 8, 12, 9, 10, 8, 10, 10, 8, 9, 9, 10, 14, 8, 9, 9, 5, 5, 5, 7, 9,
+    3, 8, 8, 7, 8, 8, 6, 8, 8, 3, 5, 7, 3, 11, 8, 8, 8, 8, 6, 7, 6, 8, 8, 12, 7, 8, 6, 6, 2, 6, 8,
+)
+SPACE_ADVANCE = 5
+
+
+def text_width(text):
+    return sum(ARIAL14_ADVANCES[ord(ch) - 33] if "!" <= ch <= "~" else SPACE_ADVANCE for ch in text)
+
+
+WINDOW_WIDTH = 980
+WINDOW_HEIGHT = 700
+PITCH = 22
+# The client cannot tell the server how tall the window is, and XML cannot hide
+# controls, so the list and detail panel have this many rows built in and the
+# server fills only as many as the player chose (the "Rows" buttons). The window
+# needs about WINDOW_HEIGHT_BASE + PITCH * rows pixels of height for a choice (16 -> 556, 22 -> 688,
+# 28 -> 820, 34 -> 952); the default window fits 22.
+ROW_SIZES = (16, 22, 28, 34)
+WINDOW_HEIGHT_BASE = 204
+ROWS = ROW_SIZES[-1]
+DETAIL_RESERVE = 5
+DETAIL_LINES = ROWS - DETAIL_RESERVE
 ACTIONS = 6
-# Label widths in pixels; the server fits text to them using arial11 advances.
-WIDTH_STATUS = 696
-WIDTH_MESSAGE = 636
-WIDTH_ROW_NAME = 110
-WIDTH_ROW_INFO = 158
-WIDTH_DETAIL = 392
-WIDTH_ACTION = 128
+LIST_X, LIST_WIDTH = 8, 472
+PANE_Y = 118
+DETAIL_X = 496
+COLUMN_HEADS_Y = 122
+ROW_TOP = 146
+DETAIL_TAB_Y, DETAIL_HEADER_Y, DETAIL_SUBHEADER_Y, DETAIL_TOP = 122, 146, 168, 194
+# Label widths in pixels; the server fits text to them using the arial14 advances.
+WIDTH_STATUS = 956
+WIDTH_MESSAGE = 760
+COLUMN_MARK, COLUMN_NAME, COLUMN_LEVEL, COLUMN_CLASS, COLUMN_TYPE, COLUMN_STATE = 14, 28, 152, 186, 300, 366
+WIDTH_ROW_HEADER = 452
+WIDTH_ROW_NAME = 120
+WIDTH_ROW_LEVEL = 30
+WIDTH_ROW_CLASS = 110
+WIDTH_ROW_TYPE = 62
+WIDTH_ROW_STATE = 102
+WIDTH_DETAIL = 468
+WIDTH_ACTION = 152
 
 GOLD = (255, 210, 90)
 MUTED = (150, 150, 150)
@@ -92,67 +135,90 @@ LINK = (240, 200, 110)
 STATUS = (200, 200, 200)
 MESSAGE = (255, 235, 160)
 DISABLED = (115, 115, 115)
+ACTIVE = (120, 215, 130)
 REALM_COLORS = ((220, 125, 120), (135, 165, 235), (125, 200, 135))  # Albion, Midgard, Hibernia
 
-# name, control, x, y, width
+
+def flow(y, x, items, gap=12):
+    """Left-to-right toggles; width follows the widest text the server can send."""
+    placed = []
+    for name, control, widest in items:
+        width = text_width(widest) + 4
+        placed.append((name, control, x, y, width))
+        x += width + gap
+    return placed
+
+
+# name, control, x, y, width. Order is the toggle index order (Toggle<Name>).
 TOGGLES = (
-    ("TabRoster", 0x30, 12, 28, 90),
-    ("TabRecruit", 0x31, 104, 28, 90),
-    ("DetailOverview", 0x38, 312, 110, 76),
-    ("DetailTraining", 0x39, 390, 110, 132),
-    ("DetailGear", 0x3A, 524, 110, 60),
-    ("RealmAll", 0x40, 58, 48, 76),
-    ("RealmAlbion", 0x41, 136, 48, 64),
-    ("RealmMidgard", 0x42, 202, 48, 68),
-    ("RealmHibernia", 0x43, 272, 48, 72),
-    ("RoleAny", 0x48, 58, 66, 70),
-    ("RoleTank", 0x49, 130, 66, 50),
-    ("RoleHealer", 0x4A, 182, 66, 56),
-    ("RoleBuffer", 0x4B, 240, 66, 56),
-    ("RoleAttacker", 0x4C, 298, 66, 70),
+    *flow(30, 12, (("TabRoster", 0x70, "Roster (99/99)"), ("TabRecruit", 0x71, "Recruit"),
+                   ("TabActive", 0x72, "Active (99)"))),
+    ("DetailOverview", 0x78, DETAIL_X, DETAIL_TAB_Y, text_width("Overview") + 4),
+    ("DetailTraining", 0x79, DETAIL_X + text_width("Overview") + 20, DETAIL_TAB_Y, text_width("Training & Tactics") + 4),
+    ("DetailGear", 0x7A, DETAIL_X + text_width("Overview") + text_width("Training & Tactics") + 36,
+     DETAIL_TAB_Y, text_width("Gear") + 4),
+    *flow(52, 74, (("RealmAll", 0x80, "All realms"), ("RealmAlbion", 0x81, "Albion"),
+                   ("RealmMidgard", 0x82, "Midgard"), ("RealmHibernia", 0x83, "Hibernia"))),
+    *flow(74, 74, (("RoleAny", 0x88, "Any role"), ("RoleTank", 0x89, "Tank"), ("RoleHealer", 0x8A, "Healer"),
+                   ("RoleBuffer", 0x8B, "Buffer"), ("RoleAttacker", 0x8C, "Attacker"))),
+    *flow(52, 560, (("GroupSmart", 0x90, "Smart"), ("GroupRealm", 0x91, "Realm"), ("GroupRole", 0x92, "Role"),
+                    ("GroupLevel", 0x93, "Level"), ("GroupNone", 0x94, "None"))),
+    *flow(74, 560, (("SortLevel", 0x98, "Level"), ("SortName", 0x99, "Name"), ("SortClass", 0x9A, "Class"))),
+    *flow(30, 470, tuple((f"Rows{size}", 0xA0 + index, str(size)) for index, size in enumerate(ROW_SIZES)), gap=14),
 )
-# Tabs added after the 0.32 layout: fixed text with a click area and no label
-# adapter, so the patched game.dll stays byte-identical. The server marks the
-# selected tab through the status line instead of a highlight.
-# protocol name, text, control, x, y, width
-TAB_LINKS = (
-    ("TabActive", "Active", 0x32, 196, 28, 90),
-)
-# protocol name, text, control, x, y, width
+# Fixed text with a click area and no label adapter.
+# protocol name, text, control, x, y, width. x is always the left edge in the default window;
+# bottom-anchored links keep their distance from the bottom edge, right-anchored ones from the right.
+def _links(y, x, items, gap=10):
+    placed = []
+    for name, text, control in items:
+        width = text_width(text) + 6
+        placed.append((name, text, control, x, y, width))
+        x += width + gap
+    return placed
+
+
+def _links_from_right(y, items, margin=12, gap=10):
+    """Chains links leftwards from the window's right edge; the first item is rightmost."""
+    placed = []
+    edge = WINDOW_WIDTH - margin
+    for name, text, control in items:
+        width = text_width(text) + 6
+        placed.append((name, text, control, edge - width, y, width))
+        edge -= width + gap
+    return placed
+
+
 STATIC_LINKS = (
-    ("Search", "[Search]", SEARCH_CONTROL, 528, 28, 60),
-    ("Clear", "[Clear]", 0x58, 592, 28, 52),
-    ("Refresh", "[Refresh]", 0x5E, 648, 28, 60),
-    ("ListUp", "[Up]", 0x50, 14, 438, 34),
-    ("ListDown", "[Down]", 0x51, 50, 438, 46),
-    ("ListPageUp", "[PgUp]", 0x52, 100, 438, 48),
-    ("ListPageDown", "[PgDn]", 0x53, 150, 438, 48),
-    ("DetailUp", "[Up]", 0x54, 312, 410, 34),
-    ("DetailDown", "[Down]", 0x55, 348, 410, 46),
-    ("Close", "[Close]", 0x5F, 652, 476, 56),
+    *_links_from_right(30, (("Refresh", "[Refresh]", 0xDE), ("Clear", "[Clear]", 0xC8), ("Search", "[Search]", 0xD0))),
+    *_links(WINDOW_HEIGHT - 52, 14, (("ListUp", "[Up]", 0xC0), ("ListDown", "[Down]", 0xC1),
+                                     ("ListPageUp", "[PgUp]", 0xC2), ("ListPageDown", "[PgDn]", 0xC3))),
+    *_links(WINDOW_HEIGHT - 116, DETAIL_X, (("DetailUp", "[Up]", 0xC4), ("DetailDown", "[Down]", 0xC5))),
+    *_links_from_right(WINDOW_HEIGHT - 30, (("Close", "[Close]", 0xDF),)),
 )
+ANCHORED_RIGHT = ("Search", "Clear", "Refresh", "Close")
+ANCHORED_BOTTOM = ("ListUp", "ListDown", "ListPageUp", "ListPageDown", "DetailUp", "DetailDown", "Close")
 
 LABEL_STATUS = 0
 LABEL_MESSAGE = 1
 LABEL_TOGGLE_BASE = 2                    # +2k inactive, +2k+1 active
 LABEL_ROW_BASE = LABEL_TOGGLE_BASE + 2 * len(TOGGLES)
-ROW_STRIDE = 5                           # marker, Albion, Midgard, Hibernia, info
+# header-or-marker (gold), name x3 realm colours, level, class, type, state active, state benched
+ROW_STRIDE = 9
 LABEL_LIST_INDICATOR = LABEL_ROW_BASE + ROW_STRIDE * ROWS
 LABEL_HEADER_BASE = LABEL_LIST_INDICATOR + 1   # Albion, Midgard, Hibernia
 LABEL_SUBHEADER = LABEL_HEADER_BASE + 3
 LABEL_DETAIL_BASE = LABEL_SUBHEADER + 1  # +2j text, +2j+1 link
 LABEL_DETAIL_INDICATOR = LABEL_DETAIL_BASE + 2 * DETAIL_LINES
 LABEL_ACTION_BASE = LABEL_DETAIL_INDICATOR + 1  # +2k enabled, +2k+1 disabled
-# Appended in 0.33.0 so the server can hide the detail scroll links; the 0.32.1
-# client ignores these indexes and keeps its static [Up]/[Down] text.
 LABEL_DETAIL_UP = LABEL_ACTION_BASE + 2 * ACTIONS
 LABEL_DETAIL_DOWN = LABEL_DETAIL_UP + 1
 LABEL_COUNT = LABEL_DETAIL_DOWN + 1
 SCROLL_LINK_LABELS = {"DetailUp": LABEL_DETAIL_UP, "DetailDown": LABEL_DETAIL_DOWN}
 
 CONTROL_ROW_BASE = 0x00
-CONTROL_DETAIL_BASE = 0x10
-CONTROL_ACTION_BASE = 0x20
+CONTROL_DETAIL_BASE = 0x30
+CONTROL_ACTION_BASE = 0x60
 
 
 def layout_constants():
@@ -161,7 +227,8 @@ def layout_constants():
         "Marker": MARKER, "ProtocolVersion": PROTOCOL_VERSION, "BodySize": BODY_SIZE,
         "TextOffset": TEXT_OFFSET, "MaximumTextLength": BODY_SIZE - TEXT_OFFSET - 1,
         "OpLabel": OP_LABEL, "OpShow": OP_SHOW, "OpHide": OP_HIDE, "OpToken": OP_TOKEN,
-        "Rows": ROWS, "DetailLines": DETAIL_LINES, "Actions": ACTIONS,
+        "WindowHeightBase": WINDOW_HEIGHT_BASE, "RowPitch": PITCH,
+        "Rows": ROWS, "DetailLines": DETAIL_LINES, "DetailReserve": DETAIL_RESERVE, "Actions": ACTIONS,
         "LabelStatus": LABEL_STATUS, "LabelMessage": LABEL_MESSAGE,
         "LabelToggleBase": LABEL_TOGGLE_BASE, "LabelRowBase": LABEL_ROW_BASE, "RowStride": ROW_STRIDE,
         "LabelListIndicator": LABEL_LIST_INDICATOR, "LabelHeaderBase": LABEL_HEADER_BASE,
@@ -171,13 +238,17 @@ def layout_constants():
         "LabelCount": LABEL_COUNT, "ControlRowBase": CONTROL_ROW_BASE,
         "ControlDetailBase": CONTROL_DETAIL_BASE, "ControlActionBase": CONTROL_ACTION_BASE,
         "ControlLimit": CONTROL_LIMIT, "ControlSearch": SEARCH_CONTROL, "ControlReady": READY_CONTROL,
-        "WidthStatus": WIDTH_STATUS, "WidthMessage": WIDTH_MESSAGE, "WidthRowName": WIDTH_ROW_NAME,
-        "WidthRowInfo": WIDTH_ROW_INFO, "WidthDetail": WIDTH_DETAIL, "WidthAction": WIDTH_ACTION,
+        "WidthStatus": WIDTH_STATUS, "WidthMessage": WIDTH_MESSAGE, "WidthRowHeader": WIDTH_ROW_HEADER,
+        "WidthRowName": WIDTH_ROW_NAME, "WidthRowLevel": WIDTH_ROW_LEVEL, "WidthRowClass": WIDTH_ROW_CLASS,
+        "WidthRowType": WIDTH_ROW_TYPE, "WidthRowState": WIDTH_ROW_STATE, "WidthDetail": WIDTH_DETAIL,
+        "WidthAction": WIDTH_ACTION, "SpaceAdvance": SPACE_ADVANCE,
     }
+    for index, size in enumerate(ROW_SIZES):
+        values[f"RowSize{index}"] = size
     for index, (name, control, *_rest) in enumerate(TOGGLES):
         values["Control" + name] = control
         values["Toggle" + name] = index
-    for name, _text, control, *_rest in TAB_LINKS + STATIC_LINKS:
+    for name, _text, control, *_rest in STATIC_LINKS:
         values["Control" + name] = control
     return values
 
@@ -215,8 +286,9 @@ def build(image):
     command = active + 16
     hex_digits = command + 32
     search_text = hex_digits + 16
-    names = search_text + 32
-    payload = bytearray(data_base + 4 * LABEL_COUNT + 16 + 32 + 16 + 32 + 16 * LABEL_COUNT)
+    counter = search_text + 32
+    names = counter + 16
+    payload = bytearray(data_base + 4 * LABEL_COUNT + 16 + 32 + 16 + 32 + 16 + 16 * LABEL_COUNT)
     offset = lambda address: address - va
     initial_command = (COMMAND_PREFIX + "0000 00").encode("ascii") + b"\0"
     payload[offset(command):offset(command) + len(initial_command)] = initial_command
@@ -240,13 +312,26 @@ def build(image):
         blocks[label] = {"address": va + start, "length": len(code)}
 
     # Registry is EDI at the raid hook, exactly as the raid's own registrations use it.
-    registrations = "\n".join(
-        f"push {names + 16 * index}; push {slots + 4 * index}; push edi; call {REGISTER_TEXT_ADAPTER}"
-        for index in range(LABEL_COUNT))
+    # A loop keeps the block small however many adapters there are; the counter lives in
+    # memory because the callee's register use is not relied on.
     put("init", 0x0000, f"""
         pushfd; pushad
         mov dword ptr [{active}], 0
-        {registrations}
+        mov dword ptr [{counter}], 0
+    register:
+        mov eax, dword ptr [{counter}]
+        shl eax, 4
+        add eax, {names}
+        push eax
+        mov eax, dword ptr [{counter}]
+        shl eax, 2
+        add eax, {slots}
+        push eax
+        push edi
+        call {REGISTER_TEXT_ADAPTER}
+        inc dword ptr [{counter}]
+        cmp dword ptr [{counter}], {LABEL_COUNT}
+        jb register
         popad; popfd
         jmp {RAID_INIT}
     """, 0x1000)
@@ -277,7 +362,7 @@ def build(image):
         je token
         jmp done
     label:
-        movzx ecx, byte ptr [esi+4]
+        movzx ecx, word ptr [esi+4]
         cmp ecx, {LABEL_COUNT}
         jae done
         mov ebx, dword ptr [{slots}+ecx*4]
@@ -427,7 +512,7 @@ def _position(parent, x, y, width, height, *, grow_width=False, grow_height=Fals
             ET.SubElement(alignment, name).text = "true"
 
 
-def _label(panel, x, y, width, color, adapter=None, text="", characters=64, height=16,
+def _label(panel, x, y, width, color, adapter=None, text="", characters=64, height=18,
            *, grow_width=False, anchor_right=False, anchor_bottom=False):
     label = ET.SubElement(panel, "LabelDef")
     ET.SubElement(label, "ControlId").text = "1000"
@@ -436,7 +521,7 @@ def _label(panel, x, y, width, color, adapter=None, text="", characters=64, heig
     rgba = ET.SubElement(label, "Color")
     for channel, value in zip("RGBA", (*color, 255)):
         ET.SubElement(rgba, channel).text = str(value)
-    ET.SubElement(label, "FontName").text = "arial11"
+    ET.SubElement(label, "FontName").text = FONT
     ET.SubElement(label, "Width").text = str(width)
     ET.SubElement(label, "Height").text = str(height)
     ET.SubElement(label, "ColorAdapter")
@@ -448,7 +533,7 @@ def _label(panel, x, y, width, color, adapter=None, text="", characters=64, heig
         ET.SubElement(label, "Adapter").text = adapter_name(adapter)
 
 
-def _click(panel, x, y, width, control, caption, height=16, *, grow_width=False,
+def _click(panel, x, y, width, control, caption, height=18, *, grow_width=False,
            anchor_right=False, anchor_bottom=False):
     button = ET.SubElement(panel, "InvisibleButtonDef")
     ET.SubElement(button, "ControlId")
@@ -478,6 +563,10 @@ def _image(panel, x, y, width, height, template, control=None, *,
     ET.SubElement(image, "Height").text = str(height)
 
 
+def _caption(name):
+    return re.sub(r"(?<!^)(?=[A-Z])", " ", name)
+
+
 def window():
     """Custom8 XML built from the installed raid window and stock resize behavior.
 
@@ -497,54 +586,64 @@ def window():
                        ("MinHeight", str(WINDOW_HEIGHT)),
                        ("ContextTemplateName", None)):
         ET.SubElement(panel, key).text = value
+    pane_height = WINDOW_HEIGHT - PANE_Y - 40
     _image(panel, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, "dlg_background_resize", "Background",
            grow_width=True, grow_height=True)
-    _image(panel, 8, 104, 294, 360, "dlg_background_resize", grow_height=True)
-    _image(panel, 306, 104, 406, 366, "dlg_background_resize",
-           grow_width=True, grow_height=True)
+    _image(panel, LIST_X, PANE_Y, LIST_WIDTH, pane_height, "dlg_background_resize", grow_height=True)
+    detail_pane_x = LIST_X + LIST_WIDTH + 6
+    _image(panel, detail_pane_x, PANE_Y, WINDOW_WIDTH - detail_pane_x - 8, pane_height,
+           "dlg_background_resize", grow_width=True, grow_height=True)
 
     _label(panel, 12, 6, 300, GOLD, text="Companion Manager", characters=32)
-    _label(panel, 12, 48, 44, MUTED, text="Realm:", characters=8)
-    _label(panel, 12, 66, 44, MUTED, text="Role:", characters=8)
-    _label(panel, 12, 86, WIDTH_STATUS, STATUS, LABEL_STATUS, characters=120, grow_width=True)
-    _label(panel, 12, 476, WIDTH_MESSAGE, MESSAGE, LABEL_MESSAGE, characters=120,
+    for text, x, y in (("Realm:", 12, 52), ("Role:", 12, 74)):
+        _label(panel, x, y, 58, MUTED, text=text, characters=8)
+    for text, y in (("Group:", 52), ("Sort:", 74)):
+        _label(panel, 490, y, 66, MUTED, text=text, characters=8)
+    _label(panel, 416, 30, 50, MUTED, text="Rows:", characters=8)
+    _label(panel, 12, 96, WIDTH_STATUS, STATUS, LABEL_STATUS, characters=120, grow_width=True)
+    _label(panel, 12, WINDOW_HEIGHT - 30, WIDTH_MESSAGE, MESSAGE, LABEL_MESSAGE, characters=120,
            grow_width=True, anchor_bottom=True)
-    for index, (name, _control, x, y, width) in enumerate(TOGGLES):
+    for index, (_name, _control, x, y, width) in enumerate(TOGGLES):
         _label(panel, x, y, width, MUTED, LABEL_TOGGLE_BASE + 2 * index, characters=32)
         _label(panel, x, y, width, GOLD, LABEL_TOGGLE_BASE + 2 * index + 1, characters=32)
+    for text, x in (("Name", COLUMN_NAME), ("Lv", COLUMN_LEVEL), ("Class", COLUMN_CLASS),
+                    ("Type", COLUMN_TYPE), ("State", COLUMN_STATE)):
+        _label(panel, x, COLUMN_HEADS_Y, 80, MUTED, text=text, characters=12)
     for row in range(ROWS):
-        y = 112 + 26 * row
+        y = ROW_TOP + PITCH * row
         base = LABEL_ROW_BASE + ROW_STRIDE * row
-        _label(panel, 14, y, 12, GOLD, base, characters=4)
+        _label(panel, COLUMN_MARK, y, WIDTH_ROW_HEADER, GOLD, base, characters=64)
         for realm in range(3):
-            _label(panel, 28, y, WIDTH_ROW_NAME, REALM_COLORS[realm], base + 1 + realm, characters=32)
-        _label(panel, 140, y, WIDTH_ROW_INFO, STATUS, base + 4, characters=40)
-    _label(panel, 202, 438, 94, STATUS, LABEL_LIST_INDICATOR, characters=24,
+            _label(panel, COLUMN_NAME, y, WIDTH_ROW_NAME, REALM_COLORS[realm], base + 1 + realm, characters=32)
+        _label(panel, COLUMN_LEVEL, y, WIDTH_ROW_LEVEL, STATUS, base + 4, characters=6)
+        _label(panel, COLUMN_CLASS, y, WIDTH_ROW_CLASS, TEXT, base + 5, characters=32)
+        _label(panel, COLUMN_TYPE, y, WIDTH_ROW_TYPE, MUTED, base + 6, characters=12)
+        _label(panel, COLUMN_STATE, y, WIDTH_ROW_STATE, ACTIVE, base + 7, characters=24)
+        _label(panel, COLUMN_STATE, y, WIDTH_ROW_STATE, MUTED, base + 8, characters=24)
+    _label(panel, 300, WINDOW_HEIGHT - 52, 170, STATUS, LABEL_LIST_INDICATOR, characters=24,
            anchor_bottom=True)
     for realm in range(3):
-        _label(panel, 312, 130, WIDTH_DETAIL, REALM_COLORS[realm], LABEL_HEADER_BASE + realm,
+        _label(panel, DETAIL_X, DETAIL_HEADER_Y, WIDTH_DETAIL, REALM_COLORS[realm], LABEL_HEADER_BASE + realm,
                characters=48, grow_width=True)
-    _label(panel, 312, 148, WIDTH_DETAIL, STATUS, LABEL_SUBHEADER,
+    _label(panel, DETAIL_X, DETAIL_SUBHEADER_Y, WIDTH_DETAIL, STATUS, LABEL_SUBHEADER,
            characters=80, grow_width=True)
     for line in range(DETAIL_LINES):
-        y = 176 + 20 * line
-        _label(panel, 312, y, WIDTH_DETAIL, TEXT, LABEL_DETAIL_BASE + 2 * line,
+        y = DETAIL_TOP + PITCH * line
+        _label(panel, DETAIL_X, y, WIDTH_DETAIL, TEXT, LABEL_DETAIL_BASE + 2 * line,
                characters=80, grow_width=True)
-        _label(panel, 312, y, WIDTH_DETAIL, LINK, LABEL_DETAIL_BASE + 2 * line + 1,
+        _label(panel, DETAIL_X, y, WIDTH_DETAIL, LINK, LABEL_DETAIL_BASE + 2 * line + 1,
                characters=80, grow_width=True)
-    _label(panel, 400, 410, 302, STATUS, LABEL_DETAIL_INDICATOR,
+    _label(panel, DETAIL_X + 130, WINDOW_HEIGHT - 116, 330, STATUS, LABEL_DETAIL_INDICATOR,
            characters=40, grow_width=True, anchor_bottom=True)
+    action_x = lambda action: DETAIL_X + (WIDTH_ACTION + 6) * (action % 3)
+    action_y = lambda action: WINDOW_HEIGHT - 92 + PITCH * (action // 3)
     for action in range(ACTIONS):
-        x, y = 312 + 132 * (action % 3), 432 + 20 * (action // 3)
-        _label(panel, x, y, WIDTH_ACTION, GOLD, LABEL_ACTION_BASE + 2 * action,
+        _label(panel, action_x(action), action_y(action), WIDTH_ACTION, GOLD, LABEL_ACTION_BASE + 2 * action,
                characters=32, anchor_bottom=True)
-        _label(panel, x, y, WIDTH_ACTION, DISABLED, LABEL_ACTION_BASE + 2 * action + 1,
+        _label(panel, action_x(action), action_y(action), WIDTH_ACTION, DISABLED, LABEL_ACTION_BASE + 2 * action + 1,
                characters=32, anchor_bottom=True)
-    for _name, text, _control, x, y, width in TAB_LINKS:
-        _label(panel, x, y, width, MUTED, text=text, characters=32)
     for name, text, _control, x, y, width in STATIC_LINKS:
-        anchored_bottom = name.startswith("List") or name.startswith("Detail") or name == "Close"
-        anchored_right = name in ("Search", "Clear", "Refresh", "Close")
+        anchored_bottom, anchored_right = name in ANCHORED_BOTTOM, name in ANCHORED_RIGHT
         if name in SCROLL_LINK_LABELS:
             _label(panel, x, y, width, LINK, SCROLL_LINK_LABELS[name], characters=16,
                    anchor_right=anchored_right, anchor_bottom=anchored_bottom)
@@ -554,22 +653,19 @@ def window():
 
     # Click areas after every label, matching the raid's z-order.
     for name, control, x, y, width in TOGGLES:
-        _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name))
-    for name, _text, control, x, y, width in TAB_LINKS:
-        _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name))
+        _click(panel, x, y, width, control, _caption(name))
     for row in range(ROWS):
-        _click(panel, 12, 112 + 26 * row, 286, CONTROL_ROW_BASE + row, f"Companion row {row + 1}", 20)
+        _click(panel, LIST_X + 2, ROW_TOP + PITCH * row - 2, LIST_WIDTH - 4, CONTROL_ROW_BASE + row,
+               f"Companion row {row + 1}", PITCH)
     for line in range(DETAIL_LINES):
-        _click(panel, 310, 176 + 20 * line, 396, CONTROL_DETAIL_BASE + line,
-               f"Detail line {line + 1}", 18, grow_width=True)
+        _click(panel, DETAIL_X - 2, DETAIL_TOP + PITCH * line - 2, WIDTH_DETAIL + 4, CONTROL_DETAIL_BASE + line,
+               f"Detail line {line + 1}", PITCH, grow_width=True)
     for action in range(ACTIONS):
-        x, y = 312 + 132 * (action % 3), 432 + 20 * (action // 3)
-        _click(panel, x, y, WIDTH_ACTION, CONTROL_ACTION_BASE + action,
+        _click(panel, action_x(action), action_y(action), WIDTH_ACTION, CONTROL_ACTION_BASE + action,
                f"Action {action + 1}", anchor_bottom=True)
     for name, _text, control, x, y, width in STATIC_LINKS:
-        _click(panel, x, y, width, control, re.sub(r"(?<!^)(?=[A-Z])", " ", name),
-               anchor_right=name in ("Search", "Clear", "Refresh", "Close"),
-               anchor_bottom=name.startswith("List") or name.startswith("Detail") or name == "Close")
+        _click(panel, x, y, width, control, _caption(name),
+               anchor_right=name in ANCHORED_RIGHT, anchor_bottom=name in ANCHORED_BOTTOM)
     ET.indent(root)
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
 

@@ -25,6 +25,7 @@ SUPPORTED_GAME_SHA256 = {
     "67dcf68a37b95a93946a943b99d5e19b4a03e08cd6469275e25c7b909de21e99": "native raid",
     "3b6274dc385b90bf892f27d96c9e56cb457e1e94cbf45b5892d462a9e4d70890": "raid + Companion Manager 0.32.1",
     "88530c0093b285fd38fd6759e464373baa65ebb20473a949bc3b79fccbb41fd3": "raid + Companion Manager 0.33.0",
+    "49095c51e792200daf824f8a00880c70815a0cacbc37f452cf062cffacb3b63d": "raid + Companion Manager 0.169.0 (protocol 3)",
 }
 # Installed raid XML before the fix, as built by build_native_raid80_client.window().
 WINDOWS = {

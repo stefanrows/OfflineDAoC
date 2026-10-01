@@ -9,6 +9,17 @@ When a task is done and its required verification is complete, move it out of it
 Agent sessions on items 45–48: take the role and context from
 [ORCHESTRATOR_BRIEF.md](ORCHESTRATOR_BRIEF.md) first.
 
+74. **Reach the selected world speed at 10×/20× (open).** Owner, 2026-10-02:
+    live 10× achieved about 6.7× (tick P95 11 ms vs 3.3 ms budget, about 6,000
+    bots). Profile: the parallel brain stage is not busy, it is held at its
+    barrier by a few heavy single turns: stable-route planning (~3.6 ms,
+    ~55 a second; ~20% of wall time), `SelectCamp` (~20 ms, ~5 a second; ~9%),
+    zone itinerary and `IssuePath` (~3% each). 0.167.0 moves the stable-route
+    plan to a background pool above 1×; re-measure
+    `BOT_THINK_PROFILE` / `SERVER_WORK` at 10×. Next candidates: make
+    `SelectCamp` cheaper (per-bot LINQ over the whole camp catalog) or slice it,
+    then itinerary/`IssuePath`; fewer active bots also helps directly.
+
 45. **Battlegroup load check.** Measure server tick and pathing cost with two
     owners and 5 companion groups each in RvR before calling tasks 42–44 done.
     Measuring tools in source (0.165.0), run pending: the server already logs
@@ -169,6 +180,29 @@ Agent sessions on items 45–48: take the role and context from
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
 ## Implemented in source; installation verification pending
+
+75. **Companion Manager: organised roster, larger text, bigger list.** Owner,
+    2026-10-01: enlarging the window did not show more companions or detail
+    lines (still paging with PgUp/PgDn, also in Training & Tactics), the font was
+    too small, and an account-bound roster mixed realms, levels, classes and
+    states ("Story L16 Skald, active"). Source 0.169.0: `arial14` text; list
+    columns (name, level, class, type, state) with green Active and grey Bench;
+    **Group** (Smart default, Realm, Role, Level, None) with foldable section
+    headers, **Sort** (Level, Name, Class), and **Rows** (16, 22, 28, 34) that
+    fill the list and the detail panel; the choice is saved per account. The
+    client cannot report its window size, so a larger window needs one Rows
+    click. This rebuilds the manager `game.dll` (protocol 3) and the window XML;
+    stage `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.169.0`.
+    Installation and real-client check pending: with the game, server and
+    launcher closed, run `tools/dev/Install-CompanionManager.ps1 -InstallRoot
+    D:\Games\OfflineDAoC -Stage <stage>` (dry run, then `-Apply`; it upgrades
+    the 0.33.0 manager in place and keeps a backup). Then confirm the window
+    opens at 980×700 with readable arial14 text (never drawn by this client
+    before), columns and labels do not overlap or clip, Rows 28 fills a
+    resized window and Training & Tactics shows more lines, header clicks fold
+    sections, clicks on blank rows below the window edge never hit the game
+    world, the raid windows still work, and the grouping/sort/rows choice
+    survives relog.
 
 73. **Levelling bots go to Darkness Falls.** Aaron, 2026-10-01: "Make bots that
     are leveling much more go to Darkness Falls for leveling! Currently its very

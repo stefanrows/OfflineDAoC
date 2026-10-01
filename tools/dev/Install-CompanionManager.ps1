@@ -11,6 +11,9 @@ $ErrorActionPreference = 'Stop'
 # Installs the staged Companion Manager client files (game.dll, ui/uimain.xml,
 # Atlantis and Isles custom8_window.xml) built by
 # source/server/tools/build_companion_manager_client.py. Dry run by default.
+# An installation that already has an earlier manager build (0.32.1 or 0.33.0 game.dll with
+# the manager's own uimain.xml) is upgraded in place: game.dll and both window files are
+# backed up and replaced, and -RestoreBackup puts the previous files back.
 # Every file is hash checked; the game, server, and launcher must be closed.
 # Nothing is stopped by this script. Saves and server files are not touched.
 
@@ -31,6 +34,12 @@ function RequireStopped {
         throw ('Close the game, server, and launcher first: ' + (($running | ForEach-Object { "$($_.Name) PID $($_.Id)" }) -join ', '))
     }
 }
+
+# game.dll builds of earlier Companion Manager releases that can be upgraded in place.
+$KnownManagerBuilds = @(
+    '3b6274dc385b90bf892f27d96c9e56cb457e1e94cbf45b5892d462a9e4d70890', # 0.32.1
+    '88530c0093b285fd38fd6759e464373baa65ebb20473a949bc3b79fccbb41fd3'  # 0.33.0 through 0.166.0
+)
 
 function CopyVerified([string]$Source, [string]$Destination, [string]$Expected) {
     RequireHash $Source $Expected 'Source'
@@ -54,6 +63,22 @@ if ($PSCmdlet.ParameterSetName -eq 'Restore') {
     if (-not (Test-Path -LiteralPath $manifestPath)) { throw "Backup manifest not found: $manifestPath" }
     $record = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if ($record.InstallRoot -ne $root) { throw 'Backup is for a different installation.' }
+    if ($record.InstallKind -eq 'upgrade') {
+        # An in-place upgrade: put back the previous game.dll and window files; uimain.xml was not changed.
+        $previous = @(@($game, 'game.dll', $record.PreviousGameSha256, $record.OutputGameSha256),
+                      @($atlantis, 'atlantis-custom8_window.xml', $record.PreviousAtlantisSha256, $record.WindowSha256),
+                      @($isles, 'isles-custom8_window.xml', $record.PreviousIslesSha256, $record.WindowSha256))
+        foreach ($item in $previous) {
+            RequireHash (Join-Path $backup $item[1]) $item[2] 'Backup file'
+            $current = Hash $item[0]
+            if ($current -ne $item[3] -and $current -ne $item[2]) {
+                throw "Installed file changed since the Companion Manager upgrade: $($item[0]) ($current). Restore refused."
+            }
+        }
+        foreach ($item in $previous) { CopyVerified (Join-Path $backup $item[1]) $item[0] $item[2] }
+        Write-Host "Companion Manager client files restored to the earlier manager build from $backup; backup retained."
+        return
+    }
     $oldGame = Join-Path $backup 'game.dll'
     $oldMain = Join-Path $backup 'uimain.xml'
     RequireHash $oldGame $record.BaselineGameSha256 'Backup game.dll'
@@ -83,27 +108,79 @@ $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.baselineSha256 -ne '67dcf68a37b95a93946a943b99d5e19b4a03e08cd6469275e25c7b909de21e99') {
     throw 'Stage was not built from the verified native raid client.'
 }
-if ($manifest.protocolVersion -ne 2) { throw 'Stage is not a Companion Manager protocol 2 build.' }
+if ($manifest.protocolVersion -ne 3) { throw 'Stage is not a Companion Manager protocol 3 build.' }
 $stageGame = Join-Path $stageRoot 'game.dll'
 $stageMain = Join-Path $stageRoot 'uimain.xml'
 $stageAtlantis = Join-Path $stageRoot 'atlantis\custom8_window.xml'
 $stageIsles = Join-Path $stageRoot 'isles\custom8_window.xml'
-RequireHash $game $manifest.baselineSha256 'Installed game.dll'
-RequireHash $main $manifest.uimainBaselineSha256 'Installed uimain.xml'
+$upgrade = $KnownManagerBuilds -contains (Hash $game)
+if ($upgrade) {
+    RequireHash $main $manifest.uimainOutputSha256 'Installed uimain.xml (earlier manager)'
+    foreach ($path in @($atlantis, $isles)) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Earlier manager window file missing: $path" }
+    }
+}
+else {
+    RequireHash $game $manifest.baselineSha256 'Installed game.dll'
+    RequireHash $main $manifest.uimainBaselineSha256 'Installed uimain.xml'
+}
 RequireHash $stageGame $manifest.outputSha256 'Stage game.dll'
 RequireHash $stageMain $manifest.uimainOutputSha256 'Stage uimain.xml'
 RequireHash $stageAtlantis $manifest.windowSha256 'Stage Atlantis XML'
 RequireHash $stageIsles $manifest.windowSha256 'Stage Isles XML'
-if ((Test-Path -LiteralPath $atlantis) -or (Test-Path -LiteralPath $isles)) {
+if (-not $upgrade -and ((Test-Path -LiteralPath $atlantis) -or (Test-Path -LiteralPath $isles))) {
     throw 'Custom8 XML already exists in the installation.'
 }
 
-Write-Host "Verified baseline game.dll: $($manifest.baselineSha256)"
+if ($upgrade) { Write-Host "Upgrading an earlier Companion Manager build (installed game.dll $(Hash $game))." }
+else { Write-Host "Verified baseline game.dll: $($manifest.baselineSha256)" }
 Write-Host "Staged manager game.dll:   $($manifest.outputSha256)"
 Write-Host 'Files: game.dll, ui/uimain.xml, Atlantis and Isles custom8_window.xml'
 if (-not $Apply) { Write-Host 'Dry run only. Pass -Apply to install.'; return }
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+if ($upgrade) {
+    $backup = "$root-backups\companion-manager-upgrade-$stamp"
+    if (Test-Path -LiteralPath $backup) { throw "Backup already exists: $backup" }
+    New-Item -ItemType Directory -Path $backup -Force | Out-Null
+    $previousGame = Hash $game
+    $previousAtlantis = Hash $atlantis
+    $previousIsles = Hash $isles
+    CopyVerified $game (Join-Path $backup 'game.dll') $previousGame
+    CopyVerified $atlantis (Join-Path $backup 'atlantis-custom8_window.xml') $previousAtlantis
+    CopyVerified $isles (Join-Path $backup 'isles-custom8_window.xml') $previousIsles
+    [pscustomobject]@{
+        InstallRoot = $root
+        InstallKind = 'upgrade'
+        PreviousGameSha256 = $previousGame
+        PreviousAtlantisSha256 = $previousAtlantis
+        PreviousIslesSha256 = $previousIsles
+        OutputGameSha256 = $manifest.outputSha256
+        WindowSha256 = $manifest.windowSha256
+        Stage = $stageRoot
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $backup 'manifest.json') -Encoding UTF8
+    try {
+        RequireStopped
+        CopyVerified $stageGame $game $manifest.outputSha256
+        CopyVerified $stageAtlantis $atlantis $manifest.windowSha256
+        CopyVerified $stageIsles $isles $manifest.windowSha256
+        Write-Host "Companion Manager client upgraded. Backup: $backup"
+        Write-Host "Restore the earlier build with: -InstallRoot '$root' -RestoreBackup '$backup'"
+    }
+    catch {
+        $reason = $_.Exception.Message
+        try {
+            RequireStopped
+            CopyVerified (Join-Path $backup 'game.dll') $game $previousGame
+            CopyVerified (Join-Path $backup 'atlantis-custom8_window.xml') $atlantis $previousAtlantis
+            CopyVerified (Join-Path $backup 'isles-custom8_window.xml') $isles $previousIsles
+        }
+        catch { throw "Upgrade failed ($reason); automatic rollback failed ($($_.Exception.Message)). Backup: $backup" }
+        throw "Upgrade failed and was rolled back: $reason. Backup: $backup"
+    }
+    return
+}
+
 $backup = "$root-backups\companion-manager-client-$stamp"
 if (Test-Path -LiteralPath $backup) { throw "Backup already exists: $backup" }
 New-Item -ItemType Directory -Path $backup -Force | Out-Null

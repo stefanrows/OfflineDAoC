@@ -10,9 +10,28 @@ namespace DOL.GS.Commands
 
     public enum CompanionManagerDetailTab { Overview, Training, Gear }
 
-    /// <summary>One list row. <see cref="Key"/> is the only identity a row click resolves to.</summary>
+    /// <summary>How the list is split into collapsible sections.</summary>
+    public enum CompanionManagerGroup { Smart, Realm, Role, Level, None }
+
+    public enum CompanionManagerSort { Level, Name, Class }
+
+    /// <summary>
+    /// One list entry. <see cref="Key"/> is the only identity a row click resolves to. The
+    /// remaining fields are the list columns and the facts grouping and sorting use.
+    /// </summary>
     public sealed record CompanionManagerEntry(string Key, eRealm Realm, eCharacterClass Class, string Name,
-        string Info, string SortKey);
+        int Level = 0, string Origin = "", string State = "", bool StateActive = false, bool InGroup = false,
+        BotPveGroupRole Role = BotPveGroupRole.Attacker, string ClassText = null)
+    {
+        public string LevelText => Level > 0 ? Level.ToString() : string.Empty;
+        public string ClassDisplay => ClassText ?? Class.ToString();
+    }
+
+    /// <summary>A list line: a section header (<see cref="Entry"/> is null) or a companion.</summary>
+    public sealed record CompanionManagerLine(string SectionKey, string Header, CompanionManagerEntry Entry)
+    {
+        public bool IsHeader => Entry == null;
+    }
 
     public sealed class CompanionManagerListState
     {
@@ -34,6 +53,11 @@ namespace DOL.GS.Commands
         public CompanionManagerListState Recruit { get; } = new();
         public CompanionManagerListState Active { get; } = new();
         public string Query { get; set; } = string.Empty;
+        public CompanionManagerGroup Group { get; set; } = CompanionManagerGroup.Smart;
+        public CompanionManagerSort Sort { get; set; } = CompanionManagerSort.Level;
+        /// <summary>List rows filled in the window; the client cannot report how tall it is.</summary>
+        public int RowCount { get; set; } = RowSizes[1];
+        public HashSet<string> CollapsedSections { get; } = new(StringComparer.Ordinal);
         public int DetailOffset { get; set; }
         public bool RealmAbilityView { get; set; }
         public string SelectedItemId { get; set; }
@@ -52,6 +76,8 @@ namespace DOL.GS.Commands
         public string Message { get; set; } = string.Empty;
         public string[] RowKeys { get; } = new string[Rows];
         public string[] SentLabels { get; } = new string[LabelCount];
+        /// <summary>Detail lines filled at the current <see cref="RowCount"/>.</summary>
+        public int DetailCount => Math.Clamp(RowCount - DetailReserve, 1, DetailLines);
         internal Action[] DetailActions { get; } = new Action[DetailLines];
         internal Action[] ActionHandlers { get; } = new Action[Actions];
         internal PersistentCompanionInventoryView Bag { get; set; }
@@ -84,7 +110,7 @@ namespace DOL.GS.Commands
             return new string(kept.ToArray()).Trim();
         }
 
-        /// <summary>Every search term must appear in the name, class, or realm.</summary>
+        /// <summary>Every search term must appear in the name, class, realm, origin, or state.</summary>
         public static bool Matches(CompanionManagerEntry entry, string query, eRealm? realm, BotPveGroupRole? role)
         {
             if (realm != null && entry.Realm != realm)
@@ -97,32 +123,118 @@ namespace DOL.GS.Commands
             {
                 if (!entry.Name.Contains(term, StringComparison.OrdinalIgnoreCase) &&
                     !entry.Class.ToString().Contains(term, StringComparison.OrdinalIgnoreCase) &&
-                    !entry.Realm.ToString().Contains(term, StringComparison.OrdinalIgnoreCase))
+                    !entry.Realm.ToString().Contains(term, StringComparison.OrdinalIgnoreCase) &&
+                    !entry.Origin.Contains(term, StringComparison.OrdinalIgnoreCase) &&
+                    !entry.State.Contains(term, StringComparison.OrdinalIgnoreCase))
                     return false;
             }
             return true;
         }
 
         public IReadOnlyList<CompanionManagerEntry> Filter(IEnumerable<CompanionManagerEntry> entries) =>
-            entries.Where(entry => Matches(entry, Query, Current.Realm, Current.Role))
-                .OrderBy(entry => entry.SortKey, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(entry => entry.Key, StringComparer.Ordinal)
-                .ToArray();
+            entries.Where(entry => Matches(entry, Query, Current.Realm, Current.Role)).ToArray();
 
-        /// <summary>Clamps the list offset and records the identity behind each visible row.</summary>
-        public IReadOnlyList<CompanionManagerEntry> VisibleRows(IReadOnlyList<CompanionManagerEntry> filtered)
+        public static string SectionKey(string tab, string section) => tab + "|" + section;
+
+        /// <summary>
+        /// Sorts the entries and, unless grouping is off, splits them into sections with a header
+        /// line each. A collapsed section keeps its header and count and hides its companions
+        /// unless <paramref name="expandAll"/> is set.
+        /// </summary>
+        public IReadOnlyList<CompanionManagerLine> Arrange(IReadOnlyList<CompanionManagerEntry> entries, bool expandAll = false)
         {
-            Current.Offset = Math.Clamp(Current.Offset, 0, Math.Max(0, filtered.Count - Rows));
-            CompanionManagerEntry[] visible = filtered.Skip(Current.Offset).Take(Rows).ToArray();
+            bool recruit = Tab == CompanionManagerTab.Recruit;
+            // Candidates have no level: Level sorts them like Class, with story people first.
+            CompanionManagerSort sort = recruit && Sort == CompanionManagerSort.Level ? CompanionManagerSort.Class : Sort;
+            IOrderedEnumerable<CompanionManagerEntry> sorted = sort switch
+            {
+                CompanionManagerSort.Name => entries.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase),
+                CompanionManagerSort.Class => entries.OrderBy(entry => entry.Class.ToString(), StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(entry => entry.Origin == "Story" ? 0 : 1).ThenByDescending(entry => entry.Level)
+                    .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase),
+                _ => entries.OrderByDescending(entry => entry.Level).ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase),
+            };
+            CompanionManagerEntry[] ordered = sorted.ThenBy(entry => entry.Key, StringComparer.Ordinal).ToArray();
+
+            CompanionManagerGroup mode = Group;
+            // Recruit candidates have no level or group state: Smart is by realm, and Level is not grouped.
+            if (recruit)
+                mode = mode switch
+                {
+                    CompanionManagerGroup.Smart => CompanionManagerGroup.Realm,
+                    CompanionManagerGroup.Level => CompanionManagerGroup.None,
+                    _ => mode,
+                };
+            var lines = new List<CompanionManagerLine>(ordered.Length + 8);
+            if (mode == CompanionManagerGroup.None)
+            {
+                foreach (CompanionManagerEntry entry in ordered)
+                    lines.Add(new CompanionManagerLine(null, null, entry));
+                return lines;
+            }
+            string tab = Tab.ToString();
+            foreach (var section in ordered.GroupBy(entry => SectionOf(entry, mode)).OrderBy(group => group.Key.Order))
+            {
+                string key = SectionKey(tab, section.Key.Key);
+                bool collapsed = !expandAll && CollapsedSections.Contains(key);
+                lines.Add(new CompanionManagerLine(key, $"{(collapsed ? "[+]" : "[-]")} {section.Key.Title} ({section.Count()})", null));
+                if (collapsed)
+                    continue;
+                foreach (CompanionManagerEntry entry in section)
+                    lines.Add(new CompanionManagerLine(null, null, entry));
+            }
+            return lines;
+        }
+
+        private static (int Order, string Key, string Title) SectionOf(CompanionManagerEntry entry, CompanionManagerGroup mode)
+        {
+            string realm = TemporaryGroupClassCatalog.RealmName(entry.Realm);
+            switch (mode)
+            {
+                case CompanionManagerGroup.Realm:
+                    return ((int)entry.Realm, "realm:" + (int)entry.Realm, realm);
+                case CompanionManagerGroup.Role:
+                    return ((int)entry.Role, "role:" + (int)entry.Role, BotPartyRoles.GroupRoleLabel(entry.Role));
+                case CompanionManagerGroup.Level:
+                    int band = entry.Level >= 50 ? 50 : entry.Level / 10 * 10;
+                    return (-band, "level:" + band, band >= 50 ? "Level 50" : band == 0 ? "Levels 1-9" : $"Levels {band}-{band + 9}");
+                default:
+                    return entry.InGroup ? (0, "group", "In your group")
+                        : ((int)entry.Realm, "bench:" + (int)entry.Realm, "On the bench - " + realm);
+            }
+        }
+
+        /// <summary>
+        /// Clamps the list offset and records what each visible row resolves to: the entry key, or
+        /// "h:" and the section key for a header.
+        /// </summary>
+        public IReadOnlyList<CompanionManagerLine> VisibleRows(IReadOnlyList<CompanionManagerLine> lines)
+        {
+            Current.Offset = Math.Clamp(Current.Offset, 0, Math.Max(0, lines.Count - RowCount));
+            CompanionManagerLine[] visible = lines.Skip(Current.Offset).Take(RowCount).ToArray();
             for (int row = 0; row < Rows; row++)
-                RowKeys[row] = row < visible.Length ? visible[row].Key : null;
+                RowKeys[row] = row < visible.Length ? (visible[row].IsHeader ? HeaderPrefix + visible[row].SectionKey : visible[row].Entry.Key) : null;
             return visible;
+        }
+
+        public const string HeaderPrefix = "h:";
+
+        /// <summary>A header click expands or collapses its section.</summary>
+        public bool TryToggleSection(int row)
+        {
+            string key = row is >= 0 and < Rows ? RowKeys[row] : null;
+            if (key == null || !key.StartsWith(HeaderPrefix, StringComparison.Ordinal))
+                return false;
+            string section = key[HeaderPrefix.Length..];
+            if (!CollapsedSections.Remove(section))
+                CollapsedSections.Add(section);
+            return true;
         }
 
         public bool TrySelectRow(int row, out string key)
         {
             key = row is >= 0 and < Rows ? RowKeys[row] : null;
-            if (key == null)
+            if (key == null || key.StartsWith(HeaderPrefix, StringComparison.Ordinal))
                 return false;
             if (Current.SelectedKey != key)
             {
@@ -207,8 +319,11 @@ namespace DOL.GS.Commands
         public bool DetailCanScrollUp { get; set; }
         public bool DetailCanScrollDown { get; set; }
         public (string Text, bool Active)[] Toggles { get; } = new (string, bool)[ToggleCount];
-        public (bool Selected, eRealm Realm, string Name, string Info)[] Rows { get; } =
-            new (bool, eRealm, string, string)[CompanionManagerProtocol.Rows];
+        /// <summary>One list row: a section header, or a companion's columns. Null leaves the row blank.</summary>
+        public sealed record RowView(string Header, bool Selected, eRealm Realm, string Name, string Level,
+            string Class, string Origin, string State, bool StateActive);
+
+        public RowView[] Rows { get; } = new RowView[CompanionManagerProtocol.Rows];
         public (string Text, bool Link)[] Details { get; } = new (string, bool)[DetailLines];
         public (string Text, bool Enabled)[] ActionLabels { get; } = new (string, bool)[CompanionManagerProtocol.Actions];
 
@@ -225,13 +340,21 @@ namespace DOL.GS.Commands
             }
             for (int row = 0; row < CompanionManagerProtocol.Rows; row++)
             {
-                (bool selected, eRealm realm, string name, string info) = Rows[row];
-                int baseIndex = LabelRowBase + RowStride * row;
-                if (name == null)
+                RowView view = Rows[row];
+                if (view == null)
                     continue;
-                labels[baseIndex] = selected ? ">" : string.Empty;
-                labels[baseIndex + 1 + RealmSlot(realm)] = Fit(Sanitize(name), WidthRowName);
-                labels[baseIndex + 4] = Fit(Sanitize(info), WidthRowInfo);
+                int baseIndex = LabelRowBase + RowStride * row;
+                if (view.Header != null)
+                {
+                    labels[baseIndex] = Fit(Sanitize(view.Header), WidthRowHeader);
+                    continue;
+                }
+                labels[baseIndex] = view.Selected ? ">" : string.Empty;
+                labels[baseIndex + RowName + RealmSlot(view.Realm)] = Fit(Sanitize(view.Name), WidthRowName);
+                labels[baseIndex + RowLevel] = Fit(Sanitize(view.Level), WidthRowLevel);
+                labels[baseIndex + RowClass] = Fit(Sanitize(view.Class), WidthRowClass);
+                labels[baseIndex + RowType] = Fit(Sanitize(view.Origin), WidthRowType);
+                labels[baseIndex + (view.StateActive ? RowStateActive : RowStateIdle)] = Fit(Sanitize(view.State), WidthRowState);
             }
             labels[LabelListIndicator] = ListIndicator;
             labels[LabelHeaderBase + RealmSlot(HeaderRealm)] = Fit(Sanitize(Header), WidthDetail);

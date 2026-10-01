@@ -40,6 +40,52 @@ namespace DOL.UnitTests
         }
 
         [Test]
+        public void StandingStillFarFromTheLeaderIsAStallOnlyAfterTheFullWindow()
+        {
+            var state = new CompanionFollowPolicy.State();
+            Vector3 stuck = new(0, 0, 400);
+            float far = CompanionFollowPolicy.LeftBehindDistance + 100;
+            Assert.That(state.Stalled(stuck, far, true, 1000), Is.False, "the window starts at the first far sighting");
+            Assert.That(state.Stalled(stuck + new Vector3(10, 0, 0), far, true,
+                1000 + CompanionFollowPolicy.StallMilliseconds - 1), Is.False);
+            Assert.That(state.Stalled(stuck + new Vector3(10, 0, 0), far, true,
+                1000 + CompanionFollowPolicy.StallMilliseconds), Is.True);
+        }
+
+        [Test]
+        public void ACompanionThatKeepsWalkingOrIsNearOrIneligibleIsNeverStalled()
+        {
+            float far = CompanionFollowPolicy.LeftBehindDistance + 100;
+            var walking = new CompanionFollowPolicy.State();
+            // Trailing a running leader: far the whole time, but always moving.
+            for (int i = 0; i < 60; i++)
+                Assert.That(walking.Stalled(new(i * 120, 0, 0), far, true, 1000 + i * 1000), Is.False);
+
+            var near = new CompanionFollowPolicy.State();
+            for (int i = 0; i < 60; i++)
+                Assert.That(near.Stalled(Vector3.Zero, CompanionFollowPolicy.LeftBehindDistance, true, 1000 + i * 1000), Is.False);
+
+            var fighting = new CompanionFollowPolicy.State();
+            for (int i = 0; i < 60; i++)
+                Assert.That(fighting.Stalled(Vector3.Zero, far, false, 1000 + i * 1000), Is.False);
+        }
+
+        [Test]
+        public void StallWindowRestartsAfterCombatOrWhenTheCompanionMovesOn()
+        {
+            float far = CompanionFollowPolicy.LeftBehindDistance + 100;
+            var state = new CompanionFollowPolicy.State();
+            Assert.That(state.Stalled(Vector3.Zero, far, true, 1000), Is.False);
+            Assert.That(state.Stalled(Vector3.Zero, far, false, 4000), Is.False, "combat resets the window");
+            Assert.That(state.Stalled(Vector3.Zero, far, true, 4500), Is.False);
+            Assert.That(state.Stalled(Vector3.Zero, far, true, 8000), Is.False, "only 3.5 s since combat ended");
+            Assert.That(state.Stalled(Vector3.Zero, far, true, 8500), Is.True);
+            Assert.That(state.Stalled(new(500, 0, 0), far, true, 8600), Is.False, "moved well past the radius");
+            Assert.That(state.Stalled(new(500, 0, 0), far, true, 12599), Is.False);
+            Assert.That(state.Stalled(new(500, 0, 0), far, true, 12600), Is.True);
+        }
+
+        [Test]
         public void BuffWaitReleasesAfterStopAndResetsOnMovementOrPositionChange()
         {
             var state = new CompanionFollowPolicy.State();
