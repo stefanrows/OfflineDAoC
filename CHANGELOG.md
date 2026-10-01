@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.175.0] - 2026-10-01
+
+### Fixed
+
+- Levelling bots no longer walk through the shared frontier dungeons on the
+  way to their XP camps (bug 78). The 0.173.0 boss spots did not help: the
+  bots did not hunt there, they crossed Marfach Cavern toward camps
+  elsewhere and died to its boss on the way (90 deaths in 11 minutes at
+  20x, 81 different bots). All bots now use the rule RvR forces already had:
+  no road through those dungeons unless the goal lies inside them or no
+  other way exists.
+
 ## [0.174.0] - 2026-10-01
 
 ### Changed

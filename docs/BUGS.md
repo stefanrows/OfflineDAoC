@@ -75,6 +75,11 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     spot where a monster 10+ levels above killed a bot, for six hours. Check:
     level-ups per hour, share of bots under 50 on RvR, deaths to the two
     bosses.
+    **Live 0.173.0 at 20x (19:10 to 19:21):** 90 boss deaths (53 before), 88
+    of them solo PvE bots *crossing* Marfach toward camps elsewhere (example:
+    a level-43 Necromancer bound for a region-190 camp), so camp filtering
+    could not help. **Fixed in source 0.175.0:** PvE routes skip the shared
+    frontier dungeons (`AllowsRvrCrossing`) whenever another way exists.
 
 
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with

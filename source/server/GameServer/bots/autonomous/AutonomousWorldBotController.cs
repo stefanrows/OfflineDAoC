@@ -4835,7 +4835,16 @@ namespace DOL.GS
                     bot.TempProperties.SetProperty(committedKey, (int)targetRegion);
                 return crossing;
             }
-            return FindNextCrossing(bot.Realm, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
+            // Bug 78: levelling bots crossed the same frontier dungeons on the
+            // way to their camps and died to their bosses (90 deaths in 11
+            // minutes at 20x). They use the RvR rule too whenever another way
+            // exists; the dungeon road stays the last resort.
+            DbZonePoint[] edges = CrossingEdges(bot.Realm, bot.CurrentRegionID, targetRegion);
+            DbZonePoint[] safe = edges.Where(edge => AutonomousRvrMobAvoidance.AllowsRvrCrossing(edge.TargetRegion, targetRegion)).ToArray();
+            return (safe.Length < edges.Length
+                    ? FindNextCrossing(safe, bot.CurrentRegionID, targetRegion, targetX, targetY, bot)
+                    : null) ??
+                FindNextCrossing(edges, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
         }
 
         private static DbZonePoint FindNextCrossing(eRealm realm, ushort currentRegion, ushort targetRegion, int targetX, int targetY) =>
