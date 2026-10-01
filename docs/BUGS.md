@@ -103,6 +103,11 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     reachability check passed through Darkness Falls, the route search does
     not. **Fixed in source 0.181.0:** `ReachableRegions(..., true)` enters
     Darkness Falls but never passes through it.
+    **Live 0.181.0 at 20x (00:58 to 01:08):** 11 boss deaths, 2 route
+    failures, but still 2.4x world speed (TravelAcrossRegions 32 s per
+    minute against 3.5 s on 0.177.0). **Source 0.182.0:** the retry search
+    is replaced by `HasWayAroundFrontierDungeons`, a cached graph check per
+    realm and region pair; one search per step.
 
 
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with

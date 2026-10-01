@@ -4856,25 +4856,39 @@ namespace DOL.GS
             // enters them unless its goal lies inside; camps are chosen so
             // that another way exists (SelectCamp). Inside, the bot carries on.
             // Goals picked elsewhere (Darkness Falls, services) may need that
-            // road (0.176.0 sent 1,670 goals to "No legal region route"). The
-            // real search decides: when no way around exists, the full road is
-            // used, and that region pair skips the detour try for ten minutes.
+            // road (0.176.0: 1,670 "No legal region route"). Whether a way
+            // around exists depends only on the static zone-point graph, so it
+            // is worked out once per realm and region pair; every step then
+            // runs one search, never two (0.180.0's retry cost 10x think time).
             DbZonePoint[] edges = CrossingEdges(bot.Realm, bot.CurrentRegionID, targetRegion);
-            var pair = (bot.Realm, bot.CurrentRegionID, targetRegion);
-            if (AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID) ||
-                AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(targetRegion) ||
-                FrontierDungeonRoadNeededUntil.TryGetValue(pair, out long until) && until > GameLoop.GameLoopTime)
-                return FindNextCrossing(edges, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
-            DbZonePoint around = FindNextCrossing(
-                edges.Where(edge => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion)).ToArray(),
-                bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
-            if (around != null)
-                return around;
-            FrontierDungeonRoadNeededUntil[pair] = GameLoop.GameLoopTime + 600_000;
+            if (!AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID) &&
+                !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(targetRegion) &&
+                HasWayAroundFrontierDungeons(bot.Realm, bot.CurrentRegionID, targetRegion, edges))
+                edges = edges.Where(edge => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion)).ToArray();
             return FindNextCrossing(edges, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
         }
 
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<(eRealm, ushort, ushort), long> FrontierDungeonRoadNeededUntil = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<(eRealm, ushort, ushort), bool> WayAroundFrontierDungeons = new();
+
+        /// <summary>Whether <paramref name="target"/> is reachable over <paramref name="edges"/> without entering a shared frontier dungeon (cached; the graph never changes).</summary>
+        private static bool HasWayAroundFrontierDungeons(eRealm realm, ushort current, ushort target, DbZonePoint[] edges) =>
+            WayAroundFrontierDungeons.GetOrAdd((realm, current, target), _ =>
+            {
+                var seen = new HashSet<ushort> { current };
+                var queue = new Queue<ushort>();
+                queue.Enqueue(current);
+                while (queue.Count > 0)
+                {
+                    ushort region = queue.Dequeue();
+                    if (region == target)
+                        return true;
+                    foreach (DbZonePoint edge in edges)
+                        if (edge.SourceRegion == region && !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion) &&
+                            seen.Add(edge.TargetRegion))
+                            queue.Enqueue(edge.TargetRegion);
+                }
+                return false;
+            });
 
         private static DbZonePoint FindNextCrossing(eRealm realm, ushort currentRegion, ushort targetRegion, int targetX, int targetY) =>
             FindNextCrossing(realm, currentRegion, targetRegion, targetX, targetY, null);

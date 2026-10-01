@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.182.0] - 2026-10-02
+
+### Fixed
+
+- Route search is fast again (bug 78). 0.180.0 searched a route twice
+  whenever the way around the shared frontier dungeons failed, which
+  multiplied cross-region think time by ten and held the server at about
+  2.4x instead of 4-6x world speed. Whether a way around exists depends only
+  on the static zone-point graph, so it is now worked out once per realm and
+  region pair; every step runs a single search. All other bug 78 fixes stay.
+
 ## [0.181.0] - 2026-10-02
 
 ### Fixed
