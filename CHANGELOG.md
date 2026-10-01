@@ -12,6 +12,20 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.172.0] - 2026-10-01
+
+### Fixed
+
+- RvR warbands no longer deadlock at the frontier porter (bug 76, after
+  0.171.0). A warband leader bound for another region held "formation"
+  until the whole party stood recovered beside it, while its members waited
+  at the porter for the leader: 506 bots stood "Boarding frontier teleporter"
+  at 20x speed. The leader now walks on to the porter, whose muster gathers
+  the party.
+- A bot with a full backpack and nothing it may sell no longer stands at the
+  medallion merchant forever ("Making room for frontier medallion", 56 bots);
+  it takes the legal dungeon road instead.
+
 ## [0.171.0] - 2026-10-01
 
 ### Fixed

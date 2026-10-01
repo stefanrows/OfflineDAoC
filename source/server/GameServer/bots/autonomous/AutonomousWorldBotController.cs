@@ -1544,7 +1544,14 @@ namespace DOL.GS
             HandleRvrObserveOutcome(bot);
             if (!battleActive && TryRvrObserveHold(brain, bot))
                 return true;
-            if (!battleActive && !(dynamicWarband && _groupDirective.GroupCombatActive) && HoldBeforeNewGroupPull(brain, bot))
+            // A warband bound for another region gathers at the porter (its
+            // muster waits for members), not in formation: the leader holding
+            // here while its members waited at the porter for it deadlocked
+            // 500 bots (bug 76, 0.171.0).
+            bool crossingToObjective = _rvrDestination != null && _rvrDestination.RegionId != 0 &&
+                bot.CurrentRegionID != _rvrDestination.RegionId;
+            if (!battleActive && !(dynamicWarband && _groupDirective.GroupCombatActive) && !crossingToObjective &&
+                HoldBeforeNewGroupPull(brain, bot))
                 return true;
             // Native keep/relic events remove resolved objectives immediately.
             // Release this controller's stale destination on its next AI pulse,

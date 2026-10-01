@@ -117,8 +117,11 @@ public sealed partial class AutonomousWorldBotController
                 // gates. Sell one ordinary disposable item at this real merchant;
                 // never delete an item or grant a free ticket/teleport.
                 var trash = AutonomousBotEconomy.FindVendorTrashCandidate(bot);
-                if (trash != null)
-                    AutonomousBotEconomy.TrySellToVendor(bot, _medallionMerchant, trash, out _);
+                // Nothing it may sell: never loop here (56 bots did, bug 76);
+                // the legal dungeon road remains.
+                if (trash == null)
+                    return Unavailable();
+                AutonomousBotEconomy.TrySellToVendor(bot, _medallionMerchant, trash, out _);
                 SetRvrStatus(bot, "Making room for frontier medallion", destination.MonsterName,
                     "At the real merchant; preserving equipped items and protected upgrades");
                 return true;

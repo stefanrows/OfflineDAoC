@@ -151,6 +151,14 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     warband member boards only with its leader or after it
     (`MayCrossWithoutLeader`). Check: departures per hour, and
     `RVR_FRONTIER_LEADER_HOLD` for leaders that never board.
+    **Live 0.171.0 at 20x (18:32 to 18:47):** departures per simulated hour
+    fell to about a quarter and stragglers to 16 %, but 528 leader holds in
+    91 warbands: leaders without a ticket, "Holding group formation" until
+    the whole party was beside them and recovered, while the members waited
+    at the porter (506 bots "Boarding frontier teleporter"); 56 more stood at
+    the merchant with a full backpack and nothing sellable. **Fixed in source
+    0.172.0:** no formation hold while the objective is in another region;
+    the full-backpack case falls back to the dungeon road.
 
 75. **Keep sieges never succeed: bots travel one by one and die alone.**
     Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
