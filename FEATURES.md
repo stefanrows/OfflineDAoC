@@ -32,7 +32,7 @@ and verification history of the full-PvP conversion.
 
 - Autonomous bots are persistent world actors with saved level, experience,
   equipment, inventory, money, location, objective, and recovery state.
-- The launcher's World Speed control can run the live world at 1×, 2×, or 3×
+- The launcher's World Speed control can run the live world at 1×, 2×, 3×, 5×, 10×, or 20×
   while no game client is connected. Travel, fights, cooldowns, recovery,
   respawns, bot schedules, and world deadlines advance through real server
   ticks; XP and loot per event are unchanged. A client connection restores 1×,

@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.166.0] - 2026-10-01
+
+### Added
+
+- Higher World Speed steps: 5×, 10×, and 20× join 1×, 2×, and 3× in the
+  launcher's World Speed control. The server accepts exactly those six values.
+
+### Changed
+
+- The achieved-speed reading, its sanity limit, and the launcher's live clock
+  now scale to 20×, and the server keeps enough tick samples to measure it.
+  As before, a connected client forces 1×, the selected speed resumes five
+  seconds after the last disconnect, and a PC that cannot keep up simply
+  achieves less than the selected speed (the launcher shows the measured value).
+  Real-client and heavy-population checks of the new steps are pending.
+
 ## [0.165.0] - 2026-10-01
 
 ### Added

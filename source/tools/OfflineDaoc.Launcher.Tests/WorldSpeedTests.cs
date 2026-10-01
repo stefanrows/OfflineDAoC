@@ -142,7 +142,7 @@ public sealed class WorldSpeedTests
         var tabs = Descendants(form).OfType<TabControl>().SelectMany(tab => tab.TabPages.Cast<TabPage>());
         Assert.That(tabs.Select(page => page.Text), Does.Contain("World Speed"));
         var selector = (ComboBox)formType.GetField("_worldSpeedMultiplier", HiddenInstance)!.GetValue(form)!;
-        Assert.That(selector.Items.Cast<object>().Select(item => item.ToString()), Is.EqualTo(new[] { "1×", "2×", "3×" }));
+        Assert.That(selector.Items.Cast<object>().Select(item => item.ToString()), Is.EqualTo(new[] { "1×", "2×", "3×", "5×", "10×", "20×" }));
         Assert.That(selector.Enabled, Is.False);
     }
 

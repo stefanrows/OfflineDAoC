@@ -14,7 +14,9 @@ namespace DOL.GS
     /// <summary>Local launcher control for offline world tick pacing.</summary>
     public static class OfflineWorldSpeedControl
     {
-        public const int MaximumMultiplier = 3;
+        /// <summary>Highest selectable speed. The launcher mirrors this in WorldSpeedProtocol.</summary>
+        public const int MaximumMultiplier = 20;
+        private static readonly int[] SupportedMultipliers = { 1, 2, 3, 5, 10, 20 };
 
         private const int RequestFreshnessSeconds = 30;
         private const int RequestFutureToleranceSeconds = 5;
@@ -28,7 +30,7 @@ namespace DOL.GS
         private static readonly object Gate = new();
         private static readonly object TickSamplesGate = new();
         private static readonly AutoResetEvent WakeWorker = new(false);
-        private static readonly long[] TickCompletionTimes = new long[2048];
+        private static readonly long[] TickCompletionTimes = new long[8192];
         private static readonly HashSet<string> AcceptedRequestIds = new(StringComparer.Ordinal);
         private static readonly Queue<(string RequestId, long AcceptedAt)> AcceptedRequestOrder = new();
         private static readonly JsonSerializerSettings JsonSettings = new()
@@ -276,9 +278,9 @@ namespace DOL.GS
                 return false;
             }
 
-            if (request.Multiplier < 1 || request.Multiplier > MaximumMultiplier)
+            if (!IsSupportedMultiplier(request.Multiplier))
             {
-                error = "The world speed multiplier must be 1, 2, or 3.";
+                error = "The world speed multiplier must be 1, 2, 3, 5, 10, or 20.";
                 return false;
             }
 
@@ -293,6 +295,8 @@ namespace DOL.GS
 
             return true;
         }
+
+        public static bool IsSupportedMultiplier(int multiplier) => Array.IndexOf(SupportedMultipliers, multiplier) >= 0;
 
         public static int ComputeEffectiveMultiplier(int selectedMultiplier, int connectedClients, bool hasDisconnected, long lastDisconnectTimestamp, long nowTimestamp, long frequency)
         {

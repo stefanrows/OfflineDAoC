@@ -64,7 +64,7 @@ instructions for explicitly requested validation, not shipping gates.
 
 ## Offline World Speed
 
-The launcher can request 1×, 2×, or 3× world speed for a running local server.
+The launcher can request 1×, 2×, 3×, 5×, 10×, or 20× world speed for a running local server.
 The game loop retains its 30 Hz logical tick and runs complete ticks at a
 shorter real interval; overload slows actual progress rather than skipping
 ticks. Any connected client forces 1×, and the selected speed resumes five

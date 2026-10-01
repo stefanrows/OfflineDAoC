@@ -37,6 +37,8 @@ internal sealed record WorldSimulationClockRead(
 
 internal static class WorldSpeedProtocol
 {
+    /// <summary>Highest selectable speed; mirrors OfflineWorldSpeedControl.MaximumMultiplier on the server.</summary>
+    internal const int MaximumMultiplier = 20;
     internal const string RequestFileName = "world-speed.request.json";
     internal const string StatusFileName = "world-speed.status.json";
     internal static readonly TimeSpan StatusMaxAge = TimeSpan.FromSeconds(5);
@@ -80,7 +82,7 @@ internal static class WorldSpeedProtocol
                 status.UpdatedUtc == default || status.SimulatedUtc == default ||
                 !IsValidMultiplier(status.SelectedMultiplier) || !IsValidMultiplier(status.EffectiveMultiplier) ||
                 status.ConnectedClients < 0 || !double.IsFinite(status.AchievedMultiplier) ||
-                status.AchievedMultiplier < 0 || status.AchievedMultiplier > 3.05 ||
+                status.AchievedMultiplier < 0 || status.AchievedMultiplier > MaximumMultiplier * 1.02 ||
                 !double.IsFinite(status.TickP95Ms) || status.TickP95Ms < 0)
             {
                 unavailableReason = "World speed status is invalid.";
@@ -125,7 +127,7 @@ internal static class WorldSpeedProtocol
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("A live server session is required.", nameof(sessionId));
         if (!IsValidMultiplier(multiplier))
-            throw new ArgumentOutOfRangeException(nameof(multiplier), "World speed must be 1×, 2×, or 3×.");
+            throw new ArgumentOutOfRangeException(nameof(multiplier), "World speed must be 1×, 2×, 3×, 5×, 10×, or 20×.");
 
         string? directory = Path.GetDirectoryName(path);
         if (string.IsNullOrWhiteSpace(directory))
@@ -146,7 +148,7 @@ internal static class WorldSpeedProtocol
         }
     }
 
-    internal static bool IsValidMultiplier(int multiplier) => multiplier is 1 or 2 or 3;
+    internal static bool IsValidMultiplier(int multiplier) => multiplier is 1 or 2 or 3 or 5 or 10 or 20;
 
     internal static DateTime? AdvanceLiveClock(WorldSpeedStatus? status, DateTime nowUtc)
     {
@@ -157,7 +159,7 @@ internal static class WorldSpeedProtocol
             elapsed = TimeSpan.Zero;
         if (elapsed > StatusMaxAge)
             return null;
-        long ticks = (long)Math.Round(elapsed.Ticks * Math.Clamp(status.AchievedMultiplier, 0d, 3d));
+        long ticks = (long)Math.Round(elapsed.Ticks * Math.Clamp(status.AchievedMultiplier, 0d, MaximumMultiplier));
         return status.SimulatedUtc.ToUniversalTime().AddTicks(ticks);
     }
 }

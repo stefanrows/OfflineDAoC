@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.165.0";
+    internal const string DisplayVersion = "0.166.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -678,6 +678,9 @@ internal sealed partial class MainForm : Form
                 new WorldSpeedOption(1, "1×"),
                 new WorldSpeedOption(2, "2×"),
                 new WorldSpeedOption(3, "3×"),
+                new WorldSpeedOption(5, "5×"),
+                new WorldSpeedOption(10, "10×"),
+                new WorldSpeedOption(20, "20×"),
             });
             _worldSpeedMultiplier.SelectedIndex = 0;
         }
@@ -854,7 +857,7 @@ internal sealed partial class MainForm : Form
             _worldSpeedMultiplier.Enabled = false;
             SetWorldSpeedSelection(1);
             _worldSpeedStatusText.Text = "Server stopped. Each new session starts with 1× selected.";
-            _worldSpeedTelemetryText.Text = "Choose 1×, 2×, or 3× after live server status appears.";
+            _worldSpeedTelemetryText.Text = "Choose 1×, 2×, 3×, 5×, 10×, or 20× after live server status appears.";
             _worldSpeedClockText.Text = _simulationUtc is DateTime stoppedNow
                 ? $"Simulated UTC: {stoppedNow:yyyy-MM-dd HH:mm:ss} (server stopped; downtime advances at 1×)"
                 : "Simulated time unavailable because the saved clock could not be read.";

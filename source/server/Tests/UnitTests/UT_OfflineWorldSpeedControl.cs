@@ -14,6 +14,9 @@ public sealed class UT_OfflineWorldSpeedControl
     [TestCase(1, 1000.0 / 30.0)]
     [TestCase(2, 1000.0 / 60.0)]
     [TestCase(3, 1000.0 / 90.0)]
+    [TestCase(5, 1000.0 / 150.0)]
+    [TestCase(10, 1000.0 / 300.0)]
+    [TestCase(20, 1000.0 / 600.0)]
     public void TickPacerUsesLogicalDurationDividedByMultiplier(int multiplier, double expectedMilliseconds)
     {
         double duration = GameLoopTickPacer.GetTargetTickDuration(1000.0 / 30.0, multiplier);
@@ -23,14 +26,15 @@ public sealed class UT_OfflineWorldSpeedControl
     [Test]
     public void CheckpointCadenceIsOneRealSecondAtEverySpeed()
     {
-        for (int multiplier = 1; multiplier <= 3; multiplier++)
+        foreach (int multiplier in new[] { 1, 2, 3, 5, 10, 20 })
             Assert.That(OfflineWorldSpeedControl.GetCheckpointIntervalMilliseconds(multiplier), Is.EqualTo(1000));
     }
 
     [Test]
     public void AchievedSpeedIsClampedDuringCatchUpBursts()
     {
-        Assert.That(OfflineWorldSpeedControl.CalculateAchievedMultiplier(300, 1), Is.EqualTo(3));
+        Assert.That(OfflineWorldSpeedControl.CalculateAchievedMultiplier(3000, 1), Is.EqualTo(20));
+        Assert.That(OfflineWorldSpeedControl.CalculateAchievedMultiplier(600, 1), Is.EqualTo(20));
         Assert.That(OfflineWorldSpeedControl.CalculateAchievedMultiplier(90, 1), Is.EqualTo(3));
         Assert.That(OfflineWorldSpeedControl.CalculateAchievedMultiplier(0, 1), Is.Zero);
         Assert.That(OfflineWorldSpeedControl.CalculateAchievedMultiplier(30, 0), Is.Zero);
@@ -117,6 +121,24 @@ public sealed class UT_OfflineWorldSpeedControl
         Assert.That(OfflineWorldSpeedControl.ComputeEffectiveMultiplier(3, 1, false, 0, disconnectedAt, frequency), Is.EqualTo(1));
         Assert.That(OfflineWorldSpeedControl.ComputeEffectiveMultiplier(3, 0, true, disconnectedAt, disconnectedAt + 4_999, frequency), Is.EqualTo(1));
         Assert.That(OfflineWorldSpeedControl.ComputeEffectiveMultiplier(3, 0, true, disconnectedAt, disconnectedAt + 5_000, frequency), Is.EqualTo(3));
+        Assert.That(OfflineWorldSpeedControl.ComputeEffectiveMultiplier(20, 0, true, disconnectedAt, disconnectedAt + 5_000, frequency), Is.EqualTo(20));
+        Assert.That(OfflineWorldSpeedControl.ComputeEffectiveMultiplier(20, 1, false, 0, disconnectedAt, frequency), Is.EqualTo(1));
+    }
+
+    [TestCase(1, true)]
+    [TestCase(2, true)]
+    [TestCase(3, true)]
+    [TestCase(4, false)]
+    [TestCase(5, true)]
+    [TestCase(7, false)]
+    [TestCase(10, true)]
+    [TestCase(15, false)]
+    [TestCase(20, true)]
+    [TestCase(21, false)]
+    [TestCase(0, false)]
+    public void OnlyTheListedSpeedStepsAreSupported(int multiplier, bool expected)
+    {
+        Assert.That(OfflineWorldSpeedControl.IsSupportedMultiplier(multiplier), Is.EqualTo(expected));
     }
 
     [Test]
