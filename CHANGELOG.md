@@ -12,6 +12,19 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.176.0] - 2026-10-01
+
+### Fixed
+
+- Levelling bots choose XP camps they can reach without a road through the
+  shared frontier dungeons (bug 78). The 0.175.0 detour searched every route
+  twice and slowed the server from about 8x to 2.5x world speed (tick p95
+  14 ms to 70 ms) without reducing boss deaths. Camp choice now counts a
+  region as reachable only when no road through those dungeons is needed;
+  a camp inside them stays allowed and is covered by the boss spots of
+  0.173.0. Outside the dungeons a route never enters them unless its goal
+  lies inside; one search per step as before.
+
 ## [0.175.0] - 2026-10-01
 
 ### Fixed

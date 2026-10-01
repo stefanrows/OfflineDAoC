@@ -3131,7 +3131,10 @@ namespace DOL.GS
             ConColor minimumTargetCon = _deathDifficultySteps > 0 || (_groupDirective?.WipePenalty ?? 0) > 0
                 ? ConColor.GREEN
                 : groupSize >= 2 ? ConColor.YELLOW : ConColor.GREEN;
-            HashSet<ushort> reachableRegions = ReachableRegions(bot.Realm, bot.CurrentRegionID);
+            // Bug 78: no XP camp that needs a road through the shared frontier
+            // dungeons, where their bosses killed passing levellers.
+            HashSet<ushort> reachableRegions = ReachableRegions(bot.Realm, bot.CurrentRegionID,
+                !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID));
             DbZonePoint[] directDungeonEntrances = localPickupGroup
                 ? ZonePoints().Where(edge => edge.SourceRegion == _groupDirective.RendezvousRegion &&
                     IsAuthoritativeZonePointEdge(edge) &&
@@ -4783,7 +4786,15 @@ namespace DOL.GS
             _ => eRealm.Albion,
         };
 
-        private static HashSet<ushort> ReachableRegions(eRealm realm, ushort startRegion)
+        private static HashSet<ushort> ReachableRegions(eRealm realm, ushort startRegion) =>
+            ReachableRegions(realm, startRegion, false);
+
+        /// <summary>
+        /// With <paramref name="aroundFrontierDungeons"/> the search enters a
+        /// shared frontier dungeon but never passes through it: a camp is
+        /// reachable only when no road through those dungeons is needed (bug 78).
+        /// </summary>
+        private static HashSet<ushort> ReachableRegions(eRealm realm, ushort startRegion, bool aroundFrontierDungeons)
         {
             var seen = new HashSet<ushort> { startRegion };
             var queue = new Queue<ushort>();
@@ -4797,7 +4808,8 @@ namespace DOL.GS
                                                                     IsRegionPointAccessible(realm, point.SourceRegion, point.SourceX, point.SourceY) &&
                                                                     IsRegionPointAccessible(realm, point.TargetRegion, point.TargetX, point.TargetY)))
                 {
-                    if (seen.Add(point.TargetRegion))
+                    if (seen.Add(point.TargetRegion) &&
+                        !(aroundFrontierDungeons && AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(point.TargetRegion)))
                         queue.Enqueue(point.TargetRegion);
                 }
             }
@@ -4835,16 +4847,14 @@ namespace DOL.GS
                     bot.TempProperties.SetProperty(committedKey, (int)targetRegion);
                 return crossing;
             }
-            // Bug 78: levelling bots crossed the same frontier dungeons on the
-            // way to their camps and died to their bosses (90 deaths in 11
-            // minutes at 20x). They use the RvR rule too whenever another way
-            // exists; the dungeon road stays the last resort.
+            // Bug 78: outside the shared frontier dungeons a PvE route never
+            // enters them unless its goal lies inside; camps are chosen so
+            // that another way exists (SelectCamp). Inside, the bot carries on.
             DbZonePoint[] edges = CrossingEdges(bot.Realm, bot.CurrentRegionID, targetRegion);
-            DbZonePoint[] safe = edges.Where(edge => AutonomousRvrMobAvoidance.AllowsRvrCrossing(edge.TargetRegion, targetRegion)).ToArray();
-            return (safe.Length < edges.Length
-                    ? FindNextCrossing(safe, bot.CurrentRegionID, targetRegion, targetX, targetY, bot)
-                    : null) ??
-                FindNextCrossing(edges, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
+            if (!AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID) &&
+                !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(targetRegion))
+                edges = edges.Where(edge => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion)).ToArray();
+            return FindNextCrossing(edges, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
         }
 
         private static DbZonePoint FindNextCrossing(eRealm realm, ushort currentRegion, ushort targetRegion, int targetX, int targetY) =>

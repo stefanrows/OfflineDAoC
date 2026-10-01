@@ -80,6 +80,13 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     a level-43 Necromancer bound for a region-190 camp), so camp filtering
     could not help. **Fixed in source 0.175.0:** PvE routes skip the shared
     frontier dungeons (`AllowsRvrCrossing`) whenever another way exists.
+    **Live 0.175.0 at 20x (19:41 to 19:52):** world speed fell to 2.5x
+    (tick p95 70 ms; TravelAcrossRegions, IssuePath and ZoneItineraryStep
+    each about 10 times the think time) and boss deaths per simulated minute
+    rose. **Replaced in source 0.176.0:** `SelectCamp` uses
+    `ReachableRegions(..., aroundFrontierDungeons: true)` (it enters the
+    dungeons but never passes through them); outside them a route drops
+    edges into them unless the goal is inside, with a single search.
 
 
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with
