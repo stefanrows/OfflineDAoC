@@ -42,7 +42,15 @@ public sealed partial class AutonomousWorldBotController
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.RvrFrontierTransport);
         if (bot.CurrentRegionID == destination.RegionId || bot.CurrentRegionID is not (1 or 100 or 200) ||
-            destination.RegionId is not (1 or 100 or 200) || GameRelic.IsPlayerCarryingRelic(bot)) return false;
+            destination.RegionId is not (1 or 100 or 200) || GameRelic.IsPlayerCarryingRelic(bot))
+        {
+            // No crossing wanted any more: drop the pending passage. Warband
+            // members follow a leader's pending passage, so a stale one sent
+            // them across while the leader stayed, then back to the leader,
+            // all day long (bug 76).
+            bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
+            return false;
+        }
         // A failed porter lets the RvR crossing search fall back to the
         // dungeon road for a minute, so no force is stranded (last resort).
         bool Unavailable()

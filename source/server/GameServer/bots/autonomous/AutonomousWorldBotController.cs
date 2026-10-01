@@ -1769,6 +1769,9 @@ namespace DOL.GS
             {
                 return TravelRvrObjective(bot,_rvrDestination);
             }
+            // The objective is in this region: a passage planned earlier is
+            // stale, and members would still follow it (bug 76).
+            bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
 
             Vector3 destination = new(_rvrDestination.X, _rvrDestination.Y, _rvrDestination.Z);
             Zone keepZone = bot.CurrentRegion?.GetZone(_rvrDestination.X, _rvrDestination.Y);

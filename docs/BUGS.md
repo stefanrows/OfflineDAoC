@@ -130,6 +130,18 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     landing (owner, "Jeder nutzt jeden Porter"). Check:
     `RVR_FRONTIER_DEPARTURE ... porter_realm= mixed= straggler=true`,
     departures per warband well below 50 per 5 hours.
+    **Live 0.162.0 (2026-09-30 19:38 to 10-01 14:52): not fixed.** 70,992
+    departures (about 3,700 per hour), 69 % mixed and 65 % stragglers; warband
+    `…-004` (leader Hildeilda) left 1,995 times, alternating Home Mid and
+    Hadrian Mid with `straggler=true` both ways. Root cause: members in the
+    leader's region follow the leader's pending passage
+    (`FollowDynamicGroupLeader`), but a passage was cleared only on departure.
+    A leader that re-planned to a target in its own region never called the
+    porter code again and kept the stale passage, so its members ported away
+    from it and then back to it. **Fixed in source 0.170.0:** the passage is
+    dropped once the objective is in the current region and whenever
+    `TryFrontierTransport` finds no crossing needed. Check: departures per
+    hour far below 3,700.
 
 75. **Keep sieges never succeed: bots travel one by one and die alone.**
     Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero

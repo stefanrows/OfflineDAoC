@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.170.0] - 2026-10-01
+
+### Fixed
+
+- RvR warbands no longer ping-pong between the frontier porters (bug 76).
+  Members follow a leader's pending porter passage, but that passage was
+  only cleared on departure. A leader who re-planned to a target in its own
+  region kept the old passage, so members ported away from it and then back
+  to it all day (live 0.162.0: about 3,700 departures per hour, one warband
+  2,000 times in 19 hours). The passage is now dropped as soon as the bot no
+  longer needs a crossing.
+
 ## [0.169.0] - 2026-10-01
 
 ### Added
