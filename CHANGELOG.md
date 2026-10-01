@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.180.0] - 2026-10-01
+
+### Fixed
+
+- Goals that need the frontier dungeon road reach it for real (bug 78). The
+  0.177.0 check used a plain region graph, which found a way around that
+  the real route search (entrance and Darkness Falls rules) could not use:
+  still 1,511 "No legal region route" failures. The route search itself now
+  decides: when no way around exists it takes the full road, and that region
+  pair skips the detour try for ten minutes. (The code landed in commit
+  ad55bd7, labelled 0.178.0 by mistake; 0.178.0 and 0.179.0 are the buffbot.)
+
 ## [0.179.0] - 2026-10-01
 
 ### Fixed

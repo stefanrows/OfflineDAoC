@@ -93,6 +93,11 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     and Vigilant Rock. **Fixed in source 0.177.0:** a route that needs the
     dungeon road keeps it (`NeedsFrontierDungeonRoad`, cached per realm and
     region pair).
+    **Live 0.177.0 at 20x (23:21 to 23:32):** boss deaths 0, first keep
+    capture (keep 80, 23:29), but still 1,511 `No legal region route` (1 to
+    181, 200, 151, 249): the region-graph check disagreed with the real
+    search. **Fixed in source 0.180.0:** the real search tries the way
+    around and falls back to the full road, cached ten minutes per pair.
 
 
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with
