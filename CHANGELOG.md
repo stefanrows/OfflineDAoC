@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.183.0] - 2026-10-02
+
+### Fixed
+
+- A pet summoned at a spot outside every zone no longer throws in the
+  casting service. Since 0.177.0 about 300 `CastingService` null-reference
+  errors per 10 minutes at 20x came from `SummonSpellHandler.GetPetLocation`;
+  the pet now appears at the caster instead.
+
 ## [0.182.0] - 2026-10-02
 
 ### Fixed

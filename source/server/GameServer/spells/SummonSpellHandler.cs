@@ -75,7 +75,9 @@ namespace DOL.GS.Spells
 			Point2D point = Caster.GetPointFromHeading(Caster.Heading, 64);
 			Zone zone = Caster.CurrentRegion.GetZone(point.X, point.Y);
 
-			if (zone.IsPathfindingEnabled)
+			// A summon cast at a point outside every zone (live 0.177.0+: ~300
+			// CastingService errors per 10 minutes) falls back to the caster spot.
+			if (zone?.IsPathfindingEnabled == true)
 			{
 				EDtPolyFlags[] filters = PathfindingProvider.Instance.DefaultFilters;
 				Vector3? closestPoint = PathfindingProvider.Instance.GetClosestPoint(zone, new(point.X, point.Y, Caster.Z), 32f, 32f, 64f, filters);
@@ -95,8 +97,8 @@ namespace DOL.GS.Spells
 			}
 			else
 			{
-				x = point.X;
-				y = point.Y;
+				x = zone == null ? Caster.X : point.X;
+				y = zone == null ? Caster.Y : point.Y;
 				z = Caster.Z;
 			}
 
