@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.178.0] - 2026-10-01
+
+### Added
+
+- Free buffbot (task 77). Right-clicking a buff merchant (`BuffMerchant`)
+  now gives every buff at once, free of charge: base and spec armor,
+  strength, constitution, dexterity, strength/constitution,
+  dexterity/quickness, acuity, haste and a new endurance regeneration buff.
+  Casters get the caster variants. The buffs last until death or logout and
+  do not use your own concentration. Group members and pets in range get
+  them too. A "Realm Enchanter" now stands beside every realm teleporter
+  (Master Visur, Stor Gothi Annark, Channeler Glasny) in the capitals and
+  levelling towns. It is created at server start and not written to the
+  save. More can be placed as GM with `/mob create DOL.GS.BuffMerchant`.
+
+### Changed
+
+- The buff merchant no longer sells tokens. Tokens you already have still
+  work when handed over.
+
 ## [0.177.0] - 2026-10-01
 
 ### Fixed

@@ -181,6 +181,17 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+77. **Free buffbot on right-click.** Owner 2026-10-01: free buffs by
+    right-clicking the NPC, all buffs including endurance, unlimited time.
+    Source 0.178.0: `BuffMerchant` gives the full set plus endurance regen
+    (value 5) on interact; timed buffs of about 11 days instead of
+    concentration buffs, so they last until death or logout. Each realm
+    teleporter (`LiveTeleporter`, 50 spawns) creates a runtime-only "Realm
+    Enchanter" 120 units to its side; extras via GM
+    `/mob create DOL.GS.BuffMerchant`. Check in the client: the Enchanter
+    stands on open ground next to each teleporter, all icons appear, stats and endurance regen apply, a caster's own
+    concentration is untouched, buffs survive zoning.
+
 76. **RvR groups fight instead of watching (step 1 of 2).** Owner
     2026-10-01: "sehe keine gruppen zusammen arbeiten also zusammen etwas
     töten oder angreifen, fast nur passiv" — keeps fall only if every

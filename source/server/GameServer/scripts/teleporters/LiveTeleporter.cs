@@ -83,7 +83,49 @@ namespace DOL.GS.Scripts
             Size = 50;
             Flags |= GameNPC.eFlags.PEACE;
 
-            return base.AddToWorld();
+            if (!base.AddToWorld())
+                return false;
+
+            SpawnBuffMerchant();
+            return true;
+        }
+
+        public override bool RemoveFromWorld()
+        {
+            m_buffMerchant?.RemoveFromWorld();
+            return base.RemoveFromWorld();
+        }
+
+        private BuffMerchant m_buffMerchant;
+
+        // Offline DAoC: every realm teleporter gets a free buffbot at its side.
+        // It is created at runtime only and never saved to the database.
+        private void SpawnBuffMerchant()
+        {
+            if (m_buffMerchant != null)
+            {
+                if (m_buffMerchant.ObjectState != eObjectState.Active)
+                    m_buffMerchant.AddToWorld();
+                return;
+            }
+
+            ushort sideHeading = (ushort)((Heading + 1024) % 4096);
+            Point2D point = GetPointFromHeading(sideHeading, 120);
+
+            m_buffMerchant = new BuffMerchant
+            {
+                Name = "Realm Enchanter",
+                GuildName = "Free Buffs",
+                Realm = Realm,
+                Model = Model,
+                Size = 50,
+                CurrentRegionID = CurrentRegionID,
+                X = point.X,
+                Y = point.Y,
+                Z = Z,
+                Heading = Heading
+            };
+            m_buffMerchant.AddToWorld();
         }
 
         /// <summary>

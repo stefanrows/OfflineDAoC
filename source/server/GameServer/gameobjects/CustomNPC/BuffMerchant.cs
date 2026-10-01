@@ -37,7 +37,9 @@ namespace DOL.GS
 		}
 
 		private Queue m_buffs = new Queue();
-		private const int BUFFS_SPELL_DURATION = 7200;
+		// Free buffs last until death or logout. They are timed buffs, not
+		// concentration buffs, so they never use the player's own concentration.
+		private const int BUFFS_SPELL_DURATION = 1000000;
 		private const bool BUFFS_PLAYER_PET = true;
 
 		public override bool AddToWorld()
@@ -136,6 +138,7 @@ namespace DOL.GS
 		private static Spell m_casteracuity;
 		private static Spell m_casterspecaf;
 		private static Spell m_haste;
+		private static Spell m_endregen;
 		#region Non-live (commented out)
 		//private static Spell m_powereg;
 		//private static Spell m_dmgadd;
@@ -157,7 +160,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1467;
 					spell.Icon = 1467;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -187,7 +190,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1467;
 					spell.Icon = 1467;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -217,7 +220,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1457;
 					spell.Icon = 1457;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -247,7 +250,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1457;
 					spell.Icon = 1457;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -277,7 +280,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1486;
 					spell.Icon = 1486;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -307,7 +310,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1486;
 					spell.Icon = 1486;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -337,7 +340,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1476;
 					spell.Icon = 1476;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -367,7 +370,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1476;
 					spell.Icon = 1476;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -397,7 +400,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1517;
 					spell.Icon = 1517;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -427,7 +430,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1517;
 					spell.Icon = 1517;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -457,7 +460,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1526;
 					spell.Icon = 1526;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -487,7 +490,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1526;
 					spell.Icon = 1526;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -517,7 +520,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1538;
 					spell.Icon = 1538;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -547,7 +550,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1538;
 					spell.Icon = 1538;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -577,7 +580,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1506;
 					spell.Icon = 1506;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -607,7 +610,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1506;
 					spell.Icon = 1506;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -637,7 +640,7 @@ namespace DOL.GS
 					DbSpell spell = new DbSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 407;
 					spell.Icon = 407;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -655,6 +658,35 @@ namespace DOL.GS
 				return m_haste;
 			}
 		}
+		/// <summary>
+		/// Merch Endurance Regen buff
+		/// </summary>
+		public static Spell MerchEndRegenBuff
+		{
+			get
+			{
+				if (m_endregen == null)
+				{
+					DbSpell spell = new DbSpell();
+					spell.AllowAdd = false;
+					spell.CastTime = 0;
+					spell.Concentration = 0;
+					spell.ClientEffect = 3298;
+					spell.Icon = 3298;
+					spell.Duration = BUFFS_SPELL_DURATION;
+					spell.Value = 5;
+					spell.Name = "Endurance of the Realm";
+					spell.Description = "Target regenerates endurance faster, even in combat and while moving.";
+					spell.Range = WorldMgr.VISIBILITY_DISTANCE;
+					spell.SpellID = 88012;
+					spell.Target = eSpellTarget.REALM.ToString();
+					spell.Type = eSpellType.EnduranceRegenBuff.ToString();
+
+					m_endregen = new Spell(spell, 50);
+				}
+				return m_endregen;
+			}
+		}
 		#region Non-live (commented out)
 		/*
 		/// <summary>
@@ -669,7 +701,7 @@ namespace DOL.GS
 					DBSpell spell = new DBSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 980;
 					spell.Icon = 980;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -698,7 +730,7 @@ namespace DOL.GS
 					DBSpell spell = new DBSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 18;
 					spell.Icon = 18;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -728,7 +760,7 @@ namespace DOL.GS
 					DBSpell spell = new DBSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1534;
 					spell.Icon = 1534;
 					spell.Duration = BUFFS_SPELL_DURATION;
@@ -757,7 +789,7 @@ namespace DOL.GS
 					DBSpell spell = new DBSpell();
 					spell.AllowAdd = false;
 					spell.CastTime = 0;
-					spell.Concentration = 1;
+					spell.Concentration = 0;
 					spell.ClientEffect = 1424;
 					spell.Value = 3000;
 					spell.Name = "Blessed Health of the Realm";
@@ -819,15 +851,43 @@ namespace DOL.GS
 
 		private bool isBounty;
 		
+		// Offline DAoC: a right-click gives every buff for free; no tokens or merchant window.
 		public override bool Interact(GamePlayer player)
 		{
-			TradeItems = new MerchantTradeItems("BuffTokens");
-			if (!base.Interact(player)) return false;
+			if (player == null || !player.IsAlive) return false;
+			if (!IsWithinRadius(player, WorldMgr.INTERACT_DISTANCE)) return false;
 			TurnTo(player, 10000);
-			player.Out.SendMessage("Greetings, " + player.Name + ". The King has instructed me to strengthen you so that you may defend the lands with valor. Simply hand me the token for the enhancement you desire, and I will empower you accordingly. Do you wish to purchase tokens with [Gold] or [Bounty Points]?", eChatType.CT_Say, eChatLoc.CL_PopupWindow);
-			isBounty = false;
-			SendMerchantWindow(player);
+			GiveFullBuffs(player);
+			player.Out.SendMessage("Fight well, " + player.Name + ". My blessings stay with you until you fall.", eChatType.CT_Say, eChatLoc.CL_PopupWindow);
 			return true;
+		}
+
+		public void GiveFullBuffs(GamePlayer t)
+		{
+			if (t.CharacterClass.ClassType == eClassType.ListCaster)
+			{
+				BuffPlayer(t, casterMerchBaseAFBuff, MerchBaseSpellLine);
+				BuffPlayer(t, casterMerchStrBuff, MerchBaseSpellLine);
+				BuffPlayer(t, casterMerchDexBuff, MerchBaseSpellLine);
+				BuffPlayer(t, casterMerchConBuff, MerchBaseSpellLine);
+				BuffPlayer(t, casterMerchSpecAFBuff, MerchSpecSpellLine);
+				BuffPlayer(t, casterMerchStrConBuff, MerchSpecSpellLine);
+				BuffPlayer(t, casterMerchDexQuiBuff, MerchSpecSpellLine);
+				BuffPlayer(t, casterMerchAcuityBuff, MerchSpecSpellLine);
+			}
+			else
+			{
+				BuffPlayer(t, MerchBaseAFBuff, MerchBaseSpellLine);
+				BuffPlayer(t, MerchStrBuff, MerchBaseSpellLine);
+				BuffPlayer(t, MerchDexBuff, MerchBaseSpellLine);
+				BuffPlayer(t, MerchConBuff, MerchBaseSpellLine);
+				BuffPlayer(t, MerchSpecAFBuff, MerchSpecSpellLine);
+				BuffPlayer(t, MerchStrConBuff, MerchSpecSpellLine);
+				BuffPlayer(t, MerchDexQuiBuff, MerchSpecSpellLine);
+				BuffPlayer(t, MerchAcuityBuff, MerchSpecSpellLine);
+			}
+			BuffPlayer(t, MerchHasteBuff, MerchSpecSpellLine);
+			BuffPlayer(t, MerchEndRegenBuff, MerchSpecSpellLine);
 		}
 
 		public override bool WhisperReceive(GameLiving source, string str)
