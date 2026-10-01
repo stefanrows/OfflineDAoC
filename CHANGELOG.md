@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.179.0] - 2026-10-01
+
+### Fixed
+
+- Free buffbot buffs vanished right after being cast (task 77). Their
+  length overflowed the server's duration clamp and became negative. They
+  now last 65,000 seconds (about 18 hours, the longest the client's buff
+  timer can show), still ending on death or logout.
+
 ## [0.178.0] - 2026-10-01
 
 ### Added

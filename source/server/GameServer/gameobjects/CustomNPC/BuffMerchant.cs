@@ -39,7 +39,9 @@ namespace DOL.GS
 		private Queue m_buffs = new Queue();
 		// Free buffs last until death or logout. They are timed buffs, not
 		// concentration buffs, so they never use the player's own concentration.
-		private const int BUFFS_SPELL_DURATION = 1000000;
+		// 65000 s (about 18 h) is the most the client's ushort icon timer shows;
+		// it also keeps SpellHandler's Duration * 4 clamp (int ms) from overflowing.
+		private const int BUFFS_SPELL_DURATION = 65000;
 		private const bool BUFFS_PLAYER_PET = true;
 
 		public override bool AddToWorld()

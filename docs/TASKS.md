@@ -184,8 +184,9 @@ Agent sessions on items 45–48: take the role and context from
 77. **Free buffbot on right-click.** Owner 2026-10-01: free buffs by
     right-clicking the NPC, all buffs including endurance, unlimited time.
     Source 0.178.0: `BuffMerchant` gives the full set plus endurance regen
-    (value 5) on interact; timed buffs of about 11 days instead of
-    concentration buffs, so they last until death or logout. Each realm
+    (value 5) on interact; timed buffs instead of concentration buffs, so
+    they last until death or logout. 0.179.0: length 65,000 s (about 18 h);
+    the 0.178.0 value overflowed `Duration * 4` and the buffs ended at once. Each realm
     teleporter (`LiveTeleporter`, 50 spawns) creates a runtime-only "Realm
     Enchanter" 120 units to its side; extras via GM
     `/mob create DOL.GS.BuffMerchant`. Check in the client: the Enchanter
