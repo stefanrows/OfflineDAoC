@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.177.0] - 2026-10-01
+
+### Fixed
+
+- Goals that only the shared frontier dungeons lead to are reachable again
+  (bug 78). 0.176.0 cut boss deaths from about 80 to 2 per measurement and
+  restored world speed (5.9x, tick p95 19 ms), but dropped the dungeon road
+  for every PvE route, so goals picked outside camp choice (Darkness Falls,
+  Vigilant Rock and others) failed 1,670 times with "No legal region route".
+  Such a route keeps the road now; whether it is needed is decided once per
+  realm and region pair.
+
 ## [0.176.0] - 2026-10-01
 
 ### Fixed

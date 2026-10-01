@@ -87,6 +87,12 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     `ReachableRegions(..., aroundFrontierDungeons: true)` (it enters the
     dungeons but never passes through them); outside them a route drops
     edges into them unless the goal is inside, with a single search.
+    **Live 0.176.0 at 20x (21:02 to 21:13):** boss deaths 2 (70 to 90
+    before), 5.9x world speed, tick p95 19 ms; but 1,670 goal attempts ended
+    `RouteFailure` "No legal region route" (65 before), mostly Darkness Falls
+    and Vigilant Rock. **Fixed in source 0.177.0:** a route that needs the
+    dungeon road keeps it (`NeedsFrontierDungeonRoad`, cached per realm and
+    region pair).
 
 
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with
