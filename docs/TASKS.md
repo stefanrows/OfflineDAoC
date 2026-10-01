@@ -159,6 +159,15 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+72. **No autonomous PvE raids; level-50 bots focus on RvR.** Aaron, 2026-10-01:
+    "Disable that autonomous bots do PVE raids (dragon, epic dungeon, etc) and
+    focus more on RvR when they are lvl 50." Source 0.163.0: bots no longer open
+    or join realm raids and the raid calendar is silent
+    (`RealmRaidRecruitmentPolicy.AutonomousRaidsEnabled`); owner-started raids
+    from the event controls still run. Level-50 bots get an RvR floor per player
+    type (35-90%). Live-log check pending: no `RAID_CALENDAR_*` lines and no
+    autonomous raid start; the level-50 RvR share rises.
+
 71. **RvR pickup groups across guilds and realms.** Aaron, 2026-09-29: "I
     only see groups standing around; hardly any full groups form." Live
     0.157.1 log: RvR groups formed after a median of 91 minutes on their

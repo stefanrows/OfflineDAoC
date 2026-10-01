@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using DOL.GS;
 using NUnit.Framework;
 
@@ -72,6 +73,22 @@ public sealed class UT_AutonomousPlayerBehavior
             Assert.That(AutonomousActivityScheduler.Choose(hybrid, prime, .2), Is.EqualTo(eAutonomousObjectiveKind.RvR));
             Assert.That(AutonomousActivityScheduler.Choose(hybrid, offPeak, .2), Is.Not.EqualTo(eAutonomousObjectiveKind.RvR));
         });
+    }
+
+    [Test]
+    public void LevelFiftyBotsLeanOnRvrAndNeverStartAutonomousRaids()
+    {
+        DateTime offPeak = new DateTime(2026, 9, 24, 10, 0, 0, DateTimeKind.Local).ToUniversalTime();
+        foreach (string type in new[] { "Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "KeepWarrior" })
+        {
+            var record = new OfflineWorldBotRecord { PlayerType = type, Level = 50,
+                Aggression = 50, RiskTolerance = 50, Sociability = 50 };
+            int rvr = Enumerable.Range(0, 100).Count(seed =>
+                AutonomousActivityScheduler.Choose(record, offPeak, seed / 100d) == eAutonomousObjectiveKind.RvR);
+            Assert.That(rvr, Is.GreaterThanOrEqualTo(35), type);
+        }
+        Assert.That(RealmRaidRecruitmentPolicy.AutonomousRaidsEnabled, Is.False);
+        Assert.That(AutonomousRealmRaid.TryJoin(null, out _), Is.False);
     }
 
     [Test]

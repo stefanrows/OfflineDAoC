@@ -13,6 +13,12 @@ public static class RealmRaidRecruitmentPolicy
     public const long AutonomousStagingLimitMilliseconds = 90 * 60_000L;
     public const long ForcedStagingLimitMilliseconds = 90 * 60_000L;
     public const long BattleMilliseconds = 4 * 60 * 60_000L;
+    /// <summary>
+    /// Autonomous bots no longer open or join dragon and epic-dungeon raids on their own,
+    /// and the raid calendar stays silent: level 50s spend that time in RvR. Raids the owner
+    /// starts from the launcher's event controls still run.
+    /// </summary>
+    public static readonly bool AutonomousRaidsEnabled = false;
     public const double NewEventChance = .20;
     public const double JoinExistingChance = .95;
 

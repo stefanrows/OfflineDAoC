@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.163.0] - 2026-10-01
+
+### Changed
+
+- Level-50 autonomous bots lean on RvR: every player type now has a level-50
+  floor for choosing an RvR task (casual 35%, leveler 55%, hybrid 75%, hunter
+  80%, roamer 85%, keep warrior 90%, shifted by aggression and risk tolerance),
+  and PvE (gear farming, Darkness Falls, camps) fills the rest. Bots in a PvE
+  intermission or with a PvE block still stay out of RvR as before.
+
+### Removed
+
+- Autonomous dragon and epic-dungeon raids: bots no longer open or join a realm
+  raid on their own, and the sign-up raid calendar no longer announces raids.
+  Raids started from the launcher's event controls still run.
+
 ## [0.162.0] - 2026-09-30
 
 ### Added

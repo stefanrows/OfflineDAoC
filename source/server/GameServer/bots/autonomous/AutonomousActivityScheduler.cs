@@ -39,6 +39,8 @@ public static class AutonomousActivityScheduler
             : 0;
         if (type == AutonomousPlayerType.Hunter)
             rvr = Math.Min(.95, rvr * AutonomousPlayerBehavior.HunterPatrolFactor(danger));
+        if (level >= 50)
+            rvr = Math.Max(rvr, MaxLevelRvrShare(type, record.Aggression, record.RiskTolerance));
         if (blocked || !mayRvr) rvr = 0;
         roll = Math.Clamp(roll, 0, .999999);
         if (roll < rvr) return eAutonomousObjectiveKind.RvR;
@@ -56,6 +58,25 @@ public static class AutonomousActivityScheduler
         if (excludeGroup) group = 0;
         double remainingRoll = (roll - rvr) / Math.Max(.001, 1 - rvr);
         return remainingRoll < group ? eAutonomousObjectiveKind.GroupPve : eAutonomousObjectiveKind.SoloPve;
+    }
+
+    /// <summary>
+    /// Level 50 is the end game: with no raids to run, a bot's tasks lean on RvR. This is the
+    /// lowest RvR share any level-50 type gets; PvE (gear farming, Darkness Falls, camps) fills the rest.
+    /// </summary>
+    public static double MaxLevelRvrShare(AutonomousPlayerType type, int aggression, int riskTolerance)
+    {
+        double share = type switch
+        {
+            AutonomousPlayerType.Casual => .35,
+            AutonomousPlayerType.Leveler => .55,
+            AutonomousPlayerType.Hybrid => .75,
+            AutonomousPlayerType.Hunter => .8,
+            AutonomousPlayerType.Roamer => .85,
+            AutonomousPlayerType.KeepWarrior => .9,
+            _ => .55,
+        };
+        return Math.Clamp(share + (aggression - 50) / 500d + (riskTolerance - 50) / 700d, 0, .95);
     }
 
     public static bool IsPveBlocked(OfflineWorldBotRecord record, DateTime now) =>

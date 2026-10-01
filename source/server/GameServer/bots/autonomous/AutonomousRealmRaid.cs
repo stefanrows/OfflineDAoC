@@ -189,6 +189,7 @@ namespace DOL.GS
         public static bool TryJoin(GameBot leader, out View view)
         {
             view = null;
+            if (!RealmRaidRecruitmentPolicy.AutonomousRaidsEnabled) return false;
             if (leader?.Group == null || leader.Group.LivingLeader != leader) return false;
             GameBot[] members = leader.Group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
             if (members.Length != 8 || members.Any(b => !IsEligible(b) || IsReserved(b) ||
