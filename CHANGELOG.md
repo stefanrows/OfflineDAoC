@@ -12,6 +12,20 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.171.0] - 2026-10-01
+
+### Fixed
+
+- RvR warbands cross the frontier with their leader (bug 76, second cause).
+  Since 0.162.0 a member boarded at once whenever any member of its force was
+  already across. Members went ahead without the leader, found it missing,
+  ported back, and followed its pending passage out again. Live 0.170.0 still
+  showed about 3,600 departures per hour: one single-realm warband alternated
+  Emain and Home 141 times in 78 minutes without a death. Members now board
+  only together with the leader or after it; a solo force is unchanged. A new
+  `RVR_FRONTIER_LEADER_HOLD` line, at most once per force every five minutes,
+  shows why a leader is not boarding.
+
 ## [0.170.0] - 2026-10-01
 
 ### Fixed

@@ -18,6 +18,32 @@ public static class AutonomousFrontierTransport
     public static bool ForceAlreadyAcross(System.Collections.Generic.IEnumerable<GameBot> party, GameBot self, ushort destinationRegion) =>
         party?.Any(member => member != null && member != self && member.IsAlive && member.CurrentRegionID == destinationRegion) == true;
 
+    /// <summary>
+    /// A warband crosses with its leader (bug 76). Members that went ahead
+    /// found the leader missing and ported back, then followed its passage
+    /// again: 1,500 straggler departures per warband and day. Without a
+    /// living leader (solo force) any member may go.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> LeaderHoldLogged = new(StringComparer.Ordinal);
+
+    /// <summary>At most once per force and five minutes: why the leader is not boarding.</summary>
+    private static void LogLeaderHold(Request request, GameBot leader, OFTeleporter porter, int waiting)
+    {
+        long now = GameLoop.GameLoopTime;
+        if (LeaderHoldLogged.TryGetValue(request.ForceId, out long last) && now - last < 300_000) return;
+        LeaderHoldLogged[request.ForceId] = now;
+        var leaderRequest = leader.TempProperties.GetProperty<Request>(RequestKey);
+        var log = DOL.Logging.LoggerManager.Create(typeof(AutonomousFrontierTransport));
+        if (log.IsInfoEnabled)
+            log.Info($"RVR_FRONTIER_LEADER_HOLD force={request.ForceId} leader=\"{leader.Name}\" waiting={waiting} destination=\"{request.Passage.Location?.Name}\" " +
+                $"leader_region={leader.CurrentRegionID} leader_porter_dist={(leader.CurrentRegion == porter.CurrentRegion ? (int)leader.GetDistanceTo(porter) : -1)} " +
+                $"leader_request=\"{leaderRequest?.Passage?.Location?.Name}\" leader_ready={(Ready(leader, porter, leaderRequest) ? "true" : "false")} " +
+                $"leader_combat={(leader.InCombat ? "true" : "false")} leader_ticket={(leaderRequest != null && Ticket(leader, leaderRequest.Passage) != null ? "true" : "false")}");
+    }
+
+    public static bool MayCrossWithoutLeader(bool hasLeader, bool leaderAcross, bool leaderBoarding) =>
+        !hasLeader || leaderAcross || leaderBoarding;
+
     /// <summary>A party of more than one realm (logged as <c>mixed</c>).</summary>
     public static bool IsMixedRealm(System.Collections.Generic.IEnumerable<eRealm> realms) =>
         realms?.Distinct().Skip(1).Any() == true;
@@ -441,13 +467,21 @@ public static class AutonomousFrontierTransport
                 SamePassage(memberRequest.Passage, request.Passage) && Ready(member, porter, memberRequest);
             // Part of the force is already across: stragglers follow at once
             // instead of mustering, regrouping or waiting out the force cap (bug 74).
-            bool forceAcross = ForceAlreadyAcross(party, null, request.Passage.Region);
+            GameBot leader = party.Length > 1 && bot.Group?.LivingLeader is GameBot { IsAlive: true } lead && party.Contains(lead) ? lead : null;
+            bool forceAcross = leader != null
+                ? leader.CurrentRegionID == request.Passage.Region
+                : ForceAlreadyAcross(party, null, request.Passage.Region);
             var group = SelectBoarders(party,
                 member => member.CurrentRegionID != request.Passage.Region && MemberReady(member),
                 member => !forceAcross && IsIncoming(member.IsAlive, member.CurrentRegion == porter.CurrentRegion,
                     member.CurrentRegionID == request.Passage.Region,
                     member.CurrentRegion == porter.CurrentRegion ? member.GetDistanceTo(porter) : double.PositiveInfinity),
                 request.ForceId, request.Passage.Region, GameLoop.GameLoopTime, out var ready, out int incoming, endMuster: false);
+            if (group.Length > 0 && !MayCrossWithoutLeader(leader != null, forceAcross, group.Contains(leader)))
+            {
+                LogLeaderHold(request, leader, porter, group.Length);
+                group = [];
+            }
             if (group.Length == 0)
             {
                 // Hold this warband's departure; later casts re-check it.

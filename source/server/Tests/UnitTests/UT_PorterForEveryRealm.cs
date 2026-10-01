@@ -45,5 +45,18 @@ namespace DOL.GS.Tests
                 Assert.That(AutonomousFrontierTransport.IsMixedRealm(new[] { eRealm.Albion, eRealm.Albion }), Is.False);
             });
         }
+
+        [Test]
+        public void WarbandMembersNeverCrossAheadOfTheirLeader()
+        {
+            Assert.Multiple(() =>
+            {
+                // Bug 76: members that went ahead ported back to the leader, then out again.
+                Assert.That(AutonomousFrontierTransport.MayCrossWithoutLeader(true, false, false), Is.False);
+                Assert.That(AutonomousFrontierTransport.MayCrossWithoutLeader(true, false, true), Is.True);
+                Assert.That(AutonomousFrontierTransport.MayCrossWithoutLeader(true, true, false), Is.True);
+                Assert.That(AutonomousFrontierTransport.MayCrossWithoutLeader(false, false, false), Is.True);
+            });
+        }
     }
 }

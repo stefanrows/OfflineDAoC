@@ -142,6 +142,15 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     dropped once the objective is in the current region and whenever
     `TryFrontierTransport` finds no crossing needed. Check: departures per
     hour far below 3,700.
+    **Live 0.170.0 (10-01 17:09 to 18:27): still about 3,600 per hour.** Top
+    warband `…-092` (single realm, leader Ranienwin) alternated Emain Alb and
+    Home Alb 141 times in 78 minutes without a death; force gap 25 minutes,
+    every departure a straggler. Second cause: the 0.162.0 straggler rule let
+    members board whenever *any* member was across, so they crossed without
+    the leader and then followed it back. **Fixed in source 0.171.0:** a
+    warband member boards only with its leader or after it
+    (`MayCrossWithoutLeader`). Check: departures per hour, and
+    `RVR_FRONTIER_LEADER_HOLD` for leaders that never board.
 
 75. **Keep sieges never succeed: bots travel one by one and die alone.**
     Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
