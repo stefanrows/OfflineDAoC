@@ -181,6 +181,16 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+76. **RvR groups fight instead of watching (step 1 of 2).** Owner
+    2026-10-01: "sehe keine gruppen zusammen arbeiten also zusammen etwas
+    töten oder angreifen, fast nur passiv" — keeps fall only if every
+    character uses its skills as the situation needs. Step 1, source 0.174.0:
+    the observe layer attacks even or smaller parties (`IsEvenOrWeaker`) and
+    no longer flees an even party closing in. Step 2 (open): check that
+    members assist the leader's target and that healers, crowd control and
+    siege roles act in combat. Check: share of `third_party` in
+    `RVR_OBSERVE_DECISION`, PvP kills per warband, keep captures.
+
 75. **Companion Manager: organised roster, larger text, bigger list.** Owner,
     2026-10-01: enlarging the window did not show more companions or detail
     lines (still paging with PgUp/PgDn, also in Training & Tactics), the font was

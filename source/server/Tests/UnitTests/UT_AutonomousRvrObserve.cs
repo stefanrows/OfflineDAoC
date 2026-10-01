@@ -48,7 +48,7 @@ public sealed class UT_AutonomousRvrObserve
     {
         Assert.Multiple(() =>
         {
-            Assert.That(AutonomousRvrObserve.Decide(Watching(Ordinary, down: 2)), Is.EqualTo(RvrObserveDecision.Wait));
+            Assert.That(AutonomousRvrObserve.Decide(Watching(Ordinary, down: 1)), Is.EqualTo(RvrObserveDecision.Wait), "6 against 7: the count rule");
             Assert.That(AutonomousRvrObserve.Decide(Watching(Ordinary, down: 3)), Is.EqualTo(RvrObserveDecision.ThirdParty));
             Assert.That(AutonomousRvrObserve.Decide(Watching(Bold, down: 1)), Is.EqualTo(RvrObserveDecision.Wait));
             Assert.That(AutonomousRvrObserve.Decide(Watching(Bold, down: 2)), Is.EqualTo(RvrObserveDecision.ThirdParty));
@@ -144,6 +144,23 @@ public sealed class UT_AutonomousRvrObserve
             Assert.That(AutonomousRvrObserve.Decide(idle with { Seen = true }), Is.EqualTo(RvrObserveDecision.Leave));
             Assert.That(AutonomousRvrObserve.Decide(idle with { Seen = true, SeenAccepted = true }),
                 Is.EqualTo(RvrObserveDecision.Wait));
+        });
+    }
+
+    [Test]
+    public void EvenOrSmallerPartiesAreAttackedNotWatched()
+    {
+        RvrObserveSituation even = Watching(Ordinary, ours: 8) with { WatchedEngaged = false };
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrObserve.Decide(even), Is.EqualTo(RvrObserveDecision.ThirdParty), "8 against 8");
+            Assert.That(AutonomousRvrObserve.Decide(Watching(Cautious, ours: 6, down: 2)), Is.EqualTo(RvrObserveDecision.ThirdParty), "6 against 6 survivors");
+            Assert.That(AutonomousRvrObserve.Decide(even with { WatchedClosingMilliseconds = 6_000 }),
+                Is.EqualTo(RvrObserveDecision.ThirdParty), "an even party closing in is met, not fled");
+            Assert.That(AutonomousRvrObserve.Decide(even with { NewPartyNearOrBehind = true }), Is.EqualTo(RvrObserveDecision.Leave));
+            Assert.That(AutonomousRvrObserve.Decide(even with { MayEngage = false }), Is.EqualTo(RvrObserveDecision.Wait));
+            Assert.That(AutonomousRvrObserve.Decide(Watching(Ordinary, ours: 5) with { WatchedEngaged = false }),
+                Is.EqualTo(RvrObserveDecision.Wait), "5 against 8 still watches");
         });
     }
 

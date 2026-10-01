@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.174.0] - 2026-10-01
+
+### Changed
+
+- RvR groups attack instead of standing by (task 76). Live 0.162.0: of
+  13,696 observe decisions, 46 % were "roam on" and 27 % "leave"; groups
+  attacked only after three of eight enemies were down. A group now attacks
+  a watched party that has no more living members than it has. It leaves
+  when charged only by a bigger party, a third party near or behind, or when
+  it is seen by one it would not fight. Smaller groups keep the counted rule.
+
 ## [0.173.0] - 2026-10-01
 
 ### Fixed

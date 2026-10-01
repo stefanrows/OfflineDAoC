@@ -160,6 +160,9 @@ public static class AutonomousRvrObserve
     /// leader (Aggression above 65) adds at 2; a group at least 1.5 times the
     /// weaker side's living members adds at 1.
     /// </summary>
+    /// <summary>A party no bigger than ours (living members) is a fight we take.</summary>
+    public static bool IsEvenOrWeaker(int ours, int theirAlive) => theirAlive > 0 && ours >= theirAlive;
+
     public static int AddThreshold(int theirSize, int theirAlive, int ours, int aggression)
     {
         int normal = Math.Max(1, (int)Math.Ceiling(3d / 8d * Math.Max(1, theirSize)));
@@ -209,6 +212,10 @@ public static class AutonomousRvrObserve
             // A party we would take on anyway is engaged, busy or not.
             if (s.AppetiteAccepts)
                 return RvrObserveDecision.ThirdParty;
+            // Owner 2026-10-01: groups stood by, passive, and keeps never fell.
+            // An even or outnumbered enemy is attacked, engaged or not.
+            if (IsEvenOrWeaker(s.Ours, s.TheirAlive))
+                return RvrObserveDecision.ThirdParty;
             if (s.WatchedEngaged)
             {
                 // The count, and never into survivors that outnumber us two to one.
@@ -231,7 +238,8 @@ public static class AutonomousRvrObserve
     /// so goes into the danger memory; an early or patient leave does not.
     /// </summary>
     public static bool IsThreatLeave(RvrObserveSituation s) =>
-        !s.SceneGone && (s.WatchedClosingMilliseconds >= ClosingMilliseconds && !s.AppetiteAccepts ||
+        !s.SceneGone && (s.WatchedClosingMilliseconds >= ClosingMilliseconds && !s.AppetiteAccepts &&
+                         !IsEvenOrWeaker(s.Ours, s.TheirAlive) ||
             s.NewPartyNearOrBehind || s.Seen && !s.SeenAccepted);
 
     public static string Label(RvrObserveDecision decision) => decision switch
