@@ -3142,6 +3142,8 @@ namespace DOL.GS
             foreach (string id in _rejectedDungeonCamps.Where(pair => pair.Value <= GameLoop.GameLoopTime).Select(pair => pair.Key).ToArray())
                 _rejectedDungeonCamps.Remove(id);
             rejectedDungeons.UnionWith(_rejectedDungeonCamps.Keys);
+            // Keep away from spots where a far stronger monster keeps killing bots.
+            DateTime bossCheckUtc = WorldSimulationClock.UtcNow;
             Dictionary<string, CampDestination> destinations = new(StringComparer.OrdinalIgnoreCase);
             List<AutonomousBotDecisionEngine.Camp> camps = new();
             // Solo levelers up to about 35 hunt near where they stand, like a
@@ -3156,6 +3158,7 @@ namespace DOL.GS
             // realm/level/death filtering a cheap in-memory operation.
             foreach (CampCatalogCell cell in CampCatalogSnapshot()
                          .Where(cell => !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
+                                        !AutonomousPveBossDanger.IsNear(cell.RegionId, cell.X, cell.Y, bossCheckUtc) &&
                                         (!localPickupGroup ||
                                             (cell.RegionId == _groupDirective.RendezvousRegion ||
                                              cell.IsDungeon && directDungeonEntrances.Any(edge => edge.TargetRegion == cell.RegionId &&
@@ -3804,6 +3807,8 @@ namespace DOL.GS
         private void LogAutonomousDeath(GameBot bot, int newDeaths, int groupSize, string branch)
         {
             AutonomousDeathSnapshot death = bot.LastAutonomousDeath;
+            if (death != null && AutonomousPveBossDanger.Marks(death.KillerType, death.KillerLevel, bot.Level, death.CountsAsPvp))
+                AutonomousPveBossDanger.Record(death.RegionId, death.X, death.Y, WorldSimulationClock.UtcNow);
             if (death == null || !Log.IsInfoEnabled)
                 return;
             Log.Info($"AUTONOMOUS_BOT_DEATH bot={bot.Name} id={bot.DatabaseID} level={bot.Level} realm={bot.Realm} " +

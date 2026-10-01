@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.173.0] - 2026-10-01
+
+### Fixed
+
+- Levelling bots level again (bug 78). Since 0.158.0 (task 70) an RvR tour
+  never ended, also below level 50: 417 of 586 bots under 50 sat in RvR,
+  230 of 255 in their thirties. Only level-50 characters now stay in RvR
+  without end. A levelling bot returns to PvE after its tour and owes one
+  PvE task before the next one; a warband with a levelling member ends
+  when its task clock runs out instead of renewing. No pauses come back.
+- Bots keep away from bosses far above their level (bug 78). Two named
+  bosses (levels 65 and 75) killed level-50 bots about 5,500 times in 19
+  hours next to their XP camps. A monster that kills a bot 10 or more levels
+  below it marks the spot; for six hours no bot picks an XP camp within
+  3,000 units of it.
+
 ## [0.172.0] - 2026-10-01
 
 ### Fixed

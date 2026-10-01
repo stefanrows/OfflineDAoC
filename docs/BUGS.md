@@ -61,6 +61,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+78. **Levelling bots barely level.** Live 0.162.0 (2026-09-30 19:38 to 10-01
+    14:52): 559 level-ups by 299 bots in 19 hours; 15,215 of 22,166 PvE goal
+    attempts failed, 11,792 by defeat. 417 of the 586 bots below level 50
+    held an RvR objective (230 of 255 in their thirties): the task 70 change
+    (0.158.0) renewed every RvR tour without end, also for levelling bots.
+    "Black Lady" (65, Marfach Cavern) and "Illusion of Aidon the Archwizard"
+    (75, Hall of the Corrupt) caused about 5,500 deaths, mostly level-50 solo
+    bots and 8-bot PvE groups at XP camps beside them; 178 more in 15 minutes
+    on 0.171.0. **Fixed in source 0.173.0:** endless RvR only at level 50
+    (`RvrTourRenews`), levelling bots return to PvE and warbands with them
+    end; `AutonomousPveBossDanger` keeps XP camps 3,000 units away from a
+    spot where a monster 10+ levels above killed a bot, for six hours. Check:
+    level-ups per hour, share of bots under 50 on RvR, deaths to the two
+    bosses.
+
+
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with
     Companion Manager screenshots: Beren (Friar, Group support, role Healer)
     and Faelan (Warden, Nurture support, role Buffer), both level 15. A

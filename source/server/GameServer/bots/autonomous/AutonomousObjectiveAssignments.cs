@@ -190,7 +190,14 @@ public static class AutonomousObjectiveAssignments
                 .ToArray();
             foreach (GameBot bot in expiredRvr)
             {
-                // Task 70: a solo roamer's tour never runs out; it keeps roaming.
+                // Task 70: a level-50 roamer's tour never runs out; it keeps
+                // roaming. A levelling bot goes back to PvE after its tour, or
+                // it never levels (417 of 586 bots below 50 sat in RvR, 0.172.0).
+                if (!RvrTourRenews(bot.Level))
+                {
+                    BeginPveAfterRvrTour(bot);
+                    continue;
+                }
                 bot.PersistentRecord.ObjectiveExpiresUtc = utcNow.Add(RollRvrTenure()).ToString("O");
                 bot.MarkAutonomousStateDirty();
                 AutonomousBotStatusPersistence.Queue(bot);
@@ -302,6 +309,28 @@ public static class AutonomousObjectiveAssignments
         return invitation ? eAutonomousObjectiveKind.RvR : chosen;
     }
 
+    /// <summary>Only level-50 characters stay in RvR without end; levelling ones return to PvE after a tour.</summary>
+    public static bool RvrTourRenews(int level) => level >= 50;
+
+    private static void BeginPveAfterRvrTour(GameBot bot)
+    {
+        OfflineWorldBotRecord record = bot.PersistentRecord;
+        record.ObjectiveExpiresUtc = string.Empty;
+        record.ObjectivePveMode = string.Empty;
+        record.ObjectivePveKillTarget = 0;
+        record.ObjectivePveKills = 0;
+        record.ObjectiveRvrEligibleUtc = PveCompletionRequired;
+        record.ObjectiveAssignmentId = string.Empty;
+        record.ObjectivePhase = "Returning to PvE after frontier tour";
+        record.CurrentCampId = string.Empty;
+        record.TargetName = string.Empty;
+        record.TravelDestination = string.Empty;
+        record.ObjectiveProgress = "Frontier tour complete; levelling next";
+        TryBeginBetweenTaskServices(bot);
+        bot.MarkAutonomousStateDirty();
+        AutonomousBotStatusPersistence.Queue(bot);
+    }
+
     public static void BeginSoloAfterGroupTask(GameBot bot, string reason, bool forceSoloPve = false)
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Group != null || bot.PersistentRecord == null)
@@ -312,6 +341,9 @@ public static class AutonomousObjectiveAssignments
         // task resets only work, never progress/items. Task 70: an RvR bot whose
         // group ended goes straight back to RvR; nobody owes PvE or a town break.
         bool leavingRvr = Is(bot, eAutonomousObjectiveKind.RvR);
+        // A levelling bot owes one PvE task after a frontier tour.
+        if (leavingRvr && !RvrTourRenews(bot.Level))
+            bot.PersistentRecord.ObjectiveRvrEligibleUtc = PveCompletionRequired;
         bool mayRvr = IsRvrEligible(bot.PersistentRecord, WorldSimulationClock.UtcNow);
         if (!forceSoloPve && TryBeginBetweenTaskServices(bot))
             return;

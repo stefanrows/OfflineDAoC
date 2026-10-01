@@ -19,7 +19,9 @@ namespace DOL.GS
         private static bool TryContinueRvrTask(Session session, GameBot[] members)
         {
             if (session.Ending || session.ObjectiveKind != eAutonomousObjectiveKind.RvR ||
-                !session.TaskClock.HasExpired(GameLoop.GameLoopTime) || members.Length == 0)
+                !session.TaskClock.HasExpired(GameLoop.GameLoopTime) || members.Length == 0 ||
+                // A warband with levelling members ends; they return to PvE.
+                !members.All(member => AutonomousObjectiveAssignments.RvrTourRenews(member.Level)))
                 return false;
             session.Renewals++;
             session.TaskClock = new AutonomousGroupTaskClock(eAutonomousObjectiveKind.RvR);
