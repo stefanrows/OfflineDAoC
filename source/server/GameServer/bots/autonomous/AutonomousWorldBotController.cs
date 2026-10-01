@@ -4808,8 +4808,13 @@ namespace DOL.GS
                                                                     IsRegionPointAccessible(realm, point.SourceRegion, point.SourceX, point.SourceY) &&
                                                                     IsRegionPointAccessible(realm, point.TargetRegion, point.TargetX, point.TargetY)))
                 {
+                    // Like the route search, Darkness Falls is a destination,
+                    // never a shortcut; without this, camp choice took regions
+                    // whose only real road ran through the boss dungeons
+                    // (0.180.0: 44 boss deaths, world speed 2.5x).
                     if (seen.Add(point.TargetRegion) &&
-                        !(aroundFrontierDungeons && AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(point.TargetRegion)))
+                        !(aroundFrontierDungeons && (AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(point.TargetRegion) ||
+                                                     point.TargetRegion == AutonomousDarknessFallsPolicy.RegionId)))
                         queue.Enqueue(point.TargetRegion);
                 }
             }

@@ -98,6 +98,11 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     181, 200, 151, 249): the region-graph check disagreed with the real
     search. **Fixed in source 0.180.0:** the real search tries the way
     around and falls back to the full road, cached ten minutes per pair.
+    **Live 0.180.0 at 20x (23:57 to 00:08):** `No legal region route` 6, but
+    44 boss deaths and 2.5x world speed (tick p95 80 ms). Cause: the camp
+    reachability check passed through Darkness Falls, the route search does
+    not. **Fixed in source 0.181.0:** `ReachableRegions(..., true)` enters
+    Darkness Falls but never passes through it.
 
 
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with

@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.181.0] - 2026-10-02
+
+### Fixed
+
+- XP camp choice and the route search agree again (bug 78). Camp choice
+  let its reachability check pass through Darkness Falls, which the route
+  search never uses as a shortcut, so it picked camps whose only real road
+  ran through the boss dungeons. 0.180.0 then walked them through: route
+  failures fell from 1,511 to 6, but 44 boss deaths came back and world
+  speed fell to 2.5x. Camp choice now treats Darkness Falls like the
+  dungeons: a destination, never a road.
+
 ## [0.180.0] - 2026-10-01
 
 ### Fixed
