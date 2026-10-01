@@ -3006,6 +3006,11 @@ namespace DOL.GS
             if (soloHabit && !bot.IsRecoveryResting)
                 RecordSoloRest();
             bot.BeginRecoveryRest();
+            // Bug 72: wake at the class habit, not only when fully recovered.
+            bot.RecoveryWakeThresholds = soloHabit && bot.CharacterClass != null
+                ? AutonomousPveArchetype.RestThresholds((eCharacterClass)bot.CharacterClass.ID,
+                    bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID)
+                : null;
             SetStatus(bot, "Resting between pulls", GoalText(),
                 $"At the live camp: HP {bot.HealthPercent}% • power {bot.ManaPercent}% • endurance {bot.EndurancePercent}%");
             return true;

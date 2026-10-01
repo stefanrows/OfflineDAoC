@@ -460,4 +460,37 @@ namespace DOL.GS
                 .Where(bot => bot.PlayerCompanionRecord?.SquadIndex > 0)
                 .ToList();
     }
+    /// <summary>Once a minute, one BATTLEGROUP_LOAD line for the battlegroup load check
+    /// (task 45). Read it beside SERVER_WORK (tick cost) and BOT_THINK_PROFILE
+    /// (NavPathQuery, pathing cost) of the same minute. Written only while at least one
+    /// online player is in a battlegroup. Runs on the game loop thread.</summary>
+    public static class BattleGroupLoadReport
+    {
+        public static string Describe()
+        {
+            HashSet<BattleGroup> seen = new();
+            int owners = 0, ownersInRvr = 0, groups = 0, companions = 0, companionsInRvr = 0;
+            foreach (GamePlayer player in ClientService.Instance.GetPlayers())
+            {
+                if (player.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY) is not BattleGroup battleGroup ||
+                    !seen.Add(battleGroup))
+                    continue;
+
+                foreach (KeyValuePair<GamePlayer, List<GameBot>> pair in battleGroup.CompanionsByOwner)
+                {
+                    bool inRvr = pair.Key.CurrentRegion?.IsRvR == true;
+                    owners++;
+                    if (inRvr)
+                        ownersInRvr++;
+                    groups += pair.Value.Select(bot => bot.PlayerCompanionRecord?.SquadIndex ?? 0).Where(index => index > 0).Distinct().Count();
+                    companions += pair.Value.Count;
+                    if (inRvr)
+                        companionsInRvr += pair.Value.Count;
+                }
+            }
+
+            return seen.Count == 0 ? null : FormattableString.Invariant(
+                $"BATTLEGROUP_LOAD battlegroups={seen.Count} owners={owners} ownersInRvr={ownersInRvr} companionGroups={groups} companions={companions} companionsInRvr={companionsInRvr}");
+        }
+    }
 }

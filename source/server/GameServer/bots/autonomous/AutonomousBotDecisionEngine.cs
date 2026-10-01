@@ -40,6 +40,19 @@ public static class AutonomousBotDecisionEngine
     public const int GroupDungeonPreferencePermille = 300;
     public const int Level50GroupDungeonPreferencePermille = 400;
 
+    // Darkness Falls is where a 2003 character went to level between the
+    // starter zones and the frontier: its lowest creatures are about level
+    // 16, so a group may start there at 16 and a solo character at 20. Below
+    // level 50 (which has its own seal/gear rule) a DF camp in the pool lifts
+    // the dungeon draw well above the game-wide rate; the soft population
+    // availability of DF itself still lets a crowded DF yield to outdoor camps.
+    public const int GroupDarknessFallsMinimumLevel = 16;
+    public const int SoloDarknessFallsMinimumLevel = 20;
+    public const int SoloDarknessFallsPreferencePermille = 400;
+    public const int GroupDarknessFallsPreferencePermille = 600;
+    /// <summary>A leveler walks this far for DF, well past the ordinary local-camp radius.</summary>
+    public const double DarknessFallsLevelingTravelMinutes = 30;
+
     public enum PveEnvironment
     {
         None,
@@ -203,7 +216,15 @@ public static class AutonomousBotDecisionEngine
         // Level-50 PvE is Darkness Falls and the SI dungeons: seals and gear.
         if (level >= 50)
             preference = gearFarming ? (groupSize >= 2 ? 750 : 450) : (groupSize >= 2 ? 600 : 350);
-        int availability = choices.Where(camp => camp.IsDungeon)
+        bool darknessFallsLeveling = IsDarknessFallsLeveler(level, groupSize) &&
+            choices.Any(camp => camp.IsDungeon && camp.RegionId == AutonomousDarknessFallsPolicy.RegionId);
+        if (darknessFallsLeveling)
+            preference = Math.Max(preference, groupSize >= 2
+                ? GroupDarknessFallsPreferencePermille : SoloDarknessFallsPreferencePermille);
+        int availability = darknessFallsLeveling
+            ? DungeonAvailability(choices.Where(camp => camp.IsDungeon &&
+                camp.RegionId == AutonomousDarknessFallsPolicy.RegionId))
+            : choices.Where(camp => camp.IsDungeon)
             .GroupBy(camp => camp.RegionId)
             .Select(group => DungeonAvailability(group))
             .DefaultIfEmpty(0)
@@ -253,6 +274,10 @@ public static class AutonomousBotDecisionEngine
         return regions[^1].Camps[^1];
     }
 
+    /// <summary>True for a party or soloer in the level range that levels in Darkness Falls (below 50).</summary>
+    public static bool IsDarknessFallsLeveler(int level, int groupSize) =>
+        level < 50 && level >= (groupSize >= 2 ? GroupDarknessFallsMinimumLevel : SoloDarknessFallsMinimumLevel);
+
     /// <summary>Solo levelers up to this level choose camps near where they stand.</summary>
     public const int LocalSoloCampMaximumLevel = 35;
     /// <summary>A 2003 soloer walked five to ten minutes to the next camp.</summary>
@@ -277,6 +302,12 @@ public static class AutonomousBotDecisionEngine
         Camp[] pool = level < 20 && home.Length > 0 ? home
             : level >= 20 && UsesLocalSoloCamps(level) ? NearbySoloPool(choices)
             : choices;
+        // DF is worth a longer walk than any other camp, so it joins the pool
+        // even when it lies beyond the local radius.
+        if (IsDarknessFallsLeveler(level, 1))
+            pool = pool.Concat(choices.Where(camp => camp.IsDungeon &&
+                camp.RegionId == AutonomousDarknessFallsPolicy.RegionId &&
+                camp.TravelMinutes <= DarknessFallsLevelingTravelMinutes)).Distinct().ToArray();
         // Preserve the dungeon draw, but apply locality and distance inside
         // the chosen environment instead of letting remote empty cells win.
         PveEnvironment environment = SelectPveEnvironment(pool, 1, level, random);

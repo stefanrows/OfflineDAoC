@@ -3507,6 +3507,8 @@ namespace DOL.GS
 				case eSpellType.CurePoison:
 				case eSpellType.CureDisease:
 				case eSpellType.OffensiveProc:
+				case eSpellType.Bladeturn:
+				case eSpellType.AblativeArmor:
 					return spell;
 				default:
 				{

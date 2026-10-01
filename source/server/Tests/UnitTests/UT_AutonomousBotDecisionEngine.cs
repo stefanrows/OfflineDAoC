@@ -611,6 +611,76 @@ public class UT_AutonomousBotDecisionEngine
         });
     }
 
+    [Test]
+    public void LevelersFavorDarknessFallsAboveTheGameWideDungeonRate()
+    {
+        var outdoor = Camp("outdoor", eRealm.Albion, ConColor.YELLOW, true);
+        var df = outdoor with { Id = "df", RegionId = 249, IsDungeon = true };
+        var muire = outdoor with { Id = "muire", RegionId = 221, IsDungeon = true };
+
+        Assert.Multiple(() =>
+        {
+            // A 0.35 draw is 350 permille: below the solo DF rate (400), above the ordinary one (100).
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([outdoor, df], 1, 30, new FixedRandom(0.35)),
+                Is.EqualTo(df));
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([outdoor, muire], 1, 30, new FixedRandom(0.35)),
+                Is.EqualTo(outdoor), "Other dungeons keep the ordinary rate");
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([outdoor, df], 1, 30, new FixedRandom(0.45)),
+                Is.EqualTo(outdoor));
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([outdoor, df], 4, 30, new FixedRandom(0.55)),
+                Is.EqualTo(df), "A group's rate is 600 permille");
+            // Level floors: the lowest DF creatures are about level 16.
+            Assert.That(AutonomousBotDecisionEngine.IsDarknessFallsLeveler(19, 1), Is.False);
+            Assert.That(AutonomousBotDecisionEngine.IsDarknessFallsLeveler(20, 1), Is.True);
+            Assert.That(AutonomousBotDecisionEngine.IsDarknessFallsLeveler(15, 5), Is.False);
+            Assert.That(AutonomousBotDecisionEngine.IsDarknessFallsLeveler(16, 5), Is.True);
+            Assert.That(AutonomousBotDecisionEngine.IsDarknessFallsLeveler(50, 1), Is.False, "Level 50 has its own rule");
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([outdoor, df], 1, 19, new FixedRandom(0.35)),
+                Is.EqualTo(outdoor));
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([outdoor, df], 1, 50, new FixedRandom(0.30)),
+                Is.EqualTo(df), "Level-50 solo rate stays 350 permille");
+        });
+    }
+
+    [Test]
+    public void CrowdedDarknessFallsSoftlyYieldsToOutdoorCamps()
+    {
+        var outdoor = Camp("outdoor", eRealm.Albion, ConColor.YELLOW, true);
+        var crowdedDf = outdoor with
+        {
+            Id = "df", RegionId = 249, IsDungeon = true, DungeonPopulation = 96, DungeonSoftCapacity = 96,
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([outdoor, crowdedDf], 1, 30,
+                new FixedRandom(0.2)), Is.EqualTo(outdoor));
+            Assert.That(AutonomousBotDecisionEngine.SelectBalancedPveCamp([crowdedDf], 1, 30,
+                new FixedRandom(0.99)), Is.EqualTo(crowdedDf), "Crowding is pressure, never a hard ban");
+        });
+    }
+
+    [Test]
+    public void SoloLevelerWalksFartherForDarknessFallsThanForAnyOtherCamp()
+    {
+        var local = Camp("local", eRealm.Albion, ConColor.YELLOW, true) with
+        { ZoneName = "Here", RegionId = 1, TravelMinutes = 3 };
+        var df = local with { Id = "df", RegionId = 249, IsDungeon = true, TravelMinutes = 28 };
+        var farDf = df with { Id = "far-df", TravelMinutes = 45 };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([local, df], 1, "Here",
+                eRealm.Albion, 28, new FixedRandom(0.1)).Id, Is.EqualTo("df"));
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([local, df], 1, "Here",
+                eRealm.Albion, 28, new FixedRandom(0.9)).Id, Is.EqualTo("local"));
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([local, farDf], 1, "Here",
+                eRealm.Albion, 28, new FixedRandom(0.1)).Id, Is.EqualTo("local"), "Past 30 minutes it is no longer a leveling walk");
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp([local, df], 1, "Here",
+                eRealm.Albion, 18, new FixedRandom(0.1)).Id, Is.EqualTo("local"), "Solo DF starts at level 20");
+        });
+    }
+
     private static AutonomousBotDecisionEngine.State State() =>
         new(eRealm.Albion, 20, 100, 100, 100, 20, 0, 0, 0, 0, 5, string.Empty, 1, false, false, false);
 

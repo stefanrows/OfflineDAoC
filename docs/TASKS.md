@@ -11,6 +11,17 @@ Agent sessions on items 45–48: take the role and context from
 
 45. **Battlegroup load check.** Measure server tick and pathing cost with two
     owners and 5 companion groups each in RvR before calling tasks 42–44 done.
+    Measuring tools in source (0.165.0), run pending: the server already logs
+    `SERVER_WORK` (tick p95, over-budget ticks) and `BOT_THINK_PROFILE`
+    (`NavPathQuery`, pathing) every minute; it now also logs `BATTLEGROUP_LOAD`
+    (owners, companion groups, companions in RvR) while any player is in a
+    battlegroup. `tools/dev/battlegroup-load.py` joins the three and compares
+    those minutes with the baseline. Baseline from the live 0.16x log (79
+    minutes, no companion battlegroup): tick p95 averages 13.2 ms, peaks at
+    28.8 ms of the 33.3 ms budget; pathing about 4,700 ms/min. To finish:
+    install, run the scene (two owners, 5 companion groups each, in RvR) for
+    15–30 minutes, then run the script and record the verdict. Not run by an
+    agent: starting the server needs the owner's go-ahead.
 
 47. **Advisor, then build: world bots barely level.** Aaron, 2026-09-28:
     levelling "barely works". First a read-only advisor pass (autonomous world
@@ -158,6 +169,19 @@ Agent sessions on items 45–48: take the role and context from
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
 ## Implemented in source; installation verification pending
+
+73. **Levelling bots go to Darkness Falls.** Aaron, 2026-10-01: "Make bots that
+    are leveling much more go to Darkness Falls for leveling! Currently its very
+    empty there. Note that the lowest mobs there are around lvl 16." Source
+    0.165.0: with a Darkness Falls camp among the legal camps, a solo bot from
+    level 20 takes a dungeon on 40% of its camp draws and a group from level 16
+    on 60% (before 10% / 30%); solo levelers up to 35 consider Darkness Falls
+    up to 30 minutes away. DF's own soft population limit and the existing
+    level/con filters still apply; level 50 is unchanged. Live-log check
+    pending: more bots and groups with a region-249 camp, DF population grows
+    without crowding past its soft capacity. Tune
+    `SoloDarknessFallsPreferencePermille` / `GroupDarknessFallsPreferencePermille`
+    if it is still empty or too busy.
 
 72. **No autonomous PvE raids; level-50 bots focus on RvR.** Aaron, 2026-10-01:
     "Disable that autonomous bots do PVE raids (dragon, epic dungeon, etc) and

@@ -117,9 +117,12 @@ namespace DOL.GS
         /// <summary>
         /// A support class is a non-combat role only when the party has an
         /// actual combat-capable partner. A solo healer must retain its attack path.
+        /// Friar and Warden are melee hybrids: even in a Healer or Buffer role they
+        /// heal first (see <c>CheckHeals</c>) and fight when nobody needs healing.
         /// </summary>
         public static bool IsSupport(GameBot bot) => bot?.Group?.MemberCount > 1 &&
             bot.CharacterClass != null &&
+            !IsMeleeHybridHealer((eCharacterClass)bot.CharacterClass.ID) &&
             (bot.IsPersistentPlayerCompanion &&
              TryParseRole(bot.PlayerCompanionRecord?.TacticalRole, out BotPveGroupRole preference)
                 ? preference is BotPveGroupRole.Healer or BotPveGroupRole.Buffer ||
@@ -127,6 +130,9 @@ namespace DOL.GS
                   For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Support
                 : For((eCharacterClass)bot.CharacterClass.ID) == BotPartyRole.Support) &&
             HasCombatPartner(bot);
+
+        public static bool IsMeleeHybridHealer(eCharacterClass characterClass) =>
+            characterClass is eCharacterClass.Friar or eCharacterClass.Warden;
 
         private static bool HasCombatPartner(GameBot bot)
         {

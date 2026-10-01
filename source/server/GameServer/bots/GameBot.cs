@@ -425,10 +425,21 @@ namespace DOL.GS
             if (Endurance < MaxEndurance) m_enduRegenerationTimer?.Start(1);
         }
 
+        /// <summary>
+        /// Set while a solo camp bot rests to its class habit rather than to
+        /// full (bug 72): the brain wakes at these targets, not only at 100 %.
+        /// </summary>
+        public PveRestThresholds? RecoveryWakeThresholds { get; set; }
+
         private void WakeAfterRecovery()
         {
-            if (IsRecoveryResting && AutonomousRestPolicy.IsFullyRecovered(HealthPercent, ManaPercent, EndurancePercent, MaxMana > 0) &&
-                Brain is BotBrain brain && brain.NextThinkTick > GameLoop.GameLoopTime)
+            if (!IsRecoveryResting)
+                return;
+            bool usesPower = MaxMana > 0;
+            bool ready = RecoveryWakeThresholds is { } habit
+                ? AutonomousPveArchetype.ReadyToPull(habit, HealthPercent, ManaPercent, EndurancePercent, usesPower)
+                : AutonomousRestPolicy.IsFullyRecovered(HealthPercent, ManaPercent, EndurancePercent, usesPower);
+            if (ready && Brain is BotBrain brain && brain.NextThinkTick > GameLoop.GameLoopTime)
                 brain.NextThinkTick = GameLoop.GameLoopTime;
         }
 
@@ -3283,6 +3294,7 @@ namespace DOL.GS
         public void WakeRecoveryRest()
         {
             _recoveryRestLocked = false;
+            RecoveryWakeThresholds = null;
         }
 
         /// <summary>

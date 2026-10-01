@@ -472,6 +472,25 @@ namespace DOL.UnitTests
             Assert.That(CompanionFollowPolicy.SpeedLimit(bot, 191), Is.EqualTo(191));
         }
 
+        [TestCase(typeof(ClassFriar), "healer")]
+        [TestCase(typeof(ClassFriar), "buffer")]
+        [TestCase(typeof(ClassWarden), "healer")]
+        [TestCase(typeof(ClassWarden), "buffer")]
+        public void MeleeHybridCompanionsFightWhileSavedAsHealerOrBuffer(Type type, string role)
+        {
+            Bot bot = NewBot(type); Player player = Actor<Player>();
+            CompanionGroup(bot, player);
+            Field(typeof(GameBot), bot, "<PlayerCompanionRecord>k__BackingField",
+                new PlayerCompanionRecord { TacticalRole = role });
+            Assert.That(BotPartyRoles.IsSupport(bot), Is.False);
+
+            Bot druid = NewBot(typeof(ClassDruid));
+            CompanionGroup(druid, player);
+            Field(typeof(GameBot), druid, "<PlayerCompanionRecord>k__BackingField",
+                new PlayerCompanionRecord { TacticalRole = role });
+            Assert.That(BotPartyRoles.IsSupport(druid), Is.True, "Pure support classes keep their support role.");
+        }
+
         [Test]
         public void DruidCommandsOnlyPetKeepsSupportRoleAndHonorsDefensiveMode()
         {

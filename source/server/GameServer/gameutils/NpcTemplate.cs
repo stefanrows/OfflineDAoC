@@ -137,6 +137,12 @@ namespace DOL.GS
 					int styleID = int.Parse(stylePart);
 					int classID = int.Parse(classPart);
 					Style style = SkillBase.GetStyleByID(styleID, classID);
+					if (style == null)
+					{
+						log.Warn($"NPC template {m_templateId} lists unknown style {styleID} for class {classID}; skipped");
+						continue;
+					}
+
 					m_styles.Add(style);
 				}
 			}
@@ -259,7 +265,8 @@ namespace DOL.GS
 
 					foreach (Style mobStyle in mob.Styles)
 					{
-						m_styles.Add(mobStyle);
+						if (mobStyle != null)
+							m_styles.Add(mobStyle);
 					}
 				}
 				catch (Exception ex)

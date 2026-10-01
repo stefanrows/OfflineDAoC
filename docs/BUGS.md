@@ -6,20 +6,13 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-72. **PvE world bots still rest to near full before pulling.** Live log
-    0.157.1, 2026-09-29 18:41–20:04, task 68: every `PVE_REST` window shows
-    93–97 % power and 96–99 % health at pull (target 70–85 % power for
-    casters, 80 % health for melee); `PVE_CAMP_LEAVE` gives only `wipe` (11)
-    and `enemy` (3), never `rival` or `outgrown`. Expected: solo bots stop
-    resting at the class threshold; groups leave outgrown or contested camps.
-    Not yet investigated (rest threshold may not reach the regen/sit path).
-
 71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
     2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
     `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
     Nightshade scored 39 of 1,419 PvP kills (2.7 %), below the 6.2 %
     baseline. `RVR_ASSIST_SWITCH` appeared in only 4 five-minute windows.
     Expected: assassin share at or above the baseline. Not yet investigated.
+    Re-check 2026-10-01 (installed `server-console.log`, all runs): assassins are 6.2 % of cross-realm bot deaths (546 of 8,839), exactly the baseline; 366 of 655 `RVR_STEALTH_BREAK` are `kill`, 105 `low_hp`, 184 `friends`. The 2.7 % window is not reproduced, so no tuning was changed. Close after a clean post-0.164.0 log keeps the share at or above 6.2 %.
 
 70. **Launcher shows a .NET exception dialog "The given key was not present in
     the dictionary" after the 0.151.0 deploy.** Aaron, 2026-09-29 ~14:15, first
@@ -31,13 +24,7 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     found in the launcher sources, so the source may be the new splash asset
     loader or a snapshot/status parser. Next step: click "Details" and paste the
     stack trace; check `playable/runtime/logs/` for a launcher log.
-
-65b. **RvR bots die to named frontier mobs far above their level.** Split
-    from 65. Live 0.125.0, 2026-09-28 04:41–15:46: 7,614 level-50 PvE deaths,
-    mostly to named frontier mobs: Illusion of Aidon the Archwizard (level 75,
-    589), Black Lady (65, 457), reanimated guardian (58, 337). Expected:
-    roaming warbands walk around named mobs far above their level. Not yet
-    investigated (RvR route and aggro avoidance).
+    Source 0.164.0 adds launcher crash logging: an unhandled launcher exception now writes its full stack trace to `logs/launcher-errors.log` (next to the launcher) and the dialog names that file. A static audit of the launcher found no throwing dictionary lookup on the startup or refresh path (`PortableCredentials` uses `TryGetValue`; `KeepRelicReset` indexes only SQLite rows behind a button). Next step: reproduce once and paste `launcher-errors.log`.
 
 64. **Player and companion overhead names sometimes do not appear.** Reported
     while source was 0.109.0; installed version and client build are
@@ -49,28 +36,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     `SendPlayerCreate` and companion names in `SendNPCCreate`; no shared
     hide condition was found in those packet paths. A client/packet capture is
     needed to locate whether a create was omitted or ignored.
-
-60. **`Ability 'ConfusionImmunity' unknown` is logged 939 times per run.**
-    Seen in the installed 0.115.0 log (2026-09-27/28, 3 h 26 min) from
-    `DOL.GS.SkillBase`, together with 240 `LineXSpell Spell Adding Error`
-    warnings. Impact unknown: the ability or spell line is not granted, so a
-    class that should have confusion immunity or the affected spells may be
-    missing them. Expected: no unknown-ability or spell-adding warnings on a
-    clean start. Not yet investigated.
-
-61. **`REALM_RAID_HUB_ROUTE_FAILED event=epic-albion` about 175 times per
-    run.** Seen in the installed 0.115.0 log (3 h 26 min): the realm-raid rally
-    path for the Albion epic event cannot route to its hub. Expected: the raid
-    hub is reachable or the event is skipped instead of retried. Not yet
-    investigated. Live 2026-09-30: four of four raids still ended "Staging
-    failed: 0 adventurers arrived"; the raiders also killed each other, which
-    is fixed separately (bug 74).
-
-62. **`SortStyles NULL style` and `Unhandled spell ... Bladeturn` warnings,
-    about 1,967 per run.** Seen in the installed 0.115.0 log (3 h 26 min) from
-    `DOL.GS.GameNPC`. Impact: styles or the Bladeturn effect may be skipped on
-    the affected NPCs or bots. Expected: no null styles in a bot's style list
-    and Bladeturn handled by an effect class. Not yet investigated.
 
 5. **Some helmets render oversized or glitched.** The supplied screenshots
     (2026-09-28) show Eilis, a level-47 Elf female Enchanter from Hibernia,
@@ -95,6 +60,62 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+77. **Friar and Warden companions never attack.** Reported 2026-10-01 with
+    Companion Manager screenshots: Beren (Friar, Group support, role Healer)
+    and Faelan (Warden, Nurture support, role Buffer), both level 15. A
+    grouped companion with a Healer or Buffer role was treated as pure support
+    (`BotPartyRoles.IsSupport`): it healed and buffed but never took the attack
+    path, although the build text promises "melee support". Source fix 0.164.0
+    excludes the melee hybrids Friar and Warden from that rule, so they heal
+    first and fight when nobody needs healing, and they now follow the leader's
+    target. Druid, Cleric and Healer stay pure support. Unit test added;
+    installation and real-client check (Friar and Warden on a support build
+    melee the group's target) pending. The combat builds (Staff (solo), Battle
+    Warden; role Attacker) already used the melee path; the report did not
+    show them failing.
+
+72. **PvE world bots still rest to near full before pulling.** Live log
+    0.157.1, 2026-09-29 18:41–20:04, task 68: every `PVE_REST` window shows
+    93–97 % power and 96–99 % health at pull (target 70–85 % power for
+    casters, 80 % health for melee); `PVE_CAMP_LEAVE` gives only `wipe` (11)
+    and `enemy` (3), never `rival` or `outgrown`. Expected: solo bots stop
+    resting at the class threshold; groups leave outgrown or contested camps.
+    Not yet investigated (rest threshold may not reach the regen/sit path).
+    **Fixed in source 0.164.0.** Cause: `GameBot.WakeAfterRecovery` woke a resting solo bot's brain only at 100 % recovery, and rest regeneration gives at least 10 % of the maximum per second, so the brain (slower resting think interval) first looked at the bot when it was already near full; the class threshold in `HandleCampRecovery` never decided the pull. A resting solo camp bot now carries its class thresholds (`GameBot.RecoveryWakeThresholds`) and wakes its brain as soon as they are met. Groups still rest to full. The camp-leave half (`rival`/`outgrown` never logged) is not a demonstrated defect: solo bots only watch for rivals, outgrown applies to groups, and neither situation need have occurred. Live-log check pending: `PVE_REST` `avg_power_pct_at_pull` about 75-85 for casters and `avg_hp_pct_at_pull` about 80-90 for melee.
+
+65b. **RvR bots die to named frontier mobs far above their level.** Split
+    from 65. Live 0.125.0, 2026-09-28 04:41–15:46: 7,614 level-50 PvE deaths,
+    mostly to named frontier mobs: Illusion of Aidon the Archwizard (level 75,
+    589), Black Lady (65, 457), reanimated guardian (58, 337). Expected:
+    roaming warbands walk around named mobs far above their level. Not yet
+    investigated (RvR route and aggro avoidance).
+    **Already fixed in source 0.136.0** (commit 974e660, 2026-09-28, after the 0.125.0 observation; the entry was never moved): RvR routes bend once around named monsters of level 55 and above, red and purple monsters and dense camps, and a warband attacked by such a monster breaks off (`AutonomousRvrMobAvoidance`, tests `UT_RvrRoamAvoidanceAndRegroup`). Installed log check 2026-10-01 (all runs in `server-console.log`): `RVR_MOB_BYPASS` 5,065, `RVR_MOB_DISENGAGE` 2,024; Illusion of Aidon 94 and Black Lady 27 level-50 deaths, down from 589 and 457 in 11 h on 0.125.0; reanimated guardian 309 (not named; the log also holds pre-0.136.0 runs, so this is not separable). Verification pending on a clean post-0.164.0 run: those killers near zero.
+
+62. **`SortStyles NULL style` and `Unhandled spell ... Bladeturn` warnings,
+    about 1,967 per run.** Seen in the installed 0.115.0 log (3 h 26 min) from
+    `DOL.GS.GameNPC`. Impact: styles or the Bladeturn effect may be skipped on
+    the affected NPCs or bots. Expected: no null styles in a bot's style list
+    and Bladeturn handled by an effect class. Not yet investigated.
+    **Fixed in source 0.164.0.** Installed log: 4,326 `NULL style for NPC named new mob` came from an NPC template whose style list holds an unknown style or class id (`SkillBase.GetStyleByID` returned null and the template stored it); templates now skip and log such an id once at load. The `Unhandled spell` lines were `Bladeturn` (6,500), `AblativeArmor` procs (1,619) and similar, none of which need pet-level scaling; they now return unscaled like the other proc types. Verification pending: no `NULL style for NPC` and no `Unhandled spell in GetScaledSpell` on a clean start.
+
+61. **`REALM_RAID_HUB_ROUTE_FAILED event=epic-albion` about 175 times per
+    run.** Seen in the installed 0.115.0 log (3 h 26 min): the realm-raid rally
+    path for the Albion epic event cannot route to its hub. Expected: the raid
+    hub is reachable or the event is skipped instead of retried. Not yet
+    investigated. Live 2026-09-30: four of four raids still ended "Staging
+    failed: 0 adventurers arrived"; the raiders also killed each other, which
+    is fixed separately (bug 74).
+    **Superseded in source 0.163.0, not separately fixed.** The route failures ("assigned formation route exhausted collision-safe recovery", 1,411 lines for six events in the installed log, not only `epic-albion`) came from autonomous bots rallying to dragon and epic-dungeon raid hubs. Autonomous raids were removed in 0.163.0, so the path is no longer entered on its own; raids started from the launcher's event controls still use it and the route itself was not changed (no navigation evidence for a rebuild). Each member already logs the failure once and retries every 60 s. Verification pending: no `REALM_RAID_HUB_ROUTE_FAILED` without a launcher-started raid; if one appears there, reopen with the hub coordinates.
+
+60. **`Ability 'ConfusionImmunity' unknown` is logged 939 times per run.**
+    Seen in the installed 0.115.0 log (2026-09-27/28, 3 h 26 min) from
+    `DOL.GS.SkillBase`, together with 240 `LineXSpell Spell Adding Error`
+    warnings. Impact unknown: the ability or spell line is not granted, so a
+    class that should have confusion immunity or the affected spells may be
+    missing them. Expected: no unknown-ability or spell-adding warnings on a
+    clean start. Not yet investigated.
+    **Fixed in source 0.164.0.** `ConfusionImmunity` (15,963 + 56,749 warnings in the installed logs), `RootImmunity` and `MezzImmunity` are tested by key name only and have no ability row; `SkillBase.GetAbility` returns the same transient ability for them without a warning, and any other unknown ability warns once. Eight `LineXSpell` rows (items, potions) point to spell ids missing from the spell table; they are skipped and reported in one summary line with the first ten ids, not one error each. Those item effects stay unavailable until the spell data is supplied. Verification pending: no `Ability '...' unknown` for the three immunities and one `LineXSpell:` summary line per start.
 
 76. **Mixed-realm RvR warbands ping-pong between frontier porters.** Live
     0.158.0, 2026-09-30 07:01–11:50: 66 of 116 warbands were mixed-realm

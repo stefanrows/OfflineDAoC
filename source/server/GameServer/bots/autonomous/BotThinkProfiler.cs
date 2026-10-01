@@ -311,6 +311,8 @@ public static class BotThinkProfiler
             if (Log.IsInfoEnabled && (finished.Thinks > 0 || finished.Calls.Any(count => count > 0)))
                 foreach (string line in Describe(finished, nowMilliseconds))
                     Log.Info(line);
+            if (Log.IsInfoEnabled && BattleGroupLoadReport.Describe() is string battleGroupLoad)
+                Log.Info(battleGroupLoad);
         }
         catch (Exception exception)
         {

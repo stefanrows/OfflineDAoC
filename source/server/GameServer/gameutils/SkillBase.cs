@@ -78,6 +78,10 @@ namespace DOL.GS
 		// Cache for Specialization constructors: Key = Type
 		private static readonly ConcurrentDictionary<Type, Func<string, string, ushort, int, Specialization>> _specConstructorCache = new();
 
+		// Abilities that are only tested by key name and have no database row.
+		private static readonly HashSet<string> _keyOnlyAbilities = [Abilities.ConfusionImmunity, Abilities.RootImmunity, Abilities.MezzImmunity];
+		private static readonly ConcurrentDictionary<string, bool> _unknownAbilitiesWarned = new();
+
 		// Cache for resolved Types to avoid looping assemblies every time
 		private static readonly ConcurrentDictionary<string, Type> _typeResolutionCache = new();
 
@@ -219,14 +223,22 @@ namespace DOL.GS
 					// Clean cache
 					m_lineSpells.Clear();
 
+					List<string> missingSpells = [];
+
 					foreach (DbLineXSpell lxs in dbox)
 					{
 						try
 						{
+							if (!m_spellIndex.TryGetValue(lxs.SpellID, out Spell indexed))
+							{
+								missingSpells.Add($"{lxs.LineName}:{lxs.SpellID}");
+								continue;
+							}
+
 							if (!m_lineSpells.ContainsKey(lxs.LineName))
 								m_lineSpells.Add(lxs.LineName, new List<Spell>());
 
-							Spell spl = (Spell)m_spellIndex[lxs.SpellID].Clone();
+							Spell spl = (Spell)indexed.Clone();
 
 							spl.Level = Math.Max(1, lxs.Level);
 
@@ -239,6 +251,9 @@ namespace DOL.GS
 								log.Error($"LineXSpell Spell Adding Error : {e.Message}, Line {lxs.LineName}, Spell {lxs.SpellID}, Level {lxs.Level}");
 						}
 					}
+
+					if (missingSpells.Count > 0 && log.IsWarnEnabled)
+						log.Warn($"LineXSpell: {missingSpells.Count} rows reference spells missing from the spell table and were skipped (first 10: {string.Join(", ", missingSpells.Take(10))})");
 
 					dbox = null;
 				}
@@ -2284,7 +2299,7 @@ namespace DOL.GS
 				return dba;
 			}
 
-			if (log.IsWarnEnabled)
+			if (log.IsWarnEnabled && !_keyOnlyAbilities.Contains(keyname) && _unknownAbilitiesWarned.TryAdd(keyname, true))
 				log.Warn($"Ability '{keyname}' unknown");
 
 			return new Ability(keyname, $"?{keyname}", "", 0, 0, level, 0);

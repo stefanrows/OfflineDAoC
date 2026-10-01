@@ -12,6 +12,69 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.165.0] - 2026-10-01
+
+### Added
+
+- Battlegroup load check tooling (task 45): the server writes a
+  `BATTLEGROUP_LOAD` line once a minute (owners, companion groups, companions,
+  how many in RvR) while a player is in a battlegroup, and
+  `tools/dev/battlegroup-load.py` compares those minutes with the baseline using
+  the existing `SERVER_WORK` tick and `BOT_THINK_PROFILE` pathing lines. The
+  measurement itself still needs a live run.
+
+### Changed
+
+- Bots below level 50 level in Darkness Falls much more often. A solo bot from
+  level 20 and a group from level 16 (the lowest Darkness Falls creatures are
+  about level 16) take the dungeon on 40% / 60% of their camp draws, up from
+  10% / 30%, whenever a Darkness Falls camp is among their legal camps. The
+  soft population limit still applies to Darkness Falls itself, so a crowded
+  Darkness Falls sends bots back outdoors. Other dungeons keep the old rates,
+  and level-50 bots keep their own rule.
+- Solo levelers up to level 35 include Darkness Falls camps up to 30 minutes
+  away in their camp pool, instead of only camps within 10 (then 20) minutes.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.164.0] - 2026-10-01
+
+### Added
+
+- The launcher writes unhandled exceptions with their full stack trace to
+  `logs/launcher-errors.log` and names that file in its dialog (bug 70, to
+  capture the "given key was not present" error).
+
+### Changed
+
+- Solo world bots at a PvE camp wake from rest as soon as their class
+  threshold is met (casters about 75 % power, melee about 80 % health) instead
+  of only at 100 %, so they pull at those levels again (bug 72). Groups still
+  rest to full.
+- Unknown abilities are warned once; the key-only `ConfusionImmunity`,
+  `RootImmunity` and `MezzImmunity` no longer warn. Spell-line rows that point
+  to missing spells give one summary line instead of one error each (bug 60).
+- Friar and Warden companions on a Healer or Buffer role (the default Group
+  support and Nurture builds) no longer stand by as pure support: they heal
+  first and melee the group's target when nobody needs healing (bug 77).
+  Druid, Cleric and Healer companions are unchanged.
+
+### Fixed
+
+- NPC templates skip unknown style ids instead of storing null, which logged
+  `NULL style for NPC named new mob` thousands of times; `Bladeturn` and
+  `AblativeArmor` spells no longer log `Unhandled spell` (bug 62).
+
+### Removed
+
+- None.
+
 ## [0.163.0] - 2026-10-01
 
 ### Changed
