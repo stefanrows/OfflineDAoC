@@ -17,8 +17,10 @@ namespace DOL.GS
 
             return spell.SpellType switch
             {
-                // Acuity raises the power stat; a class without power gains nothing.
-                eSpellType.AcuityBuff => targetClass.ManaStat != eStat.UNDEFINED,
+                // StatCalculator adds acuity to the casting stat of list casters
+                // only; hybrids, healers and tanks gain nothing from it.
+                eSpellType.AcuityBuff => targetClass.ClassType == eClassType.ListCaster &&
+                                         targetClass.ManaStat != eStat.UNDEFINED,
                 // A caster's strength only moves its carrying capacity: it gets
                 // the buff when it is overloaded, or when the buffer still keeps
                 // enough concentration for another buff of the same size.
@@ -28,10 +30,13 @@ namespace DOL.GS
             };
         }
 
-        // Valewalker and Vampiir are list casters that fight in melee.
+        // Casters and the healers that do not melee in a group. Valewalker
+        // and Vampiir are list casters that fight in melee.
         private static bool IsStrengthlessCaster(ICharacterClass characterClass) =>
             characterClass.ClassType == eClassType.ListCaster &&
             characterClass.ID != (int)eCharacterClass.Valewalker &&
-            characterClass.ID != (int)eCharacterClass.Vampiir;
+            characterClass.ID != (int)eCharacterClass.Vampiir ||
+            (eCharacterClass)characterClass.ID is eCharacterClass.Cleric or eCharacterClass.Healer or
+                eCharacterClass.Druid or eCharacterClass.Shaman or eCharacterClass.Bard;
     }
 }

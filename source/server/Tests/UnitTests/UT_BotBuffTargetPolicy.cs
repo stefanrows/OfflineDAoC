@@ -12,17 +12,22 @@ namespace DOL.UnitTests
             new(new DbSpell { Type = type, Target = "Realm", Value = 20, Concentration = (byte)concentration }, 20);
 
         private static readonly ICharacterClass[] Tanks = [new ClassArmsman(), new ClassWarrior(), new ClassHero()];
-        private static readonly ICharacterClass[] PowerUsers = [new ClassHealer(), new ClassDruid(), new ClassWizard()];
-        private static readonly ICharacterClass[] Casters = [new ClassWizard(), new ClassRunemaster(), new ClassEldritch()];
-        private static readonly ICharacterClass[] Fighters = [new ClassArmsman(), new ClassBerserker(), new ClassValewalker()];
+        private static readonly ICharacterClass[] ListCasters = [new ClassWizard(), new ClassRunemaster(), new ClassEldritch()];
+        private static readonly ICharacterClass[] NoAcuityHybrids = [new ClassCleric(), new ClassHealer(), new ClassDruid(), new ClassPaladin(), new ClassThane(), new ClassChampion()];
+        private static readonly ICharacterClass[] Casters = [new ClassWizard(), new ClassRunemaster(), new ClassEldritch(), new ClassCleric(), new ClassDruid()];
+        private static readonly ICharacterClass[] Fighters = [new ClassArmsman(), new ClassBerserker(), new ClassValewalker(), new ClassFriar(), new ClassThane()];
 
         [TestCaseSource(nameof(Tanks))]
         public void PowerlessTanksInEveryRealmTakeNoAcuity(ICharacterClass tank) =>
             Assert.That(BotBuffTargetPolicy.Wants(Buff("AcuityBuff"), tank, false, 100), Is.False);
 
-        [TestCaseSource(nameof(PowerUsers))]
-        public void PowerUsersTakeAcuity(ICharacterClass member) =>
+        [TestCaseSource(nameof(ListCasters))]
+        public void ListCastersTakeAcuity(ICharacterClass member) =>
             Assert.That(BotBuffTargetPolicy.Wants(Buff("AcuityBuff"), member, false, 0), Is.True);
+
+        [TestCaseSource(nameof(NoAcuityHybrids))]
+        public void HealersAndHybridsTakeNoAcuityBecauseTheServerIgnoresIt(ICharacterClass member) =>
+            Assert.That(BotBuffTargetPolicy.Wants(Buff("AcuityBuff"), member, false, 100), Is.False);
 
         [TestCaseSource(nameof(Casters))]
         public void CastersTakeStrengthOnlyWhenOverloadedOrConcentrationIsSpare(ICharacterClass caster)

@@ -213,6 +213,10 @@ Agent sessions on items 45–48: take the role and context from
     Cleric/Healer/Druid first buffs itself with dex, an Armsman/Warrior/Hero
     gets no acuity, a Wizard gets base strength only when overloaded or the
     buffer has concentration to spare.
+    0.188.0: acuity follows the server's own formula (StatCalculator adds it
+    to list casters' casting stat only), so healers and hybrids no longer get
+    a buff that does nothing; Cleric, Healer, Druid, Shaman and Bard count as
+    casters for base strength. Full table: docs/BUFF_RULES.md.
 
 77. **Free buffbot on right-click.** Owner 2026-10-01: free buffs by
     right-clicking the NPC, all buffs including endurance, unlimited time.

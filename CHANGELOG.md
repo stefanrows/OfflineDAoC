@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.188.0] - 2026-10-02
+
+### Changed
+
+- Acuity buffs go only to pure casters (task 78). The server adds acuity to
+  the casting stat of list casters only, so Clerics, Druids, Healers,
+  Shamans, Bards and other hybrids got nothing from it. The healers Cleric,
+  Healer, Druid, Shaman and Bard now count as casters for base strength.
+  docs/BUFF_RULES.md lists who gets which buff and in which order.
+
 ## [0.187.0] - 2026-10-02
 
 ### Fixed
