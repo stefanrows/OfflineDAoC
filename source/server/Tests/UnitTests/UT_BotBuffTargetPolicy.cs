@@ -2,6 +2,7 @@ using DOL.Database;
 using DOL.GS;
 using DOL.GS.PlayerClass;
 using NUnit.Framework;
+using Need = DOL.GS.BotBuffTargetPolicy.Need;
 
 namespace DOL.UnitTests
 {
@@ -11,6 +12,9 @@ namespace DOL.UnitTests
         private static Spell Buff(string type, int concentration = 10) =>
             new(new DbSpell { Type = type, Target = "Realm", Value = 20, Concentration = (byte)concentration }, 20);
 
+        private static Need Bot(string type, ICharacterClass cls, bool encumbered = false, int weapon = 0, int level = 50) =>
+            BotBuffTargetPolicy.NeedOf(Buff(type), cls, false, encumbered, weapon, level);
+
         private static readonly ICharacterClass[] Tanks = [new ClassArmsman(), new ClassWarrior(), new ClassHero()];
         private static readonly ICharacterClass[] ListCasters = [new ClassWizard(), new ClassRunemaster(), new ClassEldritch()];
         private static readonly ICharacterClass[] NoAcuityHybrids = [new ClassCleric(), new ClassHealer(), new ClassDruid(), new ClassPaladin(), new ClassThane(), new ClassChampion()];
@@ -18,51 +22,55 @@ namespace DOL.UnitTests
         private static readonly ICharacterClass[] Fighters = [new ClassArmsman(), new ClassBerserker(), new ClassValewalker(), new ClassFriar(), new ClassThane()];
 
         [TestCaseSource(nameof(Tanks))]
-        public void PowerlessTanksInEveryRealmTakeNoAcuity(ICharacterClass tank) =>
-            Assert.That(BotBuffTargetPolicy.Wants(Buff("AcuityBuff"), tank, false, 100), Is.False);
+        public void AcuityDoesNothingOnTanks(ICharacterClass tank) =>
+            Assert.That(Bot("AcuityBuff", tank), Is.EqualTo(Need.None));
 
         [TestCaseSource(nameof(ListCasters))]
-        public void ListCastersTakeAcuity(ICharacterClass member) =>
-            Assert.That(BotBuffTargetPolicy.Wants(Buff("AcuityBuff"), member, false, 0), Is.True);
+        public void ListCastersNeedAcuity(ICharacterClass member) =>
+            Assert.That(Bot("AcuityBuff", member), Is.EqualTo(Need.Required));
 
         [TestCaseSource(nameof(NoAcuityHybrids))]
-        public void HealersAndHybridsTakeNoAcuityBecauseTheServerIgnoresIt(ICharacterClass member) =>
-            Assert.That(BotBuffTargetPolicy.Wants(Buff("AcuityBuff"), member, false, 100), Is.False);
+        public void AcuityDoesNothingOnHealersAndHybrids(ICharacterClass member) =>
+            Assert.That(Bot("AcuityBuff", member), Is.EqualTo(Need.None));
 
         [TestCaseSource(nameof(Casters))]
-        public void CastersTakeStrengthOnlyWhenOverloadedOrConcentrationIsSpare(ICharacterClass caster)
+        public void StrengthIsOptionalOnCasterBotsUnlessOverloaded(ICharacterClass caster)
         {
-            Spell strength = Buff("StrengthBuff", 10);
-            Assert.That(BotBuffTargetPolicy.Wants(strength, caster, false, 9), Is.False, "too little concentration left");
-            Assert.That(BotBuffTargetPolicy.Wants(strength, caster, false, 10), Is.True, "another buff still fits");
-            Assert.That(BotBuffTargetPolicy.Wants(strength, caster, true, 0), Is.True, "overloaded");
+            Assert.That(Bot("StrengthBuff", caster), Is.EqualTo(Need.Optional));
+            Assert.That(Bot("StrengthBuff", caster, encumbered: true), Is.EqualTo(Need.Required));
         }
 
         [TestCaseSource(nameof(Fighters))]
-        public void FightersAlwaysTakeStrength(ICharacterClass fighter) =>
-            Assert.That(BotBuffTargetPolicy.Wants(Buff("StrengthBuff"), fighter, false, 0), Is.True);
+        public void FightersNeedStrength(ICharacterClass fighter) =>
+            Assert.That(Bot("StrengthBuff", fighter), Is.EqualTo(Need.Required));
 
         [Test]
         public void HealerStrengthIsASpecQuestion()
         {
-            Spell strength = Buff("StrengthBuff", 10);
-            // Rejuvenation/enhancement Cleric, crush 5 at level 50: no strength.
-            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassCleric(), false, 0, 5, 50), Is.False);
-            // Battle Cleric, crush 30 at level 50: melee, so strength.
-            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassCleric(), false, 0, 30, 50), Is.True);
-            // Druid with blades at half its level: strength.
-            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassDruid(), false, 0, 20, 40), Is.True);
-            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassDruid(), false, 0, 19, 40), Is.False);
-            // A weapon spec never makes a pure caster a melee class.
-            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassWizard(), false, 0, 50, 50), Is.False);
+            Assert.That(Bot("StrengthBuff", new ClassCleric(), weapon: 5), Is.EqualTo(Need.Optional), "rejuvenation Cleric");
+            Assert.That(Bot("StrengthBuff", new ClassCleric(), weapon: 30), Is.EqualTo(Need.Required), "battle Cleric");
+            Assert.That(Bot("StrengthBuff", new ClassDruid(), weapon: 20, level: 40), Is.EqualTo(Need.Required));
+            Assert.That(Bot("StrengthBuff", new ClassDruid(), weapon: 19, level: 40), Is.EqualTo(Need.Optional));
+            Assert.That(Bot("StrengthBuff", new ClassWizard(), weapon: 50), Is.EqualTo(Need.Optional), "a weapon never makes a Wizard a fighter");
         }
 
         [Test]
-        public void CastersStillTakeStrengthConstitution() =>
-            Assert.That(BotBuffTargetPolicy.Wants(Buff("StrengthConstitutionBuff"), new ClassWizard(), false, 0), Is.True);
+        public void RealPlayersNeedEveryEffectiveBuff()
+        {
+            Assert.That(BotBuffTargetPolicy.NeedOf(Buff("StrengthBuff"), new ClassWizard(), true, false), Is.EqualTo(Need.Required));
+            Assert.That(BotBuffTargetPolicy.NeedOf(Buff("AcuityBuff"), new ClassArmsman(), true, false), Is.EqualTo(Need.None),
+                "acuity still does nothing on a tank");
+        }
+
+        [Test]
+        public void EveryoneNeedsConstitutionAndSpecBuffs()
+        {
+            Assert.That(Bot("StrengthConstitutionBuff", new ClassWizard()), Is.EqualTo(Need.Required));
+            Assert.That(Bot("ConstitutionBuff", new ClassCleric()), Is.EqualTo(Need.Required));
+        }
 
         [Test]
         public void PetsAndUnknownTargetsTakeEverything() =>
-            Assert.That(BotBuffTargetPolicy.Wants(Buff("AcuityBuff"), null, false, 0), Is.True);
+            Assert.That(BotBuffTargetPolicy.NeedOf(Buff("AcuityBuff"), null, false, false), Is.EqualTo(Need.Required));
     }
 }

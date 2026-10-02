@@ -2215,6 +2215,13 @@ namespace DOL.AI.Brain
                         _nextMaintenanceBuffTick = GameLoop.GameLoopTime + 1_000;
                         return true;
                     }
+                    if (target is GamePlayer or GameBot &&
+                        BuffNeedOf(target, spell) == BotBuffTargetPolicy.Need.Required &&
+                        TryReclaimOptionalConcentration(bot))
+                    {
+                        _nextMaintenanceBuffTick = GameLoop.GameLoopTime + 1_000;
+                        return true;
+                    }
                     continue;
                 }
 
@@ -2599,11 +2606,18 @@ namespace DOL.AI.Brain
                 if (groupTarget != null)
                     return groupTarget;
             }
-            GameLiving memberTarget = BotBuffReservations<GameLiving>.Choose(
-                members,
-                target => target.IsAlive && Body.IsWithinRadius(target, range) &&
-                    NeedsUpkeep(target, spell) && BuffSuits(target, spell) &&
-                    !(claims?.IsReserved(target, family, now) ?? false));
+            // Real players first, then members who need the buff, then those
+            // for whom it is optional (owner 2026-10-02).
+            bool Eligible(GameLiving target) => target.IsAlive && Body.IsWithinRadius(target, range) &&
+                NeedsUpkeep(target, spell) && !(claims?.IsReserved(target, family, now) ?? false);
+            GameLiving[] memberList = members as GameLiving[] ?? members.ToArray();
+            GameLiving memberTarget =
+                BotBuffReservations<GameLiving>.Choose(memberList, target => target is GamePlayer &&
+                    BuffNeedOf(target, spell) != BotBuffTargetPolicy.Need.None && Eligible(target)) ??
+                BotBuffReservations<GameLiving>.Choose(memberList, target =>
+                    BuffNeedOf(target, spell) == BotBuffTargetPolicy.Need.Required && Eligible(target)) ??
+                BotBuffReservations<GameLiving>.Choose(memberList, target =>
+                    BuffNeedOf(target, spell) == BotBuffTargetPolicy.Need.Optional && Eligible(target));
             if (memberTarget != null || !includePets)
                 return memberTarget;
 
@@ -2664,12 +2678,31 @@ namespace DOL.AI.Brain
         private bool NeedsUpkeep(GameLiving target, Spell spell) =>
             !LivingHasEffect(target, spell) || LongBuffExpiresSoon(target, spell);
 
-        private bool BuffSuits(GameLiving target, Spell spell) =>
-            BotBuffTargetPolicy.Wants(spell,
+        private static BotBuffTargetPolicy.Need BuffNeedOf(GameLiving target, Spell spell) =>
+            BotBuffTargetPolicy.NeedOf(spell,
                 (target as GamePlayer)?.CharacterClass ?? (target as GameBot)?.CharacterClass,
+                target is GamePlayer,
                 target is GamePlayer { IsEncumbered: true } || target is GameBot { IsOverencumbered: true },
-                (BotBody?.Concentration ?? 0) - spell.Concentration,
                 HighestWeaponSpec(target), target?.Level ?? 0);
+
+        /// <summary>
+        /// A newcomer needs a required buff but concentration is short: end
+        /// this buffer's largest optional concentration buff on a bot (never
+        /// on a real player) so the next pulse can cast the required one.
+        /// </summary>
+        private static bool TryReclaimOptionalConcentration(GameBot bot)
+        {
+            ECSGameSpellEffect optional = bot.effectListComponent.GetConcentrationEffects()
+                .Where(effect => effect is { IsEnding: false, IsEnded: false } && effect.Owner is GameBot holder &&
+                                 effect.SpellHandler?.Spell is Spell spell &&
+                                 BuffNeedOf(holder, spell) == BotBuffTargetPolicy.Need.Optional)
+                .OrderByDescending(effect => effect.SpellHandler.Spell.Concentration)
+                .FirstOrDefault();
+            if (optional == null)
+                return false;
+            optional.End();
+            return true;
+        }
 
         private static readonly string[] WeaponSpecs =
         [

@@ -220,6 +220,12 @@ Agent sessions on items 45–48: take the role and context from
     0.189.0 (owner: for Cleric and Druid it is a spec question): such a
     healer gets base strength when its highest weapon spec is at least half
     its level (battle Cleric crush 25+ at 50, melee Druid blades/blunt).
+    0.190.0 (owner: give optional buffs while concentration lasts, take
+    them back for newcomers, players always max buffs): base strength on a
+    caster or healing-spec bot is optional and goes out whenever affordable;
+    targets are chosen real players first, then required, then optional;
+    when a required buff lacks concentration the buffer ends its largest
+    optional concentration buff on a bot (never a player).
 
 77. **Free buffbot on right-click.** Owner 2026-10-01: free buffs by
     right-clicking the NPC, all buffs including endurance, unlimited time.

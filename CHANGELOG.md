@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.190.0] - 2026-10-02
+
+### Changed
+
+- Buffers hand out optional buffs while concentration lasts and take them
+  back for newcomers (task 78). Strength on a caster or healing-spec bot is
+  optional: it goes out whenever the buffer can afford it. When someone
+  joins who needs a buff and concentration runs short, the buffer ends an
+  optional buff on a bot and buffs the newcomer instead. Real players are
+  buffed first, get every buff that has an effect, and never lose one.
+
 ## [0.189.0] - 2026-10-02
 
 ### Changed
