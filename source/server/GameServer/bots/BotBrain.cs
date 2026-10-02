@@ -2130,6 +2130,15 @@ namespace DOL.AI.Brain
                     .Where(entry => entry.Target != null)
                     .ToList();
 
+            // Dexterity shortens every cast, so the buffer takes its own dex
+            // and dex/quickness buffs before working through anyone else.
+            List<(Spell Spell, GameLiving Target)> selfCastSpeed = candidates
+                .Where(NeedsSelfCastSpeedBuff)
+                .Select(spell => (Spell: spell, Target: (GameLiving)bot))
+                .ToList();
+            if (selfCastSpeed.Count > 0)
+                pending = selfCastSpeed.Concat(pending).ToList();
+
             foreach ((Spell spell, GameLiving target) in pending)
             {
                 if (spell.HasRecastDelay && bot.GetSkillDisabledDuration(spell) > 0)
@@ -2534,7 +2543,8 @@ namespace DOL.AI.Brain
             GameLiving memberTarget = BotBuffReservations<GameLiving>.Choose(
                 members,
                 target => target.IsAlive && Body.IsWithinRadius(target, range) &&
-                    NeedsUpkeep(target, spell) && !(claims?.IsReserved(target, family, now) ?? false));
+                    NeedsUpkeep(target, spell) && BuffSuits(target, spell) &&
+                    !(claims?.IsReserved(target, family, now) ?? false));
             if (memberTarget != null || !includePets)
                 return memberTarget;
 
@@ -2594,6 +2604,15 @@ namespace DOL.AI.Brain
         /// </summary>
         private bool NeedsUpkeep(GameLiving target, Spell spell) =>
             !LivingHasEffect(target, spell) || LongBuffExpiresSoon(target, spell);
+
+        private bool BuffSuits(GameLiving target, Spell spell) =>
+            BotBuffTargetPolicy.Wants(spell,
+                (target as GamePlayer)?.CharacterClass ?? (target as GameBot)?.CharacterClass,
+                target is GamePlayer { IsEncumbered: true } || target is GameBot { IsOverencumbered: true },
+                (BotBody?.Concentration ?? 0) - spell.Concentration);
+
+        private bool NeedsSelfCastSpeedBuff(Spell spell) =>
+            BotCastSpeedSelfBuff.IsCastSpeedBuff(spell) && NeedsUpkeep(Body, spell);
 
         private bool LongBuffExpiresSoon(GameLiving target, Spell spell)
         {
@@ -5067,6 +5086,25 @@ namespace DOL.AI.Brain
 
             if (spellsToCast.Count == 0)
                 return false;
+
+            // Dexterity shortens every cast: the buffer's own dex and
+            // dex/quickness come before any other buff target.
+            List<(Spell, GameLiving)> selfCastSpeed = spellsToCast
+                .Where(entry => NeedsSelfCastSpeedBuff(entry.Item1))
+                .Select(entry => (entry.Item1, (GameLiving)Body))
+                .ToList();
+            if (selfCastSpeed.Count > 0)
+            {
+                (Spell selfSpell, GameLiving self) = selfCastSpeed
+                    .OrderByDescending(entry => entry.Item1.Value)
+                    .ThenByDescending(entry => entry.Item1.Level)
+                    .First();
+                GameObject previousTarget = Body.TargetObject;
+                Body.TargetObject = self;
+                bool selfCast = CastCoordinatedBuff(selfSpell);
+                Body.TargetObject = previousTarget;
+                return selfCast;
+            }
 
             if (spellsToCast.Any(entry => IsGroupedShamanEnduranceBuff(BotBody, entry.Item1)))
                 spellsToCast = spellsToCast

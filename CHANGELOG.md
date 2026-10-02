@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.184.0] - 2026-10-02
+
+### Changed
+
+- Bots and companions that buff first give themselves their own dexterity
+  and dexterity/quickness buffs (task 78). Dexterity shortens every cast, so
+  the rest of the group is buffed faster.
+- Single-target class buffs now go only where they help, in every realm
+  alike: classes without power get no acuity, and pure casters get base
+  strength only when they are overloaded or the buffer still has that much
+  concentration left. Strength/constitution still reaches everyone.
+
 ## [0.183.0] - 2026-10-02
 
 ### Fixed

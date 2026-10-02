@@ -181,6 +181,23 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+78. **Buffers buff in a sensible order and only where it helps.** Owner
+    2026-10-02: buffers first give themselves dex and spec dex so they buff
+    everyone faster; casters get strength only when concentration is spare
+    or the player is overloaded; tanks without power get no acuity; every
+    realm must hand out the same correct buffs (PvP). Source 0.184.0:
+    `BotCastSpeedSelfBuff` puts the buffer's own dexterity and
+    dexterity/quickness first in both buff paths (dex shortens every cast,
+    `GameLiving.CalculateCastingTime`). `BotBuffTargetPolicy` filters
+    single-target realm buffs from class data only: no `AcuityBuff` for a
+    class without a power stat; a list caster (not Valewalker/Vampiir) gets
+    base `StrengthBuff` only when encumbered or the buffer keeps at least
+    that buff's concentration free afterwards. Strength/constitution stays
+    for everyone (constitution helps casters). Check in the client: a
+    Cleric/Healer/Druid first buffs itself with dex, an Armsman/Warrior/Hero
+    gets no acuity, a Wizard gets base strength only when overloaded or the
+    buffer has concentration to spare.
+
 77. **Free buffbot on right-click.** Owner 2026-10-01: free buffs by
     right-clicking the NPC, all buffs including endurance, unlimited time.
     Source 0.178.0: `BuffMerchant` gives the full set plus endurance regen
