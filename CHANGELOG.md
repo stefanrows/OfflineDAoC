@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.194.0] - 2026-10-02
+
+### Fixed
+
+- In a shared battlegroup, `/spawn` helpers and companions no longer treat
+  the other owner and his group as enemies (bug 83). Only players carried
+  the battlegroup, so bots of two players in different guilds would fight
+  each other on Camlann; bots now count as members of their owner's
+  battlegroup.
+
 ## [0.193.0] - 2026-10-02
 
 ### Fixed

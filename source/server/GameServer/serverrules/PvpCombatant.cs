@@ -70,8 +70,8 @@ namespace DOL.GS.ServerRules
 			if (AreGuildIdsAllied(firstGuild?.GuildID, firstGuild?.Name, secondGuild?.GuildID, secondGuild?.Name))
 				return true;
 
-			BattleGroup firstBattleGroup = a.TempProperties?.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
-			BattleGroup secondBattleGroup = b.TempProperties?.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
+			BattleGroup firstBattleGroup = BattleGroupOf(a);
+			BattleGroup secondBattleGroup = BattleGroupOf(b);
 			if (firstBattleGroup != null && firstBattleGroup == secondBattleGroup)
 				return true;
 
@@ -277,6 +277,20 @@ namespace DOL.GS.ServerRules
 		public static bool AreGuildIdsAllied(string firstId, string firstName, string secondId, string secondName) =>
 			!string.IsNullOrWhiteSpace(firstId) && !string.IsNullOrWhiteSpace(secondId) &&
 			firstName != DummyGuildName && secondName != DummyGuildName && firstId == secondId;
+
+		/// <summary>
+		/// A player's battlegroup; a companion or /spawn helper fights under its
+		/// owner's (2026-10-02: in a shared battlegroup the bots of one owner
+		/// treated the other owner and his group as enemies).
+		/// </summary>
+		public static BattleGroup BattleGroupOf(GameLiving living)
+		{
+			BattleGroup own = living?.TempProperties?.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
+			if (own != null || living is not GameBot bot)
+				return own;
+			GamePlayer owner = bot.Owner ?? bot.PlayerGroupLeader;
+			return owner?.TempProperties?.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
+		}
 
 		public static Guild GuildOf(GameLiving living) => living switch
 		{

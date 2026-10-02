@@ -61,6 +61,18 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+83. **Bots attack the other owner's group in a shared battlegroup.** Owner
+    2026-10-02: in a battlegroup with Stefan (one group each, different
+    guilds), would /spawn helpers attack Stefan's side? Code says yes: only
+    players carry the battlegroup property; `PvpCombatant.AreAllied` saw a
+    bot (helper or companion) without group, guild or battlegroup in common
+    with the other owner, and `CompanionProtects` covers only the helper's own
+    owner and group, so both sides' bots and players were hostile to each
+    other on Camlann. Source 0.194.0: `PvpCombatant.BattleGroupOf` gives a bot
+    its owner's (or player group leader's) battlegroup. Autonomous world
+    bots are unchanged. Check in the client: in a shared battlegroup neither
+    owner's helpers or companions attack the other side.
+
 82. **A Paladin in the group hardly ever attacks.** Owner 2026-10-02.
     Cause 1 (code, role-dependent): `BotPartyRoles.IsSupport` treats a
     companion with role Healer or Buffer as pure support (stop attack, no
