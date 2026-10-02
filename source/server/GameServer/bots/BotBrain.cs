@@ -2668,7 +2668,18 @@ namespace DOL.AI.Brain
             BotBuffTargetPolicy.Wants(spell,
                 (target as GamePlayer)?.CharacterClass ?? (target as GameBot)?.CharacterClass,
                 target is GamePlayer { IsEncumbered: true } || target is GameBot { IsOverencumbered: true },
-                (BotBody?.Concentration ?? 0) - spell.Concentration);
+                (BotBody?.Concentration ?? 0) - spell.Concentration,
+                HighestWeaponSpec(target), target?.Level ?? 0);
+
+        private static readonly string[] WeaponSpecs =
+        [
+            Specs.Crush, Specs.Slash, Specs.Thrust, Specs.Staff, Specs.Blades, Specs.Blunt,
+            Specs.Piercing, Specs.Hammer, Specs.Sword, Specs.Axe
+        ];
+
+        private static int HighestWeaponSpec(GameLiving target) => target is GamePlayer or GameBot
+            ? WeaponSpecs.Max(target.GetBaseSpecLevel)
+            : 0;
 
         private bool NeedsSelfCastSpeedBuff(Spell spell) =>
             BotCastSpeedSelfBuff.IsCastSpeedBuff(spell) && NeedsUpkeep(Body, spell);

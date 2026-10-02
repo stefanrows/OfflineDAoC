@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.189.0] - 2026-10-02
+
+### Changed
+
+- Whether a Cleric, Healer, Druid, Shaman or Bard gets base strength now
+  depends on its spec (task 78): with a weapon trained to at least half its
+  level (a battle Cleric, a melee Druid) it counts as a fighter and gets
+  strength; a pure healing spec does not, unless overloaded.
+
 ## [0.188.0] - 2026-10-02
 
 ### Changed

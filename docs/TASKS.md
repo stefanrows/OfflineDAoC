@@ -217,6 +217,9 @@ Agent sessions on items 45–48: take the role and context from
     to list casters' casting stat only), so healers and hybrids no longer get
     a buff that does nothing; Cleric, Healer, Druid, Shaman and Bard count as
     casters for base strength. Full table: docs/BUFF_RULES.md.
+    0.189.0 (owner: for Cleric and Druid it is a spec question): such a
+    healer gets base strength when its highest weapon spec is at least half
+    its level (battle Cleric crush 25+ at 50, melee Druid blades/blunt).
 
 77. **Free buffbot on right-click.** Owner 2026-10-01: free buffs by
     right-clicking the NPC, all buffs including endurance, unlimited time.

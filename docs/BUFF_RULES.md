@@ -1,6 +1,6 @@
 # Who gets which buff, and when (bots and companions)
 
-State 0.188.0 (2026-10-02). The rules read only class data, so all three
+State 0.189.0 (2026-10-02). The rules read only class data, so all three
 realms hand out the same buffs, also against PvP opponents.
 
 ## Order a buffer works through
@@ -25,7 +25,7 @@ realms hand out the same buffs, also against PvP opponents.
 
 | Buff | Gets it | Does not get it |
 |---|---|---|
-| Strength (base) | Melee classes, hybrids, Valewalker, Vampiir, Friar | Pure casters and the healers Cleric, Healer, Druid, Shaman, Bard, unless they are overloaded or the buffer keeps that buff's concentration free afterwards |
+| Strength (base) | Melee classes, hybrids, Valewalker, Vampiir, Friar, and a Cleric, Healer, Druid, Shaman or Bard whose highest weapon spec is at least half its level (battle Cleric, melee Druid) | Pure casters and the other healers (rejuvenation Cleric, regrowth Druid ...), unless they are overloaded or the buffer keeps that buff's concentration free afterwards |
 | Constitution, dexterity | Everyone | - |
 | Strength/constitution, dexterity/quickness (spec) | Everyone (constitution helps casters too) | - |
 | Acuity | List casters only: Wizard, Sorcerer, Cabalist, Theurgist, Necromancer, Runemaster, Spiritmaster, Bonedancer, Warlock, Eldritch, Enchanter, Mentalist, Bainshee, Animist, Valewalker, Vampiir | Tanks, hybrids and healers (Cleric, Druid, Healer, Shaman, Bard, Paladin, Thane, Champion, ...): the server's StatCalculator adds acuity to list casters' casting stat only |

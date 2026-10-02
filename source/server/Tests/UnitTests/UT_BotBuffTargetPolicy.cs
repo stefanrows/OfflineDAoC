@@ -43,6 +43,21 @@ namespace DOL.UnitTests
             Assert.That(BotBuffTargetPolicy.Wants(Buff("StrengthBuff"), fighter, false, 0), Is.True);
 
         [Test]
+        public void HealerStrengthIsASpecQuestion()
+        {
+            Spell strength = Buff("StrengthBuff", 10);
+            // Rejuvenation/enhancement Cleric, crush 5 at level 50: no strength.
+            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassCleric(), false, 0, 5, 50), Is.False);
+            // Battle Cleric, crush 30 at level 50: melee, so strength.
+            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassCleric(), false, 0, 30, 50), Is.True);
+            // Druid with blades at half its level: strength.
+            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassDruid(), false, 0, 20, 40), Is.True);
+            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassDruid(), false, 0, 19, 40), Is.False);
+            // A weapon spec never makes a pure caster a melee class.
+            Assert.That(BotBuffTargetPolicy.Wants(strength, new ClassWizard(), false, 0, 50, 50), Is.False);
+        }
+
+        [Test]
         public void CastersStillTakeStrengthConstitution() =>
             Assert.That(BotBuffTargetPolicy.Wants(Buff("StrengthConstitutionBuff"), new ClassWizard(), false, 0), Is.True);
 
