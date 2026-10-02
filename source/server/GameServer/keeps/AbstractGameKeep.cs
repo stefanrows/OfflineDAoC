@@ -748,6 +748,7 @@ namespace DOL.GS.Keeps
                 Realm = player.Realm;
                 PvpKeepCampaign.CompleteClaim(this, player);
             }
+            log.Info($"KEEP_CLAIMED keep={KeepID} name={Name} guild=\"{Guild?.Name}\" by=\"{player.Name}\" bot={player is GameBot} realm={player.Realm}");
 			
 			if (ServerProperties.Properties.GUILDS_CLAIM_LIMIT > 1)
 				Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps of a maximum of " + ServerProperties.Properties.GUILDS_CLAIM_LIMIT, eChatType.CT_Guild, eChatLoc.CL_ChatWindow);

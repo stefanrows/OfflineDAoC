@@ -42,6 +42,17 @@ namespace DOL.GS.Keeps
         public static void Initialize(AbstractGameKeep keep)
         {
             if (!Applies(keep)) return;
+            // A claim whose guild is not loaded (yet) must not be handed to the
+            // garrison and saved over: that silently erased every bot claim
+            // after a restart (2026-10-02). The crew reconcile rebinds it.
+            if (keep.Guild == null && !string.IsNullOrEmpty(keep.DBKeep.ClaimedGuildName) &&
+                keep.DBKeep.ClaimedGuildName != GarrisonName)
+            {
+                log.Warn($"KEEP_OWNER_UNRESOLVED keep={keep.KeepID} name={keep.Name} guild=\"{keep.DBKeep.ClaimedGuildName}\"");
+                ApplyWardenStartLevel(keep);
+                EnsureClaimPoint(keep);
+                return;
+            }
             if (keep.Guild == null && !keep.DBKeep.LordDefeated)
             {
                 keep.Guild = GuildMgr.GetGuildByName(GarrisonName) ?? GuildMgr.CreateGuild(eRealm.None, GarrisonName);

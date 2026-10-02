@@ -61,6 +61,25 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+81. **Keeps bot guilds claimed fell back to the Frontier Wardens after a restart.**
+    Owner 2026-10-02: "when keeps are raided, bots do not claim them". Logs
+    (0.183.0): 5 of 5 captures (Arvakr, Blendrake, Bledmeer, Dun Scathaig,
+    Fensalir) were claimed by a crew bot and all 5 went back to the Wardens
+    at the next start (`FRONTIER_WARDEN_KEEP_LEVEL ... from=5`). Cause: the
+    crew reconcile renames "Camlann Crew X" to "X" in memory and saves the
+    row, but `DbGuild.GuildName` is `[ReadOnly]`, so the database kept the old
+    name; the claim stored "X", the keep found no guild at load, and
+    `PvpKeepCampaign.Initialize` handed it to the garrison and saved over it.
+    Source 0.191.0: the crew rename writes the name with a direct UPDATE; a
+    keep whose claimed guild is not loaded is left unowned and logged
+    (`KEEP_OWNER_UNRESOLVED`) instead of being given away; the rename rebinds
+    keeps claimed under the old or new name (guild keep list included);
+    every claim logs `KEEP_CLAIMED`. Player `/gc rename` is unchanged (still
+    not persisted, upstream). Open: Hlidskialf Faste (77) has had a defeated
+    lord without a claim steward since 09-29 (`no_lord_position`), so no bot
+    can claim it. Check in the client: a keep a crew claims keeps its banner
+    and lord after a server restart.
+
 80. **Level 40+ Minstrels freeze at their bind stone with a mez song.**
     Live logs 2026-09-30 to 10-02: 2,444 stuck recoveries for 35 Minstrels,
     all on bind points (Camelot, Castle Sauvage and others); Edalwell stood

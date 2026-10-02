@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.191.0] - 2026-10-02
+
+### Fixed
+
+- Keeps claimed by bot guilds stay claimed after a server restart (bug 81).
+  The bots did claim captured keeps, but their guild's new name was never
+  saved, so at the next start the keep found no owner and went back to the
+  Frontier Wardens; all five bot claims in the logs were lost this way. The
+  name is now saved, a keep with an unknown owner is no longer given away,
+  and every claim is logged.
+
 ## [0.190.0] - 2026-10-02
 
 ### Changed

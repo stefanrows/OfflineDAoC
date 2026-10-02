@@ -610,6 +610,8 @@ public static class AutonomousCrewManager
         return row;
     }
 
+    private static string SqlText(string value) => (value ?? string.Empty).Replace("'", "''");
+
     private static void RenameManagedGuild(Guild guild, AutonomousGuildCharterRecord charter, string proposedName)
     {
         string oldName = string.IsNullOrWhiteSpace(charter.PendingOldName) ? guild.Name : charter.PendingOldName;
@@ -646,8 +648,17 @@ public static class AutonomousCrewManager
             row.Dirty = true;
             if (!GameServer.Database.SaveObject(row))
                 throw new InvalidOperationException($"Could not persist generated guild name {desired}.");
+            // DbGuild.GuildName is [ReadOnly] (upstream), so SaveObject skips it.
+            // The unsaved rename made every keep a crew claimed fall back to the
+            // Frontier Wardens on the next start (2026-10-02): write it directly.
+            if (!GameServer.Database.ExecuteNonQuery(
+                    $"UPDATE `Guild` SET `GuildName` = '{SqlText(desired)}' WHERE `GuildID` = '{SqlText(guild.GuildID)}'"))
+                throw new InvalidOperationException($"Could not write generated guild name {desired}.");
         }
-        foreach (DbKeep keep in DOLDB<DbKeep>.SelectObjects(DB.Column("ClaimedGuildName").IsEqualTo(oldName)))
+        // Keeps claimed under the new name before it was ever saved are
+        // rebound too (the start-up guard leaves them unowned, not lost).
+        foreach (DbKeep keep in DOLDB<DbKeep>.SelectObjects(DB.Column("ClaimedGuildName").IsEqualTo(oldName)
+                     .Or(DB.Column("ClaimedGuildName").IsEqualTo(desired))))
         {
             keep.ClaimedGuildName = MappedKeepOwner(keep.ClaimedGuildName, oldName, desired);
             keep.Dirty = true;
@@ -656,6 +667,7 @@ public static class AutonomousCrewManager
             AbstractGameKeep live = GameServer.KeepManager.GetKeepByID(keep.KeepID);
             if (live == null) continue;
             live.Guild = guild;
+            if (!guild.ClaimedKeeps.Contains(live)) guild.ClaimedKeeps.Add(live);
             live.DBKeep.ClaimedGuildName = desired;
             foreach (GameKeepGuard guard in live.Guards.Values) guard.ChangeGuild();
         }
