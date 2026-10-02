@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.187.0] - 2026-10-02
+
+### Fixed
+
+- Minstrel bots no longer freeze at their bind stone playing a mez song
+  (bug 80). When the mez could not land, the song retried forever, which
+  real players cancel with another song but bots could not; 35 Minstrels
+  stood still for hours this way. Bots now give up and pick a new goal, and
+  the stuck rescue ends any hanging cast before moving a bot.
+
 ## [0.186.0] - 2026-10-02
 
 ### Changed

@@ -1116,8 +1116,10 @@ namespace DOL.GS.Spells
 					{
 						if (!CheckEndCast(Target))
 						{
-							// Allow flute mez to keep trying (1.65 compliance).
-							if (m_spell.IsPulsing && m_spell.SpellType is eSpellType.Mesmerize)
+							// Allow flute mez to keep trying (1.65 compliance). A bot
+							// cannot cancel it with another song, so its retry never
+							// ended and froze the bot (bug 80); bots replan instead.
+							if (m_spell.IsPulsing && m_spell.SpellType is eSpellType.Mesmerize && Caster is GamePlayer)
 								CastState = eCastState.CastingRetry;
 							else
 								CastState = eCastState.Interrupted;

@@ -61,6 +61,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+80. **Level 40+ Minstrels freeze at their bind stone with a mez song.**
+    Live logs 2026-09-30 to 10-02: 2,444 stuck recoveries for 35 Minstrels,
+    all on bind points (Camelot, Castle Sauvage and others); Edalwell stood
+    about 13.5 h. In 24 of 24 slow casting ticks their current spell was
+    Commanding Cadence. Cause: `SpellHandler` keeps a pulsing mesmerize in
+    `CastingRetry` when `CheckEndCast` fails (1.65 flute mez); a player
+    cancels it with another song, but a bot cannot (non-players only queue
+    new spells), so the bot counted as casting forever and the world
+    controller never chose a new goal. The stuck watchdog moved it without
+    ending the cast, so it froze again on the bind spot. Source 0.187.0: the
+    endless mez retry applies only to players; the watchdog stops any cast
+    before its recovery move. The Cabalist/Reaver/Sorcerer/Friar cluster at
+    the same bind stone was the bind-stone killing (bug 63) and ended with
+    0.162.0. Check in the client: no Minstrel stands at a bind stone playing
+    its mez song; Minstrels still mez in fights.
+
 79. **Level 46+ Valewalkers cast nonstop in their capital and never leave.**
     Owner 2026-10-02 (live 0.183.0): Conoorric stands in Tir na Nog casting
     without pause. 18 of 18 Valewalkers with Arboreal Path 48-50 had 78-284

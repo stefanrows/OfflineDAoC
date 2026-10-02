@@ -440,6 +440,8 @@ public static class AutonomousStuckWatchdog
             bot.StopFollowing();
             bot.StopMovingOnPath();
             bot.StopMoving();
+            // A stuck cast must not survive the recovery move (bug 80).
+            bot.StopCurrentSpellcast();
             if (bot.Brain is BotBrain brain)
             {
                 brain.ClearAggroList();
