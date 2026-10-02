@@ -3350,7 +3350,14 @@ namespace DOL.AI.Brain
                 bool continueMinstrelMelee = MinstrelBotCombatPolicy.ContinueAfterInstantDamage(
                     UsesMinstrelHybridCombat, spellAction, Body.IsCasting,
                     Body.castingComponent?.SpellHandler?.Spell, hasPendingSpell, pendingSpell);
-                if (spellAction && !continueSavageMelee && !preserveRangedDraw && !continueMinstrelMelee)
+                // A Paladin/Warden chant switch is an instant pulse: in 1.65 it
+                // never interrupted melee, so a queued chant keeps the swing going.
+                bool continueChantMelee = spellAction && !Body.IsCasting && hasPendingSpell &&
+                    pendingSpell is { IsInstantCast: true, IsPulsing: true, IsHarmful: false } &&
+                    (eCharacterClass)BotBody.CharacterClass.ID is eCharacterClass.Paladin or eCharacterClass.Warden &&
+                    BotSongTwistPolicy.IsReservedPulse(Body, pendingSpell);
+                if (spellAction && !continueSavageMelee && !preserveRangedDraw && !continueMinstrelMelee &&
+                    !continueChantMelee)
                 {
                     Body.StopAttack();
                 }

@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.193.0] - 2026-10-02
+
+### Fixed
+
+- Paladin companions fight again (bug 82). With the Healer or Buffer role
+  they counted as pure support and only chanted; like Friar and Warden they
+  now heal when needed and otherwise attack. Switching chants no longer
+  interrupts a Paladin's or Warden's melee swing.
+
 ## [0.192.0] - 2026-10-02
 
 ### Changed

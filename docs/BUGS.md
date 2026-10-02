@@ -61,6 +61,20 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+82. **A Paladin in the group hardly ever attacks.** Owner 2026-10-02.
+    Cause 1 (code, role-dependent): `BotPartyRoles.IsSupport` treats a
+    companion with role Healer or Buffer as pure support (stop attack, no
+    assist, no pull); bug 77's exemption covered only Friar and Warden, and
+    the Paladin may pick both roles, so it only chanted (its pulsing chants
+    never count as heals). Cause 2 (code, small): a queued instant chant made
+    `CheckSpells` report a spell action and `AttackMostWanted` stopped the
+    swing on every chant switch. Source 0.193.0: Paladin joins
+    `IsMeleeHybridHealer` (heals first, otherwise fights); a queued
+    Paladin/Warden chant no longer stops melee. Unverified: the role of the
+    Paladin seen on Stefan's server (`SELECT Name, TacticalRole,
+    TrainingPlanId FROM player_companions WHERE ClassId=1`). Check in the
+    client: a Paladin companion in any role melees and keeps chanting.
+
 81. **Keeps bot guilds claimed fell back to the Frontier Wardens after a restart.**
     Owner 2026-10-02: "when keeps are raided, bots do not claim them". Logs
     (0.183.0): 5 of 5 captures (Arvakr, Blendrake, Bledmeer, Dun Scathaig,
