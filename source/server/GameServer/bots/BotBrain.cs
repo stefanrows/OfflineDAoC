@@ -5284,6 +5284,11 @@ namespace DOL.AI.Brain
                 {
                     if (effect.SpellHandler.Spell.ID == spell.ID || (spell.EffectGroup > 0 && effect.SpellHandler.Spell.EffectGroup == spell.EffectGroup))
                         return true;
+                    // A same-or-higher rank of this proc line already wins
+                    // the effect conflict; recasting a lower rank only burns power.
+                    if (spell.Group != 0 && effect.SpellHandler.Spell.Group == spell.Group &&
+                        effect.SpellHandler.Spell.Level >= spell.Level)
+                        return true;
                 }
 
                 return false;

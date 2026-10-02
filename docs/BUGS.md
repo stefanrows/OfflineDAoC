@@ -61,6 +61,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+79. **Level 46+ Valewalkers cast nonstop in their capital and never leave.**
+    Owner 2026-10-02 (live 0.183.0): Conoorric stands in Tir na Nog casting
+    without pause. 18 of 18 Valewalkers with Arboreal Path 48-50 had 78-284
+    stuck recoveries, always back onto their bind spot; those at 43 or lower
+    had at most 18. Cause: Witherstrike (L46) has proc frequency 20, the
+    lower ranks of the same proc line 15. `GameBot.AreSpellsEqual` compared
+    frequency, so the bot kept Scourgestrike next to Witherstrike; the
+    weaker rank lost the effect conflict after every 3 s cast (power spent,
+    no effect) and `LivingHasEffect` kept reporting it missing, so the bot
+    stopped for it again and again. Source 0.185.0: ranks of one proc spell
+    group count as the same spell regardless of frequency, and a same-or-
+    higher rank of the proc line on the target counts as present. Check in
+    the client: Conoorric and the other high Valewalkers in Tir na Nog stop
+    casting and walk off; Witherstrike stays up. The Animist the owner saw is
+    not explained (no proc line); watch whether it still casts nonstop.
+
 78. **Levelling bots barely level.** Live 0.162.0 (2026-09-30 19:38 to 10-01
     14:52): 559 level-ups by 299 bots in 19 hours; 15,215 of 22,166 PvE goal
     attempts failed, 11,792 by defeat. 417 of the 586 bots below level 50

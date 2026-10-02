@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.185.0] - 2026-10-02
+
+### Fixed
+
+- Valewalkers from level 46 no longer cast an old weapon proc forever in
+  their capital (bug 79). Their top proc rank has a different proc chance,
+  so the bot kept a weaker rank as well and recast it after every rejected
+  cast, standing still and spending power; 18 high Valewalkers were stuck
+  this way. Ranks of one proc line now replace one another, and a stronger
+  rank already on the target counts as present.
+
 ## [0.184.0] - 2026-10-02
 
 ### Changed
