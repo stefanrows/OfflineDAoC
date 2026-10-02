@@ -1212,6 +1212,62 @@ namespace DOL.AI.Brain
             }
         }
 
+        /// <summary>
+        /// /petpull with /stay: a Mentalist trails its owner while he is out
+        /// pulling, so the pet's heal-over-time stays in range, and keeps clear
+        /// of every monster that would aggro it. False when it should hold its
+        /// own camp spot instead.
+        /// </summary>
+        private bool TryPetPullEscort()
+        {
+            if (BotBody?.CharacterClass?.ID != (int)eCharacterClass.Mentalist || HasAggro ||
+                AssistedPlayer is not GamePlayer owner || owner.CurrentRegionID != Body.CurrentRegionID ||
+                !CompanionPetPull.TryGetStayCenter(owner, out Vector3 camp))
+                return false;
+            Vector3 ownerSpot = new(owner.X, owner.Y, owner.Z);
+            if (!CompanionPetPullEscort.IsOwnerOut(ownerSpot, camp))
+                return false;
+
+            Vector3? point = CompanionPetPullEscort.EscortPoint(ownerSpot, camp, PetPullEscortThreats(ownerSpot));
+            _ambientWanderMovement = false;
+            Body.StopFollowing();
+            if (BotBody.IsSprinting)
+                BotBody.Sprint(false);
+            if (point is not Vector3 spot)
+            {
+                // Nowhere safe on the way: wait rather than walk into a camp.
+                if (Body.IsMoving)
+                    Body.StopMoving();
+                return true;
+            }
+            if (Vector3.Distance(new Vector3(Body.X, Body.Y, Body.Z), spot) > CompanionPetPull.StaySlack)
+            {
+                if (AutonomousGroupMotion.ShouldResteer(BotBody, spot, Body.MaxSpeed, GameLoop.GameLoopTime))
+                    Body.PathTo(spot, Body.MaxSpeed);
+            }
+            else if (Body.IsMoving)
+                Body.StopMoving();
+            return true;
+        }
+
+        // Idle monsters that would attack this companion on sight; those
+        // already fighting (the pulled pack on the pet) are not avoided.
+        private List<CompanionPetPullEscort.Threat> PetPullEscortThreats(Vector3 ownerSpot)
+        {
+            List<CompanionPetPullEscort.Threat> threats = [];
+            int radius = (int)Math.Min(6_000, Vector3.Distance(new Vector3(Body.X, Body.Y, Body.Z), ownerSpot) +
+                                              StandardMobBrain.MAX_AGGRO_DISTANCE);
+            foreach (GameNPC npc in Body.GetNPCsInRadius((ushort)radius))
+            {
+                if (npc == Body || !npc.IsAlive || npc.InCombat || npc.ObjectState != GameObject.eObjectState.Active ||
+                    npc.Brain is not StandardMobBrain brain || brain.AggroLevel <= 0 || brain.AggroRange <= 0 ||
+                    !brain.CanAggroTarget(BotBody))
+                    continue;
+                threats.Add(new CompanionPetPullEscort.Threat(new Vector2(npc.X, npc.Y), brain.AggroRange));
+            }
+            return threats;
+        }
+
         private void HoldStaySpot(Vector3 spot)
         {
             _ambientWanderMovement = false;
@@ -1239,7 +1295,8 @@ namespace DOL.AI.Brain
             // /stay: the companion holds its own spot at camp instead of following.
             if (CompanionPetPull.TryGetStayAnchor(BotBody, out Vector3 stayAnchor))
             {
-                HoldStaySpot(stayAnchor);
+                if (!TryPetPullEscort())
+                    HoldStaySpot(stayAnchor);
                 return;
             }
 
@@ -1530,6 +1587,8 @@ namespace DOL.AI.Brain
                     !(CompanionPetPull.TryGetCampFront(AssistedPlayer, out Vector3 campFront) &&
                       BotAnimistPolicy.PlantPetPullField(BotBody, campFront, ref _nextDeployablePetTick)))
                     CheckSpells(eCheckSpellType.Defensive);
+                if (!Body.IsCasting)
+                    TryPetPullEscort();
                 return;
             }
 
@@ -3880,6 +3939,13 @@ namespace DOL.AI.Brain
             // pipeline to finish.
             if (Body.IsCasting || Body.castingComponent?.HasPendingSkillRequests == true)
                 return true;
+
+            // /petpull with /stay: the Mentalist opens with damage only back
+            // at camp, not while trailing its owner on a pull.
+            if (type == eCheckSpellType.Offensive && BotBody?.CharacterClass?.ID == (int)eCharacterClass.Mentalist &&
+                AssistedPlayer is GamePlayer stayOwner && CompanionPetPull.TryGetStayCenter(stayOwner, out Vector3 stayCamp) &&
+                !CompanionPetPullEscort.MayDamage(new Vector3(Body.X, Body.Y, Body.Z), stayCamp))
+                return false;
 
             // Necromancer commands finish on the shade first, then the servant
             // performs the real cast. Do not enqueue another command while the

@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.186.0] - 2026-10-02
+
+### Changed
+
+- Pet pull with `/stay`: when you walk out to pull, your Mentalist follows
+  about 250 units behind you so its heal-over-time on the pet stays in range
+  (task 79). It keeps out of every idle monster's aggro range on the way and
+  waits if no safe spot is left. It casts damage only once it is back near
+  the camp, and holds its own camp spot again when you return.
+
 ## [0.185.0] - 2026-10-02
 
 ### Fixed

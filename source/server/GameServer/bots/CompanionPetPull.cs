@@ -260,6 +260,18 @@ namespace DOL.GS
             return true;
         }
 
+        /// <summary>Where the owner stood at /stay: the camp the force holds.</summary>
+        public static bool TryGetStayCenter(GamePlayer leader, out Vector3 center)
+        {
+            center = default;
+            Mode mode = StayMode(leader);
+            if (mode == null)
+                return false;
+            lock (mode)
+                center = mode.StayCenter;
+            return true;
+        }
+
         public static Vector3 StayDirection(Vector3 center, Vector3? lastPullFrom, Vector3 facing)
         {
             Vector3 toward = lastPullFrom is Vector3 from ? from - center : facing;

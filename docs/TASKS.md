@@ -181,6 +181,22 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+79. **Pet pull: the Mentalist walks along to keep its HoT on the pet.**
+    Owner 2026-10-02: while the owner goes out for new mobs, the Mentalist
+    should come along so the HoT on the pet stays up, without drawing aggro
+    while walking and following; it should only do damage again once the
+    group is back near the mushrooms. Source 0.186.0
+    (`CompanionPetPullEscort`): with `/petpull` and `/stay`, once the owner
+    is more than 400 units from the stayed camp, the Mentalist trails him
+    250 units behind on the line back to camp, stepping toward camp until it
+    is 150 units outside the aggro range of every idle monster that would
+    attack it (monsters already fighting are ignored); with no safe spot it
+    waits. Back within 400 units it holds its own camp spot again. Its
+    offensive spells wait until it is within 600 units of the camp. Check in
+    the client: walk out to pull, the Mentalist follows at a distance and
+    keeps the HoT on the pet, draws no monster on the way, and casts damage
+    only once back at the grove.
+
 78. **Buffers buff in a sensible order and only where it helps.** Owner
     2026-10-02: buffers first give themselves dex and spec dex so they buff
     everyone faster; casters get strength only when concentration is spare
