@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.192.0] - 2026-10-02
+
+### Changed
+
+- Minstrel, Skald and Bard speed songs now keep running while another song
+  plays (task 80). Before, every new song ended speed, so a twisting Bard
+  kept dropping it. This applies to players and bots in all three realms;
+  performer bots start speed first and then switch only between their other
+  songs. This departs from 1.65, where only one song could play at a time.
+
 ## [0.191.0] - 2026-10-02
 
 ### Fixed

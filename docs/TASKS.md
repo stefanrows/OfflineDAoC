@@ -181,6 +181,19 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+80. **Performers keep speed while playing another song.** Owner
+    2026-10-02: the Bard switches songs and drops speed; best if it can play
+    both at once (asked to check Eden / the local LLM). Research: the local
+    knowledge base and the official class library say 1.65 allowed only one
+    song at a time (twisting); no Eden source confirming a change was found.
+    Owner's choice applied. Source 0.192.0: the engine's existing exception
+    list `PulseSpellGroupsIgnoringOtherPulseSpells` now holds the speed song
+    groups of all three performers (Minstrel 1101, Skald 3608, Bard 5151), so
+    speed runs beside any other song for players and bots in every realm;
+    performer bots start speed first and then twist only their other songs
+    without touching speed. Warden and other chants are unchanged. Check in
+    the client: a Bard keeps speed while its endurance/power song plays.
+
 79. **Pet pull: the Mentalist walks along to keep its HoT on the pet.**
     Owner 2026-10-02: while the owner goes out for new mobs, the Mentalist
     should come along so the HoT on the pet stays up, without drawing aggro

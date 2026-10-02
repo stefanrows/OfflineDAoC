@@ -2365,6 +2365,19 @@ namespace DOL.AI.Brain
                     pulse.End();
             }
 
+            // A performer's speed song runs beside any other song: start it
+            // first, then twist only the remaining songs and leave speed alone.
+            Spell freeSpeed = songs.FirstOrDefault(EffectListComponent.IgnoresOtherPulseSpells);
+            if (freeSpeed != null)
+            {
+                bool speedRunning = Body.effectListComponent.GetPulseEffects()
+                    .Any(effect => !effect.IsEnding && !effect.IsEnded &&
+                                   effect.SpellHandler?.Spell?.Group == freeSpeed.Group);
+                songs = speedRunning
+                    ? songs.Where(spell => !EffectListComponent.IgnoresOtherPulseSpells(spell)).ToList()
+                    : [freeSpeed];
+            }
+
             if (songs.Count == 0)
             {
                 // No currently affordable replacement is not a reason to cancel
@@ -2378,7 +2391,8 @@ namespace DOL.AI.Brain
             ECSPulseEffect activePulse = Body.effectListComponent.GetPulseEffects()
                 .FirstOrDefault(effect => !effect.IsEnding && !effect.IsEnded &&
                     effect.SpellHandler?.Spell is Spell activeSpell && activeSpell.IsPulsing &&
-                    !activeSpell.IsHarmful && IsMaintainableClassBuff(activeSpell));
+                    !activeSpell.IsHarmful && IsMaintainableClassBuff(activeSpell) &&
+                    (freeSpeed == null || !EffectListComponent.IgnoresOtherPulseSpells(activeSpell)));
             _activeTwistedSongId = activePulse?.SpellHandler.Spell.ID ?? 0;
             BotSongTwistPolicy.Song[] songStates = songs.Select(candidate =>
                 new BotSongTwistPolicy.Song(candidate.ID, candidate.CastTime,

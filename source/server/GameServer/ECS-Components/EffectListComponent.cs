@@ -15,7 +15,13 @@ namespace DOL.GS
 
         // Array of pulse spell groups allowed to exist with others.
         // Used to allow players to have more than one pulse spell refreshing itself automatically.
-        private static readonly int[] PulseSpellGroupsIgnoringOtherPulseSpells = [];
+        // The performers' speed songs (Minstrel 1101, Skald 3608, Bard 5151) run
+        // beside any other song instead of being replaced by it (owner
+        // 2026-10-02: a Bard should keep speed while it plays its other song).
+        private static readonly int[] PulseSpellGroupsIgnoringOtherPulseSpells = [1101, 3608, 5151];
+
+        public static bool IgnoresOtherPulseSpells(Spell spell) =>
+            spell != null && spell.Group != 0 && PulseSpellGroupsIgnoringOtherPulseSpells.Contains(spell.Group);
 
         // Active and pending effects.
         private readonly Dictionary<eEffect, List<ECSGameEffect>> _effects = new();  // Dictionary of effects by their type.
