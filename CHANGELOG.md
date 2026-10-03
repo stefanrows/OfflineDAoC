@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.201.0] - 2026-10-03
+
+### Fixed
+
+- Bots no longer gather and kill each other at the capital exits (bug 88).
+  About 85 Albion bots looped between Camelot and its outdoor exit because
+  a PvP hunt in a foreign frontier could not be reached; they now drop such
+  a target for 30 minutes and pick another. Same-realm bots also keep the
+  peace within 1,500 units of their own capital's exits, as at bindstones.
+
 ## [0.200.0] - 2026-10-03
 
 ### Changed

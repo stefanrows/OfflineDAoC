@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using DOL.Database;
 using DOL.GS.ServerRules;
 using DOL.Logging;
 
@@ -98,6 +101,52 @@ public static class AutonomousHubDeparture
     /// <summary>Bug 63: radius of the same-realm peace around a realm's own
     /// bindstones, where released bots otherwise kill each other in a loop.</summary>
     public const int BindPeaceRadius = 2_500;
+
+    /// <summary>Radius of the same-realm peace around the outdoor landing of
+    /// a realm's capital exits (2026-10-03: the Camelot exit lies 3,900 units
+    /// from the Albion bindstone, outside the bind peace, and 85 bots looping
+    /// through it killed each other there).</summary>
+    public const int CapitalLandingPeaceRadius = 1_500;
+
+    private static readonly Lazy<(ushort Region, int X, int Y, eRealm Realm)[]> CapitalLandings = new(() =>
+    {
+        var landings = new List<(ushort, int, int, eRealm)>();
+        try
+        {
+            foreach (eRealm realm in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
+            {
+                ushort capital = AutonomousStuckWatchdog.CapitalFor(realm).RegionId;
+                if (capital == 0)
+                    continue;
+                foreach (DbZonePoint exit in DOLDB<DbZonePoint>.SelectObjects(DB.Column("SourceRegion").IsEqualTo(capital)))
+                    if (exit.TargetRegion != capital && exit.TargetRegion != 0)
+                        landings.Add((exit.TargetRegion, exit.TargetX, exit.TargetY, realm));
+            }
+        }
+        catch (Exception)
+        {
+            // No database (unit tests): no capital landing peace.
+        }
+        return landings.ToArray();
+    });
+
+    /// <summary>Whether the living stands at the outdoor landing of its own realm's capital exits.</summary>
+    public static bool NearOwnCapitalLanding(GameLiving living)
+    {
+        if (living?.CurrentRegion == null)
+            return false;
+        ushort region = living.CurrentRegionID;
+        long radiusSquared = (long)CapitalLandingPeaceRadius * CapitalLandingPeaceRadius;
+        foreach ((ushort landingRegion, int x, int y, eRealm realm) in CapitalLandings.Value)
+        {
+            if (landingRegion != region || realm != living.Realm)
+                continue;
+            long dx = living.X - x, dy = living.Y - y;
+            if (dx * dx + dy * dy <= radiusSquared)
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>Whether the living stands near one of its own realm's bindstones.</summary>
     public static bool NearOwnBind(GameLiving living) => living?.CurrentRegion != null &&
@@ -248,7 +297,8 @@ public static class AutonomousHubDeparture
         // Band first (cheap geometry); the clock is read only outside it.
         if (InHubBand(first) || InHubBand(second))
             rule = HubPeaceRule.Band;
-        else if (NearOwnBind(first) || NearOwnBind(second))
+        else if (NearOwnBind(first) || NearOwnBind(second) ||
+                 NearOwnCapitalLanding(first) || NearOwnCapitalLanding(second))
             rule = HubPeaceRule.Bind;
         else if (RecentlyDeparted((GameBot)first, nowUtc) || RecentlyDeparted((GameBot)second, nowUtc))
             rule = HubPeaceRule.RecentDeparture;

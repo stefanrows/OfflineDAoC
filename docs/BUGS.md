@@ -61,6 +61,24 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+88. **Same-realm bots kill each other at the capital exits (bug 63 again).**
+    Live 0.199.0, 2026-10-03 19:09-20:22: the top RvR death cell was
+    region 1 at 516852,497979 (116 deaths, 112 by Albion world bots), the
+    outdoor landing of the Camelot exit, 3,894 units from the Albion
+    bindstone and so outside the 2,500 bind peace; Vale of Mularn showed the
+    same at the Jordheim exit. 85 Albion bots looped: a `local-pvp-*` rival
+    hunt in a foreign frontier failed to route, `TryEscapeTerminalRoutePocket`
+    sent them back to Camelot "resuming the same goal", capital egress put
+    them on the landing again; after the 10 s immunity they fought each
+    other. Source 0.201.0: such an unreachable rival hunt is rejected for
+    30 minutes and a new goal chosen (`AUTONOMOUS_RIVAL_HUNT_UNREACHABLE`);
+    the hub peace also covers 1,500 units around each capital-exit landing
+    of the bot's own realm (counted as bind in `RVR_HUB_PEACE`). Open: realm
+    portal keeps in foreign frontiers (Hibernia Portal Keep in Odin's Gate,
+    Hib<-Hib deaths just outside its 4,000 radius) have no departure band;
+    handled with the hub muster work. Why the routes to foreign frontiers
+    fail is not traced.
+
 87. **Tri-spec and Augmentation Healer companions do not cast Group Celerity.**
     Owner, 2026-10-03; installed version unconfirmed, source 0.197.0 audited.
     Reproduce with a grouped Healer that has learned Celerity (Augmentation

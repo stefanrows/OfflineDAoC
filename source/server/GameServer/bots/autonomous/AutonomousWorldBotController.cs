@@ -4653,6 +4653,20 @@ namespace DOL.GS
             {
                 if (_terminalRouteFailuresInPocket < AutonomousRouteRecoveryPolicy.FailuresBeforeSafeRelocation)
                     return false;
+                // A rival hunt in another region whose route keeps failing is
+                // dropped, not resumed from the capital: that loop parked 85
+                // Albion bots at the Camelot exit, where they killed each other.
+                if (_camp?.Id?.StartsWith("local-pvp-", StringComparison.Ordinal) == true &&
+                    _camp.RegionId != bot.CurrentRegionID)
+                {
+                    string dropped = _camp.Id;
+                    _rejectedDungeonCamps[dropped] = now + 30 * 60_000;
+                    Log.Info($"AUTONOMOUS_RIVAL_HUNT_UNREACHABLE bot={bot.Name} id={bot.DatabaseID} camp={dropped} " +
+                             $"region={bot.CurrentRegionID} target_region={_camp.RegionId}");
+                    _terminalRouteFailuresInPocket = 0;
+                    AbandonCamp(bot, "Rival hunt unreachable from here");
+                    return true;
+                }
                 AutonomousStuckWatchdog.CapitalLocation capital = AutonomousStuckWatchdog.SafeCapitalFor(bot.Realm);
                 if (capital.RegionId == 0)
                     return false;
