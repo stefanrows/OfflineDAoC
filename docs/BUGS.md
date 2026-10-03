@@ -61,6 +61,20 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+90. **Companions earn no realm points from RvR bot kills.** Owner
+    2026-10-03 (Stefan's server, only world bots of other realms killed):
+    companions barely rank up. Save snapshot: Nova 61,405 RP, every
+    companion 0. Cause: `AutonomousBotRealmPointRewards.ResolveRootRewardOwner`
+    walked any NPC with an `IControlledBrain` owner up to that owner, and a
+    persistent companion's `BotBrain` reports the player as owner, so all
+    companion damage on a killed bot was credited to the player and the
+    companion never became a contributor. The player-kill path uses
+    `PvpCombatant.Resolve` and was correct. Source 0.204.0: the walk stops at
+    a persistent companion; /spawn helpers and pets still credit their owner.
+    Effect: companions get their own group share; the owner no longer gets
+    the companions' damage share on top. Lost points are not restored. Check
+    in the client: after a bot kill, companions' realm points rise.
+
 89. **Without a guild, TAB targets your own /spawn helpers.** Owner
     2026-10-03. On the PvP (Camlann) server the client treats only its own
     guild as friendly, so the server shows allied bots in the viewer's guild,

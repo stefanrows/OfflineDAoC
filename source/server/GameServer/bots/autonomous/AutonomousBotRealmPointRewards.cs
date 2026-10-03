@@ -271,7 +271,11 @@ public static class AutonomousBotRealmPointRewards
     public static GameLiving ResolveRootRewardOwner(GameLiving source)
     {
         GameLiving current = source;
+        // A persistent companion earns its own realm points; only /spawn
+        // helpers (and real pets) credit their owner. Resolving companions to
+        // the owner gave every companion 0 RP from bot kills (2026-10-03).
         for (int depth = 0; depth < 16 && current is GameNPC npc &&
+             current is not GameBot { IsPersistentPlayerCompanion: true } &&
              npc.Brain is IControlledBrain controlled &&
              controlled.GetLivingOwner() is GameLiving owner; depth++)
         {

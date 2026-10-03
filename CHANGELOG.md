@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.204.0] - 2026-10-03
+
+### Fixed
+
+- Companions earn realm points from RvR kills of bots again (bug 90). Their
+  damage was credited to their owner, so every companion stayed at 0 realm
+  points while the owner collected their share. Each companion now gets its
+  own share like any group member; `/spawn` helpers still credit their owner.
+
 ## [0.203.0] - 2026-10-03
 
 ### Fixed
