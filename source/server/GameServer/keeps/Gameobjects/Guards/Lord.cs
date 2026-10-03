@@ -228,7 +228,13 @@ namespace DOL.GS.Keeps
 
         public override bool AddToWorld()
         {
-            if (PvpKeepCampaign.Applies(Component?.Keep) && Component.Keep.DBKeep.LordDefeated) return false;
+            if (PvpKeepCampaign.Applies(Component?.Keep) && Component.Keep.DBKeep.LordDefeated)
+            {
+                // Keeps load before database mobs. Now the saved lord is in the
+                // guard roster, so its position can restore the claim steward.
+                PvpKeepCampaign.EnsureClaimPoint(Component.Keep);
+                return false;
+            }
             if (base.AddToWorld())
             {
                 m_lastRealm = Realm;

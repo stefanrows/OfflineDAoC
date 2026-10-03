@@ -661,30 +661,6 @@ namespace DOL.GS.Keeps
 			{
 				return RejectClaim(output, "The keep is already claimed.", out refusal);
 			}
-			switch (ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
-			{
-				case 0:
-					{
-						return RejectClaim(output, "Keep claiming is disabled!", out refusal);
-					}
-				case 1:
-					{
-						if (playerGuild.ClaimedKeeps.Count == 1)
-						{
-							return RejectClaim(output, "Your guild already owns a keep.", out refusal);
-						}
-						break;
-					}
-				default:
-					{
-						if (playerGuild.ClaimedKeeps.Count >= ServerProperties.Properties.GUILDS_CLAIM_LIMIT)
-						{
-							return RejectClaim(output, "Your guild already owns the limit of keeps (" + ServerProperties.Properties.GUILDS_CLAIM_LIMIT + ")", out refusal);
-						}
-						break;
-					}
-			}
-
 			// In the Camlann campaign, a ranked guild member may claim alone once
 			// the lord is defeated and the steward is within reach.
 			if (PvpKeepCampaign.Applies(this))
@@ -750,8 +726,7 @@ namespace DOL.GS.Keeps
             }
             log.Info($"KEEP_CLAIMED keep={KeepID} name={Name} guild=\"{Guild?.Name}\" by=\"{player.Name}\" bot={player is GameBot} realm={player.Realm}");
 			
-			if (ServerProperties.Properties.GUILDS_CLAIM_LIMIT > 1)
-				Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps of a maximum of " + ServerProperties.Properties.GUILDS_CLAIM_LIMIT, eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
+			Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps.", eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
 
 			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_CLAIM_LEVEL);
 

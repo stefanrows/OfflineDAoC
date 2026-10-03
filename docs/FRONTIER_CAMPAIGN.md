@@ -19,6 +19,73 @@ CoreServer and Windows launcher Release builds passed on 2026-09-26.
 Automated tests were not run under the local project workflow; live acceptance
 requires a separately authorized deployment and a new population observation.
 
+## Guild keep emergency defense — 0.199.0
+
+Ownership is the autonomous guild's first priority. Actual hostile damage to
+an owned Old Frontiers keep's wall, gate, guard or lord raises a temporary guild
+recall, including damage from another autonomous guild or a human, their pet
+or a siege weapon. Native keep hostility decides who is an enemy, including
+same-realm enemies and alliance/group protection. Frontier Wardens and portal
+hubs do not summon guild troops.
+
+Every active independent autonomous guild member responds, across levels,
+PvE, services, raids, roaming, existing siege/claim trips and combat. There is
+no troop cap or reserve. Population maintenance withdraws previous activity
+reservations and wakes the brains within one simulated second; movement then
+uses the existing legal routes and real frontier ticket/porter system. An old
+stable ride is canceled at its actual position. Corpses use native release
+and safe recovery, then join the defense; offline saved bots respond if they
+become active during the call. The population target is not increased.
+Player-led bots, persistent companions, temporary helpers, humans, and other
+guilds receive no autonomous recall order.
+
+Same-guild groups retain their membership for support and transport. A member
+of a mixed-guild raid leaves individually; the other members keep their party
+and raid support. Interrupted activity sessions/reservations are retired,
+while the durable activity allocation remains. Incomplete pending raid formations
+release their reserved seats for later recruitment. During the march unrelated
+combat, pet orders, casts and optional services yield to defense. At the keep,
+normal legal combat, healing, crowd control, pet upkeep and validated interior
+posts apply. Failures retry with the same defense order; no new navmesh,
+teleport shortcut, automatic capture, inventory deletion or synthetic reward
+is introduced. After stand-down, normal allocation and group planning resume.
+
+The first attacked keep holds the guild's focus so hits on two keeps cannot
+oscillate the whole army. Other attacked owned keeps queue. Actual damage
+renews a four-hour response from the latest hit; release, lord defeat, reset
+or guild ownership change invalidates it immediately, including queued calls.
+This is runtime state; after a restart the next actual hit raises a new call.
+
+Investigation found that the earlier player-driven defense pulse had no
+production caller and only recruited idle level-50 RvR forces, with reserves,
+caps and preemption exclusions. This scoped guild override is wired into the
+existing population phase and early brain entry instead of activating the
+broader realm recruitment path. Two Luna Max reviews examined detection,
+ownership/concurrency, travel, pets, combat and group/raid interruption.
+
+Pending owner checks after an authorized installation:
+
+- Attack a bot-owned gate and an outside guard with a human, autonomous enemy,
+  controlled pet and ram, and damage an attackable wall component. Include
+  enemies sharing the keep's display realm.
+  Observe `GUILD_KEEP_RECALL` for all independent active guild members, including
+  low-level grinders, remote dungeon/raid bots, vendors and existing attackers.
+- Verify unrelated guilds, companions and player-led groups keep their orders;
+  alliance/group-friendly or zero-damage attempts cause no recall.
+- Check an interrupted horse route, Necromancer servant commands, dead/released
+  members, cross-frontier porter tickets, full backpacks and blocked paths.
+  Troops must retry defense and keep possessions; incoming damage remains real.
+- Confirm same-guild party support, mixed-guild raid survivors, interior door
+  traversal, visible attacker acquisition, healing/pets, and pursuit limits.
+- Attack two owned keeps, defeat/release the first, and confirm queued focus
+  advances. Check expiry, restart/new attack, and normal activities afterwards.
+
+CoreServer and Windows launcher Release builds passed on 2026-10-03 with
+existing warnings and zero errors. Scoped static checks passed; automated
+tests were skipped under the project rules. No deployment or server start
+was requested. Offline builds/static review do not certify real-client
+gameplay acceptance.
+
 ## Autonomous siege flow (task 48, siege slice 1)
 
 A committed warband's siege operators (tanks, melee fighters, Scouts and
@@ -70,9 +137,14 @@ Source only; real-client and live-log check pending.
   server-wide safety cap of 6 attacking sieges (defense responses do not
   count). Guildless and launcher-forced sieges count per realm. An active
   relic-carrier event still pauses new sieges.
-- **A guild may hold three keeps.** `guilds_claim_limit` is 3 (was 1 in the
-  save); the steward, `/gc claim` and crew leaders use the same native limit
-  check. A guild at its limit can still take a keep; it cannot claim it.
+- **Guild keep ownership is unlimited (owner, 2026-10-03; 0.197.0).** The
+  steward, `/gc claim` and bot leaders have no keep-count cap. The legacy
+  `guilds_claim_limit` property is marked -1 in new and existing saves.
+  Eligible RvR guild forces prioritize defeated free keeps before roaming
+  or opening another siege; one force reserves each claim journey and must
+  reach the steward through the normal keep routes. Nearby guild leaders
+  still claim opportunistically. A running siege retains its commitment, except
+  when the guild must defend an attacked owned keep (0.199.0).
 - **Damage spells hit doors, as since 1.46.** Single-target direct damage and
   bolts hurt a keep door at half effect after the door's level toughness
   (5 % less per keep level): a 400 nuke deals 190 to a level-1 door and 150 to
@@ -83,11 +155,10 @@ Source only; real-client and live-log check pending.
 - **Unchanged:** the temporary ×10 Siege Ram (task 55); relic raids stay off
   (docs/TASKS.md, relic-raid mode idea).
 
-The server applies both property changes itself on the next start: a startup
-database update moves `starting_keep_level` 4 → 1 and `guilds_claim_limit`
-1 → 3 only while the row still holds the old shipped value as both value and
-default (`FRONTIER_BALANCE_PROPERTY key=... from=... to=...`). A value an
-operator set later stays.
+The server applies property changes on the next start. Keep level moves
+`starting_keep_level` 4 → 1 only for an untouched shipped value/default;
+operator-selected keep levels stay. The removed guild claim cap always moves
+its legacy value/default to -1 (`FRONTIER_BALANCE_PROPERTY key=... from=... to=...`).
 
 ## World and capture rules
 
@@ -101,8 +172,8 @@ their relics are initially held by the Wardens.
 A living lord blocks claiming, including `/gc claim`. Killing it leaves a
 peaceful **Keep Claim Steward** at its position. Right-clicking the steward
 opens a confirmation dialog; the keep is claimed only after choosing Yes. You
-can also use `/gc claim` while beside it. Guild claim rank and ownership limits
-still apply, but Camlann claims have no group-size requirement. Autonomous crew
+can also use `/gc claim` while beside it. Guild claim rank still applies;
+Camlann claims have no group-size requirement or keep-count limit. Autonomous crew
 leaders approach the same steward and claim for their guild; ordinary members
 of pure managed autonomous guilds receive native claim permission.
 Human-managed guild ranks are not changed.
@@ -113,7 +184,9 @@ the defenses belong to the winning guild. Gates destroyed during the siege
 remain open and damaged after a claim; the existing door repair timer repairs
 them by 5% every 30 minutes while the keep is out of combat, and they close
 automatically above 15% health. Unclaimed defeated keeps and claimed keeps
-survive server restarts. A voluntary guild release does not itself unlock
+survive server restarts. When the saved defeated lord loads after the keeps,
+it restores the steward at its position without respawning the lord.
+A voluntary guild release does not itself unlock
 a claim reward; another lord defeat is required. Capture RP has a persistent
 30-minute cooldown per keep. The launcher's explicit world/keep reset clears
 these states and restores garrisons on the next start.

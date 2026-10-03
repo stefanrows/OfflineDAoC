@@ -26,6 +26,7 @@ namespace DOL.GS
         public static void ObserveKeepAttack(AbstractGameKeep keep, GameObject source)
         {
             if (!AutonomousRvrKeepPolicy.IsSiegeObjective(keep)) return;
+            AutonomousGuildKeepDefense.ObserveAttack(keep, source);
             string id = $"rvr-keep-{keep.KeepID}";
             long now = GameLoop.GameLoopTime;
             // A committed world-bot attacker (or its ram) damaging this keep is

@@ -53,16 +53,12 @@ public static class AutonomousRvrTravel
         }
         return false;
     }
-    private static readonly int[] BorderDoors =
-        [11020501, 11020502, 12000101, 12000102, 102093501, 102093502,
-         111161301, 111161302, 206016801, 206016802, 207156901, 207156902];
-
     public static bool OpenNearbyBorderDoors(GameBot bot, Vector3 destination)
     {
         if (bot?.IsAutonomousWorldBot != true ||
             !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) return false;
         bool opened = false;
-        foreach (int id in BorderDoors)
+        foreach (int id in GameDoor.BorderKeepDoorIds)
         {
             GameDoorBase door = DoorMgr.GetDoorByID(id);
             if (door == null || door.CurrentRegion != bot.CurrentRegion || door.Locked ||

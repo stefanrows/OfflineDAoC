@@ -5,14 +5,10 @@ using DOL.GS.ServerProperties;
 namespace DOL.GS.DatabaseUpdate
 {
     /// <summary>
-    /// Siege balance of 2026-09-28 (owner decisions 1a and 2b, docs/TASKS.md
-    /// item 48): unclaimed keeps start at level 1 like a 1.65 unclaimed keep,
-    /// and a guild may hold up to three keeps. Existing saves carry the old
-    /// shipped values in the ServerProperty table, which the code default does
-    /// not override. This runs at every server start and moves a row only
-    /// while it still holds the old shipped value as both value and default;
-    /// afterwards value and default are the new value, so it is a no-op, and a
-    /// value an operator chose later (differing from the default) stays.
+    /// Unclaimed keep levels migrate only from the untouched shipped value.
+    /// The owner removed all guild claim limits on 2026-10-03; existing saves
+    /// also get the unlimited marker (-1), including the previously shipped 3.
+    /// Claim checks no longer enforce this legacy setting.
     /// </summary>
     [DatabaseUpdate]
     public class FrontierKeepBalanceUpdate : IDatabaseUpdater
@@ -22,7 +18,7 @@ namespace DOL.GS.DatabaseUpdate
         public static readonly (string Key, string Legacy, string Target)[] Changes =
         {
             ("starting_keep_level", "4", "1"),
-            ("guilds_claim_limit", "1", "3"),
+            ("guilds_claim_limit", "1", "-1"),
         };
 
         /// <summary>True only for an untouched legacy row: value and default both the old shipped value.</summary>
@@ -36,13 +32,17 @@ namespace DOL.GS.DatabaseUpdate
             foreach (var change in Changes)
             {
                 DbServerProperty row = DOLDB<DbServerProperty>.SelectObject(DB.Column("Key").IsEqualTo(change.Key));
-                if (row == null || !ShouldReplace(row.Value, row.DefaultValue, change.Legacy))
-                    continue;
+                if (row == null) continue;
+                bool replace = change.Key == "guilds_claim_limit"
+                    ? row.Value != change.Target || row.DefaultValue != change.Target
+                    : ShouldReplace(row.Value, row.DefaultValue, change.Legacy);
+                if (!replace) continue;
+                string previous = row.Value;
                 row.Value = change.Target;
                 row.DefaultValue = change.Target;
                 GameServer.Database.SaveObject(row);
                 changed = true;
-                log.Info($"FRONTIER_BALANCE_PROPERTY key={change.Key} from={change.Legacy} to={change.Target}");
+                log.Info($"FRONTIER_BALANCE_PROPERTY key={change.Key} from={previous} to={change.Target}");
             }
 
             if (changed)

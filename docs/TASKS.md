@@ -181,6 +181,40 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+83. **All guild troops defend their attacked keep before other work.** Owner,
+    2026-10-03. Source 0.199.0 adds a temporary guild-owned recall on actual
+    hostile wall, door, guard or lord damage, including autonomous attackers, pets
+    and siege operators. All active independent autonomous guild members
+    respond regardless of level/activity; no reserve, battle cap or combat
+    exclusion. Same-guild parties stay together; mixed-guild raid members
+    withdraw individually. Existing activity sessions/reservations retire;
+    durable activity allocation, possessions and native combat/recovery stay.
+    First attacked keep holds focus; later attacks queue, hits renew four
+    hours, and owner loss/lord defeat ends the recall. Route failure retries
+    while the order stays active. Player-led troops and companions are excluded.
+    Investigation, behavior and client scenarios:
+    [FRONTIER_CAMPAIGN.md](FRONTIER_CAMPAIGN.md#guild-keep-emergency-defense--01990).
+    CoreServer and Windows launcher Release builds passed on 2026-10-03 with
+    existing warnings and zero errors. Scoped whitespace, conflict-marker,
+    line-ending and version-pin checks passed. Installation and real-client
+    verification pending. Automated tests were not requested; no deployment
+    or server start was authorized.
+
+82. **Bot guilds secure free keeps; unlimited guild keep claims.** Owner,
+    2026-10-03: Fensalir is neutral after a raid; guild bots should hold as
+    many keeps as possible and the three-keep cap must go. Source 0.197.0
+    removes the limit for humans and bots and updates saved property rows to
+    the unlimited marker (-1). Eligible RvR guild forces prioritize free,
+    defeated keeps over roaming/new assaults, reserve one force per journey,
+    and use validated keep routes to the native steward; existing sieges
+    retain their commitment. Saved defeated lords restore missing stewards
+    (bug 85). Pending: installation and real-client confirmation that bot
+    guilds claim unattended keeps and a guild can own a fourth keep and more.
+    CoreServer and Windows launcher Release builds passed on 2026-10-03
+    with existing warnings; scoped whitespace, conflict-marker and version-pin
+    checks passed. Automated tests were skipped under the local workflow.
+    No deployment or server start was requested.
+
 81. **More deliberate world-bot journeys, safe recovery and fewer repeated
     clusters.** Owner, 2026-10-03; planned with Astra and implemented with Sol
     in 0.195.0. Safe release for independent autonomous actors, siege-march

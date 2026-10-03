@@ -641,7 +641,7 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
-    public void DeletingCompanionProtectsEarnedItemsAndRemovesOnlyStarterItems()
+    public void DeletingCompanionRemovesStarterEarnedAndUnclassifiedItems()
     {
         Owner owner = NewOwner("delete-gear-owner", eRealm.Albion);
         Assert.That(PlayerCompanionRoster.TryRecruit(owner, eRealm.Albion, eCharacterClass.Cleric,
@@ -658,20 +658,20 @@ public sealed class UT_PlayerCompanionStage6Integration
         earned.SlotPosition = (int)eInventorySlot.FirstBackpack;
         Assert.That(_database.AddObject(starter), Is.True, "starter item");
         Assert.That(_database.AddObject(earned), Is.True, "earned item");
+        GameInventoryItem unknown = GameInventoryItem.Create(new DbItemUnique(template));
+        unknown.OwnerID = inventoryOwner;
+        unknown.AllowDelete = true;
+        unknown.SlotPosition = (int)eInventorySlot.FirstBackpack + 1;
+        Assert.That(_database.AddObject(unknown), Is.True, "unclassified item");
         PlayerCompanionRoster.SetEquipmentItemFlags(record, starter.ObjectId, "S");
         PlayerCompanionRoster.SetEquipmentItemFlags(record, earned.ObjectId, "E");
         Assert.That(_database.SaveObject(record), Is.True);
 
-        Assert.That(PlayerCompanionRoster.TryDelete(owner, record.CompanionId, out string blocked), Is.False);
-        Assert.That(blocked, Does.Contain("items"));
-        Assert.That(PlayerCompanionRoster.GetRoster(owner), Has.Count.EqualTo(1));
-        Assert.That(_database.FindObjectByKey<DbInventoryItem>(starter.ObjectId), Is.Not.Null);
-        Assert.That(_database.FindObjectByKey<DbInventoryItem>(earned.ObjectId), Is.Not.Null);
-
-        Assert.That(_database.DeleteObject(earned), Is.True);
         Assert.That(PlayerCompanionRoster.TryDelete(owner, record.CompanionId, out string deleted), Is.True, deleted);
         Assert.That(PlayerCompanionRoster.GetRoster(owner), Is.Empty);
         Assert.That(_database.FindObjectByKey<DbInventoryItem>(starter.ObjectId), Is.Null);
+        Assert.That(_database.FindObjectByKey<DbInventoryItem>(earned.ObjectId), Is.Null);
+        Assert.That(_database.FindObjectByKey<DbInventoryItem>(unknown.ObjectId), Is.Null);
     }
 
     [Test]

@@ -1516,21 +1516,39 @@ namespace DOL.GS
             // The on-foot habit after a PvE release never carries into RvR.
             _walkToCampAfterRelease = false;
             KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
-                .FirstOrDefault(point => point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null);
-            if (claimPoint != null && bot.Guild != null && !bot.InCombat &&
+                .FirstOrDefault(point => AutonomousRvrKeepPolicy.IsClaimableKeep(point.Keep) &&
+                    point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null &&
+                    !AutonomousRvrEventLayer.IsAbandoned(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}",
+                        $"rvr-keep-{point.Keep.KeepID}", GameLoop.GameLoopTime));
+            if (claimPoint != null && bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true && !bot.InCombat &&
                 (bot.Group == null || bot.Group.LivingLeader == bot))
             {
                 if (bot.IsWithinRadius(claimPoint, WorldMgr.INTERACT_DISTANCE))
                 {
-                    if (claimPoint.TryClaim(bot)) return true;
+                    if (claimPoint.TryClaim(bot))
+                    {
+                        AutonomousRvrEventLayer.ReleaseClaimPlan(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}", _rvrDestination?.Id);
+                        ClearKeepObjective(bot);
+                        _rvrIntent = AutonomousRvrEventLayer.Intent.Roam;
+                        return true;
+                    }
                 }
-                else
+                else if (_rvrIntent != AutonomousRvrEventLayer.Intent.ClaimKeep)
                 {
-                    IssuePath(bot, new(claimPoint.X, claimPoint.Y, claimPoint.Z), preciseArrival: true);
-                    SetRvrStatus(bot, "Claiming keep", "Secure the defeated keep for our guild", "Approaching the claim steward", claimPoint.Keep.Name);
-                    return true;
+                    // Retain a siege's commitment while approaching its steward
+                    // on the same bounded route used for the keep assault.
+                    CampDestination claimDestination = new($"rvr-keep-{claimPoint.Keep.KeepID}", claimPoint.Keep.Name,
+                        claimPoint.CurrentZone?.Description ?? "frontier keep", claimPoint.CurrentRegionID,
+                        claimPoint.X, claimPoint.Y, claimPoint.Z, 1, false, true);
+                    if (FollowKeepTravel(bot, claimDestination)) return true;
+                    if (IssuePath(bot, new(claimPoint.X, claimPoint.Y, claimPoint.Z), preciseArrival: true))
+                    {
+                        SetRvrStatus(bot, "Claiming keep", "Secure the defeated keep for our guild", "Approaching the claim steward", claimPoint.Keep.Name);
+                        return true;
+                    }
                 }
             }
+            if (TryRunKeepClaim(bot)) return true;
             if (bot.Group != null || _rvrLfgGaveUp)
                 bot.TempProperties.RemoveProperty(AutonomousBotGroupCoordinator.LfgProperty);
             if (bot.Group != null)
@@ -2146,6 +2164,18 @@ namespace DOL.GS
         {
             Vector3 center=new(destination.X,destination.Y,destination.Z);
             var keep=GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).FirstOrDefault(k=>$"rvr-keep-{k.KeepID}"==destination.Id);
+            if (keep?.ClaimPoint is { ObjectState: GameObject.eObjectState.Active } steward &&
+                keep.DBKeep.LordDefeated && keep.Guild == null)
+            {
+                // The neutral interval permits native friendly-door travel.
+                // Finish upstairs at the steward rather than the courtyard.
+                center = new(steward.X, steward.Y, steward.Z);
+                var floor = nav.GetClosestPoint(steward.CurrentZone, center, 48, 48, 128, nav.DefaultFilters);
+                if (floor.HasValue && RvrKeepRoute.TryBuild(bot.CurrentRegion, nav, bot.Realm, actor, floor.Value, out _))
+                { approach = floor.Value; return true; }
+                approach = default;
+                return false;
+            }
             if(keep!=null && (keep.Guild == null || keep.Guild!=bot.Guild))
             {
                 var gates=keep.Doors.Values.Where(d=>d.IsAlive && d.IsAttackableDoor && d.State==eDoorState.Closed)
@@ -2498,7 +2528,9 @@ namespace DOL.GS
             foreach (AbstractGameKeep keep in GameServer.KeepManager.GetAllKeeps()
                          .Where(AutonomousRvrKeepPolicy.IsSiegeObjective)
                          .Where(keep => reachable.Contains(keep.Region) && (keep.Guild == null || keep.Guild != bot.Guild))
-                         .OrderBy(keep => bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z))).Take(24))
+                         .OrderByDescending(keep => keep.Guild == null && keep.DBKeep.LordDefeated)
+                         .ThenBy(keep => keep.Region == bot.CurrentRegionID ? 0 : 1)
+                         .ThenBy(keep => bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z))).Take(24))
             {
                 string id = $"rvr-keep-{keep.KeepID}";
                 choices.Add(new(id, keep.Name, WorldMgr.GetRegion(keep.Region)?.GetZone(keep.X, keep.Y)?.Description ??
@@ -2508,7 +2540,9 @@ namespace DOL.GS
                     keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,
                     keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0,
                     keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed),
-                    OwningGuild: keep.Guild?.Name, Claimable: AutonomousRvrKeepPolicy.IsClaimableKeep(keep)));
+                    OwningGuild: keep.Guild?.Name, Claimable: AutonomousRvrKeepPolicy.IsClaimableKeep(keep),
+                    AwaitingClaim: PvpKeepCampaign.Applies(keep) && keep.Guild == null && keep.DBKeep.LordDefeated &&
+                        keep.ClaimPoint?.ObjectState == GameObject.eObjectState.Active));
             }
 
             // Roaming is not limited to the road between keeps. Reuse the
@@ -2567,7 +2601,8 @@ namespace DOL.GS
                     (unchecked((ulong)(_groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID)) * 2654435761UL % 100) < (ulong)roamReservePercent,
                     warband.Select(member => member.DatabaseID).ToArray(), minimumLevel,
                     bot.Guild?.Name, AutonomousPlayerBehavior.CanStartCampaign(leaderType, minimumLevel, warband.Length),
-                    AutonomousSiegeDoctrine.IsSingleGuild(bot.Guild, warband.Select(member => member.Guild))),
+                    AutonomousSiegeDoctrine.IsSingleGuild(bot.Guild, warband.Select(member => member.Guild)),
+                    bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true),
                 objectives, GameLoop.GameLoopTime, Random.Shared.NextDouble());
             _rvrSharedEvent = plan?.IsSharedEvent == true;
             _rvrIntent = plan?.Intent ?? AutonomousRvrEventLayer.Intent.Roam;
@@ -3599,6 +3634,14 @@ namespace DOL.GS
 
         private void AbandonCamp(GameBot bot, string reason)
         {
+            if (AutonomousGuildKeepDefense.IsRecalled(bot))
+            {
+                ResetRouteOrderState();
+                bot.StopMovingOnPath(); bot.StopMoving();
+                _guildDefenseRouteRetry = GameLoop.GameLoopTime + 30_000;
+                SetRvrStatus(bot, "Keep defense route retry", _rvrDestination?.MonsterName ?? "Our keep", reason);
+                return;
+            }
             // PvP dungeon travel shares the guarded path pipeline with XP
             // travel, but has its own destination. Replan it on the next turn
             // so callers can finish reporting this turn's route safely.

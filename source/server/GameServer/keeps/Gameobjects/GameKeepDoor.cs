@@ -29,6 +29,8 @@ namespace DOL.GS.Keeps
         public int ComponentID => DoorId / 100 % 100;
         public int DoorIndex => DoorId % 10;
 
+        public override int InteractDistance => Math.Max(WorldMgr.INTERACT_DISTANCE, Properties.WORLD_PICKUP_DISTANCE * 2);
+
         /// <summary>
         /// This flag is send in packet(keep door = 4, regular door = 0)
         /// </summary>
@@ -286,7 +288,9 @@ namespace DOL.GS.Keeps
                 return false;
             }
 
-            if (!GameServer.KeepManager.IsEnemy(this, player) || player.Client.Account.PrivLevel != 1)
+            if (!player.IsAlive) return false;
+            if (!GameServer.KeepManager.IsEnemy(this, player) || player.Client.Account.PrivLevel != 1 ||
+                IsAttackableDoor && State == eDoorState.Open)
                 return TraverseDoor(player);
             player.Out.SendMessage("This keep is hostile. Break through its gates to enter.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
             return false;
@@ -305,71 +309,76 @@ namespace DOL.GS.Keeps
             // The client may send DoorRequest and ObjectInteract for one click.
             // Handle either, but never teleport back on the duplicate request.
             const string traversalKey = "keep-door.last-traversal";
-            long previous = player.TempProperties.GetProperty<long>(traversalKey, -1000);
-            if (GameLoop.GameLoopTime - previous < 750) return true;
-            player.TempProperties.SetProperty(traversalKey, GameLoop.GameLoopTime);
-                int keepz = Z, distance = 0;
+            DoorTraversal previous = player.TempProperties.GetProperty<DoorTraversal>(traversalKey);
+            if (previous != null && previous.DoorId == DoorId && previous.Region == CurrentRegionID &&
+                GameLoop.GameLoopTime - previous.Tick < 750) return true;
+            int keepz = Z, distance = 0;
 
-                //calculate distance
-                //normal door
-                if (DoorIndex == 1)
-                    distance = 150;
-                //side or internal door
-                else
-                    distance = 100;
+            //calculate distance
+            //normal door
+            if (DoorIndex == 1)
+                distance = 150;
+            //side or internal door
+            else
+                distance = 100;
 
-                //calculate Z
-                if (Component.Keep is GameKeepTower && !Component.Keep.IsPortalKeep)
+            //calculate Z
+            if (Component.Keep is GameKeepTower && !Component.Keep.IsPortalKeep)
+            {
+                //when entering a tower, we need to raise Z
+                //portal keeps are considered towers too, so we check component count
+                if (IsObjectInFront(player, 180, 0))
                 {
-                    //when entering a tower, we need to raise Z
-                    //portal keeps are considered towers too, so we check component count
-                    if (IsObjectInFront(player, 180))
-                    {
-                        if (DoorId == 1)
-                            keepz = Z + 83;
-                        else
-                            distance = 150;
-                    }
+                    if (DoorIndex == 1)
+                        keepz = Z + 83;
+                    else
+                        distance = 150;
                 }
-                else
+            }
+            else
+            {
+                //when entering a keeps inner door, we need to raise Z
+                if (IsObjectInFront(player, 180, 0))
                 {
-                    //when entering a keeps inner door, we need to raise Z
-                    if (IsObjectInFront(player, 180))
+                    //To find out if a door is the keeps inner door, we compare the distance between
+                    //the component for the keep and the component for the gate
+                    int keepdistance = int.MaxValue;
+                    int gatedistance = int.MaxValue;
+
+                    foreach (GameKeepComponent c in Component.Keep.KeepComponents)
                     {
-                        //To find out if a door is the keeps inner door, we compare the distance between
-                        //the component for the keep and the component for the gate
-                        int keepdistance = int.MaxValue;
-                        int gatedistance = int.MaxValue;
+                        if ((GameKeepComponent.eComponentSkin)c.Skin == GameKeepComponent.eComponentSkin.Keep)
+                            keepdistance = GetDistanceTo(c);
 
-                        foreach (GameKeepComponent c in Component.Keep.KeepComponents)
-                        {
-                            if ((GameKeepComponent.eComponentSkin)c.Skin == GameKeepComponent.eComponentSkin.Keep)
-                                keepdistance = GetDistanceTo(c);
+                        if ((GameKeepComponent.eComponentSkin)c.Skin == GameKeepComponent.eComponentSkin.Gate)
+                            gatedistance = GetDistanceTo(c);
 
-                            if ((GameKeepComponent.eComponentSkin)c.Skin == GameKeepComponent.eComponentSkin.Gate)
-                                gatedistance = GetDistanceTo(c);
-
-                            //when these are filled we can stop the search
-                            if (keepdistance != int.MaxValue && gatedistance != int.MaxValue)
-                                break;
-                        }
-
-                        if (DoorIndex == 1 && keepdistance < gatedistance)
-                            keepz = Z + 92;//checked in game with lvl 1 keep
+                        //when these are filled we can stop the search
+                        if (keepdistance != int.MaxValue && gatedistance != int.MaxValue)
+                            break;
                     }
+
+                    if (DoorIndex == 1 && keepdistance < gatedistance)
+                        keepz = Z + 92;//checked in game with lvl 1 keep
                 }
+            }
 
-                Point2D keepPoint;
+            Point2D keepPoint;
 
-                //calculate x y
-                if (IsObjectInFront(player, 180))
-                    keepPoint = GetPointFromHeading(Heading, -distance );
-                else
-                    keepPoint = GetPointFromHeading(Heading, distance );
+            //calculate x y
+            if (IsObjectInFront(player, 180, 0))
+                keepPoint = GetPointFromHeading(Heading, -distance );
+            else
+                keepPoint = GetPointFromHeading(Heading, distance );
 
-                //move player
-                return player.MoveTo(CurrentRegionID, keepPoint.X, keepPoint.Y, keepz, player.Heading);
+            //move player
+            bool moved = player.MoveTo(CurrentRegionID, keepPoint.X, keepPoint.Y, keepz, player.Heading);
+            if (moved)
+                player.TempProperties.SetProperty(traversalKey, new DoorTraversal(DoorId, CurrentRegionID, GameLoop.GameLoopTime));
+            return moved;
         }
+
+        private sealed record DoorTraversal(int DoorId, ushort Region, long Tick);
 
         public override IList GetExamineMessages(GamePlayer player)
         {

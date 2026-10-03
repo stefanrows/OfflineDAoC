@@ -169,11 +169,11 @@ public static partial class AutonomousRvrEventLayer
         return false;
     }
 
-    public enum Intent { Roam, HuntEnemy, AssaultKeep, AssaultRelicKeep, DefendEvent }
+    public enum Intent { Roam, HuntEnemy, AssaultKeep, AssaultRelicKeep, DefendEvent, ClaimKeep }
 
     public sealed record Force(string GroupId, eRealm Realm, int MemberCount, int AverageLevel, int HealerCount,
         bool CanSupplySiege = true, bool RoamingReserve = false, long[] MemberIds = null, int MinimumMemberLevel = 50,
-        string GuildName = null, bool CampaignEligible = false, bool SingleGuild = true);
+        string GuildName = null, bool CampaignEligible = false, bool SingleGuild = true, bool CanClaim = true);
     /// <param name="Claimable">A guild could claim this keep after the lord falls
     /// (see <see cref="AutonomousRvrKeepPolicy.IsClaimableKeep(DOL.GS.Keeps.AbstractGameKeep)"/>).
     /// Automatic assaults open only on claimable keeps; forced or player-driven
@@ -181,7 +181,7 @@ public static partial class AutonomousRvrEventLayer
     public sealed record LiveObjective(string Id, string Name, Intent Kind, eRealm OwningRealm, ushort RegionId,
         int X, int Y, int Z, bool IsRelicKeep, int EnemyCount, int FriendlyCount, int GuardStrength, int ClosedDoors,
         bool IsRelicCarrier = false, bool IsPortalKeep = false, bool UnderAttack = false, string OwningGuild = null,
-        bool Claimable = true);
+        bool Claimable = true, bool AwaitingClaim = false);
 
     /// <summary>
     /// Only a whole warband of eight from one guild opens an autonomous keep
@@ -402,6 +402,11 @@ public static partial class AutonomousRvrEventLayer
             if (committed != null)
                 return committed;
 
+            // A defeated keep needs a guild member at its steward, not a new
+            // siege, full warband, ram or another random assault roll.
+            Plan claim = ChooseClaimPlan(force, objectives, nowTick);
+            if (claim != null) return claim;
+
             if (force.RoamingReserve)
                 return ReservePlan(force, objectives);
 
@@ -483,7 +488,7 @@ public static partial class AutonomousRvrEventLayer
                                                                !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick) &&
                                                                !KeepRouteBlockedLocked(objective.Id, nowTick))
                 , SelectedRelics);
-            LiveObjective keep = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultKeep && !objective.IsRelicKeep && objective.Claimable &&
+            LiveObjective keep = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultKeep && !objective.IsRelicKeep && objective.Claimable && !objective.AwaitingClaim &&
                                                               !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick) &&
                                                               !KeepRouteBlockedLocked(objective.Id, nowTick))
                 , SelectedKeeps);
@@ -1087,6 +1092,7 @@ public static partial class AutonomousRvrEventLayer
             return;
         using (EnterSync())
         {
+            ClaimForces.Remove(targetId);
             if (Events.TryGetValue(targetId, out var active))
                 EndEvent(active, nowTick, "Keep captured: siege ended", winner);
             if (CarrierEvents.TryGetValue(targetId, out var escort))

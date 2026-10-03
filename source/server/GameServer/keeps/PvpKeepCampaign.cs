@@ -68,20 +68,24 @@ namespace DOL.GS.Keeps
         public static void EnsureClaimPoint(AbstractGameKeep keep)
         {
             if (!Applies(keep) || !keep.DBKeep.LordDefeated || keep.IsRelic || keep.ClaimPoint != null) return;
-            GuardLord lord = keep.Guards.Values.OfType<GuardLord>().FirstOrDefault();
-            if (lord == null)
+            lock (keep.Guards)
             {
-                log.Warn($"KEEP_CLAIM_STEWARD_MISSING keep={keep.KeepID} reason=no_lord_position");
-                return;
+                if (keep.ClaimPoint != null) return;
+                GuardLord lord = keep.Guards.Values.OfType<GuardLord>().FirstOrDefault();
+                if (lord == null)
+                {
+                    log.Warn($"KEEP_CLAIM_STEWARD_MISSING keep={keep.KeepID} reason=no_lord_position");
+                    return;
+                }
+                KeepClaimPoint steward = new KeepClaimPoint(keep, lord);
+                if (!steward.AddToWorld())
+                {
+                    log.Warn($"KEEP_CLAIM_STEWARD_MISSING keep={keep.KeepID} reason=spawn_failed region={steward.CurrentRegionID} x={steward.X} y={steward.Y} z={steward.Z}");
+                    return;
+                }
+                keep.ClaimPoint = steward;
+                log.Info($"KEEP_CLAIM_STEWARD_READY keep={keep.KeepID} region={steward.CurrentRegionID} x={steward.X} y={steward.Y} z={steward.Z}");
             }
-            KeepClaimPoint steward = new KeepClaimPoint(keep, lord);
-            if (!steward.AddToWorld())
-            {
-                log.Warn($"KEEP_CLAIM_STEWARD_MISSING keep={keep.KeepID} reason=spawn_failed region={steward.CurrentRegionID} x={steward.X} y={steward.Y} z={steward.Z}");
-                return;
-            }
-            keep.ClaimPoint = steward;
-            log.Info($"KEEP_CLAIM_STEWARD_READY keep={keep.KeepID} region={steward.CurrentRegionID} x={steward.X} y={steward.Y} z={steward.Z}");
         }
 
         public static void DefeatLord(GuardLord lord)

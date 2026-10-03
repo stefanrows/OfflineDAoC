@@ -61,6 +61,60 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+87. **Tri-spec and Augmentation Healer companions do not cast Group Celerity.**
+    Owner, 2026-10-03; installed version unconfirmed, source 0.197.0 audited.
+    Reproduce with a grouped Healer that has learned Celerity (Augmentation
+    18 or higher), including Tri-spec, during combat. Expected: use the timed
+    group attack-speed buff when healing/control permit. Actual: no Celerity.
+    Read-only installed spell lookup: ranks 3235-3238 are Group-targeted
+    `CombatSpeedBuff`, last 20 seconds, and unlock at 18/26/32/44 Augmentation.
+    `BotBrain.FindTargetForDefensiveSpell` accepts `CelerityBuff` but omits
+    `CombatSpeedBuff`, so the active list selector obtains no target. The
+    maintainable-buff classifier also omits the actual type. The older
+    single-spell selector has a CombatSpeedBuff case, but the active defensive
+    path calls the list selector instead. Tri-spec invests 19 Augmentation;
+    missing specialization is not the cause. Source fix 0.198.0 recognizes
+    CombatSpeedBuff in both defensive selectors and buff maintenance, permits
+    timed group Celerity during combat, and chooses its strongest learned rank.
+    Concentration haste remains routine upkeep; heals and control retain priority.
+    Installation and real-client casting, expiry/recast, and rank verification
+    with Tri-spec and Augmentation Healers remain pending.
+
+86. **Svasud Faste gates fail to open and keep-door clicks sometimes do not enter.**
+    Owner, 2026-10-03, installed version unconfirmed. Expected: nearby gate
+    clicks open the border gate or cross an accessible keep doorway reliably.
+    Source findings: Svasud's home-side IDs were absent from border handling;
+    an already-open server door did not resend state; keep DoorRequest allowed
+    512 units but object interaction rejected beyond 192; the traversal
+    cooldown covered all doors and was set before a successful move; facing
+    treated both sides as front within 32 units. Source 0.197.0 aligns the
+    ranges, refreshes border state, retains timed border openings, uses exact
+    side detection, fixes the tower main-door index, and tracks successful
+    traversal per door. Players can click through breached enemy main gates;
+    intact hostile gates and enemy posterns stay blocked. Pending: install,
+    check Svasud from both sides, repeated clicks and adjacent keep doors,
+    tower height, hostile intact/breached gates and a rejected transfer retry.
+
+85. **Defeated Fensalir Faste stays neutral without a bot guild claim.**
+    Owner, 2026-10-03. Logs repeatedly show
+    `KEEP_CLAIM_STEWARD_MISSING keep=80 reason=no_lord_position` at startup.
+    Keeps initialize before saved mobs, and the defeated lord's later load
+    never restored the steward; bots only approached a steward already nearby.
+    Expected: guild bots secure free, defeated keeps. Source 0.197.0 restores
+    the steward when the saved lord tries to enter the world, keeps the lord
+    absent until a claim, and adds reserved claim journeys to free keeps.
+    All guild claim caps are removed (task 82). Pending: install, observe a
+    bot traveling to and claiming Fensalir, and restart with another defeated
+    keep to check the steward and subsequent guild ownership.
+
+84. **Cannot delete companions carrying non-starter items.** Owner screenshot
+    2026-10-03: deleting benched Kjell reports earned, traded, or unclassified
+    items and refuses deletion (installed version unknown). Expected: confirmed
+    deletion is allowed regardless of gear. Source 0.196.0 removes both item
+    provenance gates and deletes the companion with all inventory rows in one
+    transaction; the confirmation warns that all equipped and carried items
+    are lost. Installation and real-client deletion checks remain pending.
+
 83. **Bots attack the other owner's group in a shared battlegroup.** Owner
     2026-10-02: in a battlegroup with Stefan (one group each, different
     guilds), would /spawn helpers attack Stefan's side? Code says yes: only

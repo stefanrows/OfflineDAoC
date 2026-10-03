@@ -21,7 +21,7 @@ public static class AutonomousSiegeMarch
         long now = GameLoop.GameLoopTime;
         var cached = bot.TempProperties.GetProperty<MarchCache>("SiegeMarchCache");
         if (cached != null && cached.Tick == now && cached.Force == force) return cached.Marching;
-        var plan = AutonomousRvrEventLayer.KeepPlan(force, bot.Realm, now);
+        var plan = AutonomousGuildKeepDefense.PlanFor(bot) ?? AutonomousRvrEventLayer.KeepPlan(force, bot.Realm, now);
         bool marching = plan != null && plan.TargetId.StartsWith("rvr-keep-", StringComparison.Ordinal) &&
             (bot.CurrentRegionID != plan.RegionId ||
              Vector2.DistanceSquared(new(bot.X, bot.Y), new(plan.X, plan.Y)) > 6500 * 6500);

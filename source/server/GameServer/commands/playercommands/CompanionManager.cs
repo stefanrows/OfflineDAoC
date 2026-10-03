@@ -477,7 +477,7 @@ namespace DOL.GS.Commands
                 realmPointPool, realmAllocations, realmAbilities);
 
             if (session.DetailTab == CompanionManagerDetailTab.Overview && session.DeleteConfirmationId == id)
-                AddText(lines, $"Permanently delete {current.Name}? Level, training and starter gear will be lost. Earned or unknown items block deletion.");
+                AddText(lines, $"Permanently delete {current.Name}? Level, training and ALL equipped and carried items will be lost.");
 
             switch (session.DetailTab)
             {

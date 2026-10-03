@@ -57,7 +57,7 @@ public static class AutonomousFrontierTransport
     /// minute at the porter for its stragglers, then ported together).</summary>
     public static GameBot[] BoardingParty(GameBot bot, Passage passage) =>
         passage.Medallion == "home_necklace" &&
-        AutonomousObjectiveAssignments.Parse(bot.PersistentRecord?.ObjectiveKind) != eAutonomousObjectiveKind.RvR
+        !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)
             ? [bot] // Initial PvE meetups can have members returning from different frontiers.
             : bot.Group?.GetMembersInTheGroup().OfType<GameBot>().ToArray() ?? [bot];
 
@@ -262,7 +262,8 @@ public static class AutonomousFrontierTransport
         if (bot?.IsAutonomousWorldBot != true || bot.IsPlayerLedGroup || bot.IsTemporaryGroupHelper ||
             !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) return null;
         string force = bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}";
-        return AutonomousRvrEventLayer.KeepPlan(force, bot.Realm, GameLoop.GameLoopTime);
+        return AutonomousGuildKeepDefense.PlanFor(bot) ??
+            AutonomousRvrEventLayer.KeepPlan(force, bot.Realm, GameLoop.GameLoopTime);
     }
 
     public static bool PassageMatchesSiege(GameBot bot, Passage passage)

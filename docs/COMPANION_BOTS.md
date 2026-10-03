@@ -45,9 +45,9 @@ gear, and player controls. Temporary `/spawn` helpers are a separate system.
 The Companion Manager roster marks generated recruits **Regular** and authored
 recruits **Story** in both the list and the selected companion's detail heading.
 On Overview, **[Delete]** opens a confirmation for that companion. Confirming
-permanently removes the saved companion and its disposable starter gear. If the
-companion carries earned, traded, or unclassified items, deletion is refused;
-invite the companion and clear those items first. An active companion is
+permanently removes the saved companion and all equipped and carried items,
+including starter, earned, traded, and unclassified gear. Items never block
+deletion; move anything you want to keep first. An active companion is
 benched before deletion. Deleting a story companion makes that authored person
 available for recruitment again.
 

@@ -173,7 +173,10 @@ These are settled. Do not reopen them without the owner.
     (door 10,000 HP, guards 52, lord 63), set at every server start;
     `starting_keep_level` is 1; claimed keeps keep the existing claim level 5.
     (2b) At most one automatic siege per attacking guild, a server-wide safety
-    cap of 6; `guilds_claim_limit` 3. (3) The temporary ×10 ram stays. (4a)
+    cap of 6. The owner removed the guild keep-count cap on 2026-10-03
+    (0.197.0): claims are unlimited and the legacy `guilds_claim_limit` is -1.
+    Eligible bot guild forces prioritize free defeated keeps. (3) The
+    temporary ×10 ram stays. (4a)
     Relic raids stay off; a relic-raid mode is a later idea. (5) As since
     1.46, single-target direct-damage spells and bolts hit keep doors at half
     effect; DoTs, debuffs and crowd control still do not. Details:
@@ -662,9 +665,9 @@ relic bonuses apply to that guild only; stacking is uncapped (decision 3).
    claimer (bot-aware rank). The former `claim_num` group-size gate (8 for
    keeps, 4 for towers) was removed for Camlann Old Frontiers claims in
    source 0.153.0 at the owner's request. Other rulesets retain that gate.
-5. `guilds_claim_limit`: raise it above 1 so a guild can hold a keep plus
-   relic keeps. The Tier 5 default is 3. Existing saves still carried 1 until
-   the startup property update of owner decision 10 (2026-09-28).
+5. Guild keep claims are unlimited as of 0.197.0 (owner, 2026-10-03).
+   The legacy `guilds_claim_limit` is -1 in fresh and existing saves; keep
+   claim checks impose no count limit. This supersedes the Tier 5 cap of 3.
 6. `PvPServerRules.ResetKeep` must accept a `GameBot` killer and a bot-owned
    pet killer, not only `GamePlayer`. Its "leader realm" display realm is
    cosmetic.

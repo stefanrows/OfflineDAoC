@@ -429,7 +429,10 @@ namespace DOL.GS.Keeps
 			if (damageAmount > 0)
 			{
 				Keep.LastAttackedByEnemyTick = CurrentRegion.Time;
+                int previousHealth = Health;
 				base.TakeDamage(source, damageType, damageAmount, criticalAmount);
+                if (Health < previousHealth)
+                    AutonomousGuildKeepDefense.ObserveAttack(Keep, source);
 
 				//only on hp change
 				if (m_oldHealthPercent != HealthPercent)

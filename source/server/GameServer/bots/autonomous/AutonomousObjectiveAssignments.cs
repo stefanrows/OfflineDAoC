@@ -49,7 +49,7 @@ public static class AutonomousObjectiveAssignments
             backpackFull && unloadRoll >= 0 && unloadRoll < 0.95);
 
     public static eAutonomousObjectiveKind KindFor(GameBot bot) =>
-        Parse(bot?.PersistentRecord?.ObjectiveKind);
+        AutonomousGuildKeepDefense.IsRecalled(bot) ? eAutonomousObjectiveKind.RvR : Parse(bot?.PersistentRecord?.ObjectiveKind);
 
     public static eAutonomousObjectiveKind Parse(string value) =>
         Enum.TryParse(value, true, out eAutonomousObjectiveKind result) ? result : eAutonomousObjectiveKind.SoloPve;
@@ -166,7 +166,7 @@ public static class AutonomousObjectiveAssignments
             DateTime utcNow = WorldSimulationClock.UtcNow;
             GameBot[] roster = AutonomousBotRegistry.Snapshot()
                 .Where(bot => bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper && !bot.IsPlayerLedGroup &&
-                              bot.PersistentRecord != null)
+                              bot.PersistentRecord != null && !AutonomousGuildKeepDefense.IsRecalled(bot))
                 .ToArray();
             // The existing one-minute pass is also a backstop for a service bot
             // whose own movement/maintenance branch is delayed. No new timer.

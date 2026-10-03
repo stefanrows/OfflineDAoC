@@ -181,6 +181,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (Interlocked.Read(ref _lastMaintenanceTick) == now || now < Interlocked.Read(ref _maintenanceRetryTick)) return;
         try
         {
+            AutonomousGuildKeepDefense.Pulse(now);
             RealmEventNotices.Pulse(now);
             RealmEventControls.Pulse();
             AutonomousRealmRaid.Pulse(now);
@@ -224,6 +225,7 @@ public static partial class AutonomousBotGroupCoordinator
 
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.GroupCoordinatorPulse);
         PrepareCoordinatorTick();
+        if (AutonomousGuildKeepDefense.IsRecalled(bot)) return null;
         // A solo bot has no session: only its own stale group metadata is
         // cleared, exactly as inside the lock. Groups gain members only in the
         // population maintenance, which runs before the parallel brain phase,
@@ -1370,7 +1372,8 @@ public static partial class AutonomousBotGroupCoordinator
 
         GameBot[] population = AutonomousBotRegistry.Snapshot();
         GameBot[] activeRoster = population
-            .Where(bot => !bot.IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(bot, objectiveKind))
+            .Where(bot => !bot.IsTemporaryGroupHelper && !AutonomousGuildKeepDefense.IsRecalled(bot) &&
+                          AutonomousObjectiveAssignments.Is(bot, objectiveKind))
             .ToArray();
         int groupedCount = activeRoster.Count(bot => bot.Group != null);
         // Allocation has already capped the GroupPve cohort at its population

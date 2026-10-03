@@ -1499,6 +1499,11 @@ namespace DOL.AI.Brain
 
         private void ThinkCore()
         {
+            if (AutonomousGuildKeepDefense.Eligible(BotBody))
+            {
+                _autonomousWorldController ??= new AutonomousWorldBotController();
+                if (_autonomousWorldController.TryRunGuildKeepDefense(this)) return;
+            }
             if (CompanionFollowPolicy.ObserveAndCancelBuffs(BotBody))
             {
                 _nextMaintenanceBuffTick = 0;
@@ -2847,6 +2852,11 @@ namespace DOL.AI.Brain
             return true;
         }
 
+        private static bool IsCombatCelerity(Spell spell) => spell != null &&
+            (spell.SpellType == eSpellType.CelerityBuff ||
+             spell.SpellType == eSpellType.CombatSpeedBuff && spell.Target == eSpellTarget.GROUP &&
+             spell.Duration > 0 && !spell.IsConcentration);
+
         internal static bool IsMaintainableClassBuff(Spell spell) => spell?.SpellType switch
         {
             eSpellType.SpeedEnhancement or
@@ -2856,7 +2866,7 @@ namespace DOL.AI.Brain
             eSpellType.AllMagicResistBuff or eSpellType.EnduranceRegenBuff or eSpellType.PowerRegenBuff or
             eSpellType.AblativeArmor or eSpellType.AcuityBuff or eSpellType.AFHitsBuff or
             eSpellType.ArmorAbsorptionBuff or eSpellType.BaseArmorFactorBuff or eSpellType.SpecArmorFactorBuff or
-            eSpellType.PaladinArmorFactorBuff or eSpellType.Buff or eSpellType.CelerityBuff or
+            eSpellType.PaladinArmorFactorBuff or eSpellType.Buff or eSpellType.CelerityBuff or eSpellType.CombatSpeedBuff or
             eSpellType.ConstitutionBuff or eSpellType.CourageBuff or eSpellType.CrushSlashTrustBuff or
             eSpellType.DexterityBuff or eSpellType.DexterityQuicknessBuff or eSpellType.EffectivenessBuff or
             eSpellType.FatigueConsumptionBuff or eSpellType.FlexibleSkillBuff or eSpellType.HasteBuff or
@@ -4928,6 +4938,7 @@ namespace DOL.AI.Brain
                 case eSpellType.PaladinArmorFactorBuff:
                 case eSpellType.Buff:
                 case eSpellType.CelerityBuff:
+                case eSpellType.CombatSpeedBuff:
                 case eSpellType.ConstitutionBuff:
                 case eSpellType.CourageBuff:
                 case eSpellType.CrushSlashTrustBuff:
@@ -4955,8 +4966,6 @@ namespace DOL.AI.Brain
                 case eSpellType.DefensiveProc:
                 case eSpellType.DamageShield:
                 case eSpellType.SpeedEnhancement when spell.Target == eSpellTarget.PET:
-                case eSpellType.CombatSpeedBuff when spell.Duration > 20:
-                case eSpellType.CombatSpeedBuff when spell.IsConcentration:
                 case eSpellType.MesmerizeDurationBuff when !spell.IsPulsing:
                 case eSpellType.Bladeturn when !spell.IsPulsing:
                 {
@@ -5233,7 +5242,7 @@ namespace DOL.AI.Brain
                 foreach (Spell spell in spells)
                 {
                     if (Body.InCombat && IsMaintainableClassBuff(spell) &&
-                        spell.SpellType != eSpellType.CelerityBuff)
+                        !IsCombatCelerity(spell))
                         continue;
                     if (!Body.InCombat && SkipsOutOfCombatUpkeep(spell, IsMaintenanceTraveling()))
                         continue;
@@ -5293,6 +5302,16 @@ namespace DOL.AI.Brain
                     .Where(entry => !baseBuffIds.Contains(entry.Item1.ID))
                     .ToList();
             }
+
+            // Choose the strongest learned group Celerity rank rather than
+            // spending successive casts upgrading a randomly chosen lower rank.
+            if (spellsToCast.Any(entry => IsCombatCelerity(entry.Item1)))
+                spellsToCast = spellsToCast
+                    .Where(entry => IsCombatCelerity(entry.Item1))
+                    .OrderByDescending(entry => entry.Item1.Value)
+                    .ThenByDescending(entry => entry.Item1.Level)
+                    .Take(1)
+                    .ToList();
 
             GameObject oldTarget = Body.TargetObject;
             (Spell spell, GameLiving target) spellToCast = BotBody.IsEndgameCompanion
@@ -5354,6 +5373,7 @@ namespace DOL.AI.Brain
                 case eSpellType.PaladinArmorFactorBuff:
                 case eSpellType.Buff:
                 case eSpellType.CelerityBuff:
+                case eSpellType.CombatSpeedBuff:
                 case eSpellType.ConstitutionBuff:
                 case eSpellType.CourageBuff:
                 case eSpellType.CrushSlashTrustBuff:

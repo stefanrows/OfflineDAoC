@@ -1680,7 +1680,7 @@ namespace DOL.GS
             }
         }
 
-        /// <summary>Removes a saved companion and its starter kit after protecting all other items.</summary>
+        /// <summary>Removes a saved companion and all of its items, regardless of provenance.</summary>
         public static bool TryDelete(GamePlayer owner, string nameOrId, out string message)
         {
             message = "That companion name or ID is not in your roster.";
@@ -1704,26 +1704,6 @@ namespace DOL.GS
                     return false;
                 }
 
-                // Only the disposable starter kit can be removed with the record.
-                // Unknown item provenance is protected just like earned and traded gear.
-                DbInventoryItem[] items;
-                try
-                {
-                    items = GameServer.Database.SelectObjects<DbInventoryItem>(
-                        DB.Column(nameof(DbInventoryItem.OwnerID)).IsEqualTo(InventoryOwnerId(record.CompanionId))).ToArray();
-                }
-                catch (Exception exception)
-                {
-                    Log.Error($"Could not inspect inventory before deleting companion {record.CompanionId}.", exception);
-                    message = "The companion inventory could not be checked. Nothing was deleted.";
-                    return false;
-                }
-                if (items.Any(item => !string.Equals(GetEquipmentItemFlags(record, item.ObjectId), "S", StringComparison.Ordinal)))
-                {
-                    message = $"{record.Name} has earned, traded, or unclassified items. Return or clear those items before deleting this companion; nothing was deleted.";
-                    return false;
-                }
-
                 if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active) && active?.Owner == owner)
                 {
                     // Save and remove the live actor first. If deletion fails, the
@@ -1740,8 +1720,8 @@ namespace DOL.GS
 
                 lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                 {
-                    // Recheck after benching: the last live inventory save may have
-                    // introduced an item that was not in the first database read.
+                    // Read after benching so the final live inventory save is included.
+                    DbInventoryItem[] items;
                     try
                     {
                         items = GameServer.Database.SelectObjects<DbInventoryItem>(
@@ -1751,11 +1731,6 @@ namespace DOL.GS
                     {
                         Log.Error($"Could not recheck inventory before deleting companion {record.CompanionId}.", exception);
                         message = "The final inventory check failed. Nothing was deleted.";
-                        return false;
-                    }
-                    if (items.Any(item => !string.Equals(GetEquipmentItemFlags(record, item.ObjectId), "S", StringComparison.Ordinal)))
-                    {
-                        message = $"{record.Name} has protected items after its final save. Nothing was deleted.";
                         return false;
                     }
                     if (!database.DeleteObjectsAtomically(items.Cast<DataObject>().Append(record)))

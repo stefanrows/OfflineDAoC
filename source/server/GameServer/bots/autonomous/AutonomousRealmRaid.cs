@@ -89,7 +89,7 @@ namespace DOL.GS
         {
             lock (Sync) return Raids.TryGetValue(id, out var raid) && raid.Forced;
         }
-        public static bool IsEligible(GameBot bot) => bot != null && RealmRaidRecruitmentPolicy.Eligible(
+        public static bool IsEligible(GameBot bot) => bot != null && !AutonomousGuildKeepDefense.IsRecalled(bot) && RealmRaidRecruitmentPolicy.Eligible(
             bot.Level, bot.IsAutonomousWorldBot, bot.IsTemporaryGroupHelper, bot.IsPlayerLedGroup);
         public static readonly Definition[] Definitions =
         [
@@ -777,6 +777,39 @@ namespace DOL.GS
                         SupportMembers(bot).Contains(petOwner) && pet.CurrentRegionID == bot.CurrentRegionID &&
                         bot.IsWithinRadius(pet, range))
                         yield return pet;
+        }
+
+        public static void CancelPendingForKeepDefense(GameBot bot)
+        {
+            lock (Sync)
+            {
+                Reservations.TryRemove(bot.DatabaseID, out _);
+                foreach (Raid raid in Raids.Values)
+                foreach (GameBot[] pending in raid.ForcedParties.Where(party => party.Contains(bot)).ToArray())
+                {
+                    // A reserved formation needs exactly four or eight members.
+                    // Free its remaining seats for recruitment rather than leave
+                    // seven bots stuck forever in an unformable reservation.
+                    raid.ForcedParties.Remove(pending);
+                    foreach (GameBot member in pending)
+                        if (Reservations.GetValueOrDefault(member.DatabaseID) == raid.Definition.Id)
+                            Reservations.TryRemove(member.DatabaseID, out _);
+                }
+            }
+        }
+
+        public static void WithdrawForKeepDefense(Group group, GameBot bot)
+        {
+            lock (Sync)
+            {
+                if (!Membership.TryGetValue(group, out Raid raid) || !raid.Parties.TryGetValue(group, out Party party)) return;
+                RealmRaidBattleGroup.Detach(raid.Battle, [bot]);
+                party.Members = party.Members.Where(member => member != bot).ToArray();
+                party.CatchingUp.Remove(bot.DatabaseID);
+                party.CorpseSince.Remove(bot.DatabaseID);
+                raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
+                if (party.Members.Length == 0) RemoveParty(group);
+            }
         }
 
         public static void RemoveParty(Group group)

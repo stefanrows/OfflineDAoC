@@ -2278,7 +2278,7 @@ namespace DOL.GS.ServerProperties
 		/// <summary>
 		/// How many things do we allow guilds to claim?
 		/// </summary>
-		[ServerProperty("guild", "guilds_claim_limit", "How many keeps do we allow a guild to claim?", 3)]
+		[ServerProperty("guild", "guilds_claim_limit", "Legacy setting: guild keep claims are unlimited (-1).", -1)]
 		public static int GUILDS_CLAIM_LIMIT;
 
 		/// <summary>

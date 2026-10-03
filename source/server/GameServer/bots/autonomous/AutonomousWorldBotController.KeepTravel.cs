@@ -45,8 +45,37 @@ public sealed partial class AutonomousWorldBotController
             $"avoidMs={AutonomousRvrEventLayer.AbandonedTargetMilliseconds}");
     }
 
+    private bool TryRunKeepClaim(GameBot bot)
+    {
+        if (_rvrIntent != AutonomousRvrEventLayer.Intent.ClaimKeep || _rvrDestination == null ||
+            bot.Group != null && bot.Group.LivingLeader != bot) return false;
+        string forceId = _groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}";
+        bot.TempProperties.SetProperty("RvrEventForce", forceId);
+        var keep = int.TryParse(_rvrDestination.Id.AsSpan(9), out int keepId)
+            ? GameServer.KeepManager.GetKeepByID(keepId) : null;
+        if (!AutonomousRvrKeepPolicy.IsClaimableKeep(keep) || !PvpClaimAvailable(keep) ||
+            !AutonomousRvrEventLayer.RenewClaimPlan(forceId, _rvrDestination.Id, GameLoop.GameLoopTime))
+        {
+            AutonomousRvrEventLayer.ReleaseClaimPlan(forceId, _rvrDestination.Id);
+            ClearKeepObjective(bot);
+            _rvrIntent = AutonomousRvrEventLayer.Intent.Roam;
+            return false;
+        }
+        ReleaseOwnedSiegeRams(bot);
+        TravelRvrObjective(bot, _rvrDestination);
+        if (_rvrDestination != null)
+            SetRvrStatus(bot, "Claiming keep", "Secure the free keep for our guild",
+                "Traveling to the defeated keep's claim steward", keep.Name);
+        return true;
+    }
+
+    private static bool PvpClaimAvailable(DOL.GS.Keeps.AbstractGameKeep keep) =>
+        keep?.Guild == null && keep?.DBKeep.LordDefeated == true &&
+        keep.ClaimPoint?.ObjectState == GameObject.eObjectState.Active;
+
     private void ClearKeepObjective(GameBot bot)
     {
+        AutonomousRvrEventLayer.ReleaseClaimPlan(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}", _rvrDestination?.Id);
         _keepTravelKey = null; _keepTravelPoints = null; _keepPlanning = null;
         _keepTravelFailures = 0; _keepTravelRetry = 0;
         _rvrDestination = null; _rvrApproachDestination = null;
@@ -111,7 +140,8 @@ public sealed partial class AutonomousWorldBotController
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.KeepTravel);
         long now = GameLoop.GameLoopTime;
-        if (AutonomousRvrEventLayer.IsAbandoned(RvrForceOf(bot), destination.Id, now))
+        if (!AutonomousGuildKeepDefense.IsRecalled(bot) &&
+            AutonomousRvrEventLayer.IsAbandoned(RvrForceOf(bot), destination.Id, now))
         {
             // Another member already called this keep off for the warband.
             ClearKeepObjective(bot);
@@ -191,7 +221,7 @@ public sealed partial class AutonomousWorldBotController
                 Log.Warn($"RVR_KEEP_ROUTE_FAILED bot=\"{bot.Name}\" id={bot.DatabaseID} realm={bot.Realm} " +
                     $"target=\"{destination.Id}\" region={bot.CurrentRegionID} from={current} queries={queries} " +
                     $"reason=\"{failure}\" retryMs={_keepTravelRetry-now} failures={_keepTravelFailures}");
-                if (ShouldAbandonKeepRoute(_keepTravelFailures))
+                if (ShouldAbandonKeepRoute(_keepTravelFailures) && !AutonomousGuildKeepDefense.IsRecalled(bot))
                     AbandonKeepTarget(bot, destination, failure, now);
                 return true;
             }

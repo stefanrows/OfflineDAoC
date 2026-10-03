@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using DOL.Database;
 using DOL.GS.PacketHandler;
@@ -19,6 +20,7 @@ namespace DOL.GS
             12000101, 12000102,
             102093501, 102093502,
             111161301, 111161302,
+            100087401, 100087402, // Svasud Faste gates on the Vale of Mularn side.
             206016801, 206016802,
             207156901, 207156902
         ];
@@ -26,7 +28,22 @@ namespace DOL.GS
         private bool _openDead = false;
         private CloseDoorAction _closeDoorAction;
 
+        public static IEnumerable<int> BorderKeepDoorIds => _borderKeepDoorIds;
+        public override int InteractDistance => Math.Max(WorldMgr.INTERACT_DISTANCE,
+            ServerProperties.Properties.WORLD_PICKUP_DISTANCE * (IsBorderKeepDoor() ? 3 : 2));
         public override bool CanBeOpenedViaInteraction => !Locked;
+
+        public override bool Interact(GamePlayer player)
+        {
+            if (!base.Interact(player)) return false;
+            if (!IsBorderKeepDoor()) return true;
+            bool privileged = player.Client.Account.PrivLevel > 1;
+            bool realmAllowed = GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP or EGameServerType.GST_PvE
+                ? Realm != eRealm.None : player.Realm == Realm || Realm == eRealm.Door;
+            if (!privileged && (Locked || Health > 0 && !realmAllowed)) return false;
+            Open(player);
+            return State == eDoorState.Open;
+        }
 
         public GameDoor() : base()
         {
@@ -35,8 +52,13 @@ namespace DOL.GS
 
         public override void Open(GameLiving opener = null)
         {
-            if (!Locked)
-                State = eDoorState.Open;
+            if (Locked) return;
+            bool alreadyOpen = State == eDoorState.Open;
+            State = eDoorState.Open;
+            // A client's animation can lag behind the shared state. Re-send
+            // when the server already considers this door open.
+            if (alreadyOpen && opener is GamePlayer player)
+                player.Out.SendDoorState(CurrentRegion, this);
 
             if (HealthPercent > 40 || !_openDead)
             {

@@ -73,6 +73,8 @@ namespace DOL.GS.PacketHandler.Client.v168
 
             if (door != null)
             {
+                // Both keep-door packet paths use the door's actual click range.
+                if (door is GameKeepDoor) radius = door.InteractDistance;
                 // Don't use TargetObject. DoorRequest is sent before PlayerTarget.
                 if (!client.Player.IsWithinRadius(door, radius))
                 {
@@ -152,7 +154,9 @@ namespace DOL.GS.PacketHandler.Client.v168
                     {
                         if (player.IsWithinRadius(door, radius))
                         {
-                            if (doorState == 0x01)
+                            // Border gates close on their native timer; a
+                            // stale close request must not undo another opener.
+                            if (doorState == 0x01 || GameDoor.IsBorderKeepDoor(doorId))
                                 door.Open(player);
                             else
                                 door.Close(player);

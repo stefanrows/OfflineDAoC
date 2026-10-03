@@ -113,9 +113,9 @@ public sealed class UT_SiegeBalance
             Assert.That(changes["starting_keep_level"].Legacy, Is.EqualTo("4"));
             Assert.That(changes["starting_keep_level"].Target, Is.EqualTo("1"));
             Assert.That(changes["guilds_claim_limit"].Legacy, Is.EqualTo("1"));
-            Assert.That(changes["guilds_claim_limit"].Target, Is.EqualTo("3"));
+            Assert.That(changes["guilds_claim_limit"].Target, Is.EqualTo("-1"));
             Assert.That(DefaultOf(nameof(Properties.STARTING_KEEP_LEVEL)), Is.EqualTo(1), "new saves start unclaimed keeps at 1");
-            Assert.That(DefaultOf(nameof(Properties.GUILDS_CLAIM_LIMIT)), Is.EqualTo(3), "new saves allow three keeps");
+            Assert.That(DefaultOf(nameof(Properties.GUILDS_CLAIM_LIMIT)), Is.EqualTo(-1), "new saves have unlimited keep claims");
         });
     }
 

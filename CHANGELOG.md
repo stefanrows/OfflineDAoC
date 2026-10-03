@@ -12,6 +12,72 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.199.0] - 2026-10-03
+
+### Added
+
+- Bot guild keep defense (task 83): actual hostile damage to an owned keep's
+  walls, gates, guards or lord immediately recalls all active independent autonomous
+  guild troops, at every level and from PvE, services, raids, roaming or other
+  sieges. Player-led troops and companions retain player control.
+
+### Changed
+
+- Keep ownership takes priority over unrelated combat and travel. Same-guild
+  parties retain their members; recalled members leave mixed-guild raids
+  individually. Existing routes, native damage, death recovery, loot and
+  inventories remain authoritative. Failed defense routes retry instead of
+  switching to another goal. Further hostile damage renews the four-hour
+  response; owner loss ends it, and simultaneous attacks queue behind the
+  first keep. Normal activity allocation resumes after stand-down.
+  Installation and real-client verification are pending.
+
+## [0.198.0] - 2026-10-03
+
+### Fixed
+
+- Healer bots recognize the installed CombatSpeedBuff form of Group Celerity
+  and cast the strongest learned rank during combat when healing and crowd
+  control permit (bug 87). Concentration haste joins normal buff upkeep;
+  companions continue to skip short timed buffs outside combat. Installation
+  and real-client verification are pending.
+
+## [0.197.1] - 2026-10-03
+
+### Added
+
+- Record the Healer Group Celerity investigation (bug 87): installed spells
+  use CombatSpeedBuff, which the active defensive target selector omits.
+  Gameplay behavior is unchanged; a source fix remains open.
+
+## [0.197.0] - 2026-10-03
+
+### Changed
+
+- Guild keep claims are unlimited, including existing saves that carried
+  the three-keep cap. Eligible autonomous guild forces prioritize free,
+  defeated keeps and travel to their stewards; one force reserves each
+  claim journey, while nearby guild leaders can still claim opportunistically.
+
+### Fixed
+
+- Defeated keep lords restore their claim stewards when saved mobs load,
+  so keeps such as Fensalir Faste remain claimable after restarting (bug 85).
+- Svasud Faste's home-side gates use border-door range and opening rules;
+  stale client state is refreshed and close requests leave the timed opening
+  intact. Keep-door clicks share one range, detect the correct side near the
+  door, and suppress duplicates only for successful use of that same door.
+  Breached enemy gates also allow entry; intact hostile gates remain blocked
+  (bug 86). Installation and real-client verification are pending.
+
+## [0.196.0] - 2026-10-03
+
+### Changed
+
+- Companion deletion now removes all equipped and carried items regardless of
+  origin, so earned, traded, or unclassified gear no longer blocks deletion
+  (bug 84). The confirmation explicitly warns that all items will be lost.
+
 ## [0.195.0] - 2026-10-03
 
 ### Changed
