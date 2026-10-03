@@ -181,6 +181,16 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+84. **The group always runs its fastest speed.** Owner 2026-10-03: casters
+    often run their own speed although a Bard is in the group. Speed values:
+    performer songs 204, caster/healer/Warden speeds 153-154. Bots already
+    skipped their speed when a bot groupmate knew a faster one, but the
+    Warden's travel chant bypassed that check and real players never
+    counted. Source 0.200.0: the Warden drops its speed chant for bladeturn
+    when a groupmate has a faster speed; a real player running a faster
+    speed pulse counts too. Check in the client: with a Bard (bot or you)
+    in the group, no caster or Warden speed icon replaces the song.
+
 83. **All guild troops defend their attacked keep before other work.** Owner,
     2026-10-03. Source 0.199.0 adds a temporary guild-owned recall on actual
     hostile wall, door, guard or lord damage, including autonomous attackers, pets

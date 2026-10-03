@@ -2529,6 +2529,14 @@ namespace DOL.AI.Brain
                 bool traveling = bot.IsMoving || bot.IsReturningAfterRelease || bot.Group?.LivingLeader?.IsMoving == true;
                 eSpellType anchor = BotSongTwistPolicy.WardenAnchor(traveling, combat,
                     bot.Group?.MemberCount > 1, chants.Any(spell => spell.SpellType == eSpellType.Bladeturn));
+                // A faster speed in the group (a performer's song) replaces the
+                // Warden's travel chant; it keeps bladeturn or damage add instead.
+                Spell speedChant = chants.FirstOrDefault(spell => spell.SpellType == eSpellType.SpeedEnhancement);
+                if (anchor == eSpellType.SpeedEnhancement && speedChant != null && GroupmateHasStrongerSpeed(speedChant))
+                {
+                    chants.Remove(speedChant);
+                    anchor = eSpellType.Bladeturn;
+                }
                 chosen = chants.FirstOrDefault(spell => spell.SpellType == anchor) ??
                     chants.FirstOrDefault(spell => spell.SpellType == eSpellType.Bladeturn) ??
                     chants.FirstOrDefault(spell => spell.SpellType == eSpellType.DamageAdd);
@@ -4823,14 +4831,28 @@ namespace DOL.AI.Brain
              bot.PersistentRecord?.Activity?.Contains("travel", StringComparison.OrdinalIgnoreCase) == true ||
              bot.PersistentRecord?.Activity?.Contains("walking", StringComparison.OrdinalIgnoreCase) == true);
 
-        /// <summary>Another living groupmate knows a stronger speed than this one.</summary>
+        /// <summary>
+        /// Another living groupmate provides a faster speed: a bot that knows one
+        /// (it will run it), or a real player who is running one right now.
+        /// </summary>
         private bool GroupmateHasStrongerSpeed(Spell speed)
         {
             if (Body?.Group == null || speed == null)
                 return false;
             foreach (GameLiving member in Body.Group.GetMembersInTheGroup())
             {
-                if (member == Body || member is not GameBot mate || !mate.IsAlive)
+                if (member == Body || !member.IsAlive)
+                    continue;
+                if (member is GamePlayer player)
+                {
+                    if (player.effectListComponent.GetPulseEffects().Any(effect =>
+                            !effect.IsEnding && !effect.IsEnded &&
+                            effect.SpellHandler?.Spell is Spell running &&
+                            running.SpellType == eSpellType.SpeedEnhancement && running.Value > speed.Value))
+                        return true;
+                    continue;
+                }
+                if (member is not GameBot mate)
                     continue;
                 if ((mate.MiscSpells ?? []).Concat(mate.InstantMiscSpells ?? [])
                     .Any(spell => spell != null && spell.SpellType == eSpellType.SpeedEnhancement &&

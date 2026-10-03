@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.200.0] - 2026-10-03
+
+### Changed
+
+- A group now keeps its fastest speed (task 84). A Warden no longer starts
+  its travel speed chant when a Bard, Minstrel or Skald in the group has the
+  faster song; it keeps bladeturn instead. Bots also leave speed to a real
+  player who is running a faster speed song.
+
 ## [0.199.1] - 2026-10-03
 
 ### Added
