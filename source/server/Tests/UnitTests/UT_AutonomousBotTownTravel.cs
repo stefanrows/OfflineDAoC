@@ -377,6 +377,78 @@ public sealed class UT_AutonomousBotTownTravel
             out _, out _, out _), Is.False);
     }
 
+    // ---- RvR portal-keep muster -------------------------------------------
+
+    private static readonly Vector3 CastleSauvageAnchor = new(585085 + 600, 477504, 2600);
+
+    [Test]
+    public void BorderHubRouteIsOfferedOnlyWhenRequested()
+    {
+        // PvE (default): the nearest ordinary town, as before.
+        Assert.That(AutonomousBotTownTravel.TryResolveTownDestination(DestinationRegion, CastleSauvageAnchor,
+            out DbTeleport town), Is.True);
+        Assert.That(town.TeleportID, Is.EqualTo("Cotswold Village"));
+
+        // RvR: the porter's route straight into the hub.
+        Assert.That(AutonomousBotTownTravel.TryResolveTownDestination(DestinationRegion, CastleSauvageAnchor,
+            out DbTeleport hub, includeBorderHub: true), Is.True);
+        Assert.That(hub.TeleportID, Is.EqualTo("Castle Sauvage"));
+
+        // Far from any hub the flag changes nothing.
+        Vector3 cornwall = new(408907, 652791, 4944);
+        Assert.That(AutonomousBotTownTravel.TryResolveTownDestination(DestinationRegion, cornwall,
+            out DbTeleport plain, includeBorderHub: true), Is.True);
+        Assert.That(plain.TeleportID, Is.EqualTo("Cornwall Station"));
+    }
+
+    [Test]
+    public void RvrMemberPortsStraightIntoTheHub()
+    {
+        _teleporter.PosX = _bot.PosX;
+        Assert.That(AutonomousBotTownTravel.TryTeleportToTown(_bot, _teleporter, DestinationRegion,
+            CastleSauvageAnchor, includeBorderHub: true), Is.True);
+        Assert.That(_bot.MovedRegion, Is.EqualTo(DestinationRegion));
+        Assert.That(AutonomousRvrStaging.TryGetHubAt(DestinationRegion,
+            new(_bot.MovedX, _bot.MovedY, _bot.MovedZ), out _, out _) ||
+            DOL.GS.ServerRules.PvpCombatant.IsSafeHubLanding(DestinationRegion, _bot.MovedX, _bot.MovedY), Is.True,
+            "the landing lies in the hub's safe circle or its landing circle");
+    }
+
+    private static bool ChooseRendezvous(GameBot leader, eAutonomousObjectiveKind kind, out Vector3 point,
+        out string name, out ushort region)
+    {
+        object[] args = { leader, kind, default(Vector3), null, (ushort)0 };
+        bool chosen = (bool)typeof(AutonomousBotGroupCoordinator)
+            .GetMethod("TryChooseRendezvous", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, args)!;
+        point = (Vector3)args[2];
+        name = (string)args[3];
+        region = (ushort)args[4];
+        return chosen;
+    }
+
+    [Test]
+    public void RvrGroupMeetsAtItsLeadersBorderHubFromAnotherRegion()
+    {
+        _bot.Realm = eRealm.Albion;
+        _bot.CurrentRegion = _source;
+        Assert.That(ChooseRendezvous(_bot, eAutonomousObjectiveKind.RvR, out Vector3 point, out string name,
+            out ushort region), Is.True);
+        Assert.That(name, Is.EqualTo("Castle Sauvage"));
+        Assert.That(region, Is.EqualTo(DestinationRegion));
+        Assert.That(AutonomousRvrStaging.TryGetHubAt(region, point, out _, out eRealm hubRealm), Is.True);
+        Assert.That(hubRealm, Is.EqualTo(eRealm.Albion));
+    }
+
+    [Test]
+    public void RvrLeaderWithoutAWayToItsHubFormsNoTownMeetup()
+    {
+        _bot.Realm = eRealm.Albion;
+        _bot.CurrentRegion = _source;
+        TestRegion.SetObjects(_source, _bot); // no porter in the leader's region
+        Assert.That(ChooseRendezvous(_bot, eAutonomousObjectiveKind.RvR, out _, out _, out _), Is.False);
+    }
+
     [Test]
     public void TownReachabilityChecksLaterSeamsAndFinalCorridor()
     {

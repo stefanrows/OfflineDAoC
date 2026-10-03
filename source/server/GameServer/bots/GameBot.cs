@@ -1221,9 +1221,20 @@ namespace DOL.GS
                 : FindNearestBindPoint();
             ushort releaseRegion = _deathRegionId;
             string releaseReason = "safe-current-region";
-            // RvR world actors recover at their own hub after either PvP or PvE death.
-            if (safeWorldRelease && AutonomousRvrStaging.TrySafeRvrRelease(Realm,
-                    AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR),
+            // RvR world actors recover at a hub after either PvP or PvE death:
+            // a grouped one at its group's hub (cross-realm groups muster at the
+            // leader's), otherwise, or if that fails, at its own.
+            bool rvrWorldActor = AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR);
+            eRealm groupHubRealm = Realm;
+            bool groupHub = safeWorldRelease && rvrWorldActor &&
+                AutonomousBotGroupCoordinator.TryGetRvrReleaseRealm(this, out groupHubRealm) && groupHubRealm != Realm;
+            if (groupHub && AutonomousRvrStaging.TrySafeRvrRelease(groupHubRealm, true,
+                    out ushort groupHubRegion, out Point3D groupHubRelease))
+            {
+                (releaseRegion, release) = (groupHubRegion, groupHubRelease);
+                releaseReason = "group-border-hub";
+            }
+            else if (safeWorldRelease && AutonomousRvrStaging.TrySafeRvrRelease(Realm, rvrWorldActor,
                     out ushort hubRegion, out Point3D hubRelease))
             {
                 (releaseRegion, release) = (hubRegion, hubRelease);

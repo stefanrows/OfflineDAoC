@@ -12,6 +12,19 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.202.0] - 2026-10-03
+
+### Changed
+
+- RvR bot groups now meet at their realm's border hub (Castle Sauvage,
+  Svasud Faste, Druim Ligen), travel there by porter, and port and march
+  together (task 85). Before, a third of the groups met deep in the enemy
+  frontier and most missing members died on the way there, then roamed
+  alone. A group leaves when everyone is there, or at three quarters when
+  the rest is not expected within five minutes; nobody is thrown out, and
+  latecomers follow. A group that never fills up returns its bots to the
+  hub to look again instead of sending them off alone.
+
 ## [0.201.0] - 2026-10-03
 
 ### Fixed

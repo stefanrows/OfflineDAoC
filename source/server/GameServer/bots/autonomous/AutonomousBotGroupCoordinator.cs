@@ -135,6 +135,13 @@ public static partial class AutonomousBotGroupCoordinator
         public long? RemoteMeetupDeadlineTick { get; set; }
         public DateTime RemoteMeetupDeadlineUtc { get; set; }
         public bool RendezvousReselectionAttempted { get; set; }
+        // RvR portal-keep muster (AutonomousRvrHubMuster): when it started,
+        // at which hub, and the missing members' expected arrivals (5 s pass).
+        public long HubMusterStartedTick { get; set; }
+        public string HubMusterKey { get; set; } = string.Empty;
+        public long HubMusterReadySinceTick { get; set; }
+        public Dictionary<long, long?> HubArrivalEstimates { get; } = new();
+        public long NextHubMusterCheckTick { get; set; }
         public long NextAttendanceTick { get; set; }
         public long LeaderStagingDeadlineTick { get; set; }
         public DateTime LeaderStagingDeadlineUtc { get; set; }
@@ -1274,7 +1281,18 @@ public static partial class AutonomousBotGroupCoordinator
                     }
                     GameBot previousLeader = session.Leader;
                     GameBot replacement = ChooseLeader(session, remaining);
-                    if (previousLeader == bot && replacement != null && IsAssemblyPhase(session.Phase))
+                    if (previousLeader == bot && replacement != null && IsAssemblyPhase(session.Phase) &&
+                        IsRvrHubMuster(session))
+                    {
+                        // The hub stays where it is; the group keeps mustering
+                        // around its new leader.
+                        session.LockedSize = remaining.Length;
+                        TryBuildRendezvousSlots(session, remaining);
+                        Log.Info($"RVR_HUB_MUSTER_LEADER_LEFT group={session.Id} old=\"{bot.Name}\" " +
+                                 $"leader=\"{replacement.Name}\" hub=\"{session.RendezvousName}\" members={remaining.Length}");
+                        WriteSessionMetadata(session, remaining);
+                    }
+                    else if (previousLeader == bot && replacement != null && IsAssemblyPhase(session.Phase))
                     {
                         // The old meetup was anchored to a leader who no longer
                         // belongs to the party. Elect an actual member and give
@@ -1291,6 +1309,7 @@ public static partial class AutonomousBotGroupCoordinator
                             session.RendezvousRegion = region;
                             session.Phase = "Leader staging";
                             session.LeaderReadyForAssembly = false;
+                            BeginHubMuster(session, GameLoop.GameLoopTime);
                             session.LockedSize = remaining.Length;
                             session.Camp = null;
                             RebaseAttendance(session, remaining);
@@ -1807,16 +1826,25 @@ public static partial class AutonomousBotGroupCoordinator
                 sessionMembers.Select(member => member.Realm).Distinct().Skip(1).Any();
             foreach (GameBot member in sessionMembers.Where(member => member.CurrentRegionID != rendezvousRegion))
                 session.RemoteMemberIds.Add(MemberKey(member));
+            long remoteTimeout = AutonomousRvrHubMuster.RemoteMeetupTimeoutMilliseconds(objectiveKind);
             if (session.RemoteMemberIds.Count > 0)
             {
-                session.RemoteMeetupDeadlineTick = GameLoop.GameLoopTime + RemoteMeetupTimeoutMilliseconds;
-                session.RemoteMeetupDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(RemoteMeetupTimeoutMilliseconds);
+                session.RemoteMeetupDeadlineTick = GameLoop.GameLoopTime + remoteTimeout;
+                session.RemoteMeetupDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(remoteTimeout);
                 session.Attendance.Rebase(sessionMembers.Select(MemberKey), GameLoop.GameLoopTime,
-                    WorldSimulationClock.UtcNow, RemoteMeetupTimeoutMilliseconds);
+                    WorldSimulationClock.UtcNow, remoteTimeout);
             }
+            else if (IsRvrHubMuster(session))
+                session.Attendance.Rebase(sessionMembers.Select(MemberKey), GameLoop.GameLoopTime,
+                    WorldSimulationClock.UtcNow, remoteTimeout);
+            BeginHubMuster(session, GameLoop.GameLoopTime);
         }
         if (!TryBuildRendezvousSlots(session, BotMembers(group)))
             return null;
+        if (raidStaging == null && IsRvrHubMuster(session))
+            Log.Info($"RVR_HUB_MUSTER_STARTED group={session.Id} hub=\"{session.RendezvousName}\" leader=\"{leader.Name}\" " +
+                     $"size={sessionMembers.Length} remote={session.RemoteMemberIds.Count} " +
+                     $"realms=\"{string.Join(",", sessionMembers.Select(member => member.Realm).Distinct())}\"");
         if (objectiveKind == eAutonomousObjectiveKind.GroupPve && session.PveRoles.Count == 0)
         {
             GameBot[] exact = BotMembers(group);
@@ -2038,7 +2066,9 @@ public static partial class AutonomousBotGroupCoordinator
             !(session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
               AutonomousRvrEventLayer.IsBattleForce(session.Id, GameLoop.GameLoopTime)))
         {
-            if (raidView == null) ExpelRendezvousNoShows(session, members);
+            if (IsRvrHubMuster(session))
+                TrackHubMusterTravellers(session, members);
+            else if (raidView == null) ExpelRendezvousNoShows(session, members);
             members = BotMembers(session.Group);
             if (session.SoftMeetupStarted && members.All(member => session.Attendance.HasArrived(MemberKey(member))))
                 session.SoftMeetupStarted = false;
@@ -2205,7 +2235,13 @@ public static partial class AutonomousBotGroupCoordinator
             AtRendezvous(session, leader) && arrived >= 2 && !HasPendingRemoteMembers(session, members);
         bool recruiting = raidView == null && members.Length < RecruitmentTarget(session.Leader, session.ObjectiveKind) &&
             GameLoop.GameLoopTime < session.RecruitmentDeadlineTick;
-        if (session.Phase == "Meeting up" && !recruiting && (softPveStart || arrived == members.Length))
+        if (session.Phase == "Meeting up" && IsRvrHubMuster(session))
+        {
+            if (!UpdateHubMusterDeparture(session, members, recruiting))
+                return false;
+            members = BotMembers(session.Group);
+        }
+        else if (session.Phase == "Meeting up" && !recruiting && (softPveStart || arrived == members.Length))
         {
             foreach (GameBot member in members)
                 session.Attendance.Observe(MemberKey(member), GameLoop.GameLoopTime, AtRendezvous(session, member));
@@ -2360,6 +2396,7 @@ public static partial class AutonomousBotGroupCoordinator
             session.RendezvousRegion = region;
             session.Phase = "Leader staging";
             session.LeaderReadyForAssembly = false;
+            BeginHubMuster(session, now);
             RebaseAttendance(session, remaining);
             session.LeaderStagingDeadlineTick = now + LeaderStagingTimeoutMilliseconds;
             session.LeaderStagingDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(LeaderStagingTimeoutMilliseconds);
@@ -2376,7 +2413,7 @@ public static partial class AutonomousBotGroupCoordinator
         if (everyInvitedMemberMissed)
         {
             int timeoutMinutes = session.RemoteMeetupDeadlineTick.HasValue
-                ? (int)(RemoteMeetupTimeoutMilliseconds / 60_000L)
+                ? (int)(AutonomousRvrHubMuster.RemoteMeetupTimeoutMilliseconds(session.ObjectiveKind) / 60_000L)
                 : (int)(AutonomousRendezvousAttendance.TimeoutMilliseconds / 60_000L);
             Log.Warn($"AUTONOMOUS_GROUP_MEETUP_FAILED group={session.Id} leader=\"{leader.Name}\" " +
                      $"town=\"{session.RendezvousName}\" invited={members.Length - 1} " +
@@ -2417,12 +2454,246 @@ public static partial class AutonomousBotGroupCoordinator
             session.Attendance.Observe(MemberKey(member), now, arrived.Contains(MemberKey(member)) || AtRendezvous(session, member));
     }
 
+    // ---- RvR portal-keep muster (AutonomousRvrHubMuster) -------------------
+
+    /// <summary>An RvR group whose meetup lies inside a border hub's safe circle.</summary>
+    private static bool IsRvrHubMuster(Session session) =>
+        session != null && session.ObjectiveKind == eAutonomousObjectiveKind.RvR && session.RaidMusterEvent == null &&
+        AutonomousRvrStaging.TryGetHubAt(session.RendezvousRegion, session.Rendezvous, out _, out _);
+
+    private static string HubMusterKeyOf(Session session) =>
+        AutonomousRvrStaging.TryGetHubAt(session.RendezvousRegion, session.Rendezvous,
+            out AutonomousRvrStaging.BorderKeep hub, out _) ? $"{session.RendezvousRegion}:{hub.Name}" : string.Empty;
+
+    /// <summary>
+    /// A session whose meetup is (now) a border hub musters there: everyone
+    /// sets out at once instead of waiting for the leader to stage first, and
+    /// the muster's clocks start now, not at the session's creation.
+    /// </summary>
+    private static void BeginHubMuster(Session session, long now)
+    {
+        if (!IsRvrHubMuster(session))
+            return;
+        session.Phase = "Meeting up";
+        session.LeaderReadyForAssembly = true;
+        RestartHubMusterClock(session, now);
+    }
+
+    private static void RestartHubMusterClock(Session session, long now)
+    {
+        session.HubMusterStartedTick = now;
+        session.HubMusterKey = HubMusterKeyOf(session);
+        session.HubMusterReadySinceTick = 0;
+        session.HubArrivalEstimates.Clear();
+    }
+
+    /// <summary>The muster's start; a muster reached any other way (or at another hub) starts now.</summary>
+    private static long HubMusterStart(Session session, long now)
+    {
+        if (session.HubMusterStartedTick == 0 ||
+            !string.Equals(session.HubMusterKey, HubMusterKeyOf(session), StringComparison.Ordinal))
+            RestartHubMusterClock(session, now);
+        return session.HubMusterStartedTick;
+    }
+
+    // Active AllRealmsTeleporter positions per region. Porters are static
+    // spawns; one region scan per five minutes, read under Sync.
+    private static readonly Dictionary<ushort, (long Tick, Vector3[] Porters)> HubPorterCache = new();
+    private const long HubPorterCacheMilliseconds = 5 * 60_000L;
+
+    private static Vector3[] PorterPositions(ushort region, long now)
+    {
+        if (HubPorterCache.TryGetValue(region, out var cached) && now - cached.Tick < HubPorterCacheMilliseconds)
+            return cached.Porters;
+        Vector3[] porters = WorldMgr.GetNPCsFromRegion(region)
+            .OfType<AllRealmsTeleporter>()
+            .Where(candidate => candidate.ObjectState == GameObject.eObjectState.Active)
+            .Select(candidate => new Vector3(candidate.X, candidate.Y, candidate.Z))
+            .ToArray();
+        HubPorterCache[region] = (now, porters);
+        return porters;
+    }
+
+    /// <summary>
+    /// The leader of an RvR group must be able to get to its hub: on foot
+    /// within the meetup travel budget in the hub's region, or through a
+    /// porter in its current region. Members are checked by recruitment.
+    /// </summary>
+    private static bool CanLeaderReachHub(GameBot leader, ushort hubRegion, Vector3 point)
+    {
+        if (leader.CurrentRegionID == hubRegion)
+            return AutonomousPickupPlanning.WithinTravelBudget(
+                Vector3.Distance(new(leader.X, leader.Y, leader.Z), point) / Math.Max(1d, leader.MaxSpeed) / 60d);
+        return AutonomousBotTownTravel.TryGetTownRoute(leader, hubRegion, point, out _, out _, out double minutes,
+                   includeBorderHub: true) &&
+               AutonomousPickupPlanning.WithinTravelBudget(minutes);
+    }
+
+    /// <summary>
+    /// A member that left the hub's region before the group departed (a
+    /// death released elsewhere, a zone line) travels again by porter rather
+    /// than by zone crossings, and its arrival counts anew. Nobody is expelled.
+    /// </summary>
+    private static void TrackHubMusterTravellers(Session session, GameBot[] members)
+    {
+        long now = GameLoop.GameLoopTime;
+        if (now < session.NextAttendanceTick)
+            return;
+        session.NextAttendanceTick = now + 5_000;
+        long started = HubMusterStart(session, now);
+        long timeout = AutonomousRvrHubMuster.RemoteMeetupTimeoutMilliseconds(session.ObjectiveKind);
+        long remaining = Math.Max(0, started + timeout - now);
+        session.HubArrivalEstimates.Clear();
+        foreach (GameBot member in members)
+        {
+            long key = MemberKey(member);
+            if (!AtRendezvous(session, member))
+                session.HubArrivalEstimates[key] = EstimateHubArrival(session, member, now);
+            if (member.CurrentRegionID != session.RendezvousRegion)
+            {
+                if (session.RemoteMemberIds.Add(key))
+                {
+                    session.RemoteMeetupDeadlineTick ??= started + timeout;
+                    session.RemoteMeetupDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(
+                        Math.Max(0, session.RemoteMeetupDeadlineTick.Value - now));
+                    Log.Info($"RVR_HUB_MUSTER_REROUTE group={session.Id} bot=\"{member.Name}\" region={member.CurrentRegionID} " +
+                             $"hub=\"{session.RendezvousName}\" alive={member.IsAlive}");
+                }
+                if (session.Attendance.HasArrived(key))
+                    session.Attendance.Restart(key, now, WorldSimulationClock.UtcNow, remaining);
+            }
+            session.Attendance.Observe(key, now, AtRendezvous(session, member));
+        }
+    }
+
+    /// <summary>Expected arrival of a missing member at its hub slot; null when not expected soon.</summary>
+    private static long? EstimateHubArrival(Session session, GameBot member, long now)
+    {
+        long key = MemberKey(member);
+        bool sameRegion = member.CurrentRegionID == session.RendezvousRegion;
+        Vector3 position = new(member.X, member.Y, member.Z);
+        double toSlot = double.NaN, toPorter = double.NaN;
+        if (sameRegion)
+            toSlot = Vector3.Distance(position, session.RendezvousSlots.TryGetValue(key, out Vector3 slot)
+                ? slot : session.Rendezvous);
+        else if (member.IsAlive && member.CurrentRegion != null)
+        {
+            foreach (Vector3 porter in PorterPositions(member.CurrentRegionID, now))
+            {
+                double distance = Vector3.Distance(position, porter);
+                if (double.IsNaN(toPorter) || distance < toPorter)
+                    toPorter = distance;
+            }
+        }
+        return AutonomousRvrHubMuster.EstimateArrivalMilliseconds(member.IsAlive,
+            session.HeldUnreachableMembers.Contains(key), sameRegion, toSlot, toPorter, member.MaxSpeed);
+    }
+
+    /// <summary>
+    /// Departure, wait or disband of a mustering RvR group. Returns false
+    /// when the group ended.
+    /// </summary>
+    private static bool UpdateHubMusterDeparture(Session session, GameBot[] members, bool recruiting)
+    {
+        long now = GameLoop.GameLoopTime;
+        if (now < session.NextHubMusterCheckTick)
+            return true;
+        session.NextHubMusterCheckTick = now + 2_000;
+        long started = HubMusterStart(session, now);
+        GameBot leader = ChooseLeader(session, members);
+        GameBot[] present = members.Where(member => AtRendezvous(session, member)).ToArray();
+        long waited = Math.Max(0, now - started);
+        if (AutonomousRvrHubMuster.QuorumReady(members.Length, present.Length, waited))
+        {
+            if (session.HubMusterReadySinceTick == 0)
+                session.HubMusterReadySinceTick = now;
+        }
+        else
+            session.HubMusterReadySinceTick = 0;
+        long readyHeld = session.HubMusterReadySinceTick == 0 ? 0 : now - session.HubMusterReadySinceTick;
+        // Estimates come from the 5 s attendance pass; only a member that
+        // left its slot since then is estimated here (cached porters).
+        long?[] arrivals = members.Where(member => !present.Contains(member))
+            .Select(member => session.HubArrivalEstimates.TryGetValue(MemberKey(member), out long? eta)
+                ? eta : EstimateHubArrival(session, member, now)).ToArray();
+        AutonomousRvrHubMuster.Outcome outcome = AutonomousRvrHubMuster.DecideHubDeparture(members.Length,
+            present.Length, arrivals, leader != null && present.Contains(leader), recruiting, waited, readyHeld);
+        if (outcome.Decision == AutonomousRvrHubMuster.Decision.Wait)
+            return true;
+        int alive = members.Count(member => member.IsAlive);
+        string counts = $"present={present.Length}/{alive}/{members.Length} waitedMs={waited} reason={outcome.Reason}";
+        if (outcome.Decision == AutonomousRvrHubMuster.Decision.Disband)
+        {
+            Log.Info($"RVR_HUB_MUSTER_DISBANDED group={session.Id} hub=\"{session.RendezvousName}\" {counts}");
+            // The tour never began: everyone stays on RvR and looks for a
+            // group at the keep again, no tour end, no PvE, no town break.
+            FinishGroupTask(session,
+                $"Too few members met at {session.RendezvousName}; looking for a group at the keep again",
+                returnToHubLfg: AutonomousObjectiveAssignments.ReturnsToHubLfg(session.ObjectiveKind,
+                    session.TaskClock.HasStarted));
+            return false;
+        }
+        if (leader == null || !present.Contains(leader))
+        {
+            // The march follows its leader. After the half-group mark one
+            // who is actually standing at the keep takes the lead.
+            GameBot promoted = present.FirstOrDefault(member => member.IsAlive);
+            if (promoted != null)
+            {
+                session.Leader = promoted;
+                session.Group.MakeLeader(promoted);
+                Log.Info($"RVR_HUB_MUSTER_LEADER_HANDOVER group={session.Id} old=\"{leader?.Name}\" leader=\"{promoted.Name}\"");
+                leader = promoted;
+            }
+        }
+        foreach (GameBot member in members)
+            session.Attendance.Observe(MemberKey(member), now, AtRendezvous(session, member));
+        session.HubMusterReadySinceTick = 0;
+        session.Phase = "Choosing group target";
+        StartTaskClock(session, members);
+        Log.Info($"AUTONOMOUS_GROUP_ASSEMBLED group={session.Id} realm={leader?.Realm} size={members.Length} arrived={present.Length} " +
+                 $"members=\"{string.Join(",", members.Select(member => member.Name))}\" " +
+                 $"region={session.RendezvousRegion} rendezvous={(int)session.Rendezvous.X},{(int)session.Rendezvous.Y},{(int)session.Rendezvous.Z}");
+        Log.Info($"RVR_HUB_MUSTER_DEPARTED group={session.Id} hub=\"{session.RendezvousName}\" {counts} " +
+                 $"missing=\"{string.Join(",", members.Where(member => !present.Contains(member)).Select(member => member.Name))}\"");
+        return true;
+    }
+
+    /// <summary>
+    /// Where a grouped RvR bot releases: at its group's hub (the hub it
+    /// musters or mustered at, otherwise its leader's), so a member of a
+    /// cross-realm group is not released into another region than its group.
+    /// </summary>
+    public static bool TryGetRvrReleaseRealm(GameBot bot, out eRealm realm)
+    {
+        realm = bot?.Realm ?? eRealm.None;
+        if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Group == null)
+            return false;
+        using (EnterSync())
+        {
+            if (!TryGetSession(bot.Group, out Session session) || session.ObjectiveKind != eAutonomousObjectiveKind.RvR)
+                return false;
+            if (AutonomousRvrStaging.TryGetHubAt(session.RendezvousRegion, session.Rendezvous, out _, out eRealm hubRealm))
+            {
+                realm = hubRealm;
+                return true;
+            }
+            if (session.Leader != null)
+            {
+                realm = session.Leader.Realm;
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static bool HasPendingRemoteMembers(Session session, GameBot[] members) =>
         session?.RemoteMemberIds.Count > 0 && members != null &&
         members.Any(member => session.RemoteMemberIds.Contains(MemberKey(member)) &&
             !session.Attendance.HasArrived(MemberKey(member)));
 
-    private static void FinishGroupTask(Session session, string reason, bool returnToSolo = false)
+    private static void FinishGroupTask(Session session, string reason, bool returnToSolo = false,
+        bool returnToHubLfg = false)
     {
         if (session == null || session.Ending)
             return;
@@ -2485,7 +2756,11 @@ public static partial class AutonomousBotGroupCoordinator
             string afterGroupReason = session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve && session.IsCrossRealmPve
                 ? reason + "; cross-realm PvE group ended; remain at current location and resume matchmaking"
                 : reason + "; choosing independent work";
-            if (!IsTransferring(member))
+            if (IsTransferring(member))
+                continue;
+            if (returnToHubLfg)
+                AutonomousObjectiveAssignments.ReturnToHubLfgAfterMuster(member, reason);
+            else
                 AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(member,
                     afterGroupReason, forceSoloPve: returnToSolo);
         }
@@ -2529,6 +2804,41 @@ public static partial class AutonomousBotGroupCoordinator
             return true;
         }
 
+        // An RvR group meets where players ported to: inside its leader's
+        // border hub (Castle Sauvage, Svasud Faste, Druim Ligen), also when
+        // the leader stands in another region; members elsewhere port in.
+        // Town and named-area meetups no longer apply to RvR: 37 % of them
+        // were enemy portal keeps out in the open frontier (live 0.199.0).
+        if (objectiveKind == eAutonomousObjectiveKind.RvR)
+        {
+            if (AutonomousRvrStaging.TryGetBorderKeep(leader.Realm, out AutonomousRvrStaging.BorderKeep hub) &&
+                WorldMgr.GetRegion(hub.RegionId) is Region hubRegion)
+                foreach (Vector3 anchor in AutonomousRvrStaging.CandidateAnchors(hub, leader.DatabaseID).Take(6))
+                {
+                    if (!TryPoint(hubRegion, anchor, out point))
+                        continue;
+                    // One route proof per leader: another anchor of the same
+                    // hub does not change whether its porter or road gets there.
+                    if (!CanLeaderReachHub(leader, hub.RegionId, point))
+                        break;
+                    rendezvousName = hub.Name;
+                    rendezvousRegion = hub.RegionId;
+                    return true;
+                }
+            // A guild already out in the frontier may still gather at its own
+            // keep when its hub cannot be reached.
+            if (leader.Guild != null)
+                foreach (DOL.GS.Keeps.AbstractGameKeep keep in GameServer.KeepManager.GetKeepsOfRegion(leader.CurrentRegionID)
+                             .Where(keep => keep.Guild == leader.Guild)
+                             .OrderBy(keep => Vector3.DistanceSquared(current, new(keep.X, keep.Y, keep.Z))).Take(2))
+                {
+                    if (!TryPoint(leader.CurrentRegion, new(keep.X, keep.Y, keep.Z), out point)) continue;
+                    rendezvousName = keep.Name;
+                    return true;
+                }
+            return false;
+        }
+
         // Never anchor a new Jordheim party to a leader waiting on the bank's
         // shelf. Keep the same floor/local-exit/member-corridor validation.
         if (leader.Realm == eRealm.Midgard && leader.CurrentRegionID == 101 &&
@@ -2567,30 +2877,6 @@ public static partial class AutonomousBotGroupCoordinator
         {
             rendezvousName = leader.CurrentRegion.Description;
             return true;
-        }
-
-        // A guild already out in the frontier gathers where players did: at its
-        // own keep, or inside its realm's border keep, instead of walking home
-        // to a town first. Both are real, validated meeting points.
-        if (objectiveKind == eAutonomousObjectiveKind.RvR)
-        {
-            if (leader.Guild != null)
-                foreach (DOL.GS.Keeps.AbstractGameKeep keep in GameServer.KeepManager.GetKeepsOfRegion(leader.CurrentRegionID)
-                             .Where(keep => keep.Guild == leader.Guild)
-                             .OrderBy(keep => Vector3.DistanceSquared(current, new(keep.X, keep.Y, keep.Z))).Take(2))
-                {
-                    if (!TryPoint(leader.CurrentRegion, new(keep.X, keep.Y, keep.Z), out point)) continue;
-                    rendezvousName = keep.Name;
-                    return true;
-                }
-            if (AutonomousRvrStaging.TryGetBorderKeep(leader.Realm, out AutonomousRvrStaging.BorderKeep border) &&
-                border.RegionId == leader.CurrentRegionID)
-                foreach (Vector3 anchor in AutonomousRvrStaging.CandidateAnchors(border, leader.DatabaseID).Take(6))
-                {
-                    if (!TryPoint(leader.CurrentRegion, anchor, out point)) continue;
-                    rendezvousName = border.Name;
-                    return true;
-                }
         }
 
         // Never form a party around an arbitrary wilderness point. A future

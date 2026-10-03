@@ -26,6 +26,32 @@ public static class AutonomousRvrStaging
         return keep.RegionId != 0;
     }
 
+    /// <summary>Radius of a border hub's safe circle (the imported area rows).</summary>
+    public const int HubRadius = 3_500;
+
+    /// <summary>
+    /// The border hub whose safe circle contains this point, and the realm it
+    /// belongs to. Hubs are neutral on Camlann, so a cross-realm warband can
+    /// muster at its leader's hub.
+    /// </summary>
+    public static bool TryGetHubAt(ushort region, Vector3 point, out BorderKeep hub, out eRealm realm)
+    {
+        foreach (eRealm candidate in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
+        {
+            if (!TryGetBorderKeep(candidate, out BorderKeep keep) || keep.RegionId != region)
+                continue;
+            float dx = point.X - keep.Position.X, dy = point.Y - keep.Position.Y;
+            if (dx * dx + dy * dy > (float)HubRadius * HubRadius)
+                continue;
+            hub = keep;
+            realm = candidate;
+            return true;
+        }
+        hub = default;
+        realm = eRealm.None;
+        return false;
+    }
+
     /// <summary>
     /// Imported area centers can sit inside keep geometry rather than on a
     /// walkable courtyard polygon. Probe a deterministic set wholly inside the

@@ -123,7 +123,9 @@ namespace DOL.GS
                         Vector3.Distance(new(candidate.X, candidate.Y, candidate.Z), point) / Math.Max(1d, candidate.MaxSpeed) / 60d) &&
                     AutonomousBotTownTravel.CanReachTownPoint(candidate.CurrentRegion, candidate.CurrentZone,
                         new(candidate.X, candidate.Y, candidate.Z), point);
-            return AutonomousBotTownTravel.TryGetTownRoute(candidate, region, point, out _, out _, out double minutes) &&
+            // An RvR member may port straight into its group's border hub.
+            return AutonomousBotTownTravel.TryGetTownRoute(candidate, region, point, out _, out _, out double minutes,
+                    includeBorderHub: AutonomousObjectiveAssignments.Is(candidate, eAutonomousObjectiveKind.RvR)) &&
                 AutonomousPickupPlanning.WithinTravelBudget(minutes);
         }
 
@@ -203,7 +205,8 @@ namespace DOL.GS
                     if (candidate.CurrentRegionID != session.RendezvousRegion)
                     {
                         session.RemoteMemberIds.Add(MemberKey(candidate));
-                        session.RemoteMeetupDeadlineTick ??= session.CreatedTick + RemoteMeetupTimeoutMilliseconds;
+                        session.RemoteMeetupDeadlineTick ??= (session.HubMusterStartedTick > 0 ? session.HubMusterStartedTick : session.CreatedTick) +
+                            AutonomousRvrHubMuster.RemoteMeetupTimeoutMilliseconds(session.ObjectiveKind);
                         session.RemoteMeetupDeadlineUtc = WorldSimulationClock.UtcNow.AddMilliseconds(
                             Math.Max(0, session.RemoteMeetupDeadlineTick.Value - now));
                     }

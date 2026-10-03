@@ -10,6 +10,7 @@ public sealed partial class AutonomousWorldBotController
     private string _townMeetupGroupId = string.Empty;
     private ushort _townMeetupRegion;
     private long _nextTownMeetupRouteSearch;
+    private bool _townMeetupNoRoute;
 
     private bool HandleTownMeetupTravel(GameBot bot, AutonomousBotGroupCoordinator.Directive directive)
     {
@@ -25,12 +26,20 @@ public sealed partial class AutonomousWorldBotController
             _failedTownMeetupPorter = null;
             _townMeetupPorter = null;
             _nextTownMeetupRouteSearch = 0;
+            _townMeetupNoRoute = false;
             ResetRouteOrderState();
         }
 
+        // An RvR group musters at a border hub. A member with no porter in its
+        // region (an enemy frontier, a dungeon) walks the zone connections
+        // there instead of standing until the muster is over.
+        bool rvr = directive.ObjectiveKind == eAutonomousObjectiveKind.RvR;
         long now = GameLoop.GameLoopTime;
         if (_townMeetupPorter == null && now < _nextTownMeetupRouteSearch)
-            return true;
+            return rvr && _townMeetupNoRoute
+                ? TravelToGroupRegion(bot, directive, directive.RendezvousRegion,
+                    (int)directive.Rendezvous.X, (int)directive.Rendezvous.Y, directive.RendezvousName)
+                : true;
 
         bool porterMovedOrStopped = _townMeetupPorter != null &&
             (_townMeetupPorter.ObjectState != GameObject.eObjectState.Active ||
@@ -39,9 +48,13 @@ public sealed partial class AutonomousWorldBotController
         {
             _nextTownMeetupRouteSearch = now + 30_000;
             if (!AutonomousBotTownTravel.TryGetTownRoute(bot, directive.RendezvousRegion, directive.Rendezvous,
-                    out AllRealmsTeleporter porter, out _, out _, _failedTownMeetupPorter))
+                    out AllRealmsTeleporter porter, out _, out _, _failedTownMeetupPorter, includeBorderHub: rvr))
             {
                 _townMeetupPorter = null;
+                _townMeetupNoRoute = true;
+                if (rvr)
+                    return TravelToGroupRegion(bot, directive, directive.RendezvousRegion,
+                        (int)directive.Rendezvous.X, (int)directive.Rendezvous.Y, directive.RendezvousName);
                 bot.StopMovingOnPath();
                 bot.StopMoving();
                 SetStatus(bot, "Waiting for town teleporter", directive.SharedGoal,
@@ -49,6 +62,7 @@ public sealed partial class AutonomousWorldBotController
                 return true;
             }
             _townMeetupPorter = porter;
+            _townMeetupNoRoute = false;
         }
 
         if (!AutonomousBotTownTravel.IsAtInteractionDistance(bot, _townMeetupPorter))
@@ -81,7 +95,8 @@ public sealed partial class AutonomousWorldBotController
 
         bot.StopMovingOnPath();
         bot.StopMoving();
-        if (AutonomousBotTownTravel.TryTeleportToTown(bot, _townMeetupPorter, directive.RendezvousRegion, directive.Rendezvous))
+        if (AutonomousBotTownTravel.TryTeleportToTown(bot, _townMeetupPorter, directive.RendezvousRegion, directive.Rendezvous,
+                includeBorderHub: rvr))
         {
             _townMeetupPorter = null;
             _nextTownMeetupRouteSearch = 0;

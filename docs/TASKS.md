@@ -181,6 +181,26 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+85. **RvR groups muster at their realm's hub and march together.** Owner
+    2026-10-03: many bots walk alone; groups should meet where one can port
+    to and walk on together; depart at 75 % only if the rest is not
+    expected within 5 minutes. Live 0.199.0 (19:09-20:23): 37 % of RvR
+    rendezvous were enemy portal keeps in the open frontier, 89 of 132
+    no-shows died on the way, 44 were released at their own hub in another
+    region without a way back, and no-shows were expelled into solo play.
+    Source 0.202.0 (`AutonomousRvrHubMuster`): an RvR group always meets at
+    the leader realm's border hub (Castle Sauvage, Svasud Faste, Druim
+    Ligen), members travel there by city porter, also after a death, and a
+    grouped RvR bot releases at its group's hub. Departure: all present, or
+    >= 75 % when no missing member is expected within 5 minutes (else wait at
+    most 5 more), after 10 minutes half the group; under 2 present and nobody
+    expected disbands back into hub LFG (RvR kept, no PvE turn); hard cap 20
+    minutes. Nobody is expelled; latecomers follow. RvR meetup window 20
+    minutes (PvE 45 unchanged). Logs: `RVR_HUB_MUSTER_STARTED`,
+    `RVR_HUB_MUSTER_DEPARTED ... reason=`, `RVR_HUB_MUSTER_DISBANDED`. Check
+    live: groups visibly gather at the hubs and port together; watch the
+    number of RvR groups and `CoordinatorLockWait`.
+
 84. **The group always runs its fastest speed.** Owner 2026-10-03: casters
     often run their own speed although a Bard is in the group. Speed values:
     performer songs 204, caster/healer/Warden speeds 153-154. Bots already

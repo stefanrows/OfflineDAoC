@@ -331,6 +331,36 @@ public static class AutonomousObjectiveAssignments
         AutonomousBotStatusPersistence.Queue(bot);
     }
 
+    /// <summary>
+    /// An RvR group that broke up at its hub muster, before it ever left,
+    /// has not made a frontier tour: its members stay on RvR at the keep.
+    /// </summary>
+    public static bool ReturnsToHubLfg(eAutonomousObjectiveKind kind, bool taskStarted) =>
+        kind == eAutonomousObjectiveKind.RvR && !taskStarted;
+
+    /// <summary>
+    /// Keeps the RvR assignment of a member whose hub muster broke up: no
+    /// tour end (no PvE owed), no town break. The controller then looks for
+    /// a group at the border keep again (TryWaitForRvrGroup).
+    /// </summary>
+    public static void ReturnToHubLfgAfterMuster(GameBot bot, string reason)
+    {
+        if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Group != null || bot.PersistentRecord == null)
+            return;
+        if (!Is(bot, eAutonomousObjectiveKind.RvR))
+        {
+            BeginSoloAfterGroupTask(bot, reason);
+            return;
+        }
+        OfflineWorldBotRecord record = bot.PersistentRecord;
+        record.CurrentCampId = string.Empty;
+        record.TargetName = string.Empty;
+        record.TravelDestination = string.Empty;
+        record.ObjectivePhase = reason;
+        bot.MarkAutonomousStateDirty();
+        AutonomousBotStatusPersistence.Queue(bot);
+    }
+
     public static void BeginSoloAfterGroupTask(GameBot bot, string reason, bool forceSoloPve = false)
     {
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.Group != null || bot.PersistentRecord == null)

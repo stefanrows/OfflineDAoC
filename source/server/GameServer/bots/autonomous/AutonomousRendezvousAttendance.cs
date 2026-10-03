@@ -50,6 +50,21 @@ namespace DOL.GS
             return !_arrived.Contains(memberId) && now >= _due[memberId];
         }
 
+        /// <summary>
+        /// Opens a fresh window for one member that left the rendezvous region
+        /// (released elsewhere, carried off) so it travels again instead of
+        /// counting as arrived. Other members keep their state.
+        /// </summary>
+        public void Restart(long memberId, long now, DateTime? utcNow = null, long timeoutMilliseconds = TimeoutMilliseconds)
+        {
+            timeoutMilliseconds = Math.Max(0, timeoutMilliseconds);
+            _arrived.Remove(memberId);
+            _due[memberId] = now + timeoutMilliseconds;
+            _started[memberId] = now;
+            _dueUtc[memberId] = (utcNow ?? WorldSimulationClock.UtcNow).AddMilliseconds(timeoutMilliseconds);
+            Revision++;
+        }
+
         public long WaitedMilliseconds(long memberId, long now) =>
             _started.TryGetValue(memberId, out long started) ? now - started : 0;
 

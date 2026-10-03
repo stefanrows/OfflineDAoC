@@ -99,7 +99,7 @@ namespace DOL.GS
         // route performs at most four destination and four porter validations.
         public static bool TryGetTownRoute(GameBot bot, ushort rendezvousRegionID,
             Vector3 rendezvous, out AllRealmsTeleporter teleporter, out DbTeleport destination,
-            out double travelMinutes, AllRealmsTeleporter excludedPorter = null)
+            out double travelMinutes, AllRealmsTeleporter excludedPorter = null, bool includeBorderHub = false)
         {
             teleporter = null;
             destination = null;
@@ -107,7 +107,7 @@ namespace DOL.GS
             if (!IsActiveAutonomousBot(bot)) return false;
             Region source = WorldMgr.GetRegion(bot.CurrentRegionID);
             if (source == null || source.IsDisabled ||
-                !TryResolveTownDestination(rendezvousRegionID, rendezvous, out destination)) return false;
+                !TryResolveTownDestination(rendezvousRegionID, rendezvous, out destination, includeBorderHub)) return false;
 
             IPathfindingMgr nav = PathfindingProvider.Instance;
             GameNPC[] sourceNpcs = WorldMgr.GetNPCsFromRegion(bot.CurrentRegionID);
@@ -170,8 +170,11 @@ namespace DOL.GS
             (Vector3.Distance(start, approach) + Vector3.Distance(arrival, rendezvous)) /
                 Math.Max(1, speed) / 60 + 1;
 
+        /// <param name="includeBorderHub">RvR only: when the rendezvous lies in a
+        /// border hub (Castle Sauvage, Svasud Faste, Druim Ligen), the porter's
+        /// route straight into that hub is offered as well, as players used it.</param>
         public static bool TryResolveTownDestination(ushort rendezvousRegionID, Vector3 rendezvous,
-            out DbTeleport destination)
+            out DbTeleport destination, bool includeBorderHub = false)
         {
             destination = null;
             Region region = WorldMgr.GetRegion(rendezvousRegionID);
@@ -180,6 +183,7 @@ namespace DOL.GS
             Zone targetZone = region.GetZone((int)rendezvous.X, (int)rendezvous.Y);
             if (targetZone == null || !nav.IsAvailable || !nav.HasNavmesh(targetZone)) return false;
             foreach (DbTeleport candidate in GetTownDestinations(rendezvousRegionID)
+                .Concat(includeBorderHub ? BorderHubDestination(rendezvousRegionID, rendezvous) : Enumerable.Empty<DbTeleport>())
                 .OrderBy(candidate => Vector3.DistanceSquared(new(candidate.X, candidate.Y, candidate.Z), rendezvous))
                 .Take(4))
             {
@@ -189,6 +193,18 @@ namespace DOL.GS
                 return true;
             }
             return false;
+        }
+
+        /// <summary>The standard porter route into the border hub around this rendezvous, if any.</summary>
+        private static IEnumerable<DbTeleport> BorderHubDestination(ushort regionID, Vector3 rendezvous)
+        {
+            if (!AutonomousRvrStaging.TryGetHubAt(regionID, rendezvous, out AutonomousRvrStaging.BorderKeep hub,
+                    out eRealm realm))
+                yield break;
+            DbTeleport candidate = WorldMgr.GetTeleportLocation(realm, $":{hub.Name}") ??
+                AllRealmsTeleportFallbacks.Get(realm, hub.Name);
+            if (IsValidTownDestination(candidate, realm, hub.Name, regionID))
+                yield return candidate;
         }
 
         private static IEnumerable<DbTeleport> GetTownDestinations(ushort regionID)
@@ -205,10 +221,10 @@ namespace DOL.GS
         }
 
         public static bool TryTeleportToTown(GameBot bot, AllRealmsTeleporter teleporter,
-            ushort rendezvousRegionID, Vector3 rendezvous)
+            ushort rendezvousRegionID, Vector3 rendezvous, bool includeBorderHub = false)
         {
             if (!IsSafeToTeleport(bot) || !IsAtInteractionDistance(bot, teleporter) ||
-                !TryResolveTownDestination(rendezvousRegionID, rendezvous, out DbTeleport destination))
+                !TryResolveTownDestination(rendezvousRegionID, rendezvous, out DbTeleport destination, includeBorderHub))
                 return false;
             return bot.MoveTo((ushort)destination.RegionID, destination.X, destination.Y,
                 destination.Z, (ushort)destination.Heading);
