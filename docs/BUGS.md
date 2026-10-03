@@ -61,6 +61,19 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+89. **Without a guild, TAB targets your own /spawn helpers.** Owner
+    2026-10-03. On the PvP (Camlann) server the client treats only its own
+    guild as friendly, so the server shows allied bots in the viewer's guild,
+    or a dummy guild for a guildless viewer, and puts the viewer in that
+    guild too (PacketLib1124 NPC create, Group). World init (login and every
+    region change) reset the viewer's own guild to "none"; helpers created
+    before that packet then sat in the dummy guild while the viewer did not,
+    so the client counted them as enemies. With a real guild both values
+    match, hence only guildless players saw it. Source 0.203.0: world init
+    sends the dummy guild to a guildless player on the PvP server. Check in
+    the client without a guild: after login and after zoning, TAB skips your
+    helpers and still picks real enemies.
+
 88. **Same-realm bots kill each other at the capital exits (bug 63 again).**
     Live 0.199.0, 2026-10-03 19:09-20:22: the top RvR death cell was
     region 1 at 516852,497979 (116 deaths, 112 by Albion world bots), the

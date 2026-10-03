@@ -136,7 +136,14 @@ namespace DOL.GS.PacketHandler.Client.v168
             // 0xBE - 0 1 0 0
             //used only on PvP, sets THIS players ID for nearest friend/enemy buttons and "friendly" name colors
             //if (GameServer.ServerRules.GetColorHandling(player.Client) == 1) // PvP
-            player.Out.SendObjectGuildID(player, player.Guild);
+            // On a PvP server allied bots and pets are shown in the viewer's guild,
+            // or the dummy guild for a guildless viewer. Resetting a guildless
+            // viewer to "no guild" here (login, every zone change) made its own
+            // /spawn helpers that arrived first count as enemies, so TAB picked them.
+            Guild ownGuild = player.Guild;
+            if (ownGuild == null && GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+                ownGuild = Guild.DummyGuild;
+            player.Out.SendObjectGuildID(player, ownGuild);
             player.Out.SendDebugMode(player.TempProperties.GetProperty<bool>(GamePlayer.DEBUG_MODE_PROPERTY));
             player.Out.SendUpdateMaxSpeed(); // Speed in debug mode ?
                                                 //WARNING: This would change problems if a scripter changed the values for plvl

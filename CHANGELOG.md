@@ -12,6 +12,14 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.203.0] - 2026-10-03
+
+### Fixed
+
+- Players without a guild no longer get their own `/spawn` helpers as TAB
+  targets (bug 89). Logging in or changing region reset the player's
+  friend marker, so helpers that arrived first looked like enemies.
+
 ## [0.202.0] - 2026-10-03
 
 ### Changed
