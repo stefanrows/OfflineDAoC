@@ -12,6 +12,14 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.199.1] - 2026-10-03
+
+### Added
+
+- docs/LOOT_LEVEL50.md lists every level-50 item from the database loot
+  tables by place (Darkness Falls seal merchants and drops, frontier zones
+  and frontier dungeons, PvE dungeons) with mob, kind, realm and chance.
+
 ## [0.199.0] - 2026-10-03
 
 ### Added
