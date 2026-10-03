@@ -63,7 +63,7 @@ existing population phase and early brain entry instead of activating the
 broader realm recruitment path. Two Luna Max reviews examined detection,
 ownership/concurrency, travel, pets, combat and group/raid interruption.
 
-Pending owner checks after an authorized installation:
+Pending owner checks after the 2026-10-03 installation of 0.199.0:
 
 - Attack a bot-owned gate and an outside guard with a human, autonomous enemy,
   controlled pet and ram, and damage an attackable wall component. Include
@@ -82,9 +82,9 @@ Pending owner checks after an authorized installation:
 
 CoreServer and Windows launcher Release builds passed on 2026-10-03 with
 existing warnings and zero errors. Scoped static checks passed; automated
-tests were skipped under the project rules. No deployment or server start
-was requested. Offline builds/static review do not certify real-client
-gameplay acceptance.
+tests were skipped under the project rules. Version 0.199.0 was deployed
+on 2026-10-03; the game was left stopped. Offline builds/static review do
+not certify real-client gameplay acceptance.
 
 ## Autonomous siege flow (task 48, siege slice 1)
 

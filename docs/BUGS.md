@@ -77,8 +77,8 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     CombatSpeedBuff in both defensive selectors and buff maintenance, permits
     timed group Celerity during combat, and chooses its strongest learned rank.
     Concentration haste remains routine upkeep; heals and control retain priority.
-    Installation and real-client casting, expiry/recast, and rank verification
-    with Tri-spec and Augmentation Healers remain pending.
+    Deployed with 0.199.0 on 2026-10-03. Real-client casting, expiry/recast,
+    and rank verification with Tri-spec and Augmentation Healers remain pending.
 
 86. **Svasud Faste gates fail to open and keep-door clicks sometimes do not enter.**
     Owner, 2026-10-03, installed version unconfirmed. Expected: nearby gate
@@ -91,9 +91,10 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     ranges, refreshes border state, retains timed border openings, uses exact
     side detection, fixes the tower main-door index, and tracks successful
     traversal per door. Players can click through breached enemy main gates;
-    intact hostile gates and enemy posterns stay blocked. Pending: install,
-    check Svasud from both sides, repeated clicks and adjacent keep doors,
-    tower height, hostile intact/breached gates and a rejected transfer retry.
+    intact hostile gates and enemy posterns stay blocked. Deployed with
+    0.199.0 on 2026-10-03. Pending: check Svasud from both sides, repeated
+    clicks and adjacent keep doors, tower height, hostile intact/breached
+    gates and a rejected transfer retry.
 
 85. **Defeated Fensalir Faste stays neutral without a bot guild claim.**
     Owner, 2026-10-03. Logs repeatedly show
@@ -103,9 +104,10 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     Expected: guild bots secure free, defeated keeps. Source 0.197.0 restores
     the steward when the saved lord tries to enter the world, keeps the lord
     absent until a claim, and adds reserved claim journeys to free keeps.
-    All guild claim caps are removed (task 82). Pending: install, observe a
-    bot traveling to and claiming Fensalir, and restart with another defeated
-    keep to check the steward and subsequent guild ownership.
+    All guild claim caps are removed (task 82). Deployed with 0.199.0 on
+    2026-10-03. Pending: observe a bot traveling to and claiming Fensalir,
+    and restart with another defeated keep to check the steward and
+    subsequent guild ownership.
 
 84. **Cannot delete companions carrying non-starter items.** Owner screenshot
     2026-10-03: deleting benched Kjell reports earned, traded, or unclassified
@@ -113,7 +115,8 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     deletion is allowed regardless of gear. Source 0.196.0 removes both item
     provenance gates and deletes the companion with all inventory rows in one
     transaction; the confirmation warns that all equipped and carried items
-    are lost. Installation and real-client deletion checks remain pending.
+    are lost. Deployed with 0.199.0 on 2026-10-03; real-client deletion
+    checks remain pending.
 
 83. **Bots attack the other owner's group in a shared battlegroup.** Owner
     2026-10-02: in a battlegroup with Stefan (one group each, different

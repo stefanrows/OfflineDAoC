@@ -30,7 +30,7 @@ package, not this fork's version.
   switching to another goal. Further hostile damage renews the four-hour
   response; owner loss ends it, and simultaneous attacks queue behind the
   first keep. Normal activity allocation resumes after stand-down.
-  Installation and real-client verification are pending.
+  Deployed on 2026-10-03; real-client verification is pending.
 
 ## [0.198.0] - 2026-10-03
 
@@ -39,8 +39,8 @@ package, not this fork's version.
 - Healer bots recognize the installed CombatSpeedBuff form of Group Celerity
   and cast the strongest learned rank during combat when healing and crowd
   control permit (bug 87). Concentration haste joins normal buff upkeep;
-  companions continue to skip short timed buffs outside combat. Installation
-  and real-client verification are pending.
+  companions continue to skip short timed buffs outside combat. Deployed
+  with 0.199.0 on 2026-10-03; real-client verification is pending.
 
 ## [0.197.1] - 2026-10-03
 
@@ -68,7 +68,8 @@ package, not this fork's version.
   intact. Keep-door clicks share one range, detect the correct side near the
   door, and suppress duplicates only for successful use of that same door.
   Breached enemy gates also allow entry; intact hostile gates remain blocked
-  (bug 86). Installation and real-client verification are pending.
+  (bug 86). Deployed with 0.199.0 on 2026-10-03; real-client verification
+  is pending.
 
 ## [0.196.0] - 2026-10-03
 

@@ -196,9 +196,9 @@ Agent sessions on items 45–48: take the role and context from
     [FRONTIER_CAMPAIGN.md](FRONTIER_CAMPAIGN.md#guild-keep-emergency-defense--01990).
     CoreServer and Windows launcher Release builds passed on 2026-10-03 with
     existing warnings and zero errors. Scoped whitespace, conflict-marker,
-    line-ending and version-pin checks passed. Installation and real-client
-    verification pending. Automated tests were not requested; no deployment
-    or server start was authorized.
+    line-ending and version-pin checks passed. Deployed as 0.199.0 on
+    2026-10-03; real-client verification remains pending. Automated tests
+    were skipped under the local workflow. The game was left stopped.
 
 82. **Bot guilds secure free keeps; unlimited guild keep claims.** Owner,
     2026-10-03: Fensalir is neutral after a raid; guild bots should hold as
@@ -208,12 +208,13 @@ Agent sessions on items 45–48: take the role and context from
     defeated keeps over roaming/new assaults, reserve one force per journey,
     and use validated keep routes to the native steward; existing sieges
     retain their commitment. Saved defeated lords restore missing stewards
-    (bug 85). Pending: installation and real-client confirmation that bot
-    guilds claim unattended keeps and a guild can own a fourth keep and more.
+    (bug 85). Deployed with 0.199.0 on 2026-10-03. Pending: real-client
+    confirmation that bot guilds claim unattended keeps and a guild can own
+    a fourth keep and more.
     CoreServer and Windows launcher Release builds passed on 2026-10-03
     with existing warnings; scoped whitespace, conflict-marker and version-pin
     checks passed. Automated tests were skipped under the local workflow.
-    No deployment or server start was requested.
+    Shipped with 0.199.0; the game was left stopped.
 
 81. **More deliberate world-bot journeys, safe recovery and fewer repeated
     clusters.** Owner, 2026-10-03; planned with Astra and implemented with Sol
