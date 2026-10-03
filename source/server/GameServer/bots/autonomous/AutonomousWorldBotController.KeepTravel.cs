@@ -31,15 +31,15 @@ public sealed partial class AutonomousWorldBotController
     /// force leaves the siege and will not rejoin or reopen this keep for
     /// twenty minutes; the normal planner picks a roam target from the
     /// current spot on the next turn.</summary>
-    private void AbandonKeepTarget(GameBot bot, CampDestination destination, string failure, long now)
+    private void AbandonKeepTarget(GameBot bot, CampDestination destination, string failure, long now, bool routeFailure = true)
     {
         string forceId = RvrForceOf(bot);
         AutonomousRvrEventLayer.AbandonTarget(forceId, destination.Id, now);
         // The opener also skips this keep for a while (an hour, doubling on repeats).
-        AutonomousRvrEventLayer.NoteKeepRouteFailure(destination.Id, now);
+        if (routeFailure) AutonomousRvrEventLayer.NoteKeepRouteFailure(destination.Id, now);
         ClearKeepObjective(bot);
         SetRvrStatus(bot, "Keep route abandoned", destination.MonsterName,
-            $"{failure} {KeepRouteGiveUpFailures} times; the warband roams the frontier from here instead");
+            $"{failure}; the warband roams the frontier from here instead");
         Log.Warn($"RVR_KEEP_ROUTE_ABANDONED bot=\"{bot.Name}\" id={bot.DatabaseID} realm={bot.Realm} " +
             $"target=\"{destination.Id}\" region={bot.CurrentRegionID} force={forceId} reason=\"{failure}\" " +
             $"avoidMs={AutonomousRvrEventLayer.AbandonedTargetMilliseconds}");
@@ -53,6 +53,39 @@ public sealed partial class AutonomousWorldBotController
         _rvrTravelWaypoint = null; _patrolDestination = null;
         _hunterPatrolArrivedTick = 0; _nextRvrPlanReview = 0;
         bot.StopMovingOnPath(); bot.StopMoving();
+    }
+
+    private Vector3[] VaryKeepDeparture(GameBot bot, CampDestination destination, Vector3[] steps,
+        RvrPlanningNavigation nav, Vector3 origin)
+    {
+        if (steps.Length == 0 || bot.CurrentZone == null ||
+            _groupDirective?.IsDynamic == true && _groupDirective.Leader != bot ||
+            Vector2.DistanceSquared(new(origin.X, origin.Y), new(destination.X, destination.Y)) < 11_500 * 11_500)
+            return steps;
+        // Insert one local connected departure. Keep every proved seam and the assault endpoint.
+        int local = 0;
+        while (local + 1 < steps.Length && bot.CurrentRegion.GetZone((int)steps[local + 1].X, (int)steps[local + 1].Y) == bot.CurrentZone)
+            local++;
+        if (bot.CurrentRegion.GetZone((int)steps[local].X, (int)steps[local].Y) != bot.CurrentZone) return steps;
+        int seed = unchecked((int)((_groupDirective?.Leader?.DatabaseID ?? bot.DatabaseID) * 397) ^
+            StringComparer.Ordinal.GetHashCode(destination.Id) ^
+            StringComparer.Ordinal.GetHashCode(bot.PersistentRecord?.ObjectiveAssignmentId ?? RvrForceOf(bot)) ^
+            (bot.PersistentRecord?.DeathCount ?? 0));
+        var random = new Random(seed);
+        bool atHub = AutonomousHubDeparture.TryGetSafeAnchor(bot.Realm, bot.CurrentRegionID, origin.X, origin.Y, out var anchor);
+        Vector3? hub = atHub ? new Vector3(anchor.Centre.X, anchor.Centre.Y, origin.Z) : null;
+        var danger = AutonomousRvrDangerMemory.Worst(AutonomousRvrDangerMemory.KeyFor(bot), bot.CurrentRegionID,
+            new(origin.X, origin.Y), 8000, WorldSimulationClock.UtcNow);
+        var variant = hub.HasValue ? RvrRouteVariant.HubFan : danger.HasValue ? RvrRouteVariant.Cover :
+            random.Next(3) switch { 0 => RvrRouteVariant.Road, 1 => RvrRouteVariant.Flank, _ => RvrRouteVariant.Cover };
+        var choice = AutonomousRvrRoutePolicy.ChooseRoute(origin, steps[local], variant,
+            AutonomousRvrTravel.Probe(nav, bot.CurrentRegion, bot.CurrentZone, steps[local]), random,
+            heat: danger?.Centre, hubCentre: hub, hubSafeRadius: atHub ? anchor.Radius : AutonomousRvrRoutePolicy.KeepSafeRadius);
+        // Both sides of the inserted waypoint must connect to the retained first road point.
+        bool insert = bot.CurrentRegion.GetZone((int)steps[0].X, (int)steps[0].Y) == bot.CurrentZone && !choice.Fallback && Vector3.DistanceSquared(origin, choice.Waypoint) > 200 * 200 &&
+            AutonomousZoneItinerary.HasCompleteCorridor(nav, bot.CurrentZone, choice.Waypoint, steps[0]);
+        Log.Info($"RVR_KEEP_DEPARTURE bot={bot.Name} target={destination.Id} variant={variant} inserted={insert}");
+        return insert ? new[] { choice.Waypoint }.Concat(steps).ToArray() : steps;
     }
 
     private static long KeepTravelGeometry(Region region, Zone destination, string targetId)
@@ -120,6 +153,11 @@ public sealed partial class AutonomousWorldBotController
                 if (TryResolveKeepTravelApproach(bot, destination, _keepPlanning, _keepPlanningOrigin, out var endpoint) &&
                     RvrKeepRoute.TryBuild(bot.CurrentRegion, _keepPlanning, bot.Realm, _keepPlanningOrigin, endpoint, out var steps))
                 {
+                    try { steps = VaryKeepDeparture(bot, destination, steps, _keepPlanning, _keepPlanningOrigin); }
+                    catch (RvrPlanningNavigation.Limit)
+                    {
+                        Log.Info($"RVR_KEEP_DEPARTURE bot={bot.Name} target={destination.Id} fallback=optional_budget");
+                    }
                     _keepTravelPoints = steps; _keepTravelIndex = 0;
                     _rvrApproachDestination = endpoint;
                     _keepPlanning = null; _keepTravelFailures = 0;

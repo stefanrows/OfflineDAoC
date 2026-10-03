@@ -20,7 +20,8 @@ public sealed partial class AutonomousWorldBotController
         // Note when an RvR bot leaves its border hub (departure truce).
         AutonomousHubDeparture.Observe(bot, WorldSimulationClock.UtcNow);
         bool defending = AutonomousRvrDefense.IsCommittedDefender(bot);
-        bool siegeFighter = AutonomousRvrDefense.IsCommittedSiegeFighter(bot);
+        bool marching = AutonomousSiegeMarch.IsMarching(bot);
+        bool siegeFighter = !marching && AutonomousRvrDefense.IsCommittedSiegeFighter(bot);
         GameLiving previousEngine = defending ? bot.TargetObject as GameSiegeWeapon ?? _siegeWeapon?.TargetObject as GameSiegeWeapon : null;
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.IsPlayerLedGroup ||
             !bot.IsAlive || bot.ObjectState != GameObject.eObjectState.Active || bot.IsReturningAfterRelease ||
@@ -42,7 +43,8 @@ public sealed partial class AutonomousWorldBotController
         GameLiving decided = AutonomousRvrObserve.TakeEngageTarget(bot);
         bool InOurFight(GameLiving target) => BotPvpCrowdControl.IsInFightWith(bot, target, null);
         bool Eligible(GameLiving target) => target != bot && !target.IsStealthed &&
-            (siegeFighter || InOurFight(target) || target == decided ||
+            (marching ? AutonomousSiegeMarch.IsPartyThreat(bot, target) :
+                siegeFighter || InOurFight(target) || target == decided ||
                 mayHunt && !observing && AutonomousPvpOpportunityPolicy.SuitableOpponent(bot, target)) &&
             target.ObjectState == GameObject.eObjectState.Active &&
             AutonomousRvrTargetPolicy.IsEligible(

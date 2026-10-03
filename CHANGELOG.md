@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.195.0] - 2026-10-03
+
+### Changed
+
+- Autonomous world bots release in validated sanctuaries; RvR bots prefer
+  their own border hub after either PvP or PvE deaths. Recovery positions
+  spread within safety, and failed safe transfers retain the corpse for retry.
+- Keep-bound warbands commit to marching, avoid optional PvP and guildmate
+  detours, and stop distant pursuit after incoming party attacks cease.
+  Distant rally followers travel behind their leader; cohesion and unavailable
+  rally posts have bounded failure handling.
+- Keep departures can insert a stable, connected local hub fan, flank or
+  cover waypoint while retaining validated road seams and assault approaches.
+  Repeated individual PvP losses near the same place prompt temporary
+  avoidance or force withdrawal from a failed approach; siege-area casualties
+  continue to use existing battle recovery. Task 81 awaits gameplay checks.
+
 ## [0.194.0] - 2026-10-02
 
 ### Fixed

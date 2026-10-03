@@ -78,6 +78,42 @@ namespace DOL.GS
         private bool _soloRvrBorderStaged;
         private Vector3? _soloRvrStagingPoint;
         private int _observedDeathCount = -1;
+        private AutonomousDeathSnapshot _previousPvpLoss;
+        private ushort _failedPvpRegion;
+        private Vector2 _failedPvpPlace;
+        private long _failedPvpUntil;
+
+        private bool AvoidRepeatedPvpPlace(ushort region, int x, int y) =>
+            GameLoop.GameLoopTime < _failedPvpUntil && region == _failedPvpRegion &&
+            Vector2.DistanceSquared(new(x, y), _failedPvpPlace) < 5000 * 5000;
+
+        private void ObserveRepeatedPvpLoss(GameBot bot)
+        {
+            var death = bot.LastAutonomousDeath;
+            if (!AutonomousSiegeMarch.IsWorldActor(bot) || death?.CountsAsPvp != true) return;
+            bool repeated = _previousPvpLoss != null && death.RegionId == _previousPvpLoss.RegionId &&
+                death.Tick - _previousPvpLoss.Tick <= 20 * 60_000 &&
+                Vector2.DistanceSquared(new(death.X, death.Y), new(_previousPvpLoss.X, _previousPvpLoss.Y)) <= 5000 * 5000;
+            _previousPvpLoss = death;
+            if (!repeated) return;
+            // Casualties in the actual siege are part of battle, not failed approaches.
+            if (_rvrDestination?.Id.StartsWith("rvr-keep-", StringComparison.Ordinal) == true &&
+                death.RegionId == _rvrDestination.RegionId &&
+                Vector2.DistanceSquared(new(death.X, death.Y), new(_rvrDestination.X, _rvrDestination.Y)) <= 6500 * 6500)
+                return;
+            _failedPvpRegion = death.RegionId; _failedPvpPlace = new(death.X, death.Y);
+            _failedPvpUntil = GameLoop.GameLoopTime + 20 * 60_000;
+            if (_rvrDestination?.Id.StartsWith("rvr-keep-", StringComparison.Ordinal) == true)
+                AbandonKeepTarget(bot, _rvrDestination, "Repeated PvP losses near the same place", GameLoop.GameLoopTime, routeFailure: false);
+            else
+            {
+                AutonomousBotGroupCoordinator.EndPvePartyBeforeIndividualRecovery(bot, "Repeated PvP deaths near the same site");
+                _camp = null; _campStartedTick = 0; _emptyCampSinceTick = 0;
+                _rvrDestination = null; _patrolDestination = null;
+                _nextPlanTick = 0; _nextRvrPlanReview = 0;
+            }
+            Log.Info($"AUTONOMOUS_REPEAT_LOSS bot={bot.Name} region={death.RegionId} place={death.X},{death.Y} avoidMs=1200000");
+        }
         // Solo PvE con ceiling: a real PvE defeat lowers it at once, clean
         // kills, a level-up or a new task bring it back one step at a time.
         private readonly AutonomousSoloConfidence _soloConfidence = new();
@@ -268,6 +304,8 @@ namespace DOL.GS
                 // off the horse because an NPC happened to notice it.
                 if (HandleStableTravel(bot))
                     return true;
+
+                brain.BreakStaleSiegePursuit();
 
                 // PvP opportunities in shared dungeons follow the same task,
                 // level and party-strength policy as outdoor hunts.
@@ -1991,7 +2029,7 @@ namespace DOL.GS
                 AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow) ||
                 brain.HasAggro || bot.InCombat || bot.IsAttacking || bot.IsRecoveryResting ||
                 _groupDirective?.RecoveringBetweenPulls == true || _groupDirective?.GroupCombatActive == true ||
-                IsSafeArea(bot) || !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
+                IsSafeArea(bot) || AutonomousSiegeMarch.IsMarching(bot) || !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
                 return false;
             if (GameLoop.GameLoopTime < _nextPvpOpportunityScan)
                 return false;
@@ -2502,6 +2540,7 @@ namespace DOL.GS
                 }
             }
 
+            choices.RemoveAll(choice => AvoidRepeatedPvpPlace(choice.RegionId, choice.X, choice.Y));
             if (choices.Count == 0)
                 return null;
 
@@ -2618,6 +2657,8 @@ namespace DOL.GS
                 }
                 else choices = outdoor;
             }
+            choices = choices.Where(choice => !AvoidRepeatedPvpPlace(choice.RegionId, choice.X, choice.Y)).ToArray();
+            if (choices.Length == 0) return null;
             int previous = Array.FindIndex(choices, choice => choice.Id == _rvrDestination?.Id);
             int next;
             if (hunter)
@@ -3160,7 +3201,7 @@ namespace DOL.GS
             // catalog keeps actors real and live while making each bot's
             // realm/level/death filtering a cheap in-memory operation.
             foreach (CampCatalogCell cell in CampCatalogSnapshot()
-                         .Where(cell => !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
+                         .Where(cell => !AvoidRepeatedPvpPlace(cell.RegionId, cell.X, cell.Y) && !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
                                         !AutonomousPveBossDanger.IsNear(cell.RegionId, cell.X, cell.Y, bossCheckUtc) &&
                                         (!localPickupGroup ||
                                             (cell.RegionId == _groupDirective.RendezvousRegion ||
@@ -3627,6 +3668,7 @@ namespace DOL.GS
                 return;
 
             int newDeaths = deathCount - _observedDeathCount;
+            ObserveRepeatedPvpLoss(bot);
             if (_groupDirective?.IsDynamic == true)
             {
                 _observedDeathCount = deathCount;

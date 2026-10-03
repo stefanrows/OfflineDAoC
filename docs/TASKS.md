@@ -181,6 +181,19 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+81. **More deliberate world-bot journeys, safe recovery and fewer repeated
+    clusters.** Owner, 2026-10-03; planned with Astra and implemented with Sol
+    in 0.195.0. Safe release for independent autonomous actors, siege-march
+    acquisition/assist discipline with bounded pursuit, leader-first distant
+    rallies with progress-sensitive wait limits, stable validated local keep
+    departure variation, and per-actor repeated-site PvP loss avoidance.
+    Plan and verification scenarios: [RVR_GROUP_DOCTRINE.md](RVR_GROUP_DOCTRINE.md#journeys-and-recovery-01950).
+    Extends task 48 and the hub/departure/route work without closing their
+    outstanding checks. Pending installation and real-client checks: repeated
+    Mag Mell deaths, Svasud/Sauvage/Druim departures under attack, distant
+    rallies with unreachable members, and full door/lord/capture/claim raids.
+    Automated tests not requested; no server start or deployment authorized.
+
 80. **Performers keep speed while playing another song.** Owner
     2026-10-02: the Bard switches songs and drops speed; best if it can play
     both at once (asked to check Eden / the local LLM). Research: the local

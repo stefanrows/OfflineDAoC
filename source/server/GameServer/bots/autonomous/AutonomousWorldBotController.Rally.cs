@@ -11,20 +11,42 @@ public sealed partial class AutonomousWorldBotController
     private string _physicalRallyKey;
     private Vector3? _physicalRallyPost;
     private long _nextRallyProjection;
+    private long _rallyBlockedSince;
+    private int _rallyBestPresent;
+    private long _rallyPostFailedSince;
+    private string _rallyWaitKey;
+    private double _rallyBestGap = double.PositiveInfinity;
+
+    private bool RallyWaitExpired(GameBot bot, string reason)
+    {
+        long now = GameLoop.GameLoopTime;
+        int present = bot.Group?.GetMembersInTheGroup().Count(member => member.IsAlive &&
+            member.CurrentRegionID == bot.CurrentRegionID && member.IsWithinRadius(bot, 2500)) ?? 1;
+        double gap = bot.Group?.GetMembersInTheGroup().Where(member => member.IsAlive && member != bot)
+            .Sum(member => member.CurrentRegionID == bot.CurrentRegionID ? Math.Max(0, bot.GetDistanceTo(member) - 2500) : 100_000) ?? 0;
+        if (_rallyBlockedSince == 0 || present > _rallyBestPresent || gap < _rallyBestGap - 250)
+        {
+            _rallyBlockedSince = now;
+            _rallyBestPresent = present;
+            _rallyBestGap = gap;
+        }
+        if (now - _rallyBlockedSince < 60_000) return false;
+        AbandonKeepTarget(bot, _rvrDestination, reason, now, routeFailure: false);
+        _rallyBlockedSince = 0; _rallyBestPresent = 0;
+        return true;
+    }
 
     private bool HandleSiegeRally(GameBot bot, string forceId, AutonomousRvrEventLayer.RallyOrder order)
     {
+        string waitKey = $"{forceId}:{order.TargetId}";
+        if (_rallyWaitKey != waitKey)
+        {
+            _rallyWaitKey = waitKey; _rallyBlockedSince = 0; _rallyBestPresent = 0;
+            _rallyBestGap = double.PositiveInfinity; _rallyPostFailedSince = 0;
+        }
         var keep = GameServer.KeepManager.GetKeepsOfRegion(_rvrDestination.RegionId)
             .FirstOrDefault(candidate => $"rvr-keep-{candidate.KeepID}" == order.TargetId);
         if (keep == null) return true;
-        // A distant responder must use the same bounded, retained keep route.
-        // Do not run a fresh full-country reachability test for every rally slot.
-        if (bot.CurrentRegionID == keep.Region &&
-            Vector2.DistanceSquared(new(bot.X,bot.Y),new(keep.X,keep.Y)) > 11_500 * 11_500)
-        {
-            FollowKeepTravel(bot, _rvrDestination);
-            return true;
-        }
         bool operatorBot = _groupDirective?.IsDynamic != true || _groupDirective.Leader == bot;
         // Equipment procurement belongs to the bounded per-keep job pool.
         // Do not send every arriving leader (and their followers) shopping.
@@ -43,7 +65,16 @@ public sealed partial class AutonomousWorldBotController
             !AutonomousBotGroupCoordinator.IsCohesive(_groupDirective))
         {
             bot.StopMovingOnPath(); bot.StopMoving();
+            if (RallyWaitExpired(bot, "Rally cohesion made no progress for one minute")) return true;
             SetRvrStatus(bot,"Regrouping en route to rally",keep.Name,"Waiting for nearby warband members before continuing together");
+            return true;
+        }
+        _rallyBlockedSince = 0; _rallyBestPresent = 0; _rallyBestGap = double.PositiveInfinity;
+        // Followers above use their leader; only the leader plans the distant approach.
+        if (bot.CurrentRegionID == keep.Region &&
+            Vector2.DistanceSquared(new(bot.X,bot.Y),new(keep.X,keep.Y)) > 11_500 * 11_500)
+        {
+            FollowKeepTravel(bot, _rvrDestination);
             return true;
         }
         var members = bot.Group?.GetMembersInTheGroup().OfType<GameBot>().OrderBy(member => member.DatabaseID).ToArray() ?? [bot];
@@ -55,6 +86,7 @@ public sealed partial class AutonomousWorldBotController
             _physicalRallyKey = key;
             _physicalRallyPost = null;
             _nextRallyProjection = 0;
+            _rallyPostFailedSince = 0;
         }
         long now = GameLoop.GameLoopTime;
         if (!_physicalRallyPost.HasValue && now >= _nextRallyProjection)
@@ -65,12 +97,19 @@ public sealed partial class AutonomousWorldBotController
         }
         if (!_physicalRallyPost.HasValue)
         {
+            if (_rallyPostFailedSince == 0) _rallyPostFailedSince = now;
+            if (now - _rallyPostFailedSince >= 60_000)
+            {
+                AbandonKeepTarget(bot, _rvrDestination, "No validated rally post for one minute", now, routeFailure: false);
+                return true;
+            }
             bot.StopMovingOnPath();
             bot.StopMoving();
             SetRvrStatus(bot, "Rally route unavailable", keep.Name,
                 "No validated defensive rally post is reachable; this bot is not counted as present");
             return true;
         }
+        _rallyPostFailedSince = 0;
         Vector3 post = _physicalRallyPost.Value;
         bool atPost = bot.CurrentRegionID == keep.Region &&
             Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), post) <= AutonomousRvrRally.ArrivalRadius * AutonomousRvrRally.ArrivalRadius;

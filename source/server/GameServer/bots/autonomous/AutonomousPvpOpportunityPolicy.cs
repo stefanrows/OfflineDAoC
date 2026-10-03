@@ -53,10 +53,11 @@ public static class AutonomousPvpOpportunityPolicy
     public static bool MayHunt(GameBot actor) => actor != null &&
         CanSeekOpportunity(AutonomousObjectiveAssignments.KindFor(actor), actor.Group?.MemberCount ?? 1) &&
         !AutonomousActivityScheduler.IsPveBlocked(actor.PersistentRecord, WorldSimulationClock.UtcNow) &&
-        !actor.IsRecoveryResting && AutonomousBotGroupCoordinator.CanInitiateNewPull(actor);
+        !actor.IsRecoveryResting && !AutonomousSiegeMarch.IsMarching(actor) && AutonomousBotGroupCoordinator.CanInitiateNewPull(actor);
 
     public static bool SuitableOpponent(GameBot actor, GameLiving target)
     {
+        if (AutonomousSiegeMarch.IsMarching(actor)) return false;
         GameLiving identity = PvpCombatant.Resolve(target);
         if (identity == null) return false;
         if (AutonomousPlayerBehavior.TypeOf(actor.PersistentRecord) == AutonomousPlayerType.Hunter &&

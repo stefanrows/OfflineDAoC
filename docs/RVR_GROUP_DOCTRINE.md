@@ -387,3 +387,62 @@ persisted, three hours) mark the enemy guilds a group hunts first. A guild
 also remembers recent losses against a guild and avoids that guild's groups
 for a while unless it feels strong. Realm-based leftovers in rally, siege and
 guard-healing code are reviewed for guild ownership.
+
+
+## Journeys and recovery (0.195.0)
+
+Owner requested an Astra plan followed by Sol implementation on 2026-10-03.
+The changes extend task 48's travel and rally repairs and the existing hub
+peace, route variation and danger memory. They apply to independent autonomous
+world bots; helpers, persistent companions and human-led actors retain their
+release rules. They do not change saves or navigation meshes.
+
+The implementation sequence and resulting behavior are:
+
+1. Release selects cached own-realm sanctuary binds. RvR actors prefer their
+   own border hub regardless of killing blow; other actors select safe binds
+   in their current region, then use the capital fallback. A bounded floor and
+   local-exit probe spreads positions inside actual Camlann sanctuary. Move
+   happens before revival; failure keeps the corpse and timer for retry.
+2. The force's actual keep assignment drives march commitment outside 6,500
+   units of the keep. Optional PvP acquisition and assistance to outside
+   guildmates are suppressed. Direct defense and actual party attackers remain
+   authoritative. After 20 seconds without recent incoming party PvP attacks,
+   distant player-shaped aggro beyond 1,200 units is dropped. Existing travel
+   resumes; at the siege the normal combat policy applies.
+3. Distant rally followers follow their living leader before independent keep
+   planning. Leaders wait for cohesion, but abandon this force's target after
+   one minute without improved attendance or reduced separation. Unavailable
+   validated rally posts also have a one-minute limit. These failures do not
+   quarantine the keep's route for other forces. Attendance remains physical.
+4. A leader can prepend one connected same-zone departure waypoint using the
+   existing hub fan, road/flank/cover and remembered danger policies. The seed
+   uses leader, assignment, destination and lifetime death count, and the route
+   remains retained across ticks. All original road points, seam pairs and
+   final assault geometry remain. The optional work uses the existing sliced
+   planner; hitting its hard limit falls back to the proved road. Followers
+   use existing leader-follow behavior. This is local variation, not a catalog
+   of independent complete cross-zone routes.
+5. Two observed PvP deaths of the same actor within 20 minutes and 5,000 units
+   trigger 20 minutes of local destination avoidance. Failed siege approaches
+   withdraw their force using the existing target exclusion; deaths inside the
+   actual siege area do not abandon ongoing battle. A repeatedly defeated PvE
+   pickup party uses existing individual-recovery task termination before
+   choosing fresh destinations. A group's first casualties are never treated
+   as one actor's repeated expeditions. PvE confidence is unchanged by PvP.
+6. Transition logs expose safe release, pursuit breaks, departure insertion or
+   fallback, rally failure and repeated-loss decisions. Existing death,
+   arrival and capture records provide the rest of the evidence.
+
+Validation is offline: scoped source review and Release server/launcher builds.
+No automated tests or real-client verification were requested, and no running
+installation was changed. Task 81 remains verification pending. The owner
+should compare rally arrivals, intact groups reaching keeps, repeated deaths
+per actor and actual captures while exercising Mag Mell recovery,
+Svasud/Sauvage/Druim departures, a rally with an unreachable member, and a
+complete door/lord/capture/claim cycle.
+
+Deferred: global recruitment redesign, relocatable siege camps, complete
+alternative macro-corridors, new safe boundaries/schema and broad doctrine
+tuning. The first phase deliberately reuses current transport, door, recovery
+and routing machinery; gameplay logs must establish its effect on clusters.

@@ -60,8 +60,18 @@ namespace DOL.GS
             return false;
         }
 
+        /// <summary>One bounded floor/local-exit probe; reject spread outside sanctuary.</summary>
+        public static Point3D SpreadSafe(ushort region, Point3D anchor, long actor)
+        {
+            double angle = (unchecked((ulong)actor) % 24) * System.Math.PI * 2 / 24;
+            Vector3 raw = new(anchor.X + (float)System.Math.Cos(angle) * 240,
+                anchor.Y + (float)System.Math.Sin(angle) * 240, anchor.Z);
+            Point3D spread = Resolve(PathfindingProvider.Instance, WorldMgr.GetRegion(region)?.GetZone((int)raw.X, (int)raw.Y), raw);
+            return DOL.GS.ServerRules.PvpCombatant.IsSafeReleasePoint(region, spread) ? spread : anchor;
+        }
+
         public static Point3D? Nearest(ushort region, int x, int y, eRealm realm = eRealm.None,
-            ushort preferredZone = 0)
+            ushort preferredZone = 0, bool safeOnly = false)
         {
             if (!Regions.TryGetValue(region, out Bind[] points)) return null;
             Point3D? nearest = null;
@@ -75,6 +85,7 @@ namespace DOL.GS
                 // existing safe-capital fallback handles a missing friendly bind.
                 if (realm != eRealm.None && bind.Realm != realm) continue;
                 Point3D point = bind.Point;
+                if (safeOnly && !DOL.GS.ServerRules.PvpCombatant.IsSafeReleasePoint(region, point)) continue;
                 double dx = (double)x - point.X, dy = (double)y - point.Y;
                 double distance = dx * dx + dy * dy;
                 if (distance < best)

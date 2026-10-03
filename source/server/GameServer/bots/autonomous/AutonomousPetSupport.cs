@@ -106,7 +106,28 @@ public static class AutonomousPetSupport
         if (owner?.ControlledBrain == null)
             return null;
 
-        return ActivePetCombatTarget(owner, owner.ControlledBrain, 0);
+        GameLiving target = ActivePetCombatTarget(owner, owner.ControlledBrain, 0);
+        return AutonomousSiegeMarch.MayAssist(owner, target) ? target : null;
+    }
+
+    public static void EndStaleMarchPursuit(GameBot owner)
+    {
+        if (owner?.ControlledBrain == null) return;
+        Visit(owner.ControlledBrain, 0);
+        void Visit(IControlledBrain brain, int depth)
+        {
+            if (brain?.Body == null || depth > 4) return;
+            GameLiving target = brain is ControlledMobBrain controlledTarget
+                ? controlledTarget.OrderedAttackTarget ?? brain.Body.TargetObject as GameLiving : brain.Body.TargetObject as GameLiving;
+            if (target != null && DOL.GS.ServerRules.PvpCombatant.IsPlayerShaped(target) &&
+                !owner.IsWithinRadius(target, 1200) && !AutonomousSiegeMarch.IsPartyThreat(owner, target) &&
+                brain is ControlledMobBrain controlled)
+            {
+                controlled.Disengage();
+                controlled.FollowOwner();
+            }
+            foreach (IControlledBrain child in brain.Body.ControlledNpcList ?? []) Visit(child, depth + 1);
+        }
     }
 
     private static GameLiving ActivePetCombatTarget(GameBot owner, IControlledBrain brain, int depth)

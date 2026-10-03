@@ -121,6 +121,15 @@ namespace DOL.GS.ServerRules
 			return false;
 		}
 
+        public static bool IsSafeReleasePoint(ushort regionId, Point3D point)
+        {
+            Region region = WorldMgr.GetRegion(regionId);
+            return point != null && region != null && region.GetZone(point.X, point.Y) != null &&
+                (IsSafeRegion(regionId) || IsSafeBorderHub(regionId, point.X, point.Y) ||
+                 IsSafeHubLanding(regionId, point.X, point.Y) ||
+                 region.GetAreasOfSpot(point).OfType<KeepArea>().Any(area => area.Keep?.IsPortalKeep == true));
+        }
+
 		public static bool IsSafeRegion(ushort regionId) => SafeRegions.Contains(regionId);
 
 		/// <summary>

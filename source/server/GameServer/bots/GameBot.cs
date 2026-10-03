@@ -1215,14 +1215,26 @@ namespace DOL.GS
                 return;
             }
 
-            Point3D release = FindNearestBindPoint();
+            bool safeWorldRelease = AutonomousSiegeMarch.IsWorldActor(this);
+            Point3D release = safeWorldRelease
+                ? BotReleaseBindPoints.Nearest(_deathRegionId, _deathLocation.X, _deathLocation.Y, Realm, safeOnly: true)
+                : FindNearestBindPoint();
             ushort releaseRegion = _deathRegionId;
-            // Frontier PvP deaths of RvR world bots release at their own border hub.
-            if (IsAutonomousWorldBot && AutonomousRvrStaging.TryFrontierPvpRelease(Realm,
+            string releaseReason = "safe-current-region";
+            // RvR world actors recover at their own hub after either PvP or PvE death.
+            if (safeWorldRelease && AutonomousRvrStaging.TrySafeRvrRelease(Realm,
+                    AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR),
+                    out ushort hubRegion, out Point3D hubRelease))
+            {
+                (releaseRegion, release) = (hubRegion, hubRelease);
+                releaseReason = "own-border-hub";
+            }
+            else if (!safeWorldRelease && IsAutonomousWorldBot &&
+                AutonomousRvrStaging.TryFrontierPvpRelease(Realm,
                     !IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR), _lastDeathWasPvp,
                     WorldMgr.GetRegion(_deathRegionId)?.GetZone(_deathLocation.X, _deathLocation.Y)?.IsOF == true,
-                    out ushort hubRegion, out Point3D hubRelease))
-                (releaseRegion, release) = (hubRegion, hubRelease);
+                    out ushort legacyRegion, out Point3D legacyRelease))
+                (releaseRegion, release) = (legacyRegion, legacyRelease);
             if (IsAutonomousWorldBot && release != null)
             {
                 Zone releaseZone = WorldMgr.GetRegion(releaseRegion)?.GetZone(release.X, release.Y);
@@ -1231,11 +1243,18 @@ namespace DOL.GS
             }
             if (release == null && IsAutonomousWorldBot)
             {
+                releaseReason = "safe-capital-fallback";
                 var capital = AutonomousStuckWatchdog.SpreadAround(AutonomousStuckWatchdog.SafeCapitalFor(Realm),
                     DatabaseID > 0 ? DatabaseID : ObjectID);
                 releaseRegion = capital.RegionId;
-                release = new Point3D(capital.X, capital.Y, capital.Z);
+                release = safeWorldRelease ? BotReleaseBindPoints.Resolve(PathfindingProvider.Instance,
+                    WorldMgr.GetRegion(releaseRegion)?.GetZone(capital.X, capital.Y), new(capital.X, capital.Y, capital.Z))
+                    : new Point3D(capital.X, capital.Y, capital.Z);
             }
+            if (safeWorldRelease && release != null)
+                release = BotReleaseBindPoints.SpreadSafe(releaseRegion, release, DatabaseID > 0 ? DatabaseID : ObjectID);
+            if (safeWorldRelease && !PvpCombatant.IsSafeReleasePoint(releaseRegion, release))
+                return; // Keep the corpse and recovery timer; retry rather than revive in danger.
             release ??= _deathLocation;
             // Transfer the corpse first: a failed MoveTo must not revive the bot
             // at its killer or cause HandleDeathRecovery to discard its timer.
@@ -1243,6 +1262,8 @@ namespace DOL.GS
                 return;
             if (CurrentRegion != null && GameServer.ServerRules is PvPServerRules releaseRules)
                 releaseRules.StartImmunityTimer(this, DeathImmunityDurationMilliseconds());
+            if (safeWorldRelease)
+                log.Info($"AUTONOMOUS_SAFE_RELEASE bot={Name} reason={releaseReason} region={releaseRegion} point={release.X},{release.Y},{release.Z}");
             Health = Math.Max(1, MaxHealth / 3);
             Mana = Math.Max(0, MaxMana / 3);
             Endurance = Math.Max(0, MaxEndurance / 3);

@@ -257,6 +257,41 @@ namespace DOL.AI.Brain
             }
         }
 
+        private long _siegePursuitQuietSince;
+        private bool _siegeMarchObserved;
+
+        public void BreakStaleSiegePursuit()
+        {
+            bool marching = AutonomousSiegeMarch.IsMarching(BotBody);
+            if (marching != _siegeMarchObserved)
+            {
+                _siegeMarchObserved = marching;
+                log.Info($"RVR_MARCH_STATE bot={Body.Name} marching={marching}");
+            }
+            if (!marching || AutonomousSiegeMarch.HasRecentPartyAttack(BotBody))
+            {
+                _siegePursuitQuietSince = 0;
+                return;
+            }
+            long now = GameLoop.GameLoopTime;
+            if (_siegePursuitQuietSince == 0) _siegePursuitQuietSince = now;
+            if (now - _siegePursuitQuietSince < 20_000) return;
+            AutonomousPetSupport.EndStaleMarchPursuit(BotBody);
+            int removed = 0;
+            foreach (GameLiving target in AggroList.Keys)
+            {
+                if (!PvpCombatant.IsPlayerShaped(target) || Body.IsWithinRadius(target, 1200)) continue;
+                RemoveFromAggroList(target);
+                removed++;
+                if (Body.TargetObject == target)
+                {
+                    Body.StopAttack();
+                    Body.TargetObject = null;
+                }
+            }
+            if (removed > 0) log.Info($"RVR_MARCH_PURSUIT_BREAK bot={Body.Name} removed={removed}");
+        }
+
         public virtual void RemoveFromAggroList(GameLiving living)
         {
             AggroList.TryRemove(living, out _);
@@ -407,6 +442,7 @@ namespace DOL.AI.Brain
         public virtual bool CanAggroTarget(GameLiving target)
         {
             if (!CompanionEngagementMode.Allows(Body, target)) return false;
+            if (BotBody != null && PvpCombatant.IsPlayerShaped(target) && AutonomousSiegeMarch.IsMarching(BotBody)) return false;
             if (!GameServer.ServerRules.IsAllowedToAttack(Body, target, true))
                 return false;
 
@@ -596,6 +632,7 @@ namespace DOL.AI.Brain
         /// <summary>A guildmate outside this bot's group is attacked nearby: go and help.</summary>
         public void OnGuildmateAttacked(GameLiving victim, GameLiving attacker)
         {
+            if (AutonomousSiegeMarch.IsMarching(BotBody)) return;
             if (Body == null || !Body.IsAlive || victim.CurrentRegionID != Body.CurrentRegionID ||
                 Body.CurrentZone == null || !Body.IsWithinRadius(victim, AutonomousGuildCohesion.HelpRadius) ||
                 !GameServer.ServerRules.IsAllowedToAttack(Body, attacker, true) ||
@@ -1534,6 +1571,7 @@ namespace DOL.AI.Brain
             if (BotBody?.IsAutonomousWorldBot == true && !BotBody.IsPlayerLedGroup)
             {
                 _autonomousWorldController ??= new AutonomousWorldBotController();
+                BreakStaleSiegePursuit();
                 if (_autonomousWorldController.TryEngageFrontierThreat(this))
                 {
                     ThinkInterval = AutonomousFidelityPolicy.IntervalMilliseconds(eAutonomousThinkMode.Combat,
@@ -3789,7 +3827,7 @@ namespace DOL.AI.Brain
                     member.CurrentRegion == Body.CurrentRegion &&
                     (member.InCombat || member.IsAttacking))
                 .Select(member => member.TargetObject as GameLiving)
-                .Where(candidate => CanDefendAgainst(candidate) &&
+                .Where(candidate => AutonomousSiegeMarch.MayAssist(BotBody, candidate) && CanDefendAgainst(candidate) &&
                     Body.IsWithinRadius(candidate, GROUP_DEFENSE_ASSIST_RADIUS) &&
                     !CompanionAddControl.ProtectsMezz(BotBody, candidate))
                 .OrderBy(candidate => Body.GetDistanceTo(candidate))
