@@ -61,9 +61,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
-Source audit, 2026-10-04: fixes 106–114 are in source 0.207.0; they have not
-been installed. Server and Windows launcher Release builds passed with zero
-errors; existing compiler warnings remain. Release restore/build has no NuGet
+Source audit and deployment, 2026-10-04: fixes 106–114 are in source 0.207.0.
+The server and launcher fixes (106–110, 112 and 113) were deployed after fresh
+Release builds and push to the fork's main. The deployment replaced and
+hash-verified 17 files, preserved accounts/database/settings, and left the game
+stopped. Backup: `D:\Games\OfflineDAoC-backups\deploy-20261004-175704`.
+The restore-tool fix (111) is available in the checkout; its disposable restore
+check remains pending. The four updated OpenTelemetry DLLs (114) were excluded
+by the standard deployment policy and still await separate third-party approval.
+Real-client checks below remain pending. Server and Windows launcher Release
+builds passed with zero errors; existing compiler warnings remain. Release restore/build has no NuGet
 vulnerability warnings after the telemetry update. PowerShell parsing, shell
 syntax, scoped whitespace/conflict-marker checks, preserved newline styles and
 all version pins passed. Automated test suites were skipped under the

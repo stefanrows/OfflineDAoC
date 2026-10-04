@@ -40,7 +40,9 @@ package, not this fork's version.
   snapshots without a shared lock; matchmaking state is resolved once per
   planning pass (bug 112). Live performance measurements remain pending.
 - Record this source audit and outstanding runtime checks in `docs/BUGS.md`.
-  No installation, migration, save change or game-server start was performed.
+  Server and launcher deployed on 2026-10-04 with saves/settings preserved;
+  the game remains stopped and real-client checks are pending. The four
+  OpenTelemetry DLL updates await separate third-party deployment approval.
 
 ## [0.206.0] - 2026-10-04
 
