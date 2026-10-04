@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace DOL.GS;
 
@@ -22,7 +23,9 @@ public static class AutonomousPveBossDanger
     private readonly record struct Spot(ushort RegionId, int X, int Y, DateTime Utc);
 
     private static readonly object Sync = new();
-    private static readonly List<Spot> Spots = new();
+    // Deaths publish a new bounded snapshot; camp planners never hold a shared
+    // lock while checking thousands of candidate cells.
+    private static Spot[] _spots = [];
 
     /// <summary>Whether a monster kill marks its place as a boss spot.</summary>
     public static bool Marks(string killerType, int killerLevel, int victimLevel, bool countsAsPvp) =>
@@ -33,33 +36,34 @@ public static class AutonomousPveBossDanger
     {
         lock (Sync)
         {
-            Spots.RemoveAll(spot => utc - spot.Utc > Lifetime);
-            if (Spots.Count >= MaximumSpots)
-                Spots.RemoveAt(0);
-            Spots.Add(new Spot(regionId, x, y, utc));
+            var spots = new List<Spot>(_spots.Length + 1);
+            foreach (Spot spot in _spots)
+                if (utc - spot.Utc <= Lifetime)
+                    spots.Add(spot);
+            if (spots.Count >= MaximumSpots)
+                spots.RemoveAt(0);
+            spots.Add(new Spot(regionId, x, y, utc));
+            Volatile.Write(ref _spots, spots.ToArray());
         }
     }
 
     public static bool IsNear(ushort regionId, int x, int y, DateTime utc)
     {
-        lock (Sync)
+        foreach (Spot spot in Volatile.Read(ref _spots))
         {
-            foreach (Spot spot in Spots)
-            {
-                if (spot.RegionId != regionId || utc - spot.Utc > Lifetime)
-                    continue;
-                double dx = spot.X - x, dy = spot.Y - y;
-                if (dx * dx + dy * dy <= (double)AvoidRadius * AvoidRadius)
-                    return true;
-            }
-            return false;
+            if (spot.RegionId != regionId || utc - spot.Utc > Lifetime)
+                continue;
+            double dx = (double)spot.X - x, dy = (double)spot.Y - y;
+            if (dx * dx + dy * dy <= (double)AvoidRadius * AvoidRadius)
+                return true;
         }
+        return false;
     }
 
     /// <summary>Tests only.</summary>
     public static void Clear()
     {
         lock (Sync)
-            Spots.Clear();
+            Volatile.Write(ref _spots, []);
     }
 }

@@ -3266,6 +3266,7 @@ namespace DOL.GS
             // 2003 soloer walking to the next camp rather than across two zones.
             bool localSoloCamps = !sharedGroup && AutonomousBotDecisionEngine.UsesLocalSoloCamps(planningLevel);
             DbZonePoint[][] crossingEdges = localSoloCamps && bot.Level >= 20 ? new DbZonePoint[2][] : null;
+            bool awaitingGroupMatchmaking = AutonomousObjectiveAssignments.IsAwaitingGroupMatchmaking(bot);
 
             // The live world used to be regrouped by every individual bot.
             // With a large roster that meant thousands of full region/object
@@ -3281,7 +3282,7 @@ namespace DOL.GS
                                                  AutonomousDungeonGoalCatalog.CanUseEntrance(edge, cell.RegionId, cell.X, cell.Y))) &&
                                             CampUsableByEveryMember(cell, planningMembers, groupTargetBonus)) &&
                                         IsZoneAccessible(bot.Realm, cell.Zone, bot.CurrentRegionID) &&
-                                        (!AutonomousObjectiveAssignments.IsAwaitingGroupMatchmaking(bot) ||
+                                        (!awaitingGroupMatchmaking ||
                                          AutonomousPvpOpportunityPolicy.CanUseMatchmakingCamp(cell.IsDungeon,
                                              cell.IsFrontier, bot.CurrentRegionID, cell.RegionId))))
             {
@@ -3649,7 +3650,7 @@ namespace DOL.GS
                     CampMonster[] members = group.ToArray();
                     CampMonster representative = members[0];
                     if (restoredGroups.ContainsKey((representative.CurrentZone.ID,
-                        group.Key.Name, group.Key.CellX, group.Key.CellY)))
+                        group.Key.Name.Trim().ToLowerInvariant(), group.Key.CellX, group.Key.CellY)))
                         continue;
                     int x = (int)Math.Round(members.Average(npc => npc.X));
                     int y = (int)Math.Round(members.Average(npc => npc.Y));

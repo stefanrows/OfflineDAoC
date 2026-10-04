@@ -31,6 +31,8 @@ namespace DOL.GS
         internal static readonly long MaximumOwnerMoney = Money.GetMoney(999, 999, 999, 99, 99);
         private static readonly Logger Log = LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
         private static readonly ConcurrentDictionary<string, GameBot> ActiveCompanions = new(StringComparer.OrdinalIgnoreCase);
+        private sealed record FailedFinalSave(GameBot Companion, bool Active);
+        private static readonly ConcurrentDictionary<string, FailedFinalSave> FailedFinalSaves = new(StringComparer.OrdinalIgnoreCase);
 
         // Task 42 companion squads: process-local, like every other runtime Group,
         // rebuilt from PlayerCompanionRecord.SquadIndex/IsSquadLeader on login.
@@ -1414,6 +1416,24 @@ namespace DOL.GS
 
         private static bool TryInvite(GamePlayer owner, PlayerCompanionRecord record, out string message)
         {
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+            {
+                if (FailedFinalSaves.TryGetValue(record.CompanionId, out FailedFinalSave pending))
+                {
+                    if (!SaveBotState(pending.Companion, pending.Active))
+                    {
+                        message = $"{record.Name}'s final save is still pending. Try inviting them again later.";
+                        return false;
+                    }
+                    // The supplied row was read before the final retry persisted.
+                    record = FindOwnedRecord(owner, record.CompanionId);
+                    if (record == null)
+                    {
+                        message = "The companion roster could not be reloaded after saving. Try again later.";
+                        return false;
+                    }
+                }
+            }
             if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot active))
             {
                 if (active?.ObjectState == GameObject.eObjectState.Active)
@@ -1738,6 +1758,7 @@ namespace DOL.GS
                         message = $"{record.Name} could not be deleted. The saved companion remains in your roster.";
                         return false;
                     }
+                    FailedFinalSaves.TryRemove(record.CompanionId, out _);
                 }
 
                 message = $"{record.Name} was permanently deleted from your roster.";
@@ -1774,6 +1795,22 @@ namespace DOL.GS
                     message = $"{record.Name} was benched. Their roster state was saved. " +
                         CompanionPersonality.Dialogue(record, "bench");
                     return true;
+                }
+
+                lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                {
+                    if (FailedFinalSaves.TryGetValue(record.CompanionId, out FailedFinalSave pending))
+                    {
+                        // An explicit bench overrides a failed logout's active flag.
+                        FailedFinalSaves[record.CompanionId] = pending with { Active = false };
+                        if (!SaveBotState(pending.Companion, active: false))
+                        {
+                            message = $"{record.Name}'s final bench save is still pending. Try again later.";
+                            return false;
+                        }
+                        message = $"{record.Name} was benched. Their final roster state was saved.";
+                        return true;
+                    }
                 }
 
                 record.IsActive = false;
@@ -1893,10 +1930,68 @@ namespace DOL.GS
 
                 if (saved && record.InventoryInitialized && companion.Inventory is BotInventory inventory)
                     saved = inventory.SaveIntoDatabase(InventoryOwnerId(record.CompanionId));
+                if (saved && FailedFinalSaves.TryGetValue(record.CompanionId, out FailedFinalSave pending) &&
+                    ReferenceEquals(pending.Companion, companion))
+                    FailedFinalSaves.TryRemove(record.CompanionId, out _);
             }
 
             if (!saved)
                 Log.Error($"Could not persist companion {record.CompanionId} ({record.Name}).");
+            return saved;
+        }
+
+        internal static bool IsCurrentProgressActor(GameBot companion)
+        {
+            string id = companion?.PlayerCompanionRecord?.CompanionId;
+            return !string.IsNullOrWhiteSpace(id) &&
+                ActiveCompanions.TryGetValue(id, out GameBot current) &&
+                ReferenceEquals(current, companion);
+        }
+
+        internal static bool CanQueueProgress(GameBot companion)
+        {
+            string id = companion?.PlayerCompanionRecord?.CompanionId;
+            return IsCurrentProgressActor(companion) ||
+                (!string.IsNullOrWhiteSpace(id) && FailedFinalSaves.TryGetValue(id, out FailedFinalSave pending) &&
+                 ReferenceEquals(pending.Companion, companion));
+        }
+
+        internal static bool SaveQueuedProgress(GameBot companion)
+        {
+            if (companion?.PlayerCompanionRecord == null)
+                return true;
+            lock (companion.Owner ?? (object)companion)
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+            {
+                string id = companion.PlayerCompanionRecord.CompanionId;
+                if (FailedFinalSaves.TryGetValue(id, out FailedFinalSave pending) &&
+                    ReferenceEquals(pending.Companion, companion))
+                {
+                    if (ActiveCompanions.TryGetValue(id, out GameBot replacement) &&
+                        !ReferenceEquals(replacement, companion))
+                    {
+                        FailedFinalSaves.TryRemove(id, out _);
+                        return true;
+                    }
+                    return SaveBotState(companion, pending.Active);
+                }
+                // A detached actor without an explicit failed-final-save token
+                // must never overwrite a replacement or deleted roster row.
+                return !IsCurrentProgressActor(companion) || SaveProgress(companion);
+            }
+        }
+
+        private static bool SaveFinalBotState(GameBot companion, bool active)
+        {
+            bool saved;
+            lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+            {
+                saved = SaveBotState(companion, active);
+                if (!saved)
+                    FailedFinalSaves[companion.PlayerCompanionRecord.CompanionId] = new FailedFinalSave(companion, active);
+            }
+            if (!saved)
+                PlayerCompanionProgressPersistence.Queue(companion);
             return saved;
         }
 
@@ -2002,12 +2097,17 @@ namespace DOL.GS
             if (companion?.IsPersistentPlayerCompanion != true)
                 return;
 
-            bool active = companion.Group != null && companion.Group.IsInTheGroup(companion);
-            SaveBotState(companion, active);
-            companion.SuppressRosterBenchOnGroupRemoval = true;
-            ActiveCompanions.TryRemove(companion.PlayerCompanionRecord.CompanionId, out _);
-            companion.Delete();
-            PruneOwnerSquadsIfEmpty(companion.Owner);
+            lock (companion.Owner ?? (object)companion)
+            {
+                if (!IsCurrentProgressActor(companion))
+                    return;
+                bool active = companion.Group != null && companion.Group.IsInTheGroup(companion);
+                SaveFinalBotState(companion, active);
+                companion.SuppressRosterBenchOnGroupRemoval = true;
+                ActiveCompanions.TryRemove(companion.PlayerCompanionRecord.CompanionId, out _);
+                companion.Delete();
+                PruneOwnerSquadsIfEmpty(companion.Owner);
+            }
         }
 
         public static void OnGroupMemberRemoved(GameBot companion)
@@ -2023,12 +2123,17 @@ namespace DOL.GS
             if (companion?.PlayerCompanionRecord == null)
                 return;
 
-            bool saved = SaveBotState(companion, active: false);
-            if (!saved && notifyOwner && companion.Owner?.ObjectState == GameObject.eObjectState.Active)
-                companion.Owner.Out.SendMessage($"{companion.Name} left the group, but the roster save failed. The last saved state was kept.",
-                    eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            lock (companion.Owner ?? (object)companion)
+            {
+                if (!IsCurrentProgressActor(companion))
+                    return;
+                bool saved = SaveFinalBotState(companion, active: false);
+                if (!saved && notifyOwner && companion.Owner?.ObjectState == GameObject.eObjectState.Active)
+                    companion.Owner.Out.SendMessage($"{companion.Name} left the group, but the roster save failed. A final save will be retried.",
+                        eChatType.CT_System, eChatLoc.CL_SystemWindow);
 
-            DetachAndDelete(companion);
+                DetachAndDelete(companion);
+            }
         }
 
         private static void DetachAndDelete(GameBot companion)
@@ -2735,6 +2840,14 @@ namespace DOL.GS
             }
         }
 
+        private static PlayerCompanionRecord ResolvePendingRecord(PlayerCompanionRecord record)
+        {
+            // Edits made while a final save is pending must share that actor's
+            // record, so the later retry preserves the owner's new metadata.
+            return record != null && FailedFinalSaves.TryGetValue(record.CompanionId, out FailedFinalSave pending)
+                ? pending.Companion.PlayerCompanionRecord : record;
+        }
+
         private static PlayerCompanionRecord FindOwnedRecord(GamePlayer owner, string nameOrId)
         {
             if (owner == null || string.IsNullOrWhiteSpace(owner.ObjectId) || string.IsNullOrWhiteSpace(nameOrId))
@@ -2744,16 +2857,16 @@ namespace DOL.GS
             {
                 if (Guid.TryParse(nameOrId, out Guid companionGuid))
                 {
-                    return SelectSharedRecords(owner)
+                    return ResolvePendingRecord(SelectSharedRecords(owner)
                         .FirstOrDefault(record => Guid.TryParse(record.CompanionId, out Guid storedGuid) &&
-                                                  storedGuid == companionGuid);
+                                                  storedGuid == companionGuid));
                 }
 
                 List<PlayerCompanionRecord> nameMatches = SelectSharedRecords(owner)
                     .Where(record => string.Equals(record.Name, nameOrId.Trim(), StringComparison.OrdinalIgnoreCase))
                     .Take(2)
                     .ToList();
-                return nameMatches.Count == 1 ? nameMatches[0] : null;
+                return nameMatches.Count == 1 ? ResolvePendingRecord(nameMatches[0]) : null;
             }
             catch (Exception exception)
             {

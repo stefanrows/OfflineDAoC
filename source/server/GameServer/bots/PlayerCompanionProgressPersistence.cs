@@ -31,6 +31,10 @@ namespace DOL.GS
 
             lock (PendingGate)
             {
+                // An old callback/retry must not replace a newer live actor.
+                if (!PlayerCompanionRoster.CanQueueProgress(companion))
+                    return;
+
                 string id = companion.PlayerCompanionRecord.CompanionId;
                 if (!Pending.ContainsKey(id))
                     PendingOrder.Enqueue(id);
@@ -64,7 +68,7 @@ namespace DOL.GS
                 int saved = 0;
                 foreach (GameBot companion in batch)
                 {
-                    if (PlayerCompanionRoster.SaveProgress(companion))
+                    if (PlayerCompanionRoster.SaveQueuedProgress(companion))
                         saved++;
                     else
                         Queue(companion);

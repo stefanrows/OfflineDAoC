@@ -19,6 +19,8 @@ internal sealed class RollingServerLog : IDisposable
     private readonly long _totalBytes;
     private StreamWriter? _writer;
     private long _currentBytes;
+    private long _archiveBytes;
+    private bool _disposed;
     private long _unflushedBytes;
     private DateTime _lastFlushUtc;
     private const long FlushByteThreshold = 64 * 1024;
@@ -33,14 +35,20 @@ internal sealed class RollingServerLog : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         if (File.Exists(_path) && new FileInfo(_path).Length >= _segmentBytes)
             Rotate();
-        OpenWriter();
-        PruneOldestArchives();
+        else
+        {
+            OpenWriter();
+            PruneOldestArchives(refreshArchives: true);
+        }
     }
 
     public void WriteLine(string value)
     {
         lock (_sync)
         {
+            // Redirected process output can finish after the form closes.
+            if (_disposed)
+                return;
             long lineBytes = Encoding.UTF8.GetByteCount(value) + Environment.NewLine.Length;
             if (_currentBytes > 0 && _currentBytes + lineBytes > _segmentBytes)
                 Rotate();
@@ -85,16 +93,19 @@ internal sealed class RollingServerLog : IDisposable
             File.Move(_path, ArchivePath(1), true);
 
         OpenWriter();
-        PruneOldestArchives();
+        PruneOldestArchives(refreshArchives: true);
     }
 
-    private void PruneOldestArchives()
+    private void PruneOldestArchives(bool refreshArchives = false)
     {
-        long total = (_writer != null ? _currentBytes : (File.Exists(_path) ? new FileInfo(_path).Length : 0)) +
-            Enumerable.Range(1, MaximumArchiveFiles)
+        if (refreshArchives)
+            _archiveBytes = Enumerable.Range(1, MaximumArchiveFiles)
                 .Select(ArchivePath)
                 .Where(File.Exists)
                 .Sum(file => new FileInfo(file).Length);
+        // Archive sizes change only on rotation/deletion; avoid eight file
+        // probes for every line of redirected server output.
+        long total = _currentBytes + _archiveBytes;
         for (int index = MaximumArchiveFiles; index >= 1 && total > _totalBytes; index--)
         {
             string archive = ArchivePath(index);
@@ -102,6 +113,7 @@ internal sealed class RollingServerLog : IDisposable
                 continue;
             long length = new FileInfo(archive).Length;
             File.Delete(archive);
+            _archiveBytes -= length;
             total -= length;
         }
     }
@@ -112,6 +124,7 @@ internal sealed class RollingServerLog : IDisposable
     {
         lock (_sync)
         {
+            _disposed = true;
             _writer?.Dispose();
             _writer = null;
         }

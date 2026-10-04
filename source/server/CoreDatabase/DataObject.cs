@@ -10,6 +10,7 @@ namespace DOL.Database
     public abstract class DataObject : ICloneable, IEquatable<DataObject>
     {
         private DataObject _snapshot;
+        private bool _isPersistenceCopy;
         private bool _allowAdd = true;
         private bool _allowDelete = true;
         private DateTime _lastTimeRowUpdated;
@@ -58,7 +59,7 @@ namespace DOL.Database
         [DataElement(AllowDbNull = false, Index = false)]
         public DateTime LastTimeRowUpdated
         {
-            get => Dirty ? DateTime.UtcNow : _lastTimeRowUpdated;
+            get => !_isPersistenceCopy && Dirty ? DateTime.UtcNow : _lastTimeRowUpdated;
             set => _lastTimeRowUpdated = value;
         }
 
@@ -87,6 +88,31 @@ namespace DOL.Database
                 throw new ArgumentException("A persistence baseline must describe the same object.", nameof(saved));
             if (!saved.IsPersisted || saved.Dirty || saved.IsDeleted) return;
             _snapshot = saved._snapshot ?? (DataObject)saved.MemberwiseClone();
+        }
+
+        internal DataObject CapturePersistenceCopy()
+        {
+            var saved = (DataObject)MemberwiseClone();
+            // The timestamp getter depends on Dirty; freeze it along with the
+            // row values before deriving SQL parameters and the saved baseline.
+            saved._lastTimeRowUpdated = LastTimeRowUpdated;
+            saved.Dirty = false;
+            saved._isPersistenceCopy = true;
+            return saved;
+        }
+
+        internal void AcceptCommittedSave(DataObject saved, DataTableHandler tableHandler)
+        {
+            _lastTimeRowUpdated = saved._lastTimeRowUpdated;
+            IsPersisted = true;
+            Dirty = false;
+            saved._snapshot = null;
+            _snapshot = saved;
+            // Compare against values actually bound to SQL. A mutation during
+            // the batch stays eligible for the next save. Never clear Dirty
+            // after this comparison, so a concurrent setter can also retain it.
+            if (GetDirtyBindings(tableHandler).Count > 0)
+                Dirty = true;
         }
 
         public List<ElementBinding> GetDirtyBindings(DataTableHandler tableHandler)

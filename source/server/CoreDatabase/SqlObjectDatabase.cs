@@ -548,6 +548,7 @@ namespace DOL.Database
         protected override IEnumerable<bool> SaveObjectImpl(DataTableHandler tableHandler, IEnumerable<DataObject> dataObjects)
         {
             List<bool> success = new();
+            List<DataObject> savedRows = new();
 
             // Pre-filter to only process objects that have been marked as Dirty.
             List<DataObject> dataObjectList = dataObjects.Where(obj => obj.Dirty).ToList();
@@ -573,17 +574,17 @@ namespace DOL.Database
                 foreach (DataObject dataObject in dataObjectList)
                 {
                     bool wasSuccessful = false;
+                    DataObject saved = dataObject.CapturePersistenceCopy();
+                    savedRows.Add(saved);
 
                     try
                     {
                         // Get the list of bindings for properties that have actually changed.
-                        List<ElementBinding> dirtyBindings = dataObject.GetDirtyBindings(tableHandler);
+                        List<ElementBinding> dirtyBindings = saved.GetDirtyBindings(tableHandler);
 
-                        // If nothing changed, just mark it clean and continue.
+                        // Acknowledge unchanged rows only after batch commit.
                         if (dirtyBindings.Count == 0)
                         {
-                            dataObject.Dirty = false;
-                            dataObject.IsPersisted = true;
                             success.Add(true);
                             continue;
                         }
@@ -598,15 +599,13 @@ namespace DOL.Database
                         cmd.CommandText = commandText;
 
                         // Add only the required parameters for this specific command.
-                        var dirtyParameters = dirtyBindings.Select(b => new QueryParameter($"@{b.ColumnName}", b.GetValue(dataObject), b.ValueType));
-                        var primaryParameters = primaryKeyBindings.Select(b => new QueryParameter($"@{b.ColumnName}", b.GetValue(dataObject), b.ValueType));
+                        var dirtyParameters = dirtyBindings.Select(b => new QueryParameter($"@{b.ColumnName}", b.GetValue(saved), b.ValueType));
+                        var primaryParameters = primaryKeyBindings.Select(b => new QueryParameter($"@{b.ColumnName}", b.GetValue(saved), b.ValueType));
 
                         FillSQLParameter(dirtyParameters.Concat(primaryParameters), cmd.Parameters);
 
                         if (cmd.ExecuteNonQuery() > 0)
                         {
-                            dataObject.Dirty = false;
-                            dataObject.TakeSnapshot(); // Important: Take a new snapshot of the now-saved state.
                             wasSuccessful = true;
                         }
                         else
@@ -629,10 +628,42 @@ namespace DOL.Database
                 }
 
                 transaction.Commit();
+
+                // Only acknowledge saves after commit. A failed commit rolls
+                // every update back, and those rows must remain dirty for retry.
+                for (int i = 0; i < dataObjectList.Count; i++)
+                {
+                    if (!success[i])
+                        continue;
+
+                    try
+                    {
+                        dataObjectList[i].AcceptCommittedSave(savedRows[i], tableHandler);
+                    }
+                    catch (Exception baselineException)
+                    {
+                        // The SQL transaction is already committed. A failed
+                        // baseline refresh must retain retry eligibility and
+                        // must not report a rollback of persisted updates.
+                        dataObjectList[i].Dirty = true;
+                        if (log.IsErrorEnabled)
+                            log.Error("Committed batch save baseline refresh failed.", baselineException);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                transaction?.Rollback();
+                try
+                {
+                    transaction?.Rollback();
+                }
+                catch (Exception rollbackException)
+                {
+                    if (log.IsErrorEnabled)
+                        log.Error("Batch save rollback failed.", rollbackException);
+                }
+
+                success.Clear();
 
                 if (log.IsErrorEnabled)
                     log.Error($"Catastrophic error during batch save for table: {tableHandler.TableName}. Transaction was rolled back.", ex);
@@ -643,6 +674,7 @@ namespace DOL.Database
             }
             finally
             {
+                transaction?.Dispose();
                 if (conn != null)
                     CloseConnection(conn);
             }

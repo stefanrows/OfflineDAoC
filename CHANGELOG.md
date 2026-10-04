@@ -12,6 +12,36 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.207.0] - 2026-10-04
+
+### Fixed
+
+- Update the OpenTelemetry OTLP exporter and resolved core/API dependencies
+  to 1.15.3 for four reported security advisories covering unbounded response/
+  propagation allocation and unsafe disk-retry input (bug 114).
+- TCP receives cannot lose an immediate completion notification and stall
+  the connection (bug 106). Database batch saves acknowledge success and
+  clear dirty state only after commit, preserving retries on rollback
+  (bug 107).
+- Delayed companion progress saves reject former actor instances after
+  benching, reinviting or deleting the companion (bug 108).
+- Launcher console logging opens one writer on startup rotation and ignores
+  callbacks after disposal (bug 109). Server-exit callbacks tolerate launcher
+  teardown and ignore obsolete processes (bug 110).
+- Deployment restore handles files newly added by the deployment, restoring
+  their original absence after hash verification (bug 111).
+- Camp catalog deduplication uses the same normalized monster names for
+  restored and fallback spawn cells (bug 113).
+
+### Changed
+
+- Launcher logging caches archive sizes instead of scanning eight archive
+  paths per console line (bug 109). Camp danger queries read immutable
+  snapshots without a shared lock; matchmaking state is resolved once per
+  planning pass (bug 112). Live performance measurements remain pending.
+- Record this source audit and outstanding runtime checks in `docs/BUGS.md`.
+  No installation, migration, save change or game-server start was performed.
+
 ## [0.206.0] - 2026-10-04
 
 ### Fixed

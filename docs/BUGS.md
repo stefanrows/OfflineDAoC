@@ -61,6 +61,132 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+Source audit, 2026-10-04: fixes 106–114 are in source 0.207.0; they have not
+been installed. Server and Windows launcher Release builds passed with zero
+errors; existing compiler warnings remain. Release restore/build has no NuGet
+vulnerability warnings after the telemetry update. PowerShell parsing, shell
+syntax, scoped whitespace/conflict-marker checks, preserved newline styles and
+all version pins passed. Automated test suites were skipped under the
+repository rules. Existing Open reports
+remain unresolved where they require client evidence or live measurement;
+this audit does not establish that the application is free of other defects.
+
+114. **Pinned telemetry packages carry four published vulnerabilities.**
+     The audit build flagged the OpenTelemetry OTLP exporter 1.15.0. Source
+     0.207.0 pins exporter 1.15.3, also resolving core/API dependencies to
+     1.15.3. This is the smallest patch that clears the four upstream
+     advisories: unbounded HTTP error bodies
+     ([GHSA-q834-8qmm-v933](https://github.com/open-telemetry/opentelemetry-dotnet/security/advisories/GHSA-q834-8qmm-v933)),
+     unbounded gRPC status trailers
+     ([GHSA-mr8r-92fq-pj8p](https://github.com/open-telemetry/opentelemetry-dotnet/security/advisories/GHSA-mr8r-92fq-pj8p)),
+     shared-temp disk-retry blob injection
+     ([GHSA-4625-4j76-fww9](https://github.com/open-telemetry/opentelemetry-dotnet/security/advisories/GHSA-4625-4j76-fww9)),
+     and propagation parsing allocations
+     ([GHSA-g94r-2vxg-569j](https://github.com/open-telemetry/opentelemetry-dotnet/security/advisories/GHSA-g94r-2vxg-569j)).
+     Exposure depends on use/configuration of the affected telemetry paths;
+     no exploitation was observed. Release dependency restore succeeded with
+     no vulnerability warnings. Installation and ordinary telemetry checks
+     remain pending. The standard server/launcher deploy excludes third-party
+     DLLs, so installing this package fix needs the separately authorized
+     third-party deployment option; no such deployment was performed.
+
+113. **Restored XP camps can also appear as fallback camps.** Found during
+     the 2026-10-04 audit; affected source 0.206.0 and earlier. In a supported
+     source-empty zone, a restored spawn with a mixed-case or padded name is
+     indexed by trimmed lowercase name, but the fallback deduplication lookup
+     used its original name. The same cell can therefore enter the catalog
+     twice, distorting selection and crowding weights and adding planning
+     work. Source 0.207.0 normalizes the lookup identically. Spawn records,
+     routes and ordinary non-overlapping camps are unchanged. Static key and
+     builder review complete; inspect the refreshed catalog on a disposable
+     fixture with an overlapping mixed-case restored spawn before acceptance.
+
+112. **Parallel camp planning serializes danger queries and repeats assignment
+     parsing per cell.** Found during the 2026-10-04 audit; affected source
+     0.206.0 and earlier. Each candidate camp acquired the global boss-danger
+     lock and scanned up to 512 remembered places. Concurrent planners
+     contended on this lock; matchmaking state also repeated an assignment
+     lookup/enum parse per eligible cell. Source 0.207.0 publishes immutable,
+     bounded danger snapshots on death/clear, so readers need no shared lock,
+     and resolves matchmaking state once per planning pass. Radius, lifetime,
+     cap and camp eligibility rules are retained. Concurrency paths reviewed
+     statically. Pending: compare SelectCamp/tick profiles at the same roster
+     and speed, and check danger avoidance after death and expiry. This does
+     not close task 74 or claim that 10×/20× targets are now achieved.
+
+111. **Restore fails for files newly added by a deployment.** Found during
+     the 2026-10-04 audit; affected source 0.206.0 and earlier. Deploy into an
+     installation without `Join Friend.cmd`, then restore that deployment's
+     backup. The manifest correctly records no old hash/file, but restore
+     tried to copy a nonexistent backup using a null expected hash. Expected:
+     restore the original absence. Source 0.207.0 removes such files only when
+     their current hash matches the deployed file, and rechecks each target
+     immediately before restoring it. Existing backups and protected-save
+     rules remain intact. PowerShell parsing and shell syntax checks passed;
+     disposable Windows deploy/restore verification remains pending. No
+     deployment or restoration was executed during this audit.
+
+110. **Server exit can dispatch to a closed launcher window.** Found during
+     the 2026-10-04 audit; affected source 0.206.0 and earlier. Close the
+     launcher while the server exits: its worker callback unconditionally
+     calls `BeginInvoke` after the window handle can be destroyed, raising an
+     unhandled exception. A queued callback from an old server can also alter
+     a replacement process's startup state. Source 0.207.0 checks window
+     lifetime before dispatch and in the UI callback, tolerates the teardown
+     race, and checks the sender against the current process. Pending: owner
+     verification of launcher closure/server-exit timing on Windows. This is
+     not established as the missing-dictionary exception in bug 70.
+
+109. **Launcher console logging leaks a writer, races closure, and scans
+     archives on every line.** Found during the 2026-10-04 audit; affected
+     source 0.206.0 and earlier. Open with a full console log: rotation opens
+     a writer and the constructor opens another, retaining the first handle.
+     Late redirected output after disposal dereferences a null writer.
+     Every output line also probes up to eight archive files. Source 0.207.0
+     opens once, ignores post-disposal writes under the logging lock, and
+     caches archive totals between rotations/deletions. Static lifecycle and
+     retention review complete. Pending: reopen with a full log, verify
+     rotation/retention limits, close during output, and measure logging cost
+     on Windows. No measured speedup is claimed.
+
+108. **Queued progress from an old companion actor can overwrite newer
+     state.** Found during the 2026-10-04 audit; affected source 0.206.0 and
+     earlier. Earn progress, bench and reinvite/delete before the two-second
+     queue flush. The queued old GameBot remained eligible for SaveProgress
+     after the roster switched actor instances, risking stale writes or
+     retries against a deleted record. Source 0.207.0 checks current actor
+     identity when enqueueing and under owner/database locks before flushing;
+     stale work is drained without writing. Failed final bench/quit saves retain
+     an explicit actor token and retry progress plus inventory. Reinvitation
+     first retries that final save and reloads the record; continued failures
+     refuse reinvitation. Successful deletion cancels the token. Direct training
+     saves retain their existing path. Lock ordering and lifecycle reviewed
+     statically. Pending: rapid bench/reinvite, reset/delete, XP/training and
+     quit/restart checks, including failed-final-save retries, on disposable saves.
+
+107. **Rolled-back batch saves report success and lose retry state.** Found
+     during the 2026-10-04 audit; affected source 0.206.0 and earlier. If SQL
+     UPDATE succeeds but transaction commit fails, SaveObjectImpl previously
+     cleared Dirty/took snapshots before commit and returned the earlier true
+     results after rollback. Callers could drop a save that never persisted.
+     Source 0.207.0 acknowledges rows only after commit, returns failures for
+     a rolled-back batch, retains dirty snapshots for retries, disposes the
+     transaction and handles rollback errors. SQL values are captured before
+     each command; commit acknowledges that captured baseline rather than later
+     live values, retaining changes made during the batch for a subsequent save.
+     Static transaction-path review complete. Pending: disposable database
+     commit-failure injection, mutation during a batch and successful retry
+     verification. No personal database was modified.
+
+106. **TCP receive completion can be lost, stalling the connection.** Found
+     during the 2026-10-04 audit; affected source 0.206.0 and earlier. An async
+     receive may invoke its completion callback before ReceiveAsync returns;
+     the caller then reset the completion flag to false and waited forever
+     for another notification. Source 0.207.0 resets the flag before posting
+     the receive. Packet processing remains on the game loop. Ordering and
+     synchronous/asynchronous completion paths reviewed statically. Pending:
+     socket concurrency stress and normal login/co-op checks after installation.
+
 Installation update, 2026-10-04: server and launcher fixes for bugs 91–99,
 102, 104 and 105 were deployed as 0.206.0. Deployment verified the copied
 binaries and preserved accounts, database and settings; the game remains

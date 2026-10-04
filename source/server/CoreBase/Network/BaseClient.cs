@@ -131,9 +131,11 @@ namespace DOL.Network
             {
                 _receiveArgs.SetBuffer(ReceiveBufferOffset, available);
 
+                // A pending receive may complete before ReceiveAsync returns.
+                // Reset before posting so its callback cannot be overwritten.
+                ReceivingAsyncCompleted = false;
                 if (Socket.ReceiveAsync(_receiveArgs))
                 {
-                    ReceivingAsyncCompleted = false;
                     _isReceivingAsync = true;
                 }
                 else

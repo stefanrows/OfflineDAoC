@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.206.0";
+    internal const string DisplayVersion = "0.207.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -3139,12 +3139,7 @@ internal sealed partial class MainForm : Form
             _serverProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
             _serverProcess.OutputDataReceived += (_, args) => { if (args.Data is not null) _serverLog?.WriteLine(args.Data); };
             _serverProcess.ErrorDataReceived += (_, args) => { if (args.Data is not null) _serverLog?.WriteLine("ERROR: " + args.Data); };
-            _serverProcess.Exited += (_, _) => BeginInvoke(async () =>
-            {
-                _serverReadinessPoll.Stop();
-                _stoppingServer = false;
-                await RefreshDashboardAsync();
-            });
+            _serverProcess.Exited += OnServerExited;
             _serverProcess.Start();
             ShowStartingState();
             _serverProcess.BeginOutputReadLine();
@@ -3168,6 +3163,29 @@ internal sealed partial class MainForm : Form
         finally
         {
             _ = RefreshDashboardAsync();
+        }
+    }
+
+    private void OnServerExited(object? sender, EventArgs args)
+    {
+        // Process events arrive on a worker thread, including after closing
+        // the launcher has destroyed its window handle.
+        if (IsDisposed || Disposing || !IsHandleCreated)
+            return;
+        try
+        {
+            BeginInvoke(async () =>
+            {
+                if (IsDisposed || Disposing || !ReferenceEquals(sender, _serverProcess))
+                    return;
+                _serverReadinessPoll.Stop();
+                _stoppingServer = false;
+                await RefreshDashboardAsync();
+            });
+        }
+        catch (InvalidOperationException) when (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            // Closing can destroy the handle between the check and BeginInvoke.
         }
     }
 

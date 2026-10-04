@@ -525,16 +525,32 @@ function Invoke-OfflineDaocRestore {
         if ($current -ne $entry.NewHash) {
             throw "Installed hash for $($entry.Relative) is neither the deployed nor the backed-up hash; restore refused."
         }
+        if (-not $oldHash) {
+            # This deployment created the file; its original state was absence.
+            $pending += [pscustomobject]@{ Target = $target; Copy = $null; OldHash = $null; NewHash = $entry.NewHash }
+            continue
+        }
         $copy = Join-Path $backupRoot $entry.Relative
         if ((Get-OfflineDaocFileHash $copy) -ne $oldHash) {
             throw "Backup file hash mismatch for $($entry.Relative)"
         }
-        $pending += [pscustomobject]@{ Target = $target; Copy = $copy; OldHash = $oldHash }
+        $pending += [pscustomobject]@{ Target = $target; Copy = $copy; OldHash = $oldHash; NewHash = $entry.NewHash }
     }
 
     foreach ($item in $pending) {
         Assert-OfflineDaocStopped
-        Copy-OfflineDaocVerified -Source $item.Copy -Destination $item.Target -ExpectedHash $item.OldHash
+        if ((Get-OfflineDaocFileHash $item.Target) -ne $item.NewHash) {
+            throw "Runtime changed during restore: $($item.Target)"
+        }
+        if (-not $item.OldHash) {
+            Remove-Item -LiteralPath $item.Target -Force
+            if (Test-Path -LiteralPath $item.Target) {
+                throw "Newly deployed file remained after restore: $($item.Target)"
+            }
+        }
+        else {
+            Copy-OfflineDaocVerified -Source $item.Copy -Destination $item.Target -ExpectedHash $item.OldHash
+        }
     }
 
     Write-Host ("Restored {0} of {1} file(s) from {2}. Saves and settings were not rolled back." -f $pending.Count, @($manifest.Entries).Count, $backupRoot)
