@@ -106,7 +106,8 @@ namespace DOL.GS
             if (Environment.ProcessorCount == 1)
                 _threadPool = new GameLoopThreadPoolSingleThreaded();
             else
-                _threadPool = new GameLoopThreadPoolMultiThreaded(Environment.ProcessorCount);
+                _threadPool = new GameLoopThreadPoolMultiThreaded(
+                    Math.Min(Environment.ProcessorCount, GameLoopThreadPoolMultiThreaded.MAX_DEGREE_OF_PARALLELISM));
 
             _threadPool.Init(); // Must be done from the game loop thread.
             BuildTickSequence();

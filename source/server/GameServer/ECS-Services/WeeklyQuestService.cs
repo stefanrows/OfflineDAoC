@@ -35,8 +35,8 @@ namespace DOL.GS
         {
             ProcessPostedActionsParallel();
 
-            // This is where the weekly check will go once testing is finished.
-            if (_lastWeeklyRollover.Date.DayOfYear + 7 < WorldSimulationClock.LocalNow.Date.DayOfYear || _lastWeeklyRollover.Year < WorldSimulationClock.LocalNow.Year)
+            // Compare whole dates so seven days is a week across year boundaries too.
+            if ((WorldSimulationClock.LocalNow.Date - _lastWeeklyRollover.Date).TotalDays >= 7)
             {
                 DbTaskRefreshInterval loadQuestsProp = GameServer.Database.SelectObject<DbTaskRefreshInterval>(DB.Column("RolloverInterval").IsEqualTo(WEEKLY_INTERVAL_KEY));
 

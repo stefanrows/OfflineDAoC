@@ -101,7 +101,7 @@ public static class CamlannWorldReset
             {
                 "bot_settings", "bot_profiles", "offline_bot_commands", "offline_world_bots",
                 "offline_auction_escrow", "offline_auction_ledger", "offline_auction_listings",
-                "realm_exchange_sales"
+                "realm_exchange_sales", "player_companions"
             })
                 DeleteAll(connection, transaction, table);
 
@@ -227,7 +227,7 @@ public static class CamlannWorldReset
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         string characterOwners = characterTables.Count == 0 ? "SELECT NULL WHERE 0" : string.Join(" UNION ", characterTables);
-        command.CommandText = $"DELETE FROM Inventory WHERE OwnerID IN ({characterOwners}) OR OwnerID LIKE 'offlinebot:%'";
+        command.CommandText = $"DELETE FROM Inventory WHERE OwnerID IN ({characterOwners}) OR OwnerID LIKE 'offlinebot:%' OR OwnerID LIKE 'playercompanion:%'";
         command.ExecuteNonQuery();
     }
 

@@ -302,6 +302,18 @@ namespace DOL.GS.Keeps
 						inArea++;
 				}
 			}
+            // Playerbots are NPCs in the world index, so the player scan misses them.
+            // Count only player-shaped NPCs, using the same keep hostility rules.
+            foreach (GameNPC nearbyNpc in GetNPCsInRadius(WorldMgr.VISIBILITY_DISTANCE))
+            {
+                if (nearbyNpc is IGamePlayer &&
+                    (Component != null
+                        ? GameServer.KeepManager.IsEnemy(Component.Keep, nearbyNpc)
+                        : GameServer.ServerRules.IsAllowedToAttack(this, nearbyNpc, true)))
+                {
+                    inArea++;
+                }
+            }
 			return inArea;
 		}
 

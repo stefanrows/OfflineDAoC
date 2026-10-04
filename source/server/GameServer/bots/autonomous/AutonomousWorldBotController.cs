@@ -75,6 +75,7 @@ namespace DOL.GS
         private CampDestination _rvrDestination;
         private bool _rvrSharedEvent;
         private Vector3? _rvrApproachDestination;
+        private bool _refreshRvrForceAfterStableRoute;
         private bool _soloRvrBorderStaged;
         private Vector3? _soloRvrStagingPoint;
         private int _observedDeathCount = -1;
@@ -249,6 +250,7 @@ namespace DOL.GS
                 {
                     // Group assignment supersedes the bot's private task at
                     // once.  No stale solo destination survives matchmaking.
+                    ResetRvrObjectiveForGroupChange(bot, _activeDynamicGroupId);
                     _activeDynamicGroupId = _groupDirective.GroupId;
                     AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.GroupChanged, "Joined a new autonomous group");
                     _camp = null;
@@ -272,6 +274,7 @@ namespace DOL.GS
                 {
                     // A disbanded bot chooses new independent work instead of
                     // silently continuing the former party's shared camp.
+                    ResetRvrObjectiveForGroupChange(bot, _activeDynamicGroupId);
                     _activeDynamicGroupId = string.Empty;
                     AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.GroupChanged, "Autonomous group disbanded");
                     _camp = null;
@@ -304,6 +307,11 @@ namespace DOL.GS
                 // off the horse because an NPC happened to notice it.
                 if (HandleStableTravel(bot))
                     return true;
+                if (_refreshRvrForceAfterStableRoute)
+                {
+                    _refreshRvrForceAfterStableRoute = false;
+                    RefreshRvrForceMetadata(bot);
+                }
 
                 brain.BreakStaleSiegePursuit();
 
@@ -669,6 +677,35 @@ namespace DOL.GS
                 }
                 return true;
             }
+        }
+
+        private void ResetRvrObjectiveForGroupChange(GameBot bot, string previousGroupId)
+        {
+            // A claim reservation belongs to a whole dynamic force. A member
+            // leaving alone must not release the keep its former group is
+            // still approaching; force cleanup handles group-wide expiry.
+            if (string.IsNullOrEmpty(previousGroupId))
+                AutonomousRvrEventLayer.ReleaseClaimPlan($"rvr-{bot.DatabaseID}", _rvrDestination?.Id);
+            _rvrDestination = null;
+            _rvrSharedEvent = false;
+            _rvrApproachDestination = null;
+            _rvrIntent = AutonomousRvrEventLayer.Intent.Roam;
+            _nextRvrPlanReview = 0;
+            _hunterPatrolArrivedTick = 0;
+            bot.TempProperties.RemoveProperty("RvrWarbandIntent");
+            bot.TempProperties.RemoveProperty("RvrDefendingKeep");
+            if (bot.IsOnStableMasterRoute)
+                _refreshRvrForceAfterStableRoute = true;
+            else
+                RefreshRvrForceMetadata(bot);
+        }
+
+        private void RefreshRvrForceMetadata(GameBot bot)
+        {
+            if (_groupDirective?.IsDynamic == true && _groupDirective.ObjectiveKind == eAutonomousObjectiveKind.RvR)
+                bot.TempProperties.SetProperty("RvrEventForce", _groupDirective.GroupId);
+            else
+                bot.TempProperties.RemoveProperty("RvrEventForce");
         }
 
         private bool TravelAcrossRegions(GameBot bot)

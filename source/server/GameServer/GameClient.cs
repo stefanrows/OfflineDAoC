@@ -282,25 +282,39 @@ namespace DOL.GS
 
         private bool CheckVersion(int size)
         {
-            // This currently assumes the first packet is received in full, which may not be the case.
-            // This should eventually be fixed since the connection may fail because of that.
+            // TCP can split the first packet across receives or combine it with
+            // later packets. Select the version from the complete first packet.
+            int bufferedSize = ReceiveBufferOffset + size;
+            if (bufferedSize < 2)
+            {
+                ReceiveBufferOffset = bufferedSize;
+                return false;
+            }
 
-            if (size < 17) // 17 is correct bytes count for 0xF4 packet.
+            int packetLength = (ReceiveBuffer[0] << 8) + ReceiveBuffer[1] + GSPacketIn.HDR_SIZE;
+            if (packetLength < 17 || packetLength > ReceiveBuffer.Length)
             {
                 if (log.IsWarnEnabled)
                 {
-                    log.Warn($"Disconnected {TcpEndpointAddress} in login phase because wrong packet size {size}");
-                    log.Warn(Marshal.ToHexDump("packet buffer:", ReceiveBuffer, 0, size));
+                    log.Warn($"Disconnected {TcpEndpointAddress} in login phase because wrong packet size {packetLength}");
+                    log.Warn(Marshal.ToHexDump("packet buffer:", ReceiveBuffer, 0, bufferedSize));
                 }
 
                 Disconnect();
                 return false;
             }
 
+            if (bufferedSize < packetLength)
+            {
+                ReceiveBufferOffset = bufferedSize;
+                return false;
+            }
+
             int version;
 
-            // The first packet format changes after 1.115c. If bytes count is below 19, we have a pre-1.115c packet.
-            if (size < 19)
+            // The first packet format changes after 1.115c. Its declared length
+            // identifies the format even when another packet arrived with it.
+            if (packetLength < 19)
             {
                 // Currently, the version is sent with the first packet, no matter what packet code it is.
                 version = ReceiveBuffer[12] * 100 + ReceiveBuffer[13] * 10 + ReceiveBuffer[14];

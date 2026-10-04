@@ -12,6 +12,51 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.206.0] - 2026-10-04
+
+### Fixed
+
+- UDP handling copies validated socket bytes before queuing them, ignores
+  incomplete headers, and releases pooled packets on every rejection path
+  (bug 92). Login version negotiation now supports split or coalesced TCP
+  receives (bug 93), and the highest valid client session ID can register
+  and resolve normally (bug 95).
+- Weekly quests reset after seven calendar days, including across New Year,
+  instead of waiting eight days or resetting early (bug 94). Automatic game
+  loop pool sizing respects its 128-thread maximum on larger hosts (bug 96).
+- Companion loot no longer awards the final rejected item after exhausted
+  category/weapon rerolls (bug 97). Hostile same-realm Camlann kills qualify
+  for companion PvP gear under the existing alliance and per-death rules
+  (bug 104).
+- Dynamic group changes clear stale autonomous RvR plans and force metadata;
+  active stablemaster legs finish before metadata changes. Ended forces
+  release keep-claim reservations without disturbing a surviving group when
+  one member leaves (bug 102).
+- Launcher server/client scans dispose unused process objects, and presence
+  checks dispose their match (bug 98). Join Friend profiles and world-speed
+  requests use separate temporary files per writer (bug 105).
+- The existing confirmed fresh-world conversion clears persistent companion
+  records and gear with their deleted owners (bug 99). Fresh-world Setup
+  refuses existing or colliding database/credentials/ruleset output paths
+  (bug 100), and spawn migrations give each backup a unique filename
+  (bug 101). No world reset, setup, migration or deployment was executed.
+
+### Changed
+
+- Correct the companion guide's PvE reward selection and full-backpack sale
+  description to match existing behavior (bug 103). Source fixes await
+  installation and the relevant owner-run checks in `docs/BUGS.md`.
+
+## [0.205.0] - 2026-10-04
+
+### Fixed
+
+- Keep guard-death alerts now include hostile autonomous playerbots in the
+  nearby enemy count (bug 91), instead of reporting zero during bot attacks.
+  Playerbots use the existing keep ownership, guild, alliance and group
+  hostility rules; ordinary NPCs and pets do not inflate the count. The
+  shared correction also applies to relic-guard alerts and capture logs.
+
 ## [0.204.0] - 2026-10-03
 
 ### Fixed

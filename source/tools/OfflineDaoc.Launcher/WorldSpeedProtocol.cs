@@ -133,7 +133,7 @@ internal static class WorldSpeedProtocol
         if (string.IsNullOrWhiteSpace(directory))
             throw new ArgumentException("The request path must have a parent directory.", nameof(path));
         Directory.CreateDirectory(directory);
-        string temporaryPath = path + ".tmp";
+        string temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         var request = new WorldSpeedRequest(sessionId, Guid.NewGuid().ToString("N"), createdUtc.ToUniversalTime(), multiplier);
         try
         {

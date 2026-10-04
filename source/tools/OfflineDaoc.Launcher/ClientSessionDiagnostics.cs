@@ -151,25 +151,30 @@ public static class ClientSessionDiagnostics
 
     private static Process? FindGameProcess(string clientDirectory, DateTime startedUtc, int bootstrapProcessId)
     {
+        Process? match = null;
         foreach (Process candidate in Process.GetProcesses())
         {
             try
             {
-                if (candidate.Id == bootstrapProcessId || candidate.HasExited ||
-                    candidate.StartTime.ToUniversalTime() < startedUtc.AddSeconds(-10) ||
-                    !IsGameProcessPath(candidate.MainModule?.FileName, clientDirectory))
+                if (match is null && candidate.Id != bootstrapProcessId && !candidate.HasExited &&
+                    candidate.StartTime.ToUniversalTime() >= startedUtc.AddSeconds(-10) &&
+                    IsGameProcessPath(candidate.MainModule?.FileName, clientDirectory))
                 {
-                    candidate.Dispose();
+                    match = candidate;
                     continue;
                 }
-                return candidate;
             }
             catch
             {
-                candidate.Dispose();
+                // Processes can exit or deny image-path access during enumeration.
             }
+
+            // Process.GetProcesses materializes every wrapper up front. Keep
+            // only the first matching game process; dispose every other wrapper,
+            // including matches later in the enumeration.
+            candidate.Dispose();
         }
-        return null;
+        return match;
     }
 
     public static bool IsGameProcessPath(string? candidatePath, string clientDirectory)

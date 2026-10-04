@@ -61,6 +61,209 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+105. **Concurrent launcher instances collide on temporary profile/request files.**
+     Found by the Luna source sweep 2026-10-04; affected source 0.205.0 and
+     earlier. Join Friend profile saves and world-speed requests used a fixed
+     `<target>.tmp` filename. Two launcher instances writing the same target
+     could overwrite, move or delete each other's staging file, causing a
+     failed save/request or publishing the wrong writer's payload. Expected:
+     each writer stages its own complete payload before atomically replacing
+     the destination. Source 0.206.0 gives each write a unique temporary path;
+     profile saves also clean up their own temporary file on failure. Password
+     encryption and request validation remain intact. Writer/cleanup paths
+     checked statically; automated tests were not requested. Concurrent use
+     with disposable profile/request paths awaits Windows verification.
+
+104. **Companion gear rewards exclude hostile same-realm PvP kills.** Found
+     by the Luna source sweep 2026-10-04; affected source 0.205.0 and earlier.
+     On Camlann, kill a non-allied actor of the companion's own realm while
+     meeting the existing owner, group, range and reward requirements.
+     Expected: the same personal companion gear opportunity as a hostile
+     cross-realm kill. Actual: `IsEligiblePvp` required different realms in
+     addition to its alliance check, suppressing valid same-realm rewards.
+     Source 0.206.0 removes that redundant realm condition and retains the
+     existing alliance, activity, range, owner and per-death claim checks.
+     Hostility and caller paths checked statically; automated tests were not
+     requested. Installation and real-client verification pending: confirm a
+     same-realm hostile kill can grant companion gear once per death, while
+     allied targets remain ineligible. Existing gear and coins were not edited.
+
+102. **Cached RvR work survives group changes; ended forces retain keep claims.**
+     Found by the Luna source sweep 2026-10-04; affected source 0.205.0 and
+     earlier. A bot joining or leaving a dynamic group cleared its PvE camp
+     but retained RvR destination, approach, intent and planning deadline.
+     A leftover private destination could suppress the new force's planner;
+     after disbanding, the bot could continue the old shared objective.
+     Separately, `RemoveForce` removed siege attendance but kept a claim lease
+     for up to ten minutes, blocking another force from reserving a free keep.
+     Expected: a changed assignment replans promptly, and an ended force owns
+     no claim reservation. Source 0.206.0 clears cached RvR work on group
+     transitions and releases claim leases in force cleanup. A single member
+     leaving does not release a surviving group's reservation. Force metadata
+     refresh waits until an active stablemaster leg ends, preserving the ride.
+     Lifecycle and lock paths checked statically; automated tests were not
+     requested. Installation and real-client verification pending: join and
+     disband during RvR travel, finish a group claiming journey, and let one
+     member leave while the remaining group retains its keep reservation.
+
+101. **Spawn-migration backups can overwrite one another within a second.**
+     Found by the Luna source sweep 2026-10-04; affected source 0.205.0 and
+     earlier. Both supported Setup spawn migrations use a backup name with
+     only a second-resolution timestamp. Two invocations within that second
+     open the same destination, allowing the later backup to replace the
+     earlier recovery point. Expected: a separate recoverable backup per run.
+     Source 0.206.0 adds a unique suffix to the timestamped filename. SQLite's
+     consistent backup API and the migration operations remain unchanged.
+     Path generation checked statically; automated tests were not requested.
+     Verification with disposable migration inputs is pending; no migration
+     or save operation was executed during this sweep.
+
+100. **Fresh-world Setup can overwrite a save or collide with its text outputs.**
+     Found by the Luna source sweep 2026-10-04; affected source 0.205.0 and
+     earlier. The ordinary `--database` path registered schema/imported world
+     data even when the database already existed. `--credentials` and the
+     adjacent `ruleset.txt` were subsequently overwritten without checking
+     whether their paths matched the database or one another. Expected:
+     creating a fresh world never modifies pre-existing output files or writes
+     credentials over its SQLite output. Source 0.206.0 validates that all
+     three normalized output paths are distinct and absent before setup
+     writes begin. The two explicit, backed-up spawn migration modes remain
+     available for existing worlds. Argument and preflight paths checked
+     statically; automated tests were not requested. Fresh setup and rejected
+     collisions on disposable outputs await verification. No setup or
+     migration was run against any save.
+
+99. **Fresh Camlann world conversion leaves orphaned companions and their gear.**
+    Found by the Luna source sweep 2026-10-04; affected source 0.205.0 and
+    earlier. When a Normal or unmarked world contains persistent companions,
+    `CamlannWorldReset.Apply` deleted player characters but retained
+    `player_companions` and `playercompanion:` inventory owners. Expected:
+    the explicitly confirmed fresh-world conversion discards the old roster
+    and inventory together with its owners. Source 0.206.0 clears companion
+    records and their inventory in the existing reset transaction. Already
+    converted worlds still return without resetting, and the backup and
+    stopped-server requirements remain intact. Cleanup paths checked
+    statically; automated tests were not requested. Verification on a
+    disposable Normal-world fixture remains pending. This change was not
+    executed against the installed world or any personal save.
+
+98. **Launcher process checks retain disposable process wrappers.** Found by
+    the Luna source sweep 2026-10-04; affected source 0.205.0 and earlier.
+    Repeated settings/start/delete guards used `FindExactServerProcess` only
+    for presence, leaving its matching `Process` undisposed. Both that scan
+    and the client-session monitor returned early after process enumeration,
+    leaving other wrappers undisposed. Expected: every wrapper except one
+    explicitly handed to its caller is promptly disposed. Source 0.206.0
+    adds a scoped presence check and disposes all nonselected wrappers in
+    both scans; metadata and stop callers retain ownership of their match.
+    Executable-path identity checks remain intact. All call sites reviewed
+    statically; automated tests were not requested. Launcher/client-monitor
+    usage and handle-count stability await installation verification.
+
+97. **Companion loot reroll exhaustion grants a rejected reward.** Found by
+    the Luna source sweep 2026-10-04; affected source 0.205.0 and earlier.
+    `CompanionLootMix.Generate` selects armor, jewelry or weapon, then retries
+    up to twelve times for armor/weapons, rejecting the wrong category or a
+    weapon outside the companion's configured build. If every attempt failed,
+    it returned the last rejected item anyway. Expected: only a reward passing
+    those filters is granted. Source 0.206.0 returns no reward on exhaustion;
+    the existing grant caller safely handles that result. Existing items,
+    coins and normal successful rewards are unchanged. Filter and caller paths
+    checked statically; automated tests were not requested. Installation and
+    real-client loot verification pending, especially companions with narrow
+    weapon policies. No inventory or save data was edited.
+
+96. **Server cannot initialize its game loop on more than 128 logical
+    processors.** Found by source sweep 2026-10-04; affected source 0.205.0
+    and earlier. `GameLoop` passed `Environment.ProcessorCount` directly to
+    a pool constructor that rejects values above 128. On such a host the
+    exception occurs before the loop's service exception handler, preventing
+    normal startup. Expected: use the pool's supported maximum on larger
+    hosts. Source 0.206.0 caps automatic pool sizing at its existing 128-thread
+    limit; explicit constructor validation remains intact. Smaller hosts keep
+    their existing sizing. Caller and constructor bounds checked statically;
+    automated tests were not requested. Runtime verification on a host exposing
+    more than 128 logical processors remains pending; no server was started.
+
+95. **Client registration rejects the highest valid session ID.** Found by
+    source sweep 2026-10-04; affected source 0.205.0 and earlier.
+    `SessionIdAllocator` issues IDs 1 through 65535, but `ClientService`
+    allocated only 65535 array slots (indices 0 through 65534). When ID 65535
+    is issued, registration/disconnection indexes outside the array and UDP
+    session lookup treats that valid ID as absent. Sequential connection
+    churn can eventually reach this ID without 65535 simultaneous players.
+    Expected: every allocated session ID can register, resolve and disconnect.
+    Source 0.206.0 allocates the complete ID range plus reserved index zero.
+    Allocator bounds and all session-index uses checked statically; automated
+    tests were not requested. Installation and client verification pending;
+    ordinary login alone does not exercise the maximum-ID boundary.
+
+94. **Weekly quest reset waits eight days and resets early at New Year.**
+    Found by source sweep 2026-10-04; affected source 0.205.0 and earlier.
+    Reproduce with a saved weekly rollover on October 4: the old comparison
+    does not reset on October 11, only October 12. A December 30 rollover
+    instead resets on January 1, only two days later. Expected: seven calendar
+    days between weekly refreshes, including across year boundaries. Cause:
+    `WeeklyQuestService` compared day-of-year using strict `<`, then treated
+    any change of year as an immediate refresh. Source 0.206.0 compares the
+    elapsed whole-date interval against seven days. Existing quest cleanup,
+    gameplay-clock source and saved rollover rows remain authoritative.
+    Date comparison checked statically; automated tests were not requested.
+    Installation and real-client verification pending: confirm completed
+    weekly quests become available after seven simulated calendar days.
+
+93. **Login rejects a valid first packet split across TCP receives.** Found
+    by source sweep 2026-10-04; affected source 0.205.0 and earlier. Reproduce
+    by delivering a valid initial client packet in chunks smaller than 17
+    bytes, or by coalescing an older 17-byte initial packet with a following
+    packet. Expected: normal version negotiation independent of TCP chunking.
+    Actual: `CheckVersion` disconnected on a short receive and chose the
+    old/new version format from that receive's size instead of the first
+    packet's length. Source 0.206.0 retains incomplete bytes using the existing
+    receive offset, waits for the declared first packet, and uses its length
+    for version selection. Invalid lengths are rejected before buffering
+    beyond capacity. The completed packet still follows normal checksum and
+    inbound processing. Buffer-offset flow checked statically; automated tests
+    were not requested. Installation and real-client verification pending:
+    confirm supported-client login locally and over co-op connections. No
+    live server or client was started.
+
+92. **UDP packets can change before processing, and rejected packets leak their
+    pool lease.** Found by source sweep 2026-10-04; affected source 0.205.0
+    and earlier. The socket receiver returns its shared buffer chunk to the
+    available queue when `OnUdpReceive` returns, but that method queued the
+    same bytes for the next client-service tick. Reuse before that tick can
+    replace a validated packet with a later datagram, producing incorrect
+    session IDs or packet contents and intermittent UDP confirmation loss.
+    Separately, packets shorter than the 12-byte header reached checksum or
+    header parsing; invalid-session and wrong-endpoint returns skipped
+    `ReleasePooledObject`, causing dirty-pool warnings and replacement
+    allocations. Expected: processing consumes the original validated bytes,
+    incomplete datagrams are ignored, and every allocated packet is released.
+    Source 0.206.0 copies accepted bytes before posting, rejects incomplete
+    headers before indexing, and releases the packet in an outer `finally`
+    covering loading and all early returns. Socket-buffer lifetime and pool
+    paths checked statically; automated tests were not requested. Installation
+    and real-client verification pending: confirm UDP initialization/ping
+    remains stable through login and ordinary co-op use, without recurring
+    invalid-session or dirty-packet warnings. No live server was started.
+
+91. **Keep attack alerts report zero enemies during autonomous bot attacks.**
+    Owner 2026-10-04; installed version unconfirmed, source baseline 0.204.0.
+    Reproduce: let hostile autonomous playerbots attack an owned keep and
+    kill a guard. Screenshot: a Huscarl killed in Blendrake Faste with
+    "0 enemy player(s) in the area". Expected: count nearby hostile
+    playerbots along with real players. Cause: `GetEnemyCountInArea` scanned
+    only the player world index; `GameBot` is stored in the NPC index.
+    Source 0.205.0 also scans nearby NPCs implementing `IGamePlayer`, using
+    the same keep hostility rules. This includes hostile autonomous bots,
+    companions and helpers, but excludes friendly defenders, ordinary NPCs,
+    pets and siege weapons. The visibility radius and human counting rules
+    are unchanged. Relic-guard alerts and keep capture logs share the fix.
+    Installation and real-client verification pending: observe a known bot
+    force killing a guard, confirm its nearby hostile count, and confirm
+    friendly guild/alliance defenders and pets do not increase the count.
+
 90. **Companions earn no realm points from RvR bot kills.** Owner
     2026-10-03 (Stefan's server, only world bots of other realms killed):
     companions barely rank up. Save snapshot: Nova 61,405 RP, every
@@ -1092,6 +1295,16 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
 
 ## Finished
+
+103. **Done — Companion guide misstates PvE gear rolls and full-bag sales.**
+     Source sweep 2026-10-04 found the guide describing independent PvE rolls
+     for every companion and sale of only one earned item to free a full bag.
+     Source has selected one eligible companion per owner/NPC kill and sold
+     up to sixteen protected surplus items for a loot reward since 0.99.0.
+     Guide corrected in 0.206.0 against `AwardPvePartyGear`, `ClearBatchSlots`,
+     `FindSurplusBatch`, and the transfer/upgrade space helper. It also explains
+     that exhausted category/weapon rerolls can skip a reward. Documentation
+     verified against source; no gameplay changes made for this item.
 
 33. **Autonomous bots cross Darkness Falls without staying to work there.** Observed from inside DF with Astreunhild, Dagunildveig and Egiliunulf passing through; the logs do not record their exact in-dungeon goals, so individual routes remain unproven. Source audit found the shared region search could use DF as an intermediate shortcut to unrelated destinations. Source 0.79.0 excludes that transit path while retaining explicit DF destinations and egress from DF. Installation and real-client observation of these bots, DF camp arrivals, and cross-realm travel remain pending.
     Log check 2026-09-28 on installed 0.115.0 (23:54–03:20, 3 h 26 min): all 38 group snapshots with a member in region 249 also had their camp in Darkness Falls (explicit DF camps), no transit-only crossing found. Proven fixed.

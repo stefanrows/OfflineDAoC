@@ -181,6 +181,19 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+86. **Bug sweep with Luna max subagents.** Owner, 2026-10-04: inspect the
+    project and fix confirmed bugs using Luna at max reasoning. Source
+    0.206.0 fixes bugs 92–102 and 104–105 across networking, weekly quests,
+    game-loop sizing, autonomous RvR groups, companion rewards, launcher
+    process/file handling, and setup/reset safeguards. Three Luna max
+    subagents reviewed autonomous AI, combat/companions, and launcher/setup;
+    the companion guide correction (bug 103) is Done. Server, Windows
+    launcher, and Setup Release builds passed with warnings and no errors.
+    Automated tests were skipped under the project rules. No server start,
+    world reset, setup, migration, merge, push, or deployment was performed.
+    Installation and the relevant runtime/client checks listed in BUGS.md
+    remain pending; this sweep does not establish that the project is bug-free.
+
 85. **RvR groups muster at their realm's hub and march together.** Owner
     2026-10-03: many bots walk alone; groups should meet where one can port
     to and walk on together; depart at 75 % only if the rest is not

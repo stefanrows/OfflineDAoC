@@ -176,7 +176,7 @@ namespace DOL.GS
                    victim.ObjectState == GameObject.eObjectState.Active &&
                    companion.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
                    owner.IsWithinRadius(victim, WorldMgr.MAX_EXPFORKILL_DISTANCE) &&
-                   companion.Realm != victim.Realm && !PvpCombatant.AreAllied(owner, victim);
+                   !PvpCombatant.AreAllied(owner, victim);
         }
 
         private static bool TryClaim(GameBot companion, GameLiving victim, string propertyKey, string cycle)

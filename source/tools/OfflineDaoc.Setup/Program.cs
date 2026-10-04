@@ -60,6 +60,7 @@ internal static class Program
             }
 
             var options = Options.Parse(args);
+            ValidateFreshSetupTargets(options);
             Directory.CreateDirectory(Path.GetDirectoryName(options.DatabasePath)!);
 
             Console.WriteLine("Creating OpenDAoC SQLite schema (no game server will be started)...");
@@ -174,13 +175,30 @@ internal static class Program
         string backupDirectory = Path.Combine(Path.GetDirectoryName(databasePath)!, "backups");
         Directory.CreateDirectory(backupDirectory);
         string stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-        string backupPath = Path.Combine(backupDirectory, $"before-classic165-spawns-{stamp}.sqlite3.db");
+        string backupPath = Path.Combine(backupDirectory, $"before-classic165-spawns-{stamp}-{Guid.NewGuid():N}.sqlite3.db");
         using var source = new SQLiteConnection($"Data Source={databasePath};Version=3;Pooling=False;Read Only=True;Default Timeout=60");
         using var destination = new SQLiteConnection($"Data Source={backupPath};Version=3;Pooling=False;Default Timeout=60");
         source.Open();
         destination.Open();
         source.BackupDatabase(destination, "main", "main", -1, null, 0);
         return backupPath;
+    }
+
+    private static void ValidateFreshSetupTargets(Options options)
+    {
+        string databasePath = Path.GetFullPath(options.DatabasePath);
+        string credentialsPath = Path.GetFullPath(options.CredentialsPath);
+        string rulesetPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(credentialsPath)!, "ruleset.txt"));
+        StringComparer pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var targets = new[] { databasePath, credentialsPath, rulesetPath };
+        if (targets.Distinct(pathComparer).Count() != targets.Length)
+            throw new ArgumentException("The database, credentials file, and ruleset file must use separate paths.");
+
+        foreach (string path in targets)
+        {
+            if (File.Exists(path))
+                throw new IOException($"Refusing to overwrite existing setup output: {path}. Choose a new, empty output path.");
+        }
     }
 
     private static void CreateOfflineTables(SQLiteConnection connection)

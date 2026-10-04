@@ -371,11 +371,13 @@ eligibility, level, damage share, caps, and the configured Realm Point rate.
 
 ## Personal gear and inventory
 
-Each eligible active companion independently rolls a personal PvE item at
-`min(100%, 25% × XP_RATE)`. PvP reward-eligible deaths award one item per
-eligible companion, including support companions in the eligible owner's party.
-Owner XP caps and maximum level do not suppress the gear roll. Player loot and
-autonomous-bot handling remain separate.
+Each eligible owner's NPC kill selects one eligible active companion to roll
+for a personal PvE item at `min(100%, 25% × XP_RATE)`. PvP reward-eligible deaths
+attempt one item per eligible companion, including support companions in the
+owner's group or squads. Generation skips a reward if it cannot produce gear
+matching the chosen category and weapon policy. Owner XP caps and maximum level
+do not suppress the gear roll. Player loot and autonomous-bot handling remain
+separate.
 
 Personal items use the companion's existing inventory namespace and are marked
 as earned, starter, or player-supplied in additive companion metadata. Starter
@@ -383,10 +385,11 @@ items stay with their original companion; player-supplied items remain
 recoverable; legacy items without provenance stay protected. Manual equipment
 locks the affected slot. Automatic upgrades require a strictly greater
 class-legal score, respect hand conflicts and locks, and keep displaced items in
-the backpack. If space is needed, only the lowest-scoring positive-value earned
-backpack item may be sold; equipped, kept, starter, supplied, and unclassified
-items are excluded. Sale proceeds use normal merchant appraisal and go to the
-owner.
+the backpack. When a loot reward needs space, up to 16 positive-value earned
+backpack items may be sold, prioritizing unusable gear and then the lowest keep
+value. Transfers and upgrades free only the space they need. Equipped, kept,
+starter, supplied, and unclassified items are excluded. Sale proceeds use normal
+merchant appraisal and go to the owner.
 
 Transfers require an active nearby companion and idle inventory state. Only
 persisted, tradable, droppable ordinary items can move; quest, relic, siege, and

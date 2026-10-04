@@ -836,6 +836,9 @@ public static partial class AutonomousRvrEventLayer
             }
             foreach (var active in CarrierEvents.Values)
                 foreach (var realm in active.Participants.Values) realm.Remove(forceId);
+            foreach (string targetId in ClaimForces.Where(pair => pair.Value.Force == forceId)
+                         .Select(pair => pair.Key).ToArray())
+                ClaimForces.Remove(targetId);
         }
     }
 

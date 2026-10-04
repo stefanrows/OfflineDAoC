@@ -43,7 +43,10 @@ namespace DOL.GS
                 if (KindOf((eObjectType)last.Object_Type) == wanted && (wanted != Kind.Weapon || CanUse(companion, last)))
                     return last;
             }
-            return last;
+            // Do not grant the final random roll when it failed the requested
+            // category or the companion's configured weapon policy. That
+            // fallback bypassed both filters after twelve unsuccessful rolls.
+            return null;
         }
 
         /// <summary>The companion could wear or swing this at all (not whether it is an upgrade).</summary>

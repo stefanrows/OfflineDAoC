@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.204.0";
+    internal const string DisplayVersion = "0.206.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -1920,7 +1920,7 @@ internal sealed partial class MainForm : Form
     {
         if (_loadingXpRates || _savingXpRates || selector.SelectedItem is not XpRateOption option)
             return;
-        if (IsServerRunning() || FindExactServerProcess() is not null)
+        if (IsServerRunning() || HasExactServerProcess())
         {
             MessageBox.Show(this, "Experience rates can only be changed while the server is fully stopped.",
                 "Server is running", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1950,7 +1950,7 @@ internal sealed partial class MainForm : Form
     {
         if (_loadingXpRates || _savingXpRates) return;
         bool enabled = _makeMeGm.Checked;
-        if (IsServerRunning() || FindExactServerProcess() is not null)
+        if (IsServerRunning() || HasExactServerProcess())
         {
             MessageBox.Show(this, "Stop the server before changing GM access.", "Server is running");
             await RefreshDashboardAsync();
@@ -1967,7 +1967,7 @@ internal sealed partial class MainForm : Form
 
     private void PersistGmSetting(bool enabled)
     {
-        if (IsServerRunning() || FindExactServerProcess() is not null)
+        if (IsServerRunning() || HasExactServerProcess())
             throw new InvalidOperationException("The server must be fully stopped.");
         string account = ReadCredentials().Account;
         using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
@@ -2007,7 +2007,7 @@ internal sealed partial class MainForm : Form
     {
         if (key is not ("xp_rate" or "bot_xp_rate") || multiplier is not (1 or 2 or 3 or 5 or 10))
             throw new InvalidOperationException("Unsupported experience-rate selection.");
-        bool serverRunning = _persistXpRateServerRunningOverride ?? (IsServerRunning() || FindExactServerProcess() is not null);
+        bool serverRunning = _persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess());
         if (serverRunning)
             throw new InvalidOperationException("The server started before the rate could be saved. Stop it and try again.");
         if (!File.Exists(_database))
@@ -2696,7 +2696,7 @@ internal sealed partial class MainForm : Form
     private async Task DeleteSelectedBotAsync()
     {
         BotRow? bot = SelectedBot();
-        bool serverRunning = IsServerRunning() || FindExactServerProcess() is not null;
+        bool serverRunning = IsServerRunning() || HasExactServerProcess();
         if (bot?.CanDelete != true || bot.BotId is null || bot.DeletionQueued && serverRunning)
             return;
 
@@ -2809,7 +2809,7 @@ internal sealed partial class MainForm : Form
 
     private async Task DeleteAllBotsAsync()
     {
-        bool serverRunning = IsServerRunning() || FindExactServerProcess() is not null;
+        bool serverRunning = IsServerRunning() || HasExactServerProcess();
         int count = _bots.Count(bot => bot.BotId.HasValue && (!bot.DeletionQueued || !serverRunning));
         if (count <= 0)
             return;
@@ -2843,7 +2843,7 @@ internal sealed partial class MainForm : Form
         using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
         connection.Open();
         using var transaction = connection.BeginTransaction();
-        bool serverRunning = IsServerRunning() || FindExactServerProcess() is not null;
+        bool serverRunning = IsServerRunning() || HasExactServerProcess();
         if (serverRunning)
         {
             using var retire = connection.CreateCommand();
@@ -2876,7 +2876,7 @@ internal sealed partial class MainForm : Form
         using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
         connection.Open();
         using var transaction = connection.BeginTransaction();
-        bool serverRunning = IsServerRunning() || FindExactServerProcess() is not null;
+        bool serverRunning = IsServerRunning() || HasExactServerProcess();
         string now = DateTime.UtcNow.ToString("O");
         if (serverRunning)
         {
@@ -2980,7 +2980,7 @@ internal sealed partial class MainForm : Form
 
     private void UpdateDeleteButton()
     {
-        bool serverRunning = IsServerRunning() || FindExactServerProcess() is not null;
+        bool serverRunning = IsServerRunning() || HasExactServerProcess();
         if (_deleteBotButton != null)
             _deleteBotButton.Enabled = SelectedBot() is { CanDelete: true } selected &&
                                        (!selected.DeletionQueued || !serverRunning);
@@ -3095,7 +3095,7 @@ internal sealed partial class MainForm : Form
         // and the TCP listener coming online.  Without it, a second click can
         // start another CoreServer while the first one is still loading the
         // world, and both processes then contend for the same SQLite database.
-        if (_resettingKeepsRelics || _savingXpRates || _serverProcess is { HasExited: false } || IsServerRunning() || FindExactServerProcess() is not null) return;
+        if (_resettingKeepsRelics || _savingXpRates || _serverProcess is { HasExited: false } || IsServerRunning() || HasExactServerProcess()) return;
         if (_botGoalsSettings?.HasUnsavedChanges == true)
         {
             MessageBox.Show(this, "Review and save or undo your Server population edits before starting the server.", "Unsaved population settings");
@@ -3327,20 +3327,36 @@ internal sealed partial class MainForm : Form
             _serverReadinessPoll.Stop();
     }
 
+    private bool HasExactServerProcess()
+    {
+        using var process = FindExactServerProcess();
+        return process is not null;
+    }
+
     private Process? FindExactServerProcess()
     {
+        Process? match = null;
         foreach (var process in Process.GetProcessesByName("CoreServer"))
         {
             try
             {
-                if (string.Equals(process.MainModule?.FileName, _serverExecutable, StringComparison.OrdinalIgnoreCase)) return process;
+                if (match is null && string.Equals(process.MainModule?.FileName, _serverExecutable, StringComparison.OrdinalIgnoreCase))
+                {
+                    match = process;
+                    continue;
+                }
             }
             catch
             {
-                process.Dispose();
+                // The process may have exited or its image path may be inaccessible.
             }
+
+            // GetProcessesByName creates a Process wrapper for every result.
+            // Retain only the first match for callers that need its metadata;
+            // presence-only callers use HasExactServerProcess and dispose it too.
+            process.Dispose();
         }
-        return null;
+        return match;
     }
 
     private bool TryUpdateRuntimeState(string state, int? pid)

@@ -23,7 +23,7 @@ namespace DOL.GS
         private SimpleDisposableLock _lock = new(LockRecursionPolicy.SupportsRecursion);
         private int _lastValidIndex = -1;
         private int _clientCount;
-        private GameClient[] _clientsBySessionId = new GameClient[ushort.MaxValue];
+        private GameClient[] _clientsBySessionId = new GameClient[ushort.MaxValue + 1];
         private Trie<GamePlayer> _playerNameTrie = new();
 
         public int ClientCount => Volatile.Read(ref _clientCount);

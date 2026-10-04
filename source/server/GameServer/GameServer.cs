@@ -1100,9 +1100,10 @@ namespace DOL.GS
 			if (m_status is not EGameServerStatus.GSS_Open)
 				return;
 
-			if (size == 0)
+			if (buffer == null || offset < 0 || size < GSPacketIn.HDR_SIZE || offset > buffer.Length - size)
 			{
-				log.Debug("Received bytes = 0");
+				if (log.IsDebugEnabled)
+					log.Debug($"Discarding incomplete UDP packet ({size} bytes).");
 				return;
 			}
 
@@ -1121,32 +1122,35 @@ namespace DOL.GS
 				return;
 			}
 
-			// Post the packet to the game loop for processing.
+			// The socket callback releases its shared buffer chunk when this method
+			// returns. Own the bytes until the posted game-loop action consumes them.
+			byte[] datagram = new byte[size];
+			Buffer.BlockCopy(buffer, offset, datagram, 0, size);
 			ClientService.Instance.Post(static state =>
 			{
 				var packet = PooledObjectFactory.GetForTick<GSPacketIn>().Init();
-				packet.Load(state.Buffer, state.Offset, state.Size);
-				GameClient client = ClientService.Instance.GetClientBySessionId(packet.SessionID);
-
-				if (client == null)
-				{
-					if (log.IsWarnEnabled)
-						log.Warn($"Got an UDP packet from invalid client ID or IP (id: {packet.SessionID}) (ip: {state.EndPoint}) (code: {packet.Code:x2})");
-
-					return;
-				}
-
-				if (client.UdpEndPoint == null)
-				{
-					client.UdpEndPoint = state.EndPoint as IPEndPoint;
-					client.UdpConfirm = false;
-				}
-
-				if (!client.UdpEndPoint.Equals(state.EndPoint))
-					return;
-
 				try
 				{
+					packet.Load(state.Buffer, state.Offset, state.Size);
+					GameClient client = ClientService.Instance.GetClientBySessionId(packet.SessionID);
+
+					if (client == null)
+					{
+						if (log.IsWarnEnabled)
+							log.Warn($"Got an UDP packet from invalid client ID or IP (id: {packet.SessionID}) (ip: {state.EndPoint}) (code: {packet.Code:x2})");
+
+						return;
+					}
+
+					if (client.UdpEndPoint == null)
+					{
+						client.UdpEndPoint = state.EndPoint as IPEndPoint;
+						client.UdpConfirm = false;
+					}
+
+					if (!client.UdpEndPoint.Equals(state.EndPoint))
+						return;
+
 					client.PacketProcessor.ProcessInboundPacket(packet);
 				}
 				catch (Exception e)
@@ -1158,10 +1162,10 @@ namespace DOL.GS
 				{
 					packet.ReleasePooledObject();
 				}
-			}, new
+			}, new UdpPacketState
 			{
-				Buffer = buffer,
-				Offset = offset,
+				Buffer = datagram,
+				Offset = 0,
 				Size = size,
 				EndPoint = endPoint
 			});
