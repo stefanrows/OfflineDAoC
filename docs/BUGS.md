@@ -61,6 +61,13 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+Installation update, 2026-10-04: server and launcher fixes for bugs 91–99,
+102, 104 and 105 were deployed as 0.206.0. Deployment verified the copied
+binaries and preserved accounts, database and settings; the game remains
+stopped. The runtime/client checks below remain pending. Setup fixes 100 and
+101 were built and pushed, but the standard server/launcher deployment does
+not install the Setup tool; their disposable-input verification is pending.
+
 105. **Concurrent launcher instances collide on temporary profile/request files.**
      Found by the Luna source sweep 2026-10-04; affected source 0.205.0 and
      earlier. Join Friend profile saves and world-speed requests used a fixed

@@ -39,7 +39,8 @@ package, not this fork's version.
   records and gear with their deleted owners (bug 99). Fresh-world Setup
   refuses existing or colliding database/credentials/ruleset output paths
   (bug 100), and spawn migrations give each backup a unique filename
-  (bug 101). No world reset, setup, migration or deployment was executed.
+  (bug 101). No world reset, setup, migration or deployment was executed
+  during the source sweep.
 
 ### Changed
 

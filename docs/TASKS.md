@@ -190,9 +190,13 @@ Agent sessions on items 45–48: take the role and context from
     the companion guide correction (bug 103) is Done. Server, Windows
     launcher, and Setup Release builds passed with warnings and no errors.
     Automated tests were skipped under the project rules. No server start,
-    world reset, setup, migration, merge, push, or deployment was performed.
-    Installation and the relevant runtime/client checks listed in BUGS.md
-    remain pending; this sweep does not establish that the project is bug-free.
+    world reset, setup or migration was performed. Owner-authorized shipping
+    on 2026-10-04 pushed all tracked changes to fork main and deployed server
+    and launcher 0.206.0 (9 files), preserving accounts, database and settings.
+    The game remains stopped. Setup changes are in source; the standard
+    deployment does not install that tool. The relevant runtime/client and
+    disposable-input checks listed in BUGS.md remain pending; this sweep
+    does not establish that the project is bug-free.
 
 85. **RvR groups muster at their realm's hub and march together.** Owner
     2026-10-03: many bots walk alone; groups should meet where one can port
