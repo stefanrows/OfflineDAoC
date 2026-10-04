@@ -210,8 +210,12 @@ Agent sessions on items 45–48: take the role and context from
     observation and does not resolve performance task 74. No personal save
     contents were changed. Server and Windows launcher Release builds passed
     with existing warnings and no errors. Scoped review, version pins and
-    newline checks passed. No server start, deployment or automated tests.
-    Pending: install and check guide readability, one hint per login/no hint
+    newline checks passed. Automated tests were skipped under the project rules.
+    Shipped on 2026-10-04 after fresh server and Windows launcher Release
+    builds and push to fork main. Deployment replaced and hash-verified 17
+    files, preserved accounts/database/settings, and left the game stopped.
+    Backup: `D:\Games\OfflineDAoC-backups\deploy-20261004-183151`.
+    Pending: check guide readability, one hint per login/no hint
     on zoning, companion dead/distant/squad/override states, trainer lists and
     ambiguous input, and both global/current-zone monster pagination in client.
 

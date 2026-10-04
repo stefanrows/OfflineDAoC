@@ -32,8 +32,9 @@ package, not this fork's version.
   to the current zone and defaults to the player's level. Existing monster
   eligibility and teleport destinations are preserved.
 - Record the freeshard research and player-flow review under task 87. Existing
-  saves, progression, economy and combat rules are preserved. Source changes
-  await installation and real-client verification.
+  saves, progression, economy and combat rules are preserved. Server and
+  launcher deployed on 2026-10-04 with protected saves/settings unchanged;
+  the game remains stopped and real-client verification is pending.
 
 ## [0.207.0] - 2026-10-04
 
