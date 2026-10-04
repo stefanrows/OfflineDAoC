@@ -67,8 +67,10 @@ Release builds and push to the fork's main. The deployment replaced and
 hash-verified 17 files, preserved accounts/database/settings, and left the game
 stopped. Backup: `D:\Games\OfflineDAoC-backups\deploy-20261004-175704`.
 The restore-tool fix (111) is available in the checkout; its disposable restore
-check remains pending. The four updated OpenTelemetry DLLs (114) were excluded
-by the standard deployment policy and still await separate third-party approval.
+check remains pending. The four updated OpenTelemetry DLLs (114) were then deployed with the owner's
+separate approval, hash-verified, and backed up at
+`D:\Games\OfflineDAoC-backups\deploy-20261004-175811`; protected saves/settings
+remained unchanged and the game remained stopped.
 Real-client checks below remain pending. Server and Windows launcher Release
 builds passed with zero errors; existing compiler warnings remain. Release restore/build has no NuGet
 vulnerability warnings after the telemetry update. PowerShell parsing, shell
@@ -92,10 +94,10 @@ this audit does not establish that the application is free of other defects.
      ([GHSA-g94r-2vxg-569j](https://github.com/open-telemetry/opentelemetry-dotnet/security/advisories/GHSA-g94r-2vxg-569j)).
      Exposure depends on use/configuration of the affected telemetry paths;
      no exploitation was observed. Release dependency restore succeeded with
-     no vulnerability warnings. Installation and ordinary telemetry checks
-     remain pending. The standard server/launcher deploy excludes third-party
-     DLLs, so installing this package fix needs the separately authorized
-     third-party deployment option; no such deployment was performed.
+     no vulnerability warnings. The owner separately authorized the four
+     third-party DLL updates, which were deployed and hash-verified on
+     2026-10-04. Ordinary telemetry/runtime verification remains pending;
+     no game server was started for deployment.
 
 113. **Restored XP camps can also appear as fallback camps.** Found during
      the 2026-10-04 audit; affected source 0.206.0 and earlier. In a supported

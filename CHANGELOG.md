@@ -42,7 +42,7 @@ package, not this fork's version.
 - Record this source audit and outstanding runtime checks in `docs/BUGS.md`.
   Server and launcher deployed on 2026-10-04 with saves/settings preserved;
   the game remains stopped and real-client checks are pending. The four
-  OpenTelemetry DLL updates await separate third-party deployment approval.
+  OpenTelemetry DLL updates were also deployed with separate owner approval.
 
 ## [0.206.0] - 2026-10-04
 
