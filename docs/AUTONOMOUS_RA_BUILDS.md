@@ -44,8 +44,10 @@ defense calculators do not apply their ability bonuses. Falcon's Eye is
 excluded because its main handler currently grants spell rather than archery
 critical chance. No real-player or companion realm ability training changes.
 
-Installation and real-client verification remain pending: inspect one bot from
-each class after loading, confirm rank/point persistence across a restart,
-observe effects in combat, and confirm a Realm Level gain spends only legitimately
-available points. The source build validates compilation but cannot establish
-those in-client effects.
+The 0.209.0 Release server and launcher builds were deployed locally on
+2026-10-04, with 17 files replaced and the existing accounts, database, and
+settings preserved. Real-client verification remains pending: inspect one bot
+from each class after loading, confirm rank/point persistence across a restart,
+observe effects in combat, and confirm a Realm Level gain spends only
+legitimately available points. The source build validates compilation but
+cannot establish those in-client effects.

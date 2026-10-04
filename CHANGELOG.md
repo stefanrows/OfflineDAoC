@@ -29,7 +29,9 @@ package, not this fork's version.
 
 - Document the class paths and pending real-client checks in
   `docs/AUTONOMOUS_RA_BUILDS.md` and task 88. Timed active abilities remain
-  outside this bot training path.
+  outside this bot training path. Server and launcher deployed locally on
+  2026-10-04 with protected saves/settings unchanged; real-client checks remain
+  pending.
 
 ## [0.208.0] - 2026-10-04
 

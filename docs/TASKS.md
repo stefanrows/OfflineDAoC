@@ -189,9 +189,11 @@ Agent sessions on items 45–48: take the role and context from
     restore across login. The plan banks points for its next rank. Timed
     active RAs and inert GameBot passives are excluded. The class table,
     rationale, and validation boundaries are in
-    [AUTONOMOUS_RA_BUILDS.md](AUTONOMOUS_RA_BUILDS.md). Installation and
-    real-client checks pending: class legality, effect use, point balance,
-    and restart persistence. Automated tests were skipped per project rule.
+    [AUTONOMOUS_RA_BUILDS.md](AUTONOMOUS_RA_BUILDS.md). Server and launcher
+    0.209.0 deployed locally on 2026-10-04 (17 files; backup
+    `D:\Games\OfflineDAoC-backups\deploy-20261004-211347`). Real-client checks
+    remain pending: class legality, effect use, point balance, and restart
+    persistence. Automated tests were skipped per project rule.
 
 87. **Research-led player experience and quality of life.** Owner, 2026-10-04:
     review the current game and other freeshards, then improve feel and flow
