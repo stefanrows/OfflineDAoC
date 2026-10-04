@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.209.0] - 2026-10-04
+
+### Added
+
+- One fixed passive realm ability priority path for each of the 39
+  autonomous world bot classes, with class-legal runtime costs, persisted
+  ranks, and automatic spending from the ordinary earned point pool.
+
+### Fixed
+
+- Autonomous world bots now derive Realm Level from earned Realm Points
+  on award and load, so realm-rank-dependent behavior uses their true rank.
+
+### Changed
+
+- Document the class paths and pending real-client checks in
+  `docs/AUTONOMOUS_RA_BUILDS.md` and task 88. Timed active abilities remain
+  outside this bot training path.
+
 ## [0.208.0] - 2026-10-04
 
 ### Added

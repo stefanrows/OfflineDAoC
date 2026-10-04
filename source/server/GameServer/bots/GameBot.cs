@@ -112,6 +112,9 @@ namespace DOL.GS
         }
         public long Experience { get; private set; }
         public long AutonomousRealmPoints { get; private set; }
+        private readonly object _autonomousRealmAbilityGate = new();
+        private Dictionary<string, int> _autonomousRealmAllocations = new(StringComparer.Ordinal);
+        private bool _autonomousRealmAllocationsValid = true;
         /// <summary>RvR realm points earned by a persistent player companion; saved additively in PlayerCompanionRecord.RealmPoints.</summary>
         public long CompanionRealmPoints { get; private set; }
         public bool AutonomousStateDirty { get; private set; }
@@ -1771,9 +1774,18 @@ namespace DOL.GS
 
             if (IsAutonomousWorldBot)
             {
-                AutonomousRealmPoints += amount;
+                lock (_autonomousRealmAbilityGate)
+                {
+                    AutonomousRealmPoints = amount > long.MaxValue - AutonomousRealmPoints
+                        ? long.MaxValue : AutonomousRealmPoints + amount;
+                    int previousRealmLevel = RealmLevel;
+                    RealmLevel = CompanionRealmAbilityTraining.RealmLevel(AutonomousRealmPoints);
+                    if (_autonomousRealmAllocationsValid && RealmLevel > previousRealmLevel)
+                        AutonomousRealmAbilityTraining.Advance(this, _autonomousRealmAllocations);
+                }
                 AutonomousStuckWatchdog.MarkProgress(this, eAutonomousProgressKind.RealmPoints);
                 MarkAutonomousStateDirty();
+                AutonomousBotStatusPersistence.Queue(this);
             }
             else
             {
@@ -1892,6 +1904,12 @@ namespace DOL.GS
                     SetBotSpells();
                     SortStyles();
                     SortSpells();
+                }
+                if (IsAutonomousWorldBot)
+                {
+                    lock (_autonomousRealmAbilityGate)
+                        if (_autonomousRealmAllocationsValid)
+                            AutonomousRealmAbilityTraining.Advance(this, _autonomousRealmAllocations);
                 }
                 Health = MaxHealth;
                 Mana = MaxMana;
@@ -3206,10 +3224,21 @@ namespace DOL.GS
             starterWeaponAdded |= BotStarterInstruments.Ensure(this);
             bool starterGearAdded = EnsureGeneratedStartingGear();
             RefreshItemBonuses();
-            if (starterWeaponAdded || starterGearAdded || !buildLocked || generatedTraining)
-                AutonomousBotStatusPersistence.Queue(this, starterWeaponAdded || starterGearAdded);
             Experience = Math.Max(0, record.Experience);
             AutonomousRealmPoints = Math.Max(0, record.RealmPoints);
+            RealmLevel = CompanionRealmAbilityTraining.RealmLevel(AutonomousRealmPoints);
+            _autonomousRealmAllocationsValid = AutonomousRealmAbilityTraining.TryRead(
+                record.SerializedAbilities, ClassId,
+                CompanionRealmAbilityTraining.PointPool(Level, AutonomousRealmPoints),
+                out _autonomousRealmAllocations);
+            if (_autonomousRealmAllocationsValid)
+            {
+                AutonomousRealmAbilityTraining.Restore(this, _autonomousRealmAllocations);
+                if (AutonomousRealmAbilityTraining.Advance(this, _autonomousRealmAllocations))
+                    MarkAutonomousStateDirty();
+            }
+            else
+                log.Warn($"Autonomous realm abilities for bot {DatabaseID} contain invalid ranks, costs or class abilities; preserving saved allocation.");
             CurrentRegionID = (ushort)Math.Clamp(record.RegionId, 0, ushort.MaxValue);
             X = record.X;
             Y = record.Y;
@@ -3222,6 +3251,8 @@ namespace DOL.GS
             var brain = new DOL.AI.Brain.BotBrain { IsHealer = IsHealerClass() };
             SetOwnBrain(brain);
             InitControlledBrainArray(1);
+            if (starterWeaponAdded || starterGearAdded || !buildLocked || generatedTraining || AutonomousStateDirty)
+                AutonomousBotStatusPersistence.Queue(this, starterWeaponAdded || starterGearAdded);
         }
 
         private bool IsHealerClass()
@@ -3836,9 +3867,13 @@ namespace DOL.GS
         private static byte ParseLastTrainedLevel(string serialized, byte currentLevel, string serializedSpecs)
         {
             const string prefix = "trained-level|";
-            if (!string.IsNullOrWhiteSpace(serialized) && serialized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-                byte.TryParse(serialized.AsSpan(prefix.Length), out byte trained))
-                return (byte)Math.Clamp((int)trained, 1, currentLevel);
+            if (!string.IsNullOrWhiteSpace(serialized) && serialized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                int separator = serialized.IndexOf(';', prefix.Length);
+                if (byte.TryParse(serialized.AsSpan(prefix.Length,
+                        separator >= 0 ? separator - prefix.Length : serialized.Length - prefix.Length), out byte trained))
+                    return (byte)Math.Clamp((int)trained, 1, currentLevel);
+            }
 
             // Existing characters already have their trained spec levels saved.
             // Treat those as current so the migration never double-spends points.
@@ -3939,7 +3974,16 @@ namespace DOL.GS
             OfflineWorldBotRecord record = PersistentRecord;
             record.Level = Level;
             record.Experience = Experience;
-            record.RealmPoints = AutonomousRealmPoints;
+            lock (_autonomousRealmAbilityGate)
+            {
+                record.RealmPoints = AutonomousRealmPoints;
+                if (_autonomousRealmAllocationsValid)
+                    record.SerializedAbilities = AutonomousRealmAbilityTraining.Serialize(
+                        _lastAutonomousTrainedLevel, _autonomousRealmAllocations);
+                else
+                    record.SerializedAbilities = AutonomousRealmAbilityTraining.UpdateTrainingLevelPreservingInvalidAllocations(
+                        record.SerializedAbilities, _lastAutonomousTrainedLevel);
+            }
             record.RegionId = CurrentRegionID;
             record.ZoneId = CurrentZone?.ID ?? 0;
             record.ZoneName = CurrentZone?.Description;
@@ -3952,7 +3996,6 @@ namespace DOL.GS
             record.IsAlive = IsAlive;
             record.IsOnline = ObjectState == eObjectState.Active;
             record.SerializedSpecs = string.Join(';', GetSpecList().Where(spec => spec.Trainable).Select(spec => $"{spec.KeyName}|{spec.Level}"));
-            record.SerializedAbilities = $"trained-level|{_lastAutonomousTrainedLevel}";
             record.UnspentSpecPoints = m_leftOverSpecPoints;
             record.LastSavedUtc = DateTime.UtcNow.ToString("O");
             record.LastUpdateUtc = record.LastSavedUtc;

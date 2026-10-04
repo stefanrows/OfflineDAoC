@@ -181,6 +181,18 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+88. **Autonomous world bots train one realm ability build per class.** Owner,
+    2026-10-04. Implemented in source 0.209.0: all 39 generated classes have
+    one fixed passive RA priority path. Earned RP now updates autonomous
+    Realm Level; class-legal ranks spend only the available player-equivalent
+    point pool at runtime cost, persist in the existing ability field, and
+    restore across login. The plan banks points for its next rank. Timed
+    active RAs and inert GameBot passives are excluded. The class table,
+    rationale, and validation boundaries are in
+    [AUTONOMOUS_RA_BUILDS.md](AUTONOMOUS_RA_BUILDS.md). Installation and
+    real-client checks pending: class legality, effect use, point balance,
+    and restart persistence. Automated tests were skipped per project rule.
+
 87. **Research-led player experience and quality of life.** Owner, 2026-10-04:
     review the current game and other freeshards, then improve feel and flow
     autonomously. Implemented in source 0.208.0: an on-demand `/offline` guide
