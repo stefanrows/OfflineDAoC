@@ -103,10 +103,14 @@ public static class PlayerMobNavigator
         }
     }
 
-    public static IReadOnlyList<(string Name, byte Level)> GetAvailableMonsterNames(GamePlayer player, byte level)
+    public static IReadOnlyList<(string Name, byte Level)> GetAvailableMonsterNames(GamePlayer player, byte level) =>
+        GetAvailableMonsterLocations(player, level).Select(entry => (entry.Name, entry.Level)).ToArray();
+
+    public static IReadOnlyList<(string Name, byte Level, string Locations)> GetAvailableMonsterLocations(
+        GamePlayer player, byte level, bool nearby = false)
     {
         var regions = new Dictionary<ushort, bool>();
-        return ExactLevelNames(EligibleObjects(player, monstersOnly: true)
+        return EligibleObjects(player, monstersOnly: true, localZoneOnly: nearby)
             .Where(npc => npc.Level == level && PathfindingProvider.Instance.HasNavmesh(npc.CurrentZone))
             .Where(npc =>
             {
@@ -116,7 +120,18 @@ public static class PlayerMobNavigator
                     regions[npc.CurrentRegionID] = accessible;
                 }
                 return accessible;
-            }).Select(npc => (npc.Name, npc.Level)), level);
+            })
+            .GroupBy(npc => npc.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                string[] locations = group.Select(npc => string.IsNullOrWhiteSpace(npc.CurrentZone.Description)
+                    ? npc.CurrentRegion.Description : npc.CurrentZone.Description)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+                string label = string.Join(", ", locations.Take(3));
+                if (locations.Length > 3) label += $" (+{locations.Length - 3} more zones)";
+                return (group.Key, level, label);
+            }).ToArray();
     }
 
     public static IReadOnlyList<(string Name, byte Level)> ExactLevelNames(IEnumerable<(string Name, byte Level)> entries, byte level) =>
@@ -278,9 +293,10 @@ public static class PlayerMobNavigator
         deadline > now && (!active || clientState != GameClient.eClientState.Playing) &&
         clientState is GameClient.eClientState.Playing or GameClient.eClientState.WorldEnter;
 
-    private static IEnumerable<GameNPC> EligibleObjects(GamePlayer player, bool monstersOnly)
+    private static IEnumerable<GameNPC> EligibleObjects(GamePlayer player, bool monstersOnly, bool localZoneOnly = false)
     {
-        foreach (Region region in WorldMgr.GetAllRegions())
+        IEnumerable<Region> regions = localZoneOnly ? new[] { player.CurrentRegion } : WorldMgr.GetAllRegions();
+        foreach (Region region in regions)
         {
             if (region == null || !AutonomousCapnBryGoalCatalog.IsClassicOrShroudedIslesExpansion(region.Expansion))
                 continue;
@@ -289,7 +305,8 @@ public static class PlayerMobNavigator
             {
                 if (npc?.ObjectState is not GameObject.eObjectState.Active || string.IsNullOrWhiteSpace(npc.Name) ||
                     npc is GameBot or GameSummonedPet or GameTaxi ||
-                    npc.CurrentZone == null || !IsZoneAccessible(player.Realm, npc.CurrentZone))
+                    npc.CurrentZone == null || localZoneOnly && npc.CurrentZone != player.CurrentZone ||
+                    !IsZoneAccessible(player.Realm, npc.CurrentZone))
                     continue;
 
                 if (monstersOnly && !IsExperienceMonster(npc))
@@ -848,37 +865,50 @@ public static class PlayerMobNavigator
     }
 }
 
-[CmdAttribute("&mobs", ePrivLevel.Player, "Lists accessible monsters at an exact level", "/mobs <level> [page]", "/mobs (your current level)")]
+[CmdAttribute("&mobs", ePrivLevel.Player, "Lists accessible monsters and their zones at an exact level",
+    "/mobs [level] [page]", "/mobs nearby [level] [page] (current zone; defaults to your level)")]
 public sealed class MobsCommandHandler : AbstractCommandHandler, ICommandHandler
 {
     public void OnCommand(GameClient client, string[] args)
     {
         GamePlayer player = client.Player;
-        if (!TryReadLevel(args, player.Level, out byte level))
+        if (IsSpammingCommand(player, "mobs")) return;
+        bool nearby = args.Length > 1 && args[1].Equals("nearby", StringComparison.OrdinalIgnoreCase);
+        string[] levelArgs = nearby ? new[] { args[0] }.Concat(args.Skip(2)).ToArray() : args;
+        if (!TryReadLevel(levelArgs, player.Level, out byte level))
         {
-            DisplayMessage(client, "Usage: /mobs <level> [page], levels 1–255. Example: /mobs 1. With no number, uses your current level.");
+            DisplayMessage(client, "Usage: /mobs [level] [page] or /mobs nearby [level] [page], levels 1-255. Defaults to your level.");
             return;
         }
-        IReadOnlyList<(string Name, byte Level)> entries = PlayerMobNavigator.GetAvailableMonsterNames(player, level);
-        DisplayMessage(client, $"{entries.Count} accessible level {level} monster names in {player.Realm} territory, dungeons and shared RvR areas.");
+        var entries = PlayerMobNavigator.GetAvailableMonsterLocations(player, level, nearby);
+        string scope = nearby ? $"your current zone ({player.CurrentZone?.Description})" : $"{player.Realm} territory, dungeons and shared PvP areas";
+        DisplayMessage(client, $"{entries.Count} accessible level {level} monster names in {scope}.");
         if (entries.Count == 0)
         {
-            DisplayMessage(client, "No matching XP monsters are available in your realm territory or shared RvR areas.");
+            DisplayMessage(client, nearby
+                ? $"No matches in this zone. Use /mobs {level} to search all accessible zones, or try another level."
+                : "No matching XP monsters are available. Try another level with /mobs <level>.");
             return;
         }
-        var pages = BuildPages(entries);
-        int page = args.Length == 3 ? int.Parse(args[2]) : 1;
+        var pages = BuildLocationPages(entries);
+        int page = levelArgs.Length == 3 ? int.Parse(levelArgs[2]) : 1;
+        string command = nearby ? $"/mobs nearby {level}" : $"/mobs {level}";
         if (page > pages.Count)
         {
-            DisplayMessage(client, $"There are {pages.Count} pages. Use /mobs {level} <page>.");
+            DisplayMessage(client, $"There are {pages.Count} pages. Use {command} <page>.");
             return;
         }
-        client.Out.SendCustomTextWindow($"Level {level} monsters — {page}/{pages.Count}", new[]
-            { "Use /tele mob <exact monster name>.", "Dungeon targets place you outside the entrance.", $"Page {page}/{pages.Count}. Use /mobs {level} <page>.", "" }
+        client.Out.SendCustomTextWindow($"Level {level} monsters - {page}/{pages.Count}", new[]
+            { $"Search: {scope}.", "Use /tele mob <exact monster name>.",
+                "Names can occur in several zones; teleport chooses its usual camp.",
+                "Dungeon targets place you outside the entrance.",
+                $"Page {page}/{pages.Count}. Use {command} <page>.", "" }
             .Concat(pages[page - 1]).ToList());
-        if (page < pages.Count) DisplayMessage(client, $"More names: /mobs {level} {page + 1} (page {page + 1}/{pages.Count}).");
-        DisplayMessage(client, "Use /tele mob <exact name>. Dungeon targets place you outside the entrance.");
+        if (page < pages.Count) DisplayMessage(client, $"More names: {command} {page + 1} (page {page + 1}/{pages.Count}).");
     }
+
+    private static IReadOnlyList<string[]> BuildLocationPages(IEnumerable<(string Name, byte Level, string Locations)> entries) =>
+        BuildLinePages(entries.Select(entry => $"{entry.Name} ({entry.Level}) - {entry.Locations}"));
 
     public static bool TryReadLevel(string[] args, byte currentLevel, out byte level)
     {
@@ -887,14 +917,16 @@ public sealed class MobsCommandHandler : AbstractCommandHandler, ICommandHandler
             (args.Length == 2 || int.TryParse(args[2], out int page) && page > 0);
     }
 
-    public static IReadOnlyList<string[]> BuildPages(IEnumerable<(string Name, byte Level)> entries)
+    public static IReadOnlyList<string[]> BuildPages(IEnumerable<(string Name, byte Level)> entries) =>
+        BuildLinePages(entries.Select(entry => $"{entry.Name} ({entry.Level})"));
+
+    private static IReadOnlyList<string[]> BuildLinePages(IEnumerable<string> linesToShow)
     {
         // Native detail windows silently truncate at their packet/200-line
         // limit. Small explicit pages keep every monster name accessible.
         var pages = new List<string[]>(); var lines = new List<string>(); int length = 0;
-        foreach (var entry in entries)
+        foreach (string line in linesToShow)
         {
-            string line = $"{entry.Name} ({entry.Level})";
             if (lines.Count > 0 && (length + line.Length + 2 > 1200 || lines.Count >= 40))
             { pages.Add(lines.ToArray()); lines.Clear(); length = 0; }
             lines.Add(line); length += line.Length + 2;

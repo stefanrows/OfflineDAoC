@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.208.0] - 2026-10-04
+
+### Added
+
+- `/offline` opens a short in-game guide for getting started, companions,
+  training, travel, recovery and Camlann PvP. A single login chat hint makes
+  it discoverable without another automatic popup.
+- `/companions status` reports live companion readiness, location and effective
+  orders; topic-based `/companions help` explains roster, tactics, training,
+  squads and recovery without requiring the Companion Manager extension.
+- `/train list` shows the player's own trainable specialization names, current
+  training and available points anywhere. Training still requires a valid
+  trainer and earned points; ambiguous abbreviated names ask for a full name.
+
+### Changed
+
+- `/mobs` includes zone names; `/mobs nearby [level] [page]` limits the list
+  to the current zone and defaults to the player's level. Existing monster
+  eligibility and teleport destinations are preserved.
+- Record the freeshard research and player-flow review under task 87. Existing
+  saves, progression, economy and combat rules are preserved. Source changes
+  await installation and real-client verification.
+
 ## [0.207.0] - 2026-10-04
 
 ### Fixed

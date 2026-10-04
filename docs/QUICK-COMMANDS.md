@@ -4,6 +4,25 @@ These are the everyday Offline DAoC commands, not the exhaustive list of every
 inherited game/server command. They are registered for normal players in this
 release; some still have level, target, party or state requirements.
 
+## In-game help and preparation
+
+Use `/offline` for a short in-game guide. `/offline companions`,
+`/offline training`, `/offline travel`, `/offline recovery` and `/offline pvp` explain
+those parts of play. A login chat hint points here; the guide opens on demand.
+Use `/cmdhelp <command>` for an individual command's complete syntax.
+
+- `/companions help` opens topic-based command help even without the manager
+  extension. `/companions status [page]` shows active companion readiness and effective
+  orders; `/companions status <name>` also inspects a benched companion.
+- `/train list` shows your trainable specialization names, current levels and
+  unspent points anywhere. If the client opens its trainer window instead,
+  use `/trainline list`. To spend points, select a valid class trainer and
+  use `/train <line> <level>`. Use a full name if an abbreviation is ambiguous.
+- `/mobs` lists monsters at your level with their zones. `/mobs nearby` limits
+  the list to your current zone; `/mobs nearby 20 2` opens page two of level-20
+  monsters there. An empty result suggests the broader search. Teleporting
+  by name still chooses its existing camp, which may be in another zone.
+
 ## Camlann crew generation
 
 Click **ADD LV.1 CREW** or **ADD LV.50 CREW** under a realm identity to add
@@ -37,7 +56,7 @@ keep up. Each server start selects 1× again.
 | Command | What it does |
 |---|---|
 | `/tele X` | Teleport to a gamebot; replace X with its name. You can also right-click bot names in the launcher to teleport. |
-| `/mobs X` | List mob names at a level; replace X with the level number. |
+| `/mobs X` | List mob names and zones at a level; replace X with the level number, or omit it for your level. Add `nearby` before X for the current zone. |
 | `/tele mob X` | Teleport to a mob spawn; use the mob's exact name for X. Dungeon targets use the configured entrance approach where applicable. |
 | `/tc` | Teleport to your realm's Realm Exchange NPC; any realm can use any capital's local broker. |
 

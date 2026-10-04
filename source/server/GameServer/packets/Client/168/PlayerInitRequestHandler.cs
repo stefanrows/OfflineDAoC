@@ -40,6 +40,7 @@ namespace DOL.GS.PacketHandler.Client.v168
                 player.EnteredGame = true;
                 player.Notify(GamePlayerEvent.GameEntered, player);
                 ShowPatchNotes(player);
+                player.Out.SendMessage("Offline DAoC: type /offline for companions, training, travel and recovery help.", eChatType.CT_System, eChatLoc.CL_ChatWindow);
                 EffectHelper.RestoreAllEffects(player);
                 checkInstanceLogin = true;
             }

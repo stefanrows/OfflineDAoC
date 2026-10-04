@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using DOL.Database;
 using DOL.GS.PacketHandler;
@@ -7,7 +8,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help [topic] | status [page or name] | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -33,6 +34,12 @@ namespace DOL.GS.Commands
             string action = args[1].ToLowerInvariant();
             switch (action)
             {
+                case "help":
+                    ShowUsage(client, args.Length > 2 ? args[2] : null);
+                    break;
+                case "status":
+                    ShowStatus(client, player, args);
+                    break;
                 case "ui":
                     if (args.Length == 4)
                         CompanionManager.HandleClientControl(player, args[2], args[3]);
@@ -585,11 +592,147 @@ namespace DOL.GS.Commands
                 eChatType.CT_System, eChatLoc.CL_SystemWindow);
         }
 
-        private void ShowUsage(GameClient client)
+        private void ShowStatus(GameClient client, GamePlayer player, string[] args)
         {
-            DisplayMessage(client, "Bare /companions opens the Companion Manager window when its client extension is installed. /companions find <name or class> searches it from the chat line.");
-            DisplayMessage(client, "Commands: /companions list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list.");
-            DisplayMessage(client, "Recruitment is free, starts at level 1, and works anywhere. Type /classes for names grouped by realm.");
+            if (!PlayerCompanionRoster.TryGetRoster(player, out var roster))
+            {
+                DisplayMessage(client, "Your companion roster could not be loaded. Try again later.");
+                return;
+            }
+
+            const int pageSize = 4;
+            int page = 1;
+            bool named = args.Length > 2 && !int.TryParse(args[2], out page);
+            List<PlayerCompanionRecord> selected;
+            if (named)
+            {
+                if (!PlayerCompanionRoster.TryMatchOwnedCompanionPrefix(player, args, 2, args.Length,
+                        out PlayerCompanionRecord record, out int nameTokens) || nameTokens != args.Length - 2)
+                {
+                    DisplayMessage(client, "Use /companions status [page or name]. Type /companions list to see names.");
+                    return;
+                }
+                selected = new List<PlayerCompanionRecord> { record };
+            }
+            else
+            {
+                if (args.Length > 3)
+                {
+                    DisplayMessage(client, "Use /companions status [page or name].");
+                    return;
+                }
+                selected = roster.Where(record => record.IsActive)
+                    .OrderBy(record => record.SquadIndex).ThenBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            int pages = Math.Max(1, (selected.Count + pageSize - 1) / pageSize);
+            page = named ? 1 : Math.Clamp(page, 1, pages);
+            var lines = new List<string>
+            {
+                $"Roster: {roster.Count} saved; {roster.Count(record => record.IsActive)} marked active.",
+                CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order)
+                    ? $"Group order: {order.ToString().ToLowerInvariant()} (overrides saved stances)."
+                    : "Group order: saved individual stances."
+            };
+            if (selected.Count == 0)
+            {
+                lines.Add(roster.Count == 0
+                    ? "Recruit with /companions recruit <class>; /classes lists classes."
+                    : "No active companions. /companions list shows names; /companions invite <name> brings one along.");
+            }
+            foreach (PlayerCompanionRecord record in selected.Skip((page - 1) * pageSize).Take(pageSize))
+            {
+                string assignment = record.SquadIndex > 0
+                    ? $"squad {record.SquadIndex}{(record.IsSquadLeader ? " leader" : string.Empty)}"
+                    : "own party";
+                string saved = string.IsNullOrWhiteSpace(record.EngagementPreference) ? "aggressive" : record.EngagementPreference;
+                string readiness;
+                string details = $"saved stance {saved}; {record.UnspentSpecPoints} spec points";
+                if (PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out GameBot bot))
+                {
+                    string effective = CompanionEngagementMode.Effective(bot).ToString().ToLowerInvariant();
+                    readiness = !bot.IsAlive ? "dead"
+                        : bot.CurrentRegionID != player.CurrentRegionID ? "another region"
+                        : player.GetDistanceTo(bot) > CompanionEngagementMode.RecallDistance ? "distant"
+                        : bot.Group == null || !bot.Group.IsInTheGroup(bot) ? "outside party"
+                        : bot.InCombat ? "in combat" : "nearby";
+                    int bagCount = bot.Inventory?.AllItems.Count(item => item.SlotPosition >= (int)eInventorySlot.FirstBackpack &&
+                        item.SlotPosition <= (int)eInventorySlot.LastBackpack) ?? 0;
+                    details = $"stance {effective}{(effective == saved ? string.Empty : $" (saved {saved})")}; " +
+                        $"{bot.UnspentSpecPoints} spec points; bag {bagCount}/40";
+                }
+                else
+                    readiness = record.IsActive ? "active elsewhere or unavailable here" : "benched";
+
+                lines.Add($"{record.Name}, level {record.Level}: {assignment}; {readiness}.");
+                lines.Add($"  {details}.");
+            }
+            if (!named && pages > 1)
+                lines.Add($"Page {page}/{pages}. Use /companions status <page> or /companions status <name>.");
+            lines.Add("Recovery: /companions help recovery. This is a snapshot; rerun to refresh.");
+            // Four entries, two lines each, keep the native detail packet bounded even for unusual saved text.
+            client.Out.SendCustomTextWindow($"Companion status {page}/{pages}",
+                lines.Select(line => line.Length <= 150 ? line : line[..147] + "...").ToArray());
+        }
+
+        private void ShowUsage(GameClient client, string topic = null)
+        {
+            string[] lines = (topic ?? string.Empty).ToLowerInvariant() switch
+            {
+                "roster" => new[]
+                {
+                    "/companions list | status [page or name] | profile <name>",
+                    "/companions recruit <class> [build] (free, level 1, anywhere). /classes lists names.",
+                    "/companions cast [realm] [page] | recruit authored <name> [build]",
+                    "/companions invite <name> | bench <name> | guild leave <name>"
+                },
+                "tactics" => new[]
+                {
+                    "/companions role <name> tank|healer|buffer|attacker|cc",
+                    "/companions stance <name> aggressive|defensive|passive saves an individual preference.",
+                    "/aggressive | /defensive | /passive overrides saved stances across your force.",
+                    "/companions group default restores saved stances. /companions status shows effective stances.",
+                    "/pull orders an attack on your target; passive and the distance leash still apply."
+                },
+                "training" => new[]
+                {
+                    "/companions build <name> lists builds; build <name> <build> switches freely and retrains.",
+                    "/companions mode <name> manual|automatic | plan <name>",
+                    "/companions train <name> <line> <level> spends available specialization points.",
+                    "Manual training needs a compatible trainer unless train-anywhere is enabled.",
+                    "/companions respec <name> confirms a reset using your full-skill respec eligibility."
+                },
+                "squads" => new[]
+                {
+                    "/companions squad list",
+                    "/companions squad <1-5> add <name> spawns or moves a companion into a squad.",
+                    "/companions squad <1-5> lead <name> selects an existing member as leader.",
+                    "/companions squad <1-5> remove <name> benches them; their next invite uses your own party.",
+                    "/companions squad <1-5> disband benches that squad. /bg brings your squads along.",
+                    "Your own party is full? Bench one companion or add the recruit to a squad."
+                },
+                "recovery" => new[]
+                {
+                    "/companions status [page or name] shows dead, distant and unavailable companions.",
+                    "/companions reset <name> saves and recreates that companion beside you.",
+                    "/companions reset recreates every active roster companion; it can affect your squads.",
+                    "If rejoining fails, the saved companion stays in the roster. Read the reported reason.",
+                    "An unavailable actor may belong to another logged-in character on your account.",
+                    "Reset is an explicit recovery action; status never moves or changes companions."
+                },
+                _ => new[]
+                {
+                    "Bare /companions opens the Companion Manager with its client extension.",
+                    "/companions find <name or class> searches the manager; /companions list works by chat.",
+                    "/companions status [page or name] opens a live readiness snapshot.",
+                    "/companions help roster | tactics | training | squads | recovery",
+                    "Start: /classes, then /companions recruit <class>, then /companions invite <name>.",
+                    "Saved companions keep progress and gear. /spawn helpers are temporary."
+                }
+            };
+            foreach (string line in lines)
+                DisplayMessage(client, line);
         }
     }
 }

@@ -1,4 +1,5 @@
-﻿using DOL.Database;
+﻿using System;
+using System.Linq;
 using DOL.GS.PacketHandler;
 using DOL.Language;
 
@@ -9,6 +10,7 @@ namespace DOL.GS.Commands
         ["&trainline", "&trainskill"], // New aliases to work around 1.105 client /train command.
         ePrivLevel.Player,
         "Trains a line by the specified amount",
+        "/train list (show your specialization names and points)",
         "/train <line> <level>",
         "e.g. /train Dual Wield 50")]
     public class TrainCommandHandler : AbstractCommandHandler, ICommandHandler
@@ -22,6 +24,12 @@ namespace DOL.GS.Commands
         {
             if (IsSpammingCommand(client.Player, "train"))
                 return;
+
+            if (args.Length == 2 && args[1].Equals("list", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowSpecializations(client);
+                return;
+            }
 
             // No longer used since 1.105, except if we explicitly want.
             if (client.Version >= GameClient.eClientVersion.Version1105)
@@ -52,25 +60,43 @@ namespace DOL.GS.Commands
 
             // Get the specialization line.
             string line = string.Join(' ', args, 1, args.Length - 2);
-            line = GameServer.Database.Escape(line);
-            Specialization spec;
-            var dbSpec = DOLDB<DbSpecialization>.SelectObject(DB.Column("KeyName").IsLike($"{line}%"));
+            var specializations = client.Player.GetSpecList().Where(entry => entry.Trainable).ToArray();
+            var matches = specializations.Where(entry =>
+                entry.KeyName.Equals(line, StringComparison.OrdinalIgnoreCase) ||
+                entry.Name.Equals(line, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (matches.Length == 0)
+                matches = specializations.Where(entry =>
+                    entry.KeyName.StartsWith(line, StringComparison.OrdinalIgnoreCase) ||
+                    entry.Name.StartsWith(line, StringComparison.OrdinalIgnoreCase)).ToArray();
 
-            if (dbSpec != null)
-                spec = client.Player.GetSpecializationByName(dbSpec.KeyName);
-            else
-                spec = client.Player.GetSpecializationByName(line); // If this is a custom line, it might not be in the DB, so search for exact match on player.
-
-            if (spec == null)
+            if (matches.Length != 1)
             {
-                client.Out.SendMessage("The provided skill could not be found.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                string message = matches.Length == 0
+                    ? $"No trainable specialization matches '{line}'. Use /train list for your lines."
+                    : $"'{line}' matches multiple lines: {string.Join(", ", matches.Select(entry => entry.KeyName))}. Use the full name from /train list.";
+                client.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
                 return;
             }
+            Specialization spec = matches[0];
 
             if (!Train(client, spec, level))
                 return;
 
             OnTrained(client);
+        }
+
+        private static void ShowSpecializations(GameClient client)
+        {
+            GamePlayer player = client.Player;
+            var lines = player.GetSpecList().Where(spec => spec.Trainable)
+                .Select(spec => $"{spec.Name}: {spec.Level} (command name: {spec.KeyName})").ToList();
+            lines.Insert(0, $"Available specialization points: {player.SkillSpecialtyPoints}. Character level: {player.BaseLevel}.");
+            lines.Add("");
+            lines.Add("Select a valid trainer for your class, then use /train <command name> <level>.");
+            lines.Add("Training spends points and may stop below the requested level when points run out.");
+            lines.Add("Example: /train Dual Wield 10. Listing lines does not spend points.");
+            lines.Add("If the client handles /train itself, use /trainline list or /trainline <command name> <level>.");
+            client.Out.SendCustomTextWindow("Your specializations", lines);
         }
 
         public static bool Train(GameClient client, Specialization spec, int level)

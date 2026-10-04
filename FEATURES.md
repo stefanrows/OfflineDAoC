@@ -132,6 +132,18 @@ and verification history of the full-PvP conversion.
   after stable local samples at 500, 1,000, and 1,500 active bots. Owner
   calibration and real-client acceptance remain pending.
 
+## In-game guidance
+
+- `/offline` provides short guides to companions, training, travel, recovery
+  and Camlann PvP, discoverable through one chat hint at login.
+- `/train list` shows earned specialization points and actual trainable names
+  anywhere; spending points retains the trainer requirement and rejects
+  ambiguous name prefixes.
+- `/mobs` shows zone names alongside monsters; `/mobs nearby [level] [page]`
+  searches the current zone. Both searches default to the player's level.
+- `/companions help` explains command topics, and `/companions status` reports
+  live readiness and effective group orders without a client extension.
+
 ## Player companions
 
 - `/companions` opens the Companion Manager window (Roster, Recruit, and

@@ -181,6 +181,40 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+87. **Research-led player experience and quality of life.** Owner, 2026-10-04:
+    review the current game and other freeshards, then improve feel and flow
+    autonomously. Implemented in source 0.208.0: an on-demand `/offline` guide
+    with one login hint, companion status and topic help, `/train list` with
+    unambiguous specialization selection, and monster listings with zones and
+    a `/mobs nearby` current-zone filter. These address observed friction:
+    the inherited command dump and starter help omit a practical fork-specific
+    introduction; the companion roster does not explain live readiness or
+    effective group orders; training requires knowing specialization names;
+    monster listings previously contain names and levels without locations.
+    Research, accessed 2026-10-04:
+    - [Eden's hub](https://eden-daoc.net/hub) and
+      [slash-command guide](https://eden-daoc.net/wiki?content=slash-commands)
+      emphasize searchable world information and basic `/info` help.
+    - [Phoenix's historical command reference](https://playphoenix.online/forum/server/wiki-pages/slash-commands-general-01F41S3TM8N4HN50060MBX2HSD)
+      documents training and routine inventory/group conveniences; this is
+      historical design evidence, not a claim about a currently running shard.
+    - [Uthgard's FAQ](https://uthgard.net/howto) combines a 1.65 target with
+      selective convenience such as potion shortcut handling. Its undated
+      legacy content is a design reference, not verified live behavior.
+    Assessment: this fork already provides extensive companion automation,
+    travel and progression tools. This pass makes those tools understandable
+    and reduces command trial and error. Saved party presets and protected
+    inventory batching are larger possible follow-ups, not implemented here.
+    The installed status/log snapshot was from an earlier 2026-10-04 session
+    (09:18 UTC), with tick P95 around 35 ms at 1x; it is not a fresh gameplay
+    observation and does not resolve performance task 74. No personal save
+    contents were changed. Server and Windows launcher Release builds passed
+    with existing warnings and no errors. Scoped review, version pins and
+    newline checks passed. No server start, deployment or automated tests.
+    Pending: install and check guide readability, one hint per login/no hint
+    on zoning, companion dead/distant/squad/override states, trainer lists and
+    ambiguous input, and both global/current-zone monster pagination in client.
+
 86. **Bug sweep with Luna max subagents.** Owner, 2026-10-04: inspect the
     project and fix confirmed bugs using Luna at max reasoning. Source
     0.206.0 fixes bugs 92–102 and 104–105 across networking, weekly quests,
