@@ -62,6 +62,16 @@ namespace DOL.GS.ServerRules
 			if (a == b)
 				return true;
 
+			// Camp escorts inherit the sponsor's current alliances without taking
+			// a slot in the player's group or becoming a persistent companion.
+			GameLiving sponsorA = EncounterSponsor(a);
+			GameLiving sponsorB = EncounterSponsor(b);
+			if (sponsorA != null || sponsorB != null)
+			{
+				if (AreAllied(sponsorA ?? a, sponsorB ?? b))
+					return true;
+			}
+
 			if (a.Group != null && a.Group == b.Group && a.Group.IsInTheGroup(a) && a.Group.IsInTheGroup(b))
 				return true;
 
@@ -76,6 +86,16 @@ namespace DOL.GS.ServerRules
 				return true;
 
 			return CompanionProtects(a, b) || CompanionProtects(b, a);
+		}
+
+		private static GameLiving EncounterSponsor(GameLiving actor)
+		{
+			if (actor is not GameBot { IsBattlegroundEncounterBot: true } encounter)
+				return null;
+			GameLiving sponsor = Resolve(encounter.BattlegroundAllianceSponsor);
+			return sponsor != null && sponsor is not GameBot { IsBattlegroundEncounterBot: true } &&
+				sponsor.ObjectState == GameObject.eObjectState.Active &&
+				sponsor.CurrentRegionID == encounter.CurrentRegionID ? sponsor : null;
 		}
 
 		public static bool IsInvulnerableToAttack(GameLiving living)
@@ -207,7 +227,9 @@ namespace DOL.GS.ServerRules
 			living?.CurrentZone?.IsOF == true;
 
 		public static bool IsSafetyProtected(GamePlayer player, int safetyLevel = 10) =>
-			player != null && IsSafetyProtected(player.Level, player.SafetyFlag, IsOldFrontier(player), safetyLevel);
+			player != null && !(BattlegroundCampaignPolicy.IsEnabled &&
+                BattlegroundCampaignPolicy.IsEligible(player, BattlegroundCampaignCatalog.Find(player.CurrentRegionID))) &&
+            IsSafetyProtected(player.Level, player.SafetyFlag, IsOldFrontier(player), safetyLevel);
 
 		public static bool IsSafetyProtected(int level, bool safetyFlag, bool isOldFrontier, int safetyLevel = 10) =>
 			safetyFlag && level < safetyLevel && !isOldFrontier;

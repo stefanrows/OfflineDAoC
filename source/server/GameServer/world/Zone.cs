@@ -192,6 +192,7 @@ namespace DOL.GS
         {
             get
             {
+                if (BattlegroundCampaignCatalog.Find(ZoneRegion.ID) != null) return true;
                 switch (ID)
                 {
                     case 250://caledonia

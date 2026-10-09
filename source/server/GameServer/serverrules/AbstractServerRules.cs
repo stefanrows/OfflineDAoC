@@ -521,6 +521,11 @@ namespace DOL.GS.ServerRules
 
         public virtual bool IsAllowedToZone(GamePlayer player, Region region)
         {
+            BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(region.ID);
+            if (definition != null)
+                return BattlegroundCampaignPolicy.CanEnter(definition, player, out _);
+            // Retired classic maps stay closed to ordinary transfers.
+            if (region.ID is 250 or 252 or 253) return false;
             return true;
         }
 
@@ -2281,7 +2286,7 @@ namespace DOL.GS.ServerRules
             int realmPoints = AutonomousBotRealmPointRewards.CalculateRealmPointReward(
                 killedPlayer.RealmPointsValue, killedPlayer.RealmLevel, botRealmPointValue,
                 botToAward.RealmLevel, contributorCount, botToAward.Group == null ? 1 : contributorCount,
-                damagePercent, battleground == null || botToAward.RealmLevel < battleground.MaxRealmLevel,
+                damagePercent, battleground == null || battleground.MaxRealmLevel == 0 || botToAward.RealmLevel < battleground.MaxRealmLevel,
                 killedPlayer.Level, botToAward.Level);
 
             if (realmPoints > 0)
@@ -2327,7 +2332,7 @@ namespace DOL.GS.ServerRules
             int realmPoints = AutonomousBotRealmPointRewards.CalculateRealmPointReward(
                 killedPlayer.RealmPointsValue, killedPlayer.RealmLevel, companionRealmPointValue,
                 companion.RealmLevel, contributorCount, companion.Group == null ? 1 : contributorCount,
-                damagePercent, battleground == null || companion.RealmLevel < battleground.MaxRealmLevel,
+                damagePercent, battleground == null || battleground.MaxRealmLevel == 0 || companion.RealmLevel < battleground.MaxRealmLevel,
                 killedPlayer.Level, companion.Level);
 
             if (realmPoints > 0)
@@ -2432,7 +2437,7 @@ namespace DOL.GS.ServerRules
                 realmPointsEarned = AutonomousBotRealmPointRewards.CalculateRealmPointReward(
                     killedPlayer.RealmPointsValue, killedPlayer.RealmLevel, playerToAward.RealmPointsValue,
                     playerToAward.RealmLevel, entityCountTotalDamagePair.Count, groupCount, damagePercent,
-                    battleground == null || playerToAward.RealmLevel < battleground.MaxRealmLevel,
+                    battleground == null || battleground.MaxRealmLevel == 0 || playerToAward.RealmLevel < battleground.MaxRealmLevel,
                     killedPlayer.Level, playerToAward.Level);
                 if (realmPointsEarned > 0)
                     playerToAward.GainRealmPoints(realmPointsEarned, true);

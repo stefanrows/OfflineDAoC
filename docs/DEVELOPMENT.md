@@ -173,6 +173,39 @@ files or world spawn data. Preserve the current validated meshes until a focused
 rebuild is requested. The texture tool converts atlases while preserving carrier
 models and bindings; it does not create a usable 3D mesh from a PNG.
 
+### Battleground navigation
+
+The 0.222.0 campaign needs ten native meshes missing from the original runtime.
+Build only these zones into developer state without modifying the installation:
+
+```bash
+tools/dev/build-battleground-nav.sh
+# Default output: /mnt/d/Games/OfflineDAoC-dev/battleground-nav/meshes
+```
+
+The helper uses the installed compatible client and cached Windows SDK, builds
+the navigation tool, and validates all ten nonempty native mesh headers before
+staging. It generates zones 165,234–238,240,241,251,254; zone242 is TestBG,
+not Leirvik. Output must be outside the installation. Intermediates remain in
+the helper's `builder/base/zones` tree. `--install-root` and `--output` support
+another complete installation and developer directory. Geometry generation can
+take several minutes; no server is started and no live mesh is overwritten.
+
+For a later authorized shipping invocation, include the staged meshes in the
+same stopped-install, backup/hash/rollback workflow:
+
+```bash
+tools/dev/deploy.sh -InstallRoot /mnt/d/Games/OfflineDAoC \
+  -ServerBuild source/server/Release \
+  -LauncherBuild source/tools/OfflineDaoc.Launcher/bin/Release/net10.0-windows \
+  -NavmeshBuild /mnt/d/Games/OfflineDAoC-dev/battleground-nav/meshes -Apply
+```
+
+The optional `-NavmeshBuild` parameter accepts only the ten validated campaign
+meshes; other navigation files are untouched. A source checkout without the
+compatible runtime/client cannot generate those binary assets. Entry stays
+closed until native meshes and safe portal landing geometry are ready.
+
 ## Safe sharing
 
 Never commit a database after playing. It will contain accounts, characters, bot

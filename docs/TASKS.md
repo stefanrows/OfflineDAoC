@@ -6,6 +6,7 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+
 94. **Upstream adaptation Stage 4: demonstrated equipment appearance fixes.**
     Selected 2026-10-09 under task 90. Initial catalog audit is recorded in
     [UPSTREAM_CONTENT_EVIDENCE.md](UPSTREAM_CONTENT_EVIDENCE.md): the upstream
@@ -235,6 +236,102 @@ Agent sessions on items 45–48: take the role and context from
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
 ## Implemented in source; installation verification pending
+
+106. **Build an Eden-inspired battleground campaign.** Owner, 2026-10-09,
+     including the reply to retain guild/group alliances. **Done in source
+     0.222.0, 2026-10-10; installation/client verification pending.** SOL Medium
+     subagents implemented ten bracket definitions, native admission/release/
+     graduation, field contracts and personal tokens, funded physical assaults,
+     captain sabotage, bounded 1–8 actor patrols/ambushes and opt-in grouping.
+     Existing saves and Camlann alliances remain. All ten generated native
+     meshes load, with three safe arrival floors and three outside-camp route
+     proofs per map. Cathal central gates are restored from verified fixtures;
+     incomplete native keep/lord/monster content gates impossible objectives.
+     Staging/deploy support preserves the existing backup/protected-save flow.
+     Server and Windows launcher Release builds passed with zero errors; existing
+     warnings remain. Deployment scripts pass syntax checks.
+     Pending: installation; owner checks of travel/graduation and sub-10 safety,
+     alliances, quest credit/persistence, funding/refunds/restarts and captain
+     respawn, actual door/lord/steward capture, difficulty and optional grouping.
+     No server/client startup or deployment was performed. Automated tests
+     skipped under project rules.
+
+105. **Coordinate multiple guild parties for a viable keep assault.** Owner,
+     2026-10-09, during live 0.217.0 observation: several parties should gather
+     and attack together instead of sending eight attackers into several
+     defending groups. Source 0.221.0 adds a guild-scoped exterior camp,
+     shared physical readiness and release, locally sighted defender pressure,
+     guard/door allowance, healing/equipment checks, bounded failure and
+     post-defeat reassembly. Owner clarification, 2026-10-10: attacks must vary,
+     including single-party sorties. Each new assault chooses a stable one-,
+     two- or three-party preference (45%/35%/20%); observed opposition can raise
+     the required strength. A single full party can attack a lightly defended
+     keep. Each contributing party still needs at least six present members.
+     Recruitment prefers the guild's own active assault. Other guilds sharing
+     a target remain separate armies. No new bots, forced transport, save
+     migration or combat/placement rule changes are included.
+     Related bug 75/task 100 fixes allow ticket/porter approach during cohesion,
+     guard cleared destinations, retain current march leases, release stale
+     siege-job assignments, and reacquire a carried ram after lease expiry.
+     Installation and gameplay verification are pending: observe both a
+     one-party sortie and a shared multi-party launch, verify that strong
+     observed opposition prevents an understrength single-party attack, measure
+     simultaneous living attackers/defenders, check real ram/door outcomes,
+     and exercise missing supplies, unreachable camp, stale reports, casualties,
+     leader replacement, guild recall and defeat/reassembly. Defender sightings
+     are bounded local observations, not omniscient knowledge of hidden troops;
+     the initial strength margin needs live calibration. Automated tests are
+     not run; the owner's live installation remains on 0.217.0.
+     Validation on 2026-10-10: isolated Release server build of this scope
+     against shipped main passed with zero errors (warnings remain). The
+     shared checkout build encountered unrelated in-progress battleground/keep
+     errors; combined integration compilation remains pending. Version pins,
+     conflict markers and preserved line endings were checked. No tests,
+     deployment, restart, save edits or runtime setting changes were performed.
+
+104. **Tune the existing Atlas Old Frontiers realm abilities.** Owner,
+     2026-10-09: retain the current classic system and hybrid Determination;
+     reduce personal Purge from 30 to 20 minutes. Implemented in source
+     0.220.0 for the standard and reduced-cost tank handlers, shared by
+     players, companions and autonomous world bots. Trainer cooldown
+     details use the runtime timer; existing saved autonomous deadlines
+     are honored. Costs, ranks, five-rank tank/three-rank hybrid
+     Determination and the separate 30-minute Druid Group Purge remain.
+     Nine-rank passive scaling is deferred. Server and Windows launcher
+     Release builds passed with zero errors (warnings remain); automated
+     tests skipped under project rules. Pending: installation
+     and owner checks of personal Purge cooldown/details for players and
+     bots, Group Purge, saved cooldowns and retained ability ranks.
+
+103. **Reaver damage aura helps hold PvE aggro at every rank.** Owner,
+     2026-10-09: add extra threat against NPCs/mobs, excluding playerbots,
+     to protect healers and bombers while retaining manual taunt styles;
+     describe the behavior in-game. Implemented in source 0.219.0: all nine
+     learned Soulrending damage-aura ranks add four times their spell level
+     per damaging pulse (8/20/40/56/84/104/132/160/200 extra threat at spell
+     levels 2/5/10/14/21/26/33/40/50). Normal damage threat and Protect still
+     apply; the bonus never forces a target switch or catches up to another
+     character's threat. Players, companion/autonomous playerbots and
+     controlled pets are excluded; resisted/zero-damage pulses add no bonus.
+     Existing damage, radius, six-second pulse, power and recast are preserved.
+     Tooltip and detailed descriptions explain rank scaling and that taunt
+     styles may still be needed. Server and Windows launcher Release builds
+     passed; scoped diff, conflict and version checks passed. Automated tests
+     skipped under project rules. Pending: installation and owner checks of
+     all ranks, descriptions,
+     healer/bomber threat balance, manual taunts and playerbot exclusions.
+
+102. **Automatic keep progression and existing-claim reset.** Owner, 2026-10-09.
+     Implemented in source 0.218.0: human and autonomous-bot guild keeps start
+     at level 1 and progress to 10 in 32 gameplay hours (level 5 at one hour).
+     Persisted deadlines retain progress across restarts and count downtime
+     at 1x. Existing guild holdings reset once on their first updated load;
+     NPC/Warden, unowned, portal and relic keeps are excluded. Claims, relic
+     placement and player/bot possessions remain intact. Legacy default
+     settings migrate; later operator overrides remain possible. Automated
+     tests skipped under the project workflow; server Release build passed.
+     Pending: installation and
+     owner checks of the reset, timed upgrades, doors/guards and restart.
 
 101. **Autonomous groups run properly; leaders loop instead of stopping.**
      Owner, 2026-10-09. No speed bug (bots have MaxSpeed 191), but heavy

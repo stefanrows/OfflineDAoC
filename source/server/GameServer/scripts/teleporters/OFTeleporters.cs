@@ -189,10 +189,9 @@ namespace DOL.GS.Scripts
                 GameLocation PortLocation = null;
                 medallion = player.Inventory.GetItem(eInventorySlot.Mythical);
 
-                if (medallion?.Id_nb == BattlegroundsID && !ServerProperties.Properties.BG_ZONES_OPENED &&
-                    player.Client.Account.PrivLevel == (uint)ePrivLevel.Player)
+                if (medallion?.Id_nb == BattlegroundsID)
                 {
-                    SayTo(player, ServerProperties.Properties.BG_ZONES_CLOSED_MESSAGE);
+                    if (!BattlegroundCampaignPolicy.TryEnter(player, out string reason)) SayTo(player, reason);
                     continue;
                 }
 

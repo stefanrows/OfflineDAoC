@@ -458,6 +458,9 @@ namespace DOL.AI.Brain
             if (PvpCombatant.IsPlayerShaped(realTarget) && !PvpCombatant.AreAllied(Body, realTarget))
                 return BotBody?.IsAutonomousWorldBot != true || AutonomousRvrTargetPolicy.ShouldEngageGrey(Body, realTarget);
 
+            if (BotBody?.IsBattlegroundEncounterBot == true && realTarget is DOL.GS.Keeps.GameKeepDoor)
+                return true;
+
             // A player-led siege order is valid even when the door's con is grey.
             if (realTarget is DOL.GS.Keeps.GameKeepDoor door &&
                 CompanionEngagementMode.LeaderAttackingDoor(AssistedPlayer, door))
@@ -1511,6 +1514,12 @@ namespace DOL.AI.Brain
 
         private void ThinkCore()
         {
+            if (BotBody?.IsBattlegroundEncounterBot == true)
+            {
+                ThinkBattlegroundEncounter();
+                return;
+            }
+
             AutonomousRealmAbilityActives.UseActives(BotBody);
 
             if (AutonomousGuildKeepDefense.Eligible(BotBody))
@@ -3324,7 +3333,7 @@ namespace DOL.AI.Brain
 
             if (Body.TargetObject != null)
             {
-                if (BotBody.IsAutonomousWorldBot && Body.TargetObject is DOL.GS.Keeps.GuardLord lord &&
+                if ((BotBody.IsAutonomousWorldBot || BotBody.IsBattlegroundEncounterBot) && Body.TargetObject is DOL.GS.Keeps.GuardLord lord &&
                     !Body.IsWithinRadius(lord, 280))
                 {
                     Body.StopAttack();

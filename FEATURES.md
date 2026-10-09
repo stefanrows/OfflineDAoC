@@ -28,6 +28,41 @@ and verification history of the full-PvP conversion.
 - Capitals, housing, protected starter dungeons, portal keeps, release immunity,
   stable travel, and the native client-patch hash guards remain protected.
 
+## Battleground campaign (0.222.0 source; installation checks pending)
+
+- `/battleground` or `/bgs` shows help; `list`, `join`, `leave` and `status`
+  expose ten five-level brackets from 1–4 through 45–49. Native navigation
+  and safe arrival geometry must be available before a bracket opens.
+- Guild, group, guild-alliance and battlegroup relationships remain the teams.
+  Entry allows sub-10 PvP inside the battleground; the saved `/safety` flag
+  applies normally after leaving. Portal keeps remain safe arrival areas.
+- Commanders outside portal sanctuaries offer repeatable field contracts.
+  Contracts and ordinary monster kills supply personal, nontradable siege tokens;
+  each completed contract also grants 5% of a level's XP. Player-shaped kills
+  retain normal damage sharing, con checks and repeat-kill protection.
+- Twenty donated tokens send a physical class-based escort against a native
+  central keep's doors, then lord. Guild claim still requires its steward.
+  A sponsored hostile captain can be killed to block turn-ins for five gameplay
+  minutes; unfunded captains remain peaceful until sponsorship begins. Guild
+  funding persists for thirty minutes; guildless group funds are session-local.
+- Patrols and contract ambushes use temporary actors with normal class combat,
+  healing, crowd control, immunity and native movement. The occupied-map
+  director chooses 1–8 members from local party strength and current guild
+  presence, with at most 24 encounter actors per map. Empty maps do not accumulate
+  patrols. These actors never enter the saved companion or world-bot roster.
+- `/LFxp` and `/LFrvr`, or `/battleground lfg xp|pvp`, opt solo players into
+  matching every thirty seconds. XP candidates stay within three levels of
+  the elected leader; PvP candidates share a bracket. `off` cancels.
+  Existing groups and the ordinary `/bg` battlegroup commands are preserved.
+- The imported world lacks central keeps on six selected maps, so those maps
+  offer field encounters without siege/capture contracts. Two other keep maps
+  lack imported lords; funding and capture require an actual loaded lord.
+  Cathal's missing gates are restored from verified native fixture positions.
+  Maps without native
+  hunting spawns offer hostile-combatant contracts. Murdaigean supplies 25–29
+  because Braemar lacks arrival camps. See the map table and verification
+  requirements in [the Camlann design](docs/CAMLANN.md#battleground-campaign-02220).
+
 ## Persistent autonomous population
 
 - Autonomous bots are persistent world actors with saved level, experience,

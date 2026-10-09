@@ -11,16 +11,17 @@ using static DOL.GS.ServerRules.IServerRules;
 namespace DOL.GS;
 
 /// <summary>
-/// Treats a persistent autonomous gamebot as a player only for RvR realm-point
-/// credit. Ordinary NPCs, controlled pets, and temporary /spawn companions
-/// remain ineligible victims.
+/// Treats saved autonomous gamebots and bounded battleground opponents as players
+/// for RvR kill credit. Ordinary NPCs, controlled pets, and temporary /spawn
+/// companions remain ineligible victims.
 /// </summary>
 public static class AutonomousBotRealmPointRewards
 {
     internal const string LastRealmPointDeathTickProperty = "autonomous.rvr.last.realm.point.death.tick";
 
     public static bool IsEligibleVictim(GameNPC npc) =>
-        npc is GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false };
+        npc is GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false } or
+            GameBot { IsBattlegroundEncounterBot: true };
 
     public static int GetPlayerEquivalentRealmPointValue(byte level, int realmLevel)
     {
@@ -190,7 +191,8 @@ public static class AutonomousBotRealmPointRewards
                 if (isWorthRealmPoints)
                 {
                     DbBattleground battleground = GameServer.KeepManager.GetBattleground(player.CurrentRegionID);
-                    bool applyRankAdjustment = battleground == null || player.RealmLevel < battleground.MaxRealmLevel;
+                    bool applyRankAdjustment = battleground == null || battleground.MaxRealmLevel == 0 ||
+                        player.RealmLevel < battleground.MaxRealmLevel;
                     realmPointsEarned = CalculateRealmPointReward(victimValue, killedBot.RealmLevel,
                         player.RealmPointsValue, player.RealmLevel, contributorCount,
                         groupContributorCount, damagePercent, applyRankAdjustment, killedBot.Level, player.Level);

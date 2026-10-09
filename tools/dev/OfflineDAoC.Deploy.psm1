@@ -191,6 +191,7 @@ function Get-OfflineDaocDeployPlan {
         [Parameter(Mandatory = $true)][string]$InstallRoot,
         [Parameter(Mandatory = $true)][string]$ServerBuild,
         [string]$LauncherBuild,
+        [string]$NavmeshBuild,
         [switch]$IncludeThirdParty
     )
     $root = Resolve-OfflineDaocInstallRoot -InstallRoot $InstallRoot
@@ -286,6 +287,34 @@ function Get-OfflineDaocDeployPlan {
         }
     }
 
+    if ($NavmeshBuild) {
+        $meshRoot = [IO.Path]::GetFullPath($NavmeshBuild)
+        if (-not (Test-Path -LiteralPath $meshRoot -PathType Container)) {
+            throw "Battleground mesh folder not found: $NavmeshBuild"
+        }
+        # Deploy only the ten campaign zones; preserve the existing world meshes.
+        foreach ($zone in @(165, 234, 235, 236, 237, 238, 240, 241, 251, 254)) {
+            $fileName = 'zone{0:000}.nav' -f $zone
+            $source = Join-Path $meshRoot $fileName
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+                throw "Missing battleground navigation mesh: $fileName"
+            }
+            $reader = [IO.BinaryReader]::new([IO.File]::OpenRead($source))
+            try {
+                if ($reader.BaseStream.Length -lt 2048 -or $reader.ReadInt32() -ne 0x4d534554 -or
+                    $reader.ReadInt32() -ne 1 -or $reader.ReadInt32() -le 0) {
+                    throw "Invalid native battleground mesh: $fileName"
+                }
+            }
+            finally { $reader.Dispose() }
+            $relative = Join-Path 'runtime\server\pathing' $fileName
+            $target = Join-Path $root $relative
+            Assert-OfflineDaocPathUnderRoot -InstallRoot $root -Path $target | Out-Null
+            $entries += New-OfflineDaocDeployEntry -Relative $relative -Target $target -Source $source `
+                -Kind 'navigation' -InstalledHash (Get-OfflineDaocFileHash $target) -NewHash (Get-OfflineDaocFileHash $source)
+        }
+    }
+
     if ($entries.Count -eq 0) {
         throw "No matching install files found under $root for this build."
     }
@@ -370,13 +399,14 @@ function Invoke-OfflineDaocDeploy {
         [Parameter(Mandatory = $true)][string]$InstallRoot,
         [Parameter(Mandatory = $true)][string]$ServerBuild,
         [string]$LauncherBuild,
+        [string]$NavmeshBuild,
         [switch]$IncludeThirdParty,
         [switch]$Apply,
         [switch]$PassThru
     )
     Assert-OfflineDaocStopped
     $root = Resolve-OfflineDaocInstallRoot -InstallRoot $InstallRoot
-    $entries = @(Get-OfflineDaocDeployPlan -InstallRoot $root -ServerBuild $ServerBuild -LauncherBuild $LauncherBuild `
+    $entries = @(Get-OfflineDaocDeployPlan -InstallRoot $root -ServerBuild $ServerBuild -LauncherBuild $LauncherBuild -NavmeshBuild $NavmeshBuild `
             -IncludeThirdParty:$IncludeThirdParty)
     # Short hash prefixes keep each row on one line; manifest.json keeps full hashes.
     $shortHash = { param($hash) if ($hash) { $hash.Substring(0, 12) } else { '-' } }

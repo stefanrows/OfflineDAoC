@@ -61,6 +61,17 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+121. **Siege column handling reads a cleared keep destination.** Verified
+     installed 0.217.0 observation on 2026-10-09: null-reference failures in
+     `HoldSiegeColumn` and the `AbandonKeepTarget` group-combat predicate.
+     A retained committed plan/muster phase can outlive synchronous objective
+     clearing earlier in the same turn. Source 0.221.0 stops that stale turn,
+     passes a captured destination into column handling, and guards absent
+     destinations. Reproduce with a marching force whose keep objective ends
+     or is cleared during recovery; expect clean reassignment without an
+     exception. Installation and exact-trigger verification remain pending.
+     These stacks are distinct from bugs 116/117. Private logs remain outside Git.
+
 120. **Autonomous groups stand idle inside their own guild keep.** Installed
      0.217.0, 2026-10-09 22:44–23:04: the owner saw about three groups idle
      in Dun Crimthain (keep 101, claimed by Camlann crew "Camp Watch 3").
@@ -232,6 +243,17 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
       `RVR_SIEGE_GATE` records job/kit state, marker, block reason and positions;
       supply and column logs retain force/operator identities. Large elevation
       errors and old blocked-ram origins remain unresolved.
+    Live 0.217.0 also exposed cohesion holds just outside native porter boarding
+    range while members waited for their leader, plus independent eight-person
+    parties reaching heavily defended keeps without an army-wide readiness gate.
+    Source 0.221.0 permits bounded leader ticket/porter approach, guards cleared
+    keep destinations (bug 121), and adds the shared guild assembly described in
+    task 105. The travel branch no longer releases the current keep's operator
+    lease every turn; existing carried ram kits may reclaim an expired lease
+    without shopping. Complete physical arrival followed by defender defeat remains a
+    different outcome from failed logistics. No live workload or installation
+    was changed to obtain these observations.
+
     Acceptance remains pending: trace one force from rally and supply return
     through every real transfer (including intermediate Home), cohesive approach,
     operator arrival and measured combat/engine outcome. Same-second 1+7 slices

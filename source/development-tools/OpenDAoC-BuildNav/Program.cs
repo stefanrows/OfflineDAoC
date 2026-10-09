@@ -73,10 +73,10 @@ namespace CEM
                 NifIgnorelist = File.ReadAllLines(ignorelistFile).ToList();
             }
 
-            BuildNavmeshes();
+            Environment.ExitCode = BuildNavmeshes() ? 0 : 1;
             Log.Normal("---------------------------------------------------------------------------");
             Log.Normal("All done.");
-            Console.ReadKey();
+            if (!Arguments.NonInteractive && !Console.IsInputRedirected) Console.ReadKey();
         }
 
         private static IEnumerable<Zone2> GetZonesToBuild()
@@ -98,7 +98,7 @@ namespace CEM
             }
         }
 
-        private static void BuildNavmeshes()
+        private static bool BuildNavmeshes()
         {
             World.WorldMgr.Init();
             Log.Normal("-----------------------------------------------------------------------------");
@@ -110,6 +110,7 @@ namespace CEM
             Log.Normal("");
             Console.Title = "NavGen";
             int finishedZones = 0;
+            int failedZones = 0;
             // Keep the desktop responsive while baking the full Classic + SI set.
             var po = new ParallelOptions() { MaxDegreeOfParallelism = Math.Min(6, Math.Max(1, Environment.ProcessorCount - 1)) };
             Parallel.Invoke(po, zones.Select(z => new Action(() =>
@@ -123,12 +124,14 @@ namespace CEM
         }
         catch (Exception ex)
         {
+          Interlocked.Increment(ref failedZones);
           Log.Error(ex);
         }
 #endif
                 int finished = Interlocked.Increment(ref finishedZones);
                 Console.Title = String.Format("[{2}%] NavGen {0}/{1}", finished, zones.Length, finished * 100 / zones.Length);
             })).ToArray());
+            return zones.Length > 0 && failedZones == 0;
         }
 
         /// <summary>
@@ -173,6 +176,9 @@ namespace CEM
 
             [Argument("obj", Description = "Export obj only")]
             public bool ExportObjOnly { get; set; }
+
+            [Argument("non-interactive", Description = "Exit without waiting for a key")]
+            public bool NonInteractive { get; set; }
 
             [Argument("normal-priority", Description = "Run at normal priority")]
             public bool NormalPriority { get; set; }

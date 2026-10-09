@@ -68,6 +68,7 @@ namespace DOL.GS
                 if (supplyKeep != _rvrDestination.Id) ReleaseSiegeJob(bot);
                 else if (ContinueSiegeSupplyTrip(bot, now)) return true;
             }
+            if (_siegeJobKeep != null && _siegeJobKeep != _rvrDestination.Id) ReleaseSiegeJob(bot);
             // A reserved operator remains part of the marching formation. A
             // kit purchase is allowed while gathering, but must not send a
             // supplied operator down the keep road ahead of its leader.
@@ -75,7 +76,11 @@ namespace DOL.GS
             if (!permitExecution)
             {
                 TraceSiegeExecution(bot, permitSupply ? "mustering" : "leader-approach-or-formation");
-                if (!permitSupply) return false;
+                if (!permitSupply)
+                {
+                    ReserveCarriedRam(bot, now);
+                    return false;
+                }
                 if (_siegeSupplyItem != null) return SupplySiegeItem(bot, _siegeSupplyItem, _siegeSupplyCount);
                 return PrepareSiegeResponseSupplies(bot, now, allowFrontierSupply: true);
             }
@@ -90,6 +95,21 @@ namespace DOL.GS
                     _siegeSupplyItem != null, canBuyBeforeMarch))
             { TraceSiegeExecution(bot, "outside-job-range"); return false; }
             return TryRunSiegeJob(bot, permitSupply);
+        }
+
+        private void ReserveCarriedRam(GameBot bot, long now)
+        {
+            // A death or long combat can expire a lease after the party muster.
+            // Reclaim a real carried kit without restarting a shopping trip.
+            if (!AutonomousSiegeJobs.Eligible(bot) || now < _siegeNextAttempt ||
+                AutonomousSiegeJobs.HasRamAssignment(bot, _rvrDestination.Id, _rvrDestination.RegionId) ||
+                BotSiegeRuntime.Item(bot, BotSiegeRuntime.Kit(bot.Realm, BotSiegeKind.Ram)) == null) return;
+            if (!AutonomousSiegeJobs.TryAcquire(bot, _rvrDestination.Id, bot.Group?.MemberCount ?? 1,
+                true, false, out var kind, out var slot, _rvrDestination.RegionId))
+            { _siegeNextAttempt = now + 10_000; return; }
+            _siegeJobKeep = _siegePreSupplyKeep = _rvrDestination.Id;
+            _siegeKind = kind; _siegeSlot = slot;
+            SiegeLog(bot, "carried_ram_assignment", null, $"kind={kind} slot={slot}; retained existing equipment");
         }
 
         /// <summary>Melee classes, and pure casters with no free seat on a ram of

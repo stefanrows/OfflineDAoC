@@ -33,9 +33,10 @@ namespace DOL.GS
 		{
 			// Camlann travel is deliberately realm-open. Keep every capital and
 			// every realm's leveling-town menu visible to every player; the town
-			// itself remains a normal PvP destination. Battlegrounds are omitted
-			// because they are disabled in this ruleset.
+			// itself remains a normal PvP destination. Battlegrounds use guild/group
+			// alliances and the character's eligible level bracket.
 			return "Would you like to teleport to?\n" +
+                (BattlegroundCampaignPolicy.IsEnabled ? "[Battlegrounds]\n" : "") +
 				"[Camelot] [Jordheim] [Tir na Nog]\n" +
 				"[Albion Frontiers] [Midgard Frontiers] [Hibernia Frontiers]\n" +
 				"[Albion Darkness Falls] [Midgard Darkness Falls] [Hibernia Darkness Falls]\n" +
@@ -460,14 +461,9 @@ namespace DOL.GS
 					return true;
 				// All realms
 				case "BATTLEGROUNDS":
-					if (!ServerProperties.Properties.BG_ZONES_OPENED && player.Client.Account.PrivLevel == (uint)ePrivLevel.Player)
-					{
-						SayTo(player, ServerProperties.Properties.BG_ZONES_CLOSED_MESSAGE);
-						return true;
-					}
-
-					SayTo(player, "I will teleport you to the appropriate battleground for your level and Realm Rank. If you exceed the Realm Rank for a battleground, you will not teleport. Please gain more experience to go to the next battleground.");
-					break;
+                    if (!BattlegroundCampaignPolicy.TryEnter(player, out string battlegroundReason))
+                        SayTo(player, battlegroundReason);
+                    return true;
 				case "ENTRANCE":
 				case "PERSONAL":
 				case "HEARTH":
@@ -493,35 +489,14 @@ namespace DOL.GS
 			// the level of the player, so let's deal with that first.
 			if (text.ToLower() == "battlegrounds")
 			{
-				if (!ServerProperties.Properties.BG_ZONES_OPENED && player.Client.Account.PrivLevel == (uint)ePrivLevel.Player)
-				{
-					SayTo(player, ServerProperties.Properties.BG_ZONES_CLOSED_MESSAGE);
-				}
-				else
-				{
-					AbstractGameKeep portalKeep = GameServer.KeepManager.GetBGPK(player);
-					if (portalKeep != null)
-					{
-						DbTeleport teleport = new DbTeleport();
-						teleport.TeleportID = "battlegrounds";
-						teleport.Realm = (byte)portalKeep.Realm;
-						teleport.RegionID = portalKeep.Region;
-						teleport.X = portalKeep.X;
-						teleport.Y = portalKeep.Y;
-						teleport.Z = portalKeep.Z;
-						teleport.Heading = 0;
-						return teleport;
-					}
-					else
-					{
-						if (player.Client.Account.PrivLevel > (uint)ePrivLevel.Player)
-						{
-							player.Out.SendMessage("No portal keep found.", eChatType.CT_Skill, eChatLoc.CL_SystemWindow);
-						}
-						return null;
-					}
-				}
-			}
+                BattlegroundDefinition definition = BattlegroundCampaignCatalog.ForLevel(player.Level);
+                if (!BattlegroundCampaignPolicy.CanEnter(definition, player, out string reason))
+                { SayTo(player, reason); return null; }
+                GameLocation landing = BattlegroundCampaignPolicy.GetLanding(player, definition);
+                return new DbTeleport { TeleportID = "battlegrounds", RegionID = landing.RegionID,
+                    X = landing.X, Y = landing.Y, Z = landing.Z, Heading = landing.Heading };
+            }
+
 
 			// Another special case is personal house, as there is no location
 			// that will work for every player.

@@ -819,6 +819,7 @@ namespace DOL.GS.Keeps
 		protected virtual void LoadBattlegroundCaps()
 		{
 			m_battlegrounds.AddRange(GameServer.Database.SelectAllObjects<DbBattleground>());
+            BattlegroundCampaignCatalog.RegisterCaps(m_battlegrounds);
 		}
 
 		public virtual DbBattleground GetBattleground(ushort region)
@@ -833,6 +834,11 @@ namespace DOL.GS.Keeps
 
 		public virtual void ExitBattleground(GamePlayer player)
 		{
+            if (BattlegroundCampaignCatalog.Find(player.CurrentRegionID) != null)
+            {
+                BattlegroundCampaignPolicy.ExitToBind(player, out _);
+                return;
+            }
 			string location = string.Empty;
 			switch (player.Realm)
 			{

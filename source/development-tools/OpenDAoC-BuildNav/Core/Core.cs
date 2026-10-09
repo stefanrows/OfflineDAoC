@@ -38,7 +38,7 @@ namespace CEM.Core {
     /// </summary>
     public static void Init() {
       // Set working dir
-      Environment.CurrentDirectory = Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), ROOT_DIR);
+      Environment.CurrentDirectory = Path.Combine(AppContext.BaseDirectory, ROOT_DIR);
       //Win32.SetDllDirectory(IntPtr.Size == 8 ? "x64" : "x86");
       AppDomain.CurrentDomain.AssemblyResolve += (o, rargs) => {
         Assembly loaded = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(x => x.FullName == rargs.Name);

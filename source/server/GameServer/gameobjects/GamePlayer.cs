@@ -866,8 +866,18 @@ namespace DOL.GS
             DbBattleground battleground = GameServer.KeepManager.GetBattleground(CurrentRegionID);
             if (battleground != null && (ePrivLevel) Client.Account.PrivLevel is ePrivLevel.Player)
             {
-                if (Level > battleground.MaxLevel || RealmLevel >= battleground.MaxRealmLevel)
-                    GameServer.KeepManager.ExitBattleground(this);
+                if (Level < battleground.MinLevel || Level > battleground.MaxLevel ||
+                    battleground.MaxRealmLevel != 0 && RealmLevel >= battleground.MaxRealmLevel)
+                {
+                    if (BattlegroundCampaignCatalog.Find(CurrentRegionID) != null)
+                    {
+                        // This actor is already being removed; calling MoveTo here
+                        // would re-enter RemoveFromWorld during graduation.
+                        DBCharacter.Region = BindRegion; DBCharacter.Xpos = BindXpos;
+                        DBCharacter.Ypos = BindYpos; DBCharacter.Zpos = BindZpos; DBCharacter.Direction = BindHeading;
+                    }
+                    else GameServer.KeepManager.ExitBattleground(this);
+                }
             }
 
             // Cancel all effects until saving of running effects is done.
@@ -1325,7 +1335,10 @@ namespace DOL.GS
                     DbBattleground battleground = GameServer.KeepManager.GetBattleground(CurrentRegionID);
 
                     // Battlegrounds caps.
-                    if (Properties.BG_RELEASE_TO_PORTAL_KEEP && battleground != null && Level <= battleground.MaxLevel && RealmLevel <= battleground.MaxRealmLevel)
+                    if (BattlegroundCampaignCatalog.Find(CurrentRegionID) is BattlegroundDefinition campaign &&
+                        BattlegroundCampaignPolicy.IsEnabled && BattlegroundCampaignPolicy.IsEligible(this, campaign) ||
+                        Properties.BG_RELEASE_TO_PORTAL_KEEP && battleground != null && Level >= battleground.MinLevel &&
+                        Level <= battleground.MaxLevel && (battleground.MaxRealmLevel == 0 || RealmLevel < battleground.MaxRealmLevel))
                         releaseCommand = eReleaseType.Battleground;
                     else
                         releaseCommand = eReleaseType.Bind;
@@ -1465,6 +1478,21 @@ namespace DOL.GS
                 }
                 case eReleaseType.Battleground:
                 {
+                    BattlegroundDefinition campaign = BattlegroundCampaignCatalog.Find(CurrentRegionID);
+                    if (campaign != null && BattlegroundCampaignPolicy.IsEnabled && BattlegroundCampaignPolicy.IsEligible(this, campaign))
+                    {
+                        GameLocation landing = BattlegroundCampaignPolicy.GetLanding(this, campaign);
+                        if (landing != null)
+                        {
+                            relRegion = landing.RegionID; relX = landing.X; relY = landing.Y; relZ = landing.Z; relHeading = landing.Heading;
+                            break;
+                        }
+                    }
+                    if (campaign != null)
+                    {
+                        ValidateAndGetBind(out relRegion, out relX, out relY, out relZ, out relHeading);
+                        break;
+                    }
                     bool foundPortalKeep = false;
                     DbBattleground battleground = GameServer.KeepManager.GetBattleground(CurrentRegionID);
 
@@ -3629,6 +3657,7 @@ namespace DOL.GS
             }
 
             Out.SendUpdatePoints();
+            BattlegroundCampaignPolicy.CheckProgress(this);
         }
 
         /// <summary>
@@ -4371,6 +4400,7 @@ namespace DOL.GS
                     {
                         //update the mob colours
                         Out.SendLevelUpSound();
+                        BattlegroundCampaignPolicy.CheckProgress(this);
                     }
                 }
             }
@@ -7726,6 +7756,12 @@ namespace DOL.GS
         /// <returns>true if created, false if creation failed</returns>
         public override bool AddToWorld()
         {
+            BattlegroundDefinition savedCampaign = BattlegroundCampaignCatalog.Find(CurrentRegionID);
+            if (savedCampaign != null && !BattlegroundCampaignPolicy.CanEnter(savedCampaign, this, out _))
+            {
+                if (BattlegroundCampaignCatalog.Find((ushort)BindRegion) != null) return false;
+                CurrentRegionID = (ushort)BindRegion; X = BindXpos; Y = BindYpos; Z = BindZpos; Heading = (ushort)BindHeading;
+            }
             if (!base.AddToWorld())
             {
                 if (log.IsErrorEnabled)
@@ -7845,6 +7881,17 @@ namespace DOL.GS
 
             if (rgn.GetZone(x, y) == null)
                 return false;
+
+            if (BattlegroundCampaignCatalog.Find(regionID) is BattlegroundDefinition destinationCampaign)
+            {
+                Zone zone = rgn.GetZone(x, y);
+                System.Numerics.Vector3 native = new(x, y, z);
+                System.Numerics.Vector3 snapped = native;
+                if (zone.ID != destinationCampaign.ZoneId || !PathfindingProvider.Instance.HasNavmesh(zone) ||
+                    !PathfindingProvider.Instance.TrySnapToMesh(zone, ref snapped, 100) ||
+                    System.Numerics.Vector3.Distance(native, snapped) > 100) return false;
+                x = (int)snapped.X; y = (int)snapped.Y; z = (int)snapped.Z;
+            }
 
             UpdateWaterBreathState(eWaterBreath.None);
             SiegeWeapon?.ReleaseControl();

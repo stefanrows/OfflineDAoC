@@ -23,6 +23,29 @@ Use `/cmdhelp <command>` for an individual command's complete syntax.
   monsters there. An empty result suggests the broader search. Teleporting
   by name still chooses its existing camp, which may be in another zone.
 
+## Battlegrounds
+
+Use `/battleground` or `/bgs` for help. `list` shows the ten level brackets;
+`join` enters your bracket and `leave` returns to your existing outside bind.
+Guild, group and battlegroup alliances apply. Under-10 PvP protection is
+suspended inside battlegrounds; your saved safety flag applies again outside.
+Portal keeps remain safe arrivals.
+
+Use `status` to locate camp commanders, `quests` beside a living camp
+commander/captain to accept field contracts, and `turnin` there to collect
+completed contracts. Contracts and ordinary monster kills earn personal siege
+tokens. `contribute <count>` donates a backpack stack; twenty tokens fund a
+physical assault where a native central keep and lord are available. A hostile
+sponsored captain can be killed to interrupt turn-ins for five gameplay minutes.
+
+`/LFxp` and `/LFrvr` opt solo players into matching every thirty seconds; append
+`off` to cancel. `/battleground lfg xp|pvp|off` does the same. Your existing group
+is preserved. `/bg` remains the ordinary battlegroup command.
+
+This campaign is implemented in 0.222.0 source; installation and gameplay
+checks are pending. Maps lacking native hunting mobs or a keep lord expose only
+their available contracts. See [the campaign table](CAMLANN.md#battleground-campaign-02220).
+
 ## Camlann crew generation
 
 Click **ADD LV.1 CREW** or **ADD LV.50 CREW** under a realm identity to add

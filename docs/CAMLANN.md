@@ -106,6 +106,12 @@ world**, which is what the world data, `classic165` spawn catalogs, frontier
 transport, and 99 navmeshes already model. No ToA, no New Frontiers, no
 `/level` shortcut, no Master Levels or Champion Levels.
 
+Realm abilities retain the Atlas Old Frontiers system with selected fork
+adjustments. Personal Purge uses a 20-minute cooldown from 0.220.0, including
+the reduced-cost tank variant; Druid Group Purge remains at 30 minutes.
+Existing five-rank tank and three-rank hybrid Determination stay in place.
+The 1.108 passive/active scaling options remain disabled.
+
 Sources: Camelot Herald PvP server addendum and PvP FAQ (fandom mirror),
 FreddysHouse "Save Mordred" and "Camlann XML" (Dec 2002) threads, the War Legend
 guild history, and Uthgard "PvP server like Camlann" threads. There is no
@@ -163,7 +169,8 @@ These are settled. Do not reopen them without the owner.
 9. **Teleporter travel:** every realm can use every capital, portal-keep
    teleporter, and the existing Albion, Midgard, and Hibernian leveling-town
    destinations. Leveling towns remain dangerous PvP territory; capitals and
-   portal keeps remain safe hubs. Battlegrounds stay closed.
+   portal keeps remain safe hubs. Battlegrounds were closed for the initial
+   conversion; the owner-approved 0.222.0 campaign below reopens selected brackets.
    Frontier porters (owner, 2026-09-30, "Jeder nutzt jeden Porter"): a human
    of any realm may use any frontier porter and lands at the porter's realm
    landing; an autonomous RvR warband takes its leader's realm passage and
@@ -171,7 +178,10 @@ These are settled. Do not reopen them without the owner.
 10. **Siege balance (2026-09-28, docs/TASKS.md item 48):** (1a) keeps the
     Frontier Wardens hold stand like a 1.65 unclaimed keep at keep level 1
     (door 10,000 HP, guards 52, lord 63), set at every server start;
-    `starting_keep_level` is 1; claimed keeps keep the existing claim level 5.
+    `starting_keep_level` is 1. Since 0.218.0 (owner, 2026-10-09), guild claims
+    also start at 1 and automatically reach 10 after 32 gameplay hours;
+    existing human/bot guild holdings reset once on updated startup. Saved
+    deadlines survive restarts; NPC holdings and relic/portal keeps are excluded.
     (2b) At most one automatic siege per attacking guild, a server-wide safety
     cap of 6. The owner removed the guild keep-count cap on 2026-10-03
     (0.197.0): claims are unlimited and the legacy `guilds_claim_limit` is -1.
@@ -223,6 +233,102 @@ tier should:
 
 Do not implement a dual-mode flag "for later." That is the work this plan
 exists to avoid.
+
+## Battleground campaign (0.222.0)
+
+Owner, 2026-10-09: build the public Eden-inspired battleground loop with SOL
+Medium subagents. Keep **guild and group alliances inside battlegrounds**.
+This supersedes the initial closed-battleground decision while retaining
+Camlann teams. Source implementation is complete; installation and owner
+real-client verification remain pending. Existing saves load without reset.
+
+Public reference: Eden's [Soldiers and Deserters announcement, 2022-10-02](https://eden-daoc.net/viewtopic.php?t=886)
+describes player-like combatants, scaled quest ambushes and managed battleground
+armies. Its realm teams are adapted here to Camlann alliances. This fork uses
+its own controller and existing class AI; Eden's private source and exact
+tuning are unavailable.
+
+| Native map | Levels | Exclusive Realm Rank ceiling | Native central keep |
+|---|---:|---:|---|
+| The Proving Grounds (234) | 1–4 | Unlimited | Absent |
+| The Lion's Den (235) | 5–9 | Unlimited | Absent |
+| The Hills of Claret (236) | 10–14 | RR1L5 | Absent |
+| Killaloe (237) | 15–19 | RR2L0 | Present; no imported lord |
+| Thidranki (238) | 20–24 | RR2L5 | Absent |
+| Murdaigean (251) | 25–29 | RR3L0 | Absent |
+| Wilton (240) | 30–34 | RR3L5 | Absent |
+| Molvik (241) | 35–39 | RR4L0 | Present |
+| Leirvik (region242, zone254) | 40–44 | RR4L5 | Present; no imported lord |
+| Cathal Valley (165) | 45–49 | RR5L0 | Present |
+
+Ceilings are fork tuning, not current Eden rules. A character at the ceiling
+graduates. Region239 Braemar lacks imported arrival keeps; Murdaigean is used
+instead. Zone242 is TestBG and must never replace Leirvik's zone254. Other
+unsupported battlegrounds remain closed. Wilton and Murdaigean have no imported
+hunting mobs; contracts reflect the available native data. Funding and capture
+require a loaded native keep lord. Cathal's two missing central keep doors
+are restored additively from exported native `Hfrontkeep.nif` fixtures; existing
+door rows and damage state are preserved. Molvik has a native lord without
+imported central gates, so the assault approaches its lord directly.
+
+`/battleground list|join|leave|status` exposes campaign state; `/bgs` is the
+alias. Admission proves the bracket, loaded native mesh and a safe snapped
+portal landing. Group leader/guild identity assigns an arrival independent
+of realm. Normal release returns there while eligible; explicit bind, house
+and city release retain their behavior. Graduation returns to the existing
+outside bind. Entry preserves binds, inventories and the saved safety flag.
+Under-10 protection is suspended only inside campaign maps; portal sanctuaries
+and release immunity remain enforced for humans, companions and encounters.
+
+Outside-portal camp points derive from native landmarks and validated floor
+and full-path queries. Commanders offer `quests`, `turnin` and `contribute
+<count>` while the captain lives. A reusable native quest persists its region,
+kill/capture counts and one-minute reward cooldowns. Ten worthwhile monsters,
+five worthwhile hostile combatants, or a participated guild keep claim complete
+independent contracts. Each pays 5% of a level's XP and five tokens (ten for
+capture). Monster kills also supply one token. PvP bodies retain XP/RP-only
+rewards. Maps expose only contracts supported by their imported content.
+
+Twenty backpack tokens fund an assault escort. Members must spawn on native
+ground and prove a route to a closed door, then the living lord. Native damage,
+LOS and successful steward claim determine the outcome. Funding binds a real
+guild or live group without consuming player group slots. Unfunded captains
+are peaceful; sponsored captains become attackable outside portal sanctuaries.
+Captain death blocks contracts and funding for five gameplay minutes, including
+across restarts. Guild balances persist in an additive
+`BattlegroundCampaignCamp` table for thirty minutes; guildless group balances
+are session-local. Threshold consumption precedes spawning to prevent restart
+replay. Inventory and camp locks serialize contributions with compensating
+refunds; the existing ORM has no crash-atomic transaction across those saves.
+
+The director adds patrols only on occupied maps, using actual autonomous guild
+identities where available and hostile guildless groups otherwise. Local party
+size and level select 1–8 combatants with tank/healer/CC support. Underrepresented
+guild presence is preferred, with at most 24 actors per map, finite lifetimes,
+corpse cleanup and gameplay-clock deadlines. Ambushes walk from validated camps
+toward contract participants, respecting safe areas and immunity. Actors use
+normal class combat without roster persistence, owner recovery or teleport
+fallbacks.
+
+`/LFxp`, `/LFrvr` and `/battleground lfg xp|pvp|off` match only opted-in solo
+humans every thirty seconds. XP partners stay within three levels of the elected
+leader; PvP partners share a bracket. Existing groups are not merged. Normal
+`/bg` still manages battlegroups. `battleground_campaign_enabled` can close
+entry without introducing another server ruleset.
+
+Build native meshes into developer state with
+`tools/dev/build-battleground-nav.sh`. An authorized shipping invocation can
+include `tools/dev/deploy.sh -NavmeshBuild <meshes-directory>` alongside server
+and launcher outputs. Only the ten campaign files deploy; existing world
+meshes, save/config protections, verified backups and rollback remain intact.
+See [development instructions](DEVELOPMENT.md#battleground-navigation).
+
+Pending owner checks: bracket arrival, graduation and death release;
+guild/group friendliness, hostile same-realm combat and portal sanctuaries;
+sub-10 safety after leaving; quest persistence and legitimate kill credit;
+concurrent funding, captain death/respawn and restart behavior; physical
+door/lord/steward captures; encounter scaling and optional automatic grouping.
+No server or client was started for development verification.
 
 ## Non-goals
 
@@ -750,7 +856,8 @@ Rewrite `KeepRelicReset` / `KeepRelicResetPanel` so they no longer run
    only outside OF frontier zones. Bots never exploit safety past level 10.
 5. Starter zones (Cotswold, Mularn, Mag Mell, and so on) are **not** safe. The
    grey policy (decision 6) is the only bot restraint there.
-6. No battleground leveling track and no `/level` shortcut.
+6. No `/level` shortcut. The initial conversion closed battlegrounds;
+   owner-authorized 0.222.0 adds the scoped campaign above.
 7. Realm points and ranks from PvP kills are personal stats and realm-ability
    currency. They never buff a whole realm.
 8. Remove Atlas bounty-point generation (`AtlasROGManager`) on PvP.

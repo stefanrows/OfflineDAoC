@@ -13,7 +13,8 @@ namespace DOL.GS.Keeps
         public const int GuardRealmPoints = 25;
         public const int CaptureRealmPoints = 1500;
         public static bool Applies(AbstractGameKeep keep) => GameServer.ServerRules is PvPServerRules &&
-            keep != null && !keep.IsPortalKeep && keep.CurrentZone?.IsOF == true;
+            keep != null && !keep.IsPortalKeep && (keep.CurrentZone?.IsOF == true ||
+                BattlegroundCampaignCatalog.Find((ushort)keep.Region) != null);
         public static bool IsGarrison(Guild guild) => guild?.Name == GarrisonName;
 
         /// <summary>Owner decision 1a (2026-09-28): a keep the Frontier Wardens
@@ -117,6 +118,8 @@ namespace DOL.GS.Keeps
                 lord.Health = lord.MaxHealth;
                 if (lord.ObjectState != GameObject.eObjectState.Active) lord.AddToWorld();
             }
+            // Campaign objectives own bracket-scaled capture rewards.
+            if (BattlegroundCampaignCatalog.Find((ushort)keep.Region) != null) return;
             bool rewardReady = WorldSimulationClock.UtcNow - keep.DBKeep.LastCaptureRewardAt >= TimeSpan.FromMinutes(30);
             if (!rewardReady) return;
             keep.DBKeep.LastCaptureRewardAt = WorldSimulationClock.UtcNow;

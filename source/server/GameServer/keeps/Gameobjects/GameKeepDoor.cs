@@ -488,6 +488,16 @@ namespace DOL.GS.Keeps
                 }
             }
 
+            // Guild keeps may have been reset to level 1 before doors load.
+            // Clamp saved HP to the new cap and remember it so later upgrades
+            // preserve the damage percentage instead of retaining an old cap.
+            if (KeepLevelProgression.IsGuildKeep(Component?.Keep?.DBKeep) && MaxHealth > 0)
+            {
+                Health = Math.Min(Health, MaxHealth);
+                _oldMaxHealth = MaxHealth;
+                SaveIntoDatabase();
+            }
+
             // HealthPercent relies on MaxHealth, which returns 0 if used before adding the door to the world and setting Component.Keep
             // Keep doors are always closed if they have more than DOOR_CLOSE_THRESHOLD% health. Otherwise the value is retrieved from the DB.
             // Postern doors are always closed.

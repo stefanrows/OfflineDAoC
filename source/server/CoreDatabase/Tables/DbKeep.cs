@@ -37,6 +37,20 @@ namespace DOL.Database
             get => m_lordDefeated;
             set { Dirty = true; m_lordDefeated = value; }
         }
+        private bool m_progressionInitialized;
+        [DataElement(AllowDbNull = false)]
+        public bool ProgressionInitialized
+        {
+            get => m_progressionInitialized;
+            set { Dirty = true; m_progressionInitialized = value; }
+        }
+        private DateTime m_nextLevelAt;
+        [DataElement(AllowDbNull = false)]
+        public DateTime NextLevelAt
+        {
+            get => m_nextLevelAt;
+            set { Dirty = true; m_nextLevelAt = value; }
+        }
 		private DateTime m_claimedAt;
 		private int m_type;
 		private byte m_baseLevel;

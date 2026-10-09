@@ -67,12 +67,18 @@ server rules.
 
 | Ability | Current cost and prerequisite | Cooldown / execution |
 | --- | --- | --- |
-| Reduced Purge handler (`AtlasOF_PurgeAbilityReduced`) | 4 points; no prerequisite | 1 rank; 30 minutes |
-| Standard Purge handler | 10 points; no prerequisite | 1 rank; 30 minutes |
+| Reduced Purge handler (`AtlasOF_PurgeAbilityReduced`) | 4 points; no prerequisite | 1 rank; 20 minutes |
+| Standard Purge handler | 10 points; no prerequisite | 1 rank; 20 minutes |
 | First Aid | 3 / 6 / 10 points for ranks 1 / 2 / 3; no prerequisite | 15 minutes; outside combat |
 | Tank Ignore Pain handler (`AtlasOF_IgnorePainTank`) | 8 points; First Aid 2 | 1 rank; 30 minutes |
 | Standard Ignore Pain handler | 14 points; First Aid 2 | 1 rank; 30 minutes |
 | Second Wind | 10 points; Augmented Constitution 3 | 1 rank; 15 minutes |
+
+Since 0.220.0, personal Purge has a 20-minute reuse delay for both standard
+and reduced-cost handlers. Players, companions and autonomous world bots use
+the same handler timer; trainer details also read that timer. Druid Group
+Purge retains its separate 30-minute delay. Existing saved autonomous
+cooldown deadlines are honored; new activations receive the shorter timer.
 
 When the required passive prerequisite is in the class catalog but below the
 required rank, its ordinary runtime upgrade cost is also charged to the same

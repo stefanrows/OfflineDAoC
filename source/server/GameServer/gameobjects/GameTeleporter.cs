@@ -94,36 +94,11 @@ namespace DOL.GS
 			// the level of the player, so let's deal with that first.
 			if (text.ToLower() == "battlegrounds")
 			{
-				if (!ServerProperties.Properties.BG_ZONES_OPENED && player.Client.Account.PrivLevel == (uint)ePrivLevel.Player)
-				{
-					SayTo(player, ServerProperties.Properties.BG_ZONES_CLOSED_MESSAGE);
-				}
-				else
-				{
-					AbstractGameKeep portalKeep = GameServer.KeepManager.GetBGPK(player);
-					if (portalKeep != null)
-					{
-						DbTeleport teleport = new DbTeleport();
-						teleport.TeleportID = "battlegrounds";
-						teleport.Realm = (byte)portalKeep.Realm;
-						teleport.RegionID = portalKeep.Region;
-						teleport.X = portalKeep.X;
-						teleport.Y = portalKeep.Y;
-						teleport.Z = portalKeep.Z;
-						teleport.Heading = 0;
-						OnDestinationPicked(player, teleport);
-						return true;
-					}
-					else
-					{
-						if (player.Client.Account.PrivLevel > (uint)ePrivLevel.Player)
-						{
-							player.Out.SendMessage("No portal keep found.", eChatType.CT_Skill, eChatLoc.CL_SystemWindow);
-						}
-						return true;
-					}
-				}
-			}
+                if (!BattlegroundCampaignPolicy.TryEnter(player, out string reason))
+                    SayTo(player, reason);
+                return true;
+            }
+
 
 			if (text == "Entrance") text = text.ToLower();
 

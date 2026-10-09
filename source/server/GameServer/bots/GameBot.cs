@@ -79,13 +79,16 @@ namespace DOL.GS
         public byte RaceId { get; set; }
         public byte GenderId { get; set; }
         public long DatabaseID { get; set; }
+        public bool IsBattlegroundEncounterBot { get; private set; }
+        internal BattlegroundEncounterBrain BattlegroundEncounter { get; set; }
+        public GameLiving BattlegroundAllianceSponsor { get; internal set; }
         public bool IsAutonomousWorldBot { get; private set; }
         public bool IsTemporaryGroupHelper { get; private set; }
         public bool IsPersistentPlayerCompanion => PlayerCompanionRecord != null;
         internal bool SuppressRosterBenchOnGroupRemoval { get; set; }
         public bool IsEndgameCompanion => TemporaryCompanionBalance.IsEndgame(IsTemporaryGroupHelper, Level);
         private bool _endgameCompanionEquipped;
-        public bool SuppressLootAndProgress => IsTemporaryGroupHelper;
+        public bool SuppressLootAndProgress => IsTemporaryGroupHelper || IsBattlegroundEncounterBot;
         internal int EquipmentLevelFloor { get; private set; }
         internal int EquipmentLevelCap { get; private set; }
         public OfflineWorldBotRecord PersistentRecord { get; private set; }
@@ -1102,7 +1105,8 @@ namespace DOL.GS
             base.ProcessDeath(killer);
             if (IsAutonomousWorldBot)
                 AutonomousBotStatusPersistence.Queue(this);
-            StartDeathRecoveryTimer();
+            if (!IsBattlegroundEncounterBot)
+                StartDeathRecoveryTimer();
         }
 
         private void StartDeathRecoveryTimer()
@@ -3135,6 +3139,43 @@ namespace DOL.GS
                 GameEventMgr.AddHandler(Owner, GamePlayerEvent.RegionChanged, new DOLEventHandler(OnOwnerRegionChanged));
         }
 
+        /// <summary>Process-local battleground opponent; never joins the saved roster.</summary>
+        public GameBot(byte classId, byte level, string name)
+        {
+            IsBattlegroundEncounterBot = true;
+            ClassId = classId;
+            ClassName = BotManager.GetClassNameById(classId);
+            InternalID = Guid.NewGuid().ToString();
+            _dummyClient = new BotDummyClient();
+            _dummyLib = new BotDummyPacketLib();
+            if (!SetCharacterClass(classId))
+                throw new ArgumentException("Invalid battleground character class.", nameof(classId));
+            SetRaceAndRealm(null);
+            Level = (byte)Math.Clamp((int)level, 1, MaxLevel);
+            _creationModel = Model;
+            Name = name;
+            MaxSpeedBase = PLAYER_BASE_SPEED;
+            InitializeBotStats();
+            eCharacterClass characterClass = (eCharacterClass)classId;
+            eSpecType spec = BotSpec.ChooseRandomSpecialization(characterClass);
+            BotSpec = characterClass == eCharacterClass.Bonedancer
+                ? new BonedancerBotSpec(spec, 0, false)
+                : BotSpec.GetSpec(characterClass, spec);
+            LoadClassSpecializations(false);
+            SpendSpecPoints(Level, 0);
+            RefreshSpecDependantSkills(false);
+            SetBotSpells();
+            SortStyles();
+            SortSpells();
+            EquipBot(Level);
+            Health = MaxHealth;
+            Mana = MaxMana;
+            Endurance = MaxEndurance;
+            RespawnInterval = -1;
+            SetOwnBrain(new BotBrain { IsHealer = IsHealerClass() });
+            InitControlledBrainArray(1);
+        }
+
         /// <summary>
         /// Loads an ownerless autonomous character from its persistent record.
         /// No generated equipment and no field auto-training are allowed here.
@@ -3570,7 +3611,8 @@ namespace DOL.GS
                 if (IsTemporaryGroupHelper || IsPersistentPlayerCompanion)
                     GameEventMgr.RemoveHandler(Owner, GamePlayerEvent.RegionChanged, new DOLEventHandler(OnOwnerRegionChanged));
             }
-            Guild?.RemoveBotMember(this);
+            if (!IsBattlegroundEncounterBot)
+                Guild?.RemoveBotMember(this);
             base.Delete();
         }
 
@@ -5567,7 +5609,7 @@ namespace DOL.GS
 
         public void SaveToDatabase()
         {
-            if (IsTemporaryGroupHelper || IsPersistentPlayerCompanion)
+            if (IsTemporaryGroupHelper || IsPersistentPlayerCompanion || IsBattlegroundEncounterBot)
                 return;
             BotDatabase.SaveBot(this);
         }
@@ -5605,7 +5647,13 @@ namespace DOL.GS
             // A tiny cross-zone seam step remains direct because Detour meshes
             // are stored per zone and cannot calculate across that boundary.
             Zone destinationZone = CurrentRegion?.GetZone((int)position.X, (int)position.Y);
-            if (IsAutonomousWorldBot && CurrentZone != null && destinationZone == CurrentZone)
+            if (IsBattlegroundEncounterBot && destinationZone != CurrentZone)
+            {
+                StopMovingOnPath();
+                StopMoving();
+                return;
+            }
+            if ((IsAutonomousWorldBot || IsBattlegroundEncounterBot) && CurrentZone != null && destinationZone == CurrentZone)
                 base.PathTo(position, speed);
             else
                 base.WalkTo(position, speed);
@@ -5613,6 +5661,12 @@ namespace DOL.GS
 
         public override void PathTo(Vector3 position, short speed)
         {
+            if (IsBattlegroundEncounterBot && CurrentRegion?.GetZone((int)position.X, (int)position.Y) != CurrentZone)
+            {
+                StopMovingOnPath();
+                StopMoving();
+                return;
+            }
             if (speed > 0 && IsRecoveryResting)
                 return;
             base.PathTo(position, speed);
@@ -5620,6 +5674,11 @@ namespace DOL.GS
 
         public override void Follow(GameObject target, int minDistance, int maxDistance)
         {
+            if (IsBattlegroundEncounterBot && target != null && target.CurrentZone != CurrentZone)
+            {
+                StopFollowing();
+                return;
+            }
             if (target != null && IsRecoveryResting)
                 return;
             base.Follow(target, minDistance, maxDistance);

@@ -1315,6 +1315,9 @@ namespace DOL.GS.ServerProperties
         [ServerProperty("pvp", "bg_zones_open", "Can the players teleport to battleground", false)]
 		public static bool BG_ZONES_OPENED;
 
+        [ServerProperty("pvp", "battleground_campaign_enabled", "Enable native level-bracket battlegrounds with guild/group alliances and verified navigation", true)]
+        public static bool BATTLEGROUND_CAMPAIGN_ENABLED;
+
 		/// <summary>
 		/// Message to display to player if BG zones are closed
 		/// </summary>
@@ -1448,21 +1451,21 @@ namespace DOL.GS.ServerProperties
 		public static int STARTING_KEEP_LEVEL;
 
 		/// <summary>
-		/// The level keeps start at when claimed - please note only levels 4 and 5 are supported correctly at this time
+		/// The level a newly claimed keep starts at before automatic progression.
 		/// </summary>
-		[ServerProperty("keeps", "starting_keep_claim_level", "The level a claimed keep starts at.", 5)]
+		[ServerProperty("keeps", "starting_keep_claim_level", "The level a claimed keep starts at.", 1)]
 		public static int STARTING_KEEP_CLAIM_LEVEL;
 
 		/// <summary>
-		/// The maximum keep level - please note only levels 4 and 5 are supported correctly at this time
+		/// The maximum level reached by automatic guild keep progression.
 		/// </summary>
-		[ServerProperty("keeps", "max_keep_level", "The maximum keep level.", 5)]
+		[ServerProperty("keeps", "max_keep_level", "The maximum keep level.", 10)]
 		public static int MAX_KEEP_LEVEL;
 
 		/// <summary>
 		/// Enable the keep upgrade timer to slowly raise keep levels
 		/// </summary>
-		[ServerProperty("keeps", "enable_keep_upgrade_timer", "Enable the keep upgrade timer to slowly raise keep levels?", false)]
+		[ServerProperty("keeps", "enable_keep_upgrade_timer", "Enable the keep upgrade timer to slowly raise keep levels?", true)]
 		public static bool ENABLE_KEEP_UPGRADE_TIMER;
 
 		/// <summary>

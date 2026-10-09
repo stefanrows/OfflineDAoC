@@ -11,20 +11,27 @@ public sealed partial class AutonomousWorldBotController
     private string _siegeColumnKey;
     private long _siegeColumnStarted, _siegeColumnProgress, _siegeColumnLogAfter;
     private float _siegeColumnBestGap;
+    private double _siegePorterBestGap = double.PositiveInfinity;
+    private bool _siegePorterHadTicket;
     private bool _siegeColumnHolding;
 
-    private bool HoldSiegeColumn(GameBot leader, string forceId, string targetId)
+    private bool HoldSiegeColumn(GameBot leader, string forceId, CampDestination destination)
     {
+        Group group = leader?.Group;
+        if (destination == null || group == null) return false;
+        string targetId = destination.Id;
         long now = GameLoop.GameLoopTime;
-        string key = $"{forceId}:{targetId}";
+        string key = $"{forceId}:{targetId}:{leader.CurrentRegionID}";
         if (_siegeColumnKey != key)
         {
             _siegeColumnKey = key;
             _siegeColumnHolding = false;
+            _siegePorterBestGap = double.PositiveInfinity;
+            _siegePorterHadTicket = false;
         }
         // Include living operators beyond the old 4,000-unit cutoff and on
         // another region leg. Corpses cannot catch up and do not hold travel.
-        GameBot[] missing = leader.Group.GetMembersInTheGroup().OfType<GameBot>()
+        GameBot[] missing = group.GetMembersInTheGroup().OfType<GameBot>()
             .Where(member => member != leader && member.IsAlive &&
                 (member.CurrentRegionID != leader.CurrentRegionID || member.IsOnStableMasterRoute ||
                  member.GetDistanceTo(leader) > AutonomousRvrSpeed.ResumeGap)).ToArray();
@@ -46,6 +53,18 @@ public sealed partial class AutonomousWorldBotController
             _siegeColumnBestGap = worstFromAnchor;
             _siegeColumnProgress = now;
         }
+        // A column meeting at a porter must let its leader approach and buy
+        // the ticket. Otherwise followers wait at boarding radius while the
+        // leader holds just outside it forever (observed in 0.217.0).
+        var passage = leader.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey);
+        if (leader.CurrentRegionID != destination.RegionId && passage?.Porter?.CurrentRegion == leader.CurrentRegion)
+        {
+            double porterGap = leader.GetDistanceTo(passage.Porter);
+            bool ticket = AutonomousFrontierTransport.Ticket(leader, passage.Passage) != null;
+            if (porterGap < _siegePorterBestGap - 100 || ticket && !_siegePorterHadTicket)
+            { _siegePorterBestGap = porterGap; _siegeColumnProgress = now; }
+            _siegePorterHadTicket = ticket;
+        }
         var decision = AutonomousRvrSpeed.SiegeCohesion(_siegeColumnHolding, worst,
             now - _siegeColumnStarted, now - _siegeColumnProgress);
         if (decision == AutonomousRvrSpeed.SiegeCohesionDecision.Advance)
@@ -62,16 +81,18 @@ public sealed partial class AutonomousWorldBotController
                 $"members=\"{string.Join(";", missing.Select(member => $"{member.Name}/{member.DatabaseID}@{member.CurrentRegionID}:{member.X},{member.Y},{member.Z}:combat={member.InCombat}:operator={BotSiegeRuntime.Assigned(member)}"))}\"");
         }
         _siegeColumnHolding = true;
+        if (decision != AutonomousRvrSpeed.SiegeCohesionDecision.Fail &&
+            leader.CurrentRegionID != destination.RegionId && TryFrontierTransport(leader, destination)) return true;
         if (decision == AutonomousRvrSpeed.SiegeCohesionDecision.Fail)
         {
             leader.StopMovingOnPath(); leader.StopMoving();
-            AbandonKeepTarget(leader, _rvrDestination, "March cohesion recovery exhausted", now, routeFailure: false);
+            AbandonKeepTarget(leader, destination, "March cohesion recovery exhausted", now, routeFailure: false);
         }
         else
         {
             bool looping = LoopInsteadOfHold(leader);
             AutonomousStuckWatchdog.MarkProgress(leader, eAutonomousProgressKind.Objective);
-            SetRvrStatus(leader, "Regrouping the siege column", _rvrDestination.MonsterName, looping
+            SetRvrStatus(leader, "Regrouping the siege column", destination.MonsterName, looping
                 ? "Circling at a run while living members and operators close up"
                 : "Waiting for living members and operators to finish combat or their legal return route");
         }
@@ -148,6 +169,7 @@ public sealed partial class AutonomousWorldBotController
     /// current spot on the next turn.</summary>
     private void AbandonKeepTarget(GameBot bot, CampDestination destination, string failure, long now, bool routeFailure = true)
     {
+        if (destination == null) return;
         // A follower's failed return or repeated roadside death cannot cancel
         // the column's battle. Even a released leader waits for its living
         // members' actual keep combat to finish before abandoning the force.
@@ -268,7 +290,8 @@ public sealed partial class AutonomousWorldBotController
 
     /// <returns>True while planning/travelling/waiting. False only at the proved
     /// endpoint, so existing combat and patrol decisions retain control there.</returns>
-    private bool FollowKeepTravel(GameBot bot, CampDestination destination)
+    private bool FollowKeepTravel(GameBot bot, CampDestination destination,
+        AutonomousRvrEventLayer.GuildArmyOrder army = null)
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.KeepTravel);
         long now = GameLoop.GameLoopTime;
@@ -282,7 +305,7 @@ public sealed partial class AutonomousWorldBotController
             return true;
         }
         Vector3 current = new(bot.X, bot.Y, bot.Z);
-        string key = $"{bot.PersistentRecord?.ObjectiveAssignmentId}:{bot.CurrentRegionID}:{bot.Realm}:{destination.Id}:{destination.X}:{destination.Y}:{destination.Z}";
+        string key = $"{bot.PersistentRecord?.ObjectiveAssignmentId}:{bot.CurrentRegionID}:{bot.Realm}:{destination.Id}:{destination.X}:{destination.Y}:{destination.Z}:army={army?.Generation}";
         long geometry = KeepTravelGeometry(bot.CurrentRegion, bot.CurrentRegion.GetZone(destination.X,destination.Y),destination.Id);
         if (_keepTravelKey != key || _keepTravelGeometry != geometry ||
             _keepTravelLastPosition.HasValue && Vector3.DistanceSquared(current, _keepTravelLastPosition.Value) > 8000 * 8000 ||
@@ -317,8 +340,11 @@ public sealed partial class AutonomousWorldBotController
             string failure = "No connected exterior route";
             try
             {
-                if (TryResolveKeepTravelApproach(bot, destination, _keepPlanning, _keepPlanningOrigin, out var endpoint) &&
-                    RvrKeepRoute.TryBuild(bot.CurrentRegion, _keepPlanning, bot.Realm, _keepPlanningOrigin, endpoint, out var steps))
+                Vector3 endpoint;
+                bool resolved = army == null
+                    ? TryResolveKeepTravelApproach(bot, destination, _keepPlanning, _keepPlanningOrigin, out endpoint)
+                    : TryGuildArmyCamp(bot, destination, _keepPlanning, _keepPlanningOrigin, army, out endpoint);
+                if (resolved && RvrKeepRoute.TryBuild(bot.CurrentRegion, _keepPlanning, bot.Realm, _keepPlanningOrigin, endpoint, out var steps))
                 {
                     try { steps = VaryKeepDeparture(bot, destination, steps, _keepPlanning, _keepPlanningOrigin); }
                     catch (RvrPlanningNavigation.Limit)
@@ -360,7 +386,7 @@ public sealed partial class AutonomousWorldBotController
                     $"reason=\"{failure}\" retryMs={_keepTravelRetry-now} failures={_keepTravelFailures}");
                 if (ShouldAbandonKeepRoute(_keepTravelFailures) && !AutonomousGuildKeepDefense.IsRecalled(bot) &&
                     (bot.Group == null || bot.Group.LivingLeader == bot))
-                    AbandonKeepTarget(bot, destination, failure, now);
+                    AbandonKeepTarget(bot, destination, failure, now, routeFailure: army == null);
                 return true;
             }
         }
@@ -389,10 +415,13 @@ public sealed partial class AutonomousWorldBotController
         if (_keepTravelIndex >= _keepTravelPoints.Length)
         {
             _rvrApproachDestination = _keepTravelPoints[^1];
-            bot.TempProperties.SetProperty(KeepAssaultApproachProperty,
-                new KeepAssaultApproach(destination.Id, bot.CurrentRegionID, _keepTravelPoints[^1]));
-            // Standing at the assault approach keeps the siege event alive.
-            AutonomousRvrEventLayer.ReportBattleActivity(destination.Id, now, RvrForceOf(bot));
+            if (army == null)
+            {
+                bot.TempProperties.SetProperty(KeepAssaultApproachProperty,
+                    new KeepAssaultApproach(destination.Id, bot.CurrentRegionID, _keepTravelPoints[^1]));
+                // A staging camp is not arrival at the actual siege approach.
+                AutonomousRvrEventLayer.ReportBattleActivity(destination.Id, now, RvrForceOf(bot));
+            }
             return false;
         }
         Vector3 next = _keepTravelPoints[_keepTravelIndex];

@@ -24,7 +24,7 @@ namespace DOL.GS.RealmAbilities
         }
 
         public override int MaxLevel { get { return 1; } }
-        public override int GetReUseDelay(int level) { return 1800; } // 30 min
+        public override int GetReUseDelay(int level) { return 1200; } // 20 min
         public override int CostForUpgrade(int level) { return 10; }
     }
 

@@ -25,6 +25,9 @@ public static class AutonomousSiegeMarch
         bool marching = plan != null && plan.TargetId.StartsWith("rvr-keep-", StringComparison.Ordinal) &&
             (bot.CurrentRegionID != plan.RegionId ||
              Vector2.DistanceSquared(new(bot.X, bot.Y), new(plan.X, plan.Y)) > 6500 * 6500);
+        // A party already near the walls still waits for its guild army.
+        // Incoming party threats remain eligible through the existing policy.
+        marching |= AutonomousRvrEventLayer.GuildArmyPlan(force, bot, now) is { Released: false };
         bot.TempProperties.SetProperty("SiegeMarchCache", new MarchCache(now, force, marching));
         return marching;
     }

@@ -58,6 +58,12 @@ namespace DOL.GS
             bot?.TempProperties.SetProperty("SiegeJobUntil", 0L);
             lock (Gate) foreach (var key in Jobs.Where(p => p.Value.Bot.TryGetTarget(out GameBot b) && b == bot).Select(p => p.Key).ToArray()) Jobs.Remove(key);
         }
+        public static bool HasRamAssignment(GameBot bot, string keep, ushort region)
+        {
+            lock (Gate) return Jobs.Any(pair => pair.Key.Keep == keep && pair.Key.Region == region &&
+                pair.Key.Side == SideOf(bot) && pair.Value.Kind == BotSiegeKind.Ram &&
+                pair.Value.Until > GameLoop.GameLoopTime && pair.Value.Bot.TryGetTarget(out var owner) && owner == bot);
+        }
         public static void Refresh(GameBot bot)
         {
             lock (Gate) foreach (var key in Jobs.Where(p => p.Value.Bot.TryGetTarget(out GameBot b) && b == bot).Select(p=>p.Key).ToArray())

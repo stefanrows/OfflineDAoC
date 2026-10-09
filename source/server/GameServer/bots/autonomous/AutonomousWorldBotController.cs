@@ -1693,15 +1693,36 @@ namespace DOL.GS
                 _nextRvrPlanReview = 0;
             }
 
+            // Movement recovery and event expiry above may have cleared the
+            // committed destination synchronously. Do not reuse its old phase.
+            if (committedPlan != null && (_rvrDestination?.Id != committedPlan.TargetId ||
+                AutonomousRvrEventLayer.KeepPlan(forceId, bot.Realm, GameLoop.GameLoopTime)?.TargetId != committedPlan.TargetId))
+            {
+                ClearKeepObjective(bot);
+                return true;
+            }
+            var guildArmy = committedPlan == null ? null :
+                AutonomousRvrEventLayer.GuildArmyPlan(forceId, bot, GameLoop.GameLoopTime);
+
             // Operators finish real supply trips during assembly, then keep
             // formation until the leader reaches the verified keep approach.
             // Player-response events and defenders retain their own lifecycle.
             bool formationSiege = musterPhase != AutonomousRvrSiegeMuster.Phase.None;
             if (TryRunSiegeWork(bot,
                     permitSupply: !formationSiege || musterPhase == AutonomousRvrSiegeMuster.Phase.Mustering,
-                    permitExecution: !formationSiege || musterPhase == AutonomousRvrSiegeMuster.Phase.Marching &&
-                        HasReachedKeepAssaultApproach(_groupDirective.Leader, committedPlan.TargetId))) return true;
-            GameLiving enemy = FindRvrTargetTimed(bot);
+                    permitExecution: (guildArmy == null || guildArmy.Released) &&
+                        (!formationSiege || musterPhase == AutonomousRvrSiegeMuster.Phase.Marching &&
+                        HasReachedKeepAssaultApproach(_groupDirective.Leader, committedPlan.TargetId)))) return true;
+            if (guildArmy != null && musterPhase == AutonomousRvrSiegeMuster.Phase.Marching &&
+                HandleGuildArmy(bot, forceId, guildArmy)) return true;
+            // Solo reinforcements also wait for their guild's physical army.
+            if (guildArmy != null && !dynamicWarband && !guildArmy.Released)
+            {
+                bot.StopMovingOnPath(); bot.StopMoving();
+                AbandonKeepTarget(bot, _rvrDestination, "A guild assault requires a formed party", GameLoop.GameLoopTime, routeFailure: false);
+                return true;
+            }
+            GameLiving enemy = guildArmy != null && !guildArmy.Released ? null : FindRvrTargetTimed(bot);
             if (enemy != null)
             {
                 bot.StopMovingOnPath();
@@ -1717,7 +1738,7 @@ namespace DOL.GS
             }
 
             if (musterPhase == AutonomousRvrSiegeMuster.Phase.Marching && _groupDirective.Leader == bot &&
-                HoldSiegeColumn(bot, forceId, committedPlan.TargetId)) return true;
+                HoldSiegeColumn(bot, forceId, _rvrDestination)) return true;
 
             // Mustering: the leader waits where it stands for the warband to come to
             // it; the others join it (across a frontier by the one force passage).
@@ -1876,7 +1897,9 @@ namespace DOL.GS
 
             // The ram owns its normal decay after release; the controller never
             // deletes it or mutates the door when the native objective changes.
-            ReleaseOwnedSiegeRams(bot);
+            // Keep the current assault's operator lease during its march.
+            if (!_rvrSharedEvent || _rvrIntent != AutonomousRvrEventLayer.Intent.AssaultKeep)
+                ReleaseOwnedSiegeRams(bot);
 
             GameRelic relic = FindInteractableRelic(bot);
             if (relic != null)

@@ -230,6 +230,7 @@ public static partial class AutonomousRvrEventLayer
         public readonly Dictionary<string, int> ThirdRealm = new(StringComparer.Ordinal);
         /// <summary>Attacking warbands that muster before they march (bug 75).</summary>
         public readonly Dictionary<string, ForceMuster> Musters = new(StringComparer.Ordinal);
+        public readonly Dictionary<string, GuildArmy> GuildArmies = new(StringComparer.Ordinal);
     }
 
     private static readonly object Sync = new();
@@ -428,7 +429,8 @@ public static partial class AutonomousRvrEventLayer
             // spreading warbands across several nearly empty objectives.
             foreach (ActiveEvent active in Events.Values
                          .Where(active => !active.DefenseReaction)
-                         .OrderBy(active => active.BattleStarted)
+                         .OrderByDescending(active => SameAttackingSide(force, active))
+                         .ThenBy(active => active.BattleStarted)
                          .ThenByDescending(active => JoinPriority(active, force))
                          .ThenBy(active => active.TargetId, StringComparer.Ordinal))
             {

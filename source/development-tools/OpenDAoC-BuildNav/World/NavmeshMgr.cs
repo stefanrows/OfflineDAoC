@@ -103,12 +103,13 @@ namespace CEM.World
 
             if (!File.Exists(nav))
             {
-                Log.Error($"Did not generate navmesh for file {nav} for unknown reasons");
+                throw new InvalidOperationException($"Did not generate navmesh for file {nav}");
             }
             else if (new FileInfo(nav).Length < 2048)
             {
                 Log.Warn($"{nav} was empty :(");
                 File.Delete(nav);
+                throw new InvalidOperationException($"Generated navmesh for {z} was empty");
             }
 
             Log.Normal($"Zone {z} finished in {DateTime.Now - start}");
@@ -124,7 +125,7 @@ namespace CEM.World
             Process buildnav = Process.Start("RecastDemo.exe", [gset, nav]);
             buildnav.PriorityClass = ProcessPriorityClass.BelowNormal;
             buildnav.WaitForExit();
-            if (buildnav.ExitCode > 0)
+            if (buildnav.ExitCode != 0)
                 throw new InvalidOperationException("RecastDemo.exe failed with " + buildnav.ExitCode);
         }
     }

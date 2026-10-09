@@ -12,10 +12,134 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.219.0] - 2026-10-09
+## [0.222.0] - 2026-10-10
+
+### Added
+
+- Eden-inspired battleground campaign across ten level brackets from 1–4
+  through 45–49, retaining Camlann guild/group alliances. `/battleground`
+  (`/bgs`) exposes entry, departure, readiness, field contracts and camp funding.
+  Joining suspends sub-10 safety only inside battlegrounds; saved flags, outside
+  binds, portal sanctuaries and release immunity remain intact.
+- Repeatable native-journal monster, hostile-combatant and participated keep
+  claim contracts, with personal nontradable siege tokens and level-scaled XP.
+  Objective availability follows actual native hunting mobs and loaded lords;
+  PvP bodies retain XP/RP-only rewards and ordinary repeat-kill protection.
+- Twenty donated tokens fund a physical class escort against native doors,
+  then the lord. Sponsored captains can be killed to block turn-ins for five
+  gameplay minutes. Guild funding and sabotage deadlines persist additively;
+  guildless group funding remains session-local. Existing saves need no reset.
+- Occupied-map patrol/ambush director with 1–8 temporary class combatants,
+  native healing/CC/immunity and a 24-actor per-map cap. Actors use proved native
+  paths, expire cleanly and create no persistent roster or recovery records.
+- Opt-in `/LFxp` and `/LFrvr` grouping every thirty seconds, preserving
+  existing groups and `/bg` battlegroup commands.
+- Focused navigation staging helper and optional guarded `-NavmeshBuild`
+  deployment support for the ten generated meshes. Existing world meshes,
+  protected save/config checks, backups and rollback remain intact.
 
 ### Changed
 
+- Integrate the latest fork main, retaining friendly-keep exits, full-speed
+  following and stable leader loops alongside local guild assault, keep
+  progression, Reaver aura, Purge and battleground changes. Reconcile
+  overlapping release notes and tracker IDs without another version bump.
+- Battleground admission, teleporters, release and graduation use consistent
+  level/RP ceilings, native landing floors and loaded-mesh guards. Murdaigean
+  supplies 25–29 because imported Braemar lacks arrival keeps. Leirvik uses
+  native zone254, not TestBG zone242.
+- Loaded native battleground guards/lords participate in guild keep claims;
+  frontier relic-pad creation and legacy flat capture rewards stay scoped away.
+  Missing central keep/lord/monster data is exposed in contract availability.
+- Player help and design/development guides describe campaign controls,
+  imported-content limits and pending owner gameplay checks.
+- Server and Windows launcher Release builds passed with zero errors; existing
+  warnings remain. All ten native meshes load with three validated arrivals and
+  three complete outside-camp routes per map. Automated tests were skipped;
+  installation and real-client checks remain pending.
+
+### Fixed
+
+- Restore Cathal Valley's two missing native central keep gates from verified
+  client fixture identities/positions, only after native approach validation.
+  Existing door rows and damage state remain authoritative.
+- Correct impossible battleground level-cap checks and treat a zero Realm Rank
+  ceiling as unlimited for admission and native kill reward calculations.
+
+## [0.221.0] - 2026-10-10
+
+### Added
+
+- Autonomous guild assaults assemble one or several existing parties at one
+  route-validated exterior camp before attacking. Readiness uses living,
+  physically present troops, healing support, completed supply trips and a
+  current ram operator with equipment while gates remain closed. Separate
+  guilds contesting the same keep never count as one allied army.
+- Attack size varies: each new assault plans one, two or three parties,
+  retaining that preference through its retries. Locally sighted enemies and
+  guard/door strength can require more troops; a lightly defended target may
+  be attacked by one ready eight-person party. Ready parties advance in a shared wave; late reinforcements
+  require a substantial surviving attack. Failed assembly and separated
+  columns have bounded deadlines; defeated waves must assemble again.
+- `RVR_GUILD_ARMY` records physical readiness, defender sightings, equipment,
+  launch/reinforcement decisions and explicit failure reasons. Installation
+  and multi-party gameplay acceptance remain pending.
+
+### Changed
+
+- Release server compilation passed for this scoped change against the shipped
+  baseline in an isolated source tree. The shared checkout build encountered
+  unrelated in-progress battleground/keep errors. Automated tests were skipped;
+  no deployment or live server changes were performed.
+
+### Fixed
+
+- Siege cohesion permits the leader's legal ticket/porter approach while
+  followers wait to board; advancing toward the porter counts as recovery
+  progress. Existing native boarding, supply isolation and travel rules remain.
+- Cleared keep objectives no longer feed stale muster state into column
+  handling or null destination reads. Reassigned operators release the old
+  keep's job before preparing for the current target. Travel retains active
+  operator leases; carried ram kits can reacquire expired assignments without
+  launching another supply trip.
+
+## [0.220.0] - 2026-10-09
+
+### Changed
+
+- Personal Purge now reuses after 20 minutes instead of 30 for players,
+  companions and autonomous world bots, including the reduced-cost tank
+  variant. Trainer cooldown details use the same handler value.
+- Retain Atlas Old Frontiers ability costs and ranks, five-rank tank and
+  three-rank hybrid Determination, and the separate 30-minute Druid Group
+  Purge. Existing saved autonomous cooldown deadlines remain valid.
+- Document the selected classic RA adjustment; nine-rank passive scaling
+  remains deferred. Installation and real-client cooldown checks are pending.
+- Server and Windows launcher Release builds passed with zero errors (warnings
+  remain); automated tests were skipped under the project workflow.
+
+## [0.219.0] - 2026-10-09
+
+### Added
+
+- All nine Reaver Soulrending damage-aura ranks add four times their learned
+  spell level as extra threat to each NPC/mob they damage per pulse. This
+  supplements normal damage threat without forcing aggro or matching the
+  highest threat; manual taunt styles remain useful against heavy healing
+  and bombing. Players, companion/world playerbots and controlled pets are
+  excluded from the bonus.
+- Aura tooltip and detailed spell descriptions explain the extra threat,
+  rank scaling, target exclusions and continued use of taunt styles. Damage,
+  range, pulse interval, power and cooldown remain unchanged.
+- A five-minute `MOVE_PACE` log line: commanded-speed percentiles of moving
+  autonomous world bots by role (leader, follower, solo) and flag (stealthed,
+  hurt, snared), plus how many leaders looped.
+
+### Changed
+
+- Server and Windows launcher Release builds passed. Installation and
+  real-client aggro balance verification are pending; automated tests were
+  skipped under the project workflow.
 - Task 101: autonomous groups run instead of crawling. Followers of a moving,
   unstealthed autonomous leader match its full run speed rather than the
   speed of its latest order. They keep the catch-up bonus and personal stride
@@ -32,13 +156,26 @@ package, not this fork's version.
   progress is measured from that centre, and circling inside the loop does not
   count as movement for the 15-minute stuck watchdog.
 
+## [0.218.0] - 2026-10-09
+
 ### Added
 
-- A five-minute `MOVE_PACE` log line: commanded-speed percentiles of moving
-  autonomous world bots by role (leader, follower, solo) and flag (stealthed,
-  hurt, snared), plus how many leaders looped.
+- Guild-held keeps start at level 1 and automatically strengthen to level 10:
+  level 5 after one hour and level 10 after 32 hours of gameplay time. Saved
+  upgrade deadlines survive restarts; downtime counts at normal speed.
+- A one-time, per-keep migration resets existing human and autonomous-bot
+  guild holdings to level 1 when the updated server loads them. Ownership,
+  claim dates and relic placement remain intact; Frontier Wardens, unowned
+  keeps, relic keeps and portal keeps are excluded.
 
-## [0.218.0] - 2026-10-09
+### Changed
+
+- Default claimed level is 1, maximum level is 10, and the upgrade timer is
+  enabled; untouched legacy settings migrate on startup. Recapture/release
+  clears upgrade progress. The timer stops at the configured cap.
+- Added regression source for reset idempotence, NPC exclusions, upgrade
+  thresholds and restart catch-up. Server Release build passed; installation
+  and real-client checks are pending. Automated tests were not run.
 
 ### Fixed
 

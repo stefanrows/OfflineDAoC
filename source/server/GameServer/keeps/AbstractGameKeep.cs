@@ -526,20 +526,24 @@ namespace DOL.GS.Keeps
 			m_difficultyLevel[2] = DBKeep.HiberniaDifficultyLevel;
 			if (DBKeep.ClaimedGuildName != null && DBKeep.ClaimedGuildName != string.Empty)
 			{
+                ClaimedAt = DBKeep.ClaimedAt;
 				Guild myguild = GuildMgr.GetGuildByName(DBKeep.ClaimedGuildName);
 				if (myguild != null)
 				{
 					Guild = myguild;
-					ClaimedAt = DBKeep.ClaimedAt;
 					if (!Guild.ClaimedKeeps.Contains(this))
 						Guild.ClaimedKeeps.Add(this);
 					StartDeductionTimer();
 				}
 			}
-			if (Level < ServerProperties.Properties.MAX_KEEP_LEVEL && Guild != null)
-				StartChangeLevel((byte)ServerProperties.Properties.MAX_KEEP_LEVEL);
-			else if (Level <= ServerProperties.Properties.MAX_KEEP_LEVEL && Level > ServerProperties.Properties.STARTING_KEEP_LEVEL && Guild == null)
-				StartChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_LEVEL);
+            if (KeepLevelProgression.Initialize(DBKeep, WorldSimulationClock.UtcNow))
+            {
+                if (!GameServer.Database.SaveObject(DBKeep))
+                    throw new InvalidOperationException($"Could not persist keep progression reset for {KeepID}.");
+                log.Info($"KEEP_PROGRESSION_RESET keep={KeepID} level=1");
+            }
+            if (KeepLevelProgression.IsGuildKeep(DBKeep))
+                StartChangeLevel((byte)ServerProperties.Properties.MAX_KEEP_LEVEL);
 		}
 
 		/// <summary>
@@ -585,7 +589,7 @@ namespace DOL.GS.Keeps
 
 		public virtual void EnsureRelicPad()
 		{
-			if (IsPortalKeep || Guild == null || PvpKeepCampaign.IsGarrison(Guild) || RelicPad != null)
+			if (IsPortalKeep || BattlegroundCampaignCatalog.Find((ushort)Region) != null || Guild == null || PvpKeepCampaign.IsGarrison(Guild) || RelicPad != null)
 				return;
 
 			RelicPad = new GameKeepRelicPad(this);
@@ -620,6 +624,10 @@ namespace DOL.GS.Keeps
 			if (output == null || playerGuild == null)
 				return false;
 
+            BattlegroundDefinition campaign = BattlegroundCampaignCatalog.Find((ushort)Region);
+            if (campaign != null && (!BattlegroundCampaignPolicy.IsEnabled || !BattlegroundCampaignPolicy.IsEligible(player, campaign)))
+                return RejectClaim(output, "You are outside this battleground's level or Realm Rank bracket.", out refusal);
+
 			// Restore a defeated keep's steward if startup could not place it.
 			PvpKeepCampaign.EnsureClaimPoint(this);
 
@@ -642,7 +650,8 @@ namespace DOL.GS.Keeps
 			}
 			
 			// Disabled check on DBKeep.BaseLevel to allow claiming of BG keeps
-			if (this.DBKeep.BaseLevel != 50 && !ServerProperties.Properties.ALLOW_BG_CLAIM)
+			if (this.DBKeep.BaseLevel != 50 && !ServerProperties.Properties.ALLOW_BG_CLAIM &&
+                !(BattlegroundCampaignPolicy.IsEnabled && BattlegroundCampaignCatalog.Find((ushort)Region) != null))
 			{
 				return RejectClaim(output, "This keep is not able to be claimed.", out refusal);
 			}
@@ -728,6 +737,9 @@ namespace DOL.GS.Keeps
 			
 			Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps.", eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
 
+            StopChangeLevelTimer();
+            DBKeep.ProgressionInitialized = true;
+            DBKeep.NextLevelAt = DateTime.MinValue;
 			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_CLAIM_LEVEL);
 
 			PlayerMgr.BroadcastClaim(this);
@@ -748,6 +760,7 @@ namespace DOL.GS.Keeps
             EnsureRelicPad();
             // door.BroadcastDoorStatus();
             StartDeductionTimer();
+            BattlegroundCampaignManager.OnKeepClaimed(this, player);
             GameEventMgr.Notify(KeepEvent.KeepClaimed, this, new KeepEventArgs(this));
             if (PvpKeepCampaign.Applies(this))
                 GameEventMgr.Notify(KeepEvent.KeepTaken, this, new KeepEventArgs(this));
@@ -837,6 +850,7 @@ namespace DOL.GS.Keeps
 			ClaimedAt = DateTime.MinValue;
 			StopDeductionTimer();
 			StopChangeLevelTimer();
+            DBKeep.NextLevelAt = DateTime.MinValue;
 			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_LEVEL);
 
 			foreach (GameKeepGuard guard in Guards.Values)
@@ -961,7 +975,7 @@ namespace DOL.GS.Keeps
 		{
 			if (ServerProperties.Properties.ENABLE_KEEP_UPGRADE_TIMER)
 			{
-				if (this.Level == targetLevel)
+				if (this.Level >= Math.Clamp((int)targetLevel, 1, 10))
 					return;
 				//this.TargetLevel = targetLevel;
 				StartChangeLevelTimer();
@@ -977,10 +991,9 @@ namespace DOL.GS.Keeps
 		{
 			get
 			{
-				int totalsec = m_changeLevelTimer.TimeUntilElapsed / 1000;
-				int min = (totalsec/60)%60;
-				int hours = (totalsec/3600)%24;
-				return new TimeSpan(0, hours, min + 1, totalsec%60);
+                return DBKeep.NextLevelAt == DateTime.MinValue ? TimeSpan.Zero :
+                    TimeSpan.FromMilliseconds(Math.Max(0,
+                        (DBKeep.NextLevelAt - WorldSimulationClock.UtcNow).TotalMilliseconds));
 			}
 		}
 
@@ -999,25 +1012,22 @@ namespace DOL.GS.Keeps
 		/// <summary>
 		/// Starts the Change Level Timer
 		/// </summary>
-		public void StartChangeLevelTimer()
-		{
-			var newinterval = CalculateTimeToUpgrade();
+        public void StartChangeLevelTimer()
+        {
+            if (!ServerProperties.Properties.ENABLE_KEEP_UPGRADE_TIMER ||
+                !KeepLevelProgression.IsGuildKeep(DBKeep) ||
+                Level >= Math.Clamp(ServerProperties.Properties.MAX_KEEP_LEVEL, 1, 10)) return;
+            if (DBKeep.NextLevelAt == DateTime.MinValue)
+            {
+                DBKeep.NextLevelAt = WorldSimulationClock.UtcNow.AddMilliseconds(CalculateTimeToUpgrade());
+                GameServer.Database.SaveObject(DBKeep);
+            }
+            m_changeLevelTimer.Stop();
+            m_changeLevelTimer.Start(NextUpgradePoll());
+        }
 
-			if (m_changeLevelTimer.IsAlive)
-			{
-				var timeelapsed = m_changeLevelTimer.Interval - m_changeLevelTimer.TimeUntilElapsed;
-				//if timer has run for more then we need, run event instantly
-				if (timeelapsed > m_changeLevelTimer.Interval)
-					newinterval = 1;
-				//change timer to the value we need
-				else if (timeelapsed < newinterval)
-					newinterval = m_changeLevelTimer.Interval - timeelapsed;
-				m_changeLevelTimer.Interval = newinterval;
-				
-			}
-			m_changeLevelTimer.Stop();
-			m_changeLevelTimer.Start(newinterval);
-		}
+        private int NextUpgradePoll() => (int)Math.Clamp(
+            (DBKeep.NextLevelAt - WorldSimulationClock.UtcNow).TotalMilliseconds, 1, 60_000);
 
 		/// <summary>
 		/// Stops the Change Level Timer
@@ -1045,45 +1055,25 @@ namespace DOL.GS.Keeps
 		/// </summary>
 		/// <param name="timer"></param>
 		/// <returns></returns>
-		public int ChangeLevelTimerCallback(ECSGameTimer timer)
-		{
-			if (this is GameKeepTower)
-			{
-				foreach (GameKeepComponent component in this.KeepComponents)
-				{
-					/*
-					 *  - A realm can claim a razed tower, and may even set it to raise to level 10,
-					 * but will have to wait until the tower is repaired to 75% before 
-					 * it will begin upgrading normally.
-					 */
-					if (component.HealthPercent < 75)
-						return 5 * 60 * 1000;
-				}
-			}
-            byte maxlevel = 0;
-            if (Guild != null)
-                maxlevel = (byte)ServerProperties.Properties.MAX_KEEP_LEVEL;
-            else
-                maxlevel = (byte)ServerProperties.Properties.STARTING_KEEP_LEVEL;
+        public int ChangeLevelTimerCallback(ECSGameTimer timer)
+        {
+            if (!ServerProperties.Properties.ENABLE_KEEP_UPGRADE_TIMER ||
+                !KeepLevelProgression.IsGuildKeep(DBKeep)) return 0;
+            // An unresolved bot guild is rebound later; never clear its saved claim.
+            if (Guild == null) return 60_000;
+            if (this is GameKeepTower)
+                foreach (GameKeepComponent component in KeepComponents)
+                    if (component.HealthPercent < 75) return 60_000;
 
-
-            if (Level < maxlevel && Guild != null)
+            byte previous = Level;
+            if (KeepLevelProgression.Advance(DBKeep, WorldSimulationClock.UtcNow,
+                ServerProperties.Properties.MAX_KEEP_LEVEL))
             {
-                ChangeLevel((byte)(this.Level + 1));
+                if (Level != previous) ChangeLevel(Level);
+                else GameServer.Database.SaveObject(DBKeep);
             }
-            else if (Level > maxlevel && Guild == null)
-                ChangeLevel((byte)(this.Level - 1));
-
-			if (this.Level != 10 && this.Level != 1)
-			{
-				return CalculateTimeToUpgrade();
-			}
-			else
-			{
-				this.SaveIntoDatabase();
-				return 0;
-			}
-		}
+            return DBKeep.NextLevelAt == DateTime.MinValue ? 0 : NextUpgradePoll();
+        }
 
 		/// <summary>
 		/// calculate time to upgrade keep, in milliseconds
@@ -1119,6 +1109,7 @@ namespace DOL.GS.Keeps
 
 			PlayerMgr.BroadcastCapture(this);
 
+            DBKeep.NextLevelAt = DateTime.MinValue;
             Level = (byte)ServerProperties.Properties.STARTING_KEEP_LEVEL;
 
 			//if a guild holds the keep, we release it

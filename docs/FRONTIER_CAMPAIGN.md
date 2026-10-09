@@ -112,14 +112,33 @@ Source only; real-client and live-log check pending.
   frontier keep held by the Frontier Wardens (base level 50, no relic keep) is
   set to keep level 1 (`FRONTIER_WARDEN_KEEP_LEVEL keep=... from=5 to=1` in the
   log; no line once it is at 1). Guild-claimed keeps and relic keeps are not
-  touched. A released or reset keep also drops to `starting_keep_level`, now 1.
-  Claiming still raises the keep to `starting_keep_claim_level` (5), the
-  existing upgrade path; `/gc upgrade` stays disabled.
+  touched by this Warden rule. A released or reset keep also drops to
+  `starting_keep_level`, now 1.
+  Since 0.218.0, claiming starts at level 1 and enables automatic progression
+  to level 10. Human and autonomous-bot guilds use the same progression;
+  `/gc upgrade` stays disabled. Attacks do not reset the clock; losing or
+  releasing the claim does. Warden, unowned, portal and relic keeps do not
+  participate.
+
+  | Level reached | Total time held |
+  |---|---|
+  | 2 / 3 / 4 | 12 / 24 / 36 minutes |
+  | 5 / 6 / 7 | 1 / 2 / 4 hours |
+  | 8 / 9 / 10 | 8 / 16 / 32 hours |
+
+  These are gameplay hours: offline world acceleration applies while the
+  server runs; shutdown time counts at 1x. Each keep saves its next deadline,
+  catches up after restart, and stops at the configured maximum. On its first
+  updated load, each existing guild-held keep resets once to level 1 with a
+  fresh deadline. Ownership, original claim time and carried keep relics are
+  preserved. NPC holdings are excluded from that migration.
 
   | Keep | Level | Outer door HP | Guards | Lord |
   |---|---|---|---|---|
   | Warden-held (unclaimed) | 1 | 10,000 | 52 | 63 |
-  | Guild-claimed | 5 | 50,000 | 59 | 70 |
+  | Newly guild-claimed | 1 | 10,000 | 52 | 63 |
+  | Guild-held for 1 hour | 5 | 50,000 | 59 | 70 |
+  | Guild-held for 32 hours | 10 | 100,000 | 67 | 78 |
   | Relic keep (unchanged) | 10 | 180,000 (relic gate) | 76–77 | 90 |
 
   Door HP = base level 50 × `keep_doors_base_health` 200 × keep level
@@ -157,7 +176,11 @@ Source only; real-client and live-log check pending.
 
 The server applies property changes on the next start. Keep level moves
 `starting_keep_level` 4 → 1 only for an untouched shipped value/default;
-operator-selected keep levels stay. The removed guild claim cap always moves
+operator-selected property values stay. Version 0.218.0 also migrates untouched
+`starting_keep_claim_level` 5 -> 1, `max_keep_level` 5 -> 10 and
+`enable_keep_upgrade_timer` False -> True. The one-time existing-claim level
+reset applies regardless of the previous level. The removed guild claim cap
+always moves
 its legacy value/default to -1 (`FRONTIER_BALANCE_PROPERTY key=... from=... to=...`).
 
 ## World and capture rules
@@ -270,3 +293,45 @@ cooldown behavior; restart with a captured and an unclaimed defeated keep;
 raid a relic temple; check both directions through friendly doors and blocked
 hostile gates. No live save, credentials or database hashes belong in this
 report.
+
+## Guild assault assembly (0.221.0; installation verification pending)
+
+Automatic attacking guilds now share a route-proved exterior camp, roughly
+9,000 units from the keep. Existing parties first gather and complete their
+supply trips, then use legal frontier passages and validated roads to reach it.
+The camp is navigation-validated separately from the actual assault approach;
+standing there never authorizes ram placement or counts as door/guard combat.
+
+Each new assault chooses a planned size once: one party (45%), two (35%), or
+three (20%). That preference remains stable through its assembly and retries;
+strong observed opposition can require more. A single eight-person party may
+attack a lightly defended keep, while larger expeditions still gather together.
+A party contributes only with six or more physically present members and its
+living leader. Troops in another region, on horses, in combat/CC, or below 60%
+health do not count as ready. Healing support requires one healer per eight
+ready troops, with at least 25% mana. Closed doors require a physically present
+operator holding a current ram assignment for this keep and a real ram kit.
+There is no free equipment or relaxation of placement, LOS or door rules.
+
+Required attackers are the greater of eight times the planned party count
+and 1.5 times recently sighted player-shaped enemies plus a guard/door reserve
+of 8–24. Observations come from
+bounded local, visible scouts and expire after 90 game seconds; hidden or
+unsighted reinforcements remain an uncertainty. Pets do not count as additional
+players. This is an initial conservative policy, not a guarantee of victory.
+
+After at least two minutes at the camp, ready parties receive one shared launch.
+Leading parties hold for a separated rear during the approach, with two minutes
+to close the gap; actual keep fighting retains combat control. Assembly has a
+15-minute deadline from the first ready party's arrival, with at most 30 minutes
+to reach the camp and a 45-minute overall ceiling. Original party/supply deadlines
+are unchanged. Insufficient armies abandon that target for
+the existing twenty-minute avoidance period, without teleporting away. Late
+parties also have a bounded wait and may reinforce only a substantial living
+attack. Wiped waves lose launch permission and must assemble again. Different
+guilds at the same keep are separate attackers, irrespective of birth realm.
+
+`RVR_GUILD_ARMY` logs the camp, ready parties/troops, healers, operators, observed
+defenders, guard/door strength, required strength and launched force IDs. Verify
+real simultaneous fighting and native ram/door outcomes after installation;
+assigned totals, camp attendance and a launch label alone are not acceptance.

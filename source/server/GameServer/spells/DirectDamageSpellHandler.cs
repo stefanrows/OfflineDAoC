@@ -1,9 +1,26 @@
+using System;
+using DOL.AI.Brain;
+
 namespace DOL.GS.Spells
 {
 	[SpellHandler(eSpellType.DirectDamage)]
 	public class DirectDamageSpellHandler : SpellHandler
 	{
-		public override string ShortDescription => $"Inflicts {Spell.Damage} {Spell.DamageTypeToString()} damage to the target.";
+        // Tooltip handlers have no spell line, so recognize the shipped aura IDs there too.
+        // The Soulrending check also covers additional ranks without matching localized names.
+        private bool IsReaverDamageAura =>
+            Spell.SpellType is eSpellType.DirectDamage &&
+            Spell.IsPBAoE && Spell.IsPulsing && Spell.DamageType is eDamageType.Spirit &&
+            (SpellLine?.Spec == Specs.Soulrending || Spell.ID is >= 9641 and <= 9649);
+
+        // Rank scaling keeps an old low-level aura from gaining a full-level tank's bonus.
+        private long ReaverAuraBonusThreat => Math.Max(1, Spell.Level) * 4L;
+
+        public override string ShortDescription => IsReaverDamageAura
+            ? $"Inflicts {Spell.Damage} {Spell.DamageTypeToString()} damage to nearby enemies. " +
+              "Each damaging pulse adds extra threat against NPCs and mobs, scaled by the spell's learned level. " +
+              "Does not taunt players, playerbots or controlled pets. Taunt styles may still be needed to hold aggro."
+            : $"Inflicts {Spell.Damage} {Spell.DamageTypeToString()} damage to the target.";
 
 		public DirectDamageSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
 
@@ -75,6 +92,22 @@ namespace DOL.GS.Spells
 			if (response is LosCheckResponse.True)
 				DealDamage(target);
 		}
+
+        public override void DamageTarget(AttackData ad, bool showEffectAnimation, int attackResult)
+        {
+            base.DamageTarget(ad, showEffectAnimation, attackResult);
+
+            if (!IsReaverDamageAura || !ad.GeneratesAggro || ad.IsSpellResisted ||
+                (long) ad.Damage + ad.CriticalDamage <= 0 ||
+                ad.Target is not GameNPC npc || npc is GameBot ||
+                !npc.IsAlive || npc.ObjectState is not GameObject.eObjectState.Active ||
+                npc.Brain is IControlledBrain || npc.Brain is not IOldAggressiveBrain brain)
+                return;
+
+            // Add to normal threat: no forced target switch or catch-up to the highest threat.
+            // Use the brain API so Protect and existing encounter rules still apply.
+            brain.AddToAggroList(Caster, ReaverAuraBonusThreat);
+        }
 
 		protected virtual void DealDamage(GameLiving target)
 		{

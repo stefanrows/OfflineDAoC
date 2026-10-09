@@ -170,6 +170,12 @@ public static partial class AutonomousRvrEventLayer
     /// </summary>
     private static void ExpireMusters(ActiveEvent active, long nowTick)
     {
+        foreach (var army in active.GuildArmies.Values.ToArray())
+        {
+            if (army.Failed || nowTick < army.NextEvaluation) continue;
+            army.NextEvaluation = nowTick + 5000;
+            EvaluateArmy(active, army, nowTick);
+        }
         foreach (var pair in active.Musters.Where(pair => !pair.Value.Departed).ToArray())
         {
             if (nowTick - pair.Value.StartedTick < AutonomousRvrSiegeMuster.MaximumWaitMilliseconds +

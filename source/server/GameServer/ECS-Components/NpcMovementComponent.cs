@@ -783,7 +783,8 @@ namespace DOL.GS
             }
 
             static bool IsPersistentAutonomous(NpcMovementComponent component) =>
-                component.Owner is GameBot { IsAutonomousWorldBot: true };
+                component.Owner is GameBot { IsAutonomousWorldBot: true } or
+                    GameBot { IsBattlegroundEncounterBot: true };
 
             static bool JumpToClosestReachableNode(NpcMovementComponent component, Vector3 destination)
             {

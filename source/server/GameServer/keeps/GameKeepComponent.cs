@@ -214,7 +214,7 @@ namespace DOL.GS.Keeps
 			{
 				whereClause = whereClause.And(DB.Column("ComponentRotation").IsEqualTo(ComponentHeading));
 			}
-			if (bg != null && GameServer.Instance.Configuration.ServerType != EGameServerType.GST_PvE)
+			if (bg != null && BattlegroundCampaignCatalog.Find(region) == null && GameServer.Instance.Configuration.ServerType != EGameServerType.GST_PvE)
 			{
 				// Battlegrounds, ignore all but GameKeepDoor
 				whereClause = whereClause.And(DB.Column("ClassType").IsEqualTo("DOL.GS.Keeps.GameKeepDoor"));

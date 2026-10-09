@@ -18,13 +18,16 @@ namespace DOL.GS.DatabaseUpdate
         public static readonly (string Key, string Legacy, string Target)[] Changes =
         {
             ("starting_keep_level", "4", "1"),
+            ("starting_keep_claim_level", "5", "1"),
+            ("max_keep_level", "5", "10"),
+            ("enable_keep_upgrade_timer", "False", "True"),
             ("guilds_claim_limit", "1", "-1"),
         };
 
         /// <summary>True only for an untouched legacy row: value and default both the old shipped value.</summary>
         public static bool ShouldReplace(string value, string defaultValue, string legacy) =>
-            string.Equals(value?.Trim(), legacy, StringComparison.Ordinal) &&
-            string.Equals(defaultValue?.Trim(), legacy, StringComparison.Ordinal);
+            string.Equals(value?.Trim(), legacy, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(defaultValue?.Trim(), legacy, StringComparison.OrdinalIgnoreCase);
 
         public void Update()
         {
