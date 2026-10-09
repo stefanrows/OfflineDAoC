@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using DOL.GS.RealmAbilities;
 
@@ -79,15 +80,30 @@ namespace DOL.GS
             plannedType == typeof(XSerenityAbility) && ability is AtlasOF_SerenityAbility ||
             plannedType == typeof(XToughnessAbility) && ability is AtlasOF_ToughnessAbility;
 
-        private static IReadOnlyList<RealmAbility> PlanAbilities(int classId)
+        private static IReadOnlyList<RealmAbility> AvailableAbilities(int classId) =>
+            SkillBase.GetClassRealmAbilities(classId)
+                .Where(ability => ability.MaxLevel > 0)
+                .GroupBy(ability => ability.KeyName, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToList();
+
+        private static IReadOnlyList<RealmAbility> PassivePlanAbilities(int classId,
+            IReadOnlyList<RealmAbility> available)
         {
             if (!Plans.TryGetValue((eCharacterClass)classId, out Type[] plan))
                 return [];
-            List<RealmAbility> available = SkillBase.GetClassRealmAbilities(classId)
-                .Where(ability => ability is not TimedRealmAbility && ability.MaxLevel > 0)
-                .ToList();
-            return plan.Select(type => available.FirstOrDefault(ability => Matches(ability, type)))
+            return plan.Select(type => available.FirstOrDefault(ability => ability is not TimedRealmAbility && Matches(ability, type)))
                 .Where(ability => ability != null).DistinctBy(ability => ability.KeyName).ToList();
+        }
+
+        private static IReadOnlyList<RealmAbility> PlanAbilities(int classId)
+        {
+            IReadOnlyList<RealmAbility> available = AvailableAbilities(classId);
+            IReadOnlyList<RealmAbility> passives = PassivePlanAbilities(classId, available);
+            HashSet<string> purchaseKeys = AutonomousRealmAbilityActives.PurchaseKeys(available)
+                .ToHashSet(StringComparer.Ordinal);
+            return passives.Concat(available.Where(ability => purchaseKeys.Contains(ability.KeyName)))
+                .DistinctBy(ability => ability.KeyName).ToList();
         }
 
         public static bool TryRead(string serialized, int classId, int pointPool,
@@ -105,7 +121,8 @@ namespace DOL.GS
                     continue;
                 string[] fields = entry.Split('|');
                 if (fields.Length != 3 || !legal.TryGetValue(fields[1], out RealmAbility ability) ||
-                    !int.TryParse(fields[2], out int rank) || rank < 1 || rank > ability.MaxLevel ||
+                    !int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out int rank) ||
+                    rank < 1 || rank > ability.MaxLevel ||
                     allocations.ContainsKey(fields[1]))
                     return false;
                 for (int current = 0; current < rank; current++)
@@ -117,12 +134,14 @@ namespace DOL.GS
                 }
                 allocations.Add(fields[1], rank);
             }
-            return true;
+            return AutonomousRealmAbilityActives.HasValidSavedPrerequisites(allocations);
         }
 
-        public static string Serialize(byte trainedLevel, IReadOnlyDictionary<string, int> allocations) =>
+        public static string Serialize(byte trainedLevel, IReadOnlyDictionary<string, int> allocations,
+            string extensionTokens = null) =>
             "trained-level|" + trainedLevel + string.Concat(allocations.OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                .Select(pair => ";ra|" + pair.Key + "|" + pair.Value));
+                .Select(pair => ";ra|" + pair.Key + "|" + pair.Value)) +
+            (string.IsNullOrEmpty(extensionTokens) ? string.Empty : ";" + extensionTokens);
 
         public static string UpdateTrainingLevelPreservingInvalidAllocations(string serialized, byte trainedLevel)
         {
@@ -140,6 +159,8 @@ namespace DOL.GS
 
         public static bool Advance(GameBot bot, IDictionary<string, int> allocations)
         {
+            IReadOnlyList<RealmAbility> available = AvailableAbilities(bot.ClassId);
+            IReadOnlyList<RealmAbility> passiveAbilities = PassivePlanAbilities(bot.ClassId, available);
             IReadOnlyList<RealmAbility> abilities = PlanAbilities(bot.ClassId);
             if (abilities.Count == 0)
                 return false;
@@ -148,28 +169,58 @@ namespace DOL.GS
                 ? Enumerable.Range(0, rank).Sum(ability.CostForUpgrade) : 0);
             int remaining = Math.Max(0, pool - spent);
             bool changed = false;
-            // A fixed purchase sequence makes the eventual build independent of
-            // whether RP arrives in small kills or one larger award.
-            int maxRank = abilities.Max(ability => ability.MaxLevel);
-            for (int stage = 1; stage <= maxRank; stage++)
+
+            // Keep one first rank across the existing class path before the
+            // initial active sequence is considered.
+            foreach (RealmAbility ability in passiveAbilities)
             {
-                foreach (RealmAbility ability in abilities)
+                int rank = allocations.TryGetValue(ability.KeyName, out int current) ? current : 0;
+                if (rank >= 1)
+                    continue;
+                if (!TryPurchaseRank(bot, ability, allocations, ref remaining))
+                    return changed;
+                changed = true;
+            }
+
+            IReadOnlyDictionary<string, RealmAbility> catalog = abilities
+                .ToDictionary(ability => ability.KeyName, StringComparer.Ordinal);
+            if (!AutonomousRealmAbilityActives.AdvanceInitialPurchases(
+                    bot, catalog, allocations, ref remaining, out bool activeChanged))
+                return changed || activeChanged;
+            changed |= activeChanged;
+
+            int maxRank = passiveAbilities.Count == 0 ? 1 : passiveAbilities.Max(ability => ability.MaxLevel);
+            for (int stage = 2; stage <= maxRank; stage++)
+            {
+                foreach (RealmAbility ability in passiveAbilities)
                 {
-                    int target = stage;
                     int rank = allocations.TryGetValue(ability.KeyName, out int current) ? current : 0;
-                    if (rank >= target || rank >= ability.MaxLevel)
+                    if (rank >= stage || rank >= ability.MaxLevel)
                         continue;
-                    int cost = ability.CostForUpgrade(rank);
-                    if (cost < 0 || cost > remaining)
+                    if (!TryPurchaseRank(bot, ability, allocations, ref remaining))
                         return changed;
-                    ability.Level = rank + 1;
-                    bot.AddAbility(ability, false);
-                    allocations[ability.KeyName] = rank + 1;
-                    remaining -= cost;
                     changed = true;
                 }
             }
+
+            if (AutonomousRealmAbilityActives.AdvanceRemainingFirstAid(
+                    bot, catalog, allocations, ref remaining, out bool firstAidChanged))
+                changed |= firstAidChanged;
             return changed;
+        }
+
+        private static bool TryPurchaseRank(GameBot bot, RealmAbility ability,
+            IDictionary<string, int> allocations, ref int remaining)
+        {
+            int rank = allocations.TryGetValue(ability.KeyName, out int current) ? current : 0;
+            int cost = ability.CostForUpgrade(rank);
+            if (cost < 0 || cost > remaining)
+                return false;
+            ability.Level = rank + 1;
+            bot.AddAbility(ability, false);
+            allocations[ability.KeyName] = rank + 1;
+            remaining -= cost;
+            return true;
         }
 
         public static void Restore(GameBot bot, IReadOnlyDictionary<string, int> allocations)

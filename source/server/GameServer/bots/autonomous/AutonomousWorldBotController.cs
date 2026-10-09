@@ -345,6 +345,7 @@ namespace DOL.GS
                     {
                         _routeInterruptedByCombat = true;
                         _routeRecoveryWaypoint = null;
+                        ClearRouteThreatDetourSequence();
                         bot.StopMoving();
                         bot.ForcePathReplot();
                     }
@@ -652,8 +653,9 @@ namespace DOL.GS
                         return true;
                     if (!IssuePath(bot, new Vector3(_camp.X, _camp.Y, _camp.Z)))
                         return true;
-                    SetStatus(bot, $"Traveling to {_camp.MonsterName}", GoalText(),
-                        $"Walking through {_camp.ZoneName}; {campDistance:N0} units remain", _camp.MonsterName, _camp.ZoneName);
+                    if (!_routeThreatHandledCurrentPath)
+                        SetStatus(bot, $"Traveling to {_camp.MonsterName}", GoalText(),
+                            $"Walking through {_camp.ZoneName}; {campDistance:N0} units remain", _camp.MonsterName, _camp.ZoneName);
                     return true;
                 }
 
@@ -1287,6 +1289,7 @@ namespace DOL.GS
                 _pendingStableChoice = null;
                 _issuedRouteDestination = null;
                 _routeRecoveryWaypoint = null;
+                ClearRouteThreatDetourSequence();
                 _pendingRecoverySearch = null;
                 _nextPlanTick = 0;
                 bot.StopMovingOnPath();
@@ -4284,6 +4287,7 @@ namespace DOL.GS
             bool preciseArrival = false)
         {
             using var profile = BotThinkProfiler.Measure(BotThinkPhase.IssuePath);
+            _routeThreatHandledCurrentPath = false;
             TryRepairNavigationFloor(bot);
             if (AutonomousRvrTravel.TraverseFriendlyDoor(bot, destination))
             {
@@ -4321,6 +4325,7 @@ namespace DOL.GS
                 _resolvedBoundaryStep = null;
                 _resolvedBoundaryZone = null;
                 _routeRecoveryWaypoint = null;
+                ClearRouteThreatDetourSequence();
                 _nextMoveOrderTick = 0;
                 _lastRoutePosition = current;
                 _lastRouteProgressTick = now;
@@ -4336,11 +4341,22 @@ namespace DOL.GS
                 _verifiedApproachZone = null;
                 _verifiedApproachRadius = 0;
                 _routeRecoveryWaypoint = null;
+                ClearRouteThreatDetourSequence();
                 _nextMoveOrderTick = 0;
                 _lastRoutePosition = current;
                 _lastRouteProgressTick = now;
                 _pendingRecoverySearch = null;
                 bot.ForcePathReplot();
+            }
+
+            if (_routeThreatHoldTarget != null)
+            {
+                using var threatProfile = BotThinkProfiler.Measure(BotThinkPhase.OutdoorRouteThreat);
+                if (TryMaintainOutdoorRouteThreatHold(bot, destination))
+                {
+                    _routeThreatHandledCurrentPath = true;
+                    return true;
+                }
             }
 
             if (_pendingRecoverySearch != null)
@@ -4354,6 +4370,7 @@ namespace DOL.GS
             if (bot.TryConsumeAutonomousPathFailure(out PathfindingStatus failureStatus, out Vector3 failedDestination) &&
                 AutonomousRouteRecoveryPolicy.AppliesToCurrentDestination(destinationChanged, failedDestination, destination))
             {
+                ClearRouteThreatDetourSequence();
                 _verifiedApproachTarget = null;
                 _verifiedApproachPoint = null;
                 _verifiedApproachZone = null;
@@ -4371,11 +4388,47 @@ namespace DOL.GS
                 return true;
             }
 
+            if (GuardOpenWorldTravel(bot, destination))
+            {
+                _routeThreatHandledCurrentPath = true;
+                return true;
+            }
+
             if (_routeRecoveryWaypoint.HasValue)
             {
                 Vector3 recovery = _routeRecoveryWaypoint.Value;
                 if (Vector3.DistanceSquared(current, recovery) <= _routeRecoveryArrivalRadius * _routeRecoveryArrivalRadius)
                 {
+                    if (_routeThreatDetourRejoinWaypoint.HasValue)
+                    {
+                        Vector3 rejoin = _routeThreatDetourRejoinWaypoint.Value;
+                        _routeThreatDetourRejoinWaypoint = null;
+                        _routeRecoveryWaypoint = rejoin;
+                        _routeThreatNeedsCampRescan = true;
+                        _nextMoveOrderTick = 0;
+                        _lastRoutePosition = current;
+                        _lastRouteProgressTick = now;
+                        bot.ForcePathReplot();
+                        _pathSegmentOrigin = current;
+                        bot.PathTo(rejoin, bot.MaxSpeed);
+                        _nextMoveOrderTick = now + 1_500;
+                        _routeThreatHandledCurrentPath = true;
+                        return true;
+                    }
+
+                    if (_routeThreatNeedsCampRescan)
+                    {
+                        _routeRecoveryWaypoint = null;
+                        _routeThreatNeedsCampRescan = false;
+                        _nextRouteThreatScanTick = 0;
+                        _nextMoveOrderTick = 0;
+                        _lastRoutePosition = current;
+                        _lastRouteProgressTick = now;
+                        bot.ForcePathReplot();
+                        _routeThreatHandledCurrentPath = true;
+                        return true;
+                    }
+
                     _routeRecoveryWaypoint = null;
                     _nextMoveOrderTick = 0;
                     _lastRoutePosition = current;
@@ -4620,6 +4673,7 @@ namespace DOL.GS
         {
             bot.StopMoving();
             bot.ForcePathReplot();
+            ClearRouteThreatDetourSequence();
             _routeRecoveryWaypoint = recovery;
             _routeRecoveryArrivalRadius = Math.Clamp(Vector3.Distance(current, recovery) / 4, 4, 70);
             _nextMoveOrderTick = GameLoop.GameLoopTime + 1_500;
@@ -4782,6 +4836,8 @@ namespace DOL.GS
 
         private void ResetRouteOrderState()
         {
+            // Same-camp route resets preserve threat cadence, retries and holds; a changed camp clears them.
+            SynchronizeRouteThreatCamp();
             _stableSearch = null;
             _capitalTransit = null;
             _resolvedBoundaryStep = null;
@@ -4789,6 +4845,7 @@ namespace DOL.GS
             _nextMoveOrderTick = 0;
             _issuedRouteDestination = null;
             _routeRecoveryWaypoint = null;
+            ClearRouteThreatDetourSequence();
             _pendingRecoverySearch = null;
             _routeRecoveryBaselineDistance = -1f;
             _routeInterruptedByCombat = false;

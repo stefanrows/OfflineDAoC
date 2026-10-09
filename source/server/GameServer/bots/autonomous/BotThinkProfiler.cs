@@ -24,6 +24,7 @@ public enum BotThinkPhase
     KeepTravel,
     TravelAcrossRegions,
     IssuePath,
+    OutdoorRouteThreat,
     ZoneItineraryStep,
     RouteRecoverySearch,
     StableRouteFindBest,

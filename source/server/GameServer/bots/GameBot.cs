@@ -3239,6 +3239,7 @@ namespace DOL.GS
             }
             else
                 log.Warn($"Autonomous realm abilities for bot {DatabaseID} contain invalid ranks, costs or class abilities; preserving saved allocation.");
+            AutonomousRealmAbilityActives.Restore(this, record.SerializedAbilities, _autonomousRealmAllocationsValid);
             CurrentRegionID = (ushort)Math.Clamp(record.RegionId, 0, ushort.MaxValue);
             X = record.X;
             Y = record.Y;
@@ -3602,11 +3603,17 @@ namespace DOL.GS
                 AutonomousBotRegistry.Unregister(this);
                 if (PersistentRecord != null)
                 {
-                    PersistentRecord.IsOnline = false;
-                    PersistentRecord.Activity = "Offline";
-                    PersistentRecord.LastUpdateUtc = DateTime.UtcNow.ToString("O");
-                    PersistentRecord.Dirty = true;
-                    GameServer.Database.SaveObject(PersistentRecord);
+                    lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                    {
+                        if (!AutonomousBotStatusPersistence.IsSupersededActor(this))
+                        {
+                            PersistentRecord.IsOnline = false;
+                            PersistentRecord.Activity = "Offline";
+                            PersistentRecord.LastUpdateUtc = DateTime.UtcNow.ToString("O");
+                            PersistentRecord.Dirty = true;
+                            GameServer.Database.SaveObject(PersistentRecord);
+                        }
+                    }
                 }
             }
 
@@ -3949,21 +3956,38 @@ namespace DOL.GS
 
         public bool SaveAutonomousState(bool includeInventory)
         {
-            OfflineWorldBotRecord record = PrepareAutonomousStateSnapshot();
-            if (record == null)
-                return false;
-
             bool saved;
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
-                saved = record.IsPersisted ? GameServer.Database.SaveObject(record) : GameServer.Database.AddObject(record);
-            if (includeInventory && Inventory is BotInventory persistentInventory)
             {
-                lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
+                if (AutonomousBotStatusPersistence.IsSupersededActor(this))
+                    return false;
+                OfflineWorldBotRecord record = PrepareAutonomousStateSnapshot();
+                if (record == null)
+                    return false;
+                saved = record.IsPersisted ? GameServer.Database.SaveObject(record) : GameServer.Database.AddObject(record);
+                if (includeInventory && Inventory is BotInventory persistentInventory)
                     saved &= persistentInventory.SaveIntoDatabase(InternalID);
             }
             if (saved)
                 AutonomousStateDirty = false;
             return saved;
+        }
+
+        internal bool TryPersistAutonomousRealmAbilityCooldown(string key, DateTime deadline)
+        {
+            if (!IsAutonomousWorldBot || PersistentRecord == null ||
+                !AutonomousBotRegistry.TryGet(DatabaseID, out GameBot current) || !ReferenceEquals(current, this))
+                return false;
+
+            lock (_autonomousRealmAbilityGate)
+            {
+                if (!_autonomousRealmAllocationsValid ||
+                    !AutonomousRealmAbilityActives.TrySetCooldown(this, key, deadline))
+                    return false;
+            }
+
+            MarkAutonomousStateDirty();
+            return SaveAutonomousState(false);
         }
 
         public OfflineWorldBotRecord PrepareAutonomousStateSnapshot()
@@ -3979,7 +4003,8 @@ namespace DOL.GS
                 record.RealmPoints = AutonomousRealmPoints;
                 if (_autonomousRealmAllocationsValid)
                     record.SerializedAbilities = AutonomousRealmAbilityTraining.Serialize(
-                        _lastAutonomousTrainedLevel, _autonomousRealmAllocations);
+                        _lastAutonomousTrainedLevel, _autonomousRealmAllocations,
+                        AutonomousRealmAbilityActives.SerializeCooldownTokens(this));
                 else
                     record.SerializedAbilities = AutonomousRealmAbilityTraining.UpdateTrainingLevelPreservingInvalidAllocations(
                         record.SerializedAbilities, _lastAutonomousTrainedLevel);

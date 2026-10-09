@@ -981,6 +981,15 @@ namespace DOL.GS
 				else if (IsObjectInFront(ad.Attacker, 180) && (evadeBuff != null || player.HasAbility(Abilities.Evade)))
 					evadeChance = Math.Max(GetModified(eProperty.EvadeChance), 0);
 			}
+			else if (this is GameBot)
+			{
+				if (HasAbility(Abilities.Advanced_Evade) || HasAbility(Abilities.Enhanced_Evade) ||
+					EffectList.GetOfType<CombatAwarenessEffect>() != null ||
+					EffectList.GetOfType<RuneOfUtterAgilityEffect>() != null)
+					evadeChance = GetModified(eProperty.EvadeChance);
+				else if (IsObjectInFront(ad.Attacker, 180) && (evadeBuff != null || HasAbility(Abilities.Evade)))
+					evadeChance = Math.Max(GetModified(eProperty.EvadeChance), 0);
+			}
 			else if (this is GameNPC && IsObjectInFront(ad.Attacker, 180))
 				evadeChance = GetModified(eProperty.EvadeChance);
 
@@ -1010,7 +1019,7 @@ namespace DOL.GS
 						evadeChance = Math.Max(evadeChance - OverwhelmAbility.BONUS, 0);
 				}
 
-				if (evadeChance > Properties.EVADE_CAP && ad.Attacker is GamePlayer && ad.Target is GamePlayer)
+				if (evadeChance > Properties.EVADE_CAP && PlayerDefenseFormula.UsesPlayerDefense(ad.Attacker) && PlayerDefenseFormula.UsesPlayerDefense(ad.Target))
 					evadeChance = Properties.EVADE_CAP;
 			}
 
@@ -1056,16 +1065,17 @@ namespace DOL.GS
 						parryChance = 0.90;
 					else if (IsObjectInFront(ad.Attacker, 120))
 					{
-						if ((player.HasSpecialization(Specs.Parry) || parryBuff != null) && ActiveWeapon != null &&
-							(eObjectType) ActiveWeapon.Object_Type is not eObjectType.RecurvedBow &&
-							(eObjectType) ActiveWeapon.Object_Type is not eObjectType.Longbow &&
-							(eObjectType) ActiveWeapon.Object_Type is not eObjectType.CompositeBow &&
-							(eObjectType) ActiveWeapon.Object_Type is not eObjectType.Crossbow &&
-							(eObjectType) ActiveWeapon.Object_Type is not eObjectType.Fired)
+						if ((player.HasSpecialization(Specs.Parry) || parryBuff != null) && CanParryWith(ActiveWeapon))
 						{
 							parryChance = GetModified(eProperty.ParryChance);
 						}
 					}
+				}
+				else if (this is GameBot bot)
+				{
+					if (IsObjectInFront(ad.Attacker, 120) &&
+						(bot.HasSpecialization(Specs.Parry) || parryBuff != null) && CanParryWith(ActiveWeapon))
+						parryChance = GetModified(eProperty.ParryChance);
 				}
 				else if (this is GameNPC && IsObjectInFront(ad.Attacker, 120))
 					parryChance = GetModified(eProperty.ParryChance);
@@ -1101,13 +1111,22 @@ namespace DOL.GS
 							parryChance = Math.Max(parryChance - OverwhelmAbility.BONUS, 0);
 					}
 
-					if (parryChance > Properties.PARRY_CAP && ad.Attacker is GamePlayer && ad.Target is GamePlayer)
+					if (parryChance > Properties.PARRY_CAP && PlayerDefenseFormula.UsesPlayerDefense(ad.Attacker) && PlayerDefenseFormula.UsesPlayerDefense(ad.Target))
 						parryChance = Properties.PARRY_CAP;
 				}
 			}
 
 			return parryChance;
 		}
+
+		/// <summary>Player parry requires a melee weapon, not a bow or crossbow.</summary>
+		public static bool CanParryWith(DbInventoryItem weapon) =>
+			weapon != null &&
+			(eObjectType) weapon.Object_Type is not eObjectType.RecurvedBow &&
+			(eObjectType) weapon.Object_Type is not eObjectType.Longbow &&
+			(eObjectType) weapon.Object_Type is not eObjectType.CompositeBow &&
+			(eObjectType) weapon.Object_Type is not eObjectType.Crossbow &&
+			(eObjectType) weapon.Object_Type is not eObjectType.Fired;
 
 		public virtual double TryBlock(AttackData ad, out int shieldSize)
 		{
@@ -1144,12 +1163,14 @@ namespace DOL.GS
 ;
 			GamePlayer player = this as GamePlayer;
 
-			if (player != null)
+			bool usesPlayerDefense = PlayerDefenseFormula.UsesPlayerDefense(this);
+
+			if (usesPlayerDefense)
 			{
+				// Players and GameBots block with a real shield and use shield size for block rounds.
 				if ((eObjectType) shield.Object_Type is not eObjectType.Shield)
 					return 0;
 
-				// Only players require a shield size. NPCs don't use block rounds.
 				shieldSize = Math.Max(shield.Type_Damage, 1);
 			}
 			else if (this is GameNPC npc)
@@ -1166,7 +1187,7 @@ namespace DOL.GS
 			if (!IsObjectInFront(ad.Attacker, 120))
 				return 0;
 
-			double blockChance = CalculateBaseBlockChance(player, shield, ad);
+			double blockChance = CalculateBaseBlockChance(usesPlayerDefense, player, shield, ad);
 
 			if (blockChance <= 0)
 				return 0;
@@ -1196,7 +1217,7 @@ namespace DOL.GS
 				blockChance = 0.99;*/
 
 			// Engage shouldn't be affected by the cap: https://darkageofcamelot.com/article/friday-grab-bag-11032017
-			if (!IsEngaging && blockChance > Properties.BLOCK_CAP && ad.Attacker is GamePlayer && ad.Target is GamePlayer)
+			if (!IsEngaging && blockChance > Properties.BLOCK_CAP && PlayerDefenseFormula.UsesPlayerDefense(ad.Attacker) && PlayerDefenseFormula.UsesPlayerDefense(ad.Target))
 				blockChance = Properties.BLOCK_CAP;
 
 			return blockChance;
@@ -1227,7 +1248,7 @@ namespace DOL.GS
 			player?.Out.SendMessage("You concentrate on blocking the blow!", eChatType.CT_Skill, eChatLoc.CL_SystemWindow);
 		}
 
-		private double CalculateBaseBlockChance(GamePlayer player, DbInventoryItem shield, AttackData ad)
+		private double CalculateBaseBlockChance(bool usesPlayerDefense, GamePlayer player, DbInventoryItem shield, AttackData ad)
 		{
 			// From Prima guide:
 			// "Your chance to block arrows from a same-level
@@ -1248,12 +1269,12 @@ namespace DOL.GS
 
 			double baseBlockChance;
 
-			if (player != null)
+			if (usesPlayerDefense)
 			{
-				if (!player.HasAbility(Abilities.Shield))
+				if (!HasAbility(Abilities.Shield))
 					return 0;
 
-				bool hasValidWeaponSetup = player.ActiveWeapon == null || player.ActiveWeapon.Item_Type is Slot.RIGHTHAND || player.ActiveWeapon.Item_Type is Slot.LEFTHAND;
+				bool hasValidWeaponSetup = ActiveWeapon == null || ActiveWeapon.Item_Type is Slot.RIGHTHAND || ActiveWeapon.Item_Type is Slot.LEFTHAND;
 
 				if (!hasValidWeaponSetup)
 					return 0;

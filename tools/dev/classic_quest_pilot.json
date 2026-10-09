@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "migrationId": "classic-quest-pilot-20054-v1",
+  "source": {
+    "repository": "shadowofze/OfflineDAoC",
+    "tag": "v0.35b",
+    "tagCommit": "d337d184034f4c84e1e1748fda7f5b2deef135b8",
+    "reviewedCommit": "c8b0dca0428666fbe2c6f68d0e4d0363b0d03caa",
+    "databasePath": "runtime/data/opendaoc.sqlite3.db",
+    "databaseSha256": "0fff1a26913430a9c8f258484a1e2bae69102354c5e287d7d505d200dd3fdfe6"
+  },
+  "definitions": [
+    {
+      "table": "DataQuest",
+      "key": {
+        "ID": 20054
+      },
+      "expectedSource": {
+        "Name": "Miari's Seed",
+        "StartType": 0,
+        "StartName": "Searlait",
+        "StartRegionID": 181,
+        "StepType": "4|0|11",
+        "StepItemTemplates": "|cq_pouch_of_seeds|",
+        "TargetName": "Mirari;181|lesser sylvanshade;181|Mirari;181",
+        "CollectItemTemplate": "||cq_pouch_of_seeds",
+        "MaxCount": 1,
+        "MinLevel": 1,
+        "MaxLevel": 5,
+        "RewardMoney": "0|0|0",
+        "RewardXP": "0|0|8",
+        "RewardCLXP": null,
+        "RewardRP": null,
+        "RewardBP": null,
+        "OptionalRewardItemTemplates": null,
+        "FinalRewardItemTemplates": "",
+        "FinishText": "",
+        "QuestDependency": "",
+        "AllowedClasses": "52",
+        "ClassType": "DOL.GS.Quests.ClassicQuestStep"
+      },
+      "compatibilityNote": "The pinned source config has only step markers and no race restriction. This fork's existing DataQuest engine handles all three standard step types; clear ClassType to avoid a missing-hook error. Markers and third-party guide text are not imported.",
+      "targetOverrides": {
+        "ClassType": ""
+      }
+    },
+    {
+      "table": "ItemTemplate",
+      "key": {
+        "Id_nb": "cq_pouch_of_seeds"
+      },
+      "expectedSource": {
+        "Name": "Pouch of Seeds",
+        "Level": 1,
+        "Model": 488,
+        "Object_Type": 0,
+        "Item_Type": 40,
+        "IsPickable": 1,
+        "IsDropable": 1,
+        "CanDropAsLoot": 0,
+        "IsTradable": 0,
+        "MaxCount": 1,
+        "Realm": 0,
+        "PackageID": "ClassicQuest"
+      },
+      "regenerateUniqueColumn": "ItemTemplate_ID"
+    }
+  ],
+  "requiredActors": [
+    {
+      "name": "Searlait",
+      "region": 181,
+      "templateId": 60165718,
+      "templateModel": "355",
+      "templateRace": 0,
+      "templateClassType": "DOL.GS.Trainer.GuardianTrainer",
+      "spawn": {
+        "x": 424708,
+        "y": 445176,
+        "z": 5952,
+        "level": 50,
+        "realm": 3
+      }
+    },
+    {
+      "name": "Mirari",
+      "region": 181,
+      "templateId": 60164082,
+      "templateModel": "743",
+      "templateRace": 0,
+      "templateClassType": "DOL.GS.GameNPC",
+      "spawn": {
+        "x": 424908,
+        "y": 446201,
+        "z": 5977,
+        "level": 50,
+        "realm": 3
+      }
+    },
+    {
+      "name": "lesser sylvanshade",
+      "region": 181,
+      "templateId": 60163235,
+      "templateModel": "890;889",
+      "templateRace": 2005,
+      "templateClassType": "DOL.GS.GameNPC",
+      "spawn": {
+        "x": 434611,
+        "y": 435902,
+        "z": 4308,
+        "level": 1,
+        "realm": 0
+      }
+    }
+  ]
+}

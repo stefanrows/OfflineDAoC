@@ -12,6 +12,150 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.214.1] - 2026-10-09
+
+### Added
+
+- Focused defense-resolution checks for bot shield, weapon, ability, facing,
+  quality/condition and PvP-cap gates, plus cooldown token round-trip and
+  malformed-state preservation checks using the production serialization path.
+- A clean-fixture-only quest migration regression harness covering dry-run,
+  apply, idempotent rerun, partial ownership, interruption recovery, rollback,
+  unrelated progress preservation and unsafe-target/reference refusals.
+
+### Changed
+
+- Record the owner's isolated verification authorization and successful
+  checks: 40 server regression cases, seven disposable quest migration cases
+  and one Windows launcher version/timer-constant case passed. Keep these
+  results separate from ordinary-client acceptance.
+  SOL 6.1 High found no actionable defects in the new test sources. Appearance,
+  runtime combat/effects, database cooldown reload, native routing, performance
+  and quest gameplay acceptance remain open; no installation was changed.
+
+## [0.214.0] - 2026-10-09
+
+### Added
+
+- A source-backed Miari's Seed classic quest pilot using the existing
+  DataQuest engine, one quest definition and one non-tradable quest item.
+  Document clean release attribution, eligibility, actor/zone dependencies
+  and original ordinary-journal guidance without importing scraped guides.
+- A dry-run-first, hash-pinned development migration restricted to marked
+  disposable copies, with exact collision/actor/schema checks, durable
+  recovery manifests, verified backups and owned-row-only rollback.
+
+### Changed
+
+- Adapt Stage 7 against upstream `c8b0dca0` and its source-compatible clean
+  v0.35b release data. No world populations, native client features, meshes,
+  played databases or installed runtime files are replaced.
+- Record Stage 4's appearance evidence audit without enabling an unverified
+  realm-based gear filter. Model/race evidence and bug 5's client check remain
+  open. Source review is separate from unexecuted migration/gameplay checks;
+  later content batches still require pilot acceptance.
+- SOL 6.1 High final source review found no remaining actionable defects
+  after travel/migration fixes. Server and Windows launcher Release builds,
+  regression-source compilation and pilot syntax/resource checks passed;
+  automated tests, migration operations and gameplay checks were not run.
+
+## [0.213.0] - 2026-10-09
+
+### Added
+
+- Independently switchable outdoor PvE route-threat checks for autonomous
+  solo bots and group leaders, using the designated puller, bounded attempts,
+  retained travel holds and complete two-leg detours on existing meshes.
+- A historical performance snapshot and controlled comparison checklist,
+  decision logs and a profiling phase. The feature defaults off until the
+  owner accepts measured routing behavior and overhead.
+
+### Changed
+
+- Adapt Stage 6 against upstream `c8b0dca0`, preserving frontier/dungeon
+  handling, safe areas, quest/service actors, companions and existing pet
+  pulls. Limit each scan to 24 candidates and six inline corridor queries;
+  existing defensive-pull validation has its separate bounded query work.
+- SOL 6.1 High source review corrected hold/recovery ordering and retained
+  the verified detour rejoin leg. Regression source is compiled, not executed;
+  enabled-travel and performance acceptance remain pending.
+
+## [0.212.0] - 2026-10-09
+
+### Added
+
+- Autonomous bots can train and use class-legal Purge, Ignore Pain, Second
+  Wind and First Aid alongside the existing 39 passive paths. Purchases use
+  earned points and runtime prerequisites; existing ranks are not respecced.
+- Optional saved cooldown tokens use gameplay UTC and are persisted before
+  activation. Queued status writes cannot restore an older cooldown snapshot.
+
+### Changed
+
+- Adapt Stage 5 against upstream `c8b0dca0` with actual catalog keys and
+  handler-type variants, deterministic purchase phases, and scoped GameBot
+  support in Purge and First Aid. Companion/player training is unchanged.
+- Document costs, activation policy and rollback limitations; add regression
+  source without executing tests. Final review, builds and gameplay/reload
+  acceptance remain pending.
+
+## [0.211.0] - 2026-10-09
+
+### Changed
+
+- Companions and autonomous GameBots use the existing player block, parry and
+  evade calculations, ability/buff bonuses, facing and equipment requirements,
+  shield block rounds and player-shaped PvP caps. Human formulas and ordinary
+  NPC/pet defense paths are preserved; realm identity does not determine caps.
+- Adapt Stage 3 from upstream `bf9bf38b` with the fork's existing specialization
+  and real-equipment APIs. Source review also closed the NPC parry fallback for
+  bots failing equipment eligibility. Combat balance and client checks remain
+  pending; regression source was added but not executed.
+
+## [0.210.0] - 2026-10-09
+
+### Fixed
+
+- Merge coincident navigation points while retaining their combined door flags,
+  the final endpoint and partial-path status. A narrowly checked forward corner
+  sight retry requires a reachable surface step, reverse segment proof and
+  door exclusion.
+  Existing meshes, Darkness Falls preparation and native interfaces are retained.
+
+### Changed
+
+- Implement adaptation-plan Stage 2 against upstream revision `c8b0dca0`.
+  Focused route-point regression source was added but not executed; corner,
+  wall, closed-door and ordinary-route verification remains pending.
+
+## [0.209.2] - 2026-10-09
+
+### Fixed
+
+- Closed console input waits one second between reads instead of spinning,
+  preserving normal console commands and independent server operation (bug 115).
+
+### Changed
+
+- Implement adaptation-plan Stage 1 from upstream commit `c1c465c3`.
+  Source exit/retry paths reviewed; runtime CPU measurement and console shutdown
+  verification remain pending. No server was started or deployment performed.
+
+## [0.209.1] - 2026-10-09
+
+### Added
+
+- A staged plan for adapting selected upstream server, navigation, bot combat,
+  equipment, travel and classic quest improvements while preserving Camlann
+  rules and existing saves. Other forks are outside its scope.
+- Track the upstream adaptation proposal and the existing closed-console-input
+  spin defect; implementation and gameplay verification remain outstanding.
+
+### Changed
+
+- Align version labels for this documentation-only change. No gameplay code,
+  runtime assets, download baseline or installed game files were changed.
+
 ## [0.209.0] - 2026-10-04
 
 ### Added

@@ -372,8 +372,9 @@ namespace DOL.GS
                 for (int i = 0; i < numNodes; i++)
                     destination[i] = new(new(buffer[i * 3 + 0] * INV_FACTOR, buffer[i * 3 + 2] * INV_FACTOR, buffer[i * 3 + 1] * INV_FACTOR), flags[i]);
 
+                int keptNodes = MergeCoincidentNodes(destination, numNodes);
                 PathfindingStatus pathfindingStatus = (status & EDtStatus.DT_PARTIAL_RESULT) != 0 ? PathfindingStatus.PartialPathFound : PathfindingStatus.PathFound;
-                return new(pathfindingStatus, numNodes);
+                return new(pathfindingStatus, keptNodes);
             }
             finally
             {
@@ -544,7 +545,75 @@ namespace DOL.GS
 
             Span<float> outVec = stackalloc float[3];
             EDtStatus status = HasLineOfSight(query, startFloats, endFloats, _defaultHalfExtents, filters, out bool hasLos, outVec);
+            if ((status & EDtStatus.DT_SUCCESS) != 0 && hasLos)
+                return true;
+
+            if ((status & EDtStatus.DT_SUCCESS) == 0 || filters.Length < 2)
+                return false;
+
+            Vector3 hit = new(outVec[0] * INV_FACTOR, outVec[2] * INV_FACTOR, outVec[1] * INV_FACTOR);
+            if (Vector3.DistanceSquared(position, hit) > VERTEX_RETRY_HIT_DISTANCE * VERTEX_RETRY_HIT_DISTANCE)
+                return false;
+
+            Vector3 direction = target - position;
+            if (direction.LengthSquared() <= VERTEX_RETRY_MIN_DISTANCE * VERTEX_RETRY_MIN_DISTANCE)
+                return false;
+
+            Vector3 retryPosition = position + Vector3.Normalize(direction) * VERTEX_RETRY_OFFSET;
+            Span<EDtPolyFlags> retryFilters = stackalloc EDtPolyFlags[2];
+            retryFilters[0] = filters[0];
+            // The retry has no door-state context, so require the full ray to avoid door polygons.
+            retryFilters[1] = filters[1] | EDtPolyFlags.AnyDoor;
+
+            Span<float> retryFloats = stackalloc float[3];
+            FillRecastFloats(retryPosition, retryFloats);
+            Span<float> movedFloats = stackalloc float[3];
+            EDtStatus moveStatus = MoveAlongSurface(query, startFloats, retryFloats, _defaultHalfExtents, retryFilters, movedFloats);
+            if ((moveStatus & EDtStatus.DT_SUCCESS) == 0)
+                return false;
+
+            Vector3 movedPosition = new(movedFloats[0] * INV_FACTOR, movedFloats[2] * INV_FACTOR, movedFloats[1] * INV_FACTOR);
+            if (Vector3.DistanceSquared(movedPosition, retryPosition) > VERTEX_RETRY_SURFACE_TOLERANCE * VERTEX_RETRY_SURFACE_TOLERANCE)
+                return false;
+
+            FillRecastFloats(movedPosition, retryFloats);
+            Span<float> originalFloats = stackalloc float[3];
+            FillRecastFloats(position, originalFloats);
+            // Surface movement can bend around a nearby edge; prove this short retry segment is clear in reverse.
+            EDtStatus reverseStatus = HasLineOfSight(query, retryFloats, originalFloats,
+                _defaultHalfExtents, retryFilters, out bool reverseHasLos, outVec);
+            if ((reverseStatus & EDtStatus.DT_SUCCESS) == 0 || !reverseHasLos)
+                return false;
+
+            retryFloats.CopyTo(startFloats);
+            status = HasLineOfSight(query, startFloats, endFloats, _defaultHalfExtents, retryFilters, out hasLos, outVec);
             return (status & EDtStatus.DT_SUCCESS) != 0 && hasLos;
+        }
+
+        public const float DUPLICATE_NODE_DISTANCE = 1f;
+        private const float VERTEX_RETRY_OFFSET = 2f;
+        private const float VERTEX_RETRY_MIN_DISTANCE = 4f;
+        private const float VERTEX_RETRY_HIT_DISTANCE = 0.25f;
+        private const float VERTEX_RETRY_SURFACE_TOLERANCE = 0.5f;
+
+        /// <summary>
+        /// Merges consecutive nodes less than 1 unit apart, combining their flags. The final node is always kept.
+        /// </summary>
+        public static int MergeCoincidentNodes(Span<WrappedPathfindingNode> nodes, int count)
+        {
+            int kept = 0;
+            for (int i = 0; i < count; i++)
+            {
+                WrappedPathfindingNode node = nodes[i];
+                if (kept > 0 && i < count - 1 &&
+                    Vector3.DistanceSquared(nodes[kept - 1].Position, node.Position) < DUPLICATE_NODE_DISTANCE * DUPLICATE_NODE_DISTANCE)
+                {
+                    nodes[kept - 1] = new(nodes[kept - 1].Position, nodes[kept - 1].Flags | node.Flags);
+                    continue;
+                }
+                nodes[kept++] = node;
+            }
+            return kept;
         }
 
         private static Vector3? GetNearestPoly(Zone zone, Vector3 point, EDtPolyFlags[] filters, out ulong polyRef)

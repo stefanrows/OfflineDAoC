@@ -2465,7 +2465,7 @@ namespace DOL.GS
                 // Block rounds work from the point of view of the attacker and use their attack speed, similar to how interrupts work.
                 // However, according to grab bags, it's supposed to be based on the defender's swing speed. But this sounds very wrong, since it implies haste buffs should make blocking more effective.
 
-                if (attackData.Target is not GamePlayer)
+                if (attackData.Target is not (GamePlayer or GameBot))
                 {
                     usedBlockRoundCount = 0;
                     return true;

@@ -1499,6 +1499,8 @@ namespace DOL.AI.Brain
 
         private void ThinkCore()
         {
+            AutonomousRealmAbilityActives.UseActives(BotBody);
+
             if (AutonomousGuildKeepDefense.Eligible(BotBody))
             {
                 _autonomousWorldController ??= new AutonomousWorldBotController();

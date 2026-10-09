@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
+using System.Threading;
 using DOL.GameServerConsole;
 using DOL.GS;
 
@@ -95,7 +96,11 @@ namespace DOL.DOLServer.Actions
                 string line = Console.ReadLine();
 
                 if (line == null)
+                {
+                    // Standard input can close while the server keeps running. Back off instead of spinning.
+                    Thread.Sleep(1000);
                     continue;
+                }
 
                 switch (line.ToLower())
                 {

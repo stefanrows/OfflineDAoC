@@ -30,7 +30,8 @@ public static class AutonomousBotStatusPersistence
 
     public static void Queue(GameBot bot, bool includeInventory = false)
     {
-        if (bot?.IsAutonomousWorldBot == true && bot.DatabaseID > 0 && bot.PersistentRecord != null)
+        if (bot?.IsAutonomousWorldBot == true && bot.DatabaseID > 0 && bot.PersistentRecord != null &&
+            !IsSuperseded(bot))
         {
             lock (PendingGate)
             {
@@ -50,7 +51,8 @@ public static class AutonomousBotStatusPersistence
     /// </summary>
     public static void QueueGroupMetadata(GameBot bot)
     {
-        if (bot?.IsAutonomousWorldBot != true || bot.DatabaseID <= 0 || bot.PersistentRecord == null)
+        if (bot?.IsAutonomousWorldBot != true || bot.DatabaseID <= 0 || bot.PersistentRecord == null ||
+            IsSuperseded(bot))
             return;
         lock (PendingGate)
         {
@@ -60,6 +62,19 @@ public static class AutonomousBotStatusPersistence
             if (PendingPriority.Add(bot.DatabaseID))
                 PendingPriorityOrder.Enqueue(bot.DatabaseID);
         }
+    }
+
+    private static bool IsSuperseded(GameBot bot) =>
+        bot != null && AutonomousBotRegistry.TryGet(bot.DatabaseID, out GameBot current) &&
+        !ReferenceEquals(current, bot);
+
+    internal static bool IsSupersededActor(GameBot bot) => IsSuperseded(bot);
+
+    private static void QueueCurrentActor(GameBot bot)
+    {
+        if (bot != null && AutonomousBotRegistry.TryGet(bot.DatabaseID, out GameBot current) &&
+            !ReferenceEquals(current, bot))
+            Queue(current);
     }
 
     private static int PendingCount
@@ -122,20 +137,26 @@ public static class AutonomousBotStatusPersistence
             if (bots.Length == 0)
                 return 0;
 
-            (GameBot Bot, OfflineWorldBotRecord Record)[] snapshots = bots
-                .Where(bot => bot?.PersistentRecord?.IsPersisted == true)
-                .Select(bot => (bot, bot.PrepareAutonomousStateSnapshot()))
-                .Where(entry => entry.Item2 != null)
-                .ToArray();
-            if (snapshots.Length == 0)
-                return 0;
-
             int savedCount = 0;
-            foreach ((GameBot Bot, OfflineWorldBotRecord Record)[] batch in snapshots.Chunk(WriteBatchSize))
+            foreach (GameBot[] botBatch in bots.Chunk(WriteBatchSize))
             {
+                (GameBot Bot, OfflineWorldBotRecord Record)[] batch;
                 bool saved;
                 lock (DatabaseWriteLock)
                 {
+                    // Snapshot and write are one serialized operation. This
+                    // prevents a queued snapshot from restoring an older
+                    // cooldown after a synchronous active-ability save.
+                    foreach (GameBot bot in botBatch)
+                        QueueCurrentActor(bot);
+                    batch = botBatch
+                        .Where(bot => bot?.PersistentRecord?.IsPersisted == true && !IsSuperseded(bot))
+                        .Select(bot => (bot, bot.PrepareAutonomousStateSnapshot()))
+                        .Where(entry => entry.Item2 != null)
+                        .ToArray();
+                    if (batch.Length == 0)
+                        continue;
+
                     saved = GameServer.Database.SaveObject(batch.Select(entry => (DataObject)entry.Record));
                     if (saved)
                     {

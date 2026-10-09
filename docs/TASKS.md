@@ -6,6 +6,34 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+94. **Upstream adaptation Stage 4: demonstrated equipment appearance fixes.**
+    Selected 2026-10-09 under task 90. Initial catalog audit is recorded in
+    [UPSTREAM_CONTENT_EVIDENCE.md](UPSTREAM_CONTENT_EVIDENCE.md): the upstream
+    name/realm classifier includes many weapons and shields, so it does not
+    establish race-fit failures. No appearance filter or owned-equipment
+    change was enabled. A demonstrated client/model-to-race fit list and
+    usable alternatives are still required before future-selection changes.
+    Bug 5 remains the existing helmet report and needs its client check.
+    The owner cannot provide the screenshot/race/item evidence at present
+    (2026-10-09); no blanket realm filter or speculative repair is authorized
+    by that absence.
+
+90. **Adapt selected upstream improvements to Camlann PvP (in progress).** Owner,
+    2026-10-09: plan adaptations from the main `shadowofze/OfflineDAoC`
+    repository; other forks are out of scope. The staged plan is
+    [UPSTREAM_ADAPTATION_PLAN.md](UPSTREAM_ADAPTATION_PLAN.md): console input,
+    navigation corners, bot defenses, equipment appearance, autonomous active
+    realm abilities, outdoor travel threats, and a classic quest pilot.
+    Owner authorized work through all seven roadmap stages on 2026-10-09,
+    using Luna MAX implementation agents and SOL 6.1 High final review.
+    Retain current Camlann rules and saves, each stage's evidence/dependency
+    gates, and separate source completion from gameplay acceptance. The owner
+    authorized focused isolated tests and disposable migration verification
+    on 2026-10-09, then authorized shipping 0.214.1 to the fork and local
+    installation. Leave the game stopped; quest save migration and enabling
+    travel threats are not included. Related existing work: bugs 5 and 115;
+    tasks 47, 48, 74 and 88.
+
 Agent sessions on items 45–48: take the role and context from
 [ORCHESTRATOR_BRIEF.md](ORCHESTRATOR_BRIEF.md) first.
 
@@ -181,13 +209,95 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+97. **Upstream adaptation Stage 7: Miari's Seed quest pilot.** Source
+    0.214.0, 2026-10-09: verified clean v0.35b release inputs match the pinned
+    code apart from its README-only successor. Use existing DataQuest steps,
+    preserve Guardian/level eligibility and configured rewards, and import
+    only quest 20054 plus its non-tradable pouch template. Required actors
+    already exist; their exact template/spawn fields and zone-181 bounds are
+    checked. Existing mesh presence is not proof of runtime reachability.
+    The development utility defaults to dry-run and accepts only marked
+    disposable targets, with collision checks, prepared manifests, immutable
+    verified backups and transactional owned-row rollback. Ambiguous recovery
+    disables automatic rollback. Seven isolated migration checks passed in
+    0.214.1: dry-run/apply/rerun, partial ownership, interruption recovery,
+    rollback and refusal guards; unrelated synthetic progress was preserved.
+    No installed or played database was modified. Source
+    evidence and original journal guide are in
+    [UPSTREAM_CONTENT_EVIDENCE.md](UPSTREAM_CONTENT_EVIDENCE.md) and
+    [CLASSIC_QUEST_PILOT.md](CLASSIC_QUEST_PILOT.md). Syntax/resource checks and
+    SOL 6.1 High source/test review passed. Full quest/restart/client checks and bot
+    non-interference remain pending. Later batches require pilot acceptance.
+
+96. **Upstream adaptation Stage 6: outdoor PvE travel threats.** Source
+    0.213.0, 2026-10-09: default-off independent switch; solo/leader-only
+    bounded scans, designated-puller handoff and readiness, retained holds,
+    two verified detour legs, bounded retry history and camp rejection.
+    Existing meshes, frontier/dungeon travel, protected actors, safe hubs,
+    companion orders and pet pulls are unchanged. SOL 6.1 High reviewed
+    hold/cadence/recovery ordering and rejoin execution. Historical log
+    aggregates and paired owner checks are in
+    [UPSTREAM_TRAVEL_BASELINE.md](UPSTREAM_TRAVEL_BASELINE.md). Three isolated
+    policy tests passed in 0.214.1, not an enabled-route/performance run.
+    Server/launcher builds passed. Owner
+    enabled-route, camp arrival, death/retry, 1x/accelerated-speed and cost
+    observations remain pending; leave the switch off until accepted.
+
+95. **Upstream adaptation Stage 5: autonomous active realm abilities.** Source
+    0.212.0, 2026-10-09: retain the 39 passive class paths and owned ranks;
+    deterministic phases purchase class-legal Purge, First Aid, Ignore Pain
+    and Second Wind with charged prerequisites and earned points only.
+    Runtime handler types select variants while real catalog keys are saved.
+    Optional cooldown tokens use gameplay UTC, save before execution and
+    fail closed when malformed. Status snapshots and writes share the same
+    database gate, preventing older queued state from overwriting cooldowns.
+    Scoped Purge/First Aid support leaves player and companion training alone.
+    Ten isolated policy, prerequisite and token tests passed in 0.214.1.
+    Serialization round-trip does not verify database cooldown persistence.
+    Release builds and SOL 6.1 High source/test review passed. Owner
+    purchase, effect, PvP balance, reload and world-speed checks remain pending.
+
+93. **Upstream adaptation Stage 3: player-style bot defenses.** Source
+    0.211.0, 2026-10-09: GameBots share player block/parry/evade arithmetic,
+    ability/buff bonuses, facing and shield/weapon/spec gates, shield block
+    rounds and PvP caps. Humans retain their existing formulas; monsters and
+    pets retain NPC rules. Same-realm hostile bots use the same caps as
+    cross-realm enemies. The existing shield quality/condition behavior,
+    including its ranged baseline, was deliberately preserved. Formula and
+    source paths reviewed; 25 isolated defense-resolution tests passed in
+    0.214.1, not equivalent-stat live combat verification. Release builds and
+    SOL 6.1 High source/test review passed. Installation,
+    equivalent-stat class/equipment/facing PvE/PvP combat and
+    balance observations remain pending.
+
+91. **Upstream adaptation Stage 1: console EOF backoff.** Source 0.209.2,
+    2026-10-09: focused port of upstream `c1c465c3`; closed console input
+    sleeps one second before retrying without changing game-loop timing or
+    normal commands. Release build and SOL 6.1 High source review passed.
+    Installation,
+    runtime CPU measurement after redirected input closes, and shutdown
+    verification remain pending. Existing defect tracked as bug 115.
+
+92. **Upstream adaptation Stage 2: navigation route points and corners.**
+    Source 0.210.0, 2026-10-09: merge coincident intermediate points with
+    combined flags while retaining the endpoint and path status. Corner sight
+    retry is restricted to a near-origin hit, a short verified surface step,
+    reverse segment proof and door exclusion; upstream's unconditional retry
+    was narrowed. Existing navigation meshes and DF preparation are preserved.
+    Two isolated route-point tests passed in 0.214.1, not native mesh checks.
+    Release builds and SOL 6.1 High source/test review passed. Real-client corner, wall,
+    closed-door, disconnected-surface and ordinary-route checks remain pending.
+
 88. **Autonomous world bots train one realm ability build per class.** Owner,
     2026-10-04. Implemented in source 0.209.0: all 39 generated classes have
     one fixed passive RA priority path. Earned RP now updates autonomous
     Realm Level; class-legal ranks spend only the available player-equivalent
     point pool at runtime cost, persist in the existing ability field, and
-    restore across login. The plan banks points for its next rank. Timed
-    active RAs and inert GameBot passives are excluded. The class table,
+    restore across login. The plan banks points for its next rank. That initial
+    release excluded timed actives and inert GameBot passives; Stage 3
+    (0.211.0) integrates defensive bonuses, and Stage 5/task 95 (0.212.0)
+    adds the reviewed initial actives without removing existing purchases.
+    The class table,
     rationale, and validation boundaries are in
     [AUTONOMOUS_RA_BUILDS.md](AUTONOMOUS_RA_BUILDS.md). Server and launcher
     0.209.0 deployed locally on 2026-10-04 (17 files; backup
@@ -612,6 +722,28 @@ Agent sessions on items 45–48: take the role and context from
 
 
 ## Finished
+
+98. **Done - Isolated upstream adaptation verification.** Owner authorized
+    focused regressions and disposable quest migration checks on 2026-10-09.
+    Completed in 0.214.1: 40/40 server cases (defense resolution, active-ability
+    policy/prerequisites/token serialization, route-threat policy, route
+    points), 7/7 clean-fixture migration cases (dry-run, apply, rerun, partial
+    ownership, interruption recovery, rollback and refusal guards), and 1/1
+    Windows launcher version/timer-constant case passed. SOL 6.1 High found
+    no actionable test-source defects. Temporary clones preserved unrelated
+    synthetic progress/inventory/currency and the clean source was unchanged.
+    No installed game/save was changed or started; no deployment performed.
+    Roadmap stages remain pending their appearance evidence and real-client,
+    database cooldown reload, native routing and performance checks.
+
+89. **Done — Plan selective upstream adaptations for Camlann.** Completed
+    2026-10-09 in 0.209.1. Saved the pinned comparison, seven ordered stages,
+    dependencies, Camlann boundaries and acceptance cases in
+    [UPSTREAM_ADAPTATION_PLAN.md](UPSTREAM_ADAPTATION_PLAN.md). Other forks are
+    excluded. Recorded the confirmed console-loop source defect as bug 115;
+    implementation remains proposal 90. Documentation and version pins checked
+    statically; no gameplay implementation, builds, automated tests, server
+    start or deployment performed.
 
 62. **Done — RvR wave 1: hub fan, departure truce, route variety.** Aaron,
     2026-09-29 (P3, "you leave the door before you hunt"). Source 0.146.0:

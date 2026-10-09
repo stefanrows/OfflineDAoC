@@ -28,6 +28,7 @@ namespace DOL.GS.RealmAbilities
 			if (CheckPreconditions(living, DEAD | SITTING | MEZZED | STUNNED | INCOMBAT)) return;
 
 			int healAmount = 0;
+			GamePlayer player = living as GamePlayer;
 
 			int currentLevelAbility = living.GetAbility<AtlasOF_FirstAid>().Level;
 			
@@ -37,8 +38,7 @@ namespace DOL.GS.RealmAbilities
 			
 			// 300hp at Lv50 per ability level as per 1.65
 			// scaled to player level
-			GamePlayer player = living as GamePlayer;
-			var scaleLevel = (double)player.Level / 50;
+			var scaleLevel = (double)(player?.Level ?? living.Level) / 50;
 			healAmount = (int)(currentLevelAbility * 300 * scaleLevel);
 			int healed = living.ChangeHealth(living, eHealthChangeType.Spell, healAmount);
 

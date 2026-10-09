@@ -61,6 +61,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+115. **Closed console input spins the server console loop.** Confirmed in
+     source 0.209.0 during the 2026-10-09 comparison: EOF immediately retried
+     `Console.ReadLine()`, potentially consuming a CPU core. Source 0.209.2
+     adapts upstream commit
+     [c1c465c3](https://github.com/shadowofze/OfflineDAoC/commit/c1c465c33dd2962d3fe8f0a09b0a04b3d75aed67)
+     with a one-second real-time backoff. Normal commands, `exit` and game-loop
+     timing are preserved. Stage 1 source exit/retry paths reviewed; no server
+     was started. Installation, closed redirected input CPU measurement while
+     the server remains running, and normal shutdown checks remain pending.
+
 Source audit and deployment, 2026-10-04: fixes 106–114 are in source 0.207.0.
 The server and launcher fixes (106–110, 112 and 113) were deployed after fresh
 Release builds and push to the fork's main. The deployment replaced and
