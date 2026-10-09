@@ -6,22 +6,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-120. **Autonomous groups stand idle inside their own guild keep.** Installed
-     0.217.0, 2026-10-09 22:44–23:04: the owner saw about three groups idle
-     in Dun Crimthain (keep 101, claimed by Camlann crew "Camp Watch 3").
-     27 bots were saved inside the keep; 24 log
-     `AUTONOMOUS_GROUP_UNREACHABLE_RENDEZVOUS` lines for 17 groups, every
-     courtyard route recovery `NoPathFound`. Causes from source review:
-     `AutonomousRvrTravel.TraverseFriendlyDoor` only lets RvR objectives pass
-     friendly keep doors, so PvE/solo legs cannot leave the courtyard; after
-     one reselection `ReportUnreachableRendezvous` holds members until the
-     15/20/45-minute no-show deadline, before the terminal pocket escape runs;
-     the guild-keep rendezvous fallback can place slots inside the walls.
-     Proposed fix (not implemented): door traversal for all autonomous legs
-     `CanPassKeep` allows, release held members as no-shows, prefer keep
-     exteriors for guild-keep rendezvous, run pocket escape first. Unverified:
-     navmesh gate blocking, why `CanLeaderReachHub` failed for RvR leaders.
-
 71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
     2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
     `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
@@ -76,6 +60,33 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+120. **Autonomous groups stand idle inside their own guild keep.** Installed
+     0.217.0, 2026-10-09 22:44–23:04: the owner saw about three groups idle
+     in Dun Crimthain (keep 101, claimed by Camlann crew "Camp Watch 3").
+     27 bots were saved inside the keep; 24 log
+     `AUTONOMOUS_GROUP_UNREACHABLE_RENDEZVOUS` lines for 17 groups, every
+     courtyard route recovery `NoPathFound`. Causes from source review:
+     `AutonomousRvrTravel.TraverseFriendlyDoor` and the path planner's
+     `Pathfinder.CanUseFriendlyKeepDoor` only let RvR objectives pass
+     friendly keep doors, so PvE/solo legs cannot leave the courtyard; after
+     one reselection `ReportUnreachableRendezvous` holds members until the
+     15/20/45-minute no-show deadline, before the terminal pocket escape runs;
+     the guild-keep rendezvous fallback can place slots inside the walls.
+     Source 0.218.0: every live autonomous world bot may plan through and use
+     a keep door `CanPassKeep` allows, on every route leg (enemies,
+     companions and `/spawn` helpers unchanged; the along-the-leg door check
+     stays). The terminal pocket escape runs before a meetup gives up on a
+     member. After the one reselection fails, the member leaves the party at
+     once (`AUTONOMOUS_GROUP_UNREACHABLE_RELEASED`) through the normal
+     member-removal path: locked size drops, a leaving leader is replaced, a
+     party under two bots ends, and the member is not re-recruited during the
+     recruitment window. Realm-expedition musters keep their hub retry. RvR
+     guild-keep meetups prefer a point 350–500 units outside the outer gate,
+     the courtyard only as fallback. Check in game: no group stands idle in
+     a claimed keep; members trapped elsewhere drop out instead of waiting
+     15+ minutes. Still unverified: why `CanLeaderReachHub` failed for RvR
+     leaders.
 
 119. **Some attacked marching bots keep running instead of defending.** Owner,
      2026-10-09, during the 0.215.0 investigation: some bots respond, others

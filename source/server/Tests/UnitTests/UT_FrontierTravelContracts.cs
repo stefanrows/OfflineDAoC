@@ -352,7 +352,7 @@ public class UT_FrontierTravelContracts
         finally { AutonomousRvrEventLayer.EndTarget(id,now+1); }
     }
     [Test]
-    public void FriendlyRvRDoorDoesNotGrantEnemyOrOrdinaryNpcAccess()
+    public void FriendlyKeepDoorAdmitsEveryAutonomousObjectiveButNotEnemiesOrOtherNpcs()
     {
         var bot=(Traveler)RuntimeHelpers.GetUninitializedObject(typeof(Traveler));
         bot.Realm=eRealm.Midgard;
@@ -364,9 +364,38 @@ public class UT_FrontierTravelContracts
         bot.Realm=eRealm.Albion;
         Assert.That(Pathfinder.CanUseFriendlyKeepDoor(bot,door),Is.False);
         bot.Realm=eRealm.Midgard;
-        bot.PersistentRecord.ObjectiveKind="SoloPve";
-        Assert.That(Pathfinder.CanUseFriendlyKeepDoor(bot,door),Is.False);
+        // Bug 120: PvE and meetup legs leave their own keep through the gate too.
+        foreach(string objective in new[]{"SoloPve","GroupPve",""})
+        {
+            bot.PersistentRecord.ObjectiveKind=objective;
+            Assert.That(Pathfinder.CanUseFriendlyKeepDoor(bot,door),Is.True,objective);
+            Assert.That(AutonomousRvrTravel.MayUseKeepDoors(bot),Is.True,objective);
+        }
+        bot.Realm=eRealm.Albion;
+        Assert.That(Pathfinder.CanUseFriendlyKeepDoor(bot,door),Is.False,"An enemy PvE bot still cannot pass");
+        bot.Realm=eRealm.Midgard;
+        typeof(GameBot).GetProperty(nameof(GameBot.IsAutonomousWorldBot)).SetValue(bot,false);
+        Assert.That(Pathfinder.CanUseFriendlyKeepDoor(bot,door),Is.False,"Companions and helpers keep the native door rules");
+        Assert.That(AutonomousRvrTravel.MayUseKeepDoors(bot),Is.False);
+        Assert.That(AutonomousRvrTravel.MayUseKeepDoors(null),Is.False);
         Assert.That(Pathfinder.CanUseFriendlyKeepDoor((GameNPC)RuntimeHelpers.GetUninitializedObject(typeof(GameNPC)),door),Is.False);
+    }
+    [Test]
+    public void GuildKeepMeetingPointsLieOutsideTheOuterGate()
+    {
+        var centre=new System.Numerics.Vector3(1000,1000,500);
+        var innerGate=new System.Numerics.Vector3(1000,1200,520);
+        var outerGate=new System.Numerics.Vector3(1000,1600,480);
+        var points=AutonomousRvrTravel.GateExteriorPoints(centre,new[]{innerGate,outerGate}).ToArray();
+        Assert.That(points,Has.Length.EqualTo(AutonomousRvrTravel.KeepGateExteriorDistances.Length));
+        for(int i=0;i<points.Length;i++)
+        {
+            Assert.That(points[i].X,Is.EqualTo(1000).Within(0.01));
+            Assert.That(points[i].Y,Is.EqualTo(1600+AutonomousRvrTravel.KeepGateExteriorDistances[i]).Within(0.01),"Beyond the outer gate, away from the courtyard");
+            Assert.That(points[i].Z,Is.EqualTo(480));
+        }
+        Assert.That(AutonomousRvrTravel.GateExteriorPoints(centre,System.Array.Empty<System.Numerics.Vector3>()),Is.Empty);
+        Assert.That(AutonomousRvrTravel.GateExteriorPoints(centre,new[]{centre}),Is.Empty,"A gate at the centre has no outward direction");
     }
     [Test]
     public void EveryRealmHasDistinctNativeArrivalsInBothEnemyFrontiers()

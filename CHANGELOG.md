@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.218.0] - 2026-10-09
+
+### Fixed
+
+- Bug 120: autonomous groups no longer stand idle inside their own guild
+  keep. Every autonomous world bot may plan through and use a keep door its
+  realm, guild or alliance may pass, on PvE, solo and meetup legs as well as
+  RvR; enemies, companions and `/spawn` helpers keep the native door rules.
+- A member whose meetup route stays unreachable after the one rendezvous
+  reselection now first tries the terminal pocket escape, then leaves the
+  party at once ("can't get there, go without me") instead of standing
+  frozen until the 15/20/45-minute no-show deadline. The party shrinks,
+  replaces a leaving leader or ends below two bots as before; realm
+  expedition musters keep their hub retry.
+- RvR guild-keep meetups prefer a point in front of the outer gate; the
+  courtyard is only the fallback.
+
 ## [0.217.1] - 2026-10-09
 
 ### Added

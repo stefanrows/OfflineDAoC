@@ -1243,8 +1243,28 @@ public static partial class AutonomousBotGroupCoordinator
                      $"id={bot.DatabaseID} region={bot.CurrentRegionID} position={bot.X},{bot.Y},{bot.Z} " +
                      $"rendezvous={session.RendezvousRegion}:{(int)session.Rendezvous.X},{(int)session.Rendezvous.Y},{(int)session.Rendezvous.Z} " +
                      $"reason=\"{reason}\"");
+            if (AutonomousRealmRaid.GetView(group) == null)
+                ReleaseUnreachableMember(session, bot);
             return true;
         }
+    }
+
+    /// <summary>
+    /// Bug 120: "can't get there, go without me". A member whose route stays
+    /// unreachable after the one reselection leaves at once instead of
+    /// standing frozen until the 15/20/45-minute no-show deadline. The normal
+    /// member-removal path lowers the locked size, replaces a leaving leader
+    /// and ends a party with fewer than two bots; the member then picks
+    /// independent work. It is not offered this party again while it recruits.
+    /// </summary>
+    private static void ReleaseUnreachableMember(Session session, GameBot bot)
+    {
+        long key = MemberKey(bot);
+        session.RecruitmentRetryTicks[key] = Math.Max(session.RecruitmentDeadlineTick, GameLoop.GameLoopTime) + 60_000;
+        Log.Warn($"AUTONOMOUS_GROUP_UNREACHABLE_RELEASED group={session.Id} bot=\"{bot.Name}\" id={bot.DatabaseID} " +
+                 $"remaining={Math.Max(0, BotMembers(session.Group).Length - 1)}");
+        session.HeldUnreachableMembers.Remove(key);
+        session.Group.RemoveMember(bot, retainSingleRemainingMember: true);
     }
 
     public static void OnMemberRemoved(Group group, GameLiving living)
@@ -2832,7 +2852,13 @@ public static partial class AutonomousBotGroupCoordinator
                              .Where(keep => keep.Guild == leader.Guild)
                              .OrderBy(keep => Vector3.DistanceSquared(current, new(keep.X, keep.Y, keep.Z))).Take(2))
                 {
-                    if (!TryPoint(leader.CurrentRegion, new(keep.X, keep.Y, keep.Z), out point)) continue;
+                    // Bug 120: meet in front of the outer gate, not in the
+                    // courtyard; the courtyard stays the fallback.
+                    bool outside = false;
+                    foreach (Vector3 anchor in AutonomousRvrTravel.GateExteriorPoints(keep).ToArray())
+                        if (outside = TryPoint(leader.CurrentRegion, anchor, out point, fixedCenter: true))
+                            break;
+                    if (!outside && !TryPoint(leader.CurrentRegion, new(keep.X, keep.Y, keep.Z), out point)) continue;
                     rendezvousName = keep.Name;
                     return true;
                 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
 using DOL.GS.Keeps;
@@ -33,9 +34,52 @@ public static class AutonomousRvrTravel
         return manager != null ? !manager.IsEnemy(keep, bot) : bot.Realm != eRealm.None && keep.Realm == bot.Realm;
     }
 
+    /// <summary>
+    /// Who may walk through a keep door that <see cref="CanPassKeep"/> allows:
+    /// every live autonomous world bot on every route leg (bug 120), not only
+    /// RvR objectives. A PvE or meetup leg that starts in the crew's own guild
+    /// keep must leave the courtyard the way a player clicks the gate.
+    /// Companions, /spawn helpers and plain NPCs keep the native door rules.
+    /// </summary>
+    public static bool MayUseKeepDoors(GameBot bot) => bot is { IsAutonomousWorldBot: true, IsAlive: true };
+
+    /// <summary>Distances in front of a keep's outer gate tried as a guild-keep meeting point.</summary>
+    public static readonly float[] KeepGateExteriorDistances = [350f, 500f];
+
+    /// <summary>
+    /// Bug 120: meeting points in front of a keep's outer gate, nearest first.
+    /// The outer gate is the main-gate door (door index 1) farthest from the
+    /// keep centre; the points lie on the line from the centre through that
+    /// gate, outside the wall. Empty when the keep has no main gate.
+    /// </summary>
+    public static IEnumerable<Vector3> GateExteriorPoints(Vector3 keepCentre, IEnumerable<Vector3> mainGates)
+    {
+        Vector2 centre = new(keepCentre.X, keepCentre.Y);
+        Vector3? outer = null;
+        float best = 1;
+        foreach (Vector3 gate in mainGates ?? [])
+        {
+            float distance = Vector2.DistanceSquared(new(gate.X, gate.Y), centre);
+            if (distance > best)
+            {
+                best = distance;
+                outer = gate;
+            }
+        }
+        if (outer is not { } door)
+            yield break;
+        Vector2 outward = Vector2.Normalize(new Vector2(door.X, door.Y) - centre);
+        foreach (float distance in KeepGateExteriorDistances)
+            yield return new(door.X + outward.X * distance, door.Y + outward.Y * distance, door.Z);
+    }
+
+    public static IEnumerable<Vector3> GateExteriorPoints(AbstractGameKeep keep) =>
+        keep == null ? [] : GateExteriorPoints(new(keep.X, keep.Y, keep.Z),
+            keep.Doors.Values.Where(door => door.DoorIndex == 1).Select(door => new Vector3(door.X, door.Y, door.Z)));
+
     public static bool TraverseFriendlyDoor(GameBot bot, Vector3 destination)
     {
-        if (!AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
+        if (!MayUseKeepDoors(bot) ||
             bot.TempProperties.GetProperty<long>("RvrDoorPassUntil") > GameLoop.GameLoopTime) return false;
         foreach (GameKeepDoor door in GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID)
                      .Where(keep => CanPassKeep(bot, keep)).SelectMany(keep => keep.Doors.Values))

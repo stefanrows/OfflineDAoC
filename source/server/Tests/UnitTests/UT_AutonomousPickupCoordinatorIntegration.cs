@@ -190,6 +190,75 @@ namespace DOL.GS.Tests
             }
         }
 
+        [Test]
+        public void UnreachableMemberLeavesAtOnceAfterTheReselectionInsteadOfWaitingForTheNoShowDeadline()
+        {
+            // Bug 120: a member trapped in a guild keep used to stand frozen
+            // until the 15/20/45-minute deadline. "Can't get there, go without me."
+            TestBot leader = Bot(31, eRealm.Albion, new ClassArmsman());
+            TestBot present = Bot(32, eRealm.Albion, new ClassCleric());
+            TestBot trapped = Bot(33, eRealm.Albion, new ClassWizard());
+            (Group group, object session) = MeetupSession("unreachable-release", leader, present, trapped);
+
+            Assert.That(AutonomousBotGroupCoordinator.ReportUnreachableRendezvous(trapped, "unreachable-release", "test"), Is.True);
+
+            Assert.That(trapped.Group, Is.Null, "The unreachable member is released, not held");
+            Assert.That(group.GetMembersInTheGroup(), Is.EquivalentTo(new[] { leader, present }));
+            Assert.That(Sessions.Contains(group), Is.True, "Two members still make a party");
+            Assert.That(Get<int>(session, "LockedSize"), Is.EqualTo(2), "The freed slot is not refilled");
+            Assert.That(Get<HashSet<long>>(session, "HeldUnreachableMembers"), Does.Not.Contain(trapped.DatabaseID));
+            Assert.That(Get<Dictionary<long, long>>(session, "RecruitmentRetryTicks")[trapped.DatabaseID],
+                Is.GreaterThan(GameLoop.GameLoopTime), "The released member is not recruited straight back");
+            Assert.That(AutonomousBotGroupCoordinator.IsRendezvousRouteHeld(trapped, "unreachable-release"), Is.False);
+            Assert.That(AutonomousBotGroupCoordinator.IsRendezvousRouteHeld(present, "unreachable-release"), Is.False);
+        }
+
+        [Test]
+        public void RealmExpeditionMusterStillHoldsAnUnreachableMemberForItsHubRetry()
+        {
+            TestBot leader = Bot(41, eRealm.Midgard, new ClassWarrior());
+            TestBot present = Bot(42, eRealm.Midgard, new ClassHealer());
+            TestBot trapped = Bot(43, eRealm.Midgard, new ClassRunemaster());
+            (Group group, object session) = MeetupSession("unreachable-raid", leader, present, trapped);
+            Set(session, "RaidMusterEvent", "test-expedition");
+
+            Assert.That(AutonomousBotGroupCoordinator.ReportUnreachableRendezvous(trapped, "unreachable-raid", "test"), Is.True);
+
+            Assert.That(trapped.Group, Is.SameAs(group));
+            Assert.That(Get<int>(session, "LockedSize"), Is.EqualTo(3));
+            Assert.That(AutonomousBotGroupCoordinator.IsRendezvousRouteHeld(trapped, "unreachable-raid"), Is.True);
+        }
+
+        private (Group, object) MeetupSession(string id, params TestBot[] members)
+        {
+            Group group = new(members[0]);
+            var nativeMembers = (List<GameLiving>)typeof(Group).GetField("_groupMembers", PrivateInstance).GetValue(group);
+            foreach (TestBot member in members)
+            {
+                member.CurrentRegionID = 1;
+                member.Group = group;
+                nativeMembers.Add(member);
+            }
+            object session = Activator.CreateInstance(Coordinator.GetNestedType("Session", BindingFlags.NonPublic), true);
+            Set(session, "Group", group);
+            Set(session, "Leader", members[0]);
+            Set(session, "Id", id);
+            Set(session, "ObjectiveKind", eAutonomousObjectiveKind.GroupPve);
+            Set(session, "TaskClock", new AutonomousGroupTaskClock(eAutonomousObjectiveKind.GroupPve, new Random(1)));
+            Set(session, "RendezvousRegion", (ushort)1);
+            Set(session, "Rendezvous", Vector3.Zero);
+            Set(session, "Phase", "Meeting up");
+            Set(session, "LockedSize", members.Length);
+            // The one coordinator-level reselection was already spent.
+            Set(session, "RendezvousReselectionAttempted", true);
+            Invoke("AssignPveRoles", members.Cast<GameBot>().ToArray(), Get<Dictionary<long, BotPveGroupRole>>(session, "PveRoles"));
+            foreach (TestBot member in members)
+                Get<Dictionary<long, Vector3>>(session, "RendezvousSlots")[member.DatabaseID] = Vector3.Zero;
+            Sessions.Add(group, session);
+            _registeredGroup = group;
+            return (group, session);
+        }
+
         private static TestBot Bot(long id, eRealm realm, ICharacterClass characterClass)
         {
             var bot = (TestBot)RuntimeHelpers.GetUninitializedObject(typeof(TestBot));

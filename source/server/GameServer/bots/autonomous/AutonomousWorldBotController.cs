@@ -4672,6 +4672,12 @@ namespace DOL.GS
             // well as an up-front corridor rejection.
             if (_camp != null && TryRecoverBlockedCapitalEgress(bot, _camp))
                 return true;
+            // Bug 120: escape a proven pocket before the meetup gives up on
+            // this member; the escape resumes the same rendezvous. A realm
+            // expedition muster keeps its own fixed-hub retry.
+            bool raidMuster = AutonomousRealmRaid.GetView(bot.Group)?.Muster == true;
+            if (!raidMuster && TryEscapeTerminalRoutePocket(bot, current))
+                return true;
             if (_groupDirective != null &&
                 (AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase) ||
                  _groupDirective.Phase == "Regrouping") &&
@@ -4681,7 +4687,7 @@ namespace DOL.GS
                 ResetRouteOrderState();
                 return false;
             }
-            if (TryEscapeTerminalRoutePocket(bot, current))
+            if (raidMuster && TryEscapeTerminalRoutePocket(bot, current))
                 return true;
             AbandonCamp(bot, "The collision-safe route could not recover after three verified side steps");
             return false;

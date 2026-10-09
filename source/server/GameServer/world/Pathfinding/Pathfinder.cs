@@ -178,11 +178,10 @@ namespace DOL.GS
             return true;
         }
 
+        // Bug 120: every autonomous world bot, not only RvR objectives, may
+        // plan through a keep door the shared CanPassKeep rule allows.
         public static bool CanUseFriendlyKeepDoor(GameNPC owner, GameKeepDoor door) =>
-            owner is GameBot { IsAutonomousWorldBot: true, IsAlive: true } bot &&
-            (AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
-             bot.TempProperties?.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey)
-                 ?.Passage?.Medallion == "home_necklace") &&
+            owner is GameBot bot && AutonomousRvrTravel.MayUseKeepDoors(bot) &&
             door?.Component?.Keep != null && bot.Realm != eRealm.None && AutonomousRvrTravel.CanPassKeep(bot, door.Component.Keep);
 
         private bool TryUsePathDoor()
