@@ -61,6 +61,15 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+118. **Launcher "Make Me a GM" fails with "Unable to save GM setting".**
+     Installed 0.215.0, 2026-10-09: ticking the box with the server stopped
+     showed an error popup and changed nothing. The server-created
+     `offline_local_options` table has four columns; the launcher's
+     positional two-value `INSERT` was rejected and the transaction rolled
+     back. Source 0.216.0 names the `Key`/`Value` columns. The owner's GM flag
+     and account level were set by hand the same evening; a launcher toggle
+     check on the installed build remains pending.
+
 117. **PvE camp turn reads a cleared objective after movement recovery.**
      Installed 0.214.1 observation on 2026-10-09 found two null-reference
      failures through `LeadPveCamp`. Source audit found that `IssuePath` can

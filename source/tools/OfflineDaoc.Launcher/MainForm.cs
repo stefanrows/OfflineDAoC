@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.215.0";
+    internal const string DisplayVersion = "0.216.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -1982,7 +1982,7 @@ internal sealed partial class MainForm : Form
         command.Transaction = transaction;
         command.CommandText = "CREATE TABLE IF NOT EXISTS offline_local_options (Key TEXT PRIMARY KEY,Value TEXT NOT NULL)";
         command.ExecuteNonQuery();
-        command.CommandText = "INSERT INTO offline_local_options VALUES ('MakeMeGM',@value) ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
+        command.CommandText = "INSERT INTO offline_local_options(Key,Value) VALUES ('MakeMeGM',@value) ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
         command.Parameters.AddWithValue("@value", enabled ? "true" : "false");
         command.ExecuteNonQuery();
         command.CommandText = "UPDATE Account SET PrivLevel=@privilege WHERE Name=@account";

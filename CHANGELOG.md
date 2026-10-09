@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.216.0] - 2026-10-09
+
+### Fixed
+
+- "Make Me a GM" in the launcher failed with an error popup and left the
+  account at player level. The server creates `offline_local_options` with
+  four columns, but the launcher inserted two positional values; it now names
+  the `Key` and `Value` columns like the other launcher option writers
+  (bug 118).
+
 ## [0.215.0] - 2026-10-09
 
 ### Fixed
