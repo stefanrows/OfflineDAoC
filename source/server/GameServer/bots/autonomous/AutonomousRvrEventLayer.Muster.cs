@@ -104,6 +104,16 @@ public static partial class AutonomousRvrEventLayer
         return AutonomousRvrSiegeMuster.Phase.None;
     }
 
+    public static long? MusterTimeRemaining(string forceId, long nowTick)
+    {
+        if (string.IsNullOrWhiteSpace(forceId)) return null;
+        using (EnterSync())
+            foreach (var active in Events.Values)
+                if (MustersLocked(active, forceId) && active.Musters.TryGetValue(forceId, out var muster) && !muster.Departed)
+                    return Math.Max(0, AutonomousRvrSiegeMuster.MaximumWaitMilliseconds - (nowTick - muster.StartedTick));
+        return null;
+    }
+
     /// <summary>Snapshot for the dashboard and logs: who is mustering at this siege.</summary>
     public static (int Mustering, int Marching) MusterCounts(string targetId)
     {

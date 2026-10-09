@@ -7,6 +7,67 @@ namespace DOL.GS;
 
 public sealed partial class AutonomousWorldBotController
 {
+    private long _keepAbandonLogAfter;
+    private string _siegeColumnKey;
+    private long _siegeColumnStarted, _siegeColumnProgress, _siegeColumnLogAfter;
+    private float _siegeColumnBestGap;
+    private bool _siegeColumnHolding;
+
+    private bool HoldSiegeColumn(GameBot leader, string forceId, string targetId)
+    {
+        long now = GameLoop.GameLoopTime;
+        string key = $"{forceId}:{targetId}";
+        if (_siegeColumnKey != key)
+        {
+            _siegeColumnKey = key;
+            _siegeColumnHolding = false;
+        }
+        // Include living operators beyond the old 4,000-unit cutoff and on
+        // another region leg. Corpses cannot catch up and do not hold travel.
+        GameBot[] missing = leader.Group.GetMembersInTheGroup().OfType<GameBot>()
+            .Where(member => member != leader && member.IsAlive &&
+                (member.CurrentRegionID != leader.CurrentRegionID || member.IsOnStableMasterRoute ||
+                 member.GetDistanceTo(leader) > AutonomousRvrSpeed.ResumeGap)).ToArray();
+        float worst = missing.Select(member => member.CurrentRegionID == leader.CurrentRegionID
+            ? (float)member.GetDistanceTo(leader) : float.PositiveInfinity).DefaultIfEmpty(0).Max();
+        if (!_siegeColumnHolding)
+        {
+            _siegeColumnStarted = _siegeColumnProgress = now;
+            _siegeColumnBestGap = worst;
+        }
+        else if (worst < _siegeColumnBestGap - 250)
+        {
+            _siegeColumnBestGap = worst;
+            _siegeColumnProgress = now;
+        }
+        var decision = AutonomousRvrSpeed.SiegeCohesion(_siegeColumnHolding, worst,
+            now - _siegeColumnStarted, now - _siegeColumnProgress);
+        if (decision == AutonomousRvrSpeed.SiegeCohesionDecision.Advance)
+        {
+            if (_siegeColumnHolding) Log.Info($"RVR_SIEGE_COLUMN force={forceId} target={targetId} action=resumed leader={leader.Name}");
+            _siegeColumnHolding = false;
+            return false;
+        }
+        if (!_siegeColumnHolding || now >= _siegeColumnLogAfter)
+        {
+            _siegeColumnLogAfter = now + 30_000;
+            Log.Info($"RVR_SIEGE_COLUMN force={forceId} target={targetId} action={decision} leader={leader.Name} " +
+                $"actor={leader.CurrentRegionID}:{leader.X},{leader.Y},{leader.Z} gap={worst} heldMs={now-_siegeColumnStarted} " +
+                $"members=\"{string.Join(";", missing.Select(member => $"{member.Name}/{member.DatabaseID}@{member.CurrentRegionID}:{member.X},{member.Y},{member.Z}:combat={member.InCombat}:operator={BotSiegeRuntime.Assigned(member)}"))}\"");
+        }
+        _siegeColumnHolding = true;
+        leader.StopMovingOnPath(); leader.StopMoving();
+        if (decision == AutonomousRvrSpeed.SiegeCohesionDecision.Fail)
+            AbandonKeepTarget(leader, _rvrDestination, "March cohesion recovery exhausted", now, routeFailure: false);
+        else
+        {
+            AutonomousStuckWatchdog.MarkProgress(leader, eAutonomousProgressKind.Objective);
+            SetRvrStatus(leader, "Regrouping the siege column", _rvrDestination.MonsterName,
+                "Waiting for living members and operators to finish combat or their legal return route");
+        }
+        return true;
+    }
+
     private string _keepTravelKey;
     private long _keepTravelGeometry, _keepTravelRetry;
     private int _keepTravelFailures, _keepTravelIndex;
@@ -28,7 +89,7 @@ public sealed partial class AutonomousWorldBotController
     /// called it off and roamed from where it stood instead of porting home:
     /// the group is already in the frontier, and a failed route to one keep
     /// says nothing about the fights around it. The decision belongs to the
-    /// whole force (stored in the event layer), whichever member hit the wall.</summary>
+    /// leader (stored in the event layer), not an isolated follower.</summary>
     public const int KeepRouteGiveUpFailures = 3;
 
     public static bool ShouldAbandonKeepRoute(int consecutiveFailures) => consecutiveFailures >= KeepRouteGiveUpFailures;
@@ -42,6 +103,22 @@ public sealed partial class AutonomousWorldBotController
     /// current spot on the next turn.</summary>
     private void AbandonKeepTarget(GameBot bot, CampDestination destination, string failure, long now, bool routeFailure = true)
     {
+        // A follower's failed return or repeated roadside death cannot cancel
+        // the column's battle. Even a released leader waits for its living
+        // members' actual keep combat to finish before abandoning the force.
+        if (bot.Group?.LivingLeader is GameBot leader &&
+            (leader != bot || bot.Group.GetMembersInTheGroup().OfType<GameBot>().Any(member =>
+                member != bot && member.IsAlive && member.CurrentRegionID == destination.RegionId &&
+                (member.InCombat || member.IsAttacking || (member.Brain as BotBrain)?.HasAggro == true) &&
+                Vector2.DistanceSquared(new(member.X, member.Y), new(destination.X, destination.Y)) <= 6500 * 6500)))
+        {
+            if (now >= _keepAbandonLogAfter)
+            {
+                _keepAbandonLogAfter = now + 30_000;
+                Log.Info($"RVR_KEEP_ABANDON_DEFERRED force={RvrForceOf(bot)} bot={bot.Name} target={destination.Id} reason=\"{failure}\" leader={leader.Name}");
+            }
+            return;
+        }
         string forceId = RvrForceOf(bot);
         AutonomousRvrEventLayer.AbandonTarget(forceId, destination.Id, now);
         // The opener also skips this keep for a while (an hour, doubling on repeats).

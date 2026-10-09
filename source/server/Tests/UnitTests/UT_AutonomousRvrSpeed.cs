@@ -13,6 +13,21 @@ namespace DOL.UnitTests;
 [TestFixture]
 public sealed class UT_AutonomousRvrSpeed
 {
+    [Test]
+    public void SiegeColumnKeepsDistantAndCrossRegionOperatorsUntilRecoveryOrExplicitFailure()
+    {
+        Assert.That(AutonomousRvrSpeed.SiegeCohesion(false, 27_000, 0, 0),
+            Is.EqualTo(AutonomousRvrSpeed.SiegeCohesionDecision.Hold));
+        Assert.That(AutonomousRvrSpeed.SiegeCohesion(true, float.PositiveInfinity, 60_000, 60_000),
+            Is.EqualTo(AutonomousRvrSpeed.SiegeCohesionDecision.Hold));
+        Assert.That(AutonomousRvrSpeed.SiegeCohesion(true, 27_000, 120_000, 120_000),
+            Is.EqualTo(AutonomousRvrSpeed.SiegeCohesionDecision.Fail));
+        Assert.That(AutonomousRvrSpeed.SiegeCohesion(true, 900, 300_000, 1_000),
+            Is.EqualTo(AutonomousRvrSpeed.SiegeCohesionDecision.Fail));
+        Assert.That(AutonomousRvrSpeed.SiegeCohesion(true, 600, 300_000, 120_000),
+            Is.EqualTo(AutonomousRvrSpeed.SiegeCohesionDecision.Advance));
+    }
+
     [TestCase(eCharacterClass.Bard)]
     [TestCase(eCharacterClass.Skald)]
     [TestCase(eCharacterClass.Minstrel)]

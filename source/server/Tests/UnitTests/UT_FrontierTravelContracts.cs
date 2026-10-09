@@ -254,6 +254,38 @@ public class UT_FrontierTravelContracts
             "The rest of a split transfer slice follows the landed leader");
     }
 
+    [Test]
+    public void SupplyPassengerKeepsItsOwnLegAndCannotTakeTheWaitingColumn()
+    {
+        Traveler leader = CreateTravelActor(eRealm.Midgard);
+        Traveler supplier = CreateTravelActor(eRealm.Hibernia);
+        var group = new Group(leader);
+        leader.Group = supplier.Group = group;
+        ((List<GameLiving>)typeof(Group).GetField("_groupMembers", BindingFlags.NonPublic | BindingFlags.Instance)
+            .GetValue(group)).AddRange([leader, supplier]);
+        supplier.TempProperties.SetProperty("RvrEventForce", "warband");
+        supplier.TempProperties.SetProperty(AutonomousWorldBotController.SiegeSupplyKeepProperty, "rvr-keep-test");
+        supplier.TempProperties.SetProperty(AutonomousWorldBotController.SiegeSupplyRegionProperty, (ushort)200);
+        var passage = AutonomousFrontierTransport.Destination(eRealm.Midgard, 200);
+        var porter = (Porter)RuntimeHelpers.GetUninitializedObject(typeof(Porter));
+        leader.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey,
+            new AutonomousFrontierTransport.Request(porter, passage, "warband", 200));
+        Assert.That(AutonomousFrontierTransport.SharedRequest(supplier, porter, 200), Is.Null);
+        Assert.That(AutonomousFrontierTransport.BoardingParty(supplier, passage), Is.EqualTo(new[] { supplier }));
+        Assert.That(AutonomousFrontierTransport.BoardingParty(leader, passage), Is.EqualTo(new[] { leader }));
+        Assert.That(AutonomousFrontierTransport.TransportForceId(supplier), Is.EqualTo("warband:supply-0"));
+        Assert.That(AutonomousFrontierTransport.PassageMatchesSiege(supplier, passage, 200), Is.True);
+        Assert.That(AutonomousFrontierTransport.PassageMatchesSiege(supplier, passage, 100), Is.False);
+        var clear = typeof(AutonomousWorldBotController).GetMethod("ClearUnrelatedFrontierRequest", BindingFlags.NonPublic | BindingFlags.Static);
+        var request = new AutonomousFrontierTransport.Request(porter, passage, "warband:supply-0", 200);
+        supplier.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey, request);
+        clear.Invoke(null, [supplier, null]);
+        Assert.That(supplier.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey), Is.SameAs(request));
+        supplier.TempProperties.RemoveProperty(AutonomousWorldBotController.SiegeSupplyKeepProperty);
+        Assert.That(AutonomousFrontierTransport.TransportForceId(supplier), Is.EqualTo("warband"));
+        Assert.That(AutonomousFrontierTransport.BoardingParty(leader, passage), Has.Length.EqualTo(2));
+    }
+
     private static Traveler CreateTravelActor(eRealm realm)
     {
         var bot = (Traveler)RuntimeHelpers.GetUninitializedObject(typeof(Traveler));

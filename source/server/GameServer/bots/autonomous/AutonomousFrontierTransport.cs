@@ -60,14 +60,23 @@ public static class AutonomousFrontierTransport
     /// Members rejoining from another frontier use the available native network
     /// there and finish its real home hop before joining the group.
     /// </summary>
+    public static string TransportForceId(GameBot bot) =>
+        (bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}") +
+        (AutonomousWorldBotController.SiegeSupplyRegion(bot) != 0 ? $":supply-{bot.DatabaseID}" : "");
+
     public static OFTeleporter WarbandPorter(GameBot bot)
     {
+        if (AutonomousWorldBotController.SiegeSupplyRegion(bot) != 0)
+            return Porters.Keys.Where(porter => porter.ObjectState == GameObject.eObjectState.Active &&
+                    porter.CurrentRegion == bot.CurrentRegion)
+                .OrderBy(porter => porter.Realm == bot.Realm ? 0 : 1).ThenBy(bot.GetDistanceTo).FirstOrDefault();
         if (bot?.Group?.LivingLeader is GameBot { IsAlive: true } leader &&
             bot.IsAutonomousWorldBot && !bot.IsPlayerLedGroup && !bot.IsTemporaryGroupHelper &&
             AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
         {
             Request leaderRequest = leader.TempProperties.GetProperty<Request>(RequestKey);
-            if (leaderRequest?.Porter is { ObjectState: GameObject.eObjectState.Active } requested &&
+            if (AutonomousWorldBotController.SiegeSupplyRegion(leader) == 0 &&
+                leaderRequest?.Porter is { ObjectState: GameObject.eObjectState.Active } requested &&
                 requested.CurrentRegion == bot.CurrentRegion && leader.CurrentRegion == bot.CurrentRegion)
                 return requested;
             OFTeleporter shared = Porters.Keys.Where(porter =>
@@ -85,7 +94,9 @@ public static class AutonomousFrontierTransport
     /// intact so followers buy the same ticket and do not repeatedly replan.
     /// </summary>
     public static Request SharedRequest(GameBot bot, OFTeleporter porter, ushort targetRegion) =>
+        AutonomousWorldBotController.SiegeSupplyRegion(bot) == 0 &&
         bot?.Group?.LivingLeader is GameBot { IsAlive: true } leader && leader != bot &&
+        AutonomousWorldBotController.SiegeSupplyRegion(leader) == 0 &&
         leader.CurrentRegion == bot.CurrentRegion &&
         leader.TempProperties.GetProperty<Request>(RequestKey) is Request request &&
         request.Porter == porter && (request.TargetRegion == targetRegion || request.Passage.Region == targetRegion)
@@ -95,10 +106,11 @@ public static class AutonomousFrontierTransport
     /// answering a committed siege, board as one party (1.65: a group waited a
     /// minute at the porter for its stragglers, then ported together).</summary>
     public static GameBot[] BoardingParty(GameBot bot, Passage passage) =>
-        passage.Medallion == "home_necklace" &&
+        AutonomousWorldBotController.SiegeSupplyRegion(bot) != 0 || passage.Medallion == "home_necklace" &&
         !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)
             ? [bot] // Initial PvE meetups can have members returning from different frontiers.
-            : bot.Group?.GetMembersInTheGroup().OfType<GameBot>().ToArray() ?? [bot];
+            : bot.Group?.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(member => AutonomousWorldBotController.SiegeSupplyRegion(member) == 0).ToArray() ?? [bot];
 
     /// <summary>How long a warband holds the departure for members on their way.</summary>
     public const int MusterWaitMilliseconds = 60_000;
@@ -307,6 +319,10 @@ public static class AutonomousFrontierTransport
 
     public static bool PassageMatchesSiege(GameBot bot, Passage passage, ushort targetRegion = 0)
     {
+        ushort supplyRegion = AutonomousWorldBotController.SiegeSupplyRegion(bot);
+        if (supplyRegion != 0)
+            return passage != null && targetRegion == supplyRegion &&
+                (passage.Region == supplyRegion || passage.Medallion == "home_necklace" && bot.CurrentRegionID != passage.Region);
         var plan=ActiveSiegePlan(bot);
         // The home hop of a two-hop passage toward the siege is allowed, and so is a
         // passage to the region of the leader the warband is mustering on (bug 75).
@@ -420,7 +436,7 @@ public static class AutonomousFrontierTransport
         (!AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
             SameNativeLanding(porter, request?.Passage)) &&
         PassageMatchesSiege(bot, request?.Passage, request?.TargetRegion ?? 0) &&
-        request?.Porter == porter && request.ForceId == (bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}") &&
+        request?.Porter == porter && request.ForceId == TransportForceId(bot) &&
         Ticket(bot,request.Passage) != null;
 
     private static bool SameNativeLanding(OFTeleporter porter, Passage passage)

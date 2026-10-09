@@ -40,6 +40,7 @@ public sealed partial class AutonomousWorldBotController
 
     private static void ClearUnrelatedFrontierRequest(GameBot bot, AutonomousRvrEventLayer.Plan plan)
     {
+        if (SiegeSupplyRegion(bot) != 0) return;
         var pending = bot.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey);
         if (pending == null) return;
         bool rejoiningLeader = bot.Group?.LivingLeader is GameBot leader && leader != bot &&
@@ -72,7 +73,8 @@ public sealed partial class AutonomousWorldBotController
         if (AutonomousFrontierTransport.Destination(bot.Realm,destination.RegionId) == null) return Unavailable();
         // A full backpack must not cancel every member's approach before the
         // owner can reach the real merchant and sell ordinary vendor trash.
-        var leaderRequest = bot.Group?.LivingLeader is GameBot leader && leader != bot &&
+        var leaderRequest = SiegeSupplyRegion(bot) == 0 &&
+            bot.Group?.LivingLeader is GameBot leader && leader != bot && SiegeSupplyRegion(leader) == 0 &&
             leader.CurrentRegion == bot.CurrentRegion
             ? leader.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey) : null;
         bool sharedPorterChanged = leaderRequest?.Porter is { ObjectState: GameObject.eObjectState.Active } &&
@@ -120,7 +122,7 @@ public sealed partial class AutonomousWorldBotController
         // returning PvE bot may need its own portal-keep door to BUY the ticket.
         // Boarding still requires the real purchased medallion and all safety checks.
         bot.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey,new AutonomousFrontierTransport.Request(
-            _frontierPorter, passage, bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}",
+            _frontierPorter, passage, AutonomousFrontierTransport.TransportForceId(bot),
             sharedRequest?.TargetRegion is > 0 ? sharedRequest.TargetRegion : destination.RegionId));
         if (AutonomousFrontierTransport.Ticket(bot,passage) == null)
         {

@@ -61,6 +61,24 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+119. **Some attacked marching bots keep running instead of defending.** Owner,
+     2026-10-09, during the 0.215.0 investigation: some bots respond, others
+     continue past the player's group. The second screenshot shows actual
+     damage and mez recovery for several named bots, plus a retaliating hunter
+     pet; it does not establish each actor's controller state. Captured session
+     recall entries match Ivarenulf, Karaienny, Karaunveig, Hildenny, Gormarmund,
+     Inguna and Torunarar. Confirmed source defect: guild keep recall runs
+     before normal combat, then clears aggro every travel turn outside the
+     keep's 6,500-unit radius. Source 0.217.0 gives live, legal nearby attackers
+     the ordinary combat turn before recall initialization/travel can clear
+     them, including recent nearby party attacks. Mez/stun still prevent action;
+     old aggro without current incoming pressure yields back to recall.
+     `GUILD_RECALL_DEFENSE` identifies the actor, attacker and location, at most
+     once per 30 game seconds per controller. Installation and direct/AoE/pet
+     attacks on recalled and ordinary marching bots remain pending; this is a
+     confirmed matching path, not proof that every observed non-response had
+     the same cause.
+
 118. **Launcher "Make Me a GM" fails with "Unable to save GM setting".**
      Installed 0.215.0, 2026-10-09: ticking the box with the server stopped
      showed an error popup and changed nothing. The server-created
@@ -78,6 +96,8 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      that branch when movement fails or changes the camp. This repairs the
      identified unsafe path; installation and reproduction of the exact
      observed stack remain pending. No live save or route state was edited.
+     The supplied 0.215.0 observation saw no recurrence; the exact failure
+     trigger was not reproduced, so acceptance remains pending.
 
 116. **Bot group-leader promotion throws during hub departure.** Installed
      0.214.1 observation on 2026-10-09 found twenty-one exceptions after
@@ -86,7 +106,9 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      the group swap and indexes. Added a regression case exercising actual
      bot promotion and its notification. Test execution and installed hub
      departure verification remain pending; this defect was one contributor,
-     not an explanation of all keep-siege failures.
+     not an explanation of all keep-siege failures. The supplied 0.215.0
+     observation recorded 31 completed hub leader handovers and no recurrence;
+     retain pending status until the required acceptance is complete.
 
 75. **Keep assaults still stall during travel and siege placement.**
     Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
@@ -145,6 +167,50 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     obstacles; the observed placement failure is not proven to be a LOS bug,
     so native placement/LOS and enemy-door rules remain intact. Large invalid
     actor elevations are not repaired by guessing a distant lower floor.
+
+
+    Follow-up 0.217.0 (source only), 2026-10-09:
+    - Force -179/Oisoaelan went via Tir na Nog/Connacht, bought at 21:52:18,
+      then sought a return medallion and fought Gisenine when its rally expired
+      at 21:53:32. Force -276/Briainela changed assignments during the earlier
+      trip, crossed via Tir na Nog, fought in Connacht and bought at 22:06:55,
+      four seconds before expiry. Force -106/Aineriaebhe hit a route-pocket
+      recovery to Tir na Nog, bought at 22:08:58 and was still collecting a
+      Home medallion at 22:09:42. Successful -269/Bjornenulf bought locally in
+      Uppland in two seconds, returned, rallied 8/8/8 and transferred eight.
+      These are physical/log observations, not proof of every route edge.
+    - Confirmed source causes: outbound purchases bypassed frontier transport;
+      the merchant was reselected every turn; the purchase clock could consume
+      the entire rally window without reserving return time. Return was only
+      implicit formation travel. Source now pins the merchant and return rally,
+      uses ticketed native passages on both legs, isolates supply boarding and
+      retains the trip marker until physical return even after purchase failure.
+      Purchase time is bounded by half the remaining existing muster window;
+      the rally deadline is unchanged. Own-realm equipment, real prices and
+      inventories remain unchanged. This is not a guarantee that any distant
+      merchant trip can fit the deadline or survive enemy interception.
+    - Force -071's operators fought Eiriarfrid while Eirunborg kept traveling;
+      the sampled gap reached about 27,000 units. Force -118 also lost operator
+      cohesion before genuine combat deaths. Siege travel now holds for living
+      members beyond the old 4,000-unit cutoff and across regions, without a
+      group-combat exemption. No progress for two game minutes, or five total,
+      ends the approach rather than authorizing a march without the stragglers.
+      Immediate defense and guard/door combat still precede travel holds.
+    - At 21:54:07 Knutiunbjorn (-071) abandoned Nottmoor after repeated roadside
+      PvP deaths while Eirunborg and others still fought its doors/guards.
+      Abandonment is now a leader decision and is deferred during living
+      members' combat at that keep. Individual failure is not force reassignment.
+    - No ram deployment or placement attempt was observed. Approach-marker
+      starvation remains a hypothesis: execution was not loosened. Throttled
+      `RVR_SIEGE_GATE` records job/kit state, marker, block reason and positions;
+      supply and column logs retain force/operator identities. Large elevation
+      errors and old blocked-ram origins remain unresolved.
+    Acceptance remains pending: trace one force from rally and supply return
+    through every real transfer (including intermediate Home), cohesive approach,
+    operator arrival and measured combat/engine outcome. Same-second 1+7 slices
+    are not stranded members. Force -185's complete Nottmoor arrival and eight
+    deaths to Jarl/Huscarls are successful logistics followed by defender victory.
+    Zero attendance counters and activity labels alone cannot establish results.
 
 
 115. **Closed console input spins the server console loop.** Confirmed in

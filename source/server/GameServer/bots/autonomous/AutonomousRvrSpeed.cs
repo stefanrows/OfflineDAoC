@@ -190,6 +190,20 @@ public static class AutonomousRvrSpeed
         return nearestAnchorDistance <= NoSpeedAnchorRange ? NoSpeedNearAnchorFactor : NoSpeedFarFactor;
     }
 
+    /// <summary>Sieges recover the column instead of silently dropping distant
+    /// members after three short waits. Combat never becomes a travel permit.</summary>
+    public enum SiegeCohesionDecision { Advance, Hold, Fail }
+    public const long SiegeNoProgressMilliseconds = 120_000;
+    public const long SiegeMaximumRegroupMilliseconds = 300_000;
+
+    public static SiegeCohesionDecision SiegeCohesion(bool holding, float worstGap,
+        long heldMilliseconds, long stalledMilliseconds)
+    {
+        if (worstGap <= (holding ? ResumeGap : HoldGap)) return SiegeCohesionDecision.Advance;
+        return heldMilliseconds >= SiegeMaximumRegroupMilliseconds || stalledMilliseconds >= SiegeNoProgressMilliseconds
+            ? SiegeCohesionDecision.Fail : SiegeCohesionDecision.Hold;
+    }
+
     // ----------------------------------------------------------- live glue
 
     private sealed class GroupSpeedState

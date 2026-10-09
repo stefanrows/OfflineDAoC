@@ -10,7 +10,8 @@ public sealed partial class AutonomousWorldBotController
     private AbstractGameKeep _guildDefenseKeep;
 
     /// <summary>Called before ordinary AI branches so combat, services, raid
-    /// staging and existing ticket rides cannot postpone the emergency order.</summary>
+    /// staging and existing ticket rides cannot postpone the emergency order.
+    /// Immediate roadside defense temporarily owns movement, then recall resumes.</summary>
     public bool TryRunGuildKeepDefense(BotBrain brain)
     {
         GameBot bot = brain?.BotBody;
@@ -35,6 +36,10 @@ public sealed partial class AutonomousWorldBotController
             }
             return false;
         }
+        // Recall remains the destination, but a live attack is not a stale
+        // PvE order. Run native defense before recall initialization can clear
+        // aggro, including while serialized group withdrawal is pending.
+        if (TryDefendDuringGuildRecall(brain, bot, keep)) return true;
         // Wait for serialized group withdrawal before any passage can board
         // members of a former mixed-guild raid alongside the recalled bot.
         if (!AutonomousGuildKeepDefense.IsPrepared(bot, keep)) return true;
@@ -106,8 +111,8 @@ public sealed partial class AutonomousWorldBotController
                 return true;
             }
         }
-        // No PvE mob, roadside fight, stale pet order or optional cast may keep
-        // the guild at another objective. Incoming damage is still real.
+        // Resume recall after current roadside defense. Stale aggro, pet
+        // orders and optional casts cannot keep the guild at another objective.
         if (atKeep)
         {
             if (bot.IsCasting && !BotSongTwistPolicy.HasMobileSongCast(bot)) return true;
@@ -128,6 +133,45 @@ public sealed partial class AutonomousWorldBotController
         if (Vector2.DistanceSquared(new(bot.X, bot.Y), new(keep.X, keep.Y)) > 3500 * 3500)
             return TravelToDefensivePost(bot, keep, new(keep.X, keep.Y, keep.Z));
         return HoldDefensiveKeepPost(bot, keep);
+    }
+
+    private bool _guildRecallDefending;
+    private long _guildRecallDefenseLogAfter;
+
+    private bool TryDefendDuringGuildRecall(BotBrain brain, GameBot bot, AbstractGameKeep keep)
+    {
+        long now = GameLoop.GameLoopTime;
+        bool atKeep = bot.CurrentRegionID == keep.Region &&
+            Vector2.DistanceSquared(new(bot.X, bot.Y), new(keep.X, keep.Y)) <= 6500 * 6500;
+        GameLiving attacker = bot.IsAlive && !atKeep ? brain.FindRecallDefenseTarget() : null;
+        if (attacker == null)
+        {
+            _guildRecallDefending = false;
+            return false;
+        }
+        if (!_guildRecallDefending)
+        {
+            bot.StopMovingOnPath(); bot.StopMoving();
+            _guildRecallDefending = true;
+        }
+        if (now >= _guildRecallDefenseLogAfter)
+        {
+            _guildRecallDefenseLogAfter = now + 30_000;
+            Log.Info($"GUILD_RECALL_DEFENSE bot={bot.Name} id={bot.DatabaseID} keep={keep.KeepID} " +
+                $"attacker={attacker.Name} actor={bot.CurrentRegionID}:{bot.X},{bot.Y},{bot.Z} " +
+                $"mezzed={bot.IsMezzed} stunned={bot.IsStunned}");
+        }
+        // Incapacitation still prevents action. Native combat owns healing,
+        // class attacks, pets, crowd control, LOS and pursuit from here.
+        if (bot.IsStunned || bot.IsMezzed) return true;
+        bot.WakeRecoveryRest();
+        brain.ThinkInterval = 500;
+        brain.AlreadyCheckedHeals = false;
+        if (brain.FSM.GetCurrentState()?.StateType != eFSMStateType.AGGRO)
+            brain.FSM.SetCurrentState(eFSMStateType.AGGRO);
+        AutonomousPetSupport.Maintain(bot, attacker, ref _nextDefensePetTick, out _);
+        brain.FSM.Think();
+        return true;
     }
 
     private static void CancelDefensePetWork(GameBot bot)

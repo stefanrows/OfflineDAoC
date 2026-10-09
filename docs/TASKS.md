@@ -65,6 +65,15 @@ Agent sessions on items 45–48: take the role and context from
     reuses a party snapshot, and bounds full eligibility/LOS checks. Profiling
     retains its original outer scope for comparison. Release compilation passed;
     achieved-speed improvement remains unmeasured until installation.
+    Supplied 0.215.0 observation: at selected 10x and 3,900 bots, achieved
+    speed was 1.81-3.99x (median 2.67x versus baseline 2.36x), with median
+    reported tick P95 still 28.1 ms. FrontierThreat median accumulated thread
+    time fell from 283.6 to 33.7 s/window; NavPathQuery remained substantial
+    (52.4 s/window versus 37.8). These are nested thread totals and different
+    live workloads, not additive wall time or a controlled improvement.
+    Revisited after the 0.217.0 correctness work: no further navigation/performance
+    tuning or live run was performed. Task stays open; reprofile after the
+    supply/cohesion/defense paths are accepted.
 
 45. **Battlegroup load check.** Measure server tick and pathing cost with two
     owners and 5 companion groups each in RvR before calling tasks 42–44 done.
@@ -247,6 +256,26 @@ Agent sessions on items 45–48: take the role and context from
      tests were not executed under the project workflow. Owner authorized
      shipping 0.215.0 on 2026-10-09, with the installation left stopped for a
      subsequent monitoring chat. Runtime acceptance remains pending; use the
+     shipping result/deployment manifest to confirm installation separately.
+     Source 0.217.0 follows the owner's supplied observation and new partial
+     retaliation report (bug 119). Supply routing now has a fixed merchant,
+     explicit return, isolated legal porter legs and a return-time reserve
+     within the existing rally deadline. Siege cohesion uses bounded regrouping
+     without abandoning distant living operators; followers cannot reassign a
+     force by giving up while its keep battle continues. Recall yields to actual
+     incoming combat. New throttled logs diagnose ram execution without changing
+     placement/LOS/door rules. Detailed force traces and remaining acceptance are
+     in bug 75. Installation, intermediate Home hops, ram/elevation diagnosis and
+     real-client end-to-end acceptance remain pending. Tests are not executed;
+     no deployment, server process action, settings change or save edit is part
+     of this development request. Validation: server and Windows launcher
+     Release builds and server regression-project compilation passed with zero
+     errors (warnings remain). Whitespace checks accounting for preserved CRLF,
+     conflict-marker checks and all four 0.217.0 version pins passed. The
+     pre-existing untracked `source/server/Tests/tmp/` was preserved. Owner
+     authorized shipping on 2026-10-09. After integrating the fork's launcher
+     GM fix (0.216.0), this task is versioned 0.217.0; deployment will leave
+     the installation stopped. Runtime acceptance remains pending; use the
      shipping result/deployment manifest to confirm installation separately.
 
 

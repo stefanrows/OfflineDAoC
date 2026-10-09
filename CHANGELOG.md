@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.217.0] - 2026-10-09
+
+### Fixed
+
+- Keep-raid supply operators retain one merchant, use legal frontier passages
+  for outbound and return legs, and return before the warband may depart.
+  Independent supply passengers cannot redirect or board the waiting column;
+  failed purchases also return, within the existing rally deadline.
+- Siege columns retain distant and cross-region stragglers during bounded
+  regrouping instead of silently dropping them after short holds. An isolated
+  follower's repeated deaths cannot abandon a force still fighting its keep.
+- Guild keep recall permits immediate roadside defense before resuming travel;
+  it no longer clears current attack aggro every turn outside the keep.
+
+### Added
+
+- Throttled siege execution, supply-return, column and recall-defense diagnostics
+  with force/operator identity and coordinates. Native ram placement, LOS,
+  navigation, enemy-door checks and defenders are unchanged. Ram non-execution,
+  invalid elevations and complete gameplay acceptance remain under investigation.
+- Regression cases for supply passenger isolation and bounded siege cohesion;
+  automated test execution and installation remain pending.
+
 ## [0.216.0] - 2026-10-09
 
 ### Fixed

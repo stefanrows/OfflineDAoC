@@ -210,13 +210,14 @@ namespace DOL.GS
                 if (!string.Equals(_observedObjectiveAssignmentId, assignmentId, StringComparison.Ordinal))
                 {
                     AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Reassigned, "Objective assignment changed");
-                    ReleaseOwnedSiegeRams(bot);
+                    ReleaseSiegeJob(bot);
                     _observedObjectiveAssignmentId = assignmentId;
                     // A fresh task restores one step of confidence; its kill
                     // counter starts again from the new objective's count.
                     _observedPveKills = -1;
                     if (_soloConfidence.RecoverStep())
                         LogConfidenceRecovery(bot, "new-task");
+                    _siegeColumnKey = null; _siegeColumnHolding = false;
                     _keepPlanning = null; _keepTravelPoints = null; _keepTravelKey = null;
                     _keepTravelLastPosition = null;
                     ResetTownIdle();
@@ -250,6 +251,7 @@ namespace DOL.GS
                 {
                     // Group assignment supersedes the bot's private task at
                     // once.  No stale solo destination survives matchmaking.
+                    ReleaseSiegeJob(bot);
                     ResetRvrObjectiveForGroupChange(bot, _activeDynamicGroupId);
                     _activeDynamicGroupId = _groupDirective.GroupId;
                     AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.GroupChanged, "Joined a new autonomous group");
@@ -330,6 +332,7 @@ namespace DOL.GS
                 bool postCombatRecovery = BotRestRecovery.NeedsOrContinuesRest(bot) && !BotRestRecovery.BlocksRest(bot);
                 if (brain.HasAggro || (bot.InCombat && !postCombatRecovery) || bot.IsAttacking)
                 {
+                    TraceSiegeExecution(bot, "personal-combat");
                     // Defense owns movement; do not resume an old dragon-ring
                     // waypoint from a different position after the fight.
                     _dragonRallyPlanning = null;
@@ -352,6 +355,15 @@ namespace DOL.GS
                     if (bot.TargetObject is GameLiving target)
                         SetStatus(bot, $"Fighting {target.Name}", GoalText(), $"Engaged level {target.EffectiveLevel} {target.Name}", target.Name);
                     return false;
+                }
+
+                if ((!bot.IsCasting || BotSongTwistPolicy.HasMobileSongCast(bot)) &&
+                    bot.TempProperties.GetProperty<string>(SiegeSupplyKeepProperty) is { } supplyKeep)
+                {
+                    string supplyForce = _groupDirective?.GroupId ?? RvrForceOf(bot);
+                    var supplyPlan = AutonomousRvrEventLayer.KeepPlan(supplyForce, bot.Realm, nowTick);
+                    if (supplyPlan?.TargetId != supplyKeep) ReleaseSiegeJob(bot);
+                    else if (ContinueSiegeSupplyTrip(bot, nowTick)) return true;
                 }
 
                 // Roadside combat pauses nearby party members. A distant or
@@ -1433,6 +1445,16 @@ namespace DOL.GS
                 }
             }
 
+            if (directive.ObjectiveKind == eAutonomousObjectiveKind.RvR && SiegeSupplyRegion(leader) != 0 &&
+                leader.TempProperties.GetProperty<CampDestination>(SiegeSupplyRallyProperty) is { } supplyRally)
+            {
+                if (bot.CurrentRegionID != supplyRally.RegionId ||
+                    Vector3.Distance(new(bot.X, bot.Y, bot.Z), new(supplyRally.X, supplyRally.Y, supplyRally.Z)) > 500)
+                    return TravelRvrObjective(bot, supplyRally);
+                bot.StopMovingOnPath(); bot.StopMoving();
+                SetRvrStatus(bot, "Waiting at the supply rally", supplyRally.MonsterName, "The leader is returning with siege supplies");
+                return true;
+            }
             if (directive.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
                 leader.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey) is { } passage &&
                 leader.CurrentRegion == bot.CurrentRegion && passage.Passage.Region != bot.CurrentRegionID &&
@@ -1685,6 +1707,9 @@ namespace DOL.GS
                 return false;
             }
 
+            if (musterPhase == AutonomousRvrSiegeMuster.Phase.Marching && _groupDirective.Leader == bot &&
+                HoldSiegeColumn(bot, forceId, committedPlan.TargetId)) return true;
+
             // Mustering: the leader waits where it stands for the warband to come to
             // it; the others join it (across a frontier by the one force passage).
             if (musterPhase == AutonomousRvrSiegeMuster.Phase.Mustering && _groupDirective.Leader == bot)
@@ -1861,17 +1886,6 @@ namespace DOL.GS
                 return true;
             }
 
-            // On the march the leader waits for a member that falls behind, as a
-            // roaming group does (bounded: six seconds, three times per straggler).
-            if (musterPhase == AutonomousRvrSiegeMuster.Phase.Marching && _groupDirective.Leader == bot &&
-                !HasReachedKeepAssaultApproach(bot, _rvrDestination.Id) && AutonomousRvrSpeed.ShouldLeaderHold(bot))
-            {
-                bot.StopMovingOnPath();
-                bot.StopMoving();
-                SetRvrStatus(bot, "Waiting for the warband", _rvrDestination.MonsterName,
-                    "A member fell behind on the march; the warband closes up before moving on");
-                return true;
-            }
             if (bot.CurrentRegionID != _rvrDestination.RegionId)
             {
                 return TravelRvrObjective(bot,_rvrDestination);

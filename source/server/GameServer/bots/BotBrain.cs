@@ -486,6 +486,18 @@ namespace DOL.AI.Brain
             target.CurrentRegion == Body.CurrentRegion &&
             GameServer.ServerRules.IsAllowedToAttack(Body, target, true);
 
+        /// <summary>Recall may discard old pulls, never a current legal attacker.</summary>
+        public GameLiving FindRecallDefenseTarget()
+        {
+            if (BotBody == null || !Body.IsAlive) return null;
+            long now = GameLoop.GameLoopTime;
+            bool recentlyHit = Body.LastAttackedByEnemyTick > 0 && now - Body.LastAttackedByEnemyTick < 15_000 ||
+                AutonomousSiegeMarch.HasRecentPartyAttack(BotBody);
+            return AggroList.FirstOrDefault(pair => pair.Value.Base > 0 && CanDefendAgainst(pair.Key) &&
+                Body.IsWithinRadius(pair.Key, MAX_AGGRO_LIST_DISTANCE) &&
+                (recentlyHit || AutonomousSiegeMarch.IsPartyThreat(BotBody, pair.Key))).Key;
+        }
+
         public virtual void OnAttackedByEnemy(AttackData ad)
         {
             CompanionPvpEngagement.RecordThreat(BotBody, Body, ad);

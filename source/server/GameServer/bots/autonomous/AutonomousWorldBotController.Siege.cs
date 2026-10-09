@@ -25,7 +25,10 @@ namespace DOL.GS
         private GameSiegeWeapon _siegeWeapon, _siegeRepair;
         private string _siegeSupplyItem;
         private int _siegeSupplyCount;
-        private long _siegeSupplyStarted, _siegeNextTopup;
+        private long _siegeSupplyStarted, _siegeNextTopup, _siegePurchaseDeadline;
+        private GameMerchant _siegeSupplyMerchant;
+        private CampDestination _siegeSupplyRally;
+        private long _siegeDiagnosticAfter;
         private long _siegeNoTargetSince;
         private Vector3? _siegeMoveTo;
         private long _siegeMoveStarted, _siegeNextMove, _siegeMoveRepath;
@@ -60,22 +63,18 @@ namespace DOL.GS
                 (_groupDirective.Leader?.IsAlive != true || _groupDirective.Leader.CurrentRegionID != bot.CurrentRegionID ||
                  bot.GetDistanceTo(_groupDirective.Leader) > AutonomousRvrSiegeMuster.RejoinRadius))
                 permitExecution = false;
-            // A completed purchase is not a completed supply trip until the
-            // operator rejoins the rally. Otherwise a six-member quorum could
-            // march while its only equipped operator is still at the merchant.
-            if (_siegeSupplyItem == null &&
-                bot.TempProperties.GetProperty<string>(SiegeSupplyKeepProperty) == _rvrDestination.Id &&
-                (_groupDirective?.IsDynamic != true || _groupDirective.Leader == bot ||
-                 _groupDirective.Leader is { IsAlive: true } supplyLeader &&
-                 supplyLeader.CurrentRegionID == bot.CurrentRegionID &&
-                 bot.GetDistanceTo(supplyLeader) <= AutonomousRvrSiegeMuster.PresentRadius))
-                bot.TempProperties.RemoveProperty(SiegeSupplyKeepProperty);
+            if (bot.TempProperties.GetProperty<string>(SiegeSupplyKeepProperty) is { } supplyKeep)
+            {
+                if (supplyKeep != _rvrDestination.Id) ReleaseSiegeJob(bot);
+                else if (ContinueSiegeSupplyTrip(bot, now)) return true;
+            }
             // A reserved operator remains part of the marching formation. A
             // kit purchase is allowed while gathering, but must not send a
             // supplied operator down the keep road ahead of its leader.
             if (_siegeJobKeep == _rvrDestination.Id) AutonomousSiegeJobs.Refresh(bot);
             if (!permitExecution)
             {
+                TraceSiegeExecution(bot, permitSupply ? "mustering" : "leader-approach-or-formation");
                 if (!permitSupply) return false;
                 if (_siegeSupplyItem != null) return SupplySiegeItem(bot, _siegeSupplyItem, _siegeSupplyCount);
                 return PrepareSiegeResponseSupplies(bot, now, allowFrontierSupply: true);
@@ -88,7 +87,8 @@ namespace DOL.GS
             bool canBuyBeforeMarch = _siegePreSupplyKeep != _rvrDestination.Id &&
                 (!IsInFrontier(bot) || PvpCombatant.IsSafeBorderHub(bot.CurrentRegionID, bot.X, bot.Y));
             if (!AutonomousSiegeDoctrine.ShouldRunSiegeJob(_rvrIntent, _rvrSharedEvent, inRegion, distance,
-                    _siegeSupplyItem != null, canBuyBeforeMarch)) return false;
+                    _siegeSupplyItem != null, canBuyBeforeMarch))
+            { TraceSiegeExecution(bot, "outside-job-range"); return false; }
             return TryRunSiegeJob(bot, permitSupply);
         }
 
@@ -178,6 +178,67 @@ namespace DOL.GS
         }
 
         public const string SiegeSupplyKeepProperty = "SiegeSupplyKeep";
+        public const string SiegeSupplyRegionProperty = "SiegeSupplyRegion";
+        private const string SiegeSupplyRallyProperty = "SiegeSupplyRally";
+
+        // Only this operator's declared supply leg may bypass the shared
+        // warband passage. Native tickets, landing, combat and door checks stay.
+        public static ushort SiegeSupplyRegion(GameBot bot) =>
+            bot?.TempProperties?.GetProperty<string>(SiegeSupplyKeepProperty) != null
+                ? bot.TempProperties.GetProperty<ushort>(SiegeSupplyRegionProperty) : (ushort)0;
+
+        private bool ContinueSiegeSupplyTrip(GameBot bot, long now)
+        {
+            AutonomousSiegeJobs.Refresh(bot);
+            if (_siegeSupplyItem != null)
+                return SupplySiegeItem(bot, _siegeSupplyItem, _siegeSupplyCount);
+            GameBot leader = _groupDirective?.Leader;
+            CampDestination rally = leader != null && leader != bot && leader.IsAlive
+                ? new("siege-supply-return", leader.Name, "warband rally", leader.CurrentRegionID,
+                    leader.X, leader.Y, leader.Z, 1, false, true) : _siegeSupplyRally;
+            if (rally == null) return false;
+            bot.TempProperties.SetProperty(SiegeSupplyRegionProperty, rally.RegionId);
+            if (bot.CurrentRegionID == rally.RegionId &&
+                Vector3.Distance(new(bot.X, bot.Y, bot.Z), new(rally.X, rally.Y, rally.Z)) <= AutonomousRvrSiegeMuster.PresentRadius)
+            {
+                SiegeLog(bot, "supply_returned", null, $"elapsedMs={now-_siegeSupplyStarted} kit={BotSiegeRuntime.Item(bot, BotSiegeRuntime.Kit(bot.Realm, _siegeKind)) != null}");
+                bot.TempProperties.RemoveProperty(SiegeSupplyKeepProperty);
+                bot.TempProperties.RemoveProperty(SiegeSupplyRegionProperty);
+                bot.TempProperties.RemoveProperty(SiegeSupplyRallyProperty);
+                bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
+                _siegeSupplyMerchant = null; _siegeSupplyRally = null;
+                _frontierPorter = null; _nextPorterSearch = 0;
+                return false;
+            }
+            TraceSiegeExecution(bot, "supply-return");
+            TravelRvrObjective(bot, rally);
+            return true;
+        }
+
+        private bool EndSiegePurchase(GameBot bot, string action, string reason)
+        {
+            SiegeLog(bot, action, null, reason);
+            _siegeSupplyItem = null;
+            _siegeNextAttempt = GameLoop.GameLoopTime + 120_000;
+            // A failed purchase must return too; clearing the job here used to
+            // let the quorum depart while the operator was still away.
+            return true; // The next non-combat turn starts the return outside inventory locks.
+        }
+
+        private void TraceSiegeExecution(GameBot bot, string reason)
+        {
+            long now = GameLoop.GameLoopTime;
+            if (_siegeJobKeep == null || now < _siegeDiagnosticAfter || !Log.IsInfoEnabled) return;
+            _siegeDiagnosticAfter = now + 30_000;
+            GameBot leader = _groupDirective?.Leader ?? bot;
+            var marker = leader.TempProperties.GetProperty<KeepAssaultApproach>(KeepAssaultApproachProperty);
+            Log.Info($"RVR_SIEGE_GATE force={_groupDirective?.GroupId ?? RvrForceOf(bot)} bot={bot.Name} id={bot.DatabaseID} " +
+                $"keep={_rvrDestination?.Id} job={_siegeJobKeep} kind={_siegeKind} slot={_siegeSlot} assigned={BotSiegeRuntime.Assigned(bot)} " +
+                $"kit={BotSiegeRuntime.Item(bot, BotSiegeRuntime.Kit(bot.Realm, _siegeKind)) != null} supply={_siegeSupplyItem ?? "none"} " +
+                $"reason={reason} marker={marker?.Target ?? "none"} markerRegion={marker?.Region} markerPoint={marker?.Point} " +
+                $"approach={HasReachedKeepAssaultApproach(leader, _rvrDestination?.Id)} " +
+                $"actor={bot.CurrentRegionID}:{bot.X},{bot.Y},{bot.Z} leader={leader.Name}:{leader.CurrentRegionID}:{leader.X},{leader.Y},{leader.Z}");
+        }
 
         /// <summary>Started purchase trips finish before departure. Keep the
         /// native melee and allied-engine alternatives: guild-scoped job slots
@@ -261,7 +322,7 @@ namespace DOL.GS
                 ReleaseSiegeJob(bot);
                 _siegeJobKeep = _rvrDestination.Id;
             }
-            if (now < _siegeNextAttempt) return false;
+            if (now < _siegeNextAttempt) { TraceSiegeExecution(bot, "job-cooldown"); return false; }
             if (_siegeMoveTo.HasValue && _siegeWeapon != null)
                 return ContinueSiegeMove(bot,now);
             if (_siegeScanNpcs == null || now >= _siegeScanUntil)
@@ -280,7 +341,7 @@ namespace DOL.GS
                     (b == bot || PvpCombatant.AreAllied(bot, b))) + (nearby.Contains(bot) ? 0 : 1) +
                 _siegeScanPlayers.Count(p => p.IsAlive && PvpCombatant.AreAllied(bot, p));
             if (!AutonomousSiegeJobs.TryAcquire(bot, _siegeJobKeep, present, attacking && door!=null, enemyEngines, out _siegeKind, out _siegeSlot))
-            { _siegeNextAttempt = now + 10_000; return false; }
+            { TraceSiegeExecution(bot, "no-job-slot"); _siegeNextAttempt = now + 10_000; return false; }
             if (now>=_siegeNextTopup)
             {
                 _siegeNextTopup=now+30_000;
@@ -306,6 +367,7 @@ namespace DOL.GS
                 target=retained;
             if (target == null)
             {
+                TraceSiegeExecution(bot, "no-legal-siege-target");
                 if (_siegeNoTargetSince==0) _siegeNoTargetSince=now;
                 // Keep the existing engine in place for brief gaps. Never continually
                 // move a working engine after each target dies.
@@ -317,7 +379,9 @@ namespace DOL.GS
 
             // Prioritize immediate personal defense without chasing distant enemies away from an engine.
             if (bot.GetNPCsInRadius(450).Any(n => n.IsAlive && n.TargetObject == bot && n.IsAttacking) ||
-                bot.GetPlayersInRadius(450).Any(p => p.IsAttacking && p.TargetObject == bot)) return false;
+                bot.GetPlayersInRadius(450).Any(p => p.IsAttacking && p.TargetObject == bot))
+            { TraceSiegeExecution(bot, "immediate-defense"); return false; }
+            TraceSiegeExecution(bot, "execution-ready");
 
             GameSiegeWeapon owned = AutonomousSiegeOwnership.All(bot).FirstOrDefault();
             if (owned != null && (owned.CurrentRegion != bot.CurrentRegion || BotSiegeRuntime.Kind(owned) != _siegeKind)) { owned.ReleaseControl(); owned = null; }
@@ -486,34 +550,57 @@ namespace DOL.GS
             // Never leave a siege just to fetch repair supplies.
             if (id==BotSiegeRuntime.RepairKit) return false;
             long now=GameLoop.GameLoopTime;
-            if (_siegeSupplyItem!=id) _siegeSupplyStarted=now;
-            bool urgent = AutonomousRvrEventLayer.IsPlayerDefenseResponse(_rvrDestination?.Id, now);
-            if (now-_siegeSupplyStarted>SiegeSupplyBudget(urgent))
-            { SiegeLog(bot,"supply_timeout",null,"finite purchase trip expired; rejoin warband and retain normal gate-combat alternatives"); ReleaseSiegeJob(bot); _siegeNextAttempt=now+120_000; return false; }
+            if (_siegeSupplyItem != id)
+            {
+                _siegeSupplyStarted = now;
+                GameBot anchor = _groupDirective?.Leader ?? bot;
+                _siegeSupplyRally = new("siege-supply-return", anchor.Name, "warband rally", anchor.CurrentRegionID,
+                    anchor.X, anchor.Y, anchor.Z, 1, false, true);
+                bot.TempProperties.SetProperty(SiegeSupplyRallyProperty, _siegeSupplyRally);
+                long remaining = AutonomousRvrEventLayer.MusterTimeRemaining(_groupDirective?.GroupId ?? RvrForceOf(bot), now)
+                    ?? SiegeSupplyBudget(AutonomousRvrEventLayer.IsPlayerDefenseResponse(_rvrDestination?.Id, now));
+                // The existing rally deadline owns the whole round trip. Reserve
+                // half its remaining time for return instead of spending all of
+                // a fresh ten-minute purchase budget after a late start.
+                _siegePurchaseDeadline = now + Math.Min(remaining / 2, SiegeSupplyBudget(false) / 2);
+                _siegeSupplyMerchant = FindReachableSiegeMerchant(bot);
+                _frontierPorter = null; _nextPorterSearch = 0;
+                bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
+                _siegeSupplyItem = id; _siegeSupplyCount = quantity;
+                bot.TempProperties.SetProperty(SiegeSupplyKeepProperty, _rvrDestination?.Id);
+                SiegeLog(bot, "supply_started", null,
+                    $"merchant={_siegeSupplyMerchant?.Name} merchantRegion={_siegeSupplyMerchant?.CurrentRegionID} rally={anchor.CurrentRegionID}:{anchor.X},{anchor.Y},{anchor.Z} rallyRemainingMs={remaining} purchaseBudgetMs={_siegePurchaseDeadline-now}");
+            }
+            if (now >= _siegePurchaseDeadline)
+            { return EndSiegePurchase(bot, "supply_timeout", "finite purchase trip expired; returning to the rally"); }
             _siegeSupplyItem=id; _siegeSupplyCount=quantity;
             bot.TempProperties.SetProperty(SiegeSupplyKeepProperty, _rvrDestination?.Id);
-            GameMerchant merchant = FindReachableSiegeMerchant(bot);
-            if (merchant == null) { SiegeLog(bot,"supply_unavailable",null,"no reachable siege merchant"); ReleaseSiegeJob(bot); _siegeNextAttempt = GameLoop.GameLoopTime + 60_000; return false; }
+            GameMerchant merchant = _siegeSupplyMerchant;
+            if (merchant?.ObjectState != GameObject.eObjectState.Active)
+                return EndSiegePurchase(bot, "supply_unavailable", "reserved merchant unavailable; returning to rally");
+            bot.TempProperties.SetProperty(SiegeSupplyRegionProperty, merchant.CurrentRegionID);
             DbItemTemplate template = merchant.TradeItems.GetAllItems().Values.OfType<DbItemTemplate>().FirstOrDefault(t => t.Id_nb == id && t.Price > 0);
             if (template == null || AutonomousBotEconomy.GetMoney(bot.DatabaseID) < template.Price * quantity)
-            { SiegeLog(bot,"supply_unavailable",null,"kit catalog missing or saved copper insufficient"); ReleaseSiegeJob(bot); _siegeNextAttempt = GameLoop.GameLoopTime + 60_000; return false; }
+            { return EndSiegePurchase(bot, "supply_unavailable", "kit catalog missing or saved copper insufficient"); }
             if (bot.CurrentRegionID != merchant.CurrentRegionID)
             {
-                CampDestination previous = _camp;
-                try { _camp = new($"siege-supply-{merchant.ObjectID}",merchant.Name,merchant.CurrentZone?.Description ?? "siege merchant",merchant.CurrentRegionID,merchant.X,merchant.Y,merchant.Z,1,false,false); return TravelAcrossRegions(bot); }
-                finally { _camp=previous; }
+                return TravelRvrObjective(bot, new($"siege-supply-{merchant.ObjectID}", merchant.Name,
+                    merchant.CurrentZone?.Description ?? "siege merchant", merchant.CurrentRegionID,
+                    merchant.X, merchant.Y, merchant.Z, 1, false, false));
             }
             if (!ApproachSupplyMerchant(bot, merchant)) { SiegeStatus(bot,"Buying siege supplies",merchant); return true; }
             lock (bot.Inventory)
             {
                 eInventorySlot slot = bot.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack,eInventorySlot.LastBackpack);
-                if (slot == eInventorySlot.Invalid) { SiegeLog(bot,"supply_unavailable",null,"backpack has no free slot"); ReleaseSiegeJob(bot); _siegeNextAttempt=GameLoop.GameLoopTime+60_000; return false; }
+                if (slot == eInventorySlot.Invalid) { return EndSiegePurchase(bot, "supply_unavailable", "backpack has no free slot"); }
                 long price=checked(template.Price*quantity);
                 DbInventoryItem item=GameInventoryItem.Create(template);
-                if (item==null) { ReleaseSiegeJob(bot); _siegeNextAttempt=GameLoop.GameLoopTime+60_000; return false; }
+                if (item==null) { return EndSiegePurchase(bot, "supply_unavailable", "kit could not be created"); }
                 item.Count=quantity;
-                if (!AutonomousBotEconomy.TrySpend(bot.DatabaseID,price)) return false;
-                if (!bot.Inventory.AddItem(slot,item)) { AutonomousBotEconomy.AddMoney(bot.DatabaseID,price); return false; }
+                if (!AutonomousBotEconomy.TrySpend(bot.DatabaseID,price))
+                    return EndSiegePurchase(bot, "supply_unavailable", "purchase payment failed");
+                if (!bot.Inventory.AddItem(slot,item))
+                { AutonomousBotEconomy.AddMoney(bot.DatabaseID,price); return EndSiegePurchase(bot, "supply_unavailable", "inventory insertion failed; payment refunded"); }
                 AutonomousBotEconomy.MarkInventoryChanged(bot); bot.MarkAutonomousStateDirty(); AutonomousBotStatusPersistence.Queue(bot,true);
                 SiegeLog(bot,"purchase",null,$"item={id} count={quantity} copper={price}");
                 _siegeSupplyItem=null;
@@ -553,7 +640,12 @@ namespace DOL.GS
         }
         private void ReleaseSiegeJob(GameBot bot)
         {
+            if (bot.TempProperties.GetProperty<string>(SiegeSupplyKeepProperty) != null)
+                bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
             bot.TempProperties.RemoveProperty(SiegeSupplyKeepProperty);
+            bot.TempProperties.RemoveProperty(SiegeSupplyRegionProperty);
+            bot.TempProperties.RemoveProperty(SiegeSupplyRallyProperty);
+            _siegeSupplyMerchant = null; _siegeSupplyRally = null;
             AutonomousSiegeJobs.Release(bot);
             foreach(var w in AutonomousSiegeOwnership.All(bot)) w.ReleaseControl();
             _siegeJobKeep=null; _siegeWeapon=null; _siegePosition=null; _siegeRepair=null; _siegeRepairUntil=0;
@@ -582,6 +674,6 @@ namespace DOL.GS
         }
         private void SiegeStatus(GameBot bot,string status,GameLiving target) => SetRvrStatus(bot,status,target.Name,"Real siege equipment, finite inventory and native combat timers");
         private void SiegeLog(GameBot bot,string action,GameSiegeWeapon weapon,string detail)
-        { if(Log.IsInfoEnabled) Log.Info($"RVR_SIEGE action={action} bot={bot.Name} keep={_siegeJobKeep} engine={weapon?.ObjectID} {detail}"); }
+        { if(Log.IsInfoEnabled) Log.Info($"RVR_SIEGE action={action} bot={bot.Name} id={bot.DatabaseID} force={_groupDirective?.GroupId ?? RvrForceOf(bot)} keep={_siegeJobKeep} engine={weapon?.ObjectID} actor={bot.CurrentRegionID}:{bot.X},{bot.Y},{bot.Z} {detail}"); }
     }
 }
