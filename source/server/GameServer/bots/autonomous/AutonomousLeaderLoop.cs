@@ -141,18 +141,33 @@ public static class AutonomousLeaderLoop
         started = false;
         lock (Holds)
         {
-            if (Holds.TryGetValue(leader, out Hold hold) && hold.Region == region &&
-                now - hold.LastTick <= StaleHoldMilliseconds &&
-                Vector2.Distance(new(here.X, here.Y), new(hold.Centre.X, hold.Centre.Y)) <= LoopFootprint + 450)
-            {
-                hold.LastTick = now;
+            if (TryReuse(leader, region, here, now, out Hold hold))
                 return hold;
-            }
-            hold = new Hold(region, here, build(here), now);
+        }
+        // Path queries run outside the lock so watchdogs and other leaders never wait on them.
+        Vector3[] points = build(here);
+        lock (Holds)
+        {
+            if (TryReuse(leader, region, here, now, out Hold hold))
+                return hold;
+            hold = new Hold(region, here, points, now);
             Holds.AddOrUpdate(leader, hold);
             started = true;
             return hold;
         }
+    }
+
+    private static bool TryReuse(GameBot leader, ushort region, Vector3 here, long now, out Hold hold)
+    {
+        if (Holds.TryGetValue(leader, out hold) && hold.Region == region &&
+            now - hold.LastTick <= StaleHoldMilliseconds &&
+            Vector2.Distance(new(here.X, here.Y), new(hold.Centre.X, hold.Centre.Y)) <= LoopFootprint + 450)
+        {
+            hold.LastTick = now;
+            return true;
+        }
+        hold = null;
+        return false;
     }
 
     /// <summary>Ends the leader's hold; the next hold builds a new loop around its own spot.</summary>
@@ -192,8 +207,10 @@ public static class AutonomousLeaderLoop
     {
         if (leader == null)
             return false;
+        long now = GameLoop.GameLoopTime;
         lock (Holds)
             return Holds.TryGetValue(leader, out Hold hold) && hold.Points.Length > 0 && hold.Region == region &&
+                now - hold.LastTick <= StaleHoldMilliseconds &&
                 IsWithinLoop(hold.Centre, previous) && IsWithinLoop(hold.Centre, current);
     }
 
