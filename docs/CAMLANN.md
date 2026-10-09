@@ -239,8 +239,9 @@ exists to avoid.
 Owner, 2026-10-09: build the public Eden-inspired battleground loop with SOL
 Medium subagents. Keep **guild and group alliances inside battlegrounds**.
 This supersedes the initial closed-battleground decision while retaining
-Camlann teams. Source implementation is complete; installation and owner
-real-client verification remain pending. Existing saves load without reset.
+Camlann teams. Implemented and deployed with the ten native meshes as 0.222.0
+on 2026-10-10; owner real-client verification remains pending. Existing saves
+load without reset.
 
 Public reference: Eden's [Soldiers and Deserters announcement, 2022-10-02](https://eden-daoc.net/viewtopic.php?t=886)
 describes player-like combatants, scaled quest ambushes and managed battleground

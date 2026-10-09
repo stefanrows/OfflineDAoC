@@ -42,8 +42,8 @@ sponsored captain can be killed to interrupt turn-ins for five gameplay minutes.
 `off` to cancel. `/battleground lfg xp|pvp|off` does the same. Your existing group
 is preserved. `/bg` remains the ordinary battlegroup command.
 
-This campaign is implemented in 0.222.0 source; installation and gameplay
-checks are pending. Maps lacking native hunting mobs or a keep lord expose only
+This campaign was deployed as 0.222.0 on 2026-10-10; gameplay checks
+are pending. Maps lacking native hunting mobs or a keep lord expose only
 their available contracts. See [the campaign table](CAMLANN.md#battleground-campaign-02220).
 
 ## Camlann crew generation

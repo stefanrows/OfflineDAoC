@@ -56,7 +56,11 @@ package, not this fork's version.
 - Server and Windows launcher Release builds passed with zero errors; existing
   warnings remain. All ten native meshes load with three validated arrivals and
   three complete outside-camp routes per map. Automated tests were skipped;
-  installation and real-client checks remain pending.
+  real-client checks remain pending.
+- Deployed the combined 0.222.0 server, Windows launcher and ten campaign
+  meshes on 2026-10-10: 27 files installed with verified backups and protected
+  accounts, save and settings unchanged. The installation is left stopped;
+  automated tests and post-deploy monitoring were skipped.
 
 ### Fixed
 

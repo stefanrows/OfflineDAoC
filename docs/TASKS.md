@@ -237,9 +237,17 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+Installation checkpoint, 2026-10-10: all local source changes and latest fork
+main were merged/pushed, built together in Release with zero errors, and deployed
+as **0.222.0** to `D:\Games\OfflineDAoC`. Server, launcher and ten campaign meshes
+installed (27 files); verified backup: `D:\Games\OfflineDAoC-backups\deploy-20261010-001850`.
+Accounts, save and settings passed protection checks. No game components were
+running; the installation remains stopped. Automated tests and monitoring were
+skipped. Tasks 100–106 remain here for their outstanding real-client checks.
+
 106. **Build an Eden-inspired battleground campaign.** Owner, 2026-10-09,
      including the reply to retain guild/group alliances. **Done in source
-     0.222.0, 2026-10-10; installation/client verification pending.** SOL Medium
+     0.222.0, 2026-10-10; deployed; client verification pending.** SOL Medium
      subagents implemented ten bracket definitions, native admission/release/
      graduation, field contracts and personal tokens, funded physical assaults,
      captain sabotage, bounded 1–8 actor patrols/ambushes and opt-in grouping.
@@ -250,11 +258,11 @@ Agent sessions on items 45–48: take the role and context from
      Staging/deploy support preserves the existing backup/protected-save flow.
      Server and Windows launcher Release builds passed with zero errors; existing
      warnings remain. Deployment scripts pass syntax checks.
-     Pending: installation; owner checks of travel/graduation and sub-10 safety,
+     Pending: owner checks of travel/graduation and sub-10 safety,
      alliances, quest credit/persistence, funding/refunds/restarts and captain
      respawn, actual door/lord/steward capture, difficulty and optional grouping.
-     No server/client startup or deployment was performed. Automated tests
-     skipped under project rules.
+     Deployed with the ten campaign meshes on 2026-10-10; no server/client
+     startup was performed. Automated tests skipped under project rules.
 
 105. **Coordinate multiple guild parties for a viable keep assault.** Owner,
      2026-10-09, during live 0.217.0 observation: several parties should gather
@@ -273,7 +281,7 @@ Agent sessions on items 45–48: take the role and context from
      Related bug 75/task 100 fixes allow ticket/porter approach during cohesion,
      guard cleared destinations, retain current march leases, release stale
      siege-job assignments, and reacquire a carried ram after lease expiry.
-     Installation and gameplay verification are pending: observe both a
+     Deployed in 0.222.0; gameplay verification is pending: observe both a
      one-party sortie and a shared multi-party launch, verify that strong
      observed opposition prevents an understrength single-party attack, measure
      simultaneous living attackers/defenders, check real ram/door outcomes,
@@ -281,13 +289,14 @@ Agent sessions on items 45–48: take the role and context from
      leader replacement, guild recall and defeat/reassembly. Defender sightings
      are bounded local observations, not omniscient knowledge of hidden troops;
      the initial strength margin needs live calibration. Automated tests are
-     not run; the owner's live installation remains on 0.217.0.
+     not run; the owner's installation was updated to 0.222.0 on 2026-10-10.
      Validation on 2026-10-10: isolated Release server build of this scope
      against shipped main passed with zero errors (warnings remain). The
      shared checkout build encountered unrelated in-progress battleground/keep
-     errors; combined integration compilation remains pending. Version pins,
-     conflict markers and preserved line endings were checked. No tests,
-     deployment, restart, save edits or runtime setting changes were performed.
+     errors; combined integration Release compilation passed on 2026-10-10.
+     Version pins, conflict markers and preserved line endings were checked.
+     Initial development performed no deployment or runtime changes; the
+     later shipment is recorded above. Tests and game startup were skipped.
 
 104. **Tune the existing Atlas Old Frontiers realm abilities.** Owner,
      2026-10-09: retain the current classic system and hybrid Determination;
@@ -299,8 +308,8 @@ Agent sessions on items 45–48: take the role and context from
      Determination and the separate 30-minute Druid Group Purge remain.
      Nine-rank passive scaling is deferred. Server and Windows launcher
      Release builds passed with zero errors (warnings remain); automated
-     tests skipped under project rules. Pending: installation
-     and owner checks of personal Purge cooldown/details for players and
+     tests skipped under project rules. Deployed in 0.222.0; pending owner
+     checks of personal Purge cooldown/details for players and
      bots, Group Purge, saved cooldowns and retained ability ranks.
 
 103. **Reaver damage aura helps hold PvE aggro at every rank.** Owner,
@@ -317,7 +326,7 @@ Agent sessions on items 45–48: take the role and context from
      Tooltip and detailed descriptions explain rank scaling and that taunt
      styles may still be needed. Server and Windows launcher Release builds
      passed; scoped diff, conflict and version checks passed. Automated tests
-     skipped under project rules. Pending: installation and owner checks of
+     skipped under project rules. Deployed in 0.222.0; pending owner checks of
      all ranks, descriptions,
      healer/bomber threat balance, manual taunts and playerbot exclusions.
 
@@ -330,8 +339,8 @@ Agent sessions on items 45–48: take the role and context from
      placement and player/bot possessions remain intact. Legacy default
      settings migrate; later operator overrides remain possible. Automated
      tests skipped under the project workflow; server Release build passed.
-     Pending: installation and
-     owner checks of the reset, timed upgrades, doors/guards and restart.
+     Deployed in 0.222.0; pending owner checks of the reset, timed upgrades,
+     doors/guards and restart.
 
 101. **Autonomous groups run properly; leaders loop instead of stopping.**
      Owner, 2026-10-09. No speed bug (bots have MaxSpeed 191), but heavy
@@ -353,7 +362,8 @@ Agent sessions on items 45–48: take the role and context from
      crossing or within 2,500 of the PvE camp. Stealthed, companion and
      player-led groups are unchanged. A five-minute `MOVE_PACE` log line gives
      commanded-speed p10/p50/p90 by role and flag plus looping leaders.
-     Check in game and in `MOVE_PACE`: follower p50 near 190 while marching,
+     Deployed in 0.222.0 on 2026-10-10; check in game and in `MOVE_PACE`:
+     follower p50 near 190 while marching,
      leaders circling instead of standing.
 
 100. **Repair observed keep-raid coordination and bot turn failures.** Owner,

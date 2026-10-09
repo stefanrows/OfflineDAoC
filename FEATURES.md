@@ -28,7 +28,7 @@ and verification history of the full-PvP conversion.
 - Capitals, housing, protected starter dungeons, portal keeps, release immunity,
   stable travel, and the native client-patch hash guards remain protected.
 
-## Battleground campaign (0.222.0 source; installation checks pending)
+## Battleground campaign (0.222.0 deployed; gameplay checks pending)
 
 - `/battleground` or `/bgs` shows help; `list`, `join`, `leave` and `status`
   expose ten five-level brackets from 1–4 through 45–49. Native navigation

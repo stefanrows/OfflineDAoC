@@ -294,7 +294,9 @@ raid a relic temple; check both directions through friendly doors and blocked
 hostile gates. No live save, credentials or database hashes belong in this
 report.
 
-## Guild assault assembly (0.221.0; installation verification pending)
+## Guild assault assembly (0.221.0 source; deployed in 0.222.0)
+
+Deployed on 2026-10-10; real-client verification remains pending.
 
 Automatic attacking guilds now share a route-proved exterior camp, roughly
 9,000 units from the keep. Existing parties first gather and complete their

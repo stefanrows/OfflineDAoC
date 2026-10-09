@@ -61,6 +61,11 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+Installation checkpoint, 2026-10-10: fixes through 0.222.0, including bugs
+120/121 and the latest remote movement changes, are deployed with the server
+and launcher. The installation is stopped; protected saves/settings are unchanged.
+This confirms installation only. Keep the required real-client checks pending.
+
 121. **Siege column handling reads a cleared keep destination.** Verified
      installed 0.217.0 observation on 2026-10-09: null-reference failures in
      `HoldSiegeColumn` and the `AbandonKeepTarget` group-combat predicate.
@@ -69,7 +74,7 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      passes a captured destination into column handling, and guards absent
      destinations. Reproduce with a marching force whose keep objective ends
      or is cleared during recovery; expect clean reassignment without an
-     exception. Installation and exact-trigger verification remain pending.
+     exception. Deployed in 0.222.0; exact-trigger verification remains pending.
      These stacks are distinct from bugs 116/117. Private logs remain outside Git.
 
 120. **Autonomous groups stand idle inside their own guild keep.** Installed
@@ -97,7 +102,7 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      the courtyard only as fallback. Check in game: no group stands idle in
      a claimed keep; members trapped elsewhere drop out instead of waiting
      15+ minutes. Still unverified: why `CanLeaderReachHub` failed for RvR
-     leaders.
+     leaders. Deployed in 0.222.0 on 2026-10-10; real-client verification pending.
 
 119. **Some attacked marching bots keep running instead of defending.** Owner,
      2026-10-09, during the 0.215.0 investigation: some bots respond, others
