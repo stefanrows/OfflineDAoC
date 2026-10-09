@@ -30,14 +30,20 @@ public sealed partial class AutonomousWorldBotController
                  member.GetDistanceTo(leader) > AutonomousRvrSpeed.ResumeGap)).ToArray();
         float worst = missing.Select(member => member.CurrentRegionID == leader.CurrentRegionID
             ? (float)member.GetDistanceTo(leader) : float.PositiveInfinity).DefaultIfEmpty(0).Max();
+        // Regroup progress is measured from the fixed hold centre, so the
+        // leader's loop cannot reset the stall timer by running toward a straggler.
+        Vector3 anchor = _siegeColumnHolding && AutonomousLeaderLoop.TryGetHoldCentre(leader, out Vector3 centre)
+            ? centre : new(leader.X, leader.Y, leader.Z);
+        float worstFromAnchor = AutonomousRvrSpeed.WorstGapFrom(anchor, missing.Select(member =>
+            (member.CurrentRegionID == leader.CurrentRegionID, new Vector3(member.X, member.Y, member.Z))));
         if (!_siegeColumnHolding)
         {
             _siegeColumnStarted = _siegeColumnProgress = now;
-            _siegeColumnBestGap = worst;
+            _siegeColumnBestGap = worstFromAnchor;
         }
-        else if (worst < _siegeColumnBestGap - 250)
+        else if (AutonomousRvrSpeed.SiegeColumnClosedUp(_siegeColumnBestGap, worstFromAnchor))
         {
-            _siegeColumnBestGap = worst;
+            _siegeColumnBestGap = worstFromAnchor;
             _siegeColumnProgress = now;
         }
         var decision = AutonomousRvrSpeed.SiegeCohesion(_siegeColumnHolding, worst,
@@ -79,6 +85,9 @@ public sealed partial class AutonomousWorldBotController
     /// </summary>
     private bool LoopInsteadOfHold(GameBot leader, bool nearHazard = false)
     {
+        // The hold (and its loop) lasts while each controller turn holds; the
+        // first turn that does not hold ends it (see Tick).
+        _holdingThisTurn = true;
         if (!AutonomousLeaderLoop.TryLoop(leader, nearHazard))
         {
             leader.StopMovingOnPath();
@@ -88,7 +97,20 @@ public sealed partial class AutonomousWorldBotController
         // The interrupted travel order is issued afresh once the hold ends.
         _issuedRouteDestination = null;
         _nextMoveOrderTick = 0;
+        // Think again soon enough to run on to the next loop point.
+        if (leader.Brain is BotBrain brain)
+            brain.ThinkInterval = Math.Min(brain.ThinkInterval, AutonomousLeaderLoop.LoopThinkIntervalMilliseconds);
         return true;
+    }
+
+    private bool _holdingThisTurn;
+
+    /// <summary>Ends a leader loop once a controller turn no longer holds.</summary>
+    private void EndLeaderLoopUnlessHolding(GameBot bot)
+    {
+        if (!_holdingThisTurn)
+            AutonomousLeaderLoop.EndHold(bot);
+        _holdingThisTurn = false;
     }
 
     private string _keepTravelKey;

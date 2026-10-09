@@ -27,7 +27,10 @@ package, not this fork's version.
   The leader holds as before in combat, near keeps, near zone crossings or its
   PvE camp, while operating siege equipment, during expedition attendance, in
   stealth, in dungeons, or when no loop point is reachable. Existing hold timers,
-  gap thresholds and give-up rules are unchanged.
+  gap thresholds and give-up rules are unchanged. The loop is built once per
+  hold around a fixed centre and ends with the hold. Siege-column regroup
+  progress is measured from that centre, and circling inside the loop does not
+  count as movement for the 15-minute stuck watchdog.
 
 ### Added
 

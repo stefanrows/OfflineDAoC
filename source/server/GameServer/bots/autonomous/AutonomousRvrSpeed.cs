@@ -204,6 +204,25 @@ public static class AutonomousRvrSpeed
             ? SiegeCohesionDecision.Fail : SiegeCohesionDecision.Hold;
     }
 
+    /// <summary>The column closed up by at least this much since its best gap: real regroup progress.</summary>
+    public const float SiegeProgressStep = 250;
+
+    /// <summary>
+    /// The worst straggler gap measured from a fixed point (the hold centre of
+    /// a looping leader), so the leader's own loop movement can neither fake
+    /// nor hide regroup progress. A member in another region is infinitely far.
+    /// </summary>
+    public static float WorstGapFrom(System.Numerics.Vector3 anchor,
+        IEnumerable<(bool SameRegion, System.Numerics.Vector3 Position)> stragglers)
+    {
+        float worst = 0;
+        foreach (var (sameRegion, position) in stragglers ?? [])
+            worst = Math.Max(worst, sameRegion ? System.Numerics.Vector3.Distance(anchor, position) : float.PositiveInfinity);
+        return worst;
+    }
+
+    public static bool SiegeColumnClosedUp(float bestGap, float worstGap) => worstGap < bestGap - SiegeProgressStep;
+
     // ----------------------------------------------------------- live glue
 
     private sealed class GroupSpeedState

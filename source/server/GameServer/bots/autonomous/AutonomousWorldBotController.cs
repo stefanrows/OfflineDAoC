@@ -696,6 +696,10 @@ namespace DOL.GS
                 }
                 return true;
             }
+            finally
+            {
+                EndLeaderLoopUnlessHolding(bot);
+            }
         }
 
         private void ResetRvrObjectiveForGroupChange(GameBot bot, string previousGroupId)

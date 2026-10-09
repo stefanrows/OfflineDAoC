@@ -246,7 +246,10 @@ Agent sessions on items 45–48: take the role and context from
      stride kept; a follower ahead of the leader is capped at its pace, +10 %
      toward a front slot). A holding leader runs a 4-6 point loop, 300-450
      units around the hold point, at full run speed; points are navmesh and
-     path checked, and without a valid loop it holds as before. All hold
+     path checked, built once per hold around a fixed centre (cleared when
+     the hold ends, 750 ms think cadence while looping); without a valid loop
+     it holds as before. Siege regroup progress is measured from the centre;
+     circling is not movement for the stuck watchdog. All hold
      timers, gap thresholds and give-up rules are unchanged. No loop in
      combat, within 1,800 of a keep, while operating siege equipment, during
      expedition attendance, in stealth or dungeons, near the next zone

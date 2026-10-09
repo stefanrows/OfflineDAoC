@@ -333,7 +333,11 @@ public static class AutonomousStuckWatchdog
         bool outcomeProgress = previous.Experience != current.Experience ||
                                previous.RealmPoints != current.RealmPoints ||
                                previous.MoneyCopper != current.MoneyCopper;
-        bool moved = HasMeaningfulMovement(previous, current);
+        // A leader circling its hold point has not moved on: a hold that
+        // never ends must still reach the 15-minute movement recovery.
+        bool moved = HasMeaningfulMovement(previous, current) &&
+                     !AutonomousLeaderLoop.StaysInLoop(bot, current.RegionId,
+                         new Vector2(previous.X, previous.Y), new Vector2(current.X, current.Y));
         CopyOutcomeSnapshot(previous, current);
         if (moved)
         {

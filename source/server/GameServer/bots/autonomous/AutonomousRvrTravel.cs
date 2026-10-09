@@ -40,6 +40,7 @@ public static class AutonomousRvrTravel
     /// RvR objectives. A PvE or meetup leg that starts in the crew's own guild
     /// keep must leave the courtyard the way a player clicks the gate.
     /// Companions, /spawn helpers and plain NPCs keep the native door rules.
+    /// It also covers an autonomous world bot hired into a player's group.
     /// </summary>
     public static bool MayUseKeepDoors(GameBot bot) => bot is { IsAutonomousWorldBot: true, IsAlive: true };
 

@@ -26,8 +26,8 @@ public static class AutonomousLeaderLoop
     /// <summary>Fewer valid points than this is no loop: the leader holds.</summary>
     public const int MinimumValidPoints = 3;
     public const float ArrivalRadius = 70;
-    /// <summary>A hold not refreshed for this long has ended; the next one starts a new loop.</summary>
-    public const long NewHoldGapMilliseconds = 3_000;
+    /// <summary>Think cadence of a looping leader, so it runs on to the next point instead of standing.</summary>
+    public const int LoopThinkIntervalMilliseconds = 750;
     /// <summary>No loop this close to a keep or tower: courtyards and gates stay calm.</summary>
     public const float KeepClearance = 1_800;
     /// <summary>No loop this close to the next zone crossing, so the loop cannot zone the leader.</summary>
@@ -78,18 +78,124 @@ public static class AutonomousLeaderLoop
 
     // ----------------------------------------------------------- live glue
 
-    private sealed class State
+    /// <summary>
+    /// One leader's loop for the whole of one hold. The centre is fixed where
+    /// the hold began; the shape and its navmesh points are built once. The
+    /// caller ends it when the hold ends (resume, failure, combat).
+    /// </summary>
+    public sealed class Hold
     {
-        public Vector3 Centre;
-        public ushort Region;
-        public Vector3[] Points;
-        public int Index;
-        public int IssuedIndex = -1;
-        public long IssuedTick;
-        public long LastTick = long.MinValue / 2;
+        public Hold(ushort region, Vector3 centre, Vector3[] points, long now)
+        {
+            Region = region;
+            Centre = centre;
+            Points = points ?? [];
+            LastTick = now;
+        }
+
+        public ushort Region { get; }
+        public Vector3 Centre { get; }
+        public Vector3[] Points { get; }
+        public int Index { get; private set; }
+        public long LastTick { get; internal set; }
+        private int _issuedIndex = -1;
+        private long _issuedTick;
+
+        /// <summary>
+        /// The loop point to run to now; true when a fresh movement order is
+        /// needed (first step, point reached, or stopped short of it).
+        /// </summary>
+        public bool Step(Vector3 here, bool moving, long now, out Vector3 target)
+        {
+            target = Centre;
+            LastTick = now;
+            if (Points.Length == 0)
+                return false;
+            bool stopped = _issuedIndex == Index && !moving && now - _issuedTick > 1_000;
+            Index = NextIndex(Index, Points.Length, Vector3.Distance(here, Points[Index]), stopped);
+            target = Points[Index];
+            if (Index == _issuedIndex && moving)
+                return false;
+            _issuedIndex = Index;
+            _issuedTick = now;
+            return true;
+        }
     }
 
-    private static readonly ConditionalWeakTable<GameBot, State> States = new();
+    /// <summary>A hold not refreshed for this long is stale (the leader fought, died, rode away).</summary>
+    public const long StaleHoldMilliseconds = 30_000;
+    /// <summary>Area a looping leader stays in: the loop radius plus mesh slack.</summary>
+    public const float LoopFootprint = MaximumRadius + 150;
+
+    private static readonly ConditionalWeakTable<GameBot, Hold> Holds = new();
+
+    /// <summary>
+    /// The leader's current hold, or a new one centred on <paramref name="here"/>
+    /// with points from <paramref name="build"/>. A hold is reused for its
+    /// whole length; only another region, staleness or a leader far outside
+    /// the loop starts a new one.
+    /// </summary>
+    public static Hold GetOrBeginHold(GameBot leader, ushort region, Vector3 here, long now,
+        Func<Vector3, Vector3[]> build, out bool started)
+    {
+        started = false;
+        lock (Holds)
+        {
+            if (Holds.TryGetValue(leader, out Hold hold) && hold.Region == region &&
+                now - hold.LastTick <= StaleHoldMilliseconds &&
+                Vector2.Distance(new(here.X, here.Y), new(hold.Centre.X, hold.Centre.Y)) <= LoopFootprint + 450)
+            {
+                hold.LastTick = now;
+                return hold;
+            }
+            hold = new Hold(region, here, build(here), now);
+            Holds.AddOrUpdate(leader, hold);
+            started = true;
+            return hold;
+        }
+    }
+
+    /// <summary>Ends the leader's hold; the next hold builds a new loop around its own spot.</summary>
+    public static void EndHold(GameBot leader)
+    {
+        if (leader == null)
+            return;
+        lock (Holds)
+            Holds.Remove(leader);
+    }
+
+    /// <summary>The fixed centre of the leader's current hold.</summary>
+    public static bool TryGetHoldCentre(GameBot leader, out Vector3 centre)
+    {
+        centre = default;
+        if (leader == null)
+            return false;
+        lock (Holds)
+        {
+            if (!Holds.TryGetValue(leader, out Hold hold))
+                return false;
+            centre = hold.Centre;
+            return true;
+        }
+    }
+
+    /// <summary>The point lies inside the loop around <paramref name="centre"/>.</summary>
+    public static bool IsWithinLoop(Vector3 centre, Vector2 point) =>
+        Vector2.Distance(new(centre.X, centre.Y), point) <= LoopFootprint;
+
+    /// <summary>
+    /// Both positions lie inside the leader's active loop: running circles is
+    /// not route progress, so the 15-minute movement watchdog still sees a
+    /// hold that never ends.
+    /// </summary>
+    public static bool StaysInLoop(GameBot leader, ushort region, Vector2 previous, Vector2 current)
+    {
+        if (leader == null)
+            return false;
+        lock (Holds)
+            return Holds.TryGetValue(leader, out Hold hold) && hold.Points.Length > 0 && hold.Region == region &&
+                IsWithinLoop(hold.Centre, previous) && IsWithinLoop(hold.Centre, current);
+    }
 
     /// <summary>
     /// Runs one loop step for a holding <paramref name="leader"/>. False when
@@ -104,43 +210,28 @@ public static class AutonomousLeaderLoop
         bool dungeon = leader.CurrentRegion.IsDungeon || leader.CurrentZone.IsDungeon;
         if (!MayLoop(leader.InCombat || leader.IsAttacking, NearKeep(leader), BotSiegeRuntime.Assigned(leader),
                 AutonomousRealmRaid.GetView(leader.Group) != null, leader.IsStealthed, dungeon, nearHazard))
+        {
+            EndHold(leader);
             return false;
+        }
 
         long now = GameLoop.GameLoopTime;
-        State state = States.GetOrCreateValue(leader);
         Vector3 here = new(leader.X, leader.Y, leader.Z);
+        Hold hold = GetOrBeginHold(leader, leader.CurrentRegionID, here, now,
+            centre => BuildLoop(leader, centre), out bool started);
+        if (started && hold.Points.Length > 0)
+            AutonomousMovePace.LoopStarted();
+        if (hold.Points.Length == 0)
+            return false;
+        bool issue;
         Vector3 target;
-        lock (state)
+        lock (hold)
+            issue = hold.Step(here, leader.IsMoving, now, out target);
+        if (issue)
         {
-            if (state.Points == null || now - state.LastTick > NewHoldGapMilliseconds ||
-                state.Region != leader.CurrentRegionID)
-            {
-                state.Centre = here;
-                state.Region = leader.CurrentRegionID;
-                state.Points = BuildLoop(leader, here);
-                state.Index = 0;
-                state.IssuedIndex = -1;
-                if (state.Points.Length > 0)
-                    AutonomousMovePace.LoopStarted();
-            }
-            state.LastTick = now;
-            if (state.Points.Length == 0)
-                return false;
-            bool stopped = state.IssuedIndex == state.Index && !leader.IsMoving && now - state.IssuedTick > 1_000;
-            state.Index = NextIndex(state.Index, state.Points.Length,
-                Vector3.Distance(here, state.Points[state.Index]), stopped);
-            target = state.Points[state.Index];
-            if (state.Index == state.IssuedIndex && leader.IsMoving)
-            {
-                AutonomousMovePace.NoteLooping(leader);
-                return true;
-            }
-            state.IssuedIndex = state.Index;
-            state.IssuedTick = now;
+            leader.WakeRecoveryRest();
+            leader.PathTo(target, leader.MaxSpeed);
         }
-        leader.WakeRecoveryRest();
-        leader.PathTo(target, leader.MaxSpeed);
-        AutonomousStuckWatchdog.MarkProgress(leader, eAutonomousProgressKind.Movement);
         AutonomousMovePace.NoteLooping(leader);
         return true;
     }
