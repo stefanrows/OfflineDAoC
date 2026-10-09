@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.219.0] - 2026-10-09
+
+### Changed
+
+- Task 101: autonomous groups run instead of crawling. Followers of a moving,
+  unstealthed autonomous leader match its full run speed rather than the
+  speed of its latest order. They keep the catch-up bonus and personal stride
+  and do not overrun the leader beyond what their formation slot needs.
+  Stealthed, companion and player-led groups are unchanged.
+- A leader waiting for stragglers (siege column, RvR roam, group travel)
+  runs a small loop of 300-450 units around the waiting spot at full speed
+  instead of standing still. The loop points are checked against the navmesh.
+  The leader holds as before in combat, near keeps, near zone crossings or its
+  PvE camp, while operating siege equipment, during expedition attendance, in
+  stealth, in dungeons, or when no loop point is reachable. Existing hold timers,
+  gap thresholds and give-up rules are unchanged.
+
+### Added
+
+- A five-minute `MOVE_PACE` log line: commanded-speed percentiles of moving
+  autonomous world bots by role (leader, follower, solo) and flag (stealthed,
+  hurt, snared), plus how many leaders looped.
+
 ## [0.218.0] - 2026-10-09
 
 ### Fixed

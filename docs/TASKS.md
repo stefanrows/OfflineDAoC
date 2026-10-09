@@ -236,6 +236,26 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+101. **Autonomous groups run properly; leaders loop instead of stopping.**
+     Owner, 2026-10-09. No speed bug (bots have MaxSpeed 191), but heavy
+     stop-and-go: siege-column, RvR roam and group travel holds stop the
+     leader, and followers matched the leader's current speed, so a slow or
+     stopped leader made the whole group crawl (siege-column member median
+     about 75 units/s). Source 0.219.0: followers of a moving, unstealthed
+     autonomous leader match its MaxSpeed (catch-up bonus and personal
+     stride kept; a follower ahead of the leader is capped at its pace, +10 %
+     toward a front slot). A holding leader runs a 4-6 point loop, 300-450
+     units around the hold point, at full run speed; points are navmesh and
+     path checked, and without a valid loop it holds as before. All hold
+     timers, gap thresholds and give-up rules are unchanged. No loop in
+     combat, within 1,800 of a keep, while operating siege equipment, during
+     expedition attendance, in stealth or dungeons, near the next zone
+     crossing or within 2,500 of the PvE camp. Stealthed, companion and
+     player-led groups are unchanged. A five-minute `MOVE_PACE` log line gives
+     commanded-speed p10/p50/p90 by role and flag plus looping leaders.
+     Check in game and in `MOVE_PACE`: follower p50 near 190 while marching,
+     leaders circling instead of standing.
+
 100. **Repair observed keep-raid coordination and bot turn failures.** Owner,
      2026-10-09, after task 99: prioritize reliable rally and march behavior;
      genuine losses to defenders remain legitimate. Source 0.215.0 fixes

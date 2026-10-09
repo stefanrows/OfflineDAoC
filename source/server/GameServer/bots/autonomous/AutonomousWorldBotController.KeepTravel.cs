@@ -56,15 +56,38 @@ public sealed partial class AutonomousWorldBotController
                 $"members=\"{string.Join(";", missing.Select(member => $"{member.Name}/{member.DatabaseID}@{member.CurrentRegionID}:{member.X},{member.Y},{member.Z}:combat={member.InCombat}:operator={BotSiegeRuntime.Assigned(member)}"))}\"");
         }
         _siegeColumnHolding = true;
-        leader.StopMovingOnPath(); leader.StopMoving();
         if (decision == AutonomousRvrSpeed.SiegeCohesionDecision.Fail)
+        {
+            leader.StopMovingOnPath(); leader.StopMoving();
             AbandonKeepTarget(leader, _rvrDestination, "March cohesion recovery exhausted", now, routeFailure: false);
+        }
         else
         {
+            bool looping = LoopInsteadOfHold(leader);
             AutonomousStuckWatchdog.MarkProgress(leader, eAutonomousProgressKind.Objective);
-            SetRvrStatus(leader, "Regrouping the siege column", _rvrDestination.MonsterName,
-                "Waiting for living members and operators to finish combat or their legal return route");
+            SetRvrStatus(leader, "Regrouping the siege column", _rvrDestination.MonsterName, looping
+                ? "Circling at a run while living members and operators close up"
+                : "Waiting for living members and operators to finish combat or their legal return route");
         }
+        return true;
+    }
+
+    /// <summary>
+    /// A holding travel leader runs a small loop around its hold point
+    /// instead of standing still (<see cref="AutonomousLeaderLoop"/>); without
+    /// a valid loop it stops exactly as before. Returns whether it loops.
+    /// </summary>
+    private bool LoopInsteadOfHold(GameBot leader, bool nearHazard = false)
+    {
+        if (!AutonomousLeaderLoop.TryLoop(leader, nearHazard))
+        {
+            leader.StopMovingOnPath();
+            leader.StopMoving();
+            return false;
+        }
+        // The interrupted travel order is issued afresh once the hold ends.
+        _issuedRouteDestination = null;
+        _nextMoveOrderTick = 0;
         return true;
     }
 

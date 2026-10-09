@@ -187,6 +187,8 @@ namespace DOL.GS
 
         private static CampCatalogCell[] _campCatalog = [];
 
+        private long _nextPaceSampleTick;
+
         public bool Tick(BotBrain brain)
         {
             using var profile = BotThinkProfiler.Measure(BotThinkPhase.WorldControllerTick);
@@ -206,6 +208,7 @@ namespace DOL.GS
                     _groupDirective = AutonomousBotGroupCoordinator.Pulse(bot);
                     _nextGroupPulseTick = nowTick + 1_500 + bot.ObjectID % 500;
                 }
+                AutonomousMovePace.Sample(bot, ref _nextPaceSampleTick);
                 string assignmentId = bot.PersistentRecord?.ObjectiveAssignmentId ?? string.Empty;
                 if (!string.Equals(_observedObjectiveAssignmentId, assignmentId, StringComparison.Ordinal))
                 {
@@ -584,10 +587,12 @@ namespace DOL.GS
                         // while it waits at the camp strands both sides.
                         if (!enteringStagingArea && !crossingStarted)
                         {
-                            bot.StopMovingOnPath();
-                            bot.StopMoving();
-                            SetStatus(bot, "Waiting for group members", GoalText(),
-                                "Holding the route until the party catches up before the next region crossing");
+                            bool nearCrossing = next != null && Distance(bot.X, bot.Y, next.SourceX, next.SourceY) <=
+                                AutonomousLeaderLoop.CrossingClearance;
+                            bool looping = LoopInsteadOfHold(bot, nearCrossing);
+                            SetStatus(bot, "Waiting for group members", GoalText(), looping
+                                ? "Circling at a run until the party catches up before the next region crossing"
+                                : "Holding the route until the party catches up before the next region crossing");
                             AutonomousBotGroupCoordinator.ReportTravelHold(bot, _groupDirective);
                             return true;
                         }
@@ -653,10 +658,10 @@ namespace DOL.GS
                         return FollowDynamicGroupLeader(bot, _groupDirective);
                     if (_groupDirective?.IsDynamic == true && !AutonomousBotGroupCoordinator.IsCohesive(_groupDirective))
                     {
-                        bot.StopMovingOnPath();
-                        bot.StopMoving();
-                        SetStatus(bot, "Waiting for group members", GoalText(),
-                            "Holding the route until every living bot is back in formation", _camp.MonsterName, _camp.ZoneName);
+                        bool looping = LoopInsteadOfHold(bot, campDistance <= AutonomousLeaderLoop.CampClearance);
+                        SetStatus(bot, "Waiting for group members", GoalText(), looping
+                            ? "Circling at a run until every living bot is back in formation"
+                            : "Holding the route until every living bot is back in formation", _camp.MonsterName, _camp.ZoneName);
                         AutonomousBotGroupCoordinator.ReportTravelHold(bot, _groupDirective);
                         return true;
                     }
@@ -1913,10 +1918,10 @@ namespace DOL.GS
             {
                 if (AutonomousRvrSpeed.ShouldLeaderHold(bot))
                 {
-                    bot.StopMovingOnPath();
-                    bot.StopMoving();
+                    bool looping = LoopInsteadOfHold(bot);
                     SetRvrStatus(bot, "Waiting for the group", "Roam active frontier keeps, relic routes, and enemy forces",
-                        "A member fell behind; the group closes up before moving on", _rvrDestination.MonsterName);
+                        looping ? "A member fell behind; circling at a run while the group closes up"
+                            : "A member fell behind; the group closes up before moving on", _rvrDestination.MonsterName);
                     return true;
                 }
                 AutonomousRvrSpeed.NoteTravel(bot);

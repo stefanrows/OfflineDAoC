@@ -91,6 +91,32 @@ public static class AutonomousGroupMotion
         return (short)Math.Clamp(Math.Round(speed), 1, Math.Max(1, ownMax * 1.3));
     }
 
+    /// <summary>
+    /// The pace a follower matches. Followers of a moving, unstealthed
+    /// autonomous leader run at the leader's full run speed (its MaxSpeed, so
+    /// speed songs and snares still count), not at the speed of its latest
+    /// order: a leader that slowed or paused for a moment no longer makes the
+    /// whole group crawl. Stealthed groups, companions and player-led groups
+    /// keep matching the leader's current speed.
+    /// </summary>
+    public static short LeaderPace(bool autonomousGroup, bool leaderMoving, bool stealthed,
+        short leaderCurrentSpeed, short leaderMaxSpeed) =>
+        autonomousGroup && leaderMoving && !stealthed && leaderMaxSpeed > 0
+            ? leaderMaxSpeed
+            : Math.Max(leaderCurrentSpeed, (short)1);
+
+    /// <summary>
+    /// A follower ahead of its leader never outruns the leader's pace, except
+    /// a little (10 %) while it still has to reach a front slot ahead of it.
+    /// </summary>
+    public static short CapAheadOfLeader(short speed, short pace, bool aheadOfLeader, bool slotStillAhead)
+    {
+        if (!aheadOfLeader || pace <= 0)
+            return speed;
+        int cap = slotStillAhead ? (int)Math.Round(pace * 1.1) : pace;
+        return (short)Math.Min(speed, cap);
+    }
+
     /// <summary>Re-steer only when the slot moved noticeably, the bot stopped, or its speed must change.</summary>
     public static bool ShouldResteer(GameBot bot, Vector3 target, short speed, long now)
     {
@@ -116,9 +142,21 @@ public static class AutonomousGroupMotion
     {
         float distance = Vector3.Distance(new Vector3(bot.X, bot.Y, bot.Z), slot);
         long key = bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID;
-        short speed = FollowSpeed(key, Math.Max(leader.CurrentSpeed, (short)1), bot.MaxSpeed, distance);
+        bool autonomousGroup = bot.IsAutonomousWorldBot && !bot.IsPlayerLedGroup &&
+            leader is GameBot { IsAutonomousWorldBot: true, IsPlayerLedGroup: false };
+        bool fullPace = autonomousGroup && leader.IsMoving && !bot.IsStealthed && !leader.IsStealthed;
+        short pace = LeaderPace(autonomousGroup, leader.IsMoving, bot.IsStealthed || leader.IsStealthed,
+            leader.CurrentSpeed, leader.MaxSpeed);
+        short speed = FollowSpeed(key, pace, bot.MaxSpeed, distance);
+        if (fullPace)
+        {
+            // Run with the leader, but do not overrun it beyond what the formation needs.
+            Vector2 forward = Forward(leader);
+            bool slotAhead = distance > 60 && Vector2.Dot(forward, new(slot.X - bot.X, slot.Y - bot.Y)) > 0;
+            speed = CapAheadOfLeader(speed, pace, IsAhead(bot, leader), slotAhead);
+        }
         // An RvR member under a speed song never runs past its leader.
-        if (AutonomousRvrDoctrineRuntime.Applies(bot))
+        else if (AutonomousRvrDoctrineRuntime.Applies(bot))
             speed = AutonomousRvrSpeed.CapFollowerSpeed(speed, leader.CurrentSpeed, IsAhead(bot, leader));
         if (ShouldResteer(bot, slot, speed, GameLoop.GameLoopTime))
             bot.PathTo(slot, speed);
@@ -127,9 +165,13 @@ public static class AutonomousGroupMotion
     /// <summary>The bot stands in front of the leader along the leader's heading.</summary>
     private static bool IsAhead(GameLiving bot, GameLiving leader)
     {
-        Point2D ahead = leader.GetPointFromHeading(leader.Heading, 100);
-        Vector2 forward = new(ahead.X - leader.X, ahead.Y - leader.Y);
         Vector2 offset = new(bot.X - leader.X, bot.Y - leader.Y);
-        return Vector2.Dot(forward, offset) > 0;
+        return Vector2.Dot(Forward(leader), offset) > 0;
+    }
+
+    private static Vector2 Forward(GameLiving leader)
+    {
+        Point2D ahead = leader.GetPointFromHeading(leader.Heading, 100);
+        return new(ahead.X - leader.X, ahead.Y - leader.Y);
     }
 }
