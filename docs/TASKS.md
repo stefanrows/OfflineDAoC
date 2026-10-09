@@ -33,6 +33,11 @@ When a task is done and its required verification is complete, move it out of it
     installation. Leave the game stopped; quest save migration and enabling
     travel threats are not included. Related existing work: bugs 5 and 115;
     tasks 47, 48, 74 and 88.
+    Owner-started live observation on 2026-10-09 confirmed the running server
+    and launcher binaries match the shipped 0.214.1 outputs. Observation is
+    recorded under finished task 99. Keep-raiding acceptance failed (bug 75);
+    new runtime failures are bugs 116 and 117. This does not accept all seven
+    stages or replace their remaining controlled/client checks.
 
 Agent sessions on items 45–48: take the role and context from
 [ORCHESTRATOR_BRIEF.md](ORCHESTRATOR_BRIEF.md) first.
@@ -47,6 +52,19 @@ Agent sessions on items 45–48: take the role and context from
     `BOT_THINK_PROFILE` / `SERVER_WORK` at 10×. Next candidates: make
     `SelectCamp` cheaper (per-bot LINQ over the whole camp catalog) or slice it,
     then itinerary/`IssuePath`; fewer active bots also helps directly.
+    Read-only installed 0.214.1 observation, 2026-10-09: selected/effective
+    speed stayed 10x with no connected clients and 3,900 active roster entries.
+    A ten-minute sampled window achieved 1.88-2.77x (median 2.36x); the wider session also
+    dipped to about 1.6x. Recent bot profiles were dominated by `FrontierThreat`,
+    with substantial `NavPathQuery` work and occasional long itinerary turns.
+    Phase timings are accumulated across threads and nested, not additive
+    wall time. The optional outdoor PvE route-threat property remained False.
+    This is an uncontrolled observation, not a regression or improvement claim;
+    the historical stable-route profile is not this run's leading result.
+    Source 0.215.0 gates expensive frontier work behind its existing cadence,
+    reuses a party snapshot, and bounds full eligibility/LOS checks. Profiling
+    retains its original outer scope for comparison. Release compilation passed;
+    achieved-speed improvement remains unmeasured until installation.
 
 45. **Battlegroup load check.** Measure server tick and pathing cost with two
     owners and 5 companion groups each in RvR before calling tasks 42–44 done.
@@ -209,6 +227,29 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+100. **Repair observed keep-raid coordination and bot turn failures.** Owner,
+     2026-10-09, after task 99: prioritize reliable rally and march behavior;
+     genuine losses to defenders remain legitimate. Source 0.215.0 fixes
+     shared porter selection, intermediate passages, leader-first transfers,
+     rally quorum, siege supply/march sequencing and bounded keep-origin
+     planning. It also repairs bugs 116/117 and bounds frontier scan work.
+     SOL High implementation agents were independently reviewed by the parent.
+     Installation and a full rally-to-gate siege check remain pending. Keep
+     combat outcomes separate from transport, rally, supply and placement
+     failures; task 74 still requires measured achieved-speed improvement.
+     No active-RA purchase defect was established: observed unspent points
+     remain below the first active's cost, and its purchase reserves future
+     earnings before higher passive upgrades. Preserve all purchased ranks.
+     Development left live saves, configuration and server processes unchanged.
+     Validation: server and Windows launcher Release builds passed, as did
+     compilation of the server regression project, including added cases.
+     Diff, conflict-marker, newline and four-version-pin checks passed. Automated
+     tests were not executed under the project workflow. Owner authorized
+     shipping 0.215.0 on 2026-10-09, with the installation left stopped for a
+     subsequent monitoring chat. Runtime acceptance remains pending; use the
+     shipping result/deployment manifest to confirm installation separately.
+
+
 97. **Upstream adaptation Stage 7: Miari's Seed quest pilot.** Source
     0.214.0, 2026-10-09: verified clean v0.35b release inputs match the pinned
     code apart from its README-only successor. Use existing DataQuest steps,
@@ -242,6 +283,9 @@ Agent sessions on items 45–48: take the role and context from
     Server/launcher builds passed. Owner
     enabled-route, camp arrival, death/retry, 1x/accelerated-speed and cost
     observations remain pending; leave the switch off until accepted.
+    Installed 0.214.1 observation on 2026-10-09 confirmed the persisted
+    property is False and no `OutdoorRouteThreat` profiling phase was seen.
+    Its disabled state does not verify enabled behavior or overhead.
 
 95. **Upstream adaptation Stage 5: autonomous active realm abilities.** Source
     0.212.0, 2026-10-09: retain the 39 passive class paths and owned ranks;
@@ -256,6 +300,16 @@ Agent sessions on items 45–48: take the role and context from
     Serialization round-trip does not verify database cooldown persistence.
     Release builds and SOL 6.1 High source/test review passed. Owner
     purchase, effect, PvP balance, reload and world-speed checks remain pending.
+    Installed 0.214.1 observation on 2026-10-09 found saved passive ranks but
+    no purchased Purge, First Aid, Ignore Pain or Second Wind and no cooldown
+    tokens in the read-only roster samples. Existing purchases are retained
+    and the initial active sequence needs spare earned points. Ability effects
+    and database cooldown reload therefore remain unobserved, not accepted.
+    Follow-up budget audit for task 100 found at most six spare points on
+    ordinary paths and three on the reduced-Purge tank paths, below the
+    ten/four purchase costs. Failed initial active purchases stop later
+    passive upgrades, so future earned points are already reserved. No
+    training bug or need to replace existing purchases was established.
 
 93. **Upstream adaptation Stage 3: player-style bot defenses.** Source
     0.211.0, 2026-10-09: GameBots share player block/parry/evade arithmetic,
@@ -269,6 +323,9 @@ Agent sessions on items 45–48: take the role and context from
     SOL 6.1 High source/test review passed. Installation,
     equivalent-stat class/equipment/facing PvE/PvP combat and
     balance observations remain pending.
+    Installation was confirmed against the shipped 0.214.1 binary on
+    2026-10-09. Ordinary logs do not expose equivalent-stat defense outcomes,
+    so this live observation does not complete the combat/balance check.
 
 91. **Upstream adaptation Stage 1: console EOF backoff.** Source 0.209.2,
     2026-10-09: focused port of upstream `c1c465c3`; closed console input
@@ -277,6 +334,8 @@ Agent sessions on items 45–48: take the role and context from
     Installation,
     runtime CPU measurement after redirected input closes, and shutdown
     verification remain pending. Existing defect tracked as bug 115.
+    Installation was confirmed in the owner-started 0.214.1 session on
+    2026-10-09; closed-input and shutdown checks were not exercised.
 
 92. **Upstream adaptation Stage 2: navigation route points and corners.**
     Source 0.210.0, 2026-10-09: merge coincident intermediate points with
@@ -287,6 +346,9 @@ Agent sessions on items 45–48: take the role and context from
     Two isolated route-point tests passed in 0.214.1, not native mesh checks.
     Release builds and SOL 6.1 High source/test review passed. Real-client corner, wall,
     closed-door, disconnected-surface and ordinary-route checks remain pending.
+    Installation was confirmed on 2026-10-09. The live run still contained
+    disconnected exterior keep routes; aggregate travel activity is not a
+    controlled check of this corner change or evidence to replace meshes.
 
 88. **Autonomous world bots train one realm ability build per class.** Owner,
     2026-10-04. Implemented in source 0.209.0: all 39 generated classes have
@@ -722,6 +784,27 @@ Agent sessions on items 45–48: take the role and context from
 
 
 ## Finished
+
+99. **Done — Observe the latest installed adaptations and bot keep raids.**
+    Completed 2026-10-09 in documentation version 0.214.2. Owner started
+    installed 0.214.1 at selected 10x. Verified running installation paths
+    and shipped main-assembly matches; reviewed the 20:28:05-21:05:34 CEST
+    session and collected 21 fresh snapshot samples over ten minutes.
+    All sampled client counts were zero; 3,900 roster entries; achieved speed
+    1.88-2.77x (median 2.36x), tick P95 24.6-31.1 ms against 3.333 ms budget.
+    Seven sieges opened, thirty forces departed siege muster (four full
+    eight-member musters), two musters failed and five sieges timed out;
+    no confirmed siege-engine hit, lord defeat or keep claim was logged.
+    Reopened bug 75 and recorded 21 leader-promotion exceptions (116) and
+    two PvE camp exceptions (117). Last snapshot: 2,046 bots defending keeps.
+    Between the read-only save samples at 20:57 and 21:05, 346 matched bots
+    gained XP, 62 gained levels and 566 gained RP. These are uncontrolled
+    observations, not before/after performance or balance results.
+    Route threats remained disabled; active-RA effects/cooldown reload,
+    equivalent-stat defenses, appearance, native corner/door routes, EOF
+    shutdown and quest-pilot acceptance stay pending. Private evidence and
+    the detailed report remain outside Git. No gameplay repair, speed change,
+    server/client start, restart, deployment or automated test run occurred.
 
 98. **Done - Isolated upstream adaptation verification.** Owner authorized
     focused regressions and disposable quest migration checks on 2026-10-09.

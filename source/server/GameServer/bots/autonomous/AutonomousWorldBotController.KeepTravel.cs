@@ -14,6 +14,15 @@ public sealed partial class AutonomousWorldBotController
     private Vector3? _keepTravelLastPosition;
     private Vector3[] _keepTravelPoints;
     private RvrPlanningNavigation _keepPlanning;
+    private const string KeepAssaultApproachProperty = "KeepAssaultApproach";
+    private sealed record KeepAssaultApproach(string Target, ushort Region, Vector3 Point);
+
+    public static bool HasReachedKeepAssaultApproach(GameBot leader, string targetId)
+    {
+        var arrival = leader?.TempProperties.GetProperty<KeepAssaultApproach>(KeepAssaultApproachProperty);
+        return leader?.IsAlive == true && arrival != null && arrival.Target == targetId && leader.CurrentRegionID == arrival.Region &&
+            Vector3.DistanceSquared(new(leader.X, leader.Y, leader.Z), arrival.Point) <= 650 * 650;
+    }
 
     /// <summary>A 2003 warband tried a keep route about three times, then
     /// called it off and roamed from where it stood instead of porting home:
@@ -76,6 +85,7 @@ public sealed partial class AutonomousWorldBotController
     private void ClearKeepObjective(GameBot bot)
     {
         AutonomousRvrEventLayer.ReleaseClaimPlan(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}", _rvrDestination?.Id);
+        bot.TempProperties.RemoveProperty(KeepAssaultApproachProperty);
         _keepTravelKey = null; _keepTravelPoints = null; _keepPlanning = null;
         _keepTravelFailures = 0; _keepTravelRetry = 0;
         _rvrDestination = null; _rvrApproachDestination = null;
@@ -157,6 +167,7 @@ public sealed partial class AutonomousWorldBotController
             _keepTravelPoints != null && _keepTravelIndex >= _keepTravelPoints.Length && Vector3.DistanceSquared(current, _keepTravelPoints[^1]) > 650 * 650 ||
             _keepPlanning != null && Vector3.DistanceSquared(current, _keepPlanningOrigin) > 96 * 96)
         {
+            bot.TempProperties.RemoveProperty(KeepAssaultApproachProperty);
             _keepTravelKey = key; _keepTravelGeometry = geometry;
             _keepTravelPoints = null; _keepPlanning = null; _keepTravelIndex = 0;
             _keepTravelRetry = 0; _keepTravelFailures = 0;
@@ -172,7 +183,11 @@ public sealed partial class AutonomousWorldBotController
                 // Cancel only the obsolete travel order. Otherwise a redirected
                 // roamer moves the search origin every slice and never finishes.
                 bot.StopMovingOnPath(); bot.StopMoving();
-                _keepPlanningOrigin = current;
+                // Match the native mover's small start-polygon tolerance for
+                // planning only. Never relocate the actor or pick a distant
+                // lower floor to repair an unproved position.
+                _keepPlanningOrigin = AutonomousKeepApproachNavigation.TryPlanningOrigin(
+                    PathfindingProvider.Instance, bot.CurrentZone, current, out var origin) ? origin : current;
                 _keepPlanning = new RvrPlanningNavigation(AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance, bot));
             }
             _keepPlanning.BeginSlice();
@@ -221,14 +236,17 @@ public sealed partial class AutonomousWorldBotController
                 Log.Warn($"RVR_KEEP_ROUTE_FAILED bot=\"{bot.Name}\" id={bot.DatabaseID} realm={bot.Realm} " +
                     $"target=\"{destination.Id}\" region={bot.CurrentRegionID} from={current} queries={queries} " +
                     $"reason=\"{failure}\" retryMs={_keepTravelRetry-now} failures={_keepTravelFailures}");
-                if (ShouldAbandonKeepRoute(_keepTravelFailures) && !AutonomousGuildKeepDefense.IsRecalled(bot))
+                if (ShouldAbandonKeepRoute(_keepTravelFailures) && !AutonomousGuildKeepDefense.IsRecalled(bot) &&
+                    (bot.Group == null || bot.Group.LivingLeader == bot))
                     AbandonKeepTarget(bot, destination, failure, now);
                 return true;
             }
         }
-        // Retain the existing attacker's optional real stable journey. The
-        // horse still owns movement exclusively; replan from its real arrival.
+        // Ordinary patrols retain stable travel. An assembled assault keeps
+        // its leader on foot with the column instead of outrunning followers.
         if (_keepTravelIndex == 0 && _rvrIntent != AutonomousRvrEventLayer.Intent.DefendEvent &&
+            !(_groupDirective?.IsDynamic == true && _groupDirective.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
+              AutonomousRvrEventLayer.MusterPhaseOf(_groupDirective.GroupId) != AutonomousRvrSiegeMuster.Phase.None) &&
             IsInFrontier(bot) && Vector2.Distance(new(current.X,current.Y),
                 new(_keepTravelPoints[^1].X,_keepTravelPoints[^1].Y)) > 650 &&
             TryBeginFasterStableRoute(bot,_keepTravelPoints[^1],destination.ZoneName))
@@ -249,6 +267,8 @@ public sealed partial class AutonomousWorldBotController
         if (_keepTravelIndex >= _keepTravelPoints.Length)
         {
             _rvrApproachDestination = _keepTravelPoints[^1];
+            bot.TempProperties.SetProperty(KeepAssaultApproachProperty,
+                new KeepAssaultApproach(destination.Id, bot.CurrentRegionID, _keepTravelPoints[^1]));
             // Standing at the assault approach keeps the siege event alive.
             AutonomousRvrEventLayer.ReportBattleActivity(destination.Id, now, RvrForceOf(bot));
             return false;

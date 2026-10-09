@@ -1480,6 +1480,8 @@ namespace DOL.GS
                 ? new Vector3(leader.X, leader.Y, leader.Z)
                 : new Vector3(directive.Camp.X, directive.Camp.Y, directive.Camp.Z);
             if (directive.ObjectiveKind != eAutonomousObjectiveKind.GroupPve &&
+                !(directive.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
+                  AutonomousRvrEventLayer.MusterPhaseOf(directive.GroupId) != AutonomousRvrSiegeMuster.Phase.None) &&
                 TryBeginFasterStableRoute(bot, strategicDestination,
                     directive.Camp?.ZoneName ?? "the group leader"))
                 return true;
@@ -1546,7 +1548,8 @@ namespace DOL.GS
                     member.GetDistanceTo(leader) <= AutonomousRvrSiegeMuster.PresentRadius));
             bool skip = AutonomousRvrSiegeMuster.CanSkipMuster(leader.CurrentRegionID == plan.RegionId,
                 Vector2.Distance(new(leader.X, leader.Y), new(plan.X, plan.Y)));
-            return AutonomousRvrEventLayer.ReportMuster(forceId, alive, present, members.Length, skip, GameLoop.GameLoopTime);
+            return AutonomousRvrEventLayer.ReportMuster(forceId, alive, present, members.Length, skip, GameLoop.GameLoopTime,
+                suppliesReady: SiegeSuppliesReadyForMarch(leader, members, plan.TargetId));
         }
 
         private bool ExecuteRvr(BotBrain brain, GameBot bot)
@@ -1607,9 +1610,7 @@ namespace DOL.GS
             var committedPlan = AutonomousRvrEventLayer.KeepPlan(forceId, bot.Realm, GameLoop.GameLoopTime);
             if (committedPlan != null)
             {
-                if (bot.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey) is { } oldPassage &&
-                    (oldPassage.Passage.Region!=committedPlan.RegionId || bot.CurrentRegionID==committedPlan.RegionId))
-                    bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
+                ClearUnrelatedFrontierRequest(bot, committedPlan);
                 if (_rvrDestination?.Id != committedPlan.TargetId)
                     _rvrApproachDestination = null;
                 _rvrDestination = new(committedPlan.TargetId, committedPlan.Name, committedPlan.Name,
@@ -1661,9 +1662,14 @@ namespace DOL.GS
                 _nextRvrPlanReview = 0;
             }
 
-            // Siege work (buy, place and operate a ram, or ride it) comes before
-            // ordinary keep targets for forces committed to a keep assault.
-            if (TryRunSiegeWork(bot)) return true;
+            // Operators finish real supply trips during assembly, then keep
+            // formation until the leader reaches the verified keep approach.
+            // Player-response events and defenders retain their own lifecycle.
+            bool formationSiege = musterPhase != AutonomousRvrSiegeMuster.Phase.None;
+            if (TryRunSiegeWork(bot,
+                    permitSupply: !formationSiege || musterPhase == AutonomousRvrSiegeMuster.Phase.Mustering,
+                    permitExecution: !formationSiege || musterPhase == AutonomousRvrSiegeMuster.Phase.Marching &&
+                        HasReachedKeepAssaultApproach(_groupDirective.Leader, committedPlan.TargetId))) return true;
             GameLiving enemy = FindRvrTargetTimed(bot);
             if (enemy != null)
             {
@@ -1697,8 +1703,7 @@ namespace DOL.GS
             bool marchFollow = musterPhase != AutonomousRvrSiegeMuster.Phase.None && dynamicWarband &&
                 marchLeader != null && marchLeader != bot && marchLeader.IsAlive &&
                 (musterPhase == AutonomousRvrSiegeMuster.Phase.Mustering || AutonomousRvrSiegeMuster.FollowsLeader(
-                    AutonomousRvrSiegeMuster.LeaderAtKeep(marchLeader.CurrentRegionID, new(marchLeader.X, marchLeader.Y),
-                        committedPlan.RegionId, new(committedPlan.X, committedPlan.Y)),
+                    HasReachedKeepAssaultApproach(marchLeader, committedPlan.TargetId),
                     bot.CurrentRegionID, marchLeader.CurrentRegionID,
                     bot.CurrentRegionID == marchLeader.CurrentRegionID ? bot.GetDistanceTo(marchLeader) : double.PositiveInfinity));
             // Never march alone while the warband musters: with the leader dead, hold
@@ -1859,8 +1864,7 @@ namespace DOL.GS
             // On the march the leader waits for a member that falls behind, as a
             // roaming group does (bounded: six seconds, three times per straggler).
             if (musterPhase == AutonomousRvrSiegeMuster.Phase.Marching && _groupDirective.Leader == bot &&
-                !AutonomousRvrSiegeMuster.LeaderAtKeep(bot.CurrentRegionID, new(bot.X, bot.Y), _rvrDestination.RegionId,
-                    new(_rvrDestination.X, _rvrDestination.Y)) && AutonomousRvrSpeed.ShouldLeaderHold(bot))
+                !HasReachedKeepAssaultApproach(bot, _rvrDestination.Id) && AutonomousRvrSpeed.ShouldLeaderHold(bot))
             {
                 bot.StopMovingOnPath();
                 bot.StopMoving();

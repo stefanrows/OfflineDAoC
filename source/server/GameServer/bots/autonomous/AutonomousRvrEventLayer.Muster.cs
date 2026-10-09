@@ -18,6 +18,7 @@ public static partial class AutonomousRvrEventLayer
         public long DepartedTick;
         public int LastAlive, LastPresent, Assigned;
         public long LastReportTick;
+        public bool SuppliesReady = true;
     }
 
     private static readonly DOL.Logging.Logger MusterLog = DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrSiegeMuster));
@@ -61,7 +62,7 @@ public static partial class AutonomousRvrEventLayer
     /// <param name="present">Living members within the muster radius of the leader.</param>
     /// <param name="skip">The force already stands near the keep and needs no muster.</param>
     public static AutonomousRvrSiegeMuster.Phase ReportMuster(string forceId, int alive, int present, int assigned,
-        bool skip, long nowTick)
+        bool skip, long nowTick, bool suppliesReady = true)
     {
         if (string.IsNullOrWhiteSpace(forceId)) return AutonomousRvrSiegeMuster.Phase.None;
         using (EnterSync())
@@ -74,15 +75,26 @@ public static partial class AutonomousRvrEventLayer
                 if (muster.Departed) return AutonomousRvrSiegeMuster.Phase.Marching;
                 muster.LastAlive = alive; muster.LastPresent = present; muster.Assigned = assigned;
                 muster.LastReportTick = nowTick;
-                var decision = skip ? AutonomousRvrSiegeMuster.Decision.Depart :
-                    AutonomousRvrSiegeMuster.Decide(alive, present, assigned, muster.StartedTick, nowTick);
+                muster.SuppliesReady = suppliesReady;
+                // A nearby leader alone is not a nearby warband. Never let
+                // the distance shortcut send a fragmented force into guards.
+                skip = skip && present >= AutonomousRvrSiegeMuster.Quorum(assigned);
+                long waited = Math.Max(0, nowTick - muster.StartedTick);
+                var decision = waited < AutonomousRvrSiegeMuster.PreparationWindowMilliseconds
+                    ? AutonomousRvrSiegeMuster.Decision.Wait
+                    : !suppliesReady
+                        ? waited >= AutonomousRvrSiegeMuster.MaximumWaitMilliseconds
+                            ? AutonomousRvrSiegeMuster.Decision.Fail : AutonomousRvrSiegeMuster.Decision.Wait
+                        : skip ? AutonomousRvrSiegeMuster.Decision.Depart :
+                            AutonomousRvrSiegeMuster.Decide(alive, present, assigned, muster.StartedTick, nowTick);
                 switch (decision)
                 {
                     case AutonomousRvrSiegeMuster.Decision.Depart:
                         DepartLocked(active, forceId, muster, nowTick, skip ? "already near the keep" : "mustered");
                         return AutonomousRvrSiegeMuster.Phase.Marching;
                     case AutonomousRvrSiegeMuster.Decision.Fail:
-                        FailMusterLocked(active, forceId, nowTick);
+                        FailMusterLocked(active, forceId, nowTick, !suppliesReady && present >= Math.Max(2, assigned / 2)
+                            ? "Siege supply trip did not finish before departure" : "Rally failed: the warband never mustered");
                         return AutonomousRvrSiegeMuster.Phase.None;
                     default:
                         return AutonomousRvrSiegeMuster.Phase.Mustering;
@@ -116,7 +128,8 @@ public static partial class AutonomousRvrEventLayer
             $"how=\"{how}\" present={muster.LastPresent}/{muster.LastAlive}/{muster.Assigned} waitedMs={nowTick - muster.StartedTick}");
     }
 
-    private static void FailMusterLocked(ActiveEvent active, string forceId, long nowTick)
+    private static void FailMusterLocked(ActiveEvent active, string forceId, long nowTick,
+        string reason = "Rally failed: the warband never mustered")
     {
         // A force that already left this siege (reassigned, abandoned) has nothing to fail:
         // drop the stale muster without releasing it from whatever it does now.
@@ -127,8 +140,8 @@ public static partial class AutonomousRvrEventLayer
         }
         var muster = active.Musters.GetValueOrDefault(forceId);
         if (MusterLog.IsInfoEnabled) MusterLog.Info($"RVR_SIEGE_MUSTER_FAILED target={active.TargetId} force={forceId} " +
-            $"present={muster?.LastPresent}/{muster?.LastAlive}/{muster?.Assigned} waitedMs={nowTick - (muster?.StartedTick ?? nowTick)}");
-        const string reason = "Rally failed: the warband never mustered";
+            $"present={muster?.LastPresent}/{muster?.LastAlive}/{muster?.Assigned} suppliesReady={muster?.SuppliesReady} " +
+            $"reportAgeMs={nowTick - (muster?.LastReportTick ?? nowTick)} waitedMs={nowTick - (muster?.StartedTick ?? nowTick)} reason=\"{reason}\"");
         active.Attackers.Remove(forceId);
         active.ThirdRealm.Remove(forceId);
         active.Slots.Remove(forceId);

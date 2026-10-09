@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using DOL.AI.Brain;
 using DOL.GS.Keeps;
@@ -19,17 +20,20 @@ public sealed partial class AutonomousWorldBotController
         GameBot bot = brain?.BotBody;
         // Note when an RvR bot leaves its border hub (departure truce).
         AutonomousHubDeparture.Observe(bot, WorldSimulationClock.UtcNow);
-        bool defending = AutonomousRvrDefense.IsCommittedDefender(bot);
-        bool marching = AutonomousSiegeMarch.IsMarching(bot);
-        bool siegeFighter = !marching && AutonomousRvrDefense.IsCommittedSiegeFighter(bot);
-        GameLiving previousEngine = defending ? bot.TargetObject as GameSiegeWeapon ?? _siegeWeapon?.TargetObject as GameSiegeWeapon : null;
+        // The one-second actor cadence owns force, area and candidate work.
+        // It must precede keep-plan/coordination lookups even on rejected turns;
+        // incoming attack events still enter the brain's normal defense path.
         if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper || bot.IsPlayerLedGroup ||
             !bot.IsAlive || bot.ObjectState != GameObject.eObjectState.Active || bot.IsReturningAfterRelease ||
-            bot.IsInvulnerableToAttack ||
-            bot.IsOnStableMasterRoute || !IsInFrontier(bot) || IsSafeArea(bot) ||
-            (brain.HasAggro || bot.InCombat || bot.IsAttacking) && previousEngine == null ||
+            bot.IsInvulnerableToAttack || bot.IsOnStableMasterRoute || !IsInFrontier(bot) ||
             brain.FSM.GetCurrentState()?.StateType == eFSMStateType.PASSIVE ||
             !_frontierThreat.Due(GameLoop.GameLoopTime, bot.DatabaseID)) return false;
+
+        bool defending = AutonomousRvrDefense.IsCommittedDefender(bot);
+        GameLiving previousEngine = defending ? bot.TargetObject as GameSiegeWeapon ?? _siegeWeapon?.TargetObject as GameSiegeWeapon : null;
+        if ((brain.HasAggro || bot.InCombat || bot.IsAttacking) && previousEngine == null || IsSafeArea(bot)) return false;
+        bool marching = AutonomousSiegeMarch.IsMarching(bot);
+        bool siegeFighter = !marching && AutonomousRvrDefense.IsCommittedSiegeFighter(bot);
 
         var nav = PathfindingProvider.Instance;
         if (!nav.IsAvailable || !nav.HasNavmesh(bot.CurrentZone)) return false;
@@ -41,47 +45,72 @@ public sealed partial class AutonomousWorldBotController
         // over the one target to open with.
         bool observing = AutonomousRvrObserve.IsObserving(bot);
         GameLiving decided = AutonomousRvrObserve.TakeEngageTarget(bot);
-        bool InOurFight(GameLiving target) => BotPvpCrowdControl.IsInFightWith(bot, target, null);
-        bool Eligible(GameLiving target) => target != bot && !target.IsStealthed &&
-            (marching ? AutonomousSiegeMarch.IsPartyThreat(bot, target) :
-                siegeFighter || InOurFight(target) || target == decided ||
-                mayHunt && !observing && AutonomousPvpOpportunityPolicy.SuitableOpponent(bot, target)) &&
-            target.ObjectState == GameObject.eObjectState.Active &&
-            AutonomousRvrTargetPolicy.IsEligible(
-                AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, target) || target is GameSiegeWeapon or GameKeepGuard,
-                target.IsAlive,
-                target.CurrentRegionID == bot.CurrentRegionID, IsInFrontier(target), IsSafeArea(target),
-                GameServer.ServerRules.IsAllowedToAttack(bot, target, true)) &&
-            AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, target, InOurFight(target));
+        // Capture the side once, rather than allocate/lock its group roster
+        // for every ally, pet and opponent in the entire nearby crowd.
+        GameLiving[] side = bot.Group?.GetMembersInTheGroup().Append(bot).Distinct().ToArray() ?? [bot];
+        var sideMembers = new HashSet<GameLiving>(side);
+        bool AttacksOurSide(GameLiving target) => target != null && (target.IsAttacking || target.IsCasting) &&
+            target.TargetObject is GameLiving victim && sideMembers.Contains(PvpCombatant.Resolve(victim) ?? victim);
+        bool InOurFight(GameLiving target)
+        {
+            GameLiving enemy = PvpCombatant.Resolve(target);
+            return enemy != null && (AttacksOurSide(target) || enemy != target && AttacksOurSide(enemy) ||
+                side.Any(member => (member.IsAttacking || member.IsCasting) &&
+                    PvpCombatant.Resolve(member.TargetObject as GameLiving) == enemy));
+        }
+        bool recentPartyAttack = marching && side.Any(member => member?.IsAlive == true &&
+            member.CurrentRegionID == bot.CurrentRegionID && member.IsWithinRadius(bot, 2500) &&
+            member.LastAttackedByEnemyTickPvP > 0 && GameLoop.GameLoopTime - member.LastAttackedByEnemyTickPvP < 15_000);
+        bool PartyThreat(GameLiving target) => AttacksOurSide(target) ||
+            AttacksOurSide(PvpCombatant.Resolve(target)) || recentPartyAttack && InOurFight(target);
+        bool BasicCandidate(GameLiving target) => target != null && target != bot && !target.IsStealthed && target.IsAlive &&
+            target.ObjectState == GameObject.eObjectState.Active && target.CurrentRegionID == bot.CurrentRegionID &&
+            IsInFrontier(target) && bot.IsWithinRadius(target, TargetSearchRadius) &&
+            (target is GameSiegeWeapon or GameKeepGuard || AutonomousRvrTargetPolicy.IsEnemyCombatant(bot, target));
+        bool Eligible(GameLiving target)
+        {
+            // Short-circuit hostility/death/range before safe-area or native
+            // permissions. Passing booleans to IsEligible evaluated all of
+            // those expensive checks even for hundreds of nearby allies.
+            if (!BasicCandidate(target) || IsSafeArea(target) ||
+                !GameServer.ServerRules.IsAllowedToAttack(bot, target, true)) return false;
+            bool inOurFight = InOurFight(target);
+            return (marching ? PartyThreat(target) : siegeFighter || inOurFight || target == decided ||
+                    mayHunt && !observing && AutonomousPvpOpportunityPolicy.SuitableOpponent(bot, target)) &&
+                AutonomousRvrTargetPolicy.ShouldEngageGrey(bot, target, inOurFight);
+        }
         bool IsHeldByAlliedOperator(GameLiving target) => target.TargetObject is GameBot friendly &&
             PvpCombatant.AreAllied(bot, friendly) && bot.IsWithinRadius(friendly, 1000) &&
             BotSiegeRuntime.HoldingPosition(friendly);
-
-        GameLiving[] nearby = bot.GetPlayersInRadius(TargetSearchRadius).Where(Eligible).Cast<GameLiving>()
+        bool siegeAssigned = BotSiegeRuntime.Assigned(bot);
+        GameLiving[] nearby = bot.GetPlayersInRadius(TargetSearchRadius).Cast<GameLiving>()
             .Concat(bot.GetNPCsInRadius(TargetSearchRadius)
-                .Where(npc => (npc is GameBot or GameSiegeWeapon ||
+                .Where(npc => npc is GameBot or GameSiegeWeapon ||
                     (siegeFighter ? AutonomousRvrDefense.IsCombatant(npc) :
-                        npc.Brain is IControlledBrain pet && pet.GetLivingOwner() is IGamePlayer)) && Eligible(npc)))
-            .Where(target => bot.GetDistanceTo(target) <= TargetSearchRadius)
-            .Where(target => defending || !BotSiegeRuntime.Assigned(bot) || bot.IsWithinRadius(target, 450) && target is not GameSiegeWeapon)
-            .OrderBy(target => IsHeldByAlliedOperator(target) ? 0 : 1)
+                        npc.Brain is IControlledBrain pet && pet.GetLivingOwner() is IGamePlayer)))
+            .Where(BasicCandidate)
+            .Where(target => defending || !siegeAssigned || bot.IsWithinRadius(target, 450) && target is not GameSiegeWeapon)
+            // Real attackers are first even when an ineligible crowd precedes
+            // them by distance. The remaining policy and geometry is bounded.
+            .OrderBy(target => IsHeldByAlliedOperator(target) ? 0 :
+                AttacksOurSide(target) || AttacksOurSide(PvpCombatant.Resolve(target)) ? 1 : 2)
             .ThenBy(bot.GetDistanceTo).ToArray();
         bool Visible(GameLiving target) => nav.HasLineOfSight(bot.CurrentZone,
             new(bot.X, bot.Y, bot.Z + 48), new(target.X, target.Y, target.Z + 48), nav.BlockingDoorAvoidanceFilters);
         var visible = siegeFighter
             ? _frontierThreat.VisiblePriority(nearby.Where(AutonomousRvrDefense.IsCombatant).ToArray(),
-                nearby.OfType<GameSiegeWeapon>().Cast<GameLiving>().ToArray(), Visible)
-            : _frontierThreat.Visible(nearby, target => nav.HasLineOfSight(bot.CurrentZone,
+                nearby.OfType<GameSiegeWeapon>().Cast<GameLiving>().ToArray(), Eligible, Visible)
+            : _frontierThreat.Visible(nearby, Eligible, target => nav.HasLineOfSight(bot.CurrentZone,
                 new(bot.X, bot.Y, bot.Z), new(target.X, target.Y, target.Z), nav.DefaultFilters));
-        var visibleTargets=visible.ToArray();
-        var operatorThreats=visibleTargets.Where(target=>target.IsAttacking && IsHeldByAlliedOperator(target)).ToArray();
+        var visibleTargets = visible.ToArray();
+        var operatorThreats = visibleTargets.Where(target => target.IsAttacking && IsHeldByAlliedOperator(target)).ToArray();
         // A stealth-doctrine assassin waits for a soft victim instead of the
         // nearest enemy; it still answers anyone already fighting it.
         GameLiving victim = null;
         bool stealthHunt = !(decided != null && Eligible(decided)) && operatorThreats.Length == 0 &&
             AutonomousRvrStealthLoop.TryPick(bot, visibleTargets, InOurFight, out victim);
         GameLiving enemy = decided != null && Eligible(decided) ? decided : stealthHunt ? victim :
-            SelectDistributedRvrTarget(bot, operatorThreats.Length>0 ? operatorThreats : visibleTargets);
+            SelectDistributedRvrTarget(bot, operatorThreats.Length > 0 ? operatorThreats : visibleTargets);
         if (enemy == null || !Eligible(enemy)) return false;
         if (previousEngine != null && enemy is GameSiegeWeapon) return false;
 

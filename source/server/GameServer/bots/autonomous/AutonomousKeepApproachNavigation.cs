@@ -27,6 +27,21 @@ public sealed class AutonomousKeepApproachNavigation : PathfindingMgrBase
             FriendlyDoors(GameServer.KeepManager?.GetKeepsOfRegion(bot.CurrentRegion.ID), keep => AutonomousRvrTravel.CanPassKeep(bot, keep)));
     }
 
+    /// <summary>Planning-only origin normalization within the native mover's
+    /// 64-unit vertical start tolerance, at effectively unchanged XY. This
+    /// cannot move a bot down to a distant floor or across a wall.</summary>
+    public static bool TryPlanningOrigin(IPathfindingMgr nav, Zone zone, Vector3 actor, out Vector3 origin)
+    {
+        origin = actor;
+        if (zone == null || nav?.IsAvailable != true || !nav.HasNavmesh(zone)) return false;
+        var floor = nav.GetClosestPoint(zone, actor, 2, 2, 64, nav.DefaultFilters);
+        if (!floor.HasValue || !float.IsFinite(floor.Value.X) || !float.IsFinite(floor.Value.Y) || !float.IsFinite(floor.Value.Z) ||
+            Vector2.DistanceSquared(new(actor.X, actor.Y), new(floor.Value.X, floor.Value.Y)) > 4 ||
+            Math.Abs(floor.Value.Z - actor.Z) > 64) return false;
+        origin = floor.Value;
+        return true;
+    }
+
     public static Vector3[] FriendlyDoors(IEnumerable<AbstractGameKeep> keeps, Func<AbstractGameKeep, bool> passable) =>
         keeps?.Where(keep => keep != null && passable(keep)).SelectMany(keep => keep.Doors.Values)
             .Select(d => new Vector3(d.X, d.Y, d.Z)).ToArray() ?? [];

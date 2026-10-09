@@ -38,6 +38,17 @@ public sealed partial class AutonomousWorldBotController
             home, passage.Location.X, passage.Location.Y, passage.Location.Z, bot.Level, false, true));
     }
 
+    private static void ClearUnrelatedFrontierRequest(GameBot bot, AutonomousRvrEventLayer.Plan plan)
+    {
+        var pending = bot.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey);
+        if (pending == null) return;
+        bool rejoiningLeader = bot.Group?.LivingLeader is GameBot leader && leader != bot &&
+            pending.TargetRegion == leader.CurrentRegionID;
+        if (bot.CurrentRegionID == plan.RegionId ||
+            pending.Passage.Region != plan.RegionId && pending.TargetRegion != plan.RegionId && !rejoiningLeader)
+            bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
+    }
+
     private bool TryFrontierTransport(GameBot bot, CampDestination destination)
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.RvrFrontierTransport);
@@ -61,14 +72,24 @@ public sealed partial class AutonomousWorldBotController
         if (AutonomousFrontierTransport.Destination(bot.Realm,destination.RegionId) == null) return Unavailable();
         // A full backpack must not cancel every member's approach before the
         // owner can reach the real merchant and sell ordinary vendor trash.
-        if (_frontierPorter?.ObjectState != GameObject.eObjectState.Active || _frontierPorter.CurrentRegion != bot.CurrentRegion)
+        var leaderRequest = bot.Group?.LivingLeader is GameBot leader && leader != bot &&
+            leader.CurrentRegion == bot.CurrentRegion
+            ? leader.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey) : null;
+        bool sharedPorterChanged = leaderRequest?.Porter is { ObjectState: GameObject.eObjectState.Active } &&
+            leaderRequest.Porter.CurrentRegion == bot.CurrentRegion && leaderRequest.Porter != _frontierPorter;
+        if (sharedPorterChanged || GameLoop.GameLoopTime >= _nextPorterSearch ||
+            _frontierPorter?.ObjectState != GameObject.eObjectState.Active || _frontierPorter.CurrentRegion != bot.CurrentRegion)
         {
-            if (GameLoop.GameLoopTime < _nextPorterSearch) return Unavailable();
+            if (!sharedPorterChanged && GameLoop.GameLoopTime < _nextPorterSearch) return Unavailable();
             _nextPorterSearch = GameLoop.GameLoopTime + 30_000;
-            _frontierPorter = AutonomousFrontierTransport.NearestPorter(bot);
-            _medallionMerchant = null;
-            _frontierWaitingPoint = null;
-            _nextWaitingPointSearch = 0;
+            var selected = AutonomousFrontierTransport.WarbandPorter(bot);
+            if (selected != _frontierPorter)
+            {
+                _frontierPorter = selected;
+                _medallionMerchant = null;
+                _frontierWaitingPoint = null;
+                _nextWaitingPointSearch = 0;
+            }
         }
         if (_frontierPorter == null) return Unavailable();
         // Albion/Midgard portal keeps in a foreign frontier sell only the home
@@ -78,10 +99,14 @@ public sealed partial class AutonomousWorldBotController
         // cannot serve the leader's.
         bool Sells(string medallion) => AutonomousFrontierTransport.PorterSells(_frontierPorter, medallion);
         bool Holds(string medallion) => AutonomousFrontierTransport.Ticket(bot, new(0, medallion, null)) != null;
-        eRealm passageRealm = AutonomousFrontierTransport.PassageRealm(bot);
-        var passage = AutonomousFrontierTransport.ChoosePassage(passageRealm, bot.CurrentRegionID, destination.RegionId, Sells, Holds);
-        if (passage == null && passageRealm != bot.Realm)
-            passage = AutonomousFrontierTransport.ChoosePassage(bot.Realm, bot.CurrentRegionID, destination.RegionId, Sells, Holds);
+        // Use the actual porter's native landing. A shared leader request owns
+        // intermediate home hops as well as direct siege passages.
+        bool rvrTransport = AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR);
+        var sharedRequest = rvrTransport
+            ? AutonomousFrontierTransport.SharedRequest(bot, _frontierPorter, destination.RegionId) : null;
+        eRealm passageRealm = rvrTransport ? _frontierPorter.Realm : AutonomousFrontierTransport.PassageRealm(bot);
+        var passage = sharedRequest?.Passage ?? AutonomousFrontierTransport.ChoosePassage(
+            passageRealm, bot.CurrentRegionID, destination.RegionId, Sells, Holds);
         if (passage == null) return Unavailable();
         bool returningToPve = passage.Medallion == "home_necklace" &&
             AutonomousObjectiveAssignments.Parse(bot.PersistentRecord?.ObjectiveKind) != eAutonomousObjectiveKind.RvR;
@@ -95,7 +120,8 @@ public sealed partial class AutonomousWorldBotController
         // returning PvE bot may need its own portal-keep door to BUY the ticket.
         // Boarding still requires the real purchased medallion and all safety checks.
         bot.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey,new AutonomousFrontierTransport.Request(
-            _frontierPorter,passage,bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}"));
+            _frontierPorter, passage, bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}",
+            sharedRequest?.TargetRegion is > 0 ? sharedRequest.TargetRegion : destination.RegionId));
         if (AutonomousFrontierTransport.Ticket(bot,passage) == null)
         {
             if (_medallionMerchant?.ObjectState != GameObject.eObjectState.Active ||

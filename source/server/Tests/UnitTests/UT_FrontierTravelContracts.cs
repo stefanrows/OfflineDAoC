@@ -156,14 +156,18 @@ public class UT_FrontierTravelContracts
         bot.PositionX=0;
         eRealm foreignRealm=realm==eRealm.Hibernia?eRealm.Albion:eRealm.Hibernia;
         bot.Realm=foreignRealm;
-        var foreignPassage=AutonomousFrontierTransport.Destination(foreignRealm,passage.Region);
+        var virtualPassage=AutonomousFrontierTransport.Destination(foreignRealm,passage.Region);
+        var foreignPassage=AutonomousFrontierTransport.Destination(realm,passage.Region);
         var foreignRequest=new AutonomousFrontierTransport.Request(porter,foreignPassage,"rvr-0");
         if (AutonomousFrontierTransport.Ticket(bot,foreignPassage) == null)
             Assert.That(bot.Inventory.AddItem(eInventorySlot.FirstBackpack+1,
                 GameInventoryItem.Create(new DbItemTemplate{Id_nb=foreignPassage.Medallion,PackSize=1,MaxCount=1})),Is.True);
         DbInventoryItem foreignTicket=AutonomousFrontierTransport.Ticket(bot,foreignPassage);
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,foreignRequest),Is.True,
-            "Camlann bots may use a foreign realm's portal-keep teleporter with their own realm ticket");
+            "Camlann bots use the actual foreign porter's native landing with a real medallion");
+        Assert.That(AutonomousFrontierTransport.Ready(bot, porter,
+            new AutonomousFrontierTransport.Request(porter, virtualPassage, "rvr-0")), Is.False,
+            "A ticket must never authorize a landing belonging to another porter network");
         Assert.That(AutonomousFrontierTransport.WakeBoardingPorter(bot,foreignRequest),Is.True);
         Assert.That(ticket.Count,Is.EqualTo(1),"Rejected boarding must preserve the real ticket");
         if (!ReferenceEquals(foreignTicket,ticket))
@@ -180,6 +184,85 @@ public class UT_FrontierTravelContracts
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,homeRequest),Is.True);
         bot.Fighting=true;
         Assert.That(AutonomousFrontierTransport.Ready(bot,porter,homeRequest),Is.False,"Returners cannot escape active combat");
+    }
+
+    [Test]
+    public void WarbandUsesLeaderNetworkAndAdoptsItsActualHomeHopPorter()
+    {
+        Traveler follower = CreateTravelActor(eRealm.Albion);
+        Traveler leader = CreateTravelActor(eRealm.Midgard);
+        follower.Group = new Group(leader);
+        var nearest = (Porter)RuntimeHelpers.GetUninitializedObject(typeof(Porter));
+        nearest.Realm = eRealm.Albion; nearest.ObjectState = GameObject.eObjectState.Active;
+        var shared = (Porter)RuntimeHelpers.GetUninitializedObject(typeof(Porter));
+        shared.Realm = eRealm.Midgard; shared.ObjectState = GameObject.eObjectState.Active;
+        AutonomousFrontierTransport.Register(nearest);
+        AutonomousFrontierTransport.Register(shared);
+        try
+        {
+            Assert.That(AutonomousFrontierTransport.WarbandPorter(follower), Is.SameAs(shared),
+                "A mixed group must not split between nearby native networks");
+            var hop = new AutonomousFrontierTransport.Request(nearest,
+                AutonomousFrontierTransport.Destination(eRealm.Albion, 1), "warband", 200);
+            leader.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey, hop);
+            Assert.That(AutonomousFrontierTransport.WarbandPorter(follower), Is.SameAs(nearest),
+                "An actual leader request overrides birth-realm preference");
+            Assert.That(AutonomousFrontierTransport.SharedRequest(follower, nearest, 200), Is.SameAs(hop));
+            Assert.That(AutonomousFrontierTransport.SharedRequest(follower, nearest, 1), Is.SameAs(hop),
+                "Following the intermediate landing retains the final target");
+            Assert.That(AutonomousFrontierTransport.SharedRequest(follower, shared, 200), Is.Null);
+            Assert.That(AutonomousFrontierTransport.SharedRequest(follower, nearest, 100), Is.Null);
+        }
+        finally
+        {
+            AutonomousFrontierTransport.Unregister(nearest);
+            AutonomousFrontierTransport.Unregister(shared);
+        }
+    }
+
+    [Test]
+    public void CommittedPlanRetainsIntermediateHomeHopButDropsAnUnrelatedRequest()
+    {
+        Traveler bot = CreateTravelActor(eRealm.Midgard);
+        var plan = new AutonomousRvrEventLayer.Plan(AutonomousRvrEventLayer.Intent.AssaultKeep,
+            "rvr-keep-test", "Keep", 200, 0, 0, 0, true, "test");
+        var hop = new AutonomousFrontierTransport.Request(null,
+            AutonomousFrontierTransport.Destination(eRealm.Midgard, 100), "warband", 200);
+        bot.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey, hop);
+        MethodInfo clear = typeof(AutonomousWorldBotController).GetMethod("ClearUnrelatedFrontierRequest",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        clear.Invoke(null, [bot, plan]);
+        Assert.That(bot.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey),
+            Is.SameAs(hop), "The intermediate region differs from the keep, but the trip still belongs to it");
+        bot.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey, hop with { TargetRegion = 100 });
+        clear.Invoke(null, [bot, plan]);
+        Assert.That(bot.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey), Is.Null);
+        bot.TempProperties.SetProperty(AutonomousFrontierTransport.RequestKey, hop);
+        clear.Invoke(null, [bot, plan with { RegionId = 1 }]);
+        Assert.That(bot.TempProperties.GetProperty<AutonomousFrontierTransport.Request>(AutonomousFrontierTransport.RequestKey), Is.Null,
+            "Arrival in the target region ends the obsolete crossing intent");
+    }
+
+    [Test]
+    public void ReunionHomeHopDoesNotWaitForLeaderInAThirdRegion()
+    {
+        Assert.That(AutonomousFrontierTransport.MayCrossWithoutLeader(true, false, false, false), Is.True,
+            "A returning member can never board alongside a leader in another source region");
+        Assert.That(AutonomousFrontierTransport.MayCrossWithoutLeader(true, false, false, true), Is.False,
+            "The column still waits for its leader when departing from the same side");
+        Assert.That(AutonomousFrontierTransport.MayCrossWithoutLeader(true, true, false, false), Is.True,
+            "The rest of a split transfer slice follows the landed leader");
+    }
+
+    private static Traveler CreateTravelActor(eRealm realm)
+    {
+        var bot = (Traveler)RuntimeHelpers.GetUninitializedObject(typeof(Traveler));
+        bot.Realm = realm; bot.ObjectState = GameObject.eObjectState.Active;
+        typeof(GameBot).GetProperty(nameof(GameBot.IsAutonomousWorldBot)).SetValue(bot, true);
+        typeof(GameBot).GetProperty(nameof(GameBot.PersistentRecord)).SetValue(bot, new OfflineWorldBotRecord { ObjectiveKind = "RvR" });
+        typeof(GameLiving).GetField("<TempProperties>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)
+            .SetValue(bot, new PropertyCollection());
+        return bot;
     }
 
     [TestCase(false)]

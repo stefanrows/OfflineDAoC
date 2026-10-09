@@ -12,6 +12,49 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.215.0] - 2026-10-09
+
+### Fixed
+
+- Keep-raid groups use their leader's porter network and preserve intermediate
+  home passages. Transfer the leader first, let distant members finish legal
+  reunion hops, and require a real quorum before bypassing a near-keep rally.
+- Give each rally a short preparation window, wait for started supply trips
+  to return, and prevent independent horse rides from splitting its column.
+  Distinguish stalled or aborted approaches from actual defended outcomes.
+- Keep siege operators with their marching party while coordinating supplies
+  during assembly. Keep-route planning accepts only the native mover's small
+  vertical start tolerance; it does not relocate bots or replace navigation.
+- Bot leader promotion announces the promoted living member without casting
+  it to a human player. PvE enemy-hold movement preserves route-recovery state
+  when a failed path abandons its camp.
+
+### Changed
+
+- Gate frontier threat coordination and area checks behind the existing scan
+  cadence, reuse one party snapshot, and bound expensive candidate checks while
+  retaining native attack permissions, combatant priority and immediate defense.
+- Add focused regression coverage and record source fixes separately from
+  installation/gameplay acceptance. Shipping leaves the installation stopped
+  for the owner's next monitored run; gameplay acceptance remains pending.
+
+## [0.214.2] - 2026-10-09
+
+### Added
+
+- Record the owner's live observation of installed 0.214.1, covering achieved
+  world speed, bot progression, keep musters, travel and siege outcomes.
+- Track bot-leader promotion and PvE camp null-reference failures as bugs
+  116 and 117; reopen keep-assault bug 75 after its runtime check failed.
+
+### Changed
+
+- Update upstream-adaptation and accelerated-speed verification status using
+  bounded runtime evidence. Keep raw logs, snapshots and save-derived data
+  outside Git; combat balance, native routing, active ability effects and
+  restart acceptance remain pending. No gameplay repair or deployment was
+  performed for this observation.
+
 ## [0.214.1] - 2026-10-09
 
 ### Added

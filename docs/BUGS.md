@@ -61,6 +61,83 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+117. **PvE camp turn reads a cleared objective after movement recovery.**
+     Installed 0.214.1 observation on 2026-10-09 found two null-reference
+     failures through `LeadPveCamp`. Source audit found that `IssuePath` can
+     synchronously abandon `_camp`, after which the enemy-hold branch read
+     its name/zone and overwrote the recovery status. Source 0.215.0 stops
+     that branch when movement fails or changes the camp. This repairs the
+     identified unsafe path; installation and reproduction of the exact
+     observed stack remain pending. No live save or route state was edited.
+
+116. **Bot group-leader promotion throws during hub departure.** Installed
+     0.214.1 observation on 2026-10-09 found twenty-one exceptions after
+     promoting a bot: `Leader` is a human-player cast and becomes null.
+     Source 0.215.0 announces the promoted `GameLiving` directly, preserving
+     the group swap and indexes. Added a regression case exercising actual
+     bot promotion and its notification. Test execution and installed hub
+     departure verification remain pending; this defect was one contributor,
+     not an explanation of all keep-siege failures.
+
+75. **Keep assaults still stall during travel and siege placement.**
+    Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
+    ram deployments, door hits or keep-guard fights; the only `RVR_SIEGE`
+    actions were equipment, purchase, repair and supply timeouts. Causes: a
+    siege opened with "each assigned bot converges without formation staging",
+    so every member walked to the keep alone from wherever it stood (example:
+    Blendrake Faste, keep 78, 2026-09-30 12:04: the group formed 4 s before
+    the opening and its members were scattered); Camlann crews mix birth
+    realms and each member chose the porter passage of its own realm (Odin
+    Alb, Odin Hib, Home Mid), one to three members per departure; lone members
+    died 5 to 43 times on the way and the occasional arrival was killed by the
+    level 59-76 guards, so the siege job (within about 6,000 units) never ran;
+    the siege closed after 15 minutes without progress (about 5 real minutes
+    at 3x); and some keeps have no exterior route at all
+    (`RVR_KEEP_ROUTE_FAILED` for keep 51 386 times a week; 57, 102, 105, 106).
+    Source 0.161.0 added partial fixes: an attacking warband musters on its
+    leader (all living members, six of eight after four minutes, half after ten minutes,
+    a warband that never gathers ends with "Rally failed: the warband never
+    mustered"), boards one porter through one passage (its leader's realm),
+    marches behind its leader in column order and fights the guards together;
+    a released member rejoins the leader; the idle and absence clocks count
+    from departure; a freshly formed warband finishes its assembly first; the
+    automatic opener skips keeps whose exterior route failed (one hour,
+    doubling to eight). Real-client check pending: watch a siege from opening
+    to the walls. Log: `RVR_SIEGE_MUSTER_DEPARTED` (present/alive/assigned),
+    `RVR_SIEGE_MUSTER_FAILED`, then ram and door actions at the keep; the same
+    force should show one `RVR_FRONTIER_DEPARTURE` with `count` equal to its
+    size and no `left_behind`.
+
+    Reopened after installed 0.214.1 observation on 2026-10-09. By 21:00
+    CEST in the owner-started 20:28 session: seven automatic sieges opened,
+    thirty forces departed their siege muster (four at 8/8/8), two musters
+    failed at 1/8/8, and four sieges closed without progress. No siege-engine
+    hit or keep claim was logged in this session. Two operators at Dun nGed
+    reported no connected firing position. Some groups ported in fragments
+    even after a full muster; guard/PvP fighting did occur near keeps. This
+    fails the complete raid check without establishing one common root cause.
+    Bug 116 interrupts hub coordination separately. Runtime attendance
+    counters often report zero; physical presence must also use participant
+    positions and combat evidence. Existing source fixes are retained; no
+    AI tuning, navigation replacement or deployment was performed.
+    Final window through 21:05:34 CEST: five of the seven sieges closed
+    without progress; two remained active. Still no confirmed siege-engine
+    hits, lord defeat/steward creation or guild claims in this session.
+
+    Source 0.215.0 addresses additional coordination causes: shared actual
+    porter networks and native landings, retained intermediate home hops,
+    leader-first transfer slices, legal third-region reunion hops, and a
+    quorum even when the leader starts near the keep. Siege supply trips no
+    longer supersede marching formation; small native start-height tolerance
+    is accepted for keep-route planning, without relocating actors. A member's
+    failed route cannot cancel the leader's entire keep objective.
+    Installation and rally-to-gate acceptance remain pending. Real defenders,
+    unavailable supplies and genuinely disconnected terrain remain valid
+    obstacles; the observed placement failure is not proven to be a LOS bug,
+    so native placement/LOS and enemy-door rules remain intact. Large invalid
+    actor elevations are not repaired by guessing a distant lower floor.
+
+
 115. **Closed console input spins the server console loop.** Confirmed in
      source 0.209.0 during the 2026-10-09 comparison: EOF immediately retried
      `Console.ReadLine()`, potentially consuming a CPU core. Source 0.209.2
@@ -70,6 +147,9 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      timing are preserved. Stage 1 source exit/retry paths reviewed; no server
      was started. Installation, closed redirected input CPU measurement while
      the server remains running, and normal shutdown checks remain pending.
+     Installation confirmed in the owner's running 0.214.1 session on
+     2026-10-09. Its launcher input was not closed and shutdown was not
+     exercised; those verification checks remain pending.
 
 Source audit and deployment, 2026-10-04: fixes 106–114 are in source 0.207.0.
 The server and launcher fixes (106–110, 112 and 113) were deployed after fresh
@@ -742,35 +822,6 @@ not install the Setup tool; their disposable-input verification is pending.
     the merchant with a full backpack and nothing sellable. **Fixed in source
     0.172.0:** no formation hold while the objective is in another region;
     the full-backpack case falls back to the dungeon road.
-
-75. **Keep sieges never succeed: bots travel one by one and die alone.**
-    Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
-    ram deployments, door hits or keep-guard fights; the only `RVR_SIEGE`
-    actions were equipment, purchase, repair and supply timeouts. Causes: a
-    siege opened with "each assigned bot converges without formation staging",
-    so every member walked to the keep alone from wherever it stood (example:
-    Blendrake Faste, keep 78, 2026-09-30 12:04: the group formed 4 s before
-    the opening and its members were scattered); Camlann crews mix birth
-    realms and each member chose the porter passage of its own realm (Odin
-    Alb, Odin Hib, Home Mid), one to three members per departure; lone members
-    died 5 to 43 times on the way and the occasional arrival was killed by the
-    level 59-76 guards, so the siege job (within about 6,000 units) never ran;
-    the siege closed after 15 minutes without progress (about 5 real minutes
-    at 3x); and some keeps have no exterior route at all
-    (`RVR_KEEP_ROUTE_FAILED` for keep 51 386 times a week; 57, 102, 105, 106).
-    Fixed in source 0.161.0: an attacking warband musters on its leader (all
-    living members, six of eight after four minutes, half after ten minutes,
-    a warband that never gathers ends with "Rally failed: the warband never
-    mustered"), boards one porter through one passage (its leader's realm),
-    marches behind its leader in column order and fights the guards together;
-    a released member rejoins the leader; the idle and absence clocks count
-    from departure; a freshly formed warband finishes its assembly first; the
-    automatic opener skips keeps whose exterior route failed (one hour,
-    doubling to eight). Real-client check pending: watch a siege from opening
-    to the walls. Log: `RVR_SIEGE_MUSTER_DEPARTED` (present/alive/assigned),
-    `RVR_SIEGE_MUSTER_FAILED`, then ram and door actions at the keep; the same
-    force should show one `RVR_FRONTIER_DEPARTURE` with `count` equal to its
-    size and no `left_behind`.
 
 74. **Parties of one realm raid kill each other.** Live log 2026-09-30: four of
     four scheduled or forced realm raids ended "Staging failed: 0 adventurers

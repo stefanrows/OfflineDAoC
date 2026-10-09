@@ -89,6 +89,73 @@ public class UT_FrontierThreatScan
         Assert.That(scan.Visible(new[] { 43 }, _ => true), Is.EqualTo(new[] { 43 }));
     }
 
+    [Test]
+    public void ExpensiveCandidatePolicyIsBoundedAndRotatesPastIneligibleCrowds()
+    {
+        var scan = new AutonomousFrontierThreatPolicy();
+        int[] crowd = Enumerable.Range(0, 70).ToArray();
+        int attempts = 0;
+        int rays = 0;
+        bool Eligible(int target) { attempts++; return target == 68; }
+        bool Visible(int target) { rays++; return true; }
+        Assert.That(scan.Visible(crowd, Eligible, Visible), Is.Empty);
+        Assert.That(attempts, Is.EqualTo(AutonomousFrontierThreatPolicy.CandidateBudget));
+        Assert.That(rays, Is.Zero);
+        attempts = 0;
+        Assert.That(scan.Visible(crowd, Eligible, Visible), Is.Empty);
+        Assert.That(attempts, Is.EqualTo(AutonomousFrontierThreatPolicy.CandidateBudget));
+        attempts = 0;
+        Assert.That(scan.Visible(crowd, Eligible, Visible), Is.EqualTo(new[] { 68 }));
+        Assert.That(attempts, Is.LessThanOrEqualTo(AutonomousFrontierThreatPolicy.CandidateBudget));
+        Assert.That(rays, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CandidateAndVisibilityBudgetsApplyTogether()
+    {
+        var scan = new AutonomousFrontierThreatPolicy();
+        int attempts = 0;
+        int rays = 0;
+        var result = scan.Visible(Enumerable.Range(0, 10000).ToArray(), target =>
+        { attempts++; return target % 2 == 0; }, _ => { rays++; return true; });
+        Assert.That(attempts, Is.EqualTo(15));
+        Assert.That(rays, Is.EqualTo(AutonomousFrontierThreatPolicy.VisibilityBudget));
+        Assert.That(result, Is.EqualTo(Enumerable.Range(0, 8).Select(i => i * 2)));
+    }
+
+    [Test]
+    public void DefenderFinishesBoundedIneligibleCombatantSweepBeforeEngines()
+    {
+        var scan = new AutonomousFrontierThreatPolicy();
+        int[] crowd = Enumerable.Range(0, 70).ToArray();
+        int attempts = 0;
+        int engineRays = 0;
+        bool Eligible(int target) { attempts++; return target == 100; }
+        bool Visible(int target) { if (target == 100) engineRays++; return true; }
+        Assert.That(scan.VisiblePriority(crowd, new[] { 100 }, Eligible, Visible), Is.Empty);
+        Assert.That(attempts, Is.EqualTo(AutonomousFrontierThreatPolicy.CandidateBudget));
+        Assert.That(engineRays, Is.Zero);
+        attempts = 0;
+        Assert.That(scan.VisiblePriority(crowd, new[] { 100 }, Eligible, Visible), Is.Empty);
+        Assert.That(attempts, Is.EqualTo(AutonomousFrontierThreatPolicy.CandidateBudget));
+        Assert.That(engineRays, Is.Zero);
+        attempts = 0;
+        Assert.That(scan.VisiblePriority(crowd, new[] { 100 }, Eligible, Visible), Is.EqualTo(new[] { 100 }));
+        Assert.That(attempts, Is.LessThanOrEqualTo(AutonomousFrontierThreatPolicy.CandidateBudget));
+        Assert.That(engineRays, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void DefenderRotatesBlockedEnginesWithoutLosingCombatantPriority()
+    {
+        var scan = new AutonomousFrontierThreatPolicy();
+        int[] engines = Enumerable.Range(100, 20).ToArray();
+        Assert.That(scan.VisiblePriority(Array.Empty<int>(), engines, target => target == 118), Is.Empty);
+        Assert.That(scan.VisiblePriority(Array.Empty<int>(), engines, target => target == 118), Is.Empty);
+        Assert.That(scan.VisiblePriority(Array.Empty<int>(), engines, target => target == 118), Is.EqualTo(new[] { 118 }));
+        Assert.That(scan.VisiblePriority(new[] { 1 }, engines, _ => true), Is.EqualTo(new[] { 1 }));
+    }
+
     [TestCase(true, true)]
     [TestCase(false, false)]
     public void CamlannHostilityIsIndependentOfCharacterRealm(bool enemy, bool expected)

@@ -196,6 +196,44 @@ public sealed class UT_RvrSiegeMuster
     }
 
     [Test]
+    public void GatheredForceWaitsForSupplyTripAndReportsSupplyFailureSeparately()
+    {
+        const long start = 205_000_000;
+        var target = OpenSiege("rvr-keep-9110", start);
+        Bucket(target.Id, "Attackers").Add("supplied", 8);
+        Bucket(target.Id, "Attackers").Add("unsupplied", 8);
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("supplied", 8, 8, 8, true, start, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("supplied", 8, 8, 8, true, start + 30_000, suppliesReady: true),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("unsupplied", 8, 8, 8, false, start, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("unsupplied", 8, 8, 8, false,
+            start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.None));
+        Assert.That(AutonomousRvrEventLayer.TryConsumeRelease("unsupplied", start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds,
+            out string reason), Is.True);
+        Assert.That(reason, Is.EqualTo("Siege supply trip did not finish before departure"));
+        Assert.That(AutonomousRvrEventLayer.MusterPhaseOf("supplied"), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
+    }
+
+    [Test]
+    public void FullFirstReportWaitsForPreparationWithoutExtendingTheMusterDeadline()
+    {
+        const long start = 208_000_000;
+        var target = OpenSiege("rvr-keep-9111", start);
+        Bucket(target.Id, "Attackers").Add("full", 8);
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("full", 8, 8, 8, false, start),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("full", 8, 8, 8, false,
+            start + AutonomousRvrSiegeMuster.PreparationWindowMilliseconds - 1),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("full", 8, 8, 8, false,
+            start + AutonomousRvrSiegeMuster.PreparationWindowMilliseconds),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
+    }
+
+    [Test]
     public void GatheredForceDeparts_AndStaysDeparted()
     {
         const long start = 210_000_000;
@@ -211,12 +249,17 @@ public sealed class UT_RvrSiegeMuster
     }
 
     [Test]
-    public void ForceNearTheKeepMarchesAtOnce()
+    public void ForceNearTheKeepWaitsForARealQuorumAndPreparation()
     {
         const long start = 215_000_000;
         var target = OpenSiege("rvr-keep-9103", start);
         Bucket(target.Id, "Attackers").Add("near", 8);
-        Assert.That(AutonomousRvrEventLayer.ReportMuster("near", 8, 1, 8, true, start), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("near", 8, 1, 8, true, start), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering),
+            "A leader near the keep cannot skip the missing warband's muster");
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("near", 8, 6, 8, true, start + 1), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering),
+            "Supply preparation must get a turn before even a nearby quorum departs");
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("near", 8, 6, 8, true,
+            start + AutonomousRvrSiegeMuster.PreparationWindowMilliseconds), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
     }
 
     [Test]
@@ -284,6 +327,8 @@ public sealed class UT_RvrSiegeMuster
         Bucket(target.Id, "Attackers").Add("strong", 8);
         Bucket(target.Id, "Attackers").Add("weak", 8);
         AutonomousRvrEventLayer.ReportMuster("strong", 8, 8, 8, false, start);
+        AutonomousRvrEventLayer.ReportMuster("strong", 8, 8, 8, false,
+            start + AutonomousRvrSiegeMuster.PreparationWindowMilliseconds);
         AutonomousRvrEventLayer.ReportMuster("weak", 8, 1, 8, false, start);
 
         Assert.That(AutonomousRvrEventLayer.ReportMuster("weak", 8, 1, 8, false, start + 11 * Minute), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.None));

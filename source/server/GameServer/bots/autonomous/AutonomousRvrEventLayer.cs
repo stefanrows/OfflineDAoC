@@ -53,6 +53,7 @@ public static partial class AutonomousRvrEventLayer
             {
                 active.LastActivityTick = Math.Max(active.LastActivityTick, nowTick);
                 active.LastAttackerPresenceTick = Math.Max(active.LastAttackerPresenceTick, nowTick);
+                active.AttackerReachedKeep = true;
             }
     }
 
@@ -97,6 +98,7 @@ public static partial class AutonomousRvrEventLayer
             if (distance <= AttackerPresenceRadius)
             {
                 active.LastAttackerPresenceTick = Math.Max(active.LastAttackerPresenceTick, nowTick);
+                active.AttackerReachedKeep = true;
                 ClearKeepRouteBlockLocked(targetId);
             }
             if (!active.Travel.TryGetValue(memberId, out var previous))
@@ -222,6 +224,7 @@ public static partial class AutonomousRvrEventLayer
         /// <summary>Last time an attacking or third-realm member stood within
         /// <see cref="AttackerPresenceRadius"/> of the keep (or the battle start).</summary>
         public long LastAttackerPresenceTick;
+        public bool AttackerReachedKeep;
         public readonly Dictionary<string, int> Attackers = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> Defenders = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> ThirdRealm = new(StringComparer.Ordinal);
@@ -894,7 +897,9 @@ public static partial class AutonomousRvrEventLayer
                 if (absentLog.IsInfoEnabled) absentLog.Info($"RVR_SIEGE_IDLE_CLOSED target={active.TargetId} reason=absent " +
                     $"absentMs={nowTick - active.LastAttackerPresenceTick} radius={AttackerPresenceRadius} " +
                     $"assigned={active.Attackers.Values.Sum()}/{active.Defenders.Values.Sum()}/{active.ThirdRealm.Values.Sum()}");
-                EndEvent(active, nowTick, "Siege defended: no attacker came within reach of the keep for forty-five minutes");
+                EndEvent(active, nowTick, active.AttackerReachedKeep
+                    ? "Siege abandoned: no attacker remained within reach of the keep for forty-five minutes"
+                    : "Siege aborted: no attacker reached the keep within forty-five minutes");
                 continue;
             }
             if (active.LastPressureTick > active.LastActivityTick) active.LastActivityTick = active.LastPressureTick;
@@ -907,8 +912,12 @@ public static partial class AutonomousRvrEventLayer
             }
             var idleLog = DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrEventLayer));
             if (idleLog.IsInfoEnabled) idleLog.Info($"RVR_SIEGE_IDLE_CLOSED target={active.TargetId} reason=no_progress " +
-                $"idleMs={nowTick - active.LastActivityTick} assigned={active.Attackers.Values.Sum()}/{active.Defenders.Values.Sum()}/{active.ThirdRealm.Values.Sum()}");
-            EndEvent(active, nowTick, "Siege defended: no attacking force reached the keep for fifteen minutes");
+                $"idleMs={nowTick - active.LastActivityTick} reachedKeep={active.AttackerReachedKeep} " +
+                $"marching={active.Musters.Values.Count(muster => muster.Departed)} " +
+                $"assigned={active.Attackers.Values.Sum()}/{active.Defenders.Values.Sum()}/{active.ThirdRealm.Values.Sum()}");
+            EndEvent(active, nowTick, active.AttackerReachedKeep
+                ? "Siege stalled: no recent attacking approach progress or keep combat for fifteen minutes"
+                : "Siege aborted: attacking forces made no approach progress for fifteen minutes");
         }
         foreach (var active in Events.Values.Where(entry => entry.ExpiresTick <= nowTick).ToArray())
         {

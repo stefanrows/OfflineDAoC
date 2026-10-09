@@ -20,6 +20,8 @@ public static class AutonomousRvrSiegeMuster
 
     /// <summary>Members this close to the leader (same region) count as mustered.</summary>
     public const int PresentRadius = 1_000;
+    /// <summary>Give every member an AI turn to start its bounded supply preparation before a full muster departs.</summary>
+    public const long PreparationWindowMilliseconds = 10_000;
     /// <summary>A quorum (6 of 8) departs once this long has passed since the muster began.</summary>
     public const long QuorumWaitMilliseconds = 4 * 60_000L;
     /// <summary>

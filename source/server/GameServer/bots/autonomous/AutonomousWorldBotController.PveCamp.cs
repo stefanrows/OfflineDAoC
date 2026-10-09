@@ -162,8 +162,14 @@ public sealed partial class AutonomousWorldBotController
             return false;
         _pveHoldSpot ??= new Vector3(bot.X, bot.Y, bot.Z);
         Vector3 spot = _pveHoldSpot.Value;
+        var heldCamp = _camp;
         if (Vector2.DistanceSquared(new(bot.X, bot.Y), new(spot.X, spot.Y)) > 80 * 80)
-            IssuePath(bot, spot);
+        {
+            // Route recovery can abandon the camp synchronously. Keep its
+            // recovery status instead of dereferencing the cleared objective.
+            if (!IssuePath(bot, spot) || !ReferenceEquals(_camp, heldCamp))
+                return true;
+        }
         else
         {
             bot.StopMovingOnPath();

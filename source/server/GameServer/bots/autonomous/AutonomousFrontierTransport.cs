@@ -41,8 +41,9 @@ public static class AutonomousFrontierTransport
                 $"leader_combat={(leader.InCombat ? "true" : "false")} leader_ticket={(leaderRequest != null && Ticket(leader, leaderRequest.Passage) != null ? "true" : "false")}");
     }
 
-    public static bool MayCrossWithoutLeader(bool hasLeader, bool leaderAcross, bool leaderBoarding) =>
-        !hasLeader || leaderAcross || leaderBoarding;
+    public static bool MayCrossWithoutLeader(bool hasLeader, bool leaderAcross, bool leaderBoarding,
+        bool leaderOnThisSide = true) =>
+        !hasLeader || !leaderOnThisSide || leaderAcross || leaderBoarding;
 
     /// <summary>A party of more than one realm (logged as <c>mixed</c>).</summary>
     public static bool IsMixedRealm(System.Collections.Generic.IEnumerable<eRealm> realms) =>
@@ -51,6 +52,44 @@ public static class AutonomousFrontierTransport
     public static OFTeleporter NearestPorter(GameBot bot) => Porters.Keys
         .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegion == bot.CurrentRegion)
         .OrderBy(bot.GetDistanceTo).FirstOrDefault();
+
+    /// <summary>
+    /// A group uses one actual porter network. Members standing at different
+    /// portal keeps in the same frontier must walk to the leader's porter,
+    /// rather than wait forever for that leader at their nearest one.
+    /// Members rejoining from another frontier use the available native network
+    /// there and finish its real home hop before joining the group.
+    /// </summary>
+    public static OFTeleporter WarbandPorter(GameBot bot)
+    {
+        if (bot?.Group?.LivingLeader is GameBot { IsAlive: true } leader &&
+            bot.IsAutonomousWorldBot && !bot.IsPlayerLedGroup && !bot.IsTemporaryGroupHelper &&
+            AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
+        {
+            Request leaderRequest = leader.TempProperties.GetProperty<Request>(RequestKey);
+            if (leaderRequest?.Porter is { ObjectState: GameObject.eObjectState.Active } requested &&
+                requested.CurrentRegion == bot.CurrentRegion && leader.CurrentRegion == bot.CurrentRegion)
+                return requested;
+            OFTeleporter shared = Porters.Keys.Where(porter =>
+                    porter.ObjectState == GameObject.eObjectState.Active && porter.CurrentRegion == bot.CurrentRegion &&
+                    porter.Realm == leader.Realm)
+                .OrderBy(bot.GetDistanceTo).FirstOrDefault();
+            if (shared != null) return shared;
+        }
+        return NearestPorter(bot);
+    }
+
+    /// <summary>
+    /// The living leader's passage is authoritative on this side of the trip,
+    /// even while its final destination is in a third region. Keep home hops
+    /// intact so followers buy the same ticket and do not repeatedly replan.
+    /// </summary>
+    public static Request SharedRequest(GameBot bot, OFTeleporter porter, ushort targetRegion) =>
+        bot?.Group?.LivingLeader is GameBot { IsAlive: true } leader && leader != bot &&
+        leader.CurrentRegion == bot.CurrentRegion &&
+        leader.TempProperties.GetProperty<Request>(RequestKey) is Request request &&
+        request.Porter == porter && (request.TargetRegion == targetRegion || request.Passage.Region == targetRegion)
+            ? request : null;
 
     /// <summary>The warband that ports together. RvR groups, including those
     /// answering a committed siege, board as one party (1.65: a group waited a
@@ -255,7 +294,7 @@ public static class AutonomousFrontierTransport
         return false;
     }
     public sealed record Passage(ushort Region, string Medallion, GameLocation Location);
-    public sealed record Request(OFTeleporter Porter, Passage Passage, string ForceId);
+    public sealed record Request(OFTeleporter Porter, Passage Passage, string ForceId, ushort TargetRegion = 0);
 
     private static AutonomousRvrEventLayer.Plan ActiveSiegePlan(GameBot bot)
     {
@@ -266,15 +305,16 @@ public static class AutonomousFrontierTransport
             AutonomousRvrEventLayer.KeepPlan(force, bot.Realm, GameLoop.GameLoopTime);
     }
 
-    public static bool PassageMatchesSiege(GameBot bot, Passage passage)
+    public static bool PassageMatchesSiege(GameBot bot, Passage passage, ushort targetRegion = 0)
     {
         var plan=ActiveSiegePlan(bot);
         // The home hop of a two-hop passage toward the siege is allowed, and so is a
         // passage to the region of the leader the warband is mustering on (bug 75).
         return plan==null || plan.RegionId==passage?.Region ||
             passage!=null && bot.Group?.LivingLeader is GameBot lead && lead!=bot && lead.CurrentRegionID==passage.Region ||
-            passage?.Medallion=="home_necklace" && passage.Region==HomeRegion(PassageRealm(bot)) &&
-            bot.CurrentRegionID!=plan.RegionId && bot.CurrentRegionID!=passage.Region;
+            passage?.Medallion == "home_necklace" && bot.CurrentRegionID != passage.Region &&
+            (targetRegion == plan.RegionId || bot.Group?.LivingLeader is GameBot leader &&
+                targetRegion == leader.CurrentRegionID) && bot.CurrentRegionID != targetRegion;
     }
     public static bool HasCommittedSiegePassage(GameBot bot, Passage passage) =>
         ActiveSiegePlan(bot) is { } plan && plan.RegionId==passage?.Region;
@@ -374,10 +414,21 @@ public static class AutonomousFrontierTransport
         bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
         bot.IsWithinRadius(porter, BoardingRadius) && !bot.InCombat && !bot.IsAttacking &&
         (bot.Brain as BotBrain)?.HasAggro != true && !GameRelic.IsPlayerCarryingRelic(bot) &&
-        CanBoardForObjective(bot.Realm, PassageRealm(bot), AutonomousObjectiveAssignments.KindFor(bot), request?.Passage) &&
-        PassageMatchesSiege(bot,request?.Passage) &&
+        (CanBoardForObjective(bot.Realm, PassageRealm(bot), AutonomousObjectiveAssignments.KindFor(bot), request?.Passage) ||
+            AutonomousObjectiveAssignments.KindFor(bot) == eAutonomousObjectiveKind.RvR &&
+            CanBoardForObjective(porter.Realm, eAutonomousObjectiveKind.RvR, request?.Passage)) &&
+        (!AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
+            SameNativeLanding(porter, request?.Passage)) &&
+        PassageMatchesSiege(bot, request?.Passage, request?.TargetRegion ?? 0) &&
         request?.Porter == porter && request.ForceId == (bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}") &&
         Ticket(bot,request.Passage) != null;
+
+    private static bool SameNativeLanding(OFTeleporter porter, Passage passage)
+    {
+        GameLocation native = passage == null ? null : PorterLanding(porter.Realm, passage.Medallion);
+        return native != null && passage.Location != null && native.RegionID == passage.Region &&
+            native.X == passage.Location.X && native.Y == passage.Location.Y && native.Z == passage.Location.Z;
+    }
 
     public static bool CanBoardForObjective(eRealm realm, eAutonomousObjectiveKind objective, Passage passage)
     {
@@ -469,6 +520,10 @@ public static class AutonomousFrontierTransport
             // Part of the force is already across: stragglers follow at once
             // instead of mustering, regrouping or waiting out the force cap (bug 74).
             GameBot leader = party.Length > 1 && bot.Group?.LivingLeader is GameBot { IsAlive: true } lead && party.Contains(lead) ? lead : null;
+            // Only the cohort leaving the leader's side must wait for it.
+            // A member returning by a home hop from a third frontier cannot
+            // possibly board with a leader who is already in another region.
+            bool leaderOnThisSide = leader != null && leader.CurrentRegion == porter.CurrentRegion;
             bool forceAcross = leader != null
                 ? leader.CurrentRegionID == request.Passage.Region
                 : ForceAlreadyAcross(party, null, request.Passage.Region);
@@ -478,7 +533,7 @@ public static class AutonomousFrontierTransport
                     member.CurrentRegionID == request.Passage.Region,
                     member.CurrentRegion == porter.CurrentRegion ? member.GetDistanceTo(porter) : double.PositiveInfinity),
                 request.ForceId, request.Passage.Region, GameLoop.GameLoopTime, out var ready, out int incoming, endMuster: false);
-            if (group.Length > 0 && !MayCrossWithoutLeader(leader != null, forceAcross, group.Contains(leader)))
+            if (group.Length > 0 && !MayCrossWithoutLeader(leader != null, forceAcross, group.Contains(leader), leaderOnThisSide))
             {
                 LogLeaderHold(request, leader, porter, group.Length);
                 group = [];
@@ -503,7 +558,12 @@ public static class AutonomousFrontierTransport
             }
             // Only a real departure ends the muster; a regroup hold keeps its clock.
             EndMuster(request.ForceId, request.Passage.Region);
+            // The leader lands first. A bounded transfer slice may stop after
+            // one passenger; followers then see the leader across and continue,
+            // instead of turning back toward a leader still on the old side.
+            group = group.OrderByDescending(member => member == leader).ToArray();
             int departed=0;
+            bool leaderTransferFailed = false;
             for (int index = 0; index < group.Length; index++)
             {
                 // A warband is checked together but even its transfers can be
@@ -517,10 +577,27 @@ public static class AutonomousFrontierTransport
                 var member = group[index];
                 batch.Handled.Add(member);
                 if(member.CurrentRegionID==request.Passage.Region) continue;
+                // Conditions can change between choosing the cohort and its
+                // transfer slice. Keep actual combat, ticket and route guards
+                // at the final transfer boundary, especially for the leader.
+                var currentRequest = member.TempProperties.GetProperty<Request>(RequestKey);
+                if (!SamePassage(currentRequest?.Passage, request.Passage) || !Ready(member, porter, currentRequest))
+                {
+                    if (member == leader) break;
+                    continue;
+                }
                 processed++;
                 var ticket = Ticket(member,request.Passage);
                 member.StopMovingOnPath(); member.StopMoving();
-                if (!member.MoveTo(request.Passage.Location)) continue;
+                if (!member.MoveTo(request.Passage.Location))
+                {
+                    if (member == leader)
+                    {
+                        leaderTransferFailed = true;
+                        break; // never split the column behind a failed leader transfer
+                    }
+                    continue;
+                }
                 departed++;
                 member.Inventory.RemoveItem(ticket);
                 member.TempProperties.RemoveProperty(RequestKey);
@@ -538,6 +615,8 @@ public static class AutonomousFrontierTransport
             // since_release_s: seconds since the latest release among those
             // leaving (-1 none); force_gap_s: since this force's previous
             // departure (-1 first); both measure the regroup rule live.
+            if (leaderTransferFailed && log.IsWarnEnabled)
+                log.Warn($"RVR_FRONTIER_LEADER_TRANSFER_FAILED force={request.ForceId} leader=\"{leader?.Name}\" porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\"; cohort retained for retry");
             if(departed>0 && log.IsInfoEnabled) log.Info($"RVR_FRONTIER_DEPARTURE force={request.ForceId} count={departed} porter=\"{porter.Name}\" destination=\"{request.Passage.Location.Name}\" region={request.Passage.Region} party={party.Length} left_behind={incoming} since_release_s={(releases.Length > 0 ? (nowTick - releases.Max().Value) / 1000 : -1)} force_gap_s={(lastDeparture is long gap ? (nowTick - gap) / 1000 : -1)} porter_realm={porter.Realm} mixed={(IsMixedRealm(party.Select(member => member.Realm)) ? "true" : "false")} straggler={(forceAcross ? "true" : "false")}");
             if (SliceFull(processed, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds)) break;
         }
