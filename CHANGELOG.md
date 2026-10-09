@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.217.1] - 2026-10-09
+
+### Added
+
+- Track bug 120: autonomous groups held idle inside their own guild keep
+  (Dun Crimthain) because non-RvR route legs cannot traverse friendly keep
+  doors and unreachable rendezvous members wait for the no-show deadline.
+  Root-cause analysis only; no gameplay change.
+
 ## [0.217.0] - 2026-10-09
 
 ### Fixed

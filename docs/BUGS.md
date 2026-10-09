@@ -6,6 +6,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+120. **Autonomous groups stand idle inside their own guild keep.** Installed
+     0.217.0, 2026-10-09 22:44–23:04: the owner saw about three groups idle
+     in Dun Crimthain (keep 101, claimed by Camlann crew "Camp Watch 3").
+     27 bots were saved inside the keep; 24 log
+     `AUTONOMOUS_GROUP_UNREACHABLE_RENDEZVOUS` lines for 17 groups, every
+     courtyard route recovery `NoPathFound`. Causes from source review:
+     `AutonomousRvrTravel.TraverseFriendlyDoor` only lets RvR objectives pass
+     friendly keep doors, so PvE/solo legs cannot leave the courtyard; after
+     one reselection `ReportUnreachableRendezvous` holds members until the
+     15/20/45-minute no-show deadline, before the terminal pocket escape runs;
+     the guild-keep rendezvous fallback can place slots inside the walls.
+     Proposed fix (not implemented): door traversal for all autonomous legs
+     `CanPassKeep` allows, release held members as no-shows, prefer keep
+     exteriors for guild-keep rendezvous, run pocket escape first. Unverified:
+     navmesh gate blocking, why `CanLeaderReachHub` failed for RvR leaders.
+
 71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
     2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
     `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
