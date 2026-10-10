@@ -122,7 +122,8 @@ namespace CEM.World
             if (File.Exists(nav))
                 File.Delete(nav);
 
-            Process buildnav = Process.Start("RecastDemo.exe", [gset, nav]);
+            // An absolute path: a bare name is not resolved from the working directory on every host.
+            Process buildnav = Process.Start(Path.GetFullPath("RecastDemo.exe"), [gset, nav]);
             buildnav.PriorityClass = ProcessPriorityClass.BelowNormal;
             buildnav.WaitForExit();
             if (buildnav.ExitCode != 0)

@@ -215,11 +215,11 @@ namespace DOL.GS
                 Campaigns.Remove(definition.RegionId);
                 return;
             }
-            if (definition.RegionId == 251 && keep != null)
+            if (keep != null && BattlegroundNativeKeepData.IsOfflineKeep(keep))
             {
-                // A failed native keep must not stop the campaign start for every map.
-                try { BattlegroundNativeKeepData.EnsureGarrison(definition, keep, campaign.Camps.Select(camp => camp.Position).ToArray()); }
-                catch (Exception exception) { Log.Error("BATTLEGROUND_NATIVE_KEEP_FAILED region=251", exception); }
+                // A failed keep must not stop the campaign start for every map.
+                try { BattlegroundNativeKeepData.EnsureGarrison(definition, keep, campaign.Camps.Select(camp => camp.Position).ToArray(), BattlegroundNativeKeepData.GarrisonSearchRadius(keep)); }
+                catch (Exception exception) { Log.Error($"BATTLEGROUND_NATIVE_KEEP_FAILED region={definition.RegionId}", exception); }
             }
             campaign.Timer = new ECSGameTimer(campaign.Camps[0].Commander, _ => Tick(campaign), 1000 + stagger);
             Log.Info($"BATTLEGROUND_CAMPAIGN_READY region={definition.RegionId} camps={campaign.Camps.Count} keep={(keep == null ? "none" : keep.KeepID.ToString())} lord={NativeLordReady(campaign)} doors={keep?.Doors.Count ?? 0} monsters={campaign.HasMonsterObjectives}");
