@@ -50,9 +50,16 @@ package, not this fork's version.
   through gates they may pass (their own portal keep), matching the native
   mover; a follower holding beside a progressing leader counts as active
   (bug 127).
-- Server Release build passes with zero errors; the touched test classes
-  pass except the pre-existing `PlayerLedAndRelicCarriersAreNeverCandidates`.
-  Real-client checks are pending.
+- Server and Windows launcher Release builds pass with zero errors; the
+  touched test classes pass except the pre-existing
+  `PlayerLedAndRelicCarriersAreNeverCandidates`. The eight changed
+  battleground navmeshes (234–238, 240, 241, 254) were rebuilt; the
+  connectivity check passes except the intentionally sealed centres of
+  Molvik (132) and Proving Grounds Tower (140). Pushed to fork main,
+  released as v0.235.0 and deployed on 2026-10-10: 24 files replaced with
+  verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-205842`. The installation
+  remains stopped. Real-client verification is pending.
 
 ### Fixed
 
