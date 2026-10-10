@@ -68,6 +68,7 @@ namespace DOL.GS
         public static bool ShouldAutonomousPlayerBotRecover(GameBot bot, long now)
         {
             if (bot?.IsAutonomousWorldBot != true || bot.IsTemporaryGroupHelper ||
+                !QuietRegenAllowed(SoloCampPlayActive(now, bot.SoloCampPlayTick), bot.IsRecoveryResting) ||
                 !bot.IsAlive || !HasAnyResourceDeficit(bot.Health, bot.MaxHealth,
                     bot.Mana, bot.MaxMana, bot.Endurance, bot.MaxEndurance) ||
                 BlocksRest(bot))
@@ -78,6 +79,22 @@ namespace DOL.GS
                 lastCombatTick = bot.AutonomousRecoveryStartTick;
             return !RecentlyFought(now, lastCombatTick);
         }
+
+        /// <summary>The camp controller refreshes the stamp on every camp turn; this is its lifetime.</summary>
+        public const int SoloCampPlayFreshMilliseconds = 10_000;
+
+        public static bool SoloCampPlayActive(long now, long soloCampPlayTick) =>
+            soloCampPlayTick > 0 && now - soloCampPlayTick <= SoloCampPlayFreshMilliseconds;
+
+        /// <summary>
+        /// Bug 72: a solo PvE camp bot gets the fast quiet regeneration only
+        /// while it is in its recovery rest (the 1.65 "sit"); standing or
+        /// walking between pulls it recovers at the ordinary standing rate, so
+        /// the class rest thresholds decide the pull. Every other bot (group,
+        /// RvR, travel) keeps the quiet regeneration.
+        /// </summary>
+        public static bool QuietRegenAllowed(bool soloCampBot, bool inRecoveryRest) =>
+            !soloCampBot || inRecoveryRest;
 
         public static bool BlocksRest(GameBot bot)
         {

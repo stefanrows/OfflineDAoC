@@ -359,6 +359,9 @@ namespace DOL.GS
 
         public bool IsRecoveryResting => _recoveryRestLocked;
 
+        /// <summary>Stamped by the solo PvE camp turn; see BotRestRecovery.QuietRegenAllowed.</summary>
+        internal long SoloCampPlayTick { get; set; }
+
         public bool IsEnhancedResting =>
             (IsRecoveryResting && !IsMoving && !BotRestRecovery.BlocksRest(this)) ||
             BotRestRecovery.ShouldAutonomousPlayerBotRecover(this, GameLoop.GameLoopTime);

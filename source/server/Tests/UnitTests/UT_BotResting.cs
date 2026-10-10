@@ -224,6 +224,40 @@ namespace DOL.UnitTests
             Assert.That(BotBuffTimingPolicy.ExpiresSoon(remaining, concentration), Is.EqualTo(expected));
         }
 
+        // Bug 72: solo camp bot standing/moving gets no quiet regen; sitting does;
+        // RvR, group and travel bots (no solo camp stamp) keep it.
+        [TestCase(true, false, false)]
+        [TestCase(true, true, true)]
+        [TestCase(false, false, true)]
+        [TestCase(false, true, true)]
+        public void SoloCampBotGetsQuietRegenOnlyWhileSitting(bool soloCamp, bool sitting, bool allowed)
+        {
+            Assert.That(BotRestRecovery.QuietRegenAllowed(soloCamp, sitting), Is.EqualTo(allowed));
+        }
+
+        [TestCase(0, 0, false)]
+        [TestCase(50_000, 45_000, true)]
+        [TestCase(50_000, 40_000, true)]
+        [TestCase(50_001, 40_000, false)]
+        public void SoloCampStampExpiresWhenTheCampTurnStops(long now, long stamp, bool active)
+        {
+            Assert.That(BotRestRecovery.SoloCampPlayActive(now, stamp), Is.EqualTo(active));
+        }
+
+        [Test]
+        public void SoloCasterAtSixtyPercentPowerRestsThenWakesInsideTheBand()
+        {
+            // Level-1 caster at 60 % power: below every jittered caster threshold (70-80),
+            // so the camp loop sits it; resting wakes it again once inside the band.
+            for (long seed = 0; seed < 11; seed++)
+            {
+                var habit = AutonomousPveArchetype.RestThresholds(eCharacterClass.Wizard, seed);
+                Assert.That(AutonomousPveArchetype.ReadyToPull(habit, 100, 60, 100, true), Is.False);
+                Assert.That(AutonomousPveArchetype.ReadyToPull(habit, 100, habit.Power, 100, true), Is.True);
+                Assert.That(habit.Power, Is.InRange(70, 80));
+            }
+        }
+
         [Test]
         public void TemporaryCompanionDoesNotRestWhenAlreadyFull()
         {
