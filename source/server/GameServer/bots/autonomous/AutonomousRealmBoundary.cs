@@ -14,6 +14,8 @@ public static class AutonomousRealmBoundary
     public static bool Allows(GameNPC actor, Vector3 point)
     {
         if (actor is not GameBot { IsAutonomousWorldBot: true } bot) return true;
-        return !IsBattlegroundRegion(bot.CurrentRegionID);
+        if (!IsBattlegroundRegion(bot.CurrentRegionID)) return true;
+        // Only admitted campaign participants may stand in a battleground.
+        return AutonomousBattlegroundParticipation.IsParticipant(bot);
     }
 }

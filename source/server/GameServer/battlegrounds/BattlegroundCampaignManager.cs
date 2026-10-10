@@ -19,7 +19,6 @@ namespace DOL.GS
         public const string TokenTemplateId = "offline_bg_siege_token";
         public const int FundingThreshold = 20;
         private const int CaptainRespawnMinutes = 5;
-        private const int MaximumActorsPerRegion = 24;
         private const int ParticipantChaseDistance = 400;
         private const int OccupiedSquadDelayMs = 15_000;
         private const long SlowTickMilliseconds = 50;
@@ -325,7 +324,7 @@ namespace DOL.GS
 
         private static void SpawnCaptain(Camp camp)
         {
-            if (ActorCount(camp.Campaign) >= MaximumActorsPerRegion) return;
+            if (ActorCount(camp.Campaign) >= DirectorCapacity(camp.Campaign)) return;
             camp.Captain = BattlegroundEncounterActor.Spawn(camp.Campaign.Definition.RegionId,
                 camp.Position.X, camp.Position.Y, camp.Position.Z, (byte)eCharacterClass.Armsman,
                 (byte)camp.Campaign.Definition.MaxLevel, $"{camp.Campaign.Definition.Name} Camp Captain", camp.Guild);
@@ -339,11 +338,18 @@ namespace DOL.GS
 
         private static int ActorCount(Campaign campaign) => campaign.Encounters.Sum(encounter => encounter.Members.Count) + campaign.Camps.Count(camp => camp.Captain != null);
 
-        private static GameLiving SiegeTarget(Campaign campaign, GameBot member, out Point3D approach)
+        // Autonomous participants inside the map reduce the director share of the 40-actor pool.
+        private static int DirectorCapacity(Campaign campaign) =>
+            AutonomousBattlegroundParticipation.DirectorCap(AutonomousBattlegroundParticipation.PresentCount(campaign.Definition.RegionId));
+
+        private static GameLiving SiegeTarget(Campaign campaign, GameBot member, out Point3D approach) => SiegeTarget(campaign.Keep, member, out approach);
+
+        /// <summary>The next closed door (or the lord) an enemy member may attack; approach is its proven standing point.</summary>
+        public static GameLiving SiegeTarget(AbstractGameKeep keep, GameBot member, out Point3D approach)
         {
             approach = null;
-            if (campaign.Keep == null || !GameServer.KeepManager.IsEnemy(campaign.Keep, member)) return null;
-            GameKeepDoor[] doors = campaign.Keep.Doors.Values
+            if (keep == null || !GameServer.KeepManager.IsEnemy(keep, member)) return null;
+            GameKeepDoor[] doors = keep.Doors.Values
                 .Where(candidate => candidate.IsAlive && candidate.State == eDoorState.Closed && GameServer.ServerRules.IsAllowedToAttack(member, candidate, true))
                 .OrderBy(candidate => member.GetDistanceTo(candidate)).ToArray();
             foreach (GameKeepDoor door in doors)
@@ -351,7 +357,7 @@ namespace DOL.GS
             // A remaining closed hostile door always precedes the lord, even if
             // navigation cannot prove its approach. Never bypass it by attacking upstairs.
             if (doors.Length > 0) return null;
-            GuardLord lord = campaign.Keep.Guards.Values.OfType<GuardLord>()
+            GuardLord lord = keep.Guards.Values.OfType<GuardLord>()
                 .FirstOrDefault(candidate => candidate.IsAlive && candidate.ObjectState == GameObject.eObjectState.Active && GameServer.ServerRules.IsAllowedToAttack(member, candidate, true));
             return lord != null && TryApproach(member, lord, out approach) ? lord : null;
         }
@@ -461,7 +467,7 @@ namespace DOL.GS
         {
             if (campaign.SquadSkipReasons.TryGetValue(kind, out string previous) && previous == reason) return;
             campaign.SquadSkipReasons[kind] = reason;
-            Log.Info($"BATTLEGROUND_SQUAD_SKIPPED region={campaign.Definition.RegionId} kind={kind} reason={reason} participants={participants} actors={ActorCount(campaign)}/{MaximumActorsPerRegion}");
+            Log.Info($"BATTLEGROUND_SQUAD_SKIPPED region={campaign.Definition.RegionId} kind={kind} reason={reason} participants={participants} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
         }
 
         private static string FormatPoint(Point3D point) => $"{point.X},{point.Y},{point.Z}";
@@ -480,7 +486,7 @@ namespace DOL.GS
             }
             int localParty = participant.Group?.GetMembersInTheGroup().Count(member => member.CurrentRegionID == campaign.Definition.RegionId && IsEligible(member)) ?? 1;
             int size = Math.Clamp(localParty, 1, 8);
-            if (ActorCount(campaign) + size > MaximumActorsPerRegion) { LogSquadSkipped(campaign, kind, "actor_cap", participants.Length); return; }
+            if (ActorCount(campaign) + size > DirectorCapacity(campaign)) { LogSquadSkipped(campaign, kind, "actor_cap", participants.Length); return; }
             // Effective current allies count against a guild's local presence.
             // Rotate ties, and select actual underrepresented autonomous guilds.
             GameBot[] representatives = AutonomousBotRegistry.Snapshot()
@@ -516,14 +522,14 @@ namespace DOL.GS
             if (encounter.Members.Count == 0) { LogSquadSkipped(campaign, kind, "route_or_spawn_failed", participants.Length); return; }
             campaign.Encounters.Add(encounter);
             campaign.SquadSkipReasons.Remove(kind);
-            Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind={kind} members={encounter.Members.Count}/{size} level={encounter.Level} guild={guild?.Name ?? "none"} origin=camp{origin.Index + 1} goal={FormatPoint(encounter.Goal)} target={participant.Name ?? "none"} actors={ActorCount(campaign)}/{MaximumActorsPerRegion}");
+            Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind={kind} members={encounter.Members.Count}/{size} level={encounter.Level} guild={guild?.Name ?? "none"} origin=camp{origin.Index + 1} goal={FormatPoint(encounter.Goal)} target={participant.Name ?? "none"} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
         }
 
         private static void SpawnParty(Campaign campaign, Encounter encounter, Point3D origin, Guild guild, GamePlayer sponsor, string name, int size)
         {
             Group group = null;
             byte[] classes = { (byte)eCharacterClass.Armsman, (byte)eCharacterClass.Cleric, (byte)eCharacterClass.Sorcerer, (byte)eCharacterClass.Mercenary };
-            for (int i = 0; i < size && ActorCount(campaign) + encounter.Members.Count < MaximumActorsPerRegion; i++)
+            for (int i = 0; i < size && ActorCount(campaign) + encounter.Members.Count < DirectorCapacity(campaign); i++)
             {
                 GameBot actor = BattlegroundEncounterActor.Spawn(campaign.Definition.RegionId, origin.X, origin.Y, origin.Z,
                     classes[i % classes.Length], encounter.Level == 0 ? (byte)campaign.Definition.MaxLevel : encounter.Level, name, guild, group);
@@ -550,7 +556,7 @@ namespace DOL.GS
             {
                 if (!TryCampaign(player, out Campaign campaign, out string reason)) { Say(player, reason); return; }
                 BattlegroundCampaignQuest quest = player.IsDoingQuest(typeof(BattlegroundCampaignQuest)) as BattlegroundCampaignQuest;
-                Say(player, $"{campaign.Definition.Name}: {ActorCount(campaign)}/{MaximumActorsPerRegion} encounter actors; siege funding {FundingThreshold} tokens per assault. Tokens are personal and earned from monster kills and commander contracts.");
+                Say(player, $"{campaign.Definition.Name}: {ActorCount(campaign)}/{DirectorCapacity(campaign)} encounter actors; siege funding {FundingThreshold} tokens per assault. Tokens are personal and earned from monster kills and commander contracts.");
                 if (!campaign.HasMonsterObjectives) Say(player, "No native hunting monsters are loaded here; the monster contract is unavailable. Hostile-player and encounter-squad contracts remain available.");
                 Say(player, "Patrols match local party sizes from one to eight, at the active participant's level; larger parties include healing and crowd control. Encounters stop being scheduled when the map is empty.");
                 if (campaign.Keep == null) Say(player, "This map has no native central keep. Available field contracts, patrols and ambushes remain active; keep contracts and siege funding are unavailable.");
@@ -670,7 +676,7 @@ namespace DOL.GS
                             message = "The assault could not find a safe route or actor slot; your last contribution was returned.";
                             return false;
                         }
-                        Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind=siege members={assault.Members.Count}/4 level={assault.Level} guild={camp.Guild?.Name ?? "none"} origin=camp{camp.Index + 1} goal={FormatPoint(assault.Goal)} target=none actors={ActorCount(campaign)}/{MaximumActorsPerRegion}");
+                        Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind=siege members={assault.Members.Count}/4 level={assault.Level} guild={camp.Guild?.Name ?? "none"} origin=camp{camp.Index + 1} goal={FormatPoint(assault.Goal)} target=none actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
                         camp.Assault = assault;
                         campaign.Encounters.Add(assault);
                         message = "The funded assault is marching to the real keep doors, then its lord. Claim the defeated keep at its steward.";
@@ -787,6 +793,11 @@ namespace DOL.GS
         public static bool HasMonsterObjectives(ushort region)
         {
             lock (Gate) return Campaigns.TryGetValue(region, out Campaign campaign) && campaign.HasMonsterObjectives;
+        }
+
+        public static Point3D[] CampPositions(ushort region)
+        {
+            lock (Gate) return Campaigns.TryGetValue(region, out Campaign campaign) ? campaign.Camps.Select(camp => camp.Position).ToArray() : Array.Empty<Point3D>();
         }
 
         private static bool IsEligible(GameLiving player) => BattlegroundCampaignPolicy.IsEnabled &&

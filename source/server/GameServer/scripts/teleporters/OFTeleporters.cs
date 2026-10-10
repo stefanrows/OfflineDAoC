@@ -182,6 +182,11 @@ namespace DOL.GS.Scripts
             {
                 global::DOL.Logging.LoggerManager.Create(typeof(OFTeleporter)).Error("Autonomous frontier boarding failed",error);
             }
+            try { AutonomousBattlegroundParticipation.Depart(this); }
+            catch (Exception error)
+            {
+                global::DOL.Logging.LoggerManager.Create(typeof(OFTeleporter)).Error("Autonomous battleground departure failed",error);
+            }
             DbInventoryItem medallion;
 
             foreach (GamePlayer player in GetPlayersInRadius(500))

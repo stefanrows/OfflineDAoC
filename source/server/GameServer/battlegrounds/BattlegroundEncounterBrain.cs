@@ -60,11 +60,7 @@ namespace DOL.GS
             if (now >= _nextScan)
             {
                 _nextScan = now + 1500;
-                GameLiving opponent = _bot.GetPlayersInRadius(2400).Cast<GameLiving>()
-                    .Concat(_bot.GetNPCsInRadius(2400).Where(npc => PvpCombatant.IsPlayerShaped(npc)))
-                    .Where(target => Legal(target) && !target.IsStealthed && !BotPvpCrowdControl.Protected(_bot, target) &&
-                        BotSiegeRuntime.Visible(_bot, target))
-                    .OrderBy(_bot.GetDistanceTo).FirstOrDefault();
+                GameLiving opponent = BattlegroundCombatTargets.FindOpponent(_bot, 2400);
                 if (opponent != null)
                     brain.Attack(opponent);
             }
@@ -96,9 +92,7 @@ namespace DOL.GS
             return true;
         }
 
-        private bool Legal(GameLiving target) => target != _bot && target.IsAlive &&
-            target.ObjectState == GameObject.eObjectState.Active && target.CurrentZone == _zone &&
-            GameServer.ServerRules.IsAllowedToAttack(_bot, target, true);
+        private bool Legal(GameLiving target) => BattlegroundCombatTargets.IsLegal(_bot, target, _zone);
     }
 }
 

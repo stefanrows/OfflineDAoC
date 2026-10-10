@@ -317,11 +317,44 @@ nearest their target. New log lines: `BATTLEGROUND_OCCUPANCY`,
 `BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE`. Actors use autonomous guild
 identities where available and hostile guildless groups otherwise. Local party
 size and level select 1–8 combatants with tank/healer/CC support. Underrepresented
-guild presence is preferred, with at most 24 actors per map, finite lifetimes,
-corpse cleanup and gameplay-clock deadlines. Ambushes walk from validated camps
+guild presence is preferred, with at most 24 director actors per map (fewer
+while autonomous participants are present, see below), finite lifetimes, corpse
+cleanup and gameplay-clock deadlines. Ambushes walk from validated camps
 toward contract participants, respecting safe areas and immunity. Actors use
 normal class combat without roster persistence, owner recovery or teleport
 fallbacks.
+
+**Autonomous battleground participation.** Autonomous gamebots (never players,
+companions or temporary helpers) on an RvR tour, standing on a home frontier
+(regions 1, 100 or 200), not player-led and not carrying a relic, join the
+battleground of their level bracket while below its Realm Rank ceiling. A
+reconcile pass every 60 seconds keeps at most 24 of them on each map and admits
+a group only when every member qualifies. The shared pool is 40 actors per map:
+the encounter director may use `40 − autonomous participants present`, at most
+24. Admission needs a real medallion source: a porter with the medallion
+merchant within reach. In the current world data only Albion's region 1 (Sall
+Fadri beside Master Visur) and Hibernia's region 200 (Araisa beside Glasny) sell
+it, so Midgard bots on region 100 join once they stand in one of those regions.
+Assigned bots walk to that porter, buy the free battlegrounds medallion from
+the merchant and equip it as a player does, then board with the porter's own
+cast, leaders first and at most eight per cast. Inside, a bot
+defends a keep its guild holds, claims a defeated keep at its steward with
+claim rank, assaults the keep (closed door, then lord) with four or more
+present, or roams the camps and fights what it meets; followers assist their
+leader. A death releases it at the campaign arrival camp. It leaves by the
+outside realm capital (bots keep no bind point) on graduation (above the
+bracket or at its Realm Rank ceiling), end of its tour, or five minutes without
+progress. The dedicated driver replaces the Old Frontiers RvR planner, which
+hard-codes regions 1, 100 and 200. The frontier boundary is lifted only for
+admitted participants inside their own campaign region; the movement blocks
+for everyone else are unchanged.
+
+The low brackets have almost no eligible bots. At the time of writing none of
+the non-retired autonomous bots is level 1–9, one is 10–14 and sixteen are
+15–19, while brackets 20–44 hold 116–605 each. The encounter director therefore
+remains the population of the low brackets; participation only adds autonomous
+players where the population exists. New log lines: `AUTONOMOUS_BG_ASSIGNED`,
+`AUTONOMOUS_BG_ENTERED` and `AUTONOMOUS_BG_LEFT reason=graduated|tour_ended|unassigned|stuck`.
 
 `/LFxp`, `/LFrvr` and `/battleground lfg xp|pvp|off` match only opted-in solo
 humans every thirty seconds. XP partners stay within three levels of the elected
@@ -602,7 +635,8 @@ and travel. Companions can be any realm. Battlegrounds are not part of play.
    owner/grace-period branch remains only for unused Normal-policy tests.
 7. ✅ Housing is already realm-open on PvP. Keep.
 8. ✅ Battlegrounds: teleporters, frontier stones, and bot travel must not pick
-   BG regions. Set `bg_zones_open` false.
+   BG regions. Set `bg_zones_open` false. (Superseded for admitted campaign
+   participants by the bounded rule in the battleground section.)
 9. ✅ `BotManager` name lookup (~L274) is now realm-agnostic.
 10. ✅ All-realm teleporter menus expose the three capitals and every existing
     Classic/SI leveling-town destination. The towns are open PvP zones; only
@@ -613,7 +647,9 @@ and travel. Companions can be any realm. Battlegrounds are not part of play.
 - ✅ An Albion character (or bot) can path into Jordheim and use a merchant.
 - ✅ An Albion player can `/spawn` a Midgard healer that heals and buffs them.
 - ✅ Realm Exchange list/buy works from a foreign capital.
-- ✅ No autonomous goal selects a battleground region.
+- ✅ Autonomous goals select a battleground region only through the bounded
+  campaign participation rule (see the battleground section, "Autonomous
+  battleground participation"). All other autonomous goals still avoid them.
 - ✅ All three realms' leveling-town teleporter menus are available to every
   realm.
 - **Gate:** Open travel and city services work; mixed-realm groups function.

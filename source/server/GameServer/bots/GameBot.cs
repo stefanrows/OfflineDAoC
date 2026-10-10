@@ -1253,7 +1253,17 @@ namespace DOL.GS
                     WorldMgr.GetRegion(_deathRegionId)?.GetZone(_deathLocation.X, _deathLocation.Y)?.IsOF == true,
                     out ushort legacyRegion, out Point3D legacyRelease))
                 (releaseRegion, release) = (legacyRegion, legacyRelease);
-            if (IsAutonomousWorldBot && release != null)
+            // A battleground participant recovers at its campaign arrival camp, as players
+            // do. That native camp is the admission landing, so no frontier boundary applies.
+            bool battlegroundLanding = AutonomousBattlegroundParticipation.TryBattlegroundRelease(
+                this, _deathRegionId, out GameLocation battlegroundLandingPoint);
+            if (battlegroundLanding)
+            {
+                (releaseRegion, release) = (battlegroundLandingPoint.RegionID,
+                    new Point3D(battlegroundLandingPoint.X, battlegroundLandingPoint.Y, battlegroundLandingPoint.Z));
+                releaseReason = "battleground-landing";
+            }
+            if (IsAutonomousWorldBot && release != null && !battlegroundLanding)
             {
                 Zone releaseZone = WorldMgr.GetRegion(releaseRegion)?.GetZone(release.X, release.Y);
                 if (releaseZone == null || !AutonomousRealmBoundary.Allows(Realm, releaseRegion, releaseZone.ID))
@@ -1269,9 +1279,9 @@ namespace DOL.GS
                     WorldMgr.GetRegion(releaseRegion)?.GetZone(capital.X, capital.Y), new(capital.X, capital.Y, capital.Z))
                     : new Point3D(capital.X, capital.Y, capital.Z);
             }
-            if (safeWorldRelease && release != null)
+            if (safeWorldRelease && !battlegroundLanding && release != null)
                 release = BotReleaseBindPoints.SpreadSafe(releaseRegion, release, DatabaseID > 0 ? DatabaseID : ObjectID);
-            if (safeWorldRelease && !PvpCombatant.IsSafeReleasePoint(releaseRegion, release))
+            if (safeWorldRelease && !battlegroundLanding && !PvpCombatant.IsSafeReleasePoint(releaseRegion, release))
                 return; // Keep the corpse and recovery timer; retry rather than revive in danger.
             release ??= _deathLocation;
             // Transfer the corpse first: a failed MoveTo must not revive the bot
