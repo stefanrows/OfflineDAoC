@@ -78,7 +78,8 @@ public static class AutonomousBotDecisionEngine
         int DungeonPopulation = 0,
         int DungeonSoftCapacity = 0,
         int OutdoorPopulation = 0,
-        bool RecentlyEmpty = false);
+        bool RecentlyEmpty = false,
+        ConColor? HighestCon = null);
 
     public sealed record Service(
         eWorldServiceKind Kind,
@@ -352,6 +353,38 @@ public static class AutonomousBotDecisionEngine
                              !string.Equals(camp.Id, previousCampId, StringComparison.OrdinalIgnoreCase) &&
                              (!UsesLocalSoloCamps(level) || camp.TravelMinutes <= ExtendedSoloTravelMinutes))
             .ToArray() ?? [];
+
+    /// <summary>
+    /// Bug 144 part 3: the hardest con among every mob level a camp cell holds,
+    /// not only the levels the bot may target. A level-12 add beside level-2
+    /// mobs makes the cell purple for a level-2 bot.
+    /// </summary>
+    public static ConColor HighestConOf(IEnumerable<int> cellLevels, int botLevel)
+    {
+        ConColor highest = ConColor.GREY;
+        foreach (int level in cellLevels ?? [])
+        {
+            ConColor con = ConLevels.GetConColor(ConLevels.GetConLevel(botLevel, level));
+            if (con > highest)
+                highest = con;
+        }
+        return highest;
+    }
+
+    /// <summary>
+    /// Bug 144 part 3: a solo camp whose hardest mob is more than one con step
+    /// above the ceiling is not preferred. Camps without a computed all-level
+    /// con use their typical con. When no camp is clean, every candidate is
+    /// returned unchanged and relaxed is set, so a bot is never left without a camp.
+    /// </summary>
+    public static Camp[] PreferCampsWithinAddCeiling(IEnumerable<Camp> candidates, ConColor maximumCon, out bool relaxed)
+    {
+        Camp[] all = candidates?.Where(camp => camp != null).ToArray() ?? [];
+        ConColor addCeiling = (ConColor)Math.Min((int)ConColor.PURPLE, (int)maximumCon + 1);
+        Camp[] clean = all.Where(camp => (camp.HighestCon ?? camp.TypicalCon) <= addCeiling).ToArray();
+        relaxed = all.Length > 0 && clean.Length == 0;
+        return relaxed ? all : clean;
+    }
 
     private static Camp[] NearbySoloPool(Camp[] choices)
     {

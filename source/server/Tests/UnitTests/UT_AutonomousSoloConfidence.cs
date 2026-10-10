@@ -76,6 +76,49 @@ public class UT_AutonomousSoloConfidence
     }
 
     [Test]
+    public void LevelUpWithinTheCooldownAfterADeathKeepsTheCeiling()
+    {
+        // Bug 144: a level-up 31 s after a yellow-to-blue death restored a step
+        // at once and the bot died to a harder mob within a minute.
+        const long death = 1_000_000;
+        const long cooldown = AutonomousSoloConfidence.RecoveryCooldownMilliseconds;
+        var confidence = new AutonomousSoloConfidence();
+        confidence.RecordPveDefeat(1, requiredSteps: 1, SoloMaximumSteps);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(confidence.RecoverStepAfterDeath(death, death + 31_000), Is.False, "level-up 31 s after the death");
+            Assert.That(confidence.RecoverStepAfterDeath(death, death + cooldown - 1), Is.False, "one tick before the cooldown ends");
+            Assert.That(confidence.Steps, Is.EqualTo(1), "the ceiling is unchanged inside the cooldown");
+            Assert.That(confidence.RecoverStepAfterDeath(death, death + cooldown), Is.True, "the cooldown has passed");
+            Assert.That(confidence.Steps, Is.Zero);
+        });
+    }
+
+    [Test]
+    public void CooldownAlsoHoldsCleanKillsAndNewTasksAndNeedsADeathToApply()
+    {
+        const long death = 1_000_000;
+        const long cooldown = AutonomousSoloConfidence.RecoveryCooldownMilliseconds;
+        var confidence = new AutonomousSoloConfidence();
+        confidence.RecordPveDefeat(2, requiredSteps: 2, SoloMaximumSteps);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(confidence.RecordKillsAfterDeath(AutonomousSoloConfidence.KillsPerRecoveryStep, death, death + 60_000), Is.False,
+                "ten clean kills inside the cooldown earn no step");
+            Assert.That(confidence.KillsTowardRecovery, Is.Zero, "kills inside the cooldown are not banked");
+            Assert.That(confidence.RecoverStepAfterDeath(death, death + 60_000), Is.False, "new task inside the cooldown");
+            Assert.That(confidence.Steps, Is.EqualTo(2));
+            Assert.That(confidence.RecordKillsAfterDeath(AutonomousSoloConfidence.KillsPerRecoveryStep, death, death + cooldown), Is.True,
+                "ten clean kills after the cooldown earn a step");
+            Assert.That(confidence.Steps, Is.EqualTo(1));
+            Assert.That(confidence.RecoverStepAfterDeath(null, 0), Is.True, "no death observed means no cooldown");
+            Assert.That(confidence.Steps, Is.Zero);
+        });
+    }
+
+    [Test]
     public void GankFinishedByAMobDoesNotLowerTheCeiling()
     {
         const long death = 1_000_000;

@@ -121,6 +121,11 @@ namespace DOL.GS
         private int _deathDifficultySteps => _soloConfidence.Steps;
         private int _observedPveKills = -1;
         private int _observedLevel = -1;
+        // Gameplay time of the last observed death; no confidence recovery
+        // within AutonomousSoloConfidence.RecoveryCooldownMilliseconds of it.
+        private long? _lastDeathTick;
+        // Next gameplay time the add-filter relaxation may be logged for this bot.
+        private long _nextAddFilterRelaxedLogTick;
         // One-shot: after a recovered step, look for a camp above the old
         // ceiling at the next safe planning point; keep the camp if none.
         private ConColor? _recoveryMinimumCon;
@@ -219,7 +224,7 @@ namespace DOL.GS
                     // A fresh task restores one step of confidence; its kill
                     // counter starts again from the new objective's count.
                     _observedPveKills = -1;
-                    if (_soloConfidence.RecoverStep())
+                    if (_soloConfidence.RecoverStepAfterDeath(_lastDeathTick, GameLoop.GameLoopTime))
                         LogConfidenceRecovery(bot, "new-task");
                     _siegeColumnKey = null; _siegeColumnHolding = false;
                     _keepPlanning = null; _keepTravelPoints = null; _keepTravelKey = null;
@@ -3430,7 +3435,8 @@ namespace DOL.GS
                     cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Population(cell.RegionId) : 0,
                     cell.IsDungeon ? AutonomousDungeonPopulationPolicy.Capacity(cell.RegionId, cell.LiveMobCount) : 0,
                     cell.IsDungeon ? 0 : AutonomousOutdoorCampPressure.Population(cell.Id),
-                    !cell.IsDungeon && AutonomousOutdoorCampPressure.WasRecentlyEmpty(cell.Id, GameLoop.GameLoopTime)));
+                    !cell.IsDungeon && AutonomousOutdoorCampPressure.WasRecentlyEmpty(cell.Id, GameLoop.GameLoopTime),
+                    AutonomousBotDecisionEngine.HighestConOf(cell.Levels, bot.EffectiveLevel)));
             }
 
             // Keep all level-valid locations eligible. Crowd and recent spawn
@@ -3469,6 +3475,20 @@ namespace DOL.GS
             else
             {
                 legal = legal.Where(camp => camp.LowestCon >= minimumTargetCon && camp.TypicalCon <= maximumTargetCon);
+                if (groupSize == 1)
+                {
+                    // Bug 144 part 3: prefer camps where no mob, not only the
+                    // target, is more than one con step above the ceiling.
+                    AutonomousBotDecisionEngine.Camp[] withinAddCeiling =
+                        AutonomousBotDecisionEngine.PreferCampsWithinAddCeiling(legal, maximumTargetCon, out bool addRelaxed);
+                    if (addRelaxed && Log.IsInfoEnabled && GameLoop.GameLoopTime >= _nextAddFilterRelaxedLogTick)
+                    {
+                        _nextAddFilterRelaxedLogTick = GameLoop.GameLoopTime + 10 * 60_000;
+                        Log.Info($"AUTONOMOUS_CAMP_ADD_FILTER_RELAXED bot={bot.Name} id={bot.DatabaseID} " +
+                                 $"level={bot.Level} ceiling={maximumTargetCon} candidates={withinAddCeiling.Length}");
+                    }
+                    legal = withinAddCeiling;
+                }
                 AutonomousBotDecisionEngine.Camp[] categoryCandidates = legal.ToArray();
                 // Local solo selection draws dungeon versus outdoor inside the
                 // nearby pool, so a far dungeon cannot force a long trip.
@@ -3550,8 +3570,13 @@ namespace DOL.GS
             bool usedDeathFallback = false;
             if (chosen == null && !sharedGroup && _deathDifficultySteps > 0)
             {
+                IEnumerable<AutonomousBotDecisionEngine.Camp> fallbackCandidates =
+                    camps.Where(camp => camp.TypicalCon <= naturalMaximumTargetCon);
+                if (groupSize == 1)
+                    fallbackCandidates = AutonomousBotDecisionEngine.PreferCampsWithinAddCeiling(
+                        fallbackCandidates, maximumTargetCon, out _);
                 chosen = AutonomousBotDecisionEngine.SelectSafestAvailableAfterDeath(
-                    camps.Where(camp => camp.TypicalCon <= naturalMaximumTargetCon),
+                    fallbackCandidates,
                     _lastFailedCampId,
                     _lastFailedTargetName,
                     Random.Shared, bot.CurrentRegionID, bot.CurrentZone?.Description, bot.Realm, bot.Level);
@@ -3839,6 +3864,7 @@ namespace DOL.GS
             if (deathCount <= _observedDeathCount)
                 return;
 
+            _lastDeathTick = GameLoop.GameLoopTime;
             int newDeaths = deathCount - _observedDeathCount;
             ObserveRepeatedPvpLoss(bot);
             if (_groupDirective?.IsDynamic == true)
@@ -3922,7 +3948,7 @@ namespace DOL.GS
             {
                 _observedLevel = level;
                 ConColor ceilingBeforeLevel = MaximumSoloTargetCon();
-                if (_soloConfidence.RecoverStep())
+                if (_soloConfidence.RecoverStepAfterDeath(_lastDeathTick, GameLoop.GameLoopTime))
                     OnConfidenceRecovered(bot, "level-up", ceilingBeforeLevel);
             }
 
@@ -3937,7 +3963,7 @@ namespace DOL.GS
             int gained = kills - _observedPveKills;
             _observedPveKills = kills;
             ConColor ceilingBeforeKills = MaximumSoloTargetCon();
-            if (_soloConfidence.RecordKills(gained))
+            if (_soloConfidence.RecordKillsAfterDeath(gained, _lastDeathTick, GameLoop.GameLoopTime))
                 OnConfidenceRecovered(bot, "kills", ceilingBeforeKills);
         }
 

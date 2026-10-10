@@ -67,6 +67,28 @@ namespace DOL.GS
             KillsTowardRecovery = 0;
             return true;
         }
+
+        /// <summary>
+        /// Gameplay milliseconds after a death during which no confidence step
+        /// is earned back. Bug 144: a level-up restored a step at once and the
+        /// bot replanned to a harder camp and died within a minute.
+        /// </summary>
+        public const long RecoveryCooldownMilliseconds = 10 * 60_000;
+
+        /// <summary>True while the last death is less than the cooldown ago. No death means no cooldown.</summary>
+        public static bool InRecoveryCooldown(long? lastDeathTick, long nowTick) =>
+            lastDeathTick is { } death && nowTick - death < RecoveryCooldownMilliseconds;
+
+        /// <summary><see cref="RecoverStep"/> unless the cooldown after the last death is still running.</summary>
+        public bool RecoverStepAfterDeath(long? lastDeathTick, long nowTick) =>
+            !InRecoveryCooldown(lastDeathTick, nowTick) && RecoverStep();
+
+        /// <summary>
+        /// <see cref="RecordKills"/> unless the cooldown is running. Kills made
+        /// during the cooldown do not count toward the next recovery step.
+        /// </summary>
+        public bool RecordKillsAfterDeath(int kills, long? lastDeathTick, long nowTick) =>
+            !InRecoveryCooldown(lastDeathTick, nowTick) && RecordKills(kills);
     }
 
     /// <summary>What killed an autonomous world bot, captured once at its death.</summary>

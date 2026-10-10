@@ -12,6 +12,40 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.239.0] - 2026-10-10
+
+### Fixed
+
+- Low-level solo bots stop dying to adds they never targeted: a camp's
+  difficulty now also counts every mob level in its cell (`HighestCon`), and
+  a solo bot prefers camps whose hardest mob is at most one con step above
+  its ceiling. When no camp is clean it keeps the previous choice and logs
+  `AUTONOMOUS_CAMP_ADD_FILTER_RELAXED` (at most every 10 minutes per bot).
+  In 0.235.0, 25 % of Midgard level 1–4 solo goals ended in death, 97 % of
+  them to a non-target mob 3–10 levels higher (bug 144).
+- No confidence recovery within 10 gameplay minutes of a death: a level-up,
+  clean kills or a new task no longer restore a step at once and send the
+  bot straight to a harder camp (bug 144).
+- Portal keep service NPCs actually spawn: every campaign portal keep row
+  is saved with Realm 0 (OriginalRealm 1–3), so all 24 were skipped as
+  `no_realm` in 0.237.0. The services now use the original realm while a
+  portal keep is unclaimed (bug 142).
+
+### Changed
+
+- Battlegrounds have no Realm Rank ceilings any more (owner decision): all
+  ten campaign brackets and the legacy battleground rows use
+  `MaxRealmLevel` 0, so players and bots of any realm rank may enter, stay
+  and earn full realm points; only the level bracket graduates a bot. The
+  legacy rows are changed in memory only, the save is untouched.
+- Bug 144 records the Mularn → Jordheim relocation loop and the death
+  analysis; the pocket and bind-band camp parts stay open.
+- Live check of 0.237.0 (2026-10-10, 22:06–23:00): 55 battleground squads
+  spawned (bug 129), 27–32 Molvik-layout guards placed per keep (bug 140), a
+  player keep claim took 136 ms instead of ~1 s (bug 143).
+- Server Release build passes with zero errors; the touched test classes
+  pass. Real-client verification is pending.
+
 ## [0.238.0] - 2026-10-10
 
 ### Added

@@ -30,7 +30,7 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 144. **Midgard newbie bots loop between the Mularn bind point, Jordheim and
      the Vale of Mularn.** Installed 0.235.0, 2026-10-10 21:04–21:58: 372
      `AUTONOMOUS_ROUTE_POCKET_ESCAPE from=100:764342,674451,5738
-     to=101:32020,28294,8803` (Jordheim) from 141 level 1–4 Midgard bots, 231
+     to=101:32020,28294,8803` (Jordheim) from 141 bots, 231
      of them in 21:50–21:58; 0.234.0 had 182 in 2 h. Pattern per bot
      (Ulfeunrik, level 4 Savage): `AUTONOMOUS_ROUTE_RECOVERY` from the bind
      point to a Vale of Mularn grind camp fails (`failedDestination`), pocket
@@ -40,7 +40,37 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      `AUTONOMOUS_DEATH_TARGET_FALLBACK` (level 1 bots fall back to YELLOW
      targets). Impact: the reset level 1–4 population cannot level, which
      delays the level-35 warbands that frontier sieges need (bug 133). Split
-     from bug 132. Not yet investigated.
+     from bug 132.
+     Investigation 2026-10-10 (read-only): 141 bots escaped (97 of them
+     Midgard level ≤4; 64 repeatedly, median 3.3 min, max 31 min in the loop).
+     The Mularn release band (763–764k, 672k) is not a registered terminal
+     pocket; long same-zone routes from it fail (`PartialPathFound` 277, "No
+     safe connected zone seam" 158; ~40 % above 30k units, 1–3 % below), so
+     after three failures the bot falls back to Jordheim and walks back out.
+     The deaths are the bigger cost: 24.8 % of Midgard level 1–4 solo goals end
+     in death, 97 % killed by a non-target mob 3–10 levels higher. Causes: camp
+     con ignores mobs above the level ceiling (`AutonomousWorldBotController`
+     ~3357–3392), `SelectSafestAvailableAfterDeath` ignores the death ceiling
+     (all 725 `DEATH_TARGET_FALLBACK` picks are harder than requested), and a
+     level-up restores a full confidence step and replans to a harder camp.
+     Proposed fixes, ranked: (1) fallback respects the death ceiling; (2) camp
+     con from all mob levels in the cell; (3) no confidence recovery or
+     harder-camp replan within ~10 min of a death; (4) after a pocket failure,
+     prefer camps near the bind band before the capital escape; (5) register
+     the pocket only after a navmesh probe.
+     Owner decision: (3) and a cooldown; the strict fallback cap was dropped
+     (it only made level 1–2 bots idle). Source 0.239.0: camps carry
+     `HighestCon` from every mob level in the cell and solo bots prefer camps
+     whose hardest mob is at most one con step above the ceiling (else the old
+     choice, `AUTONOMOUS_CAMP_ADD_FILTER_RELAXED`); no confidence recovery
+     within 10 gameplay minutes of a death (`UT_AutonomousBotDecisionEngine`,
+     `UT_AutonomousSoloConfidence`). Still open: the Mularn release-band route
+     failures and the Jordheim escape (fixes 4, 5). Pending: Midgard level 1–4
+     death rate and `DEATH_ROUTE_REPLAN` volume in a live run.
+     Note: the other analysis above (Svasud stone release, gate 100087402,
+     level 10–15 aggressive mobs on the walk back) means part of the deaths
+     happen on the route, not in the camp; the 0.239.0 camp filter does not
+     address those.
      Evidence for the owner of this bug (read-only analysis 2026-10-10 on
      Aaron's installed 0.234.0/0.236.0 logs and save; no bot below level 33
      there, so the killers are only in Stefan's log): the release point
@@ -159,22 +189,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      per 30 minutes and productive Darkness Falls hunts for Albion and
      Midgard in a live run.
 
-143. **Claiming a keep freezes the game loop for about a second.** Installed
-     0.235.0, 2026-10-10: every claim stalled ~1 s in the claimer's own tick:
-     21:07:45 Thidranki 143 (bot Aeleorlyn, `Long NpcService.Tick` 882 ms),
-     21:24:20 Wilton 144 (bot Muirriorna, 1,087 ms), 21:28:36 Leirvik 134
-     (player Ceold, `Long PacketHandler.HandlePacket (DialogResponse)` 1,016 ms).
-     Same pattern as bug 134 (keep/component/guard saves written one by one),
-     but the claim path is outside the 0.235.0 `KeepSaveBatch` scopes.
-     Cause: `AbstractGameKeep.ClaimCore` saved the keep and its 20 components
-     outside any batch (each component re-read and written in its own
-     transaction): 1 + 21 transactions on 43 connections, 567 ms in the test
-     fixture. Source 0.237.0: the claim runs in a `KeepSaveBatch`
-     (1 transaction, 2 connections, 65 ms), flushed before the capture hook;
-     `KEEP_STEP_TIMING owner=claim` steps; tests in `UT_KeepSaveBatch`.
-     Remaining: campaign quest credit on capture still saves each quest row.
-     Pending: live claims show no ~1 s tick.
-
 142. **Campaign battleground portal keeps have no NPCs.** Owner report,
      installed 0.235.0, 2026-10-10 ~21:30: the new portal keeps are empty.
      Read-only save check (mobs within 1,500 units of each portal keep): 18 of
@@ -196,6 +210,11 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      enemy territory); Hitback dummies hit back their attacker (Eden design).
      The Void Merchant is skipped (its class does not exist here). Logged as
      `BATTLEGROUND_PORTAL_KEEP_SERVICES` / `_SKIPPED`. Pending: real-client check.
+     Live 0.237.0 (22:06): all 24 logged `_SKIPPED reason=no_realm`; every
+     campaign portal keep row has Realm 0 and OriginalRealm 1–3. Source
+     0.239.0 uses the original realm while the keep is unclaimed (also for the
+     hastener model and guard realm). Pending: 24 `BATTLEGROUND_PORTAL_KEEP_SERVICES`
+     lines and a real-client look.
 
 141. **Battleground keep ownership cannot be checked in the campaign
      battlegrounds.** Owner report, installed 0.235.0, 2026-10-10 ~21:20:
@@ -237,6 +256,8 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      as at Molvik). Runtime-only keep guards (never saved). Tests in
      `UT_BattlegroundGarrisonFallback`. Pending: live
      `BATTLEGROUND_KEEP_WALL_GUARDS` counts and a real-client look.
+     Live 0.237.0 (22:06): template 40 guards; placed 31 (141), 30 (142),
+     30 (138), 32 (143), 27 (144), 30 (134). Pending: real-client look.
 
 135. **Battleground portal keeps are invisible (Molvik).** Owner report,
      2026-10-10 17:14, installed 0.234.0: a Hibernian group zoning into Molvik
@@ -259,35 +280,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      opening, the landing stays 218 units clear and every saved NPC at least
      232 units. Rebuilt meshes confirm it: every portal landing pair passes
      with gates open and fails with gates closed (48 of 48).
-
-129. **Battleground patrols never spawn and the squad phase stalls the game
-     loop.** Installed 0.234.0, 2 h: zero `BATTLEGROUND_SQUAD_SPAWNED`; 109
-     `route_or_spawn_failed`, 116 `no_participants`, 58 `no_ambush_target`.
-     1,788 `BATTLEGROUND_TICK_SLOW`, all in `squads_ms` (average 153 ms, max
-     1,038 ms, about 274 s of timer time), on ticks that mostly do not spawn.
-     Source 0.235.0: squad targets are real players first, then autonomous
-     participants outside sanctuaries/portal keeps (owner decision); the route is proved before patrol bots
-     are built (previously up to 16 GameBots were built and deleted per failed
-     squad). `CountHumans` costs microseconds (one zone per region), so the slow
-     ticks are not explained yet: `BATTLEGROUND_TICK_SLOW` now carries `humans_ms`
-     and `spawn_ms`, and skips carry `detail=no_route|spawn_failed`. Pending:
-     patrols spawn near a human; read the new timings.
-     Live 0.235.0, 2026-10-10 21:04–21:32: still zero
-     `BATTLEGROUND_SQUAD_SPAWNED`; skips are now 27 `spawn_failed`, 16
-     `no_route`, 24 `no_participants`, 1 `no_ambush_target`. All 100
-     `BATTLEGROUND_TICK_SLOW` are `spawn_ms` (avg 244 ms, max 900 ms;
-     `humans_ms` 0), so the cost is the failing spawn attempt itself. Both
-     21:11 and 21:13 attempts against the owner in Leirvik failed.
-     Cause (code): `BattlegroundEncounterActor.Spawn` built the encounter
-     brain before synchronizing the bot's placement, so the brain captured
-     zone/goal from (0,0,0) (`GameNPC.X` reads the movement component, which
-     is unset before AddToWorld); `SetGoal` then failed its zone check and
-     every member was deleted. Source 0.237.0: sync first, then build
-     the brain (`AttachBrain`); a party stops after its first failed member
-     (one build per failed attempt instead of up to 8); skip details name the
-     step (`route:<step>`, `spawn:<step>`); test
-     `EncounterBrainTakesItsZoneFromTheSynchronizedPlacement`. Pending: live
-     `BATTLEGROUND_SQUAD_SPAWNED` lines.
 
 127. **Battleground participants still ejected as `stuck` after roaming to
      a camp.** Installed 0.234.0, 2026-10-10 14:59–17:02, world speed 20x,
@@ -1779,6 +1771,58 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
 
 ## Finished
+
+143. **Done — Claiming a keep freezes the game loop for about a second.** Installed
+     0.235.0, 2026-10-10: every claim stalled ~1 s in the claimer's own tick:
+     21:07:45 Thidranki 143 (bot Aeleorlyn, `Long NpcService.Tick` 882 ms),
+     21:24:20 Wilton 144 (bot Muirriorna, 1,087 ms), 21:28:36 Leirvik 134
+     (player Ceold, `Long PacketHandler.HandlePacket (DialogResponse)` 1,016 ms).
+     Same pattern as bug 134 (keep/component/guard saves written one by one),
+     but the claim path is outside the 0.235.0 `KeepSaveBatch` scopes.
+     Cause: `AbstractGameKeep.ClaimCore` saved the keep and its 20 components
+     outside any batch (each component re-read and written in its own
+     transaction): 1 + 21 transactions on 43 connections, 567 ms in the test
+     fixture. Source 0.237.0: the claim runs in a `KeepSaveBatch`
+     (1 transaction, 2 connections, 65 ms), flushed before the capture hook;
+     `KEEP_STEP_TIMING owner=claim` steps; tests in `UT_KeepSaveBatch`.
+     Remaining: campaign quest credit on capture still saves each quest row.
+     Pending: live claims show no ~1 s tick.
+     Verified live 0.237.0, 2026-10-10 22:36:47: the owner's claim of Proving
+     Grounds Tower took 136 ms in `DialogResponse` (was 1,016 ms); no
+     `KEEP_STEP_TIMING owner=claim` line. Fixed in 0.237.0.
+
+129. **Done — Battleground patrols never spawn and the squad phase stalls the game
+     loop.** Installed 0.234.0, 2 h: zero `BATTLEGROUND_SQUAD_SPAWNED`; 109
+     `route_or_spawn_failed`, 116 `no_participants`, 58 `no_ambush_target`.
+     1,788 `BATTLEGROUND_TICK_SLOW`, all in `squads_ms` (average 153 ms, max
+     1,038 ms, about 274 s of timer time), on ticks that mostly do not spawn.
+     Source 0.235.0: squad targets are real players first, then autonomous
+     participants outside sanctuaries/portal keeps (owner decision); the route is proved before patrol bots
+     are built (previously up to 16 GameBots were built and deleted per failed
+     squad). `CountHumans` costs microseconds (one zone per region), so the slow
+     ticks are not explained yet: `BATTLEGROUND_TICK_SLOW` now carries `humans_ms`
+     and `spawn_ms`, and skips carry `detail=no_route|spawn_failed`. Pending:
+     patrols spawn near a human; read the new timings.
+     Live 0.235.0, 2026-10-10 21:04–21:32: still zero
+     `BATTLEGROUND_SQUAD_SPAWNED`; skips are now 27 `spawn_failed`, 16
+     `no_route`, 24 `no_participants`, 1 `no_ambush_target`. All 100
+     `BATTLEGROUND_TICK_SLOW` are `spawn_ms` (avg 244 ms, max 900 ms;
+     `humans_ms` 0), so the cost is the failing spawn attempt itself. Both
+     21:11 and 21:13 attempts against the owner in Leirvik failed.
+     Cause (code): `BattlegroundEncounterActor.Spawn` built the encounter
+     brain before synchronizing the bot's placement, so the brain captured
+     zone/goal from (0,0,0) (`GameNPC.X` reads the movement component, which
+     is unset before AddToWorld); `SetGoal` then failed its zone check and
+     every member was deleted. Source 0.237.0: sync first, then build
+     the brain (`AttachBrain`); a party stops after its first failed member
+     (one build per failed attempt instead of up to 8); skip details name the
+     step (`route:<step>`, `spawn:<step>`); test
+     `EncounterBrainTakesItsZoneFromTheSynchronizedPlacement`. Pending: live
+     `BATTLEGROUND_SQUAD_SPAWNED` lines.
+     Verified live 0.237.0, 2026-10-10 22:06–23:00: 55
+     `BATTLEGROUND_SQUAD_SPAWNED` (41 patrols, 14 ambushes); only 2 skips with
+     `route:path`; 42 `BATTLEGROUND_TICK_SLOW` (max 406 ms, was 1,767 / max
+     1,038 ms in 2 h). Fixed in 0.237.0.
 
 136. **Done — Lone bots register for guild sieges and are rejected at once.**
      Installed 0.234.0, 2026-10-10 19:48–20:46: 64 `RVR_KEEP_ROUTE_ABANDONED`

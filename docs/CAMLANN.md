@@ -249,18 +249,18 @@ armies. Its realm teams are adapted here to Camlann alliances. This fork uses
 its own controller and existing class AI; Eden's private source and exact
 tuning are unavailable.
 
-| Native map | Levels | Exclusive Realm Rank ceiling | Central keep |
+| Native map | Levels | Realm Rank ceiling | Central keep |
 |---|---:|---:|---|
 | The Proving Grounds (234) | 1–4 | Unlimited | Server-built tower (keep 140) from native pieces; lord gating to verify |
 | The Lion's Den (235) | 5–9 | Unlimited | Server-built fort (keep 141) from native pieces; no gate or tower skin, so no door and no lord |
-| The Hills of Claret (236) | 10–14 | RR1L5 | Server-built keep (keep 142) from native pieces; lord gating to verify |
-| Killaloe (237) | 15–19 | RR2L0 | Keep row 138 gains server-built parts from native pieces |
-| Thidranki (238) | 20–24 | RR2L5 | Server-built keep (keep 143) on a relaxed site: ground variance 183 (limit 200), lowest-ground Z, 5,888 units from the portal centre |
-| Murdaigean (251) | 25–29 | RR3L0 | Native client keep; keep row, gates and gated lord added in source (pending verification) |
-| Wilton (240) | 30–34 | RR3L5 | Server-built keep (keep 144) from native pieces; lord gating to verify |
-| Molvik (241) | 35–39 | RR4L0 | Native lord kept; server-built parts added around keep 132 from native pieces |
-| Leirvik (region242, zone254) | 40–44 | RR4L5 | Keep row 134 gains server-built parts from native pieces |
-| Cathal Valley (165) | 45–49 | RR5L0 | Present |
+| The Hills of Claret (236) | 10–14 | Unlimited | Server-built keep (keep 142) from native pieces; lord gating to verify |
+| Killaloe (237) | 15–19 | Unlimited | Keep row 138 gains server-built parts from native pieces |
+| Thidranki (238) | 20–24 | Unlimited | Server-built keep (keep 143) on a relaxed site: ground variance 183 (limit 200), lowest-ground Z, 5,888 units from the portal centre |
+| Murdaigean (251) | 25–29 | Unlimited | Native client keep; keep row, gates and gated lord added in source (pending verification) |
+| Wilton (240) | 30–34 | Unlimited | Server-built keep (keep 144) from native pieces; lord gating to verify |
+| Molvik (241) | 35–39 | Unlimited | Native lord kept; server-built parts added around keep 132 from native pieces |
+| Leirvik (region242, zone254) | 40–44 | Unlimited | Keep row 134 gains server-built parts from native pieces |
+| Cathal Valley (165) | 45–49 | Unlimited | Present |
 
 Ceilings are fork tuning, not current Eden rules. A character at the ceiling
 graduates. Region239 Braemar lacks imported arrival keeps; Murdaigean is used
@@ -360,7 +360,8 @@ fallbacks.
 **Autonomous battleground participation.** Autonomous gamebots (never players,
 companions or temporary helpers) on an RvR tour, standing on a home frontier
 (regions 1, 100 or 200), not player-led and not carrying a relic, join the
-battleground of their level bracket while below its Realm Rank ceiling. A
+battleground of their level bracket (no bracket has a Realm Rank ceiling since
+0.239.0; only the level bracket graduates a bot). A
 reconcile pass every 60 seconds keeps at most 24 of them on each map and admits
 a group only when every member qualifies. The shared pool is 40 actors per map:
 the encounter director may use `40 − autonomous participants present`, at most

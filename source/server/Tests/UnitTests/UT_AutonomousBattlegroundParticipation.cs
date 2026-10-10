@@ -11,6 +11,8 @@ namespace DOL.GS.Tests
         private static readonly BattlegroundDefinition Thidranki = BattlegroundCampaignCatalog.Find(238);
         private static readonly BattlegroundDefinition Murdaigean = BattlegroundCampaignCatalog.Find(251);
         private static readonly BattlegroundDefinition ProvingGrounds = BattlegroundCampaignCatalog.Find(234);
+        // The catalog has no realm-rank ceilings; this bracket keeps one to exercise the ceiling rule.
+        private static readonly BattlegroundDefinition CappedThidranki = new(238, 238, "Thidranki", 20, 24, 15);
 
         private static bool Candidate(int level, int realmLevel, bool rvrTour = true, ushort region = 1,
             bool playerLed = false, bool relic = false, BattlegroundDefinition definition = null) =>
@@ -63,9 +65,22 @@ namespace DOL.GS.Tests
         {
             Assert.Multiple(() =>
             {
-                Assert.That(Candidate(22, 14), Is.True, "One below the exclusive ceiling");
-                Assert.That(Candidate(22, 15), Is.False, "At the exclusive ceiling");
+                Assert.That(Candidate(22, 14, definition: CappedThidranki), Is.True, "One below the exclusive ceiling");
+                Assert.That(Candidate(22, 15, definition: CappedThidranki), Is.False, "At the exclusive ceiling");
                 Assert.That(Candidate(1, 50, definition: ProvingGrounds), Is.True, "Proving Grounds has no ceiling");
+            });
+        }
+
+        [Test]
+        public void NoCampaignBracketHasARealmRankCeiling()
+        {
+            Assert.Multiple(() =>
+            {
+                foreach (BattlegroundDefinition definition in BattlegroundCampaignCatalog.Definitions)
+                    Assert.That(definition.MaxRealmLevel, Is.EqualTo(0), definition.Name);
+                Assert.That(Candidate(22, 120), Is.True, "Thidranki takes any realm rank");
+                Assert.That(AutonomousBattlegroundParticipation.LeaveReasonFor(22, 120, true, false, false, Thidranki),
+                    Is.Not.EqualTo(AutonomousBattlegroundParticipation.LeaveReason.Graduated), "Realm rank never graduates");
             });
         }
 
@@ -76,7 +91,7 @@ namespace DOL.GS.Tests
             {
                 Assert.That(AutonomousBattlegroundParticipation.LeaveReasonFor(25, 0, true, false, false, Thidranki),
                     Is.EqualTo(AutonomousBattlegroundParticipation.LeaveReason.Graduated), "Level above the bracket");
-                Assert.That(AutonomousBattlegroundParticipation.LeaveReasonFor(22, 15, true, false, false, Thidranki),
+                Assert.That(AutonomousBattlegroundParticipation.LeaveReasonFor(22, 15, true, false, false, CappedThidranki),
                     Is.EqualTo(AutonomousBattlegroundParticipation.LeaveReason.Graduated), "Realm Rank ceiling");
                 Assert.That(AutonomousBattlegroundParticipation.LeaveReasonFor(22, 3, false, false, false, Thidranki),
                     Is.EqualTo(AutonomousBattlegroundParticipation.LeaveReason.TourEnded), "Tour ended");

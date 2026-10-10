@@ -26,20 +26,21 @@ namespace DOL.GS
 
     public static class BattlegroundCampaignCatalog
     {
+        // No bracket has a realm-rank ceiling (owner decision 2026-10-10): MaxRealmLevel 0 means unlimited.
         // Native client zones.dat and world region metadata. Zone 242 is TestBG;
         // Leirvik is zone 254 in region 242. Never substitute one for the other.
         public static IReadOnlyList<BattlegroundDefinition> Definitions { get; } = Array.AsReadOnly(new[]
         {
             new BattlegroundDefinition(234, 234, "The Proving Grounds", 1, 4, 0),
             new BattlegroundDefinition(235, 235, "The Lion's Den", 5, 9, 0),
-            new BattlegroundDefinition(236, 236, "The Hills of Claret", 10, 14, 5),
-            new BattlegroundDefinition(237, 237, "Killaloe", 15, 19, 10),
-            new BattlegroundDefinition(238, 238, "Thidranki", 20, 24, 15),
-            new BattlegroundDefinition(251, 251, "Murdaigean", 25, 29, 20),
-            new BattlegroundDefinition(240, 240, "Wilton", 30, 34, 25),
-            new BattlegroundDefinition(241, 241, "Molvik", 35, 39, 30),
-            new BattlegroundDefinition(242, 254, "Leirvik", 40, 44, 35),
-            new BattlegroundDefinition(165, 165, "Cathal Valley", 45, 49, 40),
+            new BattlegroundDefinition(236, 236, "The Hills of Claret", 10, 14, 0),
+            new BattlegroundDefinition(237, 237, "Killaloe", 15, 19, 0),
+            new BattlegroundDefinition(238, 238, "Thidranki", 20, 24, 0),
+            new BattlegroundDefinition(251, 251, "Murdaigean", 25, 29, 0),
+            new BattlegroundDefinition(240, 240, "Wilton", 30, 34, 0),
+            new BattlegroundDefinition(241, 241, "Molvik", 35, 39, 0),
+            new BattlegroundDefinition(242, 254, "Leirvik", 40, 44, 0),
+            new BattlegroundDefinition(165, 165, "Cathal Valley", 45, 49, 0),
         });
 
         public static BattlegroundDefinition Find(ushort region) => Definitions.FirstOrDefault(x => x.RegionId == region);
@@ -89,6 +90,10 @@ namespace DOL.GS
                 caps.Add(new DbBattleground { RegionID = definition.RegionId, MinLevel = definition.MinLevel,
                     MaxLevel = definition.MaxLevel, MaxRealmLevel = definition.MaxRealmLevel });
             }
+            // Legacy battleground rows from the save keep their level brackets but lose their realm-rank
+            // ceiling too; the rows are only changed in memory and never saved.
+            foreach (DbBattleground cap in caps)
+                cap.MaxRealmLevel = 0;
         }
     }
 }

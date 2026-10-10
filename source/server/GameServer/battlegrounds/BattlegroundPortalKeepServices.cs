@@ -129,7 +129,7 @@ namespace DOL.GS
                 Log.Info($"BATTLEGROUND_PORTAL_KEEP_SERVICES_SKIPPED region={region} keep={keep.KeepID} reason=already_handled");
                 return;
             }
-            if (keep.Realm is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia))
+            if (ServiceRealm(keep) is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia))
             {
                 Log.Info($"BATTLEGROUND_PORTAL_KEEP_SERVICES_SKIPPED region={region} keep={keep.KeepID} reason=no_realm");
                 return;
@@ -177,7 +177,7 @@ namespace DOL.GS
                     PortalServiceRole.Caster => SpawnGuard<PortalKeepServiceCaster>(keep, region, service.Point, GuardTemplateMgr.AvalonianMale, bracketLevel),
                     PortalServiceRole.Fighter => SpawnGuard<PortalKeepServiceFighter>(keep, region, service.Point,
                         fighters % 2 == 0 ? GuardTemplateMgr.BritonMale : GuardTemplateMgr.IcconuMale, bracketLevel),
-                    PortalServiceRole.Hastener => SpawnGuard<PortalKeepServiceHastener>(keep, region, service.Point, HastenerModel(keep.Realm), bracketLevel),
+                    PortalServiceRole.Hastener => SpawnGuard<PortalKeepServiceHastener>(keep, region, service.Point, HastenerModel(ServiceRealm(keep)), bracketLevel),
                     PortalServiceRole.DpsDummy => SpawnDummy<DPSDummy>(region, service.Point),
                     PortalServiceRole.HitbackDummy => SpawnDummy<HitbackDummy>(region, service.Point),
                     _ => false,
@@ -204,6 +204,11 @@ namespace DOL.GS
                 npc.ObjectState == GameObject.eObjectState.Active && Vector2.Distance(new(npc.X, npc.Y), centre) <= SavedNpcRadius);
         }
 
+        /// <summary>The realm a portal keep serves: its current realm, or the saved original realm while it is Realm None
+        /// (every campaign portal keep row is saved with Realm 0 and OriginalRealm 1-3).</summary>
+        private static eRealm ServiceRealm(AbstractGameKeep keep) =>
+            keep.Realm is eRealm.Albion or eRealm.Midgard or eRealm.Hibernia ? keep.Realm : keep.OriginalRealm;
+
         private static ushort HastenerModel(eRealm realm) => realm switch
         {
             eRealm.Midgard => (ushort)eLivingModel.MidgardHastener,
@@ -221,7 +226,7 @@ namespace DOL.GS
             var row = new DbMob
             {
                 ClassType = typeof(T).ToString(), Name = string.Empty, Guild = string.Empty, Region = region,
-                X = (int)point.X, Y = (int)point.Y, Z = (int)point.Z, Heading = 0, Realm = (byte)keep.Realm,
+                X = (int)point.X, Y = (int)point.Y, Z = (int)point.Z, Heading = 0, Realm = (byte)ServiceRealm(keep),
                 Level = bracketLevel, Model = model, Size = GuardSize,
             };
             var guard = new T();
@@ -232,6 +237,9 @@ namespace DOL.GS
                 if (guard.Component?.Keep == keep && guard.AddToWorld())
                 {
                     guard.ChangeGuild();
+                    // Unclaimed portal keeps keep Realm None; their guards stand for the keep's own realm.
+                    if (guard.Realm == eRealm.None)
+                        guard.Realm = ServiceRealm(keep);
                     return true;
                 }
             }

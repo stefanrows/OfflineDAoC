@@ -104,6 +104,83 @@ public class UT_AutonomousBotDecisionEngine
     }
 
     [Test]
+    public void HighestConCountsEveryMobLevelInTheCellNotOnlyTheTargetableOnes()
+    {
+        // Bug 144 part 3: a level-2 bot sees a level-12 add in a cell of level-2 mobs.
+        ConColor withAdd = AutonomousBotDecisionEngine.HighestConOf([2, 2, 12], 2);
+        ConColor withoutAdd = AutonomousBotDecisionEngine.HighestConOf([1, 2], 2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(withAdd, Is.EqualTo(ConLevels.GetConColor(ConLevels.GetConLevel(2, 12))));
+            Assert.That(withAdd, Is.GreaterThanOrEqualTo(ConColor.RED), "a level-12 add is far above a level-2 bot");
+            Assert.That(withoutAdd, Is.LessThanOrEqualTo(ConColor.YELLOW), "level-1 and level-2 mobs stay at yellow or easier");
+            Assert.That(ConLevels.GetConColor(ConLevels.GetConLevel(2, 3)), Is.EqualTo(ConColor.ORANGE),
+                "a level-3 mob is one step above a level-2 bot");
+            Assert.That(AutonomousBotDecisionEngine.HighestConOf([], 2), Is.EqualTo(ConColor.GREY));
+        });
+    }
+
+    [Test]
+    public void AddFilterRejectsACellWithALevelTwelveAddWhenACleanCellExists()
+    {
+        var dirty = Camp("dirty", eRealm.Albion, ConColor.GREEN, true) with
+        { MonsterName = "wolf", HighestCon = AutonomousBotDecisionEngine.HighestConOf([2, 12], 2) };
+        var clean = Camp("clean", eRealm.Albion, ConColor.GREEN, true) with
+        { MonsterName = "rat", HighestCon = AutonomousBotDecisionEngine.HighestConOf([1, 2], 2) };
+
+        AutonomousBotDecisionEngine.Camp[] preferred = AutonomousBotDecisionEngine.PreferCampsWithinAddCeiling(
+            [dirty, clean], ConColor.BLUE, out bool relaxed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(relaxed, Is.False);
+            Assert.That(preferred.Select(camp => camp.Id), Is.EqualTo(new[] { "clean" }));
+            Assert.That(AutonomousBotDecisionEngine.SelectLevelingCamp(preferred, 1, "Test Zone",
+                eRealm.Albion, 2, new FixedRandom(0.5)).Id, Is.EqualTo("clean"));
+        });
+    }
+
+    [Test]
+    public void AddFilterKeepsTheOldChoiceWhenNoCellIsClean()
+    {
+        var firstAdd = Camp("add-1", eRealm.Albion, ConColor.GREEN, true) with { HighestCon = ConColor.PURPLE };
+        var secondAdd = Camp("add-2", eRealm.Albion, ConColor.GREEN, true) with { HighestCon = ConColor.RED };
+        var candidates = new[] { firstAdd, secondAdd };
+
+        AutonomousBotDecisionEngine.Camp[] preferred = AutonomousBotDecisionEngine.PreferCampsWithinAddCeiling(
+            candidates, ConColor.BLUE, out bool relaxed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(relaxed, Is.True);
+            Assert.That(preferred.Select(camp => camp.Id), Is.EqualTo(new[] { "add-1", "add-2" }));
+            Assert.That(AutonomousBotDecisionEngine.PreferCampsWithinAddCeiling([], ConColor.BLUE, out bool emptyRelaxed),
+                Is.Empty);
+            Assert.That(emptyRelaxed, Is.False, "no candidates is not a relaxed filter");
+        });
+    }
+
+    [Test]
+    public void AddFilterAllowsOneConStepAboveTheCeilingOnly()
+    {
+        var orangeAdd = Camp("orange", eRealm.Albion, ConColor.GREEN, true) with { HighestCon = ConColor.ORANGE };
+        var redAdd = Camp("red", eRealm.Albion, ConColor.GREEN, true) with { HighestCon = ConColor.RED };
+        var yellowCell = Camp("yellow", eRealm.Albion, ConColor.GREEN, true) with { HighestCon = ConColor.YELLOW };
+        var plain = Camp("plain", eRealm.Albion, ConColor.GREEN, true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBotDecisionEngine.PreferCampsWithinAddCeiling(
+                [redAdd, orangeAdd, yellowCell, plain], ConColor.YELLOW, out _).Select(camp => camp.Id),
+                Is.EqualTo(new[] { "orange", "yellow", "plain" }), "yellow ceiling admits orange, never red");
+            Assert.That(AutonomousBotDecisionEngine.PreferCampsWithinAddCeiling(
+                [redAdd, plain], ConColor.BLUE, out _).Select(camp => camp.Id),
+                Is.EqualTo(new[] { "plain" }), "no HighestCon falls back to TypicalCon");
+        });
+    }
+
+    [Test]
     public void SelectionWithinEnvironmentRemainsUniformWithoutCrowdSignals()
     {
         var state = State();
