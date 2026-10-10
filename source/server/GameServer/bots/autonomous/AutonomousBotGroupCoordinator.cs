@@ -178,6 +178,9 @@ public static partial class AutonomousBotGroupCoordinator
         public long FightExperience;
         public long NextArrivalRecordTick;
         public DateTime PausedExpiryPublishedUtc;
+        // Bug 75: since when a marching RvR leader stands in another region
+        // than the living majority of its group (0 = not split).
+        public long LeaderSplitSinceTick;
     }
 
     /// <summary>Population-wide work belongs to one service phase, not every
@@ -3099,6 +3102,8 @@ public static partial class AutonomousBotGroupCoordinator
     private static Directive BuildDirective(Session session, GameBot[] members)
     {
         GameBot leader = ChooseLeader(session, members);
+        if (session.ObjectiveKind == eAutonomousObjectiveKind.RvR)
+            leader = HandOverRvrLeadership(session, members, leader);
         GameBot puller = session.ObjectiveKind == eAutonomousObjectiveKind.RvR
             ? null
             : ChoosePuller(session, members);
@@ -3439,6 +3444,74 @@ public static partial class AutonomousBotGroupCoordinator
         if (session != null)
             session.Leader = replacement;
         return replacement;
+    }
+
+    /// <summary>A marching leader cut off from its column this long hands over.</summary>
+    public const long SplitLeaderHandoverMilliseconds = 60_000;
+
+    /// <summary>
+    /// Bug 75: why an RvR group's own leader must give the lead to the
+    /// coordinator's choice, or null when it keeps it. Without the handover a
+    /// dead group leader in another region kept every keep abandon deferred and
+    /// kept its party out of the guild army. PvE keeps today's rule.
+    /// </summary>
+    public static string RvrLeaderHandoverReason(bool rvr, bool chosenIsGroupLeader, bool oldIsLivingBot,
+        bool oldReturningFromDeath, bool oldInChosenRegion) =>
+        !rvr || chosenIsGroupLeader ? null
+        : !oldIsLivingBot ? "dead"
+        : oldReturningFromDeath ? "released"
+        : !oldInChosenRegion ? "region"
+        : null;
+
+    /// <summary>
+    /// The region holding a strict majority of the living group (leader
+    /// included) when a living leader that is not riding a stable-master
+    /// route stands outside it; otherwise null.
+    /// </summary>
+    public static ushort? SplitLeaderMajorityRegion(ushort leaderRegion, bool leaderOnStableMasterRoute,
+        ushort[] otherLivingRegions)
+    {
+        if (leaderOnStableMasterRoute || otherLivingRegions == null) return null;
+        int total = otherLivingRegions.Length + 1;
+        foreach (ushort region in otherLivingRegions)
+            if (region != leaderRegion && otherLivingRegions.Count(other => other == region) * 2 > total)
+                return region;
+        return null;
+    }
+
+    private static GameBot HandOverRvrLeadership(Session session, GameBot[] members, GameBot leader)
+    {
+        if (leader == null || !leader.IsAlive || session.Group == null) return leader;
+        long now = GameLoop.GameLoopTime;
+        string reason = null;
+        // A living leader cut off from its marching column for a minute gives
+        // the lead to a member standing with the majority.
+        ushort? majority = SplitLeaderMajorityRegion(leader.CurrentRegionID, leader.IsOnStableMasterRoute,
+            members.Where(member => member != leader && member.IsAlive).Select(member => member.CurrentRegionID).ToArray());
+        if (majority == null || AutonomousRvrEventLayer.MusterPhaseOf(session.Id) != AutonomousRvrSiegeMuster.Phase.Marching)
+            session.LeaderSplitSinceTick = 0;
+        else if (session.LeaderSplitSinceTick == 0)
+            session.LeaderSplitSinceTick = now;
+        else if (now - session.LeaderSplitSinceTick >= SplitLeaderHandoverMilliseconds &&
+            members.FirstOrDefault(member => member.IsAlive && member.CurrentRegionID == majority &&
+                !member.IsOnStableMasterRoute && !session.ReturningFromDeath.Contains(MemberKey(member))) is { } promoted)
+        {
+            session.Leader = leader = promoted;
+            session.LeaderSplitSinceTick = 0;
+            reason = "split";
+        }
+        GameLiving old = session.Group.LivingLeader;
+        reason ??= RvrLeaderHandoverReason(true, old == leader, old is GameBot && old.IsAlive,
+            old is GameBot oldBot && session.ReturningFromDeath.Contains(MemberKey(oldBot)),
+            old?.CurrentRegionID == leader.CurrentRegionID);
+        // ChooseLeader keeps the new leader while it lives, so a returning
+        // old leader rejoins as a member instead of taking the lead back.
+        // Never take a human's group lead; sessions exclude player-led groups,
+        // but the guard keeps that true even if a player joins mid-pulse.
+        if (reason != null && !session.Group.GetMembersInTheGroup().Any(m => m is GamePlayer) && session.Group.MakeLeader(leader))
+            Log.Info($"RVR_LEADER_HANDOVER group={session.Id} old=\"{old?.Name}\" new=\"{leader.Name}\" reason={reason} " +
+                $"oldRegion={old?.CurrentRegionID} region={leader.CurrentRegionID}");
+        return leader;
     }
 
     private static GameBot ChoosePuller(Session session, GameBot[] members)

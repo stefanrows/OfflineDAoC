@@ -104,7 +104,7 @@ public static partial class AutonomousRvrEventLayer
         {
             var active = Events.Values.FirstOrDefault(e => MustersLocked(e, forceId));
             var army = active == null ? null : ArmyLocked(active, forceId, leader, now);
-            if (army == null || army.Failed || leader.Group?.LivingLeader != leader) return;
+            if (army == null || army.Failed || !LeadsItsParty(leader)) return;
             long joined = army.Parties.TryGetValue(forceId, out var previous) ? previous.Joined : now;
             army.Parties[forceId] = new(leader, members, now, joined, equippedOperators);
             foreach (var enemy in sightings) army.Sightings[enemy] = now;
@@ -113,6 +113,11 @@ public static partial class AutonomousRvrEventLayer
             EvaluateArmy(active, army, now);
         }
     }
+
+    /// <summary>Only the party's group leader reports and counts. The coordinator
+    /// hands the group lead to its RvR leader (bug 75), so a dead leader in
+    /// another region no longer keeps the whole party out of the army.</summary>
+    public static bool LeadsItsParty(GameBot leader) => leader?.Group != null && leader.Group.LivingLeader == leader;
 
     private static bool ArmyMember(ActiveEvent active, GuildArmy army, string force, ArmyParty party, GameBot bot) =>
         bot?.IsAlive == true && bot.ObjectState == GameObject.eObjectState.Active &&
@@ -140,6 +145,10 @@ public static partial class AutonomousRvrEventLayer
         int doors = keep?.Doors.Values.Count(d => d.IsAlive && d.IsAttackableDoor && d.State == eDoorState.Closed)
             ?? active.Target.ClosedDoors;
         army.Required = AutonomousGuildAssault.RequiredAttackers(army.Defenders, guards, doors, army.PlannedParties);
+        int keepLevel = keep?.Level ?? 0;
+        bool relaxed = keep != null && AutonomousGuildAssault.Relaxes(AutonomousSiegeProperties.SIEGE_ARMY_KEEP_LEVEL_QUORUM,
+            army.GatheredSince == 0 ? 0 : now - army.GatheredSince);
+        if (relaxed) army.Required = AutonomousGuildAssault.RelaxedRequired(army.Required, keepLevel, army.Defenders);
 
         // A released party must not retain permission after its wipe/respawn.
         // Keep living fighters' references even while combat suppresses reports.
@@ -191,7 +200,7 @@ public static partial class AutonomousRvrEventLayer
         {
             var party = pair.Value;
             if (army.Released.Contains(pair.Key) || now - party.Tick > AutonomousGuildAssault.ReportLifetime ||
-                party.Leader.Group?.LivingLeader != party.Leader || !party.Leader.IsAlive) continue;
+                !LeadsItsParty(party.Leader) || !party.Leader.IsAlive) continue;
             var present = party.Members.Where(bot => ArmyMember(active, army, pair.Key, party, bot) &&
                 bot.CurrentRegionID == active.Target.RegionId && !bot.IsOnStableMasterRoute &&
                 !bot.InCombat && !bot.IsAttacking && !bot.IsMezzed && !bot.IsStunned &&
@@ -210,7 +219,7 @@ public static partial class AutonomousRvrEventLayer
         if (army.Present > 0 && army.GatheredSince == 0) army.GatheredSince = now;
         bool launch = army.Released.Count == 0 && AutonomousGuildAssault.Ready(ready.Count, army.Present,
             army.Healers, army.Operators, army.Required, doors > 0,
-            army.GatheredSince == 0 ? 0 : now - army.GatheredSince, army.PlannedParties);
+            army.GatheredSince == 0 ? 0 : now - army.GatheredSince, army.PlannedParties, relaxed, keepLevel);
         // Late parties join only a still substantial living attack; merely
         // retaining an event reservation is never permission to march alone.
         bool reinforce = fighting && deployed.Length + army.Present >= army.Required && ready.Count > 0;
@@ -229,7 +238,7 @@ public static partial class AutonomousRvrEventLayer
                 $"action={(launch ? "launch" : reinforce ? "reinforce" : army.HoldColumn ? "column-hold" : "gather")} " +
                 $"camp={active.Target.RegionId}:{army.Camp} plannedParties={army.PlannedParties} parties={ready.Count} present={army.Present} " +
                 $"healers={army.Healers} operators={army.Operators} sightedDefenders={army.Defenders} " +
-                $"guards={guards} doors={doors} required={army.Required} deployed={deployed.Length} " +
+                $"guards={guards} doors={doors} keepLevel={keepLevel} required={army.Required} relaxed={relaxed} deployed={deployed.Length} " +
                 $"readyForces=\"{string.Join(",", ready)}\" forces=\"{string.Join(",", army.Released)}\" " +
                 $"remainingMs={Math.Max(0, ArmyDeadline(army)-now)}");
         }
