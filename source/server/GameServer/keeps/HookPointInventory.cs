@@ -277,7 +277,12 @@ namespace DOL.GS.Keeps
 			hookPointObj.Heading = hookpoint.Heading;
 
 			if (hookPointObj is GameSiegeWeapon)
+			{
 				(hookPointObj as GameSiegeWeapon).HookPoint = hookpoint;
+				// Bug 151: the buyer and its allies own the keep's engine; without a founder the first
+				// same-realm stranger or reclaiming bot would anchor it and lock the keep's guild out.
+				(hookPointObj as GameSiegeWeapon).SetFounder(player);
+			}
 			if (hookPointObj is IKeepItem)
 				(hookPointObj as IKeepItem).Component = component;
 			if (hookPointObj is GameSiegeCauldron)

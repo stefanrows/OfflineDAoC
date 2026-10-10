@@ -2577,9 +2577,9 @@ namespace DOL.GS
 				else
 					name = string.Empty;
 
-				if (this is GameSiegeRam && player.Realm != Realm)
+				if (this is GameSiegeRam siegeRam && !siegeRam.MayUseSiegeWeapon(player))
 				{
-					player.Out.SendMessage($"This siege equipment is owned by an enemy realm!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+					player.Out.SendMessage($"This siege equipment belongs to another group!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 					return false;
 				}
 

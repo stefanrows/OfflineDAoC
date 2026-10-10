@@ -127,7 +127,7 @@ namespace DOL.GS
         }
 
         public static bool CanRepair(GameBot bot, GameSiegeWeapon w) => bot?.IsAlive == true && w?.IsAlive == true &&
-            w.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == w.CurrentRegion && bot.Realm == w.Realm &&
+            w.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == w.CurrentRegion && w.MayUseSiegeWeapon(bot) &&
             w.Owner == bot && !bot.InCombat && !w.InCombat && !w.IsMoving && !bot.IsMoving && !bot.IsCasting && !bot.IsIncapacitated && w.TimesRepaired <= 3 &&
             bot.IsWithinRadius(w, WorldMgr.INTERACT_DISTANCE) && Item(bot, RepairKit) != null;
 

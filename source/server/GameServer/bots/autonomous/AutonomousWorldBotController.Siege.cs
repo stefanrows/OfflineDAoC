@@ -12,7 +12,7 @@ namespace DOL.GS
     {
         /// <summary>An engine on our side: run by an ally, or unowned and of our realm (abandoned own engines).</summary>
         private static bool FriendlyEngine(GameBot bot, GameSiegeWeapon engine) =>
-            engine.Owner is GameLiving owner ? owner == bot || PvpCombatant.AreAllied(bot, owner) : engine.Realm == bot.Realm;
+            engine.Owner is GameLiving owner ? owner == bot || PvpCombatant.AreAllied(bot, owner) : engine.MayUseSiegeWeapon(bot);
 
         private string _siegeJobKeep;
         private BotSiegeKind _siegeKind;

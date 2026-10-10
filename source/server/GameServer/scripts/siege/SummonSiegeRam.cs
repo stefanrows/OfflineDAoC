@@ -58,7 +58,7 @@ namespace DOL.GS.Spells
 
             foreach (GameNPC npc in Caster.GetNPCsInRadius((ushort) ramSummonRadius))
             {
-                if (npc is GameSiegeRam ram && ram.Realm == Caster.Realm)
+                if (npc is GameSiegeRam ram && (ram.Realm == Caster.Realm || ram.MayUseSiegeWeapon(Caster)))
                     ramsInRadius++;
             }
 
