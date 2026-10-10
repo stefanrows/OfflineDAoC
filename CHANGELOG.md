@@ -43,8 +43,13 @@ package, not this fork's version.
 - Live check of 0.237.0 (2026-10-10, 22:06–23:00): 55 battleground squads
   spawned (bug 129), 27–32 Molvik-layout guards placed per keep (bug 140), a
   player keep claim took 136 ms instead of ~1 s (bug 143).
-- Server Release build passes with zero errors; the touched test classes
-  pass. Real-client verification is pending.
+- Server and Windows launcher Release builds pass with zero errors; the
+  touched test classes pass except the pre-existing
+  `PlayerLedAndRelicCarriersAreNeverCandidates`. Pushed to fork main,
+  released as v0.239.0 and deployed on 2026-10-10: 17 files replaced with
+  verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-234340`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.238.0] - 2026-10-10
 
