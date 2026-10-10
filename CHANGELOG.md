@@ -12,6 +12,19 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.239.1] - 2026-10-11
+
+### Changed
+
+- Bug tracker: live check of 0.239.0 (2026-10-10 23:45–00:51): all 24
+  portal keeps got their service set (289 NPCs), battleground entries
+  recovered (115 in 65 minutes), 197 squads spawned. Bug 148 records the
+  Thidranki (238) keep investigation (keep 143 pieces sit up to 212 units
+  below the terrain, lord +857 above the keep; native region 252 is not a
+  drop-in); bug 144 adds the Svasud bind-stone and border-gate analysis;
+  new bugs 149 (player kills stall the reaper, up to ~1 s) and 150
+  (Pilus'Fury script NullReferenceException). No gameplay change.
+
 ## [0.239.0] - 2026-10-10
 
 ### Fixed

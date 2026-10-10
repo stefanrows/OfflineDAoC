@@ -6,6 +6,52 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+150. **Pilus'Fury boss script throws and the boss is removed from the
+     world.** Installed 0.239.0, 2026-10-10 23:52:05: `NullReferenceException`
+     in `PilusFuryBrain.DamageTarget` (`scripts/mobs/AlbionMobs/PilusFury.cs:248`,
+     from `PrepareDD` :215) on the timer service; the server then called
+     `RemoveFromWorld` for Pilus'Fury (region 23). Expected: the delayed damage
+     timer tolerates a target or caster that died or left. Not yet
+     investigated.
+
+149. **Player kills stall the game loop (reaper).** Installed 0.239.0,
+     2026-10-10 23:45–00:15, owner and Firebold in Darkness Falls (249): 63
+     `Long ReaperService.Tick` for NPCs killed by a player (average 172 ms, max
+     783 ms) and 4 for autonomous bots killed by a player (average 603 ms, max
+     1,028 ms, e.g. Elaeloranne killed by Ceoruner at 00:01:39). The bots-only
+     0.234.0 baseline had 2 such ticks, max 85 ms. Suspected: per-kill XP / RP /
+     loot crediting for the player's group (persistent companions) writing to
+     the database on the game loop. Not yet investigated.
+
+148. **Thidranki (region 238) shows no keep and no guards in the client.**
+     Owner report, installed 0.239.0, 2026-10-11 ~00:05: Firebold entered
+     Thidranki (238) at 23:54:59 and saw no keep and no guards. Server side
+     keep 143 (`offline-bg-keep:238`, X 561678 Y 549656 Z 4071, heading 0,
+     level 1) is registered with 22 components, its lord and 4 garrison guards,
+     and 32 Molvik-layout guards were placed at 23:46:20
+     (`BATTLEGROUND_KEEP_WALL_GUARDS region=238 keep=143 placed=32`).
+     Upstream (shadowofze 0.35, `world/BattlegroundBrackets.cs`) uses the four
+     native battleground regions instead: Abermenai 253, Thidranki 252
+     ("Thidranki Faste", keep 11), Murdaigean 251, Caledonia 250, and builds
+     nothing at runtime. This fork's campaign maps the 20–24 bracket to region
+     238 with a server-built keep.
+     Investigation 2026-10-11 (read-only): Firebold stayed at the Hibernia
+     portal keep 897, 27,400–31,900 units from keep 143; NPCs are only sent
+     within 6,000 (`WorldMgr.VISIBILITY_DISTANCE`), so the lord and guards were
+     never sent; the keep structure is sent on region entry (`SendKeepInit`),
+     client draw range unverified. Keep 143 is mis-built regardless: all 22
+     pieces sit 3–212 units below the terrain (Z 4071 is not in the startup Z
+     correction list), and its lord and garrison stand at Z 4928, +857 above
+     the keep (Leirvik +148). `docs/CAMLANN.md` says 5,888 units from the
+     portal centre; measured 12,250 / 24,630 / 31,870. Native 252 is not a
+     drop-in: keep 11 has no components, lord or guards in the save (its
+     portal keeps 12–14 do have hastener, static casters and dummies), there
+     is no navmesh for zone 252 (nor 250, 253), and only 15 of 70 mobs are
+     level 20+. Recommendation: verify in the client at 561678,549656 first;
+     then re-site/Z-correct keep 143 and place the garrison on the floor
+     nearest the lord point; switching to 252 needs ~8 changes incl. a new
+     navmesh.
+
 146. **Renegade Fensalir Jarl kills bots at the Svasud Faste bind stone.**
      Installed 0.234.0, 2026-10-10 19:48–21:13: the level-66 keep lord
      "Renegade Fensalir Jarl" killed Midgard bots 6 times on the Svasud
