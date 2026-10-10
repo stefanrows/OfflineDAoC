@@ -251,15 +251,15 @@ tuning are unavailable.
 
 | Native map | Levels | Exclusive Realm Rank ceiling | Native central keep |
 |---|---:|---:|---|
-| The Proving Grounds (234) | 1–4 | Unlimited | Absent |
-| The Lion's Den (235) | 5–9 | Unlimited | Absent |
-| The Hills of Claret (236) | 10–14 | RR1L5 | Absent |
-| Killaloe (237) | 15–19 | RR2L0 | Present; no imported lord |
-| Thidranki (238) | 20–24 | RR2L5 | Absent |
-| Murdaigean (251) | 25–29 | RR3L0 | Absent |
-| Wilton (240) | 30–34 | RR3L5 | Absent |
-| Molvik (241) | 35–39 | RR4L0 | Present |
-| Leirvik (region242, zone254) | 40–44 | RR4L5 | Present; no imported lord |
+| The Proving Grounds (234) | 1–4 | Unlimited | Absent in client data |
+| The Lion's Den (235) | 5–9 | Unlimited | Absent in client data |
+| The Hills of Claret (236) | 10–14 | RR1L5 | Absent in client data |
+| Killaloe (237) | 15–19 | RR2L0 | Keep row only; no keep model in client data |
+| Thidranki (238) | 20–24 | RR2L5 | Absent in client data |
+| Murdaigean (251) | 25–29 | RR3L0 | Native client keep; keep row, gates and gated lord added in source (pending verification) |
+| Wilton (240) | 30–34 | RR3L5 | Absent in client data |
+| Molvik (241) | 35–39 | RR4L0 | Lord and guards; no walls in client data |
+| Leirvik (region242, zone254) | 40–44 | RR4L5 | Keep row only; no keep model in client data |
 | Cathal Valley (165) | 45–49 | RR5L0 | Present |
 
 Ceilings are fork tuning, not current Eden rules. A character at the ceiling
@@ -270,7 +270,10 @@ hunting mobs; contracts reflect the available native data. Funding and capture
 require a loaded native keep lord. Cathal's two missing central keep doors
 are restored additively from exported native `Hfrontkeep.nif` fixtures; existing
 door rows and damage state are preserved. Molvik has a native lord without
-imported central gates, so the assault approaches its lord directly.
+imported central gates, so the assault approaches its lord directly. Murdaigean's
+native keep (`Hfrontkeep.nif`) gets keep row 139; its existing closed gates are
+kept, and its gated lord and retainers stand only on navigation-proved points
+behind those gates. Both are added in source and await real-client verification.
 
 `/battleground list|join|leave|status` exposes campaign state; `/bgs` is the
 alias. Admission proves the bracket, loaded native mesh and a safe snapped
@@ -302,7 +305,16 @@ are session-local. Threshold consumption precedes spawning to prevent restart
 replay. Inventory and camp locks serialize contributions with compensating
 refunds; the existing ORM has no crash-atomic transaction across those saves.
 
-The director adds patrols only on occupied maps, using actual autonomous guild
+The director adds patrols only on occupied maps. Occupancy is checked every tick,
+and a map that becomes occupied schedules its next patrol within about 15 seconds.
+Patrols start at a camp away from the participant and head for the participant
+once that position is outside a sanctuary or portal keep; while the participant
+stands in one, they walk to the camp nearest them. Ambushes start at the camp
+nearest their target. New log lines: `BATTLEGROUND_OCCUPANCY`,
+`BATTLEGROUND_SQUAD_SPAWNED`, `BATTLEGROUND_SQUAD_SKIPPED`,
+`BATTLEGROUND_CAMPAIGN_READY`, `BATTLEGROUND_TICK_SLOW`,
+`BATTLEGROUND_CAMP_DOOR_ROUTE` and `BATTLEGROUND_NATIVE_KEEP_READY` or
+`BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE`. Actors use autonomous guild
 identities where available and hostile guildless groups otherwise. Local party
 size and level select 1–8 combatants with tank/healer/CC support. Underrepresented
 guild presence is preferred, with at most 24 actors per map, finite lifetimes,

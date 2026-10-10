@@ -6,6 +6,19 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+109. **Battleground server-built keeps and autonomous gamebot participation: real-client spike (idea, not authorized).** Owner, 2026-10-10, after bug 125.
+     Only Murdaigean's native keep is restored from client data. The client
+     zone data has no keep model for 234, 235, 236, 238 and 240, and only keep
+     rows without a keep model for 237 and 242. Building component keeps (walls,
+     gates, towers) there is a server-side build, but it needs a real-client
+     rendering check first, because component skins and positions must look right
+     in the client, and navmesh walls that match the built geometry, which the
+     current meshes lack. Autonomous gamebots are also not participants yet:
+     `NpcMovementComponent.cs` around line 652 refuses their paths through
+     `AutonomousRealmBoundary`, and they have no porter route into these maps.
+     Scope if authorized: one map spike for rendering, navmesh and gate
+     interaction, then a decision. Do not build before the owner asks.
+
 107. **Observe the owner-started 0.222.0 session at selected 10x speed.** Owner,
      2026-10-10. **Paused at the owner's request on 2026-10-10.** Captured
      evidence covers 09:05:35-10:03:48 CEST. Assess actual keep-raiding

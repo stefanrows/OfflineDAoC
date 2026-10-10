@@ -12,6 +12,42 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.225.0] - 2026-10-10
+
+### Added
+
+- Battleground diagnostics: `BATTLEGROUND_CAMPAIGN_READY`, `_OCCUPANCY`,
+  `_SQUAD_SPAWNED`/`_SQUAD_SKIPPED` (with reason), `_TICK_SLOW` phase timings,
+  `_CAMP_DOOR_ROUTE` and `_NATIVE_KEEP_READY`/`_UNAVAILABLE`.
+- Murdaigean (25–29) gains keep row 139 at its native client keep. Its two
+  existing gates close at full health, and a lord with up to four retainers
+  is placed only on navigation-proved points behind those gates. The row,
+  gate reset and garrison are additive and idempotent; existing saves load.
+
+### Changed
+
+- Battleground patrols now walk from a camp toward an occupied human
+  position outside sanctuaries (or the camp nearest them while they stand in
+  one), and a newly occupied map schedules its first patrol within about
+  15 seconds. Ambushes start from the camp nearest their target. Patrols
+  re-path only when their participant moves away; sieges are unchanged.
+- Campaign timers, first patrols and ambushes are staggered per map, and at
+  most one camp captain spawns per map per tick.
+- The autonomous realm boundary now covers every campaign battleground region.
+- Hills of Claret, Proving Grounds, Lion's Den, Thidranki and Wilton stay
+  keepless: their client zone data has no placed keep. Server-built keeps
+  and autonomous gamebot participation are recorded as task 109.
+- Server and Tests Release builds passed with zero errors; existing warnings
+  remain. Automated tests were skipped; real-client checks remain pending.
+
+### Fixed
+
+- Unsponsored battleground camps no longer restore a sponsor expiry after a
+  restart, which reset every camp and respawned 27 captains in one tick with
+  multi-second timer stalls (bug 125).
+- Murdaigean camp anchors match their portal keep by area and accept the
+  ordinary route when the native portal gates are closed (bug 122).
+
 ## [0.224.1] - 2026-10-10
 
 ### Added

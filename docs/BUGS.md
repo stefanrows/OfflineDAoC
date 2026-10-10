@@ -6,25 +6,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-122. **Murdaigean starts without any battleground campaign camps.** Verified
-     installed 0.222.0, 2026-10-10 09:06:22 CEST, after an owner-started
-     server run with the ten shipped native campaign meshes. Startup logs
-     `BATTLEGROUND_CAMP_UNAVAILABLE region=251` for Hibernia, Midgard and
-     Albion portal keeps, each `reason=no_proved_outside_camp`. Windows-native
-     read-only world queries show 27 camp rows across the other nine maps and
-     none for region 251. All 27 deployment entries, including the meshes,
-     match the deployment manifest; the four server DLLs match the build.
-     Expected: the 25-29 bracket has verified outside camps, commanders,
-     captains and its campaign director. Actual: all three camp-anchor checks
-     fail; `BattlegroundCampaignManager.Initialize` removes the campaign when
-     no camps exist. The separate admission readiness check does not require
-     an initialized campaign, so entering the map would not establish working
-     objectives or patrols. No client entry was exercised and no workaround
-     was applied. Reproduce by starting this installed build and checking the
-     three region-251 warnings and camp rows. Investigate runtime camp-anchor
-     validation against the earlier standalone route proofs; the cause is
-     not yet established. Observation evidence stays private outside Git.
-
 71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
     2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
     `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
@@ -80,6 +61,28 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+125. **Battlegrounds have no keeps and no visible playerbots.** Owner report,
+     2026-10-10: the recently added battlegrounds show no keeps, and in the
+     level 10 battleground (Hills of Claret, 236) no playerbots are visible.
+     Cause: regions 234, 235, 236, 238 and 240 have no placed keep in the
+     client zone data, so they stay keepless; `/bgs` says so. Murdaigean (251)
+     has a native client keep whose keep row and lord were never created.
+     Patrols spawned about 4.5k units from the landing and walked camp to camp,
+     so they rarely came near a human. Unsponsored camps restored a sponsor
+     expiry after a restart, so every camp reset in one tick (27 captains
+     respawned together, with 0.6–3.3 s TimerService stalls), and the
+     autonomous realm boundary list was stale. Resolution: 234, 235, 236, 238
+     and 240 have no keep in the client data and remain keepless. Murdaigean
+     gains keep 139 with its existing gates closed and a gated lord and
+     retainers placed only on navigation-proved points behind them. Unsponsored
+     camps no longer restore an expiry; at most one captain per campaign spawns
+     per tick; campaign timers are staggered; patrols head for occupied human
+     positions outside sanctuaries and start within about 15 s of a map
+     becoming occupied; the boundary covers every campaign region. Source fix,
+     awaiting installation; real-client checks pending: a human in each
+     battleground sees patrols, Murdaigean has its keep and lord, and no tick
+     stall occurs at restart.
+
 124. **CoreServer CPU load makes the Windows desktop sluggish.** Owner report,
      2026-10-10 (installed version unspecified): Ryzen 7 5700X3D, 8C/16T,
      64 GB RAM; about 86 threads, four logical cores of constant server load,
@@ -117,6 +120,18 @@ with the Release server and Windows launcher. Seventeen files replaced;
 protected accounts, database and settings unchanged. No components were running
 at deployment; the installation remains stopped. Installation is confirmed;
 real-client checks remain pending. Bug 122 was not changed by this shipment.
+
+122. **Murdaigean starts without any battleground campaign camps.** Observed on
+     installed 0.222.0, 2026-10-10: all three region-251 camp-anchor checks
+     failed with `reason=no_proved_outside_camp`. Cause: the closed native
+     portal-keep gates are excluded by the blocking-door route filter, and the
+     portal-keep lookup matched the exact landing centre, which a snapped
+     landing never equals. Resolution: the portal keep is matched by its area;
+     when the blocking-door route fails and that portal keep has a closed gate,
+     the ordinary route to a point proved outside every portal area is accepted
+     and logged as `BATTLEGROUND_CAMP_DOOR_ROUTE`. Murdaigean's keep and gated
+     lord are covered by bug 125. Source fix, awaiting installation; real-client
+     check pending: `BATTLEGROUND_CAMPAIGN_READY region=251` reports its camps.
 
 Earlier installation checkpoint, 2026-10-10: fixes through 0.222.0, including bugs
 120/121 and the latest remote movement changes, are deployed with the server
