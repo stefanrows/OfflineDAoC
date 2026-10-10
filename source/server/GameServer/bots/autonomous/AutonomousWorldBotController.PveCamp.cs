@@ -53,10 +53,27 @@ public sealed partial class AutonomousWorldBotController
             bot.EndurancePercent, usesPower);
     }
 
-    private static void RecordSoloPull(GameBot bot)
+    private long _soloRestWakeTick;
+
+    private void RecordSoloRestWake(GameBot bot)
     {
         long now = GameLoop.GameLoopTime;
-        AutonomousPveCampRuntime.RestStats.RecordPull(now, bot.MaxMana > 0 ? (int?)bot.ManaPercent : null, bot.HealthPercent);
+        _soloRestWakeTick = now;
+        AutonomousPveCampRuntime.RestStats.RecordWake(now, bot.MaxMana > 0 ? (int?)bot.ManaPercent : null, bot.HealthPercent);
+        AutonomousPveCampRuntime.ReportIfDue(now);
+    }
+
+    private void RecordSoloPull(GameBot bot, bool routeThreat = false)
+    {
+        long now = GameLoop.GameLoopTime;
+        // A pull right after the bot got up from a rest is a "rested pull";
+        // one wake explains one pull.
+        long? rested = _soloRestWakeTick > 0 && now - _soloRestWakeTick <= AutonomousPveRestStats.RestedPullWindowMilliseconds
+            ? now - _soloRestWakeTick
+            : null;
+        _soloRestWakeTick = 0;
+        AutonomousPveCampRuntime.RestStats.RecordPull(now, bot.MaxMana > 0 ? (int?)bot.ManaPercent : null,
+            bot.HealthPercent, rested, routeThreat);
         AutonomousPveCampRuntime.ReportIfDue(now);
     }
 
