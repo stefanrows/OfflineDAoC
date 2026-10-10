@@ -351,9 +351,9 @@ companion can also receive a separate damage-based NPC award when its eligible
 owner has no player damage share. Companion and controlled-pet damage stays out
 of player damage percentages, group divisors, and loot-owner selection. The
 companion's XP is clipped at the owner's current absolute XP total, preserving
-any higher saved companion XP. Only NPC kill rewards are accepted for
-companion XP, so a companion still gains no XP from a PvP kill. RvR Realm
-Points are a separate, additive reward: see
+any higher saved companion XP. NPC and PvP kill rewards are accepted for
+companion XP (PvP XP is described below), so a companion gains no XP from
+quest or other sources. RvR Realm Points are a separate, additive reward: see
 [PvP kill rewards for persistent companions](#pvp-kill-rewards-for-persistent-companions).
 
 The `/companions train` command accepts only a specialization from the
@@ -397,11 +397,14 @@ for source status and real-client acceptance.
 
 ## PvP kill rewards for persistent companions
 
-Persistent `/companions` members still receive no XP from a PvP kill, even
-if they are grouped with the player, deal damage, or land the killing blow.
-`GameBot.GainExperience` accepts a persistent companion's NPC rewards only;
-a companion's `eXPSource.Player` award from the paths below is always a
-no-op. Persistent companions do earn Realm Points from a PvP kill, through
+Persistent `/companions` members earn PvP XP from a kill of a real player or
+an autonomous world bot when they deal qualifying damage. The award uses the
+same formula as the player and autonomous bots, scaled by the player XP rate
+(`XP_RATE`) and the usual PvP danger and item XP multipliers, and it never
+exceeds the owner's total experience. Group membership alone does not award
+it. `GameBot.GainExperience` accepts a persistent companion's NPC rewards and
+its `eXPSource.Player` PvP awards; quest and other sources remain no-ops.
+Persistent companions also earn Realm Points from a PvP kill, through
 the same `GameBot.GainRealmPoints` path, reward formula and repeat-kill
 window used for autonomous world bots, against both human and
 autonomous-bot victims. A companion's realm rank is derived the same way an

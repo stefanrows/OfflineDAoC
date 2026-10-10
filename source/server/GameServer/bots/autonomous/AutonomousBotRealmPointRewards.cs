@@ -138,7 +138,7 @@ public static class AutonomousBotRealmPointRewards
                     if (bot.Group != null)
                         AddContribution(bot, pair.Value, bot.Group, groupContributions);
                 }
-                // Persistent companions earn realm points the same way, but never
+                // Persistent companions earn realm points and PvP experience the same way, but never
                 // become the killed bot's loot owner (they stay out of
                 // botContributions / DropPlayerKillLoot below).
                 else if (bot.IsPersistentPlayerCompanion)
@@ -243,9 +243,9 @@ public static class AutonomousBotRealmPointRewards
                 bot.GainExperience(eXPSource.Player, experience, true);
         }
 
-        // Same reward formula and GainRealmPoints path as autonomous bots above,
-        // minus PvP experience (companions stay XP-neutral in PvP; see
-        // GameBot.GainExperience) and minus any loot-owner eligibility.
+        // Same reward formula, GainRealmPoints and GainExperience paths as autonomous
+        // bots above (GameBot.GainExperience caps companion XP at the owner's total),
+        // but companions never become the killed bot's loot owner.
         foreach (KeyValuePair<GameBot, EntityCountTotalDamagePair> pair in companionContributions)
         {
             GameBot companion = pair.Key;
@@ -265,6 +265,11 @@ public static class AutonomousBotRealmPointRewards
                 killedBot.Level, companion.Level);
             if (realmPoints > 0)
                 companion.GainRealmPoints(realmPoints, true);
+
+            long experience = CalculatePlayerKillExperience(killedBot, companion, contribution,
+                totalDamage, damagePercent);
+            if (experience > 0)
+                companion.GainExperience(eXPSource.Player, experience, true);
         }
 
         return isWorthRealmPoints;

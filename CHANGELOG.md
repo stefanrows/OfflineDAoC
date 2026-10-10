@@ -12,7 +12,7 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.225.0] - 2026-10-10
+## [0.226.0] - 2026-10-10
 
 ### Added
 
@@ -22,6 +22,31 @@ package, not this fork's version.
   re-checks server state inside the delete transaction. While the server runs,
   the button and menu item are disabled, and the Companion Manager in-game is
   the way to delete a companion. World bots and DELETE ALL BOTS are unchanged.
+
+## [0.225.0] - 2026-10-10
+
+### Added
+
+- Launcher XP Settings offer 15×, 20×, 25×, 50×, and 100× for both
+  YOUR PLAYER XP and AUTONOMOUS BOT XP (still editable only while the server
+  is stopped).
+
+### Fixed
+
+- Persistent companions now earn PvP experience from qualifying damage on
+  real-player and autonomous-bot kills. They use the same formula as autonomous
+  bots, scaled by the player XP rate and PvP danger multiplier and capped at the
+  owner's total experience. Previously they earned only realm points, so they
+  fell behind the player in PvP. Loot-owner eligibility is unchanged.
+
+### Changed
+
+- AUTONOMOUS BOT XP description now says companions follow the player XP rate.
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-131728`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.224.1] - 2026-10-10
 

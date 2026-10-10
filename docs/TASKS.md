@@ -268,8 +268,8 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
-109. **Delete your own persistent companions from the launcher.** Owner,
-     2026-10-10. Implemented in source **0.225.0**: the Active Population
+110. **Delete your own persistent companions from the launcher.** Owner,
+     2026-10-10. Implemented in source **0.226.0**: the Active Population
      DELETE CHARACTER… button and grid context-menu delete now act on rows for
      persistent companions (Activity Companion, Zone "With <owner>"), not only
      world bots. While the server is stopped, one confirmed delete removes the
@@ -277,11 +277,20 @@ Agent sessions on items 45–48: take the role and context from
      transaction, then refreshes the grid. While the server runs, the button and
      menu item are disabled and the Companion Manager remains the in-game path.
      World-bot deletion, DELETE ALL BOTS and the legacy bot_profiles rows are
-     unchanged. Not built or tested in the authoring session; the Release builds
-     and deployment are pending. Checks pending: with the server stopped,
+     unchanged. Server and Windows launcher Release builds verified; automated
+     tests skipped under project policy. Checks pending: with the server stopped,
      delete a test companion with equipment and backpack items; confirm the grid
      and the companion's items disappear; confirm the button and menu are disabled
      while the server runs; confirm the world-bot delete path still works.
+
+109. **Higher XP rates and companion PvP XP.** Owner, 2026-10-10. Implemented
+     in source **0.225.0**: launcher XP choices up to 100× for player and
+     autonomous bots; persistent companions earn PvP XP from their own
+     qualifying damage, using the autonomous-bot formula at the player XP rate
+     and capped at the owner's experience. Real-client checks are pending:
+     the higher rates apply after restart, and a companion's XP from a
+     player/bot kill matches the owner's at equal level. Deployed 2026-10-10
+     (backup `deploy-20261010-131728`); the installation remains stopped.
 
 108. **AssistTrain companion mode and engagement review.** Owner, 2026-10-10.
      Implemented in source **0.223.0**: `/assisttrain` and manager group order,
