@@ -30,6 +30,8 @@ public static class AutonomousBattlegroundDriver
 
     private sealed class State
     {
+        // The intent chosen this turn, logged once as the first driver action of an entry.
+        public string Action = "none";
         public long NextScan;
         public long NextClaim;
         public long NextAssault;
@@ -53,10 +55,13 @@ public static class AutonomousBattlegroundDriver
     /// </summary>
     public static bool Turn(BotBrain brain, GameBot bot)
     {
-        if (brain == null || bot == null || !bot.IsAlive || bot.IsIncapacitated) return false;
-        if (AutonomousBattlegroundParticipation.IsLeaving(bot) && AutonomousBattlegroundParticipation.TryFinishLeaving(bot)) return false;
+        if (brain == null || bot == null) return false;
+        // Each early return names its reason, so the live log shows why a participant idles.
+        if (!bot.IsAlive) return Idle(bot, "not_alive");
+        if (bot.IsIncapacitated) return Idle(bot, "crowd_controlled");
+        if (AutonomousBattlegroundParticipation.IsLeaving(bot) && AutonomousBattlegroundParticipation.TryFinishLeaving(bot)) return Idle(bot, "left");
         BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(bot.CurrentRegionID);
-        if (definition == null) return false;
+        if (definition == null) return Idle(bot, "outside_battleground");
 
         State state = States.GetValue(bot, CreateState);
         long now = GameLoop.GameLoopTime;
@@ -68,16 +73,30 @@ public static class AutonomousBattlegroundDriver
         }
 
         bool engaged = brain.HasAggro || bot.InCombat;
+        state.Action = engaged ? "engaged" : "idle";
         if (!engaged)
         {
             GameBot leader = bot.Group?.LivingLeader as GameBot;
-            if (AutonomousBattlegroundParticipation.IsLeaving(bot)) Stand(bot);
+            if (AutonomousBattlegroundParticipation.IsLeaving(bot)) { state.Action = "leaving"; Stand(bot); }
             else if (leader != null && leader != bot && leader.IsAlive && leader.CurrentRegion == bot.CurrentRegion)
                 Assist(brain, bot, leader, state, now);
             else Lead(brain, bot, definition, state, now);
         }
+        AutonomousBattlegroundParticipation.RecordDriverTurn(bot, bot.CurrentRegionID, state.Action);
         Observe(bot, state, engaged);
         return true;
+    }
+
+    /// <summary>Drops the driver's per-visit state, so a re-entry starts with a fresh first turn.</summary>
+    public static void ForgetState(GameBot bot)
+    {
+        if (bot != null) States.Remove(bot);
+    }
+
+    private static bool Idle(GameBot bot, string reason)
+    {
+        AutonomousBattlegroundParticipation.RecordDriverIdle(bot, bot.CurrentRegionID, reason);
+        return false;
     }
 
     private static State CreateState(GameBot bot) => new() { Camp = (int)(bot.DatabaseID & int.MaxValue) };
@@ -89,6 +108,7 @@ public static class AutonomousBattlegroundDriver
         if (keep != null && bot.Guild != null && keep.Guild == bot.Guild)
         {
             // Defend: hold the keep, or its nearest camp when the keep has no proven route.
+            state.Action = "defend-keep";
             Point3D keepPoint = new(keep.X, keep.Y, keep.Z);
             if (!GoTo(bot, state, keepPoint, now) && camps.Length > 0)
                 GoTo(bot, state, Nearest(camps, keepPoint), now);
@@ -109,21 +129,28 @@ public static class AutonomousBattlegroundDriver
             {
                 if (bot.IsWithinRadius(target, SiegeRange) && BotSiegeRuntime.Visible(bot, target))
                 {
+                    state.Action = "assault-keep";
                     brain.Attack(target);
                     Stand(bot);
                     return;
                 }
-                if (state.AssaultApproach != null && GoTo(bot, state, state.AssaultApproach, now)) return;
+                if (state.AssaultApproach != null)
+                {
+                    state.Action = "approach-keep";
+                    if (GoTo(bot, state, state.AssaultApproach, now)) return;
+                }
             }
         }
         if (camps.Length == 0)
         {
+            state.Action = "stand-no-camp";
             Stand(bot);
             return;
         }
         int index = state.Camp % camps.Length;
         if (bot.GetDistanceTo(camps[index]) <= ArrivalDistance)
             index = ++state.Camp % camps.Length;
+        state.Action = "roam-camp";
         GoTo(bot, state, camps[index], now);
     }
 
@@ -134,13 +161,19 @@ public static class AutonomousBattlegroundDriver
             bot.IsWithinRadius(target, OpponentRange) && !BotPvpCrowdControl.Protected(bot, target) &&
             BotSiegeRuntime.Visible(bot, target))
         {
+            state.Action = "assist-attack";
             brain.Attack(target);
             return;
         }
         Point3D follow = new(leader.X, leader.Y, leader.Z);
-        if (bot.GetDistanceTo(follow) > FollowDistance) GoTo(bot, state, follow, now);
+        if (bot.GetDistanceTo(follow) > FollowDistance)
+        {
+            state.Action = "follow-leader";
+            GoTo(bot, state, follow, now);
+        }
         else
         {
+            state.Action = "hold-leader";
             state.Goal = follow;
             Stand(bot);
         }
@@ -153,6 +186,7 @@ public static class AutonomousBattlegroundDriver
         PvpKeepCampaign.EnsureClaimPoint(keep);
         KeepClaimPoint steward = keep.ClaimPoint;
         if (steward == null) return false;
+        state.Action = "claim-keep";
         if (bot.IsWithinRadius(steward, WorldMgr.INTERACT_DISTANCE))
         {
             if (now >= state.NextClaim)

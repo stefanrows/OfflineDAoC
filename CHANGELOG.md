@@ -12,6 +12,38 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.234.0] - 2026-10-10
+
+### Added
+
+- Battleground participant diagnostics: `AUTONOMOUS_BG_DRIVER_FIRST_TURN`,
+  `AUTONOMOUS_BG_DRIVER_IDLE reason=`, `AUTONOMOUS_BG_NO_TURN_DIAGNOSTIC` and
+  `BATTLEGROUND_KEEP_GARRISON_PROBE`; `AUTONOMOUS_BG_ENTERED` now logs the
+  destination region (bug 126).
+
+### Changed
+
+- Battleground keeps whose gates cannot be proved by navigation now place
+  their lord near the keep centre on a camp-reachable point inside the keep
+  area (`BATTLEGROUND_KEEP_LORD_UNGATED`), so Hills of Claret, Killaloe,
+  Wilton and Leirvik get capture objectives. Closed doors still precede the
+  lord; existing lords are never moved.
+- Server and Tests Release builds pass with zero errors. Automated tests were
+  skipped; real-client checks remain pending.
+
+### Fixed
+
+- Autonomous battleground participants entered Hills of Claret and were
+  removed as "stuck" within seconds at 20x world speed without acting. Entry
+  and exit now stop, replot and restart the bot like frontier transport; a
+  participant counts as stuck only after acting, and both clocks must pass
+  (5 game minutes and 90 real seconds). Bots that never act leave as
+  `no_turn` (bug 126; root cause still being confirmed by the new logs).
+- The 0.233.0 startup seeder added a second Gwulla beside Stor Gothi Annark
+  because its radius lookup ran before the world index was ready. Merchant
+  checks now scan the region, the seeder runs 30 s after start, and the
+  seeder-made duplicate is removed while the native seller stays (bug 126).
+
 ## [0.233.0] - 2026-10-10
 
 ### Added

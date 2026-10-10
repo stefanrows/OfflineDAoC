@@ -284,7 +284,14 @@ pending until its doors are healed and closed, then ready. The gated lord and
 its retainers stand only on navigation-proved points behind closed doors (lord
 plus two fighters, an archer and a healer; a tower keeps lord and one archer).
 The existing Molvik lord is never moved; if it fails the proof, the server logs
-`BATTLEGROUND_KEEP_LORD_OUTSIDE`. The shared data is
+`BATTLEGROUND_KEEP_LORD_OUTSIDE`. When no gated point exists (Hills of Claret,
+Wilton and the other keeps whose gates give no proof), the garrison probe logs
+`BATTLEGROUND_KEEP_GARRISON_PROBE` and the lord stands on the navigation point
+nearest the keep centre that is inside the keep and reachable from a camp, with
+its retainers at least 200 units apart. That ungated placement logs
+`BATTLEGROUND_KEEP_LORD_UNGATED`. A gated point is always preferred, and the
+assault is unchanged: a closed door is always the target before the lord, so an
+ungated lord is reached only after the doors fall. The shared data is
 `tools/dev/battleground-keeps.json`; the site search and navigation bake are
 described in [development instructions](DEVELOPMENT.md#server-built-battleground-keeps).
 
@@ -362,7 +369,11 @@ merchant within reach. In the current world data every realm's frontier porter
 has one: Sall Fadri beside Master Visur (region 1), Gwulla beside Stor Gothi
 Annark (region 100) and Araisa beside Glasny (region 200). If a save lacks
 Midgard's Gwulla, startup adds that native merchant beside the porter
-(`FRONTIER_MEDALLION_MERCHANT_ADDED`).
+(`FRONTIER_MEDALLION_MERCHANT_ADDED`). The check runs thirty seconds after start
+and scans the region's objects within 3000 units (2D), not the radius index;
+a seeder-made duplicate beside a porter that also has the native seller is
+removed (`FRONTIER_MEDALLION_MERCHANT_DUPLICATE_REMOVED`), and the native row is
+never touched.
 Assigned bots walk to that porter, buy the free battlegrounds medallion from
 the merchant and equip it as a player does, then board with the porter's own
 cast, leaders first and at most eight per cast. Inside, a bot
@@ -372,7 +383,11 @@ present, or roams the camps and fights what it meets; followers assist their
 leader. A death releases it at the campaign arrival camp. It leaves by the
 outside realm capital (bots keep no bind point) on graduation (above the
 bracket or at its Realm Rank ceiling), end of its tour, or five minutes without
-progress. The dedicated driver replaces the Old Frontiers RvR planner, which
+progress, counted only after the participant has taken a driver turn; a
+participant that never takes one leaves as `no_turn` (with an
+`AUTONOMOUS_BG_NO_TURN_DIAGNOSTIC` line). Both rules need five game minutes and
+at least ninety wall-clock seconds, so a fast world speed cannot eject bots. The
+dedicated driver replaces the Old Frontiers RvR planner, which
 hard-codes regions 1, 100 and 200. The frontier boundary is lifted only for
 admitted participants inside their own campaign region; the movement blocks
 for everyone else are unchanged.

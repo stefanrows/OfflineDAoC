@@ -168,8 +168,9 @@ namespace DOL.GS
             return site == null ? NativeSearchRadius : BattlegroundKeepLayouts.SearchRadius(site.Template);
         }
 
-        // Places the lord only on a point proved to sit behind the closed gates: an outside camp
-        // reaches it with the default filters and not with the blocking-door filters.
+        // Places the lord on a point proved to sit behind the closed gates: an outside camp
+        // reaches it with the default filters and not with the blocking-door filters. When no
+        // such point exists, the ungated fallback places it inside the keep instead (logged as a warning).
         public static bool EnsureGarrison(BattlegroundDefinition d, AbstractGameKeep keep, IReadOnlyList<Point3D> outside, int searchRadius)
         {
             if (d == null || keep == null || outside == null || outside.Count == 0 || (ushort)keep.Region != d.RegionId || !IsOfflineKeep(keep)) return false;
@@ -192,10 +193,11 @@ namespace DOL.GS
             Zone zone = WorldMgr.GetZone(d.ZoneId);
             var nav = PathfindingProvider.Instance;
             List<GameKeepDoor> doors = keep.Doors.Values.ToList();
-            if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) || doors.Count == 0 || keep.Area == null)
-                return Unavailable(keep, "no_gated_interior");
+            if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) || keep.Area == null)
+                return Unavailable(keep, "no_navmesh_or_area");
 
-            double doorZ = doors.Average(door => door.Z);
+            // A keep without gates has no gated point at all; it takes the ungated placement below.
+            double doorZ = doors.Count == 0 ? keep.Z : doors.Average(door => door.Z);
             var nodes = new WrappedPathfindingNode[512];
             int queries = 0;
             bool Routed(Vector3 start, Vector3 end, EDtPolyFlags[] filters)
@@ -240,20 +242,85 @@ namespace DOL.GS
                     }
 
             var passing = new List<(Vector3 Point, float DoorDistance)>();
+            var notGated = new List<Vector3>();
             foreach (Vector3 candidate in candidates)
             {
                 if (queries >= MaximumPathQueries) break;
-                if (!Gated(candidate)) continue;
-                float doorDistance = doors.Min(door => Vector2.Distance(new(door.X, door.Y), new(candidate.X, candidate.Y)));
-                passing.Add((candidate, doorDistance));
+                if (!Gated(candidate)) { notGated.Add(candidate); continue; }
+                passing.Add((candidate, DoorDistance(doors, candidate)));
             }
-            if (passing.Count == 0) return Unavailable(keep, "no_gated_interior");
+
+            // Diagnostics, after the gate decision: a candidate outside the gate is either open (an outside
+            // camp reaches it through the doors) or unreachable from every camp. Bounded like the gate proof.
+            int probeBudget = MaximumPathQueries, open = 0, unreachable = 0;
+            foreach (Vector3 candidate in notGated)
+            {
+                if (probeBudget <= 0) break;
+                if (ReachableFromCamps(candidate, zone, outside, ref probeBudget)) open++;
+                else unreachable++;
+            }
+            Log.Info($"BATTLEGROUND_KEEP_GARRISON_PROBE region={region} keep={keep.KeepID} candidates={candidates.Count} gated={passing.Count} open={open} unreachable={unreachable} queries={queries + MaximumPathQueries - probeBudget}");
+
+            if (passing.Count == 0) return PlaceUngatedGarrison(keep, region, zone, outside, candidates, doors);
 
             var ordered = passing.OrderByDescending(point => point.Point.Z).ThenByDescending(point => point.DoorDistance).ToList();
             Vector3 lordPoint = ordered[0].Point;
-            string name = keep.Name;
-            if (!SpawnKeepGuard<GuardLord>(keep, region, lordPoint, $"{name} Lord", GuardTemplateMgr.HighlanderMale))
+            if (!TrySpawnGarrison(keep, region, lordPoint, ordered.Select(point => point.Point).ToList(), out int guards))
                 return Unavailable(keep, "load_failed");
+            string tag = row.CreateInfo.StartsWith(NativePrefix, StringComparison.Ordinal) ? "BATTLEGROUND_NATIVE_KEEP_READY" : "BATTLEGROUND_KEEP_READY";
+            Log.Info($"{tag} region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
+            return true;
+        }
+
+        /// <summary>No two garrison members stand closer than this.</summary>
+        public const float GuardSpacing = 200f;
+
+        /// <summary>The first point, in preference order, at least <paramref name="spacing"/> from every used point; null when none.</summary>
+        public static Vector3? FirstSpacedPoint(IEnumerable<Vector3> ordered, IReadOnlyList<Vector3> used, float spacing = GuardSpacing)
+        {
+            foreach (Vector3 candidate in ordered)
+                if (used.All(other => Vector3.Distance(other, candidate) >= spacing)) return candidate;
+            return null;
+        }
+
+        // Ungated fallback, used only when no candidate sits behind a closed gate. The lord stands on the navmesh
+        // point nearest the keep centre that lies inside the keep and that an outside camp reaches with the default
+        // filters; retainers take the nearest other reachable candidates. The gated placement is always tried first.
+        private static bool PlaceUngatedGarrison(AbstractGameKeep keep, ushort region, Zone zone, IReadOnlyList<Point3D> outside,
+            IReadOnlyList<Vector3> candidates, IReadOnlyList<GameKeepDoor> doors)
+        {
+            var nav = PathfindingProvider.Instance;
+            int budget = MaximumPathQueries;
+            Vector3? centre = null;
+            foreach (int lift in new[] { 0, 600, 1200 })
+            {
+                Vector3? floor = nav.GetClosestPoint(zone, new Vector3(keep.X, keep.Y, keep.Z + lift), 64, 64, 256, nav.DefaultFilters);
+                if (!floor.HasValue || keep.Area?.IsContaining((int)floor.Value.X, (int)floor.Value.Y, (int)floor.Value.Z, false) != true) continue;
+                if (!ReachableFromCamps(floor.Value, zone, outside, ref budget)) continue;
+                centre = floor.Value;
+                break;
+            }
+            if (centre is not Vector3 lordPoint) return Unavailable(keep, "no_lord_point");
+
+            var ordered = new List<(Vector3 Point, float DoorDistance)>();
+            foreach (Vector3 candidate in candidates.OrderBy(point => Vector2.DistanceSquared(new(point.X, point.Y), new(lordPoint.X, lordPoint.Y))))
+            {
+                if (budget <= 0) break;
+                if (!ReachableFromCamps(candidate, zone, outside, ref budget)) continue;
+                ordered.Add((candidate, DoorDistance(doors, candidate)));
+            }
+            if (!TrySpawnGarrison(keep, region, lordPoint, ordered.Select(point => point.Point).ToList(), out int guards))
+                return Unavailable(keep, "load_failed");
+            Log.Warn($"BATTLEGROUND_KEEP_LORD_UNGATED region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
+            return true;
+        }
+
+        // Spawns the lord on lordPoint, then the retainers on the first spaced points of the ordered candidates.
+        private static bool TrySpawnGarrison(AbstractGameKeep keep, ushort region, Vector3 lordPoint, IReadOnlyList<Vector3> ordered, out int guards)
+        {
+            guards = 0;
+            string name = keep.Name;
+            if (!SpawnKeepGuard<GuardLord>(keep, region, lordPoint, $"{name} Lord", GuardTemplateMgr.HighlanderMale)) return false;
 
             // A single tower keeps one archer; a full keep keeps two fighters, an archer and a healer.
             bool tower = BattlegroundKeepLayouts.IsTower(keep.KeepComponents.Select(component => component.Skin).ToList());
@@ -268,24 +335,32 @@ namespace DOL.GS
                 retainers.Add(point => SpawnKeepGuard<GuardHealer>(keep, region, point, $"{name} Healer", GuardTemplateMgr.AvalonianMale));
             }
             var used = new List<Vector3> { lordPoint };
-            int guards = 0;
             foreach (Func<Vector3, bool> retain in retainers)
             {
-                Vector3? free = null;
-                foreach ((Vector3 candidate, float _) in ordered)
-                {
-                    if (!used.All(other => Vector3.Distance(other, candidate) >= 200)) continue;
-                    free = candidate;
-                    break;
-                }
-                if (free is not Vector3 place) continue;
+                if (FirstSpacedPoint(ordered, used) is not Vector3 place) continue;
                 if (!retain(place)) continue;
                 used.Add(place);
                 guards++;
             }
-            string tag = row.CreateInfo.StartsWith(NativePrefix, StringComparison.Ordinal) ? "BATTLEGROUND_NATIVE_KEEP_READY" : "BATTLEGROUND_KEEP_READY";
-            Log.Info($"{tag} region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
             return true;
+        }
+
+        private static float DoorDistance(IReadOnlyList<GameKeepDoor> doors, Vector3 point) =>
+            doors.Count == 0 ? float.MaxValue : doors.Min(door => Vector2.Distance(new(door.X, door.Y), new(point.X, point.Y)));
+
+        // Default-filter reachability from any outside camp. Every path query spends the budget.
+        private static bool ReachableFromCamps(Vector3 target, Zone zone, IReadOnlyList<Point3D> outside, ref int budget)
+        {
+            var nav = PathfindingProvider.Instance;
+            var nodes = new WrappedPathfindingNode[512];
+            foreach (Point3D camp in outside)
+            {
+                if (budget <= 0) return false;
+                budget--;
+                Vector3 origin = new(camp.X, camp.Y, camp.Z);
+                if (nav.GetPathStraight(zone, origin, target, nav.DefaultFilters, nodes).Status == PathfindingStatus.PathFound) return true;
+            }
+            return false;
         }
 
         private static bool SpawnKeepGuard<T>(AbstractGameKeep keep, ushort region, Vector3 point, string name, ushort model) where T : GameKeepGuard, new()

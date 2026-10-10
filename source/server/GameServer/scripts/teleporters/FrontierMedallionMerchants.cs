@@ -30,10 +30,23 @@ namespace DOL.GS.Scripts
         private const int MerchantZTolerance = 200;
         private static readonly Logger Log = LoggerManager.Create(typeof(FrontierMedallionMerchants));
 
+        // The seeder reads the world once startup has settled: at the Started event the region's
+        // objects and the porter's radius index are not yet complete, so a native seller was missed.
+        public const int SeedDelayMilliseconds = 30_000;
+        // The exact ClassType the seeder writes; the native seller is DOL.GS.GameMerchant.
+        public const string SeederClassType = "DOL.GS.Scripts.OFMerchant";
+        private static ECSGameTimer _seedTimer;
+
         [GameServerStartedEvent]
         public static void OnServerStarted(DOLEvent e, object sender, EventArgs args)
         {
             if (!BattlegroundCampaignPolicy.IsEnabled) return;
+            _seedTimer?.Stop();
+            _seedTimer = new ECSGameTimer(null, _ => { RunSeeder(); return 0; }, SeedDelayMilliseconds);
+        }
+
+        private static void RunSeeder()
+        {
             try
             {
                 EnsureMidgardMerchants();
@@ -43,6 +56,10 @@ namespace DOL.GS.Scripts
                 Log.Error("FRONTIER_MEDALLION_MERCHANT_FAILED", exception);
             }
         }
+
+        /// <summary>The seeder's own row: the exact class, the Gwulla name, the Midgard frontier and the medallion list.</summary>
+        public static bool IsSeederDuplicate(string classType, string name, ushort region, string listId) =>
+            classType == SeederClassType && name == MerchantName && region == MidgardFrontierRegion && listId == MerchantListId;
 
         /// <summary>
         /// Candidate merchant positions relative to the porter, in order of preference.
@@ -59,7 +76,10 @@ namespace DOL.GS.Scripts
             yield return (500, 0);
         }
 
-        /// <summary>Adds the Midgard medallion merchant beside each Midgard porter that has no seller in reach.</summary>
+        /// <summary>
+        /// Adds the Midgard medallion merchant beside each Midgard porter that has no seller in reach.
+        /// Where a porter also has the native seller, a seeder-made duplicate in reach is removed.
+        /// </summary>
         public static void EnsureMidgardMerchants()
         {
             GameNPC[] npcs = WorldMgr.GetNPCsFromRegion(MidgardFrontierRegion);
@@ -67,9 +87,40 @@ namespace DOL.GS.Scripts
                 .Where(npc => npc.Realm == eRealm.Midgard && npc.ObjectState == GameObject.eObjectState.Active)
                 .ToArray())
             {
-                if (AutonomousBattlegroundParticipation.SellsMedallion(porter)) continue;
+                GameMerchant[] sellers = AutonomousBattlegroundParticipation.MedallionMerchantsInReach(porter);
+                GameMerchant[] duplicates = sellers.Where(IsSeederDuplicateNpc).ToArray();
+                if (duplicates.Length > 0 && sellers.Any(seller => !IsSeederDuplicateNpc(seller)))
+                {
+                    foreach (GameMerchant duplicate in duplicates) RemoveDuplicate(duplicate);
+                    continue;
+                }
+                if (sellers.Length > 0) continue;
                 AddMerchant(porter);
             }
+        }
+
+        // Reads the persisted row, so the test is the saved class, name, region and list rather than a runtime guess.
+        private static bool IsSeederDuplicateNpc(GameMerchant merchant)
+        {
+            if (merchant?.InternalID == null) return false;
+            DbMob row = GameServer.Database.FindObjectByKey<DbMob>(merchant.InternalID);
+            return row != null && IsSeederDuplicate(row.ClassType, row.Name, row.Region, row.ItemsListTemplateID);
+        }
+
+        private static void RemoveDuplicate(GameMerchant duplicate)
+        {
+            string mob = duplicate.InternalID;
+            try
+            {
+                duplicate.DeleteFromDatabase();
+                duplicate.Delete();
+            }
+            catch (Exception exception)
+            {
+                Log.Error("FRONTIER_MEDALLION_MERCHANT_DUPLICATE_FAILED", exception);
+                return;
+            }
+            Log.Info($"FRONTIER_MEDALLION_MERCHANT_DUPLICATE_REMOVED region={MidgardFrontierRegion} mob={mob}");
         }
 
         private static void AddMerchant(OFTeleporter porter)

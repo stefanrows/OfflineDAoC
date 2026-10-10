@@ -22,6 +22,8 @@ public static class AutonomousBattlegroundParticipation
     public const int SharedActorCap = 40;
     public const int ReconcileIntervalMilliseconds = 60_000;
     public const int StuckMilliseconds = 5 * 60_000;
+    /// <summary>Wall-clock floor for the stuck and no-turn rules, so a fast world speed cannot eject bots in seconds.</summary>
+    public const long StuckWallMilliseconds = 90_000;
     public const int AssignmentTimeoutMilliseconds = 15 * 60_000;
     public const int DepartureLimit = 8;
     public const string BattlegroundMedallionId = "battlegrounds_necklace";
@@ -33,7 +35,7 @@ public static class AutonomousBattlegroundParticipation
     private static readonly Dictionary<GameBot, Entry> Entries = new(ReferenceEqualityComparer.Instance);
     private static ECSGameTimer _timer;
 
-    public enum LeaveReason { Graduated, TourEnded, Unassigned, Stuck }
+    public enum LeaveReason { Graduated, TourEnded, Unassigned, Stuck, NoTurn }
 
     private sealed class Entry
     {
@@ -43,7 +45,12 @@ public static class AutonomousBattlegroundParticipation
         public bool Entered;
         public LeaveReason? Leaving;
         public long AssignedTick;
+        // Game-loop and wall-clock (Environment.TickCount64) stamps of the last real progress.
         public long LastProgressTick;
+        public long LastProgressWall;
+        // Driver turns taken inside the battleground; the stuck rule applies only after one.
+        public int DriverTurns;
+        public HashSet<string> IdleReasons;
     }
 
     [GameServerStartedEvent]
@@ -75,8 +82,27 @@ public static class AutonomousBattlegroundParticipation
         LeaveReason.Graduated => "graduated",
         LeaveReason.TourEnded => "tour_ended",
         LeaveReason.Stuck => "stuck",
+        LeaveReason.NoTurn => "no_turn",
         _ => "unassigned",
     };
+
+    /// <summary>
+    /// A participant that has taken driver turns and has recorded no real progress for both five game
+    /// minutes and ninety wall-clock seconds. Without a turn it is not stuck; see <see cref="IsNoTurn"/>.
+    /// </summary>
+    public static bool IsStuck(long gameNow, long gameLast, long wallNow, long wallLast, bool hadTurn) =>
+        hadTurn && SilentForBothClocks(gameNow, gameLast, wallNow, wallLast);
+
+    /// <summary>A participant that never took a driver turn within the same two-clock window.</summary>
+    public static bool IsNoTurn(long gameNow, long gameLast, long wallNow, long wallLast, bool hadTurn) =>
+        !hadTurn && SilentForBothClocks(gameNow, gameLast, wallNow, wallLast);
+
+    private static bool SilentForBothClocks(long gameNow, long gameLast, long wallNow, long wallLast) =>
+        gameNow - gameLast > StuckMilliseconds && wallNow - wallLast >= StuckWallMilliseconds;
+
+    /// <summary>Square-distance reach test in the 2D plane, used for merchants around a porter.</summary>
+    public static bool IsWithinReach2D(int dx, int dy, int reach) =>
+        (long)dx * dx + (long)dy * dy <= (long)reach * reach;
 
     public static bool IsFrontierRegion(ushort region) => region is 1 or 100 or 200;
 
@@ -111,10 +137,26 @@ public static class AutonomousBattlegroundParticipation
     public static bool HasBattlegroundMedallion(GameBot bot) =>
         bot?.Inventory?.GetItem(eInventorySlot.Mythical)?.Id_nb == BattlegroundMedallionId;
 
+    /// <summary>
+    /// Real merchants that sell the medallion within <see cref="MerchantReach"/> (2D) of the porter, nearest first.
+    /// Scans the region's object list rather than the sub-zone radius index: that index is empty or stale
+    /// until objects have been relocated, so a startup check missed a merchant standing 500 units away.
+    /// </summary>
+    public static GameMerchant[] MedallionMerchantsInReach(OFTeleporter porter)
+    {
+        if (porter == null) return Array.Empty<GameMerchant>();
+        return WorldMgr.GetNPCsFromRegion(porter.CurrentRegionID).OfType<GameMerchant>()
+            .Where(npc => npc.ObjectState == GameObject.eObjectState.Active &&
+                IsWithinReach2D(npc.X - porter.X, npc.Y - porter.Y, MerchantReach) && SellsMedallionItem(npc))
+            .OrderBy(npc => (long)(npc.X - porter.X) * (npc.X - porter.X) + (long)(npc.Y - porter.Y) * (npc.Y - porter.Y))
+            .ToArray();
+    }
+
+    private static bool SellsMedallionItem(GameMerchant merchant) =>
+        merchant.TradeItems?.GetAllItems().Values.OfType<DbItemTemplate>().Any(item => item.Id_nb == BattlegroundMedallionId) == true;
+
     /// <summary>A real merchant within reach of the porter sells the medallion (the free source players use).</summary>
-    public static bool SellsMedallion(OFTeleporter porter) =>
-        porter != null && porter.GetNPCsInRadius(MerchantReach).OfType<GameMerchant>().Any(npc =>
-            npc.TradeItems?.GetAllItems().Values.OfType<DbItemTemplate>().Any(item => item.Id_nb == BattlegroundMedallionId) == true);
+    public static bool SellsMedallion(OFTeleporter porter) => MedallionMerchantsInReach(porter).Length > 0;
 
     /// <summary>Active porters in the region whose medallion merchant is in reach. Empty where no legal source exists.</summary>
     public static OFTeleporter[] SourcePorters(ushort region) =>
@@ -154,7 +196,7 @@ public static class AutonomousBattlegroundParticipation
     public static void NoteProgress(GameBot bot, eAutonomousProgressKind kind)
     {
         lock (Sync)
-            if (bot != null && Entries.TryGetValue(bot, out Entry entry)) entry.LastProgressTick = GameLoop.GameLoopTime;
+            if (bot != null && Entries.TryGetValue(bot, out Entry entry)) Touch(entry, GameLoop.GameLoopTime);
         AutonomousStuckWatchdog.MarkProgress(bot, kind);
     }
 
@@ -182,20 +224,54 @@ public static class AutonomousBattlegroundParticipation
         foreach (GameBot bot in boarders)
         {
             if (!HasBattlegroundMedallion(bot)) continue;
-            if (!BattlegroundCampaignPolicy.TryEnterBot(bot, out string reason))
+            if (!BattlegroundCampaignPolicy.TryEnterBot(bot, out string reason, out ushort destination))
             {
                 Log.Debug($"AUTONOMOUS_BG_ENTRY_REFUSED region={porter.CurrentRegionID} bot=\"{bot.Name}\" reason=\"{reason}\"");
                 continue;
             }
-            ushort region = porter.CurrentRegionID;
+            ushort from = porter.CurrentRegionID;
+            // A new visit starts with a fresh driver state, so its first turn records progress again.
+            AutonomousBattlegroundDriver.ForgetState(bot);
             lock (Sync)
                 if (Entries.TryGetValue(bot, out Entry entry))
                 {
                     entry.Entered = true;
-                    entry.LastProgressTick = GameLoop.GameLoopTime;
+                    Touch(entry, GameLoop.GameLoopTime);
                 }
-            Log.Info($"AUTONOMOUS_BG_ENTERED region={region} bot=\"{bot.Name}\"");
+            Log.Info($"AUTONOMOUS_BG_ENTERED region={destination} from_region={from} bot=\"{bot.Name}\"");
         }
+    }
+
+    /// <summary>Records one driver turn. The first turn of an entry is logged with the action it chose.</summary>
+    public static void RecordDriverTurn(GameBot bot, ushort region, string action)
+    {
+        bool first = false;
+        lock (Sync)
+            if (bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Entered)
+                first = entry.DriverTurns++ == 0;
+        if (first)
+            Log.Info($"AUTONOMOUS_BG_DRIVER_FIRST_TURN region={region} bot=\"{bot.Name}\" action={action}");
+    }
+
+    /// <summary>Why the driver took no action this turn; logged at most once per entry and reason.</summary>
+    public static void RecordDriverIdle(GameBot bot, ushort region, string reason)
+    {
+        bool log = false;
+        lock (Sync)
+            if (bot != null && Entries.TryGetValue(bot, out Entry entry))
+            {
+                entry.IdleReasons ??= new HashSet<string>(StringComparer.Ordinal);
+                log = entry.IdleReasons.Add(reason);
+            }
+        if (log)
+            Log.Info($"AUTONOMOUS_BG_DRIVER_IDLE region={region} bot=\"{bot.Name}\" reason={reason}");
+    }
+
+    // Callers hold Sync. Real progress restarts both stuck clocks.
+    private static void Touch(Entry entry, long gameNow)
+    {
+        entry.LastProgressTick = gameNow;
+        entry.LastProgressWall = Environment.TickCount64;
     }
 
     /// <summary>
@@ -268,8 +344,16 @@ public static class AutonomousBattlegroundParticipation
                     reason = LeaveReason.Unassigned;
                 if (entry.Entered && bot.CurrentRegionID != entry.Definition.RegionId)
                     reason = LeaveReason.Unassigned;
-                if (entry.Entered && reason == null && now - entry.LastProgressTick > StuckMilliseconds)
+                long wall = Environment.TickCount64;
+                bool hadTurn;
+                lock (Sync) hadTurn = entry.DriverTurns > 0;
+                if (entry.Entered && reason == null && IsStuck(now, entry.LastProgressTick, wall, entry.LastProgressWall, hadTurn))
                     reason = LeaveReason.Stuck;
+                if (entry.Entered && reason == null && IsNoTurn(now, entry.LastProgressTick, wall, entry.LastProgressWall, hadTurn))
+                {
+                    reason = LeaveReason.NoTurn;
+                    LogNoTurn(bot, entry.Definition.RegionId);
+                }
                 if (reason != null && !entry.Entered)
                 {
                     Remove(entry, reason.Value);
@@ -298,11 +382,11 @@ public static class AutonomousBattlegroundParticipation
                 GameRelic.IsPlayerCarryingRelic(bot), inside);
             if (!enabled || reason != null)
             {
-                lock (Sync) Entries[bot] = new Entry { Bot = bot, Definition = inside, Entered = true, Leaving = reason ?? LeaveReason.Unassigned, AssignedTick = now, LastProgressTick = now };
+                lock (Sync) Entries[bot] = new Entry { Bot = bot, Definition = inside, Entered = true, Leaving = reason ?? LeaveReason.Unassigned, AssignedTick = now, LastProgressTick = now, LastProgressWall = Environment.TickCount64 };
                 TryFinishLeaving(bot);
                 continue;
             }
-            lock (Sync) Entries[bot] = new Entry { Bot = bot, Definition = inside, Entered = true, AssignedTick = now, LastProgressTick = now };
+            lock (Sync) Entries[bot] = new Entry { Bot = bot, Definition = inside, Entered = true, AssignedTick = now, LastProgressTick = now, LastProgressWall = Environment.TickCount64 };
             Log.Info($"AUTONOMOUS_BG_ENTERED region={inside.RegionId} bot=\"{bot.Name}\" reregistered=true");
         }
 
@@ -320,6 +404,23 @@ public static class AutonomousBattlegroundParticipation
     private static bool IsRegistered(GameBot bot)
     {
         lock (Sync) return Entries.ContainsKey(bot);
+    }
+
+    /// <summary>
+    /// Once per no-turn exit: whether the brain is still scheduled, when it next thinks, and the body's
+    /// life and crowd-control state. Separates "never scheduled" from "scheduled but returning idle".
+    /// </summary>
+    private static void LogNoTurn(GameBot bot, int regionId)
+    {
+        var brain = bot.Brain;
+        bool scheduled = brain != null && brain.ServiceObjectId.IsSet;
+        long untilThink = brain == null ? 0 : brain.NextThinkTick - GameLoop.GameLoopTime;
+        string idle;
+        lock (Sync)
+            idle = Entries.TryGetValue(bot, out Entry entry) && entry.IdleReasons != null ? string.Join(",", entry.IdleReasons) : "none";
+        Log.Info($"AUTONOMOUS_BG_NO_TURN_DIAGNOSTIC region={regionId} bot=\"{bot.Name}\" brain_scheduled={scheduled} " +
+            $"next_think_ms={untilThink} alive={bot.IsAlive} crowd_controlled={bot.IsCrowdControlled} health={bot.Health} " +
+            $"object_state={bot.ObjectState} idle_reasons={idle}");
     }
 
     private static void Remove(Entry entry, LeaveReason reason)
@@ -361,7 +462,7 @@ public static class AutonomousBattlegroundParticipation
             string label = bot.Group == null ? "solo" : anchor.Name;
             lock (Sync)
                 foreach (GameBot member in members)
-                    Entries[member] = new Entry { Bot = member, Definition = definition, Group = label, AssignedTick = now, LastProgressTick = now };
+                    Entries[member] = new Entry { Bot = member, Definition = definition, Group = label, AssignedTick = now, LastProgressTick = now, LastProgressWall = Environment.TickCount64 };
             used[(ushort)definition.RegionId] = present + members.Length;
             foreach (GameBot member in members)
                 Log.Info($"AUTONOMOUS_BG_ASSIGNED region={definition.RegionId} bot=\"{member.Name}\" level={member.Level} group=\"{label}\"");

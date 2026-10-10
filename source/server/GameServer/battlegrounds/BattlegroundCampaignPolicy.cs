@@ -74,11 +74,14 @@ namespace DOL.GS
             return true;
         }
 
+        public static bool TryEnterBot(GameBot bot, out string reason) => TryEnterBot(bot, out reason, out _);
+
         // Autonomous participants use the admission, landing and move of TryEnter.
         // Bots keep no bind point, so the bind-outside check does not apply to them.
-        public static bool TryEnterBot(GameBot bot, out string reason)
+        public static bool TryEnterBot(GameBot bot, out string reason, out ushort destinationRegion)
         {
             reason = null;
+            destinationRegion = 0;
             if (bot == null) { reason = "No battleground participant."; return false; }
             BattlegroundDefinition definition = BattlegroundCampaignCatalog.ForLevel(bot.Level);
             if (!CanEnter(definition, bot, out reason)) return false;
@@ -86,9 +89,36 @@ namespace DOL.GS
             { reason = "The bot must be alive, out of combat and carrying no relic to enter."; return false; }
             GameLocation landing = GetLanding(bot, definition);
             if (landing == null) { reason = "The battleground has no arrival camp."; return false; }
+            StopForTransfer(bot);
             if (!bot.MoveTo(landing.RegionID, landing.X, landing.Y, landing.Z, landing.Heading))
             { reason = "The battleground transfer could not be completed."; return false; }
+            destinationRegion = landing.RegionID;
+            SettleTransfer(bot);
             return true;
+        }
+
+        // The mover must not carry an old route, stable ticket or follow order into the new region.
+        // AutonomousFrontierTransport stops the same way before its cross-region MoveTo.
+        private static void StopForTransfer(GameBot bot)
+        {
+            bot.StopMovingOnPath();
+            bot.StopMoving();
+        }
+
+        // After a real transfer the bot must belong to the battleground driver again: no stable
+        // route, a fresh path plan, a brain due to think now, and the watchdog's movement clock
+        // restarted. The participation clock is restarted by its caller.
+        private static void SettleTransfer(GameBot bot)
+        {
+            if (bot.IsOnStableMasterRoute) bot.CompleteStableMasterRoute();
+            bot.ForcePathReplot();
+            if (bot.Brain is { } brain)
+            {
+                brain.Start();
+                brain.NextThinkTick = GameLoop.GameLoopTime;
+            }
+            AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Movement);
+            AutonomousBotStatusPersistence.Queue(bot, true);
         }
 
         // The bot's equivalent of /battleground leave. Bots keep no bind point, so the
@@ -102,8 +132,10 @@ namespace DOL.GS
             if (GameRelic.IsPlayerCarryingRelic(bot)) { reason = "Return the relic before leaving."; return false; }
             AutonomousStuckWatchdog.CapitalLocation capital = AutonomousStuckWatchdog.SpreadAround(
                 AutonomousStuckWatchdog.SafeCapitalFor(bot.Realm), bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID);
+            StopForTransfer(bot);
             if (!bot.MoveTo(capital.RegionId, capital.X, capital.Y, capital.Z, capital.Heading))
             { reason = "The outside destination is unavailable."; return false; }
+            SettleTransfer(bot);
             return true;
         }
 

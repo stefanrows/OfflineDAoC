@@ -61,6 +61,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+126. **Battleground participants are ejected without acting; four keeps have
+     no lord; Midgard medallion merchant duplicated.** Installed 0.233.0,
+     2026-10-10 14:20–14:27, world speed 20x. Livununny, Yrgerd and Caoaedra
+     entered Hills of Claret and left `reason=stuck` 24–40 s later with no
+     recorded driver turn. `BATTLEGROUND_KEEP_UNAVAILABLE reason=no_gated_interior`
+     for 236, 237, 240 and 242. `FRONTIER_MEDALLION_MERCHANT_ADDED` created a
+     second Gwulla beside the native one. Source 0.234.0: entry/exit restart
+     and replot the bot, the stuck rule needs an actual turn plus 5 game
+     minutes and 90 real seconds, new driver diagnostics, an ungated lord
+     fallback, region-scan merchant checks with a delayed seeder that removes
+     its duplicate. The participant root cause is not yet proven: read
+     `AUTONOMOUS_BG_DRIVER_IDLE` / `AUTONOMOUS_BG_NO_TURN_DIAGNOSTIC` on the next
+     run. Pending: bots stay and fight in a battleground; lords present in the
+     four keeps; one Gwulla remains.
+
 125. **Battlegrounds have no keeps and no visible playerbots.** Owner report,
      2026-10-10: the recently added battlegrounds show no keeps, and in the
      level 10 battleground (Hills of Claret, 236) no playerbots are visible.

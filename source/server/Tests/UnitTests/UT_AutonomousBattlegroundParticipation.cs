@@ -155,6 +155,77 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void StuckNeedsFiveGameMinutesNinetyWallSecondsAndADriverTurn()
+        {
+            const long fiveGameMinutes = 300_000;
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.IsStuck(fiveGameMinutes + 1, 0, 90_001, 0, hadTurn: true), Is.True,
+                    "Both clocks elapsed after a turn");
+                Assert.That(AutonomousBattlegroundParticipation.IsStuck(fiveGameMinutes, 0, 900_000, 0, hadTurn: true), Is.False,
+                    "The game clock must pass five minutes, not reach them");
+                Assert.That(AutonomousBattlegroundParticipation.IsStuck(fiveGameMinutes + 1, 0, 89_999, 0, hadTurn: true), Is.False,
+                    "A fast world speed cannot eject a bot inside ninety wall-clock seconds");
+                Assert.That(AutonomousBattlegroundParticipation.IsStuck(fiveGameMinutes + 1, 0, 90_000, 0, hadTurn: true), Is.True,
+                    "The wall-clock floor is inclusive");
+                Assert.That(AutonomousBattlegroundParticipation.IsStuck(fiveGameMinutes + 1, 0, 90_001, 0, hadTurn: false), Is.False,
+                    "Without a driver turn the bot is no_turn, never stuck");
+            });
+        }
+
+        [Test]
+        public void NoTurnUsesTheSameTwoClockWindowWithoutAnyDriverTurn()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.IsNoTurn(300_001, 0, 90_000, 0, hadTurn: false), Is.True);
+                Assert.That(AutonomousBattlegroundParticipation.IsNoTurn(300_001, 0, 89_000, 0, hadTurn: false), Is.False,
+                    "Not yet ninety wall-clock seconds");
+                Assert.That(AutonomousBattlegroundParticipation.IsNoTurn(300_000, 0, 120_000, 0, hadTurn: false), Is.False,
+                    "Not yet five game minutes");
+                Assert.That(AutonomousBattlegroundParticipation.IsNoTurn(300_001, 0, 90_000, 0, hadTurn: true), Is.False,
+                    "A participant that has turned is judged by IsStuck");
+            });
+        }
+
+        [Test]
+        public void NoTurnIsItsOwnLeaveReason()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.Describe(AutonomousBattlegroundParticipation.LeaveReason.NoTurn), Is.EqualTo("no_turn"));
+                Assert.That(AutonomousBattlegroundParticipation.Describe(AutonomousBattlegroundParticipation.LeaveReason.Stuck), Is.EqualTo("stuck"));
+            });
+        }
+
+        [Test]
+        public void MerchantReachIsMeasuredInTheTwoDimensionalPlane()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.IsWithinReach2D(3000, 0, 3000), Is.True, "On the reach circle");
+                Assert.That(AutonomousBattlegroundParticipation.IsWithinReach2D(2121, 2121, 3000), Is.True, "Diagonal inside the circle");
+                Assert.That(AutonomousBattlegroundParticipation.IsWithinReach2D(2200, 2200, 3000), Is.False, "Diagonal outside the circle");
+                Assert.That(AutonomousBattlegroundParticipation.IsWithinReach2D(-373, -383, 3000), Is.True, "A frontier merchant offset");
+            });
+        }
+
+        [Test]
+        public void SeederDuplicateMatchesOnlyItsOwnExactRow()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(FrontierMedallionMerchants.SeederClassType, Is.EqualTo(typeof(OFMerchant).FullName));
+                Assert.That(FrontierMedallionMerchants.IsSeederDuplicate("DOL.GS.Scripts.OFMerchant", "Gwulla", 100, "OFMerchant_Mid"), Is.True);
+                Assert.That(FrontierMedallionMerchants.IsSeederDuplicate("DOL.GS.GameMerchant", "Gwulla", 100, "OFMerchant_Mid"), Is.False,
+                    "The native seller is never a duplicate");
+                Assert.That(FrontierMedallionMerchants.IsSeederDuplicate("DOL.GS.Scripts.OFMerchant", "Gwulla", 101, "OFMerchant_Mid"), Is.False);
+                Assert.That(FrontierMedallionMerchants.IsSeederDuplicate("DOL.GS.Scripts.OFMerchant", "Gwulla", 100, "OFMerchant_Other"), Is.False);
+                Assert.That(FrontierMedallionMerchants.IsSeederDuplicate("DOL.GS.Scripts.OFMerchant", "Other", 100, "OFMerchant_Mid"), Is.False);
+            });
+        }
+
+        [Test]
         public void MerchantReachCoversTheMedallionSourceSearch()
         {
             Assert.That(AutonomousBattlegroundParticipation.MerchantReach, Is.EqualTo(3000));

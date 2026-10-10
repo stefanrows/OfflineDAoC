@@ -93,9 +93,7 @@ public sealed partial class AutonomousWorldBotController
         }
         if (_battlegroundMerchant?.ObjectState != GameObject.eObjectState.Active ||
             !_battlegroundMerchant.TradeItems.GetAllItems().Values.OfType<DbItemTemplate>().Any(item => item.Id_nb == medallion))
-            _battlegroundMerchant = porter.GetNPCsInRadius(AutonomousBattlegroundParticipation.MerchantReach).OfType<GameMerchant>()
-                .Where(npc => npc.TradeItems?.GetAllItems().Values.OfType<DbItemTemplate>().Any(item => item.Id_nb == medallion) == true)
-                .OrderBy(porter.GetDistanceTo).FirstOrDefault();
+            _battlegroundMerchant = AutonomousBattlegroundParticipation.MedallionMerchantsInReach(porter).FirstOrDefault();
         GameMerchant merchant = _battlegroundMerchant;
         if (merchant == null) return false;
         if (!ApproachSupplyMerchant(bot, merchant))
