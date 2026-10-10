@@ -274,7 +274,8 @@ Agent sessions on items 45–48: take the role and context from
      qualifying damage, using the autonomous-bot formula at the player XP rate
      and capped at the owner's experience. Real-client checks are pending:
      the higher rates apply after restart, and a companion's XP from a
-     player/bot kill matches the owner's at equal level.
+     player/bot kill matches the owner's at equal level. Deployed 2026-10-10
+     (backup `deploy-20261010-131728`); the installation remains stopped.
 
 108. **AssistTrain companion mode and engagement review.** Owner, 2026-10-10.
      Implemented in source **0.223.0**: `/assisttrain` and manager group order,

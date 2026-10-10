@@ -32,7 +32,10 @@ package, not this fork's version.
 
 - AUTONOMOUS BOT XP description now says companions follow the player XP rate.
 - Server and Windows launcher Release builds pass. Automated tests were skipped.
-  Real-client verification is pending.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-131728`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.224.1] - 2026-10-10
 
