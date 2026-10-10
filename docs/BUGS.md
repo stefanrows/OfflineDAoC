@@ -72,7 +72,10 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      expiry after a restart, so every camp reset in one tick (27 captains
      respawned together, with 0.6–3.3 s TimerService stalls), and the
      autonomous realm boundary list was stale. Resolution: 234, 235, 236, 238
-     and 240 have no keep in the client data and remain keepless. Murdaigean
+     and 240 had no keep in the client data and stayed keepless at the time.
+     Follow-up in task 112: the server now builds keeps for regions 234, 235, 236,
+     237, 238, 240, 241 and 242 (pending real-client check); Thidranki (238) sits on a relaxed site.
+     Murdaigean
      gains keep 139 with its existing gates closed and a gated lord and
      retainers placed only on navigation-proved points behind them. Unsponsored
      camps no longer restore an expiry; at most one captain per campaign spawns

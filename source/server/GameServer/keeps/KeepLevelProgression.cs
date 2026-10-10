@@ -9,7 +9,8 @@ namespace DOL.GS.Keeps
         public static bool IsGuildKeep(DbKeep keep) => keep != null && keep.BaseLevel < 100 &&
             keep.SkinType != 99 && !keep.LordDefeated &&
             !string.IsNullOrEmpty(keep.ClaimedGuildName) &&
-            keep.ClaimedGuildName != PvpKeepCampaign.GarrisonName;
+            keep.ClaimedGuildName != PvpKeepCampaign.GarrisonName &&
+            BattlegroundCampaignCatalog.Find((ushort)keep.Region) == null;
 
         // Per-keep marker makes the owner-requested reset restart-safe, including
         // guilds that have not yet been resolved by the autonomous crew loader.

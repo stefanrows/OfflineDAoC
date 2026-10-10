@@ -249,17 +249,17 @@ armies. Its realm teams are adapted here to Camlann alliances. This fork uses
 its own controller and existing class AI; Eden's private source and exact
 tuning are unavailable.
 
-| Native map | Levels | Exclusive Realm Rank ceiling | Native central keep |
+| Native map | Levels | Exclusive Realm Rank ceiling | Central keep |
 |---|---:|---:|---|
-| The Proving Grounds (234) | 1–4 | Unlimited | Absent in client data |
-| The Lion's Den (235) | 5–9 | Unlimited | Absent in client data |
-| The Hills of Claret (236) | 10–14 | RR1L5 | Absent in client data |
-| Killaloe (237) | 15–19 | RR2L0 | Keep row only; no keep model in client data |
-| Thidranki (238) | 20–24 | RR2L5 | Absent in client data |
+| The Proving Grounds (234) | 1–4 | Unlimited | Server-built tower (keep 140) from native pieces; lord gating to verify |
+| The Lion's Den (235) | 5–9 | Unlimited | Server-built fort (keep 141) from native pieces; no gate or tower skin, so no door and no lord |
+| The Hills of Claret (236) | 10–14 | RR1L5 | Server-built keep (keep 142) from native pieces; lord gating to verify |
+| Killaloe (237) | 15–19 | RR2L0 | Keep row 138 gains server-built parts from native pieces |
+| Thidranki (238) | 20–24 | RR2L5 | Server-built keep (keep 143) on a relaxed site: ground variance 183 (limit 200), lowest-ground Z, 5,888 units from the portal centre |
 | Murdaigean (251) | 25–29 | RR3L0 | Native client keep; keep row, gates and gated lord added in source (pending verification) |
-| Wilton (240) | 30–34 | RR3L5 | Absent in client data |
-| Molvik (241) | 35–39 | RR4L0 | Lord and guards; no walls in client data |
-| Leirvik (region242, zone254) | 40–44 | RR4L5 | Keep row only; no keep model in client data |
+| Wilton (240) | 30–34 | RR3L5 | Server-built keep (keep 144) from native pieces; lord gating to verify |
+| Molvik (241) | 35–39 | RR4L0 | Native lord kept; server-built parts added around keep 132 from native pieces |
+| Leirvik (region242, zone254) | 40–44 | RR4L5 | Keep row 134 gains server-built parts from native pieces |
 | Cathal Valley (165) | 45–49 | RR5L0 | Present |
 
 Ceilings are fork tuning, not current Eden rules. A character at the ceiling
@@ -274,6 +274,32 @@ imported central gates, so the assault approaches its lord directly. Murdaigean'
 native keep (`Hfrontkeep.nif`) gets keep row 139; its existing closed gates are
 kept, and its gated lord and retainers stand only on navigation-proved points
 behind those gates. Both are added in source and await real-client verification.
+
+Server-built keeps (task 112): keeps 140–144 are new rows, and existing rows
+132, 134 and 138 gain components only while they have none. Components come
+from the `/keep fastcreate` bracket layouts (`BattlegroundKeepLayouts.cs`), and
+their doors come from the native KeepPosition rows. The keeps stay at level 1,
+so the part tier does not change. A new or newly componented keep is marked
+pending until its doors are healed and closed, then ready. The gated lord and
+its retainers stand only on navigation-proved points behind closed doors (lord
+plus two fighters, an archer and a healer; a tower keeps lord and one archer).
+The existing Molvik lord is never moved; if it fails the proof, the server logs
+`BATTLEGROUND_KEEP_LORD_OUTSIDE`. The shared data is
+`tools/dev/battleground-keeps.json`; the site search and navigation bake are
+described in [development instructions](DEVELOPMENT.md#server-built-battleground-keeps).
+
+Navigation for these keeps is baked from the client frontier kit, as native
+pieces at the server's component positions. Orientation is checked against the
+native door nodes: each gate or tower has one server door that matches a native
+door node within 96 units, and the other server door has no native node. That
+unmatched door becomes a Door volume at its position, so the server still
+registers it as blocking. Pieces that fail to load or have no triangles fall
+back to approximate cylinder walls. Lion's Den has no gate and no lord. Thidranki
+is the one site found outside the 96-unit ground rule: its best spot has
+variance 183, accepted under a relaxed 200 limit, with the keep Z at the lowest
+ground across the footprint so the walls sink into the slope. Its solid-fixture
+test is not applied, and the finder logs the fixture count. Lord gating and
+the walls' real-client alignment are unverified until the owner checks them.
 
 `/battleground list|join|leave|status` exposes campaign state; `/bgs` is the
 alias. Admission proves the bracket, loaded native mesh and a safe snapped
@@ -373,7 +399,9 @@ Pending owner checks: bracket arrival, graduation and death release;
 guild/group friendliness, hostile same-realm combat and portal sanctuaries;
 sub-10 safety after leaving; quest persistence and legitimate kill credit;
 concurrent funding, captain death/respawn and restart behavior; physical
-door/lord/steward captures; encounter scaling and optional automatic grouping.
+door/lord/steward captures; encounter scaling and optional automatic grouping;
+server-built keep placement, wall and door alignment, lord gating and guard
+placement on the new keeps (task 112).
 No server or client was started for development verification.
 
 ## Non-goals

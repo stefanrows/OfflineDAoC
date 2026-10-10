@@ -6,19 +6,6 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
-112. **Battleground server-built keeps and autonomous gamebot participation: real-client spike (idea, not authorized).** Owner, 2026-10-10, after bug 125.
-     Only Murdaigean's native keep is restored from client data. The client
-     zone data has no keep model for 234, 235, 236, 238 and 240, and only keep
-     rows without a keep model for 237 and 242. Building component keeps (walls,
-     gates, towers) there is a server-side build, but it needs a real-client
-     rendering check first, because component skins and positions must look right
-     in the client, and navmesh walls that match the built geometry, which the
-     current meshes lack. Autonomous gamebots are also not participants yet:
-     `NpcMovementComponent.cs` around line 652 refuses their paths through
-     `AutonomousRealmBoundary`, and they have no porter route into these maps.
-     Scope if authorized: one map spike for rendering, navmesh and gate
-     interaction, then a decision. Do not build before the owner asks.
-
 107. **Observe the owner-started 0.222.0 session at selected 10x speed.** Owner,
      2026-10-10. **Paused at the owner's request on 2026-10-10.** Captured
      evidence covers 09:05:35-10:03:48 CEST. Assess actual keep-raiding
@@ -280,6 +267,33 @@ Agent sessions on items 45–48: take the role and context from
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
 ## Implemented in source; installation verification pending
+
+112. **Eden-style battlegrounds: server-built keeps, keep-aware navmeshes and
+     autonomous gamebot participation.** Owner, 2026-10-10, after bug 125
+     ("replicate the BGs like on Eden or Blackthorn"; Camlann alliances kept,
+     bracket gamebots, all phases authorized). Implemented in source (version in
+     CHANGELOG): keeps 140–144 are new rows, and rows 132,
+     134 and 138 gain `/keep fastcreate` components while they have none. Doors come
+     from native KeepPosition rows; corrupt offsets are skipped. Lords and
+     retainers spawn only on navigation-proved points behind closed doors. Shared
+     data: `tools/dev/battleground-keeps.json`. Navigation: native pieces from the
+     client frontier kit for all eight campaign regions. Each gate or tower has one
+     server door without a native door node, which becomes a Door volume. Lion's
+     Den (235) has no door, so no lord. Thidranki (238) is sited on a relaxed rule
+     (ground variance 183 under a 200 limit, lowest-ground Z, fixture test not
+     applied; 5,888 units from the portal centre). Details: docs/CAMLANN.md
+     (battleground campaign) and docs/DEVELOPMENT.md (battleground navigation).
+     Real-client checks pending: keep placement and look, wall and door alignment,
+     lord gating and guard placement, the Thidranki site's distance and terrain, and
+     the Lion's Den keep with no door.
+     Autonomous participation: bracket-eligible RvR-tour bots buy the free
+     battleground medallion from a real merchant, board real porters (at most 8
+     per cast, 24 per map, sharing a 40-actor cap with the director), fight over
+     the campaign keep (defend, claim, assault without rams, roam) and graduate
+     out to their capital. Midgard's frontier has no medallion seller, and the
+     1–14 brackets have almost no eligible bots, so the director remains their
+     population. Checks pending: bots arrive, fight, claim and graduate; no bot
+     walks through keep walls.
 
 111. **Delete your own persistent companions from the launcher.** Owner,
      2026-10-10. Implemented in source **0.227.0**: the Active Population

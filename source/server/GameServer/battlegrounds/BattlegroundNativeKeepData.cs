@@ -67,9 +67,10 @@ namespace DOL.GS
         private const int MurdaigeanRegion = 251;
         private const int MurdaigeanX = 33280;
         private const int MurdaigeanY = 38272;
+        private const string NativePrefix = "offline-native-bg:";
         private const string PendingCreateInfo = "offline-native-bg:251:pending";
         private const string ReadyCreateInfo = "offline-native-bg:251";
-        private const int SearchRadius = 1100;
+        private const int NativeSearchRadius = 1100;
         private const int SearchStep = 128;
         private const int MaximumPathQueries = 400;
 
@@ -81,10 +82,18 @@ namespace DOL.GS
             CreateInfo = PendingCreateInfo,
         };
 
-        // Runs before keeps load, so the native keep gets its area, doors and guards like any other keep.
+        // Runs before keeps load, so each battleground keep gets its area, doors and guards like any other keep.
         public static void EnsureKeepRows()
         {
             if (!BattlegroundCampaignPolicy.IsEnabled) return;
+            EnsureMurdaigeanKeepRow();
+            foreach (KeepSite site in BattlegroundKeepLayouts.Sites) EnsureSiteKeep(site);
+            foreach (KeepSite blocked in BattlegroundKeepLayouts.BlockedSites)
+                Log.Warn($"BATTLEGROUND_KEEP_BLOCKED region={blocked.Region} keep={blocked.KeepId} reason=no_flat_clear_site");
+        }
+
+        private static void EnsureMurdaigeanKeepRow()
+        {
             if (GameServer.Database.SelectObject<DbKeep>(DB.Column("Region").IsEqualTo(MurdaigeanRegion).And(DB.Column("BaseLevel").IsLessThan(100))) != null) return;
             if (GameServer.Database.SelectObject<DbKeep>(DB.Column("KeepID").IsEqualTo(MurdaigeanKeepId)) != null)
             {
@@ -99,13 +108,74 @@ namespace DOL.GS
             Log.Info($"BATTLEGROUND_NATIVE_KEEP_ROW_ADDED region={MurdaigeanRegion} keep={MurdaigeanKeepId}");
         }
 
-        // Places the native lord only on a point proved to sit behind the closed gates: an outside camp
-        // reaches it with the default filters and not with the blocking-door filters.
-        public static bool EnsureGarrison(BattlegroundDefinition d, AbstractGameKeep keep, IReadOnlyList<Point3D> outside)
+        // A missing row is created from the site. Components are added only when the keep has none, so
+        // existing component rows stay authoritative. A keep that gets components is marked pending, so
+        // EnsureGarrison heals its doors and proves its lord position on the next keep start.
+        private static void EnsureSiteKeep(KeepSite site)
         {
-            if (d?.RegionId != MurdaigeanRegion || keep == null || keep.KeepID != MurdaigeanKeepId || outside == null || outside.Count == 0) return false;
+            BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(site.Region);
+            if (definition == null) return;
+            string pending = BattlegroundKeepLayouts.OfflineKeepPrefix + site.Region + BattlegroundKeepLayouts.PendingSuffix;
+            DbKeep row = GameServer.Database.SelectObject<DbKeep>(DB.Column("KeepID").IsEqualTo(site.KeepId));
+            if (row == null)
+            {
+                row = new DbKeep
+                {
+                    KeepID = site.KeepId, Name = site.Name, Region = site.Region,
+                    X = site.X, Y = site.Y, Z = site.Z, Heading = (ushort)site.Heading, Realm = 0, OriginalRealm = 0,
+                    Level = 1, BaseLevel = (byte)definition.MaxLevel, KeepType = 0, SkinType = 0, ClaimedGuildName = string.Empty,
+                    CreateInfo = pending,
+                };
+                if (!GameServer.Database.AddObject(row))
+                {
+                    Log.Warn($"BATTLEGROUND_KEEP_UNAVAILABLE region={site.Region} keep={site.KeepId} reason=keep_row_not_saved");
+                    return;
+                }
+                Log.Info($"BATTLEGROUND_KEEP_ROW_ADDED region={site.Region} keep={site.KeepId}");
+            }
+            else if (row.Region != site.Region)
+            {
+                Log.Warn($"BATTLEGROUND_KEEP_UNAVAILABLE region={site.Region} keep={site.KeepId} reason=id_conflict");
+                return;
+            }
+            if (GameServer.Database.SelectObjects<DbKeepComponent>(DB.Column("KeepID").IsEqualTo(site.KeepId)).Count != 0) return;
+
+            if (!(row.CreateInfo ?? string.Empty).StartsWith(BattlegroundKeepLayouts.OfflineKeepPrefix, StringComparison.Ordinal))
+            {
+                row.CreateInfo = pending;
+                GameServer.Database.SaveObject(row);
+            }
+            int count = 0;
+            foreach (ComponentSpec spec in BattlegroundKeepLayouts.Template(site.Template))
+            {
+                if (GameServer.Database.AddObject(new DbKeepComponent(spec.Id, spec.Skin, spec.X, spec.Y, spec.Heading, 0, 3200, site.KeepId, pending)))
+                    count++;
+            }
+            Log.Info($"BATTLEGROUND_KEEP_COMPONENTS_ADDED region={site.Region} keep={site.KeepId} count={count}");
+        }
+
+        public static bool IsOfflineKeep(AbstractGameKeep keep)
+        {
+            string info = keep?.DBKeep?.CreateInfo ?? string.Empty;
+            return info.StartsWith(NativePrefix, StringComparison.Ordinal) ||
+                info.StartsWith(BattlegroundKeepLayouts.OfflineKeepPrefix, StringComparison.Ordinal);
+        }
+
+        // Garrison search reach: the native Murdaigean keep keeps its historical radius; server-built keeps scale with their template.
+        public static int GarrisonSearchRadius(AbstractGameKeep keep)
+        {
+            KeepSite site = keep == null ? null : BattlegroundKeepLayouts.FindSite(keep.KeepID);
+            return site == null ? NativeSearchRadius : BattlegroundKeepLayouts.SearchRadius(site.Template);
+        }
+
+        // Places the lord only on a point proved to sit behind the closed gates: an outside camp
+        // reaches it with the default filters and not with the blocking-door filters.
+        public static bool EnsureGarrison(BattlegroundDefinition d, AbstractGameKeep keep, IReadOnlyList<Point3D> outside, int searchRadius)
+        {
+            if (d == null || keep == null || outside == null || outside.Count == 0 || (ushort)keep.Region != d.RegionId || !IsOfflineKeep(keep)) return false;
             DbKeep row = keep.DBKeep;
-            if (row.CreateInfo?.EndsWith(":pending", StringComparison.Ordinal) == true)
+            ushort region = d.RegionId;
+            if (row.CreateInfo.EndsWith(BattlegroundKeepLayouts.PendingSuffix, StringComparison.Ordinal))
             {
                 foreach (GameKeepDoor door in keep.Doors.Values)
                 {
@@ -114,17 +184,16 @@ namespace DOL.GS
                     door.SaveIntoDatabase();
                 }
                 if (!keep.Doors.Values.Any(door => door.State == eDoorState.Closed))
-                    return Unavailable("no_closed_door");
-                row.CreateInfo = ReadyCreateInfo;
+                    return Unavailable(keep, "no_closed_door");
+                row.CreateInfo = row.CreateInfo[..^BattlegroundKeepLayouts.PendingSuffix.Length];
                 GameServer.Database.SaveObject(row);
             }
-            if (keep.Guards.Values.OfType<GuardLord>().Any()) return true;
 
-            Zone zone = WorldMgr.GetZone(MurdaigeanRegion);
+            Zone zone = WorldMgr.GetZone(d.ZoneId);
             var nav = PathfindingProvider.Instance;
             List<GameKeepDoor> doors = keep.Doors.Values.ToList();
             if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) || doors.Count == 0 || keep.Area == null)
-                return Unavailable("no_gated_interior");
+                return Unavailable(keep, "no_gated_interior");
 
             double doorZ = doors.Average(door => door.Z);
             var nodes = new WrappedPathfindingNode[512];
@@ -134,19 +203,39 @@ namespace DOL.GS
                 queries++;
                 return nav.GetPathStraight(zone, start, end, filters, nodes).Status == PathfindingStatus.PathFound;
             }
+            bool Gated(Vector3 point)
+            {
+                foreach (Point3D camp in outside)
+                {
+                    if (queries + 2 > MaximumPathQueries) return false;
+                    Vector3 origin = new(camp.X, camp.Y, camp.Z);
+                    if (Routed(origin, point, nav.BlockingDoorAvoidanceFilters) || !Routed(origin, point, nav.DefaultFilters)) continue;
+                    return true;
+                }
+                return false;
+            }
+
+            // A native lord is never moved. It is only checked, and a failed proof is logged.
+            GuardLord existing = keep.Guards.Values.OfType<GuardLord>().FirstOrDefault();
+            if (existing != null)
+            {
+                if (!Gated(new Vector3(existing.X, existing.Y, existing.Z)))
+                    Log.Warn($"BATTLEGROUND_KEEP_LORD_OUTSIDE region={region} keep={keep.KeepID}");
+                return true;
+            }
 
             var candidates = new List<Vector3>();
             foreach (int lift in new[] { 1200, 600, 0 })
-                for (int dx = -SearchRadius; dx <= SearchRadius; dx += SearchStep)
-                    for (int dy = -SearchRadius; dy <= SearchRadius; dy += SearchStep)
+                for (int dx = -searchRadius; dx <= searchRadius; dx += SearchStep)
+                    for (int dy = -searchRadius; dy <= searchRadius; dy += SearchStep)
                     {
-                        if (dx * dx + dy * dy > SearchRadius * SearchRadius) continue;
-                        Vector3? floor = nav.GetClosestPoint(zone, new Vector3(MurdaigeanX + dx, MurdaigeanY + dy, (float)(doorZ + lift)), 64, 64, 256, nav.DefaultFilters);
+                        if (dx * dx + dy * dy > searchRadius * searchRadius) continue;
+                        Vector3? floor = nav.GetClosestPoint(zone, new Vector3(keep.X + dx, keep.Y + dy, (float)(doorZ + lift)), 64, 64, 256, nav.DefaultFilters);
                         if (!floor.HasValue) continue;
                         Vector3 point = floor.Value;
                         if (keep.Area?.IsContaining((int)point.X, (int)point.Y, (int)point.Z, false) != true) continue;
                         if (doors.Any(door => Vector2.Distance(new(door.X, door.Y), new(point.X, point.Y)) <= 250)) continue;
-                        if (candidates.Any(existing => Vector3.Distance(existing, point) < 32)) continue;
+                        if (candidates.Any(existingPoint => Vector3.Distance(existingPoint, point) < 32)) continue;
                         candidates.Add(point);
                     }
 
@@ -154,33 +243,30 @@ namespace DOL.GS
             foreach (Vector3 candidate in candidates)
             {
                 if (queries >= MaximumPathQueries) break;
-                bool gated = false;
-                foreach (Point3D camp in outside)
-                {
-                    if (queries + 2 > MaximumPathQueries) break;
-                    Vector3 origin = new(camp.X, camp.Y, camp.Z);
-                    if (Routed(origin, candidate, nav.BlockingDoorAvoidanceFilters) || !Routed(origin, candidate, nav.DefaultFilters)) continue;
-                    gated = true;
-                    break;
-                }
-                if (!gated) continue;
+                if (!Gated(candidate)) continue;
                 float doorDistance = doors.Min(door => Vector2.Distance(new(door.X, door.Y), new(candidate.X, candidate.Y)));
                 passing.Add((candidate, doorDistance));
             }
-            if (passing.Count == 0) return Unavailable("no_gated_interior");
+            if (passing.Count == 0) return Unavailable(keep, "no_gated_interior");
 
             var ordered = passing.OrderByDescending(point => point.Point.Z).ThenByDescending(point => point.DoorDistance).ToList();
             Vector3 lordPoint = ordered[0].Point;
-            if (!SpawnKeepGuard<GuardLord>(keep, lordPoint, "Murdaigean Keep Lord", GuardTemplateMgr.HighlanderMale))
-                return Unavailable("load_failed");
+            string name = keep.Name;
+            if (!SpawnKeepGuard<GuardLord>(keep, region, lordPoint, $"{name} Lord", GuardTemplateMgr.HighlanderMale))
+                return Unavailable(keep, "load_failed");
 
-            Func<Vector3, bool>[] retainers =
+            // A single tower keeps one archer; a full keep keeps two fighters, an archer and a healer.
+            bool tower = BattlegroundKeepLayouts.IsTower(keep.KeepComponents.Select(component => component.Skin).ToList());
+            var retainers = new List<Func<Vector3, bool>>();
+            if (tower)
+                retainers.Add(point => SpawnKeepGuard<GuardArcher>(keep, region, point, $"{name} Archer", GuardTemplateMgr.SaracenMale));
+            else
             {
-                point => SpawnKeepGuard<GuardFighter>(keep, point, "Murdaigean Keep Guard", GuardTemplateMgr.BritonMale),
-                point => SpawnKeepGuard<GuardFighter>(keep, point, "Murdaigean Keep Guard", GuardTemplateMgr.IcconuMale),
-                point => SpawnKeepGuard<GuardArcher>(keep, point, "Murdaigean Keep Archer", GuardTemplateMgr.SaracenMale),
-                point => SpawnKeepGuard<GuardHealer>(keep, point, "Murdaigean Keep Healer", GuardTemplateMgr.AvalonianMale),
-            };
+                retainers.Add(point => SpawnKeepGuard<GuardFighter>(keep, region, point, $"{name} Guard", GuardTemplateMgr.BritonMale));
+                retainers.Add(point => SpawnKeepGuard<GuardFighter>(keep, region, point, $"{name} Guard", GuardTemplateMgr.IcconuMale));
+                retainers.Add(point => SpawnKeepGuard<GuardArcher>(keep, region, point, $"{name} Archer", GuardTemplateMgr.SaracenMale));
+                retainers.Add(point => SpawnKeepGuard<GuardHealer>(keep, region, point, $"{name} Healer", GuardTemplateMgr.AvalonianMale));
+            }
             var used = new List<Vector3> { lordPoint };
             int guards = 0;
             foreach (Func<Vector3, bool> retain in retainers)
@@ -197,16 +283,17 @@ namespace DOL.GS
                 used.Add(place);
                 guards++;
             }
-            Log.Info($"BATTLEGROUND_NATIVE_KEEP_READY region={MurdaigeanRegion} keep={MurdaigeanKeepId} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
+            string tag = row.CreateInfo.StartsWith(NativePrefix, StringComparison.Ordinal) ? "BATTLEGROUND_NATIVE_KEEP_READY" : "BATTLEGROUND_KEEP_READY";
+            Log.Info($"{tag} region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
             return true;
         }
 
-        private static bool SpawnKeepGuard<T>(AbstractGameKeep keep, Vector3 point, string name, ushort model) where T : GameKeepGuard, new()
+        private static bool SpawnKeepGuard<T>(AbstractGameKeep keep, ushort region, Vector3 point, string name, ushort model) where T : GameKeepGuard, new()
         {
             // A garrison guard is its own DbMob row; loading it binds it to the keep area it stands in.
             DbMob row = new()
             {
-                ClassType = typeof(T).ToString(), Name = name, Guild = string.Empty, Region = MurdaigeanRegion,
+                ClassType = typeof(T).ToString(), Name = name, Guild = string.Empty, Region = region,
                 X = (int)point.X, Y = (int)point.Y, Z = (int)point.Z, Heading = 0, Realm = 0, Level = 50,
                 Model = model, Size = 50,
             };
@@ -231,11 +318,14 @@ namespace DOL.GS
             return false;
         }
 
-        private static bool Unavailable(string reason)
+        private static bool Unavailable(AbstractGameKeep keep, string reason)
         {
-            Log.Warn($"BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE region={MurdaigeanRegion} reason={reason}");
+            string tag = IsNative(keep) ? "BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE" : "BATTLEGROUND_KEEP_UNAVAILABLE";
+            Log.Warn($"{tag} region={(ushort)keep.Region} keep={keep.KeepID} reason={reason}");
             return false;
         }
+
+        private static bool IsNative(AbstractGameKeep keep) => (keep?.DBKeep?.CreateInfo ?? string.Empty).StartsWith(NativePrefix, StringComparison.Ordinal);
 
         private static bool HasProvedApproach(BattlegroundDefinition definition, AbstractGameKeep keep, Zone zone)
         {
