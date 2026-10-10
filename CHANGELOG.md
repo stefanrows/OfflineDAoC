@@ -26,6 +26,11 @@ package, not this fork's version.
 
 - Friend's companions remain listed in Active Population by design; only
   deleting them from the launcher is blocked (since 0.230.0).
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-141730`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.232.0] - 2026-10-10
 

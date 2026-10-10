@@ -330,6 +330,7 @@ Agent sessions on items 45–48: take the role and context from
      one confirmation removes every orphan and its items while the server is
      stopped. Check: orphan count in the confirmation matches the "No owner
      (orphan)" rows, they disappear afterwards, and own/friend companions stay.
+     Deployed 2026-10-10 (backup `deploy-20261010-141730`); installation stopped.
 
 110. **One-click reset of all keeps and relics in the launcher.** Owner,
      2026-10-10. Implemented in source **0.226.0**: the existing
