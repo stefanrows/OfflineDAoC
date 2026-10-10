@@ -12,6 +12,66 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.238.0] - 2026-10-10
+
+### Added
+
+- Siege columns march on a quorum: with the new server property
+  `siege_column_quorum_march` (default on) a keep assault column marches once
+  its leader, every ram carrier and `siege_column_quorum` members (default 6,
+  never below a strict majority) are together, instead of failing after
+  120 s on one straggler in another region; stragglers follow as helpers
+  (`RVR_SIEGE_COLUMN action=quorum`). Off restores the 0.217.0 rule (bug 75).
+- RvR group-lead handover: when an RvR group's leader is dead, released, in
+  another region, or cut off from the living majority for 60 s while
+  marching, the lead passes to the coordinator's leader
+  (`RVR_LEADER_HANDOVER`); abandon, guild-army reporting and readiness now
+  agree on that leader. Human-led groups are never touched (bug 75).
+- Guild-army floor by keep level: five minutes after an army has gathered,
+  `siege_army_keep_level_quorum` (default on) lowers the attacker
+  requirement to 6 / 12 / 16 for keep levels 1–3 / 4–6 / 7–10, never above
+  the full requirement; sighted defenders still count 1.5× (bug 75).
+- Solo PvE camp bots regenerate at the fast "quiet" rate only while sitting
+  in their recovery rest; standing or walking between pulls they recover at
+  the ordinary rate, so casters pull at about 70–80 % power and melee at
+  75–85 % health instead of chain-pulling at 97 % (bug 72).
+- `PVE_REST` separates rested from unrested pulls (`rest_wakes`,
+  `rest_power_at_wake`, `rested_*`, `unrested_*`, `rest_to_pull_s`,
+  `route_pulls`) so the next live run can tell the rest rule from the ambient
+  regen and target difficulty (bug 72).
+
+### Fixed
+
+- A battleground participant killed and released at its portal-keep landing
+  no longer keeps the "walk back to the party" state that pinned it against
+  the keep wall until the stuck rule ejected it; the release resets the
+  driver and the bot roams again. Camps beyond the 256-polygon Detour
+  corridor are proved by chaining up to eight partial legs
+  (`AUTONOMOUS_BG_ROUTE_FAILED reason=corridor_cap|dead_end|no_route`),
+  failed goals are cached 15 s, crowd-controlled time in combat counts as
+  progress and a stuck mark is withdrawn once the bot progresses (bug 127).
+- Darkness Falls hunts: camp planning offers each realm only the rooms its
+  own landing admits (one crossing proof per entrance group per pass) instead
+  of every room, which failed with `No legal region route` 166 times in
+  28 minutes and left 0 productive hunts; Hibernia's isolated entrance 87 is
+  dropped from crossings (`AUTONOMOUS_CROSSING_ISOLATED`). Hibernian routes
+  via 85/86 still need the border-gate change of bug 144 (bug 145).
+- A rejected unreachable `local-pvp-*` rival hunt is dropped from the bot's
+  RvR destination for the 30-minute window instead of being retried every
+  40 s (2,089 `AUTONOMOUS_RIVAL_HUNT_UNREACHABLE` in 84 min) (bug 88).
+- `GetScaledSpell` scales `DirectDamageNoVariance` like `DirectDamage`
+  instead of logging `Unhandled spell` for the Scorcher DDs (bug 62).
+
+### Changed
+
+- Log verification of installed 0.234.0 (19:48–21:13) and 0.236.0
+  (21:14–21:42): bugs 20, 24, 26, 29, 57, 58, 60, 61, 63, 65, 66, 76, 79,
+  80, 81, 85, 116, 117, 121, 131 and 136 are verified and moved to Finished;
+  bugs 56, 78, 88, 119, 120 and 144 carry new log evidence; new bugs 145
+  (Darkness Falls rooms behind other realms' entrances), 146 (Renegade
+  Fensalir Jarl camps the Svasud bind stone) and 147 (battleground landings
+  ignore the realm; owner decision).
+
 ## [0.237.0] - 2026-10-10
 
 ### Added

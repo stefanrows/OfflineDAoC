@@ -6,6 +6,31 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+114. **Silence the remaining startup noise: Atlas realm ability and
+     NoVariance spell scaling.** Log sweep 2026-10-10 (installed
+     0.234.0/0.236.0): 568 `Could not instantiate Ability
+     'AtlasOF_SeveringTheTether'` warnings per start (DB ability row 322
+     points at a class that exists only as SQL in
+     `DB_RealmAbilities_Scripts.cs:896`; an Atlas custom ability, not 1.65;
+     logged per Mentalist load), and `GetScaledSpell` still lacks
+     `DirectDamageWithDebuffNoVariance`, `DamageOverTimeNoVariance`,
+     `DamageSpeedDecreaseNoVariance` and `LifedrainNoVariance` (bug 62 fixed
+     only `DirectDamageNoVariance` in 0.238.0). Both are harmless; idea:
+     drop or stub the Atlas ability row and add the four cases. Also: all 42
+     client sessions end as `abnormal-or-client-defined-exit` (0x80000000),
+     probably a mislabelled normal exit, unchecked.
+
+115. **Probe the Hibernian Darkness Falls exit landing and the DF path
+     budget.** Follow-up to bug 145 (2026-10-10): the Hibernian DF exits
+     (zone points 70–76) land at 324957,433427, about 640 units from the
+     isolated entrance 87; if that landing lies on the same isolated navmesh
+     patch, bots leaving DF there are stranded until the generic
+     safe-capital relocation. Run one navmesh probe from the exit landing to
+     the Connacht road and, if it fails, move the landing or extend the
+     isolated list. Also count `AUTONOMOUS_BG_ROUTE_FAILED
+     reason=corridor_cap` (bug 127) on the next live run; if every camp from
+     a landing logs it, raise the eight-leg chain limit.
+
 107. **Observe the owner-started 0.222.0 session at selected 10x speed.** Owner,
      2026-10-10. **Paused at the owner's request on 2026-10-10.** Captured
      evidence covers 09:05:35-10:03:48 CEST. Assess actual keep-raiding

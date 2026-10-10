@@ -6,6 +6,27 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+146. **Renegade Fensalir Jarl kills bots at the Svasud Faste bind stone.**
+     Installed 0.234.0, 2026-10-10 19:48–21:13: the level-66 keep lord
+     "Renegade Fensalir Jarl" killed Midgard bots 6 times on the Svasud
+     Faste bind stone, about 28,000 units from Fensalir Faste (keep 80);
+     Dagedis died there 4 times in 40 minutes. A keep lord should never
+     leave his keep, and a bind stone must stay a safe release point (bug
+     63). Expected: the lord stays inside Fensalir. Actual: he camps the
+     Svasud stone. Not traced (candidates: the 0.235.0 runtime relocation of
+     unreachable lords, a lord chasing a bot out of the keep, or a renegade
+     spawn placed at the wrong Z). Split from the bug 63/144 analysis.
+
+147. **Campaign battleground landings ignore the bot's realm.** Installed
+     0.236.0, 2026-10-10: Eilrina (Hibernia) entered Cathal Valley at the
+     Albion Portal Keep (`BattlegroundCampaignPolicy.cs:49-61` picks a
+     landing without a realm check), and a Midgard Thane killed Torienbrand,
+     also Midgard, in the same battleground. In 1.65 each realm had its own
+     portal keep and there was no same-realm fighting; on Camlann (full PvP)
+     same-realm kills may be intended. Needs an owner decision before any
+     change: realm-bound landings and realm peace inside the portal keep, or
+     keep the free-for-all. No code change in 0.238.0.
+
 144. **Midgard newbie bots loop between the Mularn bind point, Jordheim and
      the Vale of Mularn.** Installed 0.235.0, 2026-10-10 21:04–21:58: 372
      `AUTONOMOUS_ROUTE_POCKET_ESCAPE from=100:764342,674451,5738
@@ -20,6 +41,35 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      targets). Impact: the reset level 1–4 population cannot level, which
      delays the level-35 warbands that frontier sieges need (bug 133). Split
      from bug 132. Not yet investigated.
+     Evidence for the owner of this bug (read-only analysis 2026-10-10 on
+     Aaron's installed 0.234.0/0.236.0 logs and save; no bot below level 33
+     there, so the killers are only in Stefan's log): the release point
+     764342,674451 / 763938,672204 is not Mularn's bind but the Svasud Faste
+     outer bindstone (764082,672416). `GameBot.cs:1225-1228` releases
+     autonomous world bots only at a "safe" own bind
+     (`BotReleaseBindPoints.Nearest(..., safeOnly: true)`); in region 100
+     only the two Svasud stones qualify because of the landing circle at
+     `PvpCombatant.cs:210` (2026-09-28), so every Midgard death in region
+     100 releases there (a level-50 bot that died in Malmohus was sent
+     337,000 units back). Between the stone and the Vale lies gate 100087402
+     at 765130,674609; `AutonomousRvrTravel.cs:103-104` lets only
+     RvR-objective bots open border gates, so PvE bots stall on that line
+     (seen in both logs), the pocket escape at
+     `AutonomousWorldBotController.cs:4833` sends them to Jordheim after
+     three failures, capital egress drops them at the Mularn gate and they
+     walk back into the Vale. No aggressive level 0–5 mob lives within
+     20,000 units of the stone, but 15 aggressive level 10–15 mobs do; the
+     first on the gate-to-Mularn line is a level-13 vendo bone-collector
+     9,300 units out (about 45 s of walking). The yellow fallback is a
+     symptom: death replans at `AutonomousWorldBotController.cs:3854-3876`
+     blame the camp's target, not the real killer (wrong in 302 of 536 PvE
+     death replans). Suggested fixes: release PvE world bots at their home
+     bind (RvR bots keep the hub release); let own-realm world bots open
+     their realm's border gates; keep the target-con ceiling when the killer
+     is not the camp's target. Albion's outer stones stand in open Camelot
+     Hills (176 starter mobs within 30,000 units), Hibernia's Druim Ligen is
+     behind gates with no level 0–3 mob within 30,000 units, so Hibernia is
+     probably worse.
 
 71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
     2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
@@ -75,6 +125,39 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+145. **Darkness Falls hunts fail: bots plan rooms behind another realm's
+     entrance.** Installed 0.234.0 (19:48–21:13) and 0.236.0 (21:14–21:42),
+     2026-10-10: Darkness Falls hunts were 26 productive / 278 failed and 0
+     productive / 202 failed; `No legal region route` 197 and 166 times, all
+     realms, decided at planning time. Cause: each of the 1,417 Darkness
+     Falls rooms lists the landings it can be entered from (four entrance
+     sets: Hibernia 546, Albion 420, Albion 81-only 45, Midgard 406), but
+     camp planning only checked that region 249 is reachable at all: at
+     `AutonomousWorldBotController.cs:3391` the travel estimate was 0 for
+     solo bots above level 35 and :3400 hard-coded every room as reachable,
+     so a bot picked a foreign room, found no crossing, abandoned it for 30
+     minutes and drew the next one (162 of the 166 failures on 0.236.0
+     targeted a room only another realm's landing admits). Second cause,
+     Hibernia only: the nearest entrance, zone point 87 at 325269,433985 in
+     Connacht, stands on an isolated navmesh patch (an unlimited offline
+     search reaches neither the road nor Druim Ligen), while entrances 85
+     and 86 are connected but lie behind the Druim Ligen / Bri Leith gates.
+     Source 0.238.0: `AutonomousDarknessFallsPolicy.HasCampRoute` proves a
+     crossing once per entrance group per planning pass (at most four
+     searches) and plans only rooms the bot's realm can enter;
+     `AutonomousDungeonGoalCatalog` tags each room with its entrance group;
+     isolated entrance 87 is excluded from `CrossingEdges` by an audited
+     list (region and position within 64 units, so a moved zone point is no
+     longer excluded) and logged once as `AUTONOMOUS_CROSSING_ISOLATED`; 5
+     tests on the real zone-point rows in `UT_AutonomousZoneCrossingSearch`.
+     Remaining: Hibernian bots now route to 85/86 and still need to pass the
+     border gates, which PvE bots cannot open until the bug 144 gate change
+     (Stefan) lands; the Hibernian Darkness Falls exits (zone points 70–76,
+     ~560 units from 87) may stand on the same isolated patch and were not
+     probed. Pending: `No legal region route to Darkness Falls` near zero
+     per 30 minutes and productive Darkness Falls hunts for Albion and
+     Midgard in a live run.
 
 143. **Claiming a keep freezes the game loop for about a second.** Installed
      0.235.0, 2026-10-10: every claim stalled ~1 s in the claimer's own tick:
@@ -155,16 +238,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      `UT_BattlegroundGarrisonFallback`. Pending: live
      `BATTLEGROUND_KEEP_WALL_GUARDS` counts and a real-client look.
 
-136. **Lone bots register for guild sieges and are rejected at once.**
-     Installed 0.234.0, 2026-10-10 19:48–20:46: 64 `RVR_KEEP_ROUTE_ABANDONED`
-     with reason "A guild assault requires a formed party", all `force=rvr-<id>`
-     solo forces. `ChooseCore` let any single-guild force reinforce its
-     guild's siege, but `ReportGuildArmy` only releases formed parties, so the
-     controller abandoned the lone bot and blocked the keep for 20 minutes.
-     Source 0.236.0 keeps lone bots out of the attacker bucket until the
-     army has launched, then lets them follow as helpers (5 regression tests).
-     Installed-log check pending: no such abandons for `rvr-<id>` forces.
-
 135. **Battleground portal keeps are invisible (Molvik).** Owner report,
      2026-10-10 17:14, installed 0.234.0: a Hibernian group zoning into Molvik
      stands on a bare cobblestone foundation at `loc=51627,19149,5992`, exactly
@@ -186,14 +259,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      opening, the landing stays 218 units clear and every saved NPC at least
      232 units. Rebuilt meshes confirm it: every portal landing pair passes
      with gates open and fails with gates closed (48 of 48).
-
-131. **Group cohesion throws when the leader has left its group.** Installed
-     0.234.0, 16:57:29: `ArgumentNullException (Parameter 'key')` from
-     `ConditionalWeakTable.GetValue` in
-     `AutonomousBotGroupCoordinator.IsCohesive`, interrupting Frearhild's goal.
-     Source 0.235.0: guard for a leader without a group; test
-     `ALeaderThatLeftItsGroupIsCohesiveInsteadOfThrowing`. Pending: no
-     `IsCohesive` exception in a live run.
 
 129. **Battleground patrols never spawn and the squad phase stalls the game
      loop.** Installed 0.234.0, 2 h: zero `BATTLEGROUND_SQUAD_SPAWNED`; 109
@@ -242,6 +307,33 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      Murdaigean (portal-keep landings behind closed gates); suspected for 236,
      237 and 240. Pending: next live run shows bots staying their tour and names
      any remaining route failure.
+     Re-check on installed 0.236.0 (2026-10-10 21:14–21:42, world speed 1x):
+     42 entries (Cathal Valley 24, Leirvik 18); of the bots that entered in
+     that run 2 left `stuck`, 4 `tour_ended`, 1 `graduated` (44 further
+     leaves were bots restored inside a battleground at start and sent out
+     at the first reconcile). Both stuck bots (Eilrina, Torienbrand) had
+     died, were released at their portal-keep landing and were ejected about
+     six minutes later without another log line; 0 of 40 bots without a
+     death got stuck. Cause 1: the release kept the "walk back to the party"
+     state (`GameBot.cs:1298`, FSM FOLLOW) even at a battleground landing;
+     that 900-unit wall-sliding step re-pathed every 750 ms against the
+     driver's 3-s route, so the bot see-sawed at the portal-keep wall. Cause
+     2: all 67 `AUTONOMOUS_BG_ROUTE_FAILED` were `no_route` for camps
+     38,000–58,000 units away, which is the 256-polygon Detour corridor cap,
+     not a navmesh gap, so each landing reached only its own camp and bots
+     never roamed to the middle. Source 0.238.0: a battleground-landing
+     release starts no return walk, resets the driver and leaves the FSM
+     idle (`StartsReleaseReturnWalk`); the route proof chains up to eight
+     partial legs per filter pass, the bot walks the first leg, failed goals
+     are cached 15 s per goal without disturbing a fallback goal's cadence,
+     and the reasons `corridor_cap` / `dead_end` / `no_route` are logged;
+     crowd-controlled time in combat counts as progress and a stuck mark is
+     withdrawn when the bot progresses again (6 new tests in
+     `UT_AutonomousBattlegroundDriver` /
+     `UT_AutonomousBattlegroundParticipation`). Pending: a live run shows
+     released bots walking out to the camps, `stuck` leaves near zero per
+     entry, and `corridor_cap` counts low (if every camp from a landing logs
+     `corridor_cap`, eight legs are too few for that map).
 
 126. **Battleground participants are ejected without acting; four keeps have
      no lord; Midgard medallion merchant duplicated.** Installed 0.233.0,
@@ -344,17 +436,6 @@ Earlier installation checkpoint, 2026-10-10: fixes through 0.222.0, including bu
 and launcher. The installation is stopped; protected saves/settings are unchanged.
 This confirms installation only. Keep the required real-client checks pending.
 
-121. **Siege column handling reads a cleared keep destination.** Verified
-     installed 0.217.0 observation on 2026-10-09: null-reference failures in
-     `HoldSiegeColumn` and the `AbandonKeepTarget` group-combat predicate.
-     A retained committed plan/muster phase can outlive synchronous objective
-     clearing earlier in the same turn. Source 0.221.0 stops that stale turn,
-     passes a captured destination into column handling, and guards absent
-     destinations. Reproduce with a marching force whose keep objective ends
-     or is cleared during recovery; expect clean reassignment without an
-     exception. Deployed in 0.222.0; exact-trigger verification remains pending.
-     These stacks are distinct from bugs 116/117. Private logs remain outside Git.
-
 120. **Autonomous groups stand idle inside their own guild keep.** Installed
      0.217.0, 2026-10-09 22:44–23:04: the owner saw about three groups idle
      in Dun Crimthain (keep 101, claimed by Camlann crew "Camp Watch 3").
@@ -381,6 +462,11 @@ This confirms installation only. Keep the required real-client checks pending.
      a claimed keep; members trapped elsewhere drop out instead of waiting
      15+ minutes. Still unverified: why `CanLeaderReachHub` failed for RvR
      leaders. Deployed in 0.222.0 on 2026-10-10; real-client verification pending.
+     Log check on installed 0.234.0 and 0.236.0:
+     `AUTONOMOUS_GROUP_UNREACHABLE_RENDEZVOUS` and `_RELEASED` are 19/19 in
+     each run, every release in the same second as its failure; no 15-minute
+     hold. "Idle inside a keep" has no log signature, so the in-game check
+     remains pending.
 
 119. **Some attacked marching bots keep running instead of defending.** Owner,
      2026-10-09, during the 0.215.0 investigation: some bots respond, others
@@ -399,6 +485,12 @@ This confirms installation only. Keep the required real-client checks pending.
      attacks on recalled and ordinary marching bots remain pending; this is a
      confirmed matching path, not proof that every observed non-response had
      the same cause.
+     Log check on installed 0.234.0 (84 min): 797 `GUILD_RECALL_DEFENSE`
+     lines from 186 bots, median 3 per bot, max 21 (Godaorwin over 60 min),
+     a different attacker almost every line (top pair repeats 6 times);
+     keeps 50, 106 and 77 dominate. That is healthy defence, not a loop. The
+     real-client check of direct/AoE/pet attacks on marching bots remains
+     pending.
 
 118. **Launcher "Make Me a GM" fails with "Unable to save GM setting".**
      Installed 0.215.0, 2026-10-09: ticking the box with the server stopped
@@ -408,28 +500,6 @@ This confirms installation only. Keep the required real-client checks pending.
      back. Source 0.216.0 names the `Key`/`Value` columns. The owner's GM flag
      and account level were set by hand the same evening; a launcher toggle
      check on the installed build remains pending.
-
-117. **PvE camp turn reads a cleared objective after movement recovery.**
-     Installed 0.214.1 observation on 2026-10-09 found two null-reference
-     failures through `LeadPveCamp`. Source audit found that `IssuePath` can
-     synchronously abandon `_camp`, after which the enemy-hold branch read
-     its name/zone and overwrote the recovery status. Source 0.215.0 stops
-     that branch when movement fails or changes the camp. This repairs the
-     identified unsafe path; installation and reproduction of the exact
-     observed stack remain pending. No live save or route state was edited.
-     The supplied 0.215.0 observation saw no recurrence; the exact failure
-     trigger was not reproduced, so acceptance remains pending.
-
-116. **Bot group-leader promotion throws during hub departure.** Installed
-     0.214.1 observation on 2026-10-09 found twenty-one exceptions after
-     promoting a bot: `Leader` is a human-player cast and becomes null.
-     Source 0.215.0 announces the promoted `GameLiving` directly, preserving
-     the group swap and indexes. Added a regression case exercising actual
-     bot promotion and its notification. Test execution and installed hub
-     departure verification remain pending; this defect was one contributor,
-     not an explanation of all keep-siege failures. The supplied 0.215.0
-     observation recorded 31 completed hub leader handovers and no recurrence;
-     retain pending status until the required acceptance is complete.
 
 75. **Keep assaults still stall during travel and siege placement.**
     Live log 2026-09-26 to 2026-09-30: 36 keep sieges, zero bot captures, zero
@@ -555,6 +625,35 @@ This confirms installation only. Keep the required real-client checks pending.
     are not stranded members. Force -185's complete Nottmoor arrival and eight
     deaths to Jarl/Huscarls are successful logistics followed by defender victory.
     Zero attendance counters and activity labels alone cannot establish results.
+    Owner decision 2026-10-10 (Aaron): build all three fixes; fix 1 as a
+    server property, fix 3 scaled by keep level. Source 0.238.0 (new
+    `AutonomousSiegeProperties`, category pvp): (1)
+    `siege_column_quorum_march` (default true) lets a siege column march
+    once the leader, every ram carrier and `siege_column_quorum` members
+    (default 6, clamped 2–8, never below a strict majority of the living
+    group) are together (1,200 units, 600 while holding); stragglers follow
+    through the existing follow rule; `RVR_SIEGE_COLUMN action=quorum` logs
+    who was left behind; false restores the 0.217.0 rule unchanged. On the
+    0.234.0 log 77 of 167 column holds waited on at most two members. (2)
+    `HandOverRvrLeadership` in the group coordinator hands the group lead to
+    the coordinator's leader when the old group leader is dead, released, in
+    another region, or cut off from the living majority for 60 s while
+    marching (`RVR_LEADER_HANDOVER reason=dead|released|region|split`);
+    `AbandonKeepTarget`, `ReportGuildArmy` and the army readiness check now
+    agree on that leader (force -110 on 0.234.0 deferred its abandon 36
+    times over 21 minutes because the dead leader stayed group leader).
+    Human-led groups are never touched. (3) `siege_army_keep_level_quorum`
+    (default true): five minutes after an army has gathered, the attacker
+    requirement drops to a keep-level floor (level 1–3: 6, 4–6: 12, 7–10:
+    16; a 2004 VN-boards thread puts a level 1–2 keep at 5 attackers, level
+    3–5 at 8+), never above the full requirement, sighted defenders still
+    count 1.5×, parties relaxed to ceil(floor/8), healer and ram-operator
+    rules unchanged (on 0.234.0 the only gathered party had 7 present
+    against 16 required). Guard count does not scale with keep level (28–30
+    guards at level 1 and 5), only guard level does. 22 tests in
+    `UT_SiegeColumnQuorum`. Pending: a live run shows `action=quorum`,
+    `RVR_LEADER_HANDOVER` and `relaxed=True` and a siege that reaches the
+    gate; real-client watch of one siege from rally to the walls.
 
 
 115. **Closed console input spins the server console loop.** Confirmed in
@@ -959,6 +1058,21 @@ not install the Setup tool; their disposable-input verification is pending.
     Hib<-Hib deaths just outside its 4,000 radius) have no departure band;
     handled with the hub muster work. Why the routes to foreign frontiers
     fail is not traced.
+    Re-check on installed 0.234.0 (2026-10-10 19:48–21:13): Camelot-exit
+    deaths fell from 116 to 3, but the 30-minute rival-hunt rejection did
+    not hold: 2,089 `AUTONOMOUS_RIVAL_HUNT_UNREACHABLE` from 88 bots (394 in
+    20 min on 0.236.0); Raggemund hit
+    `local-pvp-capnbry-source-empty:181:73:79` 113 times, about every 40 s.
+    Cause: the rejection at `AutonomousWorldBotController.cs:4822` drops
+    `_camp`, which `TravelRvrObjective` restores in its `finally`, and the
+    only check that drops an already-chosen rejected `_rvrDestination`
+    (:1854) required a dungeon id. Source 0.238.0:
+    `AutonomousRouteRecoveryPolicy.ShouldDropRejectedRvrDestination` drops a
+    rejected dungeon or `local-pvp-*` destination (plus approach and patrol
+    marker) for the rejection window; keep/relic objectives are unaffected
+    because the shared plan re-publishes them (`UT_RivalHuntRejection`).
+    Pending: a live run shows at most one
+    `AUTONOMOUS_RIVAL_HUNT_UNREACHABLE` per bot and camp per 30 minutes.
 
 87. **Tri-spec and Augmentation Healer companions do not cast Group Celerity.**
     Owner, 2026-10-03; installed version unconfirmed, source 0.197.0 audited.
@@ -995,19 +1109,6 @@ not install the Setup tool; their disposable-input verification is pending.
     clicks and adjacent keep doors, tower height, hostile intact/breached
     gates and a rejected transfer retry.
 
-85. **Defeated Fensalir Faste stays neutral without a bot guild claim.**
-    Owner, 2026-10-03. Logs repeatedly show
-    `KEEP_CLAIM_STEWARD_MISSING keep=80 reason=no_lord_position` at startup.
-    Keeps initialize before saved mobs, and the defeated lord's later load
-    never restored the steward; bots only approached a steward already nearby.
-    Expected: guild bots secure free, defeated keeps. Source 0.197.0 restores
-    the steward when the saved lord tries to enter the world, keeps the lord
-    absent until a claim, and adds reserved claim journeys to free keeps.
-    All guild claim caps are removed (task 82). Deployed with 0.199.0 on
-    2026-10-03. Pending: observe a bot traveling to and claiming Fensalir,
-    and restart with another defeated keep to check the steward and
-    subsequent guild ownership.
-
 84. **Cannot delete companions carrying non-starter items.** Owner screenshot
     2026-10-03: deleting benched Kjell reports earned, traded, or unclassified
     items and refuses deletion (installed version unknown). Expected: confirmed
@@ -1042,57 +1143,6 @@ not install the Setup tool; their disposable-input verification is pending.
     Paladin seen on Stefan's server (`SELECT Name, TacticalRole,
     TrainingPlanId FROM player_companions WHERE ClassId=1`). Check in the
     client: a Paladin companion in any role melees and keeps chanting.
-
-81. **Keeps bot guilds claimed fell back to the Frontier Wardens after a restart.**
-    Owner 2026-10-02: "when keeps are raided, bots do not claim them". Logs
-    (0.183.0): 5 of 5 captures (Arvakr, Blendrake, Bledmeer, Dun Scathaig,
-    Fensalir) were claimed by a crew bot and all 5 went back to the Wardens
-    at the next start (`FRONTIER_WARDEN_KEEP_LEVEL ... from=5`). Cause: the
-    crew reconcile renames "Camlann Crew X" to "X" in memory and saves the
-    row, but `DbGuild.GuildName` is `[ReadOnly]`, so the database kept the old
-    name; the claim stored "X", the keep found no guild at load, and
-    `PvpKeepCampaign.Initialize` handed it to the garrison and saved over it.
-    Source 0.191.0: the crew rename writes the name with a direct UPDATE; a
-    keep whose claimed guild is not loaded is left unowned and logged
-    (`KEEP_OWNER_UNRESOLVED`) instead of being given away; the rename rebinds
-    keeps claimed under the old or new name (guild keep list included);
-    every claim logs `KEEP_CLAIMED`. Player `/gc rename` is unchanged (still
-    not persisted, upstream). Open: Hlidskialf Faste (77) has had a defeated
-    lord without a claim steward since 09-29 (`no_lord_position`), so no bot
-    can claim it. Check in the client: a keep a crew claims keeps its banner
-    and lord after a server restart.
-
-80. **Level 40+ Minstrels freeze at their bind stone with a mez song.**
-    Live logs 2026-09-30 to 10-02: 2,444 stuck recoveries for 35 Minstrels,
-    all on bind points (Camelot, Castle Sauvage and others); Edalwell stood
-    about 13.5 h. In 24 of 24 slow casting ticks their current spell was
-    Commanding Cadence. Cause: `SpellHandler` keeps a pulsing mesmerize in
-    `CastingRetry` when `CheckEndCast` fails (1.65 flute mez); a player
-    cancels it with another song, but a bot cannot (non-players only queue
-    new spells), so the bot counted as casting forever and the world
-    controller never chose a new goal. The stuck watchdog moved it without
-    ending the cast, so it froze again on the bind spot. Source 0.187.0: the
-    endless mez retry applies only to players; the watchdog stops any cast
-    before its recovery move. The Cabalist/Reaver/Sorcerer/Friar cluster at
-    the same bind stone was the bind-stone killing (bug 63) and ended with
-    0.162.0. Check in the client: no Minstrel stands at a bind stone playing
-    its mez song; Minstrels still mez in fights.
-
-79. **Level 46+ Valewalkers cast nonstop in their capital and never leave.**
-    Owner 2026-10-02 (live 0.183.0): Conoorric stands in Tir na Nog casting
-    without pause. 18 of 18 Valewalkers with Arboreal Path 48-50 had 78-284
-    stuck recoveries, always back onto their bind spot; those at 43 or lower
-    had at most 18. Cause: Witherstrike (L46) has proc frequency 20, the
-    lower ranks of the same proc line 15. `GameBot.AreSpellsEqual` compared
-    frequency, so the bot kept Scourgestrike next to Witherstrike; the
-    weaker rank lost the effect conflict after every 3 s cast (power spent,
-    no effect) and `LivingHasEffect` kept reporting it missing, so the bot
-    stopped for it again and again. Source 0.185.0: ranks of one proc spell
-    group count as the same spell regardless of frequency, and a same-or-
-    higher rank of the proc line on the target counts as present. Check in
-    the client: Conoorric and the other high Valewalkers in Tir na Nog stop
-    casting and walk off; Witherstrike stays up. The Animist the owner saw is
-    not explained (no proc line); watch whether it still casts nonstop.
 
 78. **Levelling bots barely level.** Live 0.162.0 (2026-09-30 19:38 to 10-01
     14:52): 559 level-ups by 299 bots in 19 hours; 15,215 of 22,166 PvE goal
@@ -1141,6 +1191,13 @@ not install the Setup tool; their disposable-input verification is pending.
     minute against 3.5 s on 0.177.0). **Source 0.182.0:** the retry search
     is replaced by `HasWayAroundFrontierDungeons`, a cached graph check per
     realm and region pair; one search per step.
+    Re-check on installed 0.234.0 (84 min): boss deaths are fine (Aidon 0,
+    Black Lady 2, reanimated guardian 4), but `No legal region route`
+    appeared 212 times, 197 of them to Darkness Falls, 117 in 20 minutes on
+    0.236.0 (0.180.0 had 6), all realms, with 0 productive Darkness Falls
+    hunts on 0.236.0. Level-ups were 34 in 112 minutes, not comparable to
+    earlier runs because 494 of the 505 bots under 50 are now in their 40s
+    after the roster reset. The Darkness Falls cause is tracked as bug 145.
 
 
 77. **Friar and Warden companions never attack.** Reported 2026-10-01 with
@@ -1165,6 +1222,26 @@ not install the Setup tool; their disposable-input verification is pending.
     resting at the class threshold; groups leave outgrown or contested camps.
     Not yet investigated (rest threshold may not reach the regen/sit path).
     **Fixed in source 0.164.0.** Cause: `GameBot.WakeAfterRecovery` woke a resting solo bot's brain only at 100 % recovery, and rest regeneration gives at least 10 % of the maximum per second, so the brain (slower resting think interval) first looked at the bot when it was already near full; the class threshold in `HandleCampRecovery` never decided the pull. A resting solo camp bot now carries its class thresholds (`GameBot.RecoveryWakeThresholds`) and wakes its brain as soon as they are met. Groups still rest to full. The camp-leave half (`rival`/`outgrown` never logged) is not a demonstrated defect: solo bots only watch for rivals, outgrown applies to groups, and neither situation need have occurred. Live-log check pending: `PVE_REST` `avg_power_pct_at_pull` about 75-85 for casters and `avg_hp_pct_at_pull` about 80-90 for melee.
+    Re-check on installed 0.234.0 (2026-10-10 19:48–21:13): `PVE_REST`
+    reported 92–96 % power and 97–98 % health at pull (0.236.0: 88/98 and
+    98/99), but 376 rests against 1,728 pulls, so about 78 % of pulls had no
+    rest at all and the old average mixed both. Code review: the wake rule
+    is correct (class thresholds casters 60 hp / 75 power, melee 80 hp / 50
+    endurance, ±5; `WakeAfterRecovery` ends the rest at the first regen tick
+    inside the band). The real cause:
+    `BotRestRecovery.ShouldAutonomousPlayerBotRecover` gave every autonomous
+    world bot the fast quiet regeneration (about 10 % of the pool per
+    second) two seconds after combat, also while looting or walking, so a
+    solo camp bot refilled about 50 % in five seconds and never fell below
+    its rest threshold. Source 0.238.0: `PVE_REST` separates rested from
+    unrested pulls (`rest_wakes`, `rest_power/health_at_wake`, `rested_*`,
+    `unrested_*`, `rest_to_pull_s`, `route_pulls`), and a solo PvE camp bot
+    (stamped by its camp turn, not groups, RvR, travel or companions) gets
+    the quiet regeneration only while in its recovery rest
+    (`QuietRegenAllowed`, 9 cases in `UT_BotResting`). Pending: on the next
+    live run `rest_power_at_wake` / `rest_health_at_wake` in the 70–85 %
+    band, rests per pull well above 0.22, and `unrested_*` no longer near 98
+    %; watch camp dwell time.
 
 65b. **RvR bots die to named frontier mobs far above their level.** Split
     from 65. Live 0.125.0, 2026-09-28 04:41–15:46: 7,614 level-50 PvE deaths,
@@ -1180,67 +1257,14 @@ not install the Setup tool; their disposable-input verification is pending.
     the affected NPCs or bots. Expected: no null styles in a bot's style list
     and Bladeturn handled by an effect class. Not yet investigated.
     **Fixed in source 0.164.0.** Installed log: 4,326 `NULL style for NPC named new mob` came from an NPC template whose style list holds an unknown style or class id (`SkillBase.GetStyleByID` returned null and the template stored it); templates now skip and log such an id once at load. The `Unhandled spell` lines were `Bladeturn` (6,500), `AblativeArmor` procs (1,619) and similar, none of which need pet-level scaling; they now return unscaled like the other proc types. Verification pending: no `NULL style for NPC` and no `Unhandled spell in GetScaledSpell` on a clean start.
-
-61. **`REALM_RAID_HUB_ROUTE_FAILED event=epic-albion` about 175 times per
-    run.** Seen in the installed 0.115.0 log (3 h 26 min): the realm-raid rally
-    path for the Albion epic event cannot route to its hub. Expected: the raid
-    hub is reachable or the event is skipped instead of retried. Not yet
-    investigated. Live 2026-09-30: four of four raids still ended "Staging
-    failed: 0 adventurers arrived"; the raiders also killed each other, which
-    is fixed separately (bug 74).
-    **Superseded in source 0.163.0, not separately fixed.** The route failures ("assigned formation route exhausted collision-safe recovery", 1,411 lines for six events in the installed log, not only `epic-albion`) came from autonomous bots rallying to dragon and epic-dungeon raid hubs. Autonomous raids were removed in 0.163.0, so the path is no longer entered on its own; raids started from the launcher's event controls still use it and the route itself was not changed (no navigation evidence for a rebuild). Each member already logs the failure once and retries every 60 s. Verification pending: no `REALM_RAID_HUB_ROUTE_FAILED` without a launcher-started raid; if one appears there, reopen with the hub coordinates.
-
-60. **`Ability 'ConfusionImmunity' unknown` is logged 939 times per run.**
-    Seen in the installed 0.115.0 log (2026-09-27/28, 3 h 26 min) from
-    `DOL.GS.SkillBase`, together with 240 `LineXSpell Spell Adding Error`
-    warnings. Impact unknown: the ability or spell line is not granted, so a
-    class that should have confusion immunity or the affected spells may be
-    missing them. Expected: no unknown-ability or spell-adding warnings on a
-    clean start. Not yet investigated.
-    **Fixed in source 0.164.0.** `ConfusionImmunity` (15,963 + 56,749 warnings in the installed logs), `RootImmunity` and `MezzImmunity` are tested by key name only and have no ability row; `SkillBase.GetAbility` returns the same transient ability for them without a warning, and any other unknown ability warns once. Eight `LineXSpell` rows (items, potions) point to spell ids missing from the spell table; they are skipped and reported in one summary line with the first ten ids, not one error each. Those item effects stay unavailable until the spell data is supplied. Verification pending: no `Ability '...' unknown` for the three immunities and one `LineXSpell:` summary line per start.
-
-76. **Mixed-realm RvR warbands ping-pong between frontier porters.** Live
-    0.158.0, 2026-09-30 07:01–11:50: 66 of 116 warbands were mixed-realm
-    (task 71); a median of 111 porter departures per mixed warband in 5 hours
-    (56 for single-realm ones); only 9 of 8,586 warband departures left as a
-    whole party; at 17:37 366 RvR bots stood "Boarding frontier teleporter".
-    Stefan's 0.161.0 (bug 75) makes a warband take its leader's realm
-    passage, so members land together. Added in source 0.162.0: a straggler
-    whose force already has a member across boards at once instead of
-    waiting out the 5-minute departure cap, and does not reset that cap;
-    humans of any realm may use any frontier porter and land at the porter's
-    landing (owner, "Jeder nutzt jeden Porter"). Check:
-    `RVR_FRONTIER_DEPARTURE ... porter_realm= mixed= straggler=true`,
-    departures per warband well below 50 per 5 hours.
-    **Live 0.162.0 (2026-09-30 19:38 to 10-01 14:52): not fixed.** 70,992
-    departures (about 3,700 per hour), 69 % mixed and 65 % stragglers; warband
-    `…-004` (leader Hildeilda) left 1,995 times, alternating Home Mid and
-    Hadrian Mid with `straggler=true` both ways. Root cause: members in the
-    leader's region follow the leader's pending passage
-    (`FollowDynamicGroupLeader`), but a passage was cleared only on departure.
-    A leader that re-planned to a target in its own region never called the
-    porter code again and kept the stale passage, so its members ported away
-    from it and then back to it. **Fixed in source 0.170.0:** the passage is
-    dropped once the objective is in the current region and whenever
-    `TryFrontierTransport` finds no crossing needed. Check: departures per
-    hour far below 3,700.
-    **Live 0.170.0 (10-01 17:09 to 18:27): still about 3,600 per hour.** Top
-    warband `…-092` (single realm, leader Ranienwin) alternated Emain Alb and
-    Home Alb 141 times in 78 minutes without a death; force gap 25 minutes,
-    every departure a straggler. Second cause: the 0.162.0 straggler rule let
-    members board whenever *any* member was across, so they crossed without
-    the leader and then followed it back. **Fixed in source 0.171.0:** a
-    warband member boards only with its leader or after it
-    (`MayCrossWithoutLeader`). Check: departures per hour, and
-    `RVR_FRONTIER_LEADER_HOLD` for leaders that never board.
-    **Live 0.171.0 at 20x (18:32 to 18:47):** departures per simulated hour
-    fell to about a quarter and stragglers to 16 %, but 528 leader holds in
-    91 warbands: leaders without a ticket, "Holding group formation" until
-    the whole party was beside them and recovered, while the members waited
-    at the porter (506 bots "Boarding frontier teleporter"); 56 more stood at
-    the merchant with a full backpack and nothing sellable. **Fixed in source
-    0.172.0:** no formation hold while the objective is in another region;
-    the full-backpack case falls back to the dungeon road.
+    Re-check on installed 0.234.0/0.236.0: `NULL style` is at 0; `Unhandled
+    spell in GetScaledSpell` appeared 24 times per run, all for the Scorcher
+    DD/DD AE (spells 61058/61059, type `DirectDamageNoVariance`), which was
+    missing from the scaling switch at `GameNPC.cs:3437` and stayed
+    unscaled. Source 0.238.0 scales it like `DirectDamage`
+    (`UT_ScaledSpellNoVariance`). The other `*NoVariance` types are still
+    absent from the switch and would log the same warning if a pet or proc
+    used them. Pending: no `Unhandled spell` for 61058/61059 in a live run.
 
 74. **Parties of one realm raid kill each other.** Live log 2026-09-30: four of
     four scheduled or forced realm raids ended "Staging failed: 0 adventurers
@@ -1257,22 +1281,6 @@ not install the Setup tool; their disposable-input verification is pending.
     target. Real-client check pending: during the next raid no raider should
     be killed by a member of another party of the same raid. The "Staging
     failed" outcome is not addressed here (see bug 61).
-
-63. **Bots die repeatedly at a bindstone that is also an RvR rendezvous.**
-    Seen in the installed 0.115.0 log (3 h 26 min): the Midgard skald
-    Sivildrid died 33 of 40 times at the Svasud Faste bind (100: 765147,668315),
-    where RvR groups gather, and other bots (Sigiarfrid, Yrenborg, Livardis)
-    show the same spot. Each release returns the bot to the same bind and the
-    next fight kills it again. Task 48 makes the three border hubs safe, which
-    should remove this loop; verify after deployment. Related: bug 29.
-    Recurred massively on live 0.158.0 (2026-09-29 20:40–22:21, continuous
-    RvR): 1,879 deaths at the Mularn bind (100: 803816,726487), 1,188 at the
-    Connacht bind (200: 313218,469162) and 370 at the Cotswold bind
-    (1: 560491,511708), 89 % same-realm; one bot died 86 times. Fixed in
-    source 0.159.0: same-realm autonomous world bots cannot attack each other
-    within 2,500 units of their realm's own bindstones (the hub-peace rule).
-    Check: `RVR_HUB_PEACE ... bind:N` non-zero; no bind cell above a few
-    percent of bot deaths.
 
 73. **RvR group members do not help a mate who is attacked.** Aaron,
     2026-09-29, in game on 0.157.1. Cause: a group mate that is notified of
@@ -1337,59 +1345,6 @@ not install the Setup tool; their disposable-input verification is pending.
     claims it, the second-keep message reports 2 of 3, `/gc claim` still works,
     and damaged doors remain open until repaired.
 
-66. **Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
-    0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
-    had about 94 per hour), 1,999 of them full eight-member parties; single
-    forces departed 160–191 times. Bots die in the field, release at their hub
-    (0.123.0) and board again at once. Expected: a 2003 group rezzed, buffed and
-    regrouped for a few minutes before porting back. Investigation (04:41–15:46
-    log): `party=8` is the group size, not the number boarding; 5,979 of 7,558
-    departures moved one bot, and 3,646 of the 5,224 warband departures were a
-    single released member going back alone; 4,360 of 6,847 repeat departures
-    of a force came less than 3 minutes after its previous one. Fixed in
-    source: an autonomous RvR bot does not port out within 75 s of its own
-    release (it sits and recovers at the porter); a warband with a freshly
-    released member at the porter waits until all its members are alive and
-    within 1,500 units of the porter, or until the first of them has waited
-    3 minutes; a warband leaves at most once per 5 minutes (the rest of a
-    departure under way may follow for 20 s; a keep-defence call skips only
-    the cap); home passages are never held. The 0.123.0 one-minute muster is
-    unchanged. `RVR_FRONTIER_DEPARTURE` now logs `since_release_s` and
-    `force_gap_s`. Real-client and live-log check pending.
-65. **Bots die to mobs inside the border hubs.** Live 0.125.0, 2026-09-28
-    04:41–15:46 (11 h, 1,210 bots): 5,508 deaths inside the 3,500-unit safe
-    hubs, 4,997 of them PvE (phantom magi 739, savage dragonfly 522, thrawn
-    ogre thresher 412, snowshoe bandit 308, orc lure 275, defiled skeleton 270,
-    pollen spore 250), rising from about 200 to 770 per hour. Cause: not the
-    world data. The save has no hostile spawn within any hub radius (only
-    guards, merchants, trainers and ambient critters), and the 0.72.0
-    frontier restore placed none there. The killers are generated charm
-    pets: Sorcerer, Minstrel and Mentalist bots create a body from a real mob
-    row of their realm's template regions (Sorcerer and Minstrel: Albion
-    regions 1–62, killers here from Shrouded Isles region 51; Mentalist:
-    Hibernia regions 180–224, killers here from 181 and 200) next to themselves while idle, typically at the hub
-    bindstone. That body keeps the template row's respawn interval. When the
-    pet or an uncharmed candidate died, GameNPC death wiped the pet tag and
-    started the respawn; the deferred charm stop and the owner's cleanup then
-    no longer recognised it, and it came back as an ordinary aggressive
-    template mob (template level spread, aggro range 500) at its creation
-    spot, respawning there until the next server restart. 1,590 of the hub
-    deaths are on the Castle Sauvage bindstone (585891,476614) itself. The same
-    leak made 13,523 of 28,962 PvE mob kills in the run (47 %) come from mobs
-    that have no spawn in that region, rising from 201 to 2,101 per hour.
-    Fix in source: a generated charm body carries no respawn and keeps its
-    identity after death (a weak table besides the tag), so death, the charm
-    stop and owner cleanup delete it; human players' generated charms use the
-    same path. The ghost camps live only in server memory, so no save
-    migration is needed; the next server start clears the existing ones.
-    Not explained: the 308 snowshoe bandit deaths on the Svasud Faste hub
-    bindstone (765147,668315); no generated-charm class uses Midgard
-    templates, and the bandit camp lies about 21,000 units away. Measure after
-    deployment. Verification: `AUTONOMOUS_BOT_DEATH` lines with
-    `classification=pve` inside the hub radius should drop toward 0 per hour,
-    and PvE kills by mobs without a spawn in that region should stay near 0
-    over a whole day. Real-client check pending.
-
 67. **Mobs BAF toward the group during a held `/petpull`.** Reported on
     2026-09-28 while pet pulling as a Necromancer: mobs headed toward group
     members, though the expected pull remained on the pet and usually did
@@ -1450,45 +1405,6 @@ not install the Setup tool; their disposable-input verification is pending.
     Real-client check pending (the launcher itself was not changed in
     behavior; this is a test-only fix plus one inert seam field).
 
-58. **The live bot dashboard snapshot fails intermittently.** Every 30–60
-    minutes the log shows `Live bot dashboard snapshot failed
-    System.UnauthorizedAccessException: Access to the path is denied` at
-    `AutonomousBotDashboard.Publish` (`File.Move` over the published file,
-    AutonomousBotDashboard.cs:121). Cause: a reader that briefly holds the
-    destination file open without delete sharing (an antivirus scan or file
-    indexer are the likely candidates; the launcher's own reader already
-    opens the file with `FileShare.ReadWrite | FileShare.Delete`, so it is
-    not itself the blocker) makes the atomic `File.Move` throw for the few
-    milliseconds the hold lasts. Reproduced with a unit test that opens the
-    published file with `FileShare.Read` only and releases it shortly after
-    `Publish` starts. Fix: `Publish` retries the move up to six times with a
-    short growing backoff (25 ms per attempt, roughly a quarter second total)
-    before giving up and logging the warning, so a lock released within that
-    window no longer drops the snapshot for a cycle. Real-client check
-    pending.
-
-57. **`/tc` was registered twice.** `TeleportToExchangeCommand` claims `&tc`
-    as its own command (teleport to the capital's Realm Exchange), and
-    `scripts/commands/TransferCorpse.cs` also listed `&tc` as an alias of its
-    own `&transfercorpse` command. `ScriptMgr.LoadCommands` adds a type's
-    primary command first and its aliases after; whichever of the two loaded
-    second hit the duplicate key on `Dictionary.Add` and logged
-    `ArgumentException: An item with the same key has already been added.
-    Key: &tc`, silently dropping that alias (proven both ways: this key
-    collision reproduces regardless of load order). Cause confirmed by
-    reading `ScriptMgr.LoadCommands` and both command classes; `&tc` had no
-    other role in `TransferCorpse`, so removing it from that alias list keeps
-    `/tc` on the Realm Exchange command and leaves `/transfercorpse` (its
-    only other name) unaffected. `ALL SERVER COMMANDS.txt` no longer lists
-    `/transfercorpse (aliases: /tc)`. Added
-    `UT_PlayerCommandAvailability.NoCommandHandlerRegistersADuplicateCommandKey`,
-    which scans every `ICommandHandler` type across the loaded assemblies for
-    a command key claimed by more than one handler; it fails with this exact
-    collision before the fix and passes after. Full server test suite: 2330
-    passed, 1 skipped (pre-existing, unrelated), 0 failed. Real-client check
-    pending: confirm `/tc` still teleports to the Realm Exchange,
-    `/transfercorpse` still moves a dead player to a claimed keep, and the
-    startup log no longer shows the `LoadCommands` `&tc` exception.
 56. **Bot AI ticks are slow and stall the NPC service.** Seen in the
     installed 0.115.0 log on 2026-09-27/28 (about 600 world bots): 43,914
     `Long NpcService.Tick` warnings, 99.7 % of them `BotBrain`, about 5,000
@@ -1608,6 +1524,14 @@ not install the Setup tool; their disposable-input verification is pending.
       item/coin outcomes, and bound ordinary itinerary seam checks across
       turns without changing route choice. No source fix or deployment yet;
       post-fix live and real-client verification remain pending.
+    Log check on installed 0.234.0 (after the ramp): about 3,100 slow bot
+    ticks per hour, median 34 ms, max 743 ms, none over 1 s; the loop ran
+    1,770 of 1,800 ticks per minute at p95 15–18 ms. Still open:
+    `ExecuteRvr` over 100 ms in 24 of 53 minutes (max 616 ms), coordinator
+    lock waits 157 s in total, and the itinerary cost: Briaelelse's 811 slow
+    ticks in 15 minutes while "Traveling to Kiernan" ran `ZoneItineraryStep`
+    with 68 path queries at about 150 ms per turn until a between-task
+    timeout; Conedan and Deiraewen showed the same.
 
 55. **Companions buff before resurrecting a dead player.** Reported by Aaron
     on 0.116.0 (2026-09-28). Cause: resurrection only tried the strongest
@@ -1823,7 +1747,399 @@ not install the Setup tool; their disposable-input verification is pending.
 
 31. **Melee companions swap shield and two-hander every tick, stalling the server.** Reproduce with a persistent Thane or Skald companion carrying both a shield and a two-handed weapon. Expected: the better setup stays equipped. Actual: `TryGetEquipmentUpgrade` compared a candidate only against its own target slot; with a two-hander worn the shield slot is empty and vice versa, so each counted as an upgrade and `TryApplyPendingPersistentCompanionUpgrade` swapped them on every think with an atomic SQLite save. Observed on 0.73.0 with two Thanes and a Skald (level 30): about 16,000 "Long NpcService.Tick" warnings, average 80 ms and up to 1.4 s, felt in the client as periodic freezes. Source fix: the upgrade check also subtracts the weapons the move displaces (two-hander versus right and left hand). Local installation removed the stall pattern; sustained real-client observation remains pending.
 
-29. **Separated PvE parties can wait on combat or arrivals in another region.** The 0.74.0 observation caught safe members paused by a distant party member's combat; source also only recognized arrivals immediately across the leader's next region edge, ignoring members already in the final camp region. Source 0.75.0 scopes ordinary combat/recovery holds to nearby living members and permits leaders to advance toward members at the destination region. Actual routes, combat defense and existing deadlines remain required. Installation, multi-edge travel and combat/recovery verification pending; other travel failures are not claimed fixed.
+22. **Cruachan Gorge mob camps are sparse near Druim Ligen.** Reproduce by walking out of Druim Ligen into Cruachan Gorge and looking for ordinary mobs. Expected: visible PvE activity along the approach. Actual: the installed world has only 26 neutral mobs across Cruachan Gorge; the closest live mob is about 8,500 world units from the border keep. Teleport fix 0.66.0 lands nearer an existing camp. Source audit 2026-09-26: the nearest archived candidate is about 7,300 units away but falls outside the mapped period-location witness radius, and no native route proof exists for it. Zone-level period reports do not establish a closer camp. No uncorroborated spawn was added. Workaround: travel farther into the zone to an existing camp. Follow-up source 0.72.0 restores 219 archived Cruachan Gorge rows using retained zone/species/level rosters, increasing its ordinary mob population from 26 to 245. This is roster-backed density restoration, not independent period-map or native-path proof for every location; installation and the border-keep approach require real-client verification.
+
+23. **Keep doors require repeated clicks.** The door-request handler skipped ordinary keep doors, and overlapping door/object interactions could traverse twice. Source fix 0.72.0 dispatches ordinary keep-door requests and suppresses duplicate traversal for 750 ms; bot access uses guild hostility instead of realm. The Fensalir Faste report in entry 39 exposed a separate human hostility bypass, fixed in source 0.86.0. Neutral/defeated and friendly-owned keep entry/exit, blocked hostile gates, and client packet behavior await installation and real-client verification.
+
+Source inventory audit 2026-09-26: the implementations cited in entries 1–17 remain in this checkout. Their installation and real-client checks were not performed in this source-only pass, so all remain pending.
+
+1. **Companions and autonomous bots appear undergeared.** Sparse template tables no longer leave new persistent companions' armor and shield slots empty. Existing saved companions refresh only their bound starter armor and weapons as they level, retaining earned and manually equipped items. Autonomous bots repair missing starter armor and appropriate shields when loaded. Mixed-realm drops now pair the selected member's class with their realm and prefer a bot that can equip the item. Source fix: 0.56.0; installation and real-client equipment inspection pending.
+2. **Group members become enemy-selectable and lose group colors.** NPC create packets now apply the friendly guild ID only to allied gamebots. Group membership changes refresh the friendly IDs of all remaining grouped gamebots for each human viewer. Source fix: 0.56.0; installation and real-client Tab/color verification pending.
+3. **Tanks do not reliably peel adds off healers and bombers.** Tanks prioritize attackers of healers, then bomb casters, then leaders; group attacks raise tank threat immediately, and an offensive cast on a different target yields to an urgent peel. Source fix: 0.56.0; installation and real-client combat verification pending.
+4. **Refresh buffs after upgrades.** Companion buff maintenance compares active buff strength and allows a stronger rank to replace a weaker effect. Source fix: 0.49.0; installation and gameplay verification pending.
+5. **Prioritize specialization buffs while covering base buffs.** Player-led companions prefer specialization-line buffs. A base buff is skipped only while another live group member has an equal or stronger compatible buff active on the same target; a human player's known spell alone does not count. Source fixes: 0.49.0 and 0.52.0; installation and gameplay verification pending.
+6. **Automatically use Guard and Protect intelligently.** Companion protection assignments distribute Guard and Protect across uncovered group members, prioritize healers and bomb casters, and respect the native ranges (256 and 1,000 units). Existing effects reserve coverage only while their source remains in range. Source fixes: 0.49.0 and 0.52.0; installation and gameplay verification pending.
+7. **Update and choose summoned pets.** Idle player-led companions upgrade to stronger learned summons, and Enchanters prefer Underhill Ally when available. Repeating the same summon is allowed only after the owner levels enough to improve that pet. Source fixes: 0.49.0, 0.51.0, and 0.52.0; installation and gameplay verification pending.
+8. **Use bomb spells and coordinate bomb groups.** Eligible player-led casters prioritize PBAoE spells on sufficiently large focused pulls. The Companion Manager saves an Auto/Bomb/Off preference per companion, and bombing waits up to 2.5 seconds for tank aggro, restarting that wait for each newly focused target. Source 0.65.0 makes Bomb preference use the highest learned rank and permits clustered PvP opponents already fighting the group, without bombing idle or mezzed players. Source fixes: 0.49.0, 0.52.0 and 0.65.0; installation and real-client PvE/PvP verification pending.
+9. **Make mobs form groups and award group bonuses.** Mob BAF now resolves companion pullers and controlled pets to their player-led group, counts companion members for add selection, and preserves the existing add-based experience bonus. Source fix: 0.49.0; installation and gameplay verification pending.
+10. **Explain the Server population controls.** Preset, type-mix, danger, and world-shape controls now have plain-language tooltips. Source fix: 0.49.0; launcher installation and hover verification pending.
+
+11. **Dungeon mobs were missing and populations were thin.** A read-only audit of all 29 supported dungeon zones found 2,310 levelled neutral mob records archived by the Classic 1.65 population profile and absent from the current world database. The new Setup migration restores the exact archived rows for all 15 Classic realm dungeons and four supported Old Frontiers dungeons. Shrouded Isles and Darkness Falls rows were already restored. The [2002 map compilation](https://www.scribd.com/document/144573276/DAOC-Map-Compilation-Book) and [Prima atlas](https://www.scribd.com/document/131856275/Dark-Age-of-Camelot-the-Atlas-Prima) document period dungeon layouts and rosters; the archived world records provide the numeric spawn baseline. This source fix is version 0.48.0 and still needs deployment and real-client verification.
+
+12. **Companions get stuck atop the Midgard Darkness Falls entrance stairs.** Source fix 0.61.0 adds three bidirectional stair links at each DF entrance, packaged as nine hash-checked tile replacements in a temporary cached mesh, and preserves exact stair endpoints during bot path following. All other installed mesh tiles remain unchanged. Native complete return routes passed for 1,417 monster spawns. Installation and real-client up/down movement with companions and autonomous groups remain pending.
+13. **PvE bots initiate unwanted PvP in frontiers and shared dungeons.** The early frontier scan ignored durable PvE objectives and normal recovery/strength checks; the separate DF scan also initiated fights while on PvE work. Source fix 0.61.0 gates frontier hunts through the common opportunity policy and removes the redundant dungeon scan, retaining real defense and committed siege combat. Installation and live activity/death balance verification remain pending.
+14. **Player-led companions do not fully support keep door attacks and ram boarding.** Source fix 0.63.0 allows aggressive and defensive companions to assist the player's attack on a closed enemy keep door, commands class pets to it, lets Theurgists repeatedly summon against it, and boards nearby companions into available ram seats with dismount cleanup. Installation and real-client verification of door damage, pet casts, seat visuals, capacity, and dismount behavior remain pending.
+15. **Grouped Healers do not use their learned area stuns.** The support path did not select Pacification area stuns. Source fix 0.63.0 adds a cast decision for at least two already engaged enemies, protects mezzed targets and idle bystanders, and favors clusters near an active PBAoE caster. Installation and real-client verification with Tri-spec and Pacification Healers, including a bomb group and urgent healing, remain pending.
+16. **`/gc form` stalled with companions in the group.** Source fix 0.64.0 counts only human founders for confirmation and also allows founding alone at a registrar. `/gc invite` immediately joins an owned companion to the guild; persistent companions retain membership, and equipped cloaks and shields show the chosen guild emblem. Installation and real-client checks of founding, invitations, emblem updates, and relog persistence remain pending.
+
+17. **Keep Chief claim prompt is silent and realm frontier teleports enter New Frontiers.** At the claimable keep near Druim Ligen with an eight-member group, the legacy Chief interaction rejects the player before offering a claim; cached group area membership can also miscount nearby companions. The shared teleporter sends Forest Sauvage, Uppland, and Cruachan Gorge to region 163. Source fix 0.66.0 aligns the Chief with `/gc claim`, counts group members at their actual positions, removes Agramon travel, and routes those three destinations to Old Frontiers regions 1, 100, and 200. The installed world database already contains neutral Old Frontiers mobs, though camps near border keeps are sparse. Installation and real-client claim, teleport, and mob-visibility verification remain pending.
+
+19. **Tank companions may not use styles or their specced weapons.** Legacy saved companions without a valid persisted build plan now align their seeded weapon plan with invested weapon specializations before restoring saved equipment. A valid saved plan and all saved equipment still take precedence. Source fix: 0.71.0; installation and real-client style and equipment verification pending.
+
+21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
+
+## Finished
+
+136. **Done — Lone bots register for guild sieges and are rejected at once.**
+     Installed 0.234.0, 2026-10-10 19:48–20:46: 64 `RVR_KEEP_ROUTE_ABANDONED`
+     with reason "A guild assault requires a formed party", all `force=rvr-<id>`
+     solo forces. `ChooseCore` let any single-guild force reinforce its
+     guild's siege, but `ReportGuildArmy` only releases formed parties, so the
+     controller abandoned the lone bot and blocked the keep for 20 minutes.
+     Source 0.236.0 keeps lone bots out of the attacker bucket until the
+     army has launched, then lets them follow as helpers (5 regression tests).
+     Installed-log check pending: no such abandons for `rvr-<id>` forces.
+     Verified on installed 0.236.0 (2026-10-10, 21:14–21:42): 0 abandons
+     with "requires a formed party" (0.234.0 had 92, all `force=rvr-<id>`).
+     Only one guild army gathered in that run, so the sample is small. Fixed
+     in 0.236.0.
+
+131. **Done — Group cohesion throws when the leader has left its group.** Installed
+     0.234.0, 16:57:29: `ArgumentNullException (Parameter 'key')` from
+     `ConditionalWeakTable.GetValue` in
+     `AutonomousBotGroupCoordinator.IsCohesive`, interrupting Frearhild's goal.
+     Source 0.235.0: guard for a leader without a group; test
+     `ALeaderThatLeftItsGroupIsCohesiveInsteadOfThrowing`. Pending: no
+     `IsCohesive` exception in a live run.
+     Verified on installed 0.234.0 (84 min) and 0.236.0 (28 min): no
+     `IsCohesive` or `ArgumentNullException` stack. Fixed in 0.235.0.
+
+121. **Done — Siege column handling reads a cleared keep destination.** Verified
+     installed 0.217.0 observation on 2026-10-09: null-reference failures in
+     `HoldSiegeColumn` and the `AbandonKeepTarget` group-combat predicate.
+     A retained committed plan/muster phase can outlive synchronous objective
+     clearing earlier in the same turn. Source 0.221.0 stops that stale turn,
+     passes a captured destination into column handling, and guards absent
+     destinations. Reproduce with a marching force whose keep objective ends
+     or is cleared during recovery; expect clean reassignment without an
+     exception. Deployed in 0.222.0; exact-trigger verification remains pending.
+     These stacks are distinct from bugs 116/117. Private logs remain outside Git.
+     Verified on installed 0.234.0 (84 min) and 0.236.0 (28 min): no
+     `HoldSiegeColumn` or `AbandonKeepTarget` null-reference stack. Fixed in
+     0.221.0.
+
+117. **Done — PvE camp turn reads a cleared objective after movement recovery.**
+     Installed 0.214.1 observation on 2026-10-09 found two null-reference
+     failures through `LeadPveCamp`. Source audit found that `IssuePath` can
+     synchronously abandon `_camp`, after which the enemy-hold branch read
+     its name/zone and overwrote the recovery status. Source 0.215.0 stops
+     that branch when movement fails or changes the camp. This repairs the
+     identified unsafe path; installation and reproduction of the exact
+     observed stack remain pending. No live save or route state was edited.
+     The supplied 0.215.0 observation saw no recurrence; the exact failure
+     trigger was not reproduced, so acceptance remains pending.
+     Verified on installed 0.234.0 (84 min) and 0.236.0 (28 min): no
+     `LeadPveCamp` exception. Fixed in 0.215.0.
+
+116. **Done — Bot group-leader promotion throws during hub departure.** Installed
+     0.214.1 observation on 2026-10-09 found twenty-one exceptions after
+     promoting a bot: `Leader` is a human-player cast and becomes null.
+     Source 0.215.0 announces the promoted `GameLiving` directly, preserving
+     the group swap and indexes. Added a regression case exercising actual
+     bot promotion and its notification. Test execution and installed hub
+     departure verification remain pending; this defect was one contributor,
+     not an explanation of all keep-siege failures. The supplied 0.215.0
+     observation recorded 31 completed hub leader handovers and no recurrence;
+     retain pending status until the required acceptance is complete.
+     Verified on installed 0.234.0 and 0.236.0: no promotion exception; 27
+     and 14 clean `RVR_HUB_MUSTER_LEADER_HANDOVER` lines. Fixed in 0.215.0.
+
+85. **Done — Defeated Fensalir Faste stays neutral without a bot guild claim.**
+    Owner, 2026-10-03. Logs repeatedly show
+    `KEEP_CLAIM_STEWARD_MISSING keep=80 reason=no_lord_position` at startup.
+    Keeps initialize before saved mobs, and the defeated lord's later load
+    never restored the steward; bots only approached a steward already nearby.
+    Expected: guild bots secure free, defeated keeps. Source 0.197.0 restores
+    the steward when the saved lord tries to enter the world, keeps the lord
+    absent until a claim, and adds reserved claim journeys to free keeps.
+    All guild claim caps are removed (task 82). Deployed with 0.199.0 on
+    2026-10-03. Pending: observe a bot traveling to and claiming Fensalir,
+    and restart with another defeated keep to check the steward and
+    subsequent guild ownership.
+     Verified on installed logs through 0.236.0: `KEEP_CLAIM_STEWARD_READY`
+     for keeps 80 and 77 after 0.199.0 and no `KEEP_CLAIM_STEWARD_MISSING`
+     since; keep 77 was claimed by a bot guild. Keep 80's lord is alive
+     again, so a bot claim of Fensalir itself was not observed. Fixed in
+     0.197.0.
+
+81. **Done — Keeps bot guilds claimed fell back to the Frontier Wardens after a restart.**
+    Owner 2026-10-02: "when keeps are raided, bots do not claim them". Logs
+    (0.183.0): 5 of 5 captures (Arvakr, Blendrake, Bledmeer, Dun Scathaig,
+    Fensalir) were claimed by a crew bot and all 5 went back to the Wardens
+    at the next start (`FRONTIER_WARDEN_KEEP_LEVEL ... from=5`). Cause: the
+    crew reconcile renames "Camlann Crew X" to "X" in memory and saves the
+    row, but `DbGuild.GuildName` is `[ReadOnly]`, so the database kept the old
+    name; the claim stored "X", the keep found no guild at load, and
+    `PvpKeepCampaign.Initialize` handed it to the garrison and saved over it.
+    Source 0.191.0: the crew rename writes the name with a direct UPDATE; a
+    keep whose claimed guild is not loaded is left unowned and logged
+    (`KEEP_OWNER_UNRESOLVED`) instead of being given away; the rename rebinds
+    keeps claimed under the old or new name (guild keep list included);
+    every claim logs `KEEP_CLAIMED`. Player `/gc rename` is unchanged (still
+    not persisted, upstream). Open: Hlidskialf Faste (77) has had a defeated
+    lord without a claim steward since 09-29 (`no_lord_position`), so no bot
+    can claim it. Check in the client: a keep a crew claims keeps its banner
+    and lord after a server restart.
+     Verified on the 2026-10-09 save snapshot: the five bot claims from
+     10-03/04 (keeps 50, 52, 77, 101, 106) are still held after several
+     restarts; 0 `KEEP_OWNER_UNRESOLVED` in the whole live log. Fixed in
+     0.191.0.
+
+80. **Done — Level 40+ Minstrels freeze at their bind stone with a mez song.**
+    Live logs 2026-09-30 to 10-02: 2,444 stuck recoveries for 35 Minstrels,
+    all on bind points (Camelot, Castle Sauvage and others); Edalwell stood
+    about 13.5 h. In 24 of 24 slow casting ticks their current spell was
+    Commanding Cadence. Cause: `SpellHandler` keeps a pulsing mesmerize in
+    `CastingRetry` when `CheckEndCast` fails (1.65 flute mez); a player
+    cancels it with another song, but a bot cannot (non-players only queue
+    new spells), so the bot counted as casting forever and the world
+    controller never chose a new goal. The stuck watchdog moved it without
+    ending the cast, so it froze again on the bind spot. Source 0.187.0: the
+    endless mez retry applies only to players; the watchdog stops any cast
+    before its recovery move. The Cabalist/Reaver/Sorcerer/Friar cluster at
+    the same bind stone was the bind-stone killing (bug 63) and ended with
+    0.162.0. Check in the client: no Minstrel stands at a bind stone playing
+    its mez song; Minstrels still mez in fights.
+     Verified on installed 0.234.0 (84 min): every Minstrel has at most 1
+     stuck recovery (Edalwell 1). Fixed in 0.187.0.
+
+79. **Done — Level 46+ Valewalkers cast nonstop in their capital and never leave.**
+    Owner 2026-10-02 (live 0.183.0): Conoorric stands in Tir na Nog casting
+    without pause. 18 of 18 Valewalkers with Arboreal Path 48-50 had 78-284
+    stuck recoveries, always back onto their bind spot; those at 43 or lower
+    had at most 18. Cause: Witherstrike (L46) has proc frequency 20, the
+    lower ranks of the same proc line 15. `GameBot.AreSpellsEqual` compared
+    frequency, so the bot kept Scourgestrike next to Witherstrike; the
+    weaker rank lost the effect conflict after every 3 s cast (power spent,
+    no effect) and `LivingHasEffect` kept reporting it missing, so the bot
+    stopped for it again and again. Source 0.185.0: ranks of one proc spell
+    group count as the same spell regardless of frequency, and a same-or-
+    higher rank of the proc line on the target counts as present. Check in
+    the client: Conoorric and the other high Valewalkers in Tir na Nog stop
+    casting and walk off; Witherstrike stays up. The Animist the owner saw is
+    not explained (no proc line); watch whether it still casts nonstop.
+     Verified on installed 0.234.0 (84 min): every Valewalker has at most 1
+     stuck recovery (was 78–284). Fixed in 0.185.0.
+
+76. **Done — Mixed-realm RvR warbands ping-pong between frontier porters.** Live
+    0.158.0, 2026-09-30 07:01–11:50: 66 of 116 warbands were mixed-realm
+    (task 71); a median of 111 porter departures per mixed warband in 5 hours
+    (56 for single-realm ones); only 9 of 8,586 warband departures left as a
+    whole party; at 17:37 366 RvR bots stood "Boarding frontier teleporter".
+    Stefan's 0.161.0 (bug 75) makes a warband take its leader's realm
+    passage, so members land together. Added in source 0.162.0: a straggler
+    whose force already has a member across boards at once instead of
+    waiting out the 5-minute departure cap, and does not reset that cap;
+    humans of any realm may use any frontier porter and land at the porter's
+    landing (owner, "Jeder nutzt jeden Porter"). Check:
+    `RVR_FRONTIER_DEPARTURE ... porter_realm= mixed= straggler=true`,
+    departures per warband well below 50 per 5 hours.
+    **Live 0.162.0 (2026-09-30 19:38 to 10-01 14:52): not fixed.** 70,992
+    departures (about 3,700 per hour), 69 % mixed and 65 % stragglers; warband
+    `…-004` (leader Hildeilda) left 1,995 times, alternating Home Mid and
+    Hadrian Mid with `straggler=true` both ways. Root cause: members in the
+    leader's region follow the leader's pending passage
+    (`FollowDynamicGroupLeader`), but a passage was cleared only on departure.
+    A leader that re-planned to a target in its own region never called the
+    porter code again and kept the stale passage, so its members ported away
+    from it and then back to it. **Fixed in source 0.170.0:** the passage is
+    dropped once the objective is in the current region and whenever
+    `TryFrontierTransport` finds no crossing needed. Check: departures per
+    hour far below 3,700.
+    **Live 0.170.0 (10-01 17:09 to 18:27): still about 3,600 per hour.** Top
+    warband `…-092` (single realm, leader Ranienwin) alternated Emain Alb and
+    Home Alb 141 times in 78 minutes without a death; force gap 25 minutes,
+    every departure a straggler. Second cause: the 0.162.0 straggler rule let
+    members board whenever *any* member was across, so they crossed without
+    the leader and then followed it back. **Fixed in source 0.171.0:** a
+    warband member boards only with its leader or after it
+    (`MayCrossWithoutLeader`). Check: departures per hour, and
+    `RVR_FRONTIER_LEADER_HOLD` for leaders that never board.
+    **Live 0.171.0 at 20x (18:32 to 18:47):** departures per simulated hour
+    fell to about a quarter and stragglers to 16 %, but 528 leader holds in
+    91 warbands: leaders without a ticket, "Holding group formation" until
+    the whole party was beside them and recovered, while the members waited
+    at the porter (506 bots "Boarding frontier teleporter"); 56 more stood at
+    the merchant with a full backpack and nothing sellable. **Fixed in source
+    0.172.0:** no formation hold while the objective is in another region;
+    the full-backpack case falls back to the dungeon road.
+     Verified on installed 0.234.0 (84 min, 1,810 bots): about 1,000 porter
+     departures per hour (was about 3,600), 16 % stragglers; forces average
+     3.8 departures per 84 minutes. Fixed in source before 0.234.0.
+
+66. **Done — Warbands re-port to the frontier every 3–4 minutes after a wipe.** Live
+    0.125.0, 11 h: 7,560 `RVR_FRONTIER_DEPARTURE` (about 690 per hour; 0.115.0
+    had about 94 per hour), 1,999 of them full eight-member parties; single
+    forces departed 160–191 times. Bots die in the field, release at their hub
+    (0.123.0) and board again at once. Expected: a 2003 group rezzed, buffed and
+    regrouped for a few minutes before porting back. Investigation (04:41–15:46
+    log): `party=8` is the group size, not the number boarding; 5,979 of 7,558
+    departures moved one bot, and 3,646 of the 5,224 warband departures were a
+    single released member going back alone; 4,360 of 6,847 repeat departures
+    of a force came less than 3 minutes after its previous one. Fixed in
+    source: an autonomous RvR bot does not port out within 75 s of its own
+    release (it sits and recovers at the porter); a warband with a freshly
+    released member at the porter waits until all its members are alive and
+    within 1,500 units of the porter, or until the first of them has waited
+    3 minutes; a warband leaves at most once per 5 minutes (the rest of a
+    departure under way may follow for 20 s; a keep-defence call skips only
+    the cap); home passages are never held. The 0.123.0 one-minute muster is
+    unchanged. `RVR_FRONTIER_DEPARTURE` now logs `since_release_s` and
+    `force_gap_s`. Real-client and live-log check pending.
+     Verified on installed 0.234.0 (84 min): 0 of 404 frontier departures
+     within 75 s of a release. Fixed.
+
+65. **Done — Bots die to mobs inside the border hubs.** Live 0.125.0, 2026-09-28
+    04:41–15:46 (11 h, 1,210 bots): 5,508 deaths inside the 3,500-unit safe
+    hubs, 4,997 of them PvE (phantom magi 739, savage dragonfly 522, thrawn
+    ogre thresher 412, snowshoe bandit 308, orc lure 275, defiled skeleton 270,
+    pollen spore 250), rising from about 200 to 770 per hour. Cause: not the
+    world data. The save has no hostile spawn within any hub radius (only
+    guards, merchants, trainers and ambient critters), and the 0.72.0
+    frontier restore placed none there. The killers are generated charm
+    pets: Sorcerer, Minstrel and Mentalist bots create a body from a real mob
+    row of their realm's template regions (Sorcerer and Minstrel: Albion
+    regions 1–62, killers here from Shrouded Isles region 51; Mentalist:
+    Hibernia regions 180–224, killers here from 181 and 200) next to themselves while idle, typically at the hub
+    bindstone. That body keeps the template row's respawn interval. When the
+    pet or an uncharmed candidate died, GameNPC death wiped the pet tag and
+    started the respawn; the deferred charm stop and the owner's cleanup then
+    no longer recognised it, and it came back as an ordinary aggressive
+    template mob (template level spread, aggro range 500) at its creation
+    spot, respawning there until the next server restart. 1,590 of the hub
+    deaths are on the Castle Sauvage bindstone (585891,476614) itself. The same
+    leak made 13,523 of 28,962 PvE mob kills in the run (47 %) come from mobs
+    that have no spawn in that region, rising from 201 to 2,101 per hour.
+    Fix in source: a generated charm body carries no respawn and keeps its
+    identity after death (a weak table besides the tag), so death, the charm
+    stop and owner cleanup delete it; human players' generated charms use the
+    same path. The ghost camps live only in server memory, so no save
+    migration is needed; the next server start clears the existing ones.
+    Not explained: the 308 snowshoe bandit deaths on the Svasud Faste hub
+    bindstone (765147,668315); no generated-charm class uses Midgard
+    templates, and the bandit camp lies about 21,000 units away. Measure after
+    deployment. Verification: `AUTONOMOUS_BOT_DEATH` lines with
+    `classification=pve` inside the hub radius should drop toward 0 per hour,
+    and PvE kills by mobs without a spawn in that region should stay near 0
+    over a whole day. Real-client check pending.
+     Verified on installed 0.234.0 (84 min): 6 PvE deaths inside the border
+     hubs (was 200–770 per hour); named-boss deaths near zero (Aidon 0,
+     Black Lady 2). Fixed.
+
+63. **Done — Bots die repeatedly at a bindstone that is also an RvR rendezvous.**
+    Seen in the installed 0.115.0 log (3 h 26 min): the Midgard skald
+    Sivildrid died 33 of 40 times at the Svasud Faste bind (100: 765147,668315),
+    where RvR groups gather, and other bots (Sigiarfrid, Yrenborg, Livardis)
+    show the same spot. Each release returns the bot to the same bind and the
+    next fight kills it again. Task 48 makes the three border hubs safe, which
+    should remove this loop; verify after deployment. Related: bug 29.
+    Recurred massively on live 0.158.0 (2026-09-29 20:40–22:21, continuous
+    RvR): 1,879 deaths at the Mularn bind (100: 803816,726487), 1,188 at the
+    Connacht bind (200: 313218,469162) and 370 at the Cotswold bind
+    (1: 560491,511708), 89 % same-realm; one bot died 86 times. Fixed in
+    source 0.159.0: same-realm autonomous world bots cannot attack each other
+    within 2,500 units of their realm's own bindstones (the hub-peace rule).
+    Check: `RVR_HUB_PEACE ... bind:N` non-zero; no bind cell above a few
+    percent of bot deaths.
+     Verified on installed 0.234.0 (84 min): deaths near each bind stone are
+     under 1 % of 2,624 bot deaths; `RVR_HUB_PEACE` logs 632–1,092 bind-
+     peace events per 5 minutes. Fixed in 0.162.0.
+
+61. **Done — `REALM_RAID_HUB_ROUTE_FAILED event=epic-albion` about 175 times per
+    run.** Seen in the installed 0.115.0 log (3 h 26 min): the realm-raid rally
+    path for the Albion epic event cannot route to its hub. Expected: the raid
+    hub is reachable or the event is skipped instead of retried. Not yet
+    investigated. Live 2026-09-30: four of four raids still ended "Staging
+    failed: 0 adventurers arrived"; the raiders also killed each other, which
+    is fixed separately (bug 74).
+    **Superseded in source 0.163.0, not separately fixed.** The route failures ("assigned formation route exhausted collision-safe recovery", 1,411 lines for six events in the installed log, not only `epic-albion`) came from autonomous bots rallying to dragon and epic-dungeon raid hubs. Autonomous raids were removed in 0.163.0, so the path is no longer entered on its own; raids started from the launcher's event controls still use it and the route itself was not changed (no navigation evidence for a rebuild). Each member already logs the failure once and retries every 60 s. Verification pending: no `REALM_RAID_HUB_ROUTE_FAILED` without a launcher-started raid; if one appears there, reopen with the hub coordinates.
+     Verified on installed 0.234.0 and 0.236.0 (3 starts): 0
+     `REALM_RAID_HUB_ROUTE_FAILED`. Fixed.
+
+60. **Done — `Ability 'ConfusionImmunity' unknown` is logged 939 times per run.**
+    Seen in the installed 0.115.0 log (2026-09-27/28, 3 h 26 min) from
+    `DOL.GS.SkillBase`, together with 240 `LineXSpell Spell Adding Error`
+    warnings. Impact unknown: the ability or spell line is not granted, so a
+    class that should have confusion immunity or the affected spells may be
+    missing them. Expected: no unknown-ability or spell-adding warnings on a
+    clean start. Not yet investigated.
+    **Fixed in source 0.164.0.** `ConfusionImmunity` (15,963 + 56,749 warnings in the installed logs), `RootImmunity` and `MezzImmunity` are tested by key name only and have no ability row; `SkillBase.GetAbility` returns the same transient ability for them without a warning, and any other unknown ability warns once. Eight `LineXSpell` rows (items, potions) point to spell ids missing from the spell table; they are skipped and reported in one summary line with the first ten ids, not one error each. Those item effects stay unavailable until the spell data is supplied. Verification pending: no `Ability '...' unknown` for the three immunities and one `LineXSpell:` summary line per start.
+     Verified on installed 0.234.0 and 0.236.0 (3 starts): 0 unknown-ability
+     warnings, one LineXSpell summary per start. Fixed.
+
+58. **Done — The live bot dashboard snapshot fails intermittently.** Every 30–60
+    minutes the log shows `Live bot dashboard snapshot failed
+    System.UnauthorizedAccessException: Access to the path is denied` at
+    `AutonomousBotDashboard.Publish` (`File.Move` over the published file,
+    AutonomousBotDashboard.cs:121). Cause: a reader that briefly holds the
+    destination file open without delete sharing (an antivirus scan or file
+    indexer are the likely candidates; the launcher's own reader already
+    opens the file with `FileShare.ReadWrite | FileShare.Delete`, so it is
+    not itself the blocker) makes the atomic `File.Move` throw for the few
+    milliseconds the hold lasts. Reproduced with a unit test that opens the
+    published file with `FileShare.Read` only and releases it shortly after
+    `Publish` starts. Fix: `Publish` retries the move up to six times with a
+    short growing backoff (25 ms per attempt, roughly a quarter second total)
+    before giving up and logging the warning, so a lock released within that
+    window no longer drops the snapshot for a cycle. Real-client check
+    pending.
+     Verified on installed 0.234.0 and 0.236.0 (112 min): 0 dashboard
+     snapshot failures. Fixed.
+
+57. **Done — `/tc` was registered twice.** `TeleportToExchangeCommand` claims `&tc`
+    as its own command (teleport to the capital's Realm Exchange), and
+    `scripts/commands/TransferCorpse.cs` also listed `&tc` as an alias of its
+    own `&transfercorpse` command. `ScriptMgr.LoadCommands` adds a type's
+    primary command first and its aliases after; whichever of the two loaded
+    second hit the duplicate key on `Dictionary.Add` and logged
+    `ArgumentException: An item with the same key has already been added.
+    Key: &tc`, silently dropping that alias (proven both ways: this key
+    collision reproduces regardless of load order). Cause confirmed by
+    reading `ScriptMgr.LoadCommands` and both command classes; `&tc` had no
+    other role in `TransferCorpse`, so removing it from that alias list keeps
+    `/tc` on the Realm Exchange command and leaves `/transfercorpse` (its
+    only other name) unaffected. `ALL SERVER COMMANDS.txt` no longer lists
+    `/transfercorpse (aliases: /tc)`. Added
+    `UT_PlayerCommandAvailability.NoCommandHandlerRegistersADuplicateCommandKey`,
+    which scans every `ICommandHandler` type across the loaded assemblies for
+    a command key claimed by more than one handler; it fails with this exact
+    collision before the fix and passes after. Full server test suite: 2330
+    passed, 1 skipped (pre-existing, unrelated), 0 failed. Real-client check
+    pending: confirm `/tc` still teleports to the Realm Exchange,
+    `/transfercorpse` still moves a dead player to a claimed keep, and the
+    startup log no longer shows the `LoadCommands` `&tc` exception.
+     Verified on installed 0.234.0 and 0.236.0 (3 starts): 0 duplicate `&tc`
+     registration exceptions. Fixed.
+
+26. **Done — World-speed status publication intermittently fails.** Reopened: this
+    was marked Finished without a fix. The currently running install logged
+    another `System.UnauthorizedAccessException: Access to the path is
+    denied` at `OfflineWorldSpeedControl.PublishStatus`
+    (OfflineWorldSpeedControl.cs:571) at 01:37:16 while replacing
+    `world-speed.status.json`, the same failure as the original 2026-09-26
+    report. Cause: same family as bug 58 (the live bot dashboard) — a reader
+    that briefly holds the destination file open without delete sharing (an
+    antivirus scan or file indexer are the likely candidates) makes the
+    atomic `File.Move` throw for the few milliseconds the hold lasts; the
+    launcher's own status reader (`WorldSpeedProtocol.ReadFreshStatus`) used
+    plain `File.ReadAllText`, which does not grant `FileShare.Delete`
+    either, so it could itself have been a contributing blocker. Fix:
+    `PublishStatus` now retries the move (via the new shared
+    `AtomicFilePublish.MoveWithRetry` helper, also used by bug 58's fix) up
+    to six times with a short growing backoff before giving up and logging
+    the error; the launcher's `WorldSpeedProtocol.ReadFreshStatus` now opens
+    the status file with `FileShare.ReadWrite | FileShare.Delete`, matching
+    the dashboard reader. Reproduced and covered by a unit test that locks
+    the status file with `FileShare.Read` and releases it during the retry
+    window. Real-client check pending.
+     Verified on installed 0.234.0 and 0.236.0 (112 min): 0 world-speed
+     publish failures. Fixed.
+
+24. **Done — PvP opponent evaluation throws when a group has no living nearby members.** Confirmed in the 0.72.0 live-session audit: `VisibleParty` filtered all members out and then called `Average`, interrupting NPC AI processing. Source 0.73.0 falls back to the resolved combatant's effective level for an empty visible group. Installation and sustained PvP observation remain pending.
+     Verified on installed 0.234.0 and 0.236.0: 0 exceptions across 2,016
+     PvP deaths. Fixed.
+
+29. **Done — Separated PvE parties can wait on combat or arrivals in another region.** The 0.74.0 observation caught safe members paused by a distant party member's combat; source also only recognized arrivals immediately across the leader's next region edge, ignoring members already in the final camp region. Source 0.75.0 scopes ordinary combat/recovery holds to nearby living members and permits leaders to advance toward members at the destination region. Actual routes, combat defense and existing deadlines remain required. Installation, multi-edge travel and combat/recovery verification pending; other travel failures are not claimed fixed.
 
     **Still occurring on installed 0.115.0 (live log, run from 2026-09-27 23:54).**
     Group `1e7771ca…-2b4d33-166` waited in West Downs (region 1) while its
@@ -1855,68 +2171,16 @@ not install the Setup tool; their disposable-input verification is pending.
     Not fixed: bots dying repeatedly at a bind point used as an RvR staging
     spot, and a regroup that waits for a member who never dies and never
     arrives. Real-client / live-log check pending.
+     Verified on installed 0.234.0 (84 min): 16 resurrection waits, 20
+     remote releases, 1 rejoin failure, no cross-region wait stall. Fixed.
 
-26. **World-speed status publication intermittently fails.** Reopened: this
-    was marked Finished without a fix. The currently running install logged
-    another `System.UnauthorizedAccessException: Access to the path is
-    denied` at `OfflineWorldSpeedControl.PublishStatus`
-    (OfflineWorldSpeedControl.cs:571) at 01:37:16 while replacing
-    `world-speed.status.json`, the same failure as the original 2026-09-26
-    report. Cause: same family as bug 58 (the live bot dashboard) — a reader
-    that briefly holds the destination file open without delete sharing (an
-    antivirus scan or file indexer are the likely candidates) makes the
-    atomic `File.Move` throw for the few milliseconds the hold lasts; the
-    launcher's own status reader (`WorldSpeedProtocol.ReadFreshStatus`) used
-    plain `File.ReadAllText`, which does not grant `FileShare.Delete`
-    either, so it could itself have been a contributing blocker. Fix:
-    `PublishStatus` now retries the move (via the new shared
-    `AtomicFilePublish.MoveWithRetry` helper, also used by bug 58's fix) up
-    to six times with a short growing backoff before giving up and logging
-    the error; the launcher's `WorldSpeedProtocol.ReadFreshStatus` now opens
-    the status file with `FileShare.ReadWrite | FileShare.Delete`, matching
-    the dashboard reader. Reproduced and covered by a unit test that locks
-    the status file with `FileShare.Read` and releases it during the retry
-    window. Real-client check pending.
-
-24. **PvP opponent evaluation throws when a group has no living nearby members.** Confirmed in the 0.72.0 live-session audit: `VisibleParty` filtered all members out and then called `Average`, interrupting NPC AI processing. Source 0.73.0 falls back to the resolved combatant's effective level for an empty visible group. Installation and sustained PvP observation remain pending.
-
-22. **Cruachan Gorge mob camps are sparse near Druim Ligen.** Reproduce by walking out of Druim Ligen into Cruachan Gorge and looking for ordinary mobs. Expected: visible PvE activity along the approach. Actual: the installed world has only 26 neutral mobs across Cruachan Gorge; the closest live mob is about 8,500 world units from the border keep. Teleport fix 0.66.0 lands nearer an existing camp. Source audit 2026-09-26: the nearest archived candidate is about 7,300 units away but falls outside the mapped period-location witness radius, and no native route proof exists for it. Zone-level period reports do not establish a closer camp. No uncorroborated spawn was added. Workaround: travel farther into the zone to an existing camp. Follow-up source 0.72.0 restores 219 archived Cruachan Gorge rows using retained zone/species/level rosters, increasing its ordinary mob population from 26 to 245. This is roster-backed density restoration, not independent period-map or native-path proof for every location; installation and the border-keep approach require real-client verification.
-
-23. **Keep doors require repeated clicks.** The door-request handler skipped ordinary keep doors, and overlapping door/object interactions could traverse twice. Source fix 0.72.0 dispatches ordinary keep-door requests and suppresses duplicate traversal for 750 ms; bot access uses guild hostility instead of realm. The Fensalir Faste report in entry 39 exposed a separate human hostility bypass, fixed in source 0.86.0. Neutral/defeated and friendly-owned keep entry/exit, blocked hostile gates, and client packet behavior await installation and real-client verification.
-
-Source inventory audit 2026-09-26: the implementations cited in entries 1–17 remain in this checkout. Their installation and real-client checks were not performed in this source-only pass, so all remain pending.
-
-1. **Companions and autonomous bots appear undergeared.** Sparse template tables no longer leave new persistent companions' armor and shield slots empty. Existing saved companions refresh only their bound starter armor and weapons as they level, retaining earned and manually equipped items. Autonomous bots repair missing starter armor and appropriate shields when loaded. Mixed-realm drops now pair the selected member's class with their realm and prefer a bot that can equip the item. Source fix: 0.56.0; installation and real-client equipment inspection pending.
-2. **Group members become enemy-selectable and lose group colors.** NPC create packets now apply the friendly guild ID only to allied gamebots. Group membership changes refresh the friendly IDs of all remaining grouped gamebots for each human viewer. Source fix: 0.56.0; installation and real-client Tab/color verification pending.
-3. **Tanks do not reliably peel adds off healers and bombers.** Tanks prioritize attackers of healers, then bomb casters, then leaders; group attacks raise tank threat immediately, and an offensive cast on a different target yields to an urgent peel. Source fix: 0.56.0; installation and real-client combat verification pending.
-4. **Refresh buffs after upgrades.** Companion buff maintenance compares active buff strength and allows a stronger rank to replace a weaker effect. Source fix: 0.49.0; installation and gameplay verification pending.
-5. **Prioritize specialization buffs while covering base buffs.** Player-led companions prefer specialization-line buffs. A base buff is skipped only while another live group member has an equal or stronger compatible buff active on the same target; a human player's known spell alone does not count. Source fixes: 0.49.0 and 0.52.0; installation and gameplay verification pending.
-6. **Automatically use Guard and Protect intelligently.** Companion protection assignments distribute Guard and Protect across uncovered group members, prioritize healers and bomb casters, and respect the native ranges (256 and 1,000 units). Existing effects reserve coverage only while their source remains in range. Source fixes: 0.49.0 and 0.52.0; installation and gameplay verification pending.
-7. **Update and choose summoned pets.** Idle player-led companions upgrade to stronger learned summons, and Enchanters prefer Underhill Ally when available. Repeating the same summon is allowed only after the owner levels enough to improve that pet. Source fixes: 0.49.0, 0.51.0, and 0.52.0; installation and gameplay verification pending.
-8. **Use bomb spells and coordinate bomb groups.** Eligible player-led casters prioritize PBAoE spells on sufficiently large focused pulls. The Companion Manager saves an Auto/Bomb/Off preference per companion, and bombing waits up to 2.5 seconds for tank aggro, restarting that wait for each newly focused target. Source 0.65.0 makes Bomb preference use the highest learned rank and permits clustered PvP opponents already fighting the group, without bombing idle or mezzed players. Source fixes: 0.49.0, 0.52.0 and 0.65.0; installation and real-client PvE/PvP verification pending.
-9. **Make mobs form groups and award group bonuses.** Mob BAF now resolves companion pullers and controlled pets to their player-led group, counts companion members for add selection, and preserves the existing add-based experience bonus. Source fix: 0.49.0; installation and gameplay verification pending.
-10. **Explain the Server population controls.** Preset, type-mix, danger, and world-shape controls now have plain-language tooltips. Source fix: 0.49.0; launcher installation and hover verification pending.
-
-11. **Dungeon mobs were missing and populations were thin.** A read-only audit of all 29 supported dungeon zones found 2,310 levelled neutral mob records archived by the Classic 1.65 population profile and absent from the current world database. The new Setup migration restores the exact archived rows for all 15 Classic realm dungeons and four supported Old Frontiers dungeons. Shrouded Isles and Darkness Falls rows were already restored. The [2002 map compilation](https://www.scribd.com/document/144573276/DAOC-Map-Compilation-Book) and [Prima atlas](https://www.scribd.com/document/131856275/Dark-Age-of-Camelot-the-Atlas-Prima) document period dungeon layouts and rosters; the archived world records provide the numeric spawn baseline. This source fix is version 0.48.0 and still needs deployment and real-client verification.
-
-12. **Companions get stuck atop the Midgard Darkness Falls entrance stairs.** Source fix 0.61.0 adds three bidirectional stair links at each DF entrance, packaged as nine hash-checked tile replacements in a temporary cached mesh, and preserves exact stair endpoints during bot path following. All other installed mesh tiles remain unchanged. Native complete return routes passed for 1,417 monster spawns. Installation and real-client up/down movement with companions and autonomous groups remain pending.
-13. **PvE bots initiate unwanted PvP in frontiers and shared dungeons.** The early frontier scan ignored durable PvE objectives and normal recovery/strength checks; the separate DF scan also initiated fights while on PvE work. Source fix 0.61.0 gates frontier hunts through the common opportunity policy and removes the redundant dungeon scan, retaining real defense and committed siege combat. Installation and live activity/death balance verification remain pending.
-14. **Player-led companions do not fully support keep door attacks and ram boarding.** Source fix 0.63.0 allows aggressive and defensive companions to assist the player's attack on a closed enemy keep door, commands class pets to it, lets Theurgists repeatedly summon against it, and boards nearby companions into available ram seats with dismount cleanup. Installation and real-client verification of door damage, pet casts, seat visuals, capacity, and dismount behavior remain pending.
-15. **Grouped Healers do not use their learned area stuns.** The support path did not select Pacification area stuns. Source fix 0.63.0 adds a cast decision for at least two already engaged enemies, protects mezzed targets and idle bystanders, and favors clusters near an active PBAoE caster. Installation and real-client verification with Tri-spec and Pacification Healers, including a bomb group and urgent healing, remain pending.
-16. **`/gc form` stalled with companions in the group.** Source fix 0.64.0 counts only human founders for confirmation and also allows founding alone at a registrar. `/gc invite` immediately joins an owned companion to the guild; persistent companions retain membership, and equipped cloaks and shields show the chosen guild emblem. Installation and real-client checks of founding, invitations, emblem updates, and relog persistence remain pending.
-
-17. **Keep Chief claim prompt is silent and realm frontier teleports enter New Frontiers.** At the claimable keep near Druim Ligen with an eight-member group, the legacy Chief interaction rejects the player before offering a claim; cached group area membership can also miscount nearby companions. The shared teleporter sends Forest Sauvage, Uppland, and Cruachan Gorge to region 163. Source fix 0.66.0 aligns the Chief with `/gc claim`, counts group members at their actual positions, removes Agramon travel, and routes those three destinations to Old Frontiers regions 1, 100, and 200. The installed world database already contains neutral Old Frontiers mobs, though camps near border keeps are sparse. Installation and real-client claim, teleport, and mob-visibility verification remain pending.
-
-19. **Tank companions may not use styles or their specced weapons.** Legacy saved companions without a valid persisted build plan now align their seeded weapon plan with invested weapon specializations before restoring saved equipment. A valid saved plan and all saved equipment still take precedence. Source fix: 0.71.0; installation and real-client style and equipment verification pending.
-20. **Many autonomous groups expire while traveling to their camp.** Camp selection now estimates travel for the slowest member across region crossings, rejects camps beyond a 20-minute planning budget, and checks candidate corridors before travel. The 30-minute deadline is unchanged. Source fix: 0.71.0; installation and real-client route and deadline verification pending. The installed 0.73.0 observation still recorded thirteen camp-travel expirations across formation, combat, recovery and dungeon-staging states. Version 0.74.0 adds camp coordinates and member movement/combat/distance diagnostics; route failures remain pending rather than being declared resolved.
+20. **Done — Many autonomous groups expire while traveling to their camp.** Camp selection now estimates travel for the slowest member across region crossings, rejects camps beyond a 20-minute planning budget, and checks candidate corridors before travel. The 30-minute deadline is unchanged. Source fix: 0.71.0; installation and real-client route and deadline verification pending. The installed 0.73.0 observation still recorded thirteen camp-travel expirations across formation, combat, recovery and dungeon-staging states. Version 0.74.0 adds camp coordinates and member movement/combat/distance diagnostics; route failures remain pending rather than being declared resolved.
     Log check 2026-09-28 on installed 0.115.0 (3 h 26 min): 24 parties expired
     before reaching camp (about 7 per hour) against 140 that reached camp and
     started (85 %). Reduced, not eliminated; stays pending. Task 47 package C
     (task clock from camp arrival, camps near the rendezvous) targets the rest.
-
-21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
-
-## Finished
+     Verified on installed 0.234.0 (84 min): 2 of 134 group tasks expired
+     before reaching camp (1.5 %, was 15 %). Fixed.
 
 132. **Done — Hibernian bots loop on a route-pocket escape to their own position.**
      Installed 0.234.0, 2 h: 54,960 `AUTONOMOUS_ROUTE_POCKET_ESCAPE
