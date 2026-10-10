@@ -71,6 +71,34 @@ public sealed partial class AutonomousWorldBotController
         }
         var decision = AutonomousRvrSpeed.SiegeCohesion(_siegeColumnHolding, worst,
             now - _siegeColumnStarted, now - _siegeColumnProgress);
+        if (decision != AutonomousRvrSpeed.SiegeCohesionDecision.Advance && missing.Length > 0 &&
+            AutonomousSiegeProperties.SIEGE_COLUMN_QUORUM_MARCH)
+        {
+            // Bug 75: march on once the leader, the ram carriers and a quorum
+            // stand together; stragglers follow (AutonomousRvrSiegeMuster.FollowsLeader).
+            // The tighter resume gap while holding keeps the column from flapping.
+            float togetherGap = _siegeColumnHolding ? AutonomousRvrSpeed.ResumeGap : AutonomousRvrSpeed.HoldGap;
+            GameBot[] living = group.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(member => member != leader && member.IsAlive).ToArray();
+            bool Together(GameBot member) => member.CurrentRegionID == leader.CurrentRegionID &&
+                !member.IsOnStableMasterRoute && member.GetDistanceTo(leader) <= togetherGap;
+            GameBot[] left = living.Where(member => !Together(member)).ToArray();
+            int together = 1 + living.Length - left.Length;
+            bool carriersTogether = !left.Any(member =>
+                AutonomousSiegeJobs.HasRamAssignment(member, destination.Id, destination.RegionId));
+            if (AutonomousRvrSpeed.SiegeQuorumMarch(true, AutonomousSiegeProperties.SIEGE_COLUMN_QUORUM,
+                    living.Length + 1, together, carriersTogether))
+            {
+                if (now >= _siegeColumnLogAfter)
+                {
+                    _siegeColumnLogAfter = now + 30_000;
+                    Log.Info($"RVR_SIEGE_COLUMN force={forceId} target={targetId} action=quorum leader={leader.Name} " +
+                        $"together={together} living={living.Length + 1} left={left.Length} " +
+                        $"members=\"{string.Join(";", left.Select(member => $"{member.Name}/{member.DatabaseID}@{member.CurrentRegionID}"))}\"");
+                }
+                decision = AutonomousRvrSpeed.SiegeCohesionDecision.Advance;
+            }
+        }
         if (decision == AutonomousRvrSpeed.SiegeCohesionDecision.Advance)
         {
             if (_siegeColumnHolding) Log.Info($"RVR_SIEGE_COLUMN force={forceId} target={targetId} action=resumed leader={leader.Name}");
@@ -177,7 +205,11 @@ public sealed partial class AutonomousWorldBotController
         // A follower's failed return or repeated roadside death cannot cancel
         // the column's battle. Even a released leader waits for its living
         // members' actual keep combat to finish before abandoning the force.
-        if (bot.Group?.LivingLeader is GameBot leader &&
+        // The coordinator's leader decides (bug 75: a dead group leader in
+        // another region deferred every abandon for 21 minutes).
+        GameLiving decider = bot.Group != null && _groupDirective?.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
+            _groupDirective.Leader?.Group == bot.Group ? _groupDirective.Leader : bot.Group?.LivingLeader;
+        if (decider is GameBot leader &&
             (leader != bot || bot.Group.GetMembersInTheGroup().OfType<GameBot>().Any(member =>
                 member != bot && member.IsAlive && member.CurrentRegionID == destination.RegionId &&
                 (member.InCombat || member.IsAttacking || (member.Brain as BotBrain)?.HasAggro == true) &&

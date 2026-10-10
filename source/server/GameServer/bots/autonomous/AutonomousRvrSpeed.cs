@@ -204,6 +204,15 @@ public static class AutonomousRvrSpeed
             ? SiegeCohesionDecision.Fail : SiegeCohesionDecision.Hold;
     }
 
+    /// <summary>
+    /// Bug 75: a 2003 raid leader moved out once the core of the group and the
+    /// ram carriers stood with him; a straggler in another zone caught up on
+    /// his own. <paramref name="together"/> counts the leader and the living
+    /// members beside him; a group no larger than the quorum still needs all.
+    /// </summary>
+    public static bool SiegeQuorumMarch(bool enabled, int quorum, int living, int together, bool carriersTogether) =>
+        enabled && carriersTogether && together >= Math.Max(Math.Min(Math.Clamp(quorum, 2, 8), living), living / 2 + 1);
+
     /// <summary>The column closed up by at least this much since its best gap: real regroup progress.</summary>
     public const float SiegeProgressStep = 250;
 
