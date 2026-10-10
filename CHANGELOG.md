@@ -22,6 +22,11 @@ package, not this fork's version.
   button and menu item disabled, and the delete transaction re-checks
   ownership. Orphaned companions now show "No owner (orphan)" in the Zone
   column instead of "With owner".
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-134149`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.229.1] - 2026-10-10
 
