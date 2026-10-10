@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using DOL.GS.PacketHandler;
 using DOL.GS.ServerRules;
@@ -46,6 +47,22 @@ namespace DOL.GS
             return IsReady(definition, out reason);
         }
 
+        /// <summary>
+        /// Index of the landing a battleground entrant uses (bug 147). A group member lands where its group leader
+        /// lands (owner decision 2026-10-11; players already did through the leader's hash). A leader or solo bot
+        /// lands at the portal keep of its own realm; no such landing falls back to <paramref name="fallback"/>.
+        /// <paramref name="leaderLanding"/> is the leader's landing when it is fixed already (a player's hash camp),
+        /// null when the leader's realm decides. <paramref name="landingRealms"/> is the realm of each landing, in landing order.
+        /// </summary>
+        public static int ChooseLanding(eRealm realm, int? leaderLanding, IReadOnlyList<eRealm> landingRealms, int fallback)
+        {
+            if (leaderLanding.HasValue) return leaderLanding.Value;
+            if (landingRealms != null && realm != eRealm.None)
+                for (int i = 0; i < landingRealms.Count; i++)
+                    if (landingRealms[i] == realm) return i;
+            return fallback;
+        }
+
         public static GameLocation GetLanding(GameLiving actor, BattlegroundDefinition definition)
         {
             GameLocation[] landings = BattlegroundCampaignCatalog.GetLandings(definition);
@@ -55,7 +72,11 @@ namespace DOL.GS
             // Stable guild/group camp assignment, independent of realm identity.
             uint hash = 2166136261;
             foreach (char c in identity) hash = (hash ^ c) * 16777619;
-            int index = (int)(hash % (uint)landings.Length);
+            int hashed = (int)(hash % (uint)landings.Length);
+            // A player leader keeps its hash camp; a bot leader (or a solo bot) lands at its realm's own portal keep.
+            int index = ChooseLanding(leader.Realm, leader is GamePlayer ? hashed : null,
+                BattlegroundCampaignCatalog.GetLandingRealms(definition, landings.Length), hashed);
+            if (index < 0 || index >= landings.Length) index = hashed;
             actor.TempProperties.SetProperty(CampKey, index);
             return landings[index];
         }

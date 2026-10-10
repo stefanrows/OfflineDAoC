@@ -82,6 +82,16 @@ namespace DOL.GS
             return result.ToArray();
         }
 
+        /// <summary>The realm each landing serves, in <see cref="GetLandings"/> order (same keeps, same filter). Empty when the count differs.</summary>
+        public static IReadOnlyList<eRealm> GetLandingRealms(BattlegroundDefinition definition, int landingCount)
+        {
+            if (definition == null) return Array.Empty<eRealm>();
+            eRealm[] realms = GameServer.KeepManager.GetKeepsOfRegion(definition.RegionId)
+                .Where(x => x.IsPortalKeep).OrderBy(x => x.KeepID)
+                .Select(x => x.Realm is eRealm.Albion or eRealm.Midgard or eRealm.Hibernia ? x.Realm : x.OriginalRealm).ToArray();
+            return realms.Length == landingCount ? realms : Array.Empty<eRealm>();
+        }
+
         public static void RegisterCaps(List<DbBattleground> caps)
         {
             foreach (BattlegroundDefinition definition in Definitions)
