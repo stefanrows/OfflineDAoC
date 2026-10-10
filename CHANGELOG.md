@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.240.0] - 2026-10-11
+
+### Changed
+
+- Siege weapons on Camlann belong to the owner's allies, not a realm: anyone
+  allied with the weapon's founder (first controller, deployer, crafter or
+  keep-hookpoint buyer) or its latest controller through group, guild,
+  alliance or battlegroup may control, fire, repair and board it whatever
+  their birth realm; strangers of any realm are refused ("belongs to another
+  group"); an abandoned weapon falls back to the founder's guild, then its
+  realm. Non-PvP rules keep the realm comparison (bug 151, owner request).
+- Battleground entrants land with their group leader: a bot leader or solo
+  bot lands at the portal keep of its own realm instead of a hashed camp (a
+  Hibernian had entered Cathal Valley at the Albion portal keep); players
+  keep their leader's camp; fighting stays free-for-all (bug 147, owner
+  decision).
+
 ## [0.239.1] - 2026-10-11
 
 ### Changed

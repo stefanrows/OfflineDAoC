@@ -63,16 +63,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      unreachable lords, a lord chasing a bot out of the keep, or a renegade
      spawn placed at the wrong Z). Split from the bug 63/144 analysis.
 
-147. **Campaign battleground landings ignore the bot's realm.** Installed
-     0.236.0, 2026-10-10: Eilrina (Hibernia) entered Cathal Valley at the
-     Albion Portal Keep (`BattlegroundCampaignPolicy.cs:49-61` picks a
-     landing without a realm check), and a Midgard Thane killed Torienbrand,
-     also Midgard, in the same battleground. In 1.65 each realm had its own
-     portal keep and there was no same-realm fighting; on Camlann (full PvP)
-     same-realm kills may be intended. Needs an owner decision before any
-     change: realm-bound landings and realm peace inside the portal keep, or
-     keep the free-for-all. No code change in 0.238.0.
-
 144. **Midgard newbie bots loop between the Mularn bind point, Jordheim and
      the Vale of Mularn.** Installed 0.235.0, 2026-10-10 21:04–21:58: 372
      `AUTONOMOUS_ROUTE_POCKET_ESCAPE from=100:764342,674451,5738
@@ -201,6 +191,62 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+151. **Siege rams are realm-bound; mixed-realm groups, guilds and
+     battlegroups cannot share one.** Owner report, 2026-10-11 (installed
+     0.239.1): on Camlann a group, guild or raid mixes birth realms, but a
+     siege weapon belongs to the realm of its first controller
+     (`GameSiegeWeapon.cs:268` sets `Realm` on first control; `:634` refuses
+     `Owner.Realm != Realm` with "owned by an enemy realm"; `:247` lets a
+     bot take control only when `Realm == bot.Realm`), and ram boarding uses
+     the same realm rule, so allies of another birth realm cannot push, fire
+     or board the ram. Expected on Camlann: anyone allied with the owner
+     (same group, guild, alliance or battlegroup, the
+     `PvpCombatant.AreAllied` rule) can control and board a siege weapon
+     regardless of realm; unallied players and bots stay locked out. Source
+     audit and fix pending.
+     Source audit 2026-10-11: realm comparisons at `GameSiegeWeapon.cs:247`
+     (bot control), `:268` (first controller sets Realm), `:634` (`CanUse`
+     before every aim/arm/fire), `GameNPC.cs:2580` (ram boarding),
+     `AutonomousWorldBotController.Siege.cs:15` (`FriendlyEngine`),
+     `BotSiegeRuntime.cs:130` (repair) and `SummonSiegeRam.cs:61` (two-rams
+     limit). Source 0.240.0: new `SiegeWeaponAccess.MayUse`; under PvP rules
+     anyone allied with the weapon's founder (first controller, deployer,
+     crafter or keep-hookpoint buyer) or its latest controller via
+     `PvpCombatant.AreAllied` may control, fire, repair and board it
+     whatever its realm, strangers of any realm may not, and an abandoned
+     weapon (no live anchor) falls back to the founder's guild, then its
+     realm. Non-PvP rules keep the realm rule; the weapon's `Realm`, door
+     and keep hostility are unchanged (9 tests in `UT_SiegeWeaponAccess`).
+     Known gaps: a hookpoint engine reloaded from the database has no buyer
+     and gets its first controller as founder; an other-realm ally still
+     sees the founder's realm colour on the ram. Pending real-client check:
+     a cross-realm groupmate takes control of and boards a ram, a stranger
+     of the same realm is refused with "belongs to another group".
+
+147. **Campaign battleground landings ignore the bot's realm.** Installed
+     0.236.0, 2026-10-10: Eilrina (Hibernia) entered Cathal Valley at the
+     Albion Portal Keep (`BattlegroundCampaignPolicy.cs:49-61` picks a
+     landing without a realm check), and a Midgard Thane killed Torienbrand,
+     also Midgard, in the same battleground. In 1.65 each realm had its own
+     portal keep and there was no same-realm fighting; on Camlann (full PvP)
+     same-realm kills may be intended. Needs an owner decision before any
+     change: realm-bound landings and realm peace inside the portal keep, or
+     keep the free-for-all. No code change in 0.238.0.
+     Owner decision 2026-10-11 (Aaron): a battleground entrant always lands
+     where its group leader is (players already come out next to their
+     leader when playing cross-realm); a leader or solo entrant lands at the
+     portal keep of its birth realm; fighting stays Camlann free-for-all, no
+     realm peace. Source fix in progress for 0.240.0.
+     Source 0.240.0: `BattlegroundCampaignPolicy.ChooseLanding`: a group
+     member lands where its leader lands (a player leader keeps its hash
+     camp), a bot leader or solo bot lands at the portal keep of its own
+     realm (`BattlegroundCampaignCatalog.GetLandingRealms`, realm from
+     `Realm` or `OriginalRealm`), no own-realm landing falls back to the old
+     hash; the same landing is used for entry and death release. Fighting
+     unchanged (Camlann free-for-all). 4 tests in `UT_BattlegroundLanding`.
+     Pending: a live run shows Hibernian bots entering at the Hibernia
+     Portal Keep and group members beside their leader.
 
 145. **Darkness Falls hunts fail: bots plan rooms behind another realm's
      entrance.** Installed 0.234.0 (19:48–21:13) and 0.236.0 (21:14–21:42),
