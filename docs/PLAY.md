@@ -36,6 +36,29 @@ from inside a ZIP. Always keep an older installation in a separate folder.
 The GitHub launcher says **0.3** intentionally. It includes the current baseline
 functionality; the author's private launcher label is not the public version number.
 
+## Get this fork's latest version
+
+The v0.3 download above is the base game. This fork's Camlann/Mordred
+full-PvP world, companions, battlegrounds and later fixes are published as
+small update packs on the fork's
+[Releases page](https://github.com/stefanrows/OfflineDAoC/releases/latest).
+
+1. Close the game, server and launcher.
+2. From the latest release, download **UPDATE-OFFLINE-DAOC.cmd** and
+   **Update-OfflineDAoC.ps1** into your game folder, next to
+   **START OFFLINE DAOC.cmd**.
+3. Run **UPDATE-OFFLINE-DAOC.cmd**. It downloads the update pack, verifies its
+   SHA-256 hash, backs up every file it replaces under `update-backups`, and
+   installs it. It refuses to run while the game, server or launcher is open,
+   and never touches your save database, `account.txt` or configuration.
+4. Later updates: run **UPDATE OFFLINE DAOC.cmd** from the game folder.
+
+The update replaces the client's `game.dll` and some UI files with the fork's
+Companion Manager and raid click-fix versions, but only over a known v0.3 or
+fork build. The first launch after updating a v0.3 game asks for the one-time
+Camlann world reset described under "Saves and old versions". The installer
+prints an undo command that restores the backed-up files.
+
 ## First-time requirements
 
 - A compatible 64-bit Windows PC with enough memory and a working graphics driver.

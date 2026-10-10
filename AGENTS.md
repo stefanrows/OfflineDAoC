@@ -67,8 +67,9 @@ until the owner replaces it. Leave the shared skill unchanged.
 
 - "ship now" and "merge to main" authorize the entire workflow below without
   another confirmation: build, merge directly to `main`, push to
-  `stefanrows/OfflineDAoC`, stop this installation's running components, and
-  deploy to `D:\Games\OfflineDAoC`. Ordinary development requests do not ship.
+  `stefanrows/OfflineDAoC`, publish the fork release, stop this installation's
+  running components, and deploy to `D:\Games\OfflineDAoC`. Ordinary
+  development requests do not ship.
 - Skip PR creation, CI checks/waits, Docker checks/builds, automated test suites,
   and post-deploy monitoring. Run tests only when explicitly requested. The
   upstream Docker files are not part of this Windows local workflow; Docker
@@ -97,10 +98,19 @@ until the owner replaces it. Leave the shared skill unchanged.
   `-ServerBuild` and `-LauncherBuild`, and `-Apply`. Keep the existing backups,
   hash verification, rollback, and protected save/configuration checks. Do not
   use `-IncludeThirdParty` without a separate request. Leave the game stopped.
-- Report merge/push and local deployment separately, including the deployed
-  version and backup path (or no changed files). Never call a failed deployment
-  successful shipping. State that automated tests were skipped and real-client
-  verification is left to the owner; do not wait for CI or gameplay acceptance.
+- After a successful build and push, package that same build and publish it
+  with `tools/release/publish-fork-release.sh`. It builds the update pack (server
+  and launcher Release outputs, the ten battleground navmeshes, Companion
+  Manager / raid click-fix client files, `UPDATE OFFLINE DAOC.cmd`) and runs
+  `gh release create v<version> --repo stefanrows/OfflineDAoC` with the
+  version's changelog section as notes. Never publish to upstream and never use
+  GitHub Actions for this. If the release already exists, report it instead of
+  replacing it.
+- Report merge/push, release, and local deployment separately, including the
+  deployed version and backup path (or no changed files) and the release URL.
+  Never call a failed deployment successful shipping. State that automated
+  tests were skipped and real-client verification is left to the owner; do not
+  wait for CI or gameplay acceptance.
 
 ## Safety defaults
 

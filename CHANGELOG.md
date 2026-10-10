@@ -12,6 +12,36 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.228.0] - 2026-10-10
+
+### Added
+
+- Fork releases: `tools/release/build_fork_release.py` packages the Release
+  server and launcher builds, the ten battleground navmeshes and the Companion
+  Manager / raid click-fix client files as an update pack for an Offline DAoC
+  v0.3 folder, every file pinned by SHA-256. `publish-fork-release.sh`
+  publishes it as GitHub release `v<version>` on the fork with the changelog
+  section as notes; no GitHub Actions are involved.
+- `UPDATE OFFLINE DAOC.cmd` downloads the latest fork release, verifies its
+  SHA-256, refuses to run while the game, server or launcher is open, backs up
+  every replaced file under `update-backups` with a `-RestoreBackup` undo, and
+  rolls back on any failure. Native client files are replaced only over a
+  known v0.3 or fork build. Saves, `account.txt`, server config and bot
+  settings are never touched.
+
+### Changed
+
+- The "ship now" workflow in `AGENTS.md` now packages the same build and
+  publishes the fork release after a successful push.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.227.0] - 2026-10-10
 
 ### Added
