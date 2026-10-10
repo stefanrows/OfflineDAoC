@@ -268,8 +268,8 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
-110. **Delete your own persistent companions from the launcher.** Owner,
-     2026-10-10. Implemented in source **0.226.0**: the Active Population
+111. **Delete your own persistent companions from the launcher.** Owner,
+     2026-10-10. Implemented in source **0.227.0**: the Active Population
      DELETE CHARACTER… button and grid context-menu delete now act on rows for
      persistent companions (Activity Companion, Zone "With <owner>"), not only
      world bots. While the server is stopped, one confirmed delete removes the
@@ -282,6 +282,13 @@ Agent sessions on items 45–48: take the role and context from
      delete a test companion with equipment and backpack items; confirm the grid
      and the companion's items disappear; confirm the button and menu are disabled
      while the server runs; confirm the world-bot delete path still works.
+
+110. **One-click reset of all keeps and relics in the launcher.** Owner,
+     2026-10-10. Implemented in source **0.226.0**: the existing
+     `KeepRelicReset` button now appears on the Realm Events tab (its old
+     panel was no longer displayed). Pending: on Windows with the server
+     stopped, click it, confirm, check that every keep is unclaimed and all
+     six relics are at their shrines after the next server start.
 
 109. **Higher XP rates and companion PvP XP.** Owner, 2026-10-10. Implemented
      in source **0.225.0**: launcher XP choices up to 100× for player and

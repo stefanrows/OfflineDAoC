@@ -12,7 +12,7 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.226.0] - 2026-10-10
+## [0.227.0] - 2026-10-10
 
 ### Added
 
@@ -22,6 +22,19 @@ package, not this fork's version.
   re-checks server state inside the delete transaction. While the server runs,
   the button and menu item are disabled, and the Companion Manager in-game is
   the way to delete a companion. World bots and DELETE ALL BOTS are unchanged.
+
+## [0.226.0] - 2026-10-10
+
+### Fixed
+
+- The launcher's Realm Events tab now shows a one-click "Reset all keeps &
+  relics" button. The existing reset (clear every keep's guild claim, return
+  all six relics to their temple shrines, small JSON backup of the keep/relic
+  rows) had been unreachable since its old panel stopped being displayed. It
+  asks for confirmation, works only while the server is fully stopped, and
+  does not change characters, bots, inventories, coins, Realm Exchange or
+  event records. Task 110 awaits a launcher check on Windows; automated tests
+  were skipped.
 
 ## [0.225.0] - 2026-10-10
 
