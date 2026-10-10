@@ -23,6 +23,10 @@ package, not this fork's version.
   NULL like server-created rows, and any existing empty-string ID is
   normalized on save. The launcher test fixture now has the real unique index.
 - Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed to fork main and deployed on 2026-10-10: 17 files replaced; accounts,
+  database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-133848`. The installation
+  remains stopped; the GitHub release was not published.
 
 ## [0.229.0] - 2026-10-10
 
