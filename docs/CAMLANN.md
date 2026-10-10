@@ -275,7 +275,7 @@ native keep (`Hfrontkeep.nif`) gets keep row 139; its existing closed gates are
 kept, and its gated lord and retainers stand only on navigation-proved points
 behind those gates. Both are added in source and await real-client verification.
 
-Server-built keeps (task 112): keeps 140–144 are new rows, and existing rows
+Server-built keeps (task 113): keeps 140–144 are new rows, and existing rows
 132, 134 and 138 gain components only while they have none. Components come
 from the `/keep fastcreate` bracket layouts (`BattlegroundKeepLayouts.cs`), and
 their doors come from the native KeepPosition rows. The keeps stay at level 1,
@@ -415,7 +415,7 @@ sub-10 safety after leaving; quest persistence and legitimate kill credit;
 concurrent funding, captain death/respawn and restart behavior; physical
 door/lord/steward captures; encounter scaling and optional automatic grouping;
 server-built keep placement, wall and door alignment, lord gating and guard
-placement on the new keeps (task 112).
+placement on the new keeps (task 113).
 No server or client was started for development verification.
 
 ## Non-goals

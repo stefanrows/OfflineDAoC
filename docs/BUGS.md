@@ -73,7 +73,7 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      respawned together, with 0.6–3.3 s TimerService stalls), and the
      autonomous realm boundary list was stale. Resolution: 234, 235, 236, 238
      and 240 had no keep in the client data and stayed keepless at the time.
-     Follow-up in task 112: the server now builds keeps for regions 234, 235, 236,
+     Follow-up in task 113: the server now builds keeps for regions 234, 235, 236,
      237, 238, 240, 241 and 242 (pending real-client check); Thidranki (238) sits on a relaxed site.
      Murdaigean
      gains keep 139 with its existing gates closed and a gated lord and

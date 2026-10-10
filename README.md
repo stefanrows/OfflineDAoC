@@ -19,6 +19,7 @@ Follow the included component licenses when modifying or redistributing code.
 ## Play / download
 
 - **Players:** [Download and play instructions](docs/PLAY.md).
+- **Fork updates:** [latest fork release](https://github.com/stefanrows/OfflineDAoC/releases/latest); run its `UPDATE-OFFLINE-DAOC.cmd` in a v0.3 game folder ([details](docs/PLAY.md#get-this-forks-latest-version)).
 - **Co-op:** [Join a friend over Tailscale](docs/TAILSCALE_COOP.md).
 - **Everyday commands:** [Quick commands and bot-generation shortcuts](docs/QUICK-COMMANDS.md).
 - **Developers and LLM users:** [Fork and customize instructions](docs/LLM-QUICKSTART.md).

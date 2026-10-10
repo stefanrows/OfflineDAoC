@@ -268,7 +268,7 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
-112. **Eden-style battlegrounds: server-built keeps, keep-aware navmeshes and
+113. **Eden-style battlegrounds: server-built keeps, keep-aware navmeshes and
      autonomous gamebot participation.** Owner, 2026-10-10, after bug 125
      ("replicate the BGs like on Eden or Blackthorn"; Camlann alliances kept,
      bracket gamebots, all phases authorized). Implemented in source (version in
@@ -293,7 +293,17 @@ Agent sessions on items 45–48: take the role and context from
      out to their capital. Midgard's frontier has no medallion seller, and the
      1–14 brackets have almost no eligible bots, so the director remains their
      population. Checks pending: bots arrive, fight, claim and graduate; no bot
-     walks through keep walls.
+     walks through keep walls. Holding the keep: a real guild holding a
+     campaign keep with a live lord earns 2% level XP (and 2 tokens for humans)
+     every 10 gameplay minutes; captures are announced region-wide.
+
+112. **Realm point rate settings.** Owner, 2026-10-10. Implemented in source
+     **0.229.0**: launcher YOUR PLAYER RP / AUTONOMOUS BOT RP selectors (1×–100×).
+     The server scales autonomous-bot RP by the new `bot_rp_rate`; companions
+     follow `rp_rate`. Real-client checks are pending: the selected RP rate
+     applies after restart to the player, companions and world bots. 0.229.1
+     fixes the launcher's first-save UNIQUE constraint error for new rate keys. Deployed
+     2026-10-10 (backup `deploy-20261010-133410`); the installation remains stopped.
 
 111. **Delete your own persistent companions from the launcher.** Owner,
      2026-10-10. Implemented in source **0.227.0**: the Active Population
@@ -305,10 +315,17 @@ Agent sessions on items 45–48: take the role and context from
      menu item are disabled and the Companion Manager remains the in-game path.
      World-bot deletion, DELETE ALL BOTS and the legacy bot_profiles rows are
      unchanged. Server and Windows launcher Release builds verified; automated
-     tests skipped under project policy. Checks pending: with the server stopped,
+     tests skipped under project policy. Deployed 2026-10-10 (backup
+     `deploy-20261010-132203`); the installation remains stopped. Checks pending: with the server stopped,
      delete a test companion with equipment and backpack items; confirm the grid
      and the companion's items disappear; confirm the button and menu are disabled
      while the server runs; confirm the world-bot delete path still works.
+     **0.230.0** limits it to companions of this installation's account and
+     orphans (owner character gone, now shown as "No owner (orphan)"); a
+     friend's companions (e.g. With Skaldnova) cannot be deleted from the
+     launcher. Deployed 2026-10-10 (backup `deploy-20261010-134149`); the
+     installation remains stopped. Check: the delete stays disabled on a
+     friend's companion row.
 
 110. **One-click reset of all keeps and relics in the launcher.** Owner,
      2026-10-10. Implemented in source **0.226.0**: the existing

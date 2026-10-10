@@ -12,7 +12,41 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.228.0] - 2026-10-10
+## [0.232.0] - 2026-10-10
+
+### Added
+
+- Eden-style battlegrounds, keeping Camlann guild/group alliances (task 113).
+  Server-built central keeps for Proving Grounds (tower), Lion's Den, Hills of
+  Claret (Caer Claret), Thidranki and Wilton (new keep rows 140–144), and
+  walls/gates for Killaloe, Molvik and Leirvik's existing rows, from the
+  `/keep fastcreate` battleground layouts. Rows and components are added only
+  where none exist; corrupt KeepPosition offsets are skipped.
+- Keep lords and retainers spawn only on navigation-proved points behind
+  closed gates. Battleground keeps stay at level 1 (no guild progression).
+- Battleground navmeshes bake the real New Frontiers keep pieces from the
+  client, with door volumes for every server gate. Sites come from a
+  flat-ground finder (`tools/dev/battleground-keeps.json`); Thidranki uses a
+  relaxed slope limit at its lowest ground point.
+- Bracket-eligible autonomous RvR bots buy the free battleground medallion,
+  board real porters and fight over the keep (defend, claim, assault without
+  rams, roam), up to 24 per map within a 40-actor cap shared with patrols.
+  They graduate out to their capital when they outlevel the bracket.
+- A real guild holding a battleground keep with a living lord earns 2% level
+  XP every 10 gameplay minutes for members present (and 2 tokens for humans).
+  Captures are announced region-wide and `/bgs` shows the holder.
+
+### Changed
+
+- Development docs describe the keep-aware battleground navmesh build. The
+  ten rebuilt meshes must be deployed with `-NavmeshBuild` for keep walls to
+  block movement.
+- Server and Tests Release builds pass with zero errors; the nav builder
+  builds and all ten meshes validate. Automated tests were skipped;
+  real-client checks (keep rendering, wall alignment, lord gating, bot
+  arrival/claim/graduation, holding rewards) remain pending.
+
+## [0.231.0] - 2026-10-10
 
 ### Added
 
@@ -36,7 +70,7 @@ package, not this fork's version.
 - The autonomous realm boundary now covers every campaign battleground region.
 - Hills of Claret, Proving Grounds, Lion's Den, Thidranki and Wilton stay
   keepless: their client zone data has no placed keep. Server-built keeps
-  and autonomous gamebot participation are recorded as a task.
+  and autonomous gamebot participation follow in 0.232.0.
 - Server and Tests Release builds passed with zero errors; existing warnings
   remain. Automated tests were skipped; real-client checks remain pending.
 
@@ -48,6 +82,89 @@ package, not this fork's version.
 - Murdaigean camp anchors match their portal keep by area and accept the
   ordinary route when the native portal gates are closed (bug 122).
 
+## [0.230.0] - 2026-10-10
+
+### Changed
+
+- Active Population companion delete is limited to companions owned by this
+  installation's account (from account.txt) and orphaned companions whose
+  owning character no longer exists. A friend's companions keep the delete
+  button and menu item disabled, and the delete transaction re-checks
+  ownership. Orphaned companions now show "No owner (orphan)" in the Zone
+  column instead of "With owner".
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-134149`. The installation
+  remains stopped. Real-client verification is pending.
+
+## [0.229.1] - 2026-10-10
+
+### Fixed
+
+- Saving a rate key that was not yet in the database (for example AUTONOMOUS
+  BOT RP) no longer fails with "UNIQUE constraint failed:
+  ServerProperty.ServerProperty_ID". The launcher wrote an empty-string ID for
+  new rows, so only one launcher-created key could exist. New rows now store
+  NULL like server-created rows, and any existing empty-string ID is
+  normalized on save. The launcher test fixture now has the real unique index.
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed to fork main and deployed on 2026-10-10: 17 files replaced; accounts,
+  database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-133848`. The installation
+  remains stopped; the GitHub release was not published.
+
+## [0.229.0] - 2026-10-10
+
+### Added
+
+- Launcher XP Settings add YOUR PLAYER RP (`rp_rate`) and AUTONOMOUS BOT RP
+  (new `bot_rp_rate`) selectors with the same 1×–100× choices as XP. They are
+  editable only while the server is stopped.
+
+### Changed
+
+- Autonomous bots scale realm point awards by `bot_rp_rate`. Persistent
+  companions follow the player `rp_rate`, like their XP. Previously all bot RP
+  ignored rate multipliers. The default 1× leaves rewards unchanged.
+- Progress import resets the RP rates to 1× along with the XP rates and GM option.
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-133410`. The installation
+  remains stopped. GitHub release v0.229.0 was packaged locally but not
+  published. Real-client verification is pending.
+
+## [0.228.0] - 2026-10-10
+
+### Added
+
+- Fork releases: `tools/release/build_fork_release.py` packages the Release
+  server and launcher builds, the ten battleground navmeshes and the Companion
+  Manager / raid click-fix client files as an update pack for an Offline DAoC
+  v0.3 folder, every file pinned by SHA-256. `publish-fork-release.sh`
+  publishes it as GitHub release `v<version>` on the fork with the changelog
+  section as notes; no GitHub Actions are involved.
+- `UPDATE OFFLINE DAOC.cmd` downloads the latest fork release, verifies its
+  SHA-256, refuses to run while the game, server or launcher is open, backs up
+  every replaced file under `update-backups` with a `-RestoreBackup` undo, and
+  rolls back on any failure. Native client files are replaced only over a
+  known v0.3 or fork build. Saves, `account.txt`, server config and bot
+  settings are never touched.
+
+### Changed
+
+- The "ship now" workflow in `AGENTS.md` now packages the same build and
+  publishes the fork release after a successful push.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.227.0] - 2026-10-10
 
 ### Added
@@ -58,6 +175,14 @@ package, not this fork's version.
   re-checks server state inside the delete transaction. While the server runs,
   the button and menu item are disabled, and the Companion Manager in-game is
   the way to delete a companion. World bots and DELETE ALL BOTS are unchanged.
+
+### Changed
+
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-132203`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.226.0] - 2026-10-10
 

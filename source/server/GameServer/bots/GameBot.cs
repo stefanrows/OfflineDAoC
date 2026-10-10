@@ -1786,6 +1786,22 @@ namespace DOL.GS
             if (amount <= 0 || (!IsAutonomousWorldBot && !IsPersistentPlayerCompanion))
                 return;
 
+            if (modify)
+            {
+                // Autonomous bots use BOT_RP_RATE; companions follow the player RP_RATE.
+                // Non-positive rates (including the -1 "no modifier" sentinel) leave the amount alone.
+                double rate = IsAutonomousWorldBot
+                    ? ServerProperties.Properties.BOT_RP_RATE
+                    : ServerProperties.Properties.RP_RATE;
+                if (rate > 0)
+                {
+                    double scaled = amount * rate;
+                    amount = scaled >= long.MaxValue ? long.MaxValue : (long)scaled;
+                }
+                if (amount <= 0)
+                    return;
+            }
+
             if (IsAutonomousWorldBot)
             {
                 lock (_autonomousRealmAbilityGate)
