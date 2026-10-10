@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.225.0";
+    internal const string DisplayVersion = "0.226.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -550,8 +550,9 @@ internal sealed partial class MainForm : Form
         worldSpeed.Controls.Add(BuildWorldSpeedPanel());
         tabs.TabPages.Add(population);
         tabs.TabPages.Add(groups);
-        // Camlann keep/relic reset is exposed through the Realm Events panel;
-        // it clears guild claims and relic mounts without touching characters.
+        // The Realm Events tab carries the one-click "Reset all keeps & relics"
+        // button (server must be stopped); it clears guild claims and relic
+        // mounts without touching characters.
         var events = new TabPage("Realm Events") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         events.Controls.Add(BuildRealmEventsPanel());
         tabs.TabPages.Add(events);

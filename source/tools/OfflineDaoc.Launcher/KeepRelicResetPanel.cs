@@ -13,16 +13,22 @@ internal sealed partial class MainForm
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.Controls.Add(new Label { Text = "PVP FRONTIER — guild-owned keeps and guild-only relics · see Realm Events", Dock = DockStyle.Fill,
             ForeColor = DaocTheme.GoldLight, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true }, 0, 0);
-        Button resetKeepsRelics = ActionButton("Reset Keeps && Relics", DaocTheme.Gold);
-        _resetKeepsRelics = resetKeepsRelics;
-        resetKeepsRelics.AccessibleName = "Reset Keeps & Relics";
-        resetKeepsRelics.AutoSize = true;
-        resetKeepsRelics.MinimumSize = new Size(220, 32);
+        Button resetKeepsRelics = BuildResetKeepsRelicsButton();
         resetKeepsRelics.Anchor = AnchorStyles.Right;
-        resetKeepsRelics.Enabled = false;
-        resetKeepsRelics.Click += async (_, _) => await ResetKeepsRelicsAsync();
         header.Controls.Add(resetKeepsRelics, 1, 0);
         return header;
+    }
+
+    private Button BuildResetKeepsRelicsButton()
+    {
+        Button resetKeepsRelics = ActionButton("RESET ALL KEEPS && RELICS…", DaocTheme.Gold);
+        _resetKeepsRelics = resetKeepsRelics;
+        resetKeepsRelics.AccessibleName = "Reset all keeps & relics";
+        resetKeepsRelics.AutoSize = true;
+        resetKeepsRelics.MinimumSize = new Size(220, 32);
+        resetKeepsRelics.Enabled = false;
+        resetKeepsRelics.Click += async (_, _) => await ResetKeepsRelicsAsync();
+        return resetKeepsRelics;
     }
 
     private async Task ResetKeepsRelicsAsync()

@@ -268,6 +268,13 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+110. **One-click reset of all keeps and relics in the launcher.** Owner,
+     2026-10-10. Implemented in source **0.226.0**: the existing
+     `KeepRelicReset` button now appears on the Realm Events tab (its old
+     panel was no longer displayed). Pending: on Windows with the server
+     stopped, click it, confirm, check that every keep is unclaimed and all
+     six relics are at their shrines after the next server start.
+
 109. **Higher XP rates and companion PvP XP.** Owner, 2026-10-10. Implemented
      in source **0.225.0**: launcher XP choices up to 100× for player and
      autonomous bots; persistent companions earn PvP XP from their own
