@@ -237,9 +237,83 @@ namespace DOL.UnitTests
             stats.RecordPull(3_000, 70, 70);
             stats.RecordPull(4_000, null, 100);
             Assert.That(stats.TryReport(500_000), Is.Null);
-            Assert.That(stats.TryReport(601_000), Is.EqualTo(
-                "PVE_REST window_s=600 rests=1 avg_power_pct_at_pull=75 avg_hp_pct_at_pull=86 pulls=3"));
+            Assert.That(stats.TryReport(601_000), Does.StartWith(
+                "PVE_REST window_s=600 rests=1 avg_power_pct_at_pull=75 avg_hp_pct_at_pull=86 pulls=3 "));
             Assert.That(stats.TryReport(700_000), Is.Null);
+        }
+
+        [Test]
+        public void RestCounterSeparatesRestedPullsFromPullsThatNeededNoRest()
+        {
+            var stats = new AutonomousPveRestStats();
+            // Two soloers rested and got up inside the class band, then pulled
+            // within seconds. Three more never needed a rest and pulled near full.
+            stats.RecordRest(1_000);
+            stats.RecordRest(1_500);
+            stats.RecordWake(5_000, 80, 100);
+            stats.RecordWake(6_000, 76, 98);
+            stats.RecordPull(7_000, 82, 100, restedForMilliseconds: 2_000);
+            stats.RecordPull(9_000, 76, 98, restedForMilliseconds: 3_000);
+            stats.RecordPull(10_000, 98, 99);
+            stats.RecordPull(11_000, 96, 97);
+            stats.RecordPull(12_000, null, 99, routeThreat: true);
+            string line = stats.TryReport(601_000);
+            Assert.That(line, Is.EqualTo(
+                "PVE_REST window_s=600 rests=2 avg_power_pct_at_pull=88 avg_hp_pct_at_pull=98 pulls=5 " +
+                "rested_pulls=2 rest_wakes=2 rest_power_at_wake=78 rest_health_at_wake=99 " +
+                "rested_power_at_pull=79 rested_hp_at_pull=99 rest_to_pull_s=2 " +
+                "unrested_power_at_pull=97 unrested_hp_at_pull=98 route_pulls=1"));
+            // The next window starts empty and reports "-" where there is no data.
+            stats.RecordRest(700_000);
+            Assert.That(stats.TryReport(1_300_000), Is.EqualTo(
+                "PVE_REST window_s=600 rests=1 avg_power_pct_at_pull=0 avg_hp_pct_at_pull=0 pulls=0 " +
+                "rested_pulls=0 rest_wakes=0 rest_power_at_wake=- rest_health_at_wake=- " +
+                "rested_power_at_pull=- rested_hp_at_pull=- rest_to_pull_s=- " +
+                "unrested_power_at_pull=- unrested_hp_at_pull=- route_pulls=0"));
+        }
+
+        // Rest regeneration gives at least 10 % of the pool per second
+        // (BotRestRecovery.RecoveryAmount) and GameBot.WakeAfterRecovery asks
+        // ReadyToPull on every tick. Whatever the start, the first tick that
+        // meets the class threshold is the wake, so the bot gets up between the
+        // threshold and the threshold plus one tick: 70-95 % for casters (75
+        // plus or minus jitter), never at full (bug 72).
+        [Test]
+        public void RestEndsInsideTheClassBandNotAtFull(
+            [Values(eCharacterClass.Wizard, eCharacterClass.Cleric, eCharacterClass.Armsman,
+                eCharacterClass.Paladin, eCharacterClass.Scout, eCharacterClass.Necromancer)]
+            eCharacterClass characterClass,
+            [Values(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)] long jitterSeed)
+        {
+            PveRestThresholds thresholds = AutonomousPveArchetype.RestThresholds(characterClass, jitterSeed);
+            bool usesPower = thresholds.Power > 0;
+            for (int start = 0; start < 100; start++)
+            {
+                int health = start, power = start, endurance = start, ticks = 0;
+                while (!AutonomousPveArchetype.ReadyToPull(thresholds, health, power, endurance, usesPower))
+                {
+                    health = System.Math.Min(100, health + 10);
+                    power = System.Math.Min(100, power + 10);
+                    endurance = System.Math.Min(100, endurance + 10);
+                    ticks++;
+                }
+                if (ticks == 0)
+                    continue;
+                // The pool that gates the wake (needs every tick) overshoots its
+                // threshold by less than one tick; the others only climb as well.
+                bool healthGates = start + 10 * (ticks - 1) < thresholds.Health;
+                bool powerGates = usesPower && start + 10 * (ticks - 1) < thresholds.Power;
+                bool enduranceGates = start + 10 * (ticks - 1) < thresholds.Endurance;
+                Assert.That(healthGates || powerGates || enduranceGates, Is.True);
+                if (healthGates)
+                    Assert.That(health, Is.LessThan(thresholds.Health + 10));
+                if (powerGates)
+                    Assert.That(power, Is.LessThan(thresholds.Power + 10));
+                if (enduranceGates)
+                    Assert.That(endurance, Is.LessThan(thresholds.Endurance + 10));
+            }
+            Assert.That(thresholds.Power, Is.LessThanOrEqualTo(80));
+            Assert.That(thresholds.Health, Is.LessThanOrEqualTo(85));
         }
     }
 }

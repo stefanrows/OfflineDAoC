@@ -231,7 +231,7 @@ namespace DOL.GS
                     }
                     RetainRouteThreatHold(blocker, "WaitingForPullResolution", _nextRouteThreatScanTick,
                         packSize, con);
-                    if (!grouped) RecordSoloPull(bot);
+                    if (!grouped) RecordSoloPull(bot, routeThreat: true);
                     if (bot.Brain is BotBrain brain)
                     {
                         brain.AddToAggroList(blocker, Math.Max(25, blocker.EffectiveLevel * 10));

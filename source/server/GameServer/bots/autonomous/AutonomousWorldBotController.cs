@@ -3188,6 +3188,10 @@ namespace DOL.GS
                     bot.HealthPercent, bot.ManaPercent, bot.EndurancePercent, usesPower);
             if (!shouldRest)
             {
+                // Bug 72 metric: the rest ended because the class thresholds
+                // were met (not because combat woke the bot).
+                if (soloHabit && fullyRecovered && bot.IsRecoveryResting)
+                    RecordSoloRestWake(bot);
                 _restingCamp = null;
                 bot.WakeRecoveryRest();
                 return false;

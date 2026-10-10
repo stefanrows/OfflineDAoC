@@ -275,18 +275,52 @@ namespace DOL.GS
 
     /// <summary>
     /// Ten-minute counter of solo rests and the resources a soloer had at the
-    /// pull. One line per window, never per bot.
+    /// pull. One line per window, never per bot. Bug 72: the plain pull
+    /// averages mix pulls that followed a rest with pulls that never needed
+    /// one (the bot was already above its class threshold), so the line also
+    /// reports the rested pulls separately, the resources at the moment the
+    /// rest ended, and how long the bot took from waking to pulling.
     /// </summary>
     public sealed class AutonomousPveRestStats
     {
         public const long WindowMilliseconds = 600_000;
+
+        /// <summary>A pull counts as "after a rest" when it follows the wake within this time.</summary>
+        public const long RestedPullWindowMilliseconds = 60_000;
+
+        private sealed class Bucket
+        {
+            public int Count;
+            public int PowerCount;
+            public long Power;
+            public long Health;
+
+            public void Add(int? powerPercent, int healthPercent)
+            {
+                Count++;
+                if (powerPercent.HasValue)
+                {
+                    PowerCount++;
+                    Power += Math.Clamp(powerPercent.Value, 0, 100);
+                }
+                Health += Math.Clamp(healthPercent, 0, 100);
+            }
+
+            /// <summary>Power is averaged over power users only.</summary>
+            public string AveragePower(string empty) => PowerCount == 0 ? empty : (Power / PowerCount).ToString();
+
+            public string AverageHealth(string empty) => Count == 0 ? empty : (Health / Count).ToString();
+        }
+
         private readonly object _sync = new();
         private long _windowStart = -1;
         private int _rests;
-        private int _pulls;
-        private int _powerPulls;
-        private long _power;
-        private long _health;
+        private int _routePulls;
+        private long _restToPullMilliseconds;
+        private Bucket _all = new();
+        private Bucket _wake = new();
+        private Bucket _rested = new();
+        private Bucket _unrested = new();
 
         public void RecordRest(long now)
         {
@@ -297,19 +331,45 @@ namespace DOL.GS
             }
         }
 
-        /// <summary>Power is averaged over power users only; pass null for pure melee.</summary>
-        public void RecordPull(long now, int? powerPercent, int healthPercent)
+        /// <summary>
+        /// A resting soloer reached its class thresholds and got up. Power is
+        /// averaged over power users only; pass null for pure melee.
+        /// </summary>
+        public void RecordWake(long now, int? powerPercent, int healthPercent)
         {
             lock (_sync)
             {
                 Start(now);
-                _pulls++;
-                if (powerPercent.HasValue)
+                _wake.Add(powerPercent, healthPercent);
+            }
+        }
+
+        /// <summary>
+        /// Power is averaged over power users only; pass null for pure melee.
+        /// <paramref name="restedForMilliseconds"/> is the time since the bot
+        /// woke from a rest when this pull followed one within
+        /// <see cref="RestedPullWindowMilliseconds"/>, otherwise null.
+        /// <paramref name="routeThreat"/> marks a pull on the way (never at a
+        /// camp, so never preceded by a camp rest).
+        /// </summary>
+        public void RecordPull(long now, int? powerPercent, int healthPercent,
+            long? restedForMilliseconds = null, bool routeThreat = false)
+        {
+            lock (_sync)
+            {
+                Start(now);
+                _all.Add(powerPercent, healthPercent);
+                if (routeThreat)
+                    _routePulls++;
+                if (restedForMilliseconds.HasValue)
                 {
-                    _powerPulls++;
-                    _power += Math.Clamp(powerPercent.Value, 0, 100);
+                    _rested.Add(powerPercent, healthPercent);
+                    _restToPullMilliseconds += Math.Max(0, restedForMilliseconds.Value);
                 }
-                _health += Math.Clamp(healthPercent, 0, 100);
+                else
+                {
+                    _unrested.Add(powerPercent, healthPercent);
+                }
             }
         }
 
@@ -320,15 +380,24 @@ namespace DOL.GS
             {
                 if (_windowStart < 0 || now - _windowStart < WindowMilliseconds)
                     return null;
+                string restToPull = _rested.Count == 0 ? "-" : (_restToPullMilliseconds / _rested.Count / 1000).ToString();
                 string line = $"PVE_REST window_s={WindowMilliseconds / 1000} rests={_rests} " +
-                              $"avg_power_pct_at_pull={(_powerPulls == 0 ? 0 : _power / _powerPulls)} " +
-                              $"avg_hp_pct_at_pull={(_pulls == 0 ? 0 : _health / _pulls)} pulls={_pulls}";
+                              $"avg_power_pct_at_pull={_all.AveragePower("0")} " +
+                              $"avg_hp_pct_at_pull={_all.AverageHealth("0")} pulls={_all.Count} " +
+                              $"rested_pulls={_rested.Count} rest_wakes={_wake.Count} " +
+                              $"rest_power_at_wake={_wake.AveragePower("-")} rest_health_at_wake={_wake.AverageHealth("-")} " +
+                              $"rested_power_at_pull={_rested.AveragePower("-")} rested_hp_at_pull={_rested.AverageHealth("-")} " +
+                              $"rest_to_pull_s={restToPull} " +
+                              $"unrested_power_at_pull={_unrested.AveragePower("-")} unrested_hp_at_pull={_unrested.AverageHealth("-")} " +
+                              $"route_pulls={_routePulls}";
                 _windowStart = now;
                 _rests = 0;
-                _pulls = 0;
-                _powerPulls = 0;
-                _power = 0;
-                _health = 0;
+                _routePulls = 0;
+                _restToPullMilliseconds = 0;
+                _all = new();
+                _wake = new();
+                _rested = new();
+                _unrested = new();
                 return line;
             }
         }
