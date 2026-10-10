@@ -445,6 +445,8 @@ namespace DOL.AI.Brain
             if (BotBody != null && PvpCombatant.IsPlayerShaped(target) && AutonomousSiegeMarch.IsMarching(BotBody)) return false;
             if (!GameServer.ServerRules.IsAllowedToAttack(Body, target, true))
                 return false;
+            // A deliberate human damage call is not an autonomous XP-pull decision.
+            if (CompanionAssistTrain.Active(Body)) return true;
 
             GameLiving realTarget = target;
 
@@ -1119,7 +1121,8 @@ namespace DOL.AI.Brain
                 if (!CompanionEngagementMode.Allows(Body, target)) RemoveFromAggroList(target);
             if (ActiveOrderedPullTarget is GameLiving order && !CompanionEngagementMode.Allows(Body, order))
                 CancelOrderedPull(order);
-            if (Body.TargetObject is GameLiving current && !CompanionEngagementMode.Allows(Body, current))
+            if (Body.TargetObject is GameLiving current && !CompanionEngagementMode.Allows(Body, current) &&
+                !(CompanionAssistTrain.Active(Body) && (PvpControlInFlight || PveControlInFlight || HealerAreaStunInFlight)))
             {
                 Body.StopAttack();
                 Body.StopFollowing();
@@ -1669,6 +1672,9 @@ namespace DOL.AI.Brain
                 if (!CheckHeals()) CheckSpells(eCheckSpellType.Defensive);
                 return;
             }
+
+            if (CompanionAssistTrain.Active(Body) && !Body.IsCasting &&
+                (CheckHeals() || TryPveAddControl() || TryPvpCrowdControl())) return;
 
             GameLiving leaderTarget = PlayerLedPullCoordinator.FindLeaderTarget(AssistedPlayer);
             if (leaderTarget != null && PlayerLedPullCoordinator.Available(BotBody, AssistedPlayer) &&
@@ -2998,11 +3004,10 @@ namespace DOL.AI.Brain
                 if (leader != null && leader.IsAlive)
                 {
                     // Check if owner is attacking something
-                    if (leader.TargetObject is GameLiving ownerTarget
+                    if (PlayerLedPullCoordinator.FindPlayerAttackTarget(leader) is GameLiving ownerTarget
                         && !BotPartyRoles.IsSupport(_brain.BotBody)
                         && PlayerLedPullCoordinator.Available(_brain.BotBody, leader)
                         && _brain.Body.IsWithinRadius(ownerTarget, GROUP_DEFENSE_ASSIST_RADIUS)
-                        && (leader.IsAttacking || (leader.IsCasting && leader.castingComponent?.SpellHandler?.Spell?.IsHarmful == true))
                         && _brain.CanAggroTarget(ownerTarget))
                     {
                         _brain.AddToAggroList(ownerTarget, 1);
@@ -3056,12 +3061,10 @@ namespace DOL.AI.Brain
                     return;
                 }
 
-                // Check if owner is in combat or attacking something
-                if (leader.IsAttacking || (leader.IsCasting && leader.castingComponent?.SpellHandler?.Spell?.IsHarmful == true))
+                // Only a damage cast or weapon attack supplies an assist target.
+                if (PlayerLedPullCoordinator.FindPlayerAttackTarget(leader) is GameLiving ownerTarget)
                 {
-                    // Try to get owner's target
-                    if (leader.TargetObject is GameLiving ownerTarget
-                        && !BotPartyRoles.IsSupport(_brain.BotBody)
+                    if (!BotPartyRoles.IsSupport(_brain.BotBody)
                         && PlayerLedPullCoordinator.Available(_brain.BotBody, leader)
                         && _brain.Body.IsWithinRadius(ownerTarget, GROUP_DEFENSE_ASSIST_RADIUS)
                         && ownerTarget.IsAlive
@@ -3258,7 +3261,7 @@ namespace DOL.AI.Brain
 
             // Preserve an accepted cast unless a different attacker is pressing
             // a protected group member. In that case the tank must peel now.
-            GameLiving urgentProtectionTarget = FindProtectionTarget();
+            GameLiving urgentProtectionTarget = CompanionAssistTrain.Active(Body) ? null : FindProtectionTarget();
             if (Body.IsCasting)
             {
                 if (urgentProtectionTarget == null || Body.TargetObject == urgentProtectionTarget ||
@@ -3278,7 +3281,7 @@ namespace DOL.AI.Brain
                 AddToAggroList(protectionTarget, 10000);
             }
 
-            GameLiving directAttacker = RecentDirectAttacker();
+            GameLiving directAttacker = CompanionAssistTrain.Active(Body) ? null : RecentDirectAttacker();
 
             // Bow release is driven by AttackAction, not by this brain pulse.
             // Re-entering the general target/movement decision while Aim is
@@ -3308,7 +3311,9 @@ namespace DOL.AI.Brain
             // protecting a group member. Generic aggro may still contain the
             // previous pull and used to make archers/casters repeatedly switch
             // away from the fight their pet had already started.
-            Body.TargetObject = protectionTarget ?? directAttacker ?? activePetTarget ?? CalculateNextAttackTarget();
+            Body.TargetObject = CompanionAssistTrain.Active(Body)
+                ? (CompanionAssistTrain.Target(AssistedPlayer) is GameLiving called && CompanionEngagementMode.Allows(Body, called) ? called : null)
+                : protectionTarget ?? directAttacker ?? activePetTarget ?? CalculateNextAttackTarget();
 
             if (Body.TargetObject is GameLiving wallTarget && AutonomousRvrDefense.HoldWall(BotBody, wallTarget))
             {
@@ -3926,6 +3931,7 @@ namespace DOL.AI.Brain
 
         private bool TryPriorityTaunt(GameLiving target)
         {
+            if (CompanionAssistTrain.Active(Body)) return false;
             if (!IsTankClass || target?.TargetObject is not GameLiving victim || Body.Group == null ||
                 // The pet of a pet pull in danger counts like a group member (task 46).
                 !(victim.Group == Body.Group && Body.Group.IsInTheGroup(victim) ||
@@ -4146,6 +4152,8 @@ namespace DOL.AI.Brain
                 if (Body.CanCastInstantHarmfulSpells)
                 {
                     IEnumerable<Spell> instantOffense = Body.InstantHarmfulSpells;
+                    if (CompanionAssistTrain.Active(Body))
+                        instantOffense = instantOffense.OrderByDescending(CompanionAssistTrain.DamagePriority);
                     if (readyBombs.Length > 0)
                         instantOffense = instantOffense.Where(spell => CompanionBombingPolicy.IsBombSpell(BotBody, spell));
                     else if (UsesMinstrelHybridCombat)
@@ -4282,7 +4290,10 @@ namespace DOL.AI.Brain
                     }
                 }
 
-                if (BotBody.CanCastBolts && spellsToCast.Count < 1)
+                if (CompanionAssistTrain.Active(Body) && Body.CanCastHarmfulSpells)
+                    spellsToCast.AddRange(Body.HarmfulSpells.Where(spell => CompanionAssistTrain.IsDamage(spell) && CanCastOffensiveSpell(spell)));
+
+                if (BotBody.CanCastBolts && (spellsToCast.Count < 1 || CompanionAssistTrain.Active(Body)))
                 {
                     foreach (Spell spell in BotBody.BoltSpells)
                     {
@@ -4365,7 +4376,9 @@ namespace DOL.AI.Brain
                         }
                     }
 
-                    Spell spellToCast = rangedAoeSelected
+                    Spell spellToCast = CompanionAssistTrain.Active(Body)
+                        ? spellsToCast.OrderByDescending(CompanionAssistTrain.DamagePriority).ThenByDescending(spell => spell.Level).First()
+                        : rangedAoeSelected
                         ? spellsToCast.OrderByDescending(spell => spell.Level).ThenByDescending(spell => spell.Damage).First()
                         : readyBombs.Length > 0 && spellsToCast.All(spell =>
                             CompanionBombingPolicy.IsBombSpell(BotBody, spell))
@@ -4386,7 +4399,7 @@ namespace DOL.AI.Brain
 
         private Spell[] ReadyCompanionBombs(GameLiving target)
         {
-            if (target?.IsAlive != true || Body == null ||
+            if (CompanionAssistTrain.Active(Body) || target?.IsAlive != true || Body == null ||
                 !CompanionBombingPolicy.CanUseBombs(BotBody))
                 return [];
 
@@ -4616,6 +4629,7 @@ namespace DOL.AI.Brain
 
         protected bool CanCastOffensiveSpell(Spell spell)
         {
+            if (!CompanionAssistTrain.AllowsSpell(Body, spell, Body.TargetObject as GameLiving)) return false;
             if (spell == null || spell.Level > Body.Level || Body.TargetObject is not GameLiving target || !target.IsAlive)
                 return false;
 
@@ -4669,6 +4683,7 @@ namespace DOL.AI.Brain
 
         protected virtual bool CheckOffensiveSpells(Spell spell)
         {
+            if (!CompanionAssistTrain.AllowsSpell(Body, spell, Body.TargetObject as GameLiving)) return false;
             if (spell == null || Body.Mana < BotBody.PowerCost(spell) || !DebuffBudgetAllows(spell))
                 return false;
 
@@ -4792,6 +4807,7 @@ namespace DOL.AI.Brain
 
         protected virtual bool CheckInstantOffensiveSpells(Spell spell)
         {
+            if (!CompanionAssistTrain.AllowsSpell(Body, spell, Body.TargetObject as GameLiving)) return false;
             if (spell == null || Body.Mana < BotBody.PowerCost(spell) ||
                 spell.HasRecastDelay && Body.GetSkillDisabledDuration(spell) > 0 ||
                 !DebuffBudgetAllows(spell))

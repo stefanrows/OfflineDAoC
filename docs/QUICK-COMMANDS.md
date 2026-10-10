@@ -111,6 +111,7 @@ keep up. Each server start selects 1× again.
 | `/spawn Realm X` | Summon a named class from another realm, such as `/spawn Midgard Healer`. |
 | `/raid 40` | Enable a 40-member companion raid. Use **before** `/spawn`. Requires level 50; the total includes you. |
 | `/raid 80` | Enable an 80-member companion raid. Use **before** `/spawn`. Requires level 50; the total includes you. |
+| `/assisttrain` | Call one target with your damage cast or weapon attack. Companions use single-target offense and retain healing/add control. Clears petpull/stay; `/passive` stops. |
 | `/aggressive` | Companions assist your attacks and defend the party. They break off and return if left far behind. |
 | `/defensive` | Companions engage threats near you and return if left far behind. |
 | `/passive` | Companions drop combat, recall their pets, and return to you without attacking. Animists take down all their mushrooms (main turret included) and plant none while passive; `/stay` ends. Choose another mode to resume fighting. |

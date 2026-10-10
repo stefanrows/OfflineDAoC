@@ -77,6 +77,9 @@ namespace DOL.GS
         /// </summary>
         public bool MetricsEnabled { get; protected set; } = false;
 
+        /// <summary>Windows process priority: Normal, BelowNormal (default), or Idle.</summary>
+        public string ProcessPriority { get; set; } = "BelowNormal";
+
         /// <summary>
         /// The interval in which Metrics are calculted/exported
         /// </summary>
@@ -147,6 +150,7 @@ namespace DOL.GS
 //			m_rootDirectory = root["Server"]["RootDirectory"].GetString(m_rootDirectory);
 
             m_logConfigFile = root["Server"]["LogConfigFile"].GetString(m_logConfigFile);
+            ProcessPriority = root["Server"]["ProcessPriority"].GetString("BelowNormal");
 
             m_scriptCompilationTarget = root["Server"]["ScriptCompilationTarget"].GetString(m_scriptCompilationTarget);
             m_scriptAssemblies = root["Server"]["ScriptAssemblies"].GetString(m_scriptAssemblies);
@@ -276,6 +280,7 @@ namespace DOL.GS
 			// Removed to not confuse users
 //			root["Server"]["RootDirectory"].Set(m_rootDirectory);
 			root["Server"]["LogConfigFile"].Set(m_logConfigFile);
+			root["Server"]["ProcessPriority"].Set(ProcessPriority);
 
 			root["Server"]["ScriptCompilationTarget"].Set(m_scriptCompilationTarget);
 			root["Server"]["ScriptAssemblies"].Set(m_scriptAssemblies);

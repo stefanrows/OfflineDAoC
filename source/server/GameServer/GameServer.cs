@@ -270,9 +270,45 @@ namespace DOL.GS
 			if (!LoggerManager.Initialize(logConfig.FullName))
 				return;
 
+			ApplyProcessPriority(config.ProcessPriority);
+
 			//Create the instance
 			m_instance = new GameServer(config);
 		}
+
+        private static void ApplyProcessPriority(string configuredPriority)
+        {
+            if (!OperatingSystem.IsWindows())
+                return;
+
+            var startupLog = LoggerManager.Create(typeof(GameServer));
+            ProcessPriorityClass priority = ProcessPriorityClass.BelowNormal;
+            switch (configuredPriority?.Trim().ToLowerInvariant())
+            {
+                case "normal":
+                    priority = ProcessPriorityClass.Normal;
+                    break;
+                case "idle":
+                    priority = ProcessPriorityClass.Idle;
+                    break;
+                case "belownormal":
+                    break;
+                default:
+                    startupLog.Warn($"Invalid ProcessPriority '{configuredPriority}'; using BelowNormal. Allowed values: Normal, BelowNormal, Idle.");
+                    break;
+            }
+
+            try
+            {
+                using Process process = Process.GetCurrentProcess();
+                process.PriorityClass = priority;
+                startupLog.Info($"Server process priority applied: {process.PriorityClass}.");
+            }
+            catch (Exception exception)
+            {
+                startupLog.Warn($"Could not apply server process priority {priority}; continuing with the current priority.", exception);
+            }
+        }
 		#endregion
 
 		#region Start

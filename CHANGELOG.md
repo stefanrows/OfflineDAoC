@@ -12,6 +12,75 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.224.1] - 2026-10-10
+
+### Added
+
+- Server `ProcessPriority` XML setting: Normal, BelowNormal (default), or Idle.
+  Missing/invalid settings use BelowNormal; invalid values log a warning.
+
+### Fixed
+
+- Windows startup applies process priority after logging initializes and before
+  server initialization, giving normal-priority desktop apps scheduling
+  preference over server work. Log the applied priority; API failures warn and
+  allow startup to continue. Non-Windows hosts skip the change. No bot/NPC
+  cadence or individual thread priority changes.
+- Server and Windows launcher Release builds passed with zero errors; warnings
+  remain. Automated tests were skipped. Bug 124 awaits installation, Windows
+  priority/responsiveness and real-client bot verification.
+
+## [0.224.0] - 2026-10-10
+
+### Fixed
+
+- Aggressive and Defensive companions no longer treat the human leader's mez,
+  root, stun, or pure debuff casts as assist orders. Cast notifications, spell
+  attack events, shared target polling and idle/follow polling now require
+  damage casts or weapon attacks. Cast polling uses the spell's captured target,
+  so selecting another enemy during a cast does not redirect assistance.
+- Retain retaliation, tank peeling, area-damage selection, defensive ranges,
+  explicit pulls, human-pet assistance and petpull behavior. AssistTrain keeps
+  its strict focus policy. Bug 123 awaits installation and real-client checks;
+  automated tests skipped under project policy.
+
+## [0.223.0] - 2026-10-10
+
+### Added
+
+- `/assisttrain` and a Companion Manager group order: the human leader calls
+  one target by starting a damage cast or weapon attack. Companions and their
+  pets concentrate single-target offense; selecting targets, mez, debuffs, pet
+  attacks and old spell ticks do not call a new target. Healing and add control
+  remain available. The order is session-only and needs no save migration.
+
+### Changed
+
+- AssistTrain suppresses area offense, bombing and multi-target styles, ranks
+  available damage spells by damage per cast time, and uses the strongest
+  currently legal melee style. Damage dealers do not peel onto other attackers.
+  Entering it clears petpull/stay and old attacks; `/passive` stops the train.
+- Document the DAoC assist/mez distinction and the existing Aggressive and
+  Defensive behavior. Ordinary modes retain their existing combat policies.
+  Source build only; automated tests skipped. Installation and caster/tank
+  real-client verification remain pending (task 108).
+
+## [0.222.1] - 2026-10-10
+
+### Added
+
+- Track the owner-started 0.222.0 live observation of keep raids, battlegrounds,
+  movement, keep progression and realm abilities. Record Murdaigean's confirmed
+  startup camp failure as bug 122 and the partial results of observation task
+  107, paused at the owner's request with a private handover retained.
+  Private evidence stays outside Git; gameplay verification remains pending.
+
+### Changed
+
+- Documentation/version pins only. The running installation remains 0.222.0;
+  no gameplay code, server lifecycle, settings, save or deployment changes.
+  Automated tests were skipped under the project workflow.
+
 ## [0.222.0] - 2026-10-10
 
 ### Added

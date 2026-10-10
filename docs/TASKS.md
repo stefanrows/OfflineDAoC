@@ -6,6 +6,37 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+107. **Observe the owner-started 0.222.0 session at selected 10x speed.** Owner,
+     2026-10-10. **Paused at the owner's request on 2026-10-10.** Captured
+     evidence covers 09:05:35-10:03:48 CEST. Assess actual keep-raiding
+     improvements, battlegrounds, keep progression, movement and realm abilities.
+     Server PID/path/session and installed deployment were verified. Private
+     collection outside Git retains dated logs, speed/RvR/live-roster snapshots
+     and short Windows-native read-only queries of autonomous bots and keeps;
+     the collector has exited and the five-minute chat heartbeat is paused.
+     A private handover retains the review cursor and notification history.
+     The game server remains running. No gameplay actions,
+     server lifecycle changes, settings/save writes, tests or deployment.
+     Result so far: one coordinated two-party launch physically mustered 16
+     living bots, four healers and two equipped ram operators. The attack
+     failed after combat losses, with no recorded ram deployment/hit or capture;
+     the keep owner and living lord were preserved. Single-party camp readiness
+     was observed, but those undersized armies expired before launching.
+     Physical ram purchase was observed; equipped return to muster remains
+     unverified. Eighteen guild-held keeps progressed from level 2 to 5.
+     Nine battleground maps have three saved camps each; Murdaigean has none
+     (bug 122), and no autonomous battleground occupants were sampled.
+     Reduced-Purge allocations grew from two to ten; new gameplay-clock
+     deadlines support attempted activations and 20-minute personal reuse,
+     without confirming effects. No actual runtime exceptions were captured.
+     At 3,900 bots, selected/effective 10x finally achieved about 1.7x;
+     evolving load prevents a controlled performance comparison. A brief client
+     connection correctly reduced effective speed to 1x.
+     Resume only at the owner's request, preserving this evidence and recording
+     the pause interval. Successful ram damage/capture, battleground gameplay,
+     RA effects and the remaining progression/travel checks are still pending.
+     Tasks 95/100-106 and bugs 120/121 retain their required gameplay checks.
+
 
 94. **Upstream adaptation Stage 4: demonstrated equipment appearance fixes.**
     Selected 2026-10-09 under task 90. Initial catalog audit is recorded in
@@ -236,6 +267,18 @@ Agent sessions on items 45–48: take the role and context from
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
 ## Implemented in source; installation verification pending
+
+108. **AssistTrain companion mode and engagement review.** Owner, 2026-10-10.
+     Implemented in source **0.223.0**: `/assisttrain` and manager group order,
+     human damage-cast/weapon-attack calls, single-target damage and pet gates,
+     spell/style ranking, independent healing/add control, and explicit
+     petpull/stay reset. Research and existing-mode findings are recorded in
+     [COMPANION_BOTS.md](COMPANION_BOTS.md#assist-train-assisttrain). Ordinary
+     Aggressive/Defensive policies were retained in 0.223.0. The owner-authorized
+     follow-up fixes their harmful-cast assist triggers and polling in 0.224.0
+     (bug 123), retaining other behavior. Server Release build verified; automated tests skipped under
+     project policy. Installation and caster/tank/CC/pet/target-switch real-client
+     checks remain pending. No deployment or server lifecycle action.
 
 Installation checkpoint, 2026-10-10: all local source changes and latest fork
 main were merged/pushed, built together in Release with zero errors, and deployed

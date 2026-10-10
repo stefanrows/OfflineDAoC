@@ -62,6 +62,26 @@ Report build, merge/push, and deployment outcomes separately. Ordinary developme
 requests do not deploy. The full test and setup commands below are reference
 instructions for explicitly requested validation, not shipping gates.
 
+## Windows server process priority
+
+At startup, CoreServer applies `BelowNormal` process priority on Windows so
+normal-priority desktop/foreground apps can preempt server CPU work. Bot/NPC
+cadences and individual thread priorities are unchanged; under CPU contention,
+the server can run slower. This is scheduling preference, not a CPU usage cap.
+
+Set `<ProcessPriority>BelowNormal</ProcessPriority>` inside `<Server>` in the
+active `config/serverconfig.xml` (or the file selected with `-config`). Allowed
+values are `Normal`, `BelowNormal`, and `Idle`, ignoring case and surrounding
+whitespace. Missing or invalid values fall back to `BelowNormal`; invalid values
+log a warning. Restart the server after changing this setting. Non-Windows
+hosts skip the priority change. A failure to set priority logs a warning and
+allows startup to continue.
+
+Verify after startup in Task Manager → Details: enable the **Base priority**
+column and check `CoreServer.exe` shows **Below normal**. The startup log should
+also contain `Server process priority applied: BelowNormal.` Compare desktop
+responsiveness under the same bot load, and confirm bots still move/fight.
+
 ## Offline World Speed
 
 The launcher can request 1×, 2×, 3×, 5×, 10×, or 20× world speed for a running local server.

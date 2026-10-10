@@ -16,7 +16,8 @@ namespace DOL.AI.Brain
             if (BotBody?.CanCastCrowdControlSpells != true || Body.IsCasting || Body.IsIncapacitated ||
                 Body.castingComponent?.HasPendingSkillRequests == true || GameLoop.GameLoopTime < _nextPvpControl) return false;
             _nextPvpControl = GameLoop.GameLoopTime + 2000;
-            if (!AggroList.Keys.Any(BotPvpCrowdControl.PlayerLike) && !BotPvpCrowdControl.PlayerLike(Body.TargetObject as GameLiving) &&
+            if (!(CompanionAssistTrain.Active(Body) && Body.Group?.GetMembersInTheGroup().Any(m => m.InCombat) == true) &&
+                !AggroList.Keys.Any(BotPvpCrowdControl.PlayerLike) && !BotPvpCrowdControl.PlayerLike(Body.TargetObject as GameLiving) &&
                 Body.Group?.GetMembersInTheGroup().Any(m=>m.IsAttacking && BotPvpCrowdControl.PlayerLike(m.TargetObject as GameLiving))!=true) return false;
             // PvE never enters this policy; native levels, specs, mana, immunity,
             // interruption and spell timers still decide whether a cast succeeds.
@@ -28,7 +29,7 @@ namespace DOL.AI.Brain
             GameLiving[] enemies = Body.GetNPCsInRadius(1800).Where(BotPvpCrowdControl.PlayerLike).Cast<GameLiving>()
                 .Concat(Body.GetPlayersInRadius(1800)).Where(t => BotSiegeRuntime.LegalEnemy(Body,t) && !t.IsMezzed &&
                     (sweepBystanders || BotPvpCrowdControl.IsInFightWith(Body, t, AggroList.Keys)) &&
-                    !t.IsStealthed && !BotPvpCrowdControl.Protected(Body,t) && CompanionEngagementMode.Allows(Body,t) &&
+                    !t.IsStealthed && !BotPvpCrowdControl.Protected(Body,t) && CompanionEngagementMode.Allows(Body,t, crowdControl: true) &&
                     !CompanionPvpEngagement.Focused(Body,t) && !CompanionPvpEngagement.Defending(Body,t))
                 .OrderBy(Body.GetDistanceTo).Take(24).ToArray();
             if (enemies.Length == 0) return false;

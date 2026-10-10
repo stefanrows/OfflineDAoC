@@ -16,6 +16,21 @@ namespace DOL.GS.Commands
             return "Companions: DEFENSIVE. They engage threats near you and return when left far behind. Use /passive to regroup or /companions group default for saved preferences.";
         }
 
+        public static string AssistTrain(GamePlayer player)
+        {
+            CompanionEngagementMode.Set(player, eCompanionEngagementMode.AssistTrain);
+            PlayerLedPullCoordinator.CancelForLeader(player);
+            CompanionPetPull.SetMode(player, false);
+            foreach (GameBot bot in CompanionSquads.OwnerForceBots(player).ToArray())
+                if (bot.Brain is BotBrain brain)
+                {
+                    brain.PrepareForTankPull();
+                    BotAnimistPolicy.ReleaseGrove(bot);
+                    brain.NextThinkTick = GameLoop.GameLoopTime;
+                }
+            return "Companions: ASSIST TRAIN. Your damage casts and weapon attacks call one target. Single-target offense; healing and add control continue. Petpull/stay cleared. Use /passive to stop or another mode to leave.";
+        }
+
         public static string Aggressive(GamePlayer player)
         {
             CompanionEngagementMode.Set(player, false);
@@ -43,6 +58,13 @@ namespace DOL.GS.Commands
             CompanionEngagementMode.ClearGroupOrder(player);
             return "Group stance override cleared; each persistent companion uses their own preference.";
         }
+    }
+
+    [CmdAttribute("&assisttrain", ePrivLevel.Player, "Coordinate single-target damage on your damage calls", "/assisttrain")]
+    public class CompanionAssistTrainCommand : AbstractCommandHandler, ICommandHandler
+    {
+        public void OnCommand(GameClient client, string[] args) =>
+            DisplayMessage(client, CompanionGroupOrders.AssistTrain(client.Player));
     }
 
     [CmdAttribute("&defensive", ePrivLevel.Player, "Companions wait for enemies to approach you", "/defensive")]

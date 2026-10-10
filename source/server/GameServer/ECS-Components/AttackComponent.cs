@@ -735,6 +735,8 @@ namespace DOL.GS
             }
 
             AttackState = true;
+            if (owner is GamePlayer leader && CompanionAssistTrain.Active(leader))
+                CompanionAssistTrain.Call(leader, _startAttackTarget as GameLiving);
             return true;
         }
 
@@ -1046,6 +1048,13 @@ namespace DOL.GS
             {
                 ad.AttackResult = (target == null) ? eAttackResult.NoTarget : eAttackResult.NoValidTarget;
                 SendAttackingCombatMessages(action, ad);
+                return ad;
+            }
+
+            // Revalidate each swing, including companion pets and secondary style hits.
+            if (CompanionAssistTrain.Active(owner) && !CompanionEngagementMode.Allows(owner, ad.Target))
+            {
+                ad.AttackResult = eAttackResult.NoValidTarget;
                 return ad;
             }
 

@@ -106,6 +106,8 @@ namespace DOL.GS
         {
             if (player == null)
                 return Usage;
+            if (on && CompanionAssistTrain.Active(player))
+                return "Choose /aggressive or /defensive before enabling /petpull; AssistTrain follows your damage calls.";
             Mode mode = Modes.GetOrCreateValue(player);
             GameNPC pet = LivePet(player);
             lock (mode)

@@ -6,6 +6,25 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+122. **Murdaigean starts without any battleground campaign camps.** Verified
+     installed 0.222.0, 2026-10-10 09:06:22 CEST, after an owner-started
+     server run with the ten shipped native campaign meshes. Startup logs
+     `BATTLEGROUND_CAMP_UNAVAILABLE region=251` for Hibernia, Midgard and
+     Albion portal keeps, each `reason=no_proved_outside_camp`. Windows-native
+     read-only world queries show 27 camp rows across the other nine maps and
+     none for region 251. All 27 deployment entries, including the meshes,
+     match the deployment manifest; the four server DLLs match the build.
+     Expected: the 25-29 bracket has verified outside camps, commanders,
+     captains and its campaign director. Actual: all three camp-anchor checks
+     fail; `BattlegroundCampaignManager.Initialize` removes the campaign when
+     no camps exist. The separate admission readiness check does not require
+     an initialized campaign, so entering the map would not establish working
+     objectives or patrols. No client entry was exercised and no workaround
+     was applied. Reproduce by starting this installed build and checking the
+     three region-251 warnings and camp rows. Investigate runtime camp-anchor
+     validation against the earlier standalone route proofs; the cause is
+     not yet established. Observation evidence stays private outside Git.
+
 71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
     2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
     `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
@@ -60,6 +79,35 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+124. **CoreServer CPU load makes the Windows desktop sluggish.** Owner report,
+     2026-10-10 (installed version unspecified): Ryzen 7 5700X3D, 8C/16T,
+     64 GB RAM; about 86 threads, four logical cores of constant server load,
+     cores 0–5 at 60–74%, processor queue spikes to 14. GPU, disk and RAM are
+     fine; stopping CoreServer restores desktop responsiveness. Expected:
+     foreground apps remain responsive while bots run. Source mitigation
+     0.224.1 applies Windows-only process priority at startup, default
+     BelowNormal, configurable to Normal/BelowNormal/Idle in serverconfig.xml;
+     malformed settings fall back with a warning, and priority failures do
+     not abort startup. Bot/NPC loops and thread priorities are unchanged.
+     Release server compilation passed; automated tests were skipped.
+     Installation, Task Manager Base priority, matched-load responsiveness
+     and real-client bot activity checks remain pending. Priority is a
+     scheduling preference, not a CPU cap or proven root-cause fix.
+
+123. **Ordinary auto-assist treats leader crowd control as an attack call.**
+     Source review 2026-10-10 confirmed the issue through 0.223.0: beginning
+     or landing a harmful mez/root/stun/pure debuff could order assistance,
+     and shared/idle/follow polling repeated that order. Fixed in source
+     **0.224.0**: all human cast-based triggers require a damage spell; polling
+     uses its captured target and does not fall through to a melee toggle
+     during CC. Weapon attacks still assist. Retaliation, peeling, area damage,
+     defensive distance rules, explicit pulls, pet assistance and petpull are
+     unchanged. Server Release build passed; automated tests skipped. Pending:
+     installation and real-client checks in both modes for single/area mez,
+     root, stun, debuffs, successful/resisted casts, damage casts with mid-cast
+     selection changes, weapon attacks, and the retained combat behaviors.
+
 
 Installation checkpoint, 2026-10-10: fixes through 0.222.0, including bugs
 120/121 and the latest remote movement changes, are deployed with the server

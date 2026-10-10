@@ -4,7 +4,7 @@ using DOL.GS.Keeps;
 
 namespace DOL.GS
 {
-    public enum eCompanionEngagementMode { Aggressive, Defensive, Passive }
+    public enum eCompanionEngagementMode { Aggressive, Defensive, Passive, AssistTrain }
 
     public static class CompanionEngagementMode
     {
@@ -34,6 +34,7 @@ namespace DOL.GS
             mode.GroupOrder = order;
             mode.HasGroupOrder = true;
             mode.Pull = null;
+            CompanionAssistTrain.Reset(player);
             CompanionPvpEngagement.Reset(player);
         }
 
@@ -41,6 +42,7 @@ namespace DOL.GS
         {
             if (player != null && Modes.TryGetValue(player, out Mode mode))
             {
+                CompanionAssistTrain.Reset(player);
                 mode.HasGroupOrder = false;
                 mode.Pull = null;
                 CompanionPvpEngagement.Reset(player);
@@ -118,7 +120,7 @@ namespace DOL.GS
                 ? bot.PlayerGroupLeader ?? bot.Owner : null;
         }
 
-        public static bool Allows(GameLiving actor, GameLiving target)
+        public static bool Allows(GameLiving actor, GameLiving target, bool crowdControl = false)
         {
             GameBot bot = Companion(actor);
             if (bot == null) return true;
@@ -127,6 +129,8 @@ namespace DOL.GS
             GamePlayer owner = bot.PlayerGroupLeader ?? bot.Owner;
             if (target != null && (target.CurrentRegionID != owner.CurrentRegionID ||
                 !owner.IsWithinRadius(target, RecallDistance))) return false;
+            if (CompanionAssistTrain.Active(actor) && !crowdControl)
+                return target != null && target == CompanionAssistTrain.Target(owner);
             GamePlayer leader = DefensiveLeader(actor);
             return leader == null || target != null && target.CurrentRegionID == leader.CurrentRegionID &&
                 (leader.IsWithinRadius(target, DefensiveRadius) || CompanionPvpEngagement.Defending(actor, target) ||

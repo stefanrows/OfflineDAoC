@@ -60,7 +60,7 @@ namespace DOL.AI.Brain
                 int range = spell.CalculateEffectiveRange(Body);
                 foreach (GameLiving center in nearby.Where(target => FightingHealerGroup(target) &&
                              !target.IsStunned && !target.IsMezzed &&
-                             CompanionEngagementMode.Allows(Body, target) &&
+                             CompanionEngagementMode.Allows(Body, target, crowdControl: true) &&
                              Body.IsWithinRadius(target, range) && BotSiegeRuntime.Visible(Body, target))
                          .OrderByDescending(target => BombSetup(bombers, nearby, target))
                          .ThenByDescending(target => nearby.Count(other => other.IsWithinRadius(target, spell.Radius)))

@@ -674,6 +674,8 @@ namespace DOL.GS.Commands
             lines.Add(new Line("Group order (select one):"));
             foreach ((string text, string key, Func<GamePlayer, string> apply, bool current) in new (string, string, Func<GamePlayer, string>, bool)[]
                      {
+                         ("Assist train: focus your damage target", "order:assisttrain", CompanionGroupOrders.AssistTrain,
+                             ordered && order == eCompanionEngagementMode.AssistTrain),
                          ("Aggressive: assist your attacks", "order:aggressive", CompanionGroupOrders.Aggressive,
                              ordered && order == eCompanionEngagementMode.Aggressive),
                          ("Defensive: engage threats near you", "order:defensive", CompanionGroupOrders.Defensive,

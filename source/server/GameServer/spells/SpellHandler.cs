@@ -387,6 +387,7 @@ namespace DOL.GS.Spells
 		/// </summary>
 		public virtual bool CheckBeginCast(GameLiving selectedTarget, bool quiet)
 		{
+			if (!CompanionAssistTrain.AllowsSpell(Caster, Spell, selectedTarget)) return false;
 			if (m_caster.ObjectState != GameObject.eObjectState.Active)
 				return false;
  
@@ -833,6 +834,7 @@ namespace DOL.GS.Spells
 		/// </summary>
 		public virtual bool CheckEndCast(GameLiving target)
 		{
+			if (!CompanionAssistTrain.AllowsSpell(Caster, Spell, target)) return false;
 			bool verbose;
 
 			if (!m_spell.IsPulsing)
@@ -1031,10 +1033,17 @@ namespace DOL.GS.Spells
 
 		private void NotifyCompanionsOfHarmfulCast()
 		{
-			if (!Spell.IsHarmful) return;
+			if (Caster is GamePlayer caller && CompanionAssistTrain.Active(caller))
+			{
+				if (PlayerLedPullCoordinator.IsDamageCast(Spell)) CompanionAssistTrain.Call(caller, Target);
+				return;
+			}
 			if (Caster is GamePlayer player)
-				PlayerLedPullCoordinator.LeaderEngaged(player, Target);
-			else if (Caster is GameNPC { Brain: ControlledMobBrain { Owner: GamePlayer owner } } &&
+			{
+				if (PlayerLedPullCoordinator.IsDamageCast(Spell))
+					PlayerLedPullCoordinator.LeaderEngaged(player, Target);
+			}
+			else if (Spell.IsHarmful && Caster is GameNPC { Brain: ControlledMobBrain { Owner: GamePlayer owner } } &&
 				owner.ControlledBrain?.Body == Caster)
 				PlayerLedPullCoordinator.LeaderEngaged(owner, Target);
 		}
@@ -2104,6 +2113,8 @@ namespace DOL.GS.Spells
 			for (int i = 0; i < targets.Count; i++)
 			{
 				GameLiving targetInList = targets[i];
+
+				if (!CompanionAssistTrain.AllowsSpell(Caster, Spell, targetInList)) continue;
 
 				if (CheckSpellResist(targetInList))
 					continue;

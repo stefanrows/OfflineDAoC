@@ -28,6 +28,8 @@ namespace DOL.GS
 
         public static string Begin(GamePlayer player, GameLiving target)
         {
+            if (CompanionAssistTrain.Active(player))
+                return "AssistTrain: start a damage spell or weapon attack to call the target. Use /aggressive for ordinary /pull orders.";
             Group group = player?.Group;
             if (!ValidEnemy(player, target)) return "No valid nearby pull target.";
             CompanionEngagementMode.RememberPull(player, target);
@@ -117,6 +119,7 @@ namespace DOL.GS
 
         public static void LeaderEngaged(GamePlayer player, GameLiving target)
         {
+            if (CompanionAssistTrain.Active(player)) return;
             // Pet pull mode (task 46): the pet's attack order or cast starts a pet
             // pull; the companions hold until it is released, then this runs again.
             if (CompanionPetPull.IsHolding(player)) return;
@@ -140,7 +143,17 @@ namespace DOL.GS
             if (attack?.Target is not GameLiving target || attack.Attacker != actor || !attack.CausesCombat) return;
             if (actor is GamePlayer player)
             {
+                if (CompanionAssistTrain.Active(player))
+                {
+                    // Spell hits (including DoT ticks and AoE victims) never change a called target.
+                    if (attack.SpellHandler == null && IsContact(attack.AttackResult))
+                        CompanionAssistTrain.Call(player, target);
+                    return;
+                }
+                // Preserve petpull release bookkeeping independently of assist orders.
                 CompanionPetPull.OnLeaderAttack(player);
+                // CC/debuff spell results also cause combat; they are not damage orders.
+                if (attack.SpellHandler != null && !IsDamageCast(attack.SpellHandler.Spell)) return;
                 LeaderEngaged(player, target);
                 return;
             }
@@ -186,11 +199,32 @@ namespace DOL.GS
             if (order?.Leader == player) Cancel(order, false);
         }
 
+        /// <summary>Use the servant payload for Necromancer commands, never the wrapper's metadata.</summary>
+        public static bool IsDamageCast(Spell spell) => CompanionAssistTrain.IsDamage(
+            spell?.SpellType == eSpellType.PetSpell ? SkillBase.GetSpellByID(spell.SubSpellID) : spell);
+
+        /// <summary>The human's actual damage cast or weapon target, not an unrelated selection.</summary>
+        public static GameLiving FindPlayerAttackTarget(GamePlayer player)
+        {
+            if (player?.IsAlive != true) return null;
+            GameLiving target;
+            if (player.IsCasting)
+            {
+                var handler = player.castingComponent?.SpellHandler;
+                // Casting CC must not fall through to a still-enabled melee toggle.
+                target = IsDamageCast(handler?.Spell) ? handler.Target : null;
+            }
+            else
+                target = player.IsAttacking ? player.TargetObject as GameLiving : null;
+            return ValidEnemy(player, target) ? target : null;
+        }
+
         public static GameLiving FindLeaderTarget(GamePlayer player)
         {
             if (player?.IsAlive != true) return null;
-            if ((player.IsAttacking || player.IsCasting && player.castingComponent?.SpellHandler?.Spell?.IsHarmful == true) &&
-                player.TargetObject is GameLiving target && ValidEnemy(player, target)) return target;
+            if (CompanionAssistTrain.Active(player)) return CompanionAssistTrain.Target(player);
+            GameLiving target = FindPlayerAttackTarget(player);
+            if (target != null) return target;
             if (player.ControlledBrain is ControlledMobBrain brain && brain.Owner == player &&
                 !CompanionPetPull.IsHolding(player) &&
                 brain.Body?.IsAlive == true && brain.Body.CurrentRegionID == player.CurrentRegionID &&

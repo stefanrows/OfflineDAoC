@@ -12,6 +12,7 @@
         <ServerName>OpenDAoC</ServerName>
         <ServerNameShort>CoreServer</ServerNameShort>
         <LogConfigFile>./config/logconfig.xml</LogConfigFile>
+        <ProcessPriority>BelowNormal</ProcessPriority>
         <ScriptCompilationTarget>./lib/GameServerScripts.dll</ScriptCompilationTarget>
         <ScriptAssemblies> </ScriptAssemblies>
         <EnableCompilation>True</EnableCompilation>

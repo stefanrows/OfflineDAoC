@@ -73,6 +73,7 @@ namespace DOL.GS
         public static bool Focused(GameLiving actor, GameLiving target)
         {
             GamePlayer leader = Leader(actor);
+            if (CompanionAssistTrain.Active(actor)) return target != null && target == CompanionAssistTrain.Target(leader);
             if (!Live(leader, target)) return false;
             if (leader.IsAttacking && leader.TargetObject == target) return true;
             if (leader.ControlledBrain is ControlledMobBrain pet && pet.Owner == leader && pet.Body?.IsAlive == true &&

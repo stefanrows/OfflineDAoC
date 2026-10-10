@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.222.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.224.1 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 Command reference maintained from server registrations and fork source.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -51,6 +51,11 @@ NORMAL PLAYER COMMANDS
   Restore normal companion assisting (default)
   /aggressive
   Handler: DOL.GS.Commands.CompanionAggressiveCommand
+
+/assisttrain
+  Coordinate single-target damage on your damage casts and weapon attacks; retain healing and add control.
+  /assisttrain
+  Handler: DOL.GS.Commands.CompanionAssistTrainCommand
 
 /angry
   Look angrily around

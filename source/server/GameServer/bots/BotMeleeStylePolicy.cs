@@ -26,20 +26,26 @@ namespace DOL.GS
                 ? bot.Inventory.GetItem(eInventorySlot.LeftHandWeapon) : bot.ActiveWeapon;
 
         public static bool Usable(GameBot bot, Style style, AttackData lastAttack) =>
-            bot != null && IsEligible(style) && style.Level <= bot.Level &&
+            bot != null && (IsEligible(style) || CompanionAssistTrain.Active(bot) && style != null && !style.StealthRequirement) &&
+            AllowsTrainStyle(bot, style) && style.Level <= bot.Level &&
             MatchesWeapon(style, bot.ActiveWeapon, bot.Inventory.GetItem(eInventorySlot.LeftHandWeapon), bot.ActiveWeaponSlot) &&
             StyleProcessor.CheckEnduranceCost(bot, Weapon(bot, style), style) &&
             bot.CheckStyleStun(style) &&
             StyleProcessor.CanUseStyle(lastAttack, bot, style, Weapon(bot, style));
 
         private static bool UsableStealthOpener(GameBot bot, Style style, AttackData lastAttack) =>
-            bot != null && IsEligibleStealthOpener(style, bot.IsStealthed) &&
+            bot != null && IsEligibleStealthOpener(style, bot.IsStealthed) && AllowsTrainStyle(bot, style) &&
             BotRvrAmbush.CanUseStealthOpener(bot, bot.TargetObject as GameLiving) &&
             style.Level <= bot.Level &&
             MatchesWeapon(style, bot.ActiveWeapon, bot.Inventory.GetItem(eInventorySlot.LeftHandWeapon), bot.ActiveWeaponSlot) &&
             StyleProcessor.CheckEnduranceCost(bot, Weapon(bot, style), style) &&
             bot.CheckStyleStun(style) &&
             StyleProcessor.CanUseStyle(lastAttack, bot, style, Weapon(bot, style));
+
+        private static bool AllowsTrainStyle(GameBot bot, Style style) => !CompanionAssistTrain.Active(bot) ||
+            style != null && style.ID != 600 && (style.Procs == null || style.Procs.All(proc =>
+                proc.Spell.SpellType != eSpellType.MultiTarget &&
+                CompanionAssistTrain.AllowsSpell(bot, proc.Spell, bot.TargetObject as GameLiving)));
 
         public static Style SelectStealthOpener(GameBot bot, AttackData lastAttack)
         {
@@ -91,7 +97,7 @@ namespace DOL.GS
                 return null;
             // Preserve a deliberate tank taunt, but revalidate at the actual swing.
             Style queued = bot.styleComponent.NextCombatStyle;
-            if (preserveQueued && (Usable(bot, queued, lastAttack) ||
+            if (preserveQueued && ((!CompanionAssistTrain.Active(bot) && Usable(bot, queued, lastAttack)) ||
                                    UsableStealthOpener(bot, queued, lastAttack))) return queued;
             Style best = null;
             Style anytime = null;

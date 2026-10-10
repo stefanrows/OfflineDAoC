@@ -792,6 +792,7 @@ namespace DOL.AI.Brain
 
 		public override bool CanAggroTarget(GameLiving target)
 		{
+			if (CompanionAssistTrain.Active(Body) && !CompanionEngagementMode.Allows(Body, target)) return false;
 			GameLiving ownerToCheck = GetPlayerOwner();
 			ownerToCheck ??= Owner;
 			// Persistent world-bot pets are explicitly commanded by the owner's
@@ -848,7 +849,7 @@ namespace DOL.AI.Brain
 		/// </summary>
 		public override void AttackMostWanted()
 		{
-            if (CompanionEngagementMode.DefensiveLeader(Body) != null ||
+            if (CompanionAssistTrain.Active(Body) || CompanionEngagementMode.DefensiveLeader(Body) != null ||
                 CompanionEngagementMode.ShouldRegroup(Body))
             {
                 foreach (GameLiving enemy in AggroList.Keys)

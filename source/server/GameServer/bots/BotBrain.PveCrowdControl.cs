@@ -20,8 +20,9 @@ namespace DOL.AI.Brain
         /// </summary>
         private bool TryPveAddControl()
         {
-            if (!(BotPartyRoles.HasCrowdControlDuty(BotBody) || AutonomousPveCampRuntime.HasAutonomousMezDuty(BotBody)) ||
-                BotBody.Stance == eBotStance.Passive ||
+            if (!(BotPartyRoles.HasCrowdControlDuty(BotBody) || AutonomousPveCampRuntime.HasAutonomousMezDuty(BotBody) ||
+                  CompanionAssistTrain.Active(BotBody) && BotPartyRoles.IsCrowdControlClass((eCharacterClass)BotBody.CharacterClass.ID)) ||
+                BotBody.Stance == eBotStance.Passive && !CompanionAssistTrain.Active(BotBody) ||
                 BotBody.CrowdControlSpells == null || Body.IsCasting || Body.IsIncapacitated ||
                 Body.castingComponent?.HasPendingSkillRequests == true || GameLoop.GameLoopTime < _nextPveControl)
                 return false;
@@ -40,7 +41,7 @@ namespace DOL.AI.Brain
                 return false;
 
             HashSet<GameLiving> focus = CompanionAddControl.FocusTargets(BotBody);
-            if (focus.Count == 0)
+            if (focus.Count == 0 && !CompanionAssistTrain.Active(BotBody))
                 return false;
 
             Group group = Body.Group;
@@ -48,7 +49,7 @@ namespace DOL.AI.Brain
                 .Where(npc => npc.IsAlive && !focus.Contains(npc) && !npc.IsMezzed && !npc.IsStealthed &&
                               !BotPvpCrowdControl.PlayerLike(npc) &&
                               GameServer.ServerRules.IsAllowedToAttack(Body, npc, true) &&
-                              CompanionEngagementMode.Allows(Body, npc) &&
+                              CompanionEngagementMode.Allows(Body, npc, crowdControl: true) &&
                               (CompanionAddControl.OnGroupSide(group, npc.TargetObject as GameLiving) || AggroList.ContainsKey(npc)))
                 .ToArray();
             if (adds.Length == 0)

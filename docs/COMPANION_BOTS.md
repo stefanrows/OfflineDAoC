@@ -114,6 +114,64 @@ owner selects a build.
 the class default build is used. Authored characters and
 their once-per-owner recruitment rules are Stage 5.
 
+## Assist train (`/assisttrain`)
+
+Use `/assisttrain` or **Assist train** in the Companion Manager group orders.
+The player who leads the companions is the main assist, including their squads.
+This session-only group order overrides individual stances.
+
+- Starting an accepted damage cast or weapon attack calls that enemy. A damage
+  spell calls its captured target at cast start, even if the spell later misses
+  or is interrupted. Selecting an enemy, mezzing (including area mez), rooting,
+  stunning, healing, or applying a pure debuff does not call it.
+- Companions retain the call while you select or control another enemy. An
+  ordinary damage tick or a human pet attack cannot switch it. Call a new enemy
+  with another damage cast or weapon attack; after the target dies or becomes
+  invalid, damage dealers wait for another call.
+- Damage dealers concentrate single-target offense. They rank available damage
+  spells by damage per cast time (minimum 1.5 seconds for this estimate), then
+  level, and select the highest-growth usable melee style, including legal
+  positional styles. Native learned spells, weapons, endurance, power, range,
+  interruption, line of sight and cooldowns still apply. This is a selection
+  heuristic, not a guarantee of maximum actual damage against every resistance.
+- Area damage, PBAoE bombs, harmful area procs and multi-target styles are
+  suppressed. Companion pets also obey the called target. Healers keep healing;
+  crowd controllers keep controlling adds. Damage dealers do not peel onto
+  attackers of themselves or healers, and do not automatically wake the last
+  mezzed enemy. Deliberately calling a mezzed enemy permits focused damage.
+- Entering clears `/petpull`, `/stay`, old attacks and Animist groves. Petpull
+  cannot be enabled until another engagement mode is selected. `/passive` stops
+  offense; `/aggressive`, `/defensive`, or `/companions group default` leaves
+  AssistTrain. Existing effects already applied before entering are not erased.
+
+DAoC context: an assist train concentrates damage on the main assist
+while crowd control keeps other enemies out of the fight. The official
+[slash-command list](https://www.darkageofcamelot.com/slash-commands/) documents
+`/assist`; the official [Sorcerer library](https://www.darkageofcamelot.com/class-library-sorcerer/)
+explains that damage or other negative effects break mesmerize. Our automatic
+damage-call trigger is this fork's companion behavior, not an extra live DAoC
+slash-command feature.
+
+Review of existing modes (source 0.224.0): **Aggressive** assists the human's
+damage casts and weapon attacks, responds to party threats, lets tanks peel,
+and may choose bombs
+or ranged area damage. **Defensive** retains those choices but normally limits
+engagement to 350 units around the owner, with exceptions for remembered PvP
+attackers and attacked keep doors. Both recall companions left over 2,100 units
+behind and release recall inside 650 units. Neither is a strict assist train.
+Since 0.224.0, the human's mez, root, stun and pure debuffs do not issue assist
+orders through cast notifications, spell-hit events or shared/idle/follow
+polling (bug 123). Damage-cast polling follows the captured spell target, not
+another enemy selected mid-cast. Retaliation, peeling, area-damage choices,
+explicit pulls and human-pet assistance remain unchanged; those ordinary
+combat behaviors can still damage controlled enemies. Choose AssistTrain for
+strict focused offense.
+
+Source implementation: 0.223.0. Real-client checks remain pending: caster and
+tank groups, CC before the first call, target switches during casts, killing
+a called target while selecting a mezzed add, healing under pressure, pets,
+PvP/CC immunity, and switching back to passive/ordinary modes.
+
 ## Companion squads and battlegroups
 
 An owner may organize up to 5 companion-led squads besides his own group, so two

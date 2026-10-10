@@ -26,6 +26,8 @@ namespace DOL.GS
         /// <summary>True when this companion must not hit a monster because it is mesmerized.</summary>
         public static bool ProtectsMezz(GameBot bot, GameLiving target)
         {
+            if (CompanionAssistTrain.Active(bot))
+                return target?.IsMezzed == true && target != CompanionAssistTrain.Target(bot.PlayerGroupLeader ?? bot.Owner);
             if (!AppliesMezzProtection(bot) || target is not GameNPC || !target.IsMezzed ||
                 BotPvpCrowdControl.PlayerLike(target))
                 return false;
@@ -83,6 +85,11 @@ namespace DOL.GS
         public static HashSet<GameLiving> FocusTargets(GameBot bot)
         {
             var focus = new HashSet<GameLiving>();
+            if (CompanionAssistTrain.Active(bot))
+            {
+                if (CompanionAssistTrain.Target(bot.PlayerGroupLeader ?? bot.Owner) is GameLiving called) focus.Add(called);
+                return focus;
+            }
             Group group = bot?.Group;
             if (group == null)
                 return focus;
