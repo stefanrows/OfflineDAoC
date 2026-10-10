@@ -32,6 +32,9 @@ package, not this fork's version.
   board real porters and fight over the keep (defend, claim, assault without
   rams, roam), up to 24 per map within a 40-actor cap shared with patrols.
   They graduate out to their capital when they outlevel the bracket.
+  Bots of every realm can join: each frontier porter has a native medallion
+  merchant, and startup re-adds Midgard's Gwulla beside Stor Gothi Annark
+  if a save lacks it.
 - A real guild holding a battleground keep with a living lord earns 2% level
   XP every 10 gameplay minutes for members present (and 2 tokens for humans).
   Captures are announced region-wide and `/bgs` shows the holder.

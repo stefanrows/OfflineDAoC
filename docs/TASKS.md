@@ -290,8 +290,8 @@ Agent sessions on items 45–48: take the role and context from
      battleground medallion from a real merchant, board real porters (at most 8
      per cast, 24 per map, sharing a 40-actor cap with the director), fight over
      the campaign keep (defend, claim, assault without rams, roam) and graduate
-     out to their capital. Midgard's frontier porter now gets the native Gwulla
-     medallion merchant if missing, and the 1–14 brackets have almost no eligible
+     out to their capital. Every realm's frontier porter has a medallion
+     merchant (Midgard's Gwulla is re-added if a save lacks it), and the 1–14 brackets have almost no eligible
      bots, so the director remains their population. Checks pending: bots
      arrive, fight, claim and graduate; no bot walks through keep walls. Holding the keep: a real guild holding a
      campaign keep with a live lord earns 2% level XP (and 2 tokens for humans)
