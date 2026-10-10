@@ -53,6 +53,10 @@ public static class AutonomousFrontierTransport
         .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegion == bot.CurrentRegion)
         .OrderBy(bot.GetDistanceTo).FirstOrDefault();
 
+    /// <summary>The active porters standing in a region, whatever the realm of their network.</summary>
+    public static OFTeleporter[] PortersInRegion(ushort region) => Porters.Keys
+        .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegionID == region).ToArray();
+
     /// <summary>
     /// A group uses one actual porter network. Members standing at different
     /// portal keeps in the same frontier must walk to the leader's porter,
