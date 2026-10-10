@@ -55,8 +55,12 @@ package, not this fork's version.
   battleground keeps (bug 128), lord deaths no longer stall the loop (bug 134),
   every campaign keep has a lord (bug 130), route-pocket self-escapes are gone
   and `stuck` battleground leaves fell from 50 % to 27 %.
-- Server Release build passes with zero errors; the touched test classes
-  pass (58 tests).
+- Server and Windows launcher Release builds pass with zero errors; the
+  touched test classes pass (58 tests). Pushed to fork main, released as
+  v0.237.0 and deployed on 2026-10-10: 17 files replaced with verified
+  backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-220417`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.236.0] - 2026-10-10
 
