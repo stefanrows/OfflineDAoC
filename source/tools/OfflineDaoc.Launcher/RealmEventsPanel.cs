@@ -98,7 +98,10 @@ internal sealed partial class MainForm
         _eventReset = ActionButton("RESET COOLDOWN…", DaocTheme.Gold);
         _eventStart.Width = 145;
         _eventReset.Width = 175;
-        actions.Controls.AddRange([new Label { Text = "Acting realm:", AutoSize = true, ForeColor = DaocTheme.GoldLight, Padding = new Padding(0, 6, 0, 0) }, _eventActingRealm, _eventStart, _eventReset]);
+        // World-wide keep/relic reset, unlike the per-event buttons beside it; enabled only while the server is stopped.
+        Button resetKeepsRelics = BuildResetKeepsRelicsButton();
+        resetKeepsRelics.Margin = new Padding(24, 3, 3, 3);
+        actions.Controls.AddRange([new Label { Text = "Acting realm:", AutoSize = true, ForeColor = DaocTheme.GoldLight, Padding = new Padding(0, 6, 0, 0) }, _eventActingRealm, _eventStart, _eventReset, resetKeepsRelics]);
         _eventStart.Click += async (_, _) => await SendEventCommandAsync("start");
         _eventReset.Click += async (_, _) => await SendEventCommandAsync("reset-cooldown");
         controls.Controls.Add(actions, 0, 0);

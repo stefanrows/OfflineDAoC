@@ -479,7 +479,7 @@ public sealed class UT_PlayerCompanionStage6Integration
     }
 
     [Test]
-    public void PersistentCompanionsAcceptNpcXpButRejectPlayerXpAndRealmPoints()
+    public void PersistentCompanionsAcceptNpcAndPvpXpButRejectQuestXpAndRealmPoints()
     {
         int previousCap = DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT;
         DOL.GS.ServerProperties.Properties.XP_CAP_PERCENT = 125;
@@ -499,6 +499,7 @@ public sealed class UT_PlayerCompanionStage6Integration
             long afterNpcExperience = companion.Experience;
             companion.GainExperience(new GainedExperienceEventArgs(
                 100, 0, 0, 0, 0, 0, false, false, eXPSource.Player));
+            long afterPvpExperience = companion.Experience;
             companion.GainExperience(new GainedExperienceEventArgs(
                 100, 0, 0, 0, 0, 0, false, false, eXPSource.Quest));
             RemovePendingProgress(record.CompanionId);
@@ -508,8 +509,10 @@ public sealed class UT_PlayerCompanionStage6Integration
             {
                 Assert.That(afterNpcExperience, Is.EqualTo(startingExperience + 1),
                     "Persistent companions progress from NPC experience.");
-                Assert.That(companion.Experience, Is.EqualTo(afterNpcExperience),
-                    "Quest and player-sourced XP do not progress persistent companions.");
+                Assert.That(afterPvpExperience, Is.EqualTo(afterNpcExperience + 100),
+                    "Persistent companions progress from player-sourced PvP experience.");
+                Assert.That(companion.Experience, Is.EqualTo(afterPvpExperience),
+                    "Quest-sourced XP does not progress persistent companions.");
                 Assert.That(companion.AutonomousRealmPoints, Is.Zero,
                     "Persistent companions do not earn realm points.");
             });

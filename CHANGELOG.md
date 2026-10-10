@@ -12,7 +12,7 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.225.0] - 2026-10-10
+## [0.228.0] - 2026-10-10
 
 ### Added
 
@@ -36,7 +36,7 @@ package, not this fork's version.
 - The autonomous realm boundary now covers every campaign battleground region.
 - Hills of Claret, Proving Grounds, Lion's Den, Thidranki and Wilton stay
   keepless: their client zone data has no placed keep. Server-built keeps
-  and autonomous gamebot participation are recorded as task 109.
+  and autonomous gamebot participation are recorded as a task.
 - Server and Tests Release builds passed with zero errors; existing warnings
   remain. Automated tests were skipped; real-client checks remain pending.
 
@@ -47,6 +47,55 @@ package, not this fork's version.
   multi-second timer stalls (bug 125).
 - Murdaigean camp anchors match their portal keep by area and accept the
   ordinary route when the native portal gates are closed (bug 122).
+
+## [0.227.0] - 2026-10-10
+
+### Added
+
+- Active Population: DELETE CHARACTER… and the grid context-menu delete now
+  permanently delete a selected persistent companion with its equipment and
+  backpack items. This works only while the server is stopped; the launcher
+  re-checks server state inside the delete transaction. While the server runs,
+  the button and menu item are disabled, and the Companion Manager in-game is
+  the way to delete a companion. World bots and DELETE ALL BOTS are unchanged.
+
+## [0.226.0] - 2026-10-10
+
+### Fixed
+
+- The launcher's Realm Events tab now shows a one-click "Reset all keeps &
+  relics" button. The existing reset (clear every keep's guild claim, return
+  all six relics to their temple shrines, small JSON backup of the keep/relic
+  rows) had been unreachable since its old panel stopped being displayed. It
+  asks for confirmation, works only while the server is fully stopped, and
+  does not change characters, bots, inventories, coins, Realm Exchange or
+  event records. Task 110 awaits a launcher check on Windows; automated tests
+  were skipped.
+
+## [0.225.0] - 2026-10-10
+
+### Added
+
+- Launcher XP Settings offer 15×, 20×, 25×, 50×, and 100× for both
+  YOUR PLAYER XP and AUTONOMOUS BOT XP (still editable only while the server
+  is stopped).
+
+### Fixed
+
+- Persistent companions now earn PvP experience from qualifying damage on
+  real-player and autonomous-bot kills. They use the same formula as autonomous
+  bots, scaled by the player XP rate and PvP danger multiplier and capped at the
+  owner's total experience. Previously they earned only realm points, so they
+  fell behind the player in PvP. Loot-owner eligibility is unchanged.
+
+### Changed
+
+- AUTONOMOUS BOT XP description now says companions follow the player XP rate.
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-131728`. The installation
+  remains stopped. Real-client verification is pending.
 
 ## [0.224.1] - 2026-10-10
 

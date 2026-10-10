@@ -85,8 +85,8 @@ public class KeepRelicResetTests
         {
             header.Size = new System.Drawing.Size(width,42); header.CreateControl(); header.PerformLayout();
             var button = header.Controls.OfType<Button>().Single();
-            Assert.That(button.Text, Is.EqualTo("Reset Keeps && Relics"));
-            Assert.That(button.AccessibleName, Is.EqualTo("Reset Keeps & Relics"));
+            Assert.That(button.Text, Is.EqualTo("RESET ALL KEEPS && RELICS…"));
+            Assert.That(button.AccessibleName, Is.EqualTo("Reset all keeps & relics"));
             Assert.That(header.ClientRectangle.Contains(button.Bounds), Is.True, button.Bounds.ToString());
             Assert.That(TextRenderer.MeasureText(button.Text,button.Font).Width, Is.LessThan(button.Width));
             Assert.That(button.Enabled, Is.False, "Must stay disabled until stopped status is established");

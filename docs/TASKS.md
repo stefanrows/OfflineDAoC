@@ -6,7 +6,7 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
-109. **Battleground server-built keeps and autonomous gamebot participation: real-client spike (idea, not authorized).** Owner, 2026-10-10, after bug 125.
+112. **Battleground server-built keeps and autonomous gamebot participation: real-client spike (idea, not authorized).** Owner, 2026-10-10, after bug 125.
      Only Murdaigean's native keep is restored from client data. The client
      zone data has no keep model for 234, 235, 236, 238 and 240, and only keep
      rows without a keep model for 237 and 242. Building component keeps (walls,
@@ -280,6 +280,37 @@ Agent sessions on items 45–48: take the role and context from
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
 ## Implemented in source; installation verification pending
+
+111. **Delete your own persistent companions from the launcher.** Owner,
+     2026-10-10. Implemented in source **0.227.0**: the Active Population
+     DELETE CHARACTER… button and grid context-menu delete now act on rows for
+     persistent companions (Activity Companion, Zone "With <owner>"), not only
+     world bots. While the server is stopped, one confirmed delete removes the
+     companion's Inventory items and its player_companions record in one
+     transaction, then refreshes the grid. While the server runs, the button and
+     menu item are disabled and the Companion Manager remains the in-game path.
+     World-bot deletion, DELETE ALL BOTS and the legacy bot_profiles rows are
+     unchanged. Server and Windows launcher Release builds verified; automated
+     tests skipped under project policy. Checks pending: with the server stopped,
+     delete a test companion with equipment and backpack items; confirm the grid
+     and the companion's items disappear; confirm the button and menu are disabled
+     while the server runs; confirm the world-bot delete path still works.
+
+110. **One-click reset of all keeps and relics in the launcher.** Owner,
+     2026-10-10. Implemented in source **0.226.0**: the existing
+     `KeepRelicReset` button now appears on the Realm Events tab (its old
+     panel was no longer displayed). Pending: on Windows with the server
+     stopped, click it, confirm, check that every keep is unclaimed and all
+     six relics are at their shrines after the next server start.
+
+109. **Higher XP rates and companion PvP XP.** Owner, 2026-10-10. Implemented
+     in source **0.225.0**: launcher XP choices up to 100× for player and
+     autonomous bots; persistent companions earn PvP XP from their own
+     qualifying damage, using the autonomous-bot formula at the player XP rate
+     and capped at the owner's experience. Real-client checks are pending:
+     the higher rates apply after restart, and a companion's XP from a
+     player/bot kill matches the owner's at equal level. Deployed 2026-10-10
+     (backup `deploy-20261010-131728`); the installation remains stopped.
 
 108. **AssistTrain companion mode and engagement review.** Owner, 2026-10-10.
      Implemented in source **0.223.0**: `/assisttrain` and manager group order,
