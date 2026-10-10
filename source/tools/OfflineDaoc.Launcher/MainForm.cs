@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.228.0";
+    internal const string DisplayVersion = "0.229.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -90,6 +90,8 @@ internal sealed partial class MainForm : Form
     private readonly ComboBox _groupRealm = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 125 };
     private readonly ComboBox _playerXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly ComboBox _botXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
+    private readonly ComboBox _playerRpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
+    private readonly ComboBox _botRpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly ComboBox _worldSpeedMultiplier = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
     private readonly Label _worldSpeedStatusText = new() { AutoSize = false, Dock = DockStyle.Fill };
     private readonly Label _worldSpeedTelemetryText = new() { AutoSize = false, Dock = DockStyle.Fill };
@@ -232,8 +234,12 @@ internal sealed partial class MainForm : Form
         _auctionRealmTabs.SelectedIndexChanged += (_, _) => ApplyAuctionFilter();
         ConfigureXpRateSelector(_playerXpRate);
         ConfigureXpRateSelector(_botXpRate);
+        ConfigureXpRateSelector(_playerRpRate);
+        ConfigureXpRateSelector(_botRpRate);
         _playerXpRate.SelectedIndexChanged += async (_, _) => await SaveXpRateAsync("xp_rate", _playerXpRate);
         _botXpRate.SelectedIndexChanged += async (_, _) => await SaveXpRateAsync("bot_xp_rate", _botXpRate);
+        _playerRpRate.SelectedIndexChanged += async (_, _) => await SaveXpRateAsync("rp_rate", _playerRpRate);
+        _botRpRate.SelectedIndexChanged += async (_, _) => await SaveXpRateAsync("bot_rp_rate", _botRpRate);
         _worldSpeedMultiplier.SelectedIndexChanged += (_, _) => RequestWorldSpeedChange();
         _groupSearch.TextChanged += (_, _) => ApplyGroupSearch();
         _groupSearch.KeyDown += (_, e) =>
@@ -580,7 +586,7 @@ internal sealed partial class MainForm : Form
         var surface = new InsetPanel
         {
             Dock = DockStyle.Top,
-            Height = 274,
+            Height = 370,
             Margin = new Padding(18),
             Padding = new Padding(20),
             Accent = DaocTheme.Gold,
@@ -589,12 +595,14 @@ internal sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 5,
+            RowCount = 7,
             BackColor = Color.Transparent,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 135));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
@@ -605,7 +613,7 @@ internal sealed partial class MainForm : Form
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
-            Text = "EXPERIENCE RATE CONTROL",
+            Text = "EXPERIENCE & REALM POINT RATES",
             Font = new Font("Georgia", 13f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
             Location = new Point(0, 12),
@@ -618,14 +626,20 @@ internal sealed partial class MainForm : Form
         layout.Controls.Add(XpRateLabel("AUTONOMOUS BOT XP"), 0, 2);
         layout.Controls.Add(_botXpRate, 1, 2);
         layout.Controls.Add(XpRateDescription("Applies to autonomous world bots only; your companions follow your player XP rate."), 2, 2);
+        layout.Controls.Add(XpRateLabel("YOUR PLAYER RP"), 0, 3);
+        layout.Controls.Add(_playerRpRate, 1, 3);
+        layout.Controls.Add(XpRateDescription("Applies to real player characters; your companions follow this rate."), 2, 3);
+        layout.Controls.Add(XpRateLabel("AUTONOMOUS BOT RP"), 0, 4);
+        layout.Controls.Add(_botRpRate, 1, 4);
+        layout.Controls.Add(XpRateDescription("Applies to autonomous world bots only."), 2, 4);
         _xpSettingsStatus.Dock = DockStyle.Fill;
         _xpSettingsStatus.TextAlign = ContentAlignment.MiddleLeft;
         _xpSettingsStatus.Font = new Font("Georgia", 9f, FontStyle.Bold | FontStyle.Italic);
-        layout.Controls.Add(_makeMeGm, 0, 3);
+        layout.Controls.Add(_makeMeGm, 0, 5);
         layout.SetColumnSpan(_makeMeGm, 2);
-        layout.Controls.Add(XpRateDescription("Applies to your account at the next server startup."), 2, 3);
+        layout.Controls.Add(XpRateDescription("Applies to your account at the next server startup."), 2, 5);
         _makeMeGm.CheckedChanged += async (_, _) => await SaveGmSettingAsync();
-        layout.Controls.Add(_xpSettingsStatus, 0, 4);
+        layout.Controls.Add(_xpSettingsStatus, 0, 6);
         layout.SetColumnSpan(_xpSettingsStatus, 3);
         surface.Controls.Add(layout);
         return surface;
@@ -1889,9 +1903,13 @@ internal sealed partial class MainForm : Form
         {
             SelectXpRate(_playerXpRate, snapshot.PlayerXpRate);
             SelectXpRate(_botXpRate, snapshot.BotXpRate);
+            SelectXpRate(_playerRpRate, snapshot.PlayerRpRate);
+            SelectXpRate(_botRpRate, snapshot.BotRpRate);
             bool editable = snapshot.ServerState == "Stopped" && !_savingXpRates;
             _playerXpRate.Enabled = editable;
             _botXpRate.Enabled = editable;
+            _playerRpRate.Enabled = editable;
+            _botRpRate.Enabled = editable;
             _makeMeGm.Checked = snapshot.MakeMeGm;
             _makeMeGm.Enabled = editable;
             if (_savingXpRates)
@@ -1935,7 +1953,7 @@ internal sealed partial class MainForm : Form
         }
 
         _savingXpRates = true;
-        ShowXpRateApplying(option.Label, key == "xp_rate");
+        ShowXpRateApplying(option.Label, key);
         try
         {
             await Task.Run(() => PersistXpRate(key, option.Multiplier));
@@ -1963,7 +1981,7 @@ internal sealed partial class MainForm : Form
             return;
         }
         _savingXpRates = true;
-        _makeMeGm.Enabled = _playerXpRate.Enabled = _botXpRate.Enabled = _startButton.Enabled = false;
+        _makeMeGm.Enabled = _playerXpRate.Enabled = _botXpRate.Enabled = _playerRpRate.Enabled = _botRpRate.Enabled = _startButton.Enabled = false;
         _xpSettingsStatus.Text = "APPLYING GM SETTING…";
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         try { await Task.Run(() => PersistGmSetting(enabled)); }
@@ -1999,19 +2017,29 @@ internal sealed partial class MainForm : Form
         transaction.Commit();
     }
 
-    private void ShowXpRateApplying(string label, bool playerRate)
+    private void ShowXpRateApplying(string label, string key)
     {
         _playerXpRate.Enabled = false;
         _botXpRate.Enabled = false;
+        _playerRpRate.Enabled = false;
+        _botRpRate.Enabled = false;
         _makeMeGm.Enabled = false;
         _startButton.Enabled = false;
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
-        _xpSettingsStatus.Text = $"APPLYING {label} TO {(playerRate ? "YOUR PLAYER XP" : "AUTONOMOUS BOT XP")}…";
+        string target = key switch
+        {
+            "xp_rate" => "YOUR PLAYER XP",
+            "bot_xp_rate" => "AUTONOMOUS BOT XP",
+            "rp_rate" => "YOUR PLAYER RP",
+            "bot_rp_rate" => "AUTONOMOUS BOT RP",
+            _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unsupported rate key."),
+        };
+        _xpSettingsStatus.Text = $"APPLYING {label} TO {target}…";
     }
 
     private void PersistXpRate(string key, double multiplier)
     {
-        if (key is not ("xp_rate" or "bot_xp_rate") || multiplier is not (1 or 2 or 3 or 5 or 10 or 15 or 20 or 25 or 50 or 100))
+        if (key is not ("xp_rate" or "bot_xp_rate" or "rp_rate" or "bot_rp_rate") || multiplier is not (1 or 2 or 3 or 5 or 10 or 15 or 20 or 25 or 50 or 100))
             throw new InvalidOperationException("Unsupported experience-rate selection.");
         bool serverRunning = _persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess());
         if (serverRunning)
@@ -2020,9 +2048,13 @@ internal sealed partial class MainForm : Form
             throw new InvalidOperationException("The prepared world database is missing.");
 
         string stored = multiplier.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
-        string description = key == "xp_rate"
-            ? "Real player character experience rate selected in the Offline DAoC launcher."
-            : "Autonomous player-bot experience rate selected in the Offline DAoC launcher.";
+        string description = key switch
+        {
+            "xp_rate" => "Real player character experience rate selected in the Offline DAoC launcher.",
+            "bot_xp_rate" => "Autonomous player-bot experience rate selected in the Offline DAoC launcher.",
+            "rp_rate" => "Real player character realm point rate selected in the Offline DAoC launcher.",
+            _ => "Autonomous player-bot realm point rate selected in the Offline DAoC launcher.",
+        };
         using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
         connection.Open();
         using var transaction = connection.BeginTransaction();
@@ -2123,7 +2155,7 @@ internal sealed partial class MainForm : Form
 
     private DashboardSnapshot ReadSnapshot()
     {
-        if (!File.Exists(_database)) return new DashboardSnapshot("Not configured", [], [], 0, 0, 0, 1, 1);
+        if (!File.Exists(_database)) return new DashboardSnapshot("Not configured", [], [], 0, 0, 0, 1, 1, 1, 1);
         var bots = new List<BotRow>();
         var running = IsServerRunning();
         using var serverProcess = FindExactServerProcess();
@@ -2141,6 +2173,8 @@ internal sealed partial class MainForm : Form
         connection.Open();
         double playerXpRate = ReadServerRate(connection, "xp_rate", 1);
         double botXpRate = ReadServerRate(connection, "bot_xp_rate", 1);
+        double playerRpRate = ReadServerRate(connection, "rp_rate", 1);
+        double botRpRate = ReadServerRate(connection, "bot_rp_rate", 1);
         using (var command = connection.CreateCommand())
         {
             command.CommandText = "SELECT TickP95Ms FROM offline_runtime_status WHERE Id=1";
@@ -2294,7 +2328,7 @@ internal sealed partial class MainForm : Form
             makeMeGm = string.Equals(gm.ExecuteScalar()?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         }
         return new DashboardSnapshot(serverState, bots, groups, active, memoryMb, tickP95Ms, playerXpRate, botXpRate,
-            makeMeGm, ReadRvrWorld(), WorldSimulationClock.ReadCheckpoint(connection));
+            playerRpRate, botRpRate, makeMeGm, ReadRvrWorld(), WorldSimulationClock.ReadCheckpoint(connection));
     }
 
     private static double ReadServerRate(SQLiteConnection connection, string key, double fallback)
@@ -3808,7 +3842,7 @@ internal sealed partial class MainForm : Form
     }
     private sealed record DashboardSnapshot(string ServerState, List<BotRow> Bots, List<GroupRow> Groups,
         int Active, double ServerMemoryMb, double TickP95Ms, double PlayerXpRate, double BotXpRate,
-        bool MakeMeGm = false, RvrWorldSnapshot? RvrWorld = null, WorldSimulationClockRead? SavedSimulationClock = null);
+        double PlayerRpRate, double BotRpRate, bool MakeMeGm = false, RvrWorldSnapshot? RvrWorld = null, WorldSimulationClockRead? SavedSimulationClock = null);
 
     private sealed record LiveBotStatus(long BotId, int Level, string ZoneName, string Activity,
         string CurrentGoal, string TargetName, string TravelDestination, string ObjectiveProgress,

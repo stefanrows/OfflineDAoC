@@ -268,6 +268,12 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+112. **Realm point rate settings.** Owner, 2026-10-10. Implemented in source
+     **0.229.0**: launcher YOUR PLAYER RP / AUTONOMOUS BOT RP selectors (1×–100×).
+     The server scales autonomous-bot RP by the new `bot_rp_rate`; companions
+     follow `rp_rate`. Real-client checks are pending: the selected RP rate
+     applies after restart to the player, companions and world bots.
+
 111. **Delete your own persistent companions from the launcher.** Owner,
      2026-10-10. Implemented in source **0.227.0**: the Active Population
      DELETE CHARACTER… button and grid context-menu delete now act on rows for

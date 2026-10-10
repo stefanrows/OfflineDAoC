@@ -750,6 +750,13 @@ namespace DOL.GS.ServerProperties
 		public static double RP_RATE;
 
 		/// <summary>
+		/// The autonomous player-bot Realm Points rate. This is intentionally
+		/// independent from RP_RATE; persistent companions still follow RP_RATE.
+		/// </summary>
+		[ServerProperty("rates", "bot_rp_rate", "The autonomous player-bot Realm Points Rate Modifier. This does not affect real player characters; persistent companions follow rp_rate.", 1.0)]
+		public static double BOT_RP_RATE;
+
+		/// <summary>
 		/// The Bounty Points Rate
 		/// </summary>
 		[ServerProperty("rates", "bp_rate", "The Bounty Points Rate Modifier - Edit this to change the rate at which you gain bounty points e.g 1.5 is 50% more 2.0 is twice the amount (100%) 0.5 is half the amount (50%)", 1.0)]

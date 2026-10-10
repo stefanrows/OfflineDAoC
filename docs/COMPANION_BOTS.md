@@ -467,6 +467,8 @@ The main tuning points are:
 
 - `XP_RATE` and `BOT_XP_RATE` in server properties control the two bot classes'
   base multipliers.
+- `RP_RATE` and `BOT_RP_RATE` control realm point multipliers the same way: persistent
+  companions follow `RP_RATE`, and autonomous bots use `BOT_RP_RATE`.
 - `AwardBotOnNpcKill` controls damage-share, level-cap, and bonus calculations.
 - `ProcessXpGainers` controls owner credit, party divisor behavior, and loot
   ownership.

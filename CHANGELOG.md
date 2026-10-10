@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.229.0] - 2026-10-10
+
+### Added
+
+- Launcher XP Settings add YOUR PLAYER RP (`rp_rate`) and AUTONOMOUS BOT RP
+  (new `bot_rp_rate`) selectors with the same 1×–100× choices as XP. They are
+  editable only while the server is stopped.
+
+### Changed
+
+- Autonomous bots scale realm point awards by `bot_rp_rate`. Persistent
+  companions follow the player `rp_rate`, like their XP. Previously all bot RP
+  ignored rate multipliers. The default 1× leaves rewards unchanged.
+- Progress import resets the RP rates to 1× along with the XP rates and GM option.
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Real-client verification is pending.
+
 ## [0.228.0] - 2026-10-10
 
 ### Added

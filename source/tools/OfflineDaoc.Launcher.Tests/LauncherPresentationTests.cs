@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.228.0"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.229.0"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -207,6 +207,15 @@ public sealed class LauncherPresentationTests
             Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×", "15×", "20×", "25×", "50×", "100×" }));
         Assert.That(botRate.Items.Cast<object>().Select(item => item.ToString()),
             Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×", "15×", "20×", "25×", "50×", "100×" }));
+        var playerRpRate = (ComboBox)mainFormType.GetField("_playerRpRate", HiddenInstance)!.GetValue(form)!;
+        var botRpRate = (ComboBox)mainFormType.GetField("_botRpRate", HiddenInstance)!.GetValue(form)!;
+        Assert.That(playerRpRate, Is.Not.SameAs(botRpRate));
+        Assert.That(playerRpRate, Is.Not.SameAs(playerRate));
+        Assert.That(botRpRate, Is.Not.SameAs(botRate));
+        Assert.That(playerRpRate.Items.Cast<object>().Select(item => item.ToString()),
+            Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×", "15×", "20×", "25×", "50×", "100×" }));
+        Assert.That(botRpRate.Items.Cast<object>().Select(item => item.ToString()),
+            Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×", "15×", "20×", "25×", "50×", "100×" }));
         var realmButtons = (System.Collections.IEnumerable)mainFormType.GetField("_realmGenerateButtons", HiddenInstance)!.GetValue(form)!;
         Assert.That(realmButtons.Cast<Button>().Count(button => button.Text == "ADD CREW"), Is.EqualTo(3));
         Assert.That(realmButtons.Cast<Button>().Count(button => button.Text == "ADD LV.50 CREW"), Is.EqualTo(3));
@@ -230,8 +239,8 @@ public sealed class LauncherPresentationTests
 
         Type snapshotType = mainFormType.GetNestedType("DashboardSnapshot", BindingFlags.NonPublic)!;
         object runningSnapshot = snapshotType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Single(constructor => constructor.GetParameters().Length == 11)
-            .Invoke(new object[] { "Running", null!, null!, 0, 0d, 0d, 1d, 1d, false, null!, null! });
+            .Single(constructor => constructor.GetParameters().Length == 13)
+            .Invoke(new object[] { "Running", null!, null!, 0, 0d, 0d, 1d, 1d, 1d, 1d, false, null!, null! });
         mainFormType.GetField("_stoppingServer", HiddenInstance)!.SetValue(form, false);
         mainFormType.GetMethod("UpdateXpRateControls", HiddenInstance)!.Invoke(form, new[] { runningSnapshot });
         var playerRate = (ComboBox)mainFormType.GetField("_playerXpRate", HiddenInstance)!.GetValue(form)!;
@@ -242,7 +251,7 @@ public sealed class LauncherPresentationTests
         Assert.That(gm.Enabled, Is.False);
         Assert.That(xpStatus.Text, Does.Contain("XP RATE LOCKED"));
 
-        mainFormType.GetMethod("ShowXpRateApplying", HiddenInstance)!.Invoke(form, new object[] { "3×", true });
+        mainFormType.GetMethod("ShowXpRateApplying", HiddenInstance)!.Invoke(form, new object[] { "3×", "xp_rate" });
         Assert.That(xpStatus.Text, Does.StartWith("APPLYING 3× TO YOUR PLAYER XP"));
         Assert.That(xpStatus.ForeColor.G, Is.GreaterThan(xpStatus.ForeColor.R));
         Assert.That(playerRate.Enabled || botRate.Enabled || start.Enabled, Is.False);
@@ -356,16 +365,18 @@ public sealed class LauncherPresentationTests
             MethodInfo persist = mainFormType.GetMethod("PersistXpRate", HiddenInstance)!;
             persist.Invoke(form, new object[] { "xp_rate", 3d });
             persist.Invoke(form, new object[] { "bot_xp_rate", 10d });
+            persist.Invoke(form, new object[] { "bot_rp_rate", 5d });
 
             using var verify = new SQLiteConnection($"Data Source={path};Version=3;Pooling=False;Read Only=True;");
             verify.Open();
             using var command = verify.CreateCommand();
-            command.CommandText = "SELECT `Key`, Value FROM ServerProperty WHERE `Key` IN ('xp_rate','bot_xp_rate') ORDER BY `Key`";
+            command.CommandText = "SELECT `Key`, Value FROM ServerProperty WHERE `Key` IN ('xp_rate','bot_xp_rate','bot_rp_rate') ORDER BY `Key`";
             using var reader = command.ExecuteReader();
             var values = new Dictionary<string, string>();
             while (reader.Read()) values[reader.GetString(0)] = reader.GetString(1);
             Assert.That(values["xp_rate"], Is.EqualTo("3"));
             Assert.That(values["bot_xp_rate"], Is.EqualTo("10"));
+            Assert.That(values["bot_rp_rate"], Is.EqualTo("5"));
         }
         finally
         {
