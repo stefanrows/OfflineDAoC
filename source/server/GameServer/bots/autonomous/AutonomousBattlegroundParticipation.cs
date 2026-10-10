@@ -207,9 +207,20 @@ public static class AutonomousBattlegroundParticipation
     public static void NoteProgress(GameBot bot, eAutonomousProgressKind kind)
     {
         lock (Sync)
-            if (bot != null && Entries.TryGetValue(bot, out Entry entry)) Touch(entry, GameLoop.GameLoopTime);
+            if (bot != null && Entries.TryGetValue(bot, out Entry entry))
+            {
+                Touch(entry, GameLoop.GameLoopTime);
+                entry.Leaving = AfterProgress(entry.Leaving);
+            }
         AutonomousStuckWatchdog.MarkProgress(bot, kind);
     }
+
+    /// <summary>
+    /// The leave mark after real progress: a stuck mark that could not be carried out (the bot was in combat)
+    /// is withdrawn once the bot acts again; every other leave reason stands.
+    /// </summary>
+    public static LeaveReason? AfterProgress(LeaveReason? leaving) =>
+        leaving == LeaveReason.Stuck ? null : leaving;
 
     /// <summary>
     /// Departure from a porter's cast: up to <see cref="DepartureLimit"/> waiting
@@ -318,6 +329,14 @@ public static class AutonomousBattlegroundParticipation
         landing = BattlegroundCampaignPolicy.GetLanding(bot, definition);
         return landing != null && landing.RegionID == deathRegion;
     }
+
+    /// <summary>
+    /// Whether a release starts the walk back to the party or death spot. Not at a battleground landing: the
+    /// driver leads the participant from there, and a second movement owner pinned it at the portal-keep wall
+    /// until the stuck rule ejected it (bug 127).
+    /// </summary>
+    public static bool StartsReleaseReturnWalk(bool returnToParty, bool battlegroundLanding) =>
+        returnToParty && !battlegroundLanding;
 
     private static int Reconcile(ECSGameTimer timer)
     {

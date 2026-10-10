@@ -1295,19 +1295,24 @@ namespace DOL.GS
             Health = Math.Max(1, MaxHealth / 3);
             Mana = Math.Max(0, MaxMana / 3);
             Endurance = Math.Max(0, MaxEndurance / 3);
-            IsReturningAfterRelease = returnToParty;
+            // A battleground landing is the participant's own rally point and the battleground driver
+            // owns its movement there; a walk back to the death spot would fight the driver (bug 127).
+            bool returnWalk = AutonomousBattlegroundParticipation.StartsReleaseReturnWalk(returnToParty, battlegroundLanding);
+            IsReturningAfterRelease = returnWalk;
             if (returnToParty) AutonomousRealmRaid.RejoinAfterRelease(this);
             AutonomousFrontierTransport.NoteRelease(this); // regroup before re-porting (bug 66)
             _nextReturnRoleplayTick = GameLoop.GameLoopTime + Util.Random(45_000, 90_000);
-            Brain?.FSM?.SetCurrentState(eFSMStateType.FOLLOW);
+            if (battlegroundLanding) AutonomousBattlegroundDriver.ForgetState(this);
+            Brain?.FSM?.SetCurrentState(battlegroundLanding ? eFSMStateType.IDLE : eFSMStateType.FOLLOW);
             Brain?.Start();
-            if (returnToParty)
+            if (returnWalk)
                 Say(ReturnDialogue("release"));
 
             if (PersistentRecord != null)
             {
-                PersistentRecord.Activity = returnToParty ? "Released and returning on foot" : "Released after party disbanded";
-                if (returnToParty)
+                PersistentRecord.Activity = returnWalk ? "Released and returning on foot"
+                    : battlegroundLanding ? "Released at the battleground landing" : "Released after party disbanded";
+                if (returnWalk)
                     PersistentRecord.CurrentGoal = $"Return to the party near {_deathLocation.X}, {_deathLocation.Y}";
                 PersistentRecord.TravelDestination = CurrentZone?.Description ?? string.Empty;
                 MarkAutonomousStateDirty();
