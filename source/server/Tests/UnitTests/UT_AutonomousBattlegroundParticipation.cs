@@ -1,3 +1,6 @@
+using System;
+using System.Linq;
+using DOL.GS.Scripts;
 using NUnit.Framework;
 
 namespace DOL.GS.Tests
@@ -149,6 +152,40 @@ namespace DOL.GS.Tests
                 Assert.That(AutonomousBattlegroundParticipation.IsLeaving(null), Is.False);
                 Assert.That(AutonomousBattlegroundParticipation.PresentCount(238), Is.EqualTo(0));
             });
+        }
+
+        [Test]
+        public void MerchantReachCoversTheMedallionSourceSearch()
+        {
+            Assert.That(AutonomousBattlegroundParticipation.MerchantReach, Is.EqualTo(3000));
+        }
+
+        [Test]
+        public void FrontierMerchantOffsetsKeepTheMerchantAboutFiveHundredUnitsFromThePorterInOrder()
+        {
+            (int dx, int dy)[] offsets = FrontierMedallionMerchants.MerchantOffsets().ToArray();
+            Assert.That(offsets, Has.Length.EqualTo(6));
+            Assert.Multiple(() =>
+            {
+                Assert.That(offsets[0], Is.EqualTo((-373, -383)), "First choice");
+                Assert.That(offsets[1], Is.EqualTo((373, -383)));
+                Assert.That(offsets[2], Is.EqualTo((-373, 383)));
+                Assert.That(offsets[3], Is.EqualTo((373, 383)));
+                Assert.That(offsets[4], Is.EqualTo((-500, 0)));
+                Assert.That(offsets[5], Is.EqualTo((500, 0)), "Last choice");
+            });
+            foreach ((int dx, int dy) in offsets)
+            {
+                double distance = Math.Sqrt((double)dx * dx + (double)dy * dy);
+                Assert.That(distance, Is.InRange(400d, 600d), $"offset ({dx},{dy})");
+            }
+        }
+
+        [Test]
+        public void FrontierMerchantOffsetsAreDistinct()
+        {
+            (int dx, int dy)[] offsets = FrontierMedallionMerchants.MerchantOffsets().ToArray();
+            Assert.That(offsets.Distinct().Count(), Is.EqualTo(offsets.Length));
         }
     }
 }

@@ -358,9 +358,10 @@ reconcile pass every 60 seconds keeps at most 24 of them on each map and admits
 a group only when every member qualifies. The shared pool is 40 actors per map:
 the encounter director may use `40 − autonomous participants present`, at most
 24. Admission needs a real medallion source: a porter with the medallion
-merchant within reach. In the current world data only Albion's region 1 (Sall
+merchant within reach. In the current world data Albion's region 1 (Sall
 Fadri beside Master Visur) and Hibernia's region 200 (Araisa beside Glasny) sell
-it, so Midgard bots on region 100 join once they stand in one of those regions.
+it. Midgard's frontier porter now gets the native Gwulla medallion merchant if
+missing, so its bots can buy the medallion too.
 Assigned bots walk to that porter, buy the free battlegrounds medallion from
 the merchant and equip it as a player does, then board with the porter's own
 cast, leaders first and at most eight per cast. Inside, a bot

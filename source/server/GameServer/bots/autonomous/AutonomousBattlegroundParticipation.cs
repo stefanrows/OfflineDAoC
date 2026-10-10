@@ -26,7 +26,7 @@ public static class AutonomousBattlegroundParticipation
     public const int DepartureLimit = 8;
     public const string BattlegroundMedallionId = "battlegrounds_necklace";
     private const int DirectorMaximum = 24;
-    private const int MerchantReach = 3000;
+    public const int MerchantReach = 3000;
     private const int ProgressDistance = 96;
     private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousBattlegroundParticipation));
     private static readonly object Sync = new();
