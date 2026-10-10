@@ -119,6 +119,51 @@ namespace DOL.GS
 		/// receive no packet traffic; nearby real players still receive broadcasts.
 		/// </summary>
 		protected IPacketLib OwnerOut => Owner is GamePlayer player ? player.Out : null;
+
+		#region ally access (bug 151)
+		private WeakReference<GameLiving> m_founder;
+		private WeakReference<GameLiving> m_lastController;
+		private string m_founderGuildId;
+		private string m_founderGuildName;
+
+		private static GameLiving Alive(WeakReference<GameLiving> reference) =>
+			reference != null && reference.TryGetTarget(out GameLiving living) && living.ObjectState == eObjectState.Active ? living : null;
+
+		/// <summary>
+		/// Records who deployed the weapon. Allies of the founder (group, guild,
+		/// battlegroup) may use it on Camlann whatever their birth realm.
+		/// </summary>
+		public void SetFounder(GameLiving founder)
+		{
+			if (founder == null) return;
+			m_founder = new WeakReference<GameLiving>(founder);
+			Guild guild = DOL.GS.ServerRules.PvpCombatant.GuildOf(founder);
+			m_founderGuildId = guild?.GuildID;
+			m_founderGuildName = guild?.Name;
+		}
+
+		/// <summary>
+		/// May this living control, push, fire, or board the weapon? Camlann (PvP
+		/// rules): allied with its founder or latest controller, any realm. Other
+		/// rules: same realm. See <see cref="SiegeWeaponAccess"/>.
+		/// </summary>
+		public bool MayUseSiegeWeapon(GameLiving candidate)
+		{
+			var anchors = new System.Collections.Generic.List<GameLiving>(2);
+			GameLiving founder = Alive(m_founder);
+			GameLiving last = Alive(m_lastController);
+			if (founder != null) anchors.Add(founder);
+			if (last != null && last != founder) anchors.Add(last);
+			return SiegeWeaponAccess.MayUse(GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules, Realm, candidate,
+				anchors, m_founderGuildId, m_founderGuildName);
+		}
+
+		private void RecordController(GameLiving controller)
+		{
+			if (Alive(m_founder) == null) SetFounder(controller);
+			m_lastController = new WeakReference<GameLiving>(controller);
+		}
+		#endregion
 		private eState m_currentState;
 		public eState CurrentState
 		{
@@ -244,9 +289,15 @@ namespace DOL.GS
 			if (player is not GamePlayer && (player is not GameBot { IsAutonomousWorldBot: true } && (this is not GameSiegeRam || player is not IGamePlayer)))
 				return false;
 			if (player is GameBot bot && (!bot.IsAlive || !IsAlive || ObjectState != eObjectState.Active ||
-				Realm != bot.Realm || !IsWithinRadius(bot, SIEGE_WEAPON_CONTROLE_DISTANCE) ||
+				!MayUseSiegeWeapon(bot) || !IsWithinRadius(bot, SIEGE_WEAPON_CONTROLE_DISTANCE) ||
 				AutonomousSiegeOwnership.All(bot).Any(w => w != this))) return false;
 
+			if (Realm != 0 && !MayUseSiegeWeapon(player))
+			{
+				if (player is GamePlayer strangerController)
+					strangerController.Out.SendMessage("This siege equipment belongs to another group!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+				return false;
+			}
 			if (Owner != null && Owner != player)
 			{
 				if (player is GamePlayer existingController)
@@ -266,6 +317,7 @@ namespace DOL.GS
 			}
 
 			if (Realm == 0) Realm = player.Realm;
+			RecordController(player);
 			Owner = player;
 			if (player is GamePlayer assignedController)
 			{
@@ -631,9 +683,9 @@ namespace DOL.GS
 				return false;
 			}
 
-			if (Owner.Realm != this.Realm)
+			if (!MayUseSiegeWeapon(Owner))
 			{
-				OwnerOut?.SendMessage($"This siege equipment is owned by an enemy realm!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+				OwnerOut?.SendMessage($"This siege equipment belongs to another group!", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				return false;
 			}
 				
