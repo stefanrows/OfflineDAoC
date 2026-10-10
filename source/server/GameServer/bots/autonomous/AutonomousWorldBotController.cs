@@ -3339,6 +3339,10 @@ namespace DOL.GS
             // 2003 soloer walking to the next camp rather than across two zones.
             bool localSoloCamps = !sharedGroup && AutonomousBotDecisionEngine.UsesLocalSoloCamps(planningLevel);
             DbZonePoint[][] crossingEdges = localSoloCamps && bot.Level >= 20 ? new DbZonePoint[2][] : null;
+            // Darkness Falls rooms admit only their proven entrance landings;
+            // one route check per entrance set and pass (HasCampRoute).
+            DbZonePoint[][] darknessFallsEdges = crossingEdges ?? new DbZonePoint[2][];
+            Dictionary<int, bool> darknessFallsRoutes = new();
             bool awaitingGroupMatchmaking = AutonomousObjectiveAssignments.IsAwaitingGroupMatchmaking(bot);
 
             // The live world used to be regrouped by every individual bot.
@@ -3394,6 +3398,16 @@ namespace DOL.GS
                         : crossingEdges != null
                             ? EstimateLocalSoloTravelMinutes(bot, cell.RegionId, cell.X, cell.Y, crossingEdges)
                             : 0;
+                // A pickup group already admits a DF room only through an
+                // entrance from its rendezvous region that the room accepts.
+                bool reachable = true;
+                if (!localPickupGroup && cell.RegionId == AutonomousDarknessFallsPolicy.RegionId)
+                {
+                    CampCatalogCell room = cell; // captured here only, not by every cell
+                    reachable = AutonomousDarknessFallsPolicy.HasCampRoute(bot.CurrentRegionID, room.RegionId,
+                        AutonomousDungeonGoalCatalog.EntranceGroup(room.RegionId, room.X, room.Y), darknessFallsRoutes,
+                        () => EstimateLocalSoloTravelMinutes(bot, room.RegionId, room.X, room.Y, darknessFallsEdges));
+                }
                 camps.Add(new(
                     cell.Id,
                     cell.ZoneName,
@@ -3402,7 +3416,7 @@ namespace DOL.GS
                     cell.RegionId,
                     cons[0],
                     cons[cons.Length / 2],
-                    true,
+                    reachable,
                     cell.IsDungeon,
                     cell.IsFrontier,
                     cell.LiveMobCount,
@@ -5191,6 +5205,7 @@ namespace DOL.GS
         private static DbZonePoint[] CrossingEdges(eRealm realm, ushort currentRegion, ushort targetRegion) =>
             ZonePoints()
                 .Where(point => IsAuthoritativeZonePointEdge(point) &&
+                                !AutonomousDarknessFallsPolicy.IsIsolatedEntrance(point) &&
                                 // DF is a destination, not a shortcut between the
                                 // three realm exits for unrelated world travel.
                                 (point.TargetRegion != AutonomousDarknessFallsPolicy.RegionId ||
@@ -5216,9 +5231,16 @@ namespace DOL.GS
                 return _zonePoints;
             lock (ZonePointLock)
             {
-                _zonePoints ??= DOLDB<DbZonePoint>.SelectAllObjects()
+                if (_zonePoints != null)
+                    return _zonePoints;
+                DbZonePoint[] points = DOLDB<DbZonePoint>.SelectAllObjects()
                     .Where(IsAuthoritativeZonePointEdge)
                     .ToArray();
+                foreach (DbZonePoint point in points.Where(AutonomousDarknessFallsPolicy.IsIsolatedEntrance))
+                    Log.Warn($"AUTONOMOUS_CROSSING_ISOLATED zonepoint={point.Id} realm={point.Realm} " +
+                             $"source={point.SourceRegion}:{point.SourceX},{point.SourceY},{point.SourceZ} " +
+                             $"target={point.TargetRegion}: audited isolated navmesh patch; autonomous routes use the other entrances");
+                _zonePoints = points;
                 return _zonePoints;
             }
         }

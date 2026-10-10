@@ -28,7 +28,8 @@ namespace DOL.GS
         }
         private sealed class Document { public Point[] Spawns { get; set; } = []; }
         private sealed record Catalog(Dictionary<string, Point> Spawns,
-            Dictionary<(ushort Region, int X, int Y), HashSet<(int X, int Y, int Z)>> Entrances);
+            Dictionary<(ushort Region, int X, int Y), HashSet<(int X, int Y, int Z)>> Entrances,
+            Dictionary<(ushort Region, int X, int Y), int> EntranceGroups);
         private static readonly Lazy<Catalog> Data = new(Load, true);
         public static int VerifiedSpawnCount => Data.Value.Spawns.Count;
         public static int VerifiedSpawnCountForRegion(ushort region) =>
@@ -62,7 +63,17 @@ namespace DOL.GS
                 if (!entries.TryGetValue(key, out var allowed)) entries[key] = allowed = new();
                 foreach (int[] entry in point.Entries) allowed.Add((entry[0], entry[1], entry[2]));
             }
-            return new(points, entries);
+            // Cells admitting exactly the same entrances share one group id,
+            // so planning can reuse one route check for all of them.
+            var signatures = new Dictionary<string, int>(StringComparer.Ordinal);
+            var groups = new Dictionary<(ushort, int, int), int>();
+            foreach (var pair in entries)
+            {
+                string signature = pair.Key.Item1 + ":" + string.Join(";", pair.Value.OrderBy(entry => entry));
+                if (!signatures.TryGetValue(signature, out int group)) signatures[signature] = group = signatures.Count;
+                groups[pair.Key] = group;
+            }
+            return new(points, entries, groups);
         }
 
         public static bool MatchesSpawn(Point point, string id, ushort region, ushort zone, string name, Vector3 spawn) =>
@@ -92,6 +103,14 @@ namespace DOL.GS
             entrances.Contains((edge.TargetX, edge.TargetY, edge.TargetZ)) ||
             entrances.Any(entry => MatchesEntrance(new(edge.TargetX, edge.TargetY, edge.TargetZ),
                 new(entry.X, entry.Y, entry.Z)));
+
+        /// <summary>
+        /// Goal cells that admit exactly the same proven entrances share this
+        /// id; -1 means no entrance restriction. CanUseEntrance gives the same
+        /// answer for every cell of one group.
+        /// </summary>
+        public static int EntranceGroup(ushort goalRegion, int goalX, int goalY) =>
+            Data.Value.EntranceGroups.TryGetValue((goalRegion, goalX, goalY), out int group) ? group : -1;
     }
 
     public sealed partial class AutonomousWorldBotController
