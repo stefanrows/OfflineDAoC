@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using DOL.Database;
 using NUnit.Framework;
@@ -105,6 +106,33 @@ namespace DOL.GS.Tests
                 Assert.That(row.X, Is.EqualTo(33280));
                 Assert.That(row.Y, Is.EqualTo(38272));
                 Assert.That(row.CreateInfo, Is.EqualTo("offline-native-bg:251:pending"));
+            });
+        }
+
+        [Test]
+        public void EncounterBrainTakesItsZoneFromTheSynchronizedPlacement()
+        {
+            // Bug 129: a GameBot built by Spawn reads (0, 0, 0) through its movement component until the
+            // placement is synchronized. A brain created before that captured the zone at the origin, so every
+            // patrol goal failed its zone check and each squad built and deleted its bots.
+            var region = new Region(new RegionData { Id = 242, Name = "Leirvik test", Description = "Leirvik test", Mobs = [] });
+            var zone = new Zone(region, 242, "Leirvik test", 524288, 524288, 65536, 65536, 2, false, 0, false, 0, 0, 0, 0, 0);
+            region.Zones.Add(zone);
+            var bot = (GameBot)RuntimeHelpers.GetUninitializedObject(typeof(GameBot));
+            bot.movementComponent = new NpcMovementComponent(bot);
+            bot.CurrentRegion = region;
+            bot.X = 540000;
+            bot.Y = 540000;
+            bot.Z = 5000;
+
+            BattlegroundEncounterBrain brain = BattlegroundEncounterActor.AttachBrain(bot);
+
+            object capturedZone = typeof(BattlegroundEncounterBrain).GetField("_zone", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(brain);
+            Assert.Multiple(() =>
+            {
+                Assert.That(capturedZone, Is.SameAs(zone), "The brain must capture the zone of the placed actor");
+                Assert.That(bot.X, Is.EqualTo(540000));
+                Assert.That(bot.Y, Is.EqualTo(540000));
             });
         }
     }

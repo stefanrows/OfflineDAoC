@@ -12,6 +12,52 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.237.0] - 2026-10-10
+
+### Added
+
+- Battleground portal keeps: the 24 rebuilt portal keeps of the campaign
+  battlegrounds get the Eden service set at startup when no keep guard,
+  merchant or hastener stands within 700 units: a realm hastener near the
+  landing, two fighters at the gate, up to six static casters along the walls
+  and three DPS plus two Hitback training dummies, floor-snapped and proven
+  inside the closed ring. Runtime only (no mob rows). Guards use the
+  bracket's maximum level and never aggro; Hitback dummies hit back their
+  attacker, as on Eden. Eden's Void Merchant is skipped (its class does not
+  exist here). Logged as `BATTLEGROUND_PORTAL_KEEP_SERVICES` / `_SKIPPED`
+  (bug 142).
+- Battleground central keeps without native guards (Leirvik, Killaloe, Lion's
+  Den, Caer Claret, Thidranki, Wilton) get Molvik's native guard layout: its
+  40 archers, fighters, healers and casters are copied in the keep frame,
+  snapped to the navmesh floor, kept only where a campaign camp can reach
+  them and 150 units apart (at most 40 per keep). They are normal keep guards
+  of that keep (capture, level, respawn) but are never saved. Logged as
+  `BATTLEGROUND_KEEP_WALL_GUARDS` (bug 140).
+- `/battlegrounds` is an alias of `/battleground`; `/battleground list` shows
+  each bracket's central keep owner, and `/ck` marks a campaign keep whose
+  lord is defeated and unclaimed (bug 141).
+
+### Fixed
+
+- Battleground patrols and ambushes spawn: each encounter bot's brain was
+  built before its placement was synchronized, so it took its zone from
+  (0,0,0), refused its goal and was deleted (zero squads in 0.234.0 and
+  0.235.0). A failed party now stops after its first member, and skips name
+  the failing step (`detail=route:<step>` / `spawn:<step>`) (bug 129).
+- Claiming a keep no longer freezes the game loop for about a second: the
+  keep and its components were written in 22 separate transactions. The
+  claim now runs in one `KeepSaveBatch` and logs `KEEP_STEP_TIMING
+  owner=claim` steps (bug 143).
+
+### Changed
+
+- Live verification of 0.235.0 (2026-10-10, 21:04–21:32): bot guilds claim
+  battleground keeps (bug 128), lord deaths no longer stall the loop (bug 134),
+  every campaign keep has a lord (bug 130), route-pocket self-escapes are gone
+  and `stuck` battleground leaves fell from 50 % to 27 %.
+- Server Release build passes with zero errors; the touched test classes
+  pass (58 tests).
+
 ## [0.236.0] - 2026-10-10
 
 ### Fixed

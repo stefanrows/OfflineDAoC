@@ -4,7 +4,7 @@ using DOL.GS.PacketHandler;
 
 namespace DOL.GS.Commands
 {
-    [CmdAttribute("&battleground", new[] { "&bgs" }, ePrivLevel.Player,
+    [CmdAttribute("&battleground", new[] { "&bgs", "&battlegrounds" }, ePrivLevel.Player,
         "Guild and group battleground campaign",
         "/battleground [list|join|leave|status|quests|turnin|contribute <count>|lfg [xp|pvp|off]]")]
     public sealed class BattlegroundCommandHandler : AbstractCommandHandler, ICommandHandler
@@ -26,6 +26,9 @@ namespace DOL.GS.Commands
                         string rank = definition.MaxRealmLevel == 0 ? "no RP ceiling" : $"below RR{definition.MaxRealmLevel / 10 + 1}L{definition.MaxRealmLevel % 10}";
                         lines.Add($"{definition.Name}: levels {definition.MinLevel}-{definition.MaxLevel}, {rank}.");
                         if (!ready) lines.Add(reason);
+                        var central = BattlegroundCampaignCatalog.CentralKeep(definition);
+                        lines.Add("  " + (central == null ? "Owner of central keep: none registered." :
+                            BattlegroundKeepOwnership.CentralLine(central.Name, central.Guild?.Name, central.DBKeep?.LordDefeated == true)));
                     }
                     if (!BattlegroundCampaignPolicy.IsEnabled) lines.Add("The campaign is currently closed.");
                     client.Out.SendCustomTextWindow("Battleground brackets", lines);

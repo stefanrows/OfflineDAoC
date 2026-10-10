@@ -219,12 +219,18 @@ namespace DOL.GS
                 Campaigns.Remove(definition.RegionId);
                 return;
             }
+            // Portal keeps with no saved NPC get the Eden service set. Runtime only: nothing is saved, and it runs after
+            // the campaign's monster check, so the dummies never count as campaign monsters.
+            try { BattlegroundPortalKeepServices.EnsureRegion(definition, landings); }
+            catch (Exception exception) { Log.Error($"BATTLEGROUND_PORTAL_KEEP_SERVICES_FAILED region={definition.RegionId}", exception); }
             if (keep != null && BattlegroundNativeKeepData.IsOfflineKeep(keep))
             {
                 // A failed keep must not stop the campaign start for every map.
                 try { BattlegroundNativeKeepData.EnsureGarrison(definition, keep, campaign.Camps.Select(camp => camp.Position).ToArray(), BattlegroundNativeKeepData.GarrisonSearchRadius(keep)); }
                 catch (Exception exception) { Log.Error($"BATTLEGROUND_NATIVE_KEEP_FAILED region={definition.RegionId}", exception); }
             }
+            // Campaign keeps without native wall guards get wall posts learned from Molvik (runtime only, see BattlegroundKeepWallGuards).
+            if (keep != null) BattlegroundKeepWallGuards.Ensure(definition, keep, campaign.Camps.Select(camp => camp.Position).ToArray());
             campaign.Timer = new ECSGameTimer(campaign.Camps[0].Commander, _ => Tick(campaign), 1000 + stagger);
             Log.Info($"BATTLEGROUND_CAMPAIGN_READY region={definition.RegionId} camps={campaign.Camps.Count} keep={(keep == null ? "none" : keep.KeepID.ToString())} lord={NativeLordReady(campaign)} doors={keep?.Doors.Count ?? 0} monsters={campaign.HasMonsterObjectives}");
         }
@@ -553,40 +559,57 @@ namespace DOL.GS
             for (int attempt = 0; encounter == null && attempt < attempts; attempt++)
             {
                 Point3D attemptGoal = attempt == 0 ? goal : fallback;
-                if (!BattlegroundEncounterActor.CanReach(campaign.Definition.RegionId, origin.Position, attemptGoal))
+                string routeFailure = BattlegroundEncounterActor.RouteFailure(campaign.Definition.RegionId, origin.Position, attemptGoal);
+                if (routeFailure != null)
                 {
-                    failure ??= "no_route";
+                    failure ??= $"route:{routeFailure}";
                     continue;
                 }
                 Encounter candidate = new() { Goal = attemptGoal, Participant = participant, Level = (byte)Math.Clamp(participant.Level, campaign.Definition.MinLevel, campaign.Definition.MaxLevel),
                     ExpiresAt = Now + (ambush ? 6 : 10) * 60_000 };
-                SpawnParty(campaign, candidate, origin.Position, guild, null, name, size);
+                string spawnFailure = SpawnParty(campaign, candidate, origin.Position, guild, null, name, size);
                 if (candidate.Members.Count > 0) encounter = candidate;
-                else failure = "spawn_failed";
+                else failure = $"spawn:{spawnFailure ?? "capacity"}";
             }
-            if (encounter == null) { LogSquadSkipped(campaign, kind, "route_or_spawn_failed", targets.Length, failure ?? "no_route"); return; }
+            if (encounter == null) { LogSquadSkipped(campaign, kind, "route_or_spawn_failed", targets.Length, failure ?? "route:none"); return; }
             campaign.Encounters.Add(encounter);
             campaign.SquadSkipReasons.Remove(kind);
             Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind={kind} members={encounter.Members.Count}/{size} level={encounter.Level} guild={guild?.Name ?? "none"} origin=camp{origin.Index + 1} goal={FormatPoint(encounter.Goal)} target={participant.Name ?? "none"} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
         }
 
-        private static void SpawnParty(Campaign campaign, Encounter encounter, Point3D origin, Guild guild, GamePlayer sponsor, string name, int size)
+        // Returns the step that failed for the last member that could not be placed, or null when none failed.
+        // Every member shares the origin and goal, so a failure before the first member stops the party after one build.
+        private static string SpawnParty(Campaign campaign, Encounter encounter, Point3D origin, Guild guild, GamePlayer sponsor, string name, int size)
         {
+            string failure = null;
             Group group = null;
             byte[] classes = { (byte)eCharacterClass.Armsman, (byte)eCharacterClass.Cleric, (byte)eCharacterClass.Sorcerer, (byte)eCharacterClass.Mercenary };
             for (int i = 0; i < size && ActorCount(campaign) + encounter.Members.Count < DirectorCapacity(campaign); i++)
             {
-                GameBot actor = BattlegroundEncounterActor.Spawn(campaign.Definition.RegionId, origin.X, origin.Y, origin.Z,
-                    classes[i % classes.Length], encounter.Level == 0 ? (byte)campaign.Definition.MaxLevel : encounter.Level, name, guild, group);
-                if (actor == null) continue;
+                GameBot actor = BattlegroundEncounterActor.TrySpawn(campaign.Definition.RegionId, origin.X, origin.Y, origin.Z,
+                    classes[i % classes.Length], encounter.Level == 0 ? (byte)campaign.Definition.MaxLevel : encounter.Level, name, guild, group, out string spawnFailure);
+                if (actor == null)
+                {
+                    failure = spawnFailure;
+                    if (encounter.Members.Count == 0) break;
+                    continue;
+                }
                 if (sponsor != null) BattlegroundEncounterActor.SetAllianceSponsor(actor, sponsor);
                 Point3D goal = encounter.Goal;
                 GameLiving target = null;
                 if (encounter.Siege) target = SiegeTarget(campaign, actor, out goal);
-                if (goal == null || !BattlegroundEncounterActor.SetGoal(actor, goal, target)) { actor.Delete(); continue; }
+                string goalFailure = goal == null ? "siege_approach" : BattlegroundEncounterActor.SetGoalFailure(actor, goal, target);
+                if (goalFailure != null)
+                {
+                    failure = goalFailure;
+                    actor.Delete();
+                    if (encounter.Members.Count == 0) break;
+                    continue;
+                }
                 if (group == null) { group = new Group(actor); group.AddMember(actor); }
                 encounter.Members.Add(actor);
             }
+            return failure;
         }
 
         private static void Cleanup(Encounter encounter)

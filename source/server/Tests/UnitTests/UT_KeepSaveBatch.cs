@@ -25,6 +25,7 @@ public sealed class UT_KeepSaveBatch
     private const int KeepId = 9001;
     private const int ComponentCount = 20;
     private const int DoorCount = 2;
+    private const ushort BattlegroundRegion = 165;
 
     /// <summary>Counts every write transaction and connection opened on the
     /// keep's SQLite file, without changing what is written.</summary>
@@ -127,7 +128,7 @@ public sealed class UT_KeepSaveBatch
         }
     }
 
-    private static Fixture Build(int componentCount = ComponentCount, int doorCount = DoorCount)
+    private static Fixture Build(int componentCount = ComponentCount, int doorCount = DoorCount, bool claimed = true, ushort region = 1)
     {
         string path = Path.Combine(System.IO.Path.GetTempPath(), "daoc-keep-save-" + Guid.NewGuid().ToString("N") + ".sqlite3");
         var database = new CountingDatabase($"Data Source={path};Version=3;Pooling=False;Journal Mode=WAL;Synchronous=Normal;Foreign Keys=True;Default Timeout=60");
@@ -137,15 +138,16 @@ public sealed class UT_KeepSaveBatch
 
         var keepRow = new DbKeep
         {
-            Name = "Test keep", KeepID = KeepId, Region = 1, Realm = 1, BaseLevel = 50, Level = 5,
-            ClaimedGuildName = "Test guild", ClaimedAt = Start.AddDays(-1), ProgressionInitialized = true,
-            NextLevelAt = Start.AddHours(2), LastCaptureRewardAt = Start.AddDays(-1),
+            Name = "Test keep", KeepID = KeepId, Region = region, Realm = 1, BaseLevel = 50, Level = 5,
+            ClaimedGuildName = claimed ? "Test guild" : string.Empty, ClaimedAt = claimed ? Start.AddDays(-1) : DateTime.MinValue,
+            ProgressionInitialized = true, NextLevelAt = Start.AddHours(2), LastCaptureRewardAt = Start.AddDays(-1),
+            LordDefeated = !claimed,
         };
         Assert.That(database.AddObject(keepRow), Is.True);
 
         var guild = new Guild(new DbGuild { GuildID = "test-guild", GuildName = "Test guild" });
-        var keep = new GameKeep { DBKeep = keepRow, Guild = guild, InternalID = keepRow.ObjectId };
-        guild.ClaimedKeeps.Add(keep);
+        var keep = new GameKeep { DBKeep = keepRow, Guild = claimed ? guild : null, InternalID = keepRow.ObjectId };
+        if (claimed) guild.ClaimedKeeps.Add(keep);
         // Load() normally creates the change-level timer; Release() stops it.
         typeof(AbstractGameKeep).GetMethod("InitialiseTimers", BindingFlags.NonPublic | BindingFlags.Instance)
             .Invoke(keep, null);
@@ -179,6 +181,17 @@ public sealed class UT_KeepSaveBatch
         var lord = (GuardLord)RuntimeHelpers.GetUninitializedObject(typeof(GuardLord));
         lord.Component = component;
         return lord;
+    }
+
+    /// <summary>A bot or player claimer. Claim reads only its guild and name here.</summary>
+    private static GameBot ClaimerOf(Guild guild)
+    {
+        var claimer = (GameBot)RuntimeHelpers.GetUninitializedObject(typeof(GameBot));
+        // GameNPC.Realm reads its brain list, which an uninitialized object does not have.
+        typeof(GameNPC).GetField("m_brains", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(claimer, new System.Collections.ArrayList());
+        claimer.Guild = guild;
+        return claimer;
     }
 
     private static CountingDatabase Reopen(string path) =>
@@ -241,6 +254,55 @@ public sealed class UT_KeepSaveBatch
         CountingDatabase reopened = Reopen(fixture.Path);
         reopened.RegisterDataObject(typeof(DbKeep));
         Assert.That(reopened.SelectAllObjects<DbKeep>().Single().Level, Is.EqualTo(6));
+    }
+
+    /// <summary>Bug 143: a claim (steward, bot brain or the keep command) saved the keep and
+    /// each component in separate transactions, about 21 on the game tick. Its rows must
+    /// reach the database in one transaction.</summary>
+    [Test]
+    public void ClaimCommitsEveryKeepRowOnceInOneTransaction()
+    {
+        using Fixture fixture = Build(claimed: false, region: BattlegroundRegion);
+        CountingDatabase database = fixture.Database;
+        var guild = new Guild(new DbGuild { GuildID = "claim-guild", GuildName = "Claim guild" });
+
+        fixture.Keep.Claim(ClaimerOf(guild));
+
+        Assert.That(fixture.Keep.Guild, Is.SameAs(guild), "The claim must take the keep.");
+        Assert.That(database.AtomicCommits, Is.EqualTo(1), database.Summary());
+        Assert.That(database.PerTypeTransactions, Is.Empty, database.Summary());
+        Assert.That(database.AtomicRows.Count(name => name == nameof(DbKeep)), Is.EqualTo(1), database.Summary());
+        Assert.That(database.AtomicRows.Count(name => name == nameof(DbKeepComponent)), Is.EqualTo(ComponentCount), database.Summary());
+        Assert.That(database.Connections, Is.LessThanOrEqualTo(2), database.Summary());
+    }
+
+    [Test]
+    public void ClaimSavedStateMatchesMemory()
+    {
+        using Fixture fixture = Build(claimed: false, region: BattlegroundRegion);
+        var guild = new Guild(new DbGuild { GuildID = "claim-guild", GuildName = "Claim guild" });
+
+        fixture.Keep.Claim(ClaimerOf(guild));
+
+        CountingDatabase reopened = Reopen(fixture.Path);
+        reopened.RegisterDataObject(typeof(DbKeep));
+        reopened.RegisterDataObject(typeof(DbKeepComponent));
+        reopened.RegisterDataObject(typeof(DbDoor));
+
+        DbKeep keep = reopened.SelectAllObjects<DbKeep>().Single();
+        Assert.That(keep.ClaimedGuildName, Is.EqualTo("Claim guild"));
+        // Reads come back in local time; the claim stores UTC.
+        Assert.That(keep.ClaimedAt.ToUniversalTime(), Is.EqualTo(fixture.KeepRow.ClaimedAt).Within(TimeSpan.FromSeconds(1)));
+        Assert.That(keep.LordDefeated, Is.EqualTo(fixture.KeepRow.LordDefeated));
+        Assert.That(keep.Level, Is.EqualTo(fixture.KeepRow.Level));
+
+        var saved = reopened.SelectAllObjects<DbKeepComponent>().ToDictionary(row => row.ObjectId);
+        for (int i = 0; i < fixture.Components.Length; i++)
+            Assert.That(saved[fixture.ComponentRows[i].ObjectId].Health, Is.EqualTo(fixture.Components[i].Health), $"component {i}");
+
+        var savedDoors = reopened.SelectAllObjects<DbDoor>().ToDictionary(row => row.ObjectId);
+        for (int i = 0; i < fixture.Doors.Length; i++)
+            Assert.That(savedDoors[fixture.DoorRows[i].ObjectId].Health, Is.EqualTo(fixture.Doors[i].Health), $"door {i}");
     }
 
     [Test]

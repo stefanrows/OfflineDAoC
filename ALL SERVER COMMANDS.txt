@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.236.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.237.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 Command reference maintained from server registrations and fork source.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -19,7 +19,7 @@ There is no Normal RvR mode, `/level` is disabled, and Normal-save progress impo
 into Camlann is refused. The first launcher run creates a fresh Camlann world backup.
 
 BATTLEGROUND CAMPAIGN
-/battleground (alias /bgs) opens campaign help. list shows ten brackets from level 1 to 49; join enters your bracket and leave returns to your existing outside bind. Guild, group, guild-alliance and battlegroup relationships determine allies. Entry allows sub-10 PvP only inside the battleground, retaining the saved /safety flag. Portal keeps remain safe arrivals.
+/battleground (aliases /bgs and /battlegrounds) opens campaign help. list shows ten brackets from level 1 to 49, each followed by its central keep's owner (guild, unclaimed, or lord defeated, unclaimed); join enters your bracket and leave returns to your existing outside bind. Guild, group, guild-alliance and battlegroup relationships determine allies. Entry allows sub-10 PvP only inside the battleground, retaining the saved /safety flag. Portal keeps remain safe arrivals.
 /battleground status shows field camps and encounters; quests accepts contracts beside a live commander/captain; turnin collects completed contracts there. Monster kills grant personal, nontradable siege tokens. Completed contracts grant tokens and XP; PvP bodies still drop no items or coins. Contract availability follows native monster/keep content.
 /battleground contribute <count> donates a backpack token stack at a sponsored camp. Twenty tokens send a physical escort against native keep doors and the lord. A sponsored hostile captain is attackable outside the safe portal keep; defeating it interrupts contracts/funding for five gameplay minutes. Guild funding lasts thirty minutes; guildless group funding is session-local.
 /battleground lfg xp|pvp|off opts solo players into automatic grouping every thirty seconds. /LFxp [off] and /LFrvr [off] are shortcuts; XP matches stay within three levels, PvP matches within the bracket. Only opted-in players are grouped. The ordinary /bg battlegroup command is preserved.
@@ -222,7 +222,7 @@ NORMAL PLAYER COMMANDS
   Handler: DOL.GS.Commands.EmoteCommandHandler
 
 /ck
-  Displays who owns the CK while in a battleground.
+  Displays who owns the CK while in a battleground. In a campaign battleground, lists every keep with its realm and owning guild; a keep whose lord was defeated and has no guild is marked 'lord defeated, unclaimed'. Legacy battlegrounds keep their original output.
   /ck
   Handler: DOL.GS.Commands.CkCommandHandler
 

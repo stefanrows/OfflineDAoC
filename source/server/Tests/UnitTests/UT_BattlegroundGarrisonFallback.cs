@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using DOL.GS.Keeps;
 using NUnit.Framework;
+using Wall = DOL.GS.BattlegroundKeepWallGuards;
 
 namespace DOL.GS.Tests
 {
@@ -162,6 +164,148 @@ namespace DOL.GS.Tests
         {
             Assert.That(BattlegroundNativeKeepData.DecideGarrisonMove(false, true), Is.EqualTo(BattlegroundNativeKeepData.GarrisonMoveDecision.Relocate));
             Assert.That(BattlegroundNativeKeepData.DecideGarrisonMove(false, false), Is.EqualTo(BattlegroundNativeKeepData.GarrisonMoveDecision.Stranded));
+        }
+
+        [Test]
+        public void KeepFrameRoundTripsAtHeadingZero()
+        {
+            // Molvik Faste (557677, 551751), heading 0: a guard's local offset is its offset with Y mirrored.
+            Wall.PostFrame frame = Wall.KeepFrame(557677, 551751, 0);
+
+            (double localX, double localY) = Wall.ToLocal(frame, 556912, 552961);
+            (double worldX, double worldY) = Wall.ToWorld(frame, localX, localY);
+
+            Assert.That(localX, Is.EqualTo(-765).Within(1e-9));
+            Assert.That(localY, Is.EqualTo(-1210).Within(1e-9));
+            Assert.That(worldX, Is.EqualTo(556912).Within(1e-9));
+            Assert.That(worldY, Is.EqualTo(552961).Within(1e-9));
+        }
+
+        [Test]
+        public void KeepFrameRoundTripsAtLeirvikHeadingOf87Degrees()
+        {
+            Wall.PostFrame frame = Wall.KeepFrame(294287, 295659, 87);
+            double radians = 87 * Math.PI / 180;
+
+            // A point one hundred units along the keep's local x lies along the keep heading: mostly north (+Y) at 87 degrees.
+            (double localX, double localY) = Wall.ToLocal(frame, 294287 + 100 * Math.Cos(radians), 295659 + 100 * Math.Sin(radians));
+            (double worldX, double worldY) = Wall.ToWorld(frame, 37, -58);
+            (double backX, double backY) = Wall.ToLocal(frame, worldX, worldY);
+
+            Assert.That(localX, Is.EqualTo(100).Within(1e-6));
+            Assert.That(localY, Is.EqualTo(0).Within(1e-6));
+            Assert.That(backX, Is.EqualTo(37).Within(1e-9));
+            Assert.That(backY, Is.EqualTo(-58).Within(1e-9));
+        }
+
+        [Test]
+        public void LayoutCopiedToAHeading87KeepTurnsWithTheKeep()
+        {
+            // The same local offset lands due east of a heading 0 keep and turned by 87 degrees for a heading 87 keep.
+            (double eastX, double eastY) = Wall.ToWorld(Wall.KeepFrame(557677, 551751, 0), 100, 0);
+            (double turnedX, double turnedY) = Wall.ToWorld(Wall.KeepFrame(294287, 295659, 87), 100, 0);
+            double radians = 87 * Math.PI / 180;
+
+            Assert.That(eastX, Is.EqualTo(557777).Within(1e-9));
+            Assert.That(eastY, Is.EqualTo(551751).Within(1e-9));
+            Assert.That(turnedX, Is.EqualTo(294287 + 100 * Math.Cos(radians)).Within(1e-9));
+            Assert.That(turnedY, Is.EqualTo(295659 + 100 * Math.Sin(radians)).Within(1e-9));
+        }
+
+        [Test]
+        public void LayoutKeepsEveryNonLordNativeGuardAndNoGarrisonRow()
+        {
+            var keep = new Wall.KeepSample("Test Keep", 1000, 2000, 500, 0);
+            var guards = new[]
+            {
+                new Wall.GuardSample("DOL.GS.Keeps.GuardArcher", "Renegade Hunter", "", 1020, 1970, 502, 100, 781),
+                new Wall.GuardSample("DOL.GS.Keeps.GuardFighter", "Renegade Guardian", "", 1400, 2300, 500, 0, 318),
+                new Wall.GuardSample("DOL.GS.Keeps.GuardHealer", "new mob", "", 1000, 1900, 500, 0, 408),
+                new Wall.GuardSample("DOL.GS.Keeps.GuardCaster", "Renegade Wizard", "", 900, 1800, 500, 0, 35),
+                new Wall.GuardSample("DOL.GS.Keeps.GuardArcher", "Test Keep Archer", "", 1010, 1990, 500, 0, 48),
+                new Wall.GuardSample("DOL.GS.Keeps.GuardLord", "Renegade Chieftain", "", 1000, 1995, 500, 0, 318),
+                new Wall.GuardSample("DOL.GS.Keeps.FrontierHastener", "new mob", "", 1100, 1100, 500, 0, 408),
+            };
+
+            List<Wall.PostTemplate> templates = Wall.DeriveTemplates(keep, guards);
+
+            Assert.That(templates.Count, Is.EqualTo(4));
+            Assert.That(templates[0].GuardType, Is.EqualTo(typeof(WallPostArcher)));
+            Assert.That(templates[0].LocalX, Is.EqualTo(20));
+            Assert.That(templates[0].LocalY, Is.EqualTo(30));
+            Assert.That(templates[0].DeltaZ, Is.EqualTo(2));
+            Assert.That(templates[0].RelativeHeading, Is.EqualTo(100));
+            Assert.That(templates[0].Model, Is.EqualTo(781));
+            Assert.That(templates[1].GuardType, Is.EqualTo(typeof(WallPostFighter)));
+            Assert.That(templates[2].Model, Is.EqualTo(GuardTemplateMgr.AvalonianMale), "a placeholder model takes the class default");
+            Assert.That(templates[3].GuardType, Is.EqualTo(typeof(WallPostCaster)));
+        }
+
+        [Test]
+        public void PlannedGuardsStopAtTheCapOfForty()
+        {
+            var keep = new Wall.KeepSample("Test Keep", 1000, 2000, 500, 0);
+            // Fifty templates 200 units apart along x: spacing never drops one, so only the cap does.
+            var templates = Enumerable.Range(0, 50).Select(i => new Wall.PostTemplate(200 * i, 0, 0, 0, typeof(WallPostHealer), 61)).ToList();
+
+            Wall.PostPlan plan = Wall.PlanPlacements(keep, templates, Array.Empty<Vector3>(), hint => hint, _ => true);
+
+            Assert.That(plan.Candidates, Is.EqualTo(50));
+            Assert.That(plan.Placements.Count, Is.EqualTo(Wall.MaximumGuardsPerKeep));
+            Assert.That(plan.DroppedSpacing, Is.EqualTo(10));
+            Assert.That(plan.DroppedSnap, Is.EqualTo(0));
+            Assert.That(plan.DroppedUnreachable, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void PlannedGuardsKeepSpacingFromStandingGuardsAndFromEachOther()
+        {
+            var keep = new Wall.KeepSample("Test Keep", 1000, 2000, 500, 0);
+            // At heading 0 a local y of -100 is due north: world (1000, 2100).
+            var templates = new[]
+            {
+                new Wall.PostTemplate(0, -100, 0, 0, typeof(WallPostHealer), 61),   // on a standing guard
+                new Wall.PostTemplate(0, -130, 0, 0, typeof(WallPostHealer), 61),   // 30 from the standing guard
+                new Wall.PostTemplate(0, -400, 0, 0, typeof(WallPostHealer), 61),   // 300 clear: placed
+                new Wall.PostTemplate(0, -420, 0, 0, typeof(WallPostHealer), 61),   // 20 from the guard just planned
+            };
+            var existing = new[] { new Vector3(1000, 2100, 500) };
+
+            Wall.PostPlan plan = Wall.PlanPlacements(keep, templates, existing, hint => hint, _ => true);
+
+            Assert.That(plan.Candidates, Is.EqualTo(4));
+            Assert.That(plan.Placements.Count, Is.EqualTo(1));
+            Assert.That(plan.Placements[0].Point, Is.EqualTo(new Vector3(1000, 2400, 500)));
+            Assert.That(plan.DroppedSpacing, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void SnapAndReachabilityDropCandidatesWithTheirOwnCounts()
+        {
+            var keep = new Wall.KeepSample("Test Keep", 1000, 2000, 500, 0);
+            var templates = new[]
+            {
+                new Wall.PostTemplate(0, -100, 0, 0, typeof(WallPostHealer), 61),  // no floor
+                new Wall.PostTemplate(0, -200, 0, 0, typeof(WallPostHealer), 61),  // floor 400 above the layout height
+                new Wall.PostTemplate(0, -300, 0, 0, typeof(WallPostHealer), 61),  // floor fine, no camp reaches it
+                new Wall.PostTemplate(0, -400, 0, 0, typeof(WallPostHealer), 61),  // floor 200 above, reachable: placed
+            };
+            Func<Vector3, Vector3?> snap = hint =>
+            {
+                if (hint.Y == 2100) return null;
+                if (hint.Y == 2200) return hint + new Vector3(0, 0, 400);
+                if (hint.Y == 2400) return hint + new Vector3(0, 0, 200);
+                return hint;
+            };
+
+            Wall.PostPlan plan = Wall.PlanPlacements(keep, templates, Array.Empty<Vector3>(), snap, point => point.Y != 2300);
+
+            Assert.That(plan.Candidates, Is.EqualTo(4));
+            Assert.That(plan.Placements.Count, Is.EqualTo(1));
+            Assert.That(plan.Placements[0].Point, Is.EqualTo(new Vector3(1000, 2400, 700)));
+            Assert.That(plan.DroppedSnap, Is.EqualTo(2));
+            Assert.That(plan.DroppedUnreachable, Is.EqualTo(1));
+            Assert.That(plan.DroppedSpacing, Is.EqualTo(0));
         }
     }
 }

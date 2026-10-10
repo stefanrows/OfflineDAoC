@@ -720,6 +720,10 @@ namespace DOL.GS.Keeps
         private void ClaimCore(GameLiving player)
 		{
             if (PvpKeepCampaign.Applies(this) && !CheckForClaim(player)) return;
+            // Bug 143: the claim's keep, component and door rows are written once, in one
+            // transaction, before the capture hook and the events read the keep.
+            using var batch = KeepSaveBatch.Begin("claim", this);
+            long mark = System.Diagnostics.Stopwatch.GetTimestamp();
 			Guild = player switch
 			{
 				GamePlayer human => human.Guild,
@@ -734,6 +738,7 @@ namespace DOL.GS.Keeps
                 Realm = player.Realm;
                 PvpKeepCampaign.CompleteClaim(this, player);
             }
+            mark = PvpKeepCampaign.LogSlowKeepStep(this, "claim", "complete", mark);
             log.Info($"KEEP_CLAIMED keep={KeepID} name={Name} guild=\"{Guild?.Name}\" by=\"{player.Name}\" bot={player is GameBot} realm={player.Realm}");
 			
 			Guild.SendMessageToGuildMembers("Your guild has currently claimed " + Guild.ClaimedKeeps.Count + " keeps.", eChatType.CT_Guild, eChatLoc.CL_ChatWindow);
@@ -742,6 +747,7 @@ namespace DOL.GS.Keeps
             DBKeep.ProgressionInitialized = true;
             DBKeep.NextLevelAt = DateTime.MinValue;
 			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_CLAIM_LEVEL);
+            mark = PvpKeepCampaign.LogSlowKeepStep(this, "claim", "change_level", mark);
 
 			PlayerMgr.BroadcastClaim(this);
 
@@ -755,16 +761,25 @@ namespace DOL.GS.Keeps
 				banner.ChangeGuild();
 			}
 
+			mark = PvpKeepCampaign.LogSlowKeepStep(this, "claim", "guards_banners", mark);
+
 			// GameKeepDoor door = new GameKeepDoor();
 			this.SaveIntoDatabase();
+            mark = PvpKeepCampaign.LogSlowKeepStep(this, "claim", "save", mark);
             LoadFromDatabase(DBKeep);
             EnsureRelicPad();
             // door.BroadcastDoorStatus();
             StartDeductionTimer();
+            mark = PvpKeepCampaign.LogSlowKeepStep(this, "claim", "load", mark);
+
+            // The keep rows are final: write them before the capture hook and the events run.
+            batch.Dispose();
             BattlegroundCampaignManager.OnKeepClaimed(this, player);
+            mark = PvpKeepCampaign.LogSlowKeepStep(this, "claim", "capture_hook", mark);
             GameEventMgr.Notify(KeepEvent.KeepClaimed, this, new KeepEventArgs(this));
             if (PvpKeepCampaign.Applies(this))
                 GameEventMgr.Notify(KeepEvent.KeepTaken, this, new KeepEventArgs(this));
+            PvpKeepCampaign.LogSlowKeepStep(this, "claim", "events", mark);
 		}
 
 		/// <summary>
@@ -1029,7 +1044,7 @@ namespace DOL.GS.Keeps
             if (DBKeep.NextLevelAt == DateTime.MinValue)
             {
                 DBKeep.NextLevelAt = WorldSimulationClock.UtcNow.AddMilliseconds(CalculateTimeToUpgrade());
-                GameServer.Database.SaveObject(DBKeep);
+                KeepSaveBatch.Save(DBKeep);
             }
             m_changeLevelTimer.Stop();
             m_changeLevelTimer.Start(NextUpgradePoll());

@@ -24,32 +24,35 @@ namespace DOL.GS
             _goal = new(bot.X, bot.Y, bot.Z);
         }
 
-        public bool SetGoal(Point3D goal, GameLiving target = null)
+        public bool SetGoal(Point3D goal, GameLiving target = null) => TrySetGoal(goal, target) == null;
+
+        // The first failing check of a goal, or null when it was accepted. The names reach the squad log
+        // as detail=spawn:<step>, so a live run shows which check refused the actor's goal.
+        internal string TrySetGoal(Point3D goal, GameLiving target)
         {
-            if (goal == null || _zone == null ||
-                _bot.CurrentRegion?.GetZone(goal.X, goal.Y) != _zone ||
-                target != null && target.CurrentZone != _zone)
-                return false;
-            if (!ProveRoute(_zone, new(_bot.X, _bot.Y, _bot.Z), goal, out Vector3 position))
-                return false;
+            if (goal == null) return "goal_null";
+            if (_zone == null) return "brain_zone_null";
+            if (_bot.CurrentRegion?.GetZone(goal.X, goal.Y) != _zone) return "goal_zone_mismatch";
+            if (target != null && target.CurrentZone != _zone) return "target_zone_mismatch";
+            string failure = ProveRouteFailure(_zone, new(_bot.X, _bot.Y, _bot.Z), goal, out Vector3 position);
+            if (failure != null) return failure;
             _goal = position;
             _target = target;
             _nextPath = 0;
-            return true;
+            return null;
         }
 
         // The navmesh proof for a goal: snap it to the mesh, then require a full straight path from the
         // actor's point. Shared with the squad director, which proves a route before building any actor.
-        internal static bool ProveRoute(Zone zone, Vector3 from, Point3D goal, out Vector3 position)
+        internal static string ProveRouteFailure(Zone zone, Vector3 from, Point3D goal, out Vector3 position)
         {
             var nav = PathfindingProvider.Instance;
             position = new(goal.X, goal.Y, goal.Z);
-            if (!nav.IsAvailable || !nav.HasNavmesh(zone) ||
-                !nav.TrySnapToMesh(zone, ref position, 100) || Math.Abs(position.Z - goal.Z) > 100)
-                return false;
+            if (!nav.IsAvailable || !nav.HasNavmesh(zone)) return "navmesh";
+            if (!nav.TrySnapToMesh(zone, ref position, 100) || Math.Abs(position.Z - goal.Z) > 100) return "goal_snap";
             Span<WrappedPathfindingNode> nodes = stackalloc WrappedPathfindingNode[512];
             var path = nav.GetPathStraight(zone, from, position, nav.BlockingDoorAvoidanceFilters, nodes);
-            return path.Status == PathfindingStatus.PathFound;
+            return path.Status == PathfindingStatus.PathFound ? null : "path";
         }
 
         internal bool PrepareTurn(BotBrain brain)
