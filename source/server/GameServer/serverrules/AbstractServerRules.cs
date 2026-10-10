@@ -2087,9 +2087,8 @@ namespace DOL.GS.ServerRules
                 AwardBotOnPlayerKill(pair.Key, killer, totalDamage, killedPlayer,
                     botCountAndDamage, groupCountAndDamage, out isWorthAnything);
 
-            // Persistent companions earn realm points through the same award
-            // path as autonomous bots (RP only; PvP XP remains disabled for
-            // companions in GainExperience).
+            // Persistent companions earn realm points and PvP experience through
+            // the same award paths as autonomous bots (see AwardBotOnPlayerKill).
             foreach (var pair in companionCountAndDamage)
                 AwardCompanionRealmPointsOnPlayerKill(pair.Key, totalDamage, killedPlayer,
                     companionCountAndDamage, groupCountAndDamage, out isWorthAnything);
@@ -2293,9 +2292,9 @@ namespace DOL.GS.ServerRules
                 botToAward.GainRealmPoints(realmPoints, true);
         }
 
-        // Persistent companions use this same formula and GainRealmPoints path
-        // as autonomous world bots (see AwardBotOnPlayerKill above), but never
-        // receive PvP experience or become a PvP kill's loot owner.
+        // Persistent companions use this same formula, GainRealmPoints path and
+        // GainExperience path as autonomous world bots (see AwardBotOnPlayerKill
+        // above), but never become a PvP kill's loot owner.
         private static void AwardCompanionRealmPointsOnPlayerKill(GameBot companion,
             double playerTotalDamageReceived,
             GamePlayer killedPlayer,
@@ -2325,6 +2324,12 @@ namespace DOL.GS.ServerRules
 
             double damagePercent = Math.Min(1.0, contribution.Damage / playerTotalDamageReceived);
             int contributorCount = Math.Max(1, contribution.Count);
+
+            long experience = AutonomousBotRealmPointRewards.CalculateExperienceReward(
+                killedPlayer.ExperienceValue, companion.GetExperienceValueForLevel(companion.Level) * 4,
+                killedPlayer.Level, companion.Level, contributorCount, damagePercent, Properties.XP_PVP_CAP_PERCENT);
+            if (experience > 0)
+                companion.GainExperience(eXPSource.Player, experience, true);
 
             int companionRealmPointValue = AutonomousBotRealmPointRewards.GetPlayerEquivalentRealmPointValue(
                 companion.Level, companion.RealmLevel);

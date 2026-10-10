@@ -1793,8 +1793,9 @@ namespace DOL.GS
             }
             else
             {
-                // Persistent companions never earn PvP XP (see GainExperience), but
-                // earn RvR realm points through the same award path as autonomous bots.
+                // Persistent companions earn RvR realm points through the same award
+                // path as autonomous bots. Their PvP XP goes through GainExperience,
+                // which caps it at the owner's experience total.
                 CompanionRealmPoints += amount;
                 RealmLevel = CompanionRealmAbilityTraining.RealmLevel(CompanionRealmPoints);
                 PlayerCompanionProgressPersistence.Queue(this);
@@ -1806,7 +1807,8 @@ namespace DOL.GS
         public override void GainExperience(GainedExperienceEventArgs arguments, bool notify = true)
         {
             bool persistentNpcReward = IsPersistentPlayerCompanion && arguments?.XPSource == eXPSource.NPC;
-            if ((!IsAutonomousWorldBot && !IsTemporaryGroupHelper && !persistentNpcReward) || arguments == null ||
+            bool persistentPvpReward = IsPersistentPlayerCompanion && arguments?.XPSource == eXPSource.Player;
+            if ((!IsAutonomousWorldBot && !IsTemporaryGroupHelper && !persistentNpcReward && !persistentPvpReward) || arguments == null ||
                 arguments.ExpTotal <= 0 || Level >= MaxLevel)
                 return;
 

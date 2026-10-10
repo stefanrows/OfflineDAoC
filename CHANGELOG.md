@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.225.0] - 2026-10-10
+
+### Added
+
+- Launcher XP Settings offer 15×, 20×, 25×, 50×, and 100× for both
+  YOUR PLAYER XP and AUTONOMOUS BOT XP (still editable only while the server
+  is stopped).
+
+### Fixed
+
+- Persistent companions now earn PvP experience from qualifying damage on
+  real-player and autonomous-bot kills. They use the same formula as autonomous
+  bots, scaled by the player XP rate and PvP danger multiplier and capped at the
+  owner's total experience. Previously they earned only realm points, so they
+  fell behind the player in PvP. Loot-owner eligibility is unchanged.
+
+### Changed
+
+- AUTONOMOUS BOT XP description now says companions follow the player XP rate.
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Real-client verification is pending.
+
 ## [0.224.1] - 2026-10-10
 
 ### Added

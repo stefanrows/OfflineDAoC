@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.224.1";
+    internal const string DisplayVersion = "0.225.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -616,7 +616,7 @@ internal sealed partial class MainForm : Form
         layout.Controls.Add(XpRateDescription("Applies to real player characters only."), 2, 1);
         layout.Controls.Add(XpRateLabel("AUTONOMOUS BOT XP"), 0, 2);
         layout.Controls.Add(_botXpRate, 1, 2);
-        layout.Controls.Add(XpRateDescription("Applies to persistent player bots only; companion helpers remain XP-neutral."), 2, 2);
+        layout.Controls.Add(XpRateDescription("Applies to autonomous world bots only; your companions follow your player XP rate."), 2, 2);
         _xpSettingsStatus.Dock = DockStyle.Fill;
         _xpSettingsStatus.TextAlign = ContentAlignment.MiddleLeft;
         _xpSettingsStatus.Font = new Font("Georgia", 9f, FontStyle.Bold | FontStyle.Italic);
@@ -949,6 +949,11 @@ internal sealed partial class MainForm : Form
             new XpRateOption(3, "3×"),
             new XpRateOption(5, "5×"),
             new XpRateOption(10, "10×"),
+            new XpRateOption(15, "15×"),
+            new XpRateOption(20, "20×"),
+            new XpRateOption(25, "25×"),
+            new XpRateOption(50, "50×"),
+            new XpRateOption(100, "100×"),
         });
     }
 
@@ -2005,7 +2010,7 @@ internal sealed partial class MainForm : Form
 
     private void PersistXpRate(string key, double multiplier)
     {
-        if (key is not ("xp_rate" or "bot_xp_rate") || multiplier is not (1 or 2 or 3 or 5 or 10))
+        if (key is not ("xp_rate" or "bot_xp_rate") || multiplier is not (1 or 2 or 3 or 5 or 10 or 15 or 20 or 25 or 50 or 100))
             throw new InvalidOperationException("Unsupported experience-rate selection.");
         bool serverRunning = _persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess());
         if (serverRunning)

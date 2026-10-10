@@ -268,6 +268,14 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+109. **Higher XP rates and companion PvP XP.** Owner, 2026-10-10. Implemented
+     in source **0.225.0**: launcher XP choices up to 100× for player and
+     autonomous bots; persistent companions earn PvP XP from their own
+     qualifying damage, using the autonomous-bot formula at the player XP rate
+     and capped at the owner's experience. Real-client checks are pending:
+     the higher rates apply after restart, and a companion's XP from a
+     player/bot kill matches the owner's at equal level.
+
 108. **AssistTrain companion mode and engagement review.** Owner, 2026-10-10.
      Implemented in source **0.223.0**: `/assisttrain` and manager group order,
      human damage-cast/weapon-attack calls, single-target damage and pet gates,

@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.224.1"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.225.0"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -204,9 +204,9 @@ public sealed class LauncherPresentationTests
         var botRate = (ComboBox)mainFormType.GetField("_botXpRate", HiddenInstance)!.GetValue(form)!;
         Assert.That(playerRate, Is.Not.SameAs(botRate));
         Assert.That(playerRate.Items.Cast<object>().Select(item => item.ToString()),
-            Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×" }));
+            Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×", "15×", "20×", "25×", "50×", "100×" }));
         Assert.That(botRate.Items.Cast<object>().Select(item => item.ToString()),
-            Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×" }));
+            Is.EqualTo(new[] { "1×  Original", "2×", "3×", "5×", "10×", "15×", "20×", "25×", "50×", "100×" }));
         var realmButtons = (System.Collections.IEnumerable)mainFormType.GetField("_realmGenerateButtons", HiddenInstance)!.GetValue(form)!;
         Assert.That(realmButtons.Cast<Button>().Count(button => button.Text == "ADD CREW"), Is.EqualTo(3));
         Assert.That(realmButtons.Cast<Button>().Count(button => button.Text == "ADD LV.50 CREW"), Is.EqualTo(3));
