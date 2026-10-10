@@ -22,6 +22,7 @@ namespace DOL.GS
         private const int ParticipantChaseDistance = 400;
         private const int OccupiedSquadDelayMs = 15_000;
         private const long SlowTickMilliseconds = 50;
+        private const long HoldRewardIntervalMs = 600_000;
         private static readonly Logger Log = LoggerManager.Create(typeof(BattlegroundCampaignManager));
         private static readonly object Gate = new();
         private static readonly Dictionary<ushort, Campaign> Campaigns = new();
@@ -45,6 +46,10 @@ namespace DOL.GS
             internal bool HasMonsterObjectives;
             internal int LastHumans;
             internal readonly Dictionary<string, string> SquadSkipReasons = new(StringComparer.Ordinal);
+            // Owner last seen on the keep, when it was seen, and the start of the current hold interval.
+            internal Guild HeldGuild;
+            internal long HeldSince;
+            internal long LastHoldReward;
         }
         private sealed class Camp
         {
@@ -243,6 +248,9 @@ namespace DOL.GS
                     GuardLord liveLord = campaign.Keep?.Guards.Values.OfType<GuardLord>().FirstOrDefault(lord => lord.IsAlive && lord.ObjectState == GameObject.eObjectState.Active);
                     if (liveLord != null && liveLord.SpawnTick != campaign.LordSpawnTick)
                     { campaign.LordParticipants.Clear(); campaign.LordSpawnTick = liveLord.SpawnTick; }
+                    SyncKeepHolder(campaign, now);
+                    try { PayKeepHoldReward(campaign, liveLord != null, now); }
+                    catch (Exception exception) { Log.Error($"BATTLEGROUND_KEEP_HOLD_REWARD_FAILED region={campaign.Definition.RegionId}", exception); }
                     // At most one captain per campaign per tick; the other due camps wait for later ticks.
                     bool captainSpawned = false;
                     foreach (Camp camp in campaign.Camps)
@@ -562,6 +570,12 @@ namespace DOL.GS
                 if (campaign.Keep == null) Say(player, "This map has no native central keep. Available field contracts, patrols and ambushes remain active; keep contracts and siege funding are unavailable.");
                 else if (!NativeLordReady(campaign)) Say(player, "This map has native keep scenery but no loaded native keep lord; capture contracts and siege funding are unavailable.");
                 else Say(player, $"Native siege objectives: {campaign.Keep.Doors.Count} actual doors and a loaded keep lord. Existing closed doors precede the lord; when no actual closed door exists the assault approaches the native lord directly.");
+                if (campaign.Keep != null)
+                {
+                    long now = Now;
+                    SyncKeepHolder(campaign, now);
+                    Say(player, KeepHoldStatus(campaign, now));
+                }
                 if (quest != null) Say(player, quest.Description);
                 foreach (Camp camp in campaign.Camps)
                     Say(player, $"Camp {camp.Index + 1}: {camp.Tokens}/{FundingThreshold}, {(CaptainAlive(camp) ? "captain alive" : "captain defeated; turn-ins closed")}, sponsor {camp.Guild?.Name ?? (camp.GroupSponsor != null ? "local group" : "open")}, commander at {camp.Position.X}, {camp.Position.Y}.");
@@ -770,6 +784,10 @@ namespace DOL.GS
             lock (Gate)
             {
                 if (!_running || keep == null || claimer == null || !Campaigns.TryGetValue((ushort)keep.Region, out Campaign campaign) || campaign.Keep != keep) return;
+                // A capture, or a re-claim after a release, starts a new hold clock for the claiming guild.
+                campaign.HeldGuild = keep.Guild;
+                campaign.HeldSince = Now;
+                campaign.LastHoldReward = 0;
                 var members = WorldMgr.GetPlayersCloseToSpot((ushort)keep.Region, keep.X, keep.Y, keep.Z, WorldMgr.MAX_EXPFORKILL_DISTANCE)
                     .Cast<GameLiving>().Concat(claimer.Group?.GetMembersInTheGroup() ?? new List<GameLiving> { claimer }).Distinct();
                 foreach (GamePlayer player in members.OfType<GamePlayer>())
@@ -780,7 +798,74 @@ namespace DOL.GS
                         quest.Credit("captures");
                 }
                 campaign.LordParticipants.Clear();
+                string holder = keep.Guild?.Name ?? claimer.Name;
+                foreach (GamePlayer player in ClientService.Instance.GetPlayersOfRegion(WorldMgr.GetRegion(campaign.Definition.RegionId)))
+                    Say(player, $"{holder} has captured {keep.Name}!");
+                Log.Info($"BATTLEGROUND_KEEP_CAPTURED region={campaign.Definition.RegionId} keep={keep.KeepID} guild={keep.Guild?.Name ?? "none"}");
             }
+        }
+
+        // Holding reward: 2% of a level's XP every ten gameplay minutes, and two siege tokens for humans.
+        public static bool HoldRewardDue(long heldSince, long lastReward, long now) =>
+            heldSince > 0 && now - Math.Max(heldSince, lastReward) >= HoldRewardIntervalMs;
+
+        public static long HoldRewardExperience(long experienceForLevel) => experienceForLevel * 2 / 100;
+
+        // The owner is compared with the one last seen. A claim restarts the clock in OnKeepClaimed;
+        // a loss (a release, or the garrison taking the keep back) is noticed here and clears it.
+        private static void SyncKeepHolder(Campaign campaign, long now)
+        {
+            Guild holder = campaign.Keep?.Guild;
+            if (holder == campaign.HeldGuild) return;
+            campaign.HeldGuild = holder;
+            campaign.HeldSince = holder == null ? 0 : now;
+            campaign.LastHoldReward = 0;
+        }
+
+        private static void PayKeepHoldReward(Campaign campaign, bool lordAlive, long now)
+        {
+            Guild holder = campaign.HeldGuild;
+            // Frontier Wardens hold unclaimed keeps; only a real guild earns the hold.
+            if (campaign.HeldSince <= 0 || !PvpCombatant.IsRealGuild(holder) || PvpKeepCampaign.IsGarrison(holder)) return;
+            // The clock pauses while the lord is down: each such tick moves the interval start forward.
+            if (!lordAlive) { campaign.LastHoldReward = now; return; }
+            if (!HoldRewardDue(campaign.HeldSince, campaign.LastHoldReward, now)) return;
+            campaign.LastHoldReward = now;
+            ushort region = campaign.Definition.RegionId;
+            GamePlayer[] humans = ClientService.Instance.GetPlayersOfRegion(WorldMgr.GetRegion(region))
+                .Where(player => player.Guild == holder && player.IsAlive && player.ObjectState == GameObject.eObjectState.Active && IsEligible(player))
+                .ToArray();
+            // Encounter and temporary helper bots are excluded by SuppressLootAndProgress; only admitted participants count.
+            GameBot[] bots = AutonomousBotRegistry.Snapshot()
+                .Where(bot => bot.IsAutonomousWorldBot && !bot.SuppressLootAndProgress && bot.Guild == holder && bot.CurrentRegionID == region &&
+                    bot.IsAlive && bot.ObjectState == GameObject.eObjectState.Active && AutonomousBattlegroundParticipation.IsParticipant(bot) && IsEligible(bot))
+                .ToArray();
+            foreach (GamePlayer human in humans)
+            {
+                long experience = HoldRewardExperience(LevelExperience(human.Level));
+                if (experience > 0) human.GainExperience(eXPSource.Quest, experience);
+                GiveTokens(human, 2);
+            }
+            foreach (GameBot bot in bots)
+            {
+                long experience = HoldRewardExperience(LevelExperience(bot.Level));
+                if (experience > 0) bot.GainExperience(eXPSource.Quest, experience);
+            }
+            long minutes = (now - campaign.HeldSince) / 60_000;
+            Log.Info($"BATTLEGROUND_KEEP_HOLD_REWARD region={region} guild={holder.Name} humans={humans.Length} bots={bots.Length} minutes={minutes}");
+        }
+
+        // The XP between a level and the next: the same span the contract rewards measure.
+        private static long LevelExperience(int level) =>
+            GamePlayer.GetExperienceAmountForLevel(level) - GamePlayer.GetExperienceAmountForLevel(level - 1);
+
+        private static string KeepHoldStatus(Campaign campaign, long now)
+        {
+            Guild holder = campaign.HeldGuild;
+            if (!PvpCombatant.IsRealGuild(holder) || PvpKeepCampaign.IsGarrison(holder))
+                return $"{campaign.Keep.Name} is held by its garrison.";
+            long minutes = Math.Max(0, now - campaign.HeldSince) / 60_000;
+            return $"{campaign.Keep.Name} is held by {holder.Name} for {minutes} minutes.";
         }
 
         private static bool NativeLordReady(Campaign campaign) => campaign.Keep != null && campaign.Keep.Guards.Values.OfType<GuardLord>().Any();

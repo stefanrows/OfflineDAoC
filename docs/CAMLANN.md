@@ -375,6 +375,20 @@ hard-codes regions 1, 100 and 200. The frontier boundary is lifted only for
 admitted participants inside their own campaign region; the movement blocks
 for everyone else are unchanged.
 
+**Holding the keep.** A real guild that claims a campaign keep (after the lord
+falls and the steward accepts the claim) holds it until it is released or
+taken. The claim starts the hold clock; a Frontier Wardens garrison hold earns
+nothing. While the guild holds the keep and its lord is alive, every ten
+gameplay minutes its humans and admitted autonomous participant bots in the
+region receive 2% of their level's XP through the contract XP path. Humans also
+receive two siege tokens. Encounter actors, temporary helpers and companions are
+excluded. The clock pauses while the lord is down. A server restart restarts it,
+because the hold is not persisted. Each capture is announced to everyone in the
+region (`BATTLEGROUND_KEEP_CAPTURED`), each payout logs
+`BATTLEGROUND_KEEP_HOLD_REWARD`, and `/bgs status` names the holder and the
+minutes held. Owner check pending: payout cadence, XP amount and token count in
+play.
+
 The low brackets have almost no eligible bots. At the time of writing none of
 the non-retired autonomous bots is level 1–9, one is 10–14 and sixteen are
 15–19, while brackets 20–44 hold 116–605 each. The encounter director therefore
