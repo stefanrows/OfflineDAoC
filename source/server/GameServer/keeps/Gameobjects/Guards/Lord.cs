@@ -193,11 +193,14 @@ namespace DOL.GS.Keeps
                 }
             }
 
+            long mark = System.Diagnostics.Stopwatch.GetTimestamp();
             base.Die(killer);
+            mark = PvpKeepCampaign.LogSlowKeepStep(Component?.Keep, "lord_die", "base_die", mark);
 
             if (Component != null )
             {
                 GameServer.ServerRules.ResetKeep(this, killer);
+                PvpKeepCampaign.LogSlowKeepStep(Component.Keep, "lord_die", "reset_keep", mark);
             }
         }
 

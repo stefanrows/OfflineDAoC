@@ -253,6 +253,19 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void ProgressCountsAsRecentOnlyInsideTheStuckWallWindow()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.IsRecentProgress(89_999, 0), Is.True, "Inside the window");
+                Assert.That(AutonomousBattlegroundParticipation.IsRecentProgress(90_000, 0), Is.False, "Same threshold as IsStuck");
+                Assert.That(AutonomousBattlegroundParticipation.IsRecentProgress(90_000, 0),
+                    Is.EqualTo(!AutonomousBattlegroundParticipation.IsStuck(300_001, 0, 90_000, 0, hadTurn: true)),
+                    "Recent progress is the complement of the wall test that makes a participant stuck");
+            });
+        }
+
+        [Test]
         public void FrontierMerchantOffsetsAreDistinct()
         {
             (int dx, int dy)[] offsets = FrontierMedallionMerchants.MerchantOffsets().ToArray();

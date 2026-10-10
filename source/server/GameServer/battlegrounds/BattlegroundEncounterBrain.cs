@@ -30,20 +30,26 @@ namespace DOL.GS
                 _bot.CurrentRegion?.GetZone(goal.X, goal.Y) != _zone ||
                 target != null && target.CurrentZone != _zone)
                 return false;
-            var nav = PathfindingProvider.Instance;
-            Vector3 position = new(goal.X, goal.Y, goal.Z);
-            if (!nav.IsAvailable || !nav.HasNavmesh(_zone) ||
-                !nav.TrySnapToMesh(_zone, ref position, 100) || Math.Abs(position.Z - goal.Z) > 100)
-                return false;
-            Span<WrappedPathfindingNode> nodes = stackalloc WrappedPathfindingNode[512];
-            var path = nav.GetPathStraight(_zone, new(_bot.X, _bot.Y, _bot.Z), position,
-                nav.BlockingDoorAvoidanceFilters, nodes);
-            if (path.Status != PathfindingStatus.PathFound)
+            if (!ProveRoute(_zone, new(_bot.X, _bot.Y, _bot.Z), goal, out Vector3 position))
                 return false;
             _goal = position;
             _target = target;
             _nextPath = 0;
             return true;
+        }
+
+        // The navmesh proof for a goal: snap it to the mesh, then require a full straight path from the
+        // actor's point. Shared with the squad director, which proves a route before building any actor.
+        internal static bool ProveRoute(Zone zone, Vector3 from, Point3D goal, out Vector3 position)
+        {
+            var nav = PathfindingProvider.Instance;
+            position = new(goal.X, goal.Y, goal.Z);
+            if (!nav.IsAvailable || !nav.HasNavmesh(zone) ||
+                !nav.TrySnapToMesh(zone, ref position, 100) || Math.Abs(position.Z - goal.Z) > 100)
+                return false;
+            Span<WrappedPathfindingNode> nodes = stackalloc WrappedPathfindingNode[512];
+            var path = nav.GetPathStraight(zone, from, position, nav.BlockingDoorAvoidanceFilters, nodes);
+            return path.Status == PathfindingStatus.PathFound;
         }
 
         internal bool PrepareTurn(BotBrain brain)

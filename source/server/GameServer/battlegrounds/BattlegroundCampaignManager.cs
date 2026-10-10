@@ -241,7 +241,7 @@ namespace DOL.GS
                 }
                 Stopwatch total = Stopwatch.StartNew();
                 Stopwatch phase = Stopwatch.StartNew();
-                long captainsMs = 0, encountersMs = 0, squadsMs = 0;
+                long captainsMs = 0, encountersMs = 0, squadsMs = 0, humansMs = 0, spawnMs = 0;
                 try
                 {
                     long now = Now;
@@ -301,6 +301,7 @@ namespace DOL.GS
                     encountersMs = phase.ElapsedMilliseconds;
                     phase.Restart();
                     int humans = CountHumans(campaign);
+                    humansMs = phase.ElapsedMilliseconds;
                     if ((humans > 0) != (campaign.LastHumans > 0))
                         Log.Info($"BATTLEGROUND_OCCUPANCY region={campaign.Definition.RegionId} humans={humans}");
                     if (humans > 0 && campaign.LastHumans == 0)
@@ -309,12 +310,16 @@ namespace DOL.GS
                     if (now >= campaign.NextSquadAt)
                     {
                         campaign.NextSquadAt = now + 120_000;
+                        long spawnStart = phase.ElapsedMilliseconds;
                         SpawnSquad(campaign, false);
+                        spawnMs += phase.ElapsedMilliseconds - spawnStart;
                     }
                     if (now >= campaign.NextAmbushAt)
                     {
                         campaign.NextAmbushAt = now + 5 * 60_000;
+                        long spawnStart = phase.ElapsedMilliseconds;
                         SpawnSquad(campaign, true);
+                        spawnMs += phase.ElapsedMilliseconds - spawnStart;
                     }
                     if (campaign.KillCredits.Count > 2048)
                         foreach (string key in campaign.KillCredits.Where(pair => now - pair.Value > 300_000).Select(pair => pair.Key).ToArray())
@@ -325,7 +330,7 @@ namespace DOL.GS
                 }
                 catch (Exception exception) { Log.Error($"BATTLEGROUND_CAMPAIGN_TICK_FAILED region={campaign.Definition.RegionId}", exception); }
                 if (total.ElapsedMilliseconds > SlowTickMilliseconds)
-                    Log.Warn($"BATTLEGROUND_TICK_SLOW region={campaign.Definition.RegionId} ms={total.ElapsedMilliseconds} captains_ms={captainsMs} encounters_ms={encountersMs} squads_ms={squadsMs} actors={ActorCount(campaign)}");
+                    Log.Warn($"BATTLEGROUND_TICK_SLOW region={campaign.Definition.RegionId} ms={total.ElapsedMilliseconds} captains_ms={captainsMs} encounters_ms={encountersMs} squads_ms={squadsMs} humans_ms={humansMs} spawn_ms={spawnMs} actors={ActorCount(campaign)}");
                 return 1000;
             }
         }
@@ -471,30 +476,50 @@ namespace DOL.GS
             return true;
         }
 
-        private static void LogSquadSkipped(Campaign campaign, string kind, string reason, int participants)
+        private static void LogSquadSkipped(Campaign campaign, string kind, string reason, int participants, string detail = null)
         {
-            if (campaign.SquadSkipReasons.TryGetValue(kind, out string previous) && previous == reason) return;
-            campaign.SquadSkipReasons[kind] = reason;
-            Log.Info($"BATTLEGROUND_SQUAD_SKIPPED region={campaign.Definition.RegionId} kind={kind} reason={reason} participants={participants} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
+            string key = detail == null ? reason : $"{reason} detail={detail}";
+            if (campaign.SquadSkipReasons.TryGetValue(kind, out string previous) && previous == key) return;
+            campaign.SquadSkipReasons[kind] = key;
+            Log.Info($"BATTLEGROUND_SQUAD_SKIPPED region={campaign.Definition.RegionId} kind={kind} reason={reason}{(detail == null ? string.Empty : $" detail={detail}")} participants={participants} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
         }
 
         private static string FormatPoint(Point3D point) => $"{point.X},{point.Y},{point.Z}";
+
+        // Patrols and ambushes draw real players first (bug 125: occupied human positions). An autonomous
+        // battleground participant (a world bot admitted to the campaign and standing inside it) is a target
+        // only outside every sanctuary and portal keep, and only while no real player is a target. Autonomous
+        // bots outside the battleground still count toward local guild presence, but never start a squad.
+        public static GameLiving[] SquadTargets(IEnumerable<GameLiving> participants) =>
+            SquadTargets(participants, AutonomousBattlegroundParticipation.IsParticipant, actor => OutsideSanctuary(actor, new Point3D(actor)));
+
+        public static GameLiving[] SquadTargets(IEnumerable<GameLiving> participants, Func<GameNPC, bool> isParticipant, Func<GameLiving, bool> outsideSanctuary)
+        {
+            GameLiving[] humans = participants.Where(actor => actor is GamePlayer).ToArray();
+            GameLiving[] bots = participants.Where(actor => actor is GameBot bot && isParticipant(bot) && outsideSanctuary(actor)).ToArray();
+            return humans.Concat(bots).ToArray();
+        }
 
         private static void SpawnSquad(Campaign campaign, bool ambush)
         {
             string kind = ambush ? "ambush" : "patrol";
             GameLiving[] participants = LocalParticipants(campaign);
-            if (participants.Length == 0) { LogSquadSkipped(campaign, kind, "no_participants", 0); return; }
-            GameLiving participant = participants[campaign.Rotation++ % participants.Length];
+            GameLiving[] targets = SquadTargets(participants);
+            if (targets.Length == 0) { LogSquadSkipped(campaign, kind, "no_participants", 0); return; }
+            // A real player leads whenever one is a target; a bot participant leads only when none is.
+            GameLiving[] humans = targets.Where(actor => actor is GamePlayer).ToArray();
+            GameLiving[] pool = humans.Length > 0 ? humans : targets;
+            GameLiving participant = pool[campaign.Rotation++ % pool.Length];
             if (ambush)
             {
-                participant = participants.FirstOrDefault(actor => !PvpCombatant.IsSafeArea(actor) && !PvpCombatant.IsInvulnerableToAttack(actor) &&
-                    (actor is not GamePlayer human || human.IsDoingQuest(typeof(BattlegroundCampaignQuest)) is BattlegroundCampaignQuest quest && quest.Region == campaign.Definition.RegionId));
-                if (participant == null) { LogSquadSkipped(campaign, kind, "no_ambush_target", participants.Length); return; }
+                // targets lists real players first, so a qualifying player is chosen before any bot.
+                participant = targets.FirstOrDefault(actor => !PvpCombatant.IsSafeArea(actor) && !PvpCombatant.IsInvulnerableToAttack(actor) &&
+                    (actor is GameBot || (actor is GamePlayer human && human.IsDoingQuest(typeof(BattlegroundCampaignQuest)) is BattlegroundCampaignQuest quest && quest.Region == campaign.Definition.RegionId)));
+                if (participant == null) { LogSquadSkipped(campaign, kind, "no_ambush_target", targets.Length); return; }
             }
             int localParty = participant.Group?.GetMembersInTheGroup().Count(member => member.CurrentRegionID == campaign.Definition.RegionId && IsEligible(member)) ?? 1;
             int size = Math.Clamp(localParty, 1, 8);
-            if (ActorCount(campaign) + size > DirectorCapacity(campaign)) { LogSquadSkipped(campaign, kind, "actor_cap", participants.Length); return; }
+            if (ActorCount(campaign) + size > DirectorCapacity(campaign)) { LogSquadSkipped(campaign, kind, "actor_cap", targets.Length); return; }
             // Effective current allies count against a guild's local presence.
             // Rotate ties, and select actual underrepresented autonomous guilds.
             GameBot[] representatives = AutonomousBotRegistry.Snapshot()
@@ -517,17 +542,29 @@ namespace DOL.GS
             bool targetParticipant = ambush || OutsideSanctuary(participant, participantPoint);
             Point3D goal = targetParticipant ? participantPoint : new Point3D(camps[nearest]);
             Camp origin = campaign.Camps[ambush ? nearest : PatrolOriginIndex(nearest, camps.Count, campaign.Rotation)];
+            // Routes are proved before any actor exists: a failed proof used to build and delete up to
+            // eight bots, twice per squad. A participant goal that cannot be proved or spawns nobody falls
+            // back once to the nearest camp, as before.
+            Point3D fallback = new Point3D(camps[nearest]);
+            int attempts = targetParticipant && !ambush ? 2 : 1;
             string name = ambush ? "Ambush patrol" : "Battleground patrol";
-            Encounter encounter = new() { Goal = goal, Participant = participant, Level = (byte)Math.Clamp(participant.Level, campaign.Definition.MinLevel, campaign.Definition.MaxLevel),
-                ExpiresAt = Now + (ambush ? 6 : 10) * 60_000 };
-            SpawnParty(campaign, encounter, origin.Position, guild, null, name, size);
-            // A participant point with no proved route must not leave the patrol empty.
-            if (encounter.Members.Count == 0 && targetParticipant && !ambush)
+            string failure = null;
+            Encounter encounter = null;
+            for (int attempt = 0; encounter == null && attempt < attempts; attempt++)
             {
-                encounter.Goal = new Point3D(camps[nearest]);
-                SpawnParty(campaign, encounter, origin.Position, guild, null, name, size);
+                Point3D attemptGoal = attempt == 0 ? goal : fallback;
+                if (!BattlegroundEncounterActor.CanReach(campaign.Definition.RegionId, origin.Position, attemptGoal))
+                {
+                    failure ??= "no_route";
+                    continue;
+                }
+                Encounter candidate = new() { Goal = attemptGoal, Participant = participant, Level = (byte)Math.Clamp(participant.Level, campaign.Definition.MinLevel, campaign.Definition.MaxLevel),
+                    ExpiresAt = Now + (ambush ? 6 : 10) * 60_000 };
+                SpawnParty(campaign, candidate, origin.Position, guild, null, name, size);
+                if (candidate.Members.Count > 0) encounter = candidate;
+                else failure = "spawn_failed";
             }
-            if (encounter.Members.Count == 0) { LogSquadSkipped(campaign, kind, "route_or_spawn_failed", participants.Length); return; }
+            if (encounter == null) { LogSquadSkipped(campaign, kind, "route_or_spawn_failed", targets.Length, failure ?? "no_route"); return; }
             campaign.Encounters.Add(encounter);
             campaign.SquadSkipReasons.Remove(kind);
             Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind={kind} members={encounter.Members.Count}/{size} level={encounter.Level} guild={guild?.Name ?? "none"} origin=camp{origin.Index + 1} goal={FormatPoint(encounter.Goal)} target={participant.Name ?? "none"} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");

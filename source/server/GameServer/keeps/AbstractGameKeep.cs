@@ -576,8 +576,9 @@ namespace DOL.GS.Keeps
 				InternalID = DBKeep.ObjectId;
 			}
 			else
-				GameServer.Database.SaveObject(DBKeep);
+				KeepSaveBatch.Save(DBKeep);
 
+			KeepSaveBatch.Prefetch<DbKeepComponent>(KeepComponents.ConvertAll(component => component.InternalID));
 			foreach (GameKeepComponent comp in this.KeepComponents)
 				comp.SaveIntoDatabase();
 		}
@@ -843,6 +844,7 @@ namespace DOL.GS.Keeps
 		/// </summary>
 		public virtual void Release()
 		{
+			using var batch = KeepSaveBatch.Begin("release", this);
 			RemoveRelicPad();
 			Guild.ClaimedKeeps.Remove(this);
 			PlayerMgr.BroadcastRelease(this);
@@ -875,6 +877,8 @@ namespace DOL.GS.Keeps
 		/// <param name="targetLevel">the target level</param>
 		public virtual void ChangeLevel(byte targetLevel)
 		{
+			using var batch = KeepSaveBatch.Begin("change_level", this);
+			long mark = System.Diagnostics.Stopwatch.GetTimestamp();
 			this.Level = targetLevel;
 
 			foreach (GameKeepComponent comp in this.KeepComponents)
@@ -886,6 +890,7 @@ namespace DOL.GS.Keeps
 
 				comp.FillPositions();
 			}
+			mark = PvpKeepCampaign.LogSlowKeepStep(this, "change_level", "components", mark);
 
 			foreach (GameKeepGuard guard in this.Guards.Values)
 			{
@@ -896,16 +901,20 @@ namespace DOL.GS.Keeps
 			{
 				p.ChangePatrolLevel();
 			}
+			mark = PvpKeepCampaign.LogSlowKeepStep(this, "change_level", "guards_patrols", mark);
 
 			foreach (GameKeepDoor door in this.Doors.Values)
 			{
 				door.UpdateLevel();
 			}
+			mark = PvpKeepCampaign.LogSlowKeepStep(this, "change_level", "doors", mark);
 
 			KeepGuildMgr.SendLevelChangeMessage(this);
 			ResetPlayersOfKeep();
+			mark = PvpKeepCampaign.LogSlowKeepStep(this, "change_level", "reset_players", mark);
 
 			this.SaveIntoDatabase();
+			PvpKeepCampaign.LogSlowKeepStep(this, "change_level", "save", mark);
 		}
 
 

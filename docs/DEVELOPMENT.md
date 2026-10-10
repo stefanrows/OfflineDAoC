@@ -211,6 +211,15 @@ the helper's `builder/base/zones` tree. `--install-root` and `--output` support
 another complete installation and developer directory. Geometry generation can
 take several minutes; no server is started and no live mesh is overwritten.
 
+After staging, the helper checks every battleground keep centre (central and portal) on
+the zone's own mesh: a path from each realm landing of its region (the portal keep centres)
+must exist with the server's default filters. `tools/dev/bg-keep-connectivity.cpp` runs
+an unbounded flood fill, and also reports the gates-closed case (Door polygons excluded)
+and the server's 256-polygon corridor limit. Results go to `bg-keep-connectivity.txt`,
+and the helper exits 3 when a keep is unreachable; the meshes are staged either way. The
+terrain height under each keep piece is logged as `BG_KEEP_GROUND_SUMMARY`
+(`bg-keep-ground.txt`).
+
 #### Server-built battleground keeps
 
 The keeps for 234, 235, 236, 237, 238, 240, 241 and 242 are built by the server

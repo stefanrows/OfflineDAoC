@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using DOL.Database;
 using NUnit.Framework;
 
@@ -64,6 +65,30 @@ namespace DOL.GS.Tests
                         Assert.That(origin, Is.InRange(0, count - 1));
                         Assert.That(origin, Is.Not.EqualTo(nearest), $"count={count} nearest={nearest} rotation={rotation}");
                     }
+        }
+
+        [Test]
+        public void SquadTargetsPutRealPlayersFirstAndAdmitParticipantBotsOutsideSanctuaries()
+        {
+            // Temporary helpers are GameNPC and never targets. Participant bots follow the real players and
+            // are dropped while standing in a sanctuary or portal keep; non-participant bots are never targets.
+            var bot = (GameBot)RuntimeHelpers.GetUninitializedObject(typeof(GameBot));
+            var sanctuaryBot = (GameBot)RuntimeHelpers.GetUninitializedObject(typeof(GameBot));
+            var helper = new GameNPC();
+            var player = (GamePlayer)RuntimeHelpers.GetUninitializedObject(typeof(GamePlayer));
+            Func<GameNPC, bool> participating = npc => ReferenceEquals(npc, bot) || ReferenceEquals(npc, sanctuaryBot);
+            Func<GameLiving, bool> outside = actor => !ReferenceEquals(actor, sanctuaryBot);
+            Assert.Multiple(() =>
+            {
+                Assert.That(BattlegroundCampaignManager.SquadTargets(new GameLiving[] { helper, bot, null, player, sanctuaryBot }, participating, outside),
+                    Is.EqualTo(new GameLiving[] { player, bot }), "Real players first, then participant bots outside sanctuaries");
+                Assert.That(BattlegroundCampaignManager.SquadTargets(new GameLiving[] { bot, player }, _ => false, _ => true),
+                    Is.EqualTo(new GameLiving[] { player }), "A bot outside the battleground is never a target");
+                Assert.That(BattlegroundCampaignManager.SquadTargets(new GameLiving[] { bot }, _ => true, _ => true),
+                    Is.EqualTo(new GameLiving[] { bot }), "Participant bots are targets when no player is present");
+                Assert.That(BattlegroundCampaignManager.SquadTargets(new GameLiving[] { sanctuaryBot }, _ => true, outside),
+                    Is.Empty, "A bot in a sanctuary or portal keep is never a target");
+            });
         }
 
         [Test]

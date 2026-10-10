@@ -418,7 +418,7 @@ namespace DOL.GS.Keeps
 			DbKeepComponent obj = null;
 			bool New = false;
 			if (InternalID != null)
-				obj = GameServer.Database.FindObjectByKey<DbKeepComponent>(InternalID);
+				obj = KeepSaveBatch.Pending<DbKeepComponent>(InternalID) ?? GameServer.Database.FindObjectByKey<DbKeepComponent>(InternalID);
 			if (obj == null)
 			{
 				obj = new DbKeepComponent();
@@ -441,7 +441,7 @@ namespace DOL.GS.Keeps
 			}
 			else
 			{
-				GameServer.Database.SaveObject(obj);
+				KeepSaveBatch.Save(obj);
 			}
 			base.SaveIntoDatabase();
 		}

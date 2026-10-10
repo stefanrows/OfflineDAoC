@@ -60,4 +60,25 @@ public sealed class UT_AutonomousRouteRecoveryPolicy
             Assert.That(AutonomousRouteRecoveryPolicy.FailuresBeforeSafeRelocation, Is.EqualTo(3));
         });
     }
+
+    [Test]
+    public void PocketEscapeMustLeaveTheActorsOwnFloor()
+    {
+        var floor = new System.Numerics.Vector3(311960, 470002, 5203);
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRouteRecoveryPolicy.IsRealPocketEscape(floor, floor), Is.False,
+                "bug 132: the Connacht road escape resolved to the bot's own floor and looped every replan");
+            Assert.That(AutonomousRouteRecoveryPolicy.IsRealPocketEscape(floor,
+                floor + new System.Numerics.Vector3(0, -1, 0)), Is.False,
+                "bug 132: the Muire pocket snapped its escape one unit from the actor");
+            Assert.That(AutonomousRouteRecoveryPolicy.IsRealPocketEscape(floor,
+                floor + new System.Numerics.Vector3(32, 0, 0)), Is.False);
+            Assert.That(AutonomousRouteRecoveryPolicy.IsRealPocketEscape(floor,
+                floor + new System.Numerics.Vector3(33, 0, 0)), Is.True);
+            Assert.That(AutonomousRouteRecoveryPolicy.IsRealPocketEscape(floor,
+                floor + new System.Numerics.Vector3(0, 0, -100)), Is.True,
+                "a height-only offset still moves the actor off its ledge");
+        });
+    }
 }

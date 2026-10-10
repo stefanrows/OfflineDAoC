@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -45,6 +46,12 @@ public static class AutonomousBattlegroundDriver
         public long RouteUntil;
         public bool HasPosition;
         public int ProgressX, ProgressY;
+        // Set while a follower holds near a leader that is itself making real progress.
+        public bool HoldProgress;
+        // No camp had a proven route until this time; the bot stands rather than re-proving every camp each turn.
+        public long CampsUnreachableUntil;
+        // Goals whose route failure is already logged in this visit.
+        public HashSet<(int, int, int)> FailedGoals;
     }
 
     private static readonly ConditionalWeakTable<GameBot, State> States = new();
@@ -74,6 +81,7 @@ public static class AutonomousBattlegroundDriver
 
         bool engaged = brain.HasAggro || bot.InCombat;
         state.Action = engaged ? "engaged" : "idle";
+        state.HoldProgress = false;
         if (!engaged)
         {
             GameBot leader = bot.Group?.LivingLeader as GameBot;
@@ -147,11 +155,34 @@ public static class AutonomousBattlegroundDriver
             Stand(bot);
             return;
         }
-        int index = state.Camp % camps.Length;
-        if (bot.GetDistanceTo(camps[index]) <= ArrivalDistance)
-            index = ++state.Camp % camps.Length;
+        RoamCamps(bot, state, camps, now);
+    }
+
+    /// <summary>
+    /// Walks toward the first camp with a proven route, starting at the bot's current camp and skipping arrived
+    /// or unreachable ones. When no camp is reachable the bot stands, and the stuck rule still removes it.
+    /// </summary>
+    private static void RoamCamps(GameBot bot, State state, Point3D[] camps, long now)
+    {
+        int count = camps.Length;
+        int start = state.Camp % count;
+        if (bot.GetDistanceTo(camps[start]) <= ArrivalDistance)
+            start = ++state.Camp % count;
         state.Action = "roam-camp";
-        GoTo(bot, state, camps[index], now);
+        if (now < state.CampsUnreachableUntil)
+        {
+            Stand(bot);
+            return;
+        }
+        for (int offset = 0; offset < count; offset++)
+        {
+            int index = (start + offset) % count;
+            if (!GoTo(bot, state, camps[index], now)) continue;
+            state.Camp = index;
+            state.CampsUnreachableUntil = 0;
+            return;
+        }
+        state.CampsUnreachableUntil = now + RouteIntervalMilliseconds;
     }
 
     private static void Assist(BotBrain brain, GameBot bot, GameBot leader, State state, long now)
@@ -175,6 +206,7 @@ public static class AutonomousBattlegroundDriver
         {
             state.Action = "hold-leader";
             state.Goal = follow;
+            state.HoldProgress = AutonomousBattlegroundParticipation.IsProgressing(leader);
             Stand(bot);
         }
     }
@@ -221,8 +253,9 @@ public static class AutonomousBattlegroundDriver
         {
             state.RouteGoal = goal;
             state.RouteUntil = now + RouteIntervalMilliseconds;
-            state.RouteOk = PathExists(bot, goal, out state.RoutePosition);
+            state.RouteOk = PathExists(bot, goal, out state.RoutePosition, out string reason);
             if (state.RouteOk && !bot.IsCasting) bot.PathTo(state.RoutePosition, bot.MaxSpeed);
+            if (!state.RouteOk) RecordRouteFailure(bot, state, goal, reason);
         }
         if (!state.RouteOk)
         {
@@ -232,17 +265,84 @@ public static class AutonomousBattlegroundDriver
         return true;
     }
 
-    private static bool PathExists(GameBot bot, Point3D goal, out Vector3 position)
+    // Logged once per goal and visit: the cause of an unproven route, for the next live run.
+    private static void RecordRouteFailure(GameBot bot, State state, Point3D goal, string reason)
+    {
+        state.FailedGoals ??= new HashSet<(int, int, int)>();
+        if (!state.FailedGoals.Add((goal.X, goal.Y, goal.Z))) return;
+        AutonomousBattlegroundParticipation.RecordRouteFailure(bot, bot.CurrentRegionID, state.Action,
+            $"{goal.X},{goal.Y},{goal.Z}", $"{bot.X},{bot.Y},{bot.Z}", reason);
+    }
+
+    /// <summary>
+    /// Proves a walkable route to the goal, reporting the first failed check in <paramref name="reason"/>.
+    /// The blocking-door filter is tried first. Then the default filters are accepted when every closed gate on
+    /// the route is one this bot may pass, which is the native mover's own rule: it plots with default filters and
+    /// exempts friendly keep doors. Portal keeps hold the battleground landings and their gates stay closed, so
+    /// the blocking-door filter alone cannot leave them.
+    /// </summary>
+    private static bool PathExists(GameBot bot, Point3D goal, out Vector3 position, out string reason)
     {
         position = default;
+        reason = "no_navmesh";
         Zone zone = bot.CurrentZone;
         var nav = PathfindingProvider.Instance;
         if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone)) return false;
         position = new(goal.X, goal.Y, goal.Z);
-        if (!nav.TrySnapToMesh(zone, ref position, 100) || Math.Abs(position.Z - goal.Z) > 100) return false;
+        if (!nav.TrySnapToMesh(zone, ref position, 100))
+        {
+            reason = "off_mesh";
+            return false;
+        }
+        if (Math.Abs(position.Z - goal.Z) > 100)
+        {
+            reason = "z_mismatch";
+            return false;
+        }
+        Vector3 from = new(bot.X, bot.Y, bot.Z);
         Span<WrappedPathfindingNode> nodes = stackalloc WrappedPathfindingNode[512];
-        return nav.GetPathStraight(zone, new(bot.X, bot.Y, bot.Z), position, nav.BlockingDoorAvoidanceFilters, nodes).Status == PathfindingStatus.PathFound;
+        if (nav.GetPathStraight(zone, from, position, nav.BlockingDoorAvoidanceFilters, nodes).Status == PathfindingStatus.PathFound)
+        {
+            reason = null;
+            return true;
+        }
+        PathfindingResult open = nav.GetPathStraight(zone, from, position, nav.DefaultFilters, nodes);
+        if (open.Status != PathfindingStatus.PathFound)
+        {
+            reason = "no_route";
+            return false;
+        }
+        if (CrossesBlockedDoor(bot, nodes, open.NodeCount))
+        {
+            reason = "closed_gate";
+            return false;
+        }
+        reason = null;
+        return true;
     }
+
+    /// <summary>True when a door near the route's door nodes blocks this bot, as in the native Pathfinder.</summary>
+    private static bool CrossesBlockedDoor(GameBot bot, Span<WrappedPathfindingNode> nodes, int count)
+    {
+        if (bot.CurrentRegion == null) return false;
+        var doors = new List<GameDoorBase>();
+        for (int i = 0; i < count; i++)
+        {
+            if ((nodes[i].Flags & EDtPolyFlags.AnyDoor) == 0) continue;
+            Vector3 point = nodes[i].Position;
+            doors.Clear();
+            bot.CurrentRegion.GetInRadius(new Point3D(point.X, point.Y, point.Z), eGameObjectType.DOOR, Pathfinder.DOOR_SEARCH_DISTANCE, doors);
+            foreach (GameDoorBase door in doors)
+                if (IsRouteBlockingDoor(door.State == eDoorState.Closed, door.CanBeOpenedViaInteraction,
+                    door is GameKeepDoor keepDoor && Pathfinder.CanUseFriendlyKeepDoor(bot, keepDoor)))
+                    return true;
+        }
+        return false;
+    }
+
+    /// <summary>The native mover's closed-door rule: a closed gate that interaction cannot open blocks unless the bot may pass it.</summary>
+    public static bool IsRouteBlockingDoor(bool closed, bool openableByInteraction, bool friendlyKeepDoor) =>
+        closed && !openableByInteraction && !friendlyKeepDoor;
 
     private static void Stand(GameBot bot)
     {
@@ -250,13 +350,16 @@ public static class AutonomousBattlegroundDriver
         bot.StopMoving();
     }
 
-    /// <summary>Real progress is combat, arrival, or ground covered since the last recorded progress point.</summary>
+    /// <summary>
+    /// Real progress is combat, arrival, ground covered since the last recorded progress point, or a follower
+    /// holding near a leader that is itself progressing.
+    /// </summary>
     private static void Observe(GameBot bot, State state, bool engaged)
     {
         bool arrived = state.Goal != null && bot.GetDistanceTo(state.Goal) <= ArrivalDistance;
         bool moved = !state.HasPosition ||
             Math.Max(Math.Abs(bot.X - state.ProgressX), Math.Abs(bot.Y - state.ProgressY)) >= ProgressDistance;
-        if (!engaged && !arrived && !moved) return;
+        if (!engaged && !arrived && !moved && !state.HoldProgress) return;
         if (moved)
         {
             state.HasPosition = true;

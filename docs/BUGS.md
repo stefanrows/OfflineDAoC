@@ -61,6 +61,149 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+130. **Lion's Den and Leirvik keeps still have no lord.** Installed 0.234.0
+     startup: `BATTLEGROUND_KEEP_UNAVAILABLE region=235 keep=141
+     reason=no_closed_door` and `region=242 keep=134 reason=no_lord_point`.
+     Leirvik's doors 713400001/713400002 fail `DoorMgr` pathfinding
+     registration. Molvik logs `BATTLEGROUND_KEEP_LORD_OUTSIDE keep=132`.
+     Source 0.235.0 fixes Lion's Den: a keep with no gates (ClaimBG5_9 by
+     design) now takes the ungated lord placement. Leirvik is not fixable in
+     code: on the installed zone254 navmesh no point inside keep 134 is reachable
+     from any landing (0 of 536 candidates; landings only reach partial paths),
+     and its two gates have no navmesh polygon within 165 units. Molvik's native
+     lord (Renegade Chieftain Molvik, 309 units from the centre) stands in a
+     20-floor pocket (radius ~707) that no landing reaches. The gate proof finds
+     `gated=0` for every keep even with unlimited budget, so every lord uses the
+     ungated rule. Needs the owner: repair the zone254 (and Molvik zone241)
+     navmesh so the keep interiors connect to the landings, and decide whether to
+     keep the gated-lord rule.
+     Navmesh analysis (exact floods, 0.235 build): the earlier "no reachable
+     point" numbers were grid artefacts. Leirvik keep 134 is saved 3,305 units
+     above the terrain (14281 vs 10976), so its pieces and gates float; with
+     Z 10976 all three landings reach the centre. Molvik's lord stands in a
+     sealed 119-polygon lord room (8 of 40 retainers unreachable too); the
+     bailey and gates are fine. Proving Grounds Tower 140: only its empty centre
+     is sealed, lord and archer are reachable. Killaloe portal keeps 201/203
+     were saved 588/288 units below the ground (landings had no navmesh floor).
+     Source 0.235.0: startup Z correction for 134/201/203, runtime relocation of
+     unreachable lords/retainers, nearest-first placement search, and a builder
+     connectivity check. Battleground navmeshes rebuilt at the corrected Z (`meshes-0.235c`): Leirvik
+     Z, then live `BATTLEGROUND_KEEP_LORD_*` lines show lords for every keep.
+     and the Killaloe landings now reach their keeps from all three landings and
+     the closed gates block; only Molvik's and Proving Grounds Tower's sealed
+     centres fail, as expected. Pending: live `BATTLEGROUND_KEEP_LORD_*` lines show
+     a reachable lord for every keep.
+
+134. **3.5 s game-loop stall when a battleground keep lord dies.** Installed
+     0.234.0, 15:46:31: `Long AttackService.Tick for Ulfebrand Time: 3517ms`
+     in the same second as `KEEP_CLAIM_STEWARD_READY keep=143`.
+     Investigation: the lord death runs `DefeatLord` → `Release` →
+     `ChangeLevel(1)` → keep and per-door saves, then two more keep saves and the
+     steward spawn, all synchronous on the attack tick; one keep write costs
+     ~0.1–0.5 s on this host (ChangeLevel timer median 1.3 s). Not fixed: batching
+     or deferring the saves changes persistence. Source 0.235.0 adds
+     `KEEP_STEP_TIMING` (threshold 250 ms) for lord death, DefeatLord and
+     ChangeLevel steps.
+     Source 0.235.0: measured on the real keep code with a temp SQLite file
+     (20 components, 2 doors), a lord death made 65 write transactions on
+     125 connections and an upgrade 23 on 43. `KeepSaveBatch` scopes in
+     DefeatLord, Release and ChangeLevel now write each dirty row once in a
+     single transaction (1 transaction, 2 connections); end state unchanged
+     (`UT_KeepSaveBatch`). Live DB already runs WAL + synchronous=NORMAL.
+     Pending: `KEEP_STEP_TIMING ... step=flush` stays well under a second on
+     the owner's host when a lord dies.
+
+135. **Battleground portal keeps are invisible (Molvik).** Owner report,
+     2026-10-10 17:14, installed 0.234.0: a Hibernian group zoning into Molvik
+     stands on a bare cobblestone foundation at `loc=51627,19149,5992`, exactly
+     the saved Hibernia Portal Keep (keep 900, 575915,543437); no walls, gates
+     or keep render. Read-only save check: every battleground portal keep row
+     (regions 165, 234–242, 251) has zero `keepcomponent` rows; the 0.232.0
+     builder only builds the central keeps. Expected: each realm's portal keep
+     renders around its landing, passable for its realm.
+     No authentic portal-keep layout exists in the repo, DB or client data.
+     Cathal Valley (165) and Murdaigean (251) have native client portal keeps;
+     the other 24 rows get a custom 8-piece ring in Caer Claret style (corner
+     towers, walls, gate north, ~630 units to the corners) that clears every
+     saved NPC by 200+ units. Source 0.235.0 adds them on startup only where a
+     row has no components (192 rows on the first start). Pending: rings render
+     level on the ground in the client and every realm passes the gate; walls
+     block only after a battleground navmesh rebuild with `portalKeepSites`.
+     Final 0.235.0 layout: a closed ring of one gate and seven walls measured
+     from the client frontier kit (raster footprints); the gate is the only
+     opening, the landing stays 218 units clear and every saved NPC at least
+     232 units. Rebuilt meshes confirm it: every portal landing pair passes
+     with gates open and fails with gates closed (48 of 48).
+
+132. **Hibernian bots loop on a route-pocket escape to their own position.**
+     Installed 0.234.0, 2 h: 54,960 `AUTONOMOUS_ROUTE_POCKET_ESCAPE
+     from=200:311960,470002,5203 to=200:311960,470002,5203` from 95 bots,
+     about every 1.2 s each, for up to ~14 minutes per bot, after
+     `AUTONOMOUS_CAPITAL_EGRESS_RECOVERY` from Tir na Nog (edge 26). Present
+     since at least 2026-10-05 (35k) and 2026-10-09 (33k). Half of all bot
+     warnings.
+     Cause: edge-26 egress lands on the audited Connacht road point, which is
+     also the escape floor of pocket (200, 312250,472500, r4000); the immediate
+     escape returned that floor without a distance check, the no-op counted as
+     success, reset the failure counter and marked progress, so neither the
+     safe-relocation budget nor the stuck watchdog fired. The 221 Muire loops are
+     the same pattern. Source 0.235.0 rejects an escape within 32 units of the
+     bot (the caller then abandons the camp for 30 min) and rate-limits the
+     warning to once a minute per bot. Open: why the Darkness Falls route from
+     that road fails; a separate repeating `from=100:764342,674451,5738
+     to=101:...` relocation (184 lines) is not investigated. Pending: the loops
+     disappear in a live run.
+
+131. **Group cohesion throws when the leader has left its group.** Installed
+     0.234.0, 16:57:29: `ArgumentNullException (Parameter 'key')` from
+     `ConditionalWeakTable.GetValue` in
+     `AutonomousBotGroupCoordinator.IsCohesive`, interrupting Frearhild's goal.
+     Source 0.235.0: guard for a leader without a group; test
+     `ALeaderThatLeftItsGroupIsCohesiveInsteadOfThrowing`. Pending: no
+     `IsCohesive` exception in a live run.
+
+129. **Battleground patrols never spawn and the squad phase stalls the game
+     loop.** Installed 0.234.0, 2 h: zero `BATTLEGROUND_SQUAD_SPAWNED`; 109
+     `route_or_spawn_failed`, 116 `no_participants`, 58 `no_ambush_target`.
+     1,788 `BATTLEGROUND_TICK_SLOW`, all in `squads_ms` (average 153 ms, max
+     1,038 ms, about 274 s of timer time), on ticks that mostly do not spawn.
+     Source 0.235.0: squad targets are real players first, then autonomous
+     participants outside sanctuaries/portal keeps (owner decision); the route is proved before patrol bots
+     are built (previously up to 16 GameBots were built and deleted per failed
+     squad). `CountHumans` costs microseconds (one zone per region), so the slow
+     ticks are not explained yet: `BATTLEGROUND_TICK_SLOW` now carries `humans_ms`
+     and `spawn_ms`, and skips carry `detail=no_route|spawn_failed`. Pending:
+     patrols spawn near a human; read the new timings.
+
+128. **Autonomous bots never claim a battleground keep.** Installed 0.234.0:
+     Thidranki's lord died 15:46:31 (`KEEP_CLAIM_STEWARD_READY keep=143`); 76
+     minutes later keep 143 was still `LordDefeated=1` with no guild. Cause:
+     `AutonomousRvrKeepPolicy.IsClaimableKeep` requires `BaseLevel == 50` or
+     `allow_bg_claim` (False), while `AbstractGameKeep` claim checks exempt
+     campaign battlegrounds. Holding rewards can never start for bots.
+     Source 0.235.0: the bot claim rule exempts campaign battleground keeps
+     like the player rule; test `ACampaignBattlegroundKeepIsClaimableByBotsWhileTheCampaignIsOpen`.
+     Pending: a bot guild claims a battleground keep after its lord dies.
+
+127. **Battleground participants still ejected as `stuck` after roaming to
+     a camp.** Installed 0.234.0, 2026-10-10 14:59–17:02, world speed 20x,
+     bots only. 735 of 1,475 `AUTONOMOUS_BG_LEFT` were `reason=stuck`, median
+     96 s after `AUTONOMOUS_BG_ENTERED` (the 90 s wall floor). Nearly all had
+     first action `roam-camp`: Killaloe 302, Murdaigean 199, Hills of Claret
+     135, Wilton 47; Thidranki mostly left `tour_ended`/`graduated`. Aelith
+     (Killaloe) gained a level inside and was still ejected 100 s after entry.
+     Suspected cause: `AutonomousBattlegroundDriver.GoTo` stands silently when
+     `PathExists` fails, so no progress is ever recorded. Expected: bots roam
+     between camps and stay for their tour.
+     Source 0.235.0: the driver's route proof falls back to the default
+     filters when every closed gate on the route is one the bot may pass (the
+     native mover's own rule), tries every camp in turn, counts a follower beside
+     a progressing leader as active, and logs `AUTONOMOUS_BG_ROUTE_FAILED
+     reason=off_mesh|z_mismatch|no_navmesh|no_route|closed_gate`. Proven for
+     Murdaigean (portal-keep landings behind closed gates); suspected for 236,
+     237 and 240. Pending: next live run shows bots staying their tour and names
+     any remaining route failure.
+
 126. **Battleground participants are ejected without acting; four keeps have
      no lord; Midgard medallion merchant duplicated.** Installed 0.233.0,
      2026-10-10 14:20–14:27, world speed 20x. Livununny, Yrgerd and Caoaedra
@@ -75,6 +218,12 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      `AUTONOMOUS_BG_DRIVER_IDLE` / `AUTONOMOUS_BG_NO_TURN_DIAGNOSTIC` on the next
      run. Pending: bots stay and fight in a battleground; lords present in the
      four keeps; one Gwulla remains.
+     Log check 2026-10-10 on installed 0.234.0 (14:59–17:02, bots only, no
+     client): every one of 1,069 entries took a first driver turn and none left
+     `no_turn`; Hills of Claret, Killaloe and Wilton have ungated lords; the
+     seeded Gwulla was removed (`FRONTIER_MEDALLION_MERCHANT_DUPLICATE_REMOVED`
+     region 100). Still failing: stuck ejections (bug 127) and Leirvik's lord
+     (bug 130). Remaining work is tracked in bugs 127–135.
 
 125. **Battlegrounds have no keeps and no visible playerbots.** Owner report,
      2026-10-10: the recently added battlegrounds show no keeps, and in the
@@ -1717,6 +1866,27 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
 
 ## Finished
+
+133. **Done — No frontier keep changed hands after the keep reset.** Installed
+     0.234.0: every frontier keep still had its 14:20 reset row ("Frontier
+     Wardens", unchanged `LastTimeRowUpdated`) at 17:02, despite 49
+     `RVR_KEEP_DEPARTURE`. `log_keep_captures` is off and no siege/arrival
+     tags were logged, so whether bots reach and attack keeps is unproven.
+     Investigation 2026-10-10: not a keep-state defect. Before the reset bots
+     started 14–26 sieges a day and claimed keeps at least 14 times. The world
+     bot roster was regenerated at level 1–4 between 12:40 and 13:45 local
+     (e.g. Garenfrey id 14979 level 48 → id 19509 level 4); RvR bot levels fell
+     from ~44 to ~21 and 532 of 600 bots are below 35. Sieges need a whole-guild
+     warband of 8+ with average level 35 and a healer (`siegeReady`), and
+     `ChooseCore` further needs avg/min 50 unless `CampaignEligible` — a gate
+     inconsistency for the owner. A roam keep visit never starts siege work by
+     design. Source 0.235.0 adds `RVR_KEEP_ARRIVED` and `RVR_ASSAULT_GATE`.
+     Owner: confirm whether the bot reset was intended.
+     Resolution 2026-10-10: the owner confirmed the bot roster reset to
+     level 1–4 was intentional; sieges resume once 8-bot whole-guild warbands
+     reach average level 35. No code defect; 0.235.0 diagnostics remain. The
+     `siegeReady` (avg 35) vs `ChooseCore` (avg/min 50) gate difference is
+     left as designed unless the owner asks to align it.
 
 103. **Done — Companion guide misstates PvE gear rolls and full-bag sales.**
      Source sweep 2026-10-04 found the guide describing independent PvE rolls

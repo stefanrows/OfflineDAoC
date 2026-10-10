@@ -315,6 +315,30 @@ public sealed class UT_SiegeSliceOne
     }
 
     [Test]
+    public void ACampaignBattlegroundKeepIsClaimableByBotsWhileTheCampaignIsOpen()
+    {
+        bool previousAllow = Properties.ALLOW_BG_CLAIM;
+        bool previousCampaign = Properties.BATTLEGROUND_CAMPAIGN_ENABLED;
+        try
+        {
+            Properties.ALLOW_BG_CLAIM = false;
+            // Region 238 is Thidranki, a campaign battleground; region 1 is not.
+            var thidranki = new GameKeep { DBKeep = new DbKeep { BaseLevel = 39, SkinType = 0, Realm = 1, Region = 238 } };
+            var elsewhere = new GameKeep { DBKeep = new DbKeep { BaseLevel = 39, SkinType = 0, Realm = 1, Region = 1 } };
+            Properties.BATTLEGROUND_CAMPAIGN_ENABLED = true;
+            Assert.That(AutonomousRvrKeepPolicy.IsClaimableKeep(thidranki), Is.True, "campaign battleground keep");
+            Assert.That(AutonomousRvrKeepPolicy.IsClaimableKeep(elsewhere), Is.False, "non-campaign battleground-level keep");
+            Properties.BATTLEGROUND_CAMPAIGN_ENABLED = false;
+            Assert.That(AutonomousRvrKeepPolicy.IsClaimableKeep(thidranki), Is.False, "closed campaign");
+        }
+        finally
+        {
+            Properties.ALLOW_BG_CLAIM = previousAllow;
+            Properties.BATTLEGROUND_CAMPAIGN_ENABLED = previousCampaign;
+        }
+    }
+
+    [Test]
     public void AnUnclaimableKeepIsNeverOpenedAutomatically()
     {
         var relic = new AutonomousRvrEventLayer.LiveObjective("rvr-keep-58", "Castle Myrddin",

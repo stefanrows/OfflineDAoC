@@ -624,6 +624,9 @@ public static partial class AutonomousBotGroupCoordinator
         // Hysteresis: a leader that is waiting resumes once everyone is within
         // 400; a walking group only stops when someone falls back past 700.
         // One fixed radius made the leader stop and start every few seconds.
+        // A leader that has just left its group has nothing to wait for, and the
+        // table rejects a null key.
+        if (directive.Leader.Group == null) return true;
         StrongBox<bool> waiting = CohesionWait.GetValue(directive.Leader.Group, _ => new StrongBox<bool>(false));
         int radius = waiting.Value ? 400 : 700;
         bool together = BotMembers(directive.Leader.Group).Where(member => member.IsAlive)

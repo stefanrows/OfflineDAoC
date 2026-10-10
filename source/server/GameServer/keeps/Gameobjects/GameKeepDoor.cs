@@ -454,7 +454,7 @@ namespace DOL.GS.Keeps
             if (DbDoor.Health != Health)
                 DbDoor.Health = Health;
 
-            GameServer.Database.SaveObject(DbDoor);
+            KeepSaveBatch.Save(DbDoor);
         }
 
         /// <summary>

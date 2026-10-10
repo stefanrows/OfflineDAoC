@@ -73,6 +73,8 @@ namespace DOL.GS
         private const int NativeSearchRadius = 1100;
         private const int SearchStep = 128;
         private const int MaximumPathQueries = 400;
+        // Relocating garrison members that no camp reaches may spend this many path queries per keep start.
+        private const int MaximumRelocationQueries = 1200;
 
         public static DbKeep MurdaigeanKeepRow() => new()
         {
@@ -184,7 +186,8 @@ namespace DOL.GS
                     door.State = eDoorState.Closed;
                     door.SaveIntoDatabase();
                 }
-                if (!keep.Doors.Values.Any(door => door.State == eDoorState.Closed))
+                // A keep with no gates at all (Lion's Den) has nothing to close and takes the ungated placement below.
+                if (GatesCannotBeClosed(keep.Doors.Count, keep.Doors.Values.Any(door => door.State == eDoorState.Closed)))
                     return Unavailable(keep, "no_closed_door");
                 row.CreateInfo = row.CreateInfo[..^BattlegroundKeepLayouts.PendingSuffix.Length];
                 GameServer.Database.SaveObject(row);
@@ -211,42 +214,34 @@ namespace DOL.GS
                 {
                     if (queries + 2 > MaximumPathQueries) return false;
                     Vector3 origin = new(camp.X, camp.Y, camp.Z);
-                    if (Routed(origin, point, nav.BlockingDoorAvoidanceFilters) || !Routed(origin, point, nav.DefaultFilters)) continue;
+                    // The default route is tested first: a point no camp reaches costs one query per camp, not two.
+                    if (!Routed(origin, point, nav.DefaultFilters) || Routed(origin, point, nav.BlockingDoorAvoidanceFilters)) continue;
                     return true;
                 }
                 return false;
             }
 
-            // A native lord is never moved. It is only checked, and a failed proof is logged.
+            // Garrison candidates, nearest the keep floor first, so the query budgets below are spent near the keep.
+            List<Vector3> candidates = GarrisonCandidates(keep, zone, doors, searchRadius, doorZ);
+
+            // A member whose spawn point no camp reaches moves to the nearest reachable point of the keep; reachable members stay.
+            bool lordMoved = RelocateUnreachableGarrison(keep, region, zone, outside, candidates);
+
+            // A native lord is never moved while it is reachable. It is only checked, and a failed proof is logged.
             GuardLord existing = keep.Guards.Values.OfType<GuardLord>().FirstOrDefault();
             if (existing != null)
             {
-                if (!Gated(new Vector3(existing.X, existing.Y, existing.Z)))
+                if (!lordMoved && !Gated(new Vector3(existing.X, existing.Y, existing.Z)))
                     Log.Warn($"BATTLEGROUND_KEEP_LORD_OUTSIDE region={region} keep={keep.KeepID}");
                 return true;
             }
-
-            var candidates = new List<Vector3>();
-            foreach (int lift in new[] { 1200, 600, 0 })
-                for (int dx = -searchRadius; dx <= searchRadius; dx += SearchStep)
-                    for (int dy = -searchRadius; dy <= searchRadius; dy += SearchStep)
-                    {
-                        if (dx * dx + dy * dy > searchRadius * searchRadius) continue;
-                        Vector3? floor = nav.GetClosestPoint(zone, new Vector3(keep.X + dx, keep.Y + dy, (float)(doorZ + lift)), 64, 64, 256, nav.DefaultFilters);
-                        if (!floor.HasValue) continue;
-                        Vector3 point = floor.Value;
-                        if (keep.Area?.IsContaining((int)point.X, (int)point.Y, (int)point.Z, false) != true) continue;
-                        if (doors.Any(door => Vector2.Distance(new(door.X, door.Y), new(point.X, point.Y)) <= 250)) continue;
-                        if (candidates.Any(existingPoint => Vector3.Distance(existingPoint, point) < 32)) continue;
-                        candidates.Add(point);
-                    }
 
             var passing = new List<(Vector3 Point, float DoorDistance)>();
             var notGated = new List<Vector3>();
             foreach (Vector3 candidate in candidates)
             {
                 if (queries >= MaximumPathQueries) break;
-                if (!Gated(candidate)) { notGated.Add(candidate); continue; }
+                if (doors.Count == 0 || !Gated(candidate)) { notGated.Add(candidate); continue; }
                 passing.Add((candidate, DoorDistance(doors, candidate)));
             }
 
@@ -261,7 +256,7 @@ namespace DOL.GS
             }
             Log.Info($"BATTLEGROUND_KEEP_GARRISON_PROBE region={region} keep={keep.KeepID} candidates={candidates.Count} gated={passing.Count} open={open} unreachable={unreachable} queries={queries + MaximumPathQueries - probeBudget}");
 
-            if (passing.Count == 0) return PlaceUngatedGarrison(keep, region, zone, outside, candidates, doors);
+            if (passing.Count == 0) return PlaceUngatedGarrison(keep, region, zone, outside, candidates);
 
             var ordered = passing.OrderByDescending(point => point.Point.Z).ThenByDescending(point => point.DoorDistance).ToList();
             Vector3 lordPoint = ordered[0].Point;
@@ -271,6 +266,9 @@ namespace DOL.GS
             Log.Info($"{tag} region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
             return true;
         }
+
+        /// <summary>True when a keep has gates but none is closed; a keep without gates has nothing to close.</summary>
+        public static bool GatesCannotBeClosed(int gateCount, bool anyClosed) => gateCount > 0 && !anyClosed;
 
         /// <summary>No two garrison members stand closer than this.</summary>
         public const float GuardSpacing = 200f;
@@ -283,33 +281,161 @@ namespace DOL.GS
             return null;
         }
 
-        // Ungated fallback, used only when no candidate sits behind a closed gate. The lord stands on the navmesh
-        // point nearest the keep centre that lies inside the keep and that an outside camp reaches with the default
-        // filters; retainers take the nearest other reachable candidates. The gated placement is always tried first.
-        private static bool PlaceUngatedGarrison(AbstractGameKeep keep, ushort region, Zone zone, IReadOnlyList<Point3D> outside,
-            IReadOnlyList<Vector3> candidates, IReadOnlyList<GameKeepDoor> doors)
+        /// <summary>Which move a garrison member gets: stay, walk to a reachable point, or stay because no reachable point exists.</summary>
+        public enum GarrisonMoveDecision { Keep, Relocate, Stranded }
+
+        /// <summary>Path queries one reachability probe can spend in the worst case: one per camp, and at least one.</summary>
+        public static int ProbeCost(int campCount) => Math.Max(1, campCount);
+
+        /// <summary>
+        /// Stay when a camp reaches the member's home or the budget could not check it (null): a member is never moved without evidence.
+        /// Otherwise relocate when a reachable point was found, and report the member as stranded when none was.
+        /// </summary>
+        public static GarrisonMoveDecision DecideGarrisonMove(bool? homeReachable, bool targetFound) =>
+            homeReachable != false ? GarrisonMoveDecision.Keep : targetFound ? GarrisonMoveDecision.Relocate : GarrisonMoveDecision.Stranded;
+
+        /// <summary>Reachability test that spends path queries from the shared budget (passed by reference).</summary>
+        public delegate bool ReachabilityProbe(Vector3 point, ref int budget);
+
+        /// <summary>Nearest-first ordering: the three-dimensional distance ranks a floor above or below the origin after the floor level.</summary>
+        public static List<Vector3> OrderByDistance(IEnumerable<Vector3> candidates, Vector3 origin) =>
+            candidates.OrderBy(point => Vector3.DistanceSquared(point, origin)).ToList();
+
+        /// <summary>
+        /// The first point, in the given order, that is at least <paramref name="spacing"/> from every used point and that the probe reaches.
+        /// A probe starts only while the budget covers its worst case, so an exhausted budget ends the search with null.
+        /// </summary>
+        public static Vector3? FirstReachableSpacedPoint(IEnumerable<Vector3> ordered, IReadOnlyList<Vector3> used, ReachabilityProbe probe,
+            int probeCost, ref int budget, float spacing = GuardSpacing)
+        {
+            foreach (Vector3 candidate in ordered)
+            {
+                if (budget < probeCost) return null;
+                if (used.Any(other => Vector3.Distance(other, candidate) < spacing)) continue;
+                if (probe(candidate, ref budget)) return candidate;
+            }
+            return null;
+        }
+
+        private static ReachabilityProbe CampProbe(Zone zone, IReadOnlyList<Point3D> outside) =>
+            (Vector3 point, ref int budget) => ReachableFromCamps(point, zone, outside, ref budget);
+
+        // Keep-area points for garrison members, nearest the keep floor first: a grid over the keep radius at three lifts
+        // (ground, +600, +1200). A point beside a door is excluded, and of two points within 32 units the nearer one is kept.
+        private static List<Vector3> GarrisonCandidates(AbstractGameKeep keep, Zone zone, IReadOnlyList<GameKeepDoor> doors, int searchRadius, double doorZ)
         {
             var nav = PathfindingProvider.Instance;
-            int budget = MaximumPathQueries;
-            Vector3? centre = null;
+            var origin = new Vector3(keep.X, keep.Y, (float)doorZ);
+            var raw = new List<Vector3>();
+            int steps = (searchRadius + SearchStep - 1) / SearchStep;
             foreach (int lift in new[] { 0, 600, 1200 })
-            {
-                Vector3? floor = nav.GetClosestPoint(zone, new Vector3(keep.X, keep.Y, keep.Z + lift), 64, 64, 256, nav.DefaultFilters);
-                if (!floor.HasValue || keep.Area?.IsContaining((int)floor.Value.X, (int)floor.Value.Y, (int)floor.Value.Z, false) != true) continue;
-                if (!ReachableFromCamps(floor.Value, zone, outside, ref budget)) continue;
-                centre = floor.Value;
-                break;
-            }
-            if (centre is not Vector3 lordPoint) return Unavailable(keep, "no_lord_point");
+                for (int i = -steps; i <= steps; i++)
+                    for (int j = -steps; j <= steps; j++)
+                    {
+                        int dx = i * SearchStep, dy = j * SearchStep;
+                        if (dx * dx + dy * dy > searchRadius * searchRadius) continue;
+                        Vector3? floor = nav.GetClosestPoint(zone, new Vector3(keep.X + dx, keep.Y + dy, (float)(doorZ + lift)), 64, 64, 256, nav.DefaultFilters);
+                        if (!floor.HasValue) continue;
+                        Vector3 point = floor.Value;
+                        if (keep.Area?.IsContaining((int)point.X, (int)point.Y, (int)point.Z, false) != true) continue;
+                        if (doors.Any(door => Vector2.Distance(new(door.X, door.Y), new(point.X, point.Y)) <= 250)) continue;
+                        raw.Add(point);
+                    }
+            var candidates = new List<Vector3>();
+            foreach (Vector3 point in OrderByDistance(raw, origin))
+                if (!candidates.Any(existingPoint => Vector3.Distance(existingPoint, point) < 32)) candidates.Add(point);
+            return candidates;
+        }
 
-            var ordered = new List<(Vector3 Point, float DoorDistance)>();
-            foreach (Vector3 candidate in candidates.OrderBy(point => Vector2.DistanceSquared(new(point.X, point.Y), new(lordPoint.X, lordPoint.Y))))
+        // Existing garrison: a member whose spawn point no outside camp reaches moves at runtime to the nearest reachable keep
+        // point. The lord goes first and needs no spacing; retainers keep GuardSpacing from every other member. The spawn point
+        // follows the move, so each respawn lands on the new point for this server run. Nothing is saved: the mob rows keep their
+        // coordinates and the next start makes the same decision. Patrol members keep their route; merchants are not garrison.
+        // Returns true when the lord moved.
+        private static bool RelocateUnreachableGarrison(AbstractGameKeep keep, ushort region, Zone zone, IReadOnlyList<Point3D> outside, IReadOnlyList<Vector3> candidates)
+        {
+            var nav = PathfindingProvider.Instance;
+            int budget = MaximumRelocationQueries;
+            int probeCost = ProbeCost(outside.Count);
+            ReachabilityProbe probe = CampProbe(zone, outside);
+
+            // Pass 1: classify each member by its spawn point. A member the budget cannot check stays where it is.
+            var used = new List<Vector3>();
+            var moving = new List<(GameKeepGuard Guard, Vector3 Home)>();
+            foreach (GameKeepGuard guard in keep.Guards.Values)
             {
-                if (budget <= 0) break;
-                if (!ReachableFromCamps(candidate, zone, outside, ref budget)) continue;
-                ordered.Add((candidate, DoorDistance(doors, candidate)));
+                if (guard is GuardMerchant || guard.PatrolGroup != null) continue;
+                Point3D spawn = guard.SpawnPoint;
+                if (spawn == null || (spawn.X == 0 && spawn.Y == 0 && spawn.Z == 0)) continue; // never placed in the world
+                var home = new Vector3(spawn.X, spawn.Y, spawn.Z);
+                bool? reachable = null;
+                if (budget >= probeCost)
+                {
+                    Vector3? floor = nav.GetClosestPoint(zone, home, 64, 64, 256, nav.DefaultFilters);
+                    reachable = floor.HasValue && ReachableFromCamps(floor.Value, zone, outside, ref budget);
+                }
+                if (reachable == false) moving.Add((guard, home));
+                else used.Add(home);
             }
-            if (!TrySpawnGarrison(keep, region, lordPoint, ordered.Select(point => point.Point).ToList(), out int guards))
+
+            // Pass 2: the lord first, then the retainers, each to the nearest reachable keep point not yet taken.
+            bool lordMoved = false;
+            foreach ((GameKeepGuard guard, Vector3 home) in moving.OrderBy(member => member.Guard is GuardLord ? 0 : 1))
+            {
+                IReadOnlyList<Vector3> spacing = guard is GuardLord ? Array.Empty<Vector3>() : used;
+                Vector3? target = FirstReachableSpacedPoint(OrderByDistance(candidates, home), spacing, probe, probeCost, ref budget);
+                if (DecideGarrisonMove(false, target.HasValue) == GarrisonMoveDecision.Relocate)
+                {
+                    MoveGarrisonMember(guard, region, target.Value);
+                    used.Add(target.Value);
+                    if (guard is GuardLord)
+                    {
+                        lordMoved = true;
+                        Log.Warn($"BATTLEGROUND_KEEP_LORD_RELOCATED region={region} keep={keep.KeepID} from={Describe(home)} to={Describe(target.Value)}");
+                    }
+                    else
+                        Log.Warn($"BATTLEGROUND_KEEP_GUARD_RELOCATED region={region} keep={keep.KeepID} type={guard.GetType().Name} from={Describe(home)} to={Describe(target.Value)}");
+                }
+                else
+                {
+                    string reason = budget < probeCost ? "budget" : "no_reachable_point";
+                    Log.Warn($"BATTLEGROUND_KEEP_GUARD_STRANDED region={region} keep={keep.KeepID} type={guard.GetType().Name} from={Describe(home)} reason={reason}");
+                }
+            }
+            return lordMoved;
+        }
+
+        // A live member walks to the point now (MoveTo re-adds it at the new point, so the spawn point is set afterwards).
+        // A dead member only takes the new spawn point and respawns there.
+        private static void MoveGarrisonMember(GameKeepGuard guard, ushort region, Vector3 target)
+        {
+            var point = new Point3D((int)target.X, (int)target.Y, (int)target.Z);
+            if (guard.IsAlive && guard.ObjectState == GameObject.eObjectState.Active)
+                guard.MoveTo(region, point.X, point.Y, point.Z, guard.Heading);
+            guard.SpawnPoint = point;
+        }
+
+        private static string Describe(Vector3 point) => $"{(int)point.X},{(int)point.Y},{(int)point.Z}";
+
+        // Ungated fallback, used only when no candidate sits behind a closed gate. The lord takes the first candidate, nearest
+        // the keep floor, that an outside camp reaches with the default filters; retainers take the reachable candidates nearest
+        // the lord. The two searches have their own budgets, so a long unreachable run for the lord cannot starve the retainers.
+        private static bool PlaceUngatedGarrison(AbstractGameKeep keep, ushort region, Zone zone, IReadOnlyList<Point3D> outside, IReadOnlyList<Vector3> candidates)
+        {
+            ReachabilityProbe probe = CampProbe(zone, outside);
+            int probeCost = ProbeCost(outside.Count);
+            int lordBudget = MaximumPathQueries;
+            if (FirstReachableSpacedPoint(candidates, Array.Empty<Vector3>(), probe, probeCost, ref lordBudget) is not Vector3 lordPoint)
+                return Unavailable(keep, "no_lord_point");
+
+            int retainerBudget = MaximumPathQueries;
+            var ordered = new List<Vector3>();
+            foreach (Vector3 candidate in OrderByDistance(candidates.Where(point => point != lordPoint), lordPoint))
+            {
+                if (retainerBudget < probeCost) break;
+                if (probe(candidate, ref retainerBudget)) ordered.Add(candidate);
+            }
+            if (!TrySpawnGarrison(keep, region, lordPoint, ordered, out int guards))
                 return Unavailable(keep, "load_failed");
             Log.Warn($"BATTLEGROUND_KEEP_LORD_UNGATED region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
             return true;

@@ -100,6 +100,9 @@ public static class AutonomousBattlegroundParticipation
     private static bool SilentForBothClocks(long gameNow, long gameLast, long wallNow, long wallLast) =>
         gameNow - gameLast > StuckMilliseconds && wallNow - wallLast >= StuckWallMilliseconds;
 
+    /// <summary>Whether the last real progress is still inside the stuck wall-clock window (the complement of its wall test).</summary>
+    public static bool IsRecentProgress(long wallNow, long wallLast) => wallNow - wallLast < StuckWallMilliseconds;
+
     /// <summary>Square-distance reach test in the 2D plane, used for merchants around a porter.</summary>
     public static bool IsWithinReach2D(int dx, int dy, int reach) =>
         (long)dx * dx + (long)dy * dy <= (long)reach * reach;
@@ -185,6 +188,14 @@ public static class AutonomousBattlegroundParticipation
             return bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Leaving != null;
     }
 
+    /// <summary>A participant still inside the battleground whose last real progress is recent.</summary>
+    public static bool IsProgressing(GameBot bot)
+    {
+        lock (Sync)
+            return bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Entered && entry.Leaving == null &&
+                IsRecentProgress(Environment.TickCount64, entry.LastProgressWall);
+    }
+
     /// <summary>Autonomous participants inside a campaign region, for the director cap.</summary>
     public static int PresentCount(ushort region)
     {
@@ -266,6 +277,10 @@ public static class AutonomousBattlegroundParticipation
         if (log)
             Log.Info($"AUTONOMOUS_BG_DRIVER_IDLE region={region} bot=\"{bot.Name}\" reason={reason}");
     }
+
+    /// <summary>Why the driver could not prove a route to a goal. The driver logs each goal once per visit.</summary>
+    public static void RecordRouteFailure(GameBot bot, ushort region, string action, string goal, string from, string reason) =>
+        Log.Info($"AUTONOMOUS_BG_ROUTE_FAILED region={region} bot=\"{bot.Name}\" action={action} goal={goal} from={from} reason={reason}");
 
     // Callers hold Sync. Real progress restarts both stuck clocks.
     private static void Touch(Entry entry, long gameNow)

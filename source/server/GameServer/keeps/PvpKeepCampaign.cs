@@ -89,11 +89,31 @@ namespace DOL.GS.Keeps
             }
         }
 
+        /// <summary>Keep saves and level changes run synchronously on the game
+        /// tick. A step at or above this many milliseconds is logged so a long
+        /// tick (bug 134) can be attributed to its step.</summary>
+        public const int SlowKeepStepMilliseconds = 250;
+
+        /// <summary>Logs KEEP_STEP_TIMING when the step that began at
+        /// <paramref name="mark"/> (a Stopwatch timestamp) was slow; returns the
+        /// current timestamp for the next step.</summary>
+        public static long LogSlowKeepStep(AbstractGameKeep keep, string owner, string step, long mark)
+        {
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            double milliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(mark, now).TotalMilliseconds;
+            if (milliseconds >= SlowKeepStepMilliseconds)
+                log.Warn($"KEEP_STEP_TIMING keep={keep?.KeepID} owner={owner} step={step} ms={(int)milliseconds}");
+            return now;
+        }
+
         public static void DefeatLord(GuardLord lord)
         {
             AbstractGameKeep keep = lord.Component.Keep;
             if (keep.DBKeep.LordDefeated) return;
+            using var batch = KeepSaveBatch.Begin("defeat_lord", keep);
+            long mark = System.Diagnostics.Stopwatch.GetTimestamp();
             if (keep.Guild != null) keep.Release();
+            mark = LogSlowKeepStep(keep, "defeat_lord", "release", mark);
             keep.DBKeep.LordDefeated = true;
             keep.LastAttackedByEnemyTick = 0;
             keep.StartCombatTick = 0;
@@ -103,7 +123,9 @@ namespace DOL.GS.Keeps
                 if (guard.Brain is DOL.AI.Brain.StandardMobBrain brain) brain.ClearAggroList();
             }
             keep.SaveIntoDatabase();
+            mark = LogSlowKeepStep(keep, "defeat_lord", "save", mark);
             EnsureClaimPoint(keep);
+            LogSlowKeepStep(keep, "defeat_lord", "steward", mark);
         }
 
         public static void CompleteClaim(AbstractGameKeep keep, GameLiving claimer)

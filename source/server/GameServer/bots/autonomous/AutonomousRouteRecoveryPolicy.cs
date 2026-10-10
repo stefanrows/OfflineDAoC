@@ -36,6 +36,14 @@ public static class AutonomousRouteRecoveryPolicy
         (emptyLiveCamp ? 2_500 : ImmediateRouteFailureCooldownMilliseconds) +
         System.Math.Abs(actorKey % 1_500);
 
+    // A pocket escape that lands on the actor's own floor is not an escape: the
+    // actor never leaves the pocket, but the move would be reported as success,
+    // reset the failure budget and repeat on every replan (bug 132).
+    public const float MinimumPocketEscapeDistance = 32f;
+
+    public static bool IsRealPocketEscape(Vector3 current, Vector3 escape) =>
+        Vector3.DistanceSquared(current, escape) > MinimumPocketEscapeDistance * MinimumPocketEscapeDistance;
+
     public static bool IsSameRepeatedFailurePocket(ushort previousRegion, ushort currentRegion,
         Vector3 previous, Vector3 current, long elapsedMilliseconds) =>
         previousRegion == currentRegion && elapsedMilliseconds >= 0 &&

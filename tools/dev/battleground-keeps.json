@@ -73,7 +73,7 @@
       "name": "Leirvik Castle",
       "x": 294287,
       "y": 295659,
-      "z": 14281,
+      "z": 10976,
       "heading": 87,
       "template": "CKBG40_44",
       "existingRow": true
@@ -1073,6 +1073,64 @@
         "y": 252,
         "heading": 3
       }
+    ],
+    "PortalKeep": [
+      {
+        "id": 0,
+        "skin": 0,
+        "x": 254,
+        "y": 254,
+        "heading": 0
+      },
+      {
+        "id": 1,
+        "skin": 9,
+        "x": 254,
+        "y": 255,
+        "heading": 1
+      },
+      {
+        "id": 2,
+        "skin": 9,
+        "x": 254,
+        "y": 2,
+        "heading": 1
+      },
+      {
+        "id": 3,
+        "skin": 9,
+        "x": 253,
+        "y": 3,
+        "heading": 0
+      },
+      {
+        "id": 4,
+        "skin": 9,
+        "x": 255,
+        "y": 3,
+        "heading": 0
+      },
+      {
+        "id": 5,
+        "skin": 9,
+        "x": 0,
+        "y": 3,
+        "heading": 0
+      },
+      {
+        "id": 6,
+        "skin": 9,
+        "x": 3,
+        "y": 1,
+        "heading": 1
+      },
+      {
+        "id": 7,
+        "skin": 9,
+        "x": 3,
+        "y": 2,
+        "heading": 1
+      }
     ]
   },
   "doorOffsets": [
@@ -1239,7 +1297,7 @@
         "keepId": 201,
         "x": 544726,
         "y": 582450,
-        "z": 7700
+        "z": 8288
       },
       {
         "keepId": 202,
@@ -1251,7 +1309,7 @@
         "keepId": 203,
         "x": 534997,
         "y": 537319,
-        "z": 8000
+        "z": 8288
       }
     ],
     "238": [
@@ -1334,5 +1392,303 @@
         "z": 10128
       }
     ]
-  }
+  },
+  "portalKeepSites": [
+    {
+      "region": 234,
+      "keepId": 381,
+      "name": "Albion Portal Keep",
+      "x": 573189,
+      "y": 549387,
+      "z": 8640,
+      "heading": 63,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 234,
+      "keepId": 637,
+      "name": "Midgard Portal Keep",
+      "x": 557159,
+      "y": 574661,
+      "z": 8640,
+      "heading": 180,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 234,
+      "keepId": 893,
+      "name": "Hibernia Portal Keep",
+      "x": 541023,
+      "y": 549746,
+      "z": 8640,
+      "heading": 295,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 235,
+      "keepId": 382,
+      "name": "Albion Portal Keep",
+      "x": 536467,
+      "y": 536600,
+      "z": 5056,
+      "heading": 300,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 235,
+      "keepId": 638,
+      "name": "Midgard Portal Keep",
+      "x": 544467,
+      "y": 575832,
+      "z": 5056,
+      "heading": 208,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 235,
+      "keepId": 894,
+      "name": "Hibernia Portal Keep",
+      "x": 579923,
+      "y": 554525,
+      "z": 5056,
+      "heading": 65,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 236,
+      "keepId": 383,
+      "name": "Albion Portal Keep",
+      "x": 541434,
+      "y": 577799,
+      "z": 8008,
+      "heading": 210,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 236,
+      "keepId": 639,
+      "name": "Midgard Portal Keep",
+      "x": 582626,
+      "y": 553398,
+      "z": 8008,
+      "heading": 90,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 236,
+      "keepId": 895,
+      "name": "Hibernia Portal Keep",
+      "x": 537984,
+      "y": 539654,
+      "z": 8008,
+      "heading": 315,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 237,
+      "keepId": 201,
+      "name": "Albion Portal Keep",
+      "x": 544726,
+      "y": 582450,
+      "z": 8288,
+      "heading": 0,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 237,
+      "keepId": 202,
+      "name": "Midgard Portal keep",
+      "x": 584841,
+      "y": 559325,
+      "z": 8288,
+      "heading": 0,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 237,
+      "keepId": 203,
+      "name": "Hibernia Portal Keep",
+      "x": 534997,
+      "y": 537319,
+      "z": 8288,
+      "heading": 0,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 238,
+      "keepId": 385,
+      "name": "Albion Portal Keep",
+      "x": 563575,
+      "y": 574212,
+      "z": 5408,
+      "heading": 180,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 238,
+      "keepId": 641,
+      "name": "Midgard Portal Keep",
+      "x": 569953,
+      "y": 540622,
+      "z": 5408,
+      "heading": 0,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 238,
+      "keepId": 897,
+      "name": "Hibernia Portal Keep",
+      "x": 533843,
+      "y": 534134,
+      "z": 5408,
+      "heading": 315,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 240,
+      "keepId": 387,
+      "name": "Albion Portal Keep",
+      "x": 554521,
+      "y": 583899,
+      "z": 6952,
+      "heading": 180,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 240,
+      "keepId": 643,
+      "name": "Midgard Portal Keep",
+      "x": 533631,
+      "y": 535174,
+      "z": 6728,
+      "heading": 315,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 240,
+      "keepId": 899,
+      "name": "Hibernia Portal Keep",
+      "x": 580637,
+      "y": 538535,
+      "z": 6736,
+      "heading": 45,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 241,
+      "keepId": 388,
+      "name": "Albion Portal Keep",
+      "x": 531699,
+      "y": 542006,
+      "z": 5992,
+      "heading": 290,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 241,
+      "keepId": 644,
+      "name": "Midgard Portal Keep",
+      "x": 550401,
+      "y": 577364,
+      "z": 5992,
+      "heading": 180,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 241,
+      "keepId": 900,
+      "name": "Hibernia Portal Keep",
+      "x": 575915,
+      "y": 543437,
+      "z": 5992,
+      "heading": 75,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 242,
+      "keepId": 390,
+      "name": "Albion Portal Keep",
+      "x": 321868,
+      "y": 283864,
+      "z": 10128,
+      "heading": 65,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 242,
+      "keepId": 646,
+      "name": "Midgard Portal Keep",
+      "x": 271949,
+      "y": 272798,
+      "z": 10128,
+      "heading": 0,
+      "template": "PortalKeep",
+      "existingRow": true
+    },
+    {
+      "region": 242,
+      "keepId": 902,
+      "name": "Hibernia Portal Keep",
+      "x": 280252,
+      "y": 319625,
+      "z": 10128,
+      "heading": 180,
+      "template": "PortalKeep",
+      "existingRow": true
+    }
+  ],
+  "portalNativeKeeps": [
+    {
+      "region": 165,
+      "keepId": 1,
+      "name": "Albion Portal Keep"
+    },
+    {
+      "region": 165,
+      "keepId": 2,
+      "name": "Midgard Portal Keep"
+    },
+    {
+      "region": 165,
+      "keepId": 3,
+      "name": "Hibernia Portal Keep"
+    },
+    {
+      "region": 251,
+      "keepId": 41,
+      "name": "Hibernia Portal Keep"
+    },
+    {
+      "region": 251,
+      "keepId": 42,
+      "name": "Midgard Portal Keep"
+    },
+    {
+      "region": 251,
+      "keepId": 43,
+      "name": "Albion Portal Keep"
+    }
+  ]
 }

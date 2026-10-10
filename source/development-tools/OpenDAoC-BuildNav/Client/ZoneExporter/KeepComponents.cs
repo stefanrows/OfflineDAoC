@@ -51,6 +51,9 @@ namespace CEM.Client.ZoneExporter
         /// <summary>Sites the finder could not place. The finder retries them and moves a placed one into Sites.</summary>
         public List<BattlegroundKeepSite> Blocked { get; } = new();
 
+        /// <summary>Portal keeps that get a server-built ring (portalKeepSites). They bake like the central keeps.</summary>
+        public List<BattlegroundKeepSite> PortalSites { get; } = new();
+
         public Dictionary<string, List<BattlegroundKeepComponent>> Templates { get; } = new(StringComparer.Ordinal);
 
         public List<BattlegroundDoorOffset> DoorOffsets { get; } = new();
@@ -76,6 +79,11 @@ namespace CEM.Client.ZoneExporter
             {
                 foreach (JsonNode node in blocked)
                     data.Blocked.Add(ReadSite(node));
+            }
+            if (data._root["portalKeepSites"] is JsonArray portalSites)
+            {
+                foreach (JsonNode node in portalSites)
+                    data.PortalSites.Add(ReadSite(node));
             }
             foreach (KeyValuePair<string, JsonNode> template in (JsonObject)data._root["templates"])
             {
@@ -442,7 +450,8 @@ namespace CEM.Client.ZoneExporter
         {
             BattlegroundKeepData data = BattlegroundKeepData.Current;
             if (data == null) return;
-            foreach (BattlegroundKeepSite site in data.Sites.Where(candidate => BattlegroundKeepData.ZoneForRegion(candidate.Region) == Zone.ID))
+            foreach (BattlegroundKeepSite site in data.Sites.Concat(data.PortalSites)
+                .Where(candidate => BattlegroundKeepData.ZoneForRegion(candidate.Region) == Zone.ID))
                 ExportBattlegroundKeep(data, site);
         }
 
@@ -469,6 +478,8 @@ namespace CEM.Client.ZoneExporter
                     FixtureId = BattlegroundFixtureBase + component.Id,
                 });
             }
+
+            LogBattlegroundGround(keep, pieces);
 
             // Orientation. A variant is valid when at least one server door has a NIF door node within the tolerance.
             // Among valid variants the most matched doors win, then the smallest worst delta over those doors; ties keep the baseline.
@@ -566,6 +577,33 @@ namespace CEM.Client.ZoneExporter
                 }
                 Log.Normal($"BG_KEEP_PIECE zone={Zone.ID} keep={keep.KeepId} comp={piece.Component.Id} nif={piece.Name} tris={triangles}");
             }
+        }
+
+        /// <summary>
+        /// Terrain height under each piece and each server door, against the keep Z the server places them at. The
+        /// navigation pieces are baked at that Z, so a large difference means a piece floats or sinks on the ground.
+        /// </summary>
+        private void LogBattlegroundGround(BattlegroundKeepSite keep, List<BattlegroundPiece> pieces)
+        {
+            int worstPiece = 0, piecesOver = 0, worstDoor = 0;
+            foreach (BattlegroundPiece piece in pieces)
+            {
+                int dz = TerrainOffset(piece.Centre.X, piece.Centre.Y, keep.Z);
+                Log.Normal($"BG_KEEP_GROUND zone={Zone.ID} keep={keep.KeepId} comp={piece.Component.Id} skin={piece.Component.Skin} dz={dz}");
+                worstPiece = Math.Max(worstPiece, Math.Abs(dz));
+                if (Math.Abs(dz) > 64) piecesOver++;
+                foreach ((double x, double y) in piece.ServerDoors)
+                    worstDoor = Math.Max(worstDoor, Math.Abs(TerrainOffset(x, y, keep.Z)));
+            }
+            Log.Normal($"BG_KEEP_GROUND_SUMMARY zone={Zone.ID} keep={keep.KeepId} region={keep.Region} pieces={pieces.Count} max_abs_dz={worstPiece} pieces_over_64={piecesOver} doors_max_abs_dz={worstDoor}");
+        }
+
+        /// <summary>Terrain height minus the keep Z at a world position (0 when the zone has no heightmap).</summary>
+        private int TerrainOffset(double x, double y, int keepZ)
+        {
+            if (!Zone.HasHeightmap) return 0;
+            ushort height = Zone.Heightmap[(float)(x - Zone.XOffset), (float)(y - Zone.YOffset)];
+            return height - keepZ;
         }
 
         private Matrix4 PieceMatrixFor(BattlegroundKeepSite keep, BattlegroundPiece piece, bool mirror, bool headingSign) =>

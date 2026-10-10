@@ -12,6 +12,83 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.235.0] - 2026-10-10
+
+### Added
+
+- Battleground portal keeps: the 24 portal keeps of Proving Grounds, Lion's
+  Den, Hills of Claret, Killaloe, Thidranki, Wilton, Molvik and Leirvik get a
+  closed 8-piece ring (one gate passable for every realm and seven walls,
+  measured from the client frontier kit: the gate is the only opening, the
+  landing stays 218 units clear and every saved NPC at least 232 units) when
+  their row has no components (bug 135). Cathal Valley and Murdaigean
+  keep their native client portal keeps. Logged as
+  `BATTLEGROUND_PORTAL_KEEP_BUILT` / `_SKIPPED`. The first start adds 192
+  keep component rows. The rebuilt battleground navmeshes bake the rings,
+  so their walls block movement.
+- Diagnostics: `AUTONOMOUS_BG_ROUTE_FAILED` (driver route failure reason),
+  `BATTLEGROUND_SQUAD_SKIPPED ... detail=no_route|spawn_failed`, `humans_ms` /
+  `spawn_ms` in `BATTLEGROUND_TICK_SLOW`, `RVR_KEEP_ARRIVED`,
+  `RVR_ASSAULT_GATE` and `KEEP_STEP_TIMING` for lord deaths and keep level
+  changes (bugs 127, 129, 133, 134).
+- Battleground navmesh build: a native connectivity checker
+  (`tools/dev/bg-keep-connectivity.cpp`) floods every keep centre and portal
+  landing from each realm landing (default, blocking and gates-closed
+  filters) and writes `bg-keep-connectivity.txt` and `bg-keep-ground.txt`;
+  `build-battleground-nav.sh` exits 3 on an unreachable keep or a landing
+  with no floor. The builder logs `BG_KEEP_GROUND` / `_SUMMARY` (piece height
+  versus terrain).
+
+### Changed
+
+- Battleground patrols and ambushes target real players first and otherwise
+  autonomous battleground bots outside sanctuaries and portal keeps, so
+  patrols also run while no human is online (bug 129). The route is proved
+  before patrol bots are built, so a failed route no longer builds and
+  deletes up to 16 bots.
+- Battleground participants try every camp in turn and accept a route
+  through gates they may pass (their own portal keep), matching the native
+  mover; a follower holding beside a progressing leader counts as active
+  (bug 127).
+- Server Release build passes with zero errors; the touched test classes
+  pass except the pre-existing `PlayerLedAndRelicCarriersAreNeverCandidates`.
+  Real-client checks are pending.
+
+### Fixed
+
+- A keep lord's death no longer freezes the game loop for seconds: the keep,
+  its components and doors were saved in ~65 separate SQLite transactions
+  with 125 connections (each component re-read before every write). Lord
+  death, release and level change (including upgrades) now write each dirty
+  row once in one transaction (`KeepSaveBatch`), with a per-table fallback
+  if that transaction fails. `KEEP_STEP_TIMING` gains a `flush` step
+  (bug 134).
+- Autonomous bots can claim a campaign battleground keep after its lord
+  dies; the bot claim rule now has the same battleground exemption as the
+  player rule (bug 128).
+- Battleground bots no longer leave as `stuck` ~90 s after entering because
+  the route out of their landing portal keep was rejected (bug 127).
+- Lion's Den (no gates by design) gets an ungated lord instead of
+  `no_closed_door` (bug 130).
+- Battleground keeps saved off the ground are corrected once at startup
+  (`BATTLEGROUND_KEEP_Z_CORRECTED`): Leirvik keep 134 sat 3,305 units above
+  the terrain (14281 → 10976, walls in the sky, gates unregistrable), and
+  Killaloe's Albion (201, 7700 → 8288) and Hibernia (203, 8000 → 8288)
+  portal keeps were below it, so their landings had no navmesh floor. Only
+  rows still holding the exact wrong Z change (bug 130).
+- Keep lords and retainers no bot can reach (Molvik's lord and up to 8
+  retainers in a sealed lord room) move at runtime to the nearest
+  camp-reachable point in the keep (`BATTLEGROUND_KEEP_LORD_RELOCATED`,
+  `_GUARD_RELOCATED`, `_GUARD_STRANDED`); mob rows are not changed and
+  reachable guards never move. Lord placement and the gate proof now test
+  keep points nearest the centre first instead of exhausting their query
+  budget on the keep's western edge (bug 130).
+- Route-pocket escape no longer "escapes" to the bot's own position: 95
+  Hibernian bots looped there after Tir na Nog egress; now the goal is
+  dropped and the warning is limited to once a minute per bot (bug 132).
+- `IsCohesive` no longer throws when a group leader has left its group
+  (bug 131).
+
 ## [0.234.0] - 2026-10-10
 
 ### Added

@@ -14,6 +14,10 @@ public sealed partial class AutonomousWorldBotController
     private double _siegePorterBestGap = double.PositiveInfinity;
     private bool _siegePorterHadTicket;
     private bool _siegeColumnHolding;
+    /// <summary>The keep whose arrival this leader last logged (RVR_KEEP_ARRIVED), so one visit logs once.</summary>
+    private string _keepArrivedLogged;
+    /// <summary>Earliest game time of the next RVR_ASSAULT_GATE line for this controller.</summary>
+    private long _assaultGateLogAfter;
 
     private bool HoldSiegeColumn(GameBot leader, string forceId, CampDestination destination)
     {
@@ -352,6 +356,7 @@ public sealed partial class AutonomousWorldBotController
                         Log.Info($"RVR_KEEP_DEPARTURE bot={bot.Name} target={destination.Id} fallback=optional_budget");
                     }
                     _keepTravelPoints = steps; _keepTravelIndex = 0;
+                    _keepArrivedLogged = null;
                     _rvrApproachDestination = endpoint;
                     _keepPlanning = null; _keepTravelFailures = 0;
                 }
@@ -417,6 +422,11 @@ public sealed partial class AutonomousWorldBotController
             _rvrApproachDestination = _keepTravelPoints[^1];
             if (army == null)
             {
+                if (_keepArrivedLogged != destination.Id)
+                {
+                    _keepArrivedLogged = destination.Id;
+                    Log.Info($"RVR_KEEP_ARRIVED bot=\"{bot.Name}\" target={destination.Id} region={bot.CurrentRegionID} intent={_rvrIntent} shared={_rvrSharedEvent} level={bot.Level}");
+                }
                 bot.TempProperties.SetProperty(KeepAssaultApproachProperty,
                     new KeepAssaultApproach(destination.Id, bot.CurrentRegionID, _keepTravelPoints[^1]));
                 // A staging camp is not arrival at the actual siege approach.

@@ -135,6 +135,7 @@ namespace DOL.GS
         private Vector3 _lastTerminalRouteFailurePosition;
         private long _lastTerminalRouteFailureTick;
         private int _terminalRouteFailuresInPocket;
+        private long _nextPocketEscapeLogTick;
         private bool _routeInterruptedByCombat;
         private bool _recoverBeforeNextCampTarget;
         private ConColor? _lastEngagedCon;
@@ -2699,6 +2700,17 @@ namespace DOL.GS
                 objectives, GameLoop.GameLoopTime, Random.Shared.NextDouble());
             _rvrSharedEvent = plan?.IsSharedEvent == true;
             _rvrIntent = plan?.Intent ?? AutonomousRvrEventLayer.Intent.Roam;
+            // Diagnostic (bug 133): a warband with keep targets that opens no assault
+            // logs the gate inputs that decided it, at most once per ten minutes.
+            if (_rvrIntent is not (AutonomousRvrEventLayer.Intent.AssaultKeep or AutonomousRvrEventLayer.Intent.AssaultRelicKeep) &&
+                (bot.Group == null || bot.Group.LivingLeader == bot) && GameLoop.GameLoopTime >= _assaultGateLogAfter &&
+                objectives.Any(objective => objective.Kind == AutonomousRvrEventLayer.Intent.AssaultKeep))
+            {
+                _assaultGateLogAfter = GameLoop.GameLoopTime + 600_000;
+                Log.Info($"RVR_ASSAULT_GATE bot=\"{bot.Name}\" group_size={warband.Length} avg_level={averageLevel} min_level={minimumLevel} " +
+                    $"healers={healers} siege_ready={siegeReady} campaign={AutonomousPlayerBehavior.CanStartCampaign(leaderType, minimumLevel, warband.Length)} " +
+                    $"keep_targets={objectives.Count(objective => objective.Kind == AutonomousRvrEventLayer.Intent.AssaultKeep)} intent={_rvrIntent}");
+            }
             bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
             bot.TempProperties.SetProperty("RvrDefendingKeep",
                 _rvrIntent == AutonomousRvrEventLayer.Intent.DefendEvent && plan.TargetId.StartsWith("rvr-keep-") &&
@@ -4826,6 +4838,15 @@ namespace DOL.GS
                 escapeName = capital.Name;
             }
 
+            // Bug 132: the immediate pocket escape can resolve to the floor the
+            // actor already stands on (a portal landing audited to the same
+            // point). Such a "move" never leaves the pocket, so it must not count
+            // as progress or reset the failure budget. Refusing it lets the caller
+            // reject this goal through its ordinary cooldown path.
+            if (escapeRegion == bot.CurrentRegionID &&
+                !AutonomousRouteRecoveryPolicy.IsRealPocketEscape(current, escape))
+                return false;
+
             ushort failedSourceRegion = bot.CurrentRegionID;
             ushort failedSourceZone = bot.CurrentZone?.ID ?? 0;
             ushort failedTargetRegion = _camp?.RegionId ?? 0;
@@ -4839,10 +4860,16 @@ namespace DOL.GS
 
             ClearZonePointQuarantine(bot, failedSourceRegion, failedSourceZone, failedTargetRegion);
 
-            Log.Warn($"AUTONOMOUS_ROUTE_POCKET_ESCAPE bot={bot.Name} id={bot.DatabaseID} " +
-                     $"from={_lastTerminalRouteFailureRegion}:{(int)current.X},{(int)current.Y},{(int)current.Z} " +
-                     $"to={escapeRegion}:{(int)escape.X},{(int)escape.Y},{(int)escape.Z} " +
-                     $"terminalFailures={_terminalRouteFailuresInPocket}");
+            // Real escapes can still recur across visits; keep the evidence at
+            // most once a minute per bot instead of once per replan.
+            if (now >= _nextPocketEscapeLogTick)
+            {
+                _nextPocketEscapeLogTick = now + 60_000;
+                Log.Warn($"AUTONOMOUS_ROUTE_POCKET_ESCAPE bot={bot.Name} id={bot.DatabaseID} " +
+                         $"from={_lastTerminalRouteFailureRegion}:{(int)current.X},{(int)current.Y},{(int)current.Z} " +
+                         $"to={escapeRegion}:{(int)escape.X},{(int)escape.Y},{(int)escape.Z} " +
+                         $"terminalFailures={_terminalRouteFailuresInPocket}");
+            }
             ResetRouteOrderState();
             ResetRepeatedRouteFailures();
             bot.MarkAutonomousStateDirty();

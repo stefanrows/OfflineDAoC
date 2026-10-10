@@ -13,6 +13,9 @@ namespace DOL.GS
     /// </summary>
     public sealed record KeepSite(ushort Region, int KeepId, string Name, int X, int Y, int Z, int Heading, string Template, bool ExistingRow);
 
+    /// <summary>A portal keep whose client zone data already has a native frontier keep fixture beside it.</summary>
+    public sealed record NativePortalKeep(ushort Region, int KeepId);
+
     /// <summary>
     /// Server-built battleground keeps. Component tuples are copied verbatim from the
     /// /keep fastcreate bracket layouts in commands/gmcommands/keep.cs (height 0). Offsets are
@@ -191,6 +194,24 @@ namespace DOL.GS
                 new ComponentSpec(23, 2, 247, 3, 1),
                 new ComponentSpec(24, 10, 254, 252, 3),
             },
+            // Portal keep ring (bug 135): a closed eight-component ring, one gate (skin 0) on the south side at
+            // grid (-2,-2) and seven walls (skin 9). With the gate shut the ring is closed; with the passage open
+            // it reaches outside only through the gate. Measured on the raster footprints (8-unit flood, closed
+            // with 16 and 24 units of character clearance): the landing centre is 218 units clear of the ring, and
+            // every saved NPC stays at least 232 units from it (Siegemaster Wyllam, keep 388, is nearest at 232;
+            // Master Eldritch B, keep 897, is 264; the others are 361 to 791). The gate reaches 842 units from the
+            // centre, so the layout is not limited to the earlier 676-unit proxy.
+            ["PortalKeep"] = new[]
+            {
+                new ComponentSpec(0, 0, 254, 254, 0),
+                new ComponentSpec(1, 9, 254, 255, 1),
+                new ComponentSpec(2, 9, 254, 2, 1),
+                new ComponentSpec(3, 9, 253, 3, 0),
+                new ComponentSpec(4, 9, 255, 3, 0),
+                new ComponentSpec(5, 9, 0, 3, 0),
+                new ComponentSpec(6, 9, 3, 1, 1),
+                new ComponentSpec(7, 9, 3, 2, 1),
+            },
         };
 
         public static IReadOnlyList<KeepSite> Sites { get; } = Array.AsReadOnly(new KeepSite[]
@@ -201,13 +222,59 @@ namespace DOL.GS
             new KeepSite(237, 138, "Dun Killaloe", 557067, 556900, 8768, 0, "CKBG15_19", true),
             new KeepSite(240, 144, "Wilton Keep", 554338, 556723, 7047, 0, "CKBG30_34", false),
             new KeepSite(241, 132, "Molvik Faste", 557677, 551751, 5896, 0, "CKBG35_39", true),
-            new KeepSite(242, 134, "Leirvik Castle", 294287, 295659, 14281, 87, "CKBG40_44", true),
+            new KeepSite(242, 134, "Leirvik Castle", 294287, 295659, 10976, 87, "CKBG40_44", true),
             new KeepSite(238, 143, "Thidranki Keep", 561678, 549656, 4071, 0, "CKBG20_24", false),
         });
 
         /// <summary>Sites the navigation search could not place (no flat clear ground). They have no keep until a site is found.</summary>
         public static IReadOnlyList<KeepSite> BlockedSites { get; } = Array.AsReadOnly(new KeepSite[]
         {
+        });
+
+        /// <summary>
+        /// Portal keeps (BaseLevel 100) of the campaign regions whose client zone data has no keep fixture beside them.
+        /// BattlegroundPortalKeepBuilder adds the PortalKeep ring to a row with no components, before keeps load.
+        /// Centre, heading and height must equal the saved row, or the site is skipped (site_mismatch).
+        /// </summary>
+        public const string PortalTemplate = "PortalKeep";
+        public const ushort PortalBaseLevel = 100;
+
+        public static IReadOnlyList<KeepSite> PortalSites { get; } = Array.AsReadOnly(new KeepSite[]
+        {
+            new KeepSite(234, 381, "Albion Portal Keep", 573189, 549387, 8640, 63, PortalTemplate, true),
+            new KeepSite(234, 637, "Midgard Portal Keep", 557159, 574661, 8640, 180, PortalTemplate, true),
+            new KeepSite(234, 893, "Hibernia Portal Keep", 541023, 549746, 8640, 295, PortalTemplate, true),
+            new KeepSite(235, 382, "Albion Portal Keep", 536467, 536600, 5056, 300, PortalTemplate, true),
+            new KeepSite(235, 638, "Midgard Portal Keep", 544467, 575832, 5056, 208, PortalTemplate, true),
+            new KeepSite(235, 894, "Hibernia Portal Keep", 579923, 554525, 5056, 65, PortalTemplate, true),
+            new KeepSite(236, 383, "Albion Portal Keep", 541434, 577799, 8008, 210, PortalTemplate, true),
+            new KeepSite(236, 639, "Midgard Portal Keep", 582626, 553398, 8008, 90, PortalTemplate, true),
+            new KeepSite(236, 895, "Hibernia Portal Keep", 537984, 539654, 8008, 315, PortalTemplate, true),
+            new KeepSite(237, 201, "Albion Portal Keep", 544726, 582450, 8288, 0, PortalTemplate, true),
+            new KeepSite(237, 202, "Midgard Portal keep", 584841, 559325, 8288, 0, PortalTemplate, true),
+            new KeepSite(237, 203, "Hibernia Portal Keep", 534997, 537319, 8288, 0, PortalTemplate, true),
+            new KeepSite(238, 385, "Albion Portal Keep", 563575, 574212, 5408, 180, PortalTemplate, true),
+            new KeepSite(238, 641, "Midgard Portal Keep", 569953, 540622, 5408, 0, PortalTemplate, true),
+            new KeepSite(238, 897, "Hibernia Portal Keep", 533843, 534134, 5408, 315, PortalTemplate, true),
+            new KeepSite(240, 387, "Albion Portal Keep", 554521, 583899, 6952, 180, PortalTemplate, true),
+            new KeepSite(240, 643, "Midgard Portal Keep", 533631, 535174, 6728, 315, PortalTemplate, true),
+            new KeepSite(240, 899, "Hibernia Portal Keep", 580637, 538535, 6736, 45, PortalTemplate, true),
+            new KeepSite(241, 388, "Albion Portal Keep", 531699, 542006, 5992, 290, PortalTemplate, true),
+            new KeepSite(241, 644, "Midgard Portal Keep", 550401, 577364, 5992, 180, PortalTemplate, true),
+            new KeepSite(241, 900, "Hibernia Portal Keep", 575915, 543437, 5992, 75, PortalTemplate, true),
+            new KeepSite(242, 390, "Albion Portal Keep", 321868, 283864, 10128, 65, PortalTemplate, true),
+            new KeepSite(242, 646, "Midgard Portal Keep", 271949, 272798, 10128, 0, PortalTemplate, true),
+            new KeepSite(242, 902, "Hibernia Portal Keep", 280252, 319625, 10128, 180, PortalTemplate, true),
+        });
+
+        /// <summary>
+        /// Portal keeps that stay native: Cathal Valley (165) and Murdaigean (251) have a frontier keep fixture within
+        /// about 520 units of each, and Murdaigean's gates are native door rows. The builder logs them and adds nothing.
+        /// </summary>
+        public static IReadOnlyList<NativePortalKeep> PortalNativeKeeps { get; } = Array.AsReadOnly(new NativePortalKeep[]
+        {
+            new NativePortalKeep(165, 1), new NativePortalKeep(165, 2), new NativePortalKeep(165, 3),
+            new NativePortalKeep(251, 41), new NativePortalKeep(251, 42), new NativePortalKeep(251, 43),
         });
 
         /// <summary>Component tuples for a template, or an empty list for an unknown name.</summary>
