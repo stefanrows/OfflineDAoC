@@ -27,8 +27,20 @@ package, not this fork's version.
   allow startup to continue. Non-Windows hosts skip the change. No bot/NPC
   cadence or individual thread priority changes.
 - Server and Windows launcher Release builds passed with zero errors; warnings
-  remain. Automated tests were skipped. Bug 124 awaits installation, Windows
+  remain. Automated tests were skipped. Bug 124 awaits Windows
   priority/responsiveness and real-client bot verification.
+
+### Changed
+
+- Ship all pending source/documentation changes together as 0.224.1, including
+  AssistTrain and the ordinary crowd-control auto-assist fix. Pushed directly
+  to fork main and deployed the same Release server/launcher outputs on
+  2026-10-10: 17 files replaced with verified backups; protected accounts,
+  database and settings unchanged. Backup: `D:\Games\OfflineDAoC-backups\deploy-20261010-101806`.
+  No components were running at deployment; the installation remains stopped.
+  Generated test scratchpad language copies were preserved locally and excluded
+  from the source commit. Automated tests and post-deploy monitoring skipped;
+  real-client verification remains pending.
 
 ## [0.224.0] - 2026-10-10
 

@@ -90,9 +90,10 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      BelowNormal, configurable to Normal/BelowNormal/Idle in serverconfig.xml;
      malformed settings fall back with a warning, and priority failures do
      not abort startup. Bot/NPC loops and thread priorities are unchanged.
-     Release server compilation passed; automated tests were skipped.
-     Installation, Task Manager Base priority, matched-load responsiveness
-     and real-client bot activity checks remain pending. Priority is a
+     Server/Windows launcher Release builds passed; automated tests skipped.
+     Deployed in 0.224.1 on 2026-10-10; the installation remains stopped.
+     Task Manager Base priority, matched-load responsiveness and real-client
+     bot activity checks remain pending. Priority is a
      scheduling preference, not a CPU cap or proven root-cause fix.
 
 123. **Ordinary auto-assist treats leader crowd control as an attack call.**
@@ -103,13 +104,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      uses its captured target and does not fall through to a melee toggle
      during CC. Weapon attacks still assist. Retaliation, peeling, area damage,
      defensive distance rules, explicit pulls, pet assistance and petpull are
-     unchanged. Server Release build passed; automated tests skipped. Pending:
-     installation and real-client checks in both modes for single/area mez,
+     unchanged. Server Release build passed; automated tests skipped.
+     Deployed in 0.224.1 on 2026-10-10. Pending: real-client checks in both
+     modes for single/area mez,
      root, stun, debuffs, successful/resisted casts, damage casts with mid-cast
      selection changes, weapon attacks, and the retained combat behaviors.
 
 
-Installation checkpoint, 2026-10-10: fixes through 0.222.0, including bugs
+Installation checkpoint, 2026-10-10: all pending source changes through
+0.224.1, including AssistTrain and bugs 123/124, are merged/pushed and deployed
+with the Release server and Windows launcher. Seventeen files replaced;
+protected accounts, database and settings unchanged. No components were running
+at deployment; the installation remains stopped. Installation is confirmed;
+real-client checks remain pending. Bug 122 was not changed by this shipment.
+
+Earlier installation checkpoint, 2026-10-10: fixes through 0.222.0, including bugs
 120/121 and the latest remote movement changes, are deployed with the server
 and launcher. The installation is stopped; protected saves/settings are unchanged.
 This confirms installation only. Keep the required real-client checks pending.

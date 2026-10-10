@@ -15,7 +15,7 @@ When a task is done and its required verification is complete, move it out of it
      and short Windows-native read-only queries of autonomous bots and keeps;
      the collector has exited and the five-minute chat heartbeat is paused.
      A private handover retains the review cursor and notification history.
-     The game server remains running. No gameplay actions,
+     The game server remained running when observation paused. No gameplay actions,
      server lifecycle changes, settings/save writes, tests or deployment.
      Result so far: one coordinated two-party launch physically mustered 16
      living bots, four healers and two equipped ram operators. The attack
@@ -277,10 +277,19 @@ Agent sessions on items 45–48: take the role and context from
      Aggressive/Defensive policies were retained in 0.223.0. The owner-authorized
      follow-up fixes their harmful-cast assist triggers and polling in 0.224.0
      (bug 123), retaining other behavior. Server Release build verified; automated tests skipped under
-     project policy. Installation and caster/tank/CC/pet/target-switch real-client
-     checks remain pending. No deployment or server lifecycle action.
+     project policy. Deployed with the combined 0.224.1 Release server and
+     Windows launcher on 2026-10-10; the installation remains stopped.
+     Caster/tank/CC/pet/target-switch real-client checks remain pending.
 
-Installation checkpoint, 2026-10-10: all local source changes and latest fork
+Installation checkpoint, 2026-10-10: all pending source changes, including
+AssistTrain and fixes 123/124, merged/pushed and deployed as **0.224.1** to
+`D:\Games\OfflineDAoC`. Server and Windows launcher Release builds passed;
+17 files replaced with verified backups and protected accounts/save/settings
+unchanged. No components were running; the installation remains stopped.
+Automated tests and post-deploy monitoring skipped; real-client checks pending.
+Paused observation task 107 was not resumed.
+
+Earlier installation checkpoint, 2026-10-10: all local source changes and latest fork
 main were merged/pushed, built together in Release with zero errors, and deployed
 as **0.222.0** to `D:\Games\OfflineDAoC`. Server, launcher and ten campaign meshes
 installed (27 files); verified backup: `D:\Games\OfflineDAoC-backups\deploy-20261010-001850`.
