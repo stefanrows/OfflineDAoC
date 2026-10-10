@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.230.0";
+    internal const string DisplayVersion = "0.231.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -139,6 +139,7 @@ internal sealed partial class MainForm : Form
     private Button? _refreshButton;
     private Button? _refreshExchangeButton;
     private Button? _deleteBotButton;
+    private Button? _deleteOrphansButton;
     private Button? _deleteAllBotsButton;
     private readonly List<Button> _realmGenerateButtons = [];
     private readonly Button _startButton;
@@ -1451,6 +1452,12 @@ internal sealed partial class MainForm : Form
         _deleteBotButton.Enabled = false;
         _deleteBotButton.Click += async (_, _) => await DeleteSelectedBotAsync();
         panel.Controls.Add(_deleteBotButton);
+        _deleteOrphansButton = ActionButton("DELETE ORPHANED COMPANIONS…", Color.FromArgb(151, 67, 57));
+        _deleteOrphansButton.Width = 250;
+        _deleteOrphansButton.Enabled = false;
+        _deleteOrphansButton.Click += async (_, _) => await DeleteOrphanedCompanionsAsync();
+        _helpTip.SetToolTip(_deleteOrphansButton, "Permanently delete every companion whose owning character no longer exists, with their items. Server must be stopped.");
+        panel.Controls.Add(_deleteOrphansButton);
         panel.Controls.Add(_onlineOnly);
         _helpTip.SetToolTip(_onlineOnly, "Show only online bots in the current realm and search results. Uncheck to show all bots.");
         return panel;
@@ -2295,7 +2302,7 @@ internal sealed partial class MainForm : Form
             {
                 var classInfo = ClassInfo(reader.GetInt32(2));
                 string ownerName = reader.GetString(6);
-                bool orphaned = reader.IsDBNull(8);
+                bool orphaned = hasCharacters && reader.IsDBNull(8);
                 string zoneName = ownerName.Length > 0 ? $"With {ownerName}" : orphaned ? "No owner (orphan)" : "With owner";
                 // Only companions of this installation's account, or orphans, may be deleted here;
                 // a friend's companions stay protected.
@@ -2306,6 +2313,7 @@ internal sealed partial class MainForm : Form
                 {
                     RealmPoints = reader.GetInt64(5),
                     CompanionId = reader.GetString(7),
+                    IsOrphanCompanion = orphaned,
                 });
             }
         }
@@ -3015,6 +3023,72 @@ internal sealed partial class MainForm : Form
         return serverRunning;
     }
 
+    private async Task DeleteOrphanedCompanionsAsync()
+    {
+        if (IsServerRunning() || HasExactServerProcess())
+        {
+            MessageBox.Show(this, "Orphaned companions can only be deleted while the server is stopped.", "Server is running",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        int count = _bots.Count(bot => bot.IsOrphanCompanion);
+        if (count == 0)
+            return;
+
+        string warning = $"Permanently delete all {count} orphaned companion(s)?\n\n" +
+                         "These companions belong to characters that no longer exist, so nobody can invite them. " +
+                         "This removes them and all of their equipment and backpack items. Companions of existing characters, " +
+                         "including your friend's, are not touched. This cannot be undone.";
+        if (MessageBox.Show(this, warning, "Delete orphaned companions forever", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        try
+        {
+            int deleted = DeleteOrphanedCompanions();
+            await RefreshDashboardAsync();
+            MessageBox.Show(this, $"{deleted} orphaned companion(s) and all of their items were permanently deleted.", "Orphaned companions deleted",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "Unable to delete orphaned companions", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private int DeleteOrphanedCompanions()
+    {
+        // Orphan: the owning character row no longer exists. Re-evaluated inside the
+        // transaction, so only companions orphaned at commit time are removed.
+        using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+        if (IsServerRunning() || HasExactServerProcess())
+            throw new InvalidOperationException("Orphaned companions can only be deleted while the server is stopped.");
+        if (!TableExists(connection, "player_companions"))
+            return 0;
+        if (!TableExists(connection, "DOLCharacters"))
+            throw new InvalidOperationException("The character table is missing, so orphaned companions cannot be identified. Nothing was deleted.");
+
+        const string orphanFilter = "NOT EXISTS (SELECT 1 FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId)";
+        using (var items = connection.CreateCommand())
+        {
+            items.Transaction = transaction;
+            items.CommandText = $"DELETE FROM Inventory WHERE OwnerID IN (SELECT 'playercompanion:' || pc.CompanionId FROM player_companions pc WHERE {orphanFilter})";
+            items.ExecuteNonQuery();
+        }
+
+        int deleted;
+        using (var records = connection.CreateCommand())
+        {
+            records.Transaction = transaction;
+            records.CommandText = $"DELETE FROM player_companions WHERE CompanionId IN (SELECT pc.CompanionId FROM player_companions pc WHERE {orphanFilter})";
+            deleted = records.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+        return deleted;
+    }
+
     private void DeleteCompanion(string companionId)
     {
         // Companions are live in memory while the server runs, so the database is
@@ -3031,9 +3105,9 @@ internal sealed partial class MainForm : Form
         using (var owner = connection.CreateCommand())
         {
             owner.Transaction = transaction;
-            owner.CommandText = TableExists(connection, "DOLCharacters")
-                ? "SELECT (SELECT c.AccountName FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId) FROM player_companions pc WHERE pc.CompanionId=@id"
-                : "SELECT NULL FROM player_companions pc WHERE pc.CompanionId=@id";
+            if (!TableExists(connection, "DOLCharacters"))
+                throw new InvalidOperationException("The character table is missing, so companion ownership cannot be checked. Nothing was deleted.");
+            owner.CommandText = "SELECT (SELECT c.AccountName FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId) FROM player_companions pc WHERE pc.CompanionId=@id";
             owner.Parameters.AddWithValue("@id", companionId);
             using var ownerReader = owner.ExecuteReader();
             if (!ownerReader.Read())
@@ -3121,6 +3195,8 @@ internal sealed partial class MainForm : Form
         if (_deleteBotButton != null)
             _deleteBotButton.Enabled = SelectedBot() is { CanDelete: true } selected &&
                                        (selected.IsCompanion ? !serverRunning : (!selected.DeletionQueued || !serverRunning));
+        if (_deleteOrphansButton != null)
+            _deleteOrphansButton.Enabled = !serverRunning && _bots.Any(bot => bot.IsOrphanCompanion);
         if (_deleteAllBotsButton != null)
             _deleteAllBotsButton.Enabled = _bots.Any(bot => bot.BotId.HasValue &&
                                                             (!bot.DeletionQueued || !serverRunning));
@@ -3773,6 +3849,7 @@ internal sealed partial class MainForm : Form
         public long? RealmPoints { get; init; }
         public string CompanionId { get; init; } = string.Empty;
         public bool IsCompanion => CompanionId.Length > 0;
+        public bool IsOrphanCompanion { get; init; }
         public string RealmPointsDisplay => RealmPoints?.ToString("N0") ?? "—";
         public string ObjectiveExpiresUtc { get; init; } = string.Empty;
         public bool HasGroupTaskClock { get; init; }

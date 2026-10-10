@@ -12,6 +12,21 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.231.0] - 2026-10-10
+
+### Added
+
+- Active Population: DELETE ORPHANED COMPANIONS… permanently deletes, in one
+  confirmed transaction, every persistent companion whose owning character no
+  longer exists ("No owner (orphan)" rows), with their equipment and backpack
+  items. It works only while the server is stopped and never touches
+  companions of existing characters, including a friend's.
+
+### Changed
+
+- Friend's companions remain listed in Active Population by design; only
+  deleting them from the launcher is blocked (since 0.230.0).
+
 ## [0.230.0] - 2026-10-10
 
 ### Changed
