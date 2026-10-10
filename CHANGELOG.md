@@ -23,6 +23,14 @@ package, not this fork's version.
   the button and menu item are disabled, and the Companion Manager in-game is
   the way to delete a companion. World bots and DELETE ALL BOTS are unchanged.
 
+### Changed
+
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-132203`. The installation
+  remains stopped. Real-client verification is pending.
+
 ## [0.226.0] - 2026-10-10
 
 ### Fixed

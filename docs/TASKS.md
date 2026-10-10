@@ -278,7 +278,8 @@ Agent sessions on items 45–48: take the role and context from
      menu item are disabled and the Companion Manager remains the in-game path.
      World-bot deletion, DELETE ALL BOTS and the legacy bot_profiles rows are
      unchanged. Server and Windows launcher Release builds verified; automated
-     tests skipped under project policy. Checks pending: with the server stopped,
+     tests skipped under project policy. Deployed 2026-10-10 (backup
+     `deploy-20261010-132203`); the installation remains stopped. Checks pending: with the server stopped,
      delete a test companion with equipment and backpack items; confirm the grid
      and the companion's items disappear; confirm the button and menu are disabled
      while the server runs; confirm the world-bot delete path still works.
