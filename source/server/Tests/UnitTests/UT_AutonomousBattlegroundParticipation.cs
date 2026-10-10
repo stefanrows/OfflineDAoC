@@ -266,6 +266,39 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void BattlegroundLandingReleaseDoesNotStartTheReturnWalk()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.StartsReleaseReturnWalk(returnToParty: true, battlegroundLanding: true),
+                    Is.False, "The driver leads a participant released at its landing; no walk back to the death spot");
+                Assert.That(AutonomousBattlegroundParticipation.StartsReleaseReturnWalk(returnToParty: true, battlegroundLanding: false),
+                    Is.True, "An ordinary world release still walks back to the party");
+                Assert.That(AutonomousBattlegroundParticipation.StartsReleaseReturnWalk(returnToParty: false, battlegroundLanding: false),
+                    Is.False, "A disbanded party has nobody to return to");
+            });
+        }
+
+        [Test]
+        public void ProgressWithdrawsOnlyAStuckLeaveMark()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.AfterProgress(AutonomousBattlegroundParticipation.LeaveReason.Stuck),
+                    Is.Null, "A bot that fights again after its stuck mark stays");
+                Assert.That(AutonomousBattlegroundParticipation.AfterProgress(null), Is.Null);
+                foreach (var reason in new[]
+                         {
+                             AutonomousBattlegroundParticipation.LeaveReason.Graduated,
+                             AutonomousBattlegroundParticipation.LeaveReason.TourEnded,
+                             AutonomousBattlegroundParticipation.LeaveReason.Unassigned,
+                             AutonomousBattlegroundParticipation.LeaveReason.NoTurn,
+                         })
+                    Assert.That(AutonomousBattlegroundParticipation.AfterProgress(reason), Is.EqualTo(reason), reason.ToString());
+            });
+        }
+
+        [Test]
         public void FrontierMerchantOffsetsAreDistinct()
         {
             (int dx, int dy)[] offsets = FrontierMedallionMerchants.MerchantOffsets().ToArray();

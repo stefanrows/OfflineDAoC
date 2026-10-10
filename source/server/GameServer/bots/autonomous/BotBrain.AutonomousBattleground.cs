@@ -13,6 +13,9 @@ namespace DOL.AI.Brain
         {
             ThinkInterval = 750;
             GameBot bot = BotBody;
+            // The driver owns movement here, as the world controller does outside: a release
+            // walk left running would re-path every tick against the driver's route (bug 127).
+            bot.HandOverReleaseReturnToGroup();
             if (!AutonomousBattlegroundDriver.Turn(this, bot))
                 return;
             AutonomousRealmAbilityActives.UseActives(bot);

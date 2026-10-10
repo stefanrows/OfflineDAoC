@@ -28,6 +28,18 @@ public static class AutonomousBattlegroundDriver
     private const int RouteIntervalMilliseconds = 3_000;
     private const int ClaimRetryMilliseconds = 5_000;
     private const int ProgressDistance = 96;
+    // Detour returns at most 256 polygons per path, so a far camp is proved by chaining capped legs.
+    public const int MaxRouteLegs = 8;
+    // A partial leg ending this close to the goal has reached it.
+    public const float LegReachDistance = 48;
+    // A failed goal is not re-proved before this, so camp roaming does not repeat long proofs every turn.
+    private const int UnreachableRetryMilliseconds = 15_000;
+
+    /// <summary>One native path query: its status and the position of its last node.</summary>
+    public readonly record struct RouteLeg(PathfindingStatus Status, Vector3 End);
+
+    /// <summary>Outcome of a chained route proof.</summary>
+    public enum RouteChain { NoPath, DeadEnd, Capped, Reached }
 
     private sealed class State
     {
@@ -52,6 +64,8 @@ public static class AutonomousBattlegroundDriver
         public long CampsUnreachableUntil;
         // Goals whose route failure is already logged in this visit.
         public HashSet<(int, int, int)> FailedGoals;
+        // Goals whose route proof failed, with the game time before which they are not proved again.
+        public Dictionary<(int, int, int), long> UnreachableUntil;
     }
 
     private static readonly ConditionalWeakTable<GameBot, State> States = new();
@@ -65,7 +79,12 @@ public static class AutonomousBattlegroundDriver
         if (brain == null || bot == null) return false;
         // Each early return names its reason, so the live log shows why a participant idles.
         if (!bot.IsAlive) return Idle(bot, "not_alive");
-        if (bot.IsIncapacitated) return Idle(bot, "crowd_controlled");
+        if (bot.IsIncapacitated)
+        {
+            // Mezzed or stunned in a fight is fighting, not standing stuck.
+            if (bot.InCombat) AutonomousBattlegroundParticipation.NoteProgress(bot, eAutonomousProgressKind.Combat);
+            return Idle(bot, "crowd_controlled");
+        }
         if (AutonomousBattlegroundParticipation.IsLeaving(bot) && AutonomousBattlegroundParticipation.TryFinishLeaving(bot)) return Idle(bot, "left");
         BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(bot.CurrentRegionID);
         if (definition == null) return Idle(bot, "outside_battleground");
@@ -247,15 +266,29 @@ public static class AutonomousBattlegroundDriver
             Stand(bot);
             return true;
         }
+        (int, int, int) key = (goal.X, goal.Y, goal.Z);
         Point3D previous = state.RouteGoal;
         bool sameGoal = previous != null && previous.X == goal.X && previous.Y == goal.Y && previous.Z == goal.Z;
+        if (state.UnreachableUntil != null && state.UnreachableUntil.TryGetValue(key, out long retry) && now < retry)
+        {
+            // A goal proven unreachable within the retry window: refuse it without
+            // touching the route state, so a caller's fallback goal (defend-keep →
+            // camp, approach → roam) keeps its own 3-s route cadence instead of
+            // being re-proved every think. Only stop when this goal was being walked.
+            if (sameGoal) Stand(bot);
+            return false;
+        }
         if (!sameGoal || now >= state.RouteUntil)
         {
             state.RouteGoal = goal;
             state.RouteUntil = now + RouteIntervalMilliseconds;
             state.RouteOk = PathExists(bot, goal, out state.RoutePosition, out string reason);
             if (state.RouteOk && !bot.IsCasting) bot.PathTo(state.RoutePosition, bot.MaxSpeed);
-            if (!state.RouteOk) RecordRouteFailure(bot, state, goal, reason);
+            if (!state.RouteOk)
+            {
+                RecordRouteFailure(bot, state, goal, reason);
+                MarkUnreachable(state, key, now);
+            }
         }
         if (!state.RouteOk)
         {
@@ -274,12 +307,23 @@ public static class AutonomousBattlegroundDriver
             $"{goal.X},{goal.Y},{goal.Z}", $"{bot.X},{bot.Y},{bot.Z}", reason);
     }
 
+    private static void MarkUnreachable(State state, (int, int, int) key, long now)
+    {
+        state.UnreachableUntil ??= new Dictionary<(int, int, int), long>();
+        // Follow goals move with their leader; drop expired keys so the table stays small.
+        if (state.UnreachableUntil.Count >= 32)
+            foreach ((int, int, int) stale in state.UnreachableUntil.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToList())
+                state.UnreachableUntil.Remove(stale);
+        state.UnreachableUntil[key] = now + UnreachableRetryMilliseconds;
+    }
+
     /// <summary>
     /// Proves a walkable route to the goal, reporting the first failed check in <paramref name="reason"/>.
     /// The blocking-door filter is tried first. Then the default filters are accepted when every closed gate on
     /// the route is one this bot may pass, which is the native mover's own rule: it plots with default filters and
     /// exempts friendly keep doors. Portal keeps hold the battleground landings and their gates stay closed, so
-    /// the blocking-door filter alone cannot leave them.
+    /// the blocking-door filter alone cannot leave them. Both passes chain capped legs (<see cref="ChainRoute"/>);
+    /// on success <paramref name="position"/> is the point to walk to now: the goal, or the end of the first leg.
     /// </summary>
     private static bool PathExists(GameBot bot, Point3D goal, out Vector3 position, out string reason)
     {
@@ -300,25 +344,82 @@ public static class AutonomousBattlegroundDriver
             return false;
         }
         Vector3 from = new(bot.X, bot.Y, bot.Z);
-        Span<WrappedPathfindingNode> nodes = stackalloc WrappedPathfindingNode[512];
-        if (nav.GetPathStraight(zone, from, position, nav.BlockingDoorAvoidanceFilters, nodes).Status == PathfindingStatus.PathFound)
+        Vector3 target = position;
+        WrappedPathfindingNode[] nodes = System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Rent(512);
+        try
         {
-            reason = null;
-            return true;
-        }
-        PathfindingResult open = nav.GetPathStraight(zone, from, position, nav.DefaultFilters, nodes);
-        if (open.Status != PathfindingStatus.PathFound)
-        {
-            reason = "no_route";
+            if (ChainRoute(from, target, MaxRouteLegs,
+                    start => Leg(nav, zone, start, target, nav.BlockingDoorAvoidanceFilters, nodes, out _),
+                    out Vector3 walkTo) == RouteChain.Reached)
+            {
+                position = walkTo;
+                reason = null;
+                return true;
+            }
+            bool closedGate = false;
+            RouteChain open = ChainRoute(from, target, MaxRouteLegs, start =>
+            {
+                RouteLeg leg = Leg(nav, zone, start, target, nav.DefaultFilters, nodes, out int count);
+                if (count == 0 || !CrossesBlockedDoor(bot, nodes, count)) return leg;
+                closedGate = true;
+                return new RouteLeg(PathfindingStatus.NoPathFound, start);
+            }, out walkTo);
+            if (open == RouteChain.Reached)
+            {
+                position = walkTo;
+                reason = null;
+                return true;
+            }
+            reason = closedGate ? "closed_gate" : open switch
+            {
+                RouteChain.Capped => "corridor_cap",
+                RouteChain.DeadEnd => "dead_end",
+                _ => "no_route",
+            };
             return false;
         }
-        if (CrossesBlockedDoor(bot, nodes, open.NodeCount))
+        finally
         {
-            reason = "closed_gate";
-            return false;
+            System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Return(nodes);
         }
-        reason = null;
-        return true;
+    }
+
+    // One native query from start toward the goal; count is the number of route nodes left in the buffer.
+    private static RouteLeg Leg(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 goal, EDtPolyFlags[] filters,
+        WrappedPathfindingNode[] nodes, out int count)
+    {
+        PathfindingResult result = nav.GetPathStraight(zone, start, goal, filters, nodes);
+        count = result.Status is PathfindingStatus.PathFound or PathfindingStatus.PartialPathFound &&
+            result.NodeCount > 0 && result.NodeCount <= nodes.Length ? result.NodeCount : 0;
+        return count == 0 ? new RouteLeg(PathfindingStatus.NoPathFound, start) : new RouteLeg(result.Status, nodes[count - 1].Position);
+    }
+
+    /// <summary>
+    /// Chains corridor-capped Detour legs from <paramref name="from"/> toward <paramref name="goal"/>, each leg
+    /// starting where the previous one ended, at most <paramref name="maxLegs"/> queries. A partial path proves a
+    /// route only when a later leg reaches the goal; the bot then walks to the end of the first leg, which the
+    /// native mover plots in one piece (it pauses persistent bots on a partial path). A leg that stops making
+    /// progress is a dead end; a chain still progressing after the last leg is capped.
+    /// </summary>
+    public static RouteChain ChainRoute(Vector3 from, Vector3 goal, int maxLegs, Func<Vector3, RouteLeg> leg, out Vector3 walkTo)
+    {
+        walkTo = goal;
+        Vector3 start = from;
+        for (int index = 0; index < maxLegs; index++)
+        {
+            RouteLeg result = leg(start);
+            if (result.Status == PathfindingStatus.PathFound ||
+                result.Status == PathfindingStatus.PartialPathFound &&
+                Vector3.DistanceSquared(result.End, goal) <= LegReachDistance * LegReachDistance)
+                return RouteChain.Reached;
+            if (result.Status != PathfindingStatus.PartialPathFound)
+                return index == 0 ? RouteChain.NoPath : RouteChain.DeadEnd;
+            if (Vector3.DistanceSquared(result.End, start) < 1)
+                return RouteChain.DeadEnd;
+            if (index == 0) walkTo = result.End;
+            start = result.End;
+        }
+        return RouteChain.Capped;
     }
 
     /// <summary>True when a door near the route's door nodes blocks this bot, as in the native Pathfinder.</summary>
