@@ -10,6 +10,17 @@ public static class AutonomousRouteRecoveryPolicy
     public static bool AppliesToCurrentDestination(bool destinationChanged, Vector3 failed, Vector3 current) =>
         !destinationChanged || Vector3.DistanceSquared(failed, current) <= 96 * 96;
 
+    // Bug 88: a rejected dungeon or outdoor rival-hunt ("local-pvp-*") roaming
+    // spot must not stay the chosen destination. The rejection (30 minutes) is
+    // recorded under the camp id, but RvR roaming keeps its own destination.
+    // Keep and relic objectives are re-published every tick by the shared RvR
+    // plan, so they are deliberately not covered here.
+    public static bool ShouldDropRejectedRvrDestination(
+        string destinationId, bool isDungeon, System.Collections.Generic.IReadOnlyDictionary<string, long> rejectedUntil,
+        long nowTick) =>
+        destinationId != null && (isDungeon || destinationId.StartsWith("local-pvp-", System.StringComparison.Ordinal)) &&
+        rejectedUntil.TryGetValue(destinationId, out long until) && until > nowTick;
+
     public const int MaximumLocalAttempts = 3;
     public const float ForwardProgressRequired = 240f;
     public const long RepeatedFailureWindowMilliseconds = 10 * 60_000L;

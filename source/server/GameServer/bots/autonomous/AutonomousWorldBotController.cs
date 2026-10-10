@@ -1851,11 +1851,12 @@ namespace DOL.GS
                 _rvrDestination = null;
             }
 
-            if (_rvrDestination?.IsDungeon == true &&
-                _rejectedDungeonCamps.TryGetValue(_rvrDestination.Id, out long rejectedUntil) &&
-                rejectedUntil > GameLoop.GameLoopTime)
+            if (_rvrDestination != null &&
+                AutonomousRouteRecoveryPolicy.ShouldDropRejectedRvrDestination(
+                    _rvrDestination.Id, _rvrDestination.IsDungeon, _rejectedDungeonCamps, GameLoop.GameLoopTime))
             {
                 _rvrDestination = null;
+                _rvrApproachDestination = null;
                 _hunterPatrolArrivedTick = 0;
             }
             bool atPatrol = _rvrDestination != null && bot.CurrentRegionID == _rvrDestination.RegionId &&

@@ -3435,6 +3435,7 @@ namespace DOL.GS
 				case eSpellType.DamageShield:
 				case eSpellType.DamageAdd:
 				case eSpellType.DirectDamage:
+				case eSpellType.DirectDamageNoVariance:
 				case eSpellType.Lifedrain:
 				case eSpellType.DamageSpeedDecrease:
 				case eSpellType.StyleBleeding:
