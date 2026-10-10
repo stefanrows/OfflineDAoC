@@ -24,6 +24,12 @@ package, not this fork's version.
   drop-in); bug 144 adds the Svasud bind-stone and border-gate analysis;
   new bugs 149 (player kills stall the reaper, up to ~1 s) and 150
   (Pilus'Fury script NullReferenceException). No gameplay change.
+- Server and Windows launcher Release builds pass with zero errors. Pushed
+  to fork main, released as v0.239.1 and deployed on 2026-10-11: 17 files
+  replaced (server binaries rebuilt from unchanged source, launcher version)
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261011-011248`. The installation
+  remains stopped.
 
 ## [0.239.0] - 2026-10-10
 
