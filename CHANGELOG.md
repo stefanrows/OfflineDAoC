@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.229.1] - 2026-10-10
+
+### Fixed
+
+- Saving a rate key that was not yet in the database (for example AUTONOMOUS
+  BOT RP) no longer fails with "UNIQUE constraint failed:
+  ServerProperty.ServerProperty_ID". The launcher wrote an empty-string ID for
+  new rows, so only one launcher-created key could exist. New rows now store
+  NULL like server-created rows, and any existing empty-string ID is
+  normalized on save. The launcher test fixture now has the real unique index.
+- Server and Windows launcher Release builds pass. Automated tests were skipped.
+
 ## [0.229.0] - 2026-10-10
 
 ### Added

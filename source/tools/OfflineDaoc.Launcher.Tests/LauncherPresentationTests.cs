@@ -80,7 +80,7 @@ public sealed class LauncherPresentationTests
     public void VersionIsManuallyPinnedAndRefreshRunsEveryFiveMinutes()
     {
         Type mainFormType = Launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.229.0"));
+        Assert.That(mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo("0.229.1"));
         Assert.That(mainFormType.GetField("AutoRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(300_000));
         Assert.That(mainFormType.GetField("RvrSnapshotRefreshMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(30_000));
         Assert.That(mainFormType.GetField("ServerReadinessPollMilliseconds", HiddenStatic)!.GetRawConstantValue(), Is.EqualTo(500));
@@ -350,6 +350,7 @@ public sealed class LauncherPresentationTests
                     (Category TEXT NOT NULL, `Key` VARCHAR(255) NOT NULL PRIMARY KEY, Description TEXT NOT NULL,
                      DefaultValue TEXT NOT NULL, Value TEXT NOT NULL, LastTimeRowUpdated DATETIME NOT NULL,
                      ServerProperty_ID VARCHAR(255));
+                    CREATE UNIQUE INDEX U_ServerProperty_ServerProperty_ID ON ServerProperty (ServerProperty_ID);
                     INSERT INTO ServerProperty VALUES
                     ('rates','xp_rate','player','1','1','2000-01-01','');
                     """;

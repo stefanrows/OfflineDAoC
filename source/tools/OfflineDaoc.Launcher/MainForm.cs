@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.229.0";
+    internal const string DisplayVersion = "0.229.1";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -2060,9 +2060,12 @@ internal sealed partial class MainForm : Form
         using var transaction = connection.BeginTransaction();
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
+        // ServerProperty_ID has a unique index; the server leaves it NULL, so new
+        // rows must too. Earlier launchers wrote '', which blocked a second new key.
         command.CommandText = """
+            UPDATE ServerProperty SET ServerProperty_ID=NULL WHERE ServerProperty_ID='';
             INSERT INTO ServerProperty (Category, `Key`, Description, DefaultValue, Value, LastTimeRowUpdated, ServerProperty_ID)
-            VALUES ('rates', @key, @description, '1', @value, @updated, '')
+            VALUES ('rates', @key, @description, '1', @value, @updated, NULL)
             ON CONFLICT(`Key`) DO UPDATE SET
                 Value=excluded.Value,
                 LastTimeRowUpdated=excluded.LastTimeRowUpdated

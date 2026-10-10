@@ -272,7 +272,8 @@ Agent sessions on items 45–48: take the role and context from
      **0.229.0**: launcher YOUR PLAYER RP / AUTONOMOUS BOT RP selectors (1×–100×).
      The server scales autonomous-bot RP by the new `bot_rp_rate`; companions
      follow `rp_rate`. Real-client checks are pending: the selected RP rate
-     applies after restart to the player, companions and world bots. Deployed
+     applies after restart to the player, companions and world bots. 0.229.1
+     fixes the launcher's first-save UNIQUE constraint error for new rate keys. Deployed
      2026-10-10 (backup `deploy-20261010-133410`); the installation remains stopped.
 
 111. **Delete your own persistent companions from the launcher.** Owner,
