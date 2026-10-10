@@ -27,7 +27,11 @@ package, not this fork's version.
   ignored rate multipliers. The default 1× leaves rewards unchanged.
 - Progress import resets the RP rates to 1× along with the XP rates and GM option.
 - Server and Windows launcher Release builds pass. Automated tests were skipped.
-  Real-client verification is pending.
+  Pushed directly to fork main and deployed on 2026-10-10: 17 files replaced
+  with verified backups; accounts, database and settings unchanged. Backup:
+  `D:\Games\OfflineDAoC-backups\deploy-20261010-133410`. The installation
+  remains stopped. GitHub release v0.229.0 was packaged locally but not
+  published. Real-client verification is pending.
 
 ## [0.228.0] - 2026-10-10
 
