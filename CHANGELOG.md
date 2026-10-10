@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.230.0] - 2026-10-10
+
+### Changed
+
+- Active Population companion delete is limited to companions owned by this
+  installation's account (from account.txt) and orphaned companions whose
+  owning character no longer exists. A friend's companions keep the delete
+  button and menu item disabled, and the delete transaction re-checks
+  ownership. Orphaned companions now show "No owner (orphan)" in the Zone
+  column instead of "With owner".
+
 ## [0.229.1] - 2026-10-10
 
 ### Fixed

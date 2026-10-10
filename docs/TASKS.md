@@ -291,6 +291,10 @@ Agent sessions on items 45–48: take the role and context from
      delete a test companion with equipment and backpack items; confirm the grid
      and the companion's items disappear; confirm the button and menu are disabled
      while the server runs; confirm the world-bot delete path still works.
+     **0.230.0** limits it to companions of this installation's account and
+     orphans (owner character gone, now shown as "No owner (orphan)"); a
+     friend's companions (e.g. With Skaldnova) cannot be deleted from the
+     launcher. Check: the delete stays disabled on a friend's companion row.
 
 110. **One-click reset of all keeps and relics in the launcher.** Owner,
      2026-10-10. Implemented in source **0.226.0**: the existing

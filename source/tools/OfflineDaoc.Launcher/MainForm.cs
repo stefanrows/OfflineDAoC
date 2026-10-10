@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.229.1";
+    internal const string DisplayVersion = "0.230.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -2279,18 +2279,29 @@ internal sealed partial class MainForm : Form
         {
             bool hasRealmPoints = ColumnExists(connection, "player_companions", "RealmPoints");
             string realmPointsColumn = hasRealmPoints ? "COALESCE(pc.RealmPoints, 0)" : "0";
-            string ownerNameColumn = TableExists(connection, "DOLCharacters")
+            bool hasCharacters = TableExists(connection, "DOLCharacters");
+            string ownerNameColumn = hasCharacters
                 ? "COALESCE((SELECT c.Name FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId), '')"
                 : "''";
+            // NULL owner account means the owning character no longer exists (orphan).
+            string ownerAccountColumn = hasCharacters
+                ? "(SELECT c.AccountName FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId)"
+                : "NULL";
+            string? localAccount = TryReadLocalAccount();
             using var command = connection.CreateCommand();
-            command.CommandText = $"SELECT pc.Name, pc.Realm, pc.ClassId, pc.Level, pc.IsActive, {realmPointsColumn}, {ownerNameColumn}, pc.CompanionId FROM player_companions pc ORDER BY pc.Name";
+            command.CommandText = $"SELECT pc.Name, pc.Realm, pc.ClassId, pc.Level, pc.IsActive, {realmPointsColumn}, {ownerNameColumn}, pc.CompanionId, {ownerAccountColumn} FROM player_companions pc ORDER BY pc.Name";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 var classInfo = ClassInfo(reader.GetInt32(2));
                 string ownerName = reader.GetString(6);
-                string zoneName = ownerName.Length == 0 ? "With owner" : $"With {ownerName}";
-                bots.Add(new BotRow(null, reader.GetString(0), RealmName(reader.GetInt32(1)), "—", "—", classInfo.Name, reader.GetInt32(3), zoneName, "Companion", running && reader.GetBoolean(4), true, false, string.Empty, string.Empty, string.Empty, string.Empty,
+                bool orphaned = reader.IsDBNull(8);
+                string zoneName = ownerName.Length > 0 ? $"With {ownerName}" : orphaned ? "No owner (orphan)" : "With owner";
+                // Only companions of this installation's account, or orphans, may be deleted here;
+                // a friend's companions stay protected.
+                bool canDelete = orphaned || localAccount != null &&
+                                 string.Equals(reader.GetString(8), localAccount, StringComparison.OrdinalIgnoreCase);
+                bots.Add(new BotRow(null, reader.GetString(0), RealmName(reader.GetInt32(1)), "—", "—", classInfo.Name, reader.GetInt32(3), zoneName, "Companion", running && reader.GetBoolean(4), canDelete, false, string.Empty, string.Empty, string.Empty, string.Empty,
                     string.Empty, string.Empty, string.Empty, string.Empty)
                 {
                     RealmPoints = reader.GetInt64(5),
@@ -3015,6 +3026,23 @@ internal sealed partial class MainForm : Form
         if (IsServerRunning() || HasExactServerProcess())
             throw new InvalidOperationException("Companions can only be deleted from the launcher while the server is stopped.");
 
+        // Re-check ownership: only this installation's account or an orphan (owner character gone).
+        string? localAccount = TryReadLocalAccount();
+        using (var owner = connection.CreateCommand())
+        {
+            owner.Transaction = transaction;
+            owner.CommandText = TableExists(connection, "DOLCharacters")
+                ? "SELECT (SELECT c.AccountName FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId) FROM player_companions pc WHERE pc.CompanionId=@id"
+                : "SELECT NULL FROM player_companions pc WHERE pc.CompanionId=@id";
+            owner.Parameters.AddWithValue("@id", companionId);
+            using var ownerReader = owner.ExecuteReader();
+            if (!ownerReader.Read())
+                throw new InvalidOperationException("The selected companion no longer exists.");
+            if (!ownerReader.IsDBNull(0) &&
+                (localAccount == null || !string.Equals(ownerReader.GetString(0), localAccount, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("This companion belongs to another account. Only your own companions and orphaned companions can be deleted here.");
+        }
+
         using (var items = connection.CreateCommand())
         {
             items.Transaction = transaction;
@@ -3422,6 +3450,18 @@ internal sealed partial class MainForm : Form
     private (string Account, string Password) ReadCredentials()
     {
         return PortableCredentials.ReadOrCreate(_root);
+    }
+
+    private string? TryReadLocalAccount()
+    {
+        try
+        {
+            return File.Exists(Path.Combine(_root, "account.txt")) ? ReadCredentials().Account : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private bool IsServerRunning()
