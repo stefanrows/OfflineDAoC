@@ -268,6 +268,35 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+113. **Eden-style battlegrounds: server-built keeps, keep-aware navmeshes and
+     autonomous gamebot participation.** Owner, 2026-10-10, after bug 125
+     ("replicate the BGs like on Eden or Blackthorn"; Camlann alliances kept,
+     bracket gamebots, all phases authorized). Implemented in source (version in
+     CHANGELOG): keeps 140–144 are new rows, and rows 132,
+     134 and 138 gain `/keep fastcreate` components while they have none. Doors come
+     from native KeepPosition rows; corrupt offsets are skipped. Lords and
+     retainers spawn only on navigation-proved points behind closed doors. Shared
+     data: `tools/dev/battleground-keeps.json`. Navigation: native pieces from the
+     client frontier kit for all eight campaign regions. Each gate or tower has one
+     server door without a native door node, which becomes a Door volume. Lion's
+     Den (235) has no door, so no lord. Thidranki (238) is sited on a relaxed rule
+     (ground variance 183 under a 200 limit, lowest-ground Z, fixture test not
+     applied; 5,888 units from the portal centre). Details: docs/CAMLANN.md
+     (battleground campaign) and docs/DEVELOPMENT.md (battleground navigation).
+     Real-client checks pending: keep placement and look, wall and door alignment,
+     lord gating and guard placement, the Thidranki site's distance and terrain, and
+     the Lion's Den keep with no door.
+     Autonomous participation: bracket-eligible RvR-tour bots buy the free
+     battleground medallion from a real merchant, board real porters (at most 8
+     per cast, 24 per map, sharing a 40-actor cap with the director), fight over
+     the campaign keep (defend, claim, assault without rams, roam) and graduate
+     out to their capital. Every realm's frontier porter has a medallion
+     merchant (Midgard's Gwulla is re-added if a save lacks it), and the 1–14 brackets have almost no eligible
+     bots, so the director remains their population. Checks pending: bots
+     arrive, fight, claim and graduate; no bot walks through keep walls. Holding the keep: a real guild holding a
+     campaign keep with a live lord earns 2% level XP (and 2 tokens for humans)
+     every 10 gameplay minutes; captures are announced region-wide.
+
 112. **Realm point rate settings.** Owner, 2026-10-10. Implemented in source
      **0.229.0**: launcher YOUR PLAYER RP / AUTONOMOUS BOT RP selectors (1×–100×).
      The server scales autonomous-bot RP by the new `bot_rp_rate`; companions
@@ -297,7 +326,7 @@ Agent sessions on items 45–48: take the role and context from
      launcher. Deployed 2026-10-10 (backup `deploy-20261010-134149`); the
      installation remains stopped. Check: the delete stays disabled on a
      friend's companion row.
-     **0.231.0** adds DELETE ORPHANED COMPANIONS… next to DELETE CHARACTER…:
+     **0.233.0** adds DELETE ORPHANED COMPANIONS… next to DELETE CHARACTER…:
      one confirmation removes every orphan and its items while the server is
      stopped. Check: orphan count in the confirmation matches the "No owner
      (orphan)" rows, they disappear afterwards, and own/friend companions stay.

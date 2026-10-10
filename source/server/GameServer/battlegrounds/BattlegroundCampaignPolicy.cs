@@ -74,6 +74,39 @@ namespace DOL.GS
             return true;
         }
 
+        // Autonomous participants use the admission, landing and move of TryEnter.
+        // Bots keep no bind point, so the bind-outside check does not apply to them.
+        public static bool TryEnterBot(GameBot bot, out string reason)
+        {
+            reason = null;
+            if (bot == null) { reason = "No battleground participant."; return false; }
+            BattlegroundDefinition definition = BattlegroundCampaignCatalog.ForLevel(bot.Level);
+            if (!CanEnter(definition, bot, out reason)) return false;
+            if (!bot.IsAlive || bot.InCombat || GameRelic.IsPlayerCarryingRelic(bot))
+            { reason = "The bot must be alive, out of combat and carrying no relic to enter."; return false; }
+            GameLocation landing = GetLanding(bot, definition);
+            if (landing == null) { reason = "The battleground has no arrival camp."; return false; }
+            if (!bot.MoveTo(landing.RegionID, landing.X, landing.Y, landing.Z, landing.Heading))
+            { reason = "The battleground transfer could not be completed."; return false; }
+            return true;
+        }
+
+        // The bot's equivalent of /battleground leave. Bots keep no bind point, so the
+        // outside destination is the realm capital, spread as the release fallback spreads it.
+        public static bool TryExitBot(GameBot bot, out string reason)
+        {
+            reason = null;
+            if (bot == null || BattlegroundCampaignCatalog.Find(bot.CurrentRegionID) == null)
+            { reason = "The bot is not in a campaign battleground."; return false; }
+            if (!bot.IsAlive || bot.InCombat) { reason = "The bot must be alive and out of combat to leave."; return false; }
+            if (GameRelic.IsPlayerCarryingRelic(bot)) { reason = "Return the relic before leaving."; return false; }
+            AutonomousStuckWatchdog.CapitalLocation capital = AutonomousStuckWatchdog.SpreadAround(
+                AutonomousStuckWatchdog.SafeCapitalFor(bot.Realm), bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID);
+            if (!bot.MoveTo(capital.RegionId, capital.X, capital.Y, capital.Z, capital.Heading))
+            { reason = "The outside destination is unavailable."; return false; }
+            return true;
+        }
+
         public static bool TryLeave(GamePlayer player, out string reason)
         {
             reason = null;

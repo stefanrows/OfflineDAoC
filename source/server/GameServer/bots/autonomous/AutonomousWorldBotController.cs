@@ -1589,6 +1589,9 @@ namespace DOL.GS
             PvpCombatant.RelinquishOptionalSafety(bot);
             // The on-foot habit after a PvE release never carries into RvR.
             _walkToCampAfterRelease = false;
+            // Assigned battleground participants travel to the porter first; a failed
+            // step leaves the ordinary RvR plan in charge.
+            if (AutonomousBattlegroundParticipation.IsAssigned(bot) && TryBattlegroundTravel(bot)) return true;
             KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
                 .FirstOrDefault(point => AutonomousRvrKeepPolicy.IsClaimableKeep(point.Keep) &&
                     point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null &&

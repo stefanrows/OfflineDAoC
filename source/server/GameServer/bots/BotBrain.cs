@@ -1523,6 +1523,14 @@ namespace DOL.AI.Brain
                 return;
             }
 
+            // Autonomous campaign participants fight inside their battleground through the
+            // bounded driver; ordinary world-bot routines wait until they leave it.
+            if (AutonomousBattlegroundParticipation.IsParticipant(BotBody))
+            {
+                ThinkAutonomousBattleground();
+                return;
+            }
+
             AutonomousRealmAbilityActives.UseActives(BotBody);
 
             if (AutonomousGuildKeepDefense.Eligible(BotBody))

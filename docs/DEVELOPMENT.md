@@ -211,6 +211,51 @@ the helper's `builder/base/zones` tree. `--install-root` and `--output` support
 another complete installation and developer directory. Geometry generation can
 take several minutes; no server is started and no live mesh is overwritten.
 
+#### Server-built battleground keeps
+
+The keeps for 234, 235, 236, 237, 238, 240, 241 and 242 are built by the server
+from the `/keep fastcreate` bracket layouts (`BattlegroundKeepLayouts.cs`), not
+from client keep models. Their navigation pieces come from the client's
+frontier kit. The shared data is `tools/dev/battleground-keeps.json`: the keep
+sites, the component templates, the KeepPosition door offsets for skins 0, 10
+and 11, and the portal-keep centres. Edit the C# table and the JSON together;
+`UT_BattlegroundKeepLayouts` fails when they differ.
+
+Order of work when a site or a template changes:
+
+```bash
+# 1. Search for flat, clear ground for the new sites (zones 234, 235, 236, 238, 240).
+#    Accepted X/Y/Z are written into the JSON. A site with no spot stays in blockedSites.
+bash tools/dev/build-battleground-nav.sh --bg-keep-sites
+# 2. Copy the accepted X/Y/Z into the matching KeepSite rows in BattlegroundKeepLayouts.Sites.
+# 3. Bake the meshes. The helper passes --bg-keeps, so zones 234, 235, 236, 237, 240,
+#    241 and 254 (region 242) include the keep pieces.
+bash tools/dev/build-battleground-nav.sh
+```
+
+Piece selection: a skin maps to its tier-1 piece through `fr_tiers.csv` and
+`fr_pieces.csv` in `frontiers/frontiers.mpk`, and each piece is read from
+`frontiers/nifs/<piece>.npk`. Pieces are placed with the server's component
+formula, so the keep heading applies in degrees as the server applies it.
+Orientation is one of four variants (mirror and heading sign). A variant is
+valid when at least one server door has a native door node within 96 units.
+The valid variant with the most matched doors wins; ties go to the smallest
+worst delta, then to the baseline. A server door with no native door node
+within 96 units becomes a Door volume at its position (`BG_KEEP_DOOR_VOLUME_ONLY`),
+so the server still registers it as blocking. A keep falls back to cylinders
+(every 96 units along each wall footprint, radius 64) plus Door volumes only
+when no variant is valid, a door piece has no NIF, or a piece has no triangles.
+
+The Thidranki site (keep 143, zone 238) uses a relaxed finder rule: variance up
+to 200, keep Z at the lowest ground across the footprint, and no solid-fixture
+test. The fixture count is logged (`solid_fixtures_within_clearance`).
+
+The log lines are `BG_KEEP_PIECE zone= keep= comp= nif= tris=`,
+`BG_KEEP_DOOR_MATCH zone= keep= comp= door= delta=`, `BG_KEEP_VARIANT`,
+`BG_KEEP_NIF_DOORS` (door centres from the NIF against the server doors),
+`BG_KEEP_DOOR_VOLUME_ONLY` and `BG_KEEP_FALLBACK` (the keep or piece that fell
+back, with the reason).
+
 For a later authorized shipping invocation, include the staged meshes in the
 same stopped-install, backup/hash/rollback workflow:
 

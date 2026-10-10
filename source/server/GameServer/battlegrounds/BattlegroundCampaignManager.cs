@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using DOL.Database;
@@ -18,7 +19,10 @@ namespace DOL.GS
         public const string TokenTemplateId = "offline_bg_siege_token";
         public const int FundingThreshold = 20;
         private const int CaptainRespawnMinutes = 5;
-        private const int MaximumActorsPerRegion = 24;
+        private const int ParticipantChaseDistance = 400;
+        private const int OccupiedSquadDelayMs = 15_000;
+        private const long SlowTickMilliseconds = 50;
+        private const long HoldRewardIntervalMs = 600_000;
         private static readonly Logger Log = LoggerManager.Create(typeof(BattlegroundCampaignManager));
         private static readonly object Gate = new();
         private static readonly Dictionary<ushort, Campaign> Campaigns = new();
@@ -40,6 +44,12 @@ namespace DOL.GS
             internal int Rotation;
             internal long LordSpawnTick;
             internal bool HasMonsterObjectives;
+            internal int LastHumans;
+            internal readonly Dictionary<string, string> SquadSkipReasons = new(StringComparer.Ordinal);
+            // Owner last seen on the keep, when it was seen, and the start of the current hold interval.
+            internal Guild HeldGuild;
+            internal long HeldSince;
+            internal long LastHoldReward;
         }
         private sealed class Camp
         {
@@ -67,6 +77,7 @@ namespace DOL.GS
             internal Point3D Goal;
             internal long NextGoalAt;
             internal byte Level;
+            internal GameLiving Participant;
         }
 
         [GameServerStartedEvent]
@@ -127,6 +138,40 @@ namespace DOL.GS
             if (!GameServer.Database.AddObject(_token)) throw new InvalidOperationException("Cannot save battleground token template.");
         }
 
+        // Restores a funded camp only for a real guild sponsor. Unsponsored camps used to
+        // restore an expiry too, so every camp reset in the same tick after a restart.
+        public static bool ShouldRestoreSponsor(string guildId, bool realGuild, DateTime expiresAt, DateTime now) =>
+            realGuild && !string.IsNullOrEmpty(guildId) && expiresAt > now;
+
+        // Nine campaign timers would otherwise start, and fire squads and captains, together.
+        public static int StaggerMs(int index) => index * 1_100;
+
+        public static int NearestIndex(IReadOnlyList<Point3D> camps, int x, int y)
+        {
+            int nearest = -1;
+            long best = long.MaxValue;
+            for (int i = 0; i < camps.Count; i++)
+            {
+                long dx = camps[i].X - x, dy = camps[i].Y - y;
+                long distance = dx * dx + dy * dy;
+                if (distance >= best) continue;
+                best = distance;
+                nearest = i;
+            }
+            return nearest;
+        }
+
+        // A patrol always walks in from a camp other than the one nearest its participant.
+        public static int PatrolOriginIndex(int nearest, int count, int rotation)
+        {
+            if (count <= 1) return 0;
+            int offset = 1 + Math.Abs(rotation % (count - 1));
+            return ((nearest < 0 ? 0 : nearest) + offset) % count;
+        }
+
+        private static int DefinitionIndex(BattlegroundDefinition definition) =>
+            Math.Max(0, BattlegroundCampaignCatalog.Definitions.ToList().FindIndex(candidate => candidate.RegionId == definition.RegionId));
+
         private static void Initialize(BattlegroundDefinition definition)
         {
             AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
@@ -137,8 +182,9 @@ namespace DOL.GS
                 WorldMgr.GetNPCsFromRegion(definition.RegionId).Any(npc => npc is not GameBot && npc is not GameKeepGuard &&
                     (npc.Flags & GameNPC.eFlags.PEACE) == 0 && npc.RewardStatus == GameNPC.RewardEligibility.Eligible) };
             long now = Now;
-            campaign.NextSquadAt = now + 60_000;
-            campaign.NextAmbushAt = now + 180_000;
+            int stagger = StaggerMs(DefinitionIndex(definition));
+            campaign.NextSquadAt = now + 60_000 + stagger;
+            campaign.NextAmbushAt = now + 180_000 + stagger;
             Campaigns.Add(definition.RegionId, campaign);
             // Camp anchors start from actual portal landings, then prove a native
             // walking route to a point outside every portal safe area.
@@ -153,10 +199,11 @@ namespace DOL.GS
                     camp.Row = new DbBattlegroundCampaignCamp { CampKey = $"{definition.RegionId}:{i}" };
                     GameServer.Database.AddObject(camp.Row);
                 }
-                if (camp.Row.ExpiresAt > WorldSimulationClock.UtcNow)
+                Guild sponsor = GuildMgr.GetGuildByGuildID(camp.Row.SponsorGuildId);
+                if (ShouldRestoreSponsor(camp.Row.SponsorGuildId, PvpCombatant.IsRealGuild(sponsor), camp.Row.ExpiresAt, WorldSimulationClock.UtcNow))
                 {
-                    camp.Guild = GuildMgr.GetGuildByGuildID(camp.Row.SponsorGuildId);
-                    if (PvpCombatant.IsRealGuild(camp.Guild)) camp.Tokens = Math.Clamp(camp.Row.Tokens, 0, FundingThreshold - 1);
+                    camp.Guild = sponsor;
+                    camp.Tokens = Math.Clamp(camp.Row.Tokens, 0, FundingThreshold - 1);
                     camp.SponsorExpiresAt = now + (long)(camp.Row.ExpiresAt - WorldSimulationClock.UtcNow).TotalMilliseconds;
                 }
                 if (camp.Guild == null) SaveFunding(camp, 0);
@@ -172,7 +219,14 @@ namespace DOL.GS
                 Campaigns.Remove(definition.RegionId);
                 return;
             }
-            campaign.Timer = new ECSGameTimer(campaign.Camps[0].Commander, _ => Tick(campaign), 1000);
+            if (keep != null && BattlegroundNativeKeepData.IsOfflineKeep(keep))
+            {
+                // A failed keep must not stop the campaign start for every map.
+                try { BattlegroundNativeKeepData.EnsureGarrison(definition, keep, campaign.Camps.Select(camp => camp.Position).ToArray(), BattlegroundNativeKeepData.GarrisonSearchRadius(keep)); }
+                catch (Exception exception) { Log.Error($"BATTLEGROUND_NATIVE_KEEP_FAILED region={definition.RegionId}", exception); }
+            }
+            campaign.Timer = new ECSGameTimer(campaign.Camps[0].Commander, _ => Tick(campaign), 1000 + stagger);
+            Log.Info($"BATTLEGROUND_CAMPAIGN_READY region={definition.RegionId} camps={campaign.Camps.Count} keep={(keep == null ? "none" : keep.KeepID.ToString())} lord={NativeLordReady(campaign)} doors={keep?.Doors.Count ?? 0} monsters={campaign.HasMonsterObjectives}");
         }
 
         private static int Tick(Campaign campaign)
@@ -185,12 +239,20 @@ namespace DOL.GS
                     Stop(GameServerEvent.Stopped, null, EventArgs.Empty);
                     return 0;
                 }
+                Stopwatch total = Stopwatch.StartNew();
+                Stopwatch phase = Stopwatch.StartNew();
+                long captainsMs = 0, encountersMs = 0, squadsMs = 0;
                 try
                 {
                     long now = Now;
                     GuardLord liveLord = campaign.Keep?.Guards.Values.OfType<GuardLord>().FirstOrDefault(lord => lord.IsAlive && lord.ObjectState == GameObject.eObjectState.Active);
                     if (liveLord != null && liveLord.SpawnTick != campaign.LordSpawnTick)
                     { campaign.LordParticipants.Clear(); campaign.LordSpawnTick = liveLord.SpawnTick; }
+                    SyncKeepHolder(campaign, now);
+                    try { PayKeepHoldReward(campaign, liveLord != null, now); }
+                    catch (Exception exception) { Log.Error($"BATTLEGROUND_KEEP_HOLD_REWARD_FAILED region={campaign.Definition.RegionId}", exception); }
+                    // At most one captain per campaign per tick; the other due camps wait for later ticks.
+                    bool captainSpawned = false;
                     foreach (Camp camp in campaign.Camps)
                     {
                         if (camp.Captain != null && (!camp.Captain.IsAlive || camp.Captain.ObjectState != GameObject.eObjectState.Active))
@@ -201,11 +263,17 @@ namespace DOL.GS
                             camp.Row.CaptainRespawnAt = WorldSimulationClock.UtcNow.AddMinutes(CaptainRespawnMinutes);
                             GameServer.Database.SaveObject(camp.Row);
                         }
-                        if (camp.Captain == null && now >= camp.RespawnAt) SpawnCaptain(camp);
+                        if (camp.Captain == null && now >= camp.RespawnAt && !captainSpawned)
+                        {
+                            captainSpawned = true;
+                            SpawnCaptain(camp);
+                        }
                         if ((camp.SponsorExpiresAt > 0 && now >= camp.SponsorExpiresAt) ||
                             (camp.GroupSponsor != null && camp.GroupSponsor.Group != camp.SponsorGroup))
                             ResetSponsor(camp);
                     }
+                    captainsMs = phase.ElapsedMilliseconds;
+                    phase.Restart();
                     foreach (Encounter encounter in campaign.Encounters.ToArray())
                     {
                         foreach (GameBot dead in encounter.Members.Where(member => member.ObjectState != GameObject.eObjectState.Active || !member.IsAlive).ToArray())
@@ -219,6 +287,9 @@ namespace DOL.GS
                         }
                         if (now < encounter.NextGoalAt) continue;
                         encounter.NextGoalAt = now + 5000;
+                        // Siege approaches are unchanged. Patrols and ambushes re-path only when
+                        // their live participant has moved away from the current goal.
+                        if (!encounter.Siege && !RefreshParticipantGoal(campaign, encounter)) continue;
                         foreach (GameBot member in encounter.Members)
                         {
                             Point3D approach = null;
@@ -227,6 +298,14 @@ namespace DOL.GS
                             BattlegroundEncounterActor.SetGoal(member, goal, target);
                         }
                     }
+                    encountersMs = phase.ElapsedMilliseconds;
+                    phase.Restart();
+                    int humans = CountHumans(campaign);
+                    if ((humans > 0) != (campaign.LastHumans > 0))
+                        Log.Info($"BATTLEGROUND_OCCUPANCY region={campaign.Definition.RegionId} humans={humans}");
+                    if (humans > 0 && campaign.LastHumans == 0)
+                        campaign.NextSquadAt = Math.Min(campaign.NextSquadAt, now + OccupiedSquadDelayMs);
+                    campaign.LastHumans = humans;
                     if (now >= campaign.NextSquadAt)
                     {
                         campaign.NextSquadAt = now + 120_000;
@@ -242,15 +321,18 @@ namespace DOL.GS
                             campaign.KillCredits.Remove(key);
                     if (campaign.KillCredits.Count > 4096)
                         foreach (string key in campaign.KillCredits.OrderBy(pair => pair.Value).Take(campaign.KillCredits.Count - 4096).Select(pair => pair.Key).ToArray()) campaign.KillCredits.Remove(key);
+                    squadsMs = phase.ElapsedMilliseconds;
                 }
                 catch (Exception exception) { Log.Error($"BATTLEGROUND_CAMPAIGN_TICK_FAILED region={campaign.Definition.RegionId}", exception); }
+                if (total.ElapsedMilliseconds > SlowTickMilliseconds)
+                    Log.Warn($"BATTLEGROUND_TICK_SLOW region={campaign.Definition.RegionId} ms={total.ElapsedMilliseconds} captains_ms={captainsMs} encounters_ms={encountersMs} squads_ms={squadsMs} actors={ActorCount(campaign)}");
                 return 1000;
             }
         }
 
         private static void SpawnCaptain(Camp camp)
         {
-            if (ActorCount(camp.Campaign) >= MaximumActorsPerRegion) return;
+            if (ActorCount(camp.Campaign) >= DirectorCapacity(camp.Campaign)) return;
             camp.Captain = BattlegroundEncounterActor.Spawn(camp.Campaign.Definition.RegionId,
                 camp.Position.X, camp.Position.Y, camp.Position.Z, (byte)eCharacterClass.Armsman,
                 (byte)camp.Campaign.Definition.MaxLevel, $"{camp.Campaign.Definition.Name} Camp Captain", camp.Guild);
@@ -264,11 +346,18 @@ namespace DOL.GS
 
         private static int ActorCount(Campaign campaign) => campaign.Encounters.Sum(encounter => encounter.Members.Count) + campaign.Camps.Count(camp => camp.Captain != null);
 
-        private static GameLiving SiegeTarget(Campaign campaign, GameBot member, out Point3D approach)
+        // Autonomous participants inside the map reduce the director share of the 40-actor pool.
+        private static int DirectorCapacity(Campaign campaign) =>
+            AutonomousBattlegroundParticipation.DirectorCap(AutonomousBattlegroundParticipation.PresentCount(campaign.Definition.RegionId));
+
+        private static GameLiving SiegeTarget(Campaign campaign, GameBot member, out Point3D approach) => SiegeTarget(campaign.Keep, member, out approach);
+
+        /// <summary>The next closed door (or the lord) an enemy member may attack; approach is its proven standing point.</summary>
+        public static GameLiving SiegeTarget(AbstractGameKeep keep, GameBot member, out Point3D approach)
         {
             approach = null;
-            if (campaign.Keep == null || !GameServer.KeepManager.IsEnemy(campaign.Keep, member)) return null;
-            GameKeepDoor[] doors = campaign.Keep.Doors.Values
+            if (keep == null || !GameServer.KeepManager.IsEnemy(keep, member)) return null;
+            GameKeepDoor[] doors = keep.Doors.Values
                 .Where(candidate => candidate.IsAlive && candidate.State == eDoorState.Closed && GameServer.ServerRules.IsAllowedToAttack(member, candidate, true))
                 .OrderBy(candidate => member.GetDistanceTo(candidate)).ToArray();
             foreach (GameKeepDoor door in doors)
@@ -276,7 +365,7 @@ namespace DOL.GS
             // A remaining closed hostile door always precedes the lord, even if
             // navigation cannot prove its approach. Never bypass it by attacking upstairs.
             if (doors.Length > 0) return null;
-            GuardLord lord = campaign.Keep.Guards.Values.OfType<GuardLord>()
+            GuardLord lord = keep.Guards.Values.OfType<GuardLord>()
                 .FirstOrDefault(candidate => candidate.IsAlive && candidate.ObjectState == GameObject.eObjectState.Active && GameServer.ServerRules.IsAllowedToAttack(member, candidate, true));
             return lord != null && TryApproach(member, lord, out approach) ? lord : null;
         }
@@ -309,10 +398,28 @@ namespace DOL.GS
             if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone)) return false;
             Vector3 start = new(landing.X, landing.Y, landing.Z);
             if (!nav.TrySnapToMesh(zone, ref start, 100)) return false;
-            AbstractGameKeep portal = GameServer.KeepManager.GetKeepsOfRegion(definition.RegionId)
-                .FirstOrDefault(candidate => candidate.IsPortalKeep && candidate.X == landing.X && candidate.Y == landing.Y);
+            // Match the portal keep by its area: a snapped landing never equals the keep's exact centre.
+            AbstractGameKeep portal = region.GetAreasOfSpot(new Point3D(landing.X, landing.Y, landing.Z)).OfType<KeepArea>()
+                .Select(area => area.Keep).FirstOrDefault(candidate => candidate?.IsPortalKeep == true);
             int radius = (portal?.Area as Area.Circle)?.Radius ?? 4000;
             double direction = Math.Atan2((keep?.Y ?? alternate.Y) - landing.Y, (keep?.X ?? alternate.X) - landing.X);
+            if (FindCampAnchor(region, zone, nav, landing, start, direction, radius, nav.BlockingDoorAvoidanceFilters, out anchor)) return true;
+            // Bug 122: the native portal keep's closed gates are excluded by the blocking-door
+            // filter, which leaves no route. Only when such a closed gate exists, accept the
+            // ordinary route to a point proved outside every portal area.
+            int closedDoors = portal?.Doors.Values.Count(door => door.State == eDoorState.Closed) ?? 0;
+            if (closedDoors > 0 && FindCampAnchor(region, zone, nav, landing, start, direction, radius, nav.DefaultFilters, out anchor))
+            {
+                Log.Info($"BATTLEGROUND_CAMP_DOOR_ROUTE region={definition.RegionId} landing={landing.Name} doors={closedDoors}");
+                return true;
+            }
+            Log.Warn($"BATTLEGROUND_CAMP_UNAVAILABLE region={definition.RegionId} landing={landing.Name} reason=no_proved_outside_camp");
+            return false;
+        }
+
+        private static bool FindCampAnchor(Region region, Zone zone, IPathfindingMgr nav, GameLocation landing, Vector3 start, double direction, int radius, EDtPolyFlags[] filters, out Point3D anchor)
+        {
+            anchor = null;
             Span<WrappedPathfindingNode> nodes = stackalloc WrappedPathfindingNode[512];
             foreach (int offset in new[] { 0, 1, -1, 2, -2, 3, -3, 4 })
             {
@@ -324,11 +431,10 @@ namespace DOL.GS
                 candidate = floor.Value;
                 Point3D point = new(candidate.X, candidate.Y, candidate.Z);
                 if (region.GetAreasOfSpot(point).OfType<KeepArea>().Any(area => area.Keep?.IsPortalKeep == true)) continue;
-                if (nav.GetPathStraight(zone, start, candidate, nav.BlockingDoorAvoidanceFilters, nodes).Status != PathfindingStatus.PathFound) continue;
+                if (nav.GetPathStraight(zone, start, candidate, filters, nodes).Status != PathfindingStatus.PathFound) continue;
                 anchor = point;
                 return true;
             }
-            Log.Warn($"BATTLEGROUND_CAMP_UNAVAILABLE region={definition.RegionId} landing={landing.Name} reason=no_proved_outside_camp");
             return false;
         }
 
@@ -340,20 +446,55 @@ namespace DOL.GS
                 .Where(actor => actor.IsAlive && actor.ObjectState == GameObject.eObjectState.Active && IsEligible(actor)).Distinct().ToArray();
         }
 
+        private static int CountHumans(Campaign campaign)
+        {
+            Point3D origin = campaign.Camps[0].Position;
+            return WorldMgr.GetPlayersCloseToSpot(campaign.Definition.RegionId, origin.X, origin.Y, origin.Z, ushort.MaxValue).Count;
+        }
+
+        // Sanctuaries and portal-keep interiors are never a patrol goal, so landed players are not chased inside.
+        private static bool OutsideSanctuary(GameLiving participant, Point3D point)
+        {
+            if (PvpCombatant.IsSafeArea(participant)) return false;
+            Region region = WorldMgr.GetRegion(participant.CurrentRegionID);
+            return region != null && !region.GetAreasOfSpot(point).OfType<KeepArea>().Any(area => area.Keep?.IsPortalKeep == true);
+        }
+
+        private static bool RefreshParticipantGoal(Campaign campaign, Encounter encounter)
+        {
+            GameLiving participant = encounter.Participant;
+            if (participant == null || !participant.IsAlive || participant.ObjectState != GameObject.eObjectState.Active ||
+                participant.CurrentRegionID != campaign.Definition.RegionId || participant.GetDistanceTo(encounter.Goal) <= ParticipantChaseDistance) return false;
+            Point3D target = new(participant);
+            if (!OutsideSanctuary(participant, target)) return false;
+            encounter.Goal = target;
+            return true;
+        }
+
+        private static void LogSquadSkipped(Campaign campaign, string kind, string reason, int participants)
+        {
+            if (campaign.SquadSkipReasons.TryGetValue(kind, out string previous) && previous == reason) return;
+            campaign.SquadSkipReasons[kind] = reason;
+            Log.Info($"BATTLEGROUND_SQUAD_SKIPPED region={campaign.Definition.RegionId} kind={kind} reason={reason} participants={participants} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
+        }
+
+        private static string FormatPoint(Point3D point) => $"{point.X},{point.Y},{point.Z}";
+
         private static void SpawnSquad(Campaign campaign, bool ambush)
         {
+            string kind = ambush ? "ambush" : "patrol";
             GameLiving[] participants = LocalParticipants(campaign);
-            if (participants.Length == 0) return;
+            if (participants.Length == 0) { LogSquadSkipped(campaign, kind, "no_participants", 0); return; }
             GameLiving participant = participants[campaign.Rotation++ % participants.Length];
             if (ambush)
             {
                 participant = participants.FirstOrDefault(actor => !PvpCombatant.IsSafeArea(actor) && !PvpCombatant.IsInvulnerableToAttack(actor) &&
                     (actor is not GamePlayer human || human.IsDoingQuest(typeof(BattlegroundCampaignQuest)) is BattlegroundCampaignQuest quest && quest.Region == campaign.Definition.RegionId));
-                if (participant == null) return;
+                if (participant == null) { LogSquadSkipped(campaign, kind, "no_ambush_target", participants.Length); return; }
             }
             int localParty = participant.Group?.GetMembersInTheGroup().Count(member => member.CurrentRegionID == campaign.Definition.RegionId && IsEligible(member)) ?? 1;
             int size = Math.Clamp(localParty, 1, 8);
-            if (ActorCount(campaign) + size > MaximumActorsPerRegion) return;
+            if (ActorCount(campaign) + size > DirectorCapacity(campaign)) { LogSquadSkipped(campaign, kind, "actor_cap", participants.Length); return; }
             // Effective current allies count against a guild's local presence.
             // Rotate ties, and select actual underrepresented autonomous guilds.
             GameBot[] representatives = AutonomousBotRegistry.Snapshot()
@@ -370,19 +511,33 @@ namespace DOL.GS
             }
             // With no autonomous guild available, a real transient Group is
             // hostile to outsiders and allied internally; no guild is fabricated.
-            Camp origin = campaign.Camps[campaign.Rotation % campaign.Camps.Count];
-            Point3D goal = ambush ? new Point3D(participant) : new Point3D(campaign.Camps[(campaign.Rotation + 1) % campaign.Camps.Count].Position);
-            Encounter encounter = new() { Goal = goal, Level = (byte)Math.Clamp(participant.Level, campaign.Definition.MinLevel, campaign.Definition.MaxLevel),
+            List<Point3D> camps = campaign.Camps.Select(camp => camp.Position).ToList();
+            int nearest = NearestIndex(camps, participant.X, participant.Y);
+            Point3D participantPoint = new(participant);
+            bool targetParticipant = ambush || OutsideSanctuary(participant, participantPoint);
+            Point3D goal = targetParticipant ? participantPoint : new Point3D(camps[nearest]);
+            Camp origin = campaign.Camps[ambush ? nearest : PatrolOriginIndex(nearest, camps.Count, campaign.Rotation)];
+            string name = ambush ? "Ambush patrol" : "Battleground patrol";
+            Encounter encounter = new() { Goal = goal, Participant = participant, Level = (byte)Math.Clamp(participant.Level, campaign.Definition.MinLevel, campaign.Definition.MaxLevel),
                 ExpiresAt = Now + (ambush ? 6 : 10) * 60_000 };
-            SpawnParty(campaign, encounter, origin.Position, guild, null, ambush ? "Ambush patrol" : "Battleground patrol", size);
-            if (encounter.Members.Count > 0) campaign.Encounters.Add(encounter);
+            SpawnParty(campaign, encounter, origin.Position, guild, null, name, size);
+            // A participant point with no proved route must not leave the patrol empty.
+            if (encounter.Members.Count == 0 && targetParticipant && !ambush)
+            {
+                encounter.Goal = new Point3D(camps[nearest]);
+                SpawnParty(campaign, encounter, origin.Position, guild, null, name, size);
+            }
+            if (encounter.Members.Count == 0) { LogSquadSkipped(campaign, kind, "route_or_spawn_failed", participants.Length); return; }
+            campaign.Encounters.Add(encounter);
+            campaign.SquadSkipReasons.Remove(kind);
+            Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind={kind} members={encounter.Members.Count}/{size} level={encounter.Level} guild={guild?.Name ?? "none"} origin=camp{origin.Index + 1} goal={FormatPoint(encounter.Goal)} target={participant.Name ?? "none"} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
         }
 
         private static void SpawnParty(Campaign campaign, Encounter encounter, Point3D origin, Guild guild, GamePlayer sponsor, string name, int size)
         {
             Group group = null;
             byte[] classes = { (byte)eCharacterClass.Armsman, (byte)eCharacterClass.Cleric, (byte)eCharacterClass.Sorcerer, (byte)eCharacterClass.Mercenary };
-            for (int i = 0; i < size && ActorCount(campaign) + encounter.Members.Count < MaximumActorsPerRegion; i++)
+            for (int i = 0; i < size && ActorCount(campaign) + encounter.Members.Count < DirectorCapacity(campaign); i++)
             {
                 GameBot actor = BattlegroundEncounterActor.Spawn(campaign.Definition.RegionId, origin.X, origin.Y, origin.Z,
                     classes[i % classes.Length], encounter.Level == 0 ? (byte)campaign.Definition.MaxLevel : encounter.Level, name, guild, group);
@@ -409,12 +564,18 @@ namespace DOL.GS
             {
                 if (!TryCampaign(player, out Campaign campaign, out string reason)) { Say(player, reason); return; }
                 BattlegroundCampaignQuest quest = player.IsDoingQuest(typeof(BattlegroundCampaignQuest)) as BattlegroundCampaignQuest;
-                Say(player, $"{campaign.Definition.Name}: {ActorCount(campaign)}/{MaximumActorsPerRegion} encounter actors; siege funding {FundingThreshold} tokens per assault. Tokens are personal and earned from monster kills and commander contracts.");
+                Say(player, $"{campaign.Definition.Name}: {ActorCount(campaign)}/{DirectorCapacity(campaign)} encounter actors; siege funding {FundingThreshold} tokens per assault. Tokens are personal and earned from monster kills and commander contracts.");
                 if (!campaign.HasMonsterObjectives) Say(player, "No native hunting monsters are loaded here; the monster contract is unavailable. Hostile-player and encounter-squad contracts remain available.");
                 Say(player, "Patrols match local party sizes from one to eight, at the active participant's level; larger parties include healing and crowd control. Encounters stop being scheduled when the map is empty.");
                 if (campaign.Keep == null) Say(player, "This map has no native central keep. Available field contracts, patrols and ambushes remain active; keep contracts and siege funding are unavailable.");
                 else if (!NativeLordReady(campaign)) Say(player, "This map has native keep scenery but no loaded native keep lord; capture contracts and siege funding are unavailable.");
                 else Say(player, $"Native siege objectives: {campaign.Keep.Doors.Count} actual doors and a loaded keep lord. Existing closed doors precede the lord; when no actual closed door exists the assault approaches the native lord directly.");
+                if (campaign.Keep != null)
+                {
+                    long now = Now;
+                    SyncKeepHolder(campaign, now);
+                    Say(player, KeepHoldStatus(campaign, now));
+                }
                 if (quest != null) Say(player, quest.Description);
                 foreach (Camp camp in campaign.Camps)
                     Say(player, $"Camp {camp.Index + 1}: {camp.Tokens}/{FundingThreshold}, {(CaptainAlive(camp) ? "captain alive" : "captain defeated; turn-ins closed")}, sponsor {camp.Guild?.Name ?? (camp.GroupSponsor != null ? "local group" : "open")}, commander at {camp.Position.X}, {camp.Position.Y}.");
@@ -529,6 +690,7 @@ namespace DOL.GS
                             message = "The assault could not find a safe route or actor slot; your last contribution was returned.";
                             return false;
                         }
+                        Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind=siege members={assault.Members.Count}/4 level={assault.Level} guild={camp.Guild?.Name ?? "none"} origin=camp{camp.Index + 1} goal={FormatPoint(assault.Goal)} target=none actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
                         camp.Assault = assault;
                         campaign.Encounters.Add(assault);
                         message = "The funded assault is marching to the real keep doors, then its lord. Claim the defeated keep at its steward.";
@@ -622,6 +784,10 @@ namespace DOL.GS
             lock (Gate)
             {
                 if (!_running || keep == null || claimer == null || !Campaigns.TryGetValue((ushort)keep.Region, out Campaign campaign) || campaign.Keep != keep) return;
+                // A capture, or a re-claim after a release, starts a new hold clock for the claiming guild.
+                campaign.HeldGuild = keep.Guild;
+                campaign.HeldSince = Now;
+                campaign.LastHoldReward = 0;
                 var members = WorldMgr.GetPlayersCloseToSpot((ushort)keep.Region, keep.X, keep.Y, keep.Z, WorldMgr.MAX_EXPFORKILL_DISTANCE)
                     .Cast<GameLiving>().Concat(claimer.Group?.GetMembersInTheGroup() ?? new List<GameLiving> { claimer }).Distinct();
                 foreach (GamePlayer player in members.OfType<GamePlayer>())
@@ -632,7 +798,74 @@ namespace DOL.GS
                         quest.Credit("captures");
                 }
                 campaign.LordParticipants.Clear();
+                string holder = keep.Guild?.Name ?? claimer.Name;
+                foreach (GamePlayer player in ClientService.Instance.GetPlayersOfRegion(WorldMgr.GetRegion(campaign.Definition.RegionId)))
+                    Say(player, $"{holder} has captured {keep.Name}!");
+                Log.Info($"BATTLEGROUND_KEEP_CAPTURED region={campaign.Definition.RegionId} keep={keep.KeepID} guild={keep.Guild?.Name ?? "none"}");
             }
+        }
+
+        // Holding reward: 2% of a level's XP every ten gameplay minutes, and two siege tokens for humans.
+        public static bool HoldRewardDue(long heldSince, long lastReward, long now) =>
+            heldSince > 0 && now - Math.Max(heldSince, lastReward) >= HoldRewardIntervalMs;
+
+        public static long HoldRewardExperience(long experienceForLevel) => experienceForLevel * 2 / 100;
+
+        // The owner is compared with the one last seen. A claim restarts the clock in OnKeepClaimed;
+        // a loss (a release, or the garrison taking the keep back) is noticed here and clears it.
+        private static void SyncKeepHolder(Campaign campaign, long now)
+        {
+            Guild holder = campaign.Keep?.Guild;
+            if (holder == campaign.HeldGuild) return;
+            campaign.HeldGuild = holder;
+            campaign.HeldSince = holder == null ? 0 : now;
+            campaign.LastHoldReward = 0;
+        }
+
+        private static void PayKeepHoldReward(Campaign campaign, bool lordAlive, long now)
+        {
+            Guild holder = campaign.HeldGuild;
+            // Frontier Wardens hold unclaimed keeps; only a real guild earns the hold.
+            if (campaign.HeldSince <= 0 || !PvpCombatant.IsRealGuild(holder) || PvpKeepCampaign.IsGarrison(holder)) return;
+            // The clock pauses while the lord is down: each such tick moves the interval start forward.
+            if (!lordAlive) { campaign.LastHoldReward = now; return; }
+            if (!HoldRewardDue(campaign.HeldSince, campaign.LastHoldReward, now)) return;
+            campaign.LastHoldReward = now;
+            ushort region = campaign.Definition.RegionId;
+            GamePlayer[] humans = ClientService.Instance.GetPlayersOfRegion(WorldMgr.GetRegion(region))
+                .Where(player => player.Guild == holder && player.IsAlive && player.ObjectState == GameObject.eObjectState.Active && IsEligible(player))
+                .ToArray();
+            // Encounter and temporary helper bots are excluded by SuppressLootAndProgress; only admitted participants count.
+            GameBot[] bots = AutonomousBotRegistry.Snapshot()
+                .Where(bot => bot.IsAutonomousWorldBot && !bot.SuppressLootAndProgress && bot.Guild == holder && bot.CurrentRegionID == region &&
+                    bot.IsAlive && bot.ObjectState == GameObject.eObjectState.Active && AutonomousBattlegroundParticipation.IsParticipant(bot) && IsEligible(bot))
+                .ToArray();
+            foreach (GamePlayer human in humans)
+            {
+                long experience = HoldRewardExperience(LevelExperience(human.Level));
+                if (experience > 0) human.GainExperience(eXPSource.Quest, experience);
+                GiveTokens(human, 2);
+            }
+            foreach (GameBot bot in bots)
+            {
+                long experience = HoldRewardExperience(LevelExperience(bot.Level));
+                if (experience > 0) bot.GainExperience(eXPSource.Quest, experience);
+            }
+            long minutes = (now - campaign.HeldSince) / 60_000;
+            Log.Info($"BATTLEGROUND_KEEP_HOLD_REWARD region={region} guild={holder.Name} humans={humans.Length} bots={bots.Length} minutes={minutes}");
+        }
+
+        // The XP between a level and the next: the same span the contract rewards measure.
+        private static long LevelExperience(int level) =>
+            GamePlayer.GetExperienceAmountForLevel(level) - GamePlayer.GetExperienceAmountForLevel(level - 1);
+
+        private static string KeepHoldStatus(Campaign campaign, long now)
+        {
+            Guild holder = campaign.HeldGuild;
+            if (!PvpCombatant.IsRealGuild(holder) || PvpKeepCampaign.IsGarrison(holder))
+                return $"{campaign.Keep.Name} is held by its garrison.";
+            long minutes = Math.Max(0, now - campaign.HeldSince) / 60_000;
+            return $"{campaign.Keep.Name} is held by {holder.Name} for {minutes} minutes.";
         }
 
         private static bool NativeLordReady(Campaign campaign) => campaign.Keep != null && campaign.Keep.Guards.Values.OfType<GuardLord>().Any();
@@ -645,6 +878,11 @@ namespace DOL.GS
         public static bool HasMonsterObjectives(ushort region)
         {
             lock (Gate) return Campaigns.TryGetValue(region, out Campaign campaign) && campaign.HasMonsterObjectives;
+        }
+
+        public static Point3D[] CampPositions(ushort region)
+        {
+            lock (Gate) return Campaigns.TryGetValue(region, out Campaign campaign) ? campaign.Camps.Select(camp => camp.Position).ToArray() : Array.Empty<Point3D>();
         }
 
         private static bool IsEligible(GameLiving player) => BattlegroundCampaignPolicy.IsEnabled &&

@@ -12,7 +12,7 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-## [0.231.0] - 2026-10-10
+## [0.233.0] - 2026-10-10
 
 ### Added
 
@@ -26,6 +26,79 @@ package, not this fork's version.
 
 - Friend's companions remain listed in Active Population by design; only
   deleting them from the launcher is blocked (since 0.230.0).
+
+## [0.232.0] - 2026-10-10
+
+### Added
+
+- Eden-style battlegrounds, keeping Camlann guild/group alliances (task 113).
+  Server-built central keeps for Proving Grounds (tower), Lion's Den, Hills of
+  Claret (Caer Claret), Thidranki and Wilton (new keep rows 140–144), and
+  walls/gates for Killaloe, Molvik and Leirvik's existing rows, from the
+  `/keep fastcreate` battleground layouts. Rows and components are added only
+  where none exist; corrupt KeepPosition offsets are skipped.
+- Keep lords and retainers spawn only on navigation-proved points behind
+  closed gates. Battleground keeps stay at level 1 (no guild progression).
+- Battleground navmeshes bake the real New Frontiers keep pieces from the
+  client, with door volumes for every server gate. Sites come from a
+  flat-ground finder (`tools/dev/battleground-keeps.json`); Thidranki uses a
+  relaxed slope limit at its lowest ground point.
+- Bracket-eligible autonomous RvR bots buy the free battleground medallion,
+  board real porters and fight over the keep (defend, claim, assault without
+  rams, roam), up to 24 per map within a 40-actor cap shared with patrols.
+  They graduate out to their capital when they outlevel the bracket.
+  Bots of every realm can join: each frontier porter has a native medallion
+  merchant, and startup re-adds Midgard's Gwulla beside Stor Gothi Annark
+  if a save lacks it.
+- A real guild holding a battleground keep with a living lord earns 2% level
+  XP every 10 gameplay minutes for members present (and 2 tokens for humans).
+  Captures are announced region-wide and `/bgs` shows the holder.
+
+### Changed
+
+- Development docs describe the keep-aware battleground navmesh build. The
+  ten rebuilt meshes must be deployed with `-NavmeshBuild` for keep walls to
+  block movement.
+- Server and Tests Release builds pass with zero errors; the nav builder
+  builds and all ten meshes validate. Automated tests were skipped;
+  real-client checks (keep rendering, wall alignment, lord gating, bot
+  arrival/claim/graduation, holding rewards) remain pending.
+
+## [0.231.0] - 2026-10-10
+
+### Added
+
+- Battleground diagnostics: `BATTLEGROUND_CAMPAIGN_READY`, `_OCCUPANCY`,
+  `_SQUAD_SPAWNED`/`_SQUAD_SKIPPED` (with reason), `_TICK_SLOW` phase timings,
+  `_CAMP_DOOR_ROUTE` and `_NATIVE_KEEP_READY`/`_UNAVAILABLE`.
+- Murdaigean (25–29) gains keep row 139 at its native client keep. Its two
+  existing gates close at full health, and a lord with up to four retainers
+  is placed only on navigation-proved points behind those gates. The row,
+  gate reset and garrison are additive and idempotent; existing saves load.
+
+### Changed
+
+- Battleground patrols now walk from a camp toward an occupied human
+  position outside sanctuaries (or the camp nearest them while they stand in
+  one), and a newly occupied map schedules its first patrol within about
+  15 seconds. Ambushes start from the camp nearest their target. Patrols
+  re-path only when their participant moves away; sieges are unchanged.
+- Campaign timers, first patrols and ambushes are staggered per map, and at
+  most one camp captain spawns per map per tick.
+- The autonomous realm boundary now covers every campaign battleground region.
+- Hills of Claret, Proving Grounds, Lion's Den, Thidranki and Wilton stay
+  keepless: their client zone data has no placed keep. Server-built keeps
+  and autonomous gamebot participation follow in 0.232.0.
+- Server and Tests Release builds passed with zero errors; existing warnings
+  remain. Automated tests were skipped; real-client checks remain pending.
+
+### Fixed
+
+- Unsponsored battleground camps no longer restore a sponsor expiry after a
+  restart, which reset every camp and respawned 27 captains in one tick with
+  multi-second timer stalls (bug 125).
+- Murdaigean camp anchors match their portal keep by area and accept the
+  ordinary route when the native portal gates are closed (bug 122).
 
 ## [0.230.0] - 2026-10-10
 

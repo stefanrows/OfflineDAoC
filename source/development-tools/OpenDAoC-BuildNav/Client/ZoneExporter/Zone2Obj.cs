@@ -139,6 +139,7 @@ namespace CEM.Client.ZoneExporter
                     break;
             }
 
+            ExportBattlegroundKeeps();
             Dispose(); // bit dirty
         }
 
@@ -553,6 +554,7 @@ namespace CEM.Client.ZoneExporter
                 try
                 {
                     ObjWriter.AddMesh(vertices, filteredTriangles.ToArray());
+                    _exportedTriangleCount += filteredTriangles.Count;
                 }
                 catch (InvalidDataException)
                 {

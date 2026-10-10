@@ -223,6 +223,11 @@ namespace DOL.GS.Keeps
 
 			foreach (DbKeepPosition position in DBPositions)
 			{
+				if (!IsPlausibleOffset(position.XOff, position.YOff))
+				{
+					WarnImplausiblePosition(position);
+					continue;
+				}
 				DbKeepPosition[] list = this.Positions[position.TemplateID] as DbKeepPosition[];
 				if (list == null)
 				{
@@ -232,6 +237,23 @@ namespace DOL.GS.Keeps
 
 				list[position.Height] = position;
 			}
+		}
+
+		/// <summary>
+		/// Corrupt native KeepPosition rows carry offsets in the hundred-thousands. Such a row would place a
+		/// door or guard far outside its keep, so the loader skips it.
+		/// </summary>
+		public static bool IsPlausibleOffset(int x, int y) => x >= -4096 && x <= 4096 && y >= -4096 && y <= 4096;
+
+		private static readonly HashSet<string> ImplausiblePositionTemplates = new();
+
+		private static void WarnImplausiblePosition(DbKeepPosition position)
+		{
+			lock (ImplausiblePositionTemplates)
+			{
+				if (!ImplausiblePositionTemplates.Add(position.TemplateID)) return;
+			}
+			log.Warn($"KEEP_POSITION_IGNORED template={position.TemplateID} skin={position.ComponentSkin}");
 		}
 
 		/// <summary>

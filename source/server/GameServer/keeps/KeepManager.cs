@@ -66,6 +66,7 @@ namespace DOL.GS.Keeps
 
 			m_keepList.Clear();
 
+			BattlegroundNativeKeepData.EnsureKeepRows();
 			var keeps = GameServer.Database.SelectAllObjects<DbKeep>();
 			foreach (DbKeep datakeep in keeps)
 			{

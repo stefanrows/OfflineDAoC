@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using CEM.Core;
 using CEM.Utils;
+using CEM.Client.ZoneExporter;
 using CEM.World;
 
 namespace CEM
@@ -71,6 +72,15 @@ namespace CEM
             else
             {
                 NifIgnorelist = File.ReadAllLines(ignorelistFile).ToList();
+            }
+
+            if (!string.IsNullOrEmpty(Arguments.BattlegroundKeeps))
+                BattlegroundKeepData.Load(Arguments.BattlegroundKeeps);
+            if (Arguments.BattlegroundKeepSites)
+            {
+                Environment.ExitCode = BattlegroundKeepSiteFinder.Run() ? 0 : 1;
+                Log.Normal("All done.");
+                return;
             }
 
             Environment.ExitCode = BuildNavmeshes() ? 0 : 1;
@@ -151,6 +161,8 @@ namespace CEM
                 ExportObjOnly = false;
                 RecastBuildAll = false;
                 NormalPriority = false;
+                BattlegroundKeeps = string.Empty;
+                BattlegroundKeepSites = false;
             }
 
             [Argument("config", Description = "Configuration File to use")]
@@ -182,6 +194,12 @@ namespace CEM
 
             [Argument("normal-priority", Description = "Run at normal priority")]
             public bool NormalPriority { get; set; }
+
+            [Argument("bg-keeps", Description = "Battleground keep data (tools/dev/battleground-keeps.json) to export keep pieces from")]
+            public string BattlegroundKeeps { get; set; }
+
+            [Argument("bg-keep-sites", Description = "Find flat, clear sites for new battleground keeps and write them to --bg-keeps")]
+            public bool BattlegroundKeepSites { get; set; }
         }
     }
 }

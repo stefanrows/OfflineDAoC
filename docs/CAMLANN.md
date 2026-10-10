@@ -249,17 +249,17 @@ armies. Its realm teams are adapted here to Camlann alliances. This fork uses
 its own controller and existing class AI; Eden's private source and exact
 tuning are unavailable.
 
-| Native map | Levels | Exclusive Realm Rank ceiling | Native central keep |
+| Native map | Levels | Exclusive Realm Rank ceiling | Central keep |
 |---|---:|---:|---|
-| The Proving Grounds (234) | 1–4 | Unlimited | Absent |
-| The Lion's Den (235) | 5–9 | Unlimited | Absent |
-| The Hills of Claret (236) | 10–14 | RR1L5 | Absent |
-| Killaloe (237) | 15–19 | RR2L0 | Present; no imported lord |
-| Thidranki (238) | 20–24 | RR2L5 | Absent |
-| Murdaigean (251) | 25–29 | RR3L0 | Absent |
-| Wilton (240) | 30–34 | RR3L5 | Absent |
-| Molvik (241) | 35–39 | RR4L0 | Present |
-| Leirvik (region242, zone254) | 40–44 | RR4L5 | Present; no imported lord |
+| The Proving Grounds (234) | 1–4 | Unlimited | Server-built tower (keep 140) from native pieces; lord gating to verify |
+| The Lion's Den (235) | 5–9 | Unlimited | Server-built fort (keep 141) from native pieces; no gate or tower skin, so no door and no lord |
+| The Hills of Claret (236) | 10–14 | RR1L5 | Server-built keep (keep 142) from native pieces; lord gating to verify |
+| Killaloe (237) | 15–19 | RR2L0 | Keep row 138 gains server-built parts from native pieces |
+| Thidranki (238) | 20–24 | RR2L5 | Server-built keep (keep 143) on a relaxed site: ground variance 183 (limit 200), lowest-ground Z, 5,888 units from the portal centre |
+| Murdaigean (251) | 25–29 | RR3L0 | Native client keep; keep row, gates and gated lord added in source (pending verification) |
+| Wilton (240) | 30–34 | RR3L5 | Server-built keep (keep 144) from native pieces; lord gating to verify |
+| Molvik (241) | 35–39 | RR4L0 | Native lord kept; server-built parts added around keep 132 from native pieces |
+| Leirvik (region242, zone254) | 40–44 | RR4L5 | Keep row 134 gains server-built parts from native pieces |
 | Cathal Valley (165) | 45–49 | RR5L0 | Present |
 
 Ceilings are fork tuning, not current Eden rules. A character at the ceiling
@@ -270,7 +270,36 @@ hunting mobs; contracts reflect the available native data. Funding and capture
 require a loaded native keep lord. Cathal's two missing central keep doors
 are restored additively from exported native `Hfrontkeep.nif` fixtures; existing
 door rows and damage state are preserved. Molvik has a native lord without
-imported central gates, so the assault approaches its lord directly.
+imported central gates, so the assault approaches its lord directly. Murdaigean's
+native keep (`Hfrontkeep.nif`) gets keep row 139; its existing closed gates are
+kept, and its gated lord and retainers stand only on navigation-proved points
+behind those gates. Both are added in source and await real-client verification.
+
+Server-built keeps (task 113): keeps 140–144 are new rows, and existing rows
+132, 134 and 138 gain components only while they have none. Components come
+from the `/keep fastcreate` bracket layouts (`BattlegroundKeepLayouts.cs`), and
+their doors come from the native KeepPosition rows. The keeps stay at level 1,
+so the part tier does not change. A new or newly componented keep is marked
+pending until its doors are healed and closed, then ready. The gated lord and
+its retainers stand only on navigation-proved points behind closed doors (lord
+plus two fighters, an archer and a healer; a tower keeps lord and one archer).
+The existing Molvik lord is never moved; if it fails the proof, the server logs
+`BATTLEGROUND_KEEP_LORD_OUTSIDE`. The shared data is
+`tools/dev/battleground-keeps.json`; the site search and navigation bake are
+described in [development instructions](DEVELOPMENT.md#server-built-battleground-keeps).
+
+Navigation for these keeps is baked from the client frontier kit, as native
+pieces at the server's component positions. Orientation is checked against the
+native door nodes: each gate or tower has one server door that matches a native
+door node within 96 units, and the other server door has no native node. That
+unmatched door becomes a Door volume at its position, so the server still
+registers it as blocking. Pieces that fail to load or have no triangles fall
+back to approximate cylinder walls. Lion's Den has no gate and no lord. Thidranki
+is the one site found outside the 96-unit ground rule: its best spot has
+variance 183, accepted under a relaxed 200 limit, with the keep Z at the lowest
+ground across the footprint so the walls sink into the slope. Its solid-fixture
+test is not applied, and the finder logs the fixture count. Lord gating and
+the walls' real-client alignment are unverified until the owner checks them.
 
 `/battleground list|join|leave|status` exposes campaign state; `/bgs` is the
 alias. Admission proves the bracket, loaded native mesh and a safe snapped
@@ -302,14 +331,72 @@ are session-local. Threshold consumption precedes spawning to prevent restart
 replay. Inventory and camp locks serialize contributions with compensating
 refunds; the existing ORM has no crash-atomic transaction across those saves.
 
-The director adds patrols only on occupied maps, using actual autonomous guild
+The director adds patrols only on occupied maps. Occupancy is checked every tick,
+and a map that becomes occupied schedules its next patrol within about 15 seconds.
+Patrols start at a camp away from the participant and head for the participant
+once that position is outside a sanctuary or portal keep; while the participant
+stands in one, they walk to the camp nearest them. Ambushes start at the camp
+nearest their target. New log lines: `BATTLEGROUND_OCCUPANCY`,
+`BATTLEGROUND_SQUAD_SPAWNED`, `BATTLEGROUND_SQUAD_SKIPPED`,
+`BATTLEGROUND_CAMPAIGN_READY`, `BATTLEGROUND_TICK_SLOW`,
+`BATTLEGROUND_CAMP_DOOR_ROUTE` and `BATTLEGROUND_NATIVE_KEEP_READY` or
+`BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE`. Actors use autonomous guild
 identities where available and hostile guildless groups otherwise. Local party
 size and level select 1–8 combatants with tank/healer/CC support. Underrepresented
-guild presence is preferred, with at most 24 actors per map, finite lifetimes,
-corpse cleanup and gameplay-clock deadlines. Ambushes walk from validated camps
+guild presence is preferred, with at most 24 director actors per map (fewer
+while autonomous participants are present, see below), finite lifetimes, corpse
+cleanup and gameplay-clock deadlines. Ambushes walk from validated camps
 toward contract participants, respecting safe areas and immunity. Actors use
 normal class combat without roster persistence, owner recovery or teleport
 fallbacks.
+
+**Autonomous battleground participation.** Autonomous gamebots (never players,
+companions or temporary helpers) on an RvR tour, standing on a home frontier
+(regions 1, 100 or 200), not player-led and not carrying a relic, join the
+battleground of their level bracket while below its Realm Rank ceiling. A
+reconcile pass every 60 seconds keeps at most 24 of them on each map and admits
+a group only when every member qualifies. The shared pool is 40 actors per map:
+the encounter director may use `40 − autonomous participants present`, at most
+24. Admission needs a real medallion source: a porter with the medallion
+merchant within reach. In the current world data every realm's frontier porter
+has one: Sall Fadri beside Master Visur (region 1), Gwulla beside Stor Gothi
+Annark (region 100) and Araisa beside Glasny (region 200). If a save lacks
+Midgard's Gwulla, startup adds that native merchant beside the porter
+(`FRONTIER_MEDALLION_MERCHANT_ADDED`).
+Assigned bots walk to that porter, buy the free battlegrounds medallion from
+the merchant and equip it as a player does, then board with the porter's own
+cast, leaders first and at most eight per cast. Inside, a bot
+defends a keep its guild holds, claims a defeated keep at its steward with
+claim rank, assaults the keep (closed door, then lord) with four or more
+present, or roams the camps and fights what it meets; followers assist their
+leader. A death releases it at the campaign arrival camp. It leaves by the
+outside realm capital (bots keep no bind point) on graduation (above the
+bracket or at its Realm Rank ceiling), end of its tour, or five minutes without
+progress. The dedicated driver replaces the Old Frontiers RvR planner, which
+hard-codes regions 1, 100 and 200. The frontier boundary is lifted only for
+admitted participants inside their own campaign region; the movement blocks
+for everyone else are unchanged.
+
+**Holding the keep.** A real guild that claims a campaign keep (after the lord
+falls and the steward accepts the claim) holds it until it is released or
+taken. The claim starts the hold clock; a Frontier Wardens garrison hold earns
+nothing. While the guild holds the keep and its lord is alive, every ten
+gameplay minutes its humans and admitted autonomous participant bots in the
+region receive 2% of their level's XP through the contract XP path. Humans also
+receive two siege tokens. Encounter actors, temporary helpers and companions are
+excluded. The clock pauses while the lord is down. A server restart restarts it,
+because the hold is not persisted. Each capture is announced to everyone in the
+region (`BATTLEGROUND_KEEP_CAPTURED`), each payout logs
+`BATTLEGROUND_KEEP_HOLD_REWARD`, and `/bgs status` names the holder and the
+minutes held. Owner check pending: payout cadence, XP amount and token count in
+play.
+
+The low brackets have almost no eligible bots. At the time of writing none of
+the non-retired autonomous bots is level 1–9, one is 10–14 and sixteen are
+15–19, while brackets 20–44 hold 116–605 each. The encounter director therefore
+remains the population of the low brackets; participation only adds autonomous
+players where the population exists. New log lines: `AUTONOMOUS_BG_ASSIGNED`,
+`AUTONOMOUS_BG_ENTERED` and `AUTONOMOUS_BG_LEFT reason=graduated|tour_ended|unassigned|stuck`.
 
 `/LFxp`, `/LFrvr` and `/battleground lfg xp|pvp|off` match only opted-in solo
 humans every thirty seconds. XP partners stay within three levels of the elected
@@ -328,7 +415,9 @@ Pending owner checks: bracket arrival, graduation and death release;
 guild/group friendliness, hostile same-realm combat and portal sanctuaries;
 sub-10 safety after leaving; quest persistence and legitimate kill credit;
 concurrent funding, captain death/respawn and restart behavior; physical
-door/lord/steward captures; encounter scaling and optional automatic grouping.
+door/lord/steward captures; encounter scaling and optional automatic grouping;
+server-built keep placement, wall and door alignment, lord gating and guard
+placement on the new keeps (task 113).
 No server or client was started for development verification.
 
 ## Non-goals
@@ -590,7 +679,8 @@ and travel. Companions can be any realm. Battlegrounds are not part of play.
    owner/grace-period branch remains only for unused Normal-policy tests.
 7. ✅ Housing is already realm-open on PvP. Keep.
 8. ✅ Battlegrounds: teleporters, frontier stones, and bot travel must not pick
-   BG regions. Set `bg_zones_open` false.
+   BG regions. Set `bg_zones_open` false. (Superseded for admitted campaign
+   participants by the bounded rule in the battleground section.)
 9. ✅ `BotManager` name lookup (~L274) is now realm-agnostic.
 10. ✅ All-realm teleporter menus expose the three capitals and every existing
     Classic/SI leveling-town destination. The towns are open PvP zones; only
@@ -601,7 +691,9 @@ and travel. Companions can be any realm. Battlegrounds are not part of play.
 - ✅ An Albion character (or bot) can path into Jordheim and use a merchant.
 - ✅ An Albion player can `/spawn` a Midgard healer that heals and buffs them.
 - ✅ Realm Exchange list/buy works from a foreign capital.
-- ✅ No autonomous goal selects a battleground region.
+- ✅ Autonomous goals select a battleground region only through the bounded
+  campaign participation rule (see the battleground section, "Autonomous
+  battleground participation"). All other autonomous goals still avoid them.
 - ✅ All three realms' leveling-town teleporter menus are available to every
   realm.
 - **Gate:** Open travel and city services work; mixed-realm groups function.

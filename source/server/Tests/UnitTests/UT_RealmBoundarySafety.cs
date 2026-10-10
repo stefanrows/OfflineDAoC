@@ -24,7 +24,7 @@ namespace DOL.GS.Tests
             }
 
             foreach (eRealm traveler in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
-                foreach (ushort battleground in new ushort[] { 165, 250, 251, 252, 253 })
+                foreach (ushort battleground in new ushort[] { 165, 234, 235, 236, 237, 238, 240, 241, 242, 251, 250, 252, 253 })
                     Assert.That(AutonomousRealmBoundary.Allows(traveler, battleground, 0), Is.False);
         }
 
