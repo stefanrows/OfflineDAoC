@@ -61,6 +61,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+136. **Lone bots register for guild sieges and are rejected at once.**
+     Installed 0.234.0, 2026-10-10 19:48–20:46: 64 `RVR_KEEP_ROUTE_ABANDONED`
+     with reason "A guild assault requires a formed party", all `force=rvr-<id>`
+     solo forces. `ChooseCore` let any single-guild force reinforce its
+     guild's siege, but `ReportGuildArmy` only releases formed parties, so the
+     controller abandoned the lone bot and blocked the keep for 20 minutes.
+     Source 0.236.0 keeps lone bots out of the attacker bucket until the
+     army has launched, then lets them follow as helpers (5 regression tests).
+     Installed-log check pending: no such abandons for `rvr-<id>` forces.
+
 130. **Lion's Den and Leirvik keeps still have no lord.** Installed 0.234.0
      startup: `BATTLEGROUND_KEEP_UNAVAILABLE region=235 keep=141
      reason=no_closed_door` and `region=242 keep=134 reason=no_lord_point`.
@@ -420,6 +430,18 @@ This confirms installation only. Keep the required real-client checks pending.
     `RVR_SIEGE_MUSTER_FAILED`, then ram and door actions at the keep; the same
     force should show one `RVR_FRONTIER_DEPARTURE` with `count` equal to its
     size and no `left_behind`.
+    Re-traced on installed 0.234.0 (2026-10-10 19:48–20:46): 5 sieges, 580 of
+    700 `RVR_SIEGE_GATE` lines with `kit=True` but all `approach=False`; the
+    closest force stopped 8,872 units from Caer Boldiam. Causes: a member in
+    another region makes the siege-column gap infinite, so the column fails
+    after 120 s (26 of 144 holds); a fighting or stuck member ends the
+    objective (10 "March cohesion recovery exhausted"); a dead leader lets
+    the rest cross, then `AbandonKeepTarget` defers for 23 minutes because the
+    column leader is not the group leader; guild armies reached their
+    16-attacker camp quorum in 4 of 532 gather checks. Fix plan awaiting the
+    owner's decision: march on with a 6-member quorum including leader and
+    ram carriers, hand leadership to the crossed party's leader, relax the
+    army quorum after the gather window.
 
     Reopened after installed 0.214.1 observation on 2026-10-09. By 21:00
     CEST in the owner-started 20:28 session: seven automatic sieges opened,

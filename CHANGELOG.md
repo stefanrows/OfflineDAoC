@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.236.0] - 2026-10-10
+
+### Fixed
+
+- Lone autonomous bots no longer register for their guild's keep siege before
+  the guild army has launched. Only formed parties are released by the army,
+  so a lone attacker was rejected at once ("A guild assault requires a formed
+  party") and blocked from that keep for 20 minutes (64 such rejections in
+  the first hour of 0.234.0). Lone bots now roam or reserve until the army
+  marches and then follow it as helpers (bug 136).
+
+### Changed
+
+- Bug 75 records the 0.234.0 trace: rams are bought and carried, but columns
+  fail on a member in another region or in a fight, a dead leader splits the
+  force, and guild armies rarely reach their 16-attacker quorum.
+
 ## [0.235.0] - 2026-10-10
 
 ### Added
