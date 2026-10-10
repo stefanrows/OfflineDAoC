@@ -34,8 +34,12 @@ public static partial class AutonomousRvrEventLayer
     /// never do. Call under <c>Sync</c>.
     /// </summary>
     private static bool MustersLocked(ActiveEvent active, string forceId) =>
-        active.BattleStarted && !active.DefenseReaction && string.IsNullOrEmpty(active.PlayerAccount) &&
+        GuildArmyGoverns(active) &&
         (active.Attackers.ContainsKey(forceId) || active.ThirdRealm.ContainsKey(forceId));
+
+    /// <summary>An automatic, started siege: its attackers muster and the guild army gate applies.</summary>
+    private static bool GuildArmyGoverns(ActiveEvent active) =>
+        active.BattleStarted && !active.DefenseReaction && string.IsNullOrEmpty(active.PlayerAccount);
 
     private static bool AnyMustering(ActiveEvent active) => active.Musters.Any(pair => !pair.Value.Departed &&
         (active.Attackers.ContainsKey(pair.Key) || active.ThirdRealm.ContainsKey(pair.Key)));

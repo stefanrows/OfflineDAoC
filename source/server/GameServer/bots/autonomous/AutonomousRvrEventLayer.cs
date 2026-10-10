@@ -453,6 +453,12 @@ public static partial class AutonomousRvrEventLayer
                     continue;
                 if (attacksTarget)
                 {
+                    // Bug 122: a lone bot is never released by the guild army (only
+                    // formed parties are), so it must not pick the siege until the
+                    // army has launched; before that it roams instead of being
+                    // registered, rejected and blocked from the keep for 20 minutes.
+                    if (!active.Attackers.ContainsKey(force.GroupId) && LoneBotMustWaitForArmyLocked(force, active))
+                        continue;
                     // Reinforcements of any size, but all of the opener's guild.
                     if (force.AverageLevel >= 35 && (force.SingleGuild || active.Attackers.ContainsKey(force.GroupId)) && (!active.BattleStarted || active.Attackers.ContainsKey(force.GroupId) ||
                         ShouldJoinActiveEvent(force, active.Attackers.Values.Sum(), Capacity(active), active.RelicKeep, false, roll)) &&

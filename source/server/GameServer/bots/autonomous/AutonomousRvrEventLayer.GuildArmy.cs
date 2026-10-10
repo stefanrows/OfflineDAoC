@@ -46,17 +46,30 @@ public static partial class AutonomousRvrEventLayer
         {
             var active = Events.Values.FirstOrDefault(e => MustersLocked(e, forceId));
             var army = active == null ? null : ArmyLocked(active, forceId, bot, now);
-            return army == null ? null : ArmyOrder(active, army, forceId, now);
+            return army == null ? null : ArmyOrder(active, army, forceId, now,
+                !army.Parties.ContainsKey(forceId) && (bot?.Group?.MemberCount ?? 0) < 2);
         }
     }
 
-    private static GuildArmyOrder ArmyOrder(ActiveEvent active, GuildArmy army, string forceId, long now)
+    /// <summary>
+    /// A lone bot is not a party and so can never be on the army's released list
+    /// (ReportGuildArmy needs a group leader). Before the army has launched it must
+    /// not join the siege at all; once a wave is out and the army has not failed it
+    /// may follow as a loose helper, like a solo player joining a siege in 1.65.
+    /// </summary>
+    private static bool LoneBotMustWaitForArmyLocked(Force force, ActiveEvent active) =>
+        force.MemberCount < 2 && GuildArmyGoverns(active) &&
+        !ArmyLaunched(active.GuildArmies.Values.FirstOrDefault(army => army.Guild?.Name == force.GuildName));
+
+    private static bool ArmyLaunched(GuildArmy army) => army is { Failed: false, Launched: > 0 };
+
+    private static GuildArmyOrder ArmyOrder(ActiveEvent active, GuildArmy army, string forceId, long now, bool lone = false)
     {
         // Hold the leading parties; the rear must still be allowed to catch up.
         bool hold = army.HoldColumn && army.Parties.TryGetValue(forceId, out var own) &&
             army.Released.Any(id => army.Parties.TryGetValue(id, out var other) && other.Leader.IsAlive &&
                 DistanceFromKeep(active, other.Leader) > DistanceFromKeep(active, own.Leader) + 600);
-        return new(active.TargetId, army.Started, army.Camp, army.Released.Contains(forceId), hold,
+        return new(active.TargetId, army.Started, army.Camp, army.Released.Contains(forceId) || lone && ArmyLaunched(army), hold,
             army.Failed, army.Present, army.Required, army.ReadyParties,
             Math.Max(0, ArmyDeadline(army) - now));
     }
