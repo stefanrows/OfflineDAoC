@@ -2867,6 +2867,10 @@ namespace DOL.GS
 
         private bool WorkCamp(BotBrain brain, GameBot bot)
         {
+            // Bug 72: only a solo PvE camp bot loses the standing quiet regen.
+            bot.SoloCampPlayTick = _groupDirective?.IsDynamic != true &&
+                AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.SoloPve)
+                ? GameLoop.GameLoopTime : 0;
             // Wave 7: leave a rival's, outgrown or enemy-held camp before pulling.
             if (TryPveCampPlay(bot)) return true;
             if (HoldBeforeNewGroupPull(brain, bot)) return true;
