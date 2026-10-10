@@ -268,6 +268,21 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+109. **Delete your own persistent companions from the launcher.** Owner,
+     2026-10-10. Implemented in source **0.225.0**: the Active Population
+     DELETE CHARACTER… button and grid context-menu delete now act on rows for
+     persistent companions (Activity Companion, Zone "With <owner>"), not only
+     world bots. While the server is stopped, one confirmed delete removes the
+     companion's Inventory items and its player_companions record in one
+     transaction, then refreshes the grid. While the server runs, the button and
+     menu item are disabled and the Companion Manager remains the in-game path.
+     World-bot deletion, DELETE ALL BOTS and the legacy bot_profiles rows are
+     unchanged. Not built or tested in the authoring session; the Release builds
+     and deployment are pending. Checks pending: with the server stopped,
+     delete a test companion with equipment and backpack items; confirm the grid
+     and the companion's items disappear; confirm the button and menu are disabled
+     while the server runs; confirm the world-bot delete path still works.
+
 108. **AssistTrain companion mode and engagement review.** Owner, 2026-10-10.
      Implemented in source **0.223.0**: `/assisttrain` and manager group order,
      human damage-cast/weapon-attack calls, single-target damage and pet gates,

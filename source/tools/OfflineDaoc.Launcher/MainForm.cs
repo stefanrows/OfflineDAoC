@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.224.1";
+    internal const string DisplayVersion = "0.225.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -1671,7 +1671,7 @@ internal sealed partial class MainForm : Form
         {
             BotRow? bot = SelectedBot();
             bool canTeleport = bot is { BotId: not null, IsOnline: true, DeletionQueued: false } && IsServerRunning();
-            bool canDelete = bot?.CanDelete == true;
+            bool canDelete = bot is { CanDelete: true } && (!bot.IsCompanion || !(IsServerRunning() || HasExactServerProcess()));
             teleportItem.Enabled = canTeleport;
             teleportItem.ToolTipText = canTeleport ? $"Teleport your logged-in character to {bot!.Name}." : "The server and selected playerbot must both be online.";
             deleteItem.Enabled = canDelete;
@@ -2240,17 +2240,18 @@ internal sealed partial class MainForm : Form
                 ? "COALESCE((SELECT c.Name FROM DOLCharacters c WHERE c.DOLCharacters_ID = pc.OwnerCharacterId), '')"
                 : "''";
             using var command = connection.CreateCommand();
-            command.CommandText = $"SELECT pc.Name, pc.Realm, pc.ClassId, pc.Level, pc.IsActive, {realmPointsColumn}, {ownerNameColumn} FROM player_companions pc ORDER BY pc.Name";
+            command.CommandText = $"SELECT pc.Name, pc.Realm, pc.ClassId, pc.Level, pc.IsActive, {realmPointsColumn}, {ownerNameColumn}, pc.CompanionId FROM player_companions pc ORDER BY pc.Name";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 var classInfo = ClassInfo(reader.GetInt32(2));
                 string ownerName = reader.GetString(6);
                 string zoneName = ownerName.Length == 0 ? "With owner" : $"With {ownerName}";
-                bots.Add(new BotRow(null, reader.GetString(0), RealmName(reader.GetInt32(1)), "—", "—", classInfo.Name, reader.GetInt32(3), zoneName, "Companion", running && reader.GetBoolean(4), false, false, string.Empty, string.Empty, string.Empty, string.Empty,
+                bots.Add(new BotRow(null, reader.GetString(0), RealmName(reader.GetInt32(1)), "—", "—", classInfo.Name, reader.GetInt32(3), zoneName, "Companion", running && reader.GetBoolean(4), true, false, string.Empty, string.Empty, string.Empty, string.Empty,
                     string.Empty, string.Empty, string.Empty, string.Empty)
                 {
                     RealmPoints = reader.GetInt64(5),
+                    CompanionId = reader.GetString(7),
                 });
             }
         }
@@ -2697,7 +2698,41 @@ internal sealed partial class MainForm : Form
     {
         BotRow? bot = SelectedBot();
         bool serverRunning = IsServerRunning() || HasExactServerProcess();
-        if (bot?.CanDelete != true || bot.BotId is null || bot.DeletionQueued && serverRunning)
+        if (bot?.CanDelete != true)
+            return;
+
+        if (bot.IsCompanion)
+        {
+            if (serverRunning)
+            {
+                MessageBox.Show(this,
+                    "Companions can only be deleted from the launcher while the server is stopped. To delete one now, use the in-game Companion Manager, or stop the server first.",
+                    "Server is running", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string ownerPart = bot.ZoneName.StartsWith("With ", StringComparison.Ordinal) && bot.ZoneName != "With owner"
+                ? $" (with {bot.ZoneName["With ".Length..]})"
+                : string.Empty;
+            string companionWarning = $"Permanently delete your companion {bot.Name}, the level {bot.Level} {bot.ClassName}{ownerPart}?\n\n" +
+                                      "This removes the companion and all of its equipment and backpack items. This cannot be undone.";
+            if (MessageBox.Show(this, companionWarning, "Delete companion forever", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+
+            try
+            {
+                DeleteCompanion(bot.CompanionId);
+                await RefreshDashboardAsync();
+                MessageBox.Show(this, $"{bot.Name} and all of its items were permanently deleted.", "Companion deleted", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(this, exception.Message, "Unable to delete companion", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            return;
+        }
+
+        if (bot.BotId is null || bot.DeletionQueued && serverRunning)
             return;
 
         string warning = $"Permanently delete {bot.Name}, the level {bot.Level} {bot.RaceName} {bot.ClassName}?\n\n" +
@@ -2926,6 +2961,37 @@ internal sealed partial class MainForm : Form
         return serverRunning;
     }
 
+    private void DeleteCompanion(string companionId)
+    {
+        // Companions are live in memory while the server runs, so the database is
+        // only touched when the server is stopped. Items and the roster record are
+        // removed in one transaction, mirroring the in-game PlayerCompanionRoster delete.
+        using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+        if (IsServerRunning() || HasExactServerProcess())
+            throw new InvalidOperationException("Companions can only be deleted from the launcher while the server is stopped.");
+
+        using (var items = connection.CreateCommand())
+        {
+            items.Transaction = transaction;
+            items.CommandText = "DELETE FROM Inventory WHERE OwnerID=@owner";
+            items.Parameters.AddWithValue("@owner", $"playercompanion:{companionId}");
+            items.ExecuteNonQuery();
+        }
+
+        using (var record = connection.CreateCommand())
+        {
+            record.Transaction = transaction;
+            record.CommandText = "DELETE FROM player_companions WHERE CompanionId=@id";
+            record.Parameters.AddWithValue("@id", companionId);
+            if (record.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("The selected companion no longer exists.");
+        }
+
+        transaction.Commit();
+    }
+
     private static void PurgeBotData(SQLiteConnection connection, SQLiteTransaction transaction, long botId)
     {
         string owner = $"offlinebot:{botId}";
@@ -2983,7 +3049,7 @@ internal sealed partial class MainForm : Form
         bool serverRunning = IsServerRunning() || HasExactServerProcess();
         if (_deleteBotButton != null)
             _deleteBotButton.Enabled = SelectedBot() is { CanDelete: true } selected &&
-                                       (!selected.DeletionQueued || !serverRunning);
+                                       (selected.IsCompanion ? !serverRunning : (!selected.DeletionQueued || !serverRunning));
         if (_deleteAllBotsButton != null)
             _deleteAllBotsButton.Enabled = _bots.Any(bot => bot.BotId.HasValue &&
                                                             (!bot.DeletionQueued || !serverRunning));
@@ -3622,6 +3688,8 @@ internal sealed partial class MainForm : Form
         public string GuildCharter { get; init; } = string.Empty;
         public string GuildName { get; init; } = string.Empty;
         public long? RealmPoints { get; init; }
+        public string CompanionId { get; init; } = string.Empty;
+        public bool IsCompanion => CompanionId.Length > 0;
         public string RealmPointsDisplay => RealmPoints?.ToString("N0") ?? "—";
         public string ObjectiveExpiresUtc { get; init; } = string.Empty;
         public bool HasGroupTaskClock { get; init; }
