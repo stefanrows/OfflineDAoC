@@ -346,6 +346,84 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void PlanRefillsAUnitThatNeverEnteredInsteadOfRelievingIt()
+        {
+            // Live run 0.242.0: 93 reliefs, median 18 s after forming; a unit below its minimum before boarding was
+            // relieved whole and replaced, and the new unit produced new stragglers. Only a unit inside is relieved.
+            RealmCount albion = new(eRealm.Albion, new OpenBgUnit[]
+            {
+                new(1, OpenBgUnitKind.Group8, 3, Inside: false),
+                new(2, OpenBgUnitKind.Small, 1, Inside: false),
+                new(3, OpenBgUnitKind.Small, 1, true, 100),
+            });
+            OpenBgPlan plan = OpenBattlegroundRoster.Plan(Defaults, new[] { albion, RealmCount.Empty(eRealm.Midgard), RealmCount.Empty(eRealm.Hibernia) });
+            OpenBgRealmPlan mine = plan.For(eRealm.Albion);
+            Assert.Multiple(() =>
+            {
+                Assert.That(mine.Relieve, Is.EqualTo(new[] { 3 }), "the small group of one inside is relieved");
+                Assert.That(mine.Refill, Is.EquivalentTo(new[] { 1, 2 }), "the travelling units are refilled at their porter");
+                Assert.That(mine.AddGroups8, Is.Zero, "the refilled 8-man keeps its setup slot");
+                Assert.That(mine.AddSmall, Is.EqualTo(1), "only the relieved small group is replaced");
+                Assert.That(OpenBattlegroundRoster.RelievedBelowMinimum(new OpenBgUnit(4, OpenBgUnitKind.Group8, 5, true, 1)), Is.True);
+                Assert.That(OpenBattlegroundRoster.RelievedBelowMinimum(new OpenBgUnit(4, OpenBgUnitKind.Group8, 5)), Is.False);
+                Assert.That(OpenBattlegroundRoster.RefilledBelowMinimum(new OpenBgUnit(4, OpenBgUnitKind.Group8, 5)), Is.True);
+                Assert.That(OpenBattlegroundRoster.RefilledBelowMinimum(new OpenBgUnit(4, OpenBgUnitKind.Group8, 6)), Is.False, "whole");
+                Assert.That(OpenBattlegroundRoster.RefilledBelowMinimum(new OpenBgUnit(4, OpenBgUnitKind.Solo, 1)), Is.False);
+            });
+
+            // The refill's missing members (three for the 8-man, one for the small group) book their seats first.
+            OpenBgPlan tight = OpenBattlegroundRoster.Plan(Defaults with { MaxBots = 5 + 4 },
+                new[] { albion, RealmCount.Empty(eRealm.Midgard), RealmCount.Empty(eRealm.Hibernia) });
+            Assert.Multiple(() =>
+            {
+                Assert.That(tight.For(eRealm.Albion).Refill, Is.EquivalentTo(new[] { 1, 2 }));
+                Assert.That(tight.Admits, Is.Empty, "no new unit takes the seats the refill needs");
+                Assert.That(tight.CapBinds, Is.True);
+            });
+        }
+
+        [Test]
+        public void RecruitsMustStandNearAPorterReadyToWalk()
+        {
+            static bool Ready(bool alive = true, bool released = false, bool dungeon = false, bool wall = false,
+                bool fighting = false, bool riding = false) =>
+                OpenBattlegroundRoster.IsRecruitableNow(alive, released, dungeon, wall, fighting, riding);
+            Assert.Multiple(() =>
+            {
+                Assert.That(Ready(), Is.True);
+                Assert.That(Ready(alive: false), Is.False, "dead");
+                Assert.That(Ready(released: true), Is.False, "walking back after a release");
+                Assert.That(Ready(dungeon: true), Is.False, "inside a dungeon");
+                Assert.That(Ready(wall: true), Is.False, "behind the PvP wall: the coordinator drops it from every RvR party");
+                Assert.That(Ready(fighting: true), Is.False, "in a fight");
+                Assert.That(Ready(riding: true), Is.False, "on a stable ride");
+                Assert.That(OpenBattlegroundRoster.PorterReach, Is.EqualTo(20_000));
+                Assert.That(OpenBattlegroundRoster.WithinPorterReach(0), Is.True);
+                Assert.That(OpenBattlegroundRoster.WithinPorterReach(20_000), Is.True);
+                Assert.That(OpenBattlegroundRoster.WithinPorterReach(20_001), Is.False);
+                Assert.That(OpenBattlegroundRoster.WithinPorterReach(47_000), Is.False, "Isaiselle, recruited 47,000 units from her porter");
+            });
+        }
+
+        [Test]
+        public void ABotThatLeftItsUnitBeforeBoardingRestsTenGameMinutes()
+        {
+            const long minute = 60_000;
+            long now = 5_000_000;
+            long until = OpenBattlegroundRoster.ExtendRest(0, now, OpenBattlegroundRoster.RecruitCooldownMilliseconds);
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoster.RecruitCooldownMilliseconds, Is.EqualTo(10 * minute));
+                Assert.That(OpenBattlegroundRoster.IsResting(until, now + 10 * minute - 1), Is.True, "Isaiselle was re-recruited within seconds");
+                Assert.That(OpenBattlegroundRoster.IsResting(until, now + 10 * minute), Is.False);
+                Assert.That(OpenBattlegroundRoster.ExtendRest(now + 30 * minute, now, OpenBattlegroundRoster.RecruitCooldownMilliseconds),
+                    Is.EqualTo(now + 30 * minute), "a drop never shortens a relief's longer rest");
+                Assert.That(OpenBattlegroundRoster.RestAfterReliefMilliseconds, Is.GreaterThanOrEqualTo(OpenBattlegroundRoster.RecruitCooldownMilliseconds),
+                    "a relieved bot (below its minimum or due) rests at least as long");
+            });
+        }
+
+        [Test]
         public void OpenCrewStaysUntilRelievedOrSwitchedOff()
         {
             Assert.Multiple(() =>

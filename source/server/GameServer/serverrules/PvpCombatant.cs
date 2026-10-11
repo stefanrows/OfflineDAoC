@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DOL.AI.Brain;
 using DOL.GS.Keeps;
+using DOL.GS.ServerProperties;
 
 namespace DOL.GS.ServerRules
 {
@@ -85,7 +86,48 @@ namespace DOL.GS.ServerRules
 			if (firstBattleGroup != null && firstBattleGroup == secondBattleGroup)
 				return true;
 
+			if (OpenBgCrewAllied(a, b))
+				return true;
+
 			return CompanionProtects(a, b) || CompanionProtects(b, a);
+		}
+
+		[ServerProperty("pvp", "open_bg_realm_crews_allied", "Autonomous open BG crew bots of the same realm are allied with each other inside the open BG; players and guest squads keep the Camlann free-for-all", true)]
+		public static bool OPEN_BG_REALM_CREWS_ALLIED = true;
+
+		/// <summary>
+		/// Live run 0.242.0: 21 of 23 logged deaths in the open BG were same-realm kills between crews of different
+		/// bot guilds at their own realm's arrival camp. With open_bg_realm_crews_allied (default on; an assumption
+		/// pending the owner) two autonomous crew bots of one realm that both stand inside the open BG as roster crew
+		/// count as allied. Players, companions, helpers, guest squads and campaign squads are never crew: they keep
+		/// Camlann free-for-all (anyone outside group, guild or battlegroup is hostile).
+		/// </summary>
+		public static bool OpenBgCrewAllied(bool enabled, bool firstCrewInside, bool secondCrewInside, eRealm firstRealm, eRealm secondRealm) =>
+			enabled && firstCrewInside && secondCrewInside && firstRealm == secondRealm && firstRealm != eRealm.None;
+
+		/// <summary>The crew alliance for two resolved actors (see the pure overload); cheap tests first, the crew roster last.</summary>
+		public static bool OpenBgCrewAllied(GameLiving first, GameLiving second)
+		{
+			if (!OPEN_BG_REALM_CREWS_ALLIED || first is not GameBot { IsAutonomousWorldBot: true } a ||
+				second is not GameBot { IsAutonomousWorldBot: true } b || a.Realm != b.Realm ||
+				a.CurrentRegionID != b.CurrentRegionID || a.CurrentRegionID != OpenBattlegroundRegion)
+				return false;
+			return OpenBgCrewAllied(true, AutonomousBattlegroundParticipation.IsOpenCrewInside(a),
+				AutonomousBattlegroundParticipation.IsOpenCrewInside(b), a.Realm, b.Realm);
+		}
+
+		private static int _openBattlegroundRegion = -1;
+
+		// The open BG's region from the static catalog, read once (AreAllied runs on every AoE and aggro scan).
+		private static int OpenBattlegroundRegion
+		{
+			get
+			{
+				int region = _openBattlegroundRegion;
+				if (region < 0)
+					_openBattlegroundRegion = region = BattlegroundCampaignCatalog.FindOpen()?.RegionId ?? 0;
+				return region;
+			}
 		}
 
 		private static GameLiving EncounterSponsor(GameLiving actor)

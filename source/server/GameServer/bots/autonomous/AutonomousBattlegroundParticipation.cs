@@ -275,13 +275,36 @@ public static class AutonomousBattlegroundParticipation
             return bot != null && Entries.TryGetValue(bot, out Entry entry) && IsOpenUnit(entry.Definition, entry.Unit) ? entry.Unit : 0;
     }
 
+    /// <summary>An open-BG crew member that has entered (fighting or walking home after a relief), for the crew alliance.</summary>
+    public static bool IsOpenCrewInside(GameBot bot)
+    {
+        lock (Sync)
+            return bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Entered && IsOpenUnit(entry.Definition, entry.Unit);
+    }
+
+    /// <summary>The label (group id or "solo") an open-BG roster unit was registered with; "refill" when no member is left.</summary>
+    public static string OpenUnitLabel(int unit)
+    {
+        lock (Sync)
+            return Entries.Values.FirstOrDefault(entry => entry.Unit == unit && IsOpenUnit(entry.Definition, entry.Unit))?.Group ?? "refill";
+    }
+
     /// <summary>An open-BG crew member assigned and still travelling to its porter (not inside, not leaving).</summary>
     public static bool IsTravellingOpenCrew(GameBot bot)
     {
         lock (Sync)
-            return bot != null && Entries.TryGetValue(bot, out Entry entry) && IsOpenUnit(entry.Definition, entry.Unit) &&
-                !entry.Entered && entry.Leaving == null;
+            return bot != null && Entries.TryGetValue(bot, out Entry entry) &&
+                WorldRvrSuspended(IsOpenUnit(entry.Definition, entry.Unit), entry.Entered, entry.Leaving != null);
     }
+
+    /// <summary>
+    /// Live run 0.242.0: once the roster assigned a bot to an open-BG unit, the world RvR layer kept driving it until
+    /// it boarded (guild keep recalls, observe/retreat runs, frontier hunts), and the unit dropped it as a straggler.
+    /// From the assignment until it boards, a crew member is out of the world RvR layer: no event-layer orders, guild
+    /// keep recall, doctrine (observe, retreat, stealth hunt) or opportunity hunting; only self-defence and the walk
+    /// to its porter. Inside the battleground its driver owns it; a leaving bot is no longer travelling.
+    /// </summary>
+    public static bool WorldRvrSuspended(bool openUnit, bool entered, bool leaving) => openUnit && !entered && !leaving;
 
     /// <summary>Open-BG crew members against the open cap, including those still travelling or leaving.</summary>
     public static int OpenCrewCount()
@@ -477,8 +500,12 @@ public static class AutonomousBattlegroundParticipation
             if (ready.Length == 0) continue;
             if (unit.Group != null)
             {
+                bool assembling = AutonomousBotGroupCoordinator.IsOpenBattlegroundAssembling(unit.Group);
+                // Live run 0.242.0: the wait ran from the first member at the porter while the others still mustered,
+                // so whole groups were dropped as stragglers in their "Meeting up" phase. The muster has its own clock.
+                if (!OpenBoardingWaitRuns(assembling, ready.Length)) continue;
                 long readySince = MarkReady(ready, now);
-                bool whole = OpenGroupMayBoard(AutonomousBotGroupCoordinator.IsOpenBattlegroundAssembling(unit.Group), live.Length, ready.Length);
+                bool whole = OpenGroupMayBoard(assembling, live.Length, ready.Length);
                 if (!whole)
                 {
                     if (!OpenBoardingWaitOver(readySince, now)) continue;
@@ -513,6 +540,21 @@ public static class AutonomousBattlegroundParticipation
         readySinceTick > 0 && now - readySinceTick >= OpenBoardingWaitMilliseconds;
 
     /// <summary>
+    /// A group's boarding wait (and with it the straggler drop) only starts once its coordinator muster at the porter
+    /// has ended and a member stands ready; while the group still musters nobody boards and nobody is dropped.
+    /// </summary>
+    public static bool OpenBoardingWaitRuns(bool assemblyPhase, int readyWaiting) => !assemblyPhase && readyWaiting > 0;
+
+    /// <summary>A refilled unit waits for its new members again: the boarding wait of every member restarts.</summary>
+    public static void RestartOpenBoardingWait(int unit)
+    {
+        lock (Sync)
+            foreach (Entry entry in Entries.Values)
+                if (entry.Unit == unit && IsOpenUnit(entry.Definition, entry.Unit) && !entry.Entered)
+                    entry.ReadySinceTick = 0;
+    }
+
+    /// <summary>
     /// After the boarding wait the ready members of a group board without its stragglers, but only while they still
     /// make a unit of their kind (<see cref="OpenBattlegroundRoster.MinimumSize"/>). Fewer board nobody; the
     /// stragglers leave anyway, so the roster relieves and replaces the shrunken unit.
@@ -535,6 +577,7 @@ public static class AutonomousBattlegroundParticipation
                     Entries.Remove(bot);
                 }
                 if (group != null && bot.Group == group) group.RemoveMember(bot);
+                OpenBattlegroundRoster.NoteLeftBeforeEntry(bot, GameLoop.GameLoopTime);
                 Log.Info($"OPEN_BG_STRAGGLER_DROPPED bot=\"{bot.Name}\" unit={unit} waited_s={OpenBoardingWaitMilliseconds / 1000}");
                 Log.Info($"AUTONOMOUS_BG_LEFT region={BattlegroundCampaignCatalog.FindOpen()?.RegionId} bot=\"{bot.Name}\" reason={Describe(LeaveReason.Unassigned)}");
             }
@@ -789,6 +832,9 @@ public static class AutonomousBattlegroundParticipation
     private static void Remove(Entry entry, LeaveReason reason)
     {
         lock (Sync) Entries.Remove(entry.Bot);
+        // An open-BG member that left its unit before boarding (timeout, another party) is not recruited again at once.
+        if (IsOpenUnit(entry.Definition, entry.Unit) && !entry.Entered)
+            OpenBattlegroundRoster.NoteLeftBeforeEntry(entry.Bot, GameLoop.GameLoopTime);
         Log.Info($"AUTONOMOUS_BG_LEFT region={entry.Definition.RegionId} bot=\"{entry.Bot.Name}\" reason={Describe(reason)}");
     }
 

@@ -82,6 +82,48 @@ namespace DOL.GS
             }
         }
 
+        /// <summary>
+        /// Refills an open-BG unit's party that lost members before boarding (live run 0.242.0: such units were relieved
+        /// whole and replaced, which churned new units and new stragglers). Each recruit must be a free RvR-tour world bot
+        /// in the muster's region with a formation slot there; it joins the party and walks to the porter like the rest.
+        /// Returns the bots that joined (none when the party is no longer an open-BG unit or is ending).
+        /// </summary>
+        public static GameBot[] TryRefillOpenBattlegroundParty(Group group, IReadOnlyList<GameBot> recruits)
+        {
+            if (group == null || recruits == null || recruits.Count == 0) return [];
+            using (EnterSync())
+            {
+                if (!TryGetSession(group, out Session session) || !session.OpenBattleground || session.Ending) return [];
+                GameBot[] members = BotMembers(group);
+                if (members.Length == 0) return [];
+                var added = new List<GameBot>();
+                foreach (GameBot recruit in recruits)
+                {
+                    if (recruit == null || !recruit.IsAutonomousWorldBot || recruit.IsTemporaryGroupHelper || recruit.Group != null ||
+                        !recruit.IsAlive || recruit.CurrentRegionID != session.RendezvousRegion ||
+                        !AutonomousObjectiveAssignments.Is(recruit, eAutonomousObjectiveKind.RvR))
+                        continue;
+                    GameBot[] expanded = [.. members, recruit];
+                    if (!TryBuildRendezvousSlots(session, expanded)) continue;
+                    if (!group.AddMember(recruit))
+                    {
+                        TryBuildRendezvousSlots(session, members);
+                        continue;
+                    }
+                    members = expanded;
+                    LastFormationAttemptTick.Remove(MemberKey(recruit));
+                    added.Add(recruit);
+                }
+                if (added.Count == 0) return [];
+                session.LockedSize = members.Length;
+                RebaseAttendance(session, members, preserveArrivals: true);
+                WriteSessionMetadata(session, members);
+                Log.Info($"AUTONOMOUS_GROUP_RECRUITED group={session.Id} objective={session.ObjectiveKind} size={members.Length} purpose=open_bg_refill " +
+                         $"added=\"{string.Join(",", added.Select(member => member.Name))}\"");
+                return added.ToArray();
+            }
+        }
+
         /// <summary>An open-BG group still in its coordinator assembly (leader staging or meeting up at its porter).</summary>
         public static bool IsOpenBattlegroundAssembling(Group group)
         {

@@ -54,8 +54,10 @@ public static class AutonomousRvrDoctrineRuntime
     private const int DoctrineRefreshMilliseconds = 60_000;
     private const int CallerRange = 2_000;
 
+    // An open-BG crew member travelling to its porter is out of the world RvR layer: no observe, retreat or stealth hunt.
     public static bool Applies(GameBot bot) => bot?.IsAutonomousWorldBot == true && !bot.IsPlayerLedGroup &&
-        !bot.IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR);
+        !bot.IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) &&
+        !AutonomousBattlegroundParticipation.IsTravellingOpenCrew(bot);
 
     public static RvrDoctrine For(GameBot bot)
     {

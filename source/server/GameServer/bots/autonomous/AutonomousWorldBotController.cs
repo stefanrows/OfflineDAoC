@@ -310,6 +310,13 @@ namespace DOL.GS
                 if (!bot.IsAlive || bot.IsReturningAfterRelease)
                     return false;
 
+                // An open-BG crew member leaves the world RvR layer once at its assignment: no stale event
+                // destination keeps reporting it as a travelling force, no siege job, no solo force in an event.
+                bool travellingOpenCrew = AutonomousBattlegroundParticipation.IsTravellingOpenCrew(bot);
+                if (travellingOpenCrew && !_leftWorldRvrForOpenBattleground)
+                    LeaveWorldRvrForOpenBattleground(bot);
+                _leftWorldRvrForOpenBattleground = travellingOpenCrew;
+
                 if (_rvrSharedEvent && _rvrDestination != null)
                     AutonomousRvrEventLayer.ReportTravel(_rvrDestination.Id,
                         _groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}", bot.DatabaseID,
@@ -719,6 +726,22 @@ namespace DOL.GS
             {
                 EndLeaderLoopUnlessHolding(bot);
             }
+        }
+
+        private bool _leftWorldRvrForOpenBattleground;
+
+        /// <summary>
+        /// The open-BG roster took this bot (live run 0.242.0: assigned members kept their world RvR destinations and
+        /// orders until they boarded). It drops its siege job, its world destination and its solo force's event
+        /// registration; its unit's own party never enlists (<see cref="AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(GameBot)"/>).
+        /// </summary>
+        private void LeaveWorldRvrForOpenBattleground(GameBot bot)
+        {
+            ReleaseSiegeJob(bot);
+            // Recruited alone: the claim and event registrations to drop are its solo force's.
+            ResetRvrObjectiveForGroupChange(bot, string.Empty);
+            ClearKeepObjective(bot);
+            AutonomousRvrEventLayer.RemoveForce($"rvr-{bot.DatabaseID}");
         }
 
         private void ResetRvrObjectiveForGroupChange(GameBot bot, string previousGroupId)

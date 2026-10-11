@@ -399,6 +399,39 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void ATravellingOpenCrewMemberIsOutOfTheWorldRvrLayer()
+        {
+            // Live run 0.242.0: assigned members were recalled to guild keeps, ran observe retreats and frontier hunts
+            // until the unit dropped them as stragglers. From the assignment until boarding the world RvR layer is off.
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.WorldRvrSuspended(true, false, false), Is.True,
+                    "assigned to an open-BG unit and still travelling to its porter");
+                Assert.That(AutonomousBattlegroundParticipation.WorldRvrSuspended(true, true, false), Is.False,
+                    "inside, its battleground driver owns it");
+                Assert.That(AutonomousBattlegroundParticipation.WorldRvrSuspended(true, true, true), Is.False, "relieved and leaving");
+                Assert.That(AutonomousBattlegroundParticipation.WorldRvrSuspended(false, false, false), Is.False,
+                    "a bracket participant keeps the ordinary RvR plan as its fallback");
+            });
+        }
+
+        [Test]
+        public void TheBoardingWaitStartsOnlyAfterTheMusterAtThePorter()
+        {
+            // Live run 0.242.0: unit 11 lost seven of eight members as stragglers while its muster still said
+            // "Meeting up"; the wait had run from the first member standing at the porter.
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.OpenBoardingWaitRuns(true, 1), Is.False,
+                    "the group still musters: nobody boards, nobody is dropped");
+                Assert.That(AutonomousBattlegroundParticipation.OpenBoardingWaitRuns(true, 8), Is.False);
+                Assert.That(AutonomousBattlegroundParticipation.OpenBoardingWaitRuns(false, 0), Is.False, "nobody ready yet");
+                Assert.That(AutonomousBattlegroundParticipation.OpenBoardingWaitRuns(false, 1), Is.True,
+                    "mustered and a member ready: the bounded wait runs");
+            });
+        }
+
+        [Test]
         public void FrontierMerchantOffsetsAreDistinct()
         {
             (int dx, int dy)[] offsets = FrontierMedallionMerchants.MerchantOffsets().ToArray();
