@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+- Merged on main after the 0.241.0 release commit, not yet built as a package
+  or deployed (night of 2026-10-11; to be shipped as 0.242.0): open BG stages
+  2-3 (phase director, roles, player drift, `/bgsetup` window, launcher tab
+  "open BG"), roster review fixes (no world siege enlistment, whole-group
+  boarding, cap shedding), the rival-hunt stale-group fix (bug 152 filed),
+  `/bgsetup` in the command reference. Guest squads and Pazz dailies 1-50
+  (tasks 11-12) sit on tag `open-bg-tasks-11-12`; their merge conflicts in
+  `BattlegroundCampaignManager.cs` (guest timer beside the director timer)
+  and must be resolved first.
+
 ## [0.241.0] - 2026-10-11
 
 ### Added
