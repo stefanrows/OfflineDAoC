@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.254.0] - 2026-10-11
+
+### Added
+
+- New server setting `allow_all_items_all_classes` (category `classes`, on by
+  default). Real players may equip and use any item regardless of its realm,
+  allowed-class list, or armor and weapon skill. Poison still needs Envenom.
+  Companions and autonomous gamebots keep the normal class rules.
+- Client UI preset code for the launcher (`ClientUiPreset`,
+  `ClientUiPresetForm`, with tests): save one character's quickbar macros as a
+  preset and apply it to other characters, skipping class-specific spell
+  slots and backing up the target files. Not yet reachable from the launcher
+  window.
+- `docs/CLIENT_UI_XML_REFERENCE.md`: how the client's `game.dll` reads its UI
+  XML (element types, child elements, value mappers and the full OnClickEvent
+  table), from static analysis of the raid baseline `game.dll`.
+
+### Changed
+
+- `docs/DEVELOPMENT.md`: the OnClickEvent mapper compares 365 names (364 stock
+  events plus `Unspecified`), not 218, and links the new UI XML reference.
+
 ## [0.253.0] - 2026-10-11
 
 ### Fixed

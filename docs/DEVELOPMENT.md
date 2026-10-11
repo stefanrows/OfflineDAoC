@@ -223,11 +223,13 @@ Each CLI call reruns Ghidra auto-analysis (about four minutes for game.dll;
 only its first query pays that cost.
 
 Validated against earlier manual work on the OnClickEvent mapper `0x4EA06F`:
-the pseudocode reads the name from ESI, compares 218 stock names with
-`_stricmp`, falls back to `atol` for text starting with a digit, and otherwise
-returns `-1`. Its 21 call sites include `0x4EDA7F`/`0x4EDAA5` inside the
-InvisibleButtonDef parser `0x4ED9B4`. See
-[Companion Manager integration](COMPANION_MANAGER_INTEGRATION.md).
+the pseudocode reads the name from ESI, compares 365 names with `_stricmp`
+(364 stock events plus `Unspecified`, which returns `-1`), falls back to `atol`
+for text starting with a digit, and otherwise returns `-1`. Its 21 call sites
+include `0x4EDA7F`/`0x4EDAA5` inside the InvisibleButtonDef parser `0x4ED9B4`.
+See [Companion Manager integration](COMPANION_MANAGER_INTEGRATION.md). The
+full XML vocabulary, the value mappers and the event table are in the
+[Client UI XML reference](CLIENT_UI_XML_REFERENCE.md).
 
 Test texture-tool source with `python tools/test-assets.py --distribution playable`
 (or the actual complete-download path). The wrapper resolves the read-only fixtures

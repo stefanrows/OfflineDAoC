@@ -662,6 +662,10 @@ namespace DOL.GS.ServerRules
             if ((item.Object_Type == 0 || item.Object_Type >= (int)eObjectType._FirstHouse) && item.Object_Type <= (int)eObjectType._LastHouse)
                 return true;
 
+            // fork rule: real players may use any item of any realm and class (poison still needs Envenom)
+            if (player != null && ServerProperties.Properties.ALLOW_ALL_ITEMS_ALL_CLASSES && item.Object_Type != (int)eObjectType.Poison)
+                return true;
+
             // on some servers we may wish for dropped items to be used by all realms regardless of what is set in the db
             if (!ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
             {

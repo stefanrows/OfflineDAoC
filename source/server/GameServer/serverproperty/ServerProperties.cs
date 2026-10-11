@@ -2211,6 +2211,12 @@ namespace DOL.GS.ServerProperties
 		public static int THEURGIST_PET_CAP;
 
 		/// <summary>
+		/// Fork rule: real players may equip and use any item regardless of realm, allowed-class list, or armor/weapon skill.
+		/// </summary>
+		[ServerProperty("classes", "allow_all_items_all_classes", "Can real players equip any item regardless of realm, allowed-class list, and armor or weapon skill? Companions and autonomous bots keep class rules.", true)]
+		public static bool ALLOW_ALL_ITEMS_ALL_CLASSES;
+
+		/// <summary>
 		/// Do we want to allow items to be equipped regardless of realm?
 		/// </summary>
 		[ServerProperty("classes", "allow_cross_realm_items", "Do we want to allow items to be equipped regardless of realm?", false)]
