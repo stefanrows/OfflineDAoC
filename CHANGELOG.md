@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.246.1] - 2026-10-11
+
+### Fixed
+
+- The open BG landing peace of 0.246.0 never applied: the landing cache's
+  retry clock started at `long.MinValue`, the subtraction overflowed and the
+  landings were never read (0.246.0 run, 25 min at ~9×: 1,339 same-realm
+  crew deaths at the arrival camps, hub-peace counter `bind:69`). The clock
+  now starts with a "tried" flag.
+
 ## [0.246.0] - 2026-10-11
 
 ### Changed

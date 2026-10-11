@@ -161,7 +161,8 @@ public static class AutonomousHubDeparture
     public const int OpenBgLandingPeaceRadius = 5_500;
 
     private static (ushort Region, int X, int Y, eRealm Realm)[] _openBgLandings = Array.Empty<(ushort, int, int, eRealm)>();
-    private static long _openBgLandingsRetryTick = long.MinValue;
+    private static long _openBgLandingsRetryTick;
+    private static bool _openBgLandingsTried;
     private const long OpenBgLandingsRetryMilliseconds = 10_000;
 
     /// <summary>
@@ -174,9 +175,11 @@ public static class AutonomousHubDeparture
         if (landings.Length > 0)
             return landings;
         long now = GameLoop.GameLoopTime;
-        if (now - Volatile.Read(ref _openBgLandingsRetryTick) < OpenBgLandingsRetryMilliseconds)
+        // 0.246.0 started the clock at long.MinValue; the subtraction overflowed and the landings were never read.
+        if (Volatile.Read(ref _openBgLandingsTried) && now - Volatile.Read(ref _openBgLandingsRetryTick) < OpenBgLandingsRetryMilliseconds)
             return landings;
         Volatile.Write(ref _openBgLandingsRetryTick, now);
+        Volatile.Write(ref _openBgLandingsTried, true);
         try
         {
             BattlegroundDefinition open = BattlegroundCampaignCatalog.FindOpen();
