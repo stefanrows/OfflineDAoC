@@ -269,12 +269,15 @@ namespace DOL.GS
 
         /// <summary>
         /// Portal keeps that stay native: Cathal Valley (165) and Murdaigean (251) have a frontier keep fixture within
-        /// about 520 units of each, and Murdaigean's gates are native door rows. The builder logs them and adds nothing.
+        /// about 520 units of each, and Murdaigean's gates are native door rows. Thidranki (252, the open battleground)
+        /// shares Murdaigean's map: its portal keeps 12-14 stand on the same spots with native gate rows. The builder logs
+        /// them and adds nothing.
         /// </summary>
         public static IReadOnlyList<NativePortalKeep> PortalNativeKeeps { get; } = Array.AsReadOnly(new NativePortalKeep[]
         {
             new NativePortalKeep(165, 1), new NativePortalKeep(165, 2), new NativePortalKeep(165, 3),
             new NativePortalKeep(251, 41), new NativePortalKeep(251, 42), new NativePortalKeep(251, 43),
+            new NativePortalKeep(252, 12), new NativePortalKeep(252, 13), new NativePortalKeep(252, 14),
         });
 
         /// <summary>Component tuples for a template, or an empty list for an unknown name.</summary>

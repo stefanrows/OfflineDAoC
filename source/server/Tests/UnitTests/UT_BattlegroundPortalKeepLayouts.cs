@@ -42,13 +42,13 @@ namespace DOL.GS.Tests
         }
 
         [Test]
-        public void NativePortalKeepsAreCathalAndMurdaigeanOnly()
+        public void NativePortalKeepsAreCathalMurdaigeanAndThidrankiOnly()
         {
             var native = BattlegroundKeepLayouts.PortalNativeKeeps.Select(keep => (keep.Region, keep.KeepId))
                 .OrderBy(keep => keep.Region).ThenBy(keep => keep.KeepId).ToList();
             Assert.That(native, Is.EqualTo(new (ushort Region, int KeepId)[]
             {
-                (165, 1), (165, 2), (165, 3), (251, 41), (251, 42), (251, 43),
+                (165, 1), (165, 2), (165, 3), (251, 41), (251, 42), (251, 43), (252, 12), (252, 13), (252, 14),
             }));
             var built = BattlegroundKeepLayouts.PortalSites.Select(site => (site.Region, site.KeepId)).ToList();
             Assert.That(built.Intersect(native), Is.Empty, "a native portal keep is never server-built");
