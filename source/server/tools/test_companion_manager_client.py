@@ -35,6 +35,7 @@ assert pe.sections[-1].Name.rstrip(b"\0") == b".cmgr"
 assert pe.sections[-2].Name.rstrip(b"\0") == b".raid"
 layout = manifest["layout"]
 LABELS = layout["LabelCount"]
+TOTAL = layout["TotalLabelCount"]
 
 uc = Uc(UC_ARCH_X86, UC_MODE_32)
 uc.mem_map(0x400000, 0x2100000)
@@ -120,9 +121,10 @@ def adapter(index):
 setup()
 uc.emu_start(manifest["blocks"]["init"]["address"], 0x4DA940, count=400000)
 assert uc.reg_read(UC_X86_REG_EDI) == 0x123456
-assert labels[:LABELS] == [builder.adapter_name(index) for index in range(LABELS)]
-assert len(labels) == LABELS + 240 and len(set(labels)) == len(labels), "Raid adapter registration was changed"
+assert labels[:TOTAL] == [builder.adapter_name(index) for index in range(TOTAL)]
+assert len(labels) == TOTAL + 240 and len(set(labels)) == len(labels), "Raid adapter registration was changed"
 assert read32(manifest["activeFlag"]) == 0
+assert read32(manifest["barActiveFlag"]) == 0
 
 
 def packet(operation, index=0, text="", marker=0x43, version=builder.PROTOCOL_VERSION, length=128, terminator=0,
@@ -151,10 +153,14 @@ assert texts[adapter(layout["LabelStatus"])] == "Roster 2/78 - All realms"
 assert LABELS > 256, "The 16-bit index is what makes the high labels reachable"
 packet(1, LABELS - 1, "Last action")
 assert texts[adapter(LABELS - 1)] == "Last action"
+packet(1, LABELS, "First COMPANIONS label")
+assert texts[adapter(LABELS)] == "First COMPANIONS label"
+packet(1, TOTAL - 1, "Last bar label")
+assert texts[adapter(TOTAL - 1)] == "Last bar label"
 packet(1, 300, "A label past the old one-byte index")
 assert texts[adapter(300)] == "A label past the old one-byte index"
 before = dict(texts)
-packet(1, LABELS, "Out of range")
+packet(1, TOTAL, "Out of range")
 packet(1, 0xFFFF, "Far out of range")
 packet(1, 0, "Bad terminator", terminator=1)
 packet(1, 0, "Probe version", version=1)
@@ -243,6 +249,34 @@ sent = len(commands)
 click(0x701)
 assert len(commands) == sent, "Clicks after hide must not send commands"
 
+# COMPANIONS window (Custom7): its own flag gates its clicks, so the bar works with the manager hidden.
+sent = len(commands)
+click(0x7A8)
+assert len(commands) == sent, "Bar clicks before the bar is shown must not send commands"
+packet(builder.OP_BAR_SHOW)
+assert windows[-1] == (builder.BAR_WINDOW, 1)
+assert read32(manifest["barActiveFlag"]) == 1
+assert commands[-1].endswith(f" {builder.BAR_READY_CONTROL:02x}"), commands[-1]
+assert read32(manifest["activeFlag"]) == 0, "Showing the bar leaves the manager flag alone"
+click(0x7A8)
+assert commands[-1].endswith(" a8"), commands[-1]
+click(0x7B1)
+assert commands[-1].endswith(" b1"), commands[-1]
+sent = len(commands)
+click(0x705)
+assert len(commands) == sent, "Manager clicks while only the bar is shown must not send commands"
+packet(builder.OP_BAR_HIDE)
+assert windows[-1] == (builder.BAR_WINDOW, 0)
+assert read32(manifest["barActiveFlag"]) == 0
+sent = len(commands)
+click(0x7A9)
+assert len(commands) == sent, "Bar clicks after hide must not send commands"
+packet(2)
+assert read32(manifest["barActiveFlag"]) == 0, "Showing the manager leaves the bar flag alone"
+assert click(0x7A, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER, "Stock member events pass through"
+packet(3)
+assert read32(manifest["activeFlag"]) == 0
+
 # A raid show message still reaches the existing 40/80 native parser.
 packet(2, marker=0x52, version=1)
 assert windows[-1] == (0x76, 1)
@@ -253,6 +287,20 @@ uc.mem_write(body, bytes(128))
 uc.mem_write(frame + 0x18, struct.pack("<I", 2))
 uc.emu_start(manifest["blocks"]["packet"]["address"], 0x411209, count=100000)
 assert uc.reg_read(UC_X86_REG_EIP) == 0x411209
+
+# Element names the manager windows may use. The COMPANIONS window adds the stock status bar, scalar label and divider.
+MANAGER_XML_TAGS = {"WindowTemplate", "Name", "WindowId", "CloseButton", "MoveButton",
+                    "TopRightResizeButton", "BottomRightResizeButton", "BottomLeftResizeButton",
+                    "ResizeButtonOffsetX", "ResizeButtonOffsetY", "TitleWidth", "TitleHeight",
+                    "Width", "Height", "ResizeableWidth", "ResizeableHeight",
+                    "ResizeableTwoWayWidth", "ResizeableTwoWayHeight", "MinWidth", "MinHeight",
+                    "ContextTemplateName", "FullResizeImageDef", "ControlId", "Position", "X", "Y",
+                    "Alignment", "TopLeft", "GrowWidth", "GrowHeight", "offsetright",
+                    "offsetbottom", "TemplateName", "LabelDef", "Color", "R", "G", "B", "A",
+                    "FontName", "ColorAdapter", "MaxCharacters", "Data", "EndAligned",
+                    "TextCentered", "Adapter", "InvisibleButtonDef", "Label", "OnClickEvent"}
+BAR_XML_TAGS = MANAGER_XML_TAGS | {"StatusBarDef", "AdapterName", "ScalarLabelDef", "DontDrawWhenNegOne",
+                                   "HorizontalResizeImageDef"}
 
 # XML: every adapter is shown exactly once, every event maps into the manager range.
 controls = set()
@@ -274,18 +322,71 @@ for skin in ("atlantis", "isles"):
         controls.add(event - builder.EVENT_BASE)
     assert window.find(".//EditBoxDef") is None and window.find(".//ClickableEditBoxDef") is None
     for element in window.iter():
-        assert element.tag in {"WindowTemplate", "Name", "WindowId", "CloseButton", "MoveButton",
-                               "TopRightResizeButton", "BottomRightResizeButton", "BottomLeftResizeButton",
-                               "ResizeButtonOffsetX", "ResizeButtonOffsetY", "TitleWidth", "TitleHeight",
-                               "Width", "Height", "ResizeableWidth", "ResizeableHeight",
-                               "ResizeableTwoWayWidth", "ResizeableTwoWayHeight", "MinWidth", "MinHeight",
-                               "ContextTemplateName", "FullResizeImageDef", "ControlId", "Position", "X", "Y",
-                               "Alignment", "TopLeft", "GrowWidth", "GrowHeight", "offsetright",
-                               "offsetbottom", "TemplateName", "LabelDef", "Color", "R", "G", "B", "A",
-                               "FontName", "ColorAdapter", "MaxCharacters", "Data", "EndAligned",
-                               "TextCentered", "Adapter", "InvisibleButtonDef", "Label", "OnClickEvent"}, element.tag
+        assert element.tag in MANAGER_XML_TAGS, element.tag
 assert b"custom8_window.xml" in (args.stage / "uimain.xml").read_bytes()
 assert builder.SEARCH_CONTROL in controls and builder.READY_CONTROL not in controls
+assert not any(builder.BAR_CONTROL_FIRST <= value < builder.BAR_CONTROL_LIMIT for value in controls), \
+    "Manager controls must stay out of the COMPANIONS range"
+
+# COMPANIONS window (Custom7): 74 labels, stock member rows, and tile clicks in the bar range only.
+assert b"<Include>custom7_window.xml</Include>" in (args.stage / "uimain.xml").read_bytes()
+assert builder.BAR_LABEL_BASE == LABELS and TOTAL == builder.TOTAL_LABEL_COUNT
+bar_tile_events = set()
+for skin in ("atlantis", "isles"):
+    root = ET.parse(args.stage / skin / "custom7_window.xml").getroot()
+    window = root.find("WindowTemplate")
+    assert window.find("Name").text == "custom7_window"
+    assert window.find("WindowId").text == "Custom7"
+    width, height = int(window.find("Width").text), int(window.find("Height").text)
+    assert (width, height) == (builder.BAR_WIDTH, builder.BAR_HEIGHT) and width <= 760 and height <= 540
+    assert {element.find("FontName").text for element in window.iter("LabelDef")} == {builder.FONT}
+    bar_adapters = sorted(element.text for element in window.iter("Adapter") if element.text.startswith("cmgr_"))
+    assert bar_adapters == sorted(builder.adapter_name(index) for index in range(builder.BAR_LABEL_BASE, TOTAL)), \
+        "Each COMPANIONS label adapter appears exactly once"
+    native = {element.text for element in window.iter("Adapter") if not element.text.startswith("cmgr_")}
+    assert native == {f"group_name{i}" for i in range(8)} | {f"group_level{i}" for i in range(8)}
+    assert {element.text for element in window.iter("ColorAdapter") if element.text} == \
+        {f"group_color{i}" for i in range(8)}
+    assert {element.text for element in window.iter("AdapterName")} == {f"group_health{i}" for i in range(8)}
+    member_events = set()
+    for button in window.iter("InvisibleButtonDef"):
+        text = button.find("OnClickEvent").text
+        if text.startswith("SelectGroupMember"):
+            assert text in {f"SelectGroupMember{i}" for i in range(8)}, text
+            member_events.add(text)
+            continue
+        assert re.fullmatch(r"[0-9]+", text), text
+        event = stock_click_event(text)
+        assert 0x7A8 <= event < 0x7C0, text
+        bar_tile_events.add(event)
+    assert member_events == {f"SelectGroupMember{i}" for i in range(8)}
+    for element in window.iter():
+        assert element.tag in BAR_XML_TAGS, element.tag
+    tiles = [(int(element.find("Position/X").text), int(element.find("Position/Y").text),
+              int(element.find("Width").text), int(element.find("Height").text))
+             for element in window.iter("FullResizeImageDef")
+             if element.find("TemplateName").text == builder.BAR_TILE_TEMPLATE]
+    assert len(tiles) == builder.BAR_TILES
+    for x, y, w, h in tiles:
+        assert 0 <= x and 0 <= y and x + w <= width and y + h <= height, (x, y, w, h)
+    for index, (ax, ay, aw, ah) in enumerate(tiles):
+        for bx, by, bw, bh in tiles[index + 1:]:
+            assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, ((ax, ay, aw, ah), (bx, by, bw, bh))
+assert bar_tile_events == set(range(0x7A8, 0x7A8 + builder.BAR_TILES)), sorted(bar_tile_events)
+assert stock_click_event("SelectGroupMember3") == 125
+for needle in (b"custom7_window\0", b"group_health%d\0", b"group_name%d\0", b"group_level%d\0",
+               b"group_color%d\0", b"SelectGroupMember0\0"):
+    assert needle in image, needle
+# Static: the COMPANIONS window is Custom7 (0x74): the ShowCustomN switch pushes 0x6D + N, so Custom7 is 0x6D + 7.
+assert image[pe.get_offset_from_rva(0x4E0B4A - 0x400000):][:4] == bytes.fromhex("6a016a74")
+assert image[pe.get_offset_from_rva(0x4E0B50 - 0x400000):][:4] == bytes.fromhex("6a016a75")
+assert builder.BAR_WINDOW == 0x6D + 7 and builder.CUSTOM8_WINDOW == 0x6D + 8
+assert manifest["barWindowSha256"] == hashlib.sha256(
+    (args.stage / "atlantis" / "custom7_window.xml").read_bytes()).hexdigest()
+assert hashlib.sha256((args.stage / "uimain.xml").read_bytes()).hexdigest() == manifest["uimainOutputSha256"]
+# Pins: the manager's own window and UI stay byte-identical to the 0.169.0 build.
+assert manifest["windowSha256"] == "9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd"
+assert manifest["uimainManagerOnlySha256"] == "e1266fcceb954b5e835d3e3ca6563d682f4bb0f6430d36947923a74974dfd2a0"
 
 # Geometry: the chosen list sizes must fit a window of the advertised height without overlap.
 for size in builder.ROW_SIZES:
@@ -335,4 +436,5 @@ print("PASS (offline only): the stock OnClickEvent mapper turns every XML click 
 print("PASS (offline only): clicks send &companions ui <token> <control>; Search opens the chat line")
 print("PASS (offline only): raid events, raid packets, and stock DebugMode packets pass through")
 print("PASS (offline only): Custom8 XML uses only raid-proven controls; server constants match")
+print("PASS (offline only): COMPANIONS Custom7 bar: ops 5/6, 74 labels, controls 0xA8-0xBF, stock member rows")
 print("NOTE: emulation is not acceptance; the owner's combined real-client check is still required")

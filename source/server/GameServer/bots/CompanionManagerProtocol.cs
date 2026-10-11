@@ -148,6 +148,45 @@ namespace DOL.GS
         public const int WidthAction = 152;
         public const int SpaceAdvance = 5;
 
+        // COMPANIONS window (Custom7): protocol 3 extension, operations 5 and 6 and label adapters 440-513.
+        // Literal values only; source/server/tools/build_companion_manager_client.py holds the native layout and
+        // test_companion_manager_client.py checks each name below against it. LabelCount is unchanged.
+        public const int BarLabelBase = 440;
+        public const int BarLabelStatus = 440;
+        public const int BarLabelMessage = 441;
+        public const int BarLabelTileBase = 442;
+        public const int BarTileStride = 4;
+        public const int BarTiles = 10;
+        public const int BarLabelSlotBase = 482;
+        public const int BarSlotStride = 4;
+        public const int BarSlots = 8;
+        public const int TotalLabelCount = 514;
+        public const int BarLabelCount = 74;
+        public const int BarTileInactive = 0;
+        public const int BarTileActive = 1;
+        public const int BarTileDisabled = 2;
+        public const int BarTileUnderline = 3;
+        public const byte OpBarShow = 5;
+        public const byte OpBarHide = 6;
+        public const int BarControlFirst = 0xA8;
+        public const int BarControlLimit = 0xC0;
+        public const int BarControlReady = 0xBF;
+        public const int BarControlAggressive = 0xA8;
+        public const int BarControlDefensive = 0xA9;
+        public const int BarControlPassive = 0xAA;
+        public const int BarControlAssist = 0xAB;
+        public const int BarControlDefault = 0xAC;
+        public const int BarControlFollow = 0xAD;
+        public const int BarControlStay = 0xAE;
+        public const int BarControlPetPull = 0xAF;
+        public const int BarControlPull = 0xB0;
+        public const int BarControlManager = 0xB1;
+        public const int BarWidthStatus = 170;
+        public const int BarWidthMessage = 312;
+        public const int BarWidthTile = 76;
+        public const int BarWidthWideTile = 156;
+        public const int BarWidthSlot = 118;
+
         // Advance widths of the client's arial14 bitmap font (ui/fonts/Arial14.tga), measured from its
         // glyph width markers for '!' through '~'. A space has no glyph; SpaceAdvance overestimates it.
         private static readonly byte[] Arial14Advances =

@@ -18,6 +18,10 @@ Protocol version 3 (16-bit label index in bytes 4-5, because the layout has more
 * Search: the Search link opens the ordinary chat line prefilled with
   ``/companions find `` using the same calls as the chat window's own
   channel-prefix menu. No native edit box is used.
+* COMPANIONS window (Custom7, window 0x74): operations 5 and 6 show and hide it. Its
+  tiles send controls 0xA8-0xBF through the same command path, gated by their own flag,
+  so they work while the manager is closed. Its member rows use the stock group
+  adapters (group_name/level/color/health) and SelectGroupMember<i> clicks.
 
 The layout below is the single source for label and control numbers. The C#
 constants in CompanionManagerProtocol.cs are checked against it by
@@ -73,6 +77,27 @@ READY_CONTROL = 0xDD
 COMMAND_PREFIX = "&companions ui "
 SEARCH_PREFIX = "/companions find "
 OP_LABEL, OP_SHOW, OP_HIDE, OP_TOKEN = 1, 2, 3, 4
+
+# COMPANIONS window (Custom7). Operations 5 and 6 show and hide it; its clicks use the manager's
+# event path with controls 0xA8-0xBF, which the manager never uses. Protocol version stays 3.
+BAR_WINDOW = 0x74                      # Custom7: the ShowCustomN switch pushes 0x6D + N (0x4E0B4A: 6a 01 6a 74)
+OP_BAR_SHOW, OP_BAR_HIDE = 5, 6
+BAR_CONTROL_FIRST, BAR_CONTROL_LIMIT, BAR_READY_CONTROL = 0xA8, 0xC0, 0xBF
+BAR_TILE_NAMES = ("Aggressive", "Defensive", "Passive", "Assist", "Default", "Follow", "Stay", "PetPull", "Pull",
+                  "Manager")
+BAR_TILES = len(BAR_TILE_NAMES)
+BAR_SLOTS = 8
+BAR_TILE_STRIDE = 4
+BAR_SLOT_STRIDE = 4
+# Offsets inside a tile's four labels: inactive text, active text, disabled text, underline.
+BAR_TILE_INACTIVE_OFFSET, BAR_TILE_ACTIVE_OFFSET, BAR_TILE_DISABLED_OFFSET, BAR_TILE_UNDERLINE_OFFSET = 0, 1, 2, 3
+BAR_WIDTH, BAR_HEIGHT = 332, 296
+BAR_TILE_W, BAR_WIDE_W, BAR_TILE_H = 76, 156, 22
+BAR_SLOT_TOP, BAR_SLOT_PITCH = 128, 20
+BAR_TILE_TEMPLATE = "tool_tip_background"
+BAR_WIDTH_STATUS, BAR_WIDTH_MESSAGE, BAR_WIDTH_SLOT = 170, 312, 118
+# Stance colours in eCompanionEngagementMode order: Aggressive, Defensive, Passive, AssistTrain.
+STANCE_COLORS = ((235, 120, 100), (120, 170, 240), (165, 165, 165), (255, 210, 90))
 
 # Window geometry. The text font is the client's registered "arial14" bitmap font
 # (ui/fonts/Arial14.tga, never used by the stock windows). It is roughly a third
@@ -214,7 +239,23 @@ LABEL_ACTION_BASE = LABEL_DETAIL_INDICATOR + 1  # +2k enabled, +2k+1 disabled
 LABEL_DETAIL_UP = LABEL_ACTION_BASE + 2 * ACTIONS
 LABEL_DETAIL_DOWN = LABEL_DETAIL_UP + 1
 LABEL_COUNT = LABEL_DETAIL_DOWN + 1
+# COMPANIONS window labels follow the manager's 440 and are registered by the same loop.
+BAR_LABEL_BASE = LABEL_COUNT
+BAR_LABEL_STATUS, BAR_LABEL_MESSAGE = BAR_LABEL_BASE, BAR_LABEL_BASE + 1
+BAR_LABEL_TILE_BASE = BAR_LABEL_BASE + 2                              # +4k inactive, +1 active, +2 disabled, +3 underline
+BAR_LABEL_SLOT_BASE = BAR_LABEL_TILE_BASE + BAR_TILE_STRIDE * BAR_TILES  # +4i + stance colour index
+TOTAL_LABEL_COUNT = BAR_LABEL_SLOT_BASE + BAR_SLOT_STRIDE * BAR_SLOTS   # 514
+BAR_LABEL_COUNT = TOTAL_LABEL_COUNT - BAR_LABEL_BASE                    # 74
 SCROLL_LINK_LABELS = {"DetailUp": LABEL_DETAIL_UP, "DetailDown": LABEL_DETAIL_DOWN}
+
+
+def bar_tile(index):
+    """(name, control, x, y, width) of COMPANIONS tile index: four per row on two rows, then two wide ones."""
+    name = BAR_TILE_NAMES[index]
+    control = BAR_CONTROL_FIRST + index
+    if index < 8:
+        return name, control, 8 + 80 * (index % 4), 22 + 26 * (index // 4), BAR_TILE_W
+    return name, control, 8 + 160 * (index - 8), 74, BAR_WIDE_W
 
 CONTROL_ROW_BASE = 0x00
 CONTROL_DETAIL_BASE = 0x30
@@ -245,6 +286,22 @@ def layout_constants():
     }
     for index, size in enumerate(ROW_SIZES):
         values[f"RowSize{index}"] = size
+    values.update({
+        "TotalLabelCount": TOTAL_LABEL_COUNT, "BarLabelBase": BAR_LABEL_BASE,
+        "BarLabelStatus": BAR_LABEL_STATUS, "BarLabelMessage": BAR_LABEL_MESSAGE,
+        "BarLabelTileBase": BAR_LABEL_TILE_BASE, "BarTileStride": BAR_TILE_STRIDE, "BarTiles": BAR_TILES,
+        "BarLabelSlotBase": BAR_LABEL_SLOT_BASE, "BarSlotStride": BAR_SLOT_STRIDE, "BarSlots": BAR_SLOTS,
+        "BarLabelCount": BAR_LABEL_COUNT,
+        "BarTileInactive": BAR_TILE_INACTIVE_OFFSET, "BarTileActive": BAR_TILE_ACTIVE_OFFSET,
+        "BarTileDisabled": BAR_TILE_DISABLED_OFFSET, "BarTileUnderline": BAR_TILE_UNDERLINE_OFFSET,
+        "OpBarShow": OP_BAR_SHOW, "OpBarHide": OP_BAR_HIDE,
+        "BarControlFirst": BAR_CONTROL_FIRST, "BarControlLimit": BAR_CONTROL_LIMIT,
+        "BarControlReady": BAR_READY_CONTROL,
+        "BarWidthStatus": BAR_WIDTH_STATUS, "BarWidthMessage": BAR_WIDTH_MESSAGE,
+        "BarWidthTile": BAR_TILE_W, "BarWidthWideTile": BAR_WIDE_W, "BarWidthSlot": BAR_WIDTH_SLOT,
+    })
+    for index, name in enumerate(BAR_TILE_NAMES):
+        values["BarControl" + name] = BAR_CONTROL_FIRST + index
     for index, (name, control, *_rest) in enumerate(TOGGLES):
         values["Control" + name] = control
         values["Toggle" + name] = index
@@ -282,20 +339,22 @@ def build(image):
 
     data_base = 0x4000
     slots = va + data_base
-    active = slots + 4 * LABEL_COUNT
+    active = slots + 4 * TOTAL_LABEL_COUNT
+    # The 16 bytes after the manager flag are free: active+0 is the manager flag, active+4 the COMPANIONS flag.
+    bar_active = active + 4
     command = active + 16
     hex_digits = command + 32
     search_text = hex_digits + 16
     counter = search_text + 32
     names = counter + 16
-    payload = bytearray(data_base + 4 * LABEL_COUNT + 16 + 32 + 16 + 32 + 16 + 16 * LABEL_COUNT)
+    payload = bytearray(data_base + 4 * TOTAL_LABEL_COUNT + 16 + 32 + 16 + 32 + 16 + 16 * TOTAL_LABEL_COUNT)
     offset = lambda address: address - va
     initial_command = (COMMAND_PREFIX + "0000 00").encode("ascii") + b"\0"
     payload[offset(command):offset(command) + len(initial_command)] = initial_command
     payload[offset(hex_digits):offset(hex_digits) + 16] = b"0123456789abcdef"
     encoded_search = SEARCH_PREFIX.encode("ascii") + b"\0"
     payload[offset(search_text):offset(search_text) + len(encoded_search)] = encoded_search
-    for index in range(LABEL_COUNT):
+    for index in range(TOTAL_LABEL_COUNT):
         encoded = adapter_name(index).encode("ascii") + b"\0"
         payload[offset(names) + 16 * index:offset(names) + 16 * index + len(encoded)] = encoded
     token_offset = len(COMMAND_PREFIX)
@@ -317,6 +376,7 @@ def build(image):
     put("init", 0x0000, f"""
         pushfd; pushad
         mov dword ptr [{active}], 0
+        mov dword ptr [{bar_active}], 0
         mov dword ptr [{counter}], 0
     register:
         mov eax, dword ptr [{counter}]
@@ -330,7 +390,7 @@ def build(image):
         push edi
         call {REGISTER_TEXT_ADAPTER}
         inc dword ptr [{counter}]
-        cmp dword ptr [{counter}], {LABEL_COUNT}
+        cmp dword ptr [{counter}], {TOTAL_LABEL_COUNT}
         jb register
         popad; popfd
         jmp {RAID_INIT}
@@ -360,10 +420,14 @@ def build(image):
         je hide
         cmp eax, {OP_TOKEN}
         je token
+        cmp eax, {OP_BAR_SHOW}
+        je bar_show
+        cmp eax, {OP_BAR_HIDE}
+        je bar_hide
         jmp done
     label:
         movzx ecx, word ptr [esi+4]
-        cmp ecx, {LABEL_COUNT}
+        cmp ecx, {TOTAL_LABEL_COUNT}
         jae done
         mov ebx, dword ptr [{slots}+ecx*4]
         test ebx, ebx
@@ -391,6 +455,28 @@ def build(image):
         jz done
         push 0
         push {CUSTOM8_WINDOW}
+        mov eax, dword ptr [ecx]
+        call dword ptr [eax+8]
+        jmp done
+    bar_show:
+        mov dword ptr [{bar_active}], 1
+        mov ecx, dword ptr [{WINDOW_MANAGER}]
+        test ecx, ecx
+        jz done
+        push 1
+        push {BAR_WINDOW}
+        mov eax, dword ptr [ecx]
+        call dword ptr [eax+8]
+        mov eax, {BAR_READY_CONTROL}
+        call {va + 0x2600}
+        jmp done
+    bar_hide:
+        mov dword ptr [{bar_active}], 0
+        mov ecx, dword ptr [{WINDOW_MANAGER}]
+        test ecx, ecx
+        jz done
+        push 0
+        push {BAR_WINDOW}
         mov eax, dword ptr [ecx]
         call dword ptr [eax+8]
         jmp done
@@ -429,10 +515,19 @@ def build(image):
         pushfd; pushad
         mov ecx, dword ptr [eax+8]
         sub ecx, {EVENT_BASE}
+        cmp ecx, {BAR_CONTROL_FIRST}
+        jb manager_gate
+        cmp ecx, {BAR_CONTROL_LIMIT}
+        jae manager_gate
+        cmp dword ptr [{bar_active}], 1
+        jne handled
+        jmp send_control
+    manager_gate:
         cmp dword ptr [{active}], 1
         jne handled
         cmp ecx, {SEARCH_CONTROL}
         je search
+    send_control:
         mov eax, ecx
         call {va + 0x2600}
         jmp handled
@@ -496,7 +591,8 @@ def build(image):
                      patched.generate_checksum())
     return bytes(data), {"baselineSha256": RAID_SHA256, "outputSha256": sha256(data),
                          "protocolVersion": PROTOCOL_VERSION, "sectionVa": va, "blocks": blocks,
-                         "adapterSlots": slots, "activeFlag": active, "command": command,
+                         "adapterSlots": slots, "activeFlag": active, "barActiveFlag": bar_active,
+                         "command": command,
                          "searchText": search_text, "layout": layout_constants()}
 
 
@@ -513,7 +609,11 @@ def _position(parent, x, y, width, height, *, grow_width=False, grow_height=Fals
 
 
 def _label(panel, x, y, width, color, adapter=None, text="", characters=64, height=18,
-           *, grow_width=False, anchor_right=False, anchor_bottom=False):
+           *, grow_width=False, anchor_right=False, anchor_bottom=False,
+           centered=False, native_adapter=None, color_adapter=None, font=FONT):
+    """LabelDef. ``adapter`` is a manager label index; ``native_adapter`` names a stock client adapter instead."""
+    if adapter is not None and native_adapter is not None:
+        raise ValueError("A label takes one adapter")
     label = ET.SubElement(panel, "LabelDef")
     ET.SubElement(label, "ControlId").text = "1000"
     _position(label, x, y, width, height, grow_width=grow_width,
@@ -521,28 +621,71 @@ def _label(panel, x, y, width, color, adapter=None, text="", characters=64, heig
     rgba = ET.SubElement(label, "Color")
     for channel, value in zip("RGBA", (*color, 255)):
         ET.SubElement(rgba, channel).text = str(value)
-    ET.SubElement(label, "FontName").text = FONT
+    ET.SubElement(label, "FontName").text = font
     ET.SubElement(label, "Width").text = str(width)
     ET.SubElement(label, "Height").text = str(height)
-    ET.SubElement(label, "ColorAdapter")
+    ET.SubElement(label, "ColorAdapter").text = color_adapter
     ET.SubElement(label, "MaxCharacters").text = str(characters)
     ET.SubElement(label, "Data").text = text
     ET.SubElement(label, "EndAligned").text = "false"
-    ET.SubElement(label, "TextCentered").text = "false"
+    ET.SubElement(label, "TextCentered").text = "true" if centered else "false"
     if adapter is not None:
         ET.SubElement(label, "Adapter").text = adapter_name(adapter)
+    elif native_adapter is not None:
+        ET.SubElement(label, "Adapter").text = native_adapter
 
 
 def _click(panel, x, y, width, control, caption, height=18, *, grow_width=False,
-           anchor_right=False, anchor_bottom=False):
+           anchor_right=False, anchor_bottom=False, event=None):
+    """InvisibleButtonDef. Without ``event`` it sends the manager's decimal event for ``control``."""
     button = ET.SubElement(panel, "InvisibleButtonDef")
     ET.SubElement(button, "ControlId")
     _position(button, x, y, width, height, grow_width=grow_width,
               anchor_right=anchor_right, anchor_bottom=anchor_bottom)
     ET.SubElement(button, "Label").text = caption
-    ET.SubElement(button, "OnClickEvent").text = click_event(control)
+    ET.SubElement(button, "OnClickEvent").text = click_event(control) if event is None else event
     ET.SubElement(button, "Width").text = str(width)
     ET.SubElement(button, "Height").text = str(height)
+
+
+def _status_bar(panel, x, y, width, adapter):
+    """Stock StatusBarDef (red_status_thick) bound to a native adapter such as group_health<i>."""
+    bar = ET.SubElement(panel, "StatusBarDef")
+    ET.SubElement(bar, "ControlId")
+    _position(bar, x, y, width, 12)
+    ET.SubElement(bar, "TemplateName").text = "red_status_thick"
+    ET.SubElement(bar, "AdapterName").text = adapter
+    ET.SubElement(bar, "Width").text = str(width)
+
+
+def _scalar_label(panel, x, y, width, adapter):
+    """Stock ScalarLabelDef for a native integer adapter such as group_level<i>, hidden when the value is -1."""
+    label = ET.SubElement(panel, "ScalarLabelDef")
+    ET.SubElement(label, "ControlId")
+    _position(label, x, y, width, 18)
+    ET.SubElement(label, "FontName").text = FONT
+    ET.SubElement(label, "Adapter").text = adapter
+    ET.SubElement(label, "ColorAdapter")
+    ET.SubElement(label, "Width").text = str(width)
+    ET.SubElement(label, "Height").text = "18"
+    ET.SubElement(label, "MaxCharacters").text = "8"
+    rgba = ET.SubElement(label, "Color")
+    for channel, value in zip("RGBA", (255, 255, 255, 255)):
+        ET.SubElement(rgba, channel).text = str(value)
+    ET.SubElement(label, "Data")
+    ET.SubElement(label, "EndAligned").text = "false"
+    ET.SubElement(label, "TextCentered").text = "true"
+    ET.SubElement(label, "DontDrawWhenNegOne").text = "true"
+
+
+def _hr_image(panel, x, y, width, template):
+    """Stock HorizontalResizeImageDef, used as the divider line."""
+    image = ET.SubElement(panel, "HorizontalResizeImageDef")
+    position = ET.SubElement(image, "Position")
+    ET.SubElement(position, "X").text = str(x)
+    ET.SubElement(position, "Y").text = str(y)
+    ET.SubElement(image, "TemplateName").text = template
+    ET.SubElement(image, "Width").text = str(width)
 
 
 def _image(panel, x, y, width, height, template, control=None, *,
@@ -670,6 +813,65 @@ def window():
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
 
 
+def bar_window():
+    """Custom7 XML: the fixed 332x296 COMPANIONS panel, built from stock controls only.
+
+    A tile is a template image, three state labels and an underline label, with one click area over it.
+    Member rows mirror the stock group window: the native group_name, group_color, group_level and
+    group_health adapters fill the row, and the stock SelectGroupMember<i> event is its click area.
+    Stance text comes from the server through four overlapping manager labels per row.
+    """
+    root = ET.Element("Root_Element", ID="DAOCUi")
+    panel = ET.SubElement(root, "WindowTemplate")
+    for key, value in (("Name", "custom7_window"), ("WindowId", "Custom7"), ("CloseButton", "true"),
+                       ("MoveButton", "true"), ("TopRightResizeButton", "false"),
+                       ("BottomRightResizeButton", "false"), ("BottomLeftResizeButton", "false"),
+                       ("ResizeButtonOffsetX", "0"), ("ResizeButtonOffsetY", "0"), ("TitleWidth", "0"),
+                       ("TitleHeight", "0"), ("Width", str(BAR_WIDTH)), ("Height", str(BAR_HEIGHT)),
+                       ("ResizeableWidth", "0"), ("ResizeableHeight", "0"), ("ResizeableTwoWayWidth", "0"),
+                       ("ResizeableTwoWayHeight", "0"), ("MinWidth", "0"), ("MinHeight", "0"),
+                       ("ContextTemplateName", None)):
+        ET.SubElement(panel, key).text = value
+
+    # Images first.
+    _image(panel, 0, 0, BAR_WIDTH, BAR_HEIGHT, "dlg_sm_title_noresize")
+    tiles = [bar_tile(index) for index in range(BAR_TILES)]
+    for _name, _control, x, y, width in tiles:
+        _image(panel, x, y, width, BAR_TILE_H, BAR_TILE_TEMPLATE)
+    _hr_image(panel, 8, 122, 316, "context_hr_image_divider")
+
+    # Native status bars, then the labels.
+    for slot in range(BAR_SLOTS):
+        _status_bar(panel, 8, BAR_SLOT_TOP + BAR_SLOT_PITCH * slot + 3, 160, f"group_health{slot}")
+    _label(panel, 12, 1, 120, GOLD, text="COMPANIONS", characters=32)
+    _label(panel, 136, 1, BAR_WIDTH_STATUS, STATUS, BAR_LABEL_STATUS, characters=120)
+    _label(panel, 10, 100, BAR_WIDTH_MESSAGE, MESSAGE, BAR_LABEL_MESSAGE, characters=120)
+    for index, (_name, _control, x, y, width) in enumerate(tiles):
+        base = BAR_LABEL_TILE_BASE + BAR_TILE_STRIDE * index
+        _label(panel, x, y + 3, width, TEXT, base + BAR_TILE_INACTIVE_OFFSET, characters=32, centered=True)
+        _label(panel, x, y + 3, width, GOLD, base + BAR_TILE_ACTIVE_OFFSET, characters=32, centered=True)
+        _label(panel, x, y + 3, width, DISABLED, base + BAR_TILE_DISABLED_OFFSET, characters=32, centered=True)
+        _label(panel, x + 6, y + 8, width - 12, GOLD, base + BAR_TILE_UNDERLINE_OFFSET, characters=64,
+               height=14)
+    for slot in range(BAR_SLOTS):
+        y = BAR_SLOT_TOP + BAR_SLOT_PITCH * slot
+        _label(panel, 14, y, 150, TEXT, native_adapter=f"group_name{slot}", color_adapter=f"group_color{slot}",
+               characters=24)
+        _scalar_label(panel, 172, y, 26, f"group_level{slot}")
+        for mode, color in enumerate(STANCE_COLORS):
+            _label(panel, 206, y, BAR_WIDTH_SLOT, color, BAR_LABEL_SLOT_BASE + BAR_SLOT_STRIDE * slot + mode,
+                   characters=24)
+
+    # Click areas last, like the raid's z-order: tiles send the manager's event, rows the stock member click.
+    for name, control, x, y, width in tiles:
+        _click(panel, x, y, width, control, _caption(name), BAR_TILE_H)
+    for slot in range(BAR_SLOTS):
+        _click(panel, 6, BAR_SLOT_TOP + BAR_SLOT_PITCH * slot - 1, 320, None, f"Group member {slot + 1}", 20,
+               event=f"SelectGroupMember{slot}")
+    ET.indent(root)
+    return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--client", type=Path, required=True, help="Verified client app directory (read only)")
@@ -683,27 +885,36 @@ def main():
     except ValueError as error:
         parser.error(str(error))
     main_xml = (args.client / "ui/uimain.xml").read_bytes()
-    if b"custom8_window.xml" in main_xml or b"</XML>" not in main_xml:
+    if b"custom8_window.xml" in main_xml or b"custom7_window.xml" in main_xml or b"</XML>" not in main_xml:
         parser.error("Unexpected UI include state")
-    output_main = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n</XML>")
+    # The manager-only UI (0.169.0) and the manager plus COMPANIONS window (0.248.0) differ only in the include list.
+    manager_only = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n</XML>")
+    output_main = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n"
+                                   b"\t<Include>custom7_window.xml</Include>\r\n</XML>")
     for skin in ("atlantis", "isles"):
-        if (args.client / "ui" / skin / "custom8_window.xml").exists():
-            parser.error(f"Custom8 is already in use in {skin}")
+        for window_file in ("custom8_window.xml", "custom7_window.xml"):
+            if (args.client / "ui" / skin / window_file).exists():
+                parser.error(f"{window_file} is already in use in {skin}")
     xml = window()
+    bar_xml = bar_window()
     args.output.mkdir(parents=True)
     (args.output / "game.dll").write_bytes(patched)
     (args.output / "uimain.xml").write_bytes(output_main)
     for skin in ("atlantis", "isles"):
         (args.output / skin).mkdir()
         (args.output / skin / "custom8_window.xml").write_bytes(xml)
+        (args.output / skin / "custom7_window.xml").write_bytes(bar_xml)
     report["uimainBaselineSha256"] = sha256(main_xml)
     report["uimainOutputSha256"] = sha256(output_main)
+    report["uimainManagerOnlySha256"] = sha256(manager_only)
     report["windowSha256"] = sha256(xml)
-    report["status"] = ("staged Companion Manager client; offline emulation only until the owner's "
-                        "combined real-client gate passes")
+    report["barWindowSha256"] = sha256(bar_xml)
+    report["status"] = ("staged Companion Manager client with the COMPANIONS window; offline emulation only until "
+                        "the owner's combined real-client gate passes")
     (args.output / "manifest.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: report[key] for key in ("baselineSha256", "outputSha256", "windowSha256",
-                                                   "uimainOutputSha256", "protocolVersion")}, indent=2))
+                                                   "barWindowSha256", "uimainOutputSha256",
+                                                   "uimainManagerOnlySha256", "protocolVersion")}, indent=2))
 
 
 if __name__ == "__main__":

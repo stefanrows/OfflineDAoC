@@ -293,6 +293,21 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+120. **COMPANIONS window: a native bar with the stance orders, Pet pull, Stay,
+     PULL, a Manager shortcut, and each group member's health, level and
+     stance.** Owner request 2026-10-11; planner defaults adopted: the window
+     appears only while an owned companion is with the player, has the eight
+     member rows, is silent except for PULL and refusals, and is switched per
+     account by `/companions bar on|off` and the Group orders panel. Implemented
+     in source **0.248.0** (offline only): Custom7 window `0x74` (ops 5/6, 74
+     label adapters 440-513, controls 0xA8-0xBF, the stock SelectGroupMember
+     rows), server `CompanionBar`, installer and release-pack upgrade paths.
+     Real-client checks pending (see docs/COMPANION_MANAGER_INTEGRATION.md,
+     "COMPANIONS window"): auto-show at login and after zoning, ini position
+     persistence, native group adapters and empty-row drawing, row click
+     targeting from the window, tile look and label fit, the 0.169.0 upgrade
+     through the installer, and the manager with 514 adapters.
+
 116. **open BG: a permanently open Thidranki (region 252) for levels 1–50.**
      Owner request 2026-10-11 ~02:00; decisions and design in
      `docs/superpowers/specs/2026-10-11-open-bg-design.md`, plan in

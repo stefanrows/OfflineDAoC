@@ -71,6 +71,20 @@ namespace DOL.GS.Commands
             Send(player, OpHide);
         }
 
+        /// <summary>Opens the window on its Group orders row, the COMPANIONS window's MANAGER tile.</summary>
+        public static void OpenGroupOrders(GamePlayer player)
+        {
+            if (player == null)
+                return;
+            CompanionManagerSession session = Sessions.GetValue(player, CreateSession);
+            session.Tab = CompanionManagerTab.Roster;
+            session.Roster.SelectedKey = GroupKey;
+            session.DetailOffset = 0;
+            session.RealmAbilityView = false;
+            session.DeleteConfirmationId = null;
+            Open(player);
+        }
+
         public static void HandleClientControl(GamePlayer player, string tokenText, string controlText)
         {
             if (player == null)
@@ -78,6 +92,13 @@ namespace DOL.GS.Commands
             if (!TryParseClientControl(tokenText, controlText, out ushort token, out int control))
             {
                 Tell(player, "That Companion Manager control was not recognized.");
+                return;
+            }
+            // COMPANIONS window clicks use controls the manager never uses. They route before the view-token checks,
+            // so the bar works while the manager is closed and its tokens are stale.
+            if (CompanionBar.IsBarControl(control))
+            {
+                CompanionBar.HandleClientControl(player, control);
                 return;
             }
             if (!Sessions.TryGetValue(player, out CompanionManagerSession session))
@@ -689,6 +710,11 @@ namespace DOL.GS.Commands
                     () => Report(player, session, apply(player))));
             }
             lines.Add(new Line(string.Empty));
+            bool barOn = CompanionBar.IsEnabled(player);
+            lines.Add(new Line($"COMPANIONS window: {(barOn ? "on (click to turn it off)" : "off (click to turn it on)")}",
+                barOn ? "bar:on" : "bar:off",
+                () => Report(player, session, CompanionBar.SetEnabled(player, !CompanionBar.IsEnabled(player)))));
+            lines.Add(new Line(string.Empty));
 
             // The owner's own group (covers temporary helpers too) plus any of his
             // squad companions (task 42), who are never in that same Group.
@@ -1297,7 +1323,7 @@ namespace DOL.GS.Commands
             Tell(player, message);
         }
 
-        private static void Tell(GamePlayer player, string message) =>
+        internal static void Tell(GamePlayer player, string message) =>
             player.Out?.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
 
         private static void ScheduleGuidance(GamePlayer player, CompanionManagerSession session)
@@ -1315,7 +1341,7 @@ namespace DOL.GS.Commands
             }, GuidanceDelayMilliseconds);
         }
 
-        private static void Send(GamePlayer player, byte operation, int index = 0, string text = "")
+        internal static void Send(GamePlayer player, byte operation, int index = 0, string text = "")
         {
             if (player.Client?.ClientState != GameClient.eClientState.Playing)
                 return;

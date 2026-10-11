@@ -55,7 +55,7 @@ def main():
     p.add_argument('--server-build', default=str(REPO / 'source/server/Release'))
     p.add_argument('--launcher-build', default=str(REPO / 'source/tools/OfflineDaoc.Launcher/bin/Release/net10.0-windows'))
     p.add_argument('--navmesh-dir', help='default: <install-root>/runtime/server/pathing')
-    p.add_argument('--companion-stage', help='default: <install-root>-dev/companion-manager-stage-0.169.0')
+    p.add_argument('--companion-stage', help='default: <install-root>-dev/companion-manager-stage-0.248.0')
     p.add_argument('--raid-stage', help='default: <install-root>-dev/raid-click-fix-stage-0.33.0')
     p.add_argument('--output', required=True, help='new folder outside the installation')
     a = p.parse_args()
@@ -75,7 +75,7 @@ def main():
     server = pathlib.Path(a.server_build)
     launcher = pathlib.Path(a.launcher_build)
     navmesh = pathlib.Path(a.navmesh_dir) if a.navmesh_dir else install / 'runtime/server/pathing'
-    companion = pathlib.Path(a.companion_stage) if a.companion_stage else dev / 'companion-manager-stage-0.169.0'
+    companion = pathlib.Path(a.companion_stage) if a.companion_stage else dev / 'companion-manager-stage-0.248.0'
     raid = pathlib.Path(a.raid_stage) if a.raid_stage else dev / 'raid-click-fix-stage-0.33.0'
 
     entries = []  # (relative path, source, guard, allowed)
@@ -105,13 +105,19 @@ def main():
     cm = json.loads((companion / 'manifest.json').read_text(encoding='utf-8'))
     if cm['baselineSha256'] != UPSTREAM_GAME_DLL or cm.get('protocolVersion') != 3:
         sys.exit('Companion Manager stage was not built from the verified v0.3 client.')
+    if not cm.get('barWindowSha256') or not cm.get('uimainManagerOnlySha256'):
+        sys.exit('Companion Manager stage predates the COMPANIONS window; rebuild it first.')
     client = 'runtime/client-opendaoc/app/'
     known_games = [UPSTREAM_GAME_DLL, '3b6274dc385b90bf892f27d96c9e56cb457e1e94cbf45b5892d462a9e4d70890',
-                   '88530c0093b285fd38fd6759e464373baa65ebb20473a949bc3b79fccbb41fd3']
+                   '88530c0093b285fd38fd6759e464373baa65ebb20473a949bc3b79fccbb41fd3',
+                   '49095c51e792200daf824f8a00880c70815a0cacbc37f452cf062cffacb3b63d']
     add(client + 'game.dll', companion / 'game.dll', 'native', known_games)
-    add(client + 'ui/uimain.xml', companion / 'uimain.xml', 'native', [cm['uimainBaselineSha256']])
+    add(client + 'ui/uimain.xml', companion / 'uimain.xml', 'native',
+        [cm['uimainBaselineSha256'], cm['uimainManagerOnlySha256']])
     for skin in ('atlantis', 'isles'):
         add(client + f'ui/{skin}/custom8_window.xml', companion / skin / 'custom8_window.xml', 'native', ['absent'])
+    for skin in ('atlantis', 'isles'):
+        add(client + f'ui/{skin}/custom7_window.xml', companion / skin / 'custom7_window.xml', 'native', ['absent'])
     rm = json.loads((raid / 'manifest.json').read_text(encoding='utf-8'))
     for window, info in rm['windows'].items():
         for skin in ('atlantis', 'isles'):

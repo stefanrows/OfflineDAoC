@@ -8,7 +8,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help [topic] | status [page or name] | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help [topic] | status [page or name] | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | bar [on|off] | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -69,6 +69,9 @@ namespace DOL.GS.Commands
                         DisplayMessage(client, CompanionGroupOrders.UseSavedStances(player));
                     }
                     else ShowUsage(client);
+                    break;
+                case "bar":
+                    DisplayMessage(client, CompanionBar.Command(player, args.Length > 2 ? args[2] : null));
                     break;
                 case "invite":
                     UpdateCompanion(client, player, args, invite: true);
@@ -680,6 +683,13 @@ namespace DOL.GS.Commands
         {
             string[] lines = (topic ?? string.Empty).ToLowerInvariant() switch
             {
+                "bar" => new[]
+                {
+                    "/companions bar on|off turns the COMPANIONS window on or off for this account.",
+                    "The window appears while a companion is with you and hides when none is left.",
+                    "Bare /companions bar shows it again after you closed it with its X.",
+                    "The Companion Manager's Group orders panel has the same switch."
+                },
                 "roster" => new[]
                 {
                     "/companions list | status [page or name] | profile <name>",
@@ -726,7 +736,7 @@ namespace DOL.GS.Commands
                     "Bare /companions opens the Companion Manager with its client extension.",
                     "/companions find <name or class> searches the manager; /companions list works by chat.",
                     "/companions status [page or name] opens a live readiness snapshot.",
-                    "/companions help roster | tactics | training | squads | recovery",
+                    "/companions help roster | tactics | training | squads | recovery | bar",
                     "Start: /classes, then /companions recruit <class>, then /companions invite <name>.",
                     "Saved companions keep progress and gear. /spawn helpers are temporary."
                 }

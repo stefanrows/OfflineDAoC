@@ -12,6 +12,35 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.248.0] - 2026-10-11
+
+### Added
+
+- COMPANIONS window (Custom7): a small bar in the native client that appears
+  while an owned companion is with you. Ten tiles: the four group orders
+  (Aggressive, Defensive, Passive, Assist), Default saved stances, Follow, Stay,
+  Pet pull, PULL and MANAGER. Eight member rows show each group member's name,
+  health, level and stance, and clicking a row targets that member. Tile clicks
+  run the same commands as /aggressive, /defensive, /passive, /assisttrain,
+  /companions group default, /stay, /petpull and /pull, and MANAGER opens the
+  Companion Manager's Group orders row. Chat echoes only PULL and refusals.
+- `/companions bar [on|off]` turns the window on or off for the account; bare
+  `/companions bar` shows it again after it was closed with its X. The
+  Companion Manager's Group orders panel has the same switch. The setting is
+  one row in the save's fork-local options table; no schema change.
+
+### Changed
+
+- Companion Manager client files, still protocol 3: game.dll gains two
+  operations and 74 label adapters, and the UI includes a custom7_window.xml in
+  both skins. The COMPANIONS window needs the new stage installed with
+  tools/dev/Install-CompanionManager.ps1 (upgrades the installed 0.169.0
+  manager; close the game, server and launcher first). Until it is installed the
+  window stays absent and every /companions command still works. The manager's
+  Custom8 window and its files are unchanged.
+- Release packaging: the update pack takes the companion stage from
+  companion-manager-stage-0.248.0 and refuses a stage that predates the window.
+
 ## [0.244.1] - 2026-10-11
 
 ### Added

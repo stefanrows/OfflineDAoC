@@ -213,8 +213,8 @@ subcommand still works. Install the matching client files.
 Server to client uses fixed 128-byte DebugMode bodies: byte 0 is `0`, marker
 `0x43`, version `3`, then operation, a 16-bit label index (bytes 4-5), and
 NUL-terminated ASCII text
-from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 440
-label adapters (132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
+from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 514
+label adapters (440 manager plus 74 COMPANIONS window since 0.248.0; 440 before 0.248.0, 132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
 short bodies, bad terminators, unknown operations, and out-of-range indexes are
 ignored. Raid marker `0x52` and ordinary DebugMode packets pass through. An
 unpatched client sees only a DebugMode packet whose flag byte is `0`, as with
@@ -393,3 +393,118 @@ roadmap items only after owner confirmation:
   bag; rejected and full-bag actions preserve items and coins.
 - An unsupported client build fails closed, and `/companions` commands keep
   working.
+
+## COMPANIONS window (Custom7), 0.248.0
+
+Status: **offline only; the owner's real-client check is pending.** The window
+is a fixed 332x296 bar that the server shows while the account's setting is on
+and an owned companion is with the player. It is separate from the Companion
+Manager's Custom8 window, which is unchanged.
+
+### Layout and behaviour
+
+| Element | Content |
+| --- | --- |
+| Title and status | "COMPANIONS"; status "{order or Own stances} \| n with you \| m in squads". |
+| Ten tiles | Aggressive, Defensive, Passive, Assist (the group orders); Default (saved stances); Follow; Stay; Pet pull; PULL; MANAGER. Active tiles are gold with an underline; disabled tiles are grey. |
+| Message line | The reply to the last tile click. Only PULL and refusals are echoed to chat. |
+| Member rows | Eight rows that mirror the group window's member slots: native name (group_name), health bar (group_health), level (group_level) and a server-written stance. A row click is the stock SelectGroupMember<i> target. |
+
+Tile rules (`CompanionBarView.ComputeTiles`): Stay is disabled while pet pull is
+off and the companions are not staying; Pet pull is disabled under Assist train;
+PULL is disabled with no owned companion. The owned set is
+`CompanionSquads.OwnerForceBots` filtered to the owner's persistent or temporary
+companions, the same predicate as the manager's group detail.
+
+The window shows only while the setting is on and at least one owned companion
+is present. It hides when the last one leaves, and at login the server always
+sends one hide when the window should not show.
+
+### Protocol (still version 3)
+
+- Operation 5 shows Custom7 (window `0x74`) and sends the ready control `0xBF`;
+  operation 6 hides it. A version-3 client without this stage ignores both.
+- Labels 440-513: 74 new adapters `cmgr_440` to `cmgr_513`. Status 440, message
+  441, tiles 442-481 (four labels each: inactive, active, disabled, underline),
+  member rows 482-513 (four stance colours each: Aggressive, Defensive, Passive,
+  Assist). The label count is 514 in total; `LabelCount` stays 440.
+- Clicks use the manager's own sender, `&companions ui <token> <control>`, with
+  controls 0xA8-0xBF (decimal event IDs 1960-1983). A separate flag
+  (`barActiveFlag`, at `active + 4`) gates them, so the bar works with the
+  manager closed. Manager controls never use 0xA8-0xBF. The server routes these
+  controls before any token or session check (`CompanionManager.HandleClientControl`).
+- Stance and camp tiles are silent; PULL and refusals echo to chat.
+
+### Evidence for the window ID and the ini position
+
+- `ShowCustomN` pushes `0x6D + N`: Custom7 is `0x74`, Custom8 `0x75`. The bytes
+  at 0x4E0B4A are `6a 01 6a 74` (Custom7) and at 0x4E0B50 `6a 01 6a 75` (Custom8)
+  in the raid baseline `game.dll` (`67dcf68a...`). Nothing installed uses Custom7.
+- The client saves a window's position in the ini `[Panels]` line, here
+  `Custom7=x,y,a,b,flag`. The window reopens where it was closed.
+- The member rows use the stock adapters `group_name<i>`, `group_color<i>`,
+  `group_level<i>` and `group_health<i>`, and the stock events
+  `SelectGroupMember0` to `7` (event IDs 122-129, checked through the client's
+  own `0x4EA06F` mapper in the emulation test).
+
+### Setting and commands
+
+- Stored per account in `offline_local_options` as `companion_bar.enabled.<account>`
+  with the value `on` or `off`. A missing or unreadable value means on.
+- `/companions bar on|off` changes it. Bare `/companions bar` shows the window
+  again after its X. If the client does not answer the show within three
+  seconds, one line explains that the client files need updating.
+- The Companion Manager's Group orders panel has a line
+  "COMPANIONS window: on (click to turn it off)" (or the reverse).
+- MANAGER opens the Companion Manager on its Group orders row.
+
+### Build, test and install
+
+```bash
+# Read-only input; writes a fresh stage and manifest.
+python3 source/server/tools/build_companion_manager_client.py \
+  --client /mnt/d/Games/OfflineDAoC-dev/raid-baseline-client --output <new stage dir>
+python3 source/server/tools/test_companion_manager_client.py --stage <stage dir>
+```
+
+The raid-only baseline client is a folder with the `game.dll` (`67dcf68a...`) and
+`ui/uimain.xml` (`637bf806...`) from a `companion-manager-client-*` backup. The
+verified stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.248.0`.
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (manager and COMPANIONS window, protocol 3) | `73223deffd8455944974b555f5bce5762c43a642c4442b5102194e337e47daf4` |
+| custom7_window.xml (both skins) | `7920bcd32909a0e6b5ad2e625902f9f8807fe04ea4370f2ace2b301a8ee59aba` |
+| uimain.xml (with both window includes) | `7d573c315a56bcacae8e8ebc871646654bfe8da5bb1dc745d6023da7f93b9dd9` |
+| uimain.xml, manager only (0.169.0 UI) | `e1266fcceb954b5e835d3e3ca6563d682f4bb0f6430d36947923a74974dfd2a0` |
+| custom8_window.xml (unchanged) | `9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` |
+
+The 0.169.0 manager `game.dll` (`49095c51...`) is the installed build that the
+upgrade starts from. The build is deterministic: a second build gives the same
+`game.dll` and window hashes.
+
+Install with `tools/dev/Install-CompanionManager.ps1`, a dry run by default.
+With `-Apply` it upgrades an installed 0.169.0 manager in place: it backs up
+`game.dll`, `uimain.xml` and the window files (custom8 and custom7) to
+`companion-manager-upgrade-<stamp>`, and rolls back on failure. `-RestoreBackup`
+restores the earlier files and removes the custom7 files this stage installed.
+The game, server and launcher must be closed; the script stops nothing.
+
+### Real-client checklist
+
+1. Login with a companion present: the bar appears once, and no ghost bar
+   remains when no companion is with you.
+2. Zoning, and a companion leaving and rejoining: the bar hides and shows
+   again. The window keeps its position after a relog (ini `Custom7=`).
+3. Member rows: health, level and stance fill for each group member, empty rows
+   draw nothing, and the player's own row is in its slot. Clicking a row targets
+   that member.
+4. Tiles: each click sends its order; PULL echoes; the active gold tile and the
+   underline match the state. Check the "Aggressive" label fit in 76 px.
+5. The status line fits (the label is 170 px; longer text is shortened with "...").
+6. `/companions bar off` hides it at once; `on` shows it again; the manager's
+   Group orders line switches the same setting.
+7. The manager still works with 514 adapters: open `/companions`, check the rows,
+   tabs and the raid windows (`/raid 40`).
+8. An unpatched 0.169.0 client with this server: `/companions` and every command
+   still work, and no bar appears.
