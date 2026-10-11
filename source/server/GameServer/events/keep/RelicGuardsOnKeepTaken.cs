@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using DOL.Events;
 using DOL.GS.Keeps;
+using DOL.GS.ServerRules;
 
 namespace DOL.GS.GameEvents
 {
@@ -25,6 +26,16 @@ namespace DOL.GS.GameEvents
         [GameServerStartedEvent]
         public static void OnScriptCompiled(DOLEvent e, object sender, EventArgs arguments)
         {
+            // Bug 146: under Camlann the Frontier Wardens garrison the relic
+            // shrines. The stock relic guards take the stale keep realm (often
+            // None), spawn as level-66 "Renegade" Jarls/Knights/Sentinels that
+            // attack every realm, and chase bots onto the border bind stones.
+            if (!ShouldRun(GameServer.ServerRules is PvPServerRules))
+            {
+                log.Info("RELIC_GUARDS_DISABLED reason=camlann");
+                return;
+            }
+
             CreateGuards();
             Init();
             GameEventMgr.AddHandler(KeepEvent.KeepTaken, new DOLEventHandler(Notify));
@@ -32,6 +43,9 @@ namespace DOL.GS.GameEvents
             GameEventMgr.AddHandler(RelicPadEvent.RelicStolen, new DOLEventHandler(NotifyRelic));
             log.Info("Relic Guards System initialized");
         }
+
+        /// <summary>The stock relic-temple guards run only outside Camlann PvP rules.</summary>
+        public static bool ShouldRun(bool camlann) => !camlann;
 
         [ScriptUnloadedEvent]
         public static void OnScriptUnload(DOLEvent e, object sender, EventArgs args)

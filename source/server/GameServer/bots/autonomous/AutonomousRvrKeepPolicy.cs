@@ -13,6 +13,12 @@ namespace DOL.GS
         }
 
         /// <summary>
+        /// Roaming groups pass by portal keeps and relic temples (bug 146):
+        /// relic-keep assaults stay off, and a lone roamer only feeds the guards.
+        /// </summary>
+        public static bool IsRoamDestination(bool portalKeep, bool relicKeep) => !portalKeep && !relicKeep;
+
+        /// <summary>
         /// Mirrors AbstractGameKeep.CheckForClaim: relic keeps (skin 99) are
         /// shrine raids, and keeps whose base level is not 50 (relic keeps at 60,
         /// battleground keeps) cannot be claimed unless allow_bg_claim is on or

@@ -2468,6 +2468,10 @@ namespace DOL.GS
                     AutonomousRvrSpeed.NearestAnchorDistance(destination.RegionId, destination.X, destination.Y));
             foreach (CampDestination choice in choices)
             {
+                // Bug 146: relic temples are not a roam stop; automatic relic-keep
+                // assaults are already off, and their guards out-level any roamer.
+                if (!IsRoamableKeepId(choice.Id))
+                    continue;
                 double kind = choice.Id.StartsWith("rvr-camp-", StringComparison.Ordinal) ? taste.Clearings :
                     choice.Id.StartsWith("rvr-keep-", StringComparison.Ordinal) ? taste.Keeps :
                     choice.Id.StartsWith("rvr-enemy-", StringComparison.Ordinal) ? taste.Enemies : 0;
@@ -2526,6 +2530,12 @@ namespace DOL.GS
                 _recentRoamIds.Dequeue();
             return chosen;
         }
+
+        private static bool IsRoamableKeepId(string id) =>
+            !id.StartsWith("rvr-keep-", StringComparison.Ordinal) ||
+            !int.TryParse(id.AsSpan("rvr-keep-".Length), out int keepId) ||
+            GameServer.KeepManager.GetKeepByID(keepId) is not { } keep ||
+            AutonomousRvrKeepPolicy.IsRoamDestination(keep.IsPortalKeep, keep.IsRelic);
 
         // A walk of a few minutes is normal; the far side of the frontier is not.
         // The classic meeting grounds pull groups across realm borders, Emain
