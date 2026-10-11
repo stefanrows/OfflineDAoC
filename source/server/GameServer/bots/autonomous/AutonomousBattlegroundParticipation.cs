@@ -337,25 +337,40 @@ public static class AutonomousBattlegroundParticipation
     /// Relieves one open-BG unit: members inside leave as <see cref="LeaveReason.Relieved"/> after walking to their
     /// own portal keep; members still travelling are released at once. Returns the relieved bots.
     /// </summary>
-    public static GameBot[] RelieveOpenUnit(int unit, long now)
+    public static GameBot[] RelieveOpenUnit(int unit, long now) => RelieveOpen(unit, null, now);
+
+    /// <summary>
+    /// Relieves only these members of an open-BG unit (a unit split because the keep's owner guild changed under it):
+    /// like <see cref="RelieveOpenUnit"/>, and each also leaves the unit's group, because the keep's friend check reads
+    /// the whole group. The rest of the unit stays. Returns the relieved bots.
+    /// </summary>
+    public static GameBot[] RelieveOpenMembers(int unit, IReadOnlyCollection<GameBot> members, long now) =>
+        members == null || members.Count == 0 ? [] : RelieveOpen(unit, members, now);
+
+    private static GameBot[] RelieveOpen(int unit, IReadOnlyCollection<GameBot> only, long now)
     {
-        var relieved = new List<(GameBot Bot, string Group, long After, bool Inside)>();
+        var relieved = new List<(GameBot Bot, string Group, long After, bool Inside, Group Party)>();
         lock (Sync)
-            foreach (Entry entry in Entries.Values.Where(entry => entry.Unit == unit && IsOpenUnit(entry.Definition, entry.Unit) && entry.Leaving == null).ToArray())
+            foreach (Entry entry in Entries.Values.Where(entry => entry.Unit == unit && IsOpenUnit(entry.Definition, entry.Unit) && entry.Leaving == null &&
+                         (only == null || only.Contains(entry.Bot))).ToArray())
             {
                 if (!entry.Entered)
                 {
                     Entries.Remove(entry.Bot);
-                    relieved.Add((entry.Bot, entry.Group, 0, false));
+                    relieved.Add((entry.Bot, entry.Group, 0, false, entry.GroupRef));
                     continue;
                 }
                 entry.Leaving = LeaveReason.Relieved;
                 entry.LeaveStartTick = now;
                 entry.ReliefHome = null;
-                relieved.Add((entry.Bot, entry.Group, now - entry.EnteredTick, true));
+                relieved.Add((entry.Bot, entry.Group, now - entry.EnteredTick, true, entry.GroupRef));
             }
-        foreach ((GameBot bot, string group, long after, bool inside) in relieved)
+        foreach ((GameBot bot, string group, long after, bool inside, Group party) in relieved)
         {
+            // A split member leaves its unit's party (or the open-BG party it boarded with); a whole relief keeps the group.
+            Group current = bot.Group;
+            if (only != null && current != null && (current == party || AutonomousBotGroupCoordinator.IsOpenBattlegroundParty(current)))
+                current.RemoveMember(bot);
             Log.Info($"OPEN_BG_RELIEF bot=\"{bot.Name}\" group=\"{group}\" unit={unit} after_s={after / 1000} inside={inside}");
             if (!inside) Log.Info($"AUTONOMOUS_BG_LEFT region={BattlegroundCampaignCatalog.FindOpen()?.RegionId} bot=\"{bot.Name}\" reason={Describe(LeaveReason.Relieved)}");
         }
