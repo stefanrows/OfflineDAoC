@@ -540,5 +540,76 @@ namespace DOL.GS.Tests
                     "an owner-guild unit defends its keep");
             });
         }
+
+        [Test]
+        public void AShrunkenUnitsMembersGetTheCooldownADueReliefTheRest()
+        {
+            // Live run 0.246.0: units relieved seconds after landing (stragglers, keep-owner splits) sent every member
+            // into the 30-minute rest and drained the candidate pool.
+            var shrunk = new OpenBgUnit(1, OpenBgUnitKind.Group8, 4, Inside: true, InsideSinceTick: 1_000);
+            var whole = new OpenBgUnit(2, OpenBgUnitKind.Group8, 8, Inside: true, InsideSinceTick: 1_000);
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoster.RelievedBelowMinimum(shrunk), Is.True);
+                Assert.That(OpenBattlegroundRoster.RestAfterRelief(OpenBattlegroundRoster.RelievedBelowMinimum(shrunk)),
+                    Is.EqualTo(OpenBattlegroundRoster.RecruitCooldownMilliseconds), "below its minimum: ten game minutes, then it may re-form");
+                Assert.That(OpenBattlegroundRoster.RestAfterRelief(OpenBattlegroundRoster.RelievedBelowMinimum(whole)),
+                    Is.EqualTo(OpenBattlegroundRoster.RestAfterReliefMilliseconds), "a due relief keeps the thirty-minute rest");
+                Assert.That(OpenBattlegroundRoster.RecruitCooldownMilliseconds, Is.EqualTo(10 * 60_000L));
+                Assert.That(OpenBattlegroundRoster.RestAfterReliefMilliseconds, Is.EqualTo(30 * 60_000L));
+            });
+        }
+
+        [Test]
+        public void ACandidatesRejectionIsItsFirstFailingCheck()
+        {
+            static OpenBgReject? Reject(bool raid = false, bool grouped = false, bool busy = false, bool rvr = true, bool idle = false,
+                bool resting = false, bool relief = false, bool near = true) =>
+                OpenBattlegroundRoster.CandidateRejection(raid, grouped, busy, rvr, idle, resting, relief, near);
+            Assert.Multiple(() =>
+            {
+                Assert.That(Reject(), Is.Null, "an RvR roamer near a porter is a candidate");
+                Assert.That(Reject(rvr: false, idle: true), Is.Null, "an idle bot is a candidate");
+                Assert.That(Reject(raid: true, grouped: true), Is.EqualTo(OpenBgReject.KeepDefenseOrRaid), "a raid or keep defense first");
+                Assert.That(Reject(grouped: true, resting: true), Is.EqualTo(OpenBgReject.InGroup));
+                Assert.That(Reject(busy: true, rvr: false), Is.EqualTo(OpenBgReject.Busy));
+                Assert.That(Reject(rvr: false, idle: false), Is.EqualTo(OpenBgReject.Objective), "on PvE work");
+                Assert.That(Reject(resting: true, relief: true), Is.EqualTo(OpenBgReject.Rest));
+                Assert.That(Reject(resting: true, relief: false), Is.EqualTo(OpenBgReject.Cooldown));
+                Assert.That(Reject(near: false), Is.EqualTo(OpenBgReject.FarFromPorter));
+                Assert.That(OpenBattlegroundRoster.MateRejection(true, true, true, true), Is.Null);
+                Assert.That(OpenBattlegroundRoster.MateRejection(false, false, false, false), Is.EqualTo(OpenBgReject.OtherRegion));
+                Assert.That(OpenBattlegroundRoster.MateRejection(true, false, false, false), Is.EqualTo(OpenBgReject.KeepOwnerSide));
+                Assert.That(OpenBattlegroundRoster.MateRejection(true, true, false, false), Is.EqualTo(OpenBgReject.LevelBand));
+                Assert.That(OpenBattlegroundRoster.MateRejection(true, true, true, false), Is.EqualTo(OpenBgReject.FarFromPorter));
+            });
+        }
+
+        [Test]
+        public void AFailedFormationNamesItsDominantRejection()
+        {
+            var poolStage = new Dictionary<OpenBgReject, int> { [OpenBgReject.InGroup] = 40, [OpenBgReject.Rest] = 12, [OpenBgReject.Objective] = 3 };
+            var mateStage = new Dictionary<OpenBgReject, int> { [OpenBgReject.OtherRegion] = 5, [OpenBgReject.LevelBand] = 2 };
+            IReadOnlyDictionary<OpenBgReject, int> shortPool = OpenBattlegroundRoster.FormFailureRejections(4, 6, 2, poolStage, mateStage);
+            IReadOnlyDictionary<OpenBgReject, int> spread = OpenBattlegroundRoster.FormFailureRejections(8, 6, 0, poolStage, mateStage);
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoster.DominantRejection(shortPool), Is.EqualTo(OpenBgReject.InGroup),
+                    "too few RvR candidates: the pool's rejections explain it");
+                Assert.That(shortPool[OpenBgReject.Objective], Is.EqualTo(5), "idle pool bots are not on an RvR tour and count as objective");
+                Assert.That(OpenBattlegroundRoster.DominantRejection(spread), Is.EqualTo(OpenBgReject.OtherRegion),
+                    "enough candidates, but not near one leader: the mate rejections explain it");
+                Assert.That(OpenBattlegroundRoster.FormFailureRejections(8, 6, 0, poolStage, new Dictionary<OpenBgReject, int>()),
+                    Is.EquivalentTo(poolStage), "no mate rejections to show: the pool's");
+                Assert.That(OpenBattlegroundRoster.DominantRejection(new Dictionary<OpenBgReject, int>
+                    { [OpenBgReject.Cooldown] = 3, [OpenBgReject.Rest] = 3 }), Is.EqualTo(OpenBgReject.Rest), "a tie goes to the earlier reason");
+                Assert.That(OpenBattlegroundRoster.DominantRejection(new Dictionary<OpenBgReject, int>()), Is.Null);
+                Assert.That(OpenBattlegroundRoster.FormFailedLine(eRealm.Albion, OpenBgUnitKind.Group8, 6, 4, shortPool, 3),
+                    Is.EqualTo("OPEN_BG_FORM_FAILED realm=Albion kind=group8 need=6 pool=4 reason=in_group " +
+                        "rejected=\"in_group:40,rest:12,objective:5\" repeats=3"));
+                Assert.That(OpenBattlegroundRoster.FormFailedLine(eRealm.Hibernia, OpenBgUnitKind.Small, 2, 0, null, 0),
+                    Does.Contain("reason=none rejected=\"\""));
+            });
+        }
     }
 }
