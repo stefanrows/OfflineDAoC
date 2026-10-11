@@ -309,16 +309,18 @@ Agent sessions on items 45–48: take the role and context from
      Live on the owner's server at 20× since 03:10 (stage 1) and from the
      0.242.0 deploy (stages 2–4). Pending: real-client checks (porter line,
      landing, keep 11 render, `/bgsetup` window, launcher tab, guest squad
-     for a character under 40, Pazz at level 50) and the owner's two
-     decisions: portal-keep guards attacking intruders inside the portal
-     keeps, and same-realm hostility inside the open BG (Camlann FFA today).
+     for a character under 40, Pazz at level 50). Owner decisions 09:20:
+     no realm affiliation inside the open BG (group, guild, battlegroup only,
+     keep raids are battlegroups; the 0.244.0 same-realm alliance removed in
+     0.245.0), players FFA, portal-keep guards passive, pace stays.
      Live on the owner's server 2026-10-11: 0.241.0 (03:10, stage 1),
      0.242.0 (06:37, stages 2–4), 0.243.0 (07:40, two live fix rounds), all
      at world speed 20×. 0.243.0 measurement (07:40–08:04, ~5.5× achieved):
      crew 48 of 54 setup, 89 entries, 0 stuck, 0 exceptions, stragglers 24
      per 23 min (0.242.0: 97), same-realm crew kills 1 of 705
-     (`open_bg_realm_crews_allied`), landing rests end recovered, no
-     world-bot recall to keep 11, five phase cycles with roles assigned.
+     (same-realm crew alliance, removed again in 0.245.0), landing rests
+     end recovered, no world-bot recall to keep 11, five phase cycles with
+     roles assigned.
      Open: the keep fell once (0.242.0, 07:17) but not in the 0.243.0
      cycles: the attacking 8-man dies to the owner crew plus 18 guards;
      `AUTONOMOUS_BG_GATE_APPROACH` never logged (assault branch not

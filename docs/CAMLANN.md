@@ -456,8 +456,10 @@ players of every level and realm, Camlann rules, no realm-rank limit. Spec:
 | Logs | `OPEN_BG_ROSTER`, `OPEN_BG_RELIEF`, `OPEN_BG_PHASE`, `OPEN_BG_ROLE`, `OPEN_BG_GUEST`, `OPEN_BG_SETUP`, `OPEN_BG_TICK_SLOW`, `AUTONOMOUS_BG_ISLAND_RECOVERY`, `AUTONOMOUS_BG_LANDING_REST` |
 
 Timers run in game time, so at world speed 20× a cycle lasts 45 s to 2.25
-min. Open owner decisions: portal-keep guards attacking intruders inside the
-portal keeps, and same-realm hostility inside the open BG (FFA today).
+min. Owner decisions 2026-10-11: no realm affiliation inside the open BG
+(allied only by group, guild or battlegroup, like everywhere on Camlann; a
+keep raid is one battlegroup for the cycle), players of one realm stay FFA,
+portal-keep guards stay passive, the measured pace stays.
 
 ## Non-goals
 

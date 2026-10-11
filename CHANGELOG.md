@@ -12,6 +12,45 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.245.0] - 2026-10-11
+
+### Added
+
+- open BG keep raids: each cycle the director picks a raid of several crew
+  units of any realm that are not friends of the keep (at least a third of
+  the crew inside, an 8-man first, guilds with the fewest recent wins
+  likeliest) and puts them in one battlegroup from the push to the cycle end;
+  the raid musters at its lead unit's bridge and marches on the keep, the
+  claiming guild defends, bystanders keep 3,000 units off. Logs
+  `OPEN_BG_RAID`, `OPEN_BG_RAID_BATTLEGROUP`, `raid=true` on role lines,
+  `owner_guild=` on `OPEN_BG_PHASE`; the status `Attacker` field shows the
+  raid summary in the `/bgsetup` window and the launcher tab.
+- World bots remember the zone-seam edges found dead on their current route,
+  so a bot whose direct edge is a cliff pocket takes the next edge instead of
+  hopping between two zones forever (bug 153; 4 tests).
+
+### Changed
+
+- Open BG alliances follow the rest of the server (owner decision): bots are
+  allied only by group, guild or battlegroup, never by realm; players of the
+  same realm stay free-for-all inside, portal-keep guards stay passive and the
+  measured pace (keep change every ~20 minutes) stays.
+- The driver's four-at-the-gate siege count uses alliances instead of realms.
+- A raid stops assaulting once one of its guilds claims the keep; its other
+  units become bystanders.
+
+### Removed
+
+- The 0.244.0 same-realm crew alliance (`open_bg_realm_crews_allied`,
+  `PvpCombatant.OpenBgCrewAllied`): realm affiliation decides nothing in the
+  open BG.
+
+### Fixed
+
+- Bug 153: a world bot re-planned its zone-boundary step on every think with
+  about 65 nav queries each (21,685 long NPC ticks in 105 minutes, the 20×
+  run slowed from 6× to 2×).
+
 ## [0.244.1] - 2026-10-11
 
 ### Added

@@ -33,6 +33,9 @@ bridges, solo guides saying "stay off bridges"; keep holes repaired with wood.
 | Keep | the conquering bot guild **holds it until the next capture**; hold rewards run |
 | Quests | campaign commander contracts (already level-scaled) + **Pazz dailies opened to 1–50** with level-scaled rewards |
 | Low levels | **own portal keep is a sanctuary, the field is FFA**; only guest squads hunt players under 30; 40–50 bots attack them only in self-defence |
+| Alliances (09:20) | **no realm affiliation at all, like the rest of the server**: allied only by group, guild or battlegroup (`PvpCombatant.AreAllied`); players of the same realm stay FFA inside; a keep raid is several units in one battlegroup for the cycle ("mehrere groups können strategisch zusammen arbeiten um ein keep zu raiden, aber BITTE keine Realm zugehörigkeit"); the 0.244.0 same-realm crew alliance was wrong and is removed |
+| Portal-keep guards (09:20) | stay passive as today; the portal keep is bind-safe only |
+| Pace (09:20) | the measured death rate (~4–5 per minute at 1×) and a keep change every ~20 minutes stay as they are |
 | Setup UI | **launcher tab "open BG"** (writes server properties while the server is stopped) + GM command **`/bgsetup`** (writes the same properties and refreshes live) |
 | Night scope | stages 1–4, each built → reviewed → deployed → measured 45–60 min → fixed → pushed; the loop may deploy and restart the local server freely |
 
@@ -139,11 +142,11 @@ cycle is 15–45 min:
 | Phase | Share | What bots do |
 |---|---|---|
 | Quiet | 30 % | groups: one group per realm holds its own bridge (bridge watch), others roam the field away from bridges; solos/stealthers lurk 300–800 units off a bridge; no keep assault |
-| Push | 20 % | the director picks the attacking realm (weighted: realm that does not own the keep, fewest recent wins); its groups muster at their bridge, then march to the keep; the other realms keep watch and may intercept |
+| Push | 20 % | the director picks a raid (units of any realm that are not keep friends, weighted toward guilds with the fewest recent wins; at least a third of the crew) and puts it in one battlegroup; its groups muster at their bridge, then march to the keep; the other realms keep watch and may intercept |
 | Keep fight | 35 % | attackers assault (hookpoint rams, doors, lord) with the existing driver assault; the owning realm's groups defend; third realm roams and picks fights near the keep |
 | Retreat | 15 % | losers walk home, the winning guild claims (existing claim rule), hold rewards run; solos keep roaming |
 
-- The director publishes `Phase`, `AttackingRealm` and a role per group;
+- The director publishes `Phase`, the raid summary (JSON key `Attacker`) and a role per group;
   `AutonomousBattlegroundDriver.Lead` consults them first, then falls back to
   today's priority. Roles are pure functions of (phase, realm, keep owner,
   group size, bridge positions, player positions).
