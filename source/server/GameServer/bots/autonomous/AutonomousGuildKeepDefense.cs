@@ -23,6 +23,10 @@ public static class AutonomousGuildKeepDefense
 
     public static bool Eligible(GameBot bot) => AutonomousSiegeMarch.IsWorldActor(bot);
 
+    // Live run 0.242.0: a recall of the guild's world keep pulled open-BG crew out of their units (9 straggler
+    // drops) and out of the battleground's groups. The open BG roster owns its crew until it leaves.
+    private static bool Recallable(GameBot bot) => Eligible(bot) && !AutonomousBattlegroundParticipation.IsOpenCrew(bot);
+
     private static bool Current(Alarm alarm, long now) => alarm != null &&
         AutonomousRvrKeepPolicy.IsWorldKeep(alarm.Keep) && alarm.Keep.Guild == alarm.Owner && !alarm.Keep.DBKeep.LordDefeated &&
         now - alarm.LastHit < ResponseMilliseconds;
@@ -55,11 +59,11 @@ public static class AutonomousGuildKeepDefense
     }
 
     public static AbstractGameKeep Target(GameBot bot) => bot?.Guild != null &&
-        Focus.TryGetValue(bot.Guild, out Alarm alarm) && Eligible(bot) && Current(alarm, GameLoop.GameLoopTime) ? alarm.Keep : null;
+        Focus.TryGetValue(bot.Guild, out Alarm alarm) && Recallable(bot) && Current(alarm, GameLoop.GameLoopTime) ? alarm.Keep : null;
 
     public static AutonomousRvrEventLayer.Plan PlanFor(GameBot bot)
     {
-        return bot?.Guild != null && Focus.TryGetValue(bot.Guild, out Alarm alarm) && Eligible(bot) &&
+        return bot?.Guild != null && Focus.TryGetValue(bot.Guild, out Alarm alarm) && Recallable(bot) &&
             Current(alarm, GameLoop.GameLoopTime) ? alarm.Plan : null;
     }
 

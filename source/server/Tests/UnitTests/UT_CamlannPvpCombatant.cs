@@ -295,6 +295,34 @@ public sealed class UT_CamlannPvpCombatant
     }
 
     [Test]
+    public void SameRealmOpenBattlegroundCrewsAreAlliedOnlyAsCrewInside()
+    {
+        // Live run 0.242.0: 21 of 23 open-BG deaths were same-realm crews of different bot guilds killing each other at
+        // their own arrival camp. Assumption pending the owner, behind open_bg_realm_crews_allied (default on).
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.OPEN_BG_REALM_CREWS_ALLIED, Is.True, "on by default");
+            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, true, eRealm.Albion, eRealm.Albion), Is.True,
+                "two Albion crew bots inside the open BG");
+            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, true, eRealm.Albion, eRealm.Midgard), Is.False, "realms still fight");
+            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, false, eRealm.Albion, eRealm.Albion), Is.False,
+                "a player, guest squad or world bot that is not crew keeps Camlann free-for-all");
+            Assert.That(PvpCombatant.OpenBgCrewAllied(false, true, true, eRealm.Albion, eRealm.Albion), Is.False,
+                "the owner switched the alliance off");
+            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, true, eRealm.None, eRealm.None), Is.False);
+        });
+
+        // Outside the open BG, and for bots that are not crew, nothing changes: same-realm strangers stay hostile.
+        var first = AutonomousBot(eRealm.Albion, 50);
+        var second = AutonomousBot(eRealm.Albion, 50);
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.OpenBgCrewAllied(first, second), Is.False);
+            Assert.That(PvpCombatant.AreAllied(first, second), Is.False);
+        });
+    }
+
+    [Test]
     public void EngagementTrackerRemembersWhoStruckFirst()
     {
         var first = AutonomousBot(eRealm.Hibernia, 20);

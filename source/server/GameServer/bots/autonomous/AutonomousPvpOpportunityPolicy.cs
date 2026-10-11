@@ -53,7 +53,9 @@ public static class AutonomousPvpOpportunityPolicy
     public static bool MayHunt(GameBot actor) => actor != null &&
         CanSeekOpportunity(AutonomousObjectiveAssignments.KindFor(actor), actor.Group?.MemberCount ?? 1) &&
         !AutonomousActivityScheduler.IsPveBlocked(actor.PersistentRecord, WorldSimulationClock.UtcNow) &&
-        !actor.IsRecoveryResting && !AutonomousSiegeMarch.IsMarching(actor) && AutonomousBotGroupCoordinator.CanInitiateNewPull(actor);
+        !actor.IsRecoveryResting && !AutonomousSiegeMarch.IsMarching(actor) && AutonomousBotGroupCoordinator.CanInitiateNewPull(actor) &&
+        // An open-BG crew member on its way to the porter fights only in self-defence.
+        !AutonomousBattlegroundParticipation.IsTravellingOpenCrew(actor);
 
     public static bool SuitableOpponent(GameBot actor, GameLiving target)
     {

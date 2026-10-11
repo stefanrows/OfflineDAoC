@@ -256,7 +256,9 @@ public static partial class AutonomousBotGroupCoordinator
                 RemoveBrokenSession(currentSession.Group, currentSession);
                 // A PvP wall applies to a grouped bot after it recovers from
                 // the fight too. The remaining warband retains its own task.
+                // An open-BG unit's party is the roster's: its members stay with it.
                 if (bot.Group == currentSession.Group && currentSession.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
+                    !currentSession.OpenBattleground &&
                     bot.IsAlive && !bot.InCombat && !bot.IsAttacking &&
                     AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow))
                     currentSession.Group.RemoveMember(bot, retainSingleRemainingMember: true);
