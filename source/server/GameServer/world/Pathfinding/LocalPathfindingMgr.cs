@@ -276,7 +276,47 @@ namespace DOL.GS
 
             lock (_doorPolyRefsLock)
             {
-                _doorPolyRefs.Add(door, polyRefs);
+                // Indexer, not Add: registering a door twice refreshes its polygons instead of throwing.
+                _doorPolyRefs[door] = polyRefs;
+            }
+
+            UpdateDoorFlags(zone, door);
+            return true;
+        }
+
+        /// <summary>True when the door's navmesh polygons are tracked, so a closed door blocks routes.</summary>
+        public static bool IsDoorRegistered(GameDoorBase door)
+        {
+            lock (_doorPolyRefsLock)
+            {
+                return _doorPolyRefs.ContainsKey(door);
+            }
+        }
+
+        /// <summary>
+        /// Registers a door the loader could not register at its saved point: the door polygons are searched in a box reaching
+        /// <paramref name="verticalReach"/> above and below the door instead of 128. True when the door is (now) registered.
+        /// </summary>
+        public static bool TryRegisterDoorNear(GameDoorBase door, float verticalReach)
+        {
+            const int MAX_DOOR_POLYS = 12;
+
+            Zone zone = door?.CurrentZone;
+
+            if (zone == null)
+                return false;
+
+            if (IsDoorRegistered(door))
+                return true;
+
+            ulong[] polyRefs = GetNearestPolys(zone, new(door.X, door.Y, door.Z), _doorMask, MAX_DOOR_POLYS, new(64f, 64f, verticalReach));
+
+            if (polyRefs.Length == 0)
+                return false;
+
+            lock (_doorPolyRefsLock)
+            {
+                _doorPolyRefs[door] = polyRefs;
             }
 
             UpdateDoorFlags(zone, door);
@@ -634,6 +674,11 @@ namespace DOL.GS
 
         private static ulong[] GetNearestPolys(Zone zone, Vector3 point, EDtPolyFlags[] filters, int maxPolyCount)
         {
+            return GetNearestPolys(zone, point, filters, maxPolyCount, new(64f, 64f, 128f));
+        }
+
+        private static ulong[] GetNearestPolys(Zone zone, Vector3 point, EDtPolyFlags[] filters, int maxPolyCount, Vector3 halfExtents)
+        {
             if (!TryGetQuery(zone, out NavMeshQuery query))
                 return [];
 
@@ -641,7 +686,7 @@ namespace DOL.GS
             FillRecastFloats(point, center);
 
             Span<float> extents = stackalloc float[3];
-            FillRecastFloats(new(64f, 64f, 128f), extents);
+            FillRecastFloats(halfExtents, extents);
 
             Span<ulong> polyRefs = stackalloc ulong[maxPolyCount];
             EDtStatus status = GetPolysInBox(query, center, extents, filters, polyRefs, out int outputPolyCount, maxPolyCount);

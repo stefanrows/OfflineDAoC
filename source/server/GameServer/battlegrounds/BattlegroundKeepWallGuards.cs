@@ -117,6 +117,24 @@ namespace DOL.GS
 
         private static int NormalizeHeading(int units) => ((units % HeadingUnits) + HeadingUnits) % HeadingUnits;
 
+        /// <summary>A keep with at least this many saved outside guards has its own wall garrison and gets no Molvik copy.</summary>
+        public const int OwnWallGuardThreshold = 10;
+
+        /// <summary>True when a keep's saved outside guards are a wall garrison of their own (Thidranki Faste, keep 11, has 17).</summary>
+        public static bool HasOwnWallGuards(int savedOutsideGuards) => savedOutsideGuards >= OwnWallGuardThreshold;
+
+        /// <summary>
+        /// True for a saved archer, fighter, healer or caster guard (static ones included). Runtime wall posts, garrison rows,
+        /// lords, hasteners and merchants are not outside guards.
+        /// </summary>
+        public static bool IsSavedOutsideGuard(Type guardType, string name, string guild, string keepName)
+        {
+            if (guardType == null || PostClasses.ContainsValue(guardType)) return false;
+            bool wallClass = typeof(GuardArcher).IsAssignableFrom(guardType) || typeof(GuardFighter).IsAssignableFrom(guardType) ||
+                typeof(GuardHealer).IsAssignableFrom(guardType) || typeof(GuardCaster).IsAssignableFrom(guardType);
+            return wallClass && !IsGarrisonRow(keepName, new GuardSample(guardType.ToString(), name, guild, 0, 0, 0, 0, 0));
+        }
+
         /// <summary>True for a row EnsureGarrison wrote: its keep name and a role, with no guild.</summary>
         public static bool IsGarrisonRow(string keepName, GuardSample guard) =>
             string.IsNullOrEmpty(guard.Guild) && GarrisonRoles.Any(role => guard.Name == $"{keepName} {role}");
@@ -227,6 +245,16 @@ namespace DOL.GS
         {
             if (definition == null || keep == null || outside == null || outside.Count == 0) return;
             if (keep.KeepID == TemplateKeepId || keep.KeepID == ProvingGroundsKeepId || keep.IsPortalKeep || keep.IsRelic) return;
+            int ownGuards;
+            lock (keep.Guards)
+            {
+                ownGuards = keep.Guards.Values.Count(guard => IsSavedOutsideGuard(guard.GetType(), guard.Name, guard.GuildName, keep.Name));
+            }
+            if (HasOwnWallGuards(ownGuards))
+            {
+                Log.Info($"BATTLEGROUND_KEEP_WALL_GUARDS_SKIPPED region={keep.Region} keep={keep.KeepID} reason=own_wall_guards guards={ownGuards}");
+                return;
+            }
             if (!(keep.DBKeep?.CreateInfo ?? string.Empty).StartsWith(BattlegroundKeepLayouts.OfflineKeepPrefix, StringComparison.Ordinal)) return;
             try
             {

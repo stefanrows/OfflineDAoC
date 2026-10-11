@@ -7,6 +7,13 @@ using DOL.GS.Keeps;
 
 namespace DOL.GS
 {
+    /// <summary>
+    /// A central keep the client zone already draws (a native frontier keep fixture). The keep row takes the fixture's id, name
+    /// and position; no component rows are written, because the client renders the fixture itself. SavedGarrison: the save
+    /// already carries the keep's own lord and guards, which are kept; the lord is then checked on his own floor.
+    /// </summary>
+    public sealed record NativeKeepFixture(ushort Region, int KeepId, string Name, int X, int Y, int Z, byte BaseLevel, bool SavedGarrison);
+
     /// <summary>Restores only proved native fixtures missing from the clean world.</summary>
     public static class BattlegroundNativeKeepData
     {
@@ -75,6 +82,62 @@ namespace DOL.GS
         private const int MaximumPathQueries = 400;
         // Relocating garrison members that no camp reaches may spend this many path queries per keep start.
         private const int MaximumRelocationQueries = 1200;
+        private const int PortalBaseLevel = 100;
+        /// <summary>Vertical reach of the floor search under a garrison member's saved point (the 0.235.0 relocation).</summary>
+        public const float GarrisonFloorSearch = 256f;
+        /// <summary>
+        /// Vertical reach under the saved lord of a keep with a saved garrison. The lord must stand on walkable floor: one saved
+        /// on a roof with no floor within this reach counts as unreachable and moves to the nearest reachable keep point.
+        /// </summary>
+        public const float LordFloorReach = 64f;
+
+        /// <summary>
+        /// Native central keeps. Murdaigean (251) keeps its historical row path (EnsureMurdaigeanKeepRow). Thidranki Faste (252,
+        /// the open battleground) adopts its saved row: id 11 and its name stay, the position moves 191 units onto the client
+        /// fixture nfrontkeep2.nif, and its saved lord and 18 guards stay (no garrison is spawned while a lord exists).
+        /// </summary>
+        public static IReadOnlyList<NativeKeepFixture> NativeKeeps { get; } = Array.AsReadOnly(new[]
+        {
+            new NativeKeepFixture(MurdaigeanRegion, MurdaigeanKeepId, "Murdaigean Keep", MurdaigeanX, MurdaigeanY, 3720, 29, false),
+            new NativeKeepFixture(252, 11, "Thidranki Faste", 33280, 38272, 3720, 26, true),
+        });
+
+        public static NativeKeepFixture FindNativeKeep(ushort region) => NativeKeeps.FirstOrDefault(keep => keep.Region == region);
+
+        /// <summary>The keep row's CreateInfo once the native keep is ready; the pending form appends PendingSuffix.</summary>
+        public static string NativeTag(ushort region) => NativePrefix + region;
+
+        /// <summary>What startup does with a native keep's saved row.</summary>
+        public enum NativeKeepAdoption { Create, Adopt, Ready, IdConflict }
+
+        /// <summary>
+        /// Create a missing row; refuse a row of another region or a portal row with the fixture's id; leave a row already tagged
+        /// (ready or pending); adopt any other row (for keep 11 the save's "Atlas BG" row).
+        /// </summary>
+        public static NativeKeepAdoption DecideAdoption(NativeKeepFixture fixture, DbKeep row)
+        {
+            if (row == null) return NativeKeepAdoption.Create;
+            if (row.Region != fixture.Region || row.BaseLevel >= PortalBaseLevel) return NativeKeepAdoption.IdConflict;
+            string tag = NativeTag(fixture.Region);
+            string info = row.CreateInfo ?? string.Empty;
+            return info == tag || info == tag + BattlegroundKeepLayouts.PendingSuffix ? NativeKeepAdoption.Ready : NativeKeepAdoption.Adopt;
+        }
+
+        /// <summary>
+        /// Moves the row onto the fixture and tags it pending, so the first keep start heals and closes its doors. Id, name,
+        /// realm, level and base level stay as saved.
+        /// </summary>
+        public static void Adopt(NativeKeepFixture fixture, DbKeep row)
+        {
+            row.X = fixture.X;
+            row.Y = fixture.Y;
+            row.Z = fixture.Z;
+            row.CreateInfo = NativeTag(fixture.Region) + BattlegroundKeepLayouts.PendingSuffix;
+        }
+
+        /// <summary>Vertical reach of the floor search under a garrison member: the tight lord reach only for the lord of a fixture keep with a saved garrison.</summary>
+        public static float GarrisonFloorReach(NativeKeepFixture fixture, int keepId, bool lord) =>
+            lord && fixture != null && fixture.SavedGarrison && fixture.KeepId == keepId ? LordFloorReach : GarrisonFloorSearch;
 
         public static DbKeep MurdaigeanKeepRow() => new()
         {
@@ -89,6 +152,7 @@ namespace DOL.GS
         {
             if (!BattlegroundCampaignPolicy.IsEnabled) return;
             EnsureMurdaigeanKeepRow();
+            foreach (NativeKeepFixture fixture in NativeKeeps.Where(keep => keep.SavedGarrison)) EnsureSavedNativeKeepRow(fixture);
             foreach (KeepSite site in BattlegroundKeepLayouts.Sites) EnsureSiteKeep(site);
             foreach (KeepSite blocked in BattlegroundKeepLayouts.BlockedSites)
                 Log.Warn($"BATTLEGROUND_KEEP_BLOCKED region={blocked.Region} keep={blocked.KeepId} reason=no_flat_clear_site");
@@ -108,6 +172,48 @@ namespace DOL.GS
                 return;
             }
             Log.Info($"BATTLEGROUND_NATIVE_KEEP_ROW_ADDED region={MurdaigeanRegion} keep={MurdaigeanKeepId}");
+        }
+
+        // A native keep whose save carries its own garrison (Thidranki Faste, 252): the saved row is adopted in place, so the
+        // garrison code (EnsureGarrison, at campaign start) heals its doors, keeps its lord and guards and relocates unreachable ones.
+        private static void EnsureSavedNativeKeepRow(NativeKeepFixture fixture)
+        {
+            DbKeep row = GameServer.Database.SelectObject<DbKeep>(DB.Column("KeepID").IsEqualTo(fixture.KeepId));
+            switch (DecideAdoption(fixture, row))
+            {
+                case NativeKeepAdoption.IdConflict:
+                    Log.Warn($"BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE region={fixture.Region} keep={fixture.KeepId} reason=id_conflict");
+                    return;
+                case NativeKeepAdoption.Create:
+                    if (GameServer.Database.SelectObject<DbKeep>(DB.Column("Region").IsEqualTo(fixture.Region).And(DB.Column("BaseLevel").IsLessThan(PortalBaseLevel))) != null)
+                    {
+                        Log.Warn($"BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE region={fixture.Region} keep={fixture.KeepId} reason=other_central_keep");
+                        return;
+                    }
+                    row = new DbKeep
+                    {
+                        KeepID = fixture.KeepId, Name = fixture.Name, Region = fixture.Region, Heading = 0, Realm = 0, OriginalRealm = 0,
+                        Level = 1, BaseLevel = fixture.BaseLevel, KeepType = 0, SkinType = 0, ClaimedGuildName = string.Empty,
+                    };
+                    Adopt(fixture, row);
+                    if (!GameServer.Database.AddObject(row))
+                    {
+                        Log.Warn($"BATTLEGROUND_NATIVE_KEEP_UNAVAILABLE region={fixture.Region} keep={fixture.KeepId} reason=keep_row_not_saved");
+                        return;
+                    }
+                    Log.Info($"BATTLEGROUND_NATIVE_KEEP_ROW_ADDED region={fixture.Region} keep={fixture.KeepId}");
+                    break;
+                case NativeKeepAdoption.Adopt:
+                    string from = $"{row.X},{row.Y},{row.Z}";
+                    Adopt(fixture, row);
+                    GameServer.Database.SaveObject(row);
+                    Log.Info($"BATTLEGROUND_NATIVE_KEEP_ADOPTED region={fixture.Region} keep={fixture.KeepId} name=\"{row.Name}\" from={from} to={row.X},{row.Y},{row.Z}");
+                    break;
+            }
+            // Navigation meshes load before keeps. Without one, the garrison code never runs: the lord stays where the save has him.
+            Zone zone = WorldMgr.GetRegion(fixture.Region)?.GetZone(fixture.X, fixture.Y);
+            if (zone == null || !PathfindingProvider.Instance.IsAvailable || !PathfindingProvider.Instance.HasNavmesh(zone))
+                Log.Warn($"BATTLEGROUND_NATIVE_KEEP_WAITING region={fixture.Region} keep={fixture.KeepId} reason=no_navmesh lord=saved_position");
         }
 
         // A missing row is created from the site. Components are added only when the keep has none, so
@@ -198,6 +304,8 @@ namespace DOL.GS
             List<GameKeepDoor> doors = keep.Doors.Values.ToList();
             if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone) || keep.Area == null)
                 return Unavailable(keep, "no_navmesh_or_area");
+            // Native gates and posterns must block routes while closed; a door the loader could not register gets one more try.
+            if (FindNativeKeep(region) is { SavedGarrison: true } native && native.KeepId == keep.KeepID) EnsureDoorsRegistered(keep, region);
 
             // A keep without gates has no gated point at all; it takes the ungated placement below.
             double doorZ = doors.Count == 0 ? keep.Z : doors.Average(door => door.Z);
@@ -233,6 +341,13 @@ namespace DOL.GS
             {
                 if (!lordMoved && !Gated(new Vector3(existing.X, existing.Y, existing.Z)))
                     Log.Warn($"BATTLEGROUND_KEEP_LORD_OUTSIDE region={region} keep={keep.KeepID}");
+                Point3D lordAt = existing.SpawnPoint ?? new Point3D(existing.X, existing.Y, existing.Z);
+                int members;
+                lock (keep.Guards)
+                {
+                    members = keep.Guards.Values.Count(guard => guard is not GuardLord && guard is not GuardMerchant);
+                }
+                Log.Info($"BATTLEGROUND_KEEP_READY region={region} keep={keep.KeepID} lord={lordAt.X},{lordAt.Y},{lordAt.Z} guards={members}");
                 return true;
             }
 
@@ -265,6 +380,31 @@ namespace DOL.GS
             string tag = row.CreateInfo.StartsWith(NativePrefix, StringComparison.Ordinal) ? "BATTLEGROUND_NATIVE_KEEP_READY" : "BATTLEGROUND_KEEP_READY";
             Log.Info($"{tag} region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
             return true;
+        }
+
+        /// <summary>Vertical reach of the second door-polygon search, for a keep door the loader matched to no polygon at its saved point.</summary>
+        public const float DoorRegistrationReach = 256f;
+
+        // The door loader searches door polygons 128 units above and below a door's saved point. A keep door it could not match
+        // (a postern saved above the floor, for example) gets a second search reaching DoorRegistrationReach. A door that still
+        // finds no polygon is logged and stays a non-blocking door; it never stops the keep.
+        private static void EnsureDoorsRegistered(AbstractGameKeep keep, ushort region)
+        {
+            if (PathfindingProvider.Instance is not LocalPathfindingMgr) return;
+            int gates = 0, gatesRegistered = 0, posterns = 0, posternsRegistered = 0;
+            foreach (GameKeepDoor door in keep.Doors.Values.ToList())
+            {
+                if (door.CanBeOpenedViaInteraction) continue;
+                bool before = LocalPathfindingMgr.IsDoorRegistered(door);
+                bool registered = before || LocalPathfindingMgr.TryRegisterDoorNear(door, DoorRegistrationReach);
+                if (door.IsPostern) { posterns++; if (registered) posternsRegistered++; }
+                else { gates++; if (registered) gatesRegistered++; }
+                if (!before && registered)
+                    Log.Info($"BATTLEGROUND_KEEP_DOOR_REGISTERED region={region} keep={keep.KeepID} door={door.DoorId} reach={DoorRegistrationReach}");
+                else if (!registered)
+                    Log.Warn($"BATTLEGROUND_KEEP_DOOR_UNREGISTERED region={region} keep={keep.KeepID} door={door.DoorId} at={door.X},{door.Y},{door.Z} reason=no_door_polygon");
+            }
+            Log.Info($"BATTLEGROUND_KEEP_DOORS region={region} keep={keep.KeepID} gates={gatesRegistered}/{gates} posterns={posternsRegistered}/{posterns}");
         }
 
         /// <summary>True when a keep has gates but none is closed; a keep without gates has nothing to close.</summary>
@@ -358,6 +498,7 @@ namespace DOL.GS
             int budget = MaximumRelocationQueries;
             int probeCost = ProbeCost(outside.Count);
             ReachabilityProbe probe = CampProbe(zone, outside);
+            NativeKeepFixture fixture = FindNativeKeep(region);
 
             // Pass 1: classify each member by its spawn point. A member the budget cannot check stays where it is.
             var used = new List<Vector3>();
@@ -371,7 +512,8 @@ namespace DOL.GS
                 bool? reachable = null;
                 if (budget >= probeCost)
                 {
-                    Vector3? floor = nav.GetClosestPoint(zone, home, 64, 64, 256, nav.DefaultFilters);
+                    float reach = GarrisonFloorReach(fixture, keep.KeepID, guard is GuardLord);
+                    Vector3? floor = nav.GetClosestPoint(zone, home, 64, 64, reach, nav.DefaultFilters);
                     reachable = floor.HasValue && ReachableFromCamps(floor.Value, zone, outside, ref budget);
                 }
                 if (reachable == false) moving.Add((guard, home));
