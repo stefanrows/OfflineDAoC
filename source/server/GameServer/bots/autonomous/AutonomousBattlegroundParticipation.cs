@@ -246,7 +246,15 @@ public static class AutonomousBattlegroundParticipation
         foreach (GameBot bot in boarders)
         {
             if (!HasBattlegroundMedallion(bot)) continue;
-            if (!BattlegroundCampaignPolicy.TryEnterBot(bot, out string reason, out ushort destination))
+            // An open-BG crew member boards for the open BG, never for its level bracket.
+            BattlegroundDefinition assigned;
+            lock (Sync) assigned = Entries.TryGetValue(bot, out Entry pending) ? pending.Definition : null;
+            string reason;
+            ushort destination;
+            bool boarded = assigned?.Kind == BattlegroundDefinitionKind.Open
+                ? BattlegroundCampaignPolicy.TryEnterBotOpen(bot, out reason, out destination)
+                : BattlegroundCampaignPolicy.TryEnterBot(bot, out reason, out destination);
+            if (!boarded)
             {
                 Log.Debug($"AUTONOMOUS_BG_ENTRY_REFUSED region={porter.CurrentRegionID} bot=\"{bot.Name}\" reason=\"{reason}\"");
                 continue;

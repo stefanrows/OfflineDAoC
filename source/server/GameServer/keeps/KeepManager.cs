@@ -352,6 +352,8 @@ namespace DOL.GS.Keeps
 				if (m_frontierRegionsList.Contains(keep.Region) == false && keep.IsPortalKeep == false) continue;
 				DbBattleground bg = GetBattleground(keep.Region);
 				if (bg == null) continue;
+				// The open BG's in-memory 1-50 cap would match every level; it is entered only through its porter line.
+				if (BattlegroundCampaignCatalog.Find(keep.Region)?.Kind == BattlegroundDefinitionKind.Open) continue;
 				if (player.Level >= bg.MinLevel &&
 					player.Level <= bg.MaxLevel &&
 					(bg.MaxRealmLevel == 0 || player.RealmLevel < bg.MaxRealmLevel))

@@ -29,14 +29,18 @@ namespace DOL.GS
 		/// <summary>
 		/// Builds the realm-open travel menu without requiring a live NPC instance.
 		/// </summary>
-		public static String BuildTravelMenu()
+		public static String BuildTravelMenu() => BuildTravelMenu(false);
+
+		/// <param name="openBattleground">Show the [open BG] line; true only when the asking player may enter it now.</param>
+		public static String BuildTravelMenu(bool openBattleground)
 		{
 			// Camlann travel is deliberately realm-open. Keep every capital and
 			// every realm's leveling-town menu visible to every player; the town
 			// itself remains a normal PvP destination. Battlegrounds use guild/group
-			// alliances and the character's eligible level bracket.
+			// alliances and the character's eligible level bracket; the open BG takes levels 1-50.
+			string battlegrounds = (BattlegroundCampaignPolicy.IsEnabled ? "[Battlegrounds] " : "") + (openBattleground ? "[open BG] " : "");
 			return "Would you like to teleport to?\n" +
-                (BattlegroundCampaignPolicy.IsEnabled ? "[Battlegrounds]\n" : "") +
+                (battlegrounds.Length == 0 ? "" : battlegrounds.TrimEnd() + "\n") +
 				"[Camelot] [Jordheim] [Tir na Nog]\n" +
 				"[Albion Frontiers] [Midgard Frontiers] [Hibernia Frontiers]\n" +
 				"[Albion Darkness Falls] [Midgard Darkness Falls] [Hibernia Darkness Falls]\n" +
@@ -57,7 +61,7 @@ namespace DOL.GS
 			if (!base.Interact(player))
 				return false;
 
-			SayTo(player, DisplayTeleportDestinations(player.Realm));
+			SayTo(player, BuildTravelMenu(OpenBattlegroundPolicy.IsOpenFor(player)));
 
 			return true;
 		}
@@ -464,6 +468,10 @@ namespace DOL.GS
                     if (!BattlegroundCampaignPolicy.TryEnter(player, out string battlegroundReason))
                         SayTo(player, battlegroundReason);
                     return true;
+				case "OPEN BG":
+                    if (!BattlegroundCampaignPolicy.TryEnterOpen(player, out string openReason))
+                        SayTo(player, openReason);
+                    return true;
 				case "ENTRANCE":
 				case "PERSONAL":
 				case "HEARTH":
@@ -494,6 +502,16 @@ namespace DOL.GS
                 { SayTo(player, reason); return null; }
                 GameLocation landing = BattlegroundCampaignPolicy.GetLanding(player, definition);
                 return new DbTeleport { TeleportID = "battlegrounds", RegionID = landing.RegionID,
+                    X = landing.X, Y = landing.Y, Z = landing.Z, Heading = landing.Heading };
+            }
+			// The open BG is not a level bracket: levels 1-50 while it is open and ready.
+			if (text.ToLower() == "open bg")
+			{
+                if (!OpenBattlegroundPolicy.IsOpenFor(player))
+                { SayTo(player, "The open battleground is closed."); return null; }
+                GameLocation landing = BattlegroundCampaignPolicy.GetLanding(player, BattlegroundCampaignCatalog.FindOpen());
+                if (landing == null) { SayTo(player, "The open battleground has no arrival camp."); return null; }
+                return new DbTeleport { TeleportID = "open bg", RegionID = landing.RegionID,
                     X = landing.X, Y = landing.Y, Z = landing.Z, Heading = landing.Heading };
             }
 

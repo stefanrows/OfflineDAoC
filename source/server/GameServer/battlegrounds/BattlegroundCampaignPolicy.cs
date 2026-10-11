@@ -47,6 +47,17 @@ namespace DOL.GS
             return IsReady(definition, out reason);
         }
 
+        // The open BG: no bracket, levels 1-50, its own switch on top of the campaign switch.
+        private static bool CanEnterOpenBattleground(BattlegroundDefinition definition, GameLiving actor, out string reason)
+        {
+            reason = null;
+            if (!OpenBattlegroundPolicy.IsEnabled || definition == null) { reason = "The open battleground is closed."; return false; }
+            if (!IsReady(definition, out reason)) return false;
+            if (!OpenBattlegroundPolicy.CanEnterOpen(true, true, actor.Level))
+            { reason = "The open battleground takes levels " + OpenBattlegroundPolicy.MinLevel + " to " + OpenBattlegroundPolicy.MaxLevel + "."; return false; }
+            return true;
+        }
+
         /// <summary>
         /// Index of the landing a battleground entrant uses (bug 147). A group member lands where its group leader
         /// lands (owner decision 2026-10-11; players already did through the leader's hash). A leader or solo bot
@@ -85,11 +96,28 @@ namespace DOL.GS
         {
             BattlegroundDefinition definition = BattlegroundCampaignCatalog.ForLevel(player.Level);
             if (!CanEnter(definition, player, out reason)) return false;
+            return MovePlayerIn(player, definition, out reason);
+        }
+
+        /// <summary>The porter's [open BG] line: the same checks, landing and move as <see cref="TryEnter"/> without a bracket.</summary>
+        public static bool TryEnterOpen(GamePlayer player, out string reason)
+        {
+            reason = null;
+            if (player == null) { reason = "No battleground participant."; return false; }
+            BattlegroundDefinition definition = BattlegroundCampaignCatalog.FindOpen();
+            if (!CanEnterOpenBattleground(definition, player, out reason)) return false;
+            return MovePlayerIn(player, definition, out reason);
+        }
+
+        private static bool MovePlayerIn(GamePlayer player, BattlegroundDefinition definition, out string reason)
+        {
+            reason = null;
             if (!player.IsAlive || player.InCombat || GameRelic.IsPlayerCarryingRelic(player))
             { reason = "You must be alive, out of combat and carrying no relic to enter."; return false; }
             if (BattlegroundCampaignCatalog.Find((ushort)player.BindRegion) != null)
             { reason = "Bind outside the battleground before entering."; return false; }
             GameLocation landing = GetLanding(player, definition);
+            if (landing == null) { reason = "The battleground has no arrival camp."; return false; }
             if (!player.MoveTo(landing.RegionID, landing.X, landing.Y, landing.Z, landing.Heading))
             { reason = "The battleground transfer could not be completed."; return false; }
             return true;
@@ -106,6 +134,26 @@ namespace DOL.GS
             if (bot == null) { reason = "No battleground participant."; return false; }
             BattlegroundDefinition definition = BattlegroundCampaignCatalog.ForLevel(bot.Level);
             if (!CanEnter(definition, bot, out reason)) return false;
+            return MoveBotIn(bot, definition, out reason, out destinationRegion);
+        }
+
+        public static bool TryEnterBotOpen(GameBot bot, out string reason) => TryEnterBotOpen(bot, out reason, out _);
+
+        /// <summary>An open-BG crew bot boards like <see cref="TryEnterBot(GameBot, out string, out ushort)"/>, without a bracket.</summary>
+        public static bool TryEnterBotOpen(GameBot bot, out string reason, out ushort destinationRegion)
+        {
+            reason = null;
+            destinationRegion = 0;
+            if (bot == null) { reason = "No battleground participant."; return false; }
+            BattlegroundDefinition definition = BattlegroundCampaignCatalog.FindOpen();
+            if (!CanEnterOpenBattleground(definition, bot, out reason)) return false;
+            return MoveBotIn(bot, definition, out reason, out destinationRegion);
+        }
+
+        private static bool MoveBotIn(GameBot bot, BattlegroundDefinition definition, out string reason, out ushort destinationRegion)
+        {
+            reason = null;
+            destinationRegion = 0;
             if (!bot.IsAlive || bot.InCombat || GameRelic.IsPlayerCarryingRelic(bot))
             { reason = "The bot must be alive, out of combat and carrying no relic to enter."; return false; }
             GameLocation landing = GetLanding(bot, definition);
@@ -180,10 +228,17 @@ namespace DOL.GS
             return true;
         }
 
+        /// <summary>
+        /// Whether a player leaves a battleground for its bracket (graduation or a closed campaign).
+        /// The open BG takes levels 1-50 for good: nobody graduates and no tour ends there.
+        /// </summary>
+        public static bool ShouldGraduate(BattlegroundDefinition definition, bool enabled, bool eligible) =>
+            definition != null && definition.Kind != BattlegroundDefinitionKind.Open && !(enabled && eligible);
+
         public static void CheckProgress(GamePlayer player)
         {
             BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(player.CurrentRegionID);
-            if (definition == null || IsEnabled && IsEligible(player, definition)) return;
+            if (!ShouldGraduate(definition, IsEnabled, IsEligible(player, definition))) return;
             if (player.IsAlive && ExitToBind(player, out string reason))
                 player.Out.SendMessage("You have graduated from this battleground. Your next eligible bracket is available through /battleground.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
         }
