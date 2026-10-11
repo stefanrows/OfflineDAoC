@@ -43,14 +43,119 @@ namespace DOL.GS.Tests
         [Test]
         public void SolosLurkInQuietAndPush()
         {
-            foreach (eRealm realm in Realms)
+            // Midgard attacks (the helper's default); its solos join the assault instead (live run 0.243.0).
+            foreach (eRealm realm in new[] { eRealm.Albion, eRealm.Hibernia })
                 Assert.Multiple(() =>
                 {
                     Assert.That(Role(OpenBgPhase.Quiet, realm, 1), Is.EqualTo(OpenBgRole.Lurk));
-                    Assert.That(Role(OpenBgPhase.Push, realm, 1), Is.EqualTo(OpenBgRole.Lurk), "even the attacker's solos");
+                    Assert.That(Role(OpenBgPhase.Push, realm, 1), Is.EqualTo(OpenBgRole.Lurk), "the other realms' solos");
                     Assert.That(Role(OpenBgPhase.KeepFight, realm, 1), Is.EqualTo(OpenBgRole.Roam));
                     Assert.That(Role(OpenBgPhase.Retreat, realm, 1), Is.EqualTo(OpenBgRole.Roam), "solos keep roaming");
                 });
+            Assert.That(Role(OpenBgPhase.Quiet, eRealm.Midgard, 1), Is.EqualTo(OpenBgRole.Lurk), "no assault in quiet");
+            Assert.That(Role(OpenBgPhase.Retreat, eRealm.Midgard, 1), Is.EqualTo(OpenBgRole.Roam));
+        }
+
+        [Test]
+        public void EveryUnitOfTheAttackingRealmAssaultsInPushAndKeepFight()
+        {
+            // Live run 0.243.0: only 10 assault assignments in 5 cycles; solos lurked and roamed through the keep fight.
+            // Unit kinds: solo (1), small groups (2-4), the 8-man (5-8); the first group of a realm has index 0.
+            int[] sizes = { 1, 2, 3, 4, 6, 8 };
+            Assert.Multiple(() =>
+            {
+                foreach (int size in sizes)
+                    foreach (int index in new[] { 0, 1, 3 })
+                    {
+                        Assert.That(Role(OpenBgPhase.Push, eRealm.Midgard, size, index), Is.EqualTo(OpenBgRole.Assault), $"push, size {size}, index {index}");
+                        Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Midgard, size, index), Is.EqualTo(OpenBgRole.Assault), $"keep fight, size {size}, index {index}");
+                        Assert.That(Role(OpenBgPhase.Quiet, eRealm.Midgard, size, index), Is.Not.EqualTo(OpenBgRole.Assault), $"quiet, size {size}");
+                        Assert.That(Role(OpenBgPhase.Retreat, eRealm.Midgard, size, index), Is.Not.EqualTo(OpenBgRole.Assault), $"retreat, size {size}");
+                    }
+                // Albion owns the keep: its groups defend, its solos roam; the realm that owns the keep never assaults it.
+                foreach (int size in sizes.Where(size => size > 1))
+                    Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Albion, size, 0), Is.EqualTo(OpenBgRole.Defend), $"owner group {size}");
+                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Albion, 1), Is.EqualTo(OpenBgRole.Roam), "owner solo");
+                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Midgard, 1, 0, eRealm.Midgard, eRealm.Midgard), Is.EqualTo(OpenBgRole.Roam),
+                    "a solo of the realm that took the keep");
+            });
+        }
+
+        [Test]
+        public void TheThirdRealmNeverAssaultsAndRoamsAwayFromTheKeepInTheFight()
+        {
+            Point3D[] field = Field().Concat(new[]
+            {
+                new Point3D(Keep.X + 2_500, Keep.Y, 3500), new Point3D(Keep.X, Keep.Y - 2_900, 3500), new Point3D(Keep.X - 3_500, Keep.Y + 200, 3500),
+            }).ToArray();
+            Point3D[] away = OpenBattlegroundRoles.FieldAwayFromKeep(field, Bridges, Keep, OpenBattlegroundRoles.ThirdRealmKeepDistance);
+            var rng = new Random(11);
+            Assert.Multiple(() =>
+            {
+                foreach (int size in new[] { 1, 2, 4, 8 })
+                    foreach (OpenBgPhase phase in Enum.GetValues<OpenBgPhase>())
+                        Assert.That(Role(phase, eRealm.Hibernia, size, 0), Is.Not.EqualTo(OpenBgRole.Assault), $"{phase}, size {size}");
+                foreach (int size in new[] { 1, 2, 4, 8 })
+                    Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Hibernia, size, 0), Is.EqualTo(OpenBgRole.Roam), $"third realm size {size}");
+                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.KeepFight, eRealm.Hibernia, eRealm.Albion, eRealm.Midgard), Is.True);
+                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.KeepFight, eRealm.Midgard, eRealm.Albion, eRealm.Midgard), Is.False);
+                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.KeepFight, eRealm.Albion, eRealm.Albion, eRealm.Midgard), Is.False);
+                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.Push, eRealm.Hibernia, eRealm.Albion, eRealm.Midgard), Is.False);
+                Assert.That(away, Is.Not.Empty);
+                Assert.That(away.Length, Is.LessThan(field.Length), "the points near the keep and the bridges are dropped");
+                for (int i = 0; i < 200; i++)
+                {
+                    Point3D point = OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, eRealm.Hibernia, Bridges, Keep, away, rng);
+                    Assert.That(OpenBattlegroundRoles.Distance2D(point, Keep), Is.GreaterThanOrEqualTo(OpenBattlegroundRoles.ThirdRealmKeepDistance));
+                    Assert.That(Nearest(point, Bridges.Select(bridge => bridge.Point)), Is.GreaterThanOrEqualTo(OpenBattlegroundRoles.RoamBridgeDistance));
+                }
+                // The live keep-fight skirmish point (2,500 south of the keep centre) is no longer a third-realm roam point.
+                Assert.That(away.Any(point => point.X == Keep.X + 2_500 && point.Y == Keep.Y), Is.False);
+            });
+        }
+
+        [Test]
+        public void AnAttackerMustersOnlyInThePushAndNeverAfterAWipeInTheKeepFight()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoles.NeedsMuster(OpenBgRole.Assault, OpenBgPhase.Push, false), Is.True);
+                Assert.That(OpenBattlegroundRoles.NeedsMuster(OpenBgRole.Assault, OpenBgPhase.Push, true), Is.False, "mustered once per cycle");
+                Assert.That(OpenBattlegroundRoles.NeedsMuster(OpenBgRole.Assault, OpenBgPhase.KeepFight, false), Is.False,
+                    "a unit that wiped in the keep fight goes back to the gate, not to its bridge");
+                Assert.That(OpenBattlegroundRoles.NeedsMuster(OpenBgRole.Defend, OpenBgPhase.Push, false), Is.False);
+                Assert.That(OpenBattlegroundRoles.NeedsMuster(OpenBgRole.Lurk, OpenBgPhase.Push, false), Is.False);
+            });
+        }
+
+        [Test]
+        public void ALurkPointIsAProvenFloorAndDeadSpotsAreDroppedForTheCycle()
+        {
+            var draws = new Queue<Point3D>(new[]
+            {
+                new Point3D(1_000, 1_000, 3300),  // no floor
+                new Point3D(2_000, 2_000, 3300),  // floor on a dead-end ledge: no route from the landing
+                new Point3D(3_000, 3_000, 3300),  // floor next to a spot that failed this cycle
+                new Point3D(4_000, 4_000, 3300),  // proven
+                new Point3D(5_000, 5_000, 3300),
+            });
+            var dead = new[] { new Point3D(3_050, 3_100, 3200) };
+            Point3D Snap(Point3D raw) => raw.X == 1_000 ? null : new Point3D(raw.X + 10, raw.Y, 3200);
+            bool Proven(Point3D floor) => floor.X != 2_010;
+            var proved = new List<Point3D>();
+            Point3D picked = OpenBattlegroundRoles.PickLurkPoint(() => draws.Count > 0 ? draws.Dequeue() : null, Snap,
+                floor => { proved.Add(floor); return Proven(floor); }, dead, 6);
+            Assert.Multiple(() =>
+            {
+                Assert.That((picked.X, picked.Y, picked.Z), Is.EqualTo((4_010, 4_000, 3200)), "the snapped floor of the first proven draw");
+                Assert.That(proved.Select(point => point.X), Is.EqualTo(new[] { 2_010, 4_010 }), "a spot near a dead one is not even proved");
+                Assert.That(OpenBattlegroundRoles.NearDeadSpot(new Point3D(3_000, 3_000, 0), dead), Is.True);
+                Assert.That(OpenBattlegroundRoles.NearDeadSpot(new Point3D(3_400, 3_000, 0), dead), Is.False);
+                Assert.That(OpenBattlegroundRoles.PickLurkPoint(() => new Point3D(2_000, 2_000, 3300), Snap, Proven, null, 4), Is.Null,
+                    "only dead ends: the caller falls back to a camp");
+                Assert.That(OpenBattlegroundRoles.PickLurkPoint(() => new Point3D(6_000, 6_000, 3300), Snap, null, null, 1)?.X, Is.EqualTo(6_010),
+                    "without a proof (no landing, no navmesh) the snapped floor stands");
+            });
         }
 
         [Test]
