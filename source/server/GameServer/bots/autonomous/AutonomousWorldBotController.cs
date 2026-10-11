@@ -479,6 +479,11 @@ namespace DOL.GS
                 }
 
                 eAutonomousObjectiveKind objectiveKind = AutonomousObjectiveAssignments.KindFor(bot);
+                // An idle bot the open BG roster picked as a solo travels to the battleground porter as an RvR
+                // participant does. Only the open roster assigns bots off an RvR tour; brackets need the tour.
+                if (objectiveKind != eAutonomousObjectiveKind.RvR && AutonomousBattlegroundParticipation.IsAssigned(bot) &&
+                    TryBattlegroundTravel(bot))
+                    return true;
                 if (objectiveKind == eAutonomousObjectiveKind.GroupPve && _groupDirective?.IsDynamic != true)
                 {
                     if (bot.CurrentZone?.IsDungeon == true)

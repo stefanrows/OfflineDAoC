@@ -181,6 +181,8 @@ public static partial class AutonomousBotGroupCoordinator
         // Bug 75: since when a marching RvR leader stands in another region
         // than the living majority of its group (0 = not split).
         public long LeaderSplitSinceTick;
+        // open BG roster unit: no recruits, no field backfill and no merge while set.
+        public bool OpenBattleground { get; set; }
     }
 
     /// <summary>Population-wide work belongs to one service phase, not every
@@ -1431,6 +1433,8 @@ public static partial class AutonomousBotGroupCoordinator
         GameBot[] available = activeRoster
             .Where(bot => bot.IsAlive && !bot.IsTemporaryGroupHelper && !bot.IsPlayerLedGroup && bot.Group == null && bot.CurrentRegion != null &&
                           !AutonomousRealmRaid.IsReserved(bot) && !bot.InCombat && !bot.IsAttacking && !bot.IsOnStableMasterRoute &&
+                          // The open BG roster owns its crew: a solo of it is never pulled into another party.
+                          !AutonomousBattlegroundParticipation.IsOpenCrew(bot) &&
                           (objectiveKind != eAutonomousObjectiveKind.RvR ||
                            !AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow)) &&
                           AutonomousObjectiveAssignments.Is(bot, objectiveKind))

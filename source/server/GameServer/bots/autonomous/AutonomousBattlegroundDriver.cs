@@ -85,7 +85,9 @@ public static class AutonomousBattlegroundDriver
             if (bot.InCombat) AutonomousBattlegroundParticipation.NoteProgress(bot, eAutonomousProgressKind.Combat);
             return Idle(bot, "crowd_controlled");
         }
-        if (AutonomousBattlegroundParticipation.IsLeaving(bot) && AutonomousBattlegroundParticipation.TryFinishLeaving(bot)) return Idle(bot, "left");
+        // A relieved open-BG bot walks to its own portal keep first; every other leaver goes at once.
+        bool walkingHome = AutonomousBattlegroundParticipation.TryGetReliefWalk(bot, out Point3D home);
+        if (!walkingHome && AutonomousBattlegroundParticipation.IsLeaving(bot) && AutonomousBattlegroundParticipation.TryFinishLeaving(bot)) return Idle(bot, "left");
         BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(bot.CurrentRegionID);
         if (definition == null) return Idle(bot, "outside_battleground");
 
@@ -104,7 +106,12 @@ public static class AutonomousBattlegroundDriver
         if (!engaged)
         {
             GameBot leader = bot.Group?.LivingLeader as GameBot;
-            if (AutonomousBattlegroundParticipation.IsLeaving(bot)) { state.Action = "leaving"; Stand(bot); }
+            if (walkingHome)
+            {
+                state.Action = "relief-walk";
+                if (!GoTo(bot, state, home, now)) AutonomousBattlegroundParticipation.EndReliefWalk(bot);
+            }
+            else if (AutonomousBattlegroundParticipation.IsLeaving(bot)) { state.Action = "leaving"; Stand(bot); }
             else if (leader != null && leader != bot && leader.IsAlive && leader.CurrentRegion == bot.CurrentRegion)
                 Assist(brain, bot, leader, state, now);
             else Lead(brain, bot, definition, state, now);
