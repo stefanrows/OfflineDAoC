@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.244.0] - 2026-10-11
+
+### Fixed
+
+- open BG keep take, from the 0.243.0 run (keep 11 never fell in five
+  cycles, only 10 assault orders): every unit of the attacking realm (8-man,
+  small groups and solos) assaults in push and keep fight, an assault order
+  at the keep always takes the gate march and the door assault once four
+  attackers stand within 1,500 units of the outer gate (`march-gate`,
+  `approach-keep`, `assault-keep`, `AUTONOMOUS_BG_GATE_APPROACH`), the third
+  realm roams at least 3,000 units from the keep during the fight, a wiped
+  attacker returns to the gate after its landing rest, and lurk points are
+  proved from the realm's landing (61 dead-end lurk failures before).
+- Members of the guild that owns keep 11 form their own crew units and never
+  share a unit with others; a mixed unit is split when the keep changes
+  hands (`OPEN_BG_UNIT_SPLIT`). One owner-guild member anywhere in a unit
+  made the whole unit a keep friend under the Camlann group rule, so most
+  attacking units defended instead of attacking ("Bandit Farmers" holds
+  about 11 % of the level-40+ roster across all realms).
+
+### Changed
+
+- Live check of 0.243.0 (07:40–08:04, 20× selected, ~5.5× achieved): crew
+  48 of 54, 89 entries, 0 stuck, 0 exceptions, stragglers 24 (was 97),
+  same-realm crew kills 1 of 705, landing rests end recovered, no world-bot
+  recall to keep 11; the keep fell once in the 0.242.0 run (07:17).
+
 ## [0.243.0] - 2026-10-11
 
 ### Fixed
