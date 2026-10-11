@@ -12,6 +12,19 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.247.0] - 2026-10-11
+
+### Changed
+
+- The open BG landing peace now works like the world hubs in full: each
+  realm's landing circle (5,500) is a safe anchor with a band of 8,000 and
+  the eight-minute departure clock, so crews that leave the landing within
+  minutes of each other do not grind at the circle's edge (0.246.1 run, first
+  five minutes: 114 of 118 same-realm deaths fell just outside the circle,
+  about 6,400 from the landing). Crew bots in region 252 run the battleground
+  driver, so the crossing is observed on the attack check itself. Field,
+  bridges and keep stay free-for-all; still no realm alliance. 4 tests.
+
 ## [0.246.1] - 2026-10-11
 
 ### Fixed

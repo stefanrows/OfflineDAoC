@@ -34,7 +34,7 @@ bridges, solo guides saying "stay off bridges"; keep holes repaired with wood.
 | Quests | campaign commander contracts (already level-scaled) + **Pazz dailies opened to 1–50** with level-scaled rewards |
 | Low levels | **own portal keep is a sanctuary, the field is FFA**; only guest squads hunt players under 30; 40–50 bots attack them only in self-defence |
 | Alliances (09:20) | **no realm affiliation at all, like the rest of the server**: allied only by group, guild or battlegroup (`PvpCombatant.AreAllied`); players of the same realm stay FFA inside; a keep raid is several units in one battlegroup for the cycle ("mehrere groups können strategisch zusammen arbeiten um ein keep zu raiden, aber BITTE keine Realm zugehörigkeit"); the 0.244.0 same-realm crew alliance was wrong and is removed |
-| Landing peace (0.246.0) | the world's same-realm hub peace (a circle, not an alliance) also covers each realm's own landing and arrival camp (5,500); measured: 891 of 1,144 same-realm deaths fell at the camps |
+| Landing peace (0.246.0–0.247.0) | the world's same-realm hub peace (a circle with band and departure clock, not an alliance) also covers each realm's own landing and arrival camp (circle 5,500, band 8,000, 8-minute clock); measured: 891 of 1,144 same-realm deaths fell at the camps, then at the circle's edge |
 | Portal-keep guards (09:20) | stay passive as today; the portal keep is bind-safe only |
 | Pace (09:20) | the measured death rate (~4–5 per minute at 1×) and a keep change every ~20 minutes stay as they are |
 | Setup UI | **launcher tab "open BG"** (writes server properties while the server is stopped) + GM command **`/bgsetup`** (writes the same properties and refreshes live) |

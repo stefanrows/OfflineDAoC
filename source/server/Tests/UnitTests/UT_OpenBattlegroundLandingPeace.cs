@@ -47,6 +47,37 @@ public sealed class UT_OpenBattlegroundLandingPeace
     [Test]
     public void WithoutAWorldThereAreNoLandingsAndNoException()
     {
+        AutonomousHubDeparture.OverrideOpenBgLandings(null);
         Assert.That(AutonomousHubDeparture.OpenBgLandings(), Is.Empty);
+    }
+
+    [Test]
+    public void TheLandingIsASafeAnchorWithABandAndADepartureClock()
+    {
+        AutonomousHubDeparture.OverrideOpenBgLandings(Landings);
+        try
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Midgard, 252, 50500, 27000, out var anchor), Is.True,
+                    "the Midgard camp lies inside the Midgard landing circle");
+                Assert.That(anchor.Radius, Is.EqualTo(AutonomousHubDeparture.OpenBgLandingPeaceRadius));
+                Assert.That(anchor.HubName, Does.Contain("Midgard"));
+                Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Albion, 252, 50500, 27000, out _), Is.False,
+                    "an Albion bot at the Midgard camp has no anchor there");
+                Assert.That(AutonomousHubDeparture.TryGetSafeAnchor(eRealm.Midgard, 252, 54053 + 6_400, 24680, out _), Is.False,
+                    "6,400 out is past the circle: the clock, not the anchor, keeps the peace there");
+                Assert.That(AutonomousHubDeparture.InHubBand(eRealm.Midgard, 252, 54053 + 7_900, 24680), Is.True,
+                    "the band reaches circle + 2,500");
+                Assert.That(AutonomousHubDeparture.InHubBand(eRealm.Midgard, 252, 54053 + 8_100, 24680), Is.False);
+                Assert.That(AutonomousHubDeparture.InHubBand(eRealm.Hibernia, 252, 54053 + 1_000, 24680), Is.False, "other realm");
+                Assert.That(AutonomousHubDeparture.IsOpenBgLandingRegion(252), Is.True);
+                Assert.That(AutonomousHubDeparture.IsOpenBgLandingRegion(238), Is.False);
+            });
+        }
+        finally
+        {
+            AutonomousHubDeparture.OverrideOpenBgLandings(null);
+        }
     }
 }

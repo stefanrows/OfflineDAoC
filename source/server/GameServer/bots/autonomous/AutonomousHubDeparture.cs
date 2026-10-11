@@ -42,6 +42,8 @@ public static class AutonomousHubDeparture
     public static bool TryGetSafeAnchor(eRealm realm, ushort regionId, float x, float y, out SafeAnchor anchor)
     {
         anchor = default;
+        if (TryGetOpenBgLandingAnchor(realm, regionId, x, y, out anchor))
+            return true;
         if (!AutonomousRvrStaging.TryGetBorderKeep(realm, out AutonomousRvrStaging.BorderKeep hub) || hub.RegionId != regionId)
             return false;
         Vector2 point = new(x, y);
@@ -217,9 +219,59 @@ public static class AutonomousHubDeparture
         return false;
     }
 
-    /// <summary>Whether the living stands at its own realm's open BG landing or arrival camp.</summary>
-    public static bool NearOwnOpenBgLanding(GameLiving living) => living?.CurrentRegion != null &&
-        NearOwnLanding(living.CurrentRegionID, living.X, living.Y, living.Realm, OpenBgLandingPeaceRadius, OpenBgLandings());
+    /// <summary>
+    /// The own realm's open BG landing circle containing the point, as a safe anchor: the departure track then
+    /// records when a crew bot leaves it, and the eight-minute clock keeps the peace just outside (0.246.1 run: the
+    /// same-realm grinder had moved to 6,400 from the landing, right past the 5,500 circle, as it once did at the
+    /// world hubs).
+    /// </summary>
+    public static bool TryGetOpenBgLandingAnchor(eRealm realm, ushort regionId, float x, float y, out SafeAnchor anchor)
+    {
+        anchor = default;
+        foreach ((ushort landingRegion, int landingX, int landingY, eRealm landingRealm) in OpenBgLandings())
+        {
+            if (landingRegion != regionId || landingRealm != realm)
+                continue;
+            Vector2 centre = new(landingX, landingY);
+            if (Vector2.Distance(new(x, y), centre) <= OpenBgLandingPeaceRadius)
+            {
+                anchor = new(regionId, centre, OpenBgLandingPeaceRadius, "open BG landing " + realm);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Whether the point lies in the band (circle + <see cref="DepartureBand"/>) of the realm's own open BG landing.</summary>
+    public static bool InOpenBgLandingBand(eRealm realm, ushort regionId, float x, float y) =>
+        NearOwnLanding(regionId, (int)x, (int)y, realm, OpenBgLandingPeaceRadius + DepartureBand, OpenBgLandings());
+
+    /// <summary>Whether the realm has safe anchors in the region: its border hub or the open BG landings.</summary>
+    private static bool HasSafeAnchors(eRealm realm, ushort regionId)
+    {
+        if (AutonomousRvrStaging.TryGetBorderKeep(realm, out AutonomousRvrStaging.BorderKeep hub) && hub.RegionId == regionId)
+            return true;
+        foreach ((ushort landingRegion, _, _, eRealm landingRealm) in OpenBgLandings())
+            if (landingRegion == regionId && landingRealm == realm)
+                return true;
+        return false;
+    }
+
+    /// <summary>Whether the region holds open BG landings (any realm).</summary>
+    public static bool IsOpenBgLandingRegion(ushort regionId)
+    {
+        foreach ((ushort landingRegion, _, _, _) in OpenBgLandings())
+            if (landingRegion == regionId)
+                return true;
+        return false;
+    }
+
+    /// <summary>Tests only: injects the open BG landings (null or empty restores the catalog read).</summary>
+    public static void OverrideOpenBgLandings((ushort Region, int X, int Y, eRealm Realm)[] landings)
+    {
+        Volatile.Write(ref _openBgLandings, landings ?? Array.Empty<(ushort, int, int, eRealm)>());
+        Volatile.Write(ref _openBgLandingsTried, false);
+    }
 
     /// <summary>Per-realm band circles (index = (int)eRealm, 1..3): the keep
     /// circle at 7,500 and each outer landing at its radius + 2,500. Built once;
@@ -269,7 +321,7 @@ public static class AutonomousHubDeparture
 
     /// <summary>Whether a point lies in the hub band of the realm's own border hub.</summary>
     public static bool InHubBand(eRealm realm, ushort regionId, float x, float y) =>
-        InHubBand(HubBandOf(realm), regionId, x, y);
+        InHubBand(HubBandOf(realm), regionId, x, y) || InOpenBgLandingBand(realm, regionId, x, y);
 
     /// <summary>Whether the living stands in its own realm's hub band.</summary>
     public static bool InHubBand(GameLiving living)
@@ -283,7 +335,7 @@ public static class AutonomousHubDeparture
         for (int i = 0; i < band.Length; i++)
             if (band[i].RegionId == regionId)
                 return InHubBand(band, regionId, living.X, living.Y);
-        return false;
+        return InOpenBgLandingBand(living.Realm, regionId, living.X, living.Y);
     }
 
     /// <summary>
@@ -363,12 +415,18 @@ public static class AutonomousHubDeparture
         if (second == first || !IsWorldBot(second) || first.Realm != second.Realm)
             return false;
         realm = first.Realm;
+        // Crew bots in the open BG run the battleground driver, not the world controller's frontier pulse that
+        // observes hub crossings, so the landing crossing is observed here on the attack check itself.
+        if (IsOpenBgLandingRegion(first.CurrentRegionID))
+        {
+            Observe((GameBot)first, nowUtc);
+            Observe((GameBot)second, nowUtc);
+        }
         // Band first (cheap geometry); the clock is read only outside it.
         if (InHubBand(first) || InHubBand(second))
             rule = HubPeaceRule.Band;
         else if (NearOwnBind(first) || NearOwnBind(second) ||
-                 NearOwnCapitalLanding(first) || NearOwnCapitalLanding(second) ||
-                 NearOwnOpenBgLanding(first) || NearOwnOpenBgLanding(second))
+                 NearOwnCapitalLanding(first) || NearOwnCapitalLanding(second))
             rule = HubPeaceRule.Bind;
         else if (RecentlyDeparted((GameBot)first, nowUtc) || RecentlyDeparted((GameBot)second, nowUtc))
             rule = HubPeaceRule.RecentDeparture;
@@ -521,8 +579,7 @@ public static class AutonomousHubDeparture
     public static bool IsDeparting(GameBot bot, DateTime nowUtc, out SafeAnchor from)
     {
         from = default;
-        if (!Applies(bot) || !AutonomousRvrStaging.TryGetBorderKeep(bot.Realm, out AutonomousRvrStaging.BorderKeep hub) ||
-            hub.RegionId != bot.CurrentRegionID)
+        if (!Applies(bot) || !HasSafeAnchors(bot.Realm, bot.CurrentRegionID))
             return false;
         bool inside = TryGetSafeAnchor(bot.Realm, bot.CurrentRegionID, bot.X, bot.Y, out SafeAnchor here);
         (DateTime? left, SafeAnchor? leftFrom) = Tracks.GetOrCreateValue(bot).Observe(inside ? here : null, nowUtc);
