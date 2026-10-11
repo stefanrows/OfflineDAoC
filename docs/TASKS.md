@@ -293,6 +293,24 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+117. **Bigger, sharper Map window (client map pack).** Owner, 2026-10-11:
+     "build a new, better, kickass Map" with the REA findings. Scope chosen:
+     XML and textures only, art rendered from terrain, companions distinct,
+     points of interest, quest givers, and a loc readout. 0.249.0 ships a
+     512 px map window, 498 maps at 512 x 512 (68 terrain renders, the rest
+     upscaled stock), static POI icons and labels baked into the textures,
+     a cyan group-member dot, the Show Quest Givers checkbox, and a loc grid.
+     REA showed that map markers scale with the image control
+     (`FUN_00530328`) and that the map code has no loc adapter. A live loc
+     readout therefore needs a game.dll patch (not done). The quest-giver
+     marker data path was not traced, so the checkbox may show nothing.
+     Pending: real-client checks of the window background stretch, marker
+     placement on the 512 map, cyan group dots, and readability. Follow-ups:
+     per-zone art policy (Agramon/frontier renders fall back to stock),
+     rivers and forests traced from the stock maps, hand-painted names
+     (Tomte Camp, Dergan Island) missing from the DB, new maps for zones
+     73-87 (`--include-new`), and adding the pack to the release.
+
 116. **open BG: a permanently open Thidranki (region 252) for levels 1–50.**
      Owner request 2026-10-11 ~02:00; decisions and design in
      `docs/superpowers/specs/2026-10-11-open-bg-design.md`, plan in

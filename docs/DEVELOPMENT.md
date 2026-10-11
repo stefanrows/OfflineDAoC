@@ -233,6 +233,36 @@ Test texture-tool source with `python tools/test-assets.py --distribution playab
 (or the actual complete-download path). The wrapper resolves the read-only fixtures
 for the source-checkout layout; modifications happen only in temporary test copies.
 
+### Client map pack (512 px Map window)
+
+An optional client file set, built with no game.dll change. It produces
+`ui/{atlantis,isles}/map_window.xml`, `ui/isles/map_icons.tga` with a cyan
+group-member cell at (144,112), and every `ui/maps/*.dds` at 512 x 512 DXT1.
+REA showed that the Map window places markers from the image control's
+runtime size (`FUN_00530328`), so every map texture must match the 512 px
+control. Requires Python 3 with Pillow and numpy.
+
+```bash
+python3 source/server/tools/render_client_maps.py --client <app> \
+  --world-db <opendaoc.sqlite3.db> --output <new maps dir>
+python3 source/server/tools/build_map_client.py --client <app> \
+  --maps <maps dir> --output <new stage dir>
+python3 -m unittest discover -s source/server/tools -p test_map_client.py
+```
+
+The renderer copies the world database and opens the copy read only. It reads
+only static world tables (areas, bind points, keeps, NPC trainers, merchants,
+zone points, teleports); it never reads players, accounts or bots. Zones without
+a zone-wide ground texture keep their stock art (`--terrain-all` overrides that).
+Zones that have no stock map are skipped unless you pass `--include-new`. Install
+with the game, server and launcher closed. The install is a dry run unless you
+pass `-Apply`:
+
+```powershell
+tools\dev\Install-ClientMap.ps1 -InstallRoot D:\Games\OfflineDAoC -Stage <stage> [-Apply]
+tools\dev\Install-ClientMap.ps1 -InstallRoot D:\Games\OfflineDAoC -RestoreBackup <backup>
+```
+
 ## World data, navigation, and customization
 
 Keep the clean world definitions and all current navmeshes available to the LLM.

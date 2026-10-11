@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.249.0] - 2026-10-11
+
+### Added
+
+- A bigger, sharper Map window as an optional client map pack. The map is
+  512 px instead of 256 px, and the window grows to 526 x 731 to fit it.
+  Every zone map is now 512 x 512. The 68 classic Albion, Midgard,
+  Hibernia and Shrouded Isles outdoor zones are re-rendered from the
+  client's own terrain data: the zone ground texture, hillshaded relief,
+  water, forest shading, roads traced from the stock map, town and dungeon
+  names, neighbouring-zone edge labels, icons for bind stones, trainers,
+  merchants, stables, porters, dungeon entrances and keeps (from the static
+  world tables), and a faint loc grid every 8k. All other maps (dungeons,
+  cities, frontiers, area and region maps) are the stock art upscaled.
+  Group members, including companions, now show as a cyan dot that differs
+  from the green world-bot dots. The stock "Show Quest Givers" checkbox is
+  back. Build: `source/server/tools/render_client_maps.py`, then
+  `build_map_client.py`. Install: `tools/dev/Install-ClientMap.ps1`, which
+  does a dry run by default, checks hashes, and keeps a backup for
+  `-RestoreBackup`. `deploy.sh` and the release update pack do not include
+  the map pack. No game.dll change and no server change.
+
 ## [0.248.0] - 2026-10-11
 
 ### Fixed
