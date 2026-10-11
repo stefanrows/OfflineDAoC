@@ -256,7 +256,7 @@ namespace DOL.GS.Commands
             bool rosterTab = session.ShowsCompanions;
             bool activeTab = session.Tab == CompanionManagerTab.Active;
             IReadOnlyList<CompanionManagerEntry> all = !rosterTab ? RecruitEntries(roster)
-                : RosterEntries(activeTab ? roster.Where(record => InPlayerGroup(player, record)) : roster);
+                : RosterEntries(player, activeTab ? roster.Where(record => InPlayerGroup(player, record)) : roster);
             IReadOnlyList<CompanionManagerEntry> filtered = session.Filter(all);
             // Displayed order, ignoring folded sections: default selection and "Invite all" follow it.
             IReadOnlyList<CompanionManagerEntry> companions = session.Arrange(filtered, expandAll: true)
@@ -375,10 +375,12 @@ namespace DOL.GS.Commands
             string search = session.Query.Length == 0
                 ? "[Search] finds a name or class"
                 : $"Search \"{session.Query}\": {filtered.Count} found";
+            int heldHere = roster.Count(record => PlayerCompanionRoster.IsActiveFor(record, player));
+            int heldElsewhere = roster.Count(record => PlayerCompanionRoster.IsReservedByOtherCharacter(record, player));
             view.Status = activeTab
                 ? $"{all.Count} in your group | {search}"
                 : rosterTab
-                ? $"{roster.Count} companions: {roster.Count(record => record.IsActive)} active, {roster.Count(record => !record.IsActive)} on the bench | {search}"
+                ? $"{roster.Count} companions: {heldHere} active{(heldElsewhere > 0 ? ", " + heldElsewhere + " with other characters" : string.Empty)}, {roster.Count - heldHere - heldElsewhere} on the bench | {search}"
                 : $"Story companions and new companions | {search}";
             if (rosterTab && session.RealmAbilityView && !string.IsNullOrEmpty(session.Message))
                 view.Status = session.Message;
@@ -404,7 +406,7 @@ namespace DOL.GS.Commands
         // "Active" means owned and currently live, not "in the owner's own
         // group": a squad companion (task 42) is just as active.
         private static bool InPlayerGroup(GamePlayer player, PlayerCompanionRecord record) =>
-            record.IsActive &&
+            PlayerCompanionRoster.IsActiveFor(record, player) &&
             PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _);
 
         private static string SquadState(PlayerCompanionRecord record) =>
@@ -417,11 +419,18 @@ namespace DOL.GS.Commands
             BotPartyRoles.TryParseRole(saved, out BotPveGroupRole role) ? role
                 : BotPartyRoles.TryParseRole(BotPartyRoles.DefaultPreference(characterClass), out role) ? role : BotPveGroupRole.Attacker;
 
-        private static IReadOnlyList<CompanionManagerEntry> RosterEntries(IEnumerable<PlayerCompanionRecord> roster) =>
-            roster.Select(record => new CompanionManagerEntry(RecordKey(record), (eRealm)record.Realm,
-                (eCharacterClass)record.ClassId, record.Name, record.Level, IsStory(record) ? "Story" : "Regular",
-                record.IsActive ? SquadState(record) : "Bench", record.IsActive, record.IsActive,
-                RoleOf((eCharacterClass)record.ClassId, record.TacticalRole))).ToArray();
+        private static IReadOnlyList<CompanionManagerEntry> RosterEntries(GamePlayer player, IEnumerable<PlayerCompanionRecord> roster) =>
+            roster.Select(record =>
+            {
+                // Reserved for another character: shown as "With <Name>", never as green Active.
+                bool here = PlayerCompanionRoster.IsActiveFor(record, player);
+                string state = here ? SquadState(record)
+                    : PlayerCompanionRoster.IsReservedByOtherCharacter(record, player)
+                        ? "With " + PlayerCompanionRoster.ReservingCharacterName(record, player) : "Bench";
+                return new CompanionManagerEntry(RecordKey(record), (eRealm)record.Realm,
+                    (eCharacterClass)record.ClassId, record.Name, record.Level, IsStory(record) ? "Story" : "Regular",
+                    state, here, here, RoleOf((eCharacterClass)record.ClassId, record.TacticalRole));
+            }).ToArray();
 
         private static CompanionManagerEntry GroupEntry(GamePlayer player) =>
             new(GroupKey, player.Realm, eCharacterClass.Unknown, "Group orders",
@@ -627,8 +636,10 @@ namespace DOL.GS.Commands
                     break;
 
                 default:
-                    lines.Add(new Line(live ? "Status: active in your group." : current.IsActive
-                        ? "Status: active, not currently in the world."
+                    lines.Add(new Line(live ? "Status: active in your group."
+                        : PlayerCompanionRoster.IsReservedByOtherCharacter(current, player)
+                        ? $"Status: grouped with {PlayerCompanionRoster.ReservingCharacterName(current, player)} on another character. Invite moves them here."
+                        : PlayerCompanionRoster.IsActiveFor(current, player) ? "Status: active, not currently in the world."
                         : "Status: benched; keeps level, training, and gear."));
                     lines.Add(new Line(current.Level >= 50
                         ? $"XP: {current.Experience:N0} (maximum level)"
@@ -661,7 +672,7 @@ namespace DOL.GS.Commands
 
             if (session.DetailTab != CompanionManagerDetailTab.Gear)
             {
-                choices.Insert(0, live || current.IsActive
+                choices.Insert(0, live || PlayerCompanionRoster.IsActiveFor(current, player)
                     ? new Choice("[Bench]", true, "bench", () => Report(player, session,
                         Run(PlayerCompanionRoster.TryBench, player, id)))
                     : new Choice("[Invite]", true, "invite", () => Report(player, session,
@@ -748,10 +759,12 @@ namespace DOL.GS.Commands
 
             string[] benched = shown
                 .Select(entry => roster.FirstOrDefault(record => RecordKey(record) == entry.Key))
-                .Where(record => record != null && !PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
+                .Where(record => record != null && !PlayerCompanionRoster.IsReservedByOtherCharacter(record, player) &&
+                                !PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
                 .Select(record => record.CompanionId).ToArray();
             string[] active = roster
-                .Where(record => record.IsActive || PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
+                .Where(record => PlayerCompanionRoster.IsActiveFor(record, player) ||
+                                 PlayerCompanionRoster.TryGetActiveCompanionById(player, record.CompanionId, out _))
                 .Select(record => record.CompanionId).ToArray();
             bool grinding = PlayerCompanionGrind.IsActive(player);
             AddText(lines, "[Pull] sends your companions after your current target, like /pull.");

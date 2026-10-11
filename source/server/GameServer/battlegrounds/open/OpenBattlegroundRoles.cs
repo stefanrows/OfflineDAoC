@@ -6,8 +6,13 @@ namespace DOL.GS
 {
     public enum OpenBgRole { BridgeWatch, Roam, Lurk, Assault, Defend, Retreat }
 
-    /// <summary>What a roster unit's role depends on: the cycle, its realm and the size of the group it plays as.</summary>
-    public readonly record struct OpenBgContext(OpenBgPhase Phase, eRealm Attacker, eRealm Owner, eRealm Realm, int GroupSize, bool IsLeaderOfGroup);
+    /// <summary>
+    /// What a roster unit's role depends on: the cycle's phase, whether the unit is in this cycle's keep raid, whether
+    /// the keep counts it as a friend (its claiming guild or alliance; the raid while the lord lies defeated), and the
+    /// size of the group it plays as. <paramref name="Realm"/> is geography only (its own bridge and landing); no role
+    /// depends on a realm (owner decision 2026-10-11: alliances in the open BG are group, guild and battlegroup).
+    /// </summary>
+    public readonly record struct OpenBgContext(OpenBgPhase Phase, bool IsRaid, bool IsKeepFriend, eRealm Realm, int GroupSize, bool IsLeaderOfGroup);
 
     /// <summary>A bridge of the open BG map: its log name, the realm whose side it faces, and its deck floor.</summary>
     public readonly record struct BridgePoint(string Name, eRealm Realm, Point3D Point);
@@ -15,8 +20,8 @@ namespace DOL.GS
     /// <summary>
     /// Pure role rules of the open BG (spec 2026-10-11 §6). Roles belong to a roster unit (a group or a solo); a group's
     /// members follow their leader, so <see cref="OpenBgContext.IsLeaderOfGroup"/> only marks who the role was decided
-    /// for (a member whose leader is down plays the same role). Every rule is a function of the phase, the realm, the
-    /// keep owner, the group size, the bridges and the human positions; the director applies them.
+    /// for (a member whose leader is down plays the same role). Every rule is a function of the phase, the raid, the
+    /// keep's friendship, the group size, the bridges and the human positions; the director applies them.
     /// </summary>
     public static class OpenBattlegroundRoles
     {
@@ -44,37 +49,45 @@ namespace DOL.GS
         });
 
         /// <summary>
-        /// The third realm keeps at least this far (2D) from the keep while it is fought over, so the keep fight is the
-        /// attacker against the owner (live run 0.243.0: the third realm roamed within 3,600 and ground the attack down).
+        /// Bystanders (units neither in the raid nor friends of the keep) keep at least this far (2D) from the keep while
+        /// it is fought over, so the keep fight is the raid against the keep's friends (live run 0.243.0: the third realm
+        /// roamed within 3,600 and ground the attack down).
         /// </summary>
-        public const int ThirdRealmKeepDistance = 3_000;
+        public const int BystanderKeepDistance = 3_000;
 
         /// <summary>
         /// The role of one unit. Quiet: the realm's first group watches its own bridge, its other groups roam the field.
-        /// Push: every unit of the attacking realm (its 8-man, small groups and solos) assaults; each musters at the
-        /// realm's bridge first, then marches on the keep; the others keep their quiet posts. Keep fight: the owner's
-        /// groups defend, every attacking unit assaults (solos and small groups join the siege as helpers), the third
-        /// realm roams away from the keep. Retreat: the owner holds, a failed attacker walks home, everyone else roams.
-        /// Other solos lurk off a bridge in quiet and push and roam afterwards. A realm that owns the keep never assaults it.
+        /// Push: every raid unit (8-man, small groups and solos, of any realm) assaults; it musters at its own realm's
+        /// bridge first, then marches on the keep, where the raid gathers at the gate; the others keep their quiet posts. Keep fight: the keep's friends defend (their
+        /// solos roam), every raid unit assaults (solos and small groups join the siege as helpers), bystanders roam away
+        /// from the keep. Retreat: the friends hold, a raid that failed walks home, everyone else roams. Other solos lurk
+        /// off a bridge in quiet and push and roam afterwards. A keep friend never assaults the keep, even in the raid.
         /// </summary>
         public static OpenBgRole Assign(OpenBgContext ctx, int groupIndexInRealm)
         {
-            bool owner = ctx.Owner != eRealm.None && ctx.Realm == ctx.Owner;
-            bool attacker = ctx.Realm == ctx.Attacker && !owner;
+            bool friend = ctx.IsKeepFriend;
+            bool raid = ctx.IsRaid && !friend;
             if (ctx.GroupSize <= 1)
             {
-                if (attacker && ctx.Phase is OpenBgPhase.Push or OpenBgPhase.KeepFight) return OpenBgRole.Assault;
+                if (raid && ctx.Phase is OpenBgPhase.Push or OpenBgPhase.KeepFight) return OpenBgRole.Assault;
                 return ctx.Phase is OpenBgPhase.Quiet or OpenBgPhase.Push ? OpenBgRole.Lurk : OpenBgRole.Roam;
             }
             OpenBgRole quiet = groupIndexInRealm <= 0 ? OpenBgRole.BridgeWatch : OpenBgRole.Roam;
             return ctx.Phase switch
             {
                 OpenBgPhase.Quiet => quiet,
-                OpenBgPhase.Push => attacker ? OpenBgRole.Assault : quiet,
-                OpenBgPhase.KeepFight => owner ? OpenBgRole.Defend : attacker ? OpenBgRole.Assault : OpenBgRole.Roam,
-                _ => owner ? OpenBgRole.Defend : attacker ? OpenBgRole.Retreat : OpenBgRole.Roam,
+                OpenBgPhase.Push => raid ? OpenBgRole.Assault : quiet,
+                OpenBgPhase.KeepFight => friend ? OpenBgRole.Defend : raid ? OpenBgRole.Assault : OpenBgRole.Roam,
+                _ => friend ? OpenBgRole.Defend : raid ? OpenBgRole.Retreat : OpenBgRole.Roam,
             };
         }
+
+        /// <summary>
+        /// Whether the roles treat a unit as a friend of the keep: its claiming guild or alliance; and, once the lord fell
+        /// in the keep fight or retreat and nobody has claimed it yet, the raid, which holds the field until a claim.
+        /// </summary>
+        public static bool ActsAsKeepFriend(bool keepFriend, bool inRaid, bool lordDefeatedUnclaimed, OpenBgPhase phase) =>
+            keepFriend || inRaid && lordDefeatedUnclaimed && phase is OpenBgPhase.KeepFight or OpenBgPhase.Retreat;
 
         /// <summary>
         /// Camlann keeps are friendly by guild, not realm: a unit the keep counts as a friend (its guild or alliance, or
@@ -138,9 +151,30 @@ namespace DOL.GS
         public static Point3D[] FieldAwayFromKeep(Point3D[] fieldPoints, IReadOnlyList<BridgePoint> bridges, Point3D keep, int keepDistance) =>
             FieldAwayFromBridges(fieldPoints, bridges).Where(point => keep == null || Distance2D(point, keep) >= keepDistance).ToArray();
 
-        /// <summary>The realm that neither owns the keep nor attacks it, while the keep is fought over.</summary>
-        public static bool IsThirdRealmInFight(OpenBgPhase phase, eRealm realm, eRealm owner, eRealm attacker) =>
-            phase == OpenBgPhase.KeepFight && realm != owner && realm != attacker;
+        /// <summary>
+        /// Keep 11's static archers aggro at 2,100 and its static casters at 1,850, and they stand up to 1,260 from
+        /// the keep centre (3,200 reach with line of sight; melee guards only 1,000), so a unit the guards count as an
+        /// enemy holds the approaches this far (2D) from the keep centre and no nearer.
+        /// </summary>
+        public const int ApproachMinDistance = 3_400;
+        /// <summary>The approaches end here (the bridges lie 4,600-5,800 out): a field point farther out no longer covers the keep.</summary>
+        public const int ApproachMaxDistance = 4_400;
+
+        /// <summary>Field points between <see cref="ApproachMinDistance"/> and <see cref="ApproachMaxDistance"/> (2D) of the keep.</summary>
+        public static Point3D[] ApproachPoints(Point3D[] fieldPoints, Point3D keep) =>
+            (fieldPoints ?? Array.Empty<Point3D>()).Where(point => point != null && keep != null &&
+                Distance2D(point, keep) >= ApproachMinDistance && Distance2D(point, keep) <= ApproachMaxDistance).ToArray();
+
+        /// <summary>
+        /// After a raid guild claimed the keep in the fight (or the retreat), the raid's other units (not friends of the
+        /// keep, whose guards still count them as enemies) defend from the approaches instead of walking off as bystanders.
+        /// </summary>
+        public static bool RaidPartnerHolds(bool raidTookKeep, bool inRaidList, bool keepFriend) =>
+            raidTookKeep && inRaidList && !keepFriend;
+
+        /// <summary>A unit neither in the raid nor a friend of the keep, while the keep is fought over.</summary>
+        public static bool IsBystanderInFight(OpenBgPhase phase, bool isRaid, bool isKeepFriend) =>
+            phase == OpenBgPhase.KeepFight && !isRaid && !isKeepFriend;
 
         /// <summary>
         /// An assaulting unit musters at its bridge only in the push and only once per cycle. In the keep fight it never

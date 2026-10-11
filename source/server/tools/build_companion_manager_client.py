@@ -887,7 +887,7 @@ def main():
     main_xml = (args.client / "ui/uimain.xml").read_bytes()
     if b"custom8_window.xml" in main_xml or b"custom7_window.xml" in main_xml or b"</XML>" not in main_xml:
         parser.error("Unexpected UI include state")
-    # The manager-only UI (0.169.0) and the manager plus COMPANIONS window (0.248.0) differ only in the include list.
+    # The manager-only UI (0.169.0) and the manager plus COMPANIONS window (0.251.0) differ only in the include list.
     manager_only = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n</XML>")
     output_main = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n"
                                    b"\t<Include>custom7_window.xml</Include>\r\n</XML>")

@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # Installs the staged Companion Manager client files (game.dll, ui/uimain.xml, Atlantis and Isles
-# custom8_window.xml, and since 0.248.0 the COMPANIONS window's Atlantis and Isles custom7_window.xml)
+# custom8_window.xml, and since 0.251.0 the COMPANIONS window's Atlantis and Isles custom7_window.xml)
 # built by source/server/tools/build_companion_manager_client.py. Dry run by default.
 # An installation that already has an earlier manager build (0.32.1, 0.33.0 through 0.169.0, or the
 # manager-only UI) is upgraded in place: game.dll, uimain.xml and the window files are backed up and

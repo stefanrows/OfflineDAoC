@@ -126,6 +126,14 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false)]
         public bool IsSquadLeader { get; set; }
 
+        // Additive per-character group reservation. Saved active for an owner, it holds the
+        // owner character's ObjectId: the companion stays active for that character only and
+        // other characters on the account neither restore nor bench it. Empty (or NULL on
+        // rows saved before this column) means unclaimed: the first character to log in
+        // claims it. Benched records keep the character they last grouped with.
+        [DataElement(AllowDbNull = true, Varchar = 255)]
+        public string LastGroupedCharacterId { get; set; } = string.Empty;
+
         [DataElement(AllowDbNull = false)]
         public int AppearanceSize { get; set; }
 

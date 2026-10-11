@@ -299,7 +299,7 @@ Agent sessions on items 45–48: take the role and context from
      appears only while an owned companion is with the player, has the eight
      member rows, is silent except for PULL and refusals, and is switched per
      account by `/companions bar on|off` and the Group orders panel. Implemented
-     in source **0.248.0** (offline only): Custom7 window `0x74` (ops 5/6, 74
+     in source **0.251.0** (offline only): Custom7 window `0x74` (ops 5/6, 74
      label adapters 440-513, controls 0xA8-0xBF, the stock SelectGroupMember
      rows), server `CompanionBar`, installer and release-pack upgrade paths.
      Real-client checks pending (see docs/COMPANION_MANAGER_INTEGRATION.md,
@@ -307,6 +307,24 @@ Agent sessions on items 45–48: take the role and context from
      persistence, native group adapters and empty-row drawing, row click
      targeting from the window, tile look and label fit, the 0.169.0 upgrade
      through the installer, and the manager with 514 adapters.
+
+117. **Bigger, sharper Map window (client map pack).** Owner, 2026-10-11:
+     "build a new, better, kickass Map" with the REA findings. Scope chosen:
+     XML and textures only, art rendered from terrain, companions distinct,
+     points of interest, quest givers, and a loc readout. 0.249.0 ships a
+     512 px map window, 498 maps at 512 x 512 (68 terrain renders, the rest
+     upscaled stock), static POI icons and labels baked into the textures,
+     a cyan group-member dot, the Show Quest Givers checkbox, and a loc grid.
+     REA showed that map markers scale with the image control
+     (`FUN_00530328`) and that the map code has no loc adapter. A live loc
+     readout therefore needs a game.dll patch (not done). The quest-giver
+     marker data path was not traced, so the checkbox may show nothing.
+     Pending: real-client checks of the window background stretch, marker
+     placement on the 512 map, cyan group dots, and readability. Follow-ups:
+     per-zone art policy (Agramon/frontier renders fall back to stock),
+     rivers and forests traced from the stock maps, hand-painted names
+     (Tomte Camp, Dergan Island) missing from the DB, new maps for zones
+     73-87 (`--include-new`), and adding the pack to the release.
 
 116. **open BG: a permanently open Thidranki (region 252) for levels 1–50.**
      Owner request 2026-10-11 ~02:00; decisions and design in
@@ -324,22 +342,48 @@ Agent sessions on items 45–48: take the role and context from
      Live on the owner's server at 20× since 03:10 (stage 1) and from the
      0.242.0 deploy (stages 2–4). Pending: real-client checks (porter line,
      landing, keep 11 render, `/bgsetup` window, launcher tab, guest squad
-     for a character under 40, Pazz at level 50) and the owner's two
-     decisions: portal-keep guards attacking intruders inside the portal
-     keeps, and same-realm hostility inside the open BG (Camlann FFA today).
+     for a character under 40, Pazz at level 50). Owner decisions 09:20:
+     no realm affiliation inside the open BG (group, guild, battlegroup only,
+     keep raids are battlegroups; the 0.244.0 same-realm alliance removed in
+     0.245.0), players FFA, portal-keep guards passive, pace stays.
      Live on the owner's server 2026-10-11: 0.241.0 (03:10, stage 1),
      0.242.0 (06:37, stages 2–4), 0.243.0 (07:40, two live fix rounds), all
      at world speed 20×. 0.243.0 measurement (07:40–08:04, ~5.5× achieved):
      crew 48 of 54 setup, 89 entries, 0 stuck, 0 exceptions, stragglers 24
      per 23 min (0.242.0: 97), same-realm crew kills 1 of 705
-     (`open_bg_realm_crews_allied`), landing rests end recovered, no
-     world-bot recall to keep 11, five phase cycles with roles assigned.
+     (same-realm crew alliance, removed again in 0.245.0), landing rests
+     end recovered, no world-bot recall to keep 11, five phase cycles with
+     roles assigned.
      Open: the keep fell once (0.242.0, 07:17) but not in the 0.243.0
      cycles: the attacking 8-man dies to the owner crew plus 18 guards;
      `AUTONOMOUS_BG_GATE_APPROACH` never logged (assault branch not
      reached); 705 crew deaths in 23 min around the keep; lurk points hit
      dead-end floors (61). A fixer for the keep take (all attacking units
      assault, gate march, lurk snap) was started at 08:15.
+     0.246.0–0.248.0 (11:38–12:59, 20×, ~7–9× achieved): landing peace
+     (0.246.0 never applied: retry-clock overflow, fixed 0.246.1; 0.246.1
+     moved the grinder to the circle's edge; 0.247.0 made the landing a full
+     hub anchor with band and departure clock) cut same-realm crew deaths
+     from 1,495 of 1,662 to 61 of 801, all on the field; crew fixes 0.248.0
+     (board only at the minimum, short cooldown after below-minimum relief,
+     `OPEN_BG_FORM_FAILED`) brought the crew to 48 of 54 with every realm's
+     8-man present (0.246.0: 33). 0.248.0 window (20 min): 773 deaths of
+     which 42 same-realm, keep 11 claimed 11 times, lord down 6, 0
+     exceptions, 0 stuck in 252, 18 below-minimum reliefs, 27 form-failed
+     lines (Midgard pool 2: 308 candidates in keep defense or raid).
+     Follow-ups: allied raid guilds still claim keep 11 over each other
+     within seconds (4 claims in 37 s); Midgard's 40+ pool is mostly bound
+     in guild keep defense; bug 154 egress loop; realm enum aliases in logs.
+     0.245.0 (deployed 11:04, 20×, ~7× achieved, 11:05–11:31): raids form
+     at the push and top up (5–6 units, 13–22 bots, all three realms mixed),
+     keep 11 claimed 8 times (4 of them within 19 s by partner guilds of one
+     raid: the claim flips between allies, follow-up), lord down 2, 0
+     exceptions, 0 stuck in 252, 1,342 crew deaths of which 1,144 same-realm
+     and 891 at the arrival camps 4,000–5,000 from the landings (0.246.0:
+     landing peace), crew inside 31 of 44 assigned (setup 54), egress
+     recovery loop (bug 154) 401 lines. Follow-ups: allied raid guilds must
+     not claim over each other; crew refill; realm enum aliases print as
+     `_FirstPlayerRealm` in logs.
      0.244.0 (deployed 08:39, 20×, ~5.4× achieved, 08:40–09:04): the keep
      take works: `lord_down=True` 4 times, `KEEP_CLAIMED keep=11` 6 times
      (Albion, Midgard and Hibernia guilds in turn),

@@ -55,7 +55,7 @@ def main():
     p.add_argument('--server-build', default=str(REPO / 'source/server/Release'))
     p.add_argument('--launcher-build', default=str(REPO / 'source/tools/OfflineDaoc.Launcher/bin/Release/net10.0-windows'))
     p.add_argument('--navmesh-dir', help='default: <install-root>/runtime/server/pathing')
-    p.add_argument('--companion-stage', help='default: <install-root>-dev/companion-manager-stage-0.248.0')
+    p.add_argument('--companion-stage', help='default: <install-root>-dev/companion-manager-stage-0.251.0')
     p.add_argument('--raid-stage', help='default: <install-root>-dev/raid-click-fix-stage-0.33.0')
     p.add_argument('--output', required=True, help='new folder outside the installation')
     a = p.parse_args()
@@ -75,7 +75,7 @@ def main():
     server = pathlib.Path(a.server_build)
     launcher = pathlib.Path(a.launcher_build)
     navmesh = pathlib.Path(a.navmesh_dir) if a.navmesh_dir else install / 'runtime/server/pathing'
-    companion = pathlib.Path(a.companion_stage) if a.companion_stage else dev / 'companion-manager-stage-0.248.0'
+    companion = pathlib.Path(a.companion_stage) if a.companion_stage else dev / 'companion-manager-stage-0.251.0'
     raid = pathlib.Path(a.raid_stage) if a.raid_stage else dev / 'raid-click-fix-stage-0.33.0'
 
     entries = []  # (relative path, source, guard, allowed)

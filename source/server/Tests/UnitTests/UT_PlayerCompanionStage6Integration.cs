@@ -64,6 +64,7 @@ public sealed class UT_PlayerCompanionStage6Integration
         private ushort _regionId;
         private ICharacterClass _characterClass;
         private long _experience;
+        private GameClient _client;
 
         private Owner() : base(null, null) { }
 
@@ -74,6 +75,7 @@ public sealed class UT_PlayerCompanionStage6Integration
         public override IPacketLib Out => DispatchProxy.Create<IPacketLib, NoOpPacketLib>();
         public override ushort CurrentRegionID { get => _regionId; set => _regionId = value; }
         public override ICharacterClass CharacterClass => _characterClass ?? new ClassCleric();
+        public override GameClient Client => _client;
         public void Configure(string id, eRealm realm, ushort region = 65000, ICharacterClass characterClass = null)
         {
             InternalID = id;
@@ -783,6 +785,251 @@ public sealed class UT_PlayerCompanionStage6Integration
         Assert.That(CompanionEngagementMode.TryGetGroupOrder(owner, out _), Is.False);
         ClickLink(owner, session, "  Active Cleric: aggressive");
         Assert.That(session.Roster.SelectedKey, Is.EqualTo("c:" + active.CompanionId), "A member line opens that companion");
+    }
+
+    // Per-character groups: companions belong to the account, but an active companion is reserved
+    // for the character it was last grouped with (LastGroupedCharacterId).
+    [Test]
+    public void ActiveCompanionIsReservedForTheCharacterItWasLastGroupedWith()
+    {
+        DbCoreCharacter main = NewCharacter("Main");
+        DbCoreCharacter alt = NewCharacter("Alt");
+        Owner mainOwner = NewAccountOwner(main, main, alt);
+        Owner altOwner = NewAccountOwner(alt, main, alt);
+        PlayerCompanionRecord legacy = NewRecord(main.ObjectId, "legacy-active", "Legacy Active", eCharacterClass.Cleric);
+        legacy.IsActive = true;
+        PlayerCompanionRecord held = NewRecord(main.ObjectId, "held-by-main", "Held Cleric", eCharacterClass.Cleric);
+        held.IsActive = true;
+        held.LastGroupedCharacterId = main.ObjectId;
+        PlayerCompanionRecord benched = NewRecord(main.ObjectId, "benched-by-main", "Benched Cleric", eCharacterClass.Cleric);
+        benched.LastGroupedCharacterId = main.ObjectId;
+        PlayerCompanionRecord orphan = NewRecord(main.ObjectId, "held-by-deleted", "Orphan Cleric", eCharacterClass.Cleric);
+        orphan.IsActive = true;
+        orphan.LastGroupedCharacterId = "character-not-on-this-account";
+        Assert.That(_database.AddObject(legacy) && _database.AddObject(held) && _database.AddObject(benched) &&
+            _database.AddObject(orphan), Is.True);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PlayerCompanionRoster.IsActiveFor(legacy, mainOwner), Is.True, "An unclaimed active companion counts for the character that logs in");
+            Assert.That(PlayerCompanionRoster.IsActiveFor(legacy, altOwner), Is.True);
+            Assert.That(PlayerCompanionRoster.IsReservedByOtherCharacter(legacy, altOwner), Is.False);
+            Assert.That(PlayerCompanionRoster.IsActiveFor(held, mainOwner), Is.True);
+            Assert.That(PlayerCompanionRoster.IsActiveFor(held, altOwner), Is.False);
+            Assert.That(PlayerCompanionRoster.IsReservedByOtherCharacter(held, altOwner), Is.True);
+            Assert.That(PlayerCompanionRoster.IsReservedByOtherCharacter(held, mainOwner), Is.False);
+            Assert.That(PlayerCompanionRoster.RosterStateLabel(held, mainOwner), Is.EqualTo("active"));
+            Assert.That(PlayerCompanionRoster.RosterStateLabel(held, altOwner), Is.EqualTo("with Main"),
+                "The holder's name comes from the account's characters");
+            Assert.That(PlayerCompanionRoster.IsReservedByOtherCharacter(benched, altOwner), Is.False,
+                "A benched companion holds no reservation");
+            Assert.That(PlayerCompanionRoster.RosterStateLabel(benched, altOwner), Is.EqualTo("benched"));
+            Assert.That(PlayerCompanionRoster.RosterStateLabel(orphan, mainOwner), Is.EqualTo("with Other char"),
+                "A holder that is not on this account falls back to Other char");
+        });
+    }
+
+    [Test]
+    public void RestoreCandidatesHoldOnlyTheLoggingInCharactersReservationsSquadsFirst()
+    {
+        DbCoreCharacter main = NewCharacter("Main");
+        DbCoreCharacter alt = NewCharacter("Alt");
+        Owner mainOwner = NewAccountOwner(main, main, alt);
+        Owner altOwner = NewAccountOwner(alt, main, alt);
+        PlayerCompanionRecord mainSquad = AddReserved(main.ObjectId, "Main Squad", main.ObjectId, squadIndex: 2, leader: true);
+        PlayerCompanionRecord mainOwn = AddReserved(main.ObjectId, "Main Own", main.ObjectId);
+        PlayerCompanionRecord altOwn = AddReserved(alt.ObjectId, "Alt Own", alt.ObjectId);
+        PlayerCompanionRecord altReserved = AddReserved(main.ObjectId, "Alt Reserved", alt.ObjectId);
+
+        Assert.That(PlayerCompanionRoster.TryGetRoster(mainOwner, out List<PlayerCompanionRecord> mainRoster), Is.True);
+        Assert.That(PlayerCompanionRoster.TryGetRoster(altOwner, out List<PlayerCompanionRecord> altRoster), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(PlayerCompanionRoster.RestoreCandidates(mainOwner, mainRoster).Select(record => record.CompanionId),
+                Is.EqualTo(new[] { mainSquad.CompanionId, mainOwn.CompanionId }),
+                "The first login restores its own reservations, squad first, and never another character's");
+            Assert.That(PlayerCompanionRoster.RestoreCandidates(altOwner, altRoster).Select(record => record.CompanionId),
+                Is.EquivalentTo(new[] { altOwn.CompanionId, altReserved.CompanionId }));
+        });
+    }
+
+    [Test]
+    public void LegacyActiveCompanionIsClaimedByTheFirstLoginOnlyOnce()
+    {
+        DbCoreCharacter main = NewCharacter("Main");
+        DbCoreCharacter alt = NewCharacter("Alt");
+        Owner mainOwner = NewAccountOwner(main, main, alt);
+        Owner altOwner = NewAccountOwner(alt, main, alt);
+        PlayerCompanionRecord legacy = NewRecord(main.ObjectId, "legacy-claim", "Legacy Claim", eCharacterClass.Cleric);
+        legacy.IsActive = true;
+        Assert.That(_database.AddObject(legacy), Is.True);
+
+        Assert.That(PlayerCompanionRoster.TryGetRoster(mainOwner, out List<PlayerCompanionRecord> beforeLogin), Is.True);
+        Assert.That(PlayerCompanionRoster.RestoreCandidates(mainOwner, beforeLogin), Has.Count.EqualTo(1));
+
+        // A successful restore saves the companion active for the character that restored it.
+        Assert.That(PlayerCompanionRoster.SaveBotState(NewCompanion(mainOwner, beforeLogin.Single(), eRealm.Albion),
+            active: true), Is.True);
+
+        Assert.That(PlayerCompanionRoster.TryGetRoster(altOwner, out List<PlayerCompanionRecord> afterClaim), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterClaim.Single().LastGroupedCharacterId, Is.EqualTo(main.ObjectId));
+            Assert.That(PlayerCompanionRoster.RestoreCandidates(altOwner, afterClaim), Is.Empty,
+                "The second character does not restore the companion the first one claimed");
+            Assert.That(PlayerCompanionRoster.RestoreCandidates(mainOwner, afterClaim).Select(record => record.CompanionId),
+                Is.EqualTo(new[] { legacy.CompanionId }));
+        });
+    }
+
+    [Test]
+    public void InvitingAReservedCompanionFromTheOtherCharacterMovesAndRestampsIt()
+    {
+        DbCoreCharacter main = NewCharacter("Main");
+        DbCoreCharacter alt = NewCharacter("Alt");
+        Owner mainOwner = NewAccountOwner(main, main, alt);
+        Owner altOwner = NewAccountOwner(alt, main, alt);
+        AddReserved(main.ObjectId, "Takeover Cleric", main.ObjectId);
+
+        Assert.That(PlayerCompanionRoster.TryGetRoster(altOwner, out List<PlayerCompanionRecord> beforeInvite), Is.True);
+        PlayerCompanionRecord reserved = beforeInvite.Single();
+        Assert.That(PlayerCompanionRoster.IsReservedByOtherCharacter(reserved, altOwner), Is.True);
+
+        // A failed invite from outside the world must not take the reservation away from Main.
+        Assert.That(PlayerCompanionRoster.TryInvite(altOwner, reserved.CompanionId, out string refused), Is.False);
+        Assert.That(refused, Does.Contain("in the world"));
+        Assert.That(_database.SelectObjects<PlayerCompanionRecord>(
+            DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(reserved.CompanionId)).Single()
+            .LastGroupedCharacterId, Is.EqualTo(main.ObjectId));
+
+        // A successful invite saves the companion active for the character that invited it.
+        Assert.That(PlayerCompanionRoster.SaveBotState(NewCompanion(altOwner, reserved, eRealm.Albion), active: true),
+            Is.True);
+
+        Assert.That(PlayerCompanionRoster.TryGetRoster(mainOwner, out List<PlayerCompanionRecord> afterInvite), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterInvite.Single().LastGroupedCharacterId, Is.EqualTo(alt.ObjectId));
+            Assert.That(afterInvite.Single().IsActive, Is.True);
+            Assert.That(PlayerCompanionRoster.RestoreCandidates(mainOwner, afterInvite), Is.Empty,
+                "The companion moved: the first character no longer restores it");
+            Assert.That(PlayerCompanionRoster.RestoreCandidates(altOwner, afterInvite).Select(record => record.CompanionId),
+                Is.EqualTo(new[] { reserved.CompanionId }));
+        });
+    }
+
+    [Test]
+    public void BenchResetAndSquadEditsFromTheOtherCharacterLeaveItsReservationAlone()
+    {
+        DbCoreCharacter main = NewCharacter("Main");
+        DbCoreCharacter alt = NewCharacter("Alt");
+        Owner mainOwner = NewAccountOwner(main, main, alt);
+        Owner altOwner = NewAccountOwner(alt, main, alt);
+        PlayerCompanionRecord reserved = AddReserved(main.ObjectId, "Held Squad", main.ObjectId,
+            squadIndex: 2, leader: true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PlayerCompanionRoster.TryBench(altOwner, reserved.CompanionId, out string benchMessage), Is.False);
+            Assert.That(benchMessage, Does.Contain("grouped with Main"));
+            Assert.That(PlayerCompanionRoster.TryReset(altOwner, reserved.CompanionId, out string resetMessage), Is.False);
+            Assert.That(resetMessage, Does.Contain("grouped with Main"));
+            Assert.That(PlayerCompanionRoster.TrySquadRemove(altOwner, 2, reserved.CompanionId, out string removeMessage), Is.False);
+            Assert.That(removeMessage, Does.Contain("grouped with Main"));
+            Assert.That(PlayerCompanionRoster.FormatSquadList(altOwner), Does.Contain("Squad 2: Held Squad (leader, with Main)"),
+                "Viewing the squads from the other character names the holder");
+        });
+
+        PlayerCompanionRecord stored = _database.SelectObjects<PlayerCompanionRecord>(
+            DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(reserved.CompanionId)).Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.IsActive, Is.True);
+            Assert.That(stored.LastGroupedCharacterId, Is.EqualTo(main.ObjectId));
+            Assert.That(stored.SquadIndex, Is.EqualTo(2));
+            Assert.That(stored.IsSquadLeader, Is.True);
+        });
+    }
+
+    [Test]
+    public void SquadDisbandFromTheOtherCharacterKeepsItsReservedMembersInTheirSquad()
+    {
+        DbCoreCharacter main = NewCharacter("Main");
+        DbCoreCharacter alt = NewCharacter("Alt");
+        Owner altOwner = NewAccountOwner(alt, main, alt);
+        PlayerCompanionRecord reserved = AddReserved(main.ObjectId, "Disband Held", main.ObjectId, squadIndex: 2);
+        PlayerCompanionRecord altBench = AddReserved(alt.ObjectId, "Disband Bench", alt.ObjectId,
+            squadIndex: 2, active: false);
+
+        Assert.That(PlayerCompanionRoster.TrySquadDisband(altOwner, 2, out string message), Is.True, message);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(message, Does.Contain("kept their squad"));
+            Assert.That(_database.SelectObjects<PlayerCompanionRecord>(
+                DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(reserved.CompanionId)).Single().SquadIndex,
+                Is.EqualTo(2));
+            Assert.That(_database.SelectObjects<PlayerCompanionRecord>(
+                DB.Column(nameof(PlayerCompanionRecord.CompanionId)).IsEqualTo(altBench.CompanionId)).Single().SquadIndex,
+                Is.Zero);
+        });
+    }
+
+    [Test]
+    public void CompanionManagerNamesTheCharacterHoldingACompanionInsteadOfShowingItActive()
+    {
+        DbCoreCharacter main = NewCharacter("Main");
+        DbCoreCharacter alt = NewCharacter("Alt");
+        Owner altOwner = NewAccountOwner(alt, main, alt);
+        PlayerCompanionRecord held = AddReserved(main.ObjectId, "Held Cleric", main.ObjectId);
+        AddReserved(alt.ObjectId, "Bench Friar", alt.ObjectId, active: false);
+
+        CompanionManager.Open(altOwner);
+        CompanionManager.TryGetSession(altOwner, out CompanionManagerSession session);
+        int row = Array.IndexOf(session.RowKeys, "c:" + held.CompanionId);
+        string Label(int offset) => session.SentLabels[CompanionManagerProtocol.LabelRowBase + row * CompanionManagerProtocol.RowStride + offset];
+        Assert.Multiple(() =>
+        {
+            Assert.That(row, Is.GreaterThan(0));
+            Assert.That(Label(CompanionManagerProtocol.RowStateIdle), Is.EqualTo("With Main"));
+            Assert.That(Label(CompanionManagerProtocol.RowStateActive), Is.Empty, "Not drawn as an active companion");
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelStatus],
+                Does.StartWith("2 companions: 0 active, 1 with other characters, 1 on the bench"));
+        });
+
+        Click(altOwner, session, CompanionManagerProtocol.ControlRowBase + row);
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.SentLabels[CompanionManagerProtocol.LabelActionBase], Is.EqualTo("[Invite]"),
+                "Invite moves the companion to this character");
+            Assert.That(session.SentLabels.Any(label => label != null && label.StartsWith("Status: grouped with Main")), Is.True);
+        });
+    }
+
+    private static DbCoreCharacter NewCharacter(string name) => new() { Name = name };
+
+    // An owner whose account holds the given characters, as GameClient.Account does for a logged-in player.
+    private static Owner NewAccountOwner(DbCoreCharacter character, params DbCoreCharacter[] accountCharacters)
+    {
+        Owner owner = NewOwner(character.ObjectId, eRealm.Albion);
+        var client = (GameClient)RuntimeHelpers.GetUninitializedObject(typeof(GameClient));
+        SetField(typeof(GameClient), client, "<Account>k__BackingField", new DbAccount { Characters = accountCharacters });
+        SetField(typeof(Owner), owner, "_client", client);
+        SetField(typeof(GameLiving), owner, "<TempProperties>k__BackingField", new PropertyCollection());
+        return owner;
+    }
+
+    // Companion IDs are GUIDs, as recruiting makes them, so roster commands can look them up.
+    private PlayerCompanionRecord AddReserved(string ownerCharacterId, string name, string reservedFor,
+        int squadIndex = 0, bool leader = false, bool active = true)
+    {
+        PlayerCompanionRecord record = NewRecord(ownerCharacterId, Guid.NewGuid().ToString("D"), name, eCharacterClass.Cleric);
+        record.IsActive = active;
+        record.LastGroupedCharacterId = reservedFor;
+        record.SquadIndex = squadIndex;
+        record.IsSquadLeader = leader;
+        Assert.That(_database.AddObject(record), Is.True);
+        return record;
     }
 
     private static string ActionControl => CompanionManagerProtocol.ControlActionBase.ToString("x2");

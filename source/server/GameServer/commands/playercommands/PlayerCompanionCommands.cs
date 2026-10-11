@@ -142,7 +142,7 @@ namespace DOL.GS.Commands
                 DisplayMessage(client, $"{TemporaryGroupClassCatalog.RealmName((eRealm)realmGroup.Key)}:");
                 foreach (PlayerCompanionRecord record in realmGroup)
                 {
-                    string state = record.IsActive ? "active" : "benched";
+                    string state = PlayerCompanionRoster.RosterStateLabel(record, player);
                     string xpProgress = record.Level >= 50
                         ? $"XP {record.Experience:N0} (max level)"
                         : $"XP {record.Experience:N0}/{GamePlayer.GetExperienceAmountForLevel(record.Level):N0}";
@@ -624,7 +624,7 @@ namespace DOL.GS.Commands
                     DisplayMessage(client, "Use /companions status [page or name].");
                     return;
                 }
-                selected = roster.Where(record => record.IsActive)
+                selected = roster.Where(record => PlayerCompanionRoster.IsActiveFor(record, player))
                     .OrderBy(record => record.SquadIndex).ThenBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }
@@ -633,7 +633,7 @@ namespace DOL.GS.Commands
             page = named ? 1 : Math.Clamp(page, 1, pages);
             var lines = new List<string>
             {
-                $"Roster: {roster.Count} saved; {roster.Count(record => record.IsActive)} marked active.",
+                $"Roster: {roster.Count} saved; {roster.Count(record => PlayerCompanionRoster.IsActiveFor(record, player))} marked active.",
                 CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order)
                     ? $"Group order: {order.ToString().ToLowerInvariant()} (overrides saved stances)."
                     : "Group order: saved individual stances."
@@ -666,7 +666,9 @@ namespace DOL.GS.Commands
                         $"{bot.UnspentSpecPoints} spec points; bag {bagCount}/40";
                 }
                 else
-                    readiness = record.IsActive ? "active elsewhere or unavailable here" : "benched";
+                    readiness = PlayerCompanionRoster.IsReservedByOtherCharacter(record, player)
+                        ? $"grouped with {PlayerCompanionRoster.ReservingCharacterName(record, player)} on another character"
+                        : PlayerCompanionRoster.IsActiveFor(record, player) ? "active elsewhere or unavailable here" : "benched";
 
                 lines.Add($"{record.Name}, level {record.Level}: {assignment}; {readiness}.");
                 lines.Add($"  {details}.");

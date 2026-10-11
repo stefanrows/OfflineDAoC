@@ -142,6 +142,31 @@ pane growing with the window, row pitch 22. Controls use event IDs
 edge; the real-client check should confirm they never catch clicks meant for
 the game world.
 
+## Client levers research (2026-10-11, static only)
+
+Read-only analysis of the raid baseline (`67dcf68a…`) and the 0.169.0
+manager `game.dll` (`49095c51…`) with capstone, for a better manager window.
+None of this is real-client proof; the lever probe below exists to get it.
+
+| Lever | Evidence | Result |
+| --- | --- | --- |
+| Window size | `0x53DCAA` stores the final width/height at owner `+0x2C`/`+0x30` (`0x53DE73`/`0x53DE76`); Custom8 stub `[[0x104C2BC]+0x37178]`, owner `[stub+0x1C]` (lookup inferred) | A click can carry the current size, so the server could choose the row count itself |
+| Scalar (bar) adapters | Registrar `0x4B6BC0` stdcall(registry, slot*, name, max, initial), `ret 0x14`; object: dirty `+4`, max `+8`, value `+0xC`, min `+0x10`; setter `0x524370` (ECX = object, float, clamps, sets dirty) | Server-fed `StatusBarDef` bars (HP, power, XP) look feasible |
+| Colour adapters | Registrar `0x4B6F87` stdcall(registry, slot*, name), `ret 0xC`; 0x18-byte object, RGBA floats `+0..+0xC`, unknown dword `+0x14`; no setter found | Direct float writes; live repaint unknown |
+| Shift-click | `OnShiftClickEvent` is parsed on buttons, invisible buttons, list boxes and checkboxes through the same mapper `0x4EA06F`; no runtime reader found; IDs `0x800`–`0x8DF` are unused | Needs the probe; the manager's `sendControl` masks to one byte, so a shift range needs its own send path |
+| Native tabs | Tab records parsed (`0x4ECD60`, `0x4ECCC7`); the stock tab event sends a command and hides nothing locally; no per-control show/hide setter found (window-level only, `0x4BED28`) | Parked |
+| List box, combo box, check box, edit box | Row hit-test exists, but no proof the row or item index reaches an event; edit boxes have no Enter event; right-click and double-click are never read | Parked |
+
+**Lever probe.** `probe_companion_manager_levers.py --input-stage <0.169.0
+stage>` writes a probe stage (`.cprb` section, event IDs `0x900`–`0x90F`
+plain and `0x800`–`0x80F` shift, everything else passed to the manager).
+`test_companion_manager_levers_probe.py --stage <probe> --input-stage <0.169.0
+stage>` emulates it. `Install-CompanionManager.ps1` does not install probe
+stages (no raid baseline in the manifest, and 0.169.0 is not yet a known
+manager build); that is a separate decision. In the client, each `[Probe]`
+click should show `P#nn W=<hex> H=<hex>`, step the bar by 25 %, and cycle
+the label colour; Shift+click should show `S#nn`.
+
 ## What the 2026-09-23 probes proved
 
 The supported client is the verified Windows x86 `game.dll` with the native raid
@@ -214,7 +239,7 @@ Server to client uses fixed 128-byte DebugMode bodies: byte 0 is `0`, marker
 `0x43`, version `3`, then operation, a 16-bit label index (bytes 4-5), and
 NUL-terminated ASCII text
 from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 514
-label adapters (440 manager plus 74 COMPANIONS window since 0.248.0; 440 before 0.248.0, 132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
+label adapters (440 manager plus 74 COMPANIONS window since 0.251.0; 440 before 0.251.0, 132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
 short bodies, bad terminators, unknown operations, and out-of-range indexes are
 ignored. Raid marker `0x52` and ordinary DebugMode packets pass through. An
 unpatched client sees only a DebugMode packet whose flag byte is `0`, as with
@@ -394,7 +419,7 @@ roadmap items only after owner confirmation:
 - An unsupported client build fails closed, and `/companions` commands keep
   working.
 
-## COMPANIONS window (Custom7), 0.248.0
+## COMPANIONS window (Custom7), 0.251.0
 
 Status: **offline only; the owner's real-client check is pending.** The window
 is a fixed 332x296 bar that the server shows while the account's setting is on
@@ -469,7 +494,7 @@ python3 source/server/tools/test_companion_manager_client.py --stage <stage dir>
 
 The raid-only baseline client is a folder with the `game.dll` (`67dcf68a...`) and
 `ui/uimain.xml` (`637bf806...`) from a `companion-manager-client-*` backup. The
-verified stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.248.0`.
+verified stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.251.0`.
 
 | Output | SHA-256 |
 | --- | --- |
