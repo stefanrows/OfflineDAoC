@@ -436,6 +436,29 @@ server-built keep placement, wall and door alignment, lord gating and guard
 placement on the new keeps (task 113).
 No server or client was started for development verification.
 
+## open BG (0.241.0–0.242.0)
+
+A permanently open battleground on the native Thidranki map (region 252,
+Thidranki Faste = keep 11, portal keeps 12 Hib / 13 Mid / 14 Alb) for
+players of every level and realm, Camlann rules, no realm-rank limit. Spec:
+`docs/superpowers/specs/2026-10-11-open-bg-design.md`; plan:
+`docs/superpowers/plans/2026-10-11-open-bg.md`.
+
+| Piece | How it works |
+|---|---|
+| Entry | porter menu line `[open BG]` (players and bots), only while `open_bg_enabled` and the zone 252 navmesh and landings are ready; the campaign switch must be on too |
+| Map | the bracket catalog has one definition of kind `Open` (252, levels 1–50, RR cap 0); the ten bracket battlegrounds are untouched; keep 11 is adopted on its client fixture with its saved lord and 18 guards, no Molvik copy |
+| Crew | `open_bg_groups8` / `open_bg_groups_small` / `open_bg_solos` per realm from the 40–50 band, cap `open_bg_max_bots` (72), groups formed before departure, relief every 20–30 game minutes, members counted (an 8-man below six is refilled) |
+| Rhythm | director cycle of 15–45 game minutes: quiet (bridge watch, roamers, lurking solos) → push (the attacking realm musters at its bridge) → keep fight → retreat; the conquering guild holds keep 11 until the next capture |
+| Players | light drift of roamers/lurkers toward a human once per cycle (never within 800 units); 40+ crew bots ignore humans under 30 unless attacked, in the driver and the class brain; the own portal keep is a sanctuary; guest squads on a player's level while a player under 40 is inside |
+| Setup | `/bgsetup` (GM) window and `/bgsetup <key> <value>` (live refresh); launcher tab "open BG" (save while stopped, live block from `open-bg-status.json`) |
+| Quests | campaign commander contracts (level-scaled) and the Pazz dailies, now levels 1–50 |
+| Logs | `OPEN_BG_ROSTER`, `OPEN_BG_RELIEF`, `OPEN_BG_PHASE`, `OPEN_BG_ROLE`, `OPEN_BG_GUEST`, `OPEN_BG_SETUP`, `OPEN_BG_TICK_SLOW`, `AUTONOMOUS_BG_ISLAND_RECOVERY`, `AUTONOMOUS_BG_LANDING_REST` |
+
+Timers run in game time, so at world speed 20× a cycle lasts 45 s to 2.25
+min. Open owner decisions: portal-keep guards attacking intruders inside the
+portal keeps, and same-realm hostility inside the open BG (FFA today).
+
 ## Non-goals
 
 - Dual Normal/PvP operation
