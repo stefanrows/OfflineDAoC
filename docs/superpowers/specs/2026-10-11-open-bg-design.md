@@ -158,10 +158,17 @@ cycle is 15–45 min:
 
 ## 7. Setup UI (stage 3)
 
-- `/bgsetup` (GM, plvl 2+): `/bgsetup` shows the values; `/bgsetup <key>
-  <value>` writes the `ServerProperty` row and refreshes properties; the
-  roster and director re-read on their next tick. Keys: enabled, groups8,
-  small, solos, max_bots, cycle_min, cycle_max, drift.
+- `/bgsetup` (GM, plvl 2+): opens an in-game window like `/companion`
+  (`SendCustomTextWindow` pages): live state (phase, attacker, keep owner,
+  every bot inside with name, level, role and group, guest squads, achieved
+  world speed) and the setup values; `/bgsetup <key> <value>` writes the
+  `ServerProperty` row and refreshes properties; the roster and director
+  re-read on their next tick. Keys: enabled, groups8, small, solos, max_bots,
+  cycle_min, cycle_max, drift. The window is callable at any time.
+- All cycle and relief timers run in **game time** (`GameLoop.GameLoopTime`,
+  scaled by the world speed): at 20× a 15–45 min cycle lasts 45 s to 2.25
+  min, so an overnight test shows many cycles; log lines carry the achieved
+  multiplier.
 - Launcher tab "open BG": the same keys with a short help text per field;
   writes while the server is stopped (existing writer), shows the live state
   from the status snapshot when running (phase, present bots, keep owner).
