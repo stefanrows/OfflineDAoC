@@ -152,6 +152,72 @@ public static class AutonomousHubDeparture
     public static bool NearOwnBind(GameLiving living) => living?.CurrentRegion != null &&
         BotReleaseBindPoints.IsNearOwnBind(living.CurrentRegionID, living.X, living.Y, living.Realm, BindPeaceRadius);
 
+    /// <summary>
+    /// Radius of the same-realm peace around each realm's own open BG landing (its portal keep). The arrival camps
+    /// lie 4,000-5,000 units out, and 891 of the 1,144 same-realm crew deaths of the 0.245.0 run (26 minutes at 7x)
+    /// fell there: the bindstone loop of bug 63 at the BG's doors. Bridges and keep 11 lie 14,000 and more away,
+    /// so the field stays Camlann free-for-all. This is a circle like the hubs and bindstones, not a realm alliance.
+    /// </summary>
+    public const int OpenBgLandingPeaceRadius = 5_500;
+
+    private static (ushort Region, int X, int Y, eRealm Realm)[] _openBgLandings = Array.Empty<(ushort, int, int, eRealm)>();
+    private static long _openBgLandingsRetryTick = long.MinValue;
+    private const long OpenBgLandingsRetryMilliseconds = 10_000;
+
+    /// <summary>
+    /// The open BG landings with their realms, read once from the campaign catalog (the keeps and the navmesh must be
+    /// loaded first); while the catalog has none the read is retried every ten seconds, not on every attack check.
+    /// </summary>
+    public static (ushort Region, int X, int Y, eRealm Realm)[] OpenBgLandings()
+    {
+        var landings = Volatile.Read(ref _openBgLandings);
+        if (landings.Length > 0)
+            return landings;
+        long now = GameLoop.GameLoopTime;
+        if (now - Volatile.Read(ref _openBgLandingsRetryTick) < OpenBgLandingsRetryMilliseconds)
+            return landings;
+        Volatile.Write(ref _openBgLandingsRetryTick, now);
+        try
+        {
+            BattlegroundDefinition open = BattlegroundCampaignCatalog.FindOpen();
+            if (open == null)
+                return landings;
+            GameLocation[] points = BattlegroundCampaignCatalog.GetLandings(open);
+            IReadOnlyList<eRealm> realms = BattlegroundCampaignCatalog.GetLandingRealms(open, points.Length);
+            if (points.Length == 0 || realms.Count != points.Length)
+                return landings;
+            landings = points.Select((point, index) => ((ushort)open.RegionId, point.X, point.Y, realms[index])).ToArray();
+            Volatile.Write(ref _openBgLandings, landings);
+        }
+        catch (Exception)
+        {
+            // No world (unit tests): no landing peace.
+        }
+        return landings;
+    }
+
+    /// <summary>Whether a living of <paramref name="realm"/> at (x, y) stands within <paramref name="radius"/> of its own realm's landing.</summary>
+    public static bool NearOwnLanding(ushort region, int x, int y, eRealm realm, int radius,
+        IReadOnlyList<(ushort Region, int X, int Y, eRealm Realm)> landings)
+    {
+        if (landings == null || realm == eRealm.None)
+            return false;
+        long radiusSquared = (long)radius * radius;
+        foreach ((ushort landingRegion, int landingX, int landingY, eRealm landingRealm) in landings)
+        {
+            if (landingRegion != region || landingRealm != realm)
+                continue;
+            long dx = x - landingX, dy = y - landingY;
+            if (dx * dx + dy * dy <= radiusSquared)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether the living stands at its own realm's open BG landing or arrival camp.</summary>
+    public static bool NearOwnOpenBgLanding(GameLiving living) => living?.CurrentRegion != null &&
+        NearOwnLanding(living.CurrentRegionID, living.X, living.Y, living.Realm, OpenBgLandingPeaceRadius, OpenBgLandings());
+
     /// <summary>Per-realm band circles (index = (int)eRealm, 1..3): the keep
     /// circle at 7,500 and each outer landing at its radius + 2,500. Built once;
     /// the hub data are code constants.</summary>
@@ -298,7 +364,8 @@ public static class AutonomousHubDeparture
         if (InHubBand(first) || InHubBand(second))
             rule = HubPeaceRule.Band;
         else if (NearOwnBind(first) || NearOwnBind(second) ||
-                 NearOwnCapitalLanding(first) || NearOwnCapitalLanding(second))
+                 NearOwnCapitalLanding(first) || NearOwnCapitalLanding(second) ||
+                 NearOwnOpenBgLanding(first) || NearOwnOpenBgLanding(second))
             rule = HubPeaceRule.Bind;
         else if (RecentlyDeparted((GameBot)first, nowUtc) || RecentlyDeparted((GameBot)second, nowUtc))
             rule = HubPeaceRule.RecentDeparture;

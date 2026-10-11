@@ -12,6 +12,19 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.246.0] - 2026-10-11
+
+### Changed
+
+- The same-realm hub peace of the world (bindstones, border hubs, capital
+  landings) now also holds within 5,500 units of each realm's own open BG
+  landing, which covers the arrival camps 4,000–5,000 units out. In the
+  0.245.0 run (26 min at ~7×) 1,144 of 1,342 crew deaths were same-realm
+  and 891 of them fell at those camps, the bindstone loop of bug 63 at the
+  BG's doors. A circle like everywhere else on Camlann, not a realm alliance:
+  bridges, field and keep 11 stay free-for-all. 3 tests in
+  `UT_OpenBattlegroundLandingPeace`.
+
 ## [0.245.0] - 2026-10-11
 
 ### Added

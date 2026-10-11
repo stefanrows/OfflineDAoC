@@ -327,6 +327,16 @@ Agent sessions on items 45–48: take the role and context from
      reached); 705 crew deaths in 23 min around the keep; lurk points hit
      dead-end floors (61). A fixer for the keep take (all attacking units
      assault, gate march, lurk snap) was started at 08:15.
+     0.245.0 (deployed 11:04, 20×, ~7× achieved, 11:05–11:31): raids form
+     at the push and top up (5–6 units, 13–22 bots, all three realms mixed),
+     keep 11 claimed 8 times (4 of them within 19 s by partner guilds of one
+     raid: the claim flips between allies, follow-up), lord down 2, 0
+     exceptions, 0 stuck in 252, 1,342 crew deaths of which 1,144 same-realm
+     and 891 at the arrival camps 4,000–5,000 from the landings (0.246.0:
+     landing peace), crew inside 31 of 44 assigned (setup 54), egress
+     recovery loop (bug 154) 401 lines. Follow-ups: allied raid guilds must
+     not claim over each other; crew refill; realm enum aliases print as
+     `_FirstPlayerRealm` in logs.
      0.244.0 (deployed 08:39, 20×, ~5.4× achieved, 08:40–09:04): the keep
      take works: `lord_down=True` 4 times, `KEEP_CLAIMED keep=11` 6 times
      (Albion, Midgard and Hibernia guilds in turn),
