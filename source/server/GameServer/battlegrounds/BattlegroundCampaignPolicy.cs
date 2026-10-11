@@ -42,6 +42,10 @@ namespace DOL.GS
         public static bool CanEnter(BattlegroundDefinition definition, GameLiving actor, out string reason)
         {
             reason = null;
+            // The open BG answers through its own switch and level range (review follow-up: the zone gate
+            // and AddToWorld call CanEnter, so a switched-off open BG must refuse here too).
+            if (definition != null && definition.Kind == BattlegroundDefinitionKind.Open)
+                return CanEnterOpenBattleground(definition, actor, out reason);
             if (!IsEnabled) { reason = "The battleground campaign is closed."; return false; }
             if (!IsEligible(actor, definition)) { reason = "Your level or Realm Rank is outside this battleground's bracket."; return false; }
             return IsReady(definition, out reason);

@@ -522,6 +522,8 @@ namespace DOL.GS.ServerRules
         public virtual bool IsAllowedToZone(GamePlayer player, Region region)
         {
             BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(region.ID);
+            // Moves inside the region (release to the landing, keep doors) stay allowed even after a live switch-off.
+            if (definition != null && player != null && player.CurrentRegionID == region.ID) return true;
             if (definition != null)
                 return BattlegroundCampaignPolicy.CanEnter(definition, player, out _);
             // Retired classic maps stay closed to ordinary transfers.
