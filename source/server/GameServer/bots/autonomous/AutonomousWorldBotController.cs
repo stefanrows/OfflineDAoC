@@ -2553,7 +2553,8 @@ namespace DOL.GS
             !id.StartsWith("rvr-keep-", StringComparison.Ordinal) ||
             !int.TryParse(id.AsSpan("rvr-keep-".Length), out int keepId) ||
             GameServer.KeepManager.GetKeepByID(keepId) is not { } keep ||
-            AutonomousRvrKeepPolicy.IsRoamDestination(keep.IsPortalKeep, keep.IsRelic);
+            AutonomousRvrKeepPolicy.IsRoamDestination(keep.IsPortalKeep, keep.IsRelic) &&
+            AutonomousRvrKeepPolicy.IsWorldKeep(keep);
 
         // A walk of a few minutes is normal; the far side of the frontier is not.
         // The classic meeting grounds pull groups across realm borders, Emain
@@ -2657,6 +2658,7 @@ namespace DOL.GS
 
             foreach (AbstractGameKeep keep in GameServer.KeepManager.GetAllKeeps()
                          .Where(AutonomousRvrKeepPolicy.IsSiegeObjective)
+                         .Where(AutonomousRvrKeepPolicy.IsWorldKeep)
                          .Where(keep => reachable.Contains(keep.Region) && (keep.Guild == null || keep.Guild != bot.Guild))
                          .OrderByDescending(keep => keep.Guild == null && keep.DBKeep.LordDefeated)
                          .ThenBy(keep => keep.Region == bot.CurrentRegionID ? 0 : 1)
