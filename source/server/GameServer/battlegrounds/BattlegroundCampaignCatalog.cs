@@ -7,6 +7,9 @@ using DOL.GS.Keeps;
 
 namespace DOL.GS
 {
+    /// <summary>Bracket: a level-bracketed campaign battleground. Open: the permanently open BG (spec 2026-10-11).</summary>
+    public enum BattlegroundDefinitionKind { Bracket, Open }
+
     public sealed class BattlegroundDefinition
     {
         public ushort RegionId { get; }
@@ -16,11 +19,13 @@ namespace DOL.GS
         public byte MaxLevel { get; }
         // Exclusive realm-level ceiling; zero means unrestricted.
         public byte MaxRealmLevel { get; }
+        public BattlegroundDefinitionKind Kind { get; }
 
-        public BattlegroundDefinition(ushort regionId, ushort zoneId, string name, byte minLevel, byte maxLevel, byte maxRealmLevel)
+        public BattlegroundDefinition(ushort regionId, ushort zoneId, string name, byte minLevel, byte maxLevel, byte maxRealmLevel,
+            BattlegroundDefinitionKind kind = BattlegroundDefinitionKind.Bracket)
         {
             RegionId = regionId; ZoneId = zoneId; Name = name;
-            MinLevel = minLevel; MaxLevel = maxLevel; MaxRealmLevel = maxRealmLevel;
+            MinLevel = minLevel; MaxLevel = maxLevel; MaxRealmLevel = maxRealmLevel; Kind = kind;
         }
     }
 
@@ -41,10 +46,16 @@ namespace DOL.GS
             new BattlegroundDefinition(241, 241, "Molvik", 35, 39, 0),
             new BattlegroundDefinition(242, 254, "Leirvik", 40, 44, 0),
             new BattlegroundDefinition(165, 165, "Cathal Valley", 45, 49, 0),
+            // The open BG on native Thidranki (keep 11, portal keeps 12-14); the 20-24 bracket stays on 238.
+            // Last in the list so the brackets keep their campaign timer stagger.
+            new BattlegroundDefinition(252, 252, "open BG", 1, 50, 0, BattlegroundDefinitionKind.Open),
         });
 
         public static BattlegroundDefinition Find(ushort region) => Definitions.FirstOrDefault(x => x.RegionId == region);
-        public static BattlegroundDefinition ForLevel(int level) => Definitions.FirstOrDefault(x => level >= x.MinLevel && level <= x.MaxLevel);
+        // Only brackets route by level; the open BG is entered through its own porter line.
+        public static BattlegroundDefinition ForLevel(int level) => Definitions.FirstOrDefault(x =>
+            x.Kind == BattlegroundDefinitionKind.Bracket && level >= x.MinLevel && level <= x.MaxLevel);
+        public static BattlegroundDefinition FindOpen() => Definitions.FirstOrDefault(x => x.Kind == BattlegroundDefinitionKind.Open);
         public static AbstractGameKeep CentralKeep(BattlegroundDefinition definition) => definition == null ? null :
             GameServer.KeepManager.GetKeepsOfRegion(definition.RegionId).FirstOrDefault(x => !x.IsPortalKeep && !x.IsRelic);
         public static GameLocation[] GetLandings(BattlegroundDefinition definition)
@@ -101,7 +112,8 @@ namespace DOL.GS
                     MaxLevel = definition.MaxLevel, MaxRealmLevel = definition.MaxRealmLevel });
             }
             // Legacy battleground rows from the save keep their level brackets but lose their realm-rank
-            // ceiling too; the rows are only changed in memory and never saved.
+            // ceiling too; the rows are only changed in memory and never saved. The legacy Thidranki row 252
+            // (20-24) was replaced above by the open BG's 1-50, so release and keep rules read 1-50 there.
             foreach (DbBattleground cap in caps)
                 cap.MaxRealmLevel = 0;
         }

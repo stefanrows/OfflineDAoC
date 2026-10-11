@@ -20,8 +20,10 @@ namespace DOL.GS.Commands
                 case "list" when args.Length == 2:
                     var lines = new List<string> { "Guild, group and battlegroup alliances apply in every bracket.",
                         "Realm identity does not assign a team. Join means consenting to PvP below level 10.", "" };
+                    // The ten level brackets; the open BG is reached through the porters' [open BG] line.
                     foreach (BattlegroundDefinition definition in BattlegroundCampaignCatalog.Definitions)
                     {
+                        if (definition.Kind == BattlegroundDefinitionKind.Open) continue;
                         bool ready = BattlegroundCampaignPolicy.IsReady(definition, out string reason);
                         string rank = definition.MaxRealmLevel == 0 ? "no RP ceiling" : $"below RR{definition.MaxRealmLevel / 10 + 1}L{definition.MaxRealmLevel % 10}";
                         lines.Add($"{definition.Name}: levels {definition.MinLevel}-{definition.MaxLevel}, {rank}.");
