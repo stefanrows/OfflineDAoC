@@ -199,4 +199,30 @@ public class UT_AutonomousSoloConfidence
             Assert.That(AutonomousDeathAttribution.TypeOf(null, null), Is.EqualTo("none"));
         });
     }
+
+    [Test]
+    public void DeathToAnotherMobDoesNotBlameTheCampTarget()
+    {
+        // Bug 144: a level-3 Savage camping young wolves dies to a level-13 road mob.
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousDeathAttribution.BlamesCampTarget("young wolf", "vendo bone-collector"), Is.False,
+                "another killer keeps the ceiling and the camp");
+            Assert.That(AutonomousDeathAttribution.BlamesCampTarget("young wolf", "young wolf"), Is.True);
+            Assert.That(AutonomousDeathAttribution.BlamesCampTarget("young wolf", "Young Wolf"), Is.True);
+            Assert.That(AutonomousDeathAttribution.BlamesCampTarget("young wolf", ""), Is.True, "unknown killer: old rule");
+            Assert.That(AutonomousDeathAttribution.BlamesCampTarget("young wolf", null), Is.True, "no snapshot: old rule");
+            Assert.That(AutonomousDeathAttribution.BlamesCampTarget(null, "vendo bone-collector"), Is.True, "no camp: old rule");
+        });
+    }
+
+    [Test]
+    public void CampIsDroppedAfterTwoOtherKillerDeathsInARow()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousDeathAttribution.KeepsCampAfterOtherKiller(1), Is.True);
+            Assert.That(AutonomousDeathAttribution.KeepsCampAfterOtherKiller(2), Is.False);
+        });
+    }
 }

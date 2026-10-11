@@ -146,6 +146,8 @@ namespace DOL.GS
         private ConColor? _lastEngagedCon;
         private string _lastFailedCampId = string.Empty;
         private string _lastFailedTargetName = string.Empty;
+        private string _otherKillerCampId = string.Empty;
+        private int _otherKillerDeaths;
         private AutonomousBotGroupCoordinator.Directive _groupDirective;
         private Group _observedGroup;
         private long _nextGroupPulseTick;
@@ -3902,6 +3904,50 @@ namespace DOL.GS
                     "A PvP defeat does not lower the PvE target difficulty", pvpFailedTarget, forceSave: true);
                 return;
             }
+
+            // Bug 144: an add or a road mob made the kill, not the camp's target.
+            // Keep the con ceiling; keep the camp too, unless other killers got
+            // the bot on this camp twice in a row (then drop it, ceiling intact).
+            string killerName = bot.LastAutonomousDeath?.KillerName;
+            if (_camp != null && !AutonomousDeathAttribution.BlamesCampTarget(_camp.MonsterName, killerName))
+            {
+                _otherKillerDeaths = _otherKillerCampId == _camp.Id ? _otherKillerDeaths + 1 : 1;
+                _otherKillerCampId = _camp.Id;
+                _observedDeathCount = deathCount;
+                _lastEngagedCon = null;
+                LogAutonomousDeath(bot, newDeaths, groupSize, "solo");
+                bool keepCamp = AutonomousDeathAttribution.KeepsCampAfterOtherKiller(_otherKillerDeaths);
+                string campTarget = _camp.MonsterName;
+                Log.Info($"AUTONOMOUS_DEATH_OTHER_KILLER bot={bot.Name} id={bot.DatabaseID} level={bot.Level} " +
+                         $"deaths={deathCount} killer=\"{killerName}\" camp_target=\"{campTarget}\" camp={_camp.Id} " +
+                         $"kept={keepCamp} in_a_row={_otherKillerDeaths} max_con={MaximumTargetCon(groupSize)} region={bot.CurrentRegionID}");
+                _emptyCampSinceTick = 0;
+                _patrolDestination = null;
+                if (keepCamp)
+                {
+                    // Same camp after the release: a same-camp route reset keeps threat memory.
+                    ResetRouteOrderState();
+                    SetStatus(bot, "Recovering from defeat", "Return to the XP camp",
+                        $"{killerName} made the kill, not {campTarget}; the target ceiling and camp stay",
+                        campTarget, _camp.ZoneName, forceSave: true);
+                    return;
+                }
+                AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Defeated, "Repeated deaths to other killers; PvE difficulty unchanged");
+                _rejectedDungeonCamps[_camp.Id] = GameLoop.GameLoopTime + 30 * 60_000;
+                _camp = null;
+                _campStartedTick = 0;
+                _otherKillerDeaths = 0;
+                _otherKillerCampId = string.Empty;
+                _nextPlanTick = GameLoop.GameLoopTime + 2_500 + bot.ObjectID % 1_500;
+                if (bot.PersistentRecord != null)
+                    bot.PersistentRecord.CurrentCampId = string.Empty;
+                SetStatus(bot, "Recovering from defeat", "Find another XP camp at the same difficulty",
+                    $"Other killers got me twice on the way to or at {campTarget}; the target ceiling stays",
+                    campTarget, forceSave: true);
+                return;
+            }
+            _otherKillerDeaths = 0;
+            _otherKillerCampId = string.Empty;
 
             ConColor failedCon = _lastEngagedCon ?? MaximumTargetCon(groupSize);
             ConColor saferCon = (ConColor)Math.Max((int)ConColor.GREEN, (int)failedCon - 1);

@@ -70,6 +70,34 @@ namespace DOL.GS
             return DOL.GS.ServerRules.PvpCombatant.IsSafeReleasePoint(region, spread) ? spread : anchor;
         }
 
+        /// <summary>
+        /// Bug 144: a PvE or levelling world bot releases like a 2003 player, at
+        /// its own bind, not at the nearest sanctuary. In region 100 the only
+        /// sanctuary binds are Svasud Faste's, so a level-3 Savage killed in the
+        /// Vale of Mularn woke behind a frontier gate 30,000 units from Mularn.
+        /// RvR objectives and battleground deaths keep the hub/landing release.
+        /// </summary>
+        public static bool UsesPveBindRelease(bool rvrObjective, bool battlegroundRegion) =>
+            !rvrObjective && !battlegroundRegion;
+
+        /// <summary>
+        /// The PvE release point: the stored home bind when it lies in the death
+        /// region and <paramref name="acceptHome"/> (realm boundary, floor) takes
+        /// it; otherwise the nearest own-realm bind of the death zone, without the
+        /// sanctuary filter. <paramref name="homeBind"/> tells which one it is.
+        /// </summary>
+        public static Point3D PveRelease(ushort deathRegion, int x, int y, eRealm realm, ushort deathZone,
+            int homeRegion, int homeX, int homeY, int homeZ, out bool homeBind,
+            System.Func<Point3D, Point3D> acceptHome = null)
+        {
+            Point3D home = homeRegion == deathRegion && (homeX != 0 || homeY != 0)
+                ? new Point3D(homeX, homeY, homeZ) : null;
+            if (home != null && acceptHome != null)
+                home = acceptHome(home);
+            homeBind = home != null;
+            return home ?? Nearest(deathRegion, x, y, realm, deathZone);
+        }
+
         public static Point3D? Nearest(ushort region, int x, int y, eRealm realm = eRealm.None,
             ushort preferredZone = 0, bool safeOnly = false)
         {

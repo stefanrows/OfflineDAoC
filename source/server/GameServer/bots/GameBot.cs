@@ -1226,15 +1226,36 @@ namespace DOL.GS
             }
 
             bool safeWorldRelease = AutonomousSiegeMarch.IsWorldActor(this);
-            Point3D release = safeWorldRelease
-                ? BotReleaseBindPoints.Nearest(_deathRegionId, _deathLocation.X, _deathLocation.Y, Realm, safeOnly: true)
-                : FindNearestBindPoint();
-            ushort releaseRegion = _deathRegionId;
+            bool rvrWorldActor = AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR);
+            // Bug 144: PvE world bots release at their own bind (home bind, else the
+            // nearest own-realm bind of the death zone), not at a sanctuary hub.
+            bool pveBindRelease = safeWorldRelease && BotReleaseBindPoints.UsesPveBindRelease(rvrWorldActor,
+                BattlegroundCampaignCatalog.Find(_deathRegionId) != null);
+            Point3D release;
             string releaseReason = "safe-current-region";
+            if (pveBindRelease)
+            {
+                Region deathRegion = WorldMgr.GetRegion(_deathRegionId);
+                OfflineWorldBotRecord home = PersistentRecord;
+                release = BotReleaseBindPoints.PveRelease(_deathRegionId, _deathLocation.X, _deathLocation.Y, Realm,
+                    deathRegion?.GetZone(_deathLocation.X, _deathLocation.Y)?.ID ?? 0,
+                    home?.BindRegionId ?? 0, home?.BindX ?? 0, home?.BindY ?? 0, home?.BindZ ?? 0, out bool homeBind,
+                    point =>
+                    {
+                        Zone homeZone = deathRegion?.GetZone(point.X, point.Y);
+                        return homeZone == null || !AutonomousRealmBoundary.Allows(Realm, _deathRegionId, homeZone.ID) ? null
+                            : BotReleaseBindPoints.Resolve(PathfindingProvider.Instance, homeZone, new(point.X, point.Y, point.Z));
+                    });
+                releaseReason = homeBind ? "pve-home-bind" : "pve-nearest-bind";
+            }
+            else
+                release = safeWorldRelease
+                    ? BotReleaseBindPoints.Nearest(_deathRegionId, _deathLocation.X, _deathLocation.Y, Realm, safeOnly: true)
+                    : FindNearestBindPoint();
+            ushort releaseRegion = _deathRegionId;
             // RvR world actors recover at a hub after either PvP or PvE death:
             // a grouped one at its group's hub (cross-realm groups muster at the
             // leader's), otherwise, or if that fails, at its own.
-            bool rvrWorldActor = AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR);
             eRealm groupHubRealm = Realm;
             bool groupHub = safeWorldRelease && rvrWorldActor &&
                 AutonomousBotGroupCoordinator.TryGetRvrReleaseRealm(this, out groupHubRealm) && groupHubRealm != Realm;
@@ -1284,7 +1305,9 @@ namespace DOL.GS
             }
             if (safeWorldRelease && !battlegroundLanding && release != null)
                 release = BotReleaseBindPoints.SpreadSafe(releaseRegion, release, DatabaseID > 0 ? DatabaseID : ObjectID);
-            if (safeWorldRelease && !battlegroundLanding && !PvpCombatant.IsSafeReleasePoint(releaseRegion, release))
+            // A PvE bind is not a sanctuary (Mularn is not); it only has to exist.
+            if (safeWorldRelease && !battlegroundLanding &&
+                (pveBindRelease ? release == null : !PvpCombatant.IsSafeReleasePoint(releaseRegion, release)))
                 return; // Keep the corpse and recovery timer; retry rather than revive in danger.
             release ??= _deathLocation;
             // Transfer the corpse first: a failed MoveTo must not revive the bot
