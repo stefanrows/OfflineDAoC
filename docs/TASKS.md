@@ -345,6 +345,20 @@ Agent sessions on items 45–48: take the role and context from
      reached); 705 crew deaths in 23 min around the keep; lurk points hit
      dead-end floors (61). A fixer for the keep take (all attacking units
      assault, gate march, lurk snap) was started at 08:15.
+     0.246.0–0.248.0 (11:38–12:59, 20×, ~7–9× achieved): landing peace
+     (0.246.0 never applied: retry-clock overflow, fixed 0.246.1; 0.246.1
+     moved the grinder to the circle's edge; 0.247.0 made the landing a full
+     hub anchor with band and departure clock) cut same-realm crew deaths
+     from 1,495 of 1,662 to 61 of 801, all on the field; crew fixes 0.248.0
+     (board only at the minimum, short cooldown after below-minimum relief,
+     `OPEN_BG_FORM_FAILED`) brought the crew to 48 of 54 with every realm's
+     8-man present (0.246.0: 33). 0.248.0 window (20 min): 773 deaths of
+     which 42 same-realm, keep 11 claimed 11 times, lord down 6, 0
+     exceptions, 0 stuck in 252, 18 below-minimum reliefs, 27 form-failed
+     lines (Midgard pool 2: 308 candidates in keep defense or raid).
+     Follow-ups: allied raid guilds still claim keep 11 over each other
+     within seconds (4 claims in 37 s); Midgard's 40+ pool is mostly bound
+     in guild keep defense; bug 154 egress loop; realm enum aliases in logs.
      0.245.0 (deployed 11:04, 20×, ~7× achieved, 11:05–11:31): raids form
      at the push and top up (5–6 units, 13–22 bots, all three realms mixed),
      keep 11 claimed 8 times (4 of them within 19 s by partner guilds of one
