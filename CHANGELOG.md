@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.248.0] - 2026-10-11
+
+### Fixed
+
+- Open BG crews no longer shrink to 33 of 54: an 8-man boarded with 5 after
+  a straggler drop and was relieved as "below minimum" five seconds later
+  (0.246.0 run: 8 of 14 8-man units relieved within 15 s of entering, 9 of
+  14 split by a keep-owner change). A unit now boards only when it meets its
+  minimum counting dead members (8-man: 6); a short unit waits at the porter
+  for the existing refill. Members of a unit relieved below its minimum or
+  after a keep-owner split get the 10-game-minute cooldown instead of the
+  30-minute rest, so they can re-form (`OPEN_BG_UNIT_RELIEVED reason=`).
+
+### Added
+
+- `OPEN_BG_FORM_FAILED realm= kind= need= pool= reason= rejected= repeats=`
+  when an open BG group cannot be formed (one line per realm and kind per
+  five game minutes), with the dominant rejection reason of the candidate
+  pool.
+
 ## [0.247.1] - 2026-10-11
 
 ### Fixed
