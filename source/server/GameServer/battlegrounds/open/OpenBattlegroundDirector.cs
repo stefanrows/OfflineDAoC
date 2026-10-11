@@ -221,6 +221,14 @@ namespace DOL.GS
         }
 
         /// <summary>Called by the campaign manager every <see cref="TickMilliseconds"/> of game time for the Open definition only.</summary>
+        /// <summary>Phase, attacker and seconds left in the cycle, for the status window (lock-free).</summary>
+        public static OpenBgPhaseStatus PhaseStatus()
+        {
+            OpenBgCycle cycle = Volatile.Read(ref _cycle);
+            long left = cycle == null ? 0 : Math.Max(0, (cycle.EndTick - GameLoop.GameLoopTime) / 1000);
+            return new OpenBgPhaseStatus(Phase.ToString(), Attacker.ToString(), (int)left);
+        }
+
         public static void Tick(BattlegroundDefinition definition, long now)
         {
             if (definition?.Kind != BattlegroundDefinitionKind.Open) return;
@@ -229,6 +237,8 @@ namespace DOL.GS
                 Reset();
                 return;
             }
+            // The /bgsetup window and the launcher status file read the phase through this hook.
+            OpenBattlegroundStatus.PhaseSource ??= PhaseStatus;
             Stopwatch watch = Stopwatch.StartNew();
             AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
             bool realGuild = keep?.Guild != null && PvpCombatant.IsRealGuild(keep.Guild);
