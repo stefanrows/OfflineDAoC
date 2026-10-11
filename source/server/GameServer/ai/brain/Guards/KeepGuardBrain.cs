@@ -19,10 +19,21 @@ namespace DOL.AI.Brain
 
         public override int ThinkInterval => 500;
 
+        /// <summary>
+        /// Bug 146: a keep guard that chased a target this far from its post
+        /// drops the fight and walks back, as 2003 keep guards did.
+        /// </summary>
+        public const int LEASH_RANGE = 3000;
+
         public KeepGuardBrain() : base()
         {
+            FSM.Add(new GuardState_AGGRO(this));
             FSM.Add(new GuardState_RETURN_TO_SPAWN(this));
         }
+
+        /// <summary>True when a guard in combat is farther than the leash from its spawn.</summary>
+        public static bool ShouldLeash(double distanceFromSpawn, int threshold) =>
+            threshold > 0 && distanceFromSpawn > threshold;
 
         public void SetAggression(int aggroLevel, int aggroRange)
         {
