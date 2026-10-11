@@ -120,9 +120,28 @@ namespace DOL.GS
                 ? (byte)Math.Clamp(level, LevelLimit, definition.MaxLevel)
                 : (byte)Math.Clamp(level, definition?.MinLevel ?? 1, definition?.MaxLevel ?? OpenBattlegroundPolicy.MaxLevel);
 
-        /// <summary>Whether a campaign patrol or ambush may pick this target: in the open BG humans under 40 are the guest squads'.</summary>
-        public static bool CampaignSquadMayTarget(BattlegroundDefinition definition, bool isHuman, int level) =>
-            definition?.Kind != BattlegroundDefinitionKind.Open || !isHuman || !IsGuestLevel(level);
+        /// <summary>
+        /// Whether a campaign patrol or ambush may pick this target. Brackets: anyone, as before. Open BG: humans of 40 or more
+        /// (those under 40 are the guest squads') and never a crew bot: the level-50 patrols hunted the crew at its own arrival
+        /// camps (live run 0.242.0, 32 squads in 22 minutes).
+        /// </summary>
+        public static bool CampaignSquadMayTarget(BattlegroundDefinition definition, bool isHuman, bool isCrewBot, int level) =>
+            definition?.Kind != BattlegroundDefinitionKind.Open || (isHuman ? !IsGuestLevel(level) : !isCrewBot);
+
+        /// <summary>open BG: a campaign squad's origin and goal keep this far (2D) from every arrival camp.</summary>
+        public const int ArrivalCampClearance = 2_000;
+
+        /// <summary>Brackets: any point. Open BG: a point farther than <see cref="ArrivalCampClearance"/> from every arrival camp.</summary>
+        public static bool CampaignSquadPointAllowed(BattlegroundDefinition definition, Point3D point, IEnumerable<Point3D> arrivalCamps) =>
+            definition?.Kind != BattlegroundDefinitionKind.Open ||
+            point != null && (arrivalCamps ?? Array.Empty<Point3D>()).All(camp => camp == null || Distance2D(camp, point) > ArrivalCampClearance);
+
+        /// <summary>
+        /// Where a campaign squad starts. Brackets: its camp. Open BG: out in the field from the camp toward the central keep
+        /// (<see cref="SanctuaryOffset"/>, at most half way), on the keep approach instead of at the crews' arrival camp.
+        /// </summary>
+        public static Point3D CampaignSquadOrigin(BattlegroundDefinition definition, Point3D camp, Point3D keep) =>
+            definition?.Kind == BattlegroundDefinitionKind.Open ? HuntAnchor(camp, true, keep) : camp;
 
         /// <summary>
         /// One tick's decision. A realm with no squad gets one while a human under 40 is inside; a wiped squad is
@@ -442,7 +461,7 @@ namespace DOL.GS
             }
         }
 
-        private static Point3D Floor(Region region, Point3D point)
+        internal static Point3D Floor(Region region, Point3D point)
         {
             Zone zone = region.GetZone(point.X, point.Y);
             var nav = PathfindingProvider.Instance;

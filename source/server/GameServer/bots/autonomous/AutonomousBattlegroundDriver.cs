@@ -47,6 +47,15 @@ public static class AutonomousBattlegroundDriver
     public const int LandingRestPercent = 80;
     /// <summary>open BG: the landing rest never lasts longer than this (game time), e.g. while regeneration is suppressed.</summary>
     public const int LandingRestMaxMilliseconds = 2 * 60_000;
+    /// <summary>
+    /// open BG assault march: the floor point a unit marches to lies this far out from a closed outer gate, tried in this
+    /// order. The keep centre lies behind the walls, so a march there failed with closed_gate or no_route (live run 0.242.0).
+    /// </summary>
+    public static readonly IReadOnlyList<int> GateApproachDistances = Array.AsReadOnly(new[] { 450, 300, 600 });
+    /// <summary>Attackable doors within this distance (2D) of the farthest one from the keep centre are its outer gates.</summary>
+    public const int OuterGateTolerance = 150;
+    // A gate approach floor lies within this height of the gate.
+    private const float GateFloorRange = 256;
     private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousBattlegroundDriver));
 
     /// <summary>One native path query: its status and the position of its last node.</summary>
@@ -91,9 +100,21 @@ public static class AutonomousBattlegroundDriver
         public bool LandingRest;
         public long LandingRestUntil;
         public bool LandingRestLogged;
+        // Self-defence turns during the landing rest: set while one lasts, counted per rest for the end line.
+        public bool LandingRestDefending;
+        public int LandingRestDefended;
+        // open BG: the last order point (or gate approach) with a proven route; a unit whose order has none returns here.
+        public Point3D LastOrderPoint;
     }
 
+    /// <summary>A closed outer gate of a keep and its proven floor points outside, nearest distance first.</summary>
+    private sealed record GateApproach(GameKeepDoor Door, Point3D[] Points);
+
+    private enum GateMarch { NoGate, Walking, Unreachable }
+
     private static readonly ConditionalWeakTable<GameBot, State> States = new();
+    // Gate approach floors per keep, resolved once on first use.
+    private static readonly ConditionalWeakTable<AbstractGameKeep, GateApproach[]> GateApproaches = new();
 
     /// <summary>
     /// Runs one driver turn. Returns false when the bot takes no action this turn
@@ -119,13 +140,20 @@ public static class AutonomousBattlegroundDriver
         State state = States.GetValue(bot, CreateState);
         long now = GameLoop.GameLoopTime;
         state.Open = definition.Kind == BattlegroundDefinitionKind.Open;
-        if (state.LandingRest && !walkingHome && !AutonomousBattlegroundParticipation.IsLeaving(bot) &&
-            RestAtLanding(brain, bot, state, now))
+        // Set while the bot defends itself during its landing rest: it fights, but takes no order until the rest is over.
+        bool restHold = false;
+        if (state.LandingRest)
         {
-            state.Action = "landing-rest";
-            AutonomousBattlegroundParticipation.RecordDriverTurn(bot, bot.CurrentRegionID, state.Action);
-            AutonomousBattlegroundParticipation.NoteProgress(bot, eAutonomousProgressKind.Recovery);
-            return true;
+            if (walkingHome || AutonomousBattlegroundParticipation.IsLeaving(bot))
+                EndLandingRest(bot, state, "order");
+            else if (RestAtLanding(brain, bot, state, now))
+            {
+                state.Action = "landing-rest";
+                AutonomousBattlegroundParticipation.RecordDriverTurn(bot, bot.CurrentRegionID, state.Action);
+                AutonomousBattlegroundParticipation.NoteProgress(bot, eAutonomousProgressKind.Recovery);
+                return true;
+            }
+            else restHold = state.LandingRest;
         }
         if (now >= state.NextScan)
         {
@@ -143,7 +171,12 @@ public static class AutonomousBattlegroundDriver
         if (!engaged)
         {
             GameBot leader = bot.Group?.LivingLeader as GameBot;
-            if (walkingHome)
+            if (restHold)
+            {
+                state.Action = "landing-rest";
+                Stand(bot);
+            }
+            else if (walkingHome)
             {
                 state.Action = "relief-walk";
                 if (!GoTo(bot, state, home, now)) AutonomousBattlegroundParticipation.EndReliefWalk(bot);
@@ -171,6 +204,8 @@ public static class AutonomousBattlegroundDriver
     /// </summary>
     public static void OnLandingRelease(GameBot bot)
     {
+        // A rest still running when the bot died again ends here, so every rest-start line has its end line.
+        if (bot != null && States.TryGetValue(bot, out State previous) && previous.LandingRest) EndLandingRest(bot, previous, "died");
         ForgetState(bot);
         if (bot == null || !AutonomousBattlegroundParticipation.IsOpenCrew(bot)) return;
         State state = States.GetValue(bot, CreateState);
@@ -183,24 +218,35 @@ public static class AutonomousBattlegroundDriver
         healthPercent >= LandingRestPercent && (!usesPower || powerPercent >= LandingRestPercent);
 
     /// <summary>
+    /// Why the landing rest ends this turn: recovered (health and power reached <see cref="LandingRestPercent"/>), cap (its
+    /// <see cref="LandingRestMaxMilliseconds"/> ran out first), or null while it goes on. A fight in between never ends it.
+    /// </summary>
+    public static string LandingRestEndReason(int healthPercent, int powerPercent, bool usesPower, long now, long until) =>
+        LandingRestDone(healthPercent, powerPercent, usesPower) ? "recovered" : now >= until ? "cap" : null;
+
+    /// <summary>
     /// One turn of the open-BG landing rest. True while the bot rests (or holds still until it may); false when the
-    /// rest is over (recovered or timed out) or the bot is attacked, which it answers through the ordinary turn.
-    /// Reuses the bots' recovery rest (fast regeneration while still and out of combat). Logged once per release.
+    /// rest is over (recovered or timed out) or the bot is attacked, which it answers through the ordinary turn; the
+    /// rest then resumes after the fight until it is over, and no order is taken before. Reuses the bots' recovery rest
+    /// (fast regeneration while still and out of combat). Its start and its end are logged once per release.
     /// </summary>
     private static bool RestAtLanding(BotBrain brain, GameBot bot, State state, long now)
     {
-        if (LandingRestDone(bot.HealthPercent, bot.ManaPercent, bot.MaxMana > 0) || now >= state.LandingRestUntil)
+        string end = LandingRestEndReason(bot.HealthPercent, bot.ManaPercent, bot.MaxMana > 0, now, state.LandingRestUntil);
+        if (end != null)
         {
-            state.LandingRest = false;
-            if (bot.IsRecoveryResting) bot.WakeRecoveryRest();
+            EndLandingRest(bot, state, end);
             return false;
         }
         if (brain.HasAggro || bot.IsAttacking)
         {
             // Self-defence first; the rest resumes after the fight while its time lasts.
             if (bot.IsRecoveryResting) bot.WakeRecoveryRest();
+            if (!state.LandingRestDefending) state.LandingRestDefended++;
+            state.LandingRestDefending = true;
             return false;
         }
+        state.LandingRestDefending = false;
         if (!state.LandingRestLogged)
         {
             state.LandingRestLogged = true;
@@ -213,6 +259,16 @@ public static class AutonomousBattlegroundDriver
         // A cast in progress (a heal or rebuff) finishes first; the rest starts on a later turn.
         if (!bot.IsCasting && !BotRestRecovery.BlocksRest(bot)) bot.BeginRecoveryRest();
         return true;
+    }
+
+    // Ends the landing rest and logs its outcome: recovered, cap, order (relief walk or leaving), died (killed while resting).
+    private static void EndLandingRest(GameBot bot, State state, string reason)
+    {
+        state.LandingRest = false;
+        state.LandingRestDefending = false;
+        if (bot.IsRecoveryResting) bot.WakeRecoveryRest();
+        Log.Info($"AUTONOMOUS_BG_LANDING_REST_END region={bot.CurrentRegionID} bot=\"{bot.Name}\" health={bot.HealthPercent} power={bot.ManaPercent} " +
+            $"reason={reason} defended={state.LandingRestDefended}");
     }
 
     private static bool Idle(GameBot bot, string reason)
@@ -241,6 +297,13 @@ public static class AutonomousBattlegroundDriver
         if (keep != null && FallbackAllows(held, LeadBranch.Claim) && TryClaim(bot, keep, state, now)) return;
         if (keep != null && FallbackAllows(held, LeadBranch.Assault) && CountPresent(bot) >= AssaultGroupMinimum &&
             TryAssault(brain, bot, keep, state, now)) return;
+        if (!FallbackAllows(held, LeadBranch.Roam))
+        {
+            // Live run 0.242.0: every unreachable order sent its unit back to the arrival camps, where the crews and the
+            // campaign patrols ground each other down. A unit with an order holds or returns to its last reachable point.
+            HoldOrder(bot, state, now);
+            return;
+        }
         if (camps.Length == 0)
         {
             state.Action = "stand-no-camp";
@@ -268,29 +331,135 @@ public static class AutonomousBattlegroundDriver
                 return true;
             }
             if (CountPresent(bot) >= AssaultGroupMinimum && TryAssault(brain, bot, keep, state, now)) return true;
+            // The keep centre lies behind the walls: march to the floor outside the nearest closed outer gate instead.
+            // Only with every outer gate broken or open is the centre (the courtyard) the march goal again.
+            GateMarch march = MarchToGate(bot, keep, state, now);
+            if (march != GateMarch.NoGate) return march == GateMarch.Walking;
             state.Action = "march-keep";
-            return GoTo(bot, state, order.Point, now);
+            if (!GoTo(bot, state, order.Point, now)) return false;
+            state.LastOrderPoint = order.Point;
+            return true;
         }
         state.Action = OpenAction(order);
         if (order.Point == null) return false;
         // While the point sits in the unreachable cache GoTo refuses it without a proof; the director already knows.
         bool known = InUnreachableCache(state, order.Point, now);
-        if (GoTo(bot, state, order.Point, now)) return true;
+        if (GoTo(bot, state, order.Point, now))
+        {
+            state.LastOrderPoint = order.Point;
+            return true;
+        }
         if (!known) OpenBattlegroundDirector.ReportUnreachable(order.Unit, order.Point);
         return false;
+    }
+
+    /// <summary>
+    /// An open-BG unit whose order has no route: it walks back to the last order point it had a route to (its bridge, its
+    /// last field point, the gate approach) or holds where it stands, until the director gives a new point. Never the camps.
+    /// </summary>
+    private static void HoldOrder(GameBot bot, State state, long now)
+    {
+        Point3D previous = state.LastOrderPoint;
+        if (previous != null && bot.GetDistanceTo(previous) > ArrivalDistance)
+        {
+            state.Action = "return-order-point";
+            if (GoTo(bot, state, previous, now)) return;
+        }
+        state.Action = "hold-order";
+        Stand(bot);
+    }
+
+    /// <summary>
+    /// The assault march: walks to the proven floor point outside the closed outer gate nearest the bot (its approach
+    /// side). NoGate when the keep has no closed outer gate with a floor outside; Unreachable when no such point routes.
+    /// </summary>
+    private static GateMarch MarchToGate(GameBot bot, AbstractGameKeep keep, State state, long now)
+    {
+        GateApproach[] gates = GateApproaches.GetValue(keep, BuildGateApproaches)
+            .Where(gate => gate.Points.Length > 0 && gate.Door.IsAlive && gate.Door.State == eDoorState.Closed)
+            .OrderBy(gate => bot.GetDistanceTo(gate.Points[0])).ToArray();
+        if (gates.Length == 0) return GateMarch.NoGate;
+        state.Action = "march-gate";
+        foreach (GateApproach gate in gates)
+            foreach (Point3D point in gate.Points)
+            {
+                if (!GoTo(bot, state, point, now)) continue;
+                state.LastOrderPoint = point;
+                return GateMarch.Walking;
+            }
+        return GateMarch.Unreachable;
+    }
+
+    // Once per keep: its outer gates and, for each, the navmesh floor GateApproachDistances out from the keep centre.
+    private static GateApproach[] BuildGateApproaches(AbstractGameKeep keep)
+    {
+        GameKeepDoor[] doors = keep.Doors.Values.Where(door => door != null && door.IsAttackableDoor).ToArray();
+        Point3D centre = new(keep.X, keep.Y, keep.Z);
+        var nav = PathfindingProvider.Instance;
+        var gates = new List<GateApproach>();
+        foreach (int index in OuterGates(centre, doors.Select(door => new Point3D(door.X, door.Y, door.Z)).ToArray()))
+        {
+            GameKeepDoor door = doors[index];
+            Point3D gatePoint = new(door.X, door.Y, door.Z);
+            var points = new List<Point3D>();
+            foreach (int distance in GateApproachDistances)
+            {
+                Point3D raw = OutsideGate(centre, gatePoint, distance);
+                Zone zone = raw == null ? null : door.CurrentRegion?.GetZone(raw.X, raw.Y);
+                if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone)) continue;
+                Vector3? floor = nav.GetClosestPoint(zone, new Vector3(raw.X, raw.Y, raw.Z), 64, 64, GateFloorRange, nav.DefaultFilters);
+                if (!floor.HasValue || !float.IsFinite(floor.Value.Z) || Math.Abs(floor.Value.Z - door.Z) > GateFloorRange) continue;
+                points.Add(new Point3D((int)Math.Round(floor.Value.X), (int)Math.Round(floor.Value.Y), (int)Math.Round(floor.Value.Z)));
+            }
+            gates.Add(new GateApproach(door, points.ToArray()));
+            Log.Info($"AUTONOMOUS_BG_GATE_APPROACH region={keep.Region} keep={keep.KeepID} door={door.DoorId} gate={door.X},{door.Y},{door.Z} " +
+                $"points={(points.Count == 0 ? "none" : string.Join(";", points.Select(point => $"{point.X},{point.Y},{point.Z}")))}");
+        }
+        return gates.ToArray();
+    }
+
+    /// <summary>
+    /// The indexes of a keep's outer gates among its attackable doors: those within <see cref="OuterGateTolerance"/> (2D)
+    /// of the door farthest from the keep centre. Inner doors (Thidranki Faste's keep door, 626 from the centre) are
+    /// reached through the broken outer gate, not marched to.
+    /// </summary>
+    public static int[] OuterGates(Point3D keep, IReadOnlyList<Point3D> doors)
+    {
+        if (keep == null || doors == null || doors.Count == 0) return Array.Empty<int>();
+        double[] distances = doors.Select(door => door == null ? -1 : Distance2D(keep, door)).ToArray();
+        double farthest = distances.Max();
+        if (farthest <= 0) return Array.Empty<int>();
+        return Enumerable.Range(0, doors.Count).Where(index => distances[index] >= 0 && distances[index] >= farthest - OuterGateTolerance).ToArray();
+    }
+
+    /// <summary>The point <paramref name="distance"/> out from a gate, on the line from the keep centre through it (null at the centre).</summary>
+    public static Point3D OutsideGate(Point3D keep, Point3D gate, int distance)
+    {
+        if (keep == null || gate == null) return null;
+        double dx = gate.X - keep.X, dy = gate.Y - keep.Y;
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1) return null;
+        return new Point3D((int)Math.Round(gate.X + dx / length * distance), (int)Math.Round(gate.Y + dy / length * distance), gate.Z);
+    }
+
+    private static double Distance2D(Point3D a, Point3D b)
+    {
+        double dx = a.X - b.X, dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     private static bool InUnreachableCache(State state, Point3D goal, long now) =>
         state.UnreachableUntil != null && state.UnreachableUntil.TryGetValue((goal.X, goal.Y, goal.Z), out long retry) && now < retry;
 
     /// <summary>The bracket priority's branches below an open-BG order.</summary>
-    public enum LeadBranch { Defend, Claim, Assault }
+    public enum LeadBranch { Defend, Claim, Assault, Roam }
 
     /// <summary>
     /// Which bracket branch may run after an open-BG order found no route. Without an order (brackets, a unit not yet
     /// ordered) every branch runs as before. A unit holding an order defends only for Defend and assaults only for
-    /// Assault; the claim was already tried by the order; every other role roams the camps (or stands), so a group
-    /// whose roam, lurk or bridge point is unreachable never sieges a door in Quiet or Push.
+    /// Assault; the claim was already tried by the order; so a group whose roam, lurk or bridge point is unreachable
+    /// never sieges a door in Quiet or Push. No unit holding an order roams the camps: it holds or returns to its last
+    /// reachable order point instead (live run 0.242.0, the arrival-camp grinder).
     /// </summary>
     public static bool FallbackAllows(OpenBgRole? heldOrder, LeadBranch branch) => heldOrder switch
     {
@@ -685,6 +854,10 @@ public static class AutonomousBattlegroundDriver
         }
     }
 
+    /// <summary>One native path query as a <see cref="ChainRoute"/> leg (the campaign's door approach proof chains these too).</summary>
+    internal static RouteLeg QueryLeg(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 goal, EDtPolyFlags[] filters,
+        WrappedPathfindingNode[] nodes) => Leg(nav, zone, start, goal, filters, nodes, out _);
+
     // One native query from start toward the goal; count is the number of route nodes left in the buffer.
     private static RouteLeg Leg(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 goal, EDtPolyFlags[] filters,
         WrappedPathfindingNode[] nodes, out int count)
@@ -745,6 +918,48 @@ public static class AutonomousBattlegroundDriver
     /// <summary>The native mover's closed-door rule: a closed gate that interaction cannot open blocks unless the bot may pass it.</summary>
     public static bool IsRouteBlockingDoor(bool closed, bool openableByInteraction, bool friendlyKeepDoor) =>
         closed && !openableByInteraction && !friendlyKeepDoor;
+
+    /// <summary>
+    /// open BG: one line per crew death at the moment it happens. The world controller's death line is written only after
+    /// the bot left the battleground, once, with its last killer (live run 0.242.0: 23 lines for 246 deaths).
+    /// </summary>
+    public static void OnParticipantDeath(GameBot bot, GameObject killer)
+    {
+        if (bot is not { IsAutonomousWorldBot: true } || !Log.IsInfoEnabled ||
+            BattlegroundCampaignCatalog.Find(bot.CurrentRegionID)?.Kind != BattlegroundDefinitionKind.Open ||
+            !AutonomousBattlegroundParticipation.IsOpenCrew(bot)) return;
+        GameLiving raw = killer as GameLiving;
+        GameLiving identity = PvpCombatant.Resolve(raw) ?? raw;
+        Log.Info(DeathLine(bot.CurrentRegionID, bot.Name, bot.Realm, bot.Guild?.Name, identity?.Name ?? killer?.Name,
+            identity?.Realm ?? eRealm.None, KillerKind(identity), GuildOf(identity)?.Name, bot.X, bot.Y, bot.Z));
+    }
+
+    /// <summary>The open-BG death line; same_realm only when the killer has the victim's (player) realm.</summary>
+    public static string DeathLine(ushort region, string bot, eRealm realm, string guild, string killer, eRealm killerRealm,
+        string killerKind, string killerGuild, int x, int y, int z) =>
+        $"AUTONOMOUS_BG_DEATH region={region} bot=\"{bot}\" realm={GlobalConstants.RealmToName(realm)} killer=\"{killer ?? "none"}\" " +
+        $"killer_realm={GlobalConstants.RealmToName(killerRealm)} " +
+        $"same_realm={realm != eRealm.None && realm == killerRealm} position={x},{y},{z} killer_kind={killerKind} " +
+        $"guild=\"{guild ?? string.Empty}\" killer_guild=\"{killerGuild ?? string.Empty}\"";
+
+    // Who the killer is in open-BG terms: crew, the campaign or guest squads, the keep's guards, a human, or anything else.
+    private static string KillerKind(GameLiving killer) => killer switch
+    {
+        null => "none",
+        GamePlayer => "player",
+        GameBot { IsBattlegroundEncounterBot: true } => "squad",
+        GameBot { IsAutonomousWorldBot: true } bot => AutonomousBattlegroundParticipation.IsOpenCrew(bot) ? "crew" : "world_bot",
+        GameBot => "companion",
+        GameKeepGuard => "guard",
+        _ => "npc",
+    };
+
+    private static Guild GuildOf(GameLiving living) => living switch
+    {
+        GamePlayer player => player.Guild,
+        GameBot bot => bot.Guild,
+        _ => null,
+    };
 
     private static void Stand(GameBot bot)
     {

@@ -146,13 +146,42 @@ namespace DOL.UnitTests
             {
                 Assert.That(OpenBattlegroundGuestSquads.CampaignSquadLevel(open, 12), Is.EqualTo(40));
                 Assert.That(OpenBattlegroundGuestSquads.CampaignSquadLevel(open, 47), Is.EqualTo(47));
-                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, true, 12), Is.False);
-                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, true, 40), Is.True);
-                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, false, 12), Is.True, "bot participants stay targets");
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, true, false, 12), Is.False);
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, true, false, 40), Is.True);
                 // Brackets are unchanged.
                 Assert.That(OpenBattlegroundGuestSquads.CampaignSquadLevel(bracket, 12), Is.EqualTo(20));
                 Assert.That(OpenBattlegroundGuestSquads.CampaignSquadLevel(bracket, 22), Is.EqualTo(22));
-                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(bracket, true, 21), Is.True);
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(bracket, true, false, 21), Is.True);
+            });
+        }
+
+        [Test]
+        public void CampaignSquadsInTheOpenBgLeaveTheCrewAndItsArrivalCampsAlone()
+        {
+            // Live run 0.242.0: 32 level-50 patrols and ambushes hunted crew bots at the crews' own arrival camps.
+            BattlegroundDefinition open = BattlegroundCampaignCatalog.FindOpen();
+            BattlegroundDefinition bracket = BattlegroundCampaignCatalog.Find(238);
+            var keep = new Point3D(33280, 38272, 3720);
+            var albionCamp = new Point3D(36700, 48200, 3279);
+            Point3D[] camps = { albionCamp, new Point3D(50900, 27400, 3300), new Point3D(21500, 21300, 3300) };
+            Point3D origin = OpenBattlegroundGuestSquads.CampaignSquadOrigin(open, albionCamp, keep);
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, false, true, 50), Is.False, "never a crew bot");
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, false, false, 30), Is.True, "a guest squad actor stays fair game");
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(open, true, false, 50), Is.True, "a human of 40 or more");
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadMayTarget(bracket, false, true, 22), Is.True, "brackets: bot participants stay targets");
+
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(open, new Point3D(36300, 48300, 3279), camps), Is.False,
+                    "no goal at an arrival camp");
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(open, keep, camps), Is.True, "the keep approach is fine");
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(open, null, camps), Is.False);
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(bracket, albionCamp, camps), Is.True, "brackets keep their camps");
+
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(open, origin, camps), Is.True, "the squad starts clear of every camp");
+                Assert.That(OpenBattlegroundGuestSquads.Distance2D(origin, keep), Is.LessThan(OpenBattlegroundGuestSquads.Distance2D(albionCamp, keep)),
+                    "on the way from the camp to the keep");
+                Assert.That(OpenBattlegroundGuestSquads.CampaignSquadOrigin(bracket, albionCamp, keep), Is.SameAs(albionCamp), "brackets start at the camp");
             });
         }
 
