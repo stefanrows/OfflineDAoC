@@ -500,6 +500,22 @@ namespace DOL.GS
             return porters;
         }
 
+        /// <summary>The kind of a roster unit, read by the /bgsetup status page. False for a unit the roster no longer tracks.</summary>
+        public static bool TryGetUnitKind(int unit, out OpenBgUnitKind kind)
+        {
+            lock (Sync)
+                if (Units.TryGetValue(unit, out UnitInfo info))
+                {
+                    kind = info.Kind;
+                    return true;
+                }
+            kind = OpenBgUnitKind.Solo;
+            return false;
+        }
+
+        /// <summary>The short name of a unit kind as the roster logs it: group8, small or solo.</summary>
+        public static string KindName(OpenBgUnitKind kind) => Describe(kind);
+
         private static bool IsHealer(GameBot bot) =>
             bot.CharacterClass != null && BotPartyRoles.IsHealingClass((eCharacterClass)bot.CharacterClass.ID);
 

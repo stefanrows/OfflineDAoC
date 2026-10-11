@@ -1,0 +1,222 @@
+namespace OfflineDaoc.Launcher;
+
+/// <summary>
+/// Launcher tab "open BG": the open BG switch and its seven numbers (the same open_bg_* rows and ranges as
+/// /bgsetup). Saving writes the server property rows and is possible only while the server is stopped; while it
+/// runs the tab shows the live state from open-bg-status.json, or points to /bgsetup in game.
+/// </summary>
+internal sealed class OpenBgSettingsControl : UserControl
+{
+    private static readonly string[] NumberFields = ["groups8", "small", "solos", "max_bots", "cycle_min", "cycle_max"];
+    private readonly string _database;
+    private readonly string _statusPath;
+    private readonly Func<bool> _serverStopped;
+    private readonly ToolTip _toolTips = new() { InitialDelay = 450, ReshowDelay = 100, AutoPopDelay = 20000, ShowAlways = true };
+    private readonly CheckBox _enabled = new() { AutoSize = true, Text = "Open BG on" };
+    private readonly CheckBox _drift = new() { AutoSize = true, Text = "Player drift" };
+    private readonly Dictionary<string, NumericUpDown> _numbers = new();
+    private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
+    private readonly Label _live = new() { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 12, 3, 3) };
+    private readonly Button _save = new() { Text = "Save", AutoSize = true };
+    private readonly Button _undo = new() { Text = "Undo edits", AutoSize = true };
+    private readonly Button _defaults = new() { Text = "Restore defaults", AutoSize = true };
+    private readonly System.Windows.Forms.Timer _poll = new() { Interval = 2000 };
+    private OpenBgSettings _saved = OpenBgSettings.Defaults;
+    private bool _loading, _loadFailed, _wasStopped = true;
+    private string _notice = string.Empty;
+
+    // A failed read is shown in red but never blocks a server start.
+    public bool HasUnsavedChanges => ReadValues() != _saved;
+
+    public OpenBgSettingsControl(string database, string statusPath, Func<bool> serverStopped)
+    {
+        _database = database;
+        _statusPath = statusPath;
+        _serverStopped = serverStopped;
+        Dock = DockStyle.Fill;
+        BackColor = DaocTheme.Panel;
+        ForeColor = DaocTheme.Text;
+        AutoScroll = true;
+        var body = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown,
+            WrapContents = false, Padding = new Padding(16),
+        };
+        body.Controls.Add(new Label { Text = "open BG — Thidranki", AutoSize = true,
+            Font = new Font(Font.FontFamily, 15, FontStyle.Bold), ForeColor = DaocTheme.GoldLight });
+        body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 9, 3, 12),
+            Text = "A permanently open battleground for levels 1-50, reached through the porters' [open BG] line. Its own bot crew per realm comes from the level 40-50 world bots and is relieved in part every 20-30 minutes. Bots keep their levels, gear and realm points." });
+
+        body.Controls.Add(SwitchRow(_enabled, OpenBgSettings.Field("enabled")));
+        foreach (string name in NumberFields)
+        {
+            OpenBgField field = OpenBgSettings.Field(name);
+            var number = new NumericUpDown { Minimum = field.Min, Maximum = field.Max, Width = 80,
+                BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text, AccessibleName = field.Label };
+            _numbers[name] = number;
+            number.ValueChanged += (_, _) => Edited();
+            body.Controls.Add(NumberRow(number, field));
+        }
+        body.Controls.Add(SwitchRow(_drift, OpenBgSettings.Field("drift")));
+        _enabled.CheckedChanged += (_, _) => Edited();
+        _drift.CheckedChanged += (_, _) => Edited();
+
+        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 13, 0, 9) };
+        buttons.Controls.AddRange([_save, _undo, _defaults]);
+        body.Controls.Add(buttons);
+        body.Controls.Add(_status);
+        body.Controls.Add(_live);
+        Controls.Add(body);
+
+        _save.Click += (_, _) => SaveSettings();
+        _undo.Click += (_, _) => LoadSettings();
+        _defaults.Click += (_, _) =>
+        {
+            SetValues(OpenBgSettings.Defaults);
+            _notice = "Defaults loaded. Click Save to write them.";
+            UpdateState();
+        };
+        LoadSettings();
+        // The server-process check is not free; poll only while the tab is shown.
+        _poll.Tick += (_, _) => { if (Visible) UpdateState(); };
+        _poll.Start();
+    }
+
+    private Control SwitchRow(CheckBox box, OpenBgField field)
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
+        box.Margin = new Padding(3, 3, 3, 0);
+        _toolTips.SetToolTip(box, field.Help);
+        row.Controls.Add(box);
+        row.Controls.Add(HelpLabel(field));
+        return row;
+    }
+
+    private Control NumberRow(NumericUpDown number, OpenBgField field)
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 2) };
+        var label = new Label { Text = field.Label, Width = 190, Height = 28, TextAlign = ContentAlignment.MiddleLeft };
+        _toolTips.SetToolTip(label, field.Help);
+        _toolTips.SetToolTip(number, field.Help);
+        row.Controls.Add(label);
+        row.Controls.Add(number);
+        var help = HelpLabel(field);
+        help.MaximumSize = new Size(560, 0);
+        help.Padding = new Padding(0, 6, 0, 0);
+        row.Controls.Add(help);
+        return row;
+    }
+
+    private static Label HelpLabel(OpenBgField field) => new()
+    {
+        AutoSize = true, MaximumSize = new Size(820, 0), ForeColor = DaocTheme.Parchment,
+        Text = field.Help, Margin = new Padding(3, 0, 3, 2),
+    };
+
+    private void Edited()
+    {
+        if (_loading) return;
+        _notice = string.Empty;
+        UpdateState();
+    }
+
+    private OpenBgSettings ReadValues() => new(
+        _enabled.Checked,
+        (int)_numbers["groups8"].Value,
+        (int)_numbers["small"].Value,
+        (int)_numbers["solos"].Value,
+        (int)_numbers["max_bots"].Value,
+        (int)_numbers["cycle_min"].Value,
+        (int)_numbers["cycle_max"].Value,
+        _drift.Checked);
+
+    private void SetValues(OpenBgSettings settings)
+    {
+        OpenBgSettings value = settings.Clamped();
+        _loading = true;
+        _enabled.Checked = value.Enabled;
+        _drift.Checked = value.Drift;
+        _numbers["groups8"].Value = value.Groups8;
+        _numbers["small"].Value = value.Small;
+        _numbers["solos"].Value = value.Solos;
+        _numbers["max_bots"].Value = value.MaxBots;
+        _numbers["cycle_min"].Value = value.CycleMin;
+        _numbers["cycle_max"].Value = value.CycleMax;
+        _loading = false;
+    }
+
+    private void LoadSettings()
+    {
+        try
+        {
+            _saved = OpenBgSettings.Load(_database);
+            _loadFailed = false;
+            _notice = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _saved = OpenBgSettings.Defaults;
+            _loadFailed = true;
+            _notice = "Cannot read the saved open BG setup: " + ex.Message;
+        }
+        SetValues(_saved);
+        UpdateState();
+    }
+
+    private void SaveSettings()
+    {
+        try
+        {
+            OpenBgSettings values = ReadValues();
+            if (values.CycleMax < values.CycleMin)
+                throw new InvalidOperationException("The longest cycle must not be shorter than the shortest cycle.");
+            OpenBgSettings.Save(_database, values, _serverStopped);
+            _saved = values.Clamped();
+            _loadFailed = false;
+            SetValues(_saved);
+            _notice = "Saved. The server reads the open BG setup at its next start.";
+        }
+        catch (Exception ex) { _notice = "Not saved: " + ex.Message; }
+        UpdateState();
+    }
+
+    public void UpdateState()
+    {
+        bool stopped = _serverStopped();
+        // /bgsetup may have changed the rows while the server ran: reread once it has stopped, unless edits are pending.
+        if (stopped && !_wasStopped && !HasUnsavedChanges)
+        {
+            _wasStopped = true;
+            LoadSettings();
+            return;
+        }
+        _wasStopped = stopped;
+        OpenBgSettings values = ReadValues();
+        bool valid = values.CycleMax >= values.CycleMin;
+        _enabled.Enabled = _drift.Enabled = stopped;
+        foreach (NumericUpDown number in _numbers.Values) number.Enabled = stopped;
+        _save.Enabled = stopped && valid;
+        _undo.Enabled = _defaults.Enabled = stopped;
+        _status.Text = !stopped ? "The server is running: these fields are read-only. Change the setup live with /bgsetup <key> <value> in game." :
+            _notice.Length > 0 ? _notice :
+            !valid ? "The longest cycle must not be shorter than the shortest cycle." :
+            HasUnsavedChanges ? "Unsaved changes — click Save before starting the server." :
+            "Saved setup shown. The server reads it at its next start.";
+        bool error = !valid || _loadFailed || _notice.StartsWith("Not saved", StringComparison.OrdinalIgnoreCase) ||
+            _notice.StartsWith("Cannot read", StringComparison.OrdinalIgnoreCase);
+        _status.ForeColor = error && stopped ? Color.Salmon : DaocTheme.GoldLight;
+        _live.Visible = !stopped;
+        if (!stopped)
+            _live.Text = OpenBgLiveStatus.Read(_statusPath, DateTime.UtcNow) ?? OpenBgLiveStatus.Fallback;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _poll.Dispose();
+            _toolTips.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}
