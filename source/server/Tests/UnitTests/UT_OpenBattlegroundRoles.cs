@@ -229,5 +229,49 @@ namespace DOL.GS.Tests
             Assert.That(Enum.GetValues<OpenBgRole>().Select(OpenBattlegroundRoles.Describe),
                 Is.EqualTo(new[] { "bridge_watch", "roam", "lurk", "assault", "defend", "retreat" }));
         }
+
+        [Test]
+        public void SnappedDriftOnTopOfAHumanFallsBackToAPointClearOfHumans()
+        {
+            var human = new Point3D(10_000, 10_000, 3_000);
+            var humans = new[] { human };
+            var ownFar = new Point3D(14_000, 10_000, 3_000);
+            var ownOnTop = new Point3D(10_300, 10_000, 3_000);
+            var snappedNear = new Point3D(10_500, 10_000, 3_000);
+            var snappedClear = new Point3D(11_500, 10_000, 3_000);
+            var undrifted = new Point3D(20_000, 20_000, 3_000);
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoles.AfterDrift(ownFar, snappedClear, humans, () => undrifted, out bool drifted), Is.SameAs(snappedClear));
+                Assert.That(drifted, Is.True);
+                Assert.That(OpenBattlegroundRoles.AfterDrift(ownFar, snappedNear, humans, () => undrifted, out drifted), Is.SameAs(ownFar),
+                    "a snap that lands within 800 of the human is dropped");
+                Assert.That(drifted, Is.False);
+                Assert.That(OpenBattlegroundRoles.AfterDrift(ownOnTop, snappedNear, humans, () => undrifted, out _), Is.SameAs(undrifted),
+                    "own point and snap both on the human: a non-drift point");
+                Assert.That(OpenBattlegroundRoles.AfterDrift(ownOnTop, null, humans, () => undrifted, out drifted), Is.SameAs(undrifted),
+                    "DriftedPoint null: never the < 800 point");
+                Assert.That(drifted, Is.False);
+            });
+        }
+
+        [Test]
+        public void NonDriftPointIsClearOfHumansWhereOneIs()
+        {
+            var humans = new[] { new Point3D(0, 0, 0) };
+            var near = new Point3D(500, 0, 0);
+            var mid = new Point3D(700, 0, 0);
+            var far = new Point3D(2_000, 0, 0);
+            Assert.Multiple(() =>
+            {
+                for (int seed = 0; seed < 20; seed++)
+                    Assert.That(OpenBattlegroundRoles.PointClearOfHumans(new[] { near, far, mid }, humans, new Random(seed)), Is.SameAs(far));
+                Assert.That(OpenBattlegroundRoles.PointClearOfHumans(new[] { near, mid }, humans, new Random(1)), Is.SameAs(mid),
+                    "every point near a human: the farthest one");
+                Assert.That(OpenBattlegroundRoles.PointClearOfHumans(Array.Empty<Point3D>(), humans, new Random(1)), Is.Null);
+                Assert.That(OpenBattlegroundRoles.ClearOfHumans(far, humans), Is.True);
+                Assert.That(OpenBattlegroundRoles.ClearOfHumans(mid, humans), Is.False);
+            });
+        }
     }
 }

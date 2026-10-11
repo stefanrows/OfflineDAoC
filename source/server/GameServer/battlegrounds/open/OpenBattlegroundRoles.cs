@@ -156,10 +156,56 @@ namespace DOL.GS
 
         /// <summary>
         /// Low-level protection: a crew bot (level 40 or more) does not pick a human below level 30 as its target unless
-        /// that human (or its companion) attacked it or its group first. Self-defence always stays allowed.
+        /// that human (or its group or companions) attacked it or its group first. Self-defence always stays allowed.
         /// </summary>
         public static bool MayHuntHuman(int botLevel, int humanLevel, bool humanAttackedBot) =>
             humanAttackedBot || botLevel < CrewMinimumLevel || humanLevel >= ProtectedHumanLevel;
+
+        /// <summary>
+        /// The one target rule for an open-BG crew bot, shared by the driver's opponent scan and the class brain's PvP
+        /// crowd control (mez sweep, healer area stun): inside the open BG a human-side target (a player or a human's
+        /// companion) is engaged only under <see cref="MayHuntHuman"/>. Outside the open BG (brackets, the world) and
+        /// for every other target the rule never applies.
+        /// </summary>
+        public static bool MayEngageInOpenBattleground(bool openBattlegroundRule, bool humanSide, int botLevel, int targetLevel, bool attacked) =>
+            !openBattlegroundRule || !humanSide || MayHuntHuman(botLevel, targetLevel, attacked);
+
+        /// <summary>True when the point lies at least <see cref="DriftMinDistance"/> (2D) from every human.</summary>
+        public static bool ClearOfHumans(Point3D point, IReadOnlyList<Point3D> humans) =>
+            point != null && (humans ?? Array.Empty<Point3D>()).All(human => human == null || Distance2D(human, point) >= DriftMinDistance);
+
+        /// <summary>
+        /// A non-drift point for a unit whose drift left it within <see cref="DriftMinDistance"/> of a human: a random
+        /// candidate clear of every human, else the candidate farthest from its nearest human. Null without candidates.
+        /// </summary>
+        public static Point3D PointClearOfHumans(Point3D[] candidates, IReadOnlyList<Point3D> humans, Random rng)
+        {
+            Point3D[] present = (candidates ?? Array.Empty<Point3D>()).Where(point => point != null).ToArray();
+            if (present.Length == 0) return null;
+            Point3D[] clear = present.Where(point => ClearOfHumans(point, humans)).ToArray();
+            if (clear.Length > 0) return clear[(rng ?? Random.Shared).Next(clear.Length)];
+            Point3D[] people = (humans ?? Array.Empty<Point3D>()).Where(human => human != null).ToArray();
+            return present.OrderByDescending(point => people.Length == 0 ? double.MaxValue : people.Min(human => Distance2D(human, point))).First();
+        }
+
+        /// <summary>
+        /// The point a drifting unit walks to. The floor-snapped drift point counts only when it is still clear of every
+        /// human; otherwise the unit keeps its own chosen point when that is clear, and takes a non-drift point
+        /// (<paramref name="undrifted"/>) when its own point sits within <see cref="DriftMinDistance"/> of a human, so
+        /// neither a failed drift nor a snap ever leaves it on top of a player. The chosen point stays only when no
+        /// other point exists at all.
+        /// </summary>
+        public static Point3D AfterDrift(Point3D chosen, Point3D snappedDrift, IReadOnlyList<Point3D> humans, Func<Point3D> undrifted, out bool drifted)
+        {
+            drifted = false;
+            if (snappedDrift != null && ClearOfHumans(snappedDrift, humans))
+            {
+                drifted = true;
+                return snappedDrift;
+            }
+            if (chosen == null || ClearOfHumans(chosen, humans)) return chosen;
+            return undrifted?.Invoke() ?? chosen;
+        }
 
         /// <summary>The log name of a role.</summary>
         public static string Describe(OpenBgRole role) => role switch

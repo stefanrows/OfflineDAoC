@@ -54,6 +54,8 @@ namespace DOL.AI.Brain
                     target is not GameRelicDoor && target is not GameSiegeWeapon &&
                     GameServer.ServerRules.IsAllowedToAttack(Body, target, true))
                 .ToArray();
+            // In the open BG a protected low-level human is neither the centre nor inside the stun.
+            GameLiving[] spared = SparedFromPvpControl((ushort)(scanRadius + spells.Max(spell => spell.Radius)));
 
             foreach (Spell spell in spells)
             {
@@ -68,6 +70,7 @@ namespace DOL.AI.Brain
                 {
                     GameLiving[] affected = nearby.Where(target => target.IsWithinRadius(center, spell.Radius)).ToArray();
                     if (affected.Length < 2 || affected.Any(target => !FightingHealerGroup(target) || target.IsMezzed) ||
+                        CatchesSpared(spared, center, spell.Radius) ||
                         affected.Count(target => CanStun(target, spell)) < 2 ||
                         CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, center))
                         continue;
