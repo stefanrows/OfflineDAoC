@@ -578,6 +578,11 @@ internal sealed partial class MainForm : Form
             BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued));
         botGoals.Controls.Add(_botGoalsSettings);
         tabs.TabPages.Add(botGoals);
+        var openBg = new TabPage("open BG") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
+        _openBgSettings = new OpenBgSettingsControl(_database,
+            Path.Combine(_serverDirectory, OpenBgLiveStatus.FileName), BotGoalsServerStopped);
+        openBg.Controls.Add(_openBgSettings);
+        tabs.TabPages.Add(openBg);
         tabs.TabPages.Add(auction);
         return tabs;
     }
@@ -2062,27 +2067,7 @@ internal sealed partial class MainForm : Form
             "rp_rate" => "Real player character realm point rate selected in the Offline DAoC launcher.",
             _ => "Autonomous player-bot realm point rate selected in the Offline DAoC launcher.",
         };
-        using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
-        connection.Open();
-        using var transaction = connection.BeginTransaction();
-        using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        // ServerProperty_ID has a unique index; the server leaves it NULL, so new
-        // rows must too. Earlier launchers wrote '', which blocked a second new key.
-        command.CommandText = """
-            UPDATE ServerProperty SET ServerProperty_ID=NULL WHERE ServerProperty_ID='';
-            INSERT INTO ServerProperty (Category, `Key`, Description, DefaultValue, Value, LastTimeRowUpdated, ServerProperty_ID)
-            VALUES ('rates', @key, @description, '1', @value, @updated, NULL)
-            ON CONFLICT(`Key`) DO UPDATE SET
-                Value=excluded.Value,
-                LastTimeRowUpdated=excluded.LastTimeRowUpdated
-            """;
-        command.Parameters.AddWithValue("@key", key);
-        command.Parameters.AddWithValue("@description", description);
-        command.Parameters.AddWithValue("@value", stored);
-        command.Parameters.AddWithValue("@updated", DateTime.UtcNow.ToString("O"));
-        command.ExecuteNonQuery();
-        transaction.Commit();
+        ServerPropertyRows.Upsert(_database, "rates", [new ServerPropertyRow(key, description, "1", stored)]);
     }
 
     private LiveBotSnapshot? RequestLiveBotSnapshot()
@@ -3216,6 +3201,7 @@ internal sealed partial class MainForm : Form
     }
 
     private BotGoalsSettingsControl? _botGoalsSettings;
+    private OpenBgSettingsControl? _openBgSettings;
 
     private bool BotGoalsServerStopped()
     {
@@ -3312,6 +3298,11 @@ internal sealed partial class MainForm : Form
         if (_botGoalsSettings?.HasUnsavedChanges == true)
         {
             MessageBox.Show(this, "Review and save or undo your Server population edits before starting the server.", "Unsaved population settings");
+            return;
+        }
+        if (_openBgSettings?.HasUnsavedChanges == true)
+        {
+            MessageBox.Show(this, "Review and save or undo your open BG edits before starting the server.", "Unsaved open BG settings");
             return;
         }
         try { OfflineDaoc.Configuration.BotGoalSettings.Load(Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName)); }
