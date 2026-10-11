@@ -44,18 +44,28 @@ namespace DOL.GS
         });
 
         /// <summary>
+        /// The third realm keeps at least this far (2D) from the keep while it is fought over, so the keep fight is the
+        /// attacker against the owner (live run 0.243.0: the third realm roamed within 3,600 and ground the attack down).
+        /// </summary>
+        public const int ThirdRealmKeepDistance = 3_000;
+
+        /// <summary>
         /// The role of one unit. Quiet: the realm's first group watches its own bridge, its other groups roam the field.
-        /// Push: the attacking realm's groups assault (they muster at their bridge first), the others keep their quiet
-        /// posts. Keep fight: the owner's groups defend, the attacker's assault, the third realm roams near the keep.
-        /// Retreat: the owner holds, a failed attacker walks home, everyone else roams. Solos lurk off a bridge in quiet
-        /// and push and roam afterwards. A realm that already owns the keep never assaults it.
+        /// Push: every unit of the attacking realm (its 8-man, small groups and solos) assaults; each musters at the
+        /// realm's bridge first, then marches on the keep; the others keep their quiet posts. Keep fight: the owner's
+        /// groups defend, every attacking unit assaults (solos and small groups join the siege as helpers), the third
+        /// realm roams away from the keep. Retreat: the owner holds, a failed attacker walks home, everyone else roams.
+        /// Other solos lurk off a bridge in quiet and push and roam afterwards. A realm that owns the keep never assaults it.
         /// </summary>
         public static OpenBgRole Assign(OpenBgContext ctx, int groupIndexInRealm)
         {
             bool owner = ctx.Owner != eRealm.None && ctx.Realm == ctx.Owner;
             bool attacker = ctx.Realm == ctx.Attacker && !owner;
             if (ctx.GroupSize <= 1)
+            {
+                if (attacker && ctx.Phase is OpenBgPhase.Push or OpenBgPhase.KeepFight) return OpenBgRole.Assault;
                 return ctx.Phase is OpenBgPhase.Quiet or OpenBgPhase.Push ? OpenBgRole.Lurk : OpenBgRole.Roam;
+            }
             OpenBgRole quiet = groupIndexInRealm <= 0 ? OpenBgRole.BridgeWatch : OpenBgRole.Roam;
             return ctx.Phase switch
             {
@@ -123,6 +133,48 @@ namespace DOL.GS
                 .Where(point => point != null && (bridges ?? Array.Empty<BridgePoint>())
                     .All(bridge => Distance2D(point, bridge.Point) >= RoamBridgeDistance))
                 .ToArray();
+
+        /// <summary>The field points away from the bridges that also lie at least <paramref name="keepDistance"/> (2D) from the keep.</summary>
+        public static Point3D[] FieldAwayFromKeep(Point3D[] fieldPoints, IReadOnlyList<BridgePoint> bridges, Point3D keep, int keepDistance) =>
+            FieldAwayFromBridges(fieldPoints, bridges).Where(point => keep == null || Distance2D(point, keep) >= keepDistance).ToArray();
+
+        /// <summary>The realm that neither owns the keep nor attacks it, while the keep is fought over.</summary>
+        public static bool IsThirdRealmInFight(OpenBgPhase phase, eRealm realm, eRealm owner, eRealm attacker) =>
+            phase == OpenBgPhase.KeepFight && realm != owner && realm != attacker;
+
+        /// <summary>
+        /// An assaulting unit musters at its bridge only in the push and only once per cycle. In the keep fight it never
+        /// musters again: a unit that wiped and released goes back to the keep (its gate) after its landing rest.
+        /// </summary>
+        public static bool NeedsMuster(OpenBgRole role, OpenBgPhase phase, bool musteredThisCycle) =>
+            role == OpenBgRole.Assault && phase == OpenBgPhase.Push && !musteredThisCycle;
+
+        /// <summary>A lurk spot within this distance (2D) of a spot that already failed this cycle is not picked again.</summary>
+        public const int DeadLurkSpotRadius = 200;
+
+        /// <summary>True when the point lies within <see cref="DeadLurkSpotRadius"/> of a lurk spot that failed this cycle.</summary>
+        public static bool NearDeadSpot(Point3D point, IEnumerable<Point3D> deadSpots) =>
+            point != null && deadSpots != null && deadSpots.Any(dead => dead != null && Distance2D(dead, point) <= DeadLurkSpotRadius);
+
+        /// <summary>
+        /// A lurk point with a proof: each draw (a raw point off a bridge) is snapped to the walkable floor, and the floor
+        /// counts only when it is not near a spot that failed this cycle and a route from the realm's landing reaches it
+        /// (live run 0.243.0: 61 lurk orders snapped onto dead-end floors). Null when no draw passes.
+        /// </summary>
+        public static Point3D PickLurkPoint(Func<Point3D> draw, Func<Point3D, Point3D> snap, Func<Point3D, bool> provenFromLanding,
+            IEnumerable<Point3D> deadSpots, int attempts)
+        {
+            if (draw == null || snap == null) return null;
+            Point3D[] dead = deadSpots?.Where(spot => spot != null).ToArray() ?? Array.Empty<Point3D>();
+            for (int attempt = 0; attempt < attempts; attempt++)
+            {
+                Point3D raw = draw();
+                Point3D floor = raw == null ? null : snap(raw);
+                if (floor == null || NearDeadSpot(raw, dead) || NearDeadSpot(floor, dead)) continue;
+                if (provenFromLanding == null || provenFromLanding(floor)) return floor;
+            }
+            return null;
+        }
 
         /// <summary>
         /// Light player drift (applied once per cycle per group by the director): a roam or lurk point that already lies

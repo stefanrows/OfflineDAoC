@@ -204,6 +204,46 @@ namespace DOL.GS.Tests
         private static double Distance(Point3D a, Point3D b) => Math.Sqrt((double)(a.X - b.X) * (a.X - b.X) + (double)(a.Y - b.Y) * (a.Y - b.Y));
 
         [Test]
+        public void AnAssaultOrderAtTheKeepAlwaysTakesTheGateMarchAndTheSiege()
+        {
+            // Live run 0.243.0: AUTONOMOUS_BG_GATE_APPROACH was never logged. Units under four got an assault order with a
+            // skirmish point (33280,40772, AtKeep false) that the driver walked as a plain point, and the siege needed four
+            // of the unit's own members present.
+            var skirmish = new Point3D(33280, 40772, 3253);
+            var bridge = new Point3D(29056, 41088, 3184);
+            var atKeep = new OpenBgOrder(3, OpenBgRole.Assault, ThidKeep, Muster: false, AtKeep: true, Cycle: 1);
+            var oldSkirmish = new OpenBgOrder(3, OpenBgRole.Assault, skirmish, Muster: false, AtKeep: false, Cycle: 1);
+            var muster = new OpenBgOrder(3, OpenBgRole.Assault, bridge, Muster: true, AtKeep: false, Cycle: 1);
+            var defend = new OpenBgOrder(4, OpenBgRole.Defend, ThidKeep, Muster: false, AtKeep: true, Cycle: 1);
+            var holdApproach = new OpenBgOrder(4, OpenBgRole.Defend, skirmish, Muster: false, AtKeep: false, Cycle: 1);
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundDriver.GoesToKeep(atKeep), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.GoesToKeep(oldSkirmish), Is.True, "an assault order is never walked as a plain point");
+                Assert.That(AutonomousBattlegroundDriver.GoesToKeep(muster), Is.False, "the bridge muster is walked first");
+                Assert.That(AutonomousBattlegroundDriver.GoesToKeep(defend), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.GoesToKeep(holdApproach), Is.False, "defenders the guards would shoot hold the approaches");
+                foreach (OpenBgRole role in new[] { OpenBgRole.Roam, OpenBgRole.Lurk, OpenBgRole.BridgeWatch, OpenBgRole.Retreat })
+                    Assert.That(AutonomousBattlegroundDriver.GoesToKeep(new OpenBgOrder(5, role, skirmish, false, false, 1)), Is.False, $"{role}");
+                // Fewer than four attackers at the gate: march there and wait; four or more of the realm (any units): siege.
+                for (int present = 0; present < AutonomousBattlegroundDriver.AssaultGroupMinimum; present++)
+                    Assert.That(AutonomousBattlegroundDriver.StepAtKeep(atKeep, present), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.MarchGate),
+                        $"{present} present");
+                Assert.That(AutonomousBattlegroundDriver.StepAtKeep(atKeep, 4), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Siege));
+                Assert.That(AutonomousBattlegroundDriver.StepAtKeep(oldSkirmish, 9), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Siege));
+                Assert.That(AutonomousBattlegroundDriver.StepAtKeep(defend, 9), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Defend));
+                Assert.That(AutonomousBattlegroundDriver.SiegeGatherRange, Is.EqualTo(1_500));
+                // The siege counts the realm's assaulting bots, alive, whatever their unit.
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Albion, eRealm.Albion, OpenBgRole.Assault), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(false, eRealm.Albion, eRealm.Albion, OpenBgRole.Assault), Is.False, "dead");
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Midgard, eRealm.Albion, OpenBgRole.Assault), Is.False, "other realm");
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Albion, eRealm.Albion, OpenBgRole.Defend), Is.False,
+                    "a keep friend of the realm defending");
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Albion, eRealm.Albion, null), Is.False, "no order");
+            });
+        }
+
+        [Test]
         public void TheLandingRestEndsRecoveredOrAtItsCapNeverInAFight()
         {
             const long until = 120_000;

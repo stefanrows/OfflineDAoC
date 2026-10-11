@@ -61,6 +61,8 @@ namespace DOL.GS
         private const long SlowTickMilliseconds = 50;
         private static readonly eRealm[] PlayerRealms = { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia };
         private static readonly int[] FieldRadii = { 2_500, 3_500, 8_000, 11_000 };
+        // Lurk draws per pick, each snapped to the floor and proved from the realm's landing.
+        private const int LurkDraws = 6;
         private static readonly Logger Log = LoggerManager.Create(typeof(OpenBattlegroundDirector));
 
         // ---- pure rules ------------------------------------------------------------------------------------------
@@ -160,6 +162,8 @@ namespace DOL.GS
             public Point3D[] Field;
             public Point3D[] Camps;
             public Point3D[] Landings;
+            // Each realm's own landing (its portal keep), the start of the lurk point proof.
+            public Dictionary<eRealm, Point3D> LandingByRealm = new();
         }
 
         private sealed class UnitState
@@ -193,6 +197,8 @@ namespace DOL.GS
         private static readonly Dictionary<int, UnitState> UnitStates = new();
         private static readonly Queue<eRealm> RecentWinners = new();
         private static readonly HashSet<string> UnresolvedLogged = new(StringComparer.Ordinal);
+        // Lurk spots a unit found no route to in this cycle; no lurk point is picked near them again before the next cycle.
+        private static readonly List<Point3D> DeadLurkSpots = new();
         private static MapData _map;
         private static OpenBgCycle _cycle;
         private static long _cycleIndex;
@@ -221,7 +227,12 @@ namespace DOL.GS
         public static void ReportUnreachable(int unit, Point3D point)
         {
             lock (Sync)
-                if (UnitStates.TryGetValue(unit, out UnitState state) && ReferenceEquals(state.Point, point)) state.Unreachable = true;
+                if (UnitStates.TryGetValue(unit, out UnitState state) && ReferenceEquals(state.Point, point))
+                {
+                    state.Unreachable = true;
+                    // A dead-end lurk spot is dropped after its first failure for the rest of the cycle.
+                    if (state.Role == OpenBgRole.Lurk && point != null) DeadLurkSpots.Add(point);
+                }
         }
 
         /// <summary>Phase, attacker and seconds left in the cycle, for the status window (lock-free).</summary>
@@ -268,6 +279,7 @@ namespace DOL.GS
                 UnitStates.Clear();
                 RecentWinners.Clear();
                 UnresolvedLogged.Clear();
+                DeadLurkSpots.Clear();
                 _map = null;
                 _cycle = null;
                 _cycleIndex = 0;
@@ -290,6 +302,7 @@ namespace DOL.GS
                     with { StartTick = now };
                 _cycleIndex++;
                 _ownerAtStart = owner;
+                DeadLurkSpots.Clear();
             }
             OpenBgPhase phase = PhaseAt(_cycle, now);
             // The keep changed hands to the chosen attacker before the fight began: another realm attacks this cycle.
@@ -321,6 +334,8 @@ namespace DOL.GS
             var units = inside.GroupBy(member => member.Unit).Select(unit => (Id: unit.Key, Members: unit.ToArray(), Leader: LeaderOf(unit.ToArray())))
                 .Where(unit => unit.Leader != null).OrderBy(unit => unit.Id).ToArray();
             var groupIndex = new Dictionary<eRealm, int>();
+            // Without a field point far from the keep the third realm keeps its point instead of re-picking every tick.
+            bool thirdRoamExists = OpenBattlegroundRoles.FieldAwayFromKeep(_map.Field, _map.Bridges, _map.Keep, OpenBattlegroundRoles.ThirdRealmKeepDistance).Length > 0;
             foreach (var unit in units)
             {
                 GameBot leader = unit.Leader;
@@ -336,7 +351,10 @@ namespace DOL.GS
                 OpenBgRole role = OpenBattlegroundRoles.Assign(ctx, index);
                 // Camlann: keep friendship is the claiming guild's. A unit the keep counts as a friend never assaults it.
                 bool keepEnemy = keep != null && GameServer.KeepManager.IsEnemy(keep, leader);
+                OpenBgRole assigned = role;
                 role = OpenBattlegroundRoles.ForKeepFriendship(role, keep != null, keepEnemy);
+                // Logged on the role line: an attacking unit with a member of the keep's guild (group check) defends instead.
+                bool keepFriend = role != assigned;
 
                 if (!UnitStates.TryGetValue(unit.Id, out UnitState state)) UnitStates[unit.Id] = state = new UnitState();
                 if (state.Point != null && state.ArrivedAt == 0 &&
@@ -345,14 +363,18 @@ namespace DOL.GS
                 // An unreachable point is replaced, but not more often than every 30 game seconds.
                 bool repick = state.Point == null || role != state.Role || state.Unreachable && now - state.PointSince >= UnreachableRepickMilliseconds ||
                     roaming && (state.ArrivedAt > 0 && now - state.ArrivedAt >= state.RestMilliseconds || state.ArrivedAt == 0 && now - state.PointSince >= PointTimeoutMilliseconds);
-                // An attacker in the push musters at its own bridge first, then marches on the keep.
-                bool muster = role == OpenBgRole.Assault && phase == OpenBgPhase.Push && state.MusteredCycle != _cycleIndex;
+                // An attacker in the push musters at its own bridge first, then marches on the keep; never in the keep fight.
+                bool muster = OpenBattlegroundRoles.NeedsMuster(role, phase, state.MusteredCycle == _cycleIndex);
                 if (muster && state.Muster && state.ArrivedAt > 0) { state.MusteredCycle = _cycleIndex; muster = false; }
                 if (role == OpenBgRole.Assault && muster != state.Muster) repick = true;
+                // A third-realm unit still roaming toward the keep from the push leaves it when the keep fight begins.
+                if (role == OpenBgRole.Roam && state.Point != null && thirdRoamExists &&
+                    OpenBattlegroundRoles.IsThirdRealmInFight(phase, realm, roleOwner, attacker) &&
+                    OpenBattlegroundRoles.Distance2D(state.Point, _map.Keep) < OpenBattlegroundRoles.ThirdRealmKeepDistance) repick = true;
                 if (repick)
                 {
                     humans ??= FieldHumans(definition);
-                    Choose(state, unit.Members[0].Group, leader, unit.Members.Length, role, realm, phase, roleOwner, attacker, keepEnemy, muster, humans, now);
+                    Choose(state, unit.Members[0].Group, leader, role, realm, phase, roleOwner, attacker, keepEnemy, keepFriend, muster, humans, now);
                 }
                 if (state.Point != null)
                     orders[unit.Id] = new OpenBgOrder(unit.Id, state.Role, state.Point, state.Muster, state.AtKeep, _cycleIndex);
@@ -370,11 +392,13 @@ namespace DOL.GS
         }
 
         // Callers hold Sync. Picks the point for a (new) role, applies the once-per-cycle drift and logs the assignment.
-        private static void Choose(UnitState state, string group, GameBot leader, int size, OpenBgRole role, eRealm realm, OpenBgPhase phase,
-            eRealm owner, eRealm attacker, bool keepEnemy, bool muster, Point3D[] humans, long now)
+        private static void Choose(UnitState state, string group, GameBot leader, OpenBgRole role, eRealm realm, OpenBgPhase phase,
+            eRealm owner, eRealm attacker, bool keepEnemy, bool keepFriend, bool muster, Point3D[] humans, long now)
         {
             MapData map = _map;
             Point3D[] nearKeep = map.Field.Where(point => OpenBattlegroundRoles.Distance2D(point, map.Keep) <= NearKeepDistance).ToArray();
+            // The third realm keeps away from the keep while it is fought over: the keep fight is attacker against owner.
+            bool third = OpenBattlegroundRoles.IsThirdRealmInFight(phase, realm, owner, attacker);
             Point3D point;
             bool atKeep = false;
             string bridge = null;
@@ -387,11 +411,11 @@ namespace DOL.GS
                     bridge = OpenBattlegroundRoles.OwnBridge(realm, map.Bridges)?.Name;
                     break;
                 case OpenBgRole.Assault:
-                    // A group too small for the doors skirmishes near the keep; the siege needs four or more.
-                    point = size >= AutonomousBattlegroundDriver.AssaultGroupMinimum ? null
-                        : OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, realm, map.Bridges, map.Keep, nearKeep, Rng);
-                    atKeep = point == null;
-                    point ??= map.Keep;
+                    // Every assaulting unit, whatever its size, goes to the keep: the driver marches it to the outer gate and
+                    // sieges once four attackers stand there (live run 0.243.0: units under four got a skirmish point
+                    // 2,500 off the keep and never reached the gate march).
+                    point = map.Keep;
+                    atKeep = true;
                     break;
                 case OpenBgRole.Defend:
                     // The keep's friends hold the keep; same-realm strangers its guards would shoot hold the approaches.
@@ -402,9 +426,8 @@ namespace DOL.GS
                     point = LurkPoint(leader.CurrentRegion, realm, map);
                     break;
                 default:
-                    // The third realm picks its fights near the keep while it is fought over.
-                    bool third = phase == OpenBgPhase.KeepFight && realm != owner && realm != attacker;
-                    point = OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, realm, map.Bridges, map.Keep, third ? nearKeep : map.Field, Rng) ??
+                    point = (third ? OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, realm, map.Bridges, map.Keep,
+                            OpenBattlegroundRoles.FieldAwayFromKeep(map.Field, map.Bridges, map.Keep, OpenBattlegroundRoles.ThirdRealmKeepDistance), Rng) : null) ??
                         OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, realm, map.Bridges, map.Keep, map.Field, Rng) ?? Nearest(map.Camps, map.Keep);
                     break;
             }
@@ -416,6 +439,8 @@ namespace DOL.GS
                 Point3D drift = OpenBattlegroundRoles.DriftedPoint(point, humans, true, Rng);
                 Point3D snapped = drift != null && !ReferenceEquals(drift, point) &&
                     TryFloor(leader.CurrentRegion?.GetZone(drift.X, drift.Y), drift, FieldFloorRange, out Point3D floor) ? floor : null;
+                // Drift never pulls the third realm back into the keep fight.
+                if (third && snapped != null && OpenBattlegroundRoles.Distance2D(snapped, map.Keep) < OpenBattlegroundRoles.ThirdRealmKeepDistance) snapped = null;
                 // The snap can move the drift point onto a player, and a failed drift can leave the unit's own point there:
                 // either way it takes a point clear of every human instead.
                 point = OpenBattlegroundRoles.AfterDrift(point, snapped, humans,
@@ -433,7 +458,8 @@ namespace DOL.GS
                 : Rng.Next(PointRestMinMilliseconds, PointRestMaxMilliseconds + 1);
             string where = point == null ? "none" : $"{point.X},{point.Y},{point.Z}";
             string line = $"OPEN_BG_ROLE bot=\"{leader.Name}\" group=\"{group ?? "solo"}\" role={OpenBattlegroundRoles.Describe(role)} point={where} " +
-                $"realm={realm} phase={Describe(phase)}{(muster ? " muster=true" : "")}{(bridge != null ? $" bridge={bridge}" : "")}{(drifted ? " drift=true" : "")}";
+                $"realm={realm} phase={Describe(phase)}{(muster ? " muster=true" : "")}{(bridge != null ? $" bridge={bridge}" : "")}{(drifted ? " drift=true" : "")}" +
+                $"{(keepFriend ? " keep_friend=true" : "")}";
             // An unreachable bridge or keep is picked again every 30 s; the unchanged assignment is logged once per 5 game minutes.
             if (LogsRoleAgain(line == state.LoggedLine, state.LoggedAt, now))
             {
@@ -461,15 +487,16 @@ namespace DOL.GS
             return OpenBattlegroundRoles.PointClearOfHumans(field.Length > 0 ? field : map.Field, humans, Rng);
         }
 
-        // A lurk point with a floor; a few draws, then the nearest camp to the realm's bridge (logged once).
+        // Callers hold Sync. A lurk point on the walkable floor that a route from the realm's landing reaches, never near a
+        // spot that failed this cycle; a few draws, then the nearest camp to the realm's bridge (logged once).
         private static Point3D LurkPoint(Region region, eRealm realm, MapData map)
         {
-            for (int attempt = 0; attempt < 4; attempt++)
-            {
-                Point3D raw = OpenBattlegroundRoles.RolePoint(OpenBgRole.Lurk, realm, map.Bridges, map.Keep, map.Field, Rng);
-                if (raw != null && TryFloor(region?.GetZone(raw.X, raw.Y), raw, LurkFloorRange, out Point3D floor))
-                    return floor;
-            }
+            map.LandingByRealm.TryGetValue(realm, out Point3D landing);
+            Point3D picked = OpenBattlegroundRoles.PickLurkPoint(
+                () => OpenBattlegroundRoles.RolePoint(OpenBgRole.Lurk, realm, map.Bridges, map.Keep, map.Field, Rng),
+                raw => TryFloor(region?.GetZone(raw.X, raw.Y), raw, LurkFloorRange, out Point3D floor) ? floor : null,
+                floor => ProvenFromLanding(region, landing, floor), DeadLurkSpots, LurkDraws);
+            if (picked != null) return picked;
             Point3D bridge = OpenBattlegroundRoles.OwnBridge(realm, map.Bridges)?.Point ?? map.Keep;
             LogUnresolvedOnce($"lurk:{realm}", $"OPEN_BG_ROLE_POINT_UNRESOLVED kind=lurk realm={realm} fallback=camp");
             return Nearest(map.Camps, bridge) ?? bridge;
@@ -485,6 +512,28 @@ namespace DOL.GS
                 .Select(player => new Point3D(player.X, player.Y, player.Z))
                 .Where(point => _map.Landings.All(landing => OpenBattlegroundRoles.Distance2D(point, landing) > SanctuaryDistance))
                 .ToArray();
+        }
+
+        // The lurk proof: chained default-filter legs (the portal keep's own gate is passable) from the landing reach the floor.
+        // Without a landing or a navmesh nothing can be proved, and the snapped floor stands as before.
+        private static bool ProvenFromLanding(Region region, Point3D landing, Point3D floor)
+        {
+            var nav = PathfindingProvider.Instance;
+            Zone zone = landing == null ? null : region?.GetZone(landing.X, landing.Y);
+            if (zone == null || floor == null || region.GetZone(floor.X, floor.Y) != zone || !nav.IsAvailable || !nav.HasNavmesh(zone)) return true;
+            Vector3 from = new(landing.X, landing.Y, landing.Z);
+            Vector3 goal = new(floor.X, floor.Y, floor.Z);
+            WrappedPathfindingNode[] nodes = System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Rent(512);
+            try
+            {
+                return AutonomousBattlegroundDriver.ChainRoute(from, goal, AutonomousBattlegroundDriver.MaxRouteLegs,
+                    start => AutonomousBattlegroundDriver.QueryLeg(nav, zone, start, goal, nav.DefaultFilters, nodes), out _) ==
+                    AutonomousBattlegroundDriver.RouteChain.Reached;
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Return(nodes);
+            }
         }
 
         // Callers hold Sync. Bridges, keep, field points and landings, resolved to navmesh floors once per start.
@@ -516,9 +565,16 @@ namespace DOL.GS
                     if (TryFloor(region?.GetZone(raw.X, raw.Y), raw, FieldFloorRange, out Point3D floor)) field.Add(floor);
                 }
             Point3D[] landings = BattlegroundCampaignCatalog.GetLandings(definition).Select(landing => new Point3D(landing.X, landing.Y, landing.Z)).ToArray();
+            IReadOnlyList<eRealm> landingRealms = BattlegroundCampaignCatalog.GetLandingRealms(definition, landings.Length);
+            var landingByRealm = new Dictionary<eRealm, Point3D>();
+            for (int i = 0; i < landingRealms.Count; i++)
+                if (IsPlayerRealm(landingRealms[i])) landingByRealm.TryAdd(landingRealms[i], landings[i]);
             Log.Info($"OPEN_BG_MAP region={definition.RegionId} bridges={string.Join(",", bridges.Select(bridge => $"{bridge.Name}:{bridge.Point.X},{bridge.Point.Y},{bridge.Point.Z}"))} " +
                 $"field={field.Count} camps={camps.Length} landings={landings.Length}");
-            return new MapData { Bridges = bridges.ToArray(), Keep = keepPoint, Field = field.ToArray(), Camps = camps, Landings = landings };
+            return new MapData
+            {
+                Bridges = bridges.ToArray(), Keep = keepPoint, Field = field.ToArray(), Camps = camps, Landings = landings, LandingByRealm = landingByRealm,
+            };
         }
 
         // A navmesh floor within a few units of the point's XY and within range of its height.
