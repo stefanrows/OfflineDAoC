@@ -151,6 +151,38 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void PlanShedsBotsWhenTheCapIsLowered()
+        {
+            // open_bg_max_bots lowered (72 -> 24) with 51 bots present at the setup: the surplus above the cap is
+            // relieved, travelling units first, then the newest inside, spread over the realms.
+            RealmCount albion = FullRealm(eRealm.Albion, 0, false);
+            albion = albion with
+            {
+                Units = albion.Units.Select(unit => unit.Id == 13 ? unit with { Inside = false, InsideSinceTick = 0 } : unit).ToArray(),
+            };
+            RealmCount[] present = { albion, FullRealm(eRealm.Midgard, 100, false), FullRealm(eRealm.Hibernia, 200, false) };
+            OpenBgPlan plan = OpenBattlegroundRoster.Plan(Defaults with { MaxBots = 24 }, present);
+            int Kept(RealmCount realm) => realm.Units.Where(unit => !plan.For(realm.Realm).Relieve.Contains(unit.Id)).Sum(unit => unit.Size);
+            Assert.Multiple(() =>
+            {
+                Assert.That(present.Sum(Kept), Is.LessThanOrEqualTo(24), "the bots that stay fit under the lowered cap");
+                Assert.That(present.Sum(Kept), Is.GreaterThan(24 - OpenBattlegroundRoster.Group8Size), "no more than needed is shed");
+                Assert.That(plan.For(eRealm.Albion).Relieve, Does.Contain(13), "the travelling solo goes first");
+                Assert.That(plan.For(eRealm.Midgard).Relieve.First(), Is.EqualTo(113), "then the newest inside");
+                foreach (RealmCount realm in present)
+                {
+                    Assert.That(Kept(realm), Is.EqualTo(8), $"{realm.Realm} keeps its share");
+                    Assert.That(plan.For(realm.Realm).Relieve, Does.Not.Contain(realm.Units[0].Id), $"{realm.Realm} keeps its longest-serving 8-man");
+                }
+                Assert.That(plan.Admits, Is.Empty, "nothing is admitted above the cap");
+            });
+
+            // At or under the cap nothing is shed.
+            OpenBgPlan atCap = OpenBattlegroundRoster.Plan(Defaults with { MaxBots = 51 }, present);
+            Assert.That(atCap.Realms.SelectMany(realm => realm.Relieve), Is.Empty);
+        }
+
+        [Test]
         public void IsCandidateRejectsPlayerLedRelicAndLowLevel()
         {
             static bool Candidate(int level = 45, bool playerLed = false, bool relic = false, bool inBattleground = false,

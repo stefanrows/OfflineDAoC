@@ -216,6 +216,17 @@ public static class AutonomousBattlegroundParticipation
             return bot != null && Entries.TryGetValue(bot, out Entry entry) && !entry.Entered && entry.Leaving == null;
     }
 
+    /// <summary>
+    /// Whether a bot may enlist in a world RvR event (siege, defence, carrier hunt): never while it is assigned to a
+    /// battleground and still travelling, nor while its group is an open-BG roster unit. Such a force would be
+    /// registered for a frontier siege while its members board for the battleground.
+    /// </summary>
+    public static bool MayEnlistInWorldRvrEvents(bool assignedToBattleground, bool openBattlegroundParty) =>
+        !assignedToBattleground && !openBattlegroundParty;
+
+    public static bool MayEnlistInWorldRvrEvents(GameBot bot) =>
+        MayEnlistInWorldRvrEvents(IsAssigned(bot), AutonomousBotGroupCoordinator.IsOpenBattlegroundParty(bot?.Group));
+
     public static bool IsLeaving(GameBot bot)
     {
         lock (Sync)
@@ -384,7 +395,7 @@ public static class AutonomousBattlegroundParticipation
     {
         if (porter == null || !BattlegroundCampaignPolicy.IsEnabled) return;
         GameBot[] waiting;
-        GameBot[] openWaiting;
+        (GameBot Bot, int Unit, Group Group)[] openWaiting;
         lock (Sync)
         {
             waiting = Entries.Values
@@ -393,7 +404,7 @@ public static class AutonomousBattlegroundParticipation
                 .ToArray();
             openWaiting = Entries.Values
                 .Where(entry => !entry.Entered && entry.Leaving == null && IsOpenUnit(entry.Definition, entry.Unit))
-                .Select(entry => entry.Bot)
+                .Select(entry => (entry.Bot, entry.Unit, entry.GroupRef))
                 .ToArray();
         }
         GameBot[] boarders = waiting
@@ -409,26 +420,40 @@ public static class AutonomousBattlegroundParticipation
     }
 
     /// <summary>
-    /// The open crew's own cast of up to <see cref="DepartureLimit"/>: a whole group together, leader first. A member
-    /// whose leader is still a waiting crew member outside the boarding circle waits for it, so the group arrives
-    /// as one and lands at its leader's portal keep.
+    /// The open crew's own cast of up to <see cref="DepartureLimit"/>, unit by unit and never splitting one: a solo
+    /// boards alone; a group boards whole, leader first, and only once <see cref="OpenGroupMayBoard"/> allows it, so
+    /// the group arrives as one and lands at its leader's portal keep. A group that does not fit this cast waits.
     /// </summary>
-    private static GameBot[] OpenBoarders(OFTeleporter porter, GameBot[] waiting)
+    private static GameBot[] OpenBoarders(OFTeleporter porter, (GameBot Bot, int Unit, Group Group)[] waiting)
     {
-        var waitingSet = waiting.ToHashSet(ReferenceEqualityComparer.Instance);
-        GameBot[] near = waiting
-            .Where(bot => bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
-                bot.IsWithinRadius(porter, AutonomousFrontierTransport.BoardingRadius))
-            .ToArray();
-        var nearSet = near.ToHashSet(ReferenceEqualityComparer.Instance);
-        return near
-            .Where(bot => bot.Group?.LivingLeader is not GameBot leader || leader == bot || !waitingSet.Contains(leader) || nearSet.Contains(leader))
-            .OrderBy(bot => (bot.Group?.LivingLeader as GameBot ?? bot).DatabaseID)
-            .ThenBy(bot => bot.Group?.LivingLeader == bot ? 0 : 1)
-            .ThenBy(bot => bot.DatabaseID)
-            .Take(DepartureLimit)
-            .ToArray();
+        bool Live(GameBot bot) => bot.ObjectState == GameObject.eObjectState.Active && bot.IsAlive;
+        bool Ready(GameBot bot) => Live(bot) && bot.CurrentRegion == porter.CurrentRegion &&
+            bot.IsWithinRadius(porter, AutonomousFrontierTransport.BoardingRadius) && HasBattlegroundMedallion(bot);
+        var boarders = new List<GameBot>();
+        foreach (var unit in waiting.GroupBy(member => member.Unit)
+                     .Select(unit => (Group: unit.Select(member => member.Group).FirstOrDefault(group => group != null),
+                         Members: unit.Select(member => member.Bot).ToArray()))
+                     .OrderBy(unit => (unit.Group?.LivingLeader as GameBot ?? unit.Members[0]).DatabaseID))
+        {
+            GameBot[] live = unit.Members.Where(Live).ToArray();
+            GameBot[] ready = live.Where(Ready).ToArray();
+            if (ready.Length == 0) continue;
+            if (unit.Group != null && !OpenGroupMayBoard(
+                    AutonomousBotGroupCoordinator.IsOpenBattlegroundAssembling(unit.Group), live.Length, ready.Length))
+                continue;
+            if (boarders.Count + ready.Length > DepartureLimit) continue;
+            boarders.AddRange(ready.OrderBy(bot => unit.Group?.LivingLeader == bot ? 0 : 1).ThenBy(bot => bot.DatabaseID));
+        }
+        return boarders.ToArray();
     }
+
+    /// <summary>
+    /// Whether an open-BG group may board at a porter's cast: its coordinator assembly (leader staging, meeting up)
+    /// has ended and every live waiting member stands in the boarding circle with the medallion. Otherwise nobody of
+    /// the group boards, so a leader never lands alone while its group still musters (or rests) around the porter.
+    /// </summary>
+    public static bool OpenGroupMayBoard(bool assemblyPhase, int liveWaiting, int readyWaiting) =>
+        !assemblyPhase && liveWaiting > 0 && readyWaiting >= liveWaiting;
 
     private static void Board(OFTeleporter porter, GameBot[] boarders)
     {

@@ -82,6 +82,22 @@ namespace DOL.GS
             }
         }
 
+        /// <summary>An open-BG group still in its coordinator assembly (leader staging or meeting up at its porter).</summary>
+        public static bool IsOpenBattlegroundAssembling(Group group)
+        {
+            if (group == null) return false;
+            using (EnterSync())
+                return TryGetSession(group, out Session session) && IsAssemblyPhase(session.Phase);
+        }
+
+        /// <summary>The group is an open-BG roster unit; it never enlists in a world RvR event while it is one.</summary>
+        public static bool IsOpenBattlegroundParty(Group group)
+        {
+            if (group == null) return false;
+            using (EnterSync())
+                return TryGetSession(group, out Session session) && session.OpenBattleground;
+        }
+
         /// <summary>The unit has left the open BG roster: its group (if it still exists) is an ordinary warband again.</summary>
         public static void ReleaseOpenBattlegroundParty(Group group)
         {
