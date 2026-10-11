@@ -81,5 +81,29 @@ namespace DOL.GS.Tests
             var leg = new AutonomousBattlegroundDriver.RouteLeg(PathfindingStatus.PartialPathFound, Goal - new Vector3(40, 0, 0));
             Assert.That(Chain(_ => leg, out _), Is.EqualTo(AutonomousBattlegroundDriver.RouteChain.Reached));
         }
+
+        [Test]
+        public void UnreachableOrderPointFallsBackOnlyAsFarAsTheOrderAllows()
+        {
+            var assault = AutonomousBattlegroundDriver.LeadBranch.Assault;
+            var defend = AutonomousBattlegroundDriver.LeadBranch.Defend;
+            var claim = AutonomousBattlegroundDriver.LeadBranch.Claim;
+            Assert.Multiple(() =>
+            {
+                foreach (OpenBgRole role in new[] { OpenBgRole.Roam, OpenBgRole.Lurk, OpenBgRole.BridgeWatch, OpenBgRole.Retreat })
+                {
+                    Assert.That(AutonomousBattlegroundDriver.FallbackAllows(role, assault), Is.False,
+                        $"{role}: a group with an unreachable point never sieges a door in quiet or push");
+                    Assert.That(AutonomousBattlegroundDriver.FallbackAllows(role, defend), Is.False, $"{role} roams the camps instead");
+                    Assert.That(AutonomousBattlegroundDriver.FallbackAllows(role, claim), Is.False, "the order tried the claim already");
+                }
+                Assert.That(AutonomousBattlegroundDriver.FallbackAllows(OpenBgRole.Assault, assault), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.FallbackAllows(OpenBgRole.Assault, defend), Is.False);
+                Assert.That(AutonomousBattlegroundDriver.FallbackAllows(OpenBgRole.Defend, defend), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.FallbackAllows(OpenBgRole.Defend, assault), Is.False);
+                foreach (var branch in new[] { assault, defend, claim })
+                    Assert.That(AutonomousBattlegroundDriver.FallbackAllows(null, branch), Is.True, "brackets and unordered units: priority unchanged");
+            });
+        }
     }
 }

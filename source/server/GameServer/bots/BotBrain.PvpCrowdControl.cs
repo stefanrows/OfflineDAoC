@@ -26,8 +26,10 @@ namespace DOL.AI.Brain
             // Companions and RvR warbands keep the full pre-emptive sweep.
             bool sweepBystanders = BotBody.IsAutonomousWorldBot != true ||
                 AutonomousObjectiveAssignments.Is(BotBody, eAutonomousObjectiveKind.RvR);
+            // In the open BG the crew spares protected low-level humans, as a target and inside an area mez.
+            GameLiving[] spared = SparedFromPvpControl(OpenControlScanRadius);
             GameLiving[] enemies = Body.GetNPCsInRadius(1800).Where(BotPvpCrowdControl.PlayerLike).Cast<GameLiving>()
-                .Concat(Body.GetPlayersInRadius(1800)).Where(t => BotSiegeRuntime.LegalEnemy(Body,t) && !t.IsMezzed &&
+                .Concat(Body.GetPlayersInRadius(1800)).Where(t => BotSiegeRuntime.LegalEnemy(Body,t) && !t.IsMezzed && !spared.Contains(t) &&
                     (sweepBystanders || BotPvpCrowdControl.IsInFightWith(Body, t, AggroList.Keys)) &&
                     !t.IsStealthed && !BotPvpCrowdControl.Protected(Body,t) && CompanionEngagementMode.Allows(Body,t, crowdControl: true) &&
                     !CompanionPvpEngagement.Focused(Body,t) && !CompanionPvpEngagement.Defending(Body,t))
@@ -41,7 +43,7 @@ namespace DOL.AI.Brain
                     spell.CastTime>0 && Body.IsBeingInterrupted && !spell.Uninterruptible) continue;
                 int range = spell.Target==eSpellTarget.SELF || spell.Range<=0 ? spell.Radius : spell.CalculateEffectiveRange(Body);
                 GameLiving candidate=enemies.Where(t=>Body.IsWithinRadius(t,range) && !LivingHasEffect(t,spell) &&
-                    NeedsOffensiveSpellApplication(t,spell)).OrderByDescending(t=>enemies.Count(n=>n.IsWithinRadius(t,Math.Max(1,spell.Radius))))
+                    NeedsOffensiveSpellApplication(t,spell) && !CatchesSpared(spared, spell.Target==eSpellTarget.SELF ? Body : t, spell.Radius)).OrderByDescending(t=>enemies.Count(n=>n.IsWithinRadius(t,Math.Max(1,spell.Radius))))
                     .ThenBy(Body.GetDistanceTo).FirstOrDefault(t=>BotSiegeRuntime.Visible(Body,t));
                 if (candidate==null || !BotPvpCrowdControl.Reserve(BotBody,candidate,spell.CastTime+2000)) continue;
                 AutonomousPvpEngagementTracker.Tag(Body, AutonomousPvpEngagementTracker.CrowdControl);
@@ -58,5 +60,25 @@ namespace DOL.AI.Brain
             }
             return false;
         }
+
+        // Covers an 1,800 scan plus an area spell's radius around a target at its edge.
+        private const ushort OpenControlScanRadius = 2_400;
+
+        /// <summary>
+        /// Enemies near this bot that the open BG's low-level protection forbids it to control
+        /// (<see cref="AutonomousBattlegroundDriver.MayEngage"/>); empty outside the open BG, so brackets and the world keep their sweep.
+        /// </summary>
+        private GameLiving[] SparedFromPvpControl(ushort radius)
+        {
+            if (!AutonomousBattlegroundDriver.HoldsOpenBattlegroundRule(BotBody)) return [];
+            return Body.GetNPCsInRadius(radius).Where(BotPvpCrowdControl.PlayerLike).Cast<GameLiving>()
+                .Concat(Body.GetPlayersInRadius(radius))
+                .Where(t => t.IsAlive && GameServer.ServerRules.IsAllowedToAttack(Body, t, true) &&
+                    !AutonomousBattlegroundDriver.MayEngage(BotBody, t, openBattlegroundRule: true))
+                .ToArray();
+        }
+
+        private static bool CatchesSpared(GameLiving[] spared, GameLiving center, int radius) =>
+            AutonomousBattlegroundDriver.CatchesSpared(spared, center, radius);
     }
 }

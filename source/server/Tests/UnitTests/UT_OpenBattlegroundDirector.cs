@@ -178,5 +178,19 @@ namespace DOL.GS.Tests
                 Assert.That(OpenBattlegroundDirector.CycleWinner(eRealm.None, eRealm.None, false, eRealm.Midgard), Is.EqualTo(eRealm.None), "garrison held");
             });
         }
+
+        [Test]
+        public void UnchangedAssignmentIsReloggedOncePerFiveGameMinutes()
+        {
+            const long logged = 1_000_000;
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundDirector.LogsRoleAgain(false, logged, logged + 30_000), Is.True, "a new assignment always logs");
+                Assert.That(OpenBattlegroundDirector.LogsRoleAgain(true, logged, logged + 30_000), Is.False,
+                    "the unreachable bridge picked again after 30 s stays quiet");
+                Assert.That(OpenBattlegroundDirector.LogsRoleAgain(true, logged, logged + 5 * 60_000), Is.True);
+                Assert.That(OpenBattlegroundDirector.LogsRoleAgain(false, 0, 0), Is.True, "first assignment");
+            });
+        }
     }
 }

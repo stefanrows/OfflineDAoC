@@ -145,16 +145,20 @@ public static class AutonomousBattlegroundDriver
     {
         AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
         Point3D[] camps = BattlegroundCampaignManager.CampPositions(definition.RegionId);
-        if (definition.Kind == BattlegroundDefinitionKind.Open && OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) &&
-            LeadOpen(brain, bot, keep, camps, order, state, now))
-            return;
-        if (keep != null && bot.Guild != null && keep.Guild == bot.Guild)
+        OpenBgRole? held = null;
+        if (definition.Kind == BattlegroundDefinitionKind.Open && OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order))
+        {
+            if (LeadOpen(brain, bot, keep, camps, order, state, now)) return;
+            held = order.Role;
+        }
+        if (keep != null && FallbackAllows(held, LeadBranch.Defend) && bot.Guild != null && keep.Guild == bot.Guild)
         {
             DefendKeep(bot, state, keep, camps, now);
             return;
         }
-        if (keep != null && TryClaim(bot, keep, state, now)) return;
-        if (keep != null && CountPresent(bot) >= AssaultGroupMinimum && TryAssault(brain, bot, keep, state, now)) return;
+        if (keep != null && FallbackAllows(held, LeadBranch.Claim) && TryClaim(bot, keep, state, now)) return;
+        if (keep != null && FallbackAllows(held, LeadBranch.Assault) && CountPresent(bot) >= AssaultGroupMinimum &&
+            TryAssault(brain, bot, keep, state, now)) return;
         if (camps.Length == 0)
         {
             state.Action = "stand-no-camp";
@@ -168,7 +172,8 @@ public static class AutonomousBattlegroundDriver
     /// An open-BG crew unit's turn from its director order: a defeated keep is claimed first (the existing claim rule),
     /// then the keep's friends defend it and a full attacking group assaults it through the existing branches; every
     /// other role walks to its point (bridge, lurk spot, field point, approach or the way home). False when the order
-    /// has no route, so the caller's ordinary priority runs; the director is told and gives a new point next tick.
+    /// has no route; the caller then falls back only as far as the order allows (<see cref="FallbackAllows"/>), and the
+    /// director is told once per unreachable window and gives a new point on a later tick.
     /// </summary>
     private static bool LeadOpen(BotBrain brain, GameBot bot, AbstractGameKeep keep, Point3D[] camps, OpenBgOrder order, State state, long now)
     {
@@ -186,10 +191,35 @@ public static class AutonomousBattlegroundDriver
         }
         state.Action = OpenAction(order);
         if (order.Point == null) return false;
+        // While the point sits in the unreachable cache GoTo refuses it without a proof; the director already knows.
+        bool known = InUnreachableCache(state, order.Point, now);
         if (GoTo(bot, state, order.Point, now)) return true;
-        OpenBattlegroundDirector.ReportUnreachable(order.Unit, order.Point);
+        if (!known) OpenBattlegroundDirector.ReportUnreachable(order.Unit, order.Point);
         return false;
     }
+
+    private static bool InUnreachableCache(State state, Point3D goal, long now) =>
+        state.UnreachableUntil != null && state.UnreachableUntil.TryGetValue((goal.X, goal.Y, goal.Z), out long retry) && now < retry;
+
+    /// <summary>The bracket priority's branches below an open-BG order.</summary>
+    public enum LeadBranch { Defend, Claim, Assault }
+
+    /// <summary>
+    /// Which bracket branch may run after an open-BG order found no route. Without an order (brackets, a unit not yet
+    /// ordered) every branch runs as before. A unit holding an order defends only for Defend and assaults only for
+    /// Assault; the claim was already tried by the order; every other role roams the camps (or stands), so a group
+    /// whose roam, lurk or bridge point is unreachable never sieges a door in Quiet or Push.
+    /// </summary>
+    public static bool FallbackAllows(OpenBgRole? heldOrder, LeadBranch branch) => heldOrder switch
+    {
+        null => true,
+        OpenBgRole role => branch switch
+        {
+            LeadBranch.Defend => role == OpenBgRole.Defend,
+            LeadBranch.Assault => role == OpenBgRole.Assault,
+            _ => false,
+        },
+    };
 
     /// <summary>The driver action logged for an open-BG order that walks to a point.</summary>
     public static string OpenAction(OpenBgOrder order) => order.Role switch
@@ -237,22 +267,72 @@ public static class AutonomousBattlegroundDriver
 
     /// <summary>
     /// open BG target rule: a human (or a human's companion) below level 30 is only taken on by the 40-50 crew after
-    /// it attacked this bot or its group; everyone else is fair game as before.
+    /// it, its group or its companions attacked this bot or its group; everyone else is fair game as before.
     /// </summary>
-    private static bool MayAcquire(GameBot bot, GameLiving target)
+    private static bool MayAcquire(GameBot bot, GameLiving target) => MayEngage(bot, target, openBattlegroundRule: true);
+
+    /// <summary>
+    /// The shared open-BG target rule (<see cref="OpenBattlegroundRoles.MayEngageInOpenBattleground"/>) for one target.
+    /// The class brain's PvP crowd control passes <see cref="HoldsOpenBattlegroundRule"/>, so brackets and the world
+    /// keep their sweep. Who attacked is only looked up for a protected target.
+    /// </summary>
+    public static bool MayEngage(GameBot bot, GameLiving target, bool openBattlegroundRule)
     {
-        if (target is not GamePlayer && target is not GameBot { IsAutonomousWorldBot: false, IsBattlegroundEncounterBot: false }) return true;
-        return OpenBattlegroundRoles.MayHuntHuman(bot.Level, target.Level, AttackedUs(bot, target));
+        if (bot == null || target == null) return true;
+        bool human = IsHumanSide(target);
+        bool shielded = openBattlegroundRule && human && !OpenBattlegroundRoles.MayHuntHuman(bot.Level, target.Level, false);
+        return OpenBattlegroundRoles.MayEngageInOpenBattleground(openBattlegroundRule, human, bot.Level, target.Level,
+            shielded && AttackedUs(bot, target));
     }
+
+    /// <summary>An open-BG crew bot standing in the open BG: the low-level protection binds it. Brackets and the world never.</summary>
+    public static bool HoldsOpenBattlegroundRule(GameBot bot) =>
+        bot is { IsAutonomousWorldBot: true } &&
+        BattlegroundCampaignCatalog.Find(bot.CurrentRegionID)?.Kind == BattlegroundDefinitionKind.Open &&
+        AutonomousBattlegroundParticipation.IsOpenCrew(bot);
+
+    /// <summary>
+    /// The class brain's single-target check uses <see cref="MayEngage"/>; an area spell (mez sweep, healer stun) is also
+    /// refused when a spared target stands within its radius of the centre.
+    /// </summary>
+    public static bool CatchesSpared(IReadOnlyList<GameLiving> spared, GameLiving center, int radius) =>
+        radius > 0 && center != null && spared != null && spared.Any(target => target != null && target.IsWithinRadius(center, radius));
+
+    // A player, or a companion or helper of a player (never another autonomous or encounter bot).
+    private static bool IsHumanSide(GameLiving target) =>
+        target is GamePlayer || target is GameBot { IsAutonomousWorldBot: false, IsBattlegroundEncounterBot: false };
 
     private static bool AttackedUs(GameBot bot, GameLiving target)
     {
-        if (bot.attackComponent?.AttackerTracker?.ContainsAttacker(target) == true) return true;
-        if (bot.Group == null) return false;
-        foreach (GameLiving member in bot.Group.GetMembersInTheGroup())
-            if (member != bot && member.attackComponent?.AttackerTracker?.ContainsAttacker(target) == true) return true;
+        HashSet<GameLiving> theirs = HumanSide(target);
+        IEnumerable<GameLiving> ours = bot.Group == null ? [bot] : bot.Group.GetMembersInTheGroup();
+        foreach (GameLiving member in ours)
+            if (member?.attackComponent?.AttackerTracker is AttackerTracker tracker && AttackedBySide(tracker.Attackers, theirs)) return true;
         return false;
     }
+
+    /// <summary>
+    /// The target, its group, and for a companion its owner and the owner's group: a lowbie healer whose companions or
+    /// group mates attack the crew is fair game.
+    /// </summary>
+    public static HashSet<GameLiving> HumanSide(GameLiving target)
+    {
+        var side = new HashSet<GameLiving>();
+        if (target == null) return side;
+        side.Add(target);
+        GamePlayer owner = (target as GameBot)?.Owner;
+        if (owner != null) side.Add(owner);
+        foreach (Group group in new[] { target.Group, owner?.Group })
+            if (group != null)
+                foreach (GameLiving member in group.GetMembersInTheGroup())
+                    if (member != null) side.Add(member);
+        return side;
+    }
+
+    /// <summary>True when one of the attackers (a pet counts as its owner) belongs to the side.</summary>
+    public static bool AttackedBySide(IEnumerable<GameLiving> attackers, ISet<GameLiving> side) =>
+        attackers != null && side != null && attackers.Any(attacker =>
+            attacker != null && (side.Contains(attacker) || PvpCombatant.Resolve(attacker) is GameLiving master && side.Contains(master)));
 
     /// <summary>
     /// Walks toward the first camp with a proven route, starting at the bot's current camp and skipping arrived

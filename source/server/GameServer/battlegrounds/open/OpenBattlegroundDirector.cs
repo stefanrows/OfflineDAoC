@@ -48,6 +48,8 @@ namespace DOL.GS
         public const int PointTimeoutMilliseconds = 8 * 60_000;
         public const int ArrivalDistance = 250;
         public const int UnreachableRepickMilliseconds = 30_000;
+        /// <summary>The same assignment (an unreachable fixed point picked again) is logged at most this often per unit.</summary>
+        public const int RoleRelogMilliseconds = 5 * 60_000;
         /// <summary>An attacker has mustered once its leader is this close to its own bridge.</summary>
         public const int MusterDistance = 500;
         /// <summary>The third realm in a keep fight, and defenders the keep's guards would shoot, fight this close to the keep.</summary>
@@ -172,6 +174,8 @@ namespace DOL.GS
             public long DriftCycle = -1;
             public long MusteredCycle = -1;
             public bool Unreachable;
+            public string LoggedLine;
+            public long LoggedAt;
         }
 
         private sealed class Snapshot
@@ -220,7 +224,6 @@ namespace DOL.GS
                 if (UnitStates.TryGetValue(unit, out UnitState state) && ReferenceEquals(state.Point, point)) state.Unreachable = true;
         }
 
-        /// <summary>Called by the campaign manager every <see cref="TickMilliseconds"/> of game time for the Open definition only.</summary>
         /// <summary>Phase, attacker and seconds left in the cycle, for the status window (lock-free).</summary>
         public static OpenBgPhaseStatus PhaseStatus()
         {
@@ -229,6 +232,7 @@ namespace DOL.GS
             return new OpenBgPhaseStatus(Phase.ToString(), Attacker.ToString(), (int)left);
         }
 
+        /// <summary>Called by the campaign manager every <see cref="TickMilliseconds"/> of game time for the Open definition only.</summary>
         public static void Tick(BattlegroundDefinition definition, long now)
         {
             if (definition?.Kind != BattlegroundDefinitionKind.Open) return;
@@ -410,12 +414,12 @@ namespace DOL.GS
             {
                 state.DriftCycle = _cycleIndex;
                 Point3D drift = OpenBattlegroundRoles.DriftedPoint(point, humans, true, Rng);
-                if (drift != null && !ReferenceEquals(drift, point) &&
-                    TryFloor(leader.CurrentRegion?.GetZone(drift.X, drift.Y), drift, FieldFloorRange, out Point3D floor))
-                {
-                    point = floor;
-                    drifted = true;
-                }
+                Point3D snapped = drift != null && !ReferenceEquals(drift, point) &&
+                    TryFloor(leader.CurrentRegion?.GetZone(drift.X, drift.Y), drift, FieldFloorRange, out Point3D floor) ? floor : null;
+                // The snap can move the drift point onto a player, and a failed drift can leave the unit's own point there:
+                // either way it takes a point clear of every human instead.
+                point = OpenBattlegroundRoles.AfterDrift(point, snapped, humans,
+                    () => UndriftedPoint(leader.CurrentRegion, role, realm, map, humans), out drifted);
             }
             state.Role = role;
             state.Point = point;
@@ -428,8 +432,33 @@ namespace DOL.GS
                 ? Rng.Next(LurkRestMinMilliseconds, LurkRestMaxMilliseconds + 1)
                 : Rng.Next(PointRestMinMilliseconds, PointRestMaxMilliseconds + 1);
             string where = point == null ? "none" : $"{point.X},{point.Y},{point.Z}";
-            Log.Info($"OPEN_BG_ROLE bot=\"{leader.Name}\" group=\"{group ?? "solo"}\" role={OpenBattlegroundRoles.Describe(role)} point={where} " +
-                $"realm={realm} phase={Describe(phase)}{(muster ? " muster=true" : "")}{(bridge != null ? $" bridge={bridge}" : "")}{(drifted ? " drift=true" : "")}");
+            string line = $"OPEN_BG_ROLE bot=\"{leader.Name}\" group=\"{group ?? "solo"}\" role={OpenBattlegroundRoles.Describe(role)} point={where} " +
+                $"realm={realm} phase={Describe(phase)}{(muster ? " muster=true" : "")}{(bridge != null ? $" bridge={bridge}" : "")}{(drifted ? " drift=true" : "")}";
+            // An unreachable bridge or keep is picked again every 30 s; the unchanged assignment is logged once per 5 game minutes.
+            if (LogsRoleAgain(line == state.LoggedLine, state.LoggedAt, now))
+            {
+                Log.Info(line);
+                state.LoggedLine = line;
+                state.LoggedAt = now;
+            }
+        }
+
+        /// <summary>A changed assignment is always logged; the same one again only after <see cref="RoleRelogMilliseconds"/>.</summary>
+        public static bool LogsRoleAgain(bool sameAssignment, long loggedAt, long now) =>
+            !sameAssignment || now - loggedAt >= RoleRelogMilliseconds;
+
+        // Callers hold Sync. A point for a drifting unit whose own point lies within 800 of a human: a lurk spot clear of
+        // humans for a lurker (a few draws), else a field point away from the bridges, clear of humans where one is.
+        private static Point3D UndriftedPoint(Region region, OpenBgRole role, eRealm realm, MapData map, Point3D[] humans)
+        {
+            if (role == OpenBgRole.Lurk)
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    Point3D lurk = LurkPoint(region, realm, map);
+                    if (OpenBattlegroundRoles.ClearOfHumans(lurk, humans)) return lurk;
+                }
+            Point3D[] field = OpenBattlegroundRoles.FieldAwayFromBridges(map.Field, map.Bridges);
+            return OpenBattlegroundRoles.PointClearOfHumans(field.Length > 0 ? field : map.Field, humans, Rng);
         }
 
         // A lurk point with a floor; a few draws, then the nearest camp to the realm's bridge (logged once).
