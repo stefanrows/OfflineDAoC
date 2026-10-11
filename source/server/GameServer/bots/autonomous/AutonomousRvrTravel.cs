@@ -98,16 +98,33 @@ public static class AutonomousRvrTravel
         }
         return false;
     }
+    /// <summary>
+    /// Who may open a border-keep gate. RvR objectives keep their old right
+    /// (door realm is theirs or the shared <see cref="eRealm.Door"/>). Bug 144:
+    /// every other autonomous world bot may open its own realm's gates, those
+    /// standing in its realm's home territory (<paramref name="gateTerritory"/>),
+    /// the way a player clicks them; before, PvE bots stalled at gate
+    /// 100087402 between the Svasud Faste stone and the Vale of Mularn.
+    /// </summary>
+    public static bool MayOpenBorderDoor(bool autonomousWorldBot, bool rvrObjective, eRealm botRealm,
+        eRealm doorRealm, eRealm gateTerritory) =>
+        autonomousWorldBot && botRealm != eRealm.None &&
+        (doorRealm == botRealm || doorRealm == eRealm.Door) &&
+        (rvrObjective || gateTerritory == botRealm);
+
     public static bool OpenNearbyBorderDoors(GameBot bot, Vector3 destination)
     {
-        if (bot?.IsAutonomousWorldBot != true ||
-            !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) return false;
+        if (bot?.IsAutonomousWorldBot != true) return false;
+        bool rvrObjective = AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR);
         bool opened = false;
         foreach (int id in GameDoor.BorderKeepDoorIds)
         {
             GameDoorBase door = DoorMgr.GetDoorByID(id);
             if (door == null || door.CurrentRegion != bot.CurrentRegion || door.Locked ||
-                door.State != eDoorState.Closed || door.Realm != bot.Realm && door.Realm != eRealm.Door ||
+                door.State != eDoorState.Closed ||
+                !MayOpenBorderDoor(true, rvrObjective, bot.Realm, door.Realm,
+                    door.CurrentZone is { } gateZone
+                        ? AutonomousWorldBotController.ProtectedRealm(door.CurrentRegionID, gateZone.ID) : eRealm.None) ||
                 !bot.IsWithinRadius(door, ServerProperties.Properties.WORLD_PICKUP_DISTANCE * 3)) continue;
             Vector2 heading = new(destination.X - bot.X, destination.Y - bot.Y);
             Vector2 toDoor = new(door.X - bot.X, door.Y - bot.Y);

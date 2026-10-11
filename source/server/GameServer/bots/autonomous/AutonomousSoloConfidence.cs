@@ -158,6 +158,27 @@ namespace DOL.GS
             return identity != null && identity != victim && !areAllied(identity, victim);
         }
 
+        /// <summary>
+        /// Bug 144: whether a solo PvE death is evidence against the camp's
+        /// target. Only when that target made the kill, or when nothing better
+        /// is known. A death to an add or to an aggressive mob on the road said
+        /// nothing about the target, yet lowered the con ceiling and dropped the
+        /// camp (302 of 536 live death replans), the yellow-to-green ratchet.
+        /// </summary>
+        public static bool BlamesCampTarget(string campTarget, string killerName) =>
+            string.IsNullOrEmpty(campTarget) || string.IsNullOrEmpty(killerName) ||
+            string.Equals(campTarget, killerName, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Deaths in a row to other killers after which the camp is dropped
+        /// anyway (the con ceiling still stays): a camp whose road kills the bot
+        /// every trip must not become a new loop.</summary>
+        public const int CampKeptOtherKillerDeaths = 2;
+
+        /// <summary>Whether the bot keeps its camp after a death that does not blame the
+        /// camp's target; the count includes this death.</summary>
+        public static bool KeepsCampAfterOtherKiller(int otherKillerDeathsInARow) =>
+            otherKillerDeathsInARow < CampKeptOtherKillerDeaths;
+
         public static bool IsAreaEffect(AttackData ad) =>
             ad?.SpellHandler?.Spell is Spell spell && spell.Radius > 0;
 
