@@ -41,6 +41,8 @@ namespace DOL.GS
             internal long NextSquadAt;
             internal long NextAmbushAt;
             internal ECSGameTimer Timer;
+            // open BG only: the roster's own 60-second timer, outside the campaign gate.
+            internal ECSGameTimer RosterTimer;
             internal int Rotation;
             internal long LordSpawnTick;
             internal bool HasMonsterObjectives;
@@ -113,6 +115,7 @@ namespace DOL.GS
                 foreach (Campaign campaign in Campaigns.Values)
                 {
                     campaign.Timer?.Stop();
+                    campaign.RosterTimer?.Stop();
                     foreach (Encounter encounter in campaign.Encounters) Cleanup(encounter);
                     foreach (Camp camp in campaign.Camps)
                     {
@@ -122,6 +125,7 @@ namespace DOL.GS
                 }
                 Campaigns.Clear();
             }
+            OpenBattlegroundRoster.Reset();
         }
 
         private static void EnsureToken()
@@ -232,6 +236,10 @@ namespace DOL.GS
             // Campaign keeps without native wall guards get wall posts learned from Molvik (runtime only, see BattlegroundKeepWallGuards).
             if (keep != null) BattlegroundKeepWallGuards.Ensure(definition, keep, campaign.Camps.Select(camp => camp.Position).ToArray());
             campaign.Timer = new ECSGameTimer(campaign.Camps[0].Commander, _ => Tick(campaign), 1000 + stagger);
+            // The open BG keeps its fixed crew; the brackets keep their tour participation unchanged.
+            if (definition.Kind == BattlegroundDefinitionKind.Open)
+                campaign.RosterTimer = new ECSGameTimer(campaign.Camps[0].Commander, _ => RosterTick(campaign),
+                    OpenBattlegroundRoster.TickMilliseconds + stagger);
             Log.Info($"BATTLEGROUND_CAMPAIGN_READY region={definition.RegionId} camps={campaign.Camps.Count} keep={(keep == null ? "none" : keep.KeepID.ToString())} lord={NativeLordReady(campaign)} doors={keep?.Doors.Count ?? 0} monsters={campaign.HasMonsterObjectives}");
         }
 
@@ -339,6 +347,15 @@ namespace DOL.GS
                     Log.Warn($"BATTLEGROUND_TICK_SLOW region={campaign.Definition.RegionId} ms={total.ElapsedMilliseconds} captains_ms={captainsMs} encounters_ms={encountersMs} squads_ms={squadsMs} humans_ms={humansMs} spawn_ms={spawnMs} actors={ActorCount(campaign)}");
                 return 1000;
             }
+        }
+
+        // Game time (GameLoop.GameLoopTime): at world speed 20x the roster runs every three real seconds.
+        private static int RosterTick(Campaign campaign)
+        {
+            if (!_running) return 0;
+            try { OpenBattlegroundRoster.Tick(campaign.Definition, GameLoop.GameLoopTime); }
+            catch (Exception exception) { Log.Error($"OPEN_BG_ROSTER_FAILED region={campaign.Definition.RegionId}", exception); }
+            return OpenBattlegroundRoster.TickMilliseconds;
         }
 
         private static void SpawnCaptain(Camp camp)

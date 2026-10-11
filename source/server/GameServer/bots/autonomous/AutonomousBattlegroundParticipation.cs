@@ -25,6 +25,10 @@ public static class AutonomousBattlegroundParticipation
     /// <summary>Wall-clock floor for the stuck and no-turn rules, so a fast world speed cannot eject bots in seconds.</summary>
     public const long StuckWallMilliseconds = 90_000;
     public const int AssignmentTimeoutMilliseconds = 15 * 60_000;
+    /// <summary>An open-BG unit musters as a group before it boards, so it gets longer to reach its porter.</summary>
+    public const int OpenAssignmentTimeoutMilliseconds = 30 * 60_000;
+    /// <summary>A relieved open-BG bot walks toward its own portal keep for at most this long before it leaves.</summary>
+    public const int ReliefWalkMilliseconds = 5 * 60_000;
     public const int DepartureLimit = 8;
     public const string BattlegroundMedallionId = "battlegrounds_necklace";
     private const int DirectorMaximum = 24;
@@ -35,7 +39,7 @@ public static class AutonomousBattlegroundParticipation
     private static readonly Dictionary<GameBot, Entry> Entries = new(ReferenceEqualityComparer.Instance);
     private static ECSGameTimer _timer;
 
-    public enum LeaveReason { Graduated, TourEnded, Unassigned, Stuck, NoTurn }
+    public enum LeaveReason { Graduated, TourEnded, Unassigned, Stuck, NoTurn, Relieved }
 
     private sealed class Entry
     {
@@ -51,7 +55,17 @@ public static class AutonomousBattlegroundParticipation
         // Driver turns taken inside the battleground; the stuck rule applies only after one.
         public int DriverTurns;
         public HashSet<string> IdleReasons;
+        // open BG: the roster unit (0 for every bracket entry), the group it was formed as (null for a solo),
+        // when it entered, and the relief walk home.
+        public int Unit;
+        public Group GroupRef;
+        public long EnteredTick;
+        public long LeaveStartTick;
+        public Point3D ReliefHome;
     }
+
+    /// <summary>One open-BG crew member for the roster.</summary>
+    public readonly record struct OpenCrewMember(GameBot Bot, int Unit, bool Entered, bool Leaving, long EnteredTick);
 
     [GameServerStartedEvent]
     public static void OnServerStarted(DOLEvent e, object sender, EventArgs args)
@@ -83,6 +97,7 @@ public static class AutonomousBattlegroundParticipation
         LeaveReason.TourEnded => "tour_ended",
         LeaveReason.Stuck => "stuck",
         LeaveReason.NoTurn => "no_turn",
+        LeaveReason.Relieved => "relieved",
         _ => "unassigned",
     };
 
@@ -129,6 +144,25 @@ public static class AutonomousBattlegroundParticipation
         if (!rvrTour) return LeaveReason.TourEnded;
         return IsEligible(level, realmLevel, rvrTour, playerLed, relic, d) ? null : LeaveReason.Unassigned;
     }
+
+    /// <summary>
+    /// Why an open-BG crew member must leave, or null to keep it. No graduation and no tour end: the roster relieves.
+    /// It leaves when the open BG is switched off, when a player leads it, or when it carries a relic or changed its
+    /// group before boarding (a solo that joined a party, a member whose muster broke up).
+    /// </summary>
+    public static LeaveReason? OpenLeaveReasonFor(bool openEnabled, bool playerLed, bool relic, bool groupChangedBeforeEntry) =>
+        !openEnabled || playerLed || relic || groupChangedBeforeEntry ? LeaveReason.Unassigned : null;
+
+    /// <summary>The open BG has its own hard cap (open_bg_max_bots); the bracket's 24 per map does not apply.</summary>
+    public static bool AdmitsOpenUnit(int memberCount, int openCrew, int cap) =>
+        memberCount > 0 && openCrew + memberCount <= cap;
+
+    /// <summary>Only an Open definition with a roster unit is an open-BG entry; every bracket entry has unit 0.</summary>
+    public static bool IsOpenUnit(BattlegroundDefinition definition, int unit) =>
+        definition?.Kind == BattlegroundDefinitionKind.Open && unit > 0;
+
+    public static int AssignmentTimeoutFor(BattlegroundDefinition definition) =>
+        definition?.Kind == BattlegroundDefinitionKind.Open ? OpenAssignmentTimeoutMilliseconds : AssignmentTimeoutMilliseconds;
 
     /// <summary>A group is admitted only when every member is eligible and the map has room for all of them.</summary>
     public static bool AdmitsGroup(int memberCount, int eligibleCount, int assignedOnMap) =>
@@ -188,6 +222,125 @@ public static class AutonomousBattlegroundParticipation
             return bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Leaving != null;
     }
 
+    /// <summary>Assigned to or standing in any campaign battleground, bracket or open.</summary>
+    public static bool IsInAnyBattleground(GameBot bot) =>
+        bot != null && (BattlegroundCampaignCatalog.Find(bot.CurrentRegionID) != null || IsRegistered(bot));
+
+    /// <summary>A member of the open BG crew (travelling, inside or leaving).</summary>
+    public static bool IsOpenCrew(GameBot bot)
+    {
+        lock (Sync)
+            return bot != null && Entries.TryGetValue(bot, out Entry entry) && IsOpenUnit(entry.Definition, entry.Unit);
+    }
+
+    /// <summary>Every open-BG crew member. Bracket entries are never part of it.</summary>
+    public static OpenCrewMember[] OpenCrew()
+    {
+        lock (Sync)
+            return Entries.Values.Where(entry => IsOpenUnit(entry.Definition, entry.Unit))
+                .Select(entry => new OpenCrewMember(entry.Bot, entry.Unit, entry.Entered, entry.Leaving != null, entry.EnteredTick))
+                .ToArray();
+    }
+
+    /// <summary>Open-BG crew members against the open cap, including those still travelling or leaving.</summary>
+    public static int OpenCrewCount()
+    {
+        lock (Sync)
+            return Entries.Values.Count(entry => IsOpenUnit(entry.Definition, entry.Unit));
+    }
+
+    /// <summary>
+    /// Registers one open-BG roster unit (a group or a solo). The members then travel like any assigned participant:
+    /// medallion, porter, and <see cref="Depart"/> boards them for the open BG. Refused when a member is registered already.
+    /// </summary>
+    public static bool AssignOpenUnit(int unit, string label, IReadOnlyList<GameBot> members, Group group, long now)
+    {
+        BattlegroundDefinition open = BattlegroundCampaignCatalog.FindOpen();
+        if (!IsOpenUnit(open, unit) || members == null || members.Count == 0 || members.Any(member => member == null)) return false;
+        lock (Sync)
+        {
+            if (members.Any(Entries.ContainsKey)) return false;
+            foreach (GameBot member in members)
+                Entries[member] = new Entry { Bot = member, Definition = open, Group = label ?? "solo", Unit = unit, GroupRef = group,
+                    AssignedTick = now, LastProgressTick = now, LastProgressWall = Environment.TickCount64 };
+        }
+        foreach (GameBot member in members)
+            Log.Info($"AUTONOMOUS_BG_ASSIGNED region={open.RegionId} bot=\"{member.Name}\" level={member.Level} group=\"{label}\" open_unit={unit}");
+        return true;
+    }
+
+    /// <summary>
+    /// Relieves one open-BG unit: members inside leave as <see cref="LeaveReason.Relieved"/> after walking to their
+    /// own portal keep; members still travelling are released at once. Returns the relieved bots.
+    /// </summary>
+    public static GameBot[] RelieveOpenUnit(int unit, long now)
+    {
+        var relieved = new List<(GameBot Bot, string Group, long After, bool Inside)>();
+        lock (Sync)
+            foreach (Entry entry in Entries.Values.Where(entry => entry.Unit == unit && IsOpenUnit(entry.Definition, entry.Unit) && entry.Leaving == null).ToArray())
+            {
+                if (!entry.Entered)
+                {
+                    Entries.Remove(entry.Bot);
+                    relieved.Add((entry.Bot, entry.Group, 0, false));
+                    continue;
+                }
+                entry.Leaving = LeaveReason.Relieved;
+                entry.LeaveStartTick = now;
+                entry.ReliefHome = null;
+                relieved.Add((entry.Bot, entry.Group, now - entry.EnteredTick, true));
+            }
+        foreach ((GameBot bot, string group, long after, bool inside) in relieved)
+        {
+            Log.Info($"OPEN_BG_RELIEF bot=\"{bot.Name}\" group=\"{group}\" unit={unit} after_s={after / 1000} inside={inside}");
+            if (!inside) Log.Info($"AUTONOMOUS_BG_LEFT region={BattlegroundCampaignCatalog.FindOpen()?.RegionId} bot=\"{bot.Name}\" reason={Describe(LeaveReason.Relieved)}");
+        }
+        return relieved.Select(item => item.Bot).ToArray();
+    }
+
+    /// <summary>
+    /// A relieved open-BG bot first walks to its own realm's portal keep (its landing), as a player would before
+    /// leaving, for at most <see cref="ReliefWalkMilliseconds"/>; then it leaves. True while that walk lasts.
+    /// </summary>
+    public static bool TryGetReliefWalk(GameBot bot, out Point3D home)
+    {
+        home = null;
+        if (bot == null) return false;
+        BattlegroundDefinition definition;
+        lock (Sync)
+        {
+            if (!Entries.TryGetValue(bot, out Entry entry) || entry.Leaving != LeaveReason.Relieved || !entry.Entered ||
+                GameLoop.GameLoopTime - entry.LeaveStartTick > ReliefWalkMilliseconds)
+                return false;
+            home = entry.ReliefHome;
+            definition = entry.Definition;
+        }
+        if (home == null)
+        {
+            GameLocation landing = BattlegroundCampaignPolicy.GetLanding(bot, definition);
+            if (landing == null || landing.RegionID != bot.CurrentRegionID)
+            {
+                EndReliefWalk(bot);
+                return false;
+            }
+            home = new Point3D(landing.X, landing.Y, landing.Z);
+            lock (Sync)
+                if (Entries.TryGetValue(bot, out Entry entry)) entry.ReliefHome = home;
+        }
+        return !bot.IsWithinRadius(home, ReliefHomeRadius);
+    }
+
+    /// <summary>Ends a relief walk early (no route home): the bot leaves from where it stands.</summary>
+    public static void EndReliefWalk(GameBot bot)
+    {
+        lock (Sync)
+            if (bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Leaving == LeaveReason.Relieved)
+                entry.LeaveStartTick = long.MinValue / 2;
+    }
+
+    /// <summary>Within this distance of its portal keep landing a relieved bot has arrived home.</summary>
+    public const int ReliefHomeRadius = 400;
+
     /// <summary>A participant still inside the battleground whose last real progress is recent.</summary>
     public static bool IsProgressing(GameBot bot)
     {
@@ -231,11 +384,18 @@ public static class AutonomousBattlegroundParticipation
     {
         if (porter == null || !BattlegroundCampaignPolicy.IsEnabled) return;
         GameBot[] waiting;
+        GameBot[] openWaiting;
         lock (Sync)
+        {
             waiting = Entries.Values
-                .Where(entry => !entry.Entered && entry.Leaving == null)
+                .Where(entry => !entry.Entered && entry.Leaving == null && !IsOpenUnit(entry.Definition, entry.Unit))
                 .Select(entry => entry.Bot)
                 .ToArray();
+            openWaiting = Entries.Values
+                .Where(entry => !entry.Entered && entry.Leaving == null && IsOpenUnit(entry.Definition, entry.Unit))
+                .Select(entry => entry.Bot)
+                .ToArray();
+        }
         GameBot[] boarders = waiting
             .Where(bot => bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
                 bot.IsWithinRadius(porter, AutonomousFrontierTransport.BoardingRadius))
@@ -243,6 +403,35 @@ public static class AutonomousBattlegroundParticipation
             .ThenBy(bot => bot.DatabaseID)
             .Take(DepartureLimit)
             .ToArray();
+        Board(porter, boarders);
+        if (openWaiting.Length > 0)
+            Board(porter, OpenBoarders(porter, openWaiting));
+    }
+
+    /// <summary>
+    /// The open crew's own cast of up to <see cref="DepartureLimit"/>: a whole group together, leader first. A member
+    /// whose leader is still a waiting crew member outside the boarding circle waits for it, so the group arrives
+    /// as one and lands at its leader's portal keep.
+    /// </summary>
+    private static GameBot[] OpenBoarders(OFTeleporter porter, GameBot[] waiting)
+    {
+        var waitingSet = waiting.ToHashSet(ReferenceEqualityComparer.Instance);
+        GameBot[] near = waiting
+            .Where(bot => bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
+                bot.IsWithinRadius(porter, AutonomousFrontierTransport.BoardingRadius))
+            .ToArray();
+        var nearSet = near.ToHashSet(ReferenceEqualityComparer.Instance);
+        return near
+            .Where(bot => bot.Group?.LivingLeader is not GameBot leader || leader == bot || !waitingSet.Contains(leader) || nearSet.Contains(leader))
+            .OrderBy(bot => (bot.Group?.LivingLeader as GameBot ?? bot).DatabaseID)
+            .ThenBy(bot => bot.Group?.LivingLeader == bot ? 0 : 1)
+            .ThenBy(bot => bot.DatabaseID)
+            .Take(DepartureLimit)
+            .ToArray();
+    }
+
+    private static void Board(OFTeleporter porter, GameBot[] boarders)
+    {
         foreach (GameBot bot in boarders)
         {
             if (!HasBattlegroundMedallion(bot)) continue;
@@ -266,6 +455,7 @@ public static class AutonomousBattlegroundParticipation
                 if (Entries.TryGetValue(bot, out Entry entry))
                 {
                     entry.Entered = true;
+                    entry.EnteredTick = GameLoop.GameLoopTime;
                     Touch(entry, GameLoop.GameLoopTime);
                 }
             Log.Info($"AUTONOMOUS_BG_ENTERED region={destination} from_region={from} bot=\"{bot.Name}\"");
@@ -379,10 +569,14 @@ public static class AutonomousBattlegroundParticipation
             }
             if (entry.Leaving == null)
             {
-                LeaveReason? reason = LeaveReasonFor(bot.Level, bot.RealmLevel,
-                    AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR), bot.IsPlayerLedGroup,
-                    GameRelic.IsPlayerCarryingRelic(bot), entry.Definition);
-                if (!entry.Entered && now - entry.AssignedTick > AssignmentTimeoutMilliseconds)
+                // An open-BG crew member stays until the roster relieves it: a died-and-released bot stays too.
+                LeaveReason? reason = IsOpenUnit(entry.Definition, entry.Unit)
+                    ? OpenLeaveReasonFor(OpenBattlegroundPolicy.IsEnabled, bot.IsPlayerLedGroup, GameRelic.IsPlayerCarryingRelic(bot),
+                        !entry.Entered && bot.Group != entry.GroupRef)
+                    : LeaveReasonFor(bot.Level, bot.RealmLevel,
+                        AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR), bot.IsPlayerLedGroup,
+                        GameRelic.IsPlayerCarryingRelic(bot), entry.Definition);
+                if (!entry.Entered && now - entry.AssignedTick > AssignmentTimeoutFor(entry.Definition))
                     reason = LeaveReason.Unassigned;
                 if (entry.Entered && bot.CurrentRegionID != entry.Definition.RegionId)
                     reason = LeaveReason.Unassigned;
@@ -409,7 +603,8 @@ public static class AutonomousBattlegroundParticipation
                 if (reason != null)
                     lock (Sync) entry.Leaving = reason;
             }
-            if (entry.Leaving != null) TryFinishLeaving(bot);
+            // A relieved bot walking home is let out by its driver once it arrives (or the walk times out).
+            if (entry.Leaving != null && !TryGetReliefWalk(bot, out _)) TryFinishLeaving(bot);
         }
 
         // Bots already standing in a bracket map (after a restart) are re-registered
@@ -419,9 +614,13 @@ public static class AutonomousBattlegroundParticipation
             if (bot.ObjectState != GameObject.eObjectState.Active || IsRegistered(bot)) continue;
             BattlegroundDefinition inside = BattlegroundCampaignCatalog.Find(bot.CurrentRegionID);
             if (inside == null) continue;
-            LeaveReason? reason = LeaveReasonFor(bot.Level, bot.RealmLevel,
-                AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR), bot.IsPlayerLedGroup,
-                GameRelic.IsPlayerCarryingRelic(bot), inside);
+            // The open BG's crew lives in the roster's memory only: a bot found inside it without an entry
+            // (after a restart) is sent out and the roster refills.
+            LeaveReason? reason = inside.Kind == BattlegroundDefinitionKind.Open
+                ? LeaveReason.Unassigned
+                : LeaveReasonFor(bot.Level, bot.RealmLevel,
+                    AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR), bot.IsPlayerLedGroup,
+                    GameRelic.IsPlayerCarryingRelic(bot), inside);
             if (!enabled || reason != null)
             {
                 lock (Sync) Entries[bot] = new Entry { Bot = bot, Definition = inside, Entered = true, Leaving = reason ?? LeaveReason.Unassigned, AssignedTick = now, LastProgressTick = now, LastProgressWall = Environment.TickCount64 };

@@ -52,7 +52,7 @@ namespace DOL.GS
         }
 
         private static bool FieldActive(Session session) =>
-            !session.Ending && session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
+            !session.Ending && !session.OpenBattleground && session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
             session.TaskClock.HasStarted && !session.Recovery.IsRegrouping &&
             AutonomousRealmRaid.GetView(session.Group) == null;
 

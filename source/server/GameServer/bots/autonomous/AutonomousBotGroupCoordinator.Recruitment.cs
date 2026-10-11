@@ -135,7 +135,7 @@ namespace DOL.GS
         {
             int probes = 0;
             long now = GameLoop.GameLoopTime;
-            foreach (Session session in Sessions.Values.Where(session => !session.Ending && session.ObjectiveKind == objective &&
+            foreach (Session session in Sessions.Values.Where(session => !session.Ending && !session.OpenBattleground && session.ObjectiveKind == objective &&
                          IsAssemblyPhase(session.Phase) && !session.TaskClock.HasStarted &&
                          now < session.RecruitmentDeadlineTick && AutonomousRealmRaid.GetView(session.Group) == null)
                      .OrderBy(session => session.CreatedTick).ToArray())
