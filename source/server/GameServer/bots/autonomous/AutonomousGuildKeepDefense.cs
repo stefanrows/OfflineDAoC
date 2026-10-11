@@ -24,13 +24,15 @@ public static class AutonomousGuildKeepDefense
     public static bool Eligible(GameBot bot) => AutonomousSiegeMarch.IsWorldActor(bot);
 
     private static bool Current(Alarm alarm, long now) => alarm != null &&
-        alarm.Keep.Guild == alarm.Owner && !alarm.Keep.DBKeep.LordDefeated &&
+        AutonomousRvrKeepPolicy.IsWorldKeep(alarm.Keep) && alarm.Keep.Guild == alarm.Owner && !alarm.Keep.DBKeep.LordDefeated &&
         now - alarm.LastHit < ResponseMilliseconds;
 
     public static void ObserveAttack(AbstractGameKeep keep, GameObject source)
     {
         Guild owner = keep?.Guild;
-        if (!PvpKeepCampaign.Applies(keep) || owner == null ||
+        // A battleground keep is defended by that battleground's crew inside its region;
+        // the guild's world bots are never recalled to it (0.242.0: 52 bots, keep 11).
+        if (!AutonomousRvrKeepPolicy.IsWorldKeep(keep) || !PvpKeepCampaign.Applies(keep) || owner == null ||
             PvpKeepCampaign.IsGarrison(owner) || keep.DBKeep.LordDefeated) return;
         GameLiving attacker = source is GameSiegeWeapon siege
             ? siege.Owner : source as GameLiving;

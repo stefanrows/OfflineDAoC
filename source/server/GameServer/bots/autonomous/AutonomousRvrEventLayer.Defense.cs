@@ -25,7 +25,7 @@ namespace DOL.GS
         // chat and all population work run in the coordinator service phase.
         public static void ObserveKeepAttack(AbstractGameKeep keep, GameObject source)
         {
-            if (!AutonomousRvrKeepPolicy.IsSiegeObjective(keep)) return;
+            if (!AutonomousRvrKeepPolicy.IsSiegeObjective(keep) || !AutonomousRvrKeepPolicy.IsWorldKeep(keep)) return;
             AutonomousGuildKeepDefense.ObserveAttack(keep, source);
             string id = $"rvr-keep-{keep.KeepID}";
             long now = GameLoop.GameLoopTime;

@@ -13,6 +13,16 @@ namespace DOL.GS
         }
 
         /// <summary>
+        /// A keep of the open world (frontier or dungeon), never one inside a campaign
+        /// battleground region (level brackets and the open BG). World bots must not be
+        /// recalled to, sent to, or roam to a battleground keep: those belong to the
+        /// battleground crews (their own defence runs inside the region).
+        /// </summary>
+        public static bool IsWorldKeep(ushort regionId) => BattlegroundCampaignCatalog.Find(regionId) == null;
+
+        public static bool IsWorldKeep(AbstractGameKeep keep) => keep != null && IsWorldKeep((ushort)keep.Region);
+
+        /// <summary>
         /// Roaming groups pass by portal keeps and relic temples (bug 146):
         /// relic-keep assaults stay off, and a lone roamer only feeds the guards.
         /// </summary>
