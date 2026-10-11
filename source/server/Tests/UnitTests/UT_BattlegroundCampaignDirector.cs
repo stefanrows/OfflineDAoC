@@ -92,6 +92,43 @@ namespace DOL.GS.Tests
             });
         }
 
+        // Fake Detour from the Albion landing of Thidranki toward a door approach: each query walks at most `reach` units
+        // (the 256-polygon cap), and stops `shortBy` units before the goal when a closed gate blocks the way.
+        private static Func<System.Numerics.Vector3, AutonomousBattlegroundDriver.RouteLeg> Corridor(System.Numerics.Vector3 goal, float reach,
+            float shortBy = 0) => start =>
+        {
+            System.Numerics.Vector3 toGoal = goal - start;
+            float left = toGoal.Length() - shortBy;
+            if (left <= 0) return new AutonomousBattlegroundDriver.RouteLeg(PathfindingStatus.PartialPathFound, start);
+            float step = Math.Min(reach, left);
+            System.Numerics.Vector3 end = start + System.Numerics.Vector3.Normalize(toGoal) * step;
+            bool reached = shortBy == 0 && step >= left;
+            return new AutonomousBattlegroundDriver.RouteLeg(reached ? PathfindingStatus.PathFound : PathfindingStatus.PartialPathFound,
+                reached ? goal : end);
+        };
+
+        [Test]
+        public void AGroupAtItsLandingGetsARouteToTheDoorApproach()
+        {
+            // Live run 0.242.0: the door approach accepted only one unchained query, which Detour caps at 256 polygons, so
+            // keep 11's gate was never proved from the landings and the assault walked back to the camps instead.
+            var landing = new System.Numerics.Vector3(37301, 52362, 3945);
+            var approach = new System.Numerics.Vector3(34783, 38276, 3720);
+            Func<System.Numerics.Vector3, AutonomousBattlegroundDriver.RouteLeg> capped = Corridor(approach, 3_000);
+            Assert.Multiple(() =>
+            {
+                Assert.That(capped(landing).Status, Is.EqualTo(PathfindingStatus.PartialPathFound), "one query alone stops after 3,000 units");
+                Assert.That(BattlegroundCampaignManager.ApproachRouteProven(landing, approach, capped), Is.True,
+                    "chained legs prove the 14,300-unit way from the landing to the gate");
+                Assert.That(BattlegroundCampaignManager.ApproachRouteProven(landing, approach, Corridor(approach, 3_000, shortBy: 30)), Is.True,
+                    "a partial path ending within 48 units of the approach point reaches it");
+                Assert.That(BattlegroundCampaignManager.ApproachRouteProven(landing, approach, Corridor(approach, 3_000, shortBy: 400)), Is.False,
+                    "a point behind the closed gate dead-ends");
+                Assert.That(BattlegroundCampaignManager.ApproachRouteProven(landing, approach,
+                    _ => new AutonomousBattlegroundDriver.RouteLeg(PathfindingStatus.NoPathFound, landing)), Is.False);
+            });
+        }
+
         [Test]
         public void MurdaigeanNativeKeepRowIsAnOrdinaryBattlegroundKeep()
         {

@@ -429,24 +429,51 @@ namespace DOL.GS
             return lord != null && TryApproach(member, lord, out approach) ? lord : null;
         }
 
+        // A standing point 180 units around the target with a proven route. Detour caps one query at 256 polygons, so a
+        // single query only proved the door from close by (live run 0.242.0: never from a landing); the legs are chained.
         private static bool TryApproach(GameBot member, GameLiving target, out Point3D approach)
         {
             approach = null;
             var nav = PathfindingProvider.Instance;
             Zone zone = member.CurrentZone;
             if (zone == null || target.CurrentZone != zone || !nav.IsAvailable || !nav.HasNavmesh(zone)) return false;
-            Span<WrappedPathfindingNode> nodes = stackalloc WrappedPathfindingNode[512];
+            Vector3 from = new(member.X, member.Y, member.Z);
+            var candidates = new List<Vector3>(8);
             for (int i = 0; i < 8; i++)
             {
                 double angle = i * Math.PI / 4;
                 Vector3 candidate = new(target.X + (float)(Math.Cos(angle) * 180), target.Y + (float)(Math.Sin(angle) * 180), target.Z);
                 if (!nav.TrySnapToMesh(zone, ref candidate, 100) || Math.Abs(candidate.Z - target.Z) > 100) continue;
-                if (nav.GetPathStraight(zone, new(member.X, member.Y, member.Z), candidate, nav.BlockingDoorAvoidanceFilters, nodes).Status != PathfindingStatus.PathFound) continue;
-                approach = new Point3D(candidate.X, candidate.Y, candidate.Z);
-                return true;
+                candidates.Add(candidate);
+            }
+            // The member's own side first: a point behind the closed gate only dead-ends, after the near ones were tried.
+            candidates.Sort((a, b) => Vector3.DistanceSquared(from, a).CompareTo(Vector3.DistanceSquared(from, b)));
+            WrappedPathfindingNode[] nodes = System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Rent(512);
+            try
+            {
+                foreach (Vector3 candidate in candidates)
+                {
+                    Vector3 goal = candidate;
+                    if (!ApproachRouteProven(from, goal, start =>
+                            AutonomousBattlegroundDriver.QueryLeg(nav, zone, start, goal, nav.BlockingDoorAvoidanceFilters, nodes))) continue;
+                    approach = new Point3D(candidate.X, candidate.Y, candidate.Z);
+                    return true;
+                }
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<WrappedPathfindingNode>.Shared.Return(nodes);
             }
             return false;
         }
+
+        /// <summary>
+        /// Whether a route to a siege approach point is proven: chained corridor-capped legs reach it, or a partial path ends
+        /// within <see cref="AutonomousBattlegroundDriver.LegReachDistance"/> of it (<see cref="AutonomousBattlegroundDriver.ChainRoute"/>).
+        /// </summary>
+        public static bool ApproachRouteProven(Vector3 from, Vector3 approach, Func<Vector3, AutonomousBattlegroundDriver.RouteLeg> leg) =>
+            AutonomousBattlegroundDriver.ChainRoute(from, approach, AutonomousBattlegroundDriver.MaxRouteLegs, leg, out _) ==
+            AutonomousBattlegroundDriver.RouteChain.Reached;
 
         private static bool TryCampAnchor(BattlegroundDefinition definition, GameLocation landing, AbstractGameKeep keep, GameLocation alternate, out Point3D anchor)
         {
@@ -526,6 +553,7 @@ namespace DOL.GS
                 participant.CurrentRegionID != campaign.Definition.RegionId || participant.GetDistanceTo(encounter.Goal) <= ParticipantChaseDistance) return false;
             Point3D target = new(participant);
             if (!OutsideSanctuary(participant, target)) return false;
+            if (!OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(campaign.Definition, target, campaign.Camps.Select(camp => camp.Position))) return false;
             encounter.Goal = target;
             return true;
         }
@@ -558,8 +586,10 @@ namespace DOL.GS
         {
             string kind = ambush ? "ambush" : "patrol";
             GameLiving[] participants = LocalParticipants(campaign);
-            // In the open BG humans under 40 belong to the guest squads; the campaign's squads never scale down to them.
-            GameLiving[] targets = SquadTargets(participants).Where(actor => OpenBattlegroundGuestSquads.CampaignSquadMayTarget(campaign.Definition, actor is GamePlayer, actor.Level)).ToArray();
+            // In the open BG humans under 40 belong to the guest squads; the campaign's squads never scale down to them, and
+            // never hunt the crew (every autonomous bot inside the open BG is crew).
+            GameLiving[] targets = SquadTargets(participants).Where(actor => OpenBattlegroundGuestSquads.CampaignSquadMayTarget(campaign.Definition,
+                actor is GamePlayer, actor is GameBot { IsAutonomousWorldBot: true }, actor.Level)).ToArray();
             if (targets.Length == 0) { LogSquadSkipped(campaign, kind, "no_participants", 0); return; }
             // A real player leads whenever one is a target; a bot participant leads only when none is.
             GameLiving[] humans = targets.Where(actor => actor is GamePlayer).ToArray();
@@ -597,18 +627,29 @@ namespace DOL.GS
             bool targetParticipant = ambush || OutsideSanctuary(participant, participantPoint);
             Point3D goal = targetParticipant ? participantPoint : new Point3D(camps[nearest]);
             Camp origin = campaign.Camps[ambush ? nearest : PatrolOriginIndex(nearest, camps.Count, campaign.Rotation)];
+            Point3D originPoint = origin.Position;
+            bool open = campaign.Definition.Kind == BattlegroundDefinitionKind.Open;
+            if (open)
+            {
+                // Live run 0.242.0: level-50 patrols spawned at and walked to the arrival camps, where the crews release.
+                // In the open BG a squad only goes for a human out in the field and walks in from the keep approach.
+                if (!targetParticipant || !OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(campaign.Definition, goal, camps))
+                { LogSquadSkipped(campaign, kind, "arrival_camp", targets.Length); return; }
+                originPoint = OpenSquadOrigin(campaign, origin.Position);
+                if (originPoint == null) { LogSquadSkipped(campaign, kind, "no_field_origin", targets.Length); return; }
+            }
             // Routes are proved before any actor exists: a failed proof used to build and delete up to
             // eight bots, twice per squad. A participant goal that cannot be proved or spawns nobody falls
-            // back once to the nearest camp, as before.
+            // back once to the nearest camp, as before (never in the open BG: that camp is an arrival camp).
             Point3D fallback = new Point3D(camps[nearest]);
-            int attempts = targetParticipant && !ambush ? 2 : 1;
+            int attempts = targetParticipant && !ambush && !open ? 2 : 1;
             string name = ambush ? "Ambush patrol" : "Battleground patrol";
             string failure = null;
             Encounter encounter = null;
             for (int attempt = 0; encounter == null && attempt < attempts; attempt++)
             {
                 Point3D attemptGoal = attempt == 0 ? goal : fallback;
-                string routeFailure = BattlegroundEncounterActor.RouteFailure(campaign.Definition.RegionId, origin.Position, attemptGoal);
+                string routeFailure = BattlegroundEncounterActor.RouteFailure(campaign.Definition.RegionId, originPoint, attemptGoal);
                 if (routeFailure != null)
                 {
                     failure ??= $"route:{routeFailure}";
@@ -616,14 +657,25 @@ namespace DOL.GS
                 }
                 Encounter candidate = new() { Goal = attemptGoal, Participant = participant, Level = OpenBattlegroundGuestSquads.CampaignSquadLevel(campaign.Definition, participant.Level),
                     ExpiresAt = Now + (ambush ? 6 : 10) * 60_000 };
-                string spawnFailure = SpawnParty(campaign, candidate, origin.Position, guild, null, name, size);
+                string spawnFailure = SpawnParty(campaign, candidate, originPoint, guild, null, name, size);
                 if (candidate.Members.Count > 0) encounter = candidate;
                 else failure = $"spawn:{spawnFailure ?? "capacity"}";
             }
             if (encounter == null) { LogSquadSkipped(campaign, kind, "route_or_spawn_failed", targets.Length, failure ?? "route:none"); return; }
             campaign.Encounters.Add(encounter);
             campaign.SquadSkipReasons.Remove(kind);
-            Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind={kind} members={encounter.Members.Count}/{size} level={encounter.Level} guild={guild?.Name ?? "none"} origin=camp{origin.Index + 1} goal={FormatPoint(encounter.Goal)} target={participant.Name ?? "none"} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
+            Log.Info($"BATTLEGROUND_SQUAD_SPAWNED region={campaign.Definition.RegionId} kind={kind} members={encounter.Members.Count}/{size} level={encounter.Level} guild={guild?.Name ?? "none"} origin=camp{origin.Index + 1}{(open ? $" from={FormatPoint(originPoint)}" : string.Empty)} goal={FormatPoint(encounter.Goal)} target={participant.Name ?? "none"} actors={ActorCount(campaign)}/{DirectorCapacity(campaign)}");
+        }
+
+        // open BG: a squad walks in from the field toward the keep from its origin camp, on a floor clear of every arrival camp.
+        private static Point3D OpenSquadOrigin(Campaign campaign, Point3D camp)
+        {
+            Point3D keep = campaign.Keep == null ? null : new Point3D(campaign.Keep.X, campaign.Keep.Y, campaign.Keep.Z);
+            Point3D raw = OpenBattlegroundGuestSquads.CampaignSquadOrigin(campaign.Definition, camp, keep);
+            Region region = WorldMgr.GetRegion(campaign.Definition.RegionId);
+            Point3D floor = region == null || raw == null ? null : OpenBattlegroundGuestSquads.Floor(region, raw);
+            return floor != null && OpenBattlegroundGuestSquads.CampaignSquadPointAllowed(campaign.Definition, floor,
+                campaign.Camps.Select(other => other.Position)) ? floor : null;
         }
 
         // Returns the step that failed for the last member that could not be placed, or null when none failed.

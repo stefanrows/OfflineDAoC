@@ -156,5 +156,84 @@ namespace DOL.GS.Tests
                     Assert.That(AutonomousBattlegroundDriver.FallbackAllows(null, branch), Is.True, "brackets and unordered units: priority unchanged");
             });
         }
+
+        [Test]
+        public void AUnitHoldingAnOrderNeverFallsBackToTheCamps()
+        {
+            // Live run 0.242.0: every unreachable order sent its unit roaming the arrival camps, into the camp grinder.
+            var roam = AutonomousBattlegroundDriver.LeadBranch.Roam;
+            Assert.Multiple(() =>
+            {
+                foreach (OpenBgRole role in Enum.GetValues<OpenBgRole>())
+                    Assert.That(AutonomousBattlegroundDriver.FallbackAllows(role, roam), Is.False, $"{role}: hold or return to the last order point");
+                Assert.That(AutonomousBattlegroundDriver.FallbackAllows(null, roam), Is.True, "brackets and unordered units still roam the camps");
+            });
+        }
+
+        // Thidranki Faste (keep 11): its centre and its two attackable doors, the outer gate 252000301 and the keep door 252000302.
+        private static readonly Point3D ThidKeep = new(33280, 38272, 3720);
+        private static readonly Point3D ThidGate = new(34333, 38275, 3720);
+        private static readonly Point3D ThidKeepDoor = new(32654, 38180, 3720);
+
+        [Test]
+        public void TheAssaultMarchesOutsideTheOuterGateNotIntoTheKeepCentre()
+        {
+            // Live run 0.242.0: the march goal was the keep centre inside the walls (closed_gate / no_route).
+            int[] outer = AutonomousBattlegroundDriver.OuterGates(ThidKeep, new[] { ThidKeepDoor, ThidGate });
+            double gateDistance = Distance(ThidKeep, ThidGate);
+            Assert.Multiple(() =>
+            {
+                Assert.That(outer, Is.EqualTo(new[] { 1 }), "only the outer gate, not the keep door behind it");
+                foreach (int distance in AutonomousBattlegroundDriver.GateApproachDistances)
+                {
+                    Point3D point = AutonomousBattlegroundDriver.OutsideGate(ThidKeep, ThidGate, distance);
+                    Assert.That(distance, Is.InRange(300, 600));
+                    Assert.That(Distance(point, ThidGate), Is.EqualTo(distance).Within(1), "that far from the gate");
+                    Assert.That(Distance(point, ThidKeep), Is.EqualTo(gateDistance + distance).Within(1), "outside, away from the keep centre");
+                    Assert.That(point.X, Is.GreaterThan(ThidGate.X), "the gate faces east: the point lies in front of it");
+                }
+                Point3D middle = AutonomousBattlegroundDriver.OutsideGate(ThidKeep, ThidGate, 450);
+                Assert.That((middle.X, middle.Y, middle.Z), Is.EqualTo((34783, 38276, 3720)));
+                Assert.That(AutonomousBattlegroundDriver.OuterGates(ThidKeep, new[] { new Point3D(34333, 38035, 3720), new Point3D(34333, 38515, 3720) }),
+                    Is.EqualTo(new[] { 0, 1 }), "a double gate counts twice; the march picks the side nearest the attacker");
+                Assert.That(AutonomousBattlegroundDriver.OuterGates(ThidKeep, Array.Empty<Point3D>()), Is.Empty);
+                Assert.That(AutonomousBattlegroundDriver.OutsideGate(ThidKeep, ThidKeep, 450), Is.Null, "no direction at the centre");
+            });
+        }
+
+        private static double Distance(Point3D a, Point3D b) => Math.Sqrt((double)(a.X - b.X) * (a.X - b.X) + (double)(a.Y - b.Y) * (a.Y - b.Y));
+
+        [Test]
+        public void TheLandingRestEndsRecoveredOrAtItsCapNeverInAFight()
+        {
+            const long until = 120_000;
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundDriver.LandingRestEndReason(53, 53, usesPower: true, now: 10_000, until), Is.Null,
+                    "released and still below 80 %: the order waits");
+                Assert.That(AutonomousBattlegroundDriver.LandingRestEndReason(80, 80, true, 10_000, until), Is.EqualTo("recovered"));
+                Assert.That(AutonomousBattlegroundDriver.LandingRestEndReason(80, 10, false, 10_000, until), Is.EqualTo("recovered"));
+                Assert.That(AutonomousBattlegroundDriver.LandingRestEndReason(60, 60, true, until, until), Is.EqualTo("cap"));
+                Assert.That(AutonomousBattlegroundDriver.LandingRestEndReason(90, 90, true, until, until), Is.EqualTo("recovered"),
+                    "recovered wins over the cap in the same turn");
+            });
+        }
+
+        [Test]
+        public void TheOpenBgDeathLineSaysWhoKilledWhom()
+        {
+            string line = AutonomousBattlegroundDriver.DeathLine(252, "Renalwell", eRealm.Albion, "The Gatekeepers 3", "Haldimund",
+                eRealm.Albion, "crew", "Bandit Farmers 2", 36700, 48200, 3279);
+            Assert.Multiple(() =>
+            {
+                Assert.That(line, Does.StartWith("AUTONOMOUS_BG_DEATH region=252 bot=\"Renalwell\" realm=Albion killer=\"Haldimund\" " +
+                    "killer_realm=Albion same_realm=True position=36700,48200,3279"));
+                Assert.That(line, Does.Contain("killer_kind=crew guild=\"The Gatekeepers 3\" killer_guild=\"Bandit Farmers 2\""));
+                Assert.That(AutonomousBattlegroundDriver.DeathLine(252, "Ysiswen", eRealm.Albion, null, "Aedan", eRealm.Hibernia, "player", null, 1, 2, 3),
+                    Does.Contain("same_realm=False"));
+                Assert.That(AutonomousBattlegroundDriver.DeathLine(252, "Ysiswen", eRealm.Albion, null, null, eRealm.None, "none", null, 1, 2, 3),
+                    Does.Contain("killer=\"none\" killer_realm=None same_realm=False"));
+            });
+        }
     }
 }

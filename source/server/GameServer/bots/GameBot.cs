@@ -1057,6 +1057,8 @@ namespace DOL.GS
                 LastAutonomousDeath = AutonomousDeathAttribution.Capture(this, killer, deathTick,
                     _lastHitAttacker, _lastHitTick, _lastHitArea, _lastHitTargeted,
                     _lastHostilePlayerAttacker, _lastHostilePlayerHitTick);
+            // open BG crew: who killed whom, written at the moment of death (the world controller logs it only after leaving).
+            AutonomousBattlegroundDriver.OnParticipantDeath(this, killer ?? _lastHitAttacker);
             // Evidence belongs to this life only; drop the references at once.
             _lastHitAttacker = null;
             _lastHitTick = 0;
