@@ -335,7 +335,8 @@ public static class AutonomousHubDeparture
         for (int i = 0; i < band.Length; i++)
             if (band[i].RegionId == regionId)
                 return InHubBand(band, regionId, living.X, living.Y);
-        return InOpenBgLandingBand(living.Realm, regionId, living.X, living.Y);
+        // The position is read only inside the open BG region (an actor without a region, as in tests, has none).
+        return IsOpenBgLandingRegion(regionId) && InOpenBgLandingBand(living.Realm, regionId, living.X, living.Y);
     }
 
     /// <summary>

@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.247.1] - 2026-10-11
+
+### Fixed
+
+- The open BG landing band check read an actor's position outside the open
+  BG region too, which threw for region-less actors in two unit tests
+  (`UT_CamlannPvpCombatant`); the position is read only inside the landing
+  region. No gameplay change.
+
 ## [0.247.0] - 2026-10-11
 
 ### Changed
