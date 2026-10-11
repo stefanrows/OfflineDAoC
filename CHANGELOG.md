@@ -12,6 +12,41 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.243.0] - 2026-10-11
+
+### Fixed
+
+- open BG keep fight, from the first 0.242.0 run (keep 11 never fell in five
+  cycles): an assault now marches to a proven floor point outside the
+  nearest outer gate instead of the keep centre, the door approach is proved
+  with chained route legs, a unit holding an order never falls back to
+  roaming the arrival camps, campaign patrols and ambushes in the open BG
+  never target crew bots and never spawn or aim at the arrival camps, the
+  landing rest resumes after self-defence and logs its end, and every crew
+  death is logged at once (`AUTONOMOUS_BG_DEATH` with realm, killer, kind and
+  guilds).
+- open BG crew assignment (97 straggler drops in 22 minutes): the boarding
+  wait starts only after the group's porter muster has ended, an assigned bot
+  leaves the world RvR layer entirely (no doctrine observe/retreat, no
+  hunts, no guild keep recall, no PvP-wall removal from its party), recruits
+  must stand alive within 20,000 units of a medallion porter, a bot dropped
+  before entry rests ten game minutes before it is re-recruited, and a unit
+  that never entered is refilled instead of relieved.
+- World bots are never recalled to, or roam toward, a battleground keep
+  (52 bots were recalled from every region when a bot guild's Thidranki
+  Faste took a hit).
+
+### Changed
+
+- Same-realm open BG crew bots are allied with each other inside region 252
+  (`open_bg_realm_crews_allied`, default on): 21 of 23 logged deaths in the
+  first run were same-realm crews of different guilds grinding each other at
+  their arrival camps. Players, companions and guest squads keep the Camlann
+  free-for-all. Owner decision pending; off restores the old hostility.
+- Live check of 0.242.0 (06:37–07:00, 20× selected, ~3.5× achieved): five
+  full phase cycles, roles assigned, crew 43 of 54, 114 entries, 5 stuck,
+  8 island recoveries, 0 exceptions.
+
 ## [0.242.0] - 2026-10-11
 
 ### Added
