@@ -51,7 +51,7 @@ Everything specific to the open BG lives in new files under
 |---|---|---|
 | `OpenBattlegroundProperties` | server properties `open_bg_*` with defaults | `ServerProperty` attribute loader (scans static classes, like `AutonomousSiegeProperties`) |
 | `OpenBattlegroundRoster` | picks and keeps the bot crew per realm from the 40–50 band, forms groups before departure, relieves in part every 20–30 min, enforces the cap | `AutonomousPopulationController` roster, `AutonomousBattlegroundParticipation` admit/depart, `AutonomousBotGroupCoordinator` |
-| `OpenBattlegroundDirector` | the phase machine (quiet → push → keep fight → retreat), random 15–45 min per cycle, picks the attacking realm, publishes phase and per-group roles | manager tick, keep ownership, driver |
+| `OpenBattlegroundDirector` | the phase machine (quiet → push → keep fight → retreat), random 15–45 min per cycle, picks the keep raid (units of any realm, one battlegroup from the push on), publishes phase and per-group roles | manager tick, keep ownership, driver |
 | `OpenBattlegroundRoles` | pure role rules: bridge watch, roamer, solo/stealther, assault, defend; light player drift; low-level protection | positions, bridges, keep, players in region |
 | `OpenBattlegroundGuestSquads` | non-persistent squads on a low player's level while such a player is inside | `BattlegroundEncounterActor` |
 | `OpenBattlegroundSetupCommand` (`/bgsetup`) | GM command that writes the properties and refreshes them live | `ServerProperties.Refresh` path used by `/serverproperties refresh` |
@@ -139,22 +139,31 @@ cycle is 15–45 min:
 | Phase | Share | What bots do |
 |---|---|---|
 | Quiet | 30 % | groups: one group per realm holds its own bridge (bridge watch), others roam the field away from bridges; solos/stealthers lurk 300–800 units off a bridge; no keep assault |
-| Push | 20 % | the director picks the attacking realm (weighted: realm that does not own the keep, fewest recent wins); its groups muster at their bridge, then march to the keep; the other realms keep watch and may intercept |
-| Keep fight | 35 % | attackers assault (hookpoint rams, doors, lord) with the existing driver assault; the owning realm's groups defend; third realm roams and picks fights near the keep |
-| Retreat | 15 % | losers walk home, the winning guild claims (existing claim rule), hold rewards run; solos keep roaming |
+| Push | 20 % | the raid forms when the push starts (units of any realm that are not friends of the keep, at least a third of the crew inside and at least 8 bots, an 8-man first, guilds with the fewest recent wins likeliest) and is topped up through the push while below that size (late entries, reliefs); it is one battlegroup; each unit musters at its own bridge, then marches to the keep, where the raid gathers at the gate; everyone else keeps watch and may intercept |
+| Keep fight | 35 % | the raid assaults (hookpoint rams, doors, lord) with the existing driver assault; the keep's friends (claiming guild or alliance) defend; bystanders roam at least 3,000 units from the keep; once a raid guild claims the keep, its raid partners hold the approaches 2,000–3,600 units out |
+| Retreat | 15 % | a failed raid walks home, the winning guild claims (existing claim rule), hold rewards run; solos keep roaming |
 
-- The director publishes `Phase`, `AttackingRealm` and a role per group;
+- Owner decision 2026-10-11: no realm alliance in the open BG. Allies are
+  group, guild and battlegroup as on the rest of the server; several groups
+  raid a keep together as one battlegroup. The 0.243.0
+  `open_bg_realm_crews_allied` property is gone.
+- The director publishes `Phase`, the raid and a role per group;
   `AutonomousBattlegroundDriver.Lead` consults them first, then falls back to
-  today's priority. Roles are pure functions of (phase, realm, keep owner,
-  group size, bridge positions, player positions).
+  today's priority. Roles are pure functions of (phase, raid membership, keep
+  friendship, group size, bridge positions, player positions); the realm only
+  picks the own bridge and landing.
 - Light player drift: when choosing a roam or lurk target, a point within
   sight range (6,000) of a human player in the region gets priority once per
   cycle per group; never a straight line to the player.
 - Low-level protection: a persistent 40–50 bot does not acquire a human
   target below level 30 unless attacked by it; portal keeps are sanctuaries
   for everyone (existing rule).
-- Log: `OPEN_BG_PHASE phase= attacker= cycle_s= owner=` on every change;
-  `OPEN_BG_ROLE` on assignment; `OPEN_BG_TICK_SLOW` like the campaign tick.
+- Log: `OPEN_BG_PHASE phase= attacker="raid N units/M bots, lead <guild>"
+  cycle_s= owner= owner_guild=` on every change; `OPEN_BG_RAID cycle= units=
+  bots= lead= lead_unit= realms= reason=push|top_up|no_raid_inside|keep_changed`
+  per raid change; `OPEN_BG_RAID_BATTLEGROUP` when raid members join the
+  battlegroup; `OPEN_BG_ROLE` on assignment (`raid=true`, `keep_friend=true`,
+  `raid_partner=true`); `OPEN_BG_TICK_SLOW` like the campaign tick.
 
 ## 7. Setup UI (stage 3)
 

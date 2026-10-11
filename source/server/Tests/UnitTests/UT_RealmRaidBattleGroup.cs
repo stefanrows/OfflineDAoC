@@ -184,4 +184,63 @@ public sealed class UT_RealmRaidBattleGroup
         }
         finally { AutonomousRealmRaid.RemoveParty(group); AutonomousRealmRaid.TryConsumeRelease(group, out _); }
     }
+
+    // ---- open BG keep raid ---------------------------------------------------
+
+    private static AutonomousBattlegroundParticipation.OpenCrewMember Crew(GameBot bot, int unit, bool entered = true, bool leaving = false) =>
+        new(bot, unit, entered, leaving, 0);
+
+    private static BattleGroup BattleGroupOf(GameBot bot) => bot.TempProperties.GetProperty<BattleGroup>(BattleGroup.BATTLEGROUP_PROPERTY);
+
+    [Test]
+    public void OpenBattlegroundRaidBattleGroupLivesFromThePushToTheCycleEnd()
+    {
+        // Raid units 1 (Albion) and 2 (Midgard), bystander unit 3 (Albion), a member of unit 1 still travelling.
+        TestBot albion = Bot(eRealm.Albion), midgard = Bot(eRealm.Midgard), bystander = Bot(eRealm.Albion), travelling = Bot(eRealm.Albion);
+        var raid = new OpenBgRaid(new[] { 1, 2 }, 1, 2, "Ashen Concord", eRealm.Albion);
+        AutonomousBattlegroundParticipation.OpenCrewMember[] crew =
+            [Crew(albion, 1), Crew(midgard, 2), Crew(bystander, 3), Crew(travelling, 1, entered: false)];
+        var group = new OpenBgRaidBattleGroup();
+
+        Assert.That(group.Sync(OpenBgPhase.Quiet, raid, crew), Is.EqualTo((0, 0)), "no battlegroup in quiet");
+        Assert.That(BattleGroupOf(albion), Is.Null);
+
+        Assert.That(group.Sync(OpenBgPhase.Push, raid, crew), Is.EqualTo((2, 0)), "attached at the push");
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.AreAllied(albion, midgard), Is.True, "raid units of two realms");
+            Assert.That(PvpCombatant.AreAllied(albion, bystander), Is.False, "the realm mate outside the raid");
+            Assert.That(BattleGroupOf(travelling), Is.Null, "a member that has not entered yet");
+            Assert.That(group.Sync(OpenBgPhase.KeepFight, raid, crew), Is.EqualTo((0, 0)), "idempotent through the fight");
+        });
+
+        // The Midgard unit is relieved (leaving): it is taken out; the rest stays.
+        crew[1] = Crew(midgard, 2, leaving: true);
+        Assert.That(group.Sync(OpenBgPhase.KeepFight, raid, crew), Is.EqualTo((0, 1)));
+        Assert.Multiple(() =>
+        {
+            Assert.That(BattleGroupOf(midgard), Is.Null);
+            Assert.That(BattleGroupOf(albion), Is.SameAs(group.BattleGroup));
+        });
+
+        // Cycle end, a raid formed anew, or Reset: everyone out; a battlegroup a bot joined since is left alone.
+        var other = new BattleGroup();
+        RealmRaidBattleGroup.Attach(other, [bystander]);
+        Assert.That(group.DetachAll(), Is.EqualTo(1));
+        Assert.Multiple(() =>
+        {
+            Assert.That(BattleGroupOf(albion), Is.Null);
+            Assert.That(BattleGroupOf(bystander), Is.SameAs(other));
+            Assert.That(group.BattleGroup, Is.Null);
+            Assert.That(group.Count, Is.EqualTo(0));
+        });
+
+        // A unit that left the raid (a new raid without it) is detached on the next sync.
+        crew[1] = Crew(midgard, 2);
+        group.Sync(OpenBgPhase.Push, raid, crew);
+        Assert.That(group.Sync(OpenBgPhase.Push, new OpenBgRaid(new[] { 2 }, 2, 1, null, eRealm.Midgard), crew), Is.EqualTo((0, 1)));
+        Assert.That(BattleGroupOf(albion), Is.Null);
+        Assert.That(BattleGroupOf(midgard), Is.SameAs(group.BattleGroup));
+        group.DetachAll();
+    }
 }

@@ -55,9 +55,9 @@ public static class AutonomousBattlegroundDriver
     /// <summary>Attackable doors within this distance (2D) of the farthest one from the keep centre are its outer gates.</summary>
     public const int OuterGateTolerance = 150;
     /// <summary>
-    /// open BG siege: the doors are attacked once <see cref="AssaultGroupMinimum"/> assaulting bots of the realm stand
-    /// within this distance (2D) of the outer gate, whatever their units (live run 0.243.0: the unit's own count failed
-    /// for every small group and for an 8-man with dead members).
+    /// open BG siege: the doors are attacked once <see cref="AssaultGroupMinimum"/> assaulting allies (the raid's
+    /// battlegroup, group or guild, never the realm) stand within this distance (2D) of the outer gate, whatever their
+    /// units (live run 0.243.0: the unit's own count failed for every small group and for an 8-man with dead members).
     /// </summary>
     public const int SiegeGatherRange = 1_500;
     // A gate approach floor lies within this height of the gate.
@@ -111,7 +111,7 @@ public static class AutonomousBattlegroundDriver
         public int LandingRestDefended;
         // open BG: the last order point (or gate approach) with a proven route; a unit whose order has none returns here.
         public Point3D LastOrderPoint;
-        // open BG siege: assaulting bots of this bot's realm at the gate, counted on the route interval.
+        // open BG siege: assaulting allies of this bot (raid battlegroup, group, guild) at the gate, counted on the route interval.
         public int SiegePresent;
         public long NextSiegeCount;
     }
@@ -376,18 +376,22 @@ public static class AutonomousBattlegroundDriver
 
     /// <summary>
     /// The step of an order at the keep: Defend holds it; an assault sieges once <see cref="AssaultGroupMinimum"/>
-    /// assaulting bots of the realm stand at the gate (<see cref="SiegeGatherRange"/>) and marches to the gate before.
+    /// assaulting allies stand at the gate (<see cref="SiegeGatherRange"/>) and marches to the gate before.
     /// </summary>
     public static KeepOrderStep StepAtKeep(OpenBgOrder order, int siegePresent) =>
         order.Role == OpenBgRole.Defend ? KeepOrderStep.Defend :
         siegePresent >= AssaultGroupMinimum ? KeepOrderStep.Siege : KeepOrderStep.MarchGate;
 
-    /// <summary>True for a bot that counts toward its realm's siege at a gate: alive, of the realm, under an assault order.</summary>
-    public static bool CountsForSiege(bool alive, eRealm realm, eRealm siegeRealm, OpenBgRole? role) =>
-        alive && realm == siegeRealm && role == OpenBgRole.Assault;
+    /// <summary>
+    /// True for a bot that counts toward a siege at a gate: alive, allied with the counting bot (the raid's battlegroup,
+    /// its group or guild under <see cref="PvpCombatant.AreAllied"/>; the bot itself counts), under an assault order.
+    /// Realm plays no part: a raid mixes realms (owner decision 2026-10-11).
+    /// </summary>
+    public static bool CountsForSiege(bool alive, bool allied, OpenBgRole? role) =>
+        alive && allied && role == OpenBgRole.Assault;
 
-    // open BG: the realm's assaulting crew within SiegeGatherRange of the outer gate nearest the bot (the keep centre when
-    // the keep has no outer gate), counted at most once per route interval.
+    // open BG: the counting bot's assaulting allies within SiegeGatherRange of the outer gate nearest the bot (the keep
+    // centre when the keep has no outer gate), counted at most once per route interval.
     private static int SiegePresent(GameBot bot, AbstractGameKeep keep, State state, long now)
     {
         if (now < state.NextSiegeCount) return state.SiegePresent;
@@ -400,7 +404,8 @@ public static class AutonomousBattlegroundDriver
         int count = 0;
         foreach (GameNPC npc in near)
             if (npc is GameBot crew && AutonomousBattlegroundParticipation.IsOpenCrew(crew) &&
-                CountsForSiege(crew.IsAlive, crew.Realm, bot.Realm, OpenBattlegroundDirector.TryGetOrder(crew, out OpenBgOrder order) ? order.Role : null))
+                CountsForSiege(crew.IsAlive, PvpCombatant.AreAllied(bot, crew),
+                    OpenBattlegroundDirector.TryGetOrder(crew, out OpenBgOrder order) ? order.Role : null))
                 count++;
         return state.SiegePresent = count;
     }

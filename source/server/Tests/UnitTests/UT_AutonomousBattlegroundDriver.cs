@@ -225,7 +225,7 @@ namespace DOL.GS.Tests
                 Assert.That(AutonomousBattlegroundDriver.GoesToKeep(holdApproach), Is.False, "defenders the guards would shoot hold the approaches");
                 foreach (OpenBgRole role in new[] { OpenBgRole.Roam, OpenBgRole.Lurk, OpenBgRole.BridgeWatch, OpenBgRole.Retreat })
                     Assert.That(AutonomousBattlegroundDriver.GoesToKeep(new OpenBgOrder(5, role, skirmish, false, false, 1)), Is.False, $"{role}");
-                // Fewer than four attackers at the gate: march there and wait; four or more of the realm (any units): siege.
+                // Fewer than four attackers at the gate: march there and wait; four or more allies (any units): siege.
                 for (int present = 0; present < AutonomousBattlegroundDriver.AssaultGroupMinimum; present++)
                     Assert.That(AutonomousBattlegroundDriver.StepAtKeep(atKeep, present), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.MarchGate),
                         $"{present} present");
@@ -233,13 +233,13 @@ namespace DOL.GS.Tests
                 Assert.That(AutonomousBattlegroundDriver.StepAtKeep(oldSkirmish, 9), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Siege));
                 Assert.That(AutonomousBattlegroundDriver.StepAtKeep(defend, 9), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Defend));
                 Assert.That(AutonomousBattlegroundDriver.SiegeGatherRange, Is.EqualTo(1_500));
-                // The siege counts the realm's assaulting bots, alive, whatever their unit.
-                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Albion, eRealm.Albion, OpenBgRole.Assault), Is.True);
-                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(false, eRealm.Albion, eRealm.Albion, OpenBgRole.Assault), Is.False, "dead");
-                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Midgard, eRealm.Albion, OpenBgRole.Assault), Is.False, "other realm");
-                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Albion, eRealm.Albion, OpenBgRole.Defend), Is.False,
-                    "a keep friend of the realm defending");
-                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, eRealm.Albion, eRealm.Albion, null), Is.False, "no order");
+                // The siege counts assaulting allies (the raid's battlegroup, group, guild), alive, whatever their unit or
+                // realm; a same-realm bot outside the raid is not an ally and does not count.
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, true, OpenBgRole.Assault), Is.True, "a raid mate of any realm");
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(false, true, OpenBgRole.Assault), Is.False, "dead");
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, false, OpenBgRole.Assault), Is.False, "not allied");
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, true, OpenBgRole.Defend), Is.False, "an ally defending");
+                Assert.That(AutonomousBattlegroundDriver.CountsForSiege(true, true, null), Is.False, "no order");
             });
         }
 
