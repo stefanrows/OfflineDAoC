@@ -325,6 +325,20 @@ Agent sessions on items 45–48: take the role and context from
      reached); 705 crew deaths in 23 min around the keep; lurk points hit
      dead-end floors (61). A fixer for the keep take (all attacking units
      assault, gate march, lurk snap) was started at 08:15.
+     0.244.0 (deployed 08:39, 20×, ~5.4× achieved, 08:40–09:04): the keep
+     take works: `lord_down=True` 4 times, `KEEP_CLAIMED keep=11` 6 times
+     (Albion, Midgard and Hibernia guilds in turn),
+     `AUTONOMOUS_BG_GATE_APPROACH` computed once (gate 34333,38275), assault
+     roles 94 (was 10), owner-guild units split 15 times (`keep_friend=true`
+     only on owner-guild units), 139 entries, 0 stuck, 0 exceptions, lurk
+     dead-ends 0 (was 61), crew deaths 575 per 24 min (was 705). Open after
+     the night: the crew shrank to 32 of 54 (the Albion and Midgard 8-man
+     units were missing at 09:04, 37 straggler drops, 0 refills in that
+     window; check recruitment near the porters and the refill path on the
+     next run), 4 `OPEN_BG_TICK_SLOW`, and the owner decisions (same-realm
+     crew alliance default on, portal-keep guards, drift strength, death
+     rate, keep change frequency: six claims per 24 minutes at 5.4× is about
+     one per 20 game-minutes).
 
 113. **Eden-style battlegrounds: server-built keeps, keep-aware navmeshes and
      autonomous gamebot participation.** Owner, 2026-10-10, after bug 125
