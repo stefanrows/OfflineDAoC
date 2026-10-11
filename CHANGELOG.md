@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.250.0] - 2026-10-11
+
+### Added
+
+- `source/server/tools/probe_companion_manager_levers.py` and
+  `test_companion_manager_levers_probe.py`: an offline research probe over the
+  0.169.0 Companion Manager `game.dll`. It adds a `[Probe]` strip to Custom8
+  that shows the window size, moves a status bar from a server-style scalar
+  adapter, recolours a label through a colour adapter, and tells a plain from
+  a shift click. Unicorn emulation only; no tool installs it and the shipped
+  manager is unchanged. The static research behind it is summarised in
+  docs/COMPANION_MANAGER_INTEGRATION.md ("Client levers research").
+
+### Fixed
+
+- Companions no longer follow you to another character. Each companion
+  remembers the character it was last grouped with and rejoins only that
+  character at login. Other characters on the account see it as
+  `With <Name>` in the Companion Manager and `/companions`, and Invite moves
+  it over. Existing saves load unchanged (one additive column); companions
+  that were active before this version join the first character that logs
+  in, then stay with it.
+
 ## [0.249.0] - 2026-10-11
 
 ### Added

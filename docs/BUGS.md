@@ -113,6 +113,23 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+155. **Companions grouped with one character join whichever character logs
+     in next.** Owner report, 2026-10-11 (0.169.0 manager): after playing a
+     level 50 character with a companion group, logging in on a level 20
+     character of the same account auto-grouped the same companions with it.
+     Cause: companions belong to the account and `IsActive` was account-wide,
+     so `PlayerCompanionRoster.RestoreActiveForPlayer` re-invited every active
+     companion of the shared roster. Source 0.250.0: the additive column
+     `LastGroupedCharacterId` records the character a companion was last
+     grouped with; login restores only that character's companions (legacy
+     rows are claimed once by the first login), other characters see them as
+     `With <Name>` in the manager and `/companions`, and Invite moves them.
+     Bench, reset, squad remove and disband from another character leave the
+     reservation alone. Installation and real-client check pending: group
+     companions on character A, log out, log in on B (they stay away and show
+     `With A`), log back in on A (they rejoin), then invite one from B (it
+     moves to B).
+
 153. **World bots re-plan their zone-boundary step on every think, 65 nav
      queries each, and the game loop stalls.** Installed 0.244.0, 2026-10-11
      08:40–10:25 at world speed 20× without clients: 21,685 `Long
