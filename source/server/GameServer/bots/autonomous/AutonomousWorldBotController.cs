@@ -5189,35 +5189,25 @@ namespace DOL.GS
             // around exists depends only on the static zone-point graph, so it
             // is worked out once per realm and region pair; every step then
             // runs one search, never two (0.180.0's retry cost 10x think time).
-            DbZonePoint[] edges = CrossingEdges(bot.Realm, bot.CurrentRegionID, targetRegion);
-            if (!AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID) &&
-                !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(targetRegion) &&
-                HasWayAroundFrontierDungeons(bot.Realm, bot.CurrentRegionID, targetRegion, edges))
-                edges = edges.Where(edge => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion)).ToArray();
-            return FindNextCrossing(edges, bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
+            return FindNextCrossing(PveCrossingEdges(bot.Realm, bot.CurrentRegionID, targetRegion),
+                bot.CurrentRegionID, targetRegion, targetX, targetY, bot);
         }
+
+        /// <summary>
+        /// CrossingEdges as a PvE route uses them: without the shared frontier
+        /// dungeon road while a way around exists. Camp planning judges
+        /// Darkness Falls rooms over this same set (bug 145).
+        /// </summary>
+        private static DbZonePoint[] PveCrossingEdges(eRealm realm, ushort currentRegion, ushort targetRegion) =>
+            AutonomousZoneCrossingSearch.WithoutFrontierDungeonRoads(CrossingEdges(realm, currentRegion, targetRegion),
+                currentRegion, targetRegion, edges => HasWayAroundFrontierDungeons(realm, currentRegion, targetRegion, edges));
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<(eRealm, ushort, ushort), bool> WayAroundFrontierDungeons = new();
 
         /// <summary>Whether <paramref name="target"/> is reachable over <paramref name="edges"/> without entering a shared frontier dungeon (cached; the graph never changes).</summary>
         private static bool HasWayAroundFrontierDungeons(eRealm realm, ushort current, ushort target, DbZonePoint[] edges) =>
             WayAroundFrontierDungeons.GetOrAdd((realm, current, target), _ =>
-            {
-                var seen = new HashSet<ushort> { current };
-                var queue = new Queue<ushort>();
-                queue.Enqueue(current);
-                while (queue.Count > 0)
-                {
-                    ushort region = queue.Dequeue();
-                    if (region == target)
-                        return true;
-                    foreach (DbZonePoint edge in edges)
-                        if (edge.SourceRegion == region && !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion) &&
-                            seen.Add(edge.TargetRegion))
-                            queue.Enqueue(edge.TargetRegion);
-                }
-                return false;
-            });
+                AutonomousZoneCrossingSearch.HasWayAroundFrontierDungeons(edges, current, target));
 
         private static DbZonePoint FindNextCrossing(eRealm realm, ushort currentRegion, ushort targetRegion, int targetX, int targetY) =>
             FindNextCrossing(realm, currentRegion, targetRegion, targetX, targetY, null);
@@ -5429,8 +5419,12 @@ namespace DOL.GS
             if (bot.CurrentRegionID == regionId)
                 return Distance(bot.X, bot.Y, x, y) / speed / 60d;
             int variant = regionId == AutonomousDarknessFallsPolicy.RegionId ? 1 : 0;
-            DbZonePoint[] edges = edgesByDarknessFallsGoal[variant] ??=
-                CrossingEdges(bot.Realm, bot.CurrentRegionID, regionId);
+            // The DF variant has one target region, so it can use the route's
+            // own edge set; over the raw edges a room behind another realm's
+            // entrance looked reachable through the frontier dungeons (bug 145).
+            DbZonePoint[] edges = edgesByDarknessFallsGoal[variant] ??= variant == 1
+                ? PveCrossingEdges(bot.Realm, bot.CurrentRegionID, regionId)
+                : CrossingEdges(bot.Realm, bot.CurrentRegionID, regionId);
             DbZonePoint crossing = FindNextCrossing(edges, bot.CurrentRegionID, regionId, x, y, bot);
             if (crossing == null)
                 return 9999;

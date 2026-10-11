@@ -69,6 +69,43 @@ namespace DOL.GS
             return null;
         }
 
+        /// <summary>
+        /// The edges a PvE route really uses (bug 78): outside the shared
+        /// frontier dungeons, and for a goal outside them, a route never enters
+        /// them while the goal region is reachable without them. Camp planning
+        /// must judge a goal over this same set; over the raw edges it found
+        /// the road through the complex to another realm's Darkness Falls
+        /// entrance, which the route then refused (bug 145).
+        /// </summary>
+        public static DbZonePoint[] WithoutFrontierDungeonRoads(DbZonePoint[] edges, ushort currentRegion,
+            ushort targetRegion, Func<DbZonePoint[], bool> hasWayAround = null)
+        {
+            if (AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(currentRegion) ||
+                AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(targetRegion) ||
+                !(hasWayAround?.Invoke(edges) ?? HasWayAroundFrontierDungeons(edges, currentRegion, targetRegion)))
+                return edges;
+            return edges.Where(edge => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion)).ToArray();
+        }
+
+        /// <summary>Whether <paramref name="targetRegion"/> is reachable over <paramref name="edges"/> without entering a shared frontier dungeon.</summary>
+        public static bool HasWayAroundFrontierDungeons(IReadOnlyList<DbZonePoint> edges, ushort currentRegion, ushort targetRegion)
+        {
+            var seen = new HashSet<ushort> { currentRegion };
+            var queue = new Queue<ushort>();
+            queue.Enqueue(currentRegion);
+            while (queue.Count > 0)
+            {
+                ushort region = queue.Dequeue();
+                if (region == targetRegion)
+                    return true;
+                foreach (DbZonePoint edge in edges)
+                    if (edge.SourceRegion == region && !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(edge.TargetRegion) &&
+                        seen.Add(edge.TargetRegion))
+                        queue.Enqueue(edge.TargetRegion);
+            }
+            return false;
+        }
+
         private static long DistanceSquared(int ax, int ay, int bx, int by)
         {
             long dx = (long)ax - bx;

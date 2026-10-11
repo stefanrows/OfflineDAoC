@@ -79,6 +79,28 @@ public class UT_AutonomousZoneCrossingSearch
     private static readonly DbZonePoint HiberniaToTirNaNog = DfEdge(26, 200, 313000, 470500, 34000, 32000, 8000, 201);
     private static readonly DbZonePoint[] DarknessFallsEdges =
         [AlbionDf81, AlbionDf79, MidgardDf84, HiberniaDf85, HiberniaDf86, HiberniaDf87, HiberniaToTirNaNog];
+
+    // The shared frontier dungeon complex as authored in the zonepoint table:
+    // 1 - 277 (Hall of the Corrupt) - 248 - 276 (Marfach) - 200, 100 - 246
+    // (Dodens) - 248. It links all three realms' Darkness Falls entrances.
+    private static readonly DbZonePoint MidgardToDodens = DfEdge(93, 100, 718392, 654864, 32259, 30624, 16045, 246);
+    private static readonly DbZonePoint[] FrontierDungeonEdges =
+    [
+        DfEdge(88, 1, 598581, 361828, 32395, 31847, 16158, 277),
+        DfEdge(89, 277, 31870, 31072, 598397, 361947, 3600, 1),
+        DfEdge(90, 277, 26191, 37697, 37690, 29013, 16512, 248),
+        DfEdge(98, 248, 37591, 29010, 26428, 37869, 13478, 277),
+        MidgardToDodens,
+        DfEdge(91, 246, 33914, 30693, 718069, 654836, 6365, 100),
+        DfEdge(92, 246, 46897, 31390, 24912, 30905, 16511, 248),
+        DfEdge(99, 248, 24908, 31015, 47362, 31508, 13303, 246),
+        DfEdge(94, 200, 445881, 392547, 32915, 29238, 16268, 276),
+        DfEdge(95, 276, 32878, 28267, 445571, 392603, 6365, 200),
+        DfEdge(96, 276, 32127, 44077, 41144, 44332, 16512, 248),
+        DfEdge(97, 248, 41143, 44240, 32125, 43898, 14725, 276),
+    ];
+    private static readonly DbZonePoint[] WorldEdges = [.. DarknessFallsEdges, .. FrontierDungeonEdges];
+    private static readonly (int X, int Y) MidgardRoad = (756903, 898252);
     private static readonly (int X, int Y) ConnachtRoad = (311960, 470002);
 
     // One audited room per entrance set (darkness_falls_navigation_points.json).
@@ -183,8 +205,86 @@ public class UT_AutonomousZoneCrossingSearch
         });
     }
 
+    // Live 0.240.0 (bug 145): a Midgard Skald in region 100 drew the
+    // Hibernian-only room "dungeon-live:249:(36, 55, 99):cursed necyomancer"
+    // and failed with "No legal region route" in the same tick. Planning
+    // searched the raw edges and found the road through the shared frontier
+    // dungeons; the route itself never takes it while a way around exists.
+    [Test]
+    public void APveRouteNeverReachesAnotherRealmsRoomThroughTheFrontierDungeons()
+    {
+        (int X, int Y) hibernianLiveRoom = (32912, 49633);
+        DbZonePoint planned040 = AutonomousZoneCrossingSearch.FindFirstCrossing(WorldEdges, 100, DarknessFalls,
+            hibernianLiveRoom.X, hibernianLiveRoom.Y,
+            point => AutonomousDungeonGoalCatalog.CanUseEntrance(point, DarknessFalls, hibernianLiveRoom.X, hibernianLiveRoom.Y),
+            null, MidgardRoad);
+        DbZonePoint[] routeEdges = AutonomousZoneCrossingSearch.WithoutFrontierDungeonRoads(WorldEdges, 100, DarknessFalls);
+        Assert.Multiple(() =>
+        {
+            Assert.That(planned040, Is.SameAs(MidgardToDodens), "0.240.0 planning: road through Dodens to Hibernia");
+            Assert.That(routeEdges, Does.Not.Contain(MidgardToDodens));
+            Assert.That(routeEdges, Does.Contain(MidgardDf84));
+            Assert.That(FindDfCrossing(WorldEdges, 100, MidgardRoad, hibernianLiveRoom.X, hibernianLiveRoom.Y), Is.Null);
+            // Inside the complex, or with a goal there, the road stays usable.
+            Assert.That(AutonomousZoneCrossingSearch.WithoutFrontierDungeonRoads(WorldEdges, 246, DarknessFalls),
+                Is.SameAs(WorldEdges));
+            Assert.That(AutonomousZoneCrossingSearch.WithoutFrontierDungeonRoads(WorldEdges, 100, 248),
+                Is.SameAs(WorldEdges));
+            // Without a way around, the road is the only route and is kept.
+            Assert.That(AutonomousZoneCrossingSearch.WithoutFrontierDungeonRoads(FrontierDungeonEdges, 100, 200),
+                Is.SameAs(FrontierDungeonEdges));
+        });
+    }
+
+    [Test]
+    public void AMidgardBotPlansOnlyMidgardRoomsAndEveryRealmMatchesItsRoute()
+    {
+        AutonomousDungeonGoalCatalog.Point[] rooms = AutonomousDungeonGoalCatalog.VerifiedPointsForRegion(DarknessFalls);
+        (int X, int Y)[] cells = rooms.Select(room => ((int)room.Position.X, (int)room.Position.Y)).Distinct().ToArray();
+        int groups = cells.Select(cell => AutonomousDungeonGoalCatalog.EntranceGroup(DarknessFalls, cell.X, cell.Y))
+            .Distinct().Count();
+        // Live-discovered camps from the failing run, keyed by their audited cell.
+        (int X, int Y)[] hibernianOnly = [(27296, 40685), (32912, 49633), (37360, 49501)];
+        (int X, int Y)[] midgardOnly = [(18896, 26792), (16079, 21782)];
+        Assert.Multiple(() =>
+        {
+            var midgardSearches = 0;
+            var midgardRoutes = new Dictionary<int, bool>();
+            foreach ((int x, int y) in hibernianOnly)
+                Assert.That(PlanDfRoom(WorldEdges, 100, MidgardRoad, x, y, midgardRoutes, ref midgardSearches), Is.False,
+                    $"Hibernian-only room {x},{y} from Midgard");
+            foreach ((int x, int y) in midgardOnly)
+                Assert.That(PlanDfRoom(WorldEdges, 100, MidgardRoad, x, y, midgardRoutes, ref midgardSearches), Is.True,
+                    $"Midgard room {x},{y} from Midgard");
+            Assert.That(PlanDfRoom(WorldEdges, 100, MidgardRoad, AlbionRoom.X, AlbionRoom.Y, midgardRoutes,
+                ref midgardSearches), Is.False, "Albion room from Midgard");
+
+            foreach ((ushort region, (int X, int Y) origin, (int X, int Y) own) in new[]
+                     {
+                         ((ushort)200, ConnachtRoad, HibernianRoom),
+                         ((ushort)1, (599000, 536000), AlbionRoom),
+                         ((ushort)100, MidgardRoad, MidgardRoom),
+                     })
+            {
+                var searches = 0;
+                var routes = new Dictionary<int, bool>();
+                (int X, int Y)[] planned = cells.Where(cell =>
+                    PlanDfRoom(WorldEdges, region, origin, cell.X, cell.Y, routes, ref searches)).ToArray();
+                (int X, int Y)[] routed = cells.Where(cell => FindDfCrossing(WorldEdges, region, origin,
+                    cell.X, cell.Y) != null).ToArray();
+                Assert.That(planned, Is.EquivalentTo(routed), $"region {region}");
+                Assert.That(planned, Does.Contain(own), $"region {region}");
+                Assert.That(planned.All(cell => FindDfCrossing(DarknessFallsEdges, region, origin, cell.X, cell.Y) != null),
+                    Is.True, $"region {region}: only rooms behind the realm's own entrance");
+                Assert.That(searches, Is.EqualTo(groups), $"region {region}: one search per entrance set and pass");
+            }
+        });
+    }
+
     // Mirrors SelectCamp: the controller's CrossingEdges drops isolated
-    // entrances, EstimateLocalSoloTravelMinutes returns 9999 without a crossing.
+    // entrances, its PvE route edges drop the frontier dungeon road when a way
+    // around exists, and EstimateLocalSoloTravelMinutes returns 9999 without a
+    // crossing.
     private static bool PlanDfRoom(DbZonePoint[] edges, ushort region, (int X, int Y) origin, int x, int y,
         Dictionary<int, bool> routes, ref int searches)
     {
@@ -202,7 +302,9 @@ public class UT_AutonomousZoneCrossingSearch
 
     private static DbZonePoint FindDfCrossing(DbZonePoint[] edges, ushort region, (int X, int Y) origin, int x, int y) =>
         AutonomousZoneCrossingSearch.FindFirstCrossing(
-            edges.Where(edge => !AutonomousDarknessFallsPolicy.IsIsolatedEntrance(edge)).ToArray(),
+            AutonomousZoneCrossingSearch.WithoutFrontierDungeonRoads(
+                edges.Where(edge => !AutonomousDarknessFallsPolicy.IsIsolatedEntrance(edge)).ToArray(),
+                region, DarknessFalls),
             region, DarknessFalls, x, y,
             point => AutonomousDungeonGoalCatalog.CanUseEntrance(point, DarknessFalls, x, y), null, origin);
 
