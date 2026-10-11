@@ -15,9 +15,9 @@ namespace DOL.GS.Tests
         private static readonly BattlegroundDefinition CappedThidranki = new(238, 238, "Thidranki", 20, 24, 15);
 
         private static bool Candidate(int level, int realmLevel, bool rvrTour = true, ushort region = 1,
-            bool playerLed = false, bool relic = false, BattlegroundDefinition definition = null) =>
+            bool playerLed = false, bool relic = false, BattlegroundDefinition definition = null, bool noBracket = false) =>
             AutonomousBattlegroundParticipation.IsCandidate((byte)level, realmLevel, rvrTour, region, playerLed, relic,
-                definition ?? Thidranki);
+                noBracket ? null : definition ?? Thidranki);
 
         [Test]
         public void ValidRvrTourBotOnAFrontierIsACandidateInEachHomeRegion()
@@ -45,7 +45,7 @@ namespace DOL.GS.Tests
                 Assert.That(Candidate(22, 3, playerLed: true), Is.False, "Player-led group");
                 Assert.That(Candidate(22, 3, relic: true), Is.False, "Relic carrier");
                 Assert.That(Candidate(22, 3, rvrTour: false), Is.False, "Not on an RvR tour");
-                Assert.That(Candidate(22, 3, definition: null), Is.False, "No bracket");
+                Assert.That(Candidate(22, 3, noBracket: true), Is.False, "No bracket");
             });
         }
 
