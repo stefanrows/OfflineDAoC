@@ -2761,11 +2761,24 @@ namespace DOL.GS
                     plan.RegionId, plan.X, plan.Y, plan.Z, 1, false, true));
         }
 
+        /// <summary>
+        /// The living bots whose average level picks a rival-hunt area. A bot can
+        /// still point at a group whose member list no longer holds it (live
+        /// 0.241.0: Caeleaevan after its warband's roster broke); that group has
+        /// no living bot, and an empty party made Average throw on every plan.
+        /// The bot itself is then the party.
+        /// </summary>
+        public static GameBot[] LivingPartyOrSelf(GameBot bot)
+        {
+            GameBot[] party = bot.Group?.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(member => member.IsAlive).ToArray() ?? [];
+            return party.Length > 0 ? party : [bot];
+        }
+
         private CampDestination ChooseLowLevelPvpDestination(GameBot bot)
         {
             HashSet<ushort> reachable = ReachableRegions(bot.Realm, bot.CurrentRegionID);
-            GameBot[] party = bot.Group?.GetMembersInTheGroup().OfType<GameBot>()
-                .Where(member => member.IsAlive).ToArray() ?? [bot];
+            GameBot[] party = LivingPartyOrSelf(bot);
             int level = (int)Math.Round(party.Average(member => member.Level));
             var nav = PathfindingProvider.Instance;
             bool hunter = AutonomousPlayerBehavior.TypeOf(bot.PersistentRecord) == AutonomousPlayerType.Hunter;
