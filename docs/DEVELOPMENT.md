@@ -181,6 +181,54 @@ substitute an arbitrary game.dll or remove a failed hash guard. The supported
 the exact baseline, and stages into a fresh `--output` directory. In release
 verification this rebuilt the installed game.dll byte-for-byte.
 
+### Static client analysis with REA and Ghidra
+
+[REA](https://github.com/morluto/rea) (`rea-agents`, MIT) gives an agent
+Ghidra decompilation, disassembly, strings, and cross-references for game.dll,
+as an MCP server (`rea mcp`) or CLI. Use it to find client functions and call
+sites; keep the Unicorn emulation tests and real-client checks as the proof of
+behavior. It is a developer tool only: nothing ships to the game installation.
+
+Setup on WSL (user-local; neither REA nor this setup installs Ghidra or Java):
+
+```bash
+# Ghidra 12.1.x and a 64-bit JDK 21 are required; check the published SHA-256.
+# Extract them under ~/opt (Ghidra zip: python3 zipfile if unzip is missing).
+npm install --global --ignore-scripts rea-agents@6.4.0
+export GHIDRA_INSTALL_DIR=$HOME/opt/ghidra_12.1.4_PUBLIC
+export JAVA_HOME=$HOME/opt/jdk-21.0.12.1+1
+rea doctor --provider ghidra --json
+rea setup --client claude_code --dry-run   # review, then rerun with --yes
+```
+
+Setup registers the MCP server in `~/.claude.json` (backup alongside) and adds
+REA's skill under `~/.claude/skills`; restart the agent session to load it.
+Do not let setup install Hopper.
+
+Analyze a read-only copy of the verified baseline, never the installed client.
+The raid baseline game.dll (`67dcf68a…`) is kept in the
+`companion-custom8-probe-*` and `companion-manager-client-*` backups under
+`D:\Games\OfflineDAoC-backups`. Work outside the game installation:
+
+```bash
+cp <backup>/game.dll <scratch>/game.dll && chmod a-w <scratch>/game.dll
+sha256sum <scratch>/game.dll    # must start with 67dcf68a
+export REA_GHIDRA_STARTUP_TIMEOUT_MS=1200000
+rea decompile <scratch>/game.dll 0x4EA06F --provider ghidra --format json
+rea xrefs <scratch>/game.dll 0x4EA06F --provider ghidra --format json
+```
+
+Each CLI call reruns Ghidra auto-analysis (about four minutes for game.dll;
+`--snapshot` does not avoid it). An MCP session keeps one analysis open, so
+only its first query pays that cost.
+
+Validated against earlier manual work on the OnClickEvent mapper `0x4EA06F`:
+the pseudocode reads the name from ESI, compares 218 stock names with
+`_stricmp`, falls back to `atol` for text starting with a digit, and otherwise
+returns `-1`. Its 21 call sites include `0x4EDA7F`/`0x4EDAA5` inside the
+InvisibleButtonDef parser `0x4ED9B4`. See
+[Companion Manager integration](COMPANION_MANAGER_INTEGRATION.md).
+
 Test texture-tool source with `python tools/test-assets.py --distribution playable`
 (or the actual complete-download path). The wrapper resolves the read-only fixtures
 for the source-checkout layout; modifications happen only in temporary test copies.

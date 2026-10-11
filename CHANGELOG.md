@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.244.1] - 2026-10-11
+
+### Added
+
+- docs/DEVELOPMENT.md documents static game.dll analysis with REA
+  (`rea-agents` 6.4.0) and Ghidra 12.1.4: WSL setup, the Claude Code MCP
+  registration, and working on a read-only copy of the verified raid baseline,
+  never the installed client. On the OnClickEvent mapper `0x4EA06F` it matched
+  the earlier emulation findings and found all 21 call sites. Developer tooling
+  only; no gameplay or client change.
+
 ## [0.244.0] - 2026-10-11
 
 ### Fixed
