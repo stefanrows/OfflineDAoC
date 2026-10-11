@@ -41,8 +41,9 @@ namespace DOL.GS
             internal long NextSquadAt;
             internal long NextAmbushAt;
             internal ECSGameTimer Timer;
-            // open BG only: the roster's own 60-second timer, outside the campaign gate.
+            // open BG only: the roster's own 60-second timer and the director's 10-second timer, outside the campaign gate.
             internal ECSGameTimer RosterTimer;
+            internal ECSGameTimer DirectorTimer;
             internal int Rotation;
             internal long LordSpawnTick;
             internal bool HasMonsterObjectives;
@@ -116,6 +117,7 @@ namespace DOL.GS
                 {
                     campaign.Timer?.Stop();
                     campaign.RosterTimer?.Stop();
+                    campaign.DirectorTimer?.Stop();
                     foreach (Encounter encounter in campaign.Encounters) Cleanup(encounter);
                     foreach (Camp camp in campaign.Camps)
                     {
@@ -126,6 +128,7 @@ namespace DOL.GS
                 Campaigns.Clear();
             }
             OpenBattlegroundRoster.Reset();
+            OpenBattlegroundDirector.Reset();
         }
 
         private static void EnsureToken()
@@ -238,8 +241,12 @@ namespace DOL.GS
             campaign.Timer = new ECSGameTimer(campaign.Camps[0].Commander, _ => Tick(campaign), 1000 + stagger);
             // The open BG keeps its fixed crew; the brackets keep their tour participation unchanged.
             if (definition.Kind == BattlegroundDefinitionKind.Open)
+            {
                 campaign.RosterTimer = new ECSGameTimer(campaign.Camps[0].Commander, _ => RosterTick(campaign),
                     OpenBattlegroundRoster.TickMilliseconds + stagger);
+                campaign.DirectorTimer = new ECSGameTimer(campaign.Camps[0].Commander, _ => DirectorTick(campaign),
+                    OpenBattlegroundDirector.TickMilliseconds + stagger);
+            }
             Log.Info($"BATTLEGROUND_CAMPAIGN_READY region={definition.RegionId} camps={campaign.Camps.Count} keep={(keep == null ? "none" : keep.KeepID.ToString())} lord={NativeLordReady(campaign)} doors={keep?.Doors.Count ?? 0} monsters={campaign.HasMonsterObjectives}");
         }
 
@@ -356,6 +363,15 @@ namespace DOL.GS
             try { OpenBattlegroundRoster.Tick(campaign.Definition, GameLoop.GameLoopTime); }
             catch (Exception exception) { Log.Error($"OPEN_BG_ROSTER_FAILED region={campaign.Definition.RegionId}", exception); }
             return OpenBattlegroundRoster.TickMilliseconds;
+        }
+
+        // Game time as well: the phase cycle and the roles follow the world speed.
+        private static int DirectorTick(Campaign campaign)
+        {
+            if (!_running) return 0;
+            try { OpenBattlegroundDirector.Tick(campaign.Definition, GameLoop.GameLoopTime); }
+            catch (Exception exception) { Log.Error($"OPEN_BG_DIRECTOR_FAILED region={campaign.Definition.RegionId}", exception); }
+            return OpenBattlegroundDirector.TickMilliseconds;
         }
 
         private static void SpawnCaptain(Camp camp)

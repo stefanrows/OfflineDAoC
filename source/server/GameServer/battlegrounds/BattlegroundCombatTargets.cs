@@ -7,7 +7,10 @@ namespace DOL.GS
     /// <summary>Legal battleground opponents, shared by encounter actors and autonomous participants.</summary>
     public static class BattlegroundCombatTargets
     {
-        public static GameLiving FindOpponent(GameBot bot, int range)
+        public static GameLiving FindOpponent(GameBot bot, int range) => FindOpponent(bot, range, null);
+
+        /// <summary>The nearest legal opponent that <paramref name="accept"/> (when given) also allows.</summary>
+        public static GameLiving FindOpponent(GameBot bot, int range, Func<GameLiving, bool> accept)
         {
             Zone zone = bot?.CurrentZone;
             if (zone == null) return null;
@@ -15,7 +18,7 @@ namespace DOL.GS
             return bot.GetPlayersInRadius(radius).Cast<GameLiving>()
                 .Concat(bot.GetNPCsInRadius(radius).Where(npc => PvpCombatant.IsPlayerShaped(npc)))
                 .Where(target => IsLegal(bot, target, zone) && !target.IsStealthed && !BotPvpCrowdControl.Protected(bot, target) &&
-                    BotSiegeRuntime.Visible(bot, target))
+                    (accept == null || accept(target)) && BotSiegeRuntime.Visible(bot, target))
                 .OrderBy(bot.GetDistanceTo).FirstOrDefault();
         }
 

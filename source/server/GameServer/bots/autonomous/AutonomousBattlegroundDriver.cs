@@ -14,6 +14,9 @@ namespace DOL.GS;
 /// (1) defend the keep when the bot's guild holds it, (2) claim a defeated keep
 /// at its steward with claim rank, (3) assault the keep (door, then lord) with a
 /// group of four or more present, (4) otherwise roam between campaign camps.
+/// In the open BG a crew unit first follows its order from
+/// <see cref="OpenBattlegroundDirector"/> (claim, then its role's point) and falls
+/// back to that priority only without an order or a route; the brackets never ask.
 /// Followers assist their leader. Damage and class behaviour stay with the native
 /// class brain, which BotBrain runs after this driver picks a goal.
 /// </summary>
@@ -96,7 +99,10 @@ public static class AutonomousBattlegroundDriver
         if (now >= state.NextScan)
         {
             state.NextScan = now + ScanMilliseconds;
-            GameLiving opponent = BattlegroundCombatTargets.FindOpponent(bot, OpponentRange);
+            // open BG: the crew leaves humans under level 30 alone unless they attacked (spec 2026-10-11 §6).
+            GameLiving opponent = definition.Kind == BattlegroundDefinitionKind.Open
+                ? BattlegroundCombatTargets.FindOpponent(bot, OpponentRange, target => MayAcquire(bot, target))
+                : BattlegroundCombatTargets.FindOpponent(bot, OpponentRange);
             if (opponent != null) brain.Attack(opponent);
         }
 
@@ -139,42 +145,16 @@ public static class AutonomousBattlegroundDriver
     {
         AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
         Point3D[] camps = BattlegroundCampaignManager.CampPositions(definition.RegionId);
+        if (definition.Kind == BattlegroundDefinitionKind.Open && OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) &&
+            LeadOpen(brain, bot, keep, camps, order, state, now))
+            return;
         if (keep != null && bot.Guild != null && keep.Guild == bot.Guild)
         {
-            // Defend: hold the keep, or its nearest camp when the keep has no proven route.
-            state.Action = "defend-keep";
-            Point3D keepPoint = new(keep.X, keep.Y, keep.Z);
-            if (!GoTo(bot, state, keepPoint, now) && camps.Length > 0)
-                GoTo(bot, state, Nearest(camps, keepPoint), now);
+            DefendKeep(bot, state, keep, camps, now);
             return;
         }
         if (keep != null && TryClaim(bot, keep, state, now)) return;
-        if (keep != null && CountPresent(bot) >= AssaultGroupMinimum)
-        {
-            // The target and its proven approach are re-proved on the route interval, not every turn.
-            if (now >= state.NextAssault || state.AssaultTarget == null || !state.AssaultTarget.IsAlive)
-            {
-                state.NextAssault = now + RouteIntervalMilliseconds;
-                state.AssaultTarget = BattlegroundCampaignManager.SiegeTarget(keep, bot, out Point3D approach);
-                state.AssaultApproach = approach;
-            }
-            GameLiving target = state.AssaultTarget;
-            if (target != null)
-            {
-                if (bot.IsWithinRadius(target, SiegeRange) && BotSiegeRuntime.Visible(bot, target))
-                {
-                    state.Action = "assault-keep";
-                    brain.Attack(target);
-                    Stand(bot);
-                    return;
-                }
-                if (state.AssaultApproach != null)
-                {
-                    state.Action = "approach-keep";
-                    if (GoTo(bot, state, state.AssaultApproach, now)) return;
-                }
-            }
-        }
+        if (keep != null && CountPresent(bot) >= AssaultGroupMinimum && TryAssault(brain, bot, keep, state, now)) return;
         if (camps.Length == 0)
         {
             state.Action = "stand-no-camp";
@@ -182,6 +162,96 @@ public static class AutonomousBattlegroundDriver
             return;
         }
         RoamCamps(bot, state, camps, now);
+    }
+
+    /// <summary>
+    /// An open-BG crew unit's turn from its director order: a defeated keep is claimed first (the existing claim rule),
+    /// then the keep's friends defend it and a full attacking group assaults it through the existing branches; every
+    /// other role walks to its point (bridge, lurk spot, field point, approach or the way home). False when the order
+    /// has no route, so the caller's ordinary priority runs; the director is told and gives a new point next tick.
+    /// </summary>
+    private static bool LeadOpen(BotBrain brain, GameBot bot, AbstractGameKeep keep, Point3D[] camps, OpenBgOrder order, State state, long now)
+    {
+        if (keep != null && TryClaim(bot, keep, state, now)) return true;
+        if (order.AtKeep && keep != null)
+        {
+            if (order.Role == OpenBgRole.Defend)
+            {
+                DefendKeep(bot, state, keep, camps, now);
+                return true;
+            }
+            if (CountPresent(bot) >= AssaultGroupMinimum && TryAssault(brain, bot, keep, state, now)) return true;
+            state.Action = "march-keep";
+            return GoTo(bot, state, order.Point, now);
+        }
+        state.Action = OpenAction(order);
+        if (order.Point == null) return false;
+        if (GoTo(bot, state, order.Point, now)) return true;
+        OpenBattlegroundDirector.ReportUnreachable(order.Unit, order.Point);
+        return false;
+    }
+
+    /// <summary>The driver action logged for an open-BG order that walks to a point.</summary>
+    public static string OpenAction(OpenBgOrder order) => order.Role switch
+    {
+        OpenBgRole.BridgeWatch => "bridge-watch",
+        OpenBgRole.Lurk => "lurk",
+        OpenBgRole.Roam => "roam-field",
+        OpenBgRole.Retreat => "retreat",
+        OpenBgRole.Assault => order.Muster ? "muster-bridge" : "skirmish-keep",
+        _ => "hold-approach",
+    };
+
+    // Defend: hold the keep, or its nearest camp when the keep has no proven route.
+    private static void DefendKeep(GameBot bot, State state, AbstractGameKeep keep, Point3D[] camps, long now)
+    {
+        state.Action = "defend-keep";
+        Point3D keepPoint = new(keep.X, keep.Y, keep.Z);
+        if (!GoTo(bot, state, keepPoint, now) && camps.Length > 0)
+            GoTo(bot, state, Nearest(camps, keepPoint), now);
+    }
+
+    // Assault: the next closed door, then the lord, from a proven standing point. False when there is nothing to do.
+    private static bool TryAssault(BotBrain brain, GameBot bot, AbstractGameKeep keep, State state, long now)
+    {
+        // The target and its proven approach are re-proved on the route interval, not every turn.
+        if (now >= state.NextAssault || state.AssaultTarget == null || !state.AssaultTarget.IsAlive)
+        {
+            state.NextAssault = now + RouteIntervalMilliseconds;
+            state.AssaultTarget = BattlegroundCampaignManager.SiegeTarget(keep, bot, out Point3D approach);
+            state.AssaultApproach = approach;
+        }
+        GameLiving target = state.AssaultTarget;
+        if (target == null) return false;
+        if (bot.IsWithinRadius(target, SiegeRange) && BotSiegeRuntime.Visible(bot, target))
+        {
+            state.Action = "assault-keep";
+            brain.Attack(target);
+            Stand(bot);
+            return true;
+        }
+        if (state.AssaultApproach == null) return false;
+        state.Action = "approach-keep";
+        return GoTo(bot, state, state.AssaultApproach, now);
+    }
+
+    /// <summary>
+    /// open BG target rule: a human (or a human's companion) below level 30 is only taken on by the 40-50 crew after
+    /// it attacked this bot or its group; everyone else is fair game as before.
+    /// </summary>
+    private static bool MayAcquire(GameBot bot, GameLiving target)
+    {
+        if (target is not GamePlayer && target is not GameBot { IsAutonomousWorldBot: false, IsBattlegroundEncounterBot: false }) return true;
+        return OpenBattlegroundRoles.MayHuntHuman(bot.Level, target.Level, AttackedUs(bot, target));
+    }
+
+    private static bool AttackedUs(GameBot bot, GameLiving target)
+    {
+        if (bot.attackComponent?.AttackerTracker?.ContainsAttacker(target) == true) return true;
+        if (bot.Group == null) return false;
+        foreach (GameLiving member in bot.Group.GetMembersInTheGroup())
+            if (member != bot && member.attackComponent?.AttackerTracker?.ContainsAttacker(target) == true) return true;
+        return false;
     }
 
     /// <summary>

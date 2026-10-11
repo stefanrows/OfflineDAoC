@@ -322,6 +322,13 @@ namespace DOL.GS
                 Log.Warn($"OPEN_BG_TICK_SLOW part=roster ms={watch.ElapsedMilliseconds} crew={crew.Length} admits={plan.Admits.Count} formed={formed}");
         }
 
+        /// <summary>The kind a roster unit was formed as, or null for a unit the roster does not know (yet).</summary>
+        public static OpenBgUnitKind? KindOf(int unit)
+        {
+            lock (Sync)
+                return Units.TryGetValue(unit, out UnitInfo info) ? info.Kind : null;
+        }
+
         /// <summary>Drops every unit and relief clock (open BG switched off or the server stopped).</summary>
         public static void Reset()
         {
