@@ -64,8 +64,8 @@ public static class AutonomousBattlegroundParticipation
         public Point3D ReliefHome;
     }
 
-    /// <summary>One open-BG crew member for the roster.</summary>
-    public readonly record struct OpenCrewMember(GameBot Bot, int Unit, bool Entered, bool Leaving, long EnteredTick);
+    /// <summary>One open-BG crew member for the roster and the director; <paramref name="Group"/> is the unit's label.</summary>
+    public readonly record struct OpenCrewMember(GameBot Bot, int Unit, bool Entered, bool Leaving, long EnteredTick, string Group = null);
 
     [GameServerStartedEvent]
     public static void OnServerStarted(DOLEvent e, object sender, EventArgs args)
@@ -249,8 +249,15 @@ public static class AutonomousBattlegroundParticipation
     {
         lock (Sync)
             return Entries.Values.Where(entry => IsOpenUnit(entry.Definition, entry.Unit))
-                .Select(entry => new OpenCrewMember(entry.Bot, entry.Unit, entry.Entered, entry.Leaving != null, entry.EnteredTick))
+                .Select(entry => new OpenCrewMember(entry.Bot, entry.Unit, entry.Entered, entry.Leaving != null, entry.EnteredTick, entry.Group))
                 .ToArray();
+    }
+
+    /// <summary>The open-BG roster unit of a crew member, or 0 for a bracket participant or any other bot.</summary>
+    public static int OpenUnitOf(GameBot bot)
+    {
+        lock (Sync)
+            return bot != null && Entries.TryGetValue(bot, out Entry entry) && IsOpenUnit(entry.Definition, entry.Unit) ? entry.Unit : 0;
     }
 
     /// <summary>Open-BG crew members against the open cap, including those still travelling or leaving.</summary>
