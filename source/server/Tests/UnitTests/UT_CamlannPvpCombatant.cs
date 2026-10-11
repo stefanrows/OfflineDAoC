@@ -42,6 +42,7 @@ public sealed class UT_CamlannPvpCombatant
         public override bool IsAlive => true;
         public override byte Level { get; set; } = 50;
         public override eRealm Realm { get; set; }
+        public override ushort CurrentRegionID { get; set; }
     }
 
     private sealed class TestPet : GameNPC
@@ -295,31 +296,32 @@ public sealed class UT_CamlannPvpCombatant
     }
 
     [Test]
-    public void SameRealmOpenBattlegroundCrewsAreAlliedOnlyAsCrewInside()
+    public void OpenBattlegroundAlliesAreGroupGuildAndBattleGroupNeverRealm()
     {
-        // Live run 0.242.0: 21 of 23 open-BG deaths were same-realm crews of different bot guilds killing each other at
-        // their own arrival camp. Assumption pending the owner, behind open_bg_realm_crews_allied (default on).
-        Assert.Multiple(() =>
-        {
-            Assert.That(PvpCombatant.OPEN_BG_REALM_CREWS_ALLIED, Is.True, "on by default");
-            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, true, eRealm.Albion, eRealm.Albion), Is.True,
-                "two Albion crew bots inside the open BG");
-            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, true, eRealm.Albion, eRealm.Midgard), Is.False, "realms still fight");
-            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, false, eRealm.Albion, eRealm.Albion), Is.False,
-                "a player, guest squad or world bot that is not crew keeps Camlann free-for-all");
-            Assert.That(PvpCombatant.OpenBgCrewAllied(false, true, true, eRealm.Albion, eRealm.Albion), Is.False,
-                "the owner switched the alliance off");
-            Assert.That(PvpCombatant.OpenBgCrewAllied(true, true, true, eRealm.None, eRealm.None), Is.False);
-        });
+        // Owner decision 2026-10-11: inside the open BG (Thidranki, region 252) alliances are the server's Camlann rule
+        // (group, guild, battlegroup); the 0.243.0 same-realm crew alliance is gone, not even behind a property.
+        const ushort openBattleground = 252;
+        var albionCrew = AutonomousBot(eRealm.Albion, 50);
+        var otherAlbionCrew = AutonomousBot(eRealm.Albion, 50);
+        albionCrew.CurrentRegionID = otherAlbionCrew.CurrentRegionID = openBattleground;
+        // No shared group, guild or battlegroup (Guild needs a running server, so these bots stay unguilded; different
+        // guilds are covered by GuildIdentityIsRealmAgnosticAndDifferentGuildsRemainHostile).
+        Assert.That(PvpCombatant.AreAllied(albionCrew, otherAlbionCrew), Is.False,
+            "two same-realm crew bots inside the open BG are not allied");
 
-        // Outside the open BG, and for bots that are not crew, nothing changes: same-realm strangers stay hostile.
-        var first = AutonomousBot(eRealm.Albion, 50);
-        var second = AutonomousBot(eRealm.Albion, 50);
+        // Two raid units of different realms share the raid's battlegroup: allied until it ends.
+        var midgardRaider = AutonomousBot(eRealm.Midgard, 50);
+        midgardRaider.CurrentRegionID = openBattleground;
+        var raid = new BattleGroup();
+        Assert.That(PvpCombatant.AreAllied(albionCrew, midgardRaider), Is.False, "before the raid forms");
+        RealmRaidBattleGroup.Attach(raid, [albionCrew, midgardRaider]);
         Assert.Multiple(() =>
         {
-            Assert.That(PvpCombatant.OpenBgCrewAllied(first, second), Is.False);
-            Assert.That(PvpCombatant.AreAllied(first, second), Is.False);
+            Assert.That(PvpCombatant.AreAllied(albionCrew, midgardRaider), Is.True, "one battlegroup across realms");
+            Assert.That(PvpCombatant.AreAllied(albionCrew, otherAlbionCrew), Is.False, "the realm mate outside the raid stays hostile");
         });
+        RealmRaidBattleGroup.Detach(raid, [albionCrew, midgardRaider]);
+        Assert.That(PvpCombatant.AreAllied(albionCrew, midgardRaider), Is.False, "the raid ended");
     }
 
     [Test]

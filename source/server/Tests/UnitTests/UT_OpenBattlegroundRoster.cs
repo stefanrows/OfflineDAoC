@@ -527,7 +527,7 @@ namespace DOL.GS.Tests
             Bot[] mixed = { new("Leader", Gatekeepers), new("Aldenalhelm", BanditFarmers), new("Theaowen", Gatekeepers) };
             Bot[] others = mixed.Except(OpenBattlegroundRoster.SplitForKeepOwner(mixed, IdsOf, FarmersOwnKeep)).ToArray();
             Bot[] owners = { new("Aldenalhelm", BanditFarmers), new("Sigearveig", BanditFarmers) };
-            var push = new OpenBgContext(OpenBgPhase.Push, eRealm.Albion, eRealm.Midgard, eRealm.Albion, 3, true);
+            var push = new OpenBgContext(OpenBgPhase.Push, IsRaid: true, IsKeepFriend: false, eRealm.Albion, 3, true);
             OpenBgRole role = OpenBattlegroundRoles.Assign(push, 0);
             Assert.Multiple(() =>
             {

@@ -275,13 +275,6 @@ public static class AutonomousBattlegroundParticipation
             return bot != null && Entries.TryGetValue(bot, out Entry entry) && IsOpenUnit(entry.Definition, entry.Unit) ? entry.Unit : 0;
     }
 
-    /// <summary>An open-BG crew member that has entered (fighting or walking home after a relief), for the crew alliance.</summary>
-    public static bool IsOpenCrewInside(GameBot bot)
-    {
-        lock (Sync)
-            return bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Entered && IsOpenUnit(entry.Definition, entry.Unit);
-    }
-
     /// <summary>The label (group id or "solo") an open-BG roster unit was registered with; "refill" when no member is left.</summary>
     public static string OpenUnitLabel(int unit)
     {

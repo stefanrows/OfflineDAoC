@@ -14,9 +14,11 @@ namespace DOL.GS.Tests
         private static readonly IReadOnlyList<BridgePoint> Bridges = OpenBattlegroundRoles.ThidrankiBridges;
         private static readonly Point3D Keep = new(33280, 38272, 3720);
 
-        private static OpenBgRole Role(OpenBgPhase phase, eRealm realm, int size, int index = 0,
-            eRealm attacker = eRealm.Midgard, eRealm owner = eRealm.Albion) =>
-            OpenBattlegroundRoles.Assign(new OpenBgContext(phase, attacker, owner, realm, size, true), index);
+        // A unit's role from the phase, its size, its index among its realm's groups, and whether it is in this cycle's
+        // raid or a friend of the keep. The realm is geography only and never changes a role.
+        private static OpenBgRole Role(OpenBgPhase phase, int size, int index = 0, bool raid = false, bool friend = false,
+            eRealm realm = eRealm.Albion) =>
+            OpenBattlegroundRoles.Assign(new OpenBgContext(phase, raid, friend, realm, size, true), index);
 
         private static double Nearest(Point3D point, IEnumerable<Point3D> others) =>
             others.Min(other => OpenBattlegroundRoles.Distance2D(point, other));
@@ -34,82 +36,91 @@ namespace DOL.GS.Tests
             foreach (eRealm realm in Realms)
                 Assert.Multiple(() =>
                 {
-                    Assert.That(Role(OpenBgPhase.Quiet, realm, 8, 0), Is.EqualTo(OpenBgRole.BridgeWatch));
-                    Assert.That(Role(OpenBgPhase.Quiet, realm, 3, 1), Is.EqualTo(OpenBgRole.Roam));
-                    Assert.That(Role(OpenBgPhase.Quiet, realm, 2, 2), Is.EqualTo(OpenBgRole.Roam));
+                    Assert.That(Role(OpenBgPhase.Quiet, 8, 0, realm: realm), Is.EqualTo(OpenBgRole.BridgeWatch));
+                    Assert.That(Role(OpenBgPhase.Quiet, 3, 1, realm: realm), Is.EqualTo(OpenBgRole.Roam));
+                    Assert.That(Role(OpenBgPhase.Quiet, 2, 2, realm: realm), Is.EqualTo(OpenBgRole.Roam));
+                    // The raid keeps its quiet posts until the push.
+                    Assert.That(Role(OpenBgPhase.Quiet, 8, 0, raid: true, realm: realm), Is.EqualTo(OpenBgRole.BridgeWatch));
                 });
         }
 
         [Test]
         public void SolosLurkInQuietAndPush()
         {
-            // Midgard attacks (the helper's default); its solos join the assault instead (live run 0.243.0).
-            foreach (eRealm realm in new[] { eRealm.Albion, eRealm.Hibernia })
-                Assert.Multiple(() =>
-                {
-                    Assert.That(Role(OpenBgPhase.Quiet, realm, 1), Is.EqualTo(OpenBgRole.Lurk));
-                    Assert.That(Role(OpenBgPhase.Push, realm, 1), Is.EqualTo(OpenBgRole.Lurk), "the other realms' solos");
-                    Assert.That(Role(OpenBgPhase.KeepFight, realm, 1), Is.EqualTo(OpenBgRole.Roam));
-                    Assert.That(Role(OpenBgPhase.Retreat, realm, 1), Is.EqualTo(OpenBgRole.Roam), "solos keep roaming");
-                });
-            Assert.That(Role(OpenBgPhase.Quiet, eRealm.Midgard, 1), Is.EqualTo(OpenBgRole.Lurk), "no assault in quiet");
-            Assert.That(Role(OpenBgPhase.Retreat, eRealm.Midgard, 1), Is.EqualTo(OpenBgRole.Roam));
+            // Solos outside the raid lurk; raid solos join the assault instead (live run 0.243.0).
+            Assert.Multiple(() =>
+            {
+                Assert.That(Role(OpenBgPhase.Quiet, 1), Is.EqualTo(OpenBgRole.Lurk));
+                Assert.That(Role(OpenBgPhase.Push, 1), Is.EqualTo(OpenBgRole.Lurk), "solos outside the raid");
+                Assert.That(Role(OpenBgPhase.KeepFight, 1), Is.EqualTo(OpenBgRole.Roam));
+                Assert.That(Role(OpenBgPhase.Retreat, 1), Is.EqualTo(OpenBgRole.Roam), "solos keep roaming");
+                Assert.That(Role(OpenBgPhase.Quiet, 1, raid: true), Is.EqualTo(OpenBgRole.Lurk), "no assault in quiet");
+                Assert.That(Role(OpenBgPhase.Retreat, 1, raid: true), Is.EqualTo(OpenBgRole.Roam));
+            });
         }
 
         [Test]
-        public void EveryUnitOfTheAttackingRealmAssaultsInPushAndKeepFight()
+        public void EveryRaidUnitOfEveryRealmAssaultsInPushAndKeepFight()
         {
             // Live run 0.243.0: only 10 assault assignments in 5 cycles; solos lurked and roamed through the keep fight.
             // Unit kinds: solo (1), small groups (2-4), the 8-man (5-8); the first group of a realm has index 0.
             int[] sizes = { 1, 2, 3, 4, 6, 8 };
             Assert.Multiple(() =>
             {
-                foreach (int size in sizes)
-                    foreach (int index in new[] { 0, 1, 3 })
-                    {
-                        Assert.That(Role(OpenBgPhase.Push, eRealm.Midgard, size, index), Is.EqualTo(OpenBgRole.Assault), $"push, size {size}, index {index}");
-                        Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Midgard, size, index), Is.EqualTo(OpenBgRole.Assault), $"keep fight, size {size}, index {index}");
-                        Assert.That(Role(OpenBgPhase.Quiet, eRealm.Midgard, size, index), Is.Not.EqualTo(OpenBgRole.Assault), $"quiet, size {size}");
-                        Assert.That(Role(OpenBgPhase.Retreat, eRealm.Midgard, size, index), Is.Not.EqualTo(OpenBgRole.Assault), $"retreat, size {size}");
-                    }
-                // Albion owns the keep: its groups defend, its solos roam; the realm that owns the keep never assaults it.
+                foreach (eRealm realm in Realms)
+                    foreach (int size in sizes)
+                        foreach (int index in new[] { 0, 1, 3 })
+                        {
+                            Assert.That(Role(OpenBgPhase.Push, size, index, raid: true, realm: realm), Is.EqualTo(OpenBgRole.Assault),
+                                $"push, {realm}, size {size}, index {index}");
+                            Assert.That(Role(OpenBgPhase.KeepFight, size, index, raid: true, realm: realm), Is.EqualTo(OpenBgRole.Assault),
+                                $"keep fight, {realm}, size {size}, index {index}");
+                            Assert.That(Role(OpenBgPhase.Quiet, size, index, raid: true, realm: realm), Is.Not.EqualTo(OpenBgRole.Assault), $"quiet, size {size}");
+                            Assert.That(Role(OpenBgPhase.Retreat, size, index, raid: true, realm: realm), Is.Not.EqualTo(OpenBgRole.Assault), $"retreat, size {size}");
+                        }
+                // Keep friends (the claiming guild, of any realm): groups defend, solos roam; a friend never assaults the keep.
                 foreach (int size in sizes.Where(size => size > 1))
-                    Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Albion, size, 0), Is.EqualTo(OpenBgRole.Defend), $"owner group {size}");
-                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Albion, 1), Is.EqualTo(OpenBgRole.Roam), "owner solo");
-                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Midgard, 1, 0, eRealm.Midgard, eRealm.Midgard), Is.EqualTo(OpenBgRole.Roam),
-                    "a solo of the realm that took the keep");
+                    Assert.That(Role(OpenBgPhase.KeepFight, size, 0, friend: true), Is.EqualTo(OpenBgRole.Defend), $"friend group {size}");
+                Assert.That(Role(OpenBgPhase.KeepFight, 1, friend: true), Is.EqualTo(OpenBgRole.Roam), "friend solo");
+                foreach (OpenBgPhase phase in Enum.GetValues<OpenBgPhase>())
+                    Assert.That(Role(phase, 8, 0, raid: true, friend: true), Is.Not.EqualTo(OpenBgRole.Assault), $"a raid unit that is a keep friend, {phase}");
             });
         }
 
         [Test]
-        public void TheThirdRealmNeverAssaultsAndRoamsAwayFromTheKeepInTheFight()
+        public void BystandersNeverAssaultAndRoamAwayFromTheKeepInTheFight()
         {
             Point3D[] field = Field().Concat(new[]
             {
                 new Point3D(Keep.X + 2_500, Keep.Y, 3500), new Point3D(Keep.X, Keep.Y - 2_900, 3500), new Point3D(Keep.X - 3_500, Keep.Y + 200, 3500),
             }).ToArray();
-            Point3D[] away = OpenBattlegroundRoles.FieldAwayFromKeep(field, Bridges, Keep, OpenBattlegroundRoles.ThirdRealmKeepDistance);
+            Point3D[] away = OpenBattlegroundRoles.FieldAwayFromKeep(field, Bridges, Keep, OpenBattlegroundRoles.BystanderKeepDistance);
             var rng = new Random(11);
             Assert.Multiple(() =>
             {
-                foreach (int size in new[] { 1, 2, 4, 8 })
-                    foreach (OpenBgPhase phase in Enum.GetValues<OpenBgPhase>())
-                        Assert.That(Role(phase, eRealm.Hibernia, size, 0), Is.Not.EqualTo(OpenBgRole.Assault), $"{phase}, size {size}");
-                foreach (int size in new[] { 1, 2, 4, 8 })
-                    Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Hibernia, size, 0), Is.EqualTo(OpenBgRole.Roam), $"third realm size {size}");
-                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.KeepFight, eRealm.Hibernia, eRealm.Albion, eRealm.Midgard), Is.True);
-                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.KeepFight, eRealm.Midgard, eRealm.Albion, eRealm.Midgard), Is.False);
-                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.KeepFight, eRealm.Albion, eRealm.Albion, eRealm.Midgard), Is.False);
-                Assert.That(OpenBattlegroundRoles.IsThirdRealmInFight(OpenBgPhase.Push, eRealm.Hibernia, eRealm.Albion, eRealm.Midgard), Is.False);
+                foreach (eRealm realm in Realms)
+                {
+                    foreach (int size in new[] { 1, 2, 4, 8 })
+                        foreach (OpenBgPhase phase in Enum.GetValues<OpenBgPhase>())
+                            Assert.That(Role(phase, size, 0, realm: realm), Is.Not.EqualTo(OpenBgRole.Assault), $"{phase}, {realm}, size {size}");
+                    foreach (int size in new[] { 1, 2, 4, 8 })
+                        Assert.That(Role(OpenBgPhase.KeepFight, size, 0, realm: realm), Is.EqualTo(OpenBgRole.Roam), $"bystander {realm} size {size}");
+                }
+                Assert.That(OpenBattlegroundRoles.IsBystanderInFight(OpenBgPhase.KeepFight, isRaid: false, isKeepFriend: false), Is.True);
+                Assert.That(OpenBattlegroundRoles.IsBystanderInFight(OpenBgPhase.KeepFight, isRaid: true, isKeepFriend: false), Is.False, "the raid");
+                Assert.That(OpenBattlegroundRoles.IsBystanderInFight(OpenBgPhase.KeepFight, isRaid: false, isKeepFriend: true), Is.False, "a keep friend");
+                Assert.That(OpenBattlegroundRoles.IsBystanderInFight(OpenBgPhase.Push, isRaid: false, isKeepFriend: false), Is.False, "only in the fight");
+                Assert.That(OpenBattlegroundRoles.IsBystanderInFight(OpenBgPhase.Retreat, isRaid: false, isKeepFriend: false), Is.False);
+                Assert.That(OpenBattlegroundRoles.BystanderKeepDistance, Is.EqualTo(3_000));
                 Assert.That(away, Is.Not.Empty);
                 Assert.That(away.Length, Is.LessThan(field.Length), "the points near the keep and the bridges are dropped");
                 for (int i = 0; i < 200; i++)
                 {
                     Point3D point = OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, eRealm.Hibernia, Bridges, Keep, away, rng);
-                    Assert.That(OpenBattlegroundRoles.Distance2D(point, Keep), Is.GreaterThanOrEqualTo(OpenBattlegroundRoles.ThirdRealmKeepDistance));
+                    Assert.That(OpenBattlegroundRoles.Distance2D(point, Keep), Is.GreaterThanOrEqualTo(OpenBattlegroundRoles.BystanderKeepDistance));
                     Assert.That(Nearest(point, Bridges.Select(bridge => bridge.Point)), Is.GreaterThanOrEqualTo(OpenBattlegroundRoles.RoamBridgeDistance));
                 }
-                // The live keep-fight skirmish point (2,500 south of the keep centre) is no longer a third-realm roam point.
+                // The live keep-fight skirmish point (2,500 south of the keep centre) is no longer a bystander roam point.
                 Assert.That(away.Any(point => point.X == Keep.X + 2_500 && point.Y == Keep.Y), Is.False);
             });
         }
@@ -159,33 +170,32 @@ namespace DOL.GS.Tests
         }
 
         [Test]
-        public void AttackerGroupsAssaultInPushAndFight()
+        public void RaidGroupsAssaultInPushAndFightOthersKeepTheirPosts()
         {
             Assert.Multiple(() =>
             {
                 foreach (int index in new[] { 0, 1, 2 })
                 {
-                    Assert.That(Role(OpenBgPhase.Push, eRealm.Midgard, 8, index), Is.EqualTo(OpenBgRole.Assault));
-                    Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Midgard, 3, index), Is.EqualTo(OpenBgRole.Assault));
+                    Assert.That(Role(OpenBgPhase.Push, 8, index, raid: true), Is.EqualTo(OpenBgRole.Assault));
+                    Assert.That(Role(OpenBgPhase.KeepFight, 3, index, raid: true), Is.EqualTo(OpenBgRole.Assault));
                 }
-                Assert.That(Role(OpenBgPhase.Quiet, eRealm.Midgard, 8, 0), Is.EqualTo(OpenBgRole.BridgeWatch), "no assault in quiet");
-                Assert.That(Role(OpenBgPhase.Push, eRealm.Hibernia, 8, 0), Is.EqualTo(OpenBgRole.BridgeWatch), "the others keep watch");
-                Assert.That(Role(OpenBgPhase.Push, eRealm.Albion, 8, 1), Is.EqualTo(OpenBgRole.Roam));
-                // A realm that took the keep never assaults its own keep.
-                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Midgard, 8, 0, eRealm.Midgard, eRealm.Midgard), Is.EqualTo(OpenBgRole.Defend));
+                Assert.That(Role(OpenBgPhase.Push, 8, 0), Is.EqualTo(OpenBgRole.BridgeWatch), "units outside the raid keep watch");
+                Assert.That(Role(OpenBgPhase.Push, 8, 1), Is.EqualTo(OpenBgRole.Roam));
+                Assert.That(Role(OpenBgPhase.Push, 8, 0, friend: true), Is.EqualTo(OpenBgRole.BridgeWatch), "keep friends keep watch in the push");
+                // A raid unit whose guild took the keep never assaults its own keep.
+                Assert.That(Role(OpenBgPhase.KeepFight, 8, 0, raid: true, friend: true), Is.EqualTo(OpenBgRole.Defend));
             });
         }
 
         [Test]
-        public void OwnerGroupsDefendInFight()
+        public void KeepFriendsDefendInFight()
         {
             Assert.Multiple(() =>
             {
-                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Albion, 8, 0), Is.EqualTo(OpenBgRole.Defend));
-                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Albion, 2, 3), Is.EqualTo(OpenBgRole.Defend));
-                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Hibernia, 8, 0), Is.EqualTo(OpenBgRole.Roam), "the third realm roams");
-                Assert.That(Role(OpenBgPhase.KeepFight, eRealm.Albion, 8, 0, eRealm.Midgard, eRealm.None), Is.EqualTo(OpenBgRole.Roam),
-                    "a garrison-held keep has no realm defending it");
+                Assert.That(Role(OpenBgPhase.KeepFight, 8, 0, friend: true), Is.EqualTo(OpenBgRole.Defend));
+                Assert.That(Role(OpenBgPhase.KeepFight, 2, 3, friend: true, realm: eRealm.Hibernia), Is.EqualTo(OpenBgRole.Defend),
+                    "friendship is the guild's, whatever the realm");
+                Assert.That(Role(OpenBgPhase.KeepFight, 8, 0), Is.EqualTo(OpenBgRole.Roam), "a bystander roams");
             });
         }
 
@@ -194,13 +204,49 @@ namespace DOL.GS.Tests
         {
             Assert.Multiple(() =>
             {
-                // Failed attack: Midgard attacked, Albion still owns the keep.
-                Assert.That(Role(OpenBgPhase.Retreat, eRealm.Midgard, 8), Is.EqualTo(OpenBgRole.Retreat));
-                Assert.That(Role(OpenBgPhase.Retreat, eRealm.Albion, 8), Is.EqualTo(OpenBgRole.Defend));
-                Assert.That(Role(OpenBgPhase.Retreat, eRealm.Hibernia, 8), Is.EqualTo(OpenBgRole.Roam));
-                // Successful attack: Midgard now owns it and holds.
-                Assert.That(Role(OpenBgPhase.Retreat, eRealm.Midgard, 8, 0, eRealm.Midgard, eRealm.Midgard), Is.EqualTo(OpenBgRole.Defend));
-                Assert.That(Role(OpenBgPhase.Retreat, eRealm.Albion, 8, 0, eRealm.Midgard, eRealm.Midgard), Is.EqualTo(OpenBgRole.Roam));
+                // Failed raid: the keep's friends still hold it.
+                Assert.That(Role(OpenBgPhase.Retreat, 8, raid: true), Is.EqualTo(OpenBgRole.Retreat));
+                Assert.That(Role(OpenBgPhase.Retreat, 8, friend: true), Is.EqualTo(OpenBgRole.Defend));
+                Assert.That(Role(OpenBgPhase.Retreat, 8), Is.EqualTo(OpenBgRole.Roam));
+                // Successful raid: its claiming guild is now the keep's friend and holds it.
+                Assert.That(Role(OpenBgPhase.Retreat, 8, raid: true, friend: true), Is.EqualTo(OpenBgRole.Defend));
+            });
+        }
+
+        [Test]
+        public void RaidPartnersHoldTheApproachesOutsideGuardReachAfterTheClaim()
+        {
+            Point3D[] field =
+            {
+                new(Keep.X + 1_200, Keep.Y, 3500), new(Keep.X + 3_000, Keep.Y, 3500), new(Keep.X, Keep.Y - 3_500, 3500),
+                new(Keep.X + 4_200, Keep.Y, 3500), new(Keep.X - 6_000, Keep.Y, 3500), null,
+            };
+            Point3D[] approaches = OpenBattlegroundRoles.ApproachPoints(field, Keep);
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoles.RaidPartnerHolds(true, true, false), Is.True, "a raid partner of the claiming guild");
+                Assert.That(OpenBattlegroundRoles.RaidPartnerHolds(true, true, true), Is.False, "the claiming guild defends the keep itself");
+                Assert.That(OpenBattlegroundRoles.RaidPartnerHolds(true, false, false), Is.False, "a bystander stays a bystander");
+                Assert.That(OpenBattlegroundRoles.RaidPartnerHolds(false, true, false), Is.False, "no claim yet: the raid assaults");
+                Assert.That(approaches.Select(point => point.X - Keep.X + point.Y - Keep.Y), Is.EquivalentTo(new[] { -3_500, 4_200 }),
+                    "inside the archers' reach (1,200 and 3,000) and the far field (6,000) are no approaches");
+                Assert.That(OpenBattlegroundRoles.ApproachMinDistance, Is.GreaterThan(3_200), "static archers reach 3,200 from the keep centre");
+                Assert.That(OpenBattlegroundRoles.ApproachPoints(null, Keep), Is.Empty);
+            });
+        }
+
+        [Test]
+        public void TheRaidHoldsTheFieldWhileTheLordLiesUnclaimed()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoles.ActsAsKeepFriend(false, true, true, OpenBgPhase.KeepFight), Is.True, "lord down in the fight");
+                Assert.That(OpenBattlegroundRoles.ActsAsKeepFriend(false, true, true, OpenBgPhase.Retreat), Is.True);
+                Assert.That(OpenBattlegroundRoles.ActsAsKeepFriend(false, true, true, OpenBgPhase.Push), Is.False,
+                    "before the fight the raid still goes to the keep as an assault (and claims it)");
+                Assert.That(OpenBattlegroundRoles.ActsAsKeepFriend(false, false, true, OpenBgPhase.KeepFight), Is.False, "a bystander");
+                Assert.That(OpenBattlegroundRoles.ActsAsKeepFriend(false, true, false, OpenBgPhase.KeepFight), Is.False, "lord standing");
+                Assert.That(OpenBattlegroundRoles.ActsAsKeepFriend(true, false, false, OpenBgPhase.Quiet), Is.True, "the claiming guild");
             });
         }
 
