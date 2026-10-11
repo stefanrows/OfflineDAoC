@@ -23,6 +23,61 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      loot crediting for the player's group (persistent companions) writing to
      the database on the game loop. Not yet investigated.
 
+71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
+    2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
+    `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
+    Nightshade scored 39 of 1,419 PvP kills (2.7 %), below the 6.2 %
+    baseline. `RVR_ASSIST_SWITCH` appeared in only 4 five-minute windows.
+    Expected: assassin share at or above the baseline. Not yet investigated.
+    Re-check 2026-10-01 (installed `server-console.log`, all runs): assassins are 6.2 % of cross-realm bot deaths (546 of 8,839), exactly the baseline; 366 of 655 `RVR_STEALTH_BREAK` are `kill`, 105 `low_hp`, 184 `friends`. The 2.7 % window is not reproduced, so no tuning was changed. Close after a clean post-0.164.0 log keeps the share at or above 6.2 %.
+
+70. **Launcher shows a .NET exception dialog "The given key was not present in
+    the dictionary" after the 0.151.0 deploy.** Aaron, 2026-09-29 ~14:15, first
+    launcher run of the 0.145.1+ launcher build (Stefan's PvP & Co-op naming and
+    splash asset, merged today) together with server 0.151.0. The server is not
+    affected (0 exceptions, port open). Expected: no dialog. Actual: a WinForms
+    unhandled-exception dialog; "Weiter" continues. Stack trace not captured yet;
+    MainForm changes in 0.145.x are text-only, no string-keyed dictionary lookup
+    found in the launcher sources, so the source may be the new splash asset
+    loader or a snapshot/status parser. Next step: click "Details" and paste the
+    stack trace; check `playable/runtime/logs/` for a launcher log.
+    Source 0.164.0 adds launcher crash logging: an unhandled launcher exception now writes its full stack trace to `logs/launcher-errors.log` (next to the launcher) and the dialog names that file. A static audit of the launcher found no throwing dictionary lookup on the startup or refresh path (`PortableCredentials` uses `TryGetValue`; `KeepRelicReset` indexes only SQLite rows behind a button). Next step: reproduce once and paste `launcher-errors.log`.
+
+64. **Player and companion overhead names sometimes do not appear.** Reported
+    while source was 0.109.0; installed version and client build are
+    unconfirmed. Seen after login, zoning, or when entities reappear or
+    visibility refreshes. Expected: nearby player and companion name labels
+    remain visible whenever their models are visible. Actual: entity models
+    appear but some overhead labels are intermittently absent. Exact scope and
+    workaround are unknown. Source audit on 2026-09-27 found player names in
+    `SendPlayerCreate` and companion names in `SendNPCCreate`; no shared
+    hide condition was found in those packet paths. A client/packet capture is
+    needed to locate whether a create was omitted or ignored.
+
+5. **Some helmets render oversized or glitched.** The supplied screenshots
+    (2026-09-28) show Eilis, a level-47 Elf female Enchanter from Hibernia,
+    wearing a level-46, quality-95 Matterbender Cloth Cap. A read-only lookup
+    of the installed save found a likely match: a level-49 Hibernian Elf
+    Enchanter named Eilis wears the same level-46 / quality-95 cap. It has
+    model 825 and Realm Midgard; its saved appearance size is 50. The level-47
+    screenshot and this saved record are a strong, but not conclusive, match.
+    The local `game.dll` metadata reports 1.127, but the screenshot's client
+    process is unverified.
+    Source maps the ordinary Midgard cloth cap to model 825 and the ordinary
+    Hibernian cloth cap to 826 (the wizard-hat variants are 1280 and 1279).
+    The equipment packet sends the stored item model, texture and effect
+    fields without a realm conversion or helmet-scale field. Current companion
+    reward generation uses the companion's realm; owner-to-companion transfers
+    preserve the original item template. The leading explanation is that this
+    Hibernian Elf is wearing a cross-realm Midgard model. The item's origin and
+    the model's rendered fit still need confirmation in the client. Reproduce
+    by viewing Eilis in-world with this cap equipped. Expected: the cap fits
+    the wearer's head at normal scale. Actual: the helmet appears oversized or
+    visually glitched. The reported impact is cosmetic; no gameplay effect or
+    workaround was reported. Installed server version is unknown.
+
+## Fixed in source; installation verification pending
+
 148. **Thidranki (region 238) shows no keep and no guards in the client.**
      Owner report, installed 0.239.0, 2026-10-11 ~00:05: Firebold entered
      Thidranki (238) at 23:54:59 and saw no keep and no guards. Server side
@@ -51,17 +106,25 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      then re-site/Z-correct keep 143 and place the garrison on the floor
      nearest the lord point; switching to 252 needs ~8 changes incl. a new
      navmesh.
-
-146. **Renegade Fensalir Jarl kills bots at the Svasud Faste bind stone.**
-     Installed 0.234.0, 2026-10-10 19:48–21:13: the level-66 keep lord
-     "Renegade Fensalir Jarl" killed Midgard bots 6 times on the Svasud
-     Faste bind stone, about 28,000 units from Fensalir Faste (keep 80);
-     Dagedis died there 4 times in 40 minutes. A keep lord should never
-     leave his keep, and a bind stone must stay a safe release point (bug
-     63). Expected: the lord stays inside Fensalir. Actual: he camps the
-     Svasud stone. Not traced (candidates: the 0.235.0 runtime relocation of
-     unreachable lords, a lord chasing a bot out of the keep, or a renegade
-     spawn placed at the wrong Z). Split from the bug 63/144 analysis.
+     Analysis 2026-10-11 (log, builder output, source): the "no keep, no
+     guards" report was a distance effect: the owner stood 12,250–31,870
+     units from keep 143 and NPCs are sent within 6,000 (`docs/CAMLANN.md`
+     now lists the per-landing distances; the keep pieces are sent on region
+     entry). The real defect: lord and garrison stood on the main keep's
+     roof (+857) because `BattlegroundNativeKeepData` ordered gated
+     candidate points highest-Z first (candidates sampled at doorZ
+     +0/+600/+1200) and never re-placed a reachable existing lord. Z 4071 is
+     the deliberate lowest-ground site; no Z correction or re-site. Source
+     0.241.0: garrison points rank by distance to the door floor (64-unit
+     bands, deepest behind the doors first), retainers prefer the lord's
+     floor, and a server-built full keep whose saved lord stands more than
+     400 above the door floor gets its garrison rows deleted and re-placed
+     once (`BATTLEGROUND_KEEP_GARRISON_REPLACED`; only keep 143 today, tower
+     140 and Leirvik exempt, native keeps untouched); 6 tests in
+     `UT_BattlegroundKeepGarrisonFloor`. Pending: next start logs
+     `BATTLEGROUND_KEEP_GARRISON_REPLACED keep=143` once and
+     `BATTLEGROUND_KEEP_READY region=238 keep=143` with the lord near Z
+     4071; real-client check within 6,000 units of the keep.
 
 144. **Midgard newbie bots loop between the Mularn bind point, Jordheim and
      the Vale of Mularn.** Installed 0.235.0, 2026-10-10 21:04–21:58: 372
@@ -136,61 +199,62 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      Hills (176 starter mobs within 30,000 units), Hibernia's Druim Ligen is
      behind gates with no level 0–3 mob within 30,000 units, so Hibernia is
      probably worse.
+     Source 0.241.0 (Aaron, night of 2026-10-11, after the owner moved the
+     bug from Stefan to this session): (1) PvE world bots (not on an RvR
+     objective, not in a battleground) release at their stored home bind
+     when it lies in the death region, otherwise at the nearest own-realm
+     bind of the death zone without the safe-only filter
+     (`BotReleaseBindPoints.PveRelease`, log reasons `pve-home-bind` /
+     `pve-nearest-bind`); RvR and battleground releases are unchanged
+     (`UT_AutonomousPveRelease`). (2) Any own-realm autonomous world bot may
+     open its realm's home-side border gates (Vale of Mularn 100087401/2,
+     West Svealand 102093501/2, Bri Leith 206016801/2, Connacht
+     207156901/2); frontier-side gates (Uppland, Forest Sauvage, Snowdonia)
+     stay RvR-only (`AutonomousRvrTravel.MayOpenBorderDoor`). (3) A death to
+     a mob that is not the camp's target keeps the target-con ceiling and
+     the camp (`AUTONOMOUS_DEATH_OTHER_KILLER`); the camp is dropped only
+     after two such deaths in a row (`AutonomousDeathAttribution`). Reviewer
+     notes: the 400 Jordheim-bound level-50 Midgard bots still release at
+     the Svasud courtyard stone for north-Vale deaths (now walkable through
+     the opened gate; a 1.65 player would release to Jordheim); an Albion
+     PvE death in Forest Sauvage still releases at the Castle Sauvage inner
+     stone between frontier-side gates; the other-killer counter does not
+     decay with time. Pending: on the next live run no
+     `AUTONOMOUS_SAFE_RELEASE reason=safe-current-region region=100` at
+     763–765k/668–672k for PvE bots, Mularn releases instead, fewer
+     `AUTONOMOUS_ROUTE_POCKET_ESCAPE` to Jordheim, and the level 1–4 death
+     rate on Stefan's roster.
 
-71. **RvR stealthers kill less than before wave 5.** Live log 0.157.1,
-    2026-09-29 18:41–20:04, task 67: 38 `RVR_STEALTH_OPEN` (all
-    `reason=lone`), breaks mostly under 30 s, but Infiltrator/Shadowblade/
-    Nightshade scored 39 of 1,419 PvP kills (2.7 %), below the 6.2 %
-    baseline. `RVR_ASSIST_SWITCH` appeared in only 4 five-minute windows.
-    Expected: assassin share at or above the baseline. Not yet investigated.
-    Re-check 2026-10-01 (installed `server-console.log`, all runs): assassins are 6.2 % of cross-realm bot deaths (546 of 8,839), exactly the baseline; 366 of 655 `RVR_STEALTH_BREAK` are `kill`, 105 `low_hp`, 184 `friends`. The 2.7 % window is not reproduced, so no tuning was changed. Close after a clean post-0.164.0 log keeps the share at or above 6.2 %.
-
-70. **Launcher shows a .NET exception dialog "The given key was not present in
-    the dictionary" after the 0.151.0 deploy.** Aaron, 2026-09-29 ~14:15, first
-    launcher run of the 0.145.1+ launcher build (Stefan's PvP & Co-op naming and
-    splash asset, merged today) together with server 0.151.0. The server is not
-    affected (0 exceptions, port open). Expected: no dialog. Actual: a WinForms
-    unhandled-exception dialog; "Weiter" continues. Stack trace not captured yet;
-    MainForm changes in 0.145.x are text-only, no string-keyed dictionary lookup
-    found in the launcher sources, so the source may be the new splash asset
-    loader or a snapshot/status parser. Next step: click "Details" and paste the
-    stack trace; check `playable/runtime/logs/` for a launcher log.
-    Source 0.164.0 adds launcher crash logging: an unhandled launcher exception now writes its full stack trace to `logs/launcher-errors.log` (next to the launcher) and the dialog names that file. A static audit of the launcher found no throwing dictionary lookup on the startup or refresh path (`PortableCredentials` uses `TryGetValue`; `KeepRelicReset` indexes only SQLite rows behind a button). Next step: reproduce once and paste `launcher-errors.log`.
-
-64. **Player and companion overhead names sometimes do not appear.** Reported
-    while source was 0.109.0; installed version and client build are
-    unconfirmed. Seen after login, zoning, or when entities reappear or
-    visibility refreshes. Expected: nearby player and companion name labels
-    remain visible whenever their models are visible. Actual: entity models
-    appear but some overhead labels are intermittently absent. Exact scope and
-    workaround are unknown. Source audit on 2026-09-27 found player names in
-    `SendPlayerCreate` and companion names in `SendNPCCreate`; no shared
-    hide condition was found in those packet paths. A client/packet capture is
-    needed to locate whether a create was omitted or ignored.
-
-5. **Some helmets render oversized or glitched.** The supplied screenshots
-    (2026-09-28) show Eilis, a level-47 Elf female Enchanter from Hibernia,
-    wearing a level-46, quality-95 Matterbender Cloth Cap. A read-only lookup
-    of the installed save found a likely match: a level-49 Hibernian Elf
-    Enchanter named Eilis wears the same level-46 / quality-95 cap. It has
-    model 825 and Realm Midgard; its saved appearance size is 50. The level-47
-    screenshot and this saved record are a strong, but not conclusive, match.
-    The local `game.dll` metadata reports 1.127, but the screenshot's client
-    process is unverified.
-    Source maps the ordinary Midgard cloth cap to model 825 and the ordinary
-    Hibernian cloth cap to 826 (the wizard-hat variants are 1280 and 1279).
-    The equipment packet sends the stored item model, texture and effect
-    fields without a realm conversion or helmet-scale field. Current companion
-    reward generation uses the companion's realm; owner-to-companion transfers
-    preserve the original item template. The leading explanation is that this
-    Hibernian Elf is wearing a cross-realm Midgard model. The item's origin and
-    the model's rendered fit still need confirmation in the client. Reproduce
-    by viewing Eilis in-world with this cap equipped. Expected: the cap fits
-    the wearer's head at normal scale. Actual: the helmet appears oversized or
-    visually glitched. The reported impact is cosmetic; no gameplay effect or
-    workaround was reported. Installed server version is unknown.
-
-## Fixed in source; installation verification pending
+146. **Renegade Fensalir Jarl kills bots at the Svasud Faste bind stone.**
+     Installed 0.234.0, 2026-10-10 19:48–21:13: the level-66 keep lord
+     "Renegade Fensalir Jarl" killed Midgard bots 6 times on the Svasud
+     Faste bind stone, about 28,000 units from Fensalir Faste (keep 80);
+     Dagedis died there 4 times in 40 minutes. A keep lord should never
+     leave his keep, and a bind stone must stay a safe release point (bug
+     63). Expected: the lord stays inside Fensalir. Actual: he camps the
+     Svasud stone. Not traced (candidates: the 0.235.0 runtime relocation of
+     unreachable lords, a lord chasing a bot out of the keep, or a renegade
+     spawn placed at the wrong Z). Split from the bug 63/144 analysis.
+     Root cause 2026-10-11 (log, save, source): the killer is not keep 80's
+     lord but a realmless level-66 relic-temple guard.
+     `RelicGuardsOnKeepTaken.cs:58` creates `GuardFighterRK` "Fensalir Jarl"
+     at Mjollner Faste (771263,628729) whenever keep 80's stale `Realm`
+     equals its `OriginalRealm` (true under Camlann although the Frontier
+     Wardens hold it); `SetGuardRealm` takes realm 0 from the relic keep, so
+     the guard is "Renegade", attacks everyone (`killer_realm=_First`) and
+     has no leash (`StandardMobState_AGGRO` never checks the distance from
+     spawn). Five such guards spawned every start (Bledmeer ×2, Blendrake
+     ×2, Fensalir, Arvakr, Scathaig) and killed 226 bots over the whole log;
+     seven Fensalir kills sit on the Svasud release points 42,800 units from
+     the spawn. Source 0.241.0: relic guards are disabled under PvP rules
+     (`RELIC_GUARDS_DISABLED reason=camlann`), keep guards without a patrol
+     that are more than 3,000 units from their spawn drop aggro and return
+     (`GuardState_AGGRO`, `KeepGuardBrain.ShouldLeash`), and autonomous
+     roamers no longer pick relic keeps
+     (`AutonomousRvrKeepPolicy.IsRoamDestination`); 15 tests in
+     `UT_RelicGuardLeash`. Pending: no `Renegade ... Jarl/Sentinel` kills in
+     a live run, no `RVR_ROAM_PICK pick="rvr-keep-198"`, a pulled keep guard
+     walks back.
 
 151. **Siege rams are realm-bound; mixed-realm groups, guilds and
      battlegroups cannot share one.** Owner report, 2026-10-11 (installed
@@ -280,6 +344,20 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      probed. Pending: `No legal region route to Darkness Falls` near zero
      per 30 minutes and productive Darkness Falls hunts for Albion and
      Midgard in a live run.
+     Live check on installed 0.240.0 (2026-10-11 01:50–02:44, world speed
+     20×): still 190 `No legal region route to Darkness Falls`, 0 productive
+     hunts. Cause: the 0.238.0 entrance-group check searched the raw
+     zone-point edges, which include the shared frontier dungeon road
+     (1–277–248–276–200, 100–246–248), while the runtime route drops that
+     road whenever a way around exists, so every foreign room looked
+     reachable at planning time and failed in the same tick (190 of 190
+     failures were foreign rooms: 172 `dungeon-live`, 18 `capnbry`). Source
+     0.241.0: planning uses the route's own edges (`PveCrossingEdges` /
+     `AutonomousZoneCrossingSearch.WithoutFrontierDungeonRoads`); 2 tests
+     with the real tunnel rows 88–99 in `UT_AutonomousZoneCrossingSearch`.
+     Pending: `No legal region route to Darkness Falls` near 0 per 30 min
+     and productive DF hunts for Albion and Midgard; Hibernia additionally
+     needs the bug 144 gate change (0.241.0 too).
 
 142. **Campaign battleground portal keeps have no NPCs.** Owner report,
      installed 0.235.0, 2026-10-10 ~21:30: the new portal keeps are empty.

@@ -12,6 +12,54 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.241.0] - 2026-10-11
+
+### Added
+
+- open BG, stage 1 (spec `docs/superpowers/specs/2026-10-11-open-bg-design.md`):
+  the native Thidranki map (region 252) is a permanently open battleground for
+  levels 1–50 without a realm-rank limit under Camlann rules. Catalog kind
+  `Open` (the ten bracket battlegrounds are untouched), porter menu line
+  `[open BG]`, server properties `open_bg_enabled` (default off),
+  `open_bg_max_bots` (72), `open_bg_groups8` (1), `open_bg_groups_small` (2),
+  `open_bg_solos` (4), `open_bg_cycle_min/max_minutes` (15/45),
+  `open_bg_player_drift`. Zone 252 navmesh built and packaged (eleven
+  battleground meshes). Thidranki Faste (keep 11) is adopted as a native keep
+  on its client fixture with its saved lord and 18 guards, its gates and
+  posterns registered (`BATTLEGROUND_KEEP_DOORS`, `BATTLEGROUND_KEEP_READY
+  region=252`). A fixed bot crew from the 40–50 band is planned per realm
+  (8-man groups, small groups of 2–4, solos), formed into parties before
+  departure, boarded through the porters, relieved every 20–30 game minutes
+  and capped by `open_bg_max_bots` (`OPEN_BG_ROSTER`, `OPEN_BG_RELIEF`,
+  `AUTONOMOUS_BG_LEFT reason=relieved`). Phases, roles, `/bgsetup`, the
+  launcher tab, quests and guest squads follow in stages 2–4.
+
+### Fixed
+
+- Midgard newbies no longer loop Svasud → Jordheim → Vale: PvE world bots
+  release at their home bind (or the nearest own-realm stone of the death
+  zone) instead of the Svasud Faste stone behind a border gate, any
+  own-realm world bot may open its realm's home-side border gates, and a
+  death to a mob that is not the camp's target keeps the target-con ceiling
+  and the camp (bug 144).
+- Darkness Falls planning uses the route's own crossing edges: the 0.238.0
+  check searched edges including the shared frontier-dungeon road the route
+  never takes, so every foreign room looked reachable and failed in the same
+  tick (190 of 190 failures on 0.240.0) (bug 145).
+- The "Renegade Fensalir Jarl" camping the Svasud bind stone was a realmless
+  level-66 relic-temple guard: relic guards are disabled under Camlann, keep
+  guards leash back at 3,000 units, roamers no longer pick relic keeps (bug 146).
+- Server-built battleground keep lords stand on the door floor instead of the
+  main keep's roof; Thidranki 238's roof garrison is replaced once (bug 148).
+- The open BG switch also gates the zone transfer and login into region 252.
+
+### Changed
+
+- Live check of 0.240.0 (01:50–02:44, world speed 20×): siege quorum marches
+  (121), RvR lead handovers (138) and relaxed army floors (145) fire; stuck
+  battleground leaves 1 of 30 entries; rival-hunt rejections hold; no
+  `Unhandled spell`; 0 exceptions.
+
 ## [0.240.0] - 2026-10-11
 
 ### Changed
