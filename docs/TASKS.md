@@ -293,6 +293,26 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+116. **open BG: a permanently open Thidranki (region 252) for levels 1–50.**
+     Owner request 2026-10-11 ~02:00; decisions and design in
+     `docs/superpowers/specs/2026-10-11-open-bg-design.md`, plan in
+     `docs/superpowers/plans/2026-10-11-open-bg.md`. Built overnight in four
+     stages (0.241.0 stage 1, 0.242.0 stages 2–4): catalog kind `Open` for
+     the native Thidranki map with keep 11 adopted on its client fixture,
+     zone 252 navmesh, porter line `[open BG]`, `open_bg_*` server
+     properties, a fixed bot crew from the 40–50 band (per realm 8-man
+     groups, small groups, solos; cap 72; relief every 20–30 game minutes),
+     a phase director (random 15–45 game-minute cycle quiet → push → keep
+     fight → retreat), roles (bridge watch, roam, lurk, assault, defend),
+     light player drift, low-level protection, `/bgsetup` window and
+     launcher tab, guest squads on a low player's level, Pazz dailies 1–50.
+     Live on the owner's server at 20× since 03:10 (stage 1) and from the
+     0.242.0 deploy (stages 2–4). Pending: real-client checks (porter line,
+     landing, keep 11 render, `/bgsetup` window, launcher tab, guest squad
+     for a character under 40, Pazz at level 50) and the owner's two
+     decisions: portal-keep guards attacking intruders inside the portal
+     keeps, and same-realm hostility inside the open BG (Camlann FFA today).
+
 113. **Eden-style battlegrounds: server-built keeps, keep-aware navmeshes and
      autonomous gamebot participation.** Owner, 2026-10-10, after bug 125
      ("replicate the BGs like on Eden or Blackthorn"; Camlann alliances kept,
