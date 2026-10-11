@@ -6,6 +6,27 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+152. **A bot can keep a stale Group reference after a parallel MakeLeader
+     and RemoveMember.** Installed 0.241.0, 2026-10-11 03:21: Caeleaevan
+     (Hibernian Champion, level 50) stayed `Group`-linked to Midgard warband
+     `…-5bf8eb-087` after `AUTONOMOUS_GROUP_TASK_ENDED reason="The group
+     roster is no longer valid"` (the coordinator's `members.All(member =>
+     member.Group == group)` check failed,
+     `AutonomousBotGroupCoordinator.cs:3571`); his rival-hunt planning then
+     threw `Sequence contains no elements` every 15 s until the stuck
+     watchdog moved him (symptom fixed in 0.242.0: `LivingPartyOrSelf`).
+     Suspected cause, not proven: `Group.MakeLeader` swaps members by the
+     stored `GroupIndex` without checking `_groupMembers[index] == living`,
+     while `RemoveMember` refreshes indexes only at the end
+     (`UpdateGroupIndexes`) after releasing the lock; a `MakeLeader` from a
+     coordinator pulse (0.238.0 RvR lead handover fires on death) in that
+     window overwrites one member (he keeps `Group` but leaves the list) and
+     duplicates another. Expected: a bot's `Group` is null whenever it is
+     not in that group's member list. Next step: reproduce with a unit test
+     around `Group.MakeLeader`/`RemoveMember` ordering, then make
+     `MakeLeader` verify the index and `RemoveMember` refresh indexes under
+     the lock.
+
 150. **Pilus'Fury boss script throws and the boss is removed from the
      world.** Installed 0.239.0, 2026-10-10 23:52:05: `NullReferenceException`
      in `PilusFuryBrain.DamageTarget` (`scripts/mobs/AlbionMobs/PilusFury.cs:248`,
