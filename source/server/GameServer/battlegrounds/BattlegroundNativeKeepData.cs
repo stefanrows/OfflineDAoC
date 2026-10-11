@@ -339,6 +339,18 @@ namespace DOL.GS
             GuardLord existing = keep.Guards.Values.OfType<GuardLord>().FirstOrDefault();
             if (existing != null)
             {
+                // A server-built full keep whose lord was placed on an upper floor (the old highest-floor-first rule) is placed again once.
+                double lordZ = (existing.SpawnPoint ?? new Point3D(existing.X, existing.Y, existing.Z)).Z;
+                bool isTower = BattlegroundKeepLayouts.IsTower(keep.KeepComponents.Select(component => component.Skin).ToList());
+                if (ShouldReplaceGarrison(row.CreateInfo, isTower, lordZ, doorZ))
+                {
+                    DeleteGarrisonRows(keep);
+                    Log.Warn($"BATTLEGROUND_KEEP_GARRISON_REPLACED region={region} keep={keep.KeepID} from_z={(int)lordZ} door_z={(int)doorZ}");
+                    existing = null;
+                }
+            }
+            if (existing != null)
+            {
                 if (!lordMoved && !Gated(new Vector3(existing.X, existing.Y, existing.Z)))
                     Log.Warn($"BATTLEGROUND_KEEP_LORD_OUTSIDE region={region} keep={keep.KeepID}");
                 Point3D lordAt = existing.SpawnPoint ?? new Point3D(existing.X, existing.Y, existing.Z);
@@ -373,9 +385,9 @@ namespace DOL.GS
 
             if (passing.Count == 0) return PlaceUngatedGarrison(keep, region, zone, outside, candidates);
 
-            var ordered = passing.OrderByDescending(point => point.Point.Z).ThenByDescending(point => point.DoorDistance).ToList();
-            Vector3 lordPoint = ordered[0].Point;
-            if (!TrySpawnGarrison(keep, region, lordPoint, ordered.Select(point => point.Point).ToList(), out int guards))
+            List<Vector3> ordered = GarrisonOrder(passing, doorZ);
+            Vector3 lordPoint = ordered[0];
+            if (!TrySpawnGarrison(keep, region, lordPoint, ordered, out int guards))
                 return Unavailable(keep, "load_failed");
             string tag = row.CreateInfo.StartsWith(NativePrefix, StringComparison.Ordinal) ? "BATTLEGROUND_NATIVE_KEEP_READY" : "BATTLEGROUND_KEEP_READY";
             Log.Info($"{tag} region={region} keep={keep.KeepID} lord={(int)lordPoint.X},{(int)lordPoint.Y},{(int)lordPoint.Z} guards={guards}");
@@ -405,6 +417,55 @@ namespace DOL.GS
                     Log.Warn($"BATTLEGROUND_KEEP_DOOR_UNREGISTERED region={region} keep={keep.KeepID} door={door.DoorId} at={door.X},{door.Y},{door.Z} reason=no_door_polygon");
             }
             Log.Info($"BATTLEGROUND_KEEP_DOORS region={region} keep={keep.KeepID} gates={gatesRegistered}/{gates} posterns={posternsRegistered}/{posterns}");
+        }
+
+        /// <summary>A lord standing more than this above the gate floor sits on an upper floor or the roof, not in the lord room.</summary>
+        public const float GarrisonRiseLimit = 400f;
+
+        /// <summary>Retainers stand within this height of the lord when enough points on his floor exist.</summary>
+        public const float SameFloorReach = 64f;
+
+        /// <summary>Height band width of the garrison ordering: points within one band of the gate floor count as the same floor.</summary>
+        public const float FloorBand = 64f;
+
+        /// <summary>
+        /// Garrison order for gated points: nearest the gate floor first (in bands of <see cref="FloorBand"/>, so slope noise does not
+        /// matter), then deepest behind the doors. The first point is the lord room on the main keep's ground floor, not the roof.
+        /// </summary>
+        public static List<Vector3> GarrisonOrder(IEnumerable<(Vector3 Point, float DoorDistance)> gated, double doorZ) =>
+            gated.OrderBy(point => (int)(Math.Abs(point.Point.Z - doorZ) / FloorBand)).ThenByDescending(point => point.DoorDistance)
+                .Select(point => point.Point).ToList();
+
+        /// <summary>Retainer order: the points on the lord's floor first, then the rest, each group in the given order.</summary>
+        public static List<Vector3> RetainerOrder(IEnumerable<Vector3> ordered, Vector3 lordPoint)
+        {
+            List<Vector3> all = ordered.ToList();
+            return all.Where(point => Math.Abs(point.Z - lordPoint.Z) <= SameFloorReach)
+                .Concat(all.Where(point => Math.Abs(point.Z - lordPoint.Z) > SameFloorReach)).ToList();
+        }
+
+        /// <summary>
+        /// One-time re-placement: a server-built (offline-bg-keep) full keep whose saved lord stands more than
+        /// <see cref="GarrisonRiseLimit"/> above the gate floor. Towers keep their top, native keeps keep their saved garrison.
+        /// </summary>
+        public static bool ShouldReplaceGarrison(string createInfo, bool isTower, double lordZ, double doorZ) =>
+            createInfo != null && createInfo.StartsWith(BattlegroundKeepLayouts.OfflineKeepPrefix, StringComparison.Ordinal) &&
+            !isTower && lordZ - doorZ > GarrisonRiseLimit;
+
+        // Deletes the rows EnsureGarrison wrote (lord and retainers named after the keep, no guild); wall guards and merchants stay.
+        private static void DeleteGarrisonRows(AbstractGameKeep keep)
+        {
+            List<GameKeepGuard> rows;
+            lock (keep.Guards)
+            {
+                rows = keep.Guards.Values.Where(guard => guard is not GuardMerchant &&
+                    BattlegroundKeepWallGuards.IsGarrisonRow(keep.Name, new BattlegroundKeepWallGuards.GuardSample(guard.GetType().ToString(), guard.Name, guard.GuildName, 0, 0, 0, 0, 0))).ToList();
+            }
+            foreach (GameKeepGuard guard in rows)
+            {
+                guard.Delete();
+                guard.DeleteFromDatabase();
+            }
         }
 
         /// <summary>True when a keep has gates but none is closed; a keep without gates has nothing to close.</summary>
@@ -603,9 +664,10 @@ namespace DOL.GS
                 retainers.Add(point => SpawnKeepGuard<GuardHealer>(keep, region, point, $"{name} Healer", GuardTemplateMgr.AvalonianMale));
             }
             var used = new List<Vector3> { lordPoint };
+            List<Vector3> sameFloorFirst = RetainerOrder(ordered, lordPoint);
             foreach (Func<Vector3, bool> retain in retainers)
             {
-                if (FirstSpacedPoint(ordered, used) is not Vector3 place) continue;
+                if (FirstSpacedPoint(sameFloorFirst, used) is not Vector3 place) continue;
                 if (!retain(place)) continue;
                 used.Add(place);
                 guards++;
