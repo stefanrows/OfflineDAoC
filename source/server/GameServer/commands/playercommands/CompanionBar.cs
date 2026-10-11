@@ -53,18 +53,42 @@ namespace DOL.GS.Commands
         private static readonly ConditionalWeakTable<GamePlayer, Session> Sessions = new();
 
         [GameServerStartedEvent]
-        public static void OnServerStarted(DOLEvent e, object sender, EventArgs arguments) =>
+        public static void OnServerStarted(DOLEvent e, object sender, EventArgs arguments)
+        {
             GameEventMgr.AddHandler(GamePlayerEvent.GameEntered, new DOLEventHandler(OnGameEntered));
+            GameEventMgr.AddHandler(GamePlayerEvent.RegionChanged, new DOLEventHandler(OnRegionChanged));
+        }
 
         [GameServerStoppedEvent]
-        public static void OnServerStopped(DOLEvent e, object sender, EventArgs arguments) =>
+        public static void OnServerStopped(DOLEvent e, object sender, EventArgs arguments)
+        {
             GameEventMgr.RemoveHandler(GamePlayerEvent.GameEntered, new DOLEventHandler(OnGameEntered));
+            GameEventMgr.RemoveHandler(GamePlayerEvent.RegionChanged, new DOLEventHandler(OnRegionChanged));
+        }
 
         private static void OnGameEntered(DOLEvent e, object sender, EventArgs arguments)
         {
             // Bots have no window; only a real client gets the bar.
             if (sender is GamePlayer player && player.Client is not BotDummyClient)
                 Start(player);
+        }
+
+        /// <summary>
+        /// Every zone load rebuilds the client's UI: the native init hook clears the window's click flag, so the
+        /// server must show the window again (op 5 sets the flag and sends the ready control) and resend all labels.
+        /// The next one-second tick does this once the player is live in the new region.
+        /// </summary>
+        private static void OnRegionChanged(DOLEvent e, object sender, EventArgs arguments)
+        {
+            if (sender is GamePlayer player && player.Client is not BotDummyClient && Sessions.TryGetValue(player, out Session session))
+                ResetClientState(session);
+        }
+
+        private static void ResetClientState(Session session)
+        {
+            session.Shown = false;
+            session.InitialStateSent = false;
+            Array.Clear(session.SentLabels);
         }
 
         /// <summary>Creates the player's session and its one-second reconcile timer, if it does not exist yet.</summary>
@@ -324,7 +348,7 @@ namespace DOL.GS.Commands
             if (session.Region != player.CurrentRegionID)
             {
                 session.Region = player.CurrentRegionID;
-                Array.Clear(session.SentLabels);
+                ResetClientState(session);
             }
             bool want = session.Enabled && OwnedCompanions(player).Count > 0;
             if (want && !session.Shown)

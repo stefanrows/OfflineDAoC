@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.253.0] - 2026-10-11
+
+### Fixed
+
+- The COMPANIONS window no longer goes dead after a zone change. The client
+  resets the window's click flag whenever a zone loads, but the server only
+  showed the window once per session, so it stayed on screen and ignored every
+  click until a relog. The server now shows it again, with all labels, after
+  each zone load. No client file changes; a server update is enough.
+
 ## [0.252.0] - 2026-10-11
 
 ### Added

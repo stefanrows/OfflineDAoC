@@ -113,6 +113,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+156. **The COMPANIONS window goes dead after a zone change.** Owner report,
+     2026-10-11 (0.252.0): after porting to another zone the window stays
+     on screen but no tile reacts; a relog fixes it until the next port.
+     Cause: the client's native init hook (`game.dll` 0x4DA938) runs on every
+     zone load and zeroes the window's click flag (`barActiveFlag`), while the
+     server kept `Session.Shown` true and never sent operation 5 again, so
+     clicks were dropped and the labels were not resent. Source: `CompanionBar`
+     now handles `GamePlayerEvent.RegionChanged` (fired by each PlayerInit) and
+     on any region change resets `Shown`, `InitialStateSent` and the sent
+     labels, so the next tick shows the window again (flag set, ready control,
+     full label resend). No client file change. Installation and real-client
+     check pending: port between zones (also a dungeon and back) with a
+     companion present and click tiles each time; with no companion the
+     window must stay hidden. Not checked: the Companion Manager window
+     (Custom8) shares the init hook and may need the same treatment.
+
 155. **Companions grouped with one character join whichever character logs
      in next.** Owner report, 2026-10-11 (0.169.0 manager): after playing a
      level 50 character with a companion group, logging in on a level 20
