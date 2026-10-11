@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
+using DOL.GS.Keeps;
 using DOL.GS.Scripts;
+using DOL.GS.ServerRules;
 using DOL.Logging;
 
 namespace DOL.GS
@@ -303,6 +305,53 @@ namespace DOL.GS
         /// <summary>Whether a bot still rests (game time) and may not be recruited.</summary>
         public static bool IsResting(long restingUntil, long now) => now < restingUntil;
 
+        /// <summary>
+        /// Camlann keeps are friendly by guild (and its alliance), and the keep's friend check reads the whole group: one
+        /// member of the owning guild makes every unit-mate a keep friend (live run 0.243.0: the realmless crew guild
+        /// "Bandit Farmers" held keep 11 and had members in the attacking units of every realm, so they defended instead
+        /// of assaulting). Whether a guild is the keep's owner or allied to it; false while no guild owns the keep.
+        /// </summary>
+        public static bool IsKeepOwnerGuild(string guildId, string allianceId, string keepOwnerGuildId, string keepOwnerAllianceId) =>
+            !string.IsNullOrEmpty(keepOwnerGuildId) && !string.IsNullOrEmpty(guildId) &&
+            (string.Equals(guildId, keepOwnerGuildId, StringComparison.OrdinalIgnoreCase) ||
+             !string.IsNullOrEmpty(keepOwnerAllianceId) && string.Equals(allianceId, keepOwnerAllianceId, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// A candidate joins a unit only on the same side of the keep's owner guild as the unit's leader: owner-guild bots
+        /// form their own units (the keep counts them as friends, so they defend it), everyone else never shares a group
+        /// with them. Any candidate may join any unit while no guild owns the keep.
+        /// </summary>
+        public static bool MayJoinUnit(string candidateGuildId, string candidateAllianceId, string unitLeaderGuildId, string unitLeaderAllianceId,
+            string keepOwnerGuildId, string keepOwnerAllianceId) =>
+            IsKeepOwnerGuild(candidateGuildId, candidateAllianceId, keepOwnerGuildId, keepOwnerAllianceId) ==
+            IsKeepOwnerGuild(unitLeaderGuildId, unitLeaderAllianceId, keepOwnerGuildId, keepOwnerAllianceId);
+
+        /// <summary>The keep's owning guild and its alliance (empty while no guild owns it), and a member's guild ids.</summary>
+        public readonly record struct GuildIds(string GuildId, string AllianceId);
+
+        /// <summary>The candidates that may join the anchor's unit (<see cref="MayJoinUnit"/>), in their order.</summary>
+        public static IEnumerable<T> UnitMates<T>(T anchor, IEnumerable<T> candidates, Func<T, GuildIds> guildOf, GuildIds keepOwner)
+        {
+            GuildIds lead = guildOf(anchor);
+            return (candidates ?? Array.Empty<T>()).Where(candidate =>
+            {
+                GuildIds mine = guildOf(candidate);
+                return MayJoinUnit(mine.GuildId, mine.AllianceId, lead.GuildId, lead.AllianceId, keepOwner.GuildId, keepOwner.AllianceId);
+            });
+        }
+
+        /// <summary>
+        /// The members a unit loses when the keep's owner changes under it: in a unit that mixes owner-guild members
+        /// with others, the owner-guild members; nobody in a unit all of one side.
+        /// </summary>
+        public static T[] SplitForKeepOwner<T>(IReadOnlyList<T> members, Func<T, GuildIds> guildOf, GuildIds keepOwner)
+        {
+            if (members == null || members.Count < 2) return Array.Empty<T>();
+            T[] owners = members.Where(member => guildOf(member) is GuildIds ids &&
+                IsKeepOwnerGuild(ids.GuildId, ids.AllianceId, keepOwner.GuildId, keepOwner.AllianceId)).ToArray();
+            return owners.Length > 0 && owners.Length < members.Count ? owners : Array.Empty<T>();
+        }
+
         // Idle: alone and without a running PvE task (between tasks, or none assigned yet).
         private static bool IsIdle(GameBot bot) =>
             bot.Group == null && bot.PersistentRecord != null && !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) &&
@@ -371,6 +420,9 @@ namespace DOL.GS
             Stopwatch watch = Stopwatch.StartNew();
             OpenBgSetup setup = OpenBgSetup.FromProperties();
             AutonomousBattlegroundParticipation.OpenCrewMember[] crew = AutonomousBattlegroundParticipation.OpenCrew();
+            GuildIds keepOwner = KeepOwnerOf(definition);
+            // A unit the keep's owner changed under keeps no owner-guild member next to others; the split shows in the counts.
+            if (SplitKeepOwnerUnits(crew, keepOwner, now) > 0) crew = AutonomousBattlegroundParticipation.OpenCrew();
             IReadOnlyList<RealmCount> counts;
             Group[] released;
             lock (Sync)
@@ -409,8 +461,8 @@ namespace DOL.GS
                 ? CandidatePools(plan.Admits.Select(admit => admit.Realm)
                     .Concat(plan.Realms.Where(realm => realm.Refill?.Count > 0).Select(realm => realm.Realm)).Distinct().ToArray(), now)
                 : null;
-            if (refilling) RefillUnits(plan, setup, crew, pools, now);
-            int formed = plan.Admits.Count > 0 ? FormUnits(plan, setup, now, pools) : 0;
+            if (refilling) RefillUnits(plan, setup, crew, pools, keepOwner, now);
+            int formed = plan.Admits.Count > 0 ? FormUnits(plan, setup, now, pools, keepOwner) : 0;
 
             if (now >= _nextLogTick)
             {
@@ -474,7 +526,7 @@ namespace DOL.GS
         }
 
         /// <summary>Forms the plan's admits in its order. Never above the cap: every unit's real size is checked against the seats left.</summary>
-        private static int FormUnits(OpenBgPlan plan, OpenBgSetup setup, long now, Dictionary<eRealm, List<GameBot>> pools)
+        private static int FormUnits(OpenBgPlan plan, OpenBgSetup setup, long now, Dictionary<eRealm, List<GameBot>> pools, GuildIds keepOwner)
         {
             int free = Math.Max(0, setup.MaxBots) - AutonomousBattlegroundParticipation.OpenCrewCount();
             if (free <= 0) return 0;
@@ -495,7 +547,7 @@ namespace DOL.GS
                 int size = admit.Kind == OpenBgUnitKind.Group8 ? Math.Min(Group8Size, free) : Math.Min(SmallGroupSize(Rng), free);
                 int minimum = admit.Kind == OpenBgUnitKind.Group8 ? Group8Minimum : SmallGroupMin;
                 if (size < minimum) continue;
-                if (!TryPickGroup(pool, size, minimum, now, out GameBot leader, out GameBot[] others, out OFTeleporter porter)) continue;
+                if (!TryPickGroup(pool, size, minimum, now, keepOwner, out GameBot leader, out GameBot[] others, out OFTeleporter porter)) continue;
                 groupsFormed++;
                 pool.Remove(leader);
                 foreach (GameBot other in others) pool.Remove(other);
@@ -585,7 +637,7 @@ namespace DOL.GS
         /// Without enough candidates near the porter it waits for the next tick (the assignment timeout bounds it).
         /// </summary>
         private static void RefillUnits(OpenBgPlan plan, OpenBgSetup setup, AutonomousBattlegroundParticipation.OpenCrewMember[] crew,
-            Dictionary<eRealm, List<GameBot>> pools, long now)
+            Dictionary<eRealm, List<GameBot>> pools, GuildIds keepOwner, long now)
         {
             int free = Math.Max(0, setup.MaxBots) - AutonomousBattlegroundParticipation.OpenCrewCount();
             foreach (OpenBgRealmPlan realm in plan.Realms)
@@ -608,7 +660,7 @@ namespace DOL.GS
                     if (wanted < MinimumSize(info.Kind) - members.Length || anchor == null ||
                         pools == null || !pools.TryGetValue(realm.Realm, out List<GameBot> pool))
                         continue;
-                    GameBot[] picks = pool.Where(bot => bot.CurrentRegionID == porter.CurrentRegionID &&
+                    GameBot[] picks = UnitMates(anchor, pool, GuildIdsOf, keepOwner).Where(bot => bot.CurrentRegionID == porter.CurrentRegionID &&
                             AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) &&
                             AutonomousBotGroupCoordinator.LevelsCompatible(anchor.Level, bot.Level) &&
                             WithinPorterReach(bot.GetDistanceTo(porter)))
@@ -634,9 +686,10 @@ namespace DOL.GS
         /// <summary>
         /// A leader and its members from the RvR-tour part of the pool, all in the leader's region: the best-ranked
         /// leader (a claim-rank guild member preferred), its nearest medallion porter as the muster, a healer first
-        /// (two for an 8-man), then the nearest level-compatible bots.
+        /// (two for an 8-man), then the nearest level-compatible bots on the leader's side of the keep's owner guild
+        /// (<see cref="MayJoinUnit"/>).
         /// </summary>
-        private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now,
+        private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now, GuildIds keepOwner,
             out GameBot leader, out GameBot[] others, out OFTeleporter porter)
         {
             leader = null;
@@ -648,7 +701,7 @@ namespace DOL.GS
             {
                 OFTeleporter nearest = PortersIn(seed.CurrentRegionID, now).OrderBy(candidate => seed.GetDistanceTo(candidate)).FirstOrDefault();
                 if (nearest == null) continue;
-                GameBot[] near = rvr.Where(bot => bot != seed && bot.CurrentRegionID == seed.CurrentRegionID &&
+                GameBot[] near = UnitMates(seed, rvr, GuildIdsOf, keepOwner).Where(bot => bot != seed && bot.CurrentRegionID == seed.CurrentRegionID &&
                         AutonomousBotGroupCoordinator.LevelsCompatible(seed.Level, bot.Level) && WithinPorterReach(bot.GetDistanceTo(nearest)))
                     .OrderBy(bot => bot.GetDistanceTo(nearest)).ToArray();
                 if (near.Length + 1 < minimum) continue;
@@ -661,6 +714,50 @@ namespace DOL.GS
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// The guild that owns the open BG's keep by the keep's friend check (<c>KeepManager.IsEnemy</c>):
+        /// a real guild on a PvP (Camlann) server, with its alliance. Empty for an unclaimed keep, the garrison, or a
+        /// realm server, where the keep's friends are not a guild.
+        /// </summary>
+        private static GuildIds KeepOwnerOf(BattlegroundDefinition definition)
+        {
+            if (GameServer.Instance?.Configuration?.ServerType != EGameServerType.GST_PvP) return default;
+            AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
+            return keep?.Guild != null && PvpCombatant.IsRealGuild(keep.Guild) ? IdsOf(keep.Guild) : default;
+        }
+
+        private static GuildIds GuildIdsOf(GameBot bot) => IdsOf(bot?.Guild);
+
+        private static GuildIds IdsOf(Guild guild) =>
+            guild == null ? default : new GuildIds(guild.GuildID, guild.alliance == null ? null : guild.alliance.DbAlliance?.ObjectId ?? guild.AllianceId);
+
+        /// <summary>
+        /// Splits every unit that mixes members of the keep's owner guild with others (the keep changed hands under it):
+        /// the owner-guild members leave the unit and its group with the <see cref="RecruitCooldownMilliseconds"/> rest,
+        /// the others stay, and the roster refills or replaces a unit left below its minimum as usual. Returns the
+        /// number of units split.
+        /// </summary>
+        private static int SplitKeepOwnerUnits(AutonomousBattlegroundParticipation.OpenCrewMember[] crew, GuildIds keepOwner, long now)
+        {
+            if (string.IsNullOrEmpty(keepOwner.GuildId)) return 0;
+            int split = 0;
+            foreach (IGrouping<int, AutonomousBattlegroundParticipation.OpenCrewMember> unit in crew.Where(member => !member.Leaving).GroupBy(member => member.Unit))
+            {
+                GameBot[] members = unit.Select(member => member.Bot).Where(bot => bot != null).ToArray();
+                GameBot[] owners = SplitForKeepOwner(members, GuildIdsOf, keepOwner);
+                if (owners.Length == 0) continue;
+                GameBot[] relieved = AutonomousBattlegroundParticipation.RelieveOpenMembers(unit.Key, owners, now);
+                if (relieved.Length == 0) continue;
+                lock (Sync)
+                    foreach (GameBot bot in relieved)
+                        RestingUntil[bot] = ExtendRest(RestingUntil.GetValueOrDefault(bot), now, RecruitCooldownMilliseconds);
+                split++;
+                Log.Info($"OPEN_BG_UNIT_SPLIT unit={unit.Key} reason=keep_owner_guild guild=\"{relieved[0].Guild?.Name}\" " +
+                    $"members=\"{string.Join(",", relieved.Select(bot => bot.Name))}\" remaining={members.Length - relieved.Length}");
+            }
+            return split;
         }
 
         // Active porters with a medallion merchant in reach, cached per region (see PorterCacheMilliseconds).

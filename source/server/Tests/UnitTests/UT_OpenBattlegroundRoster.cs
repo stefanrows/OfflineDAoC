@@ -440,5 +440,105 @@ namespace DOL.GS.Tests
                     Is.EqualTo("relieved"));
             });
         }
+
+        // Live run 0.243.0: the realmless crew guild "Bandit Farmers" (about 70 bots per realm) held keep 11. The keep's
+        // friend check reads the whole group, so one of its members made every unit-mate a keep friend and the
+        // attacking units defended instead.
+        private const string BanditFarmers = "bandit-farmers";
+        private const string Gatekeepers = "gatekeepers";
+        private const string FarmersAlliance = "farmers-alliance";
+        private static readonly OpenBattlegroundRoster.GuildIds FarmersOwnKeep = new(BanditFarmers, null);
+
+        private sealed record Bot(string Name, string Guild, string Alliance = null);
+
+        private static OpenBattlegroundRoster.GuildIds IdsOf(Bot bot) => new(bot.Guild, bot.Alliance);
+
+        [Test]
+        public void KeepOwnerGuildNeverJoinsAUnitOfOthers()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundRoster.MayJoinUnit(BanditFarmers, null, Gatekeepers, null, BanditFarmers, null), Is.False,
+                    "an owner-guild bot does not join another guild's unit");
+                Assert.That(OpenBattlegroundRoster.MayJoinUnit(Gatekeepers, null, BanditFarmers, null, BanditFarmers, null), Is.False,
+                    "nobody else joins an owner-guild unit");
+                Assert.That(OpenBattlegroundRoster.MayJoinUnit(null, null, BanditFarmers, null, BanditFarmers, null), Is.False,
+                    "a guildless bot is not the owner's either");
+                Assert.That(OpenBattlegroundRoster.MayJoinUnit(BanditFarmers, null, BanditFarmers, null, BanditFarmers, null), Is.True,
+                    "owner-guild bots form their own units");
+                Assert.That(OpenBattlegroundRoster.MayJoinUnit(Gatekeepers, null, null, null, BanditFarmers, null), Is.True);
+                Assert.That(OpenBattlegroundRoster.MayJoinUnit(BanditFarmers, null, Gatekeepers, null, null, null), Is.True,
+                    "anyone joins anyone while no guild owns the keep");
+                Assert.That(OpenBattlegroundRoster.MayJoinUnit(Gatekeepers, FarmersAlliance, Gatekeepers, null, BanditFarmers, FarmersAlliance), Is.False,
+                    "an allied guild counts as the owner's (the keep's friend check reads the alliance)");
+                Assert.That(OpenBattlegroundRoster.IsKeepOwnerGuild("BANDIT-FARMERS", null, BanditFarmers, null), Is.True, "ids compare without case");
+            });
+        }
+
+        [Test]
+        public void MixedCandidatesAreNeverGrouped()
+        {
+            Bot[] pool =
+            {
+                new("Aldenalhelm", BanditFarmers), new("Theaowen", Gatekeepers), new("Saoina", null), new("Sigearveig", BanditFarmers),
+                new("Isaiselle", Gatekeepers), new("Ally", "night-stalkers", FarmersAlliance),
+            };
+            var owner = new OpenBattlegroundRoster.GuildIds(BanditFarmers, FarmersAlliance);
+            string[] Mates(Bot anchor) => OpenBattlegroundRoster.UnitMates(anchor, pool.Where(bot => bot != anchor), IdsOf, owner)
+                .Select(bot => bot.Name).ToArray();
+            Assert.Multiple(() =>
+            {
+                Assert.That(Mates(pool[1]), Is.EqualTo(new[] { "Saoina", "Isaiselle" }), "a Gatekeepers leader picks no owner-guild or allied bot");
+                Assert.That(Mates(pool[0]), Is.EqualTo(new[] { "Sigearveig", "Ally" }), "an owner-guild leader picks only the owner's side");
+                Assert.That(OpenBattlegroundRoster.UnitMates(pool[1], pool.Where(bot => bot != pool[1]), IdsOf, default).Count(), Is.EqualTo(5),
+                    "an unowned keep restricts nobody");
+            });
+        }
+
+        [Test]
+        public void MixedUnitIsSplitWhenTheKeepChangesHands()
+        {
+            Bot[] unit =
+            {
+                new("Theaowen", "gatekeepers-3"), new("Aldenalhelm", BanditFarmers), new("Isaiselle", "gatekeepers-3"),
+                new("Saoina", null), new("Sigearveig", BanditFarmers), new("Ealdred", "gatekeepers-3"),
+            };
+            var gatekeepersOwn = new OpenBattlegroundRoster.GuildIds("gatekeepers-3", null);
+            Assert.Multiple(() =>
+            {
+                // Formed while another guild held the keep; Bandit Farmers then claimed it (KEEP_CLAIMED keep=11).
+                Assert.That(OpenBattlegroundRoster.SplitForKeepOwner(unit, IdsOf, default), Is.Empty, "nobody owns the keep");
+                Assert.That(OpenBattlegroundRoster.SplitForKeepOwner(unit, IdsOf, FarmersOwnKeep).Select(bot => bot.Name),
+                    Is.EqualTo(new[] { "Aldenalhelm", "Sigearveig" }), "the owner-guild members leave the unit");
+                Assert.That(OpenBattlegroundRoster.SplitForKeepOwner(unit, IdsOf, gatekeepersOwn).Select(bot => bot.Name),
+                    Is.EqualTo(new[] { "Theaowen", "Isaiselle", "Ealdred" }), "after the next claim, that owner's members leave");
+                Assert.That(OpenBattlegroundRoster.SplitForKeepOwner(unit.Where(bot => bot.Guild == BanditFarmers).ToArray(), IdsOf, FarmersOwnKeep),
+                    Is.Empty, "an owner-guild unit stays whole");
+                Assert.That(OpenBattlegroundRoster.SplitForKeepOwner(new[] { unit[1] }, IdsOf, FarmersOwnKeep), Is.Empty, "a solo is never split");
+            });
+        }
+
+        [Test]
+        public void OwnerGuildUnitDefendsAndOthersAssault()
+        {
+            // The keep's friend check with the group check on: one friend in the group makes the unit a keep friend.
+            static bool KeepEnemy(IEnumerable<Bot> members) =>
+                !members.Any(bot => OpenBattlegroundRoster.IsKeepOwnerGuild(bot.Guild, bot.Alliance, BanditFarmers, null));
+            Bot[] mixed = { new("Leader", Gatekeepers), new("Aldenalhelm", BanditFarmers), new("Theaowen", Gatekeepers) };
+            Bot[] others = mixed.Except(OpenBattlegroundRoster.SplitForKeepOwner(mixed, IdsOf, FarmersOwnKeep)).ToArray();
+            Bot[] owners = { new("Aldenalhelm", BanditFarmers), new("Sigearveig", BanditFarmers) };
+            var push = new OpenBgContext(OpenBgPhase.Push, eRealm.Albion, eRealm.Midgard, eRealm.Albion, 3, true);
+            OpenBgRole role = OpenBattlegroundRoles.Assign(push, 0);
+            Assert.Multiple(() =>
+            {
+                Assert.That(role, Is.EqualTo(OpenBgRole.Assault));
+                Assert.That(OpenBattlegroundRoles.ForKeepFriendship(role, true, KeepEnemy(mixed)), Is.EqualTo(OpenBgRole.Defend),
+                    "the 0.243.0 blocker: one owner-guild member turned the Albion assault into a defence");
+                Assert.That(OpenBattlegroundRoles.ForKeepFriendship(role, true, KeepEnemy(others)), Is.EqualTo(OpenBgRole.Assault),
+                    "after the split the rest of the unit assaults");
+                Assert.That(OpenBattlegroundRoles.ForKeepFriendship(role, true, KeepEnemy(owners)), Is.EqualTo(OpenBgRole.Defend),
+                    "an owner-guild unit defends its keep");
+            });
+        }
     }
 }
