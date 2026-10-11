@@ -266,9 +266,16 @@ namespace DOL.GS.Commands
                 $"{Count(bots, "outside")} outside; cap {status.Cap}. Setup per realm: {values.Groups8}x8, {values.Small} small, {values.Solos} solos.",
                 players.Length == 0 ? "Players inside: none."
                     : $"Players inside ({players.Length}): " + string.Join(", ", players.Select(player => $"{player.Name} {player.Level} {player.Realm}")) + ".",
+                GuestLine(status.Guests),
             };
             return lines.Select(Fit).ToList();
         }
+
+        /// <summary>The guest squads on a low human's level (spec 2026-10-11 §8), one entry per realm.</summary>
+        public static string GuestLine(OpenBgGuestStatus[] guests) =>
+            guests == null || guests.Length == 0 ? "Guest squads: none."
+                : $"Guest squads ({guests.Length}): " + string.Join(", ", guests.Select(guest =>
+                    $"{guest.Realm} level {guest.Level}, {guest.Alive}/{guest.Size} alive" + (string.IsNullOrEmpty(guest.Target) ? "" : $", hunting near {guest.Target}"))) + ".";
 
         /// <summary>Per realm a summary line, then one line per unit (wrapped): id, kind, leader, members with level and class.</summary>
         public static List<string> CrewLines(OpenBgStatusSnapshot status)
