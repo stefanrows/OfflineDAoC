@@ -255,7 +255,7 @@ tuning are unavailable.
 | The Lion's Den (235) | 5–9 | Unlimited | Server-built fort (keep 141) from native pieces; no gate or tower skin, so no door and no lord |
 | The Hills of Claret (236) | 10–14 | Unlimited | Server-built keep (keep 142) from native pieces; lord gating to verify |
 | Killaloe (237) | 15–19 | Unlimited | Keep row 138 gains server-built parts from native pieces |
-| Thidranki (238) | 20–24 | Unlimited | Server-built keep (keep 143) on a relaxed site: ground variance 183 (limit 200), lowest-ground Z, 5,888 units from the portal centre |
+| Thidranki (238) | 20–24 | Unlimited | Server-built keep (keep 143) on a relaxed site: ground variance 183 (limit 200), lowest-ground Z; 5,888 units from the centroid of the three portal keeps but 12,250 (Mid), 24,630 (Alb) and 31,870 (Hib) units from the landings, so the keep is out of NPC visibility (6,000) from every landing; lord and garrison on the door floor since bug 148 |
 | Murdaigean (251) | 25–29 | Unlimited | Native client keep; keep row, gates and gated lord added in source (pending verification) |
 | Wilton (240) | 30–34 | Unlimited | Server-built keep (keep 144) from native pieces; lord gating to verify |
 | Molvik (241) | 35–39 | Unlimited | Native lord kept; server-built parts added around keep 132 from native pieces |
