@@ -65,11 +65,11 @@ if [[ "$MODE" == "sites" ]]; then
   exit 0
 fi
 # Leirvik is zone254, region242. TestBG zone242 and the incomplete Braemar239
-# are deliberately excluded. Murdaigean251 supplies the25–29 bracket.
+# are deliberately excluded. Murdaigean251 supplies the25–29 bracket; Thidranki252 is the open BG.
 "$SCRIPT_DIR/winnet.sh" "$OUTPUT_ROOT/builder/OpenDAoC-BuildNav.dll" \
   "--daoc=$(wslpath -w "$CLIENT_ROOT")" \
   "--bg-keeps=$BG_KEEPS_WIN" \
-  --zones=165,234,235,236,237,238,240,241,251,254 --non-interactive 2>&1 | tee "$OUTPUT_ROOT/builder/build.log"
+  --zones=165,234,235,236,237,238,240,241,251,252,254 --non-interactive 2>&1 | tee "$OUTPUT_ROOT/builder/build.log"
 # Connectivity checker: the repo's Detour sources (uncapped path search, the same dtPolyRef width as the server).
 DETOUR_ROOT="$REPO_ROOT/source/development-tools/OpenDAoC-Core/Pathing/Detour"
 CONN_TOOL="$OUTPUT_ROOT/tools/bg-keep-connectivity"
@@ -85,7 +85,7 @@ import sys
 root = Path(sys.argv[1])
 bg_keeps = Path(sys.argv[2])
 conn_tool = sys.argv[3]
-zones = [165, 234, 235, 236, 237, 238, 240, 241, 251, 254]
+zones = [165, 234, 235, 236, 237, 238, 240, 241, 251, 252, 254]
 sources = [root / 'builder' / 'base' / 'zones' / f'zone{zone:03d}.nav' for zone in zones]
 for path in sources:
     with path.open('rb') as source:

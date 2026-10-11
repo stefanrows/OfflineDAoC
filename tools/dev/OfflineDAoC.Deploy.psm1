@@ -292,8 +292,8 @@ function Get-OfflineDaocDeployPlan {
         if (-not (Test-Path -LiteralPath $meshRoot -PathType Container)) {
             throw "Battleground mesh folder not found: $NavmeshBuild"
         }
-        # Deploy only the ten campaign zones; preserve the existing world meshes.
-        foreach ($zone in @(165, 234, 235, 236, 237, 238, 240, 241, 251, 254)) {
+        # Deploy only the campaign zones and the open BG; preserve the existing world meshes.
+        foreach ($zone in @(165, 234, 235, 236, 237, 238, 240, 241, 251, 252, 254)) {
             $fileName = 'zone{0:000}.nav' -f $zone
             $source = Join-Path $meshRoot $fileName
             if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {

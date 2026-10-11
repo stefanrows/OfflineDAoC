@@ -1689,6 +1689,21 @@
       "region": 251,
       "keepId": 43,
       "name": "Albion Portal Keep"
+    },
+    {
+      "region": 252,
+      "keepId": 12,
+      "name": "Hibernia Portal Keep"
+    },
+    {
+      "region": 252,
+      "keepId": 13,
+      "name": "Midgard Portal Keep"
+    },
+    {
+      "region": 252,
+      "keepId": 14,
+      "name": "Albion Portal Keep"
     }
   ]
 }

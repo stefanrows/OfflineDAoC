@@ -97,8 +97,8 @@ def main():
     for name in LAUNCHER_FILES:
         add(f'runtime/{name}', launcher / name)
     navs = sorted(navmesh.glob('zone*.nav'))
-    if len(navs) != 10:
-        sys.exit(f'Expected the ten battleground navmeshes in {navmesh}, found {len(navs)}.')
+    if len(navs) != 11:
+        sys.exit(f'Expected the eleven battleground navmeshes in {navmesh}, found {len(navs)}.')
     for nav in navs:
         add(f'runtime/server/pathing/{nav.name}', nav)
 
