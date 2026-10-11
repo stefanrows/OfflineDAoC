@@ -26,12 +26,21 @@ internal sealed partial class MainForm
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
         panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        // The status line was styled only by the removed RVR grid builder; style it here.
+        _rvrUpdated.Dock = DockStyle.Fill;
+        _rvrUpdated.AutoEllipsis = true;
+        _rvrUpdated.TextAlign = ContentAlignment.MiddleLeft;
+        _rvrUpdated.Font = DaocTheme.Fonts.Bold;
+        _rvrUpdated.ForeColor = DaocTheme.GoldLight;
+        _rvrUpdated.Padding = new Padding(8, 0, 0, 0);
         panel.Controls.Add(_rvrUpdated, 0, 0);
         var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true };
         _eventRealm.Items.AddRange(["All realms", "Albion", "Midgard", "Hibernia"]);
         _eventKind.Items.AddRange(["All events", "Keep", "Relic keep", "Relic", "Dragon", "Epic dungeon"]);
         _eventActingRealm.Items.AddRange(["Albion", "Midgard", "Hibernia"]);
         _eventRealm.SelectedIndex = _eventKind.SelectedIndex = _eventActingRealm.SelectedIndex = 0;
+        foreach (Control input in new Control[] { _eventRealm, _eventKind, _eventActingRealm, _eventSearch })
+            StyleInput(input);
         filters.Controls.AddRange([_eventRealm, _eventKind, _eventSearch, _eventActiveOnly,
             new Label { Text = "Select an event to inspect its assigned bots below", AutoSize = true, ForeColor = DaocTheme.GoldLight, Padding = new Padding(3, 6, 0, 0) }]);
         _eventRealm.SelectedIndexChanged += (_, _) => RenderRealmEvents();
@@ -62,6 +71,9 @@ internal sealed partial class MainForm
                 case "Forces": column.MinimumWidth = 190; break;
             }
         }
+        // Fill mode keeps every column, including the relic carrier, on screen without a horizontal
+        // scroll. Headers stay on one line: this list is short at the 620 px minimum window height.
+        UseFillColumns(_rvrObjectivesGrid, wrapHeaders: false);
         _rvrObjectivesGrid.CellFormatting += (_, e) =>
         {
             if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && _rvrObjectivesGrid.Columns[e.ColumnIndex].DataPropertyName == "PhaseRemainingMilliseconds" &&
@@ -113,10 +125,7 @@ internal sealed partial class MainForm
         _eventMembers.AllowUserToDeleteRows = false;
         _eventMembers.AutoGenerateColumns = false;
         _eventMembers.RowHeadersVisible = false;
-        _eventMembers.BackgroundColor = DaocTheme.StoneDark;
-        _eventMembers.EnableHeadersVisualStyles = false;
-        _eventMembers.ColumnHeadersDefaultCellStyle = _rvrGrid.ColumnHeadersDefaultCellStyle.Clone();
-        _eventMembers.DefaultCellStyle = _rvrGrid.DefaultCellStyle.Clone();
+        DaocTheme.StyleGrid(_eventMembers);
         foreach (var c in new[] { ("Name", "Name", 130), ("Realm", "Realm", 80), ("Group", "GroupId", 130), ("Zone", "Location", 140), ("X", "X", 70), ("Y", "Y", 70), ("Z", "Z", 65) })
             _eventMembers.Columns.Add(TextColumn(c.Item1, c.Item2, c.Item3));
         _eventMembers.Columns.Add(TextColumn("Current activity", "Activity", 260, DataGridViewAutoSizeColumnMode.Fill));
@@ -243,8 +252,7 @@ internal sealed partial class MainForm
                     var result = JsonSerializer.Deserialize<EventCommandResult>(await File.ReadAllTextAsync(resultPath));
                     if (result?.Id != id) continue;
                     _eventCommandStatus.Text = (result.Success ? "Applied: " : "Not applied: ") + result.Message;
-                    _nextRvrSnapshotRefreshUtc = DateTime.MinValue;
-                    RefreshRvrSnapshotIfDue();
+                    await RefreshRvrSnapshotAsync();
                     return;
                 }
                 catch (IOException) { }

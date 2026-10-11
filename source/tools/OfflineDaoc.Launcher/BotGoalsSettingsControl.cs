@@ -34,10 +34,10 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private readonly Label _total = new() { AutoSize = true };
     private readonly Label _population = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
-    private readonly Button _save = new() { Text = "Save settings", AutoSize = true };
-    private readonly Button _undo = new() { Text = "Undo edits", AutoSize = true };
-    private readonly Button _defaults = new() { Text = "Restore defaults", AutoSize = true };
-    private readonly Button _applyMix = new() { Text = "Apply mix to existing bots", AutoSize = true };
+    private readonly Button _save = DaocTheme.ToolButton("Save settings");
+    private readonly Button _undo = DaocTheme.ToolButton("Undo edits");
+    private readonly Button _defaults = DaocTheme.ToolButton("Restore defaults");
+    private readonly Button _applyMix = DaocTheme.ToolButton("Apply mix to existing bots");
     private readonly System.Windows.Forms.Timer _poll = new() { Interval = 2000 };
     private BotGoalSettings _saved = BotGoalSettings.Defaults;
     private bool _loading, _loadFailed, _savedFile, _legacyMapping;
@@ -59,6 +59,10 @@ internal sealed class BotGoalsSettingsControl : UserControl
         BackColor = DaocTheme.Panel;
         ForeColor = DaocTheme.Text;
         AutoScroll = true;
+        foreach (ComboBox choice in new[] { _preset, _danger, _worldShape })
+            DaocTheme.StyleInput(choice);
+        foreach (NumericUpDown number in new[] { _altHours, _altCap })
+            DaocTheme.StyleNumeric(number);
         var body = new FlowLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown,
@@ -84,11 +88,11 @@ internal sealed class BotGoalsSettingsControl : UserControl
             int captured = index;
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
             var typeLabel = new Label { Text = TypeNames[index], Width = 130, Height = 35, TextAlign = ContentAlignment.MiddleLeft };
-            var slider = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, Width = 390,
+            var slider = new DaocTrackBar { Minimum = 0, Maximum = 100, Width = 390,
                 Height = 42, AccessibleName = TypeNames[index] + " percentage" };
             var value = new NumericUpDown { Minimum = 0, Maximum = 100, Width = 64,
-                BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text,
                 AccessibleName = TypeNames[index] + " exact percentage" };
+            DaocTheme.StyleNumeric(value);
             var percentLabel = new Label { Text = "%", AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
             _toolTips.SetToolTip(typeLabel, TypeToolTips[index]);
             _toolTips.SetToolTip(slider, TypeToolTips[index]);

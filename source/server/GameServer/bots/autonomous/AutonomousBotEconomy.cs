@@ -1001,4 +1001,18 @@ public sealed class OfflineWorldBotRecord : DataObject
     [DataElement(AllowDbNull = false)] public string NoTargetsSinceUtc { get; set; } = string.Empty;
     [DataElement(AllowDbNull = false)] public string RecentPvpDeathWindowUtc { get; set; } = string.Empty;
     [DataElement(AllowDbNull = false)] public int RecentPvpDeaths { get; set; }
+    // Additive PvP kill credit and death counters with the same names as the
+    // DOLCharacters columns that the Herald leaderboard reads for players. The
+    // SQLite schema reconciler adds them to an existing offline_world_bots table
+    // as NOT NULL DEFAULT 0, so saved autonomous bots keep their rows and start at zero.
+    [DataElement(AllowDbNull = false)] public int KillsAlbionPlayers { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsMidgardPlayers { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsHiberniaPlayers { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsAlbionDeathBlows { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsMidgardDeathBlows { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsHiberniaDeathBlows { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsAlbionSolo { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsMidgardSolo { get; set; }
+    [DataElement(AllowDbNull = false)] public int KillsHiberniaSolo { get; set; }
+    [DataElement(AllowDbNull = false)] public int DeathsPvP { get; set; }
 }

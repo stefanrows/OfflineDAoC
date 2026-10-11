@@ -2092,7 +2092,7 @@ namespace DOL.GS.ServerRules
             // Persistent companions earn realm points and PvP experience through
             // the same award paths as autonomous bots (see AwardBotOnPlayerKill).
             foreach (var pair in companionCountAndDamage)
-                AwardCompanionRealmPointsOnPlayerKill(pair.Key, totalDamage, killedPlayer,
+                AwardCompanionRealmPointsOnPlayerKill(pair.Key, totalDamage, killedPlayer, killer,
                     companionCountAndDamage, groupCountAndDamage, out isWorthAnything);
 
             killedPlayer.DeathsPvP++;
@@ -2292,6 +2292,13 @@ namespace DOL.GS.ServerRules
 
             if (realmPoints > 0)
                 botToAward.GainRealmPoints(realmPoints, true);
+
+            // Kill credit follows the realm point award: the same worth check, the victim's
+            // realm, a death blow for the resolved killer, and a solo kill when one contributor
+            // dealt all of the damage.
+            botToAward.CreditPvpKill(killedPlayer.Realm,
+                ReferenceEquals(botToAward, AutonomousBotRealmPointRewards.ResolveRootRewardOwner(killer as GameLiving)),
+                BotPvpKillStats.IsSoloKill(damagePercent, contributorCount));
         }
 
         // Persistent companions use this same formula, GainRealmPoints path and
@@ -2300,6 +2307,7 @@ namespace DOL.GS.ServerRules
         private static void AwardCompanionRealmPointsOnPlayerKill(GameBot companion,
             double playerTotalDamageReceived,
             GamePlayer killedPlayer,
+            GameObject killer,
             Dictionary<GameBot, EntityCountTotalDamagePair> companionCountAndDamage,
             Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
             out bool isWorthAnything)
@@ -2344,6 +2352,11 @@ namespace DOL.GS.ServerRules
 
             if (realmPoints > 0)
                 companion.GainRealmPoints(realmPoints, true);
+
+            // Same kill credit rule as the autonomous bot path above.
+            companion.CreditPvpKill(killedPlayer.Realm,
+                ReferenceEquals(companion, AutonomousBotRealmPointRewards.ResolveRootRewardOwner(killer as GameLiving)),
+                BotPvpKillStats.IsSoloKill(damagePercent, contributorCount));
         }
 
         private static void AwardPlayerOnPlayerKill(GamePlayer playerToAward,

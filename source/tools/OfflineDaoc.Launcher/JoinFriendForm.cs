@@ -37,6 +37,7 @@ internal sealed class JoinFriendForm : Form
         Accent = Color.FromArgb(104, 111, 77),
         Margin = new Padding(4),
     };
+    private readonly Icon? _windowIcon;
     private readonly Button _closeButton = new RuneButton
     {
         Text = "CLOSE",
@@ -46,6 +47,13 @@ internal sealed class JoinFriendForm : Form
         Margin = new Padding(4),
         DialogResult = DialogResult.Cancel,
     };
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+            _windowIcon?.Dispose();
+    }
 
     public JoinFriendForm()
     {
@@ -57,6 +65,8 @@ internal sealed class JoinFriendForm : Form
         ForeColor = DaocTheme.Text;
         Font = new Font("Georgia", 8.5f);
         AutoScaleMode = AutoScaleMode.Dpi;
+        _windowIcon = LauncherIcon.Create();
+        if (_windowIcon is not null) Icon = _windowIcon;
 
         var frame = new StoneSurface { Dock = DockStyle.Fill, Padding = new Padding(14) };
         Controls.Add(frame);

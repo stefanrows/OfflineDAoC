@@ -3643,12 +3643,16 @@ namespace DOL.GS
                     Out.SendMessage(LanguageMgr.GetTranslation(Client.Account.Language, "GamePlayer.GainRealmPoints.ReachedRank", (RealmLevel / 10) + 1), eChatType.CT_ScreenCenter, eChatLoc.CL_SystemWindow);
                     Out.SendMessage(LanguageMgr.GetTranslation(Client.Account.Language, "GamePlayer.GainRealmPoints.NewRealmTitle", RealmRankTitle(Client.Account.Language)), eChatType.CT_System, eChatLoc.CL_SystemWindow);
                     Out.SendMessage(LanguageMgr.GetTranslation(Client.Account.Language, "GamePlayer.GainRealmPoints.GainBonus", RealmLevel / 10), eChatType.CT_System, eChatLoc.CL_SystemWindow);
-                    foreach (GamePlayer plr in GetPlayersInRadius(WorldMgr.VISIBILITY_DISTANCE))
-                        plr.Out.SendLivingDataUpdate(this, true);
+                    ResendLivingStringsToNearbyPlayers();
                     Notify(GamePlayerEvent.RRLevelUp, this);
                 }
                 else
+                {
+                    // Nameplates show the realm level too ("RR 2L5"); an RR-up already resent the strings above.
+                    if (RealmRankNameplate.Enabled)
+                        ResendLivingStringsToNearbyPlayers();
                     Notify(GamePlayerEvent.RLLevelUp, this);
+                }
                 if (GameServer.ServerRules.CanGenerateNews(this) && ((RealmLevel >= 40 && RealmLevel % 10 == 0) || RealmLevel >= 60))
                 {
                     string newsmessage = LanguageMgr.GetTranslation(Client.Account.Language, "GamePlayer.GainRealmPoints.ReachedRankNews", Name, RealmLevel + 10, LastPositionUpdateZone.Description);
@@ -3658,6 +3662,16 @@ namespace DOL.GS
 
             Out.SendUpdatePoints();
             BattlegroundCampaignPolicy.CheckProgress(this);
+        }
+
+        /// <summary>
+        /// Re-sends this player's guild and last-name strings to nearby players, so their nameplates show the
+        /// current realm rank. Used for rank-ups and, while the nameplate property is on, every realm level.
+        /// </summary>
+        private void ResendLivingStringsToNearbyPlayers()
+        {
+            foreach (GamePlayer plr in GetPlayersInRadius(WorldMgr.VISIBILITY_DISTANCE))
+                plr.Out.SendLivingDataUpdate(this, true);
         }
 
         /// <summary>

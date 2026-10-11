@@ -293,6 +293,39 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+122. **Camlann Herald, bot kill counters, realm rank nameplates and a
+     launcher facelift.** Owner, 2026-10-11, inspired by another fork's herald
+     and "Name | RR 2L5" nameplates. Implemented in source **0.252.0**:
+     launcher HERALD window (rankings, guilds, keeps & relics, titles, server
+     statistics) reading the save read-only; PvP kill/death-blow/solo/death
+     counters for autonomous gamebots and persistent companions (additive
+     columns, credited only with realm points); `show_realm_rank_nameplates`
+     (default off, XP Settings checkbox) adding the rank to bot names and the
+     player last-name slot in outgoing packets only; launcher facelift (tabs
+     and grids fit from 960 px, shared dark styles, icon, off-UI-thread
+     polls, dead RvR code removed, LauncherLayoutCheck fixed). Static RE of
+     game.dll (baseline 67dcf68a): NPC create strings fit 47 characters,
+     player create strings must stay <= 31, '|' has no markup meaning.
+     Server and launcher Release builds verified; launcher tests 242/242 on
+     the merged tree; focused server tests (UT_BotPvpKillStats 18,
+     UT_RealmRankNameplate 16) pass; full server suite showed the same 7
+     failures as clean HEAD. Checks pending: first start rebuilds
+     `offline_world_bots`/`player_companions` without losing rows; bot and
+     companion kill counters rise in RvR and show in the Herald; with the
+     setting on, gamebot/companion nameplates read "Name | RR xLy", the
+     player rank shows in the last-name slot (and whether the client draws
+     last names below RR5), no target flicker on rank-up, `/target`, `/send`
+     and group invites still work by plain name; launcher look at the active
+     Windows DPI, custom sliders respond in a real window.
+
+121. **Hide companions in the launcher's PvP bot population list.** Owner,
+     2026-10-11. Implemented in source **0.252.0**: companions (including
+     legacy `/bot` rows) are filtered out by default; a COMPANIONS checkbox
+     beside ONLINE ONLY shows them again. Checks pending: the list shows only
+     autonomous gamebots, ticking COMPANIONS brings companion rows back and
+     lets DELETE CHARACTER… select them, and DELETE ORPHANED COMPANIONS…
+     still enables while they are hidden.
+
 120. **COMPANIONS window: a native bar with the stance orders, Pet pull, Stay,
      PULL, a Manager shortcut, and each group member's health, level and
      stance.** Owner request 2026-10-11; planner defaults adopted: the window

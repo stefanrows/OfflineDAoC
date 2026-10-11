@@ -1378,6 +1378,13 @@ namespace DOL.GS.ServerProperties
 		[ServerProperty("pvp", "bg_release_to_portal_keep", "Whether releasing in a battleground should teleport the player to the portal keep", false)]
 		public static bool BG_RELEASE_TO_PORTAL_KEEP;
 
+		/// <summary>
+		/// Show the realm rank (RR xLy) after the names of autonomous bots, persistent companions and players
+		/// on overhead nameplates. Presentation only: stored names are never changed. Read by RealmRankNameplate.
+		/// </summary>
+		[ServerProperty("pvp", "show_realm_rank_nameplates", "Show realm rank (RR xLy) after the names of gamebots, companions and players on nameplates. Presentation only.", false)]
+		public static bool SHOW_REALM_RANK_NAMEPLATES;
+
 		#endregion
 
 		#region Daily / Weekly / Monthly / Beetle Quest

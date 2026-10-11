@@ -241,6 +241,10 @@ public static class AutonomousBotRealmPointRewards
                 totalDamage, damagePercent);
             if (experience > 0)
                 bot.GainExperience(eXPSource.Player, experience, true);
+
+            // Kill credit follows the realm point award above (worth-it kills only).
+            bot.CreditPvpKill(killedBot.Realm, ReferenceEquals(bot, creditedKiller),
+                BotPvpKillStats.IsSoloKill(damagePercent, contributorCount));
         }
 
         // Same reward formula, GainRealmPoints and GainExperience paths as autonomous
@@ -270,6 +274,10 @@ public static class AutonomousBotRealmPointRewards
                 totalDamage, damagePercent);
             if (experience > 0)
                 companion.GainExperience(eXPSource.Player, experience, true);
+
+            // Same kill credit rule as the autonomous bot loop above.
+            companion.CreditPvpKill(killedBot.Realm, ReferenceEquals(companion, creditedKiller),
+                BotPvpKillStats.IsSoloKill(damagePercent, contributorCount));
         }
 
         return isWorthRealmPoints;

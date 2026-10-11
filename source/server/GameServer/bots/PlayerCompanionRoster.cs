@@ -924,6 +924,7 @@ namespace DOL.GS
                     long previousPoints = record.RealmPoints;
                     record.SerializedRealmAbilities = CompanionRealmAbilityTraining.Serialize(allocations);
                     record.RealmPoints = Math.Max(record.RealmPoints, realmPoints);
+                    live?.CopyPvpKillStatsTo(record);
                     record.UpdatedUtc = DateTime.UtcNow.ToString("O");
                     record.Dirty = true;
                     if (!SaveRecord(record))
@@ -2093,6 +2094,7 @@ namespace DOL.GS
             record.Level = Math.Clamp((int)companion.Level, 1, 50);
             record.Experience = Math.Max(0, companion.Experience);
             record.RealmPoints = Math.Max(0, companion.CompanionRealmPoints);
+            companion.CopyPvpKillStatsTo(record);
             record.SerializedSpecs = string.Join(';', companion.GetSpecList()
                 .Where(spec => spec.Trainable).Select(spec => $"{spec.KeyName}|{spec.Level}"));
             record.SerializedBuildPlan = companion.BotSpec == null ? string.Empty : BotLifetimeBuild.Encode(companion.BotSpec);

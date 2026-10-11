@@ -12,6 +12,53 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.252.0] - 2026-10-11
+
+### Added
+
+- Camlann Herald in the launcher: a HERALD button opens a read-only
+  ranking and statistics window over the save (also while the server runs,
+  read once on open and on REFRESH). Rankings for players, gamebots and
+  companions by realm points, kills, deaths, death blows or solo kills, with
+  type, realm, class, count and name filters and a per-character profile;
+  guilds (members, member RP, claimed keeps); keeps and relics; PvP kill and
+  keep titles with their holders; server statistics (realm balance bars,
+  class donuts per realm, level distribution). Characters hidden with
+  `/statsanon` or `/anonymous` are left out.
+- Autonomous gamebots and persistent companions keep PvP kill counters like
+  players: kills, death blows and solo kills per victim realm, and PvP
+  deaths. They move only where the bot is credited realm points for a kill;
+  RP and XP awards are unchanged. New columns on `offline_world_bots` and
+  `player_companions` start at 0; the first start of this build rebuilds
+  both tables once, keeping every row.
+- Realm rank on nameplates (`show_realm_rank_nameplates`, off by default;
+  launcher XP Settings checkbox, applies at the next server start):
+  gamebots and companions show "Name | RR 2L5", players get the rank in the
+  last-name slot. Only the outgoing packets change; stored names, last
+  names and guilds are untouched. Temporary group helpers and battleground
+  bots keep plain names. A bot's nameplate refreshes when its realm level
+  changes.
+
+### Changed
+
+- The launcher's PvP bot population list hides companions by default; a
+  COMPANIONS checkbox beside ONLINE ONLY shows them again (needed to select
+  one for DELETE CHARACTER…). DELETE ORPHANED COMPANIONS… still finds
+  orphans while they are hidden.
+- Launcher facelift: all nine tabs fit in one row from 960 px (title-case
+  labels, gold underline), the population and group grids fit the window,
+  one shared dark grid style, dark context menu, styled buttons, inputs,
+  sliders and checkboxes, a window icon from the realm shield, the header
+  ampersands show ("PVP & CO-OP") and the title steps down a size on narrow
+  windows, XP Settings scrolls on short windows. The per-second world-speed
+  and 30-second RvR file reads moved off the UI thread.
+- LauncherLayoutCheck now checks the real ADD CREW buttons and tab fit and
+  fails when it finds nothing to check.
+
+### Removed
+
+- The launcher's unused Active RvR panel code.
+
 ## [0.251.0] - 2026-10-11
 
 ### Added

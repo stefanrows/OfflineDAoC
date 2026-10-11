@@ -413,6 +413,16 @@ a PvP kill's loot owner; its personal gear still comes only from
 `PlayerCompanionGearRewards`. Temporary `/spawn` helpers remain excluded
 from both PvP XP and Realm Points.
 
+Persistent companions and autonomous world bots also keep the PvP kill and death
+counters that players keep: the `Kills{Albion,Midgard,Hibernia}Players`,
+`...DeathBlows` and `...Solo` columns and `DeathsPvP`, saved under the same names on
+`PlayerCompanionRecord` and `offline_world_bots`. The kill counters move only where the bot
+earns Realm Points for a worth-it kill. The victim's realm selects the column, the
+resolved killer takes the death blow (a controlled pet credits its root owner, as it
+does for Realm Points), and a solo kill needs one contributor who dealt all of the
+damage. A death counts as PvP when a credited player, autonomous bot or companion
+did damage. `/spawn` helpers and battleground encounter bots keep no counters.
+
 The owner can earn PvP XP and Realm Points from qualifying personal damage or
 damage by a controlled pet credited to that player. Damage dealt by a
 persistent companion stays in the encounter's damage total but is not

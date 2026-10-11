@@ -17,9 +17,9 @@ internal sealed class OpenBgSettingsControl : UserControl
     private readonly Dictionary<string, NumericUpDown> _numbers = new();
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
     private readonly Label _live = new() { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 12, 3, 3) };
-    private readonly Button _save = new() { Text = "Save", AutoSize = true };
-    private readonly Button _undo = new() { Text = "Undo edits", AutoSize = true };
-    private readonly Button _defaults = new() { Text = "Restore defaults", AutoSize = true };
+    private readonly Button _save = DaocTheme.ToolButton("Save");
+    private readonly Button _undo = DaocTheme.ToolButton("Undo edits");
+    private readonly Button _defaults = DaocTheme.ToolButton("Restore defaults");
     private readonly System.Windows.Forms.Timer _poll = new() { Interval = 2000 };
     private OpenBgSettings _saved = OpenBgSettings.Defaults;
     private bool _loading, _loadFailed, _wasStopped = true;
@@ -37,6 +37,8 @@ internal sealed class OpenBgSettingsControl : UserControl
         BackColor = DaocTheme.Panel;
         ForeColor = DaocTheme.Text;
         AutoScroll = true;
+        DaocTheme.StyleCheckBox(_enabled);
+        DaocTheme.StyleCheckBox(_drift);
         var body = new FlowLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown,
@@ -51,8 +53,8 @@ internal sealed class OpenBgSettingsControl : UserControl
         foreach (string name in NumberFields)
         {
             OpenBgField field = OpenBgSettings.Field(name);
-            var number = new NumericUpDown { Minimum = field.Min, Maximum = field.Max, Width = 80,
-                BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text, AccessibleName = field.Label };
+            var number = new NumericUpDown { Minimum = field.Min, Maximum = field.Max, Width = 80, AccessibleName = field.Label };
+            DaocTheme.StyleNumeric(number);
             _numbers[name] = number;
             number.ValueChanged += (_, _) => Edited();
             body.Controls.Add(NumberRow(number, field));
