@@ -314,6 +314,37 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void OpenBattlegroundCrewNeverEnlistsInWorldEvents()
+        {
+            // Review finding 1: an open 8-man past its assembly was registered for a frontier siege.
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(false, false), Is.True, "an ordinary warband");
+                Assert.That(AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(true, false), Is.False,
+                    "assigned and travelling to its porter (a solo, or a member outside)");
+                Assert.That(AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(false, true), Is.False,
+                    "an open-BG roster group, also once its leader is inside");
+                Assert.That(AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(true, true), Is.False);
+            });
+        }
+
+        [Test]
+        public void AnOpenGroupBoardsOnlyWholeAfterItsAssembly()
+        {
+            // Review finding 2: a porter cast during the muster boarded the leader alone.
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoard(false, 8, 8), Is.True, "assembled, all eight in the circle");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoard(true, 8, 8), Is.False,
+                    "still in leader staging or meeting up: nobody boards, even standing in the muster slots");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoard(false, 8, 1), Is.False, "the leader alone never boards");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoard(false, 8, 7), Is.False, "one member still outside");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoard(false, 6, 6), Is.True, "a dead member does not hold the rest");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoard(false, 0, 0), Is.False, "nobody left to board");
+            });
+        }
+
+        [Test]
         public void FrontierMerchantOffsetsAreDistinct()
         {
             (int dx, int dy)[] offsets = FrontierMedallionMerchants.MerchantOffsets().ToArray();

@@ -89,8 +89,9 @@ namespace DOL.GS
 
         /// <summary>
         /// Per realm: relieve one unit when its relief is due (the longest-serving group, or a quarter of the solos
-        /// when a solo serves longest), relieve units above a lowered setup, then add missing units in realm
-        /// round-robin order (fewest bots first) while they fit under the cap. Never throws for a cap below the setup.
+        /// when a solo serves longest), relieve units above a lowered setup, relieve units above a lowered cap until the
+        /// bots that stay fit under it, then add missing units in realm round-robin order (fewest bots first) while they
+        /// fit under the cap. Never throws for a cap below the setup.
         /// </summary>
         public static OpenBgPlan Plan(OpenBgSetup setup, IReadOnlyList<RealmCount> present)
         {
@@ -117,6 +118,7 @@ namespace DOL.GS
                     Remaining(OpenBgUnitKind.Solo, setup.Solos),
                 };
             }
+            CapSurplusPick(present, cap, relieved);
 
             // Relieved bots stay until they have walked out, so they still hold their seats this tick.
             int free = cap - total;
@@ -169,6 +171,25 @@ namespace DOL.GS
             if (surplus <= 0) return Array.Empty<int>();
             return kept.OrderBy(unit => unit.Inside ? 1 : 0).ThenByDescending(unit => unit.InsideSinceTick).ThenByDescending(unit => unit.Id)
                 .Take(surplus).Select(unit => unit.Id).ToArray();
+        }
+
+        // A lowered cap: while the bots that stay (neither relieved nor already leaving) exceed it, one more unit goes,
+        // taken from the realm that keeps the most bots so the shed is spread over the realms; within that realm
+        // travelling units first, then the most recently entered.
+        private static void CapSurplusPick(IReadOnlyList<RealmCount> present, int cap, Dictionary<eRealm, List<int>> relieved)
+        {
+            int Kept(RealmCount realm) => realm.Units.Where(unit => !relieved[realm.Realm].Contains(unit.Id)).Sum(unit => unit.Size);
+            while (present.Sum(Kept) > cap)
+            {
+                RealmCount realm = present.Where(count => Kept(count) > 0).OrderByDescending(Kept)
+                    .ThenBy(count => Array.IndexOf(RealmOrder, count.Realm) is int index && index >= 0 ? index : int.MaxValue)
+                    .FirstOrDefault();
+                if (realm == null) return;
+                OpenBgUnit unit = realm.Units.Where(candidate => !relieved[realm.Realm].Contains(candidate.Id))
+                    .OrderBy(candidate => candidate.Inside ? 1 : 0).ThenByDescending(candidate => candidate.InsideSinceTick)
+                    .ThenByDescending(candidate => candidate.Id).First();
+                relieved[realm.Realm].Add(unit.Id);
+            }
         }
 
         /// <summary>Realm counts from participation entries. Bracket entries and entries without a roster unit are ignored.</summary>
@@ -398,7 +419,7 @@ namespace DOL.GS
                 if (!AutonomousBotGroupCoordinator.TryFormOpenBattlegroundParty(leader, others, muster, porter.Name,
                         out Group group, out string groupId, out string reason))
                 {
-                    Log.Info($"OPEN_BG_GROUP_FAILED realm={admit.Realm} kind={Describe(admit.Kind)} leader=\"{leader.Name}\" size={others.Length + 1} reason=\"{reason}\"");
+                    Log.Info($"OPEN_BG_GROUP_FAILED realm={RealmName(admit.Realm)} kind={Describe(admit.Kind)} leader=\"{leader.Name}\" size={others.Length + 1} reason=\"{reason}\"");
                     continue;
                 }
                 GameBot[] members = group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
@@ -422,7 +443,7 @@ namespace DOL.GS
             lock (Sync) id = ++_nextUnit;
             if (!AutonomousBattlegroundParticipation.AssignOpenUnit(id, label, members, group, now)) return false;
             lock (Sync) Units[id] = new UnitInfo { Id = id, Realm = admit.Realm, Kind = admit.Kind, Group = group };
-            Log.Info($"OPEN_BG_UNIT_ASSIGNED realm={admit.Realm} unit={id} kind={Describe(admit.Kind)} group=\"{label}\" size={members.Length} " +
+            Log.Info($"OPEN_BG_UNIT_ASSIGNED realm={RealmName(admit.Realm)} unit={id} kind={Describe(admit.Kind)} group=\"{label}\" size={members.Length} " +
                 $"leader=\"{members[0].Name}\" members=\"{string.Join(",", members.Select(member => member.Name))}\"");
             return true;
         }
@@ -510,12 +531,21 @@ namespace DOL.GS
             _ => "solo",
         };
 
+        // eRealm.Albion shares its value with _FirstPlayerRealm, so ToString() prints the alias.
+        public static string RealmName(eRealm realm) => realm switch
+        {
+            eRealm.Albion => "Albion",
+            eRealm.Midgard => "Midgard",
+            eRealm.Hibernia => "Hibernia",
+            _ => realm.ToString(),
+        };
+
         private static void LogRoster(OpenBgSetup setup, IReadOnlyList<RealmCount> counts, OpenBgPlan plan)
         {
             foreach (RealmCount realm in counts)
             {
                 int inside = realm.Units.Where(unit => unit.Inside).Sum(unit => unit.Size);
-                Log.Info($"OPEN_BG_ROSTER realm={realm.Realm} groups8={realm.Groups8}/{setup.Groups8} small={realm.GroupsSmall}/{setup.GroupsSmall} " +
+                Log.Info($"OPEN_BG_ROSTER realm={RealmName(realm.Realm)} groups8={realm.Groups8}/{setup.Groups8} small={realm.GroupsSmall}/{setup.GroupsSmall} " +
                     $"solos={realm.Solos}/{setup.Solos} present={inside} assigned={realm.Bots} leaving={realm.LeavingBots} " +
                     $"total={plan.Present} cap={plan.Cap} cap_binds={plan.CapBinds}");
             }

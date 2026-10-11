@@ -450,7 +450,10 @@ namespace DOL.GS
                     // it may open or join a siege, so it does not set out scattered (bug 75).
                     bool assemblingWarband = _groupDirective?.IsDynamic == true &&
                         AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase);
-                    if (_rvrDestination == null && nowTick >= _nextRvrPlanReview && !assemblingWarband)
+                    // An open-BG unit or an assigned battleground participant travels to its porter; it never
+                    // reviews a world destination that could enlist it in a siege as a phantom force.
+                    if (_rvrDestination == null && nowTick >= _nextRvrPlanReview && !assemblingWarband &&
+                        AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(bot))
                     {
                         _nextRvrPlanReview = nowTick + 45_000;
                         _rvrDestination = ChooseRvrDestinationTimed(bot);
@@ -2712,6 +2715,15 @@ namespace DOL.GS
                 AutonomousPlayerType.KeepWarrior => 5,
                 _ => 30,
             };
+            if (!AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(bot))
+            {
+                // Open-BG crew and battleground participants roam alone; they never register a force in a world event.
+                _rvrSharedEvent = false;
+                _rvrIntent = AutonomousRvrEventLayer.Intent.Roam;
+                bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
+                bot.TempProperties.SetProperty("RvrDefendingKeep", -1);
+                return ChooseRoamDestination(bot, choices);
+            }
             AutonomousRvrEventLayer.Plan plan = AutonomousRvrEventLayer.ChooseOrJoin(
                 new AutonomousRvrEventLayer.Force(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}", bot.Realm,
                     warband.Length, averageLevel, healers, siegeReady,
