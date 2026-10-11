@@ -12,15 +12,58 @@ package, not this fork's version.
 
 ## [Unreleased]
 
-- Merged on main after the 0.241.0 release commit, not yet built as a package
-  or deployed (night of 2026-10-11; to be shipped as 0.242.0): open BG stages
-  2-3 (phase director, roles, player drift, `/bgsetup` window, launcher tab
-  "open BG"), roster review fixes (no world siege enlistment, whole-group
-  boarding, cap shedding), the rival-hunt stale-group fix (bug 152 filed),
-  `/bgsetup` in the command reference. Guest squads and Pazz dailies 1-50
-  (tasks 11-12) sit on tag `open-bg-tasks-11-12`; their merge conflicts in
-  `BattlegroundCampaignManager.cs` (guest timer beside the director timer)
-  and must be resolved first.
+## [0.242.0] - 2026-10-11
+
+### Added
+
+- open BG, stages 2–4: a phase director runs a random 15–45 game-minute
+  cycle quiet → push → keep fight → retreat with an attacking realm
+  (`OPEN_BG_PHASE`); crew units get roles (bridge watch at the realm's own
+  bridge, roamers away from the bridges, solos lurking 300–800 units off a
+  bridge, assault, defend, retreat; `OPEN_BG_ROLE`) that the battleground
+  driver follows for open BG participants only; light player drift (roam and
+  lurk points visit a human once per cycle, never within 800 units); 40+
+  crew bots ignore humans under 30 unless attacked, also in the class
+  brain's crowd-control and area-stun scans. `/bgsetup` (GM) opens a
+  `/companion`-style window with the live state (phase, attacker, keep
+  owner, world speed, crew per realm with name, level, class, unit, leader,
+  guest squads, players inside) and the setup values; `/bgsetup <key>
+  <value>` writes the `open_bg_*` property and refreshes it live. Launcher
+  tab "open BG" with the same keys (save while stopped) and a live block from
+  `open-bg-status.json`. Guest squads: while a player under 40 is inside,
+  each realm gets a non-persistent 3–5 bot squad on that player's level that
+  hunts in the player's half of the map (`OPEN_BG_GUEST`); the campaign's
+  own squads in 252 stay at 40–50 and never target players under 40. The
+  Thidranki dailies (Pazz) accept levels 1–50.
+
+### Fixed
+
+- open BG crew, from the first live run: bots stranded on small navmesh
+  islands near the portal-keep gates are moved back to their landing
+  (`AUTONOMOUS_BG_ISLAND_RECOVERY`) and route failures are logged once per
+  bot per minute; the roster counts members, so an 8-man below six or a
+  small group below two is relieved and refilled; assigned crew members on
+  their way to the porter fight only in self-defence (no observe, hunt,
+  retreat or opportunity scan); a member that dies or is recovered before
+  boarding stays in its unit; a group boards whole after assembly, but after
+  three game minutes the ready members board and stragglers are dropped;
+  released bots rest at the landing to 80 % before their next order; crews
+  never enlist in world sieges; a lowered `open_bg_max_bots` sheds bots.
+- The open BG switch also gates zone transfers and login into region 252.
+- A bot whose group no longer listed it threw `Sequence contains no
+  elements` every 15 s in rival-hunt planning; it now plans as its own party
+  (bug 152 filed for the stale reference).
+- The "no bracket" candidate test really passes a null definition.
+
+### Changed
+
+- Live check of 0.241.0 (03:10–06:25, 20× selected, 3.7–9× achieved): the
+  crew held ~37 bots, 189 entries, 163 reliefs, 189 PvP deaths inside 252;
+  Darkness Falls `No legal region route` fell from 190 per 54 min to 19 per
+  2 h 43 min with 212 productive hunts; PvE releases went to home binds
+  (770) or the nearest own stone (3,129), none to Svasud; siege quorum
+  marches 28, lead handovers 379, relaxed army floors 115, keep arrivals 63,
+  claims 2.
 
 ## [0.241.0] - 2026-10-11
 
