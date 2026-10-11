@@ -87,11 +87,26 @@ namespace DOL.GS
             _ => 1,
         };
 
+        /// <summary>The fewest members a unit of this kind fights with: six for an 8-man, two for a small group, one solo.</summary>
+        public static int MinimumSize(OpenBgUnitKind kind) => kind switch
+        {
+            OpenBgUnitKind.Group8 => Group8Minimum,
+            OpenBgUnitKind.Small => SmallGroupMin,
+            _ => 1,
+        };
+
+        /// <summary>
+        /// A group that lost members below its kind's minimum (an 8-man of three, a small group of one) no longer
+        /// counts as that unit: the plan relieves it and forms a new one. An 8-man formed with six is whole.
+        /// </summary>
+        public static bool IsBelowMinimum(OpenBgUnit unit) => unit.Size < MinimumSize(unit.Kind);
+
         /// <summary>
         /// Per realm: relieve one unit when its relief is due (the longest-serving group, or a quarter of the solos
         /// when a solo serves longest), relieve units above a lowered setup, relieve units above a lowered cap until the
         /// bots that stay fit under it, then add missing units in realm round-robin order (fewest bots first) while they
-        /// fit under the cap. Never throws for a cap below the setup.
+        /// fit under the cap. A group below its minimum (<see cref="IsBelowMinimum"/>) is relieved and counts as
+        /// missing, so it is refilled. Never throws for a cap below the setup.
         /// </summary>
         public static OpenBgPlan Plan(OpenBgSetup setup, IReadOnlyList<RealmCount> present)
         {
@@ -104,7 +119,9 @@ namespace DOL.GS
             foreach (RealmCount realm in present)
             {
                 var relieve = new List<int>();
-                if (realm.ReliefDue) relieve.AddRange(ReliefPick(realm.Units));
+                // Counted by members, not units: a group shrunk below its minimum is replaced.
+                relieve.AddRange(realm.Units.Where(IsBelowMinimum).Select(unit => unit.Id));
+                if (realm.ReliefDue) relieve.AddRange(ReliefPick(realm.Units.Where(unit => !relieve.Contains(unit.Id)).ToArray()));
                 relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Group8, setup.Groups8, relieve));
                 relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Small, setup.GroupsSmall, relieve));
                 relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Solo, setup.Solos, relieve));

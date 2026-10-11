@@ -345,6 +345,60 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void AMemberThatLostItsGroupBeforeBoardingStaysInItsUnit()
+        {
+            // Live run 0.241.0: death, position recovery and the muster's unreachable release dropped members silently.
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.LeftOpenUnitBeforeEntry(false, inAGroup: false, inItsUnitGroup: false), Is.False,
+                    "removed from its group (recovered, released by the muster): it travels to the porter alone");
+                Assert.That(AutonomousBattlegroundParticipation.LeftOpenUnitBeforeEntry(false, inAGroup: true, inItsUnitGroup: true), Is.False,
+                    "still in its unit's group");
+                Assert.That(AutonomousBattlegroundParticipation.LeftOpenUnitBeforeEntry(false, inAGroup: true, inItsUnitGroup: false), Is.True,
+                    "joined another party: a real leave");
+                Assert.That(AutonomousBattlegroundParticipation.LeftOpenUnitBeforeEntry(true, inAGroup: true, inItsUnitGroup: false), Is.False,
+                    "inside the battleground the pre-boarding rule no longer applies");
+            });
+        }
+
+        [Test]
+        public void AnOpenGroupBoardsWithoutItsStragglersAfterABoundedWait()
+        {
+            const long first = 1_000_000;
+            long wait = AutonomousBattlegroundParticipation.OpenBoardingWaitMilliseconds;
+            Assert.Multiple(() =>
+            {
+                Assert.That(wait, Is.EqualTo(3 * 60_000), "three game minutes");
+                Assert.That(AutonomousBattlegroundParticipation.OpenBoardingWaitOver(0, first + wait * 10), Is.False, "nobody was ready yet");
+                Assert.That(AutonomousBattlegroundParticipation.OpenBoardingWaitOver(first, first + wait - 1), Is.False);
+                Assert.That(AutonomousBattlegroundParticipation.OpenBoardingWaitOver(first, first + wait), Is.True);
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(false, 7, OpenBattlegroundRoster.Group8Minimum),
+                    Is.False, "before the wait is over the group still boards only whole");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 7, OpenBattlegroundRoster.Group8Minimum),
+                    Is.True, "seven of eight board; the straggler leaves the unit");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 5, OpenBattlegroundRoster.Group8Minimum),
+                    Is.False, "five no longer make an 8-man: nobody boards and the roster replaces the unit");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 2, OpenBattlegroundRoster.SmallGroupMin),
+                    Is.True, "a small group of three boards with two");
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 0, 1), Is.False);
+            });
+        }
+
+        [Test]
+        public void ATravellingOpenCrewMemberFightsOnlyInSelfDefence()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousWorldBotController.OpenCrewDefendsItself(true, false, false, false, false), Is.False,
+                    "out of combat it walks to the porter instead of the world RvR plan");
+                Assert.That(AutonomousWorldBotController.OpenCrewDefendsItself(true, false, false, true, false), Is.True, "attacked: it answers");
+                Assert.That(AutonomousWorldBotController.OpenCrewDefendsItself(true, true, false, false, false), Is.True, "in combat");
+                Assert.That(AutonomousWorldBotController.OpenCrewDefendsItself(true, false, true, false, false), Is.True, "already swinging");
+                Assert.That(AutonomousWorldBotController.OpenCrewDefendsItself(true, false, false, false, true), Is.True, "stunned or mezzed");
+            });
+        }
+
+        [Test]
         public void FrontierMerchantOffsetsAreDistinct()
         {
             (int dx, int dy)[] offsets = FrontierMedallionMerchants.MerchantOffsets().ToArray();

@@ -312,6 +312,40 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void PlanRefillsAUnitBelowItsMinimum()
+        {
+            // Live run 0.241.0: a group8 of three and a small group of one still counted 1/1 and were never refilled.
+            RealmCount albion = new(eRealm.Albion, new OpenBgUnit[]
+            {
+                new(1, OpenBgUnitKind.Group8, 3, true, 100),
+                new(2, OpenBgUnitKind.Small, 1, true, 200),
+                new(3, OpenBgUnitKind.Small, 2, false),
+                new(10, OpenBgUnitKind.Solo, 1, true, 300),
+                new(11, OpenBgUnitKind.Solo, 1, true, 300),
+                new(12, OpenBgUnitKind.Solo, 1, true, 300),
+                new(13, OpenBgUnitKind.Solo, 1, true, 300),
+            });
+            RealmCount midgard = new(eRealm.Midgard, new OpenBgUnit[]
+            {
+                new(20, OpenBgUnitKind.Group8, OpenBattlegroundRoster.Group8Minimum, true, 100),
+                new(21, OpenBgUnitKind.Small, OpenBattlegroundRoster.SmallGroupMin, true, 100),
+                new(22, OpenBgUnitKind.Small, OpenBattlegroundRoster.SmallGroupMax, true, 100),
+            });
+            OpenBgPlan plan = OpenBattlegroundRoster.Plan(Defaults, new[] { albion, midgard, RealmCount.Empty(eRealm.Hibernia) });
+            Assert.Multiple(() =>
+            {
+                Assert.That(plan.For(eRealm.Albion).Relieve, Is.EquivalentTo(new[] { 1, 2 }), "the 8-man of three and the small group of one go");
+                Assert.That(plan.For(eRealm.Albion).AddGroups8, Is.EqualTo(1), "a new 8-man replaces the shrunken one");
+                Assert.That(plan.For(eRealm.Albion).AddSmall, Is.EqualTo(1), "a new small group replaces the lone member");
+                Assert.That(plan.For(eRealm.Albion).AddSolos, Is.Zero, "a solo is a whole unit");
+                Assert.That(plan.For(eRealm.Midgard).Relieve, Is.Empty, "an 8-man formed with six and small groups of two to four are whole");
+                Assert.That(plan.For(eRealm.Midgard).AddGroups8, Is.Zero);
+                Assert.That(OpenBattlegroundRoster.IsBelowMinimum(new OpenBgUnit(5, OpenBgUnitKind.Group8, 5)), Is.True);
+                Assert.That(OpenBattlegroundRoster.IsBelowMinimum(new OpenBgUnit(6, OpenBgUnitKind.Solo, 1)), Is.False);
+            });
+        }
+
+        [Test]
         public void OpenCrewStaysUntilRelievedOrSwitchedOff()
         {
             Assert.Multiple(() =>
@@ -323,7 +357,7 @@ namespace DOL.GS.Tests
                 Assert.That(AutonomousBattlegroundParticipation.OpenLeaveReasonFor(true, true, false, false),
                     Is.EqualTo(AutonomousBattlegroundParticipation.LeaveReason.Unassigned), "a player took it into a group");
                 Assert.That(AutonomousBattlegroundParticipation.OpenLeaveReasonFor(true, false, false, true),
-                    Is.EqualTo(AutonomousBattlegroundParticipation.LeaveReason.Unassigned), "its muster broke up before boarding");
+                    Is.EqualTo(AutonomousBattlegroundParticipation.LeaveReason.Unassigned), "it joined another party before boarding");
                 Assert.That(AutonomousBattlegroundParticipation.Describe(AutonomousBattlegroundParticipation.LeaveReason.Relieved),
                     Is.EqualTo("relieved"));
             });

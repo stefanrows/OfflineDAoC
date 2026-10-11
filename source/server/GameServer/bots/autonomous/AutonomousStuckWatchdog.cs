@@ -438,7 +438,8 @@ public static class AutonomousStuckWatchdog
             // one actor and leaving seven stale group assignments behind.
             if (expedition == null) AutonomousBotGroupCoordinator.EndPvePartyBeforeIndividualRecovery(bot, reason);
             bot.TempProperties.GetProperty<GameRelic>(GameRelic.PLAYER_CARRY_RELIC_WEAK)?.DropFromCarrier(bot);
-            if (expedition == null) bot.Group?.RemoveMember(bot);
+            // An open-BG crew member still travelling to its porter keeps its unit's group: it is moved, not dropped.
+            if (expedition == null && !AutonomousBattlegroundParticipation.IsTravellingOpenCrew(bot)) bot.Group?.RemoveMember(bot);
             bot.CompleteStableMasterRoute();
             bot.StopAttack();
             bot.StopFollowing();

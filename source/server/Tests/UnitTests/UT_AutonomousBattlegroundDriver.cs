@@ -76,6 +76,57 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void ThreeNoRouteGoalsInARowAndNoWayToTheLandingMeanAnIsland()
+        {
+            // Live run 0.241.0: four bots on tiny lower mesh layers beside the portal-keep gates logged 253 no_route lines.
+            int streak = 0;
+            for (int i = 0; i < AutonomousBattlegroundDriver.IslandNoRouteStreak; i++)
+                streak = AutonomousBattlegroundDriver.NextNoRouteStreak(streak, routeOk: false, reason: "no_route");
+            Assert.Multiple(() =>
+            {
+                Assert.That(streak, Is.EqualTo(3));
+                Assert.That(AutonomousBattlegroundDriver.NextNoRouteStreak(streak, true, null), Is.Zero, "a proven route ends the streak");
+                Assert.That(AutonomousBattlegroundDriver.NextNoRouteStreak(streak, false, "closed_gate"), Is.Zero, "another failure is no island sign");
+                Assert.That(AutonomousBattlegroundDriver.NeedsIslandRecovery(streak, atLanding: false, landingRouteReason: "no_route"), Is.True,
+                    "the bot cannot even reach its own landing: move it there");
+                Assert.That(AutonomousBattlegroundDriver.NeedsIslandRecovery(streak, false, "dead_end"), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.NeedsIslandRecovery(streak, false, null), Is.False,
+                    "its landing is reachable: the goals are the problem, not the bot's position");
+                Assert.That(AutonomousBattlegroundDriver.NeedsIslandRecovery(streak, false, "off_mesh"), Is.False, "no evidence about the bot");
+                Assert.That(AutonomousBattlegroundDriver.NeedsIslandRecovery(streak, atLanding: true, "no_route"), Is.False, "already at its landing");
+                Assert.That(AutonomousBattlegroundDriver.NeedsIslandRecovery(2, false, "no_route"), Is.False, "two failures are not enough");
+            });
+        }
+
+        [Test]
+        public void OpenRouteFailuresAreLoggedOncePerMinutePerBot()
+        {
+            const long now = 500_000;
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundDriver.MayLogRouteFailure(now, 0), Is.True, "the first line");
+                Assert.That(AutonomousBattlegroundDriver.MayLogRouteFailure(now, now + 1), Is.False, "held back inside the minute");
+                Assert.That(AutonomousBattlegroundDriver.MayLogRouteFailure(now + AutonomousBattlegroundDriver.RouteFailureLogMilliseconds,
+                    now + AutonomousBattlegroundDriver.RouteFailureLogMilliseconds), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.RouteFailureLogMilliseconds, Is.EqualTo(60_000));
+            });
+        }
+
+        [Test]
+        public void ALandingReleaseRestsToEightyPercentBeforeTheNextOrder()
+        {
+            // Live run 0.241.0: 785 landing releases in 15 minutes; bots walked back into the fight at a third of their health.
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundDriver.LandingRestDone(33, 33, usesPower: true), Is.False, "released at a third");
+                Assert.That(AutonomousBattlegroundDriver.LandingRestDone(80, 79, usesPower: true), Is.False, "a caster waits for its power too");
+                Assert.That(AutonomousBattlegroundDriver.LandingRestDone(80, 80, usesPower: true), Is.True);
+                Assert.That(AutonomousBattlegroundDriver.LandingRestDone(80, 0, usesPower: false), Is.True, "a fighter needs only health");
+                Assert.That(AutonomousBattlegroundDriver.LandingRestDone(79, 100, usesPower: false), Is.False);
+            });
+        }
+
+        [Test]
         public void PartialLegEndingBesideTheGoalReachesIt()
         {
             var leg = new AutonomousBattlegroundDriver.RouteLeg(PathfindingStatus.PartialPathFound, Goal - new Vector3(40, 0, 0));

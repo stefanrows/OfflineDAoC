@@ -486,9 +486,12 @@ namespace DOL.GS
                 eAutonomousObjectiveKind objectiveKind = AutonomousObjectiveAssignments.KindFor(bot);
                 // An idle bot the open BG roster picked as a solo travels to the battleground porter as an RvR
                 // participant does. Only the open roster assigns bots off an RvR tour; brackets need the tour.
-                if (objectiveKind != eAutonomousObjectiveKind.RvR && AutonomousBattlegroundParticipation.IsAssigned(bot) &&
-                    TryBattlegroundTravel(bot))
-                    return true;
+                if (objectiveKind != eAutonomousObjectiveKind.RvR && AutonomousBattlegroundParticipation.IsAssigned(bot))
+                {
+                    if (TryBattlegroundTravel(bot)) return true;
+                    // An open-BG solo never drifts back into PvE work while it owes the roster its trip.
+                    if (HoldsOpenBattlegroundCrew(bot)) return HoldOpenBattlegroundCrew(brain, bot);
+                }
                 if (objectiveKind == eAutonomousObjectiveKind.GroupPve && _groupDirective?.IsDynamic != true)
                 {
                     if (bot.CurrentZone?.IsDungeon == true)
@@ -1606,8 +1609,13 @@ namespace DOL.GS
             // The on-foot habit after a PvE release never carries into RvR.
             _walkToCampAfterRelease = false;
             // Assigned battleground participants travel to the porter first; a failed
-            // step leaves the ordinary RvR plan in charge.
-            if (AutonomousBattlegroundParticipation.IsAssigned(bot) && TryBattlegroundTravel(bot)) return true;
+            // step leaves the ordinary RvR plan in charge (brackets). An open-BG crew
+            // member never falls back to it: self-defence only, otherwise the porter.
+            if (AutonomousBattlegroundParticipation.IsAssigned(bot))
+            {
+                if (TryBattlegroundTravel(bot)) return true;
+                if (HoldsOpenBattlegroundCrew(bot)) return HoldOpenBattlegroundCrew(brain, bot);
+            }
             KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
                 .FirstOrDefault(point => AutonomousRvrKeepPolicy.IsClaimableKeep(point.Keep) &&
                     point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null &&
