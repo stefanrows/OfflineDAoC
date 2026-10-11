@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.255.0] - 2026-10-11
+
+### Added
+
+- None.
+
+### Changed
+
+- Spell mana costs are back to their native 1.65 values for real players,
+  companions and autonomous gamebots. The 70% discount on offensive caster
+  damage spells and the 90% discount on buffs and pet summons (0.89.0, 0.95.0)
+  are removed. Focus, quickcast and power-pool rules are unchanged.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The caster damage, buff and pet-summon mana cost reductions in
+  `BotSpellPower`.
+
 ## [0.254.0] - 2026-10-11
 
 ### Added

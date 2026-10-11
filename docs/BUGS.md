@@ -1980,15 +1980,6 @@ not install the Setup tool; their disposable-input verification is pending.
     bombs where it stands after 3 s. Real-client check pending: PvE pulls
     with two Suppression Spiritmasters.
 
-41. **Casters run out of mana too quickly, especially while bombing.** The
-    2026-09-26 source audit found bot damaging spells use native mana costs and
-    continuous high-rank PBAoE could outpace combat regeneration. Source 0.89.0
-    reduced damaging spell mana costs by 50% for offensive caster classes.
-    Source 0.95.0 raises that reduction to 70% and reduces mana costs by 90%
-    for all buffs and pet summons. Other spells keep their existing costs.
-    Installation and real-client checks across companion and
-    player caster groups remain pending.
-
 40. **Grouped bot Healers do not cast their learned Celerity buff.** Reported while source was 0.87.0 (installed version unknown): a grouped Healer bot with Celerity available does not cast it. Expected: Celerity is applied to the Healer and eligible group members when missing, including during combat. The defensive selector omitted Celerity from its target choices, the in-combat filter skipped maintained buffs, and effect handling returned Unknown for Celerity, preventing reliable coverage checks. Source fix 0.88.0 recognizes Celerity group targets, permits this buff during combat, and tracks its dedicated melee-speed effect. Installation and real-client verification pending.
 
 39. **Hostile keep guards attack companions but cannot be attacked by a player; hostile doors admit players.** Reported at Fensalir Faste while source was 0.85.0 (installed version unconfirmed): guards attack companions and players, but the player cannot attack them; a normal-player friend right-clicked all doors to traverse them while the lord was alive. The keep enemy check accepted companion `IGamePlayer` objects but excluded real `GamePlayer` objects, so the server treated humans as friendly at both guards and doors. The PvP NPC-create packet also gave realm NPCs the viewer's guild ID; neutral Warden guards need an enemy display realm. Source fix 0.86.0 evaluates human and bot players against keep ownership, withholds friendly guild presentation from hostile guards, and displays them as enemies. Installation and real-client guard targeting, player/companion attack, hostile door blocking, and friendly-owned keep checks pending.
@@ -2037,6 +2028,15 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
 
 ## Finished
+
+41. **Reverted — Casters run out of mana too quickly, especially while bombing.** The
+    2026-09-26 source audit found bot damaging spells use native mana costs and
+    continuous high-rank PBAoE could outpace combat regeneration. Source 0.89.0
+    reduced damaging spell mana costs by 50% for offensive caster classes.
+    Source 0.95.0 raises that reduction to 70% and reduces mana costs by 90%
+    for all buffs and pet summons. Other spells keep their existing costs.
+    Reverted by owner request in source 0.255.0, 2026-10-11: all spell mana
+    costs are native again; no discount remains.
 
 143. **Done — Claiming a keep freezes the game loop for about a second.** Installed
      0.235.0, 2026-10-10: every claim stalled ~1 s in the claimer's own tick:

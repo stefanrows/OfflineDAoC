@@ -1246,10 +1246,6 @@ namespace DOL.GS.Spells
 			if (IsQuickCasting && Spell.CastTime > 0)
 				powerCost *= 2;
 
-			powerCost = BotSpellPower.ApplyBuffAndPetSummonCostReduction(Spell, powerCost);
-			if (playerCaster != null)
-				powerCost = BotSpellPower.ApplyDamageCostReduction(playerCaster.CharacterClass, Spell, powerCost);
-
 			return (int) powerCost;
 		}
 
