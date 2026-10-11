@@ -1328,7 +1328,8 @@ namespace DOL.GS
             if (returnToParty) AutonomousRealmRaid.RejoinAfterRelease(this);
             AutonomousFrontierTransport.NoteRelease(this); // regroup before re-porting (bug 66)
             _nextReturnRoleplayTick = GameLoop.GameLoopTime + Util.Random(45_000, 90_000);
-            if (battlegroundLanding) AutonomousBattlegroundDriver.ForgetState(this);
+            // An open-BG crew member also rests at its landing before the next order; brackets only reset the driver.
+            if (battlegroundLanding) AutonomousBattlegroundDriver.OnLandingRelease(this);
             Brain?.FSM?.SetCurrentState(battlegroundLanding ? eFSMStateType.IDLE : eFSMStateType.FOLLOW);
             Brain?.Start();
             if (returnWalk)

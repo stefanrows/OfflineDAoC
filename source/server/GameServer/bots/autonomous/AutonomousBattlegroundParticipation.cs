@@ -29,6 +29,11 @@ public static class AutonomousBattlegroundParticipation
     public const int OpenAssignmentTimeoutMilliseconds = 30 * 60_000;
     /// <summary>A relieved open-BG bot walks toward its own portal keep for at most this long before it leaves.</summary>
     public const int ReliefWalkMilliseconds = 5 * 60_000;
+    /// <summary>
+    /// An open-BG group waits this long (game time) after its first member stood ready in the boarding circle; then
+    /// the ready members board without the stragglers, which leave the unit (the roster refills a group below its minimum).
+    /// </summary>
+    public const int OpenBoardingWaitMilliseconds = 3 * 60_000;
     public const int DepartureLimit = 8;
     public const string BattlegroundMedallionId = "battlegrounds_necklace";
     private const int DirectorMaximum = 24;
@@ -62,6 +67,8 @@ public static class AutonomousBattlegroundParticipation
         public long EnteredTick;
         public long LeaveStartTick;
         public Point3D ReliefHome;
+        // open BG: game time this member first stood ready in its porter's boarding circle (0 = not yet).
+        public long ReadySinceTick;
     }
 
     /// <summary>One open-BG crew member for the roster and the director; <paramref name="Group"/> is the unit's label.</summary>
@@ -147,11 +154,19 @@ public static class AutonomousBattlegroundParticipation
 
     /// <summary>
     /// Why an open-BG crew member must leave, or null to keep it. No graduation and no tour end: the roster relieves.
-    /// It leaves when the open BG is switched off, when a player leads it, or when it carries a relic or changed its
-    /// group before boarding (a solo that joined a party, a member whose muster broke up).
+    /// It leaves when the open BG is switched off, when a player leads it, or when it carries a relic or left its unit
+    /// before boarding (<see cref="LeftOpenUnitBeforeEntry"/>).
     /// </summary>
-    public static LeaveReason? OpenLeaveReasonFor(bool openEnabled, bool playerLed, bool relic, bool groupChangedBeforeEntry) =>
-        !openEnabled || playerLed || relic || groupChangedBeforeEntry ? LeaveReason.Unassigned : null;
+    public static LeaveReason? OpenLeaveReasonFor(bool openEnabled, bool playerLed, bool relic, bool leftUnitBeforeEntry) =>
+        !openEnabled || playerLed || relic || leftUnitBeforeEntry ? LeaveReason.Unassigned : null;
+
+    /// <summary>
+    /// A real leave before boarding: the member (or a solo) is now in a party that is not its unit's group. Losing
+    /// its group is not a leave: a member removed by death, position recovery or the muster stays in its unit and
+    /// travels to the porter alone.
+    /// </summary>
+    public static bool LeftOpenUnitBeforeEntry(bool entered, bool inAGroup, bool inItsUnitGroup) =>
+        !entered && inAGroup && !inItsUnitGroup;
 
     /// <summary>The open BG has its own hard cap (open_bg_max_bots); the bracket's 24 per map does not apply.</summary>
     public static bool AdmitsOpenUnit(int memberCount, int openCrew, int cap) =>
@@ -258,6 +273,14 @@ public static class AutonomousBattlegroundParticipation
     {
         lock (Sync)
             return bot != null && Entries.TryGetValue(bot, out Entry entry) && IsOpenUnit(entry.Definition, entry.Unit) ? entry.Unit : 0;
+    }
+
+    /// <summary>An open-BG crew member assigned and still travelling to its porter (not inside, not leaving).</summary>
+    public static bool IsTravellingOpenCrew(GameBot bot)
+    {
+        lock (Sync)
+            return bot != null && Entries.TryGetValue(bot, out Entry entry) && IsOpenUnit(entry.Definition, entry.Unit) &&
+                !entry.Entered && entry.Leaving == null;
     }
 
     /// <summary>Open-BG crew members against the open cap, including those still travelling or leaving.</summary>
@@ -422,36 +445,99 @@ public static class AutonomousBattlegroundParticipation
             .Take(DepartureLimit)
             .ToArray();
         Board(porter, boarders);
-        if (openWaiting.Length > 0)
-            Board(porter, OpenBoarders(porter, openWaiting));
+        if (openWaiting.Length == 0) return;
+        GameBot[] open = OpenBoarders(porter, openWaiting, GameLoop.GameLoopTime, out List<(int Unit, GameBot[] Stragglers)> stragglers);
+        Board(porter, open);
+        DropStragglers(stragglers);
     }
 
     /// <summary>
     /// The open crew's own cast of up to <see cref="DepartureLimit"/>, unit by unit and never splitting one: a solo
     /// boards alone; a group boards whole, leader first, and only once <see cref="OpenGroupMayBoard"/> allows it, so
     /// the group arrives as one and lands at its leader's portal keep. A group that does not fit this cast waits.
+    /// Once its boarding wait is over (<see cref="OpenBoardingWaitOver"/>) the ready members of a group board
+    /// without its live stragglers (<see cref="OpenGroupMayBoardWithoutStragglers"/>); the stragglers are returned
+    /// in <paramref name="stragglers"/> and leave the unit.
     /// </summary>
-    private static GameBot[] OpenBoarders(OFTeleporter porter, (GameBot Bot, int Unit, Group Group)[] waiting)
+    private static GameBot[] OpenBoarders(OFTeleporter porter, (GameBot Bot, int Unit, Group Group)[] waiting, long now,
+        out List<(int Unit, GameBot[] Stragglers)> stragglers)
     {
         bool Live(GameBot bot) => bot.ObjectState == GameObject.eObjectState.Active && bot.IsAlive;
         bool Ready(GameBot bot) => Live(bot) && bot.CurrentRegion == porter.CurrentRegion &&
             bot.IsWithinRadius(porter, AutonomousFrontierTransport.BoardingRadius) && HasBattlegroundMedallion(bot);
         var boarders = new List<GameBot>();
+        stragglers = new List<(int Unit, GameBot[] Stragglers)>();
         foreach (var unit in waiting.GroupBy(member => member.Unit)
-                     .Select(unit => (Group: unit.Select(member => member.Group).FirstOrDefault(group => group != null),
+                     .Select(unit => (Id: unit.Key, Group: unit.Select(member => member.Group).FirstOrDefault(group => group != null),
                          Members: unit.Select(member => member.Bot).ToArray()))
                      .OrderBy(unit => (unit.Group?.LivingLeader as GameBot ?? unit.Members[0]).DatabaseID))
         {
             GameBot[] live = unit.Members.Where(Live).ToArray();
             GameBot[] ready = live.Where(Ready).ToArray();
             if (ready.Length == 0) continue;
-            if (unit.Group != null && !OpenGroupMayBoard(
-                    AutonomousBotGroupCoordinator.IsOpenBattlegroundAssembling(unit.Group), live.Length, ready.Length))
-                continue;
+            if (unit.Group != null)
+            {
+                long readySince = MarkReady(ready, now);
+                bool whole = OpenGroupMayBoard(AutonomousBotGroupCoordinator.IsOpenBattlegroundAssembling(unit.Group), live.Length, ready.Length);
+                if (!whole)
+                {
+                    if (!OpenBoardingWaitOver(readySince, now)) continue;
+                    // The wait is over: the stragglers leave whether or not the ready members still make a unit.
+                    stragglers.Add((unit.Id, live.Except(ready).ToArray()));
+                    int minimum = OpenBattlegroundRoster.KindOf(unit.Id) is OpenBgUnitKind kind ? OpenBattlegroundRoster.MinimumSize(kind) : 1;
+                    if (!OpenGroupMayBoardWithoutStragglers(true, ready.Length, minimum)) continue;
+                }
+            }
             if (boarders.Count + ready.Length > DepartureLimit) continue;
             boarders.AddRange(ready.OrderBy(bot => unit.Group?.LivingLeader == bot ? 0 : 1).ThenBy(bot => bot.DatabaseID));
         }
         return boarders.ToArray();
+    }
+
+    // Stamps the members standing ready now; returns the game time the first of them was ready.
+    private static long MarkReady(GameBot[] ready, long now)
+    {
+        long first = 0;
+        lock (Sync)
+            foreach (GameBot bot in ready)
+                if (Entries.TryGetValue(bot, out Entry entry))
+                {
+                    if (entry.ReadySinceTick <= 0) entry.ReadySinceTick = now;
+                    first = first == 0 ? entry.ReadySinceTick : Math.Min(first, entry.ReadySinceTick);
+                }
+        return first;
+    }
+
+    /// <summary>Whether a group's boarding wait is over: <see cref="OpenBoardingWaitMilliseconds"/> of game time since its first member stood ready.</summary>
+    public static bool OpenBoardingWaitOver(long readySinceTick, long now) =>
+        readySinceTick > 0 && now - readySinceTick >= OpenBoardingWaitMilliseconds;
+
+    /// <summary>
+    /// After the boarding wait the ready members of a group board without its stragglers, but only while they still
+    /// make a unit of their kind (<see cref="OpenBattlegroundRoster.MinimumSize"/>). Fewer board nobody; the
+    /// stragglers leave anyway, so the roster relieves and replaces the shrunken unit.
+    /// </summary>
+    public static bool OpenGroupMayBoardWithoutStragglers(bool waitOver, int readyWaiting, int minimum) =>
+        waitOver && readyWaiting > 0 && readyWaiting >= Math.Max(1, minimum);
+
+    // Live members still outside the circle when their group's wait ran out leave the unit and its group. Dead
+    // members are not stragglers: they stay in the unit and travel to the porter alone after their release.
+    private static void DropStragglers(List<(int Unit, GameBot[] Stragglers)> stragglers)
+    {
+        foreach ((int unit, GameBot[] bots) in stragglers)
+            foreach (GameBot bot in bots)
+            {
+                Group group;
+                lock (Sync)
+                {
+                    if (!Entries.TryGetValue(bot, out Entry entry) || entry.Unit != unit || entry.Entered || entry.Leaving != null) continue;
+                    group = entry.GroupRef;
+                    Entries.Remove(bot);
+                }
+                if (group != null && bot.Group == group) group.RemoveMember(bot);
+                Log.Info($"OPEN_BG_STRAGGLER_DROPPED bot=\"{bot.Name}\" unit={unit} waited_s={OpenBoardingWaitMilliseconds / 1000}");
+                Log.Info($"AUTONOMOUS_BG_LEFT region={BattlegroundCampaignCatalog.FindOpen()?.RegionId} bot=\"{bot.Name}\" reason={Describe(LeaveReason.Unassigned)}");
+            }
     }
 
     /// <summary>
@@ -519,9 +605,13 @@ public static class AutonomousBattlegroundParticipation
             Log.Info($"AUTONOMOUS_BG_DRIVER_IDLE region={region} bot=\"{bot.Name}\" reason={reason}");
     }
 
-    /// <summary>Why the driver could not prove a route to a goal. The driver logs each goal once per visit.</summary>
-    public static void RecordRouteFailure(GameBot bot, ushort region, string action, string goal, string from, string reason) =>
-        Log.Info($"AUTONOMOUS_BG_ROUTE_FAILED region={region} bot=\"{bot.Name}\" action={action} goal={goal} from={from} reason={reason}");
+    /// <summary>
+    /// Why the driver could not prove a route to a goal. The driver logs each goal once per visit; in the open BG at
+    /// most one line per bot per game minute, with the number of lines it held back since the last one.
+    /// </summary>
+    public static void RecordRouteFailure(GameBot bot, ushort region, string action, string goal, string from, string reason, int suppressed = 0) =>
+        Log.Info($"AUTONOMOUS_BG_ROUTE_FAILED region={region} bot=\"{bot.Name}\" action={action} goal={goal} from={from} reason={reason}" +
+            (suppressed > 0 ? $" suppressed={suppressed}" : string.Empty));
 
     // Callers hold Sync. Real progress restarts both stuck clocks.
     private static void Touch(Entry entry, long gameNow)
@@ -604,7 +694,7 @@ public static class AutonomousBattlegroundParticipation
                 // An open-BG crew member stays until the roster relieves it: a died-and-released bot stays too.
                 LeaveReason? reason = IsOpenUnit(entry.Definition, entry.Unit)
                     ? OpenLeaveReasonFor(OpenBattlegroundPolicy.IsEnabled, bot.IsPlayerLedGroup, GameRelic.IsPlayerCarryingRelic(bot),
-                        !entry.Entered && bot.Group != entry.GroupRef)
+                        LeftOpenUnitBeforeEntry(entry.Entered, bot.Group != null, bot.Group == entry.GroupRef))
                     : LeaveReasonFor(bot.Level, bot.RealmLevel,
                         AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR), bot.IsPlayerLedGroup,
                         GameRelic.IsPlayerCarryingRelic(bot), entry.Definition);

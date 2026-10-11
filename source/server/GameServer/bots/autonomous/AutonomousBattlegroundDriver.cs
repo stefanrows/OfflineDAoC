@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using DOL.AI.Brain;
 using DOL.GS.Keeps;
 using DOL.GS.ServerRules;
+using DOL.Logging;
 
 namespace DOL.GS;
 
@@ -37,6 +38,16 @@ public static class AutonomousBattlegroundDriver
     public const float LegReachDistance = 48;
     // A failed goal is not re-proved before this, so camp roaming does not repeat long proofs every turn.
     private const int UnreachableRetryMilliseconds = 15_000;
+    /// <summary>open BG: this many goals in a row without a route make the driver test the bot's own position (island check).</summary>
+    public const int IslandNoRouteStreak = 3;
+    /// <summary>open BG: game time between two island checks of one bot, and between two of its route-failure log lines.</summary>
+    public const int IslandCheckMilliseconds = 60_000;
+    public const int RouteFailureLogMilliseconds = 60_000;
+    /// <summary>open BG: after a release at its landing a crew member rests there to this share of health and power.</summary>
+    public const int LandingRestPercent = 80;
+    /// <summary>open BG: the landing rest never lasts longer than this (game time), e.g. while regeneration is suppressed.</summary>
+    public const int LandingRestMaxMilliseconds = 2 * 60_000;
+    private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousBattlegroundDriver));
 
     /// <summary>One native path query: its status and the position of its last node.</summary>
     public readonly record struct RouteLeg(PathfindingStatus Status, Vector3 End);
@@ -69,6 +80,17 @@ public static class AutonomousBattlegroundDriver
         public HashSet<(int, int, int)> FailedGoals;
         // Goals whose route proof failed, with the game time before which they are not proved again.
         public Dictionary<(int, int, int), long> UnreachableUntil;
+        // open BG only (set each turn): island recovery, route-failure log limit and landing rest apply.
+        public bool Open;
+        // Goals in a row whose proof ended with no_route; the next island check; the next route-failure log line.
+        public int NoRouteStreak;
+        public long NextIslandCheck;
+        public long NextRouteFailureLog;
+        public int SuppressedRouteFailures;
+        // Set by a release at the landing: rest there before the next order, until LandingRestUntil at the latest.
+        public bool LandingRest;
+        public long LandingRestUntil;
+        public bool LandingRestLogged;
     }
 
     private static readonly ConditionalWeakTable<GameBot, State> States = new();
@@ -96,6 +118,15 @@ public static class AutonomousBattlegroundDriver
 
         State state = States.GetValue(bot, CreateState);
         long now = GameLoop.GameLoopTime;
+        state.Open = definition.Kind == BattlegroundDefinitionKind.Open;
+        if (state.LandingRest && !walkingHome && !AutonomousBattlegroundParticipation.IsLeaving(bot) &&
+            RestAtLanding(brain, bot, state, now))
+        {
+            state.Action = "landing-rest";
+            AutonomousBattlegroundParticipation.RecordDriverTurn(bot, bot.CurrentRegionID, state.Action);
+            AutonomousBattlegroundParticipation.NoteProgress(bot, eAutonomousProgressKind.Recovery);
+            return true;
+        }
         if (now >= state.NextScan)
         {
             state.NextScan = now + ScanMilliseconds;
@@ -131,6 +162,57 @@ public static class AutonomousBattlegroundDriver
     public static void ForgetState(GameBot bot)
     {
         if (bot != null) States.Remove(bot);
+    }
+
+    /// <summary>
+    /// A participant released at its battleground landing: the driver state starts fresh (brackets: nothing else).
+    /// An open-BG crew member then rests at the landing (<see cref="RestAtLanding"/>) before its next order, so it
+    /// does not walk back into the fight with a third of its health.
+    /// </summary>
+    public static void OnLandingRelease(GameBot bot)
+    {
+        ForgetState(bot);
+        if (bot == null || !AutonomousBattlegroundParticipation.IsOpenCrew(bot)) return;
+        State state = States.GetValue(bot, CreateState);
+        state.LandingRest = true;
+        state.LandingRestUntil = GameLoop.GameLoopTime + LandingRestMaxMilliseconds;
+    }
+
+    /// <summary>The landing rest ends once health (and power, for a caster) reach <see cref="LandingRestPercent"/>.</summary>
+    public static bool LandingRestDone(int healthPercent, int powerPercent, bool usesPower) =>
+        healthPercent >= LandingRestPercent && (!usesPower || powerPercent >= LandingRestPercent);
+
+    /// <summary>
+    /// One turn of the open-BG landing rest. True while the bot rests (or holds still until it may); false when the
+    /// rest is over (recovered or timed out) or the bot is attacked, which it answers through the ordinary turn.
+    /// Reuses the bots' recovery rest (fast regeneration while still and out of combat). Logged once per release.
+    /// </summary>
+    private static bool RestAtLanding(BotBrain brain, GameBot bot, State state, long now)
+    {
+        if (LandingRestDone(bot.HealthPercent, bot.ManaPercent, bot.MaxMana > 0) || now >= state.LandingRestUntil)
+        {
+            state.LandingRest = false;
+            if (bot.IsRecoveryResting) bot.WakeRecoveryRest();
+            return false;
+        }
+        if (brain.HasAggro || bot.IsAttacking)
+        {
+            // Self-defence first; the rest resumes after the fight while its time lasts.
+            if (bot.IsRecoveryResting) bot.WakeRecoveryRest();
+            return false;
+        }
+        if (!state.LandingRestLogged)
+        {
+            state.LandingRestLogged = true;
+            Log.Info($"AUTONOMOUS_BG_LANDING_REST region={bot.CurrentRegionID} bot=\"{bot.Name}\" health={bot.HealthPercent} power={bot.ManaPercent} " +
+                $"until_pct={LandingRestPercent}");
+        }
+        bot.WakeRecoveryRestIfCombatBlocked();
+        if (bot.IsRecoveryResting) return true;
+        Stand(bot);
+        // A cast in progress (a heal or rebuff) finishes first; the rest starts on a later turn.
+        if (!bot.IsCasting && !BotRestRecovery.BlocksRest(bot)) bot.BeginRecoveryRest();
+        return true;
     }
 
     private static bool Idle(GameBot bot, string reason)
@@ -361,10 +443,12 @@ public static class AutonomousBattlegroundDriver
             state.RouteUntil = now + RouteIntervalMilliseconds;
             state.RouteOk = PathExists(bot, goal, out state.RoutePosition, out string reason);
             if (state.RouteOk && !bot.IsCasting) bot.PathTo(state.RoutePosition, bot.MaxSpeed);
+            state.NoRouteStreak = NextNoRouteStreak(state.NoRouteStreak, state.RouteOk, reason);
             if (!state.RouteOk)
             {
-                RecordRouteFailure(bot, state, goal, reason);
+                RecordRouteFailure(bot, state, goal, reason, now);
                 MarkUnreachable(state, key, now);
+                if (state.Open && TryIslandRecovery(bot, state, now)) return false;
             }
         }
         if (!state.RouteOk)
@@ -375,13 +459,73 @@ public static class AutonomousBattlegroundDriver
         return true;
     }
 
-    // Logged once per goal and visit: the cause of an unproven route, for the next live run.
-    private static void RecordRouteFailure(GameBot bot, State state, Point3D goal, string reason)
+    // Logged once per goal and visit: the cause of an unproven route, for the next live run. In the open BG at most
+    // one line per bot per game minute: a follower's goal moves with its leader, so one stuck bot logged hundreds.
+    private static void RecordRouteFailure(GameBot bot, State state, Point3D goal, string reason, long now)
     {
         state.FailedGoals ??= new HashSet<(int, int, int)>();
         if (!state.FailedGoals.Add((goal.X, goal.Y, goal.Z))) return;
+        if (state.Open)
+        {
+            if (!MayLogRouteFailure(now, state.NextRouteFailureLog))
+            {
+                state.SuppressedRouteFailures++;
+                return;
+            }
+            state.NextRouteFailureLog = now + RouteFailureLogMilliseconds;
+        }
         AutonomousBattlegroundParticipation.RecordRouteFailure(bot, bot.CurrentRegionID, state.Action,
-            $"{goal.X},{goal.Y},{goal.Z}", $"{bot.X},{bot.Y},{bot.Z}", reason);
+            $"{goal.X},{goal.Y},{goal.Z}", $"{bot.X},{bot.Y},{bot.Z}", reason, state.SuppressedRouteFailures);
+        state.SuppressedRouteFailures = 0;
+    }
+
+    /// <summary>open BG: whether a bot's next route-failure line may be written now (one per <see cref="RouteFailureLogMilliseconds"/>).</summary>
+    public static bool MayLogRouteFailure(long now, long nextAllowed) => now >= nextAllowed;
+
+    /// <summary>Goals in a row that failed with no_route; a proven route or any other failure ends the streak.</summary>
+    public static int NextNoRouteStreak(int streak, bool routeOk, string reason) =>
+        !routeOk && reason == "no_route" ? streak + 1 : 0;
+
+    /// <summary>
+    /// An open-BG bot stands on a disconnected navmesh island when its last <see cref="IslandNoRouteStreak"/> goals
+    /// had no route, it is not at its landing, and its own position cannot route to its landing either (the advisor
+    /// found such islands 100-160 units below the walkable ground beside the portal-keep gates).
+    /// </summary>
+    public static bool NeedsIslandRecovery(int noRouteStreak, bool atLanding, string landingRouteReason) =>
+        noRouteStreak >= IslandNoRouteStreak && !atLanding && landingRouteReason is "no_route" or "dead_end";
+
+    // open BG island recovery: at most once per IslandCheckMilliseconds, prove the bot's way to its landing and, when
+    // it has none, move it onto the landing; the stuck rule no longer has to eject it. True when the bot was moved.
+    private static bool TryIslandRecovery(GameBot bot, State state, long now)
+    {
+        if (state.NoRouteStreak < IslandNoRouteStreak || now < state.NextIslandCheck) return false;
+        state.NextIslandCheck = now + IslandCheckMilliseconds;
+        BattlegroundDefinition definition = BattlegroundCampaignCatalog.Find(bot.CurrentRegionID);
+        GameLocation landing = definition == null ? null : BattlegroundCampaignPolicy.GetLanding(bot, definition);
+        if (landing == null || landing.RegionID != bot.CurrentRegionID) return false;
+        Point3D landingPoint = new(landing.X, landing.Y, landing.Z);
+        bool atLanding = bot.GetDistanceTo(landingPoint) <= ArrivalDistance;
+        string landingReason = null;
+        if (!atLanding && PathExists(bot, landingPoint, out _, out landingReason)) landingReason = null;
+        if (!NeedsIslandRecovery(state.NoRouteStreak, atLanding, landingReason))
+        {
+            if (landingReason == null) state.NoRouteStreak = 0;
+            return false;
+        }
+        string from = $"{bot.X},{bot.Y},{bot.Z}";
+        int streak = state.NoRouteStreak;
+        Stand(bot);
+        if (!bot.MoveTo(landing.RegionID, landing.X, landing.Y, landing.Z, landing.Heading)) return false;
+        state.NoRouteStreak = 0;
+        state.RouteGoal = null;
+        state.RouteOk = false;
+        state.UnreachableUntil?.Clear();
+        state.CampsUnreachableUntil = 0;
+        state.HasPosition = false;
+        Log.Info($"AUTONOMOUS_BG_ISLAND_RECOVERY region={bot.CurrentRegionID} bot=\"{bot.Name}\" from={from} " +
+            $"to={landing.X},{landing.Y},{landing.Z} no_route_streak={streak} landing_route={landingReason}");
+        AutonomousBattlegroundParticipation.NoteProgress(bot, eAutonomousProgressKind.Recovery);
+        return true;
     }
 
     private static void MarkUnreachable(State state, (int, int, int) key, long now)

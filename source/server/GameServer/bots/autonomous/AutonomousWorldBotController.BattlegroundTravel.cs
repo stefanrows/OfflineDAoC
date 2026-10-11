@@ -73,6 +73,44 @@ public sealed partial class AutonomousWorldBotController
     }
 
     /// <summary>
+    /// An open-BG crew member on its way to the porter whose travel step could not act this turn. It never falls back
+    /// to the world RvR plan (observe, retreat, doctrine, rival or grudge hunts): unit members fought whole frontier
+    /// battles and walked off into Darkness Falls before boarding (live run 0.241.0). While it is attacked, fighting
+    /// or crowd-controlled it only defends itself: false hands the turn to the native combat FSM, which answers what
+    /// attacks it. Otherwise it walks to its porter's waiting point when one is known in this region, or stands.
+    /// Callers hold only on a home frontier (<see cref="HoldsOpenBattlegroundCrew"/>): elsewhere (a capital after a
+    /// release, a dungeon) the ordinary plan still brings the bot back, since only that plan crosses regions.
+    /// </summary>
+    private bool HoldOpenBattlegroundCrew(BotBrain brain, GameBot bot)
+    {
+        if (OpenCrewDefendsItself(bot.IsAlive, bot.InCombat, bot.IsAttacking, brain?.HasAggro == true,
+                bot.IsStunned || bot.IsMezzed))
+            return false;
+        OFTeleporter porter = _battlegroundPorter;
+        if (porter is { ObjectState: GameObject.eObjectState.Active } && porter.CurrentRegion == bot.CurrentRegion &&
+            !bot.IsWithinRadius(porter, AutonomousFrontierTransport.BoardingRadius))
+        {
+            IssuePath(bot, _battlegroundWaitingPoint ?? new Vector3(porter.X, porter.Y, porter.Z));
+            SetRvrStatus(bot, "Walking to battleground teleporter", "Battleground campaign",
+                $"Assigned to the open battleground; walking to {porter.Name}", porter.Name);
+            return true;
+        }
+        bot.StopMovingOnPath();
+        bot.StopMoving();
+        SetRvrStatus(bot, "Waiting for battleground departure", "Battleground campaign",
+            "Assigned to the open battleground; holding until the unit can travel", porter?.Name ?? string.Empty);
+        return true;
+    }
+
+    /// <summary>An open-BG crew member still travelling and standing on a home frontier, where its porter is.</summary>
+    private static bool HoldsOpenBattlegroundCrew(GameBot bot) =>
+        AutonomousBattlegroundParticipation.IsFrontierRegion(bot.CurrentRegionID) && AutonomousBattlegroundParticipation.IsTravellingOpenCrew(bot);
+
+    /// <summary>An assigned open-BG member fights only in self-defence: alive and attacked, fighting or crowd-controlled.</summary>
+    public static bool OpenCrewDefendsItself(bool alive, bool inCombat, bool attacking, bool hasAggro, bool crowdControlled) =>
+        !alive || inCombat || attacking || hasAggro || crowdControlled;
+
+    /// <summary>
     /// Buys the free medallion from the real merchant beside the porter, as a
     /// player does, or equips a copy already bought. True while this turn did
     /// something toward owning the medallion; false when no legal source exists.
