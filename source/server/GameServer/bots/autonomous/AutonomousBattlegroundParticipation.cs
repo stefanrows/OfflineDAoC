@@ -457,6 +457,7 @@ public static class AutonomousBattlegroundParticipation
         if (porter == null || !BattlegroundCampaignPolicy.IsEnabled) return;
         GameBot[] waiting;
         (GameBot Bot, int Unit, Group Group)[] openWaiting;
+        Dictionary<int, int> openUnitSizes;
         lock (Sync)
         {
             waiting = Entries.Values
@@ -467,6 +468,7 @@ public static class AutonomousBattlegroundParticipation
                 .Where(entry => !entry.Entered && entry.Leaving == null && IsOpenUnit(entry.Definition, entry.Unit))
                 .Select(entry => (entry.Bot, entry.Unit, entry.GroupRef))
                 .ToArray();
+            openUnitSizes = openWaiting.Length == 0 ? null : OpenUnitSizes();
         }
         GameBot[] boarders = waiting
             .Where(bot => bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
@@ -477,7 +479,8 @@ public static class AutonomousBattlegroundParticipation
             .ToArray();
         Board(porter, boarders);
         if (openWaiting.Length == 0) return;
-        GameBot[] open = OpenBoarders(porter, openWaiting, GameLoop.GameLoopTime, out List<(int Unit, GameBot[] Stragglers)> stragglers);
+        GameBot[] open = OpenBoarders(porter, openWaiting, openUnitSizes, GameLoop.GameLoopTime,
+            out List<(int Unit, GameBot[] Stragglers)> stragglers);
         Board(porter, open);
         DropStragglers(stragglers);
     }
@@ -488,10 +491,12 @@ public static class AutonomousBattlegroundParticipation
     /// the group arrives as one and lands at its leader's portal keep. A group that does not fit this cast waits.
     /// Once its boarding wait is over (<see cref="OpenBoardingWaitOver"/>) the ready members of a group board
     /// without its live stragglers (<see cref="OpenGroupMayBoardWithoutStragglers"/>); the stragglers are returned
-    /// in <paramref name="stragglers"/> and leave the unit.
+    /// in <paramref name="stragglers"/> and leave the unit. A group boards only while its unit, dead members and members
+    /// already inside included (<paramref name="unitSizes"/>), still makes its kind's minimum
+    /// (<see cref="OpenUnitMeetsBoardingMinimum"/>); a unit below it waits at the porter for the roster's refill.
     /// </summary>
-    private static GameBot[] OpenBoarders(OFTeleporter porter, (GameBot Bot, int Unit, Group Group)[] waiting, long now,
-        out List<(int Unit, GameBot[] Stragglers)> stragglers)
+    private static GameBot[] OpenBoarders(OFTeleporter porter, (GameBot Bot, int Unit, Group Group)[] waiting,
+        IReadOnlyDictionary<int, int> unitSizes, long now, out List<(int Unit, GameBot[] Stragglers)> stragglers)
     {
         bool Live(GameBot bot) => bot.ObjectState == GameObject.eObjectState.Active && bot.IsAlive;
         bool Ready(GameBot bot) => Live(bot) && bot.CurrentRegion == porter.CurrentRegion &&
@@ -513,15 +518,21 @@ public static class AutonomousBattlegroundParticipation
                 // so whole groups were dropped as stragglers in their "Meeting up" phase. The muster has its own clock.
                 if (!OpenBoardingWaitRuns(assembling, ready.Length)) continue;
                 long readySince = MarkReady(ready, now);
+                int minimum = OpenBattlegroundRoster.KindOf(unit.Id) is OpenBgUnitKind kind ? OpenBattlegroundRoster.MinimumSize(kind) : 1;
+                int members = unitSizes != null && unitSizes.TryGetValue(unit.Id, out int size) ? size : unit.Members.Length;
                 bool whole = OpenGroupMayBoard(assembling, live.Length, ready.Length);
                 if (!whole)
                 {
                     if (!OpenBoardingWaitOver(readySince, now)) continue;
                     // The wait is over: the stragglers leave whether or not the ready members still make a unit.
-                    stragglers.Add((unit.Id, live.Except(ready).ToArray()));
-                    int minimum = OpenBattlegroundRoster.KindOf(unit.Id) is OpenBgUnitKind kind ? OpenBattlegroundRoster.MinimumSize(kind) : 1;
-                    if (!OpenGroupMayBoardWithoutStragglers(true, ready.Length, minimum)) continue;
+                    GameBot[] late = live.Except(ready).ToArray();
+                    stragglers.Add((unit.Id, late));
+                    if (!OpenGroupMayBoardWithoutStragglers(true, members - late.Length, minimum)) continue;
                 }
+                // Live run 0.246.0: the remainder of a straggler drop boarded one cast later below its minimum and the
+                // roster relieved it seconds after landing. Below its minimum a unit waits here for the porter refill
+                // instead; its assignment timeout bounds the wait.
+                else if (!OpenUnitMeetsBoardingMinimum(members, minimum)) continue;
             }
             if (boarders.Count + ready.Length > DepartureLimit) continue;
             boarders.AddRange(ready.OrderBy(bot => unit.Group?.LivingLeader == bot ? 0 : 1).ThenBy(bot => bot.DatabaseID));
@@ -563,12 +574,26 @@ public static class AutonomousBattlegroundParticipation
     }
 
     /// <summary>
-    /// After the boarding wait the ready members of a group board without its stragglers, but only while they still
-    /// make a unit of their kind (<see cref="OpenBattlegroundRoster.MinimumSize"/>). Fewer board nobody; the
-    /// stragglers leave anyway, so the roster relieves and replaces the shrunken unit.
+    /// After the boarding wait the ready members of a group board without its stragglers, but only while the unit
+    /// left behind (<paramref name="remainingMembers"/>: every member that is not a straggler, dead members and members
+    /// already inside included) still makes a unit of its kind (<see cref="OpenBattlegroundRoster.MinimumSize"/>).
+    /// Fewer board nobody; the stragglers leave anyway, and the rest waits at the porter for the roster's refill.
     /// </summary>
-    public static bool OpenGroupMayBoardWithoutStragglers(bool waitOver, int readyWaiting, int minimum) =>
-        waitOver && readyWaiting > 0 && readyWaiting >= Math.Max(1, minimum);
+    public static bool OpenGroupMayBoardWithoutStragglers(bool waitOver, int remainingMembers, int minimum) =>
+        waitOver && OpenUnitMeetsBoardingMinimum(remainingMembers, minimum);
+
+    /// <summary>
+    /// Whether an open-BG unit may board at all: its members (dead ones and those already inside count, a dropped
+    /// straggler does not) make its kind's minimum. Six with one dead member board; five after a straggler drop wait
+    /// at the porter for the refill instead of landing short and being relieved at once.
+    /// </summary>
+    public static bool OpenUnitMeetsBoardingMinimum(int unitMembers, int minimum) =>
+        unitMembers > 0 && unitMembers >= Math.Max(1, minimum);
+
+    // Callers hold Sync. Members per open-BG unit that are not leaving, entered or not, dead or alive.
+    private static Dictionary<int, int> OpenUnitSizes() =>
+        Entries.Values.Where(entry => entry.Leaving == null && IsOpenUnit(entry.Definition, entry.Unit))
+            .GroupBy(entry => entry.Unit).ToDictionary(unit => unit.Key, unit => unit.Count());
 
     // Live members still outside the circle when their group's wait ran out leave the unit and its group. Dead
     // members are not stragglers: they stay in the unit and travel to the porter alone after their release.
