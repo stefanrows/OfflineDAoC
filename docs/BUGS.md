@@ -6,6 +6,20 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+154. **Two Midgard world bots loop in capital egress recovery for over an
+     hour.** Installed 0.244.0, 2026-10-11 08:40–10:25 (20×):
+     `AUTONOMOUS_CAPITAL_EGRESS_RECOVERY bot="Ragungrim" id=1579 realm=Midgard
+     edge=22 from=101:32020,28294,8803 to=100:805561,730996,5029 goal="Grind
+     Riannan in Domnann"` 244 times and the same line for Eirikaunar (id 1416,
+     goal "Grind Gareisren in Avalon Isle") 230 times, 5–20 per minute, both
+     from the same Jordheim exit edge 22 toward the same Midgard outdoor
+     point. Expected: the egress either succeeds or the goal is abandoned
+     after a few recoveries. Actual: the recovery repeats with the same
+     coordinates; the bots never reach their grind camps (Hibernian/Albion
+     zones from Midgard, so the route also needs a frontier crossing). Not
+     traced; check `AutonomousWorldBotCapitalRouting.cs` (~L136) and whether
+     edge 22's outdoor point lies off the mesh.
+
 152. **A bot can keep a stale Group reference after a parallel MakeLeader
      and RemoveMember.** Installed 0.241.0, 2026-10-11 03:21: Caeleaevan
      (Hibernian Champion, level 50) stayed `Group`-linked to Midgard warband
@@ -98,6 +112,34 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+153. **World bots re-plan their zone-boundary step on every think, 65 nav
+     queries each, and the game loop stalls.** Installed 0.244.0, 2026-10-11
+     08:40–10:25 at world speed 20× without clients: 21,685 `Long
+     NpcService.Tick ... BotBrain` warnings (average 112 ms), 14,966 of them
+     for Haldunildulf (Midgard Skald 50, solo LoneRoamer, region 200) and
+     1,242 for Muirinaewen (Hibernian Mentalist 50, group of 4);
+     `BOT_THINK_SLOW ... ZoneItineraryStep=219ms/1x;NavPathQuery=219ms/65x` on
+     every think, 260–360 times a minute from 09:29 on; achieved speed fell
+     from ~6× to 2.1× within an hour, tick p95 from 14 ms to 137 ms. Cause
+     (inferred from the log and the save, the live mesh was not read):
+     `AutonomousZoneItinerary.TryNextStep` plans one zone hop per call with no
+     memory, and the controller's `_resolvedBoundaryStep` is keyed on the
+     current zone. When zone A's direct edge toward the goal has no walkable
+     seam (a cliff pocket), the bot steps into neighbour B, whose shortest
+     route leads back through A, so it walks A, B, A, B forever and pays a
+     full seam search (33 samples, ~65 nav queries) on every hop; nothing is
+     abandoned or logged and the stuck watchdog counts the walking as
+     progress. Both bots sat within 52 units of a zone border in the save
+     (Sheeroe Hills/Bog of Cullen and Connacht/Lough Derg). Source 0.245.0:
+     the controller remembers the edges found dead on the current route
+     (`_deadZoneEdges`, cleared on a new destination, on route reset and after
+     10 game minutes) and passes them to `TryNextStep`, which skips them; a
+     route with no live edge fails once and then costs no nav queries. 4 tests
+     in `UT_ZoneItineraryDeadEdges`. Pending: after installation the
+     `ZoneItineraryStep` slow lines must stop repeating per bot and seam-
+     sitting bots must leave their borders; check `Long NpcService.Tick`
+     counts per hour.
 
 148. **Thidranki (region 238) shows no keep and no guards in the client.**
      Owner report, installed 0.239.0, 2026-10-11 ~00:05: Firebold entered

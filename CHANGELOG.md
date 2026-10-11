@@ -12,6 +12,132 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.249.0] - 2026-10-11
+
+### Added
+
+- A bigger, sharper Map window as an optional client map pack. The map is
+  512 px instead of 256 px, and the window grows to 526 x 731 to fit it.
+  Every zone map is now 512 x 512. The 68 classic Albion, Midgard,
+  Hibernia and Shrouded Isles outdoor zones are re-rendered from the
+  client's own terrain data: the zone ground texture, hillshaded relief,
+  water, forest shading, roads traced from the stock map, town and dungeon
+  names, neighbouring-zone edge labels, icons for bind stones, trainers,
+  merchants, stables, porters, dungeon entrances and keeps (from the static
+  world tables), and a faint loc grid every 8k. All other maps (dungeons,
+  cities, frontiers, area and region maps) are the stock art upscaled.
+  Group members, including companions, now show as a cyan dot that differs
+  from the green world-bot dots. The stock "Show Quest Givers" checkbox is
+  back. Build: `source/server/tools/render_client_maps.py`, then
+  `build_map_client.py`. Install: `tools/dev/Install-ClientMap.ps1`, which
+  does a dry run by default, checks hashes, and keeps a backup for
+  `-RestoreBackup`. `deploy.sh` and the release update pack do not include
+  the map pack. No game.dll change and no server change.
+
+## [0.248.0] - 2026-10-11
+
+### Fixed
+
+- Open BG crews no longer shrink to 33 of 54: an 8-man boarded with 5 after
+  a straggler drop and was relieved as "below minimum" five seconds later
+  (0.246.0 run: 8 of 14 8-man units relieved within 15 s of entering, 9 of
+  14 split by a keep-owner change). A unit now boards only when it meets its
+  minimum counting dead members (8-man: 6); a short unit waits at the porter
+  for the existing refill. Members of a unit relieved below its minimum or
+  after a keep-owner split get the 10-game-minute cooldown instead of the
+  30-minute rest, so they can re-form (`OPEN_BG_UNIT_RELIEVED reason=`).
+
+### Added
+
+- `OPEN_BG_FORM_FAILED realm= kind= need= pool= reason= rejected= repeats=`
+  when an open BG group cannot be formed (one line per realm and kind per
+  five game minutes), with the dominant rejection reason of the candidate
+  pool.
+
+## [0.247.1] - 2026-10-11
+
+### Fixed
+
+- The open BG landing band check read an actor's position outside the open
+  BG region too, which threw for region-less actors in two unit tests
+  (`UT_CamlannPvpCombatant`); the position is read only inside the landing
+  region. No gameplay change.
+
+## [0.247.0] - 2026-10-11
+
+### Changed
+
+- The open BG landing peace now works like the world hubs in full: each
+  realm's landing circle (5,500) is a safe anchor with a band of 8,000 and
+  the eight-minute departure clock, so crews that leave the landing within
+  minutes of each other do not grind at the circle's edge (0.246.1 run, first
+  five minutes: 114 of 118 same-realm deaths fell just outside the circle,
+  about 6,400 from the landing). Crew bots in region 252 run the battleground
+  driver, so the crossing is observed on the attack check itself. Field,
+  bridges and keep stay free-for-all; still no realm alliance. 4 tests.
+
+## [0.246.1] - 2026-10-11
+
+### Fixed
+
+- The open BG landing peace of 0.246.0 never applied: the landing cache's
+  retry clock started at `long.MinValue`, the subtraction overflowed and the
+  landings were never read (0.246.0 run, 25 min at ~9×: 1,339 same-realm
+  crew deaths at the arrival camps, hub-peace counter `bind:69`). The clock
+  now starts with a "tried" flag.
+
+## [0.246.0] - 2026-10-11
+
+### Changed
+
+- The same-realm hub peace of the world (bindstones, border hubs, capital
+  landings) now also holds within 5,500 units of each realm's own open BG
+  landing, which covers the arrival camps 4,000–5,000 units out. In the
+  0.245.0 run (26 min at ~7×) 1,144 of 1,342 crew deaths were same-realm
+  and 891 of them fell at those camps, the bindstone loop of bug 63 at the
+  BG's doors. A circle like everywhere else on Camlann, not a realm alliance:
+  bridges, field and keep 11 stay free-for-all. 3 tests in
+  `UT_OpenBattlegroundLandingPeace`.
+
+## [0.245.0] - 2026-10-11
+
+### Added
+
+- open BG keep raids: each cycle the director picks a raid of several crew
+  units of any realm that are not friends of the keep (at least a third of
+  the crew inside, an 8-man first, guilds with the fewest recent wins
+  likeliest) and puts them in one battlegroup from the push to the cycle end;
+  the raid musters at its lead unit's bridge and marches on the keep, the
+  claiming guild defends, bystanders keep 3,000 units off. Logs
+  `OPEN_BG_RAID`, `OPEN_BG_RAID_BATTLEGROUP`, `raid=true` on role lines,
+  `owner_guild=` on `OPEN_BG_PHASE`; the status `Attacker` field shows the
+  raid summary in the `/bgsetup` window and the launcher tab.
+- World bots remember the zone-seam edges found dead on their current route,
+  so a bot whose direct edge is a cliff pocket takes the next edge instead of
+  hopping between two zones forever (bug 153; 4 tests).
+
+### Changed
+
+- Open BG alliances follow the rest of the server (owner decision): bots are
+  allied only by group, guild or battlegroup, never by realm; players of the
+  same realm stay free-for-all inside, portal-keep guards stay passive and the
+  measured pace (keep change every ~20 minutes) stays.
+- The driver's four-at-the-gate siege count uses alliances instead of realms.
+- A raid stops assaulting once one of its guilds claims the keep; its other
+  units become bystanders.
+
+### Removed
+
+- The 0.244.0 same-realm crew alliance (`open_bg_realm_crews_allied`,
+  `PvpCombatant.OpenBgCrewAllied`): realm affiliation decides nothing in the
+  open BG.
+
+### Fixed
+
+- Bug 153: a world bot re-planned its zone-boundary step on every think with
+  about 65 nav queries each (21,685 long NPC ticks in 105 minutes, the 20×
+  run slowed from 6× to 2×).
+
 ## [0.244.1] - 2026-10-11
 
 ### Added

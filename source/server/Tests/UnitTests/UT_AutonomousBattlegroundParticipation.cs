@@ -377,10 +377,35 @@ namespace DOL.GS.Tests
                 Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 7, OpenBattlegroundRoster.Group8Minimum),
                     Is.True, "seven of eight board; the straggler leaves the unit");
                 Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 5, OpenBattlegroundRoster.Group8Minimum),
-                    Is.False, "five no longer make an 8-man: nobody boards and the roster replaces the unit");
+                    Is.False, "five no longer make an 8-man: nobody boards and the rest waits for the porter refill");
                 Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 2, OpenBattlegroundRoster.SmallGroupMin),
                     Is.True, "a small group of three boards with two");
                 Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 0, 1), Is.False);
+            });
+        }
+
+        [Test]
+        public void AnOpenUnitBoardsOnlyAtItsMinimumDeadMembersIncluded()
+        {
+            // Live run 0.246.0, unit 39: six formed, one straggler dropped, the five boarded one cast later and were
+            // relieved 37 s after landing. Below its minimum a unit now waits at the porter for the refill.
+            int eight = OpenBattlegroundRoster.Group8Minimum;
+            Assert.Multiple(() =>
+            {
+                Assert.That(AutonomousBattlegroundParticipation.OpenUnitMeetsBoardingMinimum(6, eight), Is.True,
+                    "five alive and ready plus one dead member make six: the unit boards, the dead one follows after its release");
+                Assert.That(AutonomousBattlegroundParticipation.OpenUnitMeetsBoardingMinimum(5, eight), Is.False,
+                    "five left after a straggler drop wait for the refill instead of landing short");
+                Assert.That(AutonomousBattlegroundParticipation.OpenUnitMeetsBoardingMinimum(8, eight), Is.True);
+                Assert.That(AutonomousBattlegroundParticipation.OpenUnitMeetsBoardingMinimum(2, OpenBattlegroundRoster.SmallGroupMin), Is.True);
+                Assert.That(AutonomousBattlegroundParticipation.OpenUnitMeetsBoardingMinimum(1, OpenBattlegroundRoster.SmallGroupMin), Is.False,
+                    "a small group of one waits");
+                Assert.That(AutonomousBattlegroundParticipation.OpenUnitMeetsBoardingMinimum(1, 1), Is.True, "a solo always boards");
+                Assert.That(AutonomousBattlegroundParticipation.OpenUnitMeetsBoardingMinimum(0, 0), Is.False, "nobody left");
+                // After the boarding wait: 7 of 8 alive, one of them a straggler, one dead -> six stay and board.
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 8 - 1, eight), Is.True);
+                // Six formed, one straggler: the five left do not board even though all five stand ready.
+                Assert.That(AutonomousBattlegroundParticipation.OpenGroupMayBoardWithoutStragglers(true, 6 - 1, eight), Is.False);
             });
         }
 

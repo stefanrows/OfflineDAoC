@@ -21,6 +21,12 @@ namespace DOL.GS
 
     public enum OpenBgUnitKind { Group8, Small, Solo }
 
+    /// <summary>
+    /// Why a level 40-50 world bot of a realm did not make the open BG crew's candidate pool, or why a pool candidate
+    /// did not fit a group's leader (logged by <c>OPEN_BG_FORM_FAILED</c>).
+    /// </summary>
+    public enum OpenBgReject { KeepDefenseOrRaid, InGroup, Busy, Objective, Rest, Cooldown, FarFromPorter, OtherRegion, KeepOwnerSide, LevelBand }
+
     /// <summary>One roster unit of a realm: a group or a solo. Inside once a member has entered; leaving members are not part of it.</summary>
     public readonly record struct OpenBgUnit(int Id, OpenBgUnitKind Kind, int Size, bool Inside = false, long InsideSinceTick = 0);
 
@@ -302,6 +308,100 @@ namespace DOL.GS
         /// <summary>The later of a running rest and a new one starting now; a rest never shrinks.</summary>
         public static long ExtendRest(long restingUntil, long now, long restMilliseconds) => Math.Max(restingUntil, now + restMilliseconds);
 
+        /// <summary>
+        /// The rest a relieved unit's members get before the roster may pick them again. A unit relieved because it fell
+        /// below its minimum (stragglers, a keep-owner split) served for seconds; its members get only the
+        /// <see cref="RecruitCooldownMilliseconds"/> so they can re-form (live run 0.246.0: the 30-minute rest after such
+        /// reliefs drained the pool). A due, surplus or cap relief keeps the <see cref="RestAfterReliefMilliseconds"/>.
+        /// </summary>
+        public static long RestAfterRelief(bool belowMinimum) => belowMinimum ? RecruitCooldownMilliseconds : RestAfterReliefMilliseconds;
+
+        /// <summary>
+        /// The first reason a level 40-50 world bot on a home frontier is not a crew candidate, in this order: held for a
+        /// guild keep defense or a realm raid, in a group, busy (dead, fighting, walking back, in a dungeon, on a stable
+        /// ride, behind the PvP wall, carrying a relic), on PvE work, resting after a relief or cooling down after a drop,
+        /// too far from a medallion porter. Null for a candidate.
+        /// </summary>
+        public static OpenBgReject? CandidateRejection(bool keepDefenseOrRaid, bool inGroup, bool busy, bool rvrTour, bool idle,
+            bool resting, bool restAfterRelief, bool nearPorter)
+        {
+            if (keepDefenseOrRaid) return OpenBgReject.KeepDefenseOrRaid;
+            if (inGroup) return OpenBgReject.InGroup;
+            if (busy) return OpenBgReject.Busy;
+            if (CandidateRank(rvrTour, idle) < 0) return OpenBgReject.Objective;
+            if (resting) return restAfterRelief ? OpenBgReject.Rest : OpenBgReject.Cooldown;
+            if (!nearPorter) return OpenBgReject.FarFromPorter;
+            return null;
+        }
+
+        /// <summary>
+        /// Why a pool candidate cannot join a group leader: another frontier region, the other side of the keep's owner
+        /// guild, a level the leader's group does not take, or too far from the leader's porter. Null for a fit.
+        /// </summary>
+        public static OpenBgReject? MateRejection(bool sameRegion, bool sameKeepSide, bool levelsCompatible, bool withinPorterReach)
+        {
+            if (!sameRegion) return OpenBgReject.OtherRegion;
+            if (!sameKeepSide) return OpenBgReject.KeepOwnerSide;
+            if (!levelsCompatible) return OpenBgReject.LevelBand;
+            if (!withinPorterReach) return OpenBgReject.FarFromPorter;
+            return null;
+        }
+
+        /// <summary>
+        /// The rejections that explain a group that could not form: with fewer RvR candidates in the pool than the group
+        /// needs, the realm's pool rejections plus the idle pool bots (not on an RvR tour, so no group member); with
+        /// enough candidates, why they did not fit the leader that came closest.
+        /// </summary>
+        public static IReadOnlyDictionary<OpenBgReject, int> FormFailureRejections(int rvrPool, int need, int idleInPool,
+            IReadOnlyDictionary<OpenBgReject, int> poolStage, IReadOnlyDictionary<OpenBgReject, int> mateStage)
+        {
+            if (rvrPool >= need && mateStage != null && mateStage.Values.Any(count => count > 0)) return mateStage;
+            var result = new Dictionary<OpenBgReject, int>();
+            foreach (KeyValuePair<OpenBgReject, int> pair in poolStage ?? new Dictionary<OpenBgReject, int>())
+                if (pair.Value > 0) result[pair.Key] = pair.Value;
+            if (idleInPool > 0) result[OpenBgReject.Objective] = result.GetValueOrDefault(OpenBgReject.Objective) + idleInPool;
+            return result;
+        }
+
+        /// <summary>The most frequent rejection (ties: the earlier reason), or null when nothing was rejected.</summary>
+        public static OpenBgReject? DominantRejection(IReadOnlyDictionary<OpenBgReject, int> counts) =>
+            (counts ?? new Dictionary<OpenBgReject, int>()).Where(pair => pair.Value > 0)
+                .OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key)
+                .Select(pair => (OpenBgReject?)pair.Key).FirstOrDefault();
+
+        /// <summary>The log name of a rejection.</summary>
+        public static string RejectionName(OpenBgReject? reject) => reject switch
+        {
+            OpenBgReject.KeepDefenseOrRaid => "keep_defense_or_raid",
+            OpenBgReject.InGroup => "in_group",
+            OpenBgReject.Busy => "busy",
+            OpenBgReject.Objective => "objective",
+            OpenBgReject.Rest => "rest",
+            OpenBgReject.Cooldown => "cooldown",
+            OpenBgReject.FarFromPorter => "far_from_porter",
+            OpenBgReject.OtherRegion => "other_region",
+            OpenBgReject.KeepOwnerSide => "keep_owner_side",
+            OpenBgReject.LevelBand => "level_band",
+            _ => "none",
+        };
+
+        /// <summary>
+        /// The <c>OPEN_BG_FORM_FAILED</c> line: a realm's group of this kind could not form; <paramref name="need"/> is its
+        /// minimum, <paramref name="pool"/> the RvR candidates left in the realm's pool, then the dominant rejection, all
+        /// of them, and how many further failures since the last line it stands for.
+        /// </summary>
+        public static string FormFailedLine(eRealm realm, OpenBgUnitKind kind, int need, int pool, IReadOnlyDictionary<OpenBgReject, int> rejections,
+            int repeats)
+        {
+            string all = string.Join(",", (rejections ?? new Dictionary<OpenBgReject, int>()).Where(pair => pair.Value > 0)
+                .OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key).Select(pair => $"{RejectionName(pair.Key)}:{pair.Value}"));
+            return $"OPEN_BG_FORM_FAILED realm={RealmName(realm)} kind={Describe(kind)} need={need} pool={pool} " +
+                $"reason={RejectionName(DominantRejection(rejections))} rejected=\"{all}\" repeats={repeats}";
+        }
+
+        /// <summary>The fewest game milliseconds between two <c>OPEN_BG_FORM_FAILED</c> lines of one realm and kind.</summary>
+        public const long FormFailedLogMilliseconds = 5 * 60_000L;
+
         /// <summary>Whether a bot still rests (game time) and may not be recruited.</summary>
         public static bool IsResting(long restingUntil, long now) => now < restingUntil;
 
@@ -399,6 +499,9 @@ namespace DOL.GS
         private static readonly Dictionary<int, UnitInfo> Units = new();
         private static readonly Dictionary<eRealm, ReliefClock> Clocks = new();
         private static readonly Dictionary<GameBot, long> RestingUntil = new(ReferenceEqualityComparer.Instance);
+        // Bots whose running rest is the long one after a relief (not a drop or below-minimum cooldown); only logged.
+        private static readonly HashSet<GameBot> RestIsRelief = new(ReferenceEqualityComparer.Instance);
+        private static readonly Dictionary<(eRealm, OpenBgUnitKind), (long NextTick, int Repeats)> FormFailedLog = new();
         private static readonly Random Rng = new();
         private static int _nextUnit;
         private static long _nextLogTick;
@@ -435,18 +538,30 @@ namespace DOL.GS
                     Units[member.Unit].Kind, BattlegroundDefinitionKind.Open, member.Entered, member.Leaving, member.EnteredTick)),
                     realm => ReliefDue(realm, crew, now));
                 foreach (GameBot bot in RestingUntil.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
+                {
                     RestingUntil.Remove(bot);
+                    RestIsRelief.Remove(bot);
+                }
             }
             foreach (Group group in released)
                 AutonomousBotGroupCoordinator.ReleaseOpenBattlegroundParty(group);
 
             OpenBgPlan plan = Plan(setup, counts);
+            var belowMinimum = counts.SelectMany(count => count.Units).Where(RelievedBelowMinimum).Select(unit => unit.Id).ToHashSet();
             foreach (OpenBgRealmPlan realm in plan.Realms)
             {
                 if (realm.Relieve.Count == 0) continue;
                 foreach (int unit in realm.Relieve)
-                    foreach (GameBot bot in AutonomousBattlegroundParticipation.RelieveOpenUnit(unit, now))
-                        lock (Sync) RestingUntil[bot] = ExtendRest(RestingUntil.GetValueOrDefault(bot), now, RestAfterReliefMilliseconds);
+                {
+                    bool shrunk = belowMinimum.Contains(unit);
+                    long rest = RestAfterRelief(shrunk);
+                    GameBot[] relieved = AutonomousBattlegroundParticipation.RelieveOpenUnit(unit, now);
+                    foreach (GameBot bot in relieved)
+                        StartRest(bot, now, rest);
+                    if (relieved.Length > 0)
+                        Log.Info($"OPEN_BG_UNIT_RELIEVED realm={RealmName(realm.Realm)} unit={unit} size={relieved.Length} " +
+                            $"reason={(shrunk ? "below_minimum" : "scheduled")} rest_min={rest / 60_000}");
+                }
                 // Only a due relief restarts the realm's clock; a lowered setup's surplus does not.
                 if (counts.FirstOrDefault(count => count.Realm == realm.Realm)?.ReliefDue != true) continue;
                 lock (Sync)
@@ -457,12 +572,14 @@ namespace DOL.GS
                 }
             }
             bool refilling = plan.Realms.Any(realm => realm.Refill?.Count > 0);
+            Dictionary<eRealm, Dictionary<OpenBgReject, int>> poolRejections = null;
             Dictionary<eRealm, List<GameBot>> pools = plan.Admits.Count > 0 || refilling
                 ? CandidatePools(plan.Admits.Select(admit => admit.Realm)
-                    .Concat(plan.Realms.Where(realm => realm.Refill?.Count > 0).Select(realm => realm.Realm)).Distinct().ToArray(), now)
+                    .Concat(plan.Realms.Where(realm => realm.Refill?.Count > 0).Select(realm => realm.Realm)).Distinct().ToArray(), now,
+                    out poolRejections)
                 : null;
             if (refilling) RefillUnits(plan, setup, crew, pools, keepOwner, now);
-            int formed = plan.Admits.Count > 0 ? FormUnits(plan, setup, now, pools, keepOwner) : 0;
+            int formed = plan.Admits.Count > 0 ? FormUnits(plan, setup, now, pools, poolRejections, keepOwner) : 0;
 
             if (now >= _nextLogTick)
             {
@@ -490,6 +607,8 @@ namespace DOL.GS
                 Units.Clear();
                 Clocks.Clear();
                 RestingUntil.Clear();
+                RestIsRelief.Clear();
+                FormFailedLog.Clear();
                 PorterCache.Clear();
                 _nextLogTick = 0;
             }
@@ -526,7 +645,8 @@ namespace DOL.GS
         }
 
         /// <summary>Forms the plan's admits in its order. Never above the cap: every unit's real size is checked against the seats left.</summary>
-        private static int FormUnits(OpenBgPlan plan, OpenBgSetup setup, long now, Dictionary<eRealm, List<GameBot>> pools, GuildIds keepOwner)
+        private static int FormUnits(OpenBgPlan plan, OpenBgSetup setup, long now, Dictionary<eRealm, List<GameBot>> pools,
+            Dictionary<eRealm, Dictionary<OpenBgReject, int>> poolRejections, GuildIds keepOwner)
         {
             int free = Math.Max(0, setup.MaxBots) - AutonomousBattlegroundParticipation.OpenCrewCount();
             if (free <= 0) return 0;
@@ -547,7 +667,12 @@ namespace DOL.GS
                 int size = admit.Kind == OpenBgUnitKind.Group8 ? Math.Min(Group8Size, free) : Math.Min(SmallGroupSize(Rng), free);
                 int minimum = admit.Kind == OpenBgUnitKind.Group8 ? Group8Minimum : SmallGroupMin;
                 if (size < minimum) continue;
-                if (!TryPickGroup(pool, size, minimum, now, keepOwner, out GameBot leader, out GameBot[] others, out OFTeleporter porter)) continue;
+                if (!TryPickGroup(pool, size, minimum, now, keepOwner, out GameBot leader, out GameBot[] others, out OFTeleporter porter,
+                        out Dictionary<OpenBgReject, int> mateRejections))
+                {
+                    NoteFormFailed(admit, minimum, pool, poolRejections?.GetValueOrDefault(admit.Realm), mateRejections, now);
+                    continue;
+                }
                 groupsFormed++;
                 pool.Remove(leader);
                 foreach (GameBot other in others) pool.Remove(other);
@@ -573,6 +698,43 @@ namespace DOL.GS
             return formed;
         }
 
+        // An 8-man or small group of a realm could not form: one OPEN_BG_FORM_FAILED line per realm and kind every
+        // FormFailedLogMilliseconds, counting the failures in between.
+        private static void NoteFormFailed(OpenBgAdmit admit, int need, List<GameBot> pool, Dictionary<OpenBgReject, int> poolStage,
+            Dictionary<OpenBgReject, int> mateStage, long now)
+        {
+            int rvr = pool.Count(bot => AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) && bot.Group == null);
+            int repeats;
+            lock (Sync)
+            {
+                var key = (admit.Realm, admit.Kind);
+                (long next, int suppressed) = FormFailedLog.GetValueOrDefault(key);
+                if (now < next)
+                {
+                    FormFailedLog[key] = (next, suppressed + 1);
+                    return;
+                }
+                FormFailedLog[key] = (now + FormFailedLogMilliseconds, 0);
+                repeats = suppressed;
+            }
+            Log.Info(FormFailedLine(admit.Realm, admit.Kind, need, rvr,
+                FormFailureRejections(rvr, need, pool.Count - rvr, poolStage, mateStage), repeats));
+        }
+
+        // Starts or extends a bot's rest; remembers whether the running rest is the long one after a relief.
+        private static void StartRest(GameBot bot, long now, long restMilliseconds)
+        {
+            if (bot == null) return;
+            lock (Sync)
+            {
+                long until = RestingUntil.GetValueOrDefault(bot);
+                long extended = ExtendRest(until, now, restMilliseconds);
+                if (extended != until) RestIsRelief.Remove(bot);
+                if (extended != until && restMilliseconds >= RestAfterReliefMilliseconds) RestIsRelief.Add(bot);
+                RestingUntil[bot] = extended;
+            }
+        }
+
         private static bool Register(OpenBgAdmit admit, GameBot[] members, Group group, string label, long now, OFTeleporter porter = null)
         {
             int id;
@@ -591,20 +753,36 @@ namespace DOL.GS
         /// to walk now (<see cref="IsRecruitableNow"/>) and within <see cref="PorterReach"/> of a porter that sells the
         /// medallion.
         /// </summary>
-        private static Dictionary<eRealm, List<GameBot>> CandidatePools(eRealm[] realms, long now)
+        private static Dictionary<eRealm, List<GameBot>> CandidatePools(eRealm[] realms, long now,
+            out Dictionary<eRealm, Dictionary<OpenBgReject, int>> rejections)
         {
             var pools = realms.ToDictionary(realm => realm, _ => new List<GameBot>());
+            rejections = realms.ToDictionary(realm => realm, _ => new Dictionary<OpenBgReject, int>());
             var distance = new Dictionary<GameBot, long>(ReferenceEqualityComparer.Instance);
             Dictionary<GameBot, long> resting;
-            lock (Sync) resting = new Dictionary<GameBot, long>(RestingUntil, ReferenceEqualityComparer.Instance);
+            HashSet<GameBot> restIsRelief;
+            lock (Sync)
+            {
+                resting = new Dictionary<GameBot, long>(RestingUntil, ReferenceEqualityComparer.Instance);
+                restIsRelief = new HashSet<GameBot>(RestIsRelief, ReferenceEqualityComparer.Instance);
+            }
             foreach (GameBot bot in AutonomousBotRegistry.Snapshot())
             {
-                if (!pools.TryGetValue(bot.Realm, out List<GameBot> pool) || bot.Group != null ||
-                    resting.TryGetValue(bot, out long until) && IsResting(until, now) || !IsCandidate(bot)) continue;
+                if (!pools.TryGetValue(bot.Realm, out List<GameBot> pool)) continue;
+                bool isResting = resting.TryGetValue(bot, out long until) && IsResting(until, now);
+                if (bot.Group != null || isResting || !IsCandidate(bot))
+                {
+                    if (InCrewBand(bot))
+                        Count(rejections[bot.Realm], CandidateRejection(bot, isResting, restIsRelief.Contains(bot)) ?? OpenBgReject.Busy);
+                    continue;
+                }
                 OFTeleporter[] porters = PortersIn(bot.CurrentRegionID, now);
-                if (porters.Length == 0) continue;
-                long nearest = porters.Min(porter => (long)bot.GetDistanceTo(porter));
-                if (!WithinPorterReach(nearest)) continue;
+                long nearest = porters.Length == 0 ? -1 : porters.Min(porter => (long)bot.GetDistanceTo(porter));
+                if (!WithinPorterReach(nearest))
+                {
+                    Count(rejections[bot.Realm], OpenBgReject.FarFromPorter);
+                    continue;
+                }
                 distance[bot] = nearest;
                 pool.Add(bot);
             }
@@ -623,12 +801,26 @@ namespace DOL.GS
             return pools;
         }
 
+        // The bots whose rejection the FORM_FAILED line counts: level 40-50 autonomous world bots on a home frontier
+        // outside every battleground, i.e. those the roster could recruit at all.
+        private static bool InCrewBand(GameBot bot) =>
+            bot.ObjectState == GameObject.eObjectState.Active && bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper &&
+            !bot.IsPersistentPlayerCompanion && bot.Level >= MinLevel && bot.Level <= MaxLevel &&
+            AutonomousBattlegroundParticipation.IsFrontierRegion(bot.CurrentRegionID) && !AutonomousBattlegroundParticipation.IsInAnyBattleground(bot);
+
+        private static OpenBgReject? CandidateRejection(GameBot bot, bool resting, bool restAfterRelief) =>
+            CandidateRejection(AutonomousRealmRaid.IsReserved(bot) || AutonomousGuildKeepDefense.IsRecalled(bot), bot.Group != null,
+                bot.IsPlayerLedGroup || GameRelic.IsPlayerCarryingRelic(bot) ||
+                !IsRecruitableNow(bot.IsAlive, bot.IsReturningAfterRelease, bot.CurrentZone?.IsDungeon == true,
+                    AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow),
+                    bot.InCombat || bot.IsAttacking, bot.IsOnStableMasterRoute),
+                AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR), IsIdle(bot), resting, restAfterRelief, true);
+
+        private static void Count(Dictionary<OpenBgReject, int> counts, OpenBgReject reject) =>
+            counts[reject] = counts.GetValueOrDefault(reject) + 1;
+
         /// <summary>Starts a bot's re-recruit cooldown (<see cref="RecruitCooldownMilliseconds"/>) after it left its unit before boarding.</summary>
-        public static void NoteLeftBeforeEntry(GameBot bot, long now)
-        {
-            if (bot == null) return;
-            lock (Sync) RestingUntil[bot] = ExtendRest(RestingUntil.GetValueOrDefault(bot), now, RecruitCooldownMilliseconds);
-        }
+        public static void NoteLeftBeforeEntry(GameBot bot, long now) => StartRest(bot, now, RecruitCooldownMilliseconds);
 
         /// <summary>
         /// Refills each unit the plan keeps although it fell below its minimum before boarding: replacements from the
@@ -651,7 +843,7 @@ namespace DOL.GS
                         info.Porter is not { ObjectState: GameObject.eObjectState.Active } porter)
                     {
                         foreach (GameBot bot in AutonomousBattlegroundParticipation.RelieveOpenUnit(unit, now))
-                            lock (Sync) RestingUntil[bot] = ExtendRest(RestingUntil.GetValueOrDefault(bot), now, RecruitCooldownMilliseconds);
+                            StartRest(bot, now, RecruitCooldownMilliseconds);
                         continue;
                     }
                     int target = Math.Max(MinimumSize(info.Kind), info.Kind == OpenBgUnitKind.Group8 ? Group8Size : info.FormedSize);
@@ -690,13 +882,15 @@ namespace DOL.GS
         /// (<see cref="MayJoinUnit"/>).
         /// </summary>
         private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now, GuildIds keepOwner,
-            out GameBot leader, out GameBot[] others, out OFTeleporter porter)
+            out GameBot leader, out GameBot[] others, out OFTeleporter porter, out Dictionary<OpenBgReject, int> mateRejections)
         {
             leader = null;
             others = Array.Empty<GameBot>();
             porter = null;
+            mateRejections = null;
             GameBot[] rvr = pool.Where(bot => AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) && bot.Group == null).ToArray();
             if (rvr.Length < minimum) return false;
+            int bestNear = -1;
             foreach (GameBot seed in rvr.OrderBy(bot => bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true ? 0 : 1).Take(4))
             {
                 OFTeleporter nearest = PortersIn(seed.CurrentRegionID, now).OrderBy(candidate => seed.GetDistanceTo(candidate)).FirstOrDefault();
@@ -704,7 +898,16 @@ namespace DOL.GS
                 GameBot[] near = UnitMates(seed, rvr, GuildIdsOf, keepOwner).Where(bot => bot != seed && bot.CurrentRegionID == seed.CurrentRegionID &&
                         AutonomousBotGroupCoordinator.LevelsCompatible(seed.Level, bot.Level) && WithinPorterReach(bot.GetDistanceTo(nearest)))
                     .OrderBy(bot => bot.GetDistanceTo(nearest)).ToArray();
-                if (near.Length + 1 < minimum) continue;
+                if (near.Length + 1 < minimum)
+                {
+                    // For the log: why the others did not fit the leader that came closest.
+                    if (near.Length > bestNear)
+                    {
+                        bestNear = near.Length;
+                        mateRejections = MateRejections(seed, rvr, nearest, keepOwner);
+                    }
+                    continue;
+                }
                 int healersWanted = (size >= 6 ? 2 : 1) - (IsHealer(seed) ? 1 : 0);
                 GameBot[] healers = near.Where(IsHealer).Take(Math.Max(0, healersWanted)).ToArray();
                 GameBot[] picked = healers.Concat(near.Where(bot => !healers.Contains(bot)).Take(size - 1 - healers.Length)).ToArray();
@@ -714,6 +917,21 @@ namespace DOL.GS
                 return true;
             }
             return false;
+        }
+
+        private static Dictionary<OpenBgReject, int> MateRejections(GameBot seed, GameBot[] rvr, OFTeleporter porter, GuildIds keepOwner)
+        {
+            var counts = new Dictionary<OpenBgReject, int>();
+            var sameSide = UnitMates(seed, rvr, GuildIdsOf, keepOwner).ToHashSet(ReferenceEqualityComparer.Instance);
+            foreach (GameBot bot in rvr)
+            {
+                if (bot == seed) continue;
+                bool sameRegion = bot.CurrentRegionID == seed.CurrentRegionID;
+                OpenBgReject? reject = MateRejection(sameRegion, sameSide.Contains(bot),
+                    AutonomousBotGroupCoordinator.LevelsCompatible(seed.Level, bot.Level), sameRegion && WithinPorterReach(bot.GetDistanceTo(porter)));
+                if (reject is OpenBgReject value) Count(counts, value);
+            }
+            return counts;
         }
 
         /// <summary>
@@ -750,9 +968,8 @@ namespace DOL.GS
                 if (owners.Length == 0) continue;
                 GameBot[] relieved = AutonomousBattlegroundParticipation.RelieveOpenMembers(unit.Key, owners, now);
                 if (relieved.Length == 0) continue;
-                lock (Sync)
-                    foreach (GameBot bot in relieved)
-                        RestingUntil[bot] = ExtendRest(RestingUntil.GetValueOrDefault(bot), now, RecruitCooldownMilliseconds);
+                foreach (GameBot bot in relieved)
+                    StartRest(bot, now, RecruitCooldownMilliseconds);
                 split++;
                 Log.Info($"OPEN_BG_UNIT_SPLIT unit={unit.Key} reason=keep_owner_guild guild=\"{relieved[0].Guild?.Name}\" " +
                     $"members=\"{string.Join(",", relieved.Select(bot => bot.Name))}\" remaining={members.Length - relieved.Length}");
