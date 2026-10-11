@@ -2164,6 +2164,8 @@ namespace DOL.GS
                     bot.Group?.MemberCount ?? 1) ||
                 AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow) ||
                 brain.HasAggro || bot.InCombat || bot.IsAttacking || bot.IsRecoveryResting ||
+                // An open-BG crew member on its way to the porter fights only in self-defence.
+                AutonomousBattlegroundParticipation.IsTravellingOpenCrew(bot) ||
                 _groupDirective?.RecoveringBetweenPulls == true || _groupDirective?.GroupCombatActive == true ||
                 IsSafeArea(bot) || AutonomousSiegeMarch.IsMarching(bot) || !AutonomousBotGroupCoordinator.CanInitiateNewPull(bot))
                 return false;
