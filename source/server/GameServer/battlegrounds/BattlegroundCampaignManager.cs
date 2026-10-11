@@ -43,6 +43,8 @@ namespace DOL.GS
             internal ECSGameTimer Timer;
             // open BG only: the roster's own 60-second timer, outside the campaign gate.
             internal ECSGameTimer RosterTimer;
+            // open BG only: guest squads for humans under 40, every 30 game seconds, outside the campaign gate.
+            internal ECSGameTimer GuestTimer;
             internal int Rotation;
             internal long LordSpawnTick;
             internal bool HasMonsterObjectives;
@@ -116,6 +118,7 @@ namespace DOL.GS
                 {
                     campaign.Timer?.Stop();
                     campaign.RosterTimer?.Stop();
+                    campaign.GuestTimer?.Stop();
                     foreach (Encounter encounter in campaign.Encounters) Cleanup(encounter);
                     foreach (Camp camp in campaign.Camps)
                     {
@@ -126,6 +129,7 @@ namespace DOL.GS
                 Campaigns.Clear();
             }
             OpenBattlegroundRoster.Reset();
+            OpenBattlegroundGuestSquads.Reset();
         }
 
         private static void EnsureToken()
@@ -240,6 +244,9 @@ namespace DOL.GS
             if (definition.Kind == BattlegroundDefinitionKind.Open)
                 campaign.RosterTimer = new ECSGameTimer(campaign.Camps[0].Commander, _ => RosterTick(campaign),
                     OpenBattlegroundRoster.TickMilliseconds + stagger);
+            if (definition.Kind == BattlegroundDefinitionKind.Open)
+                campaign.GuestTimer = new ECSGameTimer(campaign.Camps[0].Commander, _ => GuestTick(campaign),
+                    OpenBattlegroundGuestSquads.TickMilliseconds + stagger);
             Log.Info($"BATTLEGROUND_CAMPAIGN_READY region={definition.RegionId} camps={campaign.Camps.Count} keep={(keep == null ? "none" : keep.KeepID.ToString())} lord={NativeLordReady(campaign)} doors={keep?.Doors.Count ?? 0} monsters={campaign.HasMonsterObjectives}");
         }
 
@@ -356,6 +363,15 @@ namespace DOL.GS
             try { OpenBattlegroundRoster.Tick(campaign.Definition, GameLoop.GameLoopTime); }
             catch (Exception exception) { Log.Error($"OPEN_BG_ROSTER_FAILED region={campaign.Definition.RegionId}", exception); }
             return OpenBattlegroundRoster.TickMilliseconds;
+        }
+
+        // Game time, like the roster: guest squads on a low human's level while one is inside (spec 2026-10-11 §8).
+        private static int GuestTick(Campaign campaign)
+        {
+            if (!_running) return 0;
+            try { OpenBattlegroundGuestSquads.Tick(campaign.Definition, campaign.Camps.Select(camp => (camp.Index, camp.Position)).ToArray(), campaign.Keep, GameLoop.GameLoopTime); }
+            catch (Exception exception) { Log.Error($"OPEN_BG_GUEST_FAILED region={campaign.Definition.RegionId}", exception); }
+            return OpenBattlegroundGuestSquads.TickMilliseconds;
         }
 
         private static void SpawnCaptain(Camp camp)
@@ -527,7 +543,8 @@ namespace DOL.GS
         {
             string kind = ambush ? "ambush" : "patrol";
             GameLiving[] participants = LocalParticipants(campaign);
-            GameLiving[] targets = SquadTargets(participants);
+            // In the open BG humans under 40 belong to the guest squads; the campaign's squads never scale down to them.
+            GameLiving[] targets = SquadTargets(participants).Where(actor => OpenBattlegroundGuestSquads.CampaignSquadMayTarget(campaign.Definition, actor is GamePlayer, actor.Level)).ToArray();
             if (targets.Length == 0) { LogSquadSkipped(campaign, kind, "no_participants", 0); return; }
             // A real player leads whenever one is a target; a bot participant leads only when none is.
             GameLiving[] humans = targets.Where(actor => actor is GamePlayer).ToArray();
@@ -582,7 +599,7 @@ namespace DOL.GS
                     failure ??= $"route:{routeFailure}";
                     continue;
                 }
-                Encounter candidate = new() { Goal = attemptGoal, Participant = participant, Level = (byte)Math.Clamp(participant.Level, campaign.Definition.MinLevel, campaign.Definition.MaxLevel),
+                Encounter candidate = new() { Goal = attemptGoal, Participant = participant, Level = OpenBattlegroundGuestSquads.CampaignSquadLevel(campaign.Definition, participant.Level),
                     ExpiresAt = Now + (ambush ? 6 : 10) * 60_000 };
                 string spawnFailure = SpawnParty(campaign, candidate, origin.Position, guild, null, name, size);
                 if (candidate.Members.Count > 0) encounter = candidate;
@@ -758,7 +775,7 @@ namespace DOL.GS
                             message = "The assault could not record its funding; your last contribution was returned.";
                             return false;
                         }
-                        Encounter assault = new() { Camp = camp, Siege = true, Level = (byte)Math.Clamp(player.Level, campaign.Definition.MinLevel, campaign.Definition.MaxLevel), Goal = new Point3D(campaign.Keep.X, campaign.Keep.Y, campaign.Keep.Z), ExpiresAt = Now + 10 * 60_000 };
+                        Encounter assault = new() { Camp = camp, Siege = true, Level = OpenBattlegroundGuestSquads.CampaignSquadLevel(campaign.Definition, player.Level), Goal = new Point3D(campaign.Keep.X, campaign.Keep.Y, campaign.Keep.Z), ExpiresAt = Now + 10 * 60_000 };
                         SpawnParty(campaign, assault, camp.Position, camp.Guild, camp.AllianceSponsor, "Camp siege escort", 4);
                         if (assault.Members.Count == 0)
                         {

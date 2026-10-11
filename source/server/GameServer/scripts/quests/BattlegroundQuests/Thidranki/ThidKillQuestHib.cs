@@ -20,8 +20,8 @@ namespace DOL.GS.DailyQuest.Hibernia
 		private static readonly Logging.Logger log = Logging.LoggerManager.Create(MethodBase.GetCurrentMethod().DeclaringType);
 
 		private const string questTitle = "[Daily] Fen's New Friends";
-		private const int minimumLevel = 20;
-		private const int maximumLevel = 24;
+		private const int minimumLevel = ThidrankiDailies.MinimumLevel;
+		private const int maximumLevel = ThidrankiDailies.MaximumLevel;
 
 		private static GameNPC PazzHib = null; // Start NPC
 
@@ -225,7 +225,7 @@ namespace DOL.GS.DailyQuest.Hibernia
 			//if (!CheckPartAccessible(player,typeof(CityOfCamelot)))
 			//	return false;
 
-			if (player.Level < minimumLevel || player.Level > maximumLevel)
+			if (!ThidrankiDailies.AcceptsLevel(player.Level))
 				return false;
 
 			return true;
@@ -350,7 +350,7 @@ namespace DOL.GS.DailyQuest.Hibernia
 			if (m_questPlayer.Inventory.IsSlotsFree(1, eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack))
 			{
 				m_questPlayer.ForceGainExperience((m_questPlayer.ExperienceForNextLevel - m_questPlayer.ExperienceForCurrentLevel) / 3);
-				m_questPlayer.AddMoney(Money.GetMoney(0, 0, m_questPlayer.Level * 2, 32, Util.Random(50)),
+				m_questPlayer.AddMoney(ThidrankiDailies.KillCoinReward(m_questPlayer.Level) + Util.Random(50),
 					"You receive {0} as a reward.");
 				AtlasROGManager.GenerateBattlegroundToken(m_questPlayer, 1);
 				PlayersKilled = 0;

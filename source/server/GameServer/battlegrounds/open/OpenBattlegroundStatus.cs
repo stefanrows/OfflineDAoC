@@ -29,7 +29,8 @@ namespace DOL.GS
     /// </summary>
     public sealed record OpenBgStatusSnapshot(DateTime UpdatedUtc, bool Running, bool CampaignEnabled, bool OpenEnabled,
         bool Ready, string NotReadyReason, string Phase, string Attacker, int PhaseSecondsLeft, string KeepOwner,
-        double AchievedSpeed, int SelectedSpeed, int Cap, OpenBgPlayerStatus[] Players, OpenBgBotStatus[] Bots)
+        double AchievedSpeed, int SelectedSpeed, int Cap, OpenBgPlayerStatus[] Players, OpenBgBotStatus[] Bots,
+        OpenBgGuestStatus[] Guests = null)
     {
         public const string PhaseNotAvailable = "n/a (stage 2)";
     }
@@ -117,7 +118,7 @@ namespace DOL.GS
             return new OpenBgStatusSnapshot(DateTime.UtcNow, running, BattlegroundCampaignPolicy.IsEnabled,
                 OpenBattlegroundProperties.OPEN_BG_ENABLED, ready, ready ? null : reason, phase, attacker, secondsLeft, owner,
                 Math.Round(OfflineWorldSpeedControl.AchievedMultiplier, 2), OfflineWorldSpeedControl.EffectiveMultiplier,
-                OpenBattlegroundProperties.MaxBots, players, bots);
+                OpenBattlegroundProperties.MaxBots, players, bots, OpenBattlegroundGuestSquads.Status());
         }
 
         [GameServerStartedEvent]
