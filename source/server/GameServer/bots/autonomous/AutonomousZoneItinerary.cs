@@ -98,8 +98,17 @@ namespace DOL.GS
             return Array.Empty<Zone>();
         }
 
+        /// <summary>
+        /// Plans the next seam toward <paramref name="to"/>. <paramref name="deadEdges"/> is the
+        /// caller's per-route memory (bug 153): every edge that had no walkable seam is added
+        /// to it, and edges already in it are never searched again. Without it each hop plans
+        /// from scratch, so a zone whose direct edge is dead (a cliff pocket) steps into a
+        /// neighbour, the neighbour's shortest route leads back through the zone, and the bot
+        /// walks the same two-zone loop forever, paying a full seam search on every hop.
+        /// </summary>
         public static bool TryNextStep(Region region, Zone from, Zone to, Vector3 start, Vector3 goal,
-            IPathfindingMgr nav, out AutonomousZoneBoundaryRouting.Step step, Func<Zone, bool> allowed = null)
+            IPathfindingMgr nav, out AutonomousZoneBoundaryRouting.Step step, Func<Zone, bool> allowed = null,
+            ISet<Edge> deadEdges = null)
         {
             step = default;
             using var profile = BotThinkProfiler.Measure(BotThinkPhase.ZoneItineraryStep);
@@ -113,13 +122,13 @@ namespace DOL.GS
                 Vector3 road = new(361354, 750434, 4944);
                 Zone via = region.GetZone((int)road.X, (int)road.Y);
                 if (via != null && via != from && via != to && allowed?.Invoke(via) != false &&
-                    TryNextStep(region, from, via, start, road, nav, out step, allowed)) return true;
+                    TryNextStep(region, from, via, start, road, nav, out step, allowed, deadEdges)) return true;
             }
             // Same-XY altitude correction for planning only. The mover repairs
             // the actor on a failed raw path; never substitute another XY island.
             AutonomousNavigationSurface.TryFloor(nav, from, start, out start);
             Topology topology = Topologies.GetValue(region, key => new Topology(key.Zones));
-            var excluded = new HashSet<Edge>();
+            var excluded = deadEdges == null ? new HashSet<Edge>() : new HashSet<Edge>(deadEdges);
             int maximumAlternatives = Math.Min(8,
                 topology.Edges.TryGetValue(from, out Edge[] firstEdges) ? firstEdges.Length : 0);
             for (int alternative = 0; alternative < maximumAlternatives; alternative++)
@@ -129,6 +138,7 @@ namespace DOL.GS
                 TryGetSharedEdge(from, route[1], out Edge edge);
                 if (nav.HasNavmesh(edge.To) && TryEdgeStep(topology, edge, start, goal, nav, out step)) return true;
                 excluded.Add(edge);
+                deadEdges?.Add(edge);
             }
             return false;
         }
@@ -176,8 +186,8 @@ namespace DOL.GS
             // limit routinely discarded the only walkable seam on large zone
             // borders, producing a false "no connected seam" and a new goal
             // even though the mesh had a valid crossing farther along the
-            // border.  This is only reached when a boundary step is first
-            // planned; the selected step is then retained by the mover.
+            // border.  The caller plans this once per zone and route and
+            // retains the step; a dead edge is remembered in deadEdges.
             foreach (var candidate in candidates.OrderBy(p => Vector3.DistanceSquared(start, p.Inside) +
                          Vector3.DistanceSquared(p.Outside, goal)))
             {

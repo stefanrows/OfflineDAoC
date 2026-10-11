@@ -69,6 +69,11 @@ namespace DOL.GS
         private Vector3 _pathSegmentOrigin;
         private AutonomousZoneBoundaryRouting.Step? _resolvedBoundaryStep;
         private Zone _resolvedBoundaryZone;
+        // Bug 153: seam edges found dead on this route. Zone-hop planning is
+        // otherwise memoryless and two zones can send the bot back and forth.
+        private readonly HashSet<AutonomousZoneItinerary.Edge> _deadZoneEdges = new();
+        private long _deadZoneEdgesTick;
+        private const long DeadZoneEdgeMemoryMilliseconds = 10 * 60_000;
         private Vector3? _patrolDestination;
         // RvR uses the same collision-safe/stable/zone route machinery as PvE,
         // but never treats the destination as a monster camp.
@@ -4559,6 +4564,7 @@ namespace DOL.GS
                 _issuedRouteDestination = destination;
                 _resolvedBoundaryStep = null;
                 _resolvedBoundaryZone = null;
+                _deadZoneEdges.Clear();
                 _routeRecoveryWaypoint = null;
                 ClearRouteThreatDetourSequence();
                 _nextMoveOrderTick = 0;
@@ -4734,9 +4740,13 @@ namespace DOL.GS
                 if (!_resolvedBoundaryStep.HasValue || _resolvedBoundaryZone != currentZone)
                 {
                     IPathfindingMgr nav = PathfindingProvider.Instance;
+                    if (_deadZoneEdges.Count > 0 && now - _deadZoneEdgesTick >= DeadZoneEdgeMemoryMilliseconds)
+                        _deadZoneEdges.Clear();
+                    if (_deadZoneEdges.Count == 0) _deadZoneEdgesTick = now;
                     if (!AutonomousZoneItinerary.TryNextStep(bot.CurrentRegion, currentZone, destinationZone,
                             current, destination, nav, out var resolved,
-                            zone => AutonomousRealmBoundary.Allows(bot.Realm, bot.CurrentRegionID, zone.ID)))
+                            zone => AutonomousRealmBoundary.Allows(bot.Realm, bot.CurrentRegionID, zone.ID),
+                            _deadZoneEdges))
                     {
                         if (TryPlanCapitalTransit(bot, destination))
                             return HandleCapitalTransit(bot);
@@ -5098,6 +5108,7 @@ namespace DOL.GS
             _capitalTransit = null;
             _resolvedBoundaryStep = null;
             _resolvedBoundaryZone = null;
+            _deadZoneEdges.Clear();
             _nextMoveOrderTick = 0;
             _issuedRouteDestination = null;
             _routeRecoveryWaypoint = null;
