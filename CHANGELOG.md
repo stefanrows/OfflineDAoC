@@ -12,6 +12,43 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.256.0] - 2026-10-12
+
+### Added
+
+- Map pack: hand-painted place names from the stock maps that the world
+  database lacks (Tomte Camp, Nob's Stable, Gronyr's Farm, Mithra's Tomb,
+  Dergan Island, Hy Brasil, housing neighbourhoods and others; 181 names in 48
+  zones) are painted back from the new curated
+  `source/server/tools/client_map_labels.json` (`--labels`).
+- Map pack: keep names on every frontier keep, with the stock relic sub-line
+  such as "(Hammer Relic)" read from the static Relic table.
+- Map pack: interior zone exits are labelled "to <zone>"; the manifest lists
+  every drawn label per zone.
+
+### Changed
+
+- Map pack labels are larger (towns 15 px, keeps 13 px, dungeons 12 px, edge
+  labels 11 px) and placed by priority: edges, keeps, towns, dungeons and
+  exits, curated names, service icons, then grid ticks.
+- Map pack trees are dark canopy stipple instead of bright green dots that
+  looked like the client's NPC and quest-giver markers.
+- Renderer version v4 (`render_client_maps.py`).
+
+### Fixed
+
+- Keeps were drawn as bare icons with no name (for example Mjollner Faste and
+  Fensalir Faste in Uppland).
+- A dungeon entrance next to a keep (Darkness Falls at Mjollner Faste) was
+  dropped because no icon offset was free.
+- Edge exit names such as Jordheim never drew because the label overlapped its
+  own icon.
+- A neighbour edge label read "DUMMY ZONE".
+
+### Removed
+
+- None.
+
 ## [0.255.0] - 2026-10-11
 
 ### Added

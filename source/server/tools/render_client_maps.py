@@ -41,7 +41,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont  # noqa: E402
 
 import client_map_data as D  # noqa: E402
 
-TOOL_VERSION = 'v3'
+TOOL_VERSION = 'v4'
 OUT_SIZE = 512
 SUPERSAMPLE = 2
 FONT_CANDIDATES = ['/mnt/c/Windows/Fonts', 'C:/Windows/Fonts', 'C:\\Windows\\Fonts']
@@ -51,12 +51,15 @@ FONT_FALLBACK = {
     'georgiai.ttf': ['LiberationSerif-Italic.ttf'],
 }
 FONT_FALLBACK_DIRS = ['/usr/share/fonts/truetype/liberation', '/usr/share/fonts/truetype/dejavu']
+DEFAULT_LABELS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'client_map_labels.json')
 
 # Palette (sRGB)
 ROAD_RED = (122, 23, 18)          # #7a1712
 PARCHMENT = (239, 226, 191)       # #efe2bf
 LABEL_FILL = (244, 234, 210)      # #f4ead2
 LABEL_OUTLINE = (27, 20, 12)      # #1b140c
+WATER_LABEL_FILL = (214, 232, 240)
+WATER_LABEL_OUTLINE = (20, 44, 66)
 ICON_DISC = (27, 20, 14)
 FRAME_INK = (72, 52, 36)
 GRID_INK = (30, 22, 14)
@@ -275,12 +278,124 @@ def draw_icon(canvas, kind, cx, cy):
         d.ellipse([x - r3, y - r3, x + r3, y + r3], fill=g)
 
 
+# Icon and label helpers for the terrain render (output px space)
+
+ICON_BOX = 12.4       # output px box of one map icon
+# Offsets tried when an icon collides: the spot, the 9 px and 7 px ring, then a 14 px ring so a
+# dungeon sharing a keep's spot still gets its own icon.
+ICON_OFFSETS = [(0, 0), (9, 0), (-9, 0), (0, 9), (0, -9), (7, 7), (-7, 7), (7, -7), (-7, -7),
+                (14, 0), (-14, 0), (0, 14), (0, -14), (10, 10), (-10, 10), (10, -10), (-10, -10)]
+NEIGHBOUR_SIDES = ('north', 'south', 'west', 'east')
+EXTRA_OFFSETS = [(0, 0), (0, -8), (0, 8), (-12, 0), (12, 0)]
+
+
+def _icon_candidates(cx, cy):
+    return [(cx + dx, cy + dy) for dx, dy in ICON_OFFSETS]
+
+
+def _neighbour_names(zones, zid):
+    """{side: [names]} for the neighbour edge labels. Unnamed and 'dummy' zones are dropped and
+    each name is listed once (the first side that has it wins)."""
+    seen = set()
+    out = {}
+    nb = D.neighbours(zones, zid)
+    for side in NEIGHBOUR_SIDES:
+        names = []
+        for oid in nb.get(side, []):
+            name = (zones[oid].name or '').strip()
+            if not name or 'dummy' in name.lower() or name.upper() in seen:
+                continue
+            seen.add(name.upper())
+            names.append(name)
+        out[side] = names
+    return out
+
+
+def _place_icon(cv, placer, kind, cx, cy):
+    """Draw an icon at the first free offset from (cx, cy). Returns the drawn centre or None."""
+    for ix, iy in _icon_candidates(cx, cy):
+        ib = _box_at(ix, iy, ICON_BOX, ICON_BOX)
+        if placer.free(ib):
+            draw_icon(cv, kind, ix, iy)
+            placer.add(ib)
+            return ix, iy
+    return None
+
+
+def _label_beside(cv, placer, ix, iy, text, fnt, fill, outline_px, outline_rgb, gap=10.0):
+    """Text next to an icon: right, left, below, above, then two lower-offset variants."""
+    w, h = text_box_out(cv, text, fnt, outline_px)
+    for dx, dy in [(gap + w / 2, 0), (-(gap + w / 2), 0), (0, gap), (0, -gap),
+                   (gap + w / 2, 8), (-(gap + w / 2), 8)]:
+        box = _box_at(ix + dx, iy + dy, w + 2, h + 1)
+        if placer.free(box):
+            cv.draw_text(ix + dx, iy + dy, text, fnt, fill, outline_px, outline_rgb)
+            placer.add(box)
+            return True
+    return False
+
+
+def _label_edge_exit(cv, placer, ix, iy, cx, cy, size, name, fnt):
+    """Zone exit on the map edge: the name runs along the frame just inside the icon.
+    cx, cy give the true position (edge side); ix, iy the drawn icon."""
+    edge = min([('w', cx), ('e', size - cx), ('n', cy), ('s', size - cy)], key=lambda t: t[1])[0]
+    w, h = text_box_out(cv, name, fnt, 1.0)
+    if edge in ('w', 'e'):
+        lx = ix + (1 if edge == 'w' else -1) * (ICON_BOX / 2 + 3.0 + h / 2)
+        box = _box_at(lx, iy, h + 2, w + 2)
+        if placer.free(box):
+            cv.draw_text(lx, iy, name, fnt, LABEL_FILL, 1.0, LABEL_OUTLINE, rotate=90 if edge == 'w' else -90)
+            placer.add(box)
+            return True
+        return False
+    ly = iy + (1 if edge == 'n' else -1) * (ICON_BOX / 2 + 3.0 + h / 2)
+    box = _box_at(ix, ly, w + 2, h + 2)
+    if placer.free(box):
+        cv.draw_text(ix, ly, name, fnt, LABEL_FILL, 1.0, LABEL_OUTLINE)
+        placer.add(box)
+        return True
+    return False
+
+
+def _wrap_label(cv, text, fnt, outline_px, max_w=90.0):
+    """One line, or two lines split at the space nearest the middle when the line is too wide."""
+    w, _ = text_box_out(cv, text, fnt, outline_px)
+    spaces = [i for i, ch in enumerate(text) if ch == ' ']
+    if w <= max_w or not spaces:
+        return [text]
+    mid = len(text) / 2.0
+    cut = min(spaces, key=lambda i: abs(i - mid))
+    return [text[:cut], text[cut + 1:]]
+
+
+def _draw_extra(cv, placer, ex, ey, text, fnt, fill, outline_px, outline_rgb):
+    """Curated label centred on (ex, ey) output px, trying small offsets. False when none is free."""
+    lines = _wrap_label(cv, text, fnt, outline_px)
+    sizes = [text_box_out(cv, ln, fnt, outline_px) for ln in lines]
+    bw = max(w for w, _ in sizes)
+    bh = sum(h for _, h in sizes) + (len(lines) - 1) * 1.0
+    for dx, dy in EXTRA_OFFSETS:
+        cx, cy = ex + dx, ey + dy
+        box = _box_at(cx, cy, bw + 2, bh + 1)
+        if not placer.free(box):
+            continue
+        y = cy - bh / 2.0
+        for ln, (w, h) in zip(lines, sizes):
+            cv.draw_text(cx, y + h / 2.0, ln, fnt, fill, outline_px, outline_rgb)
+            y += h + 1.0
+        placer.add(box)
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Terrain render
 # ---------------------------------------------------------------------------
 
-def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zones, size, font_dir=None):
-    """Compose the v3 terrain map. Returns (PIL RGB image, metadata dict)."""
+def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zones, size, font_dir=None,
+                   extras=None):
+    """Compose the v4 terrain map. extras: curated labels for this zone (load_extra_labels).
+    Returns (PIL RGB image, metadata dict)."""
     cv = Canvas(size, font_dir)
     S, u = cv.S, cv.u
     grid = zone.grid
@@ -382,7 +497,8 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
         rd.line(pts, fill=ROAD_RED + (255,), width=road_w, joint='curve')
     cv.img = Image.alpha_composite(cv.img, road_layer)
 
-    # --- sparse tree glyphs at fixture positions where density is high ---------
+    # --- tree canopy blobs at fixture positions where density is high ----------
+    # Dark blobs with a faint shadow, never a bright dot, so they cannot read as map markers.
     trees = [f for f in zone.fixtures if f.get('class') == 'tree']
     cand = []
     for f in trees:
@@ -392,7 +508,7 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
             cand.append(f)
     cand.sort(key=lambda f: ((f['x'] * 0.6180339887) % 1.0, f['y']))
     accepted = []
-    min_space = 9.0
+    min_space = 5.5
     for f in cand:
         ox_ = f['x'] / ext * size
         oy_ = f['y'] / ext * size
@@ -400,34 +516,40 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
             accepted.append((ox_, oy_, f))
     tree_layer = Image.new('RGBA', (S, S), (0, 0, 0, 0))
     td = ImageDraw.Draw(tree_layer)
+    r = 1.7 * u
     for ox_, oy_, f in accepted:
-        r = 2.2 * u
         cx, cy = ox_ * u, oy_ * u
-        td.ellipse([cx - r + 0.7 * u, cy - r + 0.7 * u, cx + r + 0.7 * u, cy + r + 0.7 * u], fill=(12, 16, 10, 95))
-        td.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(44, 74, 36, 245))
-        rh = 1.0 * u
-        td.ellipse([cx - 0.6 * u - rh, cy - 0.7 * u - rh, cx - 0.6 * u + rh, cy - 0.7 * u + rh], fill=(122, 158, 96, 245))
+        snowy = ground_lum[min(S - 1, max(0, int(cy))), min(S - 1, max(0, int(cx)))] > 185.0
+        canopy = (52, 64, 58, 200) if snowy else (26, 40, 24, 190)
+        td.ellipse([cx - r + 0.5 * u, cy - r + 0.5 * u, cx + r + 0.5 * u, cy + r + 0.5 * u], fill=(0, 0, 0, 60))
+        td.ellipse([cx - r, cy - r, cx + r, cy + r], fill=canopy)
     cv.img = Image.alpha_composite(cv.img, tree_layer)
 
-    # --- labels and icons (collision-aware) ------------------------------------
+    # --- labels and icons (collision-aware; the Placer forbids overlap, so draw order is priority)
     placer = Placer(size)
     placer.add((0, 0, size, 1.2))  # keep clear of the frame edge
     fnt_grid = font('georgia.ttf', int(round(7.5 * u)), font_dir)
-    fnt_nb = font('georgiab.ttf', int(round(9.0 * u)), font_dir)
-    fnt_town = font('georgiab.ttf', int(round(13.0 * u)), font_dir)
-    fnt_dun = font('georgiai.ttf', int(round(10.5 * u)), font_dir)
+    fnt_nb = font('georgiab.ttf', int(round(11.0 * u)), font_dir)
+    fnt_keep = font('georgiab.ttf', int(round(13.0 * u)), font_dir)
+    fnt_relic = font('georgiai.ttf', int(round(11.0 * u)), font_dir)
+    fnt_town = font('georgiab.ttf', int(round(15.0 * u)), font_dir)
+    fnt_dun = font('georgiai.ttf', int(round(12.0 * u)), font_dir)
+    fnt_exit = font('georgiai.ttf', int(round(11.5 * u)), font_dir)
+    fnt_extra = font('georgiab.ttf', int(round(12.0 * u)), font_dir)
+    fnt_water = font('georgiai.ttf', int(round(12.0 * u)), font_dir)
+    drawn = []           # every text label drawn on this map (grid ticks excluded)
+    icons_placed = 0
+    extra_drawn = 0
 
-    # neighbour zones on the four edges (stock style: "▲ NAME" on the edges)
-    nb = D.neighbours(zones, zinfo.id)
+    # 1) neighbour zones on the four edges (stock style: "▲ NAME" on the edges)
     nb_drawn = []
-    for side, ids in nb.items():
-        for i, oid in enumerate(ids):
-            name = zones[oid].name.upper()
-            n = len(ids)
-            frac = (i + 1) / (n + 1)
+    for side, names in _neighbour_names(zones, zinfo.id).items():
+        for i, raw in enumerate(names):
+            name = raw.upper()
+            frac = (i + 1) / (len(names) + 1)
             if side in ('north', 'south'):
                 cx = size * frac
-                cy = 9.5 if side == 'north' else size - 9.5
+                cy = 11.0 if side == 'north' else size - 11.0
                 w, h = text_box_out(cv, name, fnt_nb, 1.0)
                 box = _box_at(cx, cy, w + 9, h + 2)
                 if placer.free(box):
@@ -443,32 +565,56 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
                     nb_drawn.append(name)
             else:
                 cy = size * frac
-                cx = 9.5 if side == 'west' else size - 9.5
+                cx = 11.0 if side == 'west' else size - 11.0
                 w, h = text_box_out(cv, name, fnt_nb, 1.0)
                 box = _box_at(cx, cy, h + 2, w + 9)
                 if placer.free(box):
                     cv.draw_text(cx, cy, name, fnt_nb, LABEL_FILL, 1.0, LABEL_OUTLINE, rotate=90 if side == 'west' else -90)
                     placer.add(box)
                     nb_drawn.append(name)
+    drawn.extend(nb_drawn)
 
-    # grid tick labels (tiny, along the top and left edges); skip any that collide
-    tick_drawn = []
-    for kl, pos_out in ticks:
-        label = f'{int(kl)}k'
-        w, h = text_box_out(cv, label, fnt_grid, 0.6)
-        cx = pos_out
-        box = _box_at(cx, 6.0, w + 2, h + 1)
-        if placer.free(box, pad=0.5, margin=1):
-            cv.draw_text(cx, 6.0, label, fnt_grid, (250, 244, 228), 0.6, GRID_INK, alpha=235)
-            placer.add(box)
-            tick_drawn.append(label)
-        box2 = _box_at(6.0, pos_out, w + 1, h + 2)
-        if placer.free(box2, pad=0.5, margin=1):
-            cv.draw_text(6.0, pos_out, label, fnt_grid, (250, 244, 228), 0.6, GRID_INK, alpha=235, rotate=90)
-            placer.add(box2)
-            tick_drawn.append(label)
+    # 2) keeps: icon plus name beside it, relic sub-line under the name
+    for p in pois:
+        if p['type'] != 'keep':
+            continue
+        cx, cy = to_out(zinfo, p['x'], p['y'], size)
+        if not (4 <= cx <= size - 4 and 4 <= cy <= size - 4):
+            continue
+        name = p['name']
+        relic = f"({p['relic']})" if p.get('relic') else None
+        nw, nh = text_box_out(cv, name, fnt_keep, 2.0)
+        rw, rh = text_box_out(cv, relic, fnt_relic, 1.4) if relic else (0.0, 0.0)
+        bw = max(nw, rw)
+        bh = nh + (rh + 1.0 if relic else 0.0)
+        chosen = None
+        for ix, iy in _icon_candidates(cx, cy):
+            ib = _box_at(ix, iy, ICON_BOX, ICON_BOX)
+            if not placer.free(ib):
+                continue
+            for lx, ly in [(ix, iy + 6.5 + bh / 2), (ix, iy - 6.5 - bh / 2),
+                           (ix + 6.5 + bw / 2, iy), (ix - 6.5 - bw / 2, iy)]:
+                lb = _box_at(lx, ly, bw + 4, bh + 2)
+                if placer.free(lb):
+                    chosen = (ix, iy, ib, lx, ly, lb)
+                    break
+            if chosen is not None:
+                break
+        if chosen is None:
+            continue    # never draw a keep icon without its name
+        ix, iy, ib, lx, ly, lb = chosen
+        draw_icon(cv, 'keep', ix, iy)
+        placer.add(ib)
+        top = ly - bh / 2.0
+        cv.draw_text(lx, top + nh / 2.0, name, fnt_keep, LABEL_FILL, 2.0, LABEL_OUTLINE)
+        drawn.append(name)
+        if relic:
+            cv.draw_text(lx, top + nh + 1.0 + rh / 2.0, relic, fnt_relic, LABEL_FILL, 1.4, LABEL_OUTLINE)
+            drawn.append(relic)
+        placer.add(lb)
+        icons_placed += 1
 
-    # towns with one icon per service type in a row beneath the name
+    # 3) towns with one icon per service type in a row beneath the name
     town_icons = 0
     placed_pois = set()
     for t in towns:
@@ -496,6 +642,7 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
             if placer.free(label_box) and all(placer.free(b) for b in icon_boxes):
                 cv.draw_text(gx_, top + lh / 2, t['name'], fnt_town, LABEL_FILL, 2.0, LABEL_OUTLINE)
                 placer.add(label_box)
+                drawn.append(t['name'])
                 for i, kind in enumerate(kinds):
                     draw_icon(cv, kind, gx_ - row_w / 2 + 5.8 + i * 14.0, top + lh + 2 + 7.0)
                     placer.add(icon_boxes[i])
@@ -509,67 +656,82 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
                 if placer.free(box):
                     cv.draw_text(cx + ox_, cy + oy_, t['name'], fnt_town, LABEL_FILL, 2.0, LABEL_OUTLINE)
                     placer.add(box)
+                    drawn.append(t['name'])
                     break
         for p in members:
             placed_pois.add(id(p))
 
-    # all other POIs: dungeons with names, everything else as a bare icon
-    icons_placed = 0
-    dungeon_labels = []
+    # 4) dungeons and zone exits: icon, then the name (edge exits along the frame)
     for p in pois:
-        if id(p) in placed_pois:
+        if p['type'] not in ('dungeon', 'exit'):
             continue
         cx, cy = to_out(zinfo, p['x'], p['y'], size)
         if not (4 <= cx <= size - 4 and 4 <= cy <= size - 4):
             continue
-        kind = p['type']
-        if kind not in ('bind', 'trainer', 'merchant', 'stable', 'porter', 'portal', 'dungeon', 'keep', 'exit'):
+        spot = _place_icon(cv, placer, p['type'], cx, cy)
+        if spot is None:
             continue
-        base = _box_at(cx, cy, 12.4, 12.4)
-        # try the spot first, then nearby offsets
-        chosen = None
-        for dx, dy in [(0, 0), (9, 0), (-9, 0), (0, 9), (0, -9), (7, 7), (-7, 7), (7, -7), (-7, -7)]:
-            b = _box_at(cx + dx, cy + dy, 12.4, 12.4)
-            if placer.free(b):
-                chosen = (cx + dx, cy + dy, b)
-                break
-        if chosen is None:
-            continue
-        ix, iy, ib = chosen
-        draw_icon(cv, kind, ix, iy)
-        placer.add(ib)
+        ix, iy = spot
         icons_placed += 1
-        if kind == 'dungeon' and p.get('name'):
-            dungeon_labels.append((ix, iy, p['name'], kind))
-        elif kind == 'exit' and p.get('name') and p.get('target_kind') in ('city', 'overworld'):
-            dungeon_labels.append((ix, iy, p['name'], kind))
-    for ix, iy, name, kind in dungeon_labels:
-        if kind == 'exit' and min(ix, size - ix, iy, size - iy) < 14:
-            # city and zone exits on the map edge: stock-style name along the edge, inside the frame
-            edge = min([('w', ix), ('e', size - ix), ('n', iy), ('s', size - iy)], key=lambda t: t[1])[0]
-            w, h = text_box_out(cv, name, fnt_nb, 1.0)
-            if edge in ('w', 'e'):
-                cands = [(ix + (9 if edge == 'w' else -9), iy)]
-                for cx_, cy_ in cands:
-                    box = _box_at(cx_, cy_, h + 2, w + 2)
-                    if placer.free(box):
-                        cv.draw_text(cx_, cy_, name, fnt_nb, LABEL_FILL, 1.0, LABEL_OUTLINE, rotate=90 if edge == 'w' else -90)
-                        placer.add(box)
-                        break
-            else:
-                cy_ = iy + (9 if edge == 'n' else -9)
-                box = _box_at(ix, cy_, w + 2, h + 2)
-                if placer.free(box):
-                    cv.draw_text(ix, cy_, name, fnt_nb, LABEL_FILL, 1.0, LABEL_OUTLINE)
-                    placer.add(box)
+        name = p.get('name')
+        if not name:
             continue
-        w, h = text_box_out(cv, name, fnt_dun, 1.5)
-        for dx, dy in [(10 + w / 2, 0), (-(10 + w / 2), 0), (0, 10), (0, -10), (10 + w / 2, 8), (-(10 + w / 2), 8)]:
-            box = _box_at(ix + dx, iy + dy, w + 2, h + 1)
-            if placer.free(box):
-                cv.draw_text(ix + dx, iy + dy, name, fnt_dun, LABEL_FILL, 1.5, LABEL_OUTLINE)
-                placer.add(box)
-                break
+        if p['type'] == 'dungeon':
+            if _label_beside(cv, placer, ix, iy, name, fnt_dun, LABEL_FILL, 1.6, LABEL_OUTLINE):
+                drawn.append(name)
+            continue
+        if p.get('target_kind') not in ('city', 'overworld'):
+            continue
+        if min(cx, size - cx, cy, size - cy) < 14:
+            if _label_edge_exit(cv, placer, ix, iy, cx, cy, size, name, fnt_nb):
+                drawn.append(name)
+        else:
+            text = f'to {name}'
+            if _label_beside(cv, placer, ix, iy, text, fnt_exit, LABEL_FILL, 1.5, LABEL_OUTLINE):
+                drawn.append(text)
+
+    # 5) curated labels from client_map_labels.json (stock 256-texel units to output px)
+    seen = {s.lower() for s in drawn}
+    for e in extras or []:
+        name = e['name']
+        if name.lower() in seen:
+            continue
+        ex_, ey_ = e['x'] * size / 256.0, e['y'] * size / 256.0
+        if e['kind'] == 'water':
+            ok = _draw_extra(cv, placer, ex_, ey_, name, fnt_water, WATER_LABEL_FILL, 1.6, WATER_LABEL_OUTLINE)
+        else:
+            ok = _draw_extra(cv, placer, ex_, ey_, name, fnt_extra, LABEL_FILL, 1.8, LABEL_OUTLINE)
+        if ok:
+            drawn.append(name)
+            seen.add(name.lower())
+            extra_drawn += 1
+
+    # 6) remaining bare icons (bind, trainer, merchant, stable, porter, portal)
+    for p in pois:
+        if p['type'] not in ('bind', 'trainer', 'merchant', 'stable', 'porter', 'portal') or id(p) in placed_pois:
+            continue
+        cx, cy = to_out(zinfo, p['x'], p['y'], size)
+        if not (4 <= cx <= size - 4 and 4 <= cy <= size - 4):
+            continue
+        if _place_icon(cv, placer, p['type'], cx, cy) is not None:
+            icons_placed += 1
+
+    # 7) grid tick labels last (tiny, along the top and left edges); skip any that collide
+    tick_drawn = []
+    for kl, pos_out in ticks:
+        label = f'{int(kl)}k'
+        w, h = text_box_out(cv, label, fnt_grid, 0.6)
+        cx = pos_out
+        box = _box_at(cx, 6.0, w + 2, h + 1)
+        if placer.free(box, pad=0.5, margin=1):
+            cv.draw_text(cx, 6.0, label, fnt_grid, (250, 244, 228), 0.6, GRID_INK, alpha=235)
+            placer.add(box)
+            tick_drawn.append(label)
+        box2 = _box_at(6.0, pos_out, w + 1, h + 2)
+        if placer.free(box2, pad=0.5, margin=1):
+            cv.draw_text(6.0, pos_out, label, fnt_grid, (250, 244, 228), 0.6, GRID_INK, alpha=235, rotate=90)
+            placer.add(box2)
+            tick_drawn.append(label)
 
     # --- frame ------------------------------------------------------------------
     fd = ImageDraw.Draw(cv.img, 'RGBA')
@@ -586,6 +748,8 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
         'icons': icons_placed,
         'neighbour_labels': nb_drawn,
         'grid_ticks': tick_drawn,
+        'labels_drawn': sorted(drawn),
+        'extra_labels': extra_drawn,
     }
     return out, meta
 
@@ -713,7 +877,7 @@ def poi_json(zinfo, towns, pois):
     }
 
 
-def render_zone_outputs(client, zid, zones, db, stock_path, out_dir, size, preview, font_dir, ui_dir):
+def render_zone_outputs(client, zid, zones, db, stock_path, out_dir, size, preview, font_dir, ui_dir, extras=None):
     zinfo = zones[zid]
     label, zdir = D.find_zone_archives(client, zid)
     arch = D.zone_archives(zdir, zid)
@@ -722,7 +886,8 @@ def render_zone_outputs(client, zid, zones, db, stock_path, out_dir, size, previ
     ground, layer = D.load_ground_rgb(client, arch['ter'], size * SUPERSAMPLE)
     stock = D.read_stock_rgb(stock_path) if stock_path and os.path.exists(stock_path) else None
     towns, pois = build_pois(db, zinfo, zones) if db is not None else ([], [])
-    img, meta = render_terrain(client, zinfo, zone, ground, stock, towns, pois, zones, size, font_dir)
+    img, meta = render_terrain(client, zinfo, zone, ground, stock, towns, pois, zones, size, font_dir,
+                               extras=extras)
     return img, meta, towns, pois, label
 
 
@@ -739,6 +904,8 @@ def main(argv=None):
                     help='also write maps for zones that have no stock map (not installed by default)')
     ap.add_argument('--terrain-all', action='store_true',
                     help='keep terrain renders that fall back to height tint; default upscales the stock map')
+    ap.add_argument('--labels', default=DEFAULT_LABELS,
+                    help='curated label JSON (default: client_map_labels.json next to this script; missing is fine)')
     args = ap.parse_args(argv)
 
     t0 = time.time()
@@ -750,6 +917,10 @@ def main(argv=None):
         raise SystemExit(f'output directory is not empty: {args.output}')
     os.makedirs(args.output, exist_ok=True)
 
+    try:
+        extra_labels = D.load_extra_labels(args.labels)
+    except ValueError as exc:
+        raise SystemExit(f'bad label file: {exc}')
     zones = D.read_zones_table(client)
     only = None
     if args.zones:
@@ -789,7 +960,7 @@ def main(argv=None):
                 try:
                     img, meta, towns, pois, _label = render_zone_outputs(
                         client, zid, zones, db, stock_path, args.output, args.size, args.preview_png,
-                        args.font_dir, ui_dir)
+                        args.font_dir, ui_dir, extras=extra_labels.get(zid))
                 except Exception as exc:  # one bad zone must not stop the batch
                     skipped.append({'file': name, 'zone': zid, 'reason': f'render failed: {exc}'})
                     counts['failed'] += 1
@@ -890,6 +1061,8 @@ def _entry(args, name, zid, zi, source, addon_label, stock_path, out_path, meta,
         e['pois'] = len(pois)
         e['towns'] = len(towns)
         e['neighbour_labels'] = meta.get('neighbour_labels')
+        e['labels_drawn'] = meta.get('labels_drawn')
+        e['extra_labels'] = meta.get('extra_labels')
     else:
         e['reason'] = meta.get('reason')
     return e

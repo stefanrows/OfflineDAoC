@@ -358,6 +358,12 @@ Agent sessions on items 45–48: take the role and context from
      rivers and forests traced from the stock maps, hand-painted names
      (Tomte Camp, Dergan Island) missing from the DB, new maps for zones
      73-87 (`--include-new`), and adding the pack to the release.
+     0.256.0 (owner, 2026-10-12: "can't see any keep names"): keep names with
+     relic sub-lines, curated stock place names (`client_map_labels.json`,
+     181 names), larger priority-placed labels, dark tree stipple instead of
+     marker-like green dots, interior exit labels, no "DUMMY ZONE". Pending:
+     install of the 0.256.0 stage and real-client readability checks.
+     Still open: rivers traced from the stock maps, zones 73-87.
 
 116. **open BG: a permanently open Thidranki (region 252) for levels 1–50.**
      Owner request 2026-10-11 ~02:00; decisions and design in

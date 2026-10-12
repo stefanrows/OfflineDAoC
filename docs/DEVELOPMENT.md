@@ -254,11 +254,13 @@ python3 -m unittest discover -s source/server/tools -p test_map_client.py
 
 The renderer copies the world database and opens the copy read only. It reads
 only static world tables (areas, bind points, keeps, NPC trainers, merchants,
-zone points, teleports); it never reads players, accounts or bots. Zones without
-a zone-wide ground texture keep their stock art (`--terrain-all` overrides that).
-Zones that have no stock map are skipped unless you pass `--include-new`. Install
-with the game, server and launcher closed. The install is a dry run unless you
-pass `-Apply`:
+zone points, teleports, relics); it never reads players, accounts or bots.
+Zones without a zone-wide ground texture keep their stock art (`--terrain-all`
+overrides that). Zones that have no stock map are skipped unless you pass
+`--include-new`. Curated place names from the stock maps live in
+`source/server/tools/client_map_labels.json` (label centres in stock 256-texel
+units; `--labels` picks another file). Install with the game, server and
+launcher closed. The install is a dry run unless you pass `-Apply`:
 
 ```powershell
 tools\dev\Install-ClientMap.ps1 -InstallRoot D:\Games\OfflineDAoC -Stage <stage> [-Apply]
