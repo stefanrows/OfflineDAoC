@@ -12,6 +12,39 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.260.0] - 2026-10-12
+
+### Added
+
+- `RVR_ASSAULT_GATE` log lines now carry the plan `reason`, so it is visible
+  why a ready warband did not open an assault.
+
+### Changed
+
+- More keep fights: an autonomous warband may open or join a keep assault at
+  average level 35 with every member at least 30 (was all level 50 unless led
+  by a KeepWarrior), the roaming reserve is smaller (Roamer 40 %, Hybrid 25 %,
+  KeepWarrior 5 %, others 15 %), and each guild may run two automatic sieges
+  at once (server cap still six) (bug 159).
+- A siege ram operator no longer travels to a siege merchant in another
+  region than its warband's rally; it marches without a purchase. A muster
+  that reaches its quorum departs at the hard end even if supplies are
+  missing, instead of failing (bugs 75, 159).
+
+### Fixed
+
+- A companion healer no longer passes one optional strength concentration
+  buff around the group forever: members who need a buff are served first,
+  and optional concentration buffs wait 30 s after a reclaim (bug 157).
+- A companion whose equipped melee weapon differs from its build plan (for
+  example a Blademaster with a mace) fights with it instead of standing idle
+  with its bow out; a bot with no usable melee weapon at all still swings
+  (bug 158).
+
+### Removed
+
+- None.
+
 ## [0.259.0] - 2026-10-12
 
 ### Added

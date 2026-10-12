@@ -746,6 +746,7 @@ namespace DOL.AI.Brain
         private long _nextDeployablePetTick;
         private long _nextCombatProgressTick;
         private long _nextMaintenanceBuffTick;
+        private long _optionalConcentrationHoldUntil;
         private long _nextCompanionProtectionTick;
         private GameLiving _groupPeelTarget;
         private int _groupPeelPriority;
@@ -2268,6 +2269,11 @@ namespace DOL.AI.Brain
                     .Select(spell => (Spell: spell, Target: FindMissingMaintenanceTarget(spell, true)))
                     .Where(entry => entry.Target != null)
                     .ToList();
+            // Required targets first (bug 157): concentration freed for a required
+            // newcomer must reach it before an optional buff refills the points.
+            pending = pending
+                .OrderBy(entry => BuffNeedOf(entry.Target, entry.Spell) == BotBuffTargetPolicy.Need.Optional)
+                .ToList();
 
             // Dexterity shortens every cast, so the buffer takes its own dex
             // and dex/quickness buffs before working through anyone else.
@@ -2287,6 +2293,9 @@ namespace DOL.AI.Brain
                 if (spell.NeedInstrument && !TryEquipRealInstrument(bot, spell.InstrumentRequirement))
                     continue;
 
+                if (BotBuffTargetPolicy.HoldsOptionalCast(BuffNeedOf(target, spell), spell.Concentration > 0,
+                        GameLoop.GameLoopTime, _optionalConcentrationHoldUntil))
+                    continue;
                 if (!bot.CanAffordConcentration(spell))
                 {
                     if (IsGroupedShamanEnduranceBuff(bot, spell) &&
@@ -2792,7 +2801,7 @@ namespace DOL.AI.Brain
         /// this buffer's largest optional concentration buff on a bot (never
         /// on a real player) so the next pulse can cast the required one.
         /// </summary>
-        private static bool TryReclaimOptionalConcentration(GameBot bot)
+        private bool TryReclaimOptionalConcentration(GameBot bot)
         {
             ECSGameSpellEffect optional = bot.effectListComponent.GetConcentrationEffects()
                 .Where(effect => effect is { IsEnding: false, IsEnded: false } && effect.Owner is GameBot holder &&
@@ -2800,9 +2809,10 @@ namespace DOL.AI.Brain
                                  BuffNeedOf(holder, spell) == BotBuffTargetPolicy.Need.Optional)
                 .OrderByDescending(effect => effect.SpellHandler.Spell.Concentration)
                 .FirstOrDefault();
-            if (optional == null)
+            if (optional == null || !optional.End())
                 return false;
-            optional.End();
+            // The freed points are for the required newcomer; optional buffs wait (see HoldsOptionalCast).
+            _optionalConcentrationHoldUntil = GameLoop.GameLoopTime + BotBuffTargetPolicy.ReclaimHoldMilliseconds;
             return true;
         }
 
@@ -3533,9 +3543,10 @@ namespace DOL.AI.Brain
                             }
                             if (!weaponReady)
                             {
-                                Body.StopAttack();
-                                Body.TargetObject = null;
-                                return;
+                                // No legal melee weapon: keep the target and swing unarmed instead of
+                                // standing idle. Drop an unusable distance weapon first.
+                                if (Body.ActiveWeaponSlot == eActiveWeaponSlot.Distance)
+                                    Body.SwitchWeapon(eActiveWeaponSlot.Standard);
                             }
                             QueueUsableMeleeStyle();
                         }

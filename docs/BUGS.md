@@ -113,6 +113,84 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+159. **Too few automatic sieges open for the number of ready warbands.**
+     Live 0.255.0, 2026-10-12 20:34–21:00: 43 distinct siege-ready warbands
+     logged `RVR_ASSAULT_GATE` but only one frontier siege opened. Gates in
+     order: `ChooseCore` required average and minimum level 50 unless the
+     leader is a KeepWarrior (90 of 121 not-ready 8-member checks averaged
+     below 35; bug 133 noted the 35/50 mismatch), a 30–70 % roaming reserve
+     by leader type, one siege per guild (owner decision 2b), and the intent
+     roll. Owner decision 2026-10-12 ("fix it"): source 0.260.0 aligns the
+     gate to average 35 / minimum 30 (`SiegeGateAverageLevel`,
+     `SiegeGateMinimumLevel`), cuts the roaming reserve to Roamer 40 /
+     Hybrid 25 / KeepWarrior 5 / other 15 %, allows two automatic sieges per
+     side (`MaxSiegesPerSide`, server cap 6 unchanged), skips cross-region
+     ram purchases and departs a quorum without supplies (see bug 75);
+     `RVR_ASSAULT_GATE` now logs the plan `reason`. Installation and a live
+     log check pending: expect several `RVR_SIEGE_STARTED` per real hour.
+
+157. **Companion healer cycles one strength buff around the group forever.**
+     Owner report with screenshot, 2026-10-12 (installed 0.255.0): companion
+     healer Eydis keeps casting her strength concentration buff (Midgard
+     Augmentation "Strength of the Viking" family, `StrengthBuff`, Target
+     Realm, Duration 0, Concentration > 0). The combat log repeats
+     `Isolde feels stronger!` / `Brakka's extra strength fades.` /
+     `Eydis casts a spell!` / `Eydis feels stronger!` / `Isolde's extra
+     strength fades.` / ... : every new application is followed at once by
+     the previous holder losing it, and the three members take turns.
+     Expected: the buff lands on the members it suits and stays; no recast
+     while it is up. Suspects (not yet traced): (a) the server keeps only
+     one instance of a caster's concentration spell, so each cast moves it
+     and the companion upkeep (`BotBrain.FindRandomMissingRealmBuffTarget` /
+     `NeedsUpkeep`) sees a member missing it again; (b) the
+     concentration-reclaim path (`TryReclaimOptionalConcentration`, owner
+     rule 2026-10-02 in `BotBuffTargetPolicy`) ends one member's buff to
+     cast it on another and the next pulse repeats.
+     Root cause: (b). (a) is ruled out: a test probe put the same strength
+     concentration buff from one caster on two targets and both stayed (20
+     points used); `ConcentrationList` has no same-spell replacement. Eydis
+     (Healer), Isolde (Wizard) and Brakka (Shaman) are all strengthless
+     casters, so strength is Optional on each. When another member's
+     Required buff was unaffordable, `TryReclaimOptionalConcentration` ended
+     the oldest Optional strength buff, but the next pass met the strength
+     entry first (pending order is spell value) and spent the freed points
+     on the next Optional member; the Required buff stayed unaffordable and
+     the reclaim repeated. Which Required buff triggered it is not proven.
+     Source fix 0.260.0: pending buff entries go Required targets
+     first, and after a reclaim Optional concentration casts are held for
+     30 s (`BotBuffTargetPolicy.HoldsOptionalCast`,
+     `ReclaimHoldMilliseconds`); a failed `End()` no longer counts as a
+     reclaim. Tests: `UT_BotBuffTargetPolicy` (2 new).
+
+158. **Companion Blademaster stands idle with a bow in hand.** Owner report,
+     2026-10-12 (installed 0.255.0): companion Blademaster Lethira (levels
+     34→37 between 21:12 and 21:16, so her group was fighting) stands
+     around holding a bow and does nothing. Log only shows
+     `BOT_THINK_SLOW bot="Lethira" kind=Companion ... CompanionUpgrades=385ms`
+     (21:09:24). Not traced. Suspects: the 0.254.0
+     `allow_all_items_all_classes` rule or a loot upgrade put a bow in her
+     distance slot; the ranged path (`BotRangedCombat.ShouldUseRangedWeapon`,
+     `BotBrain.cs` ~3500) switches to it, but a Blademaster has no archery
+     skill or arrows, so she never fires and never switches back to melee.
+     Same evening the owner reported companion Savage Terk (same group) also
+     doing nothing.
+     Root cause (Lethira, proven from the save and source): her build plan is
+     Blades (`WeaponOneType` 19) but she wears a level-16 Icebender Mace and
+     Bodybender Club (Blunt) with a "training Fired" shortbow in the distance
+     slot, and owns no Blades weapon. `BotBrain.SwitchToUsableMeleeWeapon`
+     accepts the mace through `BotWeaponStats.CanUseEquippedMeleeFallback`
+     and calls `StartAttack`, but `GameNPC.StartAttackWithMeleeWeapon`'s
+     GameBot branch checked only the strict `CanUseMelee` (plan type) and
+     returned silently, leaving the bow active and the bot idle. Terk's gear
+     is valid (level-48 Bodybender Claw, Hand to Hand plan), so his idling is
+     not this cause; both use the `defensive` stance (engage only within 350
+     units of the leader). Not yet explained.
+     Source fix 0.260.0: GameNPC applies the same equipped-gear
+     fallback; with no legal weapon at all a bot now swings from the
+     standard slot instead of returning (`BotWeaponStats.ResolveMeleeAttackSlot`),
+     and BotBrain drops an active distance weapon instead of clearing its
+     target. Tests: `UT_BotWeaponStats` (7 new cases).
+
 156. **The COMPANIONS window goes dead after a zone change.** Owner report,
      2026-10-11 (0.252.0): after porting to another zone the window stays
      on screen but no tile reacts; a relog fixes it until the next port.
@@ -912,6 +990,15 @@ This confirms installation only. Keep the required real-client checks pending.
     `UT_SiegeColumnQuorum`. Pending: a live run shows `action=quorum`,
     `RVR_LEADER_HANDOVER` and `relaxed=True` and a siege that reaches the
     gate; real-client watch of one siege from rally to the walls.
+    Live 0.255.0 observation 2026-10-12 20:34–21:00 (world speed 2.5x):
+    one frontier siege (rvr-keep-51) opened in 23 real minutes; 3 of its 6
+    musters failed with "Siege supply trip did not finish before departure".
+    Every ram purchase whose merchant lay in another region than the rally
+    timed out (6–12 min round trips; same-region trips took 12–56 s). Source
+    0.260.0 (bug 159) skips cross-region ram purchases (`supply_skipped`) and
+    lets a quorum depart without supplies at the muster's hard end ("mustered
+    without supplies"). The column stop-and-go and the 6-member-quorum fix
+    plan above remain open.
 
 
 115. **Closed console input spins the server console loop.** Confirmed in

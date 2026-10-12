@@ -130,14 +130,17 @@ public class UT_PhysicalSiegeRally
         var other = target with { Id = target.Id + "-other" };
         var roam = target with { Id = target.Id + "-roam", Kind = AutonomousRvrEventLayer.Intent.Roam };
         var extra = forces[0] with { GroupId = "extra" };
-        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(extra, [target, other, roam], now + 1, 0)?.TargetId, Is.EqualTo(roam.Id));
+        // The first event is full, so the side's second siege opens (owner decision 2026-10-12).
+        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(extra, [target, other, roam], now + 1, 0)?.TargetId, Is.EqualTo(other.Id));
         Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(extra with { GroupId = "reserve", RoamingReserve = true }, [target, other, roam], now + 2, 0)?.TargetId, Is.EqualTo(roam.Id));
         AutonomousRvrEventLayer.RemoveForce(forces[^1].GroupId);
         long ready = now + RealmEventPolicy.EarliestAssaultMilliseconds;
         Attend(target, forces, cap - 8, ready);
         AddDefenders(target, relic ? 96 : 64, ready);
         Assert.That(AutonomousRvrEventLayer.IsBattleForce(forces[0].GroupId, ready), Is.True);
-        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(extra, [target], ready + 1, 0)?.TargetId, Is.EqualTo(target.Id));
+        // A late warband fills the freed slots of the first event; one more is over its cap.
+        var late = forces[0] with { GroupId = "late" };
+        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(late, [target], ready + 1, 0)?.TargetId, Is.EqualTo(target.Id));
         Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(extra with { GroupId = "over-cap" }, [target], ready + 2, 0), Is.Null);
     }
 

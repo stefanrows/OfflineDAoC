@@ -52,6 +52,21 @@ namespace DOL.GS
             };
         }
 
+        /// <summary>
+        /// After a required newcomer takes concentration back from an optional
+        /// buff, the freed points are held for it this long.
+        /// </summary>
+        public const long ReclaimHoldMilliseconds = 30_000;
+
+        /// <summary>
+        /// Optional concentration buffs wait while a reclaim hold runs. Otherwise a later
+        /// pass can refill the freed points with the optional buff before the required
+        /// one is considered, and the buffer reclaims again: an endless fade and recast
+        /// of the same buff on each member in turn.
+        /// </summary>
+        public static bool HoldsOptionalCast(Need need, bool concentration, long now, long holdUntil) =>
+            need == Need.Optional && concentration && now < holdUntil;
+
         /// <summary>A healer with a weapon trained to half its level or more fights in melee.</summary>
         public static bool IsMeleeSpec(int highestWeaponSpec, int level) =>
             highestWeaponSpec > 1 && highestWeaponSpec * 2 >= Math.Max(2, level);

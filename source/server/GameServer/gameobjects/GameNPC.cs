@@ -2752,10 +2752,21 @@ namespace DOL.GS
 					                    (!standardUsable || bot.BotSpec?.Is2H == true);
 				}
 
+				// Same equipped-gear fallback as BotBrain.SwitchToUsableMeleeWeapon: a
+				// companion whose build plan names another weapon type keeps fighting with
+				// a class-legal equipped weapon (bug 158: Blades plan, Blunt mace equipped).
 				if (!standardUsable && !twoHandUsable)
-					return;
+				{
+					standardUsable = BotWeaponStats.CanUseEquippedMeleeFallback(bot, rightHand, eInventorySlot.RightHandWeapon);
+					twoHandUsable = BotWeaponStats.CanUseEquippedMeleeFallback(bot, twoHand, eInventorySlot.TwoHandWeapon);
+					preferTwoHand = twoHandUsable &&
+					                    (!standardUsable || bot.BotSpec?.Is2H == true);
+				}
 
-				eActiveWeaponSlot newBotSlot = preferTwoHand
+				// No legal melee weapon still swings (unarmed, from the standard slot).
+				// Returning here left an unusable distance weapon active and the bot idle.
+				eActiveWeaponSlot newBotSlot = BotWeaponStats.ResolveMeleeAttackSlot(standardUsable, twoHandUsable, preferTwoHand)
+					== BotWeaponStats.eMeleeAttackSlot.TwoHanded
 					? eActiveWeaponSlot.TwoHanded
 					: eActiveWeaponSlot.Standard;
 				if (newBotSlot != ActiveWeaponSlot)

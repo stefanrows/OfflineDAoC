@@ -122,7 +122,7 @@ public sealed class UT_SiegeBalance
     private static object DefaultOf(string field) =>
         typeof(Properties).GetField(field).GetCustomAttribute<ServerPropertyAttribute>().DefaultValue;
 
-    // ---- 2b: one siege per guild, server-wide cap -------------------------------------
+    // ---- 2b: two sieges per guild (2026-10-12), server-wide cap -----------------------
 
     private static AutonomousRvrEventLayer.LiveObjective Keep(int id) => new($"rvr-keep-{9200 + id}", $"Balance Faste {id}",
         AutonomousRvrEventLayer.Intent.AssaultKeep, eRealm.Midgard, 100, 100_000 + id * 10_000, 100_000, 0, false, 0, 0, 4, 2,
@@ -156,21 +156,21 @@ public sealed class UT_SiegeBalance
     }
 
     [Test]
-    public void AGuildCannotOpenASecondSiege()
+    public void AGuildOpensAtMostTwoSieges()
     {
         var keeps = Enumerable.Range(1, 3).Select(Keep).Append(Roam).ToArray();
         var opened = AutonomousRvrEventLayer.ChooseOrJoin(Warband("raiders-1", "Raiders"), keeps, 1_000, OpenNotJoin);
-        var again = AutonomousRvrEventLayer.ChooseOrJoin(Warband("raiders-2", "Raiders"), keeps, 2_000, OpenNotJoin);
+        var second = AutonomousRvrEventLayer.ChooseOrJoin(Warband("raiders-2", "Raiders"), keeps, 2_000, OpenNotJoin);
         Assert.Multiple(() =>
         {
             Assert.That(opened?.IsSharedEvent, Is.True);
-            Assert.That(again?.IsSharedEvent, Is.False, "the guild's second warband roams instead");
-            Assert.That(again?.TargetId, Is.EqualTo(Roam.Id));
-            Assert.That(ActiveSieges(), Is.EqualTo(1));
+            Assert.That(second?.IsSharedEvent, Is.True, "the guild's second siege opens (owner decision 2026-10-12)");
+            Assert.That(second?.TargetId, Is.Not.EqualTo(opened?.TargetId));
+            Assert.That(ActiveSieges(), Is.EqualTo(2));
         });
-        // Its second warband may still reinforce the guild's own siege.
-        var reinforce = AutonomousRvrEventLayer.ChooseOrJoin(Warband("raiders-3", "Raiders"), keeps, 3_000, 0);
-        Assert.That(reinforce?.TargetId, Is.EqualTo(opened.TargetId));
+        // A third siege of the same guild is refused: its warband joins one of the two or roams.
+        AutonomousRvrEventLayer.ChooseOrJoin(Warband("raiders-3", "Raiders"), keeps, 3_000, OpenNotJoin);
+        Assert.That(ActiveSieges(), Is.EqualTo(2), "no third siege for one guild");
     }
 
     [Test]
@@ -195,13 +195,18 @@ public sealed class UT_SiegeBalance
         string raiders = AutonomousRvrEventLayer.SiegeSideKey("Raiders", eRealm.Albion);
         string albionRealm = AutonomousRvrEventLayer.SiegeSideKey(null, eRealm.Albion);
         string[] full = Enumerable.Range(0, AutonomousRvrEventLayer.MaxConcurrentSieges).Select(i => $"guild:G{i}").ToArray();
+        string[] fullWithOwnOne = full.Take(AutonomousRvrEventLayer.MaxConcurrentSieges - 1).Append(raiders).ToArray();
         Assert.Multiple(() =>
         {
             Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, Array.Empty<string>(), false), Is.True);
-            Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, new[] { raiders }, false), Is.False);
+            Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, new[] { raiders }, false), Is.True, "a guild may run a second siege");
+            Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, new[] { raiders, raiders }, false), Is.False, "never a third");
+            Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, new[] { raiders, albionRealm }, false), Is.True);
             Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, new[] { albionRealm }, false), Is.True);
             Assert.That(AutonomousRvrEventLayer.MayOpenSiege(albionRealm, new[] { raiders }, false), Is.True);
             Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, full, false), Is.False);
+            Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, fullWithOwnOne, false), Is.False,
+                "the server-wide cap still holds for a second siege");
             Assert.That(AutonomousRvrEventLayer.MayOpenSiege(raiders, Array.Empty<string>(), true), Is.False,
                 "a relic-carrier event still pauses new sieges");
         });

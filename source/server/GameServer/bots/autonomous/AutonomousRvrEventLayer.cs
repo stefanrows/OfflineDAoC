@@ -22,6 +22,10 @@ public static partial class AutonomousRvrEventLayer
     public const int OrdinaryAssaultCap = 128;
     public const int RelicAssaultCap = 192;
     public const int RelicCarrierRealmCap = 192;
+    /// <summary>The gate matches the siegeReady average-35 rule (owner decision 2026-10-12; bug 133 noted the old 50 mismatch).</summary>
+    public const int SiegeGateAverageLevel = 35;
+    /// <summary>Minimum member level for the same siege gate (owner decision 2026-10-12).</summary>
+    public const int SiegeGateMinimumLevel = 30;
     /// <summary>An automatic siege nobody reaches or fights at for this long is
     /// called off (the rvr-keep-75 siege of 2026-09-28 sat at 0/0/0 for hours
     /// and blocked every other assault meanwhile).</summary>
@@ -398,7 +402,7 @@ public static partial class AutonomousRvrEventLayer
         using (EnterSync())
         {
             Cleanup(nowTick, objectives);
-            if ((force.AverageLevel < 50 || force.MinimumMemberLevel < 50) && !force.CampaignEligible)
+            if ((force.AverageLevel < SiegeGateAverageLevel || force.MinimumMemberLevel < SiegeGateMinimumLevel) && !force.CampaignEligible)
                 return ReservePlan(force, objectives.Where(o => !o.IsRelicCarrier && o.Kind is not Intent.AssaultKeep and not Intent.AssaultRelicKeep).ToArray());
             if (ReleasedForces.ContainsKey(force.GroupId)) return null;
 
@@ -487,9 +491,9 @@ public static partial class AutonomousRvrEventLayer
                         target, true, "Third-realm force contesting the siege under its own participation cap.");
             }
 
-            // One automatic siege per attacking guild (owner decision 2b): a
-            // guild already besieging keeps its other warbands roaming unless
-            // they joined above; other guilds open their own, up to the
+            // Two automatic sieges per attacking guild (owner decision 2b, raised
+            // from one on 2026-10-12): a guild already running two keeps its other
+            // warbands roaming unless they joined above; other guilds open their own, up to the
             // server-wide safety cap (AutonomousRvrEventLayer.SiegeCap.cs).
             if (!MayOpenSiegeLocked(force.GuildName, force.Realm))
                 return ReservePlan(force, objectives);

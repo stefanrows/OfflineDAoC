@@ -142,6 +142,21 @@ namespace DOL.GS
             (slot == eInventorySlot.RightHandWeapon && item.Item_Type != Slot.TWOHAND && item.Hand != 1 ||
              slot == eInventorySlot.TwoHandWeapon && item.Item_Type == Slot.TWOHAND);
 
+        /// <summary>Melee slot a bot attacks from; Unarmed means no held melee weapon is legal for its class.</summary>
+        public enum eMeleeAttackSlot { Standard, TwoHanded, Unarmed }
+
+        /// <summary>
+        /// Chooses the melee slot for an attack. With no legal melee weapon the
+        /// bot swings unarmed from the standard slot instead of returning and
+        /// standing idle (for example holding a bow it cannot use).
+        /// </summary>
+        public static eMeleeAttackSlot ResolveMeleeAttackSlot(bool standardUsable, bool twoHandUsable, bool preferTwoHand)
+        {
+            if (twoHandUsable && (!standardUsable || preferTwoHand))
+                return eMeleeAttackSlot.TwoHanded;
+            return standardUsable ? eMeleeAttackSlot.Standard : eMeleeAttackSlot.Unarmed;
+        }
+
         public static eObjectType PrimaryType(eObjectType first, eObjectType second, bool twoHanded) =>
             twoHanded && second is eObjectType.TwoHandedWeapon or eObjectType.PolearmWeapon or
                 eObjectType.LargeWeapons or eObjectType.CelticSpear ? second : first != 0 ? first : second;

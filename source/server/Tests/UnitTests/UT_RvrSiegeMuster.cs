@@ -206,15 +206,47 @@ public sealed class UT_RvrSiegeMuster
             Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
         Assert.That(AutonomousRvrEventLayer.ReportMuster("supplied", 8, 8, 8, true, start + 30_000, suppliesReady: true),
             Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
-        Assert.That(AutonomousRvrEventLayer.ReportMuster("unsupplied", 8, 8, 8, false, start, suppliesReady: false),
+        // Five of eight is below the quorum of six: without its kit the warband fails at the hard end.
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("unsupplied", 8, 5, 8, false, start, suppliesReady: false),
             Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
-        Assert.That(AutonomousRvrEventLayer.ReportMuster("unsupplied", 8, 8, 8, false,
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("unsupplied", 8, 5, 8, false,
             start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds, suppliesReady: false),
             Is.EqualTo(AutonomousRvrSiegeMuster.Phase.None));
         Assert.That(AutonomousRvrEventLayer.TryConsumeRelease("unsupplied", start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds,
             out string reason), Is.True);
         Assert.That(reason, Is.EqualTo("Siege supply trip did not finish before departure"));
         Assert.That(AutonomousRvrEventLayer.MusterPhaseOf("supplied"), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
+    }
+
+    [Test]
+    public void AQuorumMarchesWithoutItsSuppliesAtTheHardEnd_AndABelowQuorumFails()
+    {
+        const long start = 207_000_000;
+        var target = OpenSiege("rvr-keep-9112", start);
+        Bucket(target.Id, "Attackers").Add("quorum", 8);
+        Bucket(target.Id, "Attackers").Add("short", 8);
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("quorum", 8, 6, 8, false, start, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("short", 8, 5, 8, false, start, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
+        // Before the hard end a present quorum still waits for its kit.
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("quorum", 8, 6, 8, false, start + 9 * Minute, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Mustering));
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("quorum", 8, 6, 8, false,
+            start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching), "six of eight marches without the missing kit");
+        Assert.That(AutonomousRvrEventLayer.ReportMuster("short", 8, 5, 8, false,
+            start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds, suppliesReady: false),
+            Is.EqualTo(AutonomousRvrSiegeMuster.Phase.None));
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrEventLayer.TryConsumeRelease("short", start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds,
+                out string reason), Is.True);
+            Assert.That(reason, Is.EqualTo("Siege supply trip did not finish before departure"));
+            Assert.That(AutonomousRvrEventLayer.MusterPhaseOf("quorum"), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
+            Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds),
+                Is.True, "the departed quorum keeps the siege open");
+        });
     }
 
     [Test]
@@ -414,7 +446,8 @@ public sealed class UT_RvrSiegeMuster
         // The warband picks a roaming plan instead (for instance a pickup member drops its level).
         var roam = new AutonomousRvrEventLayer.LiveObjective("rvr-camp-1", "patrol", AutonomousRvrEventLayer.Intent.Roam,
             eRealm.None, 100, 1, 1, 0, false, 0, 0, 0, 0);
-        var lowLevel = new AutonomousRvrEventLayer.Force("switcher", eRealm.Albion, 8, 40, 1, true, false, [1], 40);
+        // Below the siege gate (average 35, minimum 30): the warband can no longer keep its siege.
+        var lowLevel = new AutonomousRvrEventLayer.Force("switcher", eRealm.Albion, 8, 34, 1, true, false, [1], 34);
         AutonomousRvrEventLayer.ChooseOrJoin(lowLevel, [roam], start + Minute, 0);
         Assert.That(Bucket(target.Id, "Attackers").ContainsKey("switcher"), Is.False);
         Assert.That(AutonomousRvrEventLayer.MusterCounts(target.Id), Is.EqualTo((0, 0)), "the muster left with the force");

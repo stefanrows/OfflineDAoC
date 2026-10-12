@@ -2750,10 +2750,10 @@ namespace DOL.GS
             int minimumLevel = warband.Min(member => member.Level);
             int roamReservePercent = leaderType switch
             {
-                AutonomousPlayerType.Roamer => 70,
-                AutonomousPlayerType.Hybrid => 50,
+                AutonomousPlayerType.Roamer => 40,
+                AutonomousPlayerType.Hybrid => 25,
                 AutonomousPlayerType.KeepWarrior => 5,
-                _ => 30,
+                _ => 15,
             };
             if (!AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(bot))
             {
@@ -2784,7 +2784,7 @@ namespace DOL.GS
                 _assaultGateLogAfter = GameLoop.GameLoopTime + 600_000;
                 Log.Info($"RVR_ASSAULT_GATE bot=\"{bot.Name}\" group_size={warband.Length} avg_level={averageLevel} min_level={minimumLevel} " +
                     $"healers={healers} siege_ready={siegeReady} campaign={AutonomousPlayerBehavior.CanStartCampaign(leaderType, minimumLevel, warband.Length)} " +
-                    $"keep_targets={objectives.Count(objective => objective.Kind == AutonomousRvrEventLayer.Intent.AssaultKeep)} intent={_rvrIntent}");
+                    $"keep_targets={objectives.Count(objective => objective.Kind == AutonomousRvrEventLayer.Intent.AssaultKeep)} intent={_rvrIntent} reason=\"{plan?.Reason}\"");
             }
             bot.TempProperties.SetProperty("RvrWarbandIntent", (int)_rvrIntent);
             bot.TempProperties.SetProperty("RvrDefendingKeep",

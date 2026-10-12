@@ -584,6 +584,15 @@ namespace DOL.GS
                 // a fresh ten-minute purchase budget after a late start.
                 _siegePurchaseDeadline = now + Math.Min(remaining / 2, SiegeSupplyBudget(false) / 2);
                 _siegeSupplyMerchant = FindReachableSiegeMerchant(bot);
+                // 2026-10-12: cross-region ram trips took 380-740 s and missed the muster; same-region ones took 12-56 s.
+                if (_siegeSupplyMerchant != null && _siegeSupplyMerchant.CurrentRegionID != anchor.CurrentRegionID)
+                {
+                    GameMerchant distant = _siegeSupplyMerchant;
+                    _siegeSupplyMerchant = null; _siegeSupplyRally = null;
+                    bot.TempProperties.RemoveProperty(SiegeSupplyRallyProperty);
+                    bot.TempProperties.RemoveProperty(SiegeSupplyKeepProperty);
+                    return EndSiegePurchase(bot, "supply_skipped", $"merchant {distant.Name} is in region {distant.CurrentRegionID}, rally in region {anchor.CurrentRegionID}; marching without a purchase");
+                }
                 _frontierPorter = null; _nextPorterSearch = 0;
                 bot.TempProperties.RemoveProperty(AutonomousFrontierTransport.RequestKey);
                 _siegeSupplyItem = id; _siegeSupplyCount = quantity;
