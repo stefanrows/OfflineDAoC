@@ -293,6 +293,19 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+124. **Copy one character's UI layout to other characters.** Owner,
+     2026-10-12. Implemented in source **0.261.0**: the launcher header has a
+     UI PRESET button that opens `ClientUiPresetForm` (preset code from
+     0.254.0). It saves a character's window layout and quickbar macros as a
+     preset, applies it to another character with a `.uipreset-backup` of the
+     original, installs it as the new-character default
+     (`default<screen width>.ini`), and can clear it. Spell slots are never
+     copied. Launcher Release build succeeds; tests not run. Checks pending:
+     with the client closed, save a preset from a configured character, apply
+     it to another character and log in to confirm windows and macros match;
+     create a new character and confirm it starts with the preset layout;
+     CLEAR PRESET restores the previous default.
+
 123. **Autonomous bot realm ranks on nameplates by default.** Owner,
      2026-10-12. Implemented in source **0.259.0**: new server property
      `show_bot_realm_rank_nameplates` (pvp, default on) gives autonomous

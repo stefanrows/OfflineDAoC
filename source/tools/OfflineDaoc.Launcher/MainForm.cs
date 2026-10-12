@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.260.0";
+    internal const string DisplayVersion = "0.261.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -175,6 +175,7 @@ internal sealed partial class MainForm : Form
     private readonly Button _stopButton;
     private readonly Button _playButton;
     private readonly Button _heraldButton;
+    private readonly Button _uiPresetButton;
     private Process? _serverProcess;
     private RollingServerLog? _serverLog;
     private bool _stoppingServer;
@@ -259,6 +260,12 @@ internal sealed partial class MainForm : Form
         _playButton.Click += (_, _) => LaunchClient();
         _heraldButton = ActionButton("HERALD", DaocTheme.Gold);
         _heraldButton.Click += (_, _) => _herald = HeraldForm.ShowOrFocus(this, _database, _herald);
+        _uiPresetButton = ActionButton("UI PRESET", DaocTheme.Iron);
+        _uiPresetButton.Click += (_, _) =>
+        {
+            using var presets = new ClientUiPresetForm(_clientDirectory);
+            presets.ShowDialog(this);
+        };
 
         rootLayout.Controls.Add(BuildHeader(), 0, 0);
         rootLayout.Controls.Add(BuildCards(), 0, 1);
@@ -516,7 +523,7 @@ internal sealed partial class MainForm : Form
         header.Controls.Add(titlePanel, 0, 0);
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(3, 5, 0, 0), BackColor = Color.Transparent };
-        foreach (var button in new[] { _startButton, _stopButton, _playButton, _heraldButton })
+        foreach (var button in new[] { _startButton, _stopButton, _playButton, _heraldButton, _uiPresetButton })
         {
             button.Width = 132;
             button.Height = 26;
@@ -526,6 +533,7 @@ internal sealed partial class MainForm : Form
         actions.Controls.Add(_stopButton);
         actions.Controls.Add(_playButton);
         actions.Controls.Add(_heraldButton);
+        actions.Controls.Add(_uiPresetButton);
         header.Controls.Add(actions, 1, 0);
         banner.Controls.Add(header);
         return banner;

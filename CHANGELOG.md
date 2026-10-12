@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.261.0] - 2026-10-12
+
+### Added
+
+- A UI PRESET button in the launcher header opens the client UI preset window
+  (code added in 0.254.0, until now not reachable). Save one character's
+  window layout and quickbar macros as a preset, apply it to another
+  character (the original file is backed up), or clear it. Saving also
+  installs the preset as the layout for newly created characters. Spell slots
+  are class-specific and are never copied. The window refuses to change files
+  while the game client is running.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.260.0] - 2026-10-12
 
 ### Added
