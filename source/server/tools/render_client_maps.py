@@ -41,7 +41,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont  # noqa: E402
 
 import client_map_data as D  # noqa: E402
 
-TOOL_VERSION = 'v4'
+TOOL_VERSION = 'v5'
 OUT_SIZE = 512
 SUPERSAMPLE = 2
 FONT_CANDIDATES = ['/mnt/c/Windows/Fonts', 'C:/Windows/Fonts', 'C:\\Windows\\Fonts']
@@ -392,6 +392,57 @@ def _draw_extra(cv, placer, ex, ey, text, fnt, fill, outline_px, outline_rgb):
 # Terrain render
 # ---------------------------------------------------------------------------
 
+def _resample_256(arr, size, resample):
+    """Resample a 256 texel field to size x size (float32 result)."""
+    im = Image.fromarray(arr.astype(np.float32), mode='F').resize((size, size), resample)
+    return np.asarray(im, dtype=np.float32)
+
+
+def _missing_water(stock_mask, terrain_mask, max_frac=0.4, min_covered=0.5, min_area=160, min_residual=250):
+    """Bool 256 mask of the stock water that the terrain water does not cover.
+
+    terrain_mask is the thresholded terrain water at 256 texels. It is grown by two texels
+    before the test. Stock components covering max_frac of the map or more are ignored
+    (large blue areas on foggy stock maps). A component of at least min_area texels is added
+    whole when less than min_covered of it falls in the grown terrain water; of a mostly
+    covered component only the uncovered pieces of at least min_residual texels are added
+    (Aldland's bay). The size floors keep out shore fringes and blue realm shields (about
+    100-150 texels).
+    """
+    grown = D.dilate_mask(terrain_mask, 2)
+    added = np.zeros(stock_mask.shape, bool)
+    limit = max_frac * stock_mask.size
+    for comp in D.water_components(stock_mask, min_area):
+        area = int(comp.sum())
+        if area >= limit:
+            continue
+        if int((comp & grown).sum()) < min_covered * area:
+            added |= comp
+            continue
+        for piece in D.water_components(comp & ~grown, min_residual):
+            added |= piece
+    return added
+
+
+def _stock_water_fields(added, size):
+    """Canvas-resolution coverage and depth ramp for stock-only water (added: bool 256 mask).
+
+    Coverage is the mask upsampled, blurred 1.2 texels and sharpened to an anti-aliased edge.
+    Depth is the mask blurred 5 texels, so water deepens away from the shore.
+    """
+    up = _resample_256(added.astype(np.float32), size, Image.BILINEAR)
+    cov = np.clip((gaussian_grid(up, 1.2 * size / 256.0) - 0.5) * 4.0 + 0.5, 0.0, 1.0)
+    deep = _resample_256(gaussian_grid(added.astype(np.float32), 5.0), size, Image.BILINEAR)
+    dep = np.clip((deep - 0.5) * 2.0, 0.0, 1.0)
+    return cov.astype(np.float32), dep.astype(np.float32)
+
+
+def _is_placeholder_zone(name):
+    """Dummy and test zones from zones.dat. They have no real map."""
+    low = (name or '').strip().lower()
+    return 'dummy' in low or low.startswith('test')
+
+
 def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zones, size, font_dir=None,
                    extras=None):
     """Compose the v4 terrain map. extras: curated labels for this zone (load_extra_labels).
@@ -462,10 +513,22 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
             dr.line([(x * k, y * k) for x, y in r['mid']], fill=255, width=max(2, int(round(0.8 * k))), joint='curve')
     river = np.asarray(river_img.filter(ImageFilter.GaussianBlur(0.6))).astype(np.float32) / 255.0
     water = np.clip(np.maximum(cov, np.clip(river * 1.4, 0, 1)), 0, 1)
-    dep = np.clip(np.maximum(depth_field, 0) / 1200.0, 0, 1)[..., None]
+    # water the stock map paints where the terrain has none (lakes and sea at the zone edge)
+    added_cov = np.zeros((S, S), np.float32)
+    added_dep = np.zeros((S, S), np.float32)
+    stock_water_texels = 0
+    if stock_rgb is not None:
+        terrain_256 = _resample_256(water, 256, Image.BOX) > 0.5
+        added = _missing_water(D.stock_water_mask(stock_rgb), terrain_256)
+        stock_water_texels = int(added.sum())
+        if stock_water_texels:
+            added_cov, added_dep = _stock_water_fields(added, S)
+            water = np.maximum(water, added_cov)
+    dep = np.maximum(np.clip(np.maximum(depth_field, 0) / 1200.0, 0, 1), added_dep)[..., None]
     wcol = np.array(WATER_SHALLOW, np.float32) * (1 - dep) + np.array(WATER_DEEP, np.float32) * dep
     wcol = wcol * (0.96 + 0.04 * mult[..., None])
     halo = np.clip(1.0 - np.clip(dpx, 0, None) / (1.5 * u), 0, 1) * (dpx > 0) * (depth_field > 0)
+    halo = np.maximum(halo, added_cov * np.clip(1.0 - added_dep / 0.35, 0, 1))   # thin rim on stock-only edges
     wcol = wcol * (1 - 0.18 * halo[..., None]) + np.array(SHORE_DARK, np.float32) * 0.18 * halo[..., None]
     img = land * (1 - water[..., None]) + wcol * water[..., None]
     cv.img = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), 'RGB').convert('RGBA')
@@ -750,6 +813,7 @@ def render_terrain(client, zinfo, zone, ground_rgb, stock_rgb, towns, pois, zone
         'grid_ticks': tick_drawn,
         'labels_drawn': sorted(drawn),
         'extra_labels': extra_drawn,
+        'stock_water_texels': stock_water_texels,
     }
     return out, meta
 
@@ -950,6 +1014,10 @@ def main(argv=None):
                 skipped.append({'file': name, 'zone': zid, 'reason': 'no stock map; pass --include-new'})
                 counts['skipped'] += 1
                 continue
+            if terrain_ok and stock_path is None and _is_placeholder_zone(zi.name):
+                skipped.append({'file': name, 'zone': zid, 'reason': 'placeholder zone'})
+                counts['skipped'] += 1
+                continue
             if terrain_ok and not args.terrain_all:
                 # Without a zone-wide ground texture the render is a flat height tint that
                 # reads worse than the painted stock map, so keep (upscale) the stock art.
@@ -1063,6 +1131,7 @@ def _entry(args, name, zid, zi, source, addon_label, stock_path, out_path, meta,
         e['neighbour_labels'] = meta.get('neighbour_labels')
         e['labels_drawn'] = meta.get('labels_drawn')
         e['extra_labels'] = meta.get('extra_labels')
+        e['stock_water_texels'] = meta.get('stock_water_texels')
     else:
         e['reason'] = meta.get('reason')
     return e

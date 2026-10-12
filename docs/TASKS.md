@@ -363,7 +363,9 @@ Agent sessions on items 45–48: take the role and context from
      181 names), larger priority-placed labels, dark tree stipple instead of
      marker-like green dots, interior exit labels, no "DUMMY ZONE". Pending:
      install of the 0.256.0 stage and real-client readability checks.
-     Still open: rivers traced from the stock maps, zones 73-87.
+     0.257.0: stock-only water bodies filled in (renderer v5) and new maps
+     for the Atlantis zones 73-87 and Foothills 330/334/335 with installer
+     support for added files. Pending: install and real-client checks.
 
 116. **open BG: a permanently open Thidranki (region 252) for levels 1–50.**
      Owner request 2026-10-11 ~02:00; decisions and design in

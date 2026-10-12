@@ -13,7 +13,9 @@ world-bot dots keep the stock group_location template and its atlas cell.
 
 The 512x512 map textures are not made here. Pass --maps with DXT1 .dds files
 named as in the client's ui/maps folder to stage them too; without it only the
-window XML and the atlas change. The input client is read only.
+window XML and the atlas change. Add --allow-new-maps to also stage .dds names
+the stock client does not ship; the installer adds those as new files. The
+input client is read only.
 """
 
 import argparse
@@ -45,6 +47,7 @@ ATLAS_WIDTH, ATLAS_HEIGHT = 256, 128
 GROUP_MEMBER_IDS = tuple(range(1100, 1108))
 FILL, OUTLINE, HIGHLIGHT = (0, 220, 255), (0, 28, 44), (255, 255, 255)
 MAP_NAME = re.compile(r"[A-Za-z0-9_]+\.dds")
+ABSENT = "absent"  # baselineSha256 of a map the stock client does not ship
 DDS_HEADER = 128
 
 # Each entry: element tag, a marker that identifies the one element, and the
@@ -320,7 +323,7 @@ def _pinned(client, relative):
     return data
 
 
-def build_stage(client, output, maps=None):
+def build_stage(client, output, maps=None, allow_new=False):
     """Writes the staged map client into a new output folder and returns its manifest."""
     if output.exists():
         raise ValueError("Output directory already exists")
@@ -337,17 +340,26 @@ def build_stage(client, output, maps=None):
         sources = sorted(maps.glob("*.dds"))
         if not sources:
             raise ValueError(f"No .dds files in {maps}")
+        new_names = set()
         for source in sources:
             name = source.name
             if not MAP_NAME.fullmatch(name):
                 raise ValueError(f"Unexpected map file name: {name}")
-            if name.lower() not in installed:
+            is_new = name.lower() not in installed
+            if is_new and not allow_new:
                 raise ValueError(f"{name} is not a map in the client's ui/maps")
-            name = installed[name.lower()]
+            if is_new and name.lower() in new_names:
+                raise ValueError(f"Duplicate new map name: {name}")
             data = source.read_bytes()
             check_map(data, name)
-            stock = (client / "ui" / "maps" / name).read_bytes()
-            staged[f"ui/maps/{name}"] = (data, sha256(stock))
+            if is_new:
+                # Not in the stock client: staged as a new file, installed only if absent.
+                new_names.add(name.lower())
+                staged[f"ui/maps/{name}"] = (data, ABSENT)
+            else:
+                name = installed[name.lower()]
+                stock = (client / "ui" / "maps" / name).read_bytes()
+                staged[f"ui/maps/{name}"] = (data, sha256(stock))
 
     files = []
     for path, (data, baseline) in staged.items():
@@ -361,7 +373,8 @@ def build_stage(client, output, maps=None):
         "templateName": TEMPLATE,
         "atlasCell": {"x": MARKER_CELL[0], "y": MARKER_CELL[1], "size": CELL},
         "files": files,
-        "status": "staged 512x512 map window and group marker; offline checks only until the owner's real-client check",
+        "newMaps": [entry["path"] for entry in files if entry["baselineSha256"] == ABSENT],
+        "status":"staged 512x512 map window and group marker; offline checks only until the owner's real-client check",
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
@@ -372,9 +385,11 @@ def main():
     parser.add_argument("--client", type=Path, required=True, help="Installed client app directory (read only)")
     parser.add_argument("--output", type=Path, required=True, help="New staging directory")
     parser.add_argument("--maps", type=Path, help="Optional folder of 512x512 DXT1 .dds maps named as in ui/maps")
+    parser.add_argument("--allow-new-maps", action="store_true",
+                        help="With --maps, also stage .dds names the stock client lacks (added as new files)")
     args = parser.parse_args()
     try:
-        manifest = build_stage(args.client, args.output, args.maps)
+        manifest = build_stage(args.client, args.output, args.maps, args.allow_new_maps)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps({entry["path"]: entry["sha256"] for entry in manifest["files"]}, indent=2))

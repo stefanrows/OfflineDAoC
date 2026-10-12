@@ -267,6 +267,12 @@ tools\dev\Install-ClientMap.ps1 -InstallRoot D:\Games\OfflineDAoC -Stage <stage>
 tools\dev\Install-ClientMap.ps1 -InstallRoot D:\Games\OfflineDAoC -RestoreBackup <backup>
 ```
 
+Maps the stock client does not ship (new terrain for Atlantis zones z073-z087
+and Foothills z330, z334, z335) need both `--include-new` in
+`render_client_maps.py` and `--allow-new-maps` in `build_map_client.py`. The
+installer adds those as new files, and restore deletes them if they still match
+the installed hash.
+
 ## World data, navigation, and customization
 
 Keep the clean world definitions and all current navmeshes available to the LLM.

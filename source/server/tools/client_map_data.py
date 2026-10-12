@@ -625,6 +625,70 @@ def extract_roads(stock_rgb, join_texels=5.0, min_texels=4.0):
 
 
 # ---------------------------------------------------------------------------
+# Stock water (blue areas painted on the 256 texel stock map)
+# ---------------------------------------------------------------------------
+
+STOCK_WATER_MIN_TEXELS = 12   # smaller blue specks (lettering, icons) are dropped
+
+
+def dilate_mask(mask, steps=1):
+    """Grow a bool mask by steps texels (4-connected)."""
+    for _ in range(steps):
+        mask = _dilate(mask)
+    return mask
+
+
+def stock_water_mask(stock_rgb, min_texels=STOCK_WATER_MIN_TEXELS):
+    """Bool 256x256 mask of the water painted on a stock map.
+
+    Blue-dominant texels are closed (dilate then erode, one texel), then components smaller
+    than min_texels are dropped. That removes blue text and icons on the stock art.
+    """
+    if stock_rgb.size != (256, 256):
+        stock_rgb = stock_rgb.resize((256, 256), Image.BOX)
+    a = np.asarray(stock_rgb).astype(np.int32)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    raw = (b > r + 25) & (b >= g) & (b > 60)
+    closed = ~dilate_mask(~dilate_mask(raw))
+    out = np.zeros(closed.shape, bool)
+    for comp in water_components(closed, min_texels):
+        out |= comp
+    return out
+
+
+def label_components(mask):
+    """8-connected labels of a bool mask: (int32 array with 0 for background, component count)."""
+    labels = np.zeros(mask.shape, np.int32)
+    h, w = mask.shape
+    count = 0
+    rows, cols = np.nonzero(mask)
+    for sr, sc in zip(rows.tolist(), cols.tolist()):
+        if labels[sr, sc]:
+            continue
+        count += 1
+        labels[sr, sc] = count
+        stack = [(sr, sc)]
+        while stack:
+            r, c = stack.pop()
+            for rr in range(max(0, r - 1), min(h, r + 2)):
+                for cc in range(max(0, c - 1), min(w, c + 2)):
+                    if mask[rr, cc] and not labels[rr, cc]:
+                        labels[rr, cc] = count
+                        stack.append((rr, cc))
+    return labels, count
+
+
+def water_components(mask, min_texels=1):
+    """8-connected components of a bool mask as a list of bool arrays, each with at least
+    min_texels texels, in label order."""
+    labels, count = label_components(mask)
+    if count == 0:
+        return []
+    areas = np.bincount(labels.ravel(), minlength=count + 1)
+    return [labels == i for i in range(1, count + 1) if areas[i] >= min_texels]
+
+
+# ---------------------------------------------------------------------------
 # World database (read-only copy)
 # ---------------------------------------------------------------------------
 

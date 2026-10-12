@@ -5,6 +5,7 @@ Run from the repository root with:
 No client, server, or game file is needed; the stock hashes are patched to the fixtures.
 """
 
+import json
 import struct
 import sys
 import tempfile
@@ -470,6 +471,49 @@ class BuildStageTests(unittest.TestCase):
             client = self.make_client(root)
             with self.assertRaises(ValueError):
                 builder.build_stage(client, root / "stage")
+
+    def test_unknown_map_refused_without_allow_new_maps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = self.make_client(root)
+            maps = root / "maps"
+            maps.mkdir()
+            (maps / "z373.dds").write_bytes(dds_fixture())
+            with mock.patch.dict(builder.BASELINE, self.pins()):
+                with self.assertRaisesRegex(ValueError, "z373.dds is not a map in the client's ui/maps"):
+                    builder.build_stage(client, root / "stage", maps)
+
+    def test_new_map_staged_as_absent_with_allow_new_maps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = self.make_client(root)
+            maps = root / "maps"
+            maps.mkdir()
+            new_map = dds_fixture()
+            (maps / "z373.dds").write_bytes(new_map)
+            with mock.patch.dict(builder.BASELINE, self.pins()):
+                manifest = builder.build_stage(client, root / "stage", maps, allow_new=True)
+            entries = {entry["path"]: entry for entry in manifest["files"]}
+            self.assertIn("ui/maps/z373.dds", entries)
+            self.assertEqual(entries["ui/maps/z373.dds"]["baselineSha256"], "absent")
+            self.assertEqual(entries["ui/maps/z373.dds"]["sha256"], builder.sha256(new_map))
+            self.assertEqual((root / "stage" / "maps" / "z373.dds").read_bytes(), new_map)
+            self.assertEqual(manifest["newMaps"], ["ui/maps/z373.dds"])
+            self.assertEqual(entries["ui/isles/map_window.xml"]["baselineSha256"], self.pins()["ui/isles/map_window.xml"])
+            on_disk = json.loads((root / "stage" / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(on_disk["newMaps"], ["ui/maps/z373.dds"])
+
+    def test_new_map_names_and_sizes_are_still_checked_with_allow_new_maps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = self.make_client(root)
+            for bad_name, data in (("bad-name.dds", dds_fixture()), ("z374.dds", dds_fixture(256, 256))):
+                maps = root / f"maps-{bad_name}"
+                maps.mkdir()
+                (maps / bad_name).write_bytes(data)
+                with mock.patch.dict(builder.BASELINE, self.pins()):
+                    with self.assertRaises(ValueError):
+                        builder.build_stage(client, root / f"stage-{bad_name}", maps, allow_new=True)
 
 
 if __name__ == "__main__":

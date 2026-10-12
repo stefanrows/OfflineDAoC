@@ -15,6 +15,8 @@ import types
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import client_map_data as D  # noqa: E402
 import render_client_maps as R  # noqa: E402
@@ -227,6 +229,106 @@ class TerrainFontTests(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertEqual(' '.join(lines), 'The Long Named Border Keep Ruins')
         self.assertTrue(all(lines))
+
+
+class StockWaterMaskTests(unittest.TestCase):
+    def test_square_kept_speck_dropped_green_not_water(self):
+        from PIL import Image
+        a = np.zeros((256, 256, 3), np.uint8)
+        a[:] = (200, 190, 150)                 # parchment land
+        a[20:50, 20:50] = (40, 90, 200)        # 30x30 lake
+        a[200:202, 200:202] = (40, 90, 200)    # 2x2 speck, like blue lettering
+        a[100:140, 150:200] = (60, 160, 60)    # green forest
+        mask = D.stock_water_mask(Image.fromarray(a, 'RGB'))
+        self.assertEqual(mask.shape, (256, 256))
+        self.assertTrue(mask[20:50, 20:50].all())
+        self.assertEqual(int(mask.sum()), 900)  # the square only, closing leaves it unchanged
+        self.assertFalse(mask[200:202, 200:202].any())
+        self.assertFalse(mask[100:140, 150:200].any())
+
+    def test_water_components_split_and_filter(self):
+        m = np.zeros((20, 20), bool)
+        m[0:3, 0:3] = True                     # 9 texels
+        m[10, 10] = True                       # diagonal neighbour joins 8-connected blobs
+        m[11, 11] = True
+        m[18, 0] = True                        # single texel
+        comps = D.water_components(m)
+        self.assertEqual(sorted(int(c.sum()) for c in comps), [1, 2, 9])
+        big = D.water_components(m, min_texels=2)
+        self.assertEqual(sorted(int(c.sum()) for c in big), [2, 9])
+        self.assertEqual(D.water_components(np.zeros((4, 4), bool)), [])
+
+
+class MissingWaterTests(unittest.TestCase):
+    def _empty(self):
+        return np.zeros((256, 256), bool)
+
+    def test_component_inside_terrain_water_not_added(self):
+        stock = self._empty()
+        stock[50:60, 50:60] = True
+        terrain = self._empty()
+        terrain[40:70, 40:70] = True
+        self.assertFalse(R._missing_water(stock, terrain).any())
+
+    def test_separate_component_added(self):
+        stock = self._empty()
+        stock[50:60, 50:60] = True
+        stock[150:165, 150:165] = True
+        terrain = self._empty()
+        terrain[40:70, 40:70] = True
+        added = R._missing_water(stock, terrain)
+        self.assertFalse(added[50:60, 50:60].any())
+        self.assertTrue(added[150:165, 150:165].all())
+        self.assertEqual(int(added.sum()), 225)
+
+    def test_component_over_40_percent_of_map_not_added(self):
+        stock = self._empty()
+        stock[0:200, 0:200] = True             # 40000 texels, 61 % of the map
+        self.assertFalse(R._missing_water(stock, self._empty()).any())
+
+    def test_component_under_40_percent_added_without_terrain(self):
+        stock = self._empty()
+        stock[10:150, 10:150] = True           # 19600 texels, 30 % of the map
+        self.assertEqual(int(R._missing_water(stock, self._empty()).sum()), 19600)
+
+    def test_large_uncovered_bay_of_a_covered_body_added(self):
+        stock = self._empty()
+        stock[0:60, 0:256] = True              # sea, mostly drawn by the terrain
+        terrain = self._empty()
+        terrain[0:58, 0:256] = True
+        stock[60:90, 100:130] = True           # 900-texel bay the terrain lacks
+        added = R._missing_water(stock, terrain)
+        self.assertTrue(added[70:90, 105:125].all())
+        self.assertFalse(added[0:55, :].any())
+
+    def test_small_uncovered_piece_such_as_a_shield_not_added(self):
+        stock = self._empty()
+        stock[0:100, 0:256] = True
+        terrain = self._empty()
+        terrain[0:98, 0:256] = True
+        stock[100:110, 20:30] = True           # 100-texel blue shield at the shore
+        self.assertFalse(R._missing_water(stock, terrain).any())
+
+    def test_lone_shield_not_added(self):
+        stock = self._empty()
+        stock[200:210, 200:212] = True         # 120-texel blue realm shield on land
+        self.assertFalse(R._missing_water(stock, self._empty()).any())
+
+    def test_fog_split_by_terrain_water_not_added(self):
+        stock = self._empty()
+        stock[:, :] = True                     # foggy all-blue stock map
+        terrain = self._empty()
+        terrain[:, 120:136] = True             # a river splits the leftover in two
+        self.assertFalse(R._missing_water(stock, terrain).any())
+
+
+class PlaceholderZoneTests(unittest.TestCase):
+    def test_names(self):
+        self.assertTrue(R._is_placeholder_zone('Dummy Zone'))
+        self.assertTrue(R._is_placeholder_zone('TestBG'))
+        self.assertFalse(R._is_placeholder_zone("Typhon's Reach"))
+        self.assertFalse(R._is_placeholder_zone('Oceanus Hesperos'))
+        self.assertFalse(R._is_placeholder_zone(None))
 
 
 if __name__ == '__main__':

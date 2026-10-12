@@ -12,6 +12,57 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.257.0] - 2026-10-12
+
+### Added
+
+- Map pack: new terrain maps for the zones the stock client ships without a
+  map: the Atlantis zones Oceanus Hesperos, Mesothalassa, Oceanus Boreal,
+  Notos and Anatole, Stygian Delta, Land of Atum, Typhon's Reach, Ashen
+  Isles, Green Glades and Arbor Glen, and the three Foothills zones
+  (z330/z334/z335). Placeholder zones (Dummy Zone, TestBG) are skipped.
+- `build_map_client.py --allow-new-maps` stages maps the client lacks;
+  `Install-ClientMap.ps1` adds them as new files (dry run shows `[new]`) and
+  restore or rollback deletes them again after a hash check.
+
+### Changed
+
+- Map renderer v5: water bodies painted on the stock map but missing from the
+  terrain water data are filled in from the stock art (Aldland's southern
+  bay, the Gripklosa and Delling Crater lakes, Vale of Balor pools). Bodies
+  the terrain already draws, shore fringes, blue realm shields and foggy
+  all-blue stock maps are left alone.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.257.0] - 2026-10-12
+
+### Added
+
+- None.
+
+### Changed
+
+- Buffs (self-buffs and every other helpful spell with a duration or
+  concentration upkeep) and pet summons cost 10% of their native mana again
+  for real players, companions and autonomous gamebots. Damage spells keep
+  the native 1.65 cost restored in 0.255.0. Focus, quickcast and power-pool
+  rules are unchanged; the discount applies after them.
+
+### Fixed
+
+- Keeping self-buffs and pets up drained too much mana after 0.255.0.
+
+### Removed
+
+- None.
+
 ## [0.256.0] - 2026-10-12
 
 ### Added
