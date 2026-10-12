@@ -1379,11 +1379,19 @@ namespace DOL.GS.ServerProperties
 		public static bool BG_RELEASE_TO_PORTAL_KEEP;
 
 		/// <summary>
-		/// Show the realm rank (RR xLy) after the names of autonomous bots, persistent companions and players
-		/// on overhead nameplates. Presentation only: stored names are never changed. Read by RealmRankNameplate.
+		/// Show the realm rank (RR xLy) after the names of persistent companions and players on overhead
+		/// nameplates. Autonomous world bots use show_bot_realm_rank_nameplates. Presentation only: stored names
+		/// are never changed. Read by RealmRankNameplate.
 		/// </summary>
-		[ServerProperty("pvp", "show_realm_rank_nameplates", "Show realm rank (RR xLy) after the names of gamebots, companions and players on nameplates. Presentation only.", false)]
+		[ServerProperty("pvp", "show_realm_rank_nameplates", "Show realm rank (RR xLy) after the names of companions and players on nameplates. Presentation only.", false)]
 		public static bool SHOW_REALM_RANK_NAMEPLATES;
+
+		/// <summary>
+		/// Show the realm rank (RR xLy) after the names of autonomous world bots on overhead nameplates (on by
+		/// default). Presentation only: stored names are never changed. Read by RealmRankNameplate.
+		/// </summary>
+		[ServerProperty("pvp", "show_bot_realm_rank_nameplates", "Show realm rank (RR xLy) after the names of autonomous world bots on nameplates. Presentation only.", true)]
+		public static bool SHOW_BOT_REALM_RANK_NAMEPLATES;
 
 		#endregion
 

@@ -293,6 +293,18 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+123. **Autonomous bot realm ranks on nameplates by default.** Owner,
+     2026-10-12. Implemented in source **0.259.0**: new server property
+     `show_bot_realm_rank_nameplates` (pvp, default on) gives autonomous
+     world bots "Name | RR xLy"; `show_realm_rank_nameplates` (still off by
+     default) now covers only companions and players. The launcher's XP
+     Settings tab has a checkbox for each. Server (with tests project) and
+     launcher Release builds succeed; tests not run. Checks pending: after the
+     next server start, autonomous bot nameplates show the rank without
+     touching any setting; companions and your character stay plain until
+     the other checkbox is ticked; unticking the bot checkbox restores plain
+     bot names.
+
 122. **Camlann Herald, bot kill counters, realm rank nameplates and a
      launcher facelift.** Owner, 2026-10-11, inspired by another fork's herald
      and "Name | RR 2L5" nameplates. Implemented in source **0.252.0**:

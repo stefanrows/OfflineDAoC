@@ -7,25 +7,29 @@ using NUnit.Framework;
 
 namespace DOL.UnitTests
 {
-    // show_realm_rank_nameplates (presentation only): "Name | RR 2L5" on autonomous bots and persistent companions,
-    // "| RR 2L5" after an empty player last name. Stored names never change, and the caps keep the strings
+    // Realm rank nameplates (presentation only): "Name | RR 2L5" on autonomous bots (show_bot_realm_rank_nameplates,
+    // on by default) and persistent companions (show_realm_rank_nameplates, off by default, which also gives players
+    // "| RR 2L5" after an empty last name). Stored names never change, and the caps keep the strings
     // inside the lengths the client copies into fixed buffers (45 for NPC names, 31 for player last names).
     [TestFixture, NonParallelizable]
     public sealed class UT_RealmRankNameplate
     {
         private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic;
         private bool _previous;
+        private bool _previousBots;
 
         [SetUp]
         public void SetUp()
         {
             _previous = DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES;
+            _previousBots = DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES;
         }
 
         [TearDown]
         public void TearDown()
         {
             DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = _previous;
+            DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES = _previousBots;
         }
 
         [TestCase(0, "RR 1L0")]
@@ -50,6 +54,20 @@ namespace DOL.UnitTests
                 Assert.That(attribute.Category, Is.EqualTo("pvp"));
                 Assert.That(attribute.Key, Is.EqualTo("show_realm_rank_nameplates"));
                 Assert.That(attribute.DefaultValue, Is.EqualTo(false));
+            });
+        }
+
+        [Test]
+        public void AutonomousBotPropertyDefaultsOnAndSitsInThePvpCategory()
+        {
+            FieldInfo field = typeof(DOL.GS.ServerProperties.Properties).GetField("SHOW_BOT_REALM_RANK_NAMEPLATES",
+                BindingFlags.Public | BindingFlags.Static);
+            ServerPropertyAttribute attribute = field.GetCustomAttribute<ServerPropertyAttribute>();
+            Assert.Multiple(() =>
+            {
+                Assert.That(attribute.Category, Is.EqualTo("pvp"));
+                Assert.That(attribute.Key, Is.EqualTo("show_bot_realm_rank_nameplates"));
+                Assert.That(attribute.DefaultValue, Is.EqualTo(true));
             });
         }
 
@@ -105,35 +123,49 @@ namespace DOL.UnitTests
         }
 
         [Test]
-        public void EligibleBotsGetTheRankOnlyWhileTheSettingIsOn()
+        public void AutonomousBotsFollowOnlyTheBotSetting()
         {
             GameBot bot = UninitializedBot(autonomous: true, companion: false, helper: false, encounter: false, realmLevel: 15);
 
-            DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = true;
-            string on = RealmRankNameplate.NpcName(bot, "Dairoinlan");
+            DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES = true;
             DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = false;
+            string on = RealmRankNameplate.NpcName(bot, "Dairoinlan");
+            DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES = false;
+            DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = true;
             string off = RealmRankNameplate.NpcName(bot, "Dairoinlan");
 
             Assert.Multiple(() =>
             {
                 Assert.That(on, Is.EqualTo("Dairoinlan | RR 2L5"));
-                Assert.That(off, Is.EqualTo("Dairoinlan"), "property off keeps the packet text exactly as before");
+                Assert.That(off, Is.EqualTo("Dairoinlan"), "bot setting off keeps the packet text exactly as before");
                 Assert.That(bot.RealmLevel, Is.EqualTo(15), "the stored realm level is never changed by the label");
             });
         }
 
         [Test]
-        public void PersistentCompanionsGetTheRankToo()
+        public void PersistentCompanionsFollowOnlyTheCompanionAndPlayerSetting()
         {
-            DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = true;
             GameBot companion = UninitializedBot(autonomous: false, companion: true, helper: false, encounter: false, realmLevel: 3);
-            Assert.That(RealmRankNameplate.NpcName(companion, "Ysolde"), Is.EqualTo("Ysolde | RR 1L3"));
+
+            DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = true;
+            DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES = false;
+            string on = RealmRankNameplate.NpcName(companion, "Ysolde");
+            DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = false;
+            DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES = true;
+            string off = RealmRankNameplate.NpcName(companion, "Ysolde");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(on, Is.EqualTo("Ysolde | RR 1L3"));
+                Assert.That(off, Is.EqualTo("Ysolde"));
+            });
         }
 
         [Test]
         public void TemporaryHelpersBattlegroundActorsAndOrdinaryNpcsKeepThePlainName()
         {
             DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = true;
+            DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES = true;
             GameBot helper = UninitializedBot(autonomous: false, companion: false, helper: true, encounter: false, realmLevel: 15);
             GameBot encounter = UninitializedBot(autonomous: false, companion: false, helper: false, encounter: true, realmLevel: 15);
             var ordinary = new GameNPC();
@@ -150,7 +182,7 @@ namespace DOL.UnitTests
         [Test]
         public void EligibleBotNamesThatWouldOverflowKeepThePlainName()
         {
-            DOL.GS.ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES = true;
+            DOL.GS.ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES = true;
             GameBot bot = UninitializedBot(autonomous: true, companion: false, helper: false, encounter: false, realmLevel: 110);
             string longName = new string('B', 37);
             Assert.That(RealmRankNameplate.NpcName(bot, longName), Is.EqualTo(longName));

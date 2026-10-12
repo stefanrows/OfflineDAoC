@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.257.0";
+    internal const string DisplayVersion = "0.259.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -114,15 +114,25 @@ internal sealed partial class MainForm : Form
     private readonly Label _worldSpeedClockText = new() { AutoSize = false, Dock = DockStyle.Fill };
     private readonly CheckBox _makeMeGm = new() { Text = "Make Me a GM", AutoSize = true, ForeColor = DaocTheme.Parchment, Font = new Font("Georgia", 9f, FontStyle.Bold) };
     private const string RealmRankNameplateKey = "show_realm_rank_nameplates";
-    private const string RealmRankNameplateDescription = "Show the realm rank (RR xLy) after the names of gamebots, companions and players on nameplates. Presentation only.";
+    private const string RealmRankNameplateDescription = "Show realm rank (RR xLy) after the names of companions and players on nameplates. Presentation only.";
+    private const string BotRealmRankNameplateKey = "show_bot_realm_rank_nameplates";
+    private const string BotRealmRankNameplateDescription = "Show realm rank (RR xLy) after the names of autonomous world bots on nameplates. Presentation only.";
     private readonly CheckBox _realmRankNameplates = new()
     {
-        Text = "Show realm rank on nameplates",
+        Text = "Realm rank on companion and player nameplates",
         AutoSize = true,
         ForeColor = DaocTheme.Parchment,
         Font = new Font("Georgia", 9f, FontStyle.Bold),
     };
-    private readonly Label _realmRankNameplatesNote = XpRateDescription("Adds RR xLy after names on nameplates. Applies at the next server startup.");
+    private readonly Label _realmRankNameplatesNote = XpRateDescription("Adds RR xLy after companion and player names. Applies at the next server startup.");
+    private readonly CheckBox _botRealmRankNameplates = new()
+    {
+        Text = "Realm rank on autonomous bot nameplates",
+        AutoSize = true,
+        ForeColor = DaocTheme.Parchment,
+        Font = new Font("Georgia", 9f, FontStyle.Bold),
+    };
+    private readonly Label _botRealmRankNameplatesNote = XpRateDescription("On by default. Adds RR xLy after autonomous bot names. Applies at the next server startup.");
     private readonly Label _xpSettingsStatus = new()
     {
         AutoSize = true,
@@ -263,6 +273,7 @@ internal sealed partial class MainForm : Form
         _showCompanions.CheckedChanged += (_, _) => ApplyFilter();
         DaocTheme.StyleCheckBox(_makeMeGm);
         DaocTheme.StyleCheckBox(_realmRankNameplates);
+        DaocTheme.StyleCheckBox(_botRealmRankNameplates);
         DaocTheme.StyleCheckBox(_eventActiveOnly);
         _auctionSearch.TextChanged += (_, _) => ApplyAuctionFilter();
         _auctionRealmTabs.SelectedIndexChanged += (_, _) => ApplyAuctionFilter();
@@ -694,7 +705,7 @@ internal sealed partial class MainForm : Form
         var surface = new InsetPanel
         {
             Dock = DockStyle.Top,
-            Height = 300,
+            Height = 332,
             Margin = new Padding(18),
             Padding = new Padding(16, 12, 16, 12),
             Accent = DaocTheme.Gold,
@@ -703,7 +714,7 @@ internal sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 8,
+            RowCount = 9,
             BackColor = Color.Transparent,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
@@ -714,6 +725,7 @@ internal sealed partial class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -752,8 +764,14 @@ internal sealed partial class MainForm : Form
         layout.Controls.Add(_realmRankNameplates, 0, 6);
         layout.SetColumnSpan(_realmRankNameplates, 2);
         layout.Controls.Add(_realmRankNameplatesNote, 2, 6);
-        _realmRankNameplates.CheckedChanged += async (_, _) => await SaveRealmRankNameplatesAsync();
-        layout.Controls.Add(_xpSettingsStatus, 0, 7);
+        _realmRankNameplates.CheckedChanged += async (_, _) =>
+            await SaveNameplateSettingAsync(_realmRankNameplates, RealmRankNameplateKey, RealmRankNameplateDescription, "false");
+        layout.Controls.Add(_botRealmRankNameplates, 0, 7);
+        layout.SetColumnSpan(_botRealmRankNameplates, 2);
+        layout.Controls.Add(_botRealmRankNameplatesNote, 2, 7);
+        _botRealmRankNameplates.CheckedChanged += async (_, _) =>
+            await SaveNameplateSettingAsync(_botRealmRankNameplates, BotRealmRankNameplateKey, BotRealmRankNameplateDescription, "true");
+        layout.Controls.Add(_xpSettingsStatus, 0, 8);
         layout.SetColumnSpan(_xpSettingsStatus, 3);
         surface.Controls.Add(layout);
         return surface;
@@ -1908,11 +1926,18 @@ internal sealed partial class MainForm : Form
             _makeMeGm.Enabled = editable;
             _realmRankNameplates.Checked = snapshot.RealmRankNameplates;
             _realmRankNameplates.Enabled = editable;
+            _botRealmRankNameplates.Checked = snapshot.BotRealmRankNameplates;
+            _botRealmRankNameplates.Enabled = editable;
             string nameplateHelp = editable
-                ? "Shows the realm rank after names on nameplates (players, autonomous bots and companions). Applies at the next server startup."
+                ? "Shows the realm rank after companion and player names on nameplates. Applies at the next server startup."
+                : "Stop the server before changing this setting.";
+            string botNameplateHelp = editable
+                ? "Shows the realm rank after autonomous world bot names on nameplates (on by default). Applies at the next server startup."
                 : "Stop the server before changing this setting.";
             _helpTip.SetToolTip(_realmRankNameplates, nameplateHelp);
             _helpTip.SetToolTip(_realmRankNameplatesNote, nameplateHelp);
+            _helpTip.SetToolTip(_botRealmRankNameplates, botNameplateHelp);
+            _helpTip.SetToolTip(_botRealmRankNameplatesNote, botNameplateHelp);
             if (_savingXpRates)
             {
                 _xpSettingsStatus.ForeColor = DaocTheme.Success;
@@ -1982,7 +2007,7 @@ internal sealed partial class MainForm : Form
             return;
         }
         _savingXpRates = true;
-        _makeMeGm.Enabled = _realmRankNameplates.Enabled = _playerXpRate.Enabled = _botXpRate.Enabled = _playerRpRate.Enabled = _botRpRate.Enabled = _startButton.Enabled = false;
+        _makeMeGm.Enabled = _realmRankNameplates.Enabled = _botRealmRankNameplates.Enabled = _playerXpRate.Enabled = _botXpRate.Enabled = _playerRpRate.Enabled = _botRpRate.Enabled = _startButton.Enabled = false;
         _xpSettingsStatus.Text = "APPLYING GM SETTING…";
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         try { await Task.Run(() => PersistGmSetting(enabled)); }
@@ -2026,6 +2051,7 @@ internal sealed partial class MainForm : Form
         _botRpRate.Enabled = false;
         _makeMeGm.Enabled = false;
         _realmRankNameplates.Enabled = false;
+        _botRealmRankNameplates.Enabled = false;
         _startButton.Enabled = false;
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         string target = key switch
@@ -2060,10 +2086,10 @@ internal sealed partial class MainForm : Form
         ServerPropertyRows.Upsert(_database, "rates", [new ServerPropertyRow(key, description, "1", stored)]);
     }
 
-    private async Task SaveRealmRankNameplatesAsync()
+    private async Task SaveNameplateSettingAsync(CheckBox checkBox, string key, string description, string defaultValue)
     {
         if (_loadingXpRates || _savingXpRates) return;
-        bool enabled = _realmRankNameplates.Checked;
+        bool enabled = checkBox.Checked;
         if (IsServerRunning() || HasExactServerProcess())
         {
             MessageBox.Show(this, "Stop the server before changing the nameplate setting.", "Server is running",
@@ -2074,11 +2100,12 @@ internal sealed partial class MainForm : Form
 
         _savingXpRates = true;
         _realmRankNameplates.Enabled = false;
+        _botRealmRankNameplates.Enabled = false;
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         _xpSettingsStatus.Text = "APPLYING NAMEPLATE SETTING…";
         try
         {
-            await Task.Run(() => PersistRealmRankNameplates(enabled));
+            await Task.Run(() => PersistNameplateSetting(key, description, defaultValue, enabled));
         }
         catch (Exception exception)
         {
@@ -2091,7 +2118,7 @@ internal sealed partial class MainForm : Form
         }
     }
 
-    private void PersistRealmRankNameplates(bool enabled)
+    private void PersistNameplateSetting(string key, string description, string defaultValue, bool enabled)
     {
         bool serverRunning = _persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess());
         if (serverRunning)
@@ -2099,7 +2126,7 @@ internal sealed partial class MainForm : Form
         if (!File.Exists(_database))
             throw new InvalidOperationException("The prepared world database is missing.");
         ServerPropertyRows.Upsert(_database, "pvp",
-            [new ServerPropertyRow(RealmRankNameplateKey, RealmRankNameplateDescription, "false", enabled ? "true" : "false")]);
+            [new ServerPropertyRow(key, description, defaultValue, enabled ? "true" : "false")]);
     }
 
     private LiveBotSnapshot? RequestLiveBotSnapshot()
@@ -2370,6 +2397,7 @@ internal sealed partial class MainForm : Form
             playerRpRate, botRpRate, makeMeGm, ReadRvrWorldSnapshot(_serverDirectory, _database), WorldSimulationClock.ReadCheckpoint(connection))
         {
             RealmRankNameplates = ReadServerFlag(connection, RealmRankNameplateKey),
+            BotRealmRankNameplates = ReadServerFlag(connection, BotRealmRankNameplateKey, fallback: true),
         };
     }
 
@@ -2387,14 +2415,18 @@ internal sealed partial class MainForm : Form
             : fallback;
     }
 
-    private static bool ReadServerFlag(SQLiteConnection connection, string key)
+    // A missing row means the server has not stored the property yet, so it will start with its default (fallback).
+    private static bool ReadServerFlag(SQLiteConnection connection, string key, bool fallback = false)
     {
         if (!TableExists(connection, "ServerProperty"))
-            return false;
+            return fallback;
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT Value FROM ServerProperty WHERE `Key`=@key LIMIT 1";
         command.Parameters.AddWithValue("@key", key);
-        return string.Equals(command.ExecuteScalar()?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        object? value = command.ExecuteScalar();
+        if (value == null || value is DBNull)
+            return fallback;
+        return string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static GroupMetadata? ParseGroupMetadata(string raw)
@@ -3974,6 +4006,7 @@ internal sealed partial class MainForm : Form
     {
         // Set by the snapshot reader; not a constructor parameter, so the positional shape stays as it was.
         public bool RealmRankNameplates { get; init; }
+        public bool BotRealmRankNameplates { get; init; } = true;
     }
 
     private sealed record LiveBotStatus(long BotId, int Level, string ZoneName, string Activity,

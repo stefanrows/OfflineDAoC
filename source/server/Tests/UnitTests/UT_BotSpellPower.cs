@@ -532,16 +532,32 @@ namespace DOL.UnitTests
             }
         }
 
-        [Test] public void CasterSummonsBuffsAndDotsUseNativePercentageCost_FreeSpellsStayFree()
+        [Test] public void CasterSummonsBuffsAndDotsUsePercentageCost_FreeSpellsStayFree()
         {
             Bot bot = MakeBot(typeof(ClassSpiritmaster), 50);
             foreach (string type in new[] { "SummonSpiritFighter", "StrengthBuff", "DamageOverTime", "DirectDamage" })
             {
                 Spell spell = S(-80, 3, 50, type);
                 double pool = bot.CalculateMaxMana(bot.Level, bot.GetBaseStat(bot.CharacterClass.ManaStat)) * 0.8;
-                Assert.That(BotSpellPower.Cost(bot, spell, null), Is.EqualTo((int)pool).Within(1), type);
+                // 0.258.0: pet summons cost 10 %; damage and duration-less spells stay native.
+                double expected = BotSpellPower.ApplyBuffAndPetSummonCostReduction(spell, pool);
+                Assert.That(expected, Is.EqualTo(type == "SummonSpiritFighter" ? pool * 0.1 : pool), type);
+                Assert.That(BotSpellPower.Cost(bot, spell, null), Is.EqualTo((int)expected).Within(1), type);
                 Assert.That(BotSpellPower.Cost(bot, S(0, 3, 50, type), null), Is.Zero);
             }
+        }
+
+        [Test] public void BuffsCostTenPercentForHumansAndBots_DamageStaysNative()
+        {
+            Bot bot = MakeBot(typeof(ClassSpiritmaster), 50);
+            Player player = Actor<Player>(); player.Class = bot.Class; player.Level = 50;
+            var line = new SpellLine("test", "test", "", true);
+            var buff = new Spell(new DbSpell { SpellID = 99982, Name = "Buff test", Type = "StrengthBuff", Target = "Self",
+                Power = 20, CastTime = 3, Value = 10, Duration = 600, Range = 0 }, 1);
+            Assert.That(buff.IsBuff, Is.True);
+            Assert.That(new SpellHandler(player, buff, line).PowerCost(player), Is.EqualTo(2));
+            Assert.That(BotSpellPower.Cost(bot, buff, null), Is.EqualTo(2));
+            Assert.That(new SpellHandler(player, S(20, 3), line).PowerCost(player), Is.EqualTo(20));
         }
 
         [Test] public void NativePulseChargesOncePerDuePulse_NotEveryServiceOrAiTick()

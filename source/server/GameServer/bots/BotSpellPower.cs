@@ -3,12 +3,43 @@ using System;
 namespace DOL.GS
 {
     /// <summary>
-    /// Bot affordability uses the native player spell cost.
+    /// Bot affordability uses the player spell cost, including the buff and pet-summon discount.
     /// Only native settlement rolls free-cast effects, never AI evaluation.
     /// Quickcast is never used by a GameBot.
     /// </summary>
     public static class BotSpellPower
     {
+        // Owner rule 2026-10-12: buffs and pet summons cost 10% of their native
+        // mana so keeping self-buffs and pets up is cheap. Damage stays native.
+        private const double BuffAndPetSummonManaCostMultiplier = 0.1;
+
+        public static double ApplyBuffAndPetSummonCostReduction(Spell spell, double cost) =>
+            spell is { IsBuff: true } || IsPetSummoningSpell(spell) ? cost * BuffAndPetSummonManaCostMultiplier : cost;
+
+        private static bool IsPetSummoningSpell(Spell spell) => spell?.SpellType is
+            eSpellType.Bomber or
+            eSpellType.Pet or
+            eSpellType.SummonCommander or
+            eSpellType.SummonTheurgistPet or
+            eSpellType.Summon or
+            eSpellType.SummonJuggernaut or
+            eSpellType.SummonMinion or
+            eSpellType.SummonSimulacrum or
+            eSpellType.SummonUnderhill or
+            eSpellType.SummonAnimistAmbusher or
+            eSpellType.SummonAnimistPet or
+            eSpellType.SummonDruidPet or
+            eSpellType.SummonHealingElemental or
+            eSpellType.SummonHunterPet or
+            eSpellType.SummonAnimistFnF or
+            eSpellType.SummonAnimistFnFCustom or
+            eSpellType.SummonSpiritFighter or
+            eSpellType.SummonNecroPet or
+            eSpellType.SummonNoveltyPet or
+            eSpellType.AstralPetSummon or
+            eSpellType.SummonElemental or
+            eSpellType.SummonTitan;
+
         public static bool IsOffensiveCaster(GameBot bot) => bot != null && IsOffensiveCaster(bot.CharacterClass);
 
         private static bool IsOffensiveCaster(ICharacterClass characterClass) =>
@@ -57,6 +88,7 @@ namespace DOL.GS
                 }
             }
 
+            cost = ApplyBuffAndPetSummonCostReduction(spell, cost);
             return Math.Max(0, (int)cost);
         }
     }

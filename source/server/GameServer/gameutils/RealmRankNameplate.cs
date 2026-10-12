@@ -3,8 +3,9 @@ using System;
 namespace DOL.GS
 {
     /// <summary>
-    /// Realm rank after a name on overhead nameplates, such as "Dairoinlan | RR 2L5", behind the
-    /// show_realm_rank_nameplates server property (off by default). Presentation only: the packet writers
+    /// Realm rank after a name on overhead nameplates, such as "Dairoinlan | RR 2L5". Autonomous world bots
+    /// follow show_bot_realm_rank_nameplates (on by default); persistent companions and players follow
+    /// show_realm_rank_nameplates (off by default). Presentation only: the packet writers
     /// use these helpers for the strings they send, and nothing here changes a stored name, last name,
     /// guild or save.
     /// </summary>
@@ -21,8 +22,11 @@ namespace DOL.GS
 
         private const string Separator = " | ";
 
-        /// <summary>True while the show_realm_rank_nameplates server property is on.</summary>
+        /// <summary>True while the show_realm_rank_nameplates server property (companions and players) is on.</summary>
         public static bool Enabled => ServerProperties.Properties.SHOW_REALM_RANK_NAMEPLATES;
+
+        /// <summary>True while the show_bot_realm_rank_nameplates server property (autonomous world bots) is on.</summary>
+        public static bool BotsEnabled => ServerProperties.Properties.SHOW_BOT_REALM_RANK_NAMEPLATES;
 
         /// <summary>The rank label for a realm level: 0 gives "RR 1L0", 15 gives "RR 2L5".</summary>
         public static string Format(int realmLevel)
@@ -51,13 +55,24 @@ namespace DOL.GS
         }
 
         /// <summary>
-        /// The name for an NPC create or living-data packet. While the property is on, an eligible bot gets
+        /// True when this NPC's nameplate carries the rank right now: an eligible companion while
+        /// show_realm_rank_nameplates is on, or an eligible autonomous bot while show_bot_realm_rank_nameplates is on.
+        /// </summary>
+        public static bool ShowsRank(GameNPC npc)
+        {
+            if (!IsNameplateBot(npc))
+                return false;
+            return ((GameBot)npc).IsPersistentPlayerCompanion ? Enabled : BotsEnabled;
+        }
+
+        /// <summary>
+        /// The name for an NPC create or living-data packet. While its property is on, an eligible bot gets
         /// " | RR xLy" after its translated or stored name. The plain name is kept when the result would
         /// exceed the 45-character cap; the name is never cut short to make room for the rank.
         /// </summary>
         public static string NpcName(GameNPC npc, string name)
         {
-            if (!Enabled || string.IsNullOrEmpty(name) || !IsNameplateBot(npc))
+            if (string.IsNullOrEmpty(name) || !ShowsRank(npc))
                 return name;
             return ComposeNpcName(name, ((GameBot)npc).RealmLevel);
         }

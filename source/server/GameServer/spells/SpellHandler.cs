@@ -1246,6 +1246,8 @@ namespace DOL.GS.Spells
 			if (IsQuickCasting && Spell.CastTime > 0)
 				powerCost *= 2;
 
+			powerCost = BotSpellPower.ApplyBuffAndPetSummonCostReduction(Spell, powerCost);
+
 			return (int) powerCost;
 		}
 

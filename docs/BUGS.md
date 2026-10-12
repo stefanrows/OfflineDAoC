@@ -2036,7 +2036,9 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
     Source 0.95.0 raises that reduction to 70% and reduces mana costs by 90%
     for all buffs and pet summons. Other spells keep their existing costs.
     Reverted by owner request in source 0.255.0, 2026-10-11: all spell mana
-    costs are native again; no discount remains.
+    costs are native again. Source 0.258.0, 2026-10-12 (owner: self-buffs
+    cost too much again): buffs and pet summons cost 10% again; damage spells
+    stay native.
 
 143. **Done — Claiming a keep freezes the game loop for about a second.** Installed
      0.235.0, 2026-10-10: every claim stalled ~1 s in the claimer's own tick:

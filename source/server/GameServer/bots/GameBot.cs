@@ -1885,11 +1885,11 @@ namespace DOL.GS
 
         /// <summary>
         /// Re-sends this bot's create packet so nearby players see its new realm rank on the nameplate.
-        /// Only an in-world autonomous bot or persistent companion, and only while the property is on.
+        /// Only an in-world autonomous bot or persistent companion, and only while its property is on.
         /// </summary>
         private void RefreshRealmRankNameplate()
         {
-            if (ObjectState != eObjectState.Active || !RealmRankNameplate.Enabled || !RealmRankNameplate.IsNameplateBot(this))
+            if (ObjectState != eObjectState.Active || !RealmRankNameplate.ShowsRank(this))
                 return;
             ClientService.CreateObjectForPlayers(this);
         }

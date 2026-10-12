@@ -12,6 +12,53 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.259.0] - 2026-10-12
+
+### Added
+
+- New server setting `show_bot_realm_rank_nameplates` (category `pvp`, on by
+  default): autonomous world bots show their realm rank after their name,
+  such as "Dairoinlan | RR 2L5". The launcher's XP Settings tab has a
+  "Realm rank on autonomous bot nameplates" checkbox for it.
+
+### Changed
+
+- `show_realm_rank_nameplates` (still off by default) now covers only
+  persistent companions and players; its launcher checkbox reads "Realm
+  rank on companion and player nameplates". Temporary helpers and
+  battleground bots stay plain. Presentation only; stored names are
+  untouched.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.258.0] - 2026-10-12
+
+### Added
+
+- None.
+
+### Changed
+
+- Buffs (self-buffs and every other helpful spell with a duration or
+  concentration upkeep) and pet summons cost 10% of their native mana again
+  for real players, companions and autonomous gamebots. Damage spells keep
+  the native 1.65 cost restored in 0.255.0. Focus, quickcast and power-pool
+  rules are unchanged; the discount applies after them.
+
+### Fixed
+
+- Keeping self-buffs and pets up drained too much mana after 0.255.0.
+
+### Removed
+
+- None.
+
 ## [0.257.0] - 2026-10-12
 
 ### Added
@@ -36,28 +83,6 @@ package, not this fork's version.
 ### Fixed
 
 - None.
-
-### Removed
-
-- None.
-
-## [0.257.0] - 2026-10-12
-
-### Added
-
-- None.
-
-### Changed
-
-- Buffs (self-buffs and every other helpful spell with a duration or
-  concentration upkeep) and pet summons cost 10% of their native mana again
-  for real players, companions and autonomous gamebots. Damage spells keep
-  the native 1.65 cost restored in 0.255.0. Focus, quickcast and power-pool
-  rules are unchanged; the discount applies after them.
-
-### Fixed
-
-- Keeping self-buffs and pets up drained too much mana after 0.255.0.
 
 ### Removed
 
