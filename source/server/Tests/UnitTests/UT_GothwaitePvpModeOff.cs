@@ -44,6 +44,7 @@ namespace DOL.GS.Tests
             Assert.That(GothwaitePvpRules.IsCastleSafe(51, 534958, 548813), Is.False);
             Assert.That(GothwaitePvpRules.IsCastleSafe(51, 534958 + 3900, 548813), Is.False);
             Assert.That(PvpCombatant.IsSafeArea(null), Is.False);
+            Assert.That(GothwaitePvpRules.BlocksSafeImpact(null, null), Is.False, "no spell impact is blocked while the mode is off");
         }
 
         [Test]

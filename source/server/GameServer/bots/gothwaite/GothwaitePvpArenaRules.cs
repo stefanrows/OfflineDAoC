@@ -25,9 +25,22 @@ public static class GothwaitePvpArenaRules
     public const string ActionRepick = "repick";
     public const string ActionCastle = "castle";
 
-    /// <summary>The dwell at a patrol point after a visit; each visit draws its own length (inclusive range).</summary>
-    public const int DwellMinMilliseconds = 15_000;
-    public const int DwellMaxMilliseconds = 40_000;
+    /// <summary>
+    /// The dwell at a patrol point after a visit; each visit draws its own length (inclusive range). Short, so groups keep cruising the
+    /// island instead of standing at one point (second live run, 2026-10-13).
+    /// </summary>
+    public const int DwellMinMilliseconds = 6_000;
+    public const int DwellMaxMilliseconds = 15_000;
+    /// <summary>
+    /// Heat above this counts as this much. Without a cap the hundreds of fights at the gate made the points next to it win nearly every
+    /// pick, and the groups never left the gate area (second live run, 2026-10-13).
+    /// </summary>
+    public const double HeatCap = 3;
+    /// <summary>
+    /// The outbound leg (the walk from the gate to the first patrol point, which opens no fight) ends after this long (game time) even
+    /// when the point was not reached, e.g. after long self-defence fights on the way.
+    /// </summary>
+    public const int OutboundMaxMilliseconds = 3 * 60_000;
     /// <summary>A patrol weight divides by 1 + distance / this: a slight preference for points that are near the bot.</summary>
     public const int DistanceScale = 10_000;
     /// <summary>A bot that is not fighting returns to the castle below this health (per cent).</summary>
@@ -66,13 +79,15 @@ public static class GothwaitePvpArenaRules
     public static bool OutsideEdge(double castleDistance, int edge) => castleDistance > edge;
 
     /// <summary>
-    /// The weight of one patrol point: heat raises it (recent fights, 1 + heat) and distance lowers it slightly
-    /// (divided by 1 + distance / <see cref="DistanceScale"/>). Negative or unknown heat counts as none.
+    /// The weight of one patrol point: heat raises it (recent fights, 1 + heat, heat capped at <see cref="HeatCap"/>) and distance lowers
+    /// it slightly (divided by 1 + distance / <see cref="DistanceScale"/>). Negative or unknown heat counts as none.
     /// </summary>
     public static double PatrolWeight(double heat, double distance)
     {
         if (!(heat > 0))
             heat = 0;
+        else if (heat > HeatCap)
+            heat = HeatCap;
         if (!(distance > 0))
             distance = 0;
         return (1 + heat) / (1 + distance / DistanceScale);
@@ -84,6 +99,28 @@ public static class GothwaitePvpArenaRules
     /// <see cref="PatrolWeight"/>.
     /// </summary>
     public static double RoamWeight(bool firstPick, double heat, double distance) => firstPick ? 1 : PatrolWeight(heat, distance);
+
+    /// <summary>
+    /// <see cref="RoamWeight(bool, double, double)"/> divided by 1 + the number of other groups and solos already heading to or standing at
+    /// the point (<paramref name="claims"/>), so the groups spread over the whole island instead of meeting at one point. Negative claims
+    /// count as none.
+    /// </summary>
+    public static double RoamWeight(bool firstPick, double heat, double distance, int claims) =>
+        RoamWeight(firstPick, heat, distance) / (1 + Math.Max(0, claims));
+
+    /// <summary>
+    /// The outbound leg is over (second live run, 2026-10-13): the leader reached the patrol point it picked at the gate, or the leg has
+    /// lasted <see cref="OutboundMaxMilliseconds"/>. Until then the group opens no fight, so it does not stop to fight the next group out
+    /// of the gate just beyond the no-fight ring.
+    /// </summary>
+    public static bool OutboundOver(bool arrivedAtGoal, long now, long since) => arrivedAtGoal || now - since >= OutboundMaxMilliseconds;
+
+    /// <summary>
+    /// A fight dropped at the castle or the no-fight ring sends an arrived leader on a new outbound leg to a freshly picked point; a fight
+    /// dropped at the edge sends it to the nearest point inside its edge (pure). Walking to the nearest point after a ring drop kept the
+    /// groups next to the gate.
+    /// </summary>
+    public static bool DropSendsOutbound(string chaseReason) => chaseReason == ChaseRing || chaseReason == ChaseCastle;
 
     /// <summary>
     /// The next patrol point: a weighted random draw among the points inside <paramref name="goalEdge"/>, skipping the point

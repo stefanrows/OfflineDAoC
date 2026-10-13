@@ -287,5 +287,19 @@ namespace DOL.GS.Tests
 
             Assert.That(GothwaitePvpMode.IsActive, Is.False);
         }
+
+        [Test]
+        public void ASpellImpactInTheCastleDealsNoPvpDamage()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(GothwaitePvpRules.BlocksSafeImpact(true, attackerInCastle: false, targetInCastle: true), Is.True,
+                    "a bolt or DoT that reaches a target in the castle");
+                Assert.That(GothwaitePvpRules.BlocksSafeImpact(true, attackerInCastle: true, targetInCastle: false), Is.True,
+                    "an attacker who stepped into the castle");
+                Assert.That(GothwaitePvpRules.BlocksSafeImpact(true, false, false), Is.False, "both outside: the hit lands");
+                Assert.That(GothwaitePvpRules.BlocksSafeImpact(false, true, true), Is.False, "a monster fight is not touched");
+            });
+        }
     }
 }

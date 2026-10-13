@@ -3280,6 +3280,9 @@ namespace DOL.GS.Spells
 		/// </summary>
 		public virtual void DamageTarget(AttackData ad, bool showEffectAnimation, int attackResult)
 		{
+			// Gothwaite PvP mode: a bolt, arrow or DoT tick that lands in the castle safe circle deals no PvP damage (no-op with the mode off).
+			if (GothwaitePvpRules.BlocksSafeImpact(ad.Attacker, ad.Target)) return;
+
 			ad.AttackResult = eAttackResult.HitUnstyled;
 
 			// Send animation before dealing damage else dying livings show no animation

@@ -127,8 +127,8 @@ public class UT_GothwaitePvpArena
         GothwaitePvpSpot hot = PatrolPointNamed("GP01");
         GothwaitePvpSpot cold = PatrolPointNamed("GP03");
         var points = new[] { hot, cold };
-        // The same distance to the bot for both points, so only the heat differs: a weight of 6 against 1.
-        Func<GothwaitePvpSpot, double> weightOf = point => GothwaitePvpArenaRules.PatrolWeight(point == hot ? 5 : 0, 0);
+        // The same distance to the bot for both points, so only the heat differs: a weight of 3 against 1.
+        Func<GothwaitePvpSpot, double> weightOf = point => GothwaitePvpArenaRules.PatrolWeight(point == hot ? 2 : 0, 0);
         var random = new Random(11);
         int hotPicks = 0;
         for (int i = 0; i < Draws; i++)
@@ -136,7 +136,7 @@ public class UT_GothwaitePvpArena
                 hotPicks++;
 
         double share = hotPicks / (double)Draws;
-        Assert.That(share, Is.EqualTo(6.0 / 7.0).Within(0.02), "a point with heat 5 is picked six times as often as a cold one");
+        Assert.That(share, Is.EqualTo(3.0 / 4.0).Within(0.02), "a point with heat 2 is picked three times as often as a cold one");
     }
 
     [Test]
@@ -165,7 +165,9 @@ public class UT_GothwaitePvpArena
         Assert.Multiple(() =>
         {
             Assert.That(GothwaitePvpArenaRules.PatrolWeight(0, 0), Is.EqualTo(1.0), "no heat, no distance");
-            Assert.That(GothwaitePvpArenaRules.PatrolWeight(5, 0), Is.EqualTo(6.0), "heat adds one per unit");
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(2, 0), Is.EqualTo(3.0), "heat adds one per unit");
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(GothwaitePvpArenaRules.HeatCap, 0), Is.EqualTo(4.0), "heat up to the cap counts");
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(120, 0), Is.EqualTo(4.0), "heat above the cap counts as the cap");
             Assert.That(GothwaitePvpArenaRules.PatrolWeight(0, 10_000), Is.EqualTo(0.5), "10,000 units halve the weight");
             Assert.That(GothwaitePvpArenaRules.PatrolWeight(-3, 0), Is.EqualTo(1.0), "negative heat counts as none");
             Assert.That(GothwaitePvpArenaRules.PatrolWeight(double.NaN, 0), Is.EqualTo(1.0), "unknown heat counts as none");
@@ -206,7 +208,7 @@ public class UT_GothwaitePvpArena
     }
 
     [Test]
-    public void TheDwellIsFifteenToFortySecondsPerVisit()
+    public void TheDwellIsSixToFifteenSecondsPerVisit()
     {
         var random = new Random(3);
         int shortest = int.MaxValue;
@@ -220,6 +222,8 @@ public class UT_GothwaitePvpArena
 
         Assert.Multiple(() =>
         {
+            Assert.That(GothwaitePvpArenaRules.DwellMinMilliseconds, Is.EqualTo(6_000));
+            Assert.That(GothwaitePvpArenaRules.DwellMaxMilliseconds, Is.EqualTo(15_000));
             Assert.That(shortest, Is.InRange(GothwaitePvpArenaRules.DwellMinMilliseconds, GothwaitePvpArenaRules.DwellMinMilliseconds + 100));
             Assert.That(longest, Is.InRange(GothwaitePvpArenaRules.DwellMaxMilliseconds - 100, GothwaitePvpArenaRules.DwellMaxMilliseconds));
         });
@@ -582,7 +586,76 @@ public class UT_GothwaitePvpArena
             if (Pick(points, null, 25, random, laterWeight) == hot)
                 hotPicks++;
 
-        Assert.That(hotPicks / (double)Draws, Is.EqualTo(6.0 / 7.0).Within(0.02), "heat 5 still weighs six times a cold point after the first pick");
+        Assert.That(hotPicks / (double)Draws, Is.EqualTo(4.0 / 5.0).Within(0.02), "heat 5 (capped at 3) weighs four times a cold point after the first pick");
+    }
+
+    [Test]
+    public void GatePileHeatNoLongerPullsEveryGroupBack()
+    {
+        // Second live run (2026-10-13): hundreds of fights by the gate gave its nearest point a weight near 100 against 1.
+        TurnOn();
+        GothwaitePvpSpot hot = PatrolPointNamed("GP03");
+        var points = new[] { hot, PatrolPointNamed("GP05"), PatrolPointNamed("GP06"), PatrolPointNamed("GP12") };
+        Func<GothwaitePvpSpot, double> laterWeight = point => GothwaitePvpArenaRules.RoamWeight(false, point == hot ? 100 : 0, 0);
+        var random = new Random(29);
+        int hotPicks = 0;
+        for (int i = 0; i < Draws; i++)
+            if (Pick(points, null, 25, random, laterWeight) == hot)
+                hotPicks++;
+
+        Assert.That(hotPicks / (double)Draws, Is.EqualTo(4.0 / 7.0).Within(0.02), "the hot point weighs 4 against 1 for each of the other three");
+    }
+
+    [Test]
+    public void ClaimedPointsAreShared()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.RoamWeight(true, 0, 0, 0), Is.EqualTo(1.0), "an unclaimed point keeps its weight");
+            Assert.That(GothwaitePvpArenaRules.RoamWeight(true, 0, 0, 3), Is.EqualTo(0.25), "three groups there quarter it");
+            Assert.That(GothwaitePvpArenaRules.RoamWeight(false, 3, 0, 1), Is.EqualTo(2.0), "heat and claims combine");
+            Assert.That(GothwaitePvpArenaRules.RoamWeight(true, 0, 0, -2), Is.EqualTo(1.0), "negative claims count as none");
+        });
+
+        TurnOn();
+        GothwaitePvpSpot crowded = PatrolPointNamed("GP03");
+        GothwaitePvpSpot empty = PatrolPointNamed("GP05");
+        var points = new[] { crowded, empty };
+        Func<GothwaitePvpSpot, double> weightOf = point => GothwaitePvpArenaRules.RoamWeight(true, 0, 0, point == crowded ? 4 : 0);
+        var random = new Random(31);
+        int emptyPicks = 0;
+        for (int i = 0; i < Draws; i++)
+            if (Pick(points, null, 25, random, weightOf) == empty)
+                emptyPicks++;
+
+        Assert.That(emptyPicks / (double)Draws, Is.EqualTo(5.0 / 6.0).Within(0.02), "a point four groups already claimed is picked one time in six");
+    }
+
+    [Test]
+    public void TheOutboundLegEndsOnArrivalOrAfterThreeMinutes()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.OutboundOver(arrivedAtGoal: true, now: 1_000, since: 1_000), Is.True, "arrived");
+            Assert.That(GothwaitePvpArenaRules.OutboundOver(false, 1_000 + GothwaitePvpArenaRules.OutboundMaxMilliseconds - 1, 1_000),
+                Is.False, "still walking within the cap");
+            Assert.That(GothwaitePvpArenaRules.OutboundOver(false, 1_000 + GothwaitePvpArenaRules.OutboundMaxMilliseconds, 1_000),
+                Is.True, "the cap ran out");
+            Assert.That(GothwaitePvpArenaRules.OutboundMaxMilliseconds, Is.EqualTo(180_000));
+        });
+    }
+
+    [Test]
+    public void OnlyARingOrCastleDropSendsTheLeaderOutbound()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.DropSendsOutbound(GothwaitePvpArenaRules.ChaseRing), Is.True);
+            Assert.That(GothwaitePvpArenaRules.DropSendsOutbound(GothwaitePvpArenaRules.ChaseCastle), Is.True);
+            Assert.That(GothwaitePvpArenaRules.DropSendsOutbound(GothwaitePvpArenaRules.ChaseEdge), Is.False, "edge: nearest point inside");
+            Assert.That(GothwaitePvpArenaRules.DropSendsOutbound(GothwaitePvpArenaRules.ChaseSelfEdge), Is.False, "self edge: nearest point inside");
+            Assert.That(GothwaitePvpArenaRules.DropSendsOutbound(null), Is.False);
+        });
     }
 
     [Test]
@@ -641,6 +714,10 @@ public class UT_GothwaitePvpArena
                 Is.EqualTo("GOTH_PVP_GROUP_LEADER group=7 leader=\"Bo\" previous=\"Ana\" reason=leader_lost"));
             Assert.That(GothwaitePvpLines.Return("Ana", "low_health", "health=30 power=10"),
                 Is.EqualTo("GOTH_PVP_RETURN bot=\"Ana\" reason=low_health health=30 power=10"));
+            Assert.That(GothwaitePvpLines.Outbound("Ana", "GP07", 10637, "gate"),
+                Is.EqualTo("GOTH_PVP_OUTBOUND bot=\"Ana\" spot=GP07 distance=10637 reason=gate"));
+            Assert.That(GothwaitePvpLines.OutboundEnd("Ana", "arrived", 10512),
+                Is.EqualTo("GOTH_PVP_OUTBOUND_END bot=\"Ana\" reason=arrived distance=10512"));
             Assert.That(GothwaitePvpLines.Spot(null), Is.EqualTo("none"));
             Assert.That(GothwaitePvpLines.Spot(new Point3D(1, 2, 3)), Is.EqualTo("1,2,3"));
         });

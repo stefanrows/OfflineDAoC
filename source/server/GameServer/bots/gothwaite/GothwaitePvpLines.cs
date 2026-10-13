@@ -57,6 +57,17 @@ public static class GothwaitePvpLines
     public static string GroupLeader(string id, string leader, string previous, string reason) =>
         $"GOTH_PVP_GROUP_LEADER group={id} leader=\"{leader}\" previous=\"{previous}\" reason={reason}";
 
+    /// <summary>
+    /// A leader (or solo) starts an outbound leg to a patrol point, out of the gate or after a fight dropped at the ring or the castle: the
+    /// group opens no fight until it is there (second live run, 2026-10-13). <paramref name="distance"/> is the point's castle distance.
+    /// </summary>
+    public static string Outbound(string bot, string spot, int distance, string reason) =>
+        $"GOTH_PVP_OUTBOUND bot=\"{bot}\" spot={spot} distance={distance} reason={reason}";
+
+    /// <summary>The outbound leg is over (arrived, or the time cap): the group opens fights again. <paramref name="distance"/> is the bot's castle distance.</summary>
+    public static string OutboundEnd(string bot, string reason, int distance) =>
+        $"GOTH_PVP_OUTBOUND_END bot=\"{bot}\" reason={reason} distance={distance}";
+
     /// <summary>A map position as the log writes it: x,y,z, or none for a goal that does not exist.</summary>
     public static string Spot(Point3D point) => point == null ? "none" : $"{point.X},{point.Y},{point.Z}";
 

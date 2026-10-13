@@ -1,3 +1,5 @@
+using DOL.GS.ServerRules;
+
 namespace DOL.GS;
 
 /// <summary>
@@ -10,6 +12,22 @@ public static class GothwaitePvpRules
     public static bool IsCastleSafe(GameLiving living) =>
         GothwaitePvpMode.IsActive && living != null && living.CurrentRegion != null &&
         GothwaitePvpMode.Arena.InCastle(living.CurrentRegionID, living.X, living.Y);
+
+    /// <summary>
+    /// A spell hit that lands after its cast (a bolt or archery shot in flight, a DoT tick) is checked against the castle again at impact
+    /// (second live run, 2026-10-13): no PvP damage while the attacker or the target stands in the castle circle. Without it a bot hit
+    /// outside could die at its castle landing after its release, or on its way in. Melee and bot bow shots already re-check at impact
+    /// through the server rules. False with the mode off and for any fight that is not player-shaped against player-shaped (a pet counts
+    /// as its owner), so monsters and guards are unchanged.
+    /// </summary>
+    public static bool BlocksSafeImpact(GameLiving attacker, GameLiving target) =>
+        GothwaitePvpMode.IsActive && attacker != null && target != null &&
+        BlocksSafeImpact(PvpCombatant.IsPlayerShaped(attacker) && PvpCombatant.IsPlayerShaped(target),
+            IsCastleSafe(attacker), IsCastleSafe(target));
+
+    /// <summary>The impact rule as a pure predicate: a player-shaped fight with either side inside the castle circle.</summary>
+    public static bool BlocksSafeImpact(bool bothPlayerShaped, bool attackerInCastle, bool targetInCastle) =>
+        bothPlayerShaped && (attackerInCastle || targetInCastle);
 
     /// <summary>Point form of <see cref="IsCastleSafe(GameLiving)"/>, for release points.</summary>
     public static bool IsCastleSafe(ushort regionId, int x, int y) =>

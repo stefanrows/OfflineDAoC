@@ -14,6 +14,8 @@ public enum GothwaitePvpPhase { Castle, Departing, Arena }
 /// The Gothwaite PvP mode driver (docs/GOTHWAITE_PVP_MODE.md section 6). A mode bot rests in the castle to the rest level,
 /// holds a short buff window, and offers itself to the castle group former. A group walks out to the castle exit, which is
 /// only a waypoint: the leader roams on once it is out of the gate. No bot opens a fight inside the no-fight ring (section 6.2).
+/// From the gate a group first walks an outbound leg to a patrol point picked at random over the whole island and opens no fight
+/// on the way (it still fights back), so the groups spread out instead of fighting the next group out just beyond the ring.
 /// In the arena the leader (or a solo) roams the patrol points with a dwell at each, every bot scans for legal openings every
 /// 1.5 s and drops a fight that breaks the castle or edge rules, a bot keeps inside its edge, and a bot goes home when it is
 /// low, its group is gone, or it stalls. <see cref="Turn"/> returns true on every turn that lets the class routine run
@@ -70,6 +72,13 @@ public static class GothwaitePvpDriver
         public bool EdgeLogged;
         // The next patrol pick is the first after the group arrived outside the gate: it ignores heat (section 6.4, live-run fix 2026-10-13).
         public bool FirstPick;
+        // On the outbound leg (second live run, 2026-10-13) the bot opens no fight. A leader sets it for itself; a follower copies its
+        // leader's every turn. Volatile: GothwaitePvpTargetRules.MayOpen reads it from other bots' turns and the class brain.
+        public volatile bool Outbound;
+        public long OutboundSince;
+        public string OutboundReason;
+        // The patrol point a leader or solo has picked and walks to or dwells at, by name; read by other leaders' picks to spread out.
+        public volatile string Claim;
         public HashSet<int> ChaseLogged;
         // The scan's acceptance test, built once for this bot (see AcceptFor).
         public Func<GameLiving, bool> Accept;
@@ -163,6 +172,12 @@ public static class GothwaitePvpDriver
         return state.Step == CastleStep.Ready ? GothwaitePvpBotPhase.CastleReady : GothwaitePvpBotPhase.CastleResting;
     }
 
+    /// <summary>
+    /// True while the bot is on an outbound leg and opens no fight (<see cref="GothwaitePvpTargetRules.MayOpen"/> asks). Read-only and
+    /// lock-free, like <see cref="PhaseOf"/>. False for a bot with no driver state.
+    /// </summary>
+    public static bool IsOutbound(GameBot bot) => bot != null && States.TryGetValue(bot, out State state) && state.Outbound;
+
     // The castle rest: rest until the rest level, then the buff window. The rest ends as recovered or cap, logged once each.
     private static bool Rest(GameBot bot, State state, long now, bool engaged)
     {
@@ -255,6 +270,8 @@ public static class GothwaitePvpDriver
     private static bool Depart(BotBrain brain, GameBot bot, State state, GothwaitePvpGroupFormer.Membership membership, long now)
     {
         state.Phase = membership.Arrived ? GothwaitePvpPhase.Arena : GothwaitePvpPhase.Departing;
+        if (!membership.IsLeader)
+            FollowOutbound(state, membership, now);
         bool engaged = FightNow(brain, bot, state, membership, now);
         if (!engaged)
         {
@@ -382,6 +399,7 @@ public static class GothwaitePvpDriver
             state.Spot = null;
             state.StuckFailures = 0;
             state.FirstPick = true;
+            BeginOutbound(state, now, "gate");
             ResetProgress(state);
             return Roam(brain, bot, state, membership, engaged, now);
         }
@@ -415,6 +433,8 @@ public static class GothwaitePvpDriver
             ResetProgress(state);
             return true;
         }
+        if (state.Outbound && GothwaitePvpArenaRules.OutboundOver(false, now, state.OutboundSince))
+            EndOutbound(bot, state, "time");
         int edge = GroupEdgeOf(bot);
         if (OutsideEdge(bot, edge))
         {
@@ -445,6 +465,8 @@ public static class GothwaitePvpDriver
         Point3D goal = state.Goal;
         if (GothwaitePvpNavigation.Arrived(bot, goal, state.Route))
         {
+            if (state.Outbound)
+                EndOutbound(bot, state, "arrived");
             state.DwellUntil = now + GothwaitePvpArenaRules.DwellMilliseconds(state.Random);
             state.StuckFailures = 0;
             ResetProgress(state);
@@ -520,7 +542,7 @@ public static class GothwaitePvpDriver
     /// </summary>
     private static bool Scan(BotBrain brain, GameBot bot, State state, GothwaitePvpGroupFormer.Membership membership, long now)
     {
-        if (now < state.NextScan)
+        if (now < state.NextScan || state.Outbound)
             return false;
         bool leaderHasLegalTarget = !membership.IsLeader && MayAttack(bot, membership.Leader?.TargetObject as GameLiving);
         // Inside the no-fight ring no scan runs at all (section 6.2): a bot there opens nothing.
@@ -600,6 +622,8 @@ public static class GothwaitePvpDriver
         state.StuckFailures = 0;
         state.EdgeLogged = false;
         state.FirstPick = false;
+        state.Outbound = false;
+        state.Claim = null;
         ResetProgress(state);
     }
 
@@ -646,7 +670,7 @@ public static class GothwaitePvpDriver
             if (reason == null)
                 continue;
             LogChaseOnce(bot, state, target, reason);
-            DropFight(brain, bot, state, membership, now);
+            DropFight(brain, bot, state, membership, now, reason);
             return true;
         }
         return false;
@@ -687,8 +711,11 @@ public static class GothwaitePvpDriver
 
     // Drops the fight: the brain forgets its aggro and target, the attack stops, and the FSM stands down to idle. The RvR and
     // stuck recovery do the same; BotBrain.Disengage is not used because it sends the bot to follow. A walking leader or solo
-    // heads for the nearest patrol point inside its edge.
-    private static void DropFight(BotBrain brain, GameBot bot, State state, GothwaitePvpGroupFormer.Membership? membership, long now)
+    // heads for the nearest patrol point inside its edge after an edge drop. After a drop at the castle or the no-fight ring it starts
+    // a new outbound leg to a freshly picked point (picked by Roam on this turn), so it walks away from the gate instead of back to
+    // the patrol point next to it; one already outbound keeps its goal.
+    private static void DropFight(BotBrain brain, GameBot bot, State state, GothwaitePvpGroupFormer.Membership? membership, long now,
+        string reason)
     {
         brain.ClearAggroList();
         bot.StopAttack();
@@ -698,8 +725,40 @@ public static class GothwaitePvpDriver
         if (membership is not { IsLeader: true, Arrived: true })
             return;
         state.DwellUntil = 0;
+        if (GothwaitePvpArenaRules.DropSendsOutbound(reason))
+        {
+            if (state.Outbound)
+                return;
+            state.Goal = null;
+            state.FirstPick = true;
+            BeginOutbound(state, now, reason);
+            return;
+        }
         if (WalkBackSpot(bot, state, GroupEdgeOf(bot), now) is { } spot)
             SetSpot(state, spot);
+    }
+
+    // The outbound leg starts: the bot opens no fight until it reaches the point it picks next (or the time cap runs out).
+    private static void BeginOutbound(State state, long now, string reason)
+    {
+        state.Outbound = true;
+        state.OutboundSince = now;
+        state.OutboundReason = reason;
+    }
+
+    private static void EndOutbound(GameBot bot, State state, string reason)
+    {
+        state.Outbound = false;
+        Log.Info(GothwaitePvpLines.OutboundEnd(bot.Name, reason, (int)GothwaitePvpMode.Arena.CastleDistance(bot.X, bot.Y)));
+    }
+
+    // A follower is outbound while its arrived leader is: the group's openings are the leader's.
+    private static void FollowOutbound(State state, GothwaitePvpGroupFormer.Membership membership, long now)
+    {
+        bool outbound = membership.Arrived && IsOutbound(membership.Leader);
+        if (outbound && !state.Outbound)
+            state.OutboundSince = now;
+        state.Outbound = outbound;
     }
 
     private static void LogChaseOnce(GameBot bot, State state, GameLiving target, string reason)
@@ -711,24 +770,45 @@ public static class GothwaitePvpDriver
             Log.Info(GothwaitePvpLines.Chase(bot.Name, target.Name, reason));
     }
 
-    // A leader or solo picks its next patrol point: weighted by heat and a little by distance, never the point it has just left,
-    // never a point refused for five minutes, and never outside its goal edge. The first pick after the gate ignores heat and
-    // distance, so the groups spread (section 6.4, live-run fix 2026-10-13). False when none is left.
+    // A leader or solo picks its next patrol point: weighted by heat (capped) and a little by distance, never the point it has just
+    // left, never a point refused for five minutes, and never outside its goal edge. The first pick of an outbound leg ignores heat
+    // and distance, so the groups spread (section 6.4, live-run fix 2026-10-13). Every pick also divides by 1 + the other groups
+    // already at or heading to the point (second live run). False when none is left.
     private static bool PickPatrol(GameBot bot, State state, int edge, long now)
     {
         GothwaitePvpArena arena = GothwaitePvpMode.Arena;
         bool firstPick = state.FirstPick;
+        Dictionary<string, int> claims = ClaimCounts(state);
         GothwaitePvpSpot? chosen = GothwaitePvpArenaRules.ChoosePatrolPoint(arena, GothwaitePvpArenaRules.GoalEdge(edge), PatrolPoints(bot),
             state.Spot,
             point => !GothwaitePvpNavigation.IsUnreachable(state.Route, PointOf(point), now),
             point => GothwaitePvpArenaRules.RoamWeight(firstPick, firstPick ? 0 : GothwaitePvpStats.Heat(point, now),
-                GothwaitePvpArenaRules.Distance2D(bot.X, bot.Y, point.X, point.Y)),
+                GothwaitePvpArenaRules.Distance2D(bot.X, bot.Y, point.X, point.Y), claims.GetValueOrDefault(point.Name)),
             state.Random);
         if (chosen is not { } spot)
             return false;
         state.FirstPick = false;
         SetSpot(state, spot);
+        state.Claim = spot.Name;
+        if (state.Outbound)
+            Log.Info(GothwaitePvpLines.Outbound(bot.Name, spot.Name, (int)arena.CastleDistance(spot.X, spot.Y),
+                firstPick ? state.OutboundReason : "repick"));
         return true;
+    }
+
+    // The patrol points other leaders and solos have claimed, counted by name. A released or returning bot has cleared its claim.
+    // The table is enumerated lock-free (safe alongside other bots' turns); a pick happens once per patrol leg, so the cost is small.
+    private static Dictionary<string, int> ClaimCounts(State self)
+    {
+        var claims = new Dictionary<string, int>();
+        foreach (KeyValuePair<GameBot, State> entry in States)
+        {
+            if (entry.Value == self || entry.Value.Claim is not { } name ||
+                entry.Key is not { IsAlive: true, ObjectState: GameObject.eObjectState.Active })
+                continue;
+            claims[name] = claims.GetValueOrDefault(name) + 1;
+        }
+        return claims;
     }
 
     // Outside its edge, a bot walks back to the nearest usable patrol point inside its goal edge. Logged once per excursion.
@@ -769,12 +849,14 @@ public static class GothwaitePvpDriver
         return true;
     }
 
-    // A follower attacks its leader's target when it is legal for the follower, visible and in range: the leader's fight is the group's.
+    // A follower attacks its leader's target when the follower may fight it, visible and in range: the leader's fight is the group's.
+    // "May fight" is a legal opening or self-defence (the target attacked the group), so an outbound group, which opens nothing, still
+    // fights back together.
     private static bool AssistLeader(BotBrain brain, GameBot bot, GameBot leader)
     {
         if (leader is not { IsAlive: true } || leader.TargetObject is not GameLiving target)
             return false;
-        if (!MayAttack(bot, target) || !BotSiegeRuntime.Visible(bot, target) ||
+        if (!GothwaitePvpSelfDefence.MayFight(bot, target) || !BotSiegeRuntime.Visible(bot, target) ||
             !bot.IsWithinRadius(target, AutonomousBattlegroundDriver.OpponentRange))
             return false;
         brain.Attack(target);

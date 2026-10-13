@@ -468,11 +468,15 @@ namespace DOL.GS.Tests
             var released = new List<(long Time, GothwaitePvpDeparture Departure)>();
             for (long now = from; now <= to; now += GothwaitePvpGroupFormer.TickMilliseconds)
             {
-                int index = gate.Release(now, pending);
-                if (index < 0)
-                    continue;
-                released.Add((now, pending[index]));
-                pending.RemoveAt(index);
+                // The former releases while the gate allows it on this tick.
+                while (gate.CanRelease(now))
+                {
+                    int index = gate.Release(now, pending);
+                    if (index < 0)
+                        break;
+                    released.Add((now, pending[index]));
+                    pending.RemoveAt(index);
+                }
             }
             return released;
         }
@@ -486,30 +490,46 @@ namespace DOL.GS.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(gate.Release(0, queue), Is.EqualTo(0), "the first due departure leaves at once");
-                Assert.That(gate.Release(3_999, queue), Is.EqualTo(-1), "no second departure within four seconds");
-                Assert.That(gate.Release(4_000, queue), Is.EqualTo(0), "the next one leaves four seconds after the first");
-                Assert.That(gate.NextAt, Is.EqualTo(8_000));
-                Assert.That(gate.Release(5_000, Array.Empty<GothwaitePvpDeparture>()), Is.EqualTo(-1), "nobody is waiting, so the clock does not move");
-                Assert.That(gate.NextAt, Is.EqualTo(8_000));
+                Assert.That(gate.Release(999, queue), Is.EqualTo(-1), "no second departure within one second");
+                Assert.That(gate.Release(1_000, queue), Is.EqualTo(0), "the next one leaves one second after the first");
+                Assert.That(gate.NextAt, Is.EqualTo(2_000));
+                Assert.That(gate.Release(1_500, Array.Empty<GothwaitePvpDeparture>()), Is.EqualTo(-1), "nobody is waiting, so the clock does not move");
+                Assert.That(gate.NextAt, Is.EqualTo(2_000));
             });
         }
 
         [Test]
-        public void EveryWaitingDepartureLeavesFourSecondsApartAndNoneIsLost()
+        public void EveryWaitingDepartureLeavesTwoPerFormerTickAndNoneIsLost()
         {
             var pending = Enumerable.Range(1, 10).Select(id => new GothwaitePvpDeparture(0, Solo: id % 2 == 0, BotId: id)).ToList();
 
-            List<(long Time, GothwaitePvpDeparture Departure)> released = RunDepartures(pending, 0, 120_000);
+            // A game clock that has run for a while (the gate's schedule starts at 0).
+            List<(long Time, GothwaitePvpDeparture Departure)> released = RunDepartures(pending, 10_000, 130_000);
 
             Assert.Multiple(() =>
             {
-                Assert.That(released, Has.Count.EqualTo(10), "ten departures, one at a time");
+                Assert.That(released, Has.Count.EqualTo(10), "ten departures");
                 Assert.That(pending, Is.Empty, "every waiting departure leaves");
-                Assert.That(released[0].Time, Is.EqualTo(0));
-                for (int index = 1; index < released.Count; index++)
-                    Assert.That(released[index].Time - released[index - 1].Time,
-                        Is.GreaterThanOrEqualTo(GothwaitePvpDepartureGate.IntervalMilliseconds), $"departure {index + 1}");
+                Assert.That(released[0].Time, Is.EqualTo(10_000));
+                Assert.That(released[^1].Time, Is.EqualTo(18_000), "two per 2-second tick: ten leave over five ticks");
+                foreach (IGrouping<long, (long Time, GothwaitePvpDeparture Departure)> tick in released.GroupBy(entry => entry.Time))
+                    Assert.That(tick.Count(), Is.EqualTo(GothwaitePvpGroupFormer.TickMilliseconds / GothwaitePvpDepartureGate.IntervalMilliseconds),
+                        $"tick {tick.Key}");
             });
+        }
+
+        [Test]
+        public void AnIdleGateBuildsNoBurst()
+        {
+            var gate = new GothwaitePvpDepartureGate();
+            var queue = new[] { new GothwaitePvpDeparture(0, false, 1) };
+            gate.Release(10_000, queue);
+            int releasedAfterIdle = 0;
+            // A minute with nobody waiting, then one tick with a long queue: still only two leave.
+            while (gate.CanRelease(60_000) && gate.Release(60_000, queue) >= 0)
+                releasedAfterIdle++;
+
+            Assert.That(releasedAfterIdle, Is.EqualTo(2));
         }
 
         [Test]

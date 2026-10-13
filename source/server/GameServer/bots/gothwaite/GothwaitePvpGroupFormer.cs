@@ -409,28 +409,36 @@ public static class GothwaitePvpGroupFormer
         }
     }
 
-    // The departure stagger (section 6.3, live-run fix 2026-10-13): at most one departing group or solo per interval, globally. The earliest due one leaves;
-    // the others stay ready in the castle and keep their place. A solo is due from the tick it became ready.
+    // The departure stagger (section 6.3, live-run fix 2026-10-13): one departing group or solo per interval on average, globally (two per 2-second
+    // tick since the second live run). The earliest due one leaves; the others stay ready in the castle and keep their place. A solo is due from the
+    // tick it became ready.
     private static void ReleaseDeparture(long now)
     {
         if (!Departures.CanRelease(now))
             return;
-        Record[] groups = Records.Where(record => !record.Departing && record.DueSince != null).ToArray();
-        Entry[] solos = PoolEntries().Where(entry => entry.Shape == GothwaitePvpShape.Solo && IsEligible(entry.Bot)).ToArray();
-        if (groups.Length + solos.Length == 0)
-            return;
-        var queue = new GothwaitePvpDeparture[groups.Length + solos.Length];
-        for (int index = 0; index < groups.Length; index++)
-            queue[index] = new GothwaitePvpDeparture(groups[index].DueSince.Value, Solo: false, BotIdOf(groups[index].Leader));
-        for (int index = 0; index < solos.Length; index++)
-            queue[groups.Length + index] = new GothwaitePvpDeparture(solos[index].ReadyTick, Solo: true, BotIdOf(solos[index].Bot));
-        int chosen = Departures.Release(now, queue);
-        if (chosen < 0)
-            return;
-        if (chosen < groups.Length)
-            Depart(groups[chosen], now);
-        else
-            DepartSolo(solos[chosen - groups.Length], now);
+        var groups = Records.Where(record => !record.Departing && record.DueSince != null).ToList();
+        var solos = PoolEntries().Where(entry => entry.Shape == GothwaitePvpShape.Solo && IsEligible(entry.Bot)).ToList();
+        while (groups.Count + solos.Count > 0 && Departures.CanRelease(now))
+        {
+            var queue = new GothwaitePvpDeparture[groups.Count + solos.Count];
+            for (int index = 0; index < groups.Count; index++)
+                queue[index] = new GothwaitePvpDeparture(groups[index].DueSince.Value, Solo: false, BotIdOf(groups[index].Leader));
+            for (int index = 0; index < solos.Count; index++)
+                queue[groups.Count + index] = new GothwaitePvpDeparture(solos[index].ReadyTick, Solo: true, BotIdOf(solos[index].Bot));
+            int chosen = Departures.Release(now, queue);
+            if (chosen < 0)
+                return;
+            if (chosen < groups.Count)
+            {
+                Depart(groups[chosen], now);
+                groups.RemoveAt(chosen);
+            }
+            else
+            {
+                DepartSolo(solos[chosen - groups.Count], now);
+                solos.RemoveAt(chosen - groups.Count);
+            }
+        }
     }
 
     // A released solo departs alone: its own one-member record, logged like a group's departure.

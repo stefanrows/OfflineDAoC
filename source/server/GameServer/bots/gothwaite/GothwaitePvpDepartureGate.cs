@@ -9,13 +9,22 @@ namespace DOL.GS;
 public readonly record struct GothwaitePvpDeparture(long DueSince, bool Solo, long BotId);
 
 /// <summary>
-/// The stagger of castle departures: at most one departing group or solo every <see cref="IntervalMilliseconds"/>, across the whole former, so
+/// The stagger of castle departures: one departing group or solo per <see cref="IntervalMilliseconds"/> on average, across the whole former, so
 /// the arena does not get a wave of groups at the gate at once. The earliest due departure leaves first; on a tie a group leaves before a solo,
-/// then the lower bot id. The others stay ready in the castle and keep their place. The former runs it once per tick, in its service phase.
+/// then the lower bot id. The others stay ready in the castle and keep their place. The former asks it on every tick, in its service phase, and
+/// releases while <see cref="CanRelease"/> holds: the schedule may lag <see cref="CatchUpMilliseconds"/> behind the clock, so a 2-second former
+/// tick releases two departures a second apart in the schedule.
 /// </summary>
 public sealed class GothwaitePvpDepartureGate
 {
-    public const int IntervalMilliseconds = 4_000;
+    /// <summary>
+    /// One departure per second (second live run, 2026-10-13). Four seconds, released once per 2-second former tick, held the whole mode to 15
+    /// departures a minute: about 70% of the bots stood queued in the castle. Groups now leave on an outbound leg that opens no fight, so the
+    /// stagger no longer has to keep them apart at the gate.
+    /// </summary>
+    public const int IntervalMilliseconds = 1_000;
+    /// <summary>How far the release schedule may lag behind the clock: one former tick less one interval, so no burst builds up while idle.</summary>
+    public const int CatchUpMilliseconds = GothwaitePvpGroupFormer.TickMilliseconds - IntervalMilliseconds;
 
     private long _nextAt;
 
@@ -37,7 +46,7 @@ public sealed class GothwaitePvpDepartureGate
         for (int index = 1; index < candidates.Count; index++)
             if (Earlier(candidates[index], candidates[best]))
                 best = index;
-        _nextAt = now + IntervalMilliseconds;
+        _nextAt = System.Math.Max(_nextAt, now - CatchUpMilliseconds) + IntervalMilliseconds;
         return best;
     }
 

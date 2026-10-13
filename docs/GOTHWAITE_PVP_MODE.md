@@ -381,6 +381,7 @@ proves the patrol points with an installed-mesh test.
 | Home snapshot | `AutonomousPopulationController.OnServerStarted`, before the roster loads | Snapshot (mode on) or restore (mode off) of `offline_gothwaite_pvp_home`. |
 | Release | `GameBot.ReleaseToNearestBindAndReturn`, after `SpreadSafe` | Mode bots release at a castle landing. |
 | Safe area | `PvpCombatant.IsSafeArea`, `IsSafeReleasePoint` | Castle circle is safe. |
+| Spell impact (0.267.0) | `SpellHandler.DamageTarget(ad, show, result)` | A bolt, archery spell or DoT tick between player-shaped sides deals no damage while either side stands in the castle circle (`GothwaitePvpRules.BlocksSafeImpact`). |
 | Sub-10 rule | `PvpCombatant.IsSafetyProtected(GameLiving)` bot arm | Lifted for mode bots (G6). `BlocksLowLevelAutonomousPvp` and `BlocksAutonomousPvp` follow without edits. |
 | Constitution | `AutonomousBotRealmPointRewards.Award`, the `PVP_DEATH_CON_LOSS` write | Skipped for mode bots (G8). Bots only count lost constitution; nothing applies it to their stats today. |
 | Switch | `GameServer.Start`, next to `AutonomousBotGoalPolicy.Initialize` | Reads `gothwaite-pvp.json` once. |
@@ -563,3 +564,62 @@ the gate were dead ends. Load was 0.09 ms per bot turn at 138 bots.
   232 of 239 candidates passed), each snapped tight on the plateau and routed
   to the gate and to CL01 by the explicit probe; a bot gets one by id with at
   most 15 units of spread.
+
+### Second live run fixes (0.267.0)
+
+Owner's run, 300 bots at levels 7–19, observed 2026-10-13 21:11–21:23 with a
+read-only position sampler on the save database (every 15 s):
+
+- On average 213 of the 300 bots stood in the castle, 31 between the safe
+  circle and the ring, 54 between 5,500 and 7,000 units, and fewer than one
+  beyond 7,000. Only 6 position samples in 12 minutes were within 4,000 units
+  of the harbor. The arena bots stood in one line at y 543,000–543,500, x
+  532,500–538,000: the ring's edge below the north gate.
+- 778 of 892 kills were 5,000–6,000 units from the centre. The ring dropped
+  916 fights in 10 minutes (`GOTH_PVP_CHASE_LIMIT reason=ring`).
+- Cause: every group crosses the ring at the same spot and may open fights at
+  once, so it fights the next group out of the gate. A target that steps
+  back into the ring ends the fight, and the leader then walked to the
+  *nearest* patrol point, next to the gate. Fight heat was uncapped (about
+  100 near the gate against 1 elsewhere), so later picks also went back
+  there.
+- Departures were held to one per 4 s, but the former ticks every 2 s, so
+  only 15 groups or solos left per minute (230 of 531 were solos). Bots died
+  within a minute of leaving, so the rest queued in the castle.
+
+Changes:
+
+- **Outbound leg.** Out of the gate the leader picks its first patrol point
+  evenly over the allowed points and walks there. Until it arrives, or for at
+  most 3 minutes, the group opens no fight: `GothwaitePvpTargetRules.MayOpen`
+  refuses, the scan does not run, and followers copy their leader's state. An
+  outbound group still fights back as a group: a follower assists its
+  leader's target when `GothwaitePvpSelfDefence.MayFight` allows it, so a
+  legal opening or an attacker of the group.
+- **Ring and castle drops go outward.** A fight dropped at the ring or the
+  castle sends an arrived leader on a new outbound leg to a freshly picked
+  point. An edge drop still walks to the nearest point inside the edge.
+- **Spread.** Heat counts up to 3 (`HeatCap`). Every pick divides a point's
+  weight by 1 + the number of other living leaders and solos that have
+  claimed it.
+- **Dwell** 6–15 s (was 15–40 s).
+- **Departures** one per second on average, two per former tick
+  (`GothwaitePvpDepartureGate`, `CatchUpMilliseconds`). An idle gate builds
+  no burst.
+- **Castle deaths.** 73 of 1,084 kills in this run happened at the
+  victim's castle landing or release point. All the killers whose class
+  showed in the log fight with bolts, arrows or DoTs: their damage lands
+  after the cast and did not check the safe area again, while melee and bot
+  bow shots do. A guarded hook in `SpellHandler.DamageTarget` (the one call
+  that bolts, archery spells and DoT ticks share) now drops that damage while
+  either player-shaped side stands in the castle circle. A few kills by
+  Scouts (bow shots, which do check at impact) also logged the landing as
+  the death position. Their cause is not found yet; a later run with the
+  kill position taken from the killing hit would show it.
+- Logs: `GOTH_PVP_OUTBOUND bot spot distance reason` (gate, ring, castle,
+  repick) and `GOTH_PVP_OUTBOUND_END bot reason distance` (arrived, time).
+
+Live check: positions spread over the island and the harbor, kills spread
+by distance rather than piled at 5,000–6,000, far fewer than 900
+`reason=ring` drops per 10 minutes, and departures above 15 per minute when
+many bots are ready.

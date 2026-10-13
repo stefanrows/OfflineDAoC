@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.267.0] - 2026-10-13
+
+### Fixed
+
+- **Gothwaite PvP mode: bots no longer clump on the slope below Caer
+  Gothwaite.** In the second live run (300 bots, watched with a position
+  sampler), fewer than one bot on average stood beyond 7,000 units of the
+  castle, the harbor stayed nearly empty, and 778 of 892 kills fell in the band 5,000–6,000 units out.
+  The bots stood in one line where the no-fight ring ends below the gate.
+  Groups leaving the gate now walk to a patrol point picked at random over
+  the island before they open any fight; they still fight back when
+  attacked, as a group. A fight that ends because the target ran back toward
+  the castle sends the leader to a new random point instead of the nearest
+  one, which was next to the gate.
+- Mode bots spread over the whole island: one spot full of recent fights now
+  draws a group at most four times as often as a quiet spot (it was about a
+  hundred times by the gate), and spots that other groups are already
+  heading to are picked less often. Bots wait 6–15 seconds at a spot instead
+  of 15–40.
+- About 70% of mode bots stood queued in the castle: only 15 groups or solos
+  could leave per minute. Now one leaves per second on average.
+- Mode bots could still die inside the Caer Gothwaite safe area. A bolt,
+  arrow or damage-over-time spell that hit outside could finish its target
+  after it was back in the castle, often at its landing spot. Spell damage
+  between players and bots now stops at the castle edge, also for a real
+  player's spells, while the mode is on.
+
 ## [0.266.0] - 2026-10-13
 
 ### Fixed

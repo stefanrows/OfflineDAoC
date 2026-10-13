@@ -14,11 +14,14 @@ public static class GothwaitePvpTargetRules
     /// or a pet of one), cons green to red to the bot (G4: never grey or purple), stands outside the castle circle and
     /// inside the bot's arena edge, neither the bot nor the target stands inside the no-fight ring (section 6.2), is not an
     /// alliance mate, and the server rules allow the attack (group and guild mates are refused there). Monsters are never
-    /// opened on. False for any bot that is not a mode bot.
+    /// opened on. A bot on its outbound leg from the gate opens nothing (second live run, 2026-10-13). False for any bot that is
+    /// not a mode bot.
     /// </summary>
     public static bool MayOpen(GameBot bot, GameLiving target)
     {
         if (!GothwaitePvpMode.IsModeBot(bot) || target == null || target == bot || !target.IsAlive)
+            return false;
+        if (GothwaitePvpDriver.IsOutbound(bot))
             return false;
         if (PvpCombatant.Resolve(target) is not GameLiving master || !PvpCombatant.IsPlayerShaped(master))
             return false;

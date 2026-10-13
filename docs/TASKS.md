@@ -311,7 +311,9 @@ Agent sessions on items 45–48: take the role and context from
      departure) in 0.263.0; stage 3 (arena roaming, con rule, chase limits,
      returns, kill log) in 0.264.0; stage 4 (`/gothpvp` status, load log,
      kill chat) in 0.265.0; first live run fixed in 0.266.0 (gate camp,
-     off-floor landings). Pending: the owner's load run at 300/600/1,000
+     off-floor landings); second live run fixed in 0.267.0 (bots clumped on
+     the no-fight ring below the castle: outbound leg, heat cap, claimed
+     points, 1 s departures). Pending: the owner's load run at 300/600/1,000
      bots (plan section 12) and the stage 5 live check.
 
 ## Implemented in source; installation verification pending
