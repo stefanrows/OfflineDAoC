@@ -1,0 +1,474 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using DOL.GS.ServerRules;
+using DOL.Logging;
+
+namespace DOL.GS;
+
+/// <summary>
+/// The Gothwaite PvP castle group former (docs/GOTHWAITE_PVP_MODE.md 6.3). It is the mode's own simple former, not the
+/// world group coordinator, which the mode suppresses. A ready castle bot draws a shape and waits in the pool. A non-solo
+/// bot leads a new open group, or joins one within the leader's level band (same guild, then an allied guild, then
+/// strangers, with a healer before a second non-healer). The real <see cref="Group"/> exists once a second bot is in.
+/// A group leaves when it is full, or at its wait limit with its minimum; a smaller group disbands and its ready members
+/// return to the pool. A departing group walks to the castle exit (the driver does the walking).
+/// All state sits behind one lock. <see cref="TickIfDue"/> runs at most once per <see cref="TickMilliseconds"/>, from any
+/// mode bot's turn, and an error in it is logged, never thrown into the bot's turn.
+/// </summary>
+public static class GothwaitePvpGroupFormer
+{
+    public const int TickMilliseconds = 2_000;
+    /// <summary>How long an open group waits for members before its minimum decides (leave, or disband).</summary>
+    public const int WaitMilliseconds = 90_000;
+    /// <summary>How long a departing group may take to reach the castle exit before it gives up and goes home.</summary>
+    public const int DepartureLimitMilliseconds = 180_000;
+
+    private static readonly Logger Log = LoggerManager.Create(typeof(GothwaitePvpGroupFormer));
+    private static readonly object Sync = new();
+    private static long _nextTick;
+    private static long _nextNumber;
+    private static readonly Dictionary<GameBot, Entry> Entries = new();
+    private static readonly List<Record> Records = new();
+
+    /// <summary>What a driver needs to know about its bot's group.</summary>
+    public readonly record struct Membership(string Id, GothwaitePvpShape Shape, GameBot Leader, bool IsLeader, bool Departing, bool Arrived);
+
+    // One bot in the former: waiting in the pool (Record null) or placed in a group or solo record.
+    private sealed class Entry
+    {
+        public Entry(GameBot bot, GothwaitePvpShape shape, int cycle, long readyTick)
+        {
+            Bot = bot;
+            Shape = shape;
+            Cycle = cycle;
+            ReadyTick = readyTick;
+        }
+
+        public GameBot Bot { get; }
+        public GothwaitePvpShape Shape { get; }
+        public int Cycle { get; }
+        public long ReadyTick { get; set; }
+        /// <summary>The bot's castle step is Ready. A released bot is not ready until it has rested and buffed again.</summary>
+        public bool Ready { get; set; } = true;
+        public Record Record { get; set; }
+    }
+
+    // A group (or a solo departure): its leader, its members, its real group once two bots are in, and its clock.
+    private sealed class Record
+    {
+        public string Id { get; init; }
+        public GothwaitePvpShape Shape { get; init; }
+        public int Target { get; init; }
+        public int Minimum { get; init; }
+        public GameBot Leader { get; init; }
+        public long ExpiresAt { get; init; }
+        public long DepartedAt { get; set; }
+        public bool Departing { get; set; }
+        public bool Arrived { get; set; }
+        public Group Real { get; set; }
+        public readonly List<Entry> Members = new();
+    }
+
+    /// <summary>
+    /// The former's service-phase hook (NpcService.Tick, before the brains think in parallel): groups are created and
+    /// changed here on one thread. Returns at once while the mode is off.
+    /// </summary>
+    public static void PrepareTick()
+    {
+        if (GothwaitePvpMode.IsActive)
+            TickIfDue(GameLoop.GameLoopTime);
+    }
+
+    /// <summary>Runs the former's tick if it is due (at most once per interval).</summary>
+    public static void TickIfDue(long now)
+    {
+        lock (Sync)
+        {
+            if (now < _nextTick)
+                return;
+            _nextTick = now + TickMilliseconds;
+            try
+            {
+                Prune(now);
+                Match(now);
+                DecideRecords(now);
+            }
+            catch (Exception exception)
+            {
+                Log.Error($"GOTH_PVP_FORMER_FAILED: the castle group tick failed; it retries in {TickMilliseconds} ms.", exception);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A ready castle bot offers itself with the shape it drew for this ready cycle. A solo departs at once. A bot already
+    /// in the former only becomes ready again. Called every ready turn, so it is idempotent.
+    /// </summary>
+    public static void Offer(GameBot bot, GothwaitePvpShape shape, int cycle, long now)
+    {
+        if (bot == null)
+            return;
+        lock (Sync)
+        {
+            if (Entries.TryGetValue(bot, out Entry existing))
+            {
+                existing.Ready = true;
+                return;
+            }
+            var entry = new Entry(bot, shape, cycle, now);
+            Entries[bot] = entry;
+            if (shape != GothwaitePvpShape.Solo)
+                return;
+            var solo = new Record
+            {
+                Id = GothwaitePvpLines.SoloId,
+                Shape = shape,
+                Target = 1,
+                Minimum = 1,
+                Leader = bot,
+                ExpiresAt = now,
+                DepartedAt = now,
+                Departing = true,
+            };
+            AttachMember(solo, entry);
+            Records.Add(solo);
+            LogDeparture(solo);
+        }
+    }
+
+    /// <summary>The bot is not ready (it was released and rests): it leaves the pool, and its group stops counting it.</summary>
+    public static void Withdraw(GameBot bot)
+    {
+        lock (Sync)
+        {
+            if (bot == null || !Entries.TryGetValue(bot, out Entry entry))
+                return;
+            if (entry.Record == null)
+                Entries.Remove(bot);
+            else
+                entry.Ready = false;
+        }
+    }
+
+    /// <summary>
+    /// The bot leaves its group for good: it was released with its leader outside the castle, or it was not ready when its
+    /// group departed. A leader leaving dissolves the group; the other members go home or return to the pool.
+    /// </summary>
+    public static void Leave(GameBot bot, string reason)
+    {
+        lock (Sync)
+        {
+            if (bot == null || !Entries.TryGetValue(bot, out Entry entry))
+                return;
+            entry.Ready = false;
+            Record record = entry.Record;
+            if (record == null)
+            {
+                Entries.Remove(bot);
+                return;
+            }
+            if (record.Leader == bot)
+            {
+                Close(record, GameLoop.GameLoopTime, reason);
+                return;
+            }
+            RemoveFromRecord(record, entry);
+            Entries.Remove(bot);
+        }
+    }
+
+    /// <summary>The bot's group, when it is in one (gathering, departing or arrived). False for a pooled or unplaced bot.</summary>
+    public static bool TryGetMembership(GameBot bot, out Membership membership)
+    {
+        lock (Sync)
+        {
+            if (bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Record is { } record)
+            {
+                membership = new Membership(record.Id, record.Shape, record.Leader, record.Leader == bot, record.Departing, record.Arrived);
+                return true;
+            }
+        }
+        membership = default;
+        return false;
+    }
+
+    /// <summary>The leader reached the castle exit: its group holds there. Logged once per group.</summary>
+    public static void MarkArrived(GameBot leader)
+    {
+        lock (Sync)
+        {
+            if (leader == null || !Entries.TryGetValue(leader, out Entry entry) || entry.Record is not { } record ||
+                record.Leader != leader || record.Arrived)
+                return;
+            record.Arrived = true;
+            Log.Info(GothwaitePvpLines.Arrive(record.Id, leader.Name, record.Members.Count));
+        }
+    }
+
+    // Drops what no longer belongs: a pooled bot that is no longer eligible, a member that left its group, that left the
+    // castle while gathering, or that is no longer active. A record whose leader is gone ends.
+    private static void Prune(long now)
+    {
+        foreach (Entry entry in Entries.Values.Where(entry => entry.Record == null).ToArray())
+            if (!IsEligible(entry.Bot))
+                Entries.Remove(entry.Bot);
+
+        foreach (Record record in Records.ToArray())
+        {
+            if (record.Real != null && record.Leader.Group != record.Real)
+                record.Real = null; // a native break-up left the leader alone; the record carries on without a real group
+
+            if (!IsActive(record.Leader) || !record.Leader.IsAlive)
+            {
+                Close(record, now, "leader_lost");
+                continue;
+            }
+            if (!record.Departing && !InCastle(record.Leader))
+            {
+                Close(record, now, "left_castle");
+                continue;
+            }
+            if (record.Departing && !record.Arrived && now - record.DepartedAt > DepartureLimitMilliseconds)
+            {
+                Close(record, now, "depart_timeout");
+                continue;
+            }
+            foreach (Entry member in record.Members.ToArray())
+                if (member.Bot != record.Leader && !IsMember(record, member.Bot))
+                {
+                    RemoveFromRecord(record, member);
+                    Entries.Remove(member.Bot);
+                }
+        }
+    }
+
+    // Pool bots that are eligible join open groups (oldest first); each leftover bot that is not a solo leads a new group.
+    private static void Match(long now)
+    {
+        int levelBand = GothwaitePvpMode.Settings.LevelBand;
+        List<Entry> pool = PoolEntries().ToList();
+        foreach (Record record in Records.Where(record => !record.Departing).ToArray())
+            FillFromPool(record, levelBand, pool);
+        foreach (Entry entry in pool)
+        {
+            if (entry.Record != null || !Entries.ContainsKey(entry.Bot) || entry.Shape == GothwaitePvpShape.Solo ||
+                !IsEligible(entry.Bot))
+                continue;
+            FillFromPool(OpenGroup(entry, now), levelBand, pool);
+        }
+    }
+
+    // Every open group decides on this tick: full leaves, its wait limit decides with its minimum.
+    private static void DecideRecords(long now)
+    {
+        foreach (Record record in Records.Where(record => !record.Departing).ToArray())
+        {
+            // A leader that is not ready cannot lead the group out, so no member counts as ready.
+            int ready = Entries.TryGetValue(record.Leader, out Entry leader) && leader.Ready && IsReadyNow(record.Leader)
+                ? record.Members.Count(member => member.Ready && IsReadyNow(member.Bot))
+                : 0;
+            switch (GothwaitePvpCastleRules.Decide(now, record.ExpiresAt, ready, record.Target, record.Minimum))
+            {
+                case GothwaitePvpFormationStep.Depart:
+                    Depart(record, now);
+                    break;
+                case GothwaitePvpFormationStep.Disband:
+                    Disband(record, now, ready);
+                    break;
+            }
+        }
+    }
+
+    private static void Depart(Record record, long now)
+    {
+        // Members who are resting after a release stay behind: they rest and return to the pool on their own.
+        foreach (Entry member in record.Members.ToArray())
+            if (member.Bot != record.Leader && !(member.Ready && IsReadyNow(member.Bot)))
+            {
+                RemoveFromRecord(record, member);
+                Entries.Remove(member.Bot);
+            }
+        record.Departing = true;
+        record.DepartedAt = now;
+        LogDeparture(record);
+    }
+
+    private static void Disband(Record record, long now, int readyCount)
+    {
+        Log.Info(GothwaitePvpLines.Disbanded(record.Id, record.Shape, record.Members.Count, readyCount, "expired"));
+        Records.Remove(record);
+        Unplace(record, now);
+    }
+
+    private static void Close(Record record, long now, string reason)
+    {
+        Log.Info(GothwaitePvpLines.Dissolved(record.Id, record.Shape, record.Members.Count, reason));
+        Records.Remove(record);
+        Unplace(record, now);
+    }
+
+    // The group ends: its real group is disbanded and each member leaves it. A member that is ready and eligible returns
+    // to the pool with its shape; any other member is dropped and comes back when its castle step is ready again.
+    private static void Unplace(Record record, long now)
+    {
+        if (record.Real != null)
+        {
+            record.Real.DisbandGroup();
+            record.Real = null;
+        }
+        foreach (Entry member in record.Members.ToArray())
+        {
+            member.Record = null;
+            // A solo is never pooled: its next ready turn offers it again and it departs alone.
+            if (member.Shape != GothwaitePvpShape.Solo && member.Ready && IsEligible(member.Bot))
+            {
+                member.ReadyTick = now;
+                Entries[member.Bot] = member;
+            }
+            else
+            {
+                Entries.Remove(member.Bot);
+            }
+        }
+        record.Members.Clear();
+    }
+
+    // Opens a group led by the entry's bot; the real group is made later, when the second bot joins.
+    private static Record OpenGroup(Entry leader, long now)
+    {
+        var record = new Record
+        {
+            Id = (++_nextNumber).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Shape = leader.Shape,
+            Target = GothwaitePvpShapes.TargetSize(leader.Shape, BotIdOf(leader.Bot), leader.Cycle),
+            Minimum = GothwaitePvpShapes.MinimumSize(leader.Shape),
+            Leader = leader.Bot,
+            ExpiresAt = now + WaitMilliseconds,
+        };
+        AttachMember(record, leader);
+        Records.Add(record);
+        return record;
+    }
+
+    // Fills an open group from the pool snapshot of this tick, one best-ranked candidate at a time.
+    private static void FillFromPool(Record record, int levelBand, List<Entry> pool)
+    {
+        if (record.Departing || record.Members.Count >= record.Target || record.Leader == null)
+            return;
+        var byId = new Dictionary<long, Entry>();
+        var candidates = new List<GothwaitePvpCandidate>();
+        foreach (Entry entry in pool)
+        {
+            if (entry.Record != null || entry.Shape == GothwaitePvpShape.Solo || !IsEligible(entry.Bot) ||
+                !GothwaitePvpCastleRules.InLevelBand(record.Leader.Level, entry.Bot.Level, levelBand))
+                continue;
+            long id = BotIdOf(entry.Bot);
+            byId[id] = entry;
+            candidates.Add(new GothwaitePvpCandidate(id, MemberOf(entry.Bot), entry.ReadyTick));
+        }
+        GothwaitePvpMember leader = MemberOf(record.Leader);
+        while (record.Members.Count < record.Target && candidates.Count > 0)
+        {
+            var members = record.Members.Select(member => MemberOf(member.Bot)).ToArray();
+            IReadOnlyList<GothwaitePvpCandidate> ranked = GothwaitePvpCastleRules.Rank(leader, members, candidates, levelBand);
+            if (ranked.Count == 0)
+                break;
+            GothwaitePvpCandidate next = ranked[0];
+            candidates.RemoveAll(candidate => candidate.BotId == next.BotId);
+            if (byId.TryGetValue(next.BotId, out Entry chosen))
+                TryJoin(record, chosen);
+        }
+    }
+
+    // A bot joins a gathering group. The real group is made when the second bot joins; a native refusal leaves the bot in the pool.
+    private static bool TryJoin(Record record, Entry entry)
+    {
+        if (record.Real == null)
+        {
+            if (record.Members.Count != 1)
+                return false;
+            var created = new Group(record.Leader);
+            GroupMgr.AddGroup(created);
+            if (!created.AddMember(record.Leader))
+            {
+                GroupMgr.RemoveGroup(created);
+                return false;
+            }
+            record.Real = created;
+        }
+        if (!record.Real.AddMember(entry.Bot))
+            return false;
+        AttachMember(record, entry);
+        return true;
+    }
+
+    private static void AttachMember(Record record, Entry entry)
+    {
+        record.Members.Add(entry);
+        entry.Record = record;
+        entry.Ready = true;
+        Entries[entry.Bot] = entry;
+    }
+
+    private static void RemoveFromRecord(Record record, Entry entry)
+    {
+        if (record.Real != null)
+        {
+            record.Real.RemoveMember(entry.Bot, retainSingleRemainingMember: true);
+            if (record.Real.MemberCount == 0)
+                record.Real = null;
+        }
+        record.Members.Remove(entry);
+        entry.Record = null;
+    }
+
+    // A non-leader member stays only while it is in the record's real group (and, while gathering, in the castle).
+    private static bool IsMember(Record record, GameBot bot)
+    {
+        if (record.Real == null || !IsActive(bot) || bot.Group != record.Real)
+            return false;
+        return record.Departing || InCastle(bot);
+    }
+
+    // Pool bots: waiting, not in a group, alive, active and inside the castle.
+    private static IEnumerable<Entry> PoolEntries() => Entries.Values
+        .Where(entry => entry.Record == null && entry.Ready)
+        .OrderBy(entry => entry.ReadyTick)
+        .ThenBy(entry => BotIdOf(entry.Bot));
+
+    private static bool IsEligible(GameBot bot) => IsReadyNow(bot) && bot.Group == null && !bot.IsPlayerLedGroup;
+
+    private static bool IsReadyNow(GameBot bot) => IsActive(bot) && bot.IsAlive && InCastle(bot);
+
+    private static bool IsActive(GameBot bot) =>
+        bot != null && bot.ObjectState == GameObject.eObjectState.Active && !bot.IsPlayerLedGroup;
+
+    private static bool InCastle(GameBot bot) => GothwaitePvpMode.Arena.InCastle(bot.CurrentRegionID, bot.X, bot.Y);
+
+    private static long BotIdOf(GameBot bot) => bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID;
+
+    private static GothwaitePvpMember MemberOf(GameBot bot) => new(
+        bot.Level,
+        bot.CharacterClass != null && GothwaitePvpCastleRules.IsHealer((eCharacterClass)bot.CharacterClass.ID),
+        GuildOf(bot));
+
+    // The guild identity the former compares. Dummy and garrison guilds never count as a guild.
+    private static GothwaitePvpGuild GuildOf(GameBot bot)
+    {
+        Guild guild = bot.Guild;
+        if (guild == null || !PvpCombatant.IsRealGuild(guild))
+            return default;
+        return new GothwaitePvpGuild(guild.GuildID, guild.alliance?.DbAlliance?.ObjectId ?? guild.AllianceId);
+    }
+
+    private static void LogDeparture(Record record)
+    {
+        GameBot[] bots = record.Members.Select(member => member.Bot).ToArray();
+        int minLevel = bots.Min(bot => (int)bot.Level);
+        int maxLevel = bots.Max(bot => (int)bot.Level);
+        Log.Info(GothwaitePvpLines.Formed(record.Id, record.Shape, bots.Length, minLevel, maxLevel,
+            bots.Select(bot => GlobalConstants.RealmToName(bot.Realm)).Distinct(), bots.Select(bot => bot.Name)));
+        Log.Info(GothwaitePvpLines.Depart(record.Id, record.Leader.Name, bots.Length));
+    }
+}

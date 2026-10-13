@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.263.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP mode, stage 2: castle life** (`docs/GOTHWAITE_PVP_MODE.md`,
+  TASKS 125). With the mode on, a bot in Caer Gothwaite rests to 80% health
+  and power, buffs, and then joins the mode's own group former: solos, duos,
+  small groups and 8-man groups in the configured shares, members within ±5
+  levels of the leader, same guild and alliance first, a healer before a
+  second of any other role. A group leaves when full, or after 90 seconds
+  with at least its minimum, and walks out to the castle gate (stage 3 adds
+  roaming and fights). A released bot rests and regroups in the castle; a bot
+  outside the castle without a group walks back.
+- An explicit installed-navmesh probe (`UT_GothwaitePvpArenaInstalledNavigation`)
+  proves the castle landings, the gate and 30 patrol points route from the
+  castle.
+
+### Changed
+
+- Nothing changes with the mode off. The former runs in the NPC service phase
+  and returns at once while the mode is off.
 ## [0.262.0] - 2026-10-13
 
 ### Added

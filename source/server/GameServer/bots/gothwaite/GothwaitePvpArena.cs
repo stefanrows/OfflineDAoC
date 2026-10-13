@@ -20,6 +20,11 @@ public sealed record GothwaitePvpArena
     public required int SafeRadius { get; init; }
     /// <summary>Where mode bots log in and release: next to the castle bindstones, inside the safe circle.</summary>
     public required IReadOnlyList<GothwaitePvpSpot> CastleLandings { get; init; }
+    /// <summary>
+    /// Castle exits: the points just outside the safe circle where a departing group walks to and holds (section 6.3).
+    /// The first one is the exit a group uses.
+    /// </summary>
+    public IReadOnlyList<GothwaitePvpSpot> CastleApproaches { get; init; } = Array.Empty<GothwaitePvpSpot>();
     /// <summary>Roaming goals outside the castle; every one is proven reachable from the castle (stage 3).</summary>
     public IReadOnlyList<GothwaitePvpSpot> PatrolPoints { get; init; } = Array.Empty<GothwaitePvpSpot>();
 
@@ -38,9 +43,19 @@ public sealed record GothwaitePvpArena
             // The all-realms teleporter landing (AllRealmsTeleportFallbacks "1:Gothwaite").
             new("castle teleporter landing", 535158, 548589, 4800),
         },
+        CastleApproaches = new GothwaitePvpSpot[]
+        {
+            // About 4,800 units north of the centre (y grows southward), just outside the 4,000 safe circle, in front of the gate.
+            // The Z is an estimate: the installed mesh floor under this point is at Z 3,898 (installed-mesh probe 2026-10-13),
+            // so the navigation snaps the goal to the floor and does not reject it for its height.
+            new("castle approach N", 535020, 544020, 4800),
+        },
     };
 
     private const string GothwaitePvpSettingsArena = "gothwaite";
+
+    /// <summary>The castle exit a departing group walks to (the first approach).</summary>
+    public GothwaitePvpSpot CastleExit => CastleApproaches[0];
 
     /// <summary>Squared 2-D distance from the castle centre, in doubles (int math overflows at these coordinates).</summary>
     public double CastleDistanceSquared(int x, int y)

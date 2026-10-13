@@ -1,8 +1,8 @@
 # Gothwaite PvP mode: plan
 
 **Status:** in progress. Stage 0 (audit) done 2026-10-13 (0.261.2), results
-in section 11. Stage 1 built in 0.262.0 (section 12). Stages 2–4 follow in
-order, each as its own version.
+in section 11. Stage 1 built in 0.262.0, stage 2 in 0.263.0 (section 12). Stages 3–4
+follow in order, each as its own version.
 
 **This is a separate world mode.** It is not a population preset, it is not
 part of the Camlann world bot work, and it does not change that work. With the
@@ -450,3 +450,30 @@ Findings that shaped the design:
   `GOTH_PVP_ENTER`, plus `GOTH_PVP_*_FAILED` lines on errors.
 - Tests: `UT_GothwaitePvpModeOff`, `UT_GothwaitePvpRules`,
   `UT_GothwaitePvpHome`; launcher `GothwaitePvpSettingsTests`.
+
+### Stage 2 (0.263.0)
+
+- Driver phases: Castle (rest → buff window → ready), Departing, Arena.
+  `GothwaitePvpDriver`, `GothwaitePvpGroupFormer`, `GothwaitePvpShapes`,
+  `GothwaitePvpCastleRules`, `GothwaitePvpNavigation`, `GothwaitePvpLines`.
+- Rest: the bots' recovery rest to `restPercent`, capped at 2 minutes; then an
+  8-second buff window while the class routine buffs.
+- Former: ticked every 2 s from `NpcService.Tick` (service phase, one thread;
+  one guarded line). Shapes drawn per bot from `groupShares`; joiners within
+  ±`levelBand` of the leader; same guild (2), same alliance (1), then
+  strangers; a healer (`BotPartyRoles.IsHealingClass`) before a second
+  non-healer. Full → depart; after 90 s, at least the minimum (duo 2, small 3,
+  eight 5) → depart, else disband.
+- Departure: the leader walks to the castle gate (`castle approach N`, floor
+  Z 3,898); followers follow beyond 300 units and assist the leader's target
+  only if it is legal for them (green to red, outside the castle). In stage 2
+  groups hold at the gate.
+- Release: the bot rests again in the castle; it leaves its group unless that
+  group is still gathering in the castle with its leader there.
+- Group removal by existing code was audited: only a player's `/invite` takes
+  a mode bot out of its group, and that bot then leaves the mode (player-led).
+- New logs: `GOTH_PVP_REST`, `GOTH_PVP_REST_END`, `GOTH_PVP_GROUP_FORMED`,
+  `GOTH_PVP_GROUP_DISBANDED`, `GOTH_PVP_GROUP_DISSOLVED`, `GOTH_PVP_DEPART`,
+  `GOTH_PVP_ARRIVE`, `GOTH_PVP_RETURN`, `GOTH_PVP_ROUTE_FAILED`.
+- Navmesh probe: all 30 candidate patrol points snap and route from the
+  castle landing in one leg with the blocking-door filters.
