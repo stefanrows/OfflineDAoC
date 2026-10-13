@@ -1,8 +1,8 @@
 # Gothwaite PvP mode: plan
 
 **Status:** in progress. Stage 0 (audit) done 2026-10-13 (0.261.2), results
-in section 11. Stage 1 built in 0.262.0, stage 2 in 0.263.0, stage 3 in 0.264.0
-(section 12). Stage 4 follows.
+in section 11. Stages 1–4 built in 0.262.0–0.265.0 (section 12). Open: the owner's
+load run (section 12, stage 4) and stage 5, the live check.
 
 **This is a separate world mode.** It is not a population preset, it is not
 part of the Camlann world bot work, and it does not change that work. With the
@@ -508,3 +508,35 @@ Findings that shaped the design:
 - Kills: `AbstractServerRules.OnNpcKilled` / `OnPlayerKilled` call
   `GothwaitePvpStats.RecordKill` (`GOTH_PVP_KILL` with levels, kinds and both
   con colours). A mode bot killed by a monster is logged as `killer_kind=other`.
+
+### Stage 4 (0.265.0)
+
+- `/gothpvp` or `/gothpvp status` (GM): mode bots by band and phase, groups,
+  mode bot kills and deaths per band, kills by con (self-defence included, so
+  grey and purple can appear there only from fights the other side opened),
+  and the turn load. `GothwaitePvpStatus`, `GothwaitePvpCommand`.
+- Load: `GOTH_PVP_LOAD` once per real minute while the mode is on
+  (`GothwaitePvpLoadMeter`: bots, turns, turnAvgMs, turnP95MsAtMost,
+  turnMaxMs, scans, scanAvgMs, formers, formerAvgMs, formerMaxMs).
+  `BOT_THINK_PROFILE` also gets the phases `GothwaitePvpDriver`,
+  `GothwaitePvpScan` and `GothwaitePvpFormer`, but it lists only its top 16
+  phases, so `GOTH_PVP_LOAD` is the reliable source.
+- Kill chat (`GothwaitePvpKillChat`): 15% of a mode bot's arena kills, at most
+  once per bot per 2 minutes and once per arena per 30 seconds, local say only
+  when a player is within 512 units. The existing bot PvP taunt
+  (`AutonomousBotChatCoordinator.OnAutonomousBotPvpKill`) can still speak for
+  the same kill.
+- No population cap is built: it waits for measured numbers.
+
+#### Measuring the load (owner)
+
+1. Stop the server. Set World mode to Gothwaite PvP and the bot population to
+   300 on the Server population tab, world speed 1×. Start.
+2. Wait 15–20 minutes, then check `/gothpvp`.
+3. Collect about 10 minutes of `GOTH_PVP_LOAD` lines from
+   `runtime/logs/server-console.log`; note turnAvgMs, turnP95MsAtMost,
+   turnMaxMs, scanAvgMs and formerMaxMs. Cross-check `BOT_THINK_PROFILE` and
+   any `Long NpcService.Tick` warnings.
+4. CPU estimate: bots × 1.33 turns/s × turnAvgMs. Turn p95 must stay far
+   below the 750 ms think interval.
+5. Repeat at 600 and 1,000 bots, then choose a recommended cap.

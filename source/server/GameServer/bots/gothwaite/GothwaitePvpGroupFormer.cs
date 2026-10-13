@@ -79,8 +79,11 @@ public static class GothwaitePvpGroupFormer
     /// </summary>
     public static void PrepareTick()
     {
-        if (GothwaitePvpMode.IsActive)
-            TickIfDue(GameLoop.GameLoopTime);
+        if (!GothwaitePvpMode.IsActive)
+            return;
+        // Once a real minute the load meter writes its GOTH_PVP_LOAD line (a read of one value otherwise).
+        GothwaitePvpLoadMeter.PublishIfDue(Environment.TickCount64, GothwaitePvpStatus.CountOnline);
+        TickIfDue(GameLoop.GameLoopTime);
     }
 
     /// <summary>Runs the former's tick if it is due (at most once per interval).</summary>
@@ -91,15 +94,19 @@ public static class GothwaitePvpGroupFormer
             if (now < _nextTick)
                 return;
             _nextTick = now + TickMilliseconds;
-            try
+            using (BotThinkProfiler.Measure(BotThinkPhase.GothwaitePvpFormer))
+            using (GothwaitePvpLoadMeter.MeasureFormer())
             {
-                Prune(now);
-                Match(now);
-                DecideRecords(now);
-            }
-            catch (Exception exception)
-            {
-                Log.Error($"GOTH_PVP_FORMER_FAILED: the castle group tick failed; it retries in {TickMilliseconds} ms.", exception);
+                try
+                {
+                    Prune(now);
+                    Match(now);
+                    DecideRecords(now);
+                }
+                catch (Exception exception)
+                {
+                    Log.Error($"GOTH_PVP_FORMER_FAILED: the castle group tick failed; it retries in {TickMilliseconds} ms.", exception);
+                }
             }
         }
     }
@@ -278,6 +285,37 @@ public static class GothwaitePvpGroupFormer
         }
         membership = default;
         return false;
+    }
+
+    /// <summary>
+    /// A read-only census for the status command (stage 4): the open groups still gathering and their members, the bots waiting in the
+    /// castle pool, the departed groups by shape, and the members of the groups of two or more for their average size. One lock, once per call.
+    /// </summary>
+    public static GothwaitePvpGroupCensus Census()
+    {
+        lock (Sync)
+        {
+            int forming = 0, formingMembers = 0, multiGroups = 0, multiMembers = 0;
+            var departed = new int[4];
+            foreach (Record record in Records)
+            {
+                int size = record.Members.Count;
+                if (record.Departing)
+                    departed[(int)record.Shape]++;
+                else
+                {
+                    forming++;
+                    formingMembers += size;
+                }
+                if (record.Shape != GothwaitePvpShape.Solo)
+                {
+                    multiGroups++;
+                    multiMembers += size;
+                }
+            }
+            int waiting = Entries.Values.Count(entry => entry.Record == null && entry.Ready);
+            return new GothwaitePvpGroupCensus(forming, formingMembers, waiting, departed, multiGroups, multiMembers);
+        }
     }
 
     /// <summary>The leader reached the castle exit: its group holds there. Logged once per group.</summary>

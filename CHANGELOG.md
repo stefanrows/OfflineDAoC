@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.265.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP mode, stage 4: status and load** (`docs/GOTHWAITE_PVP_MODE.md`,
+  TASKS 125). `/gothpvp` (GM) shows the mode bots by level band and phase,
+  the castle groups by shape, mode bot kills and deaths per band, kills by
+  con colour, and the mode's turn load.
+- A `GOTH_PVP_LOAD` log line once a minute while the mode is on (bots, turn
+  average, p95 and maximum, scan and group-former cost), and three new
+  `BOT_THINK_PROFILE` phases (`GothwaitePvpDriver`, `GothwaitePvpScan`,
+  `GothwaitePvpFormer`). The plan's section 12 describes how to measure the
+  mode at 300, 600 and 1,000 bots.
+- Mode bots now and then say a short line in local chat after an arena kill
+  (15%, at most once per 2 minutes per bot and once per 30 seconds in the
+  arena).
+
+### Changed
+
+- Cheaper mode turns: patrol points are cached per arena edge, and a bot's
+  opponent scan runs only when it is due (every 1.5 s).
 ## [0.264.0] - 2026-10-13
 
 ### Added

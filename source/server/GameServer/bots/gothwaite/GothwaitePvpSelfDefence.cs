@@ -78,9 +78,11 @@ public static class GothwaitePvpSelfDefence
         {
             if (member is GameBot noting && Noted(noting, target, master, now))
                 return true;
-            if (member.attackComponent?.AttackerTracker is { } tracker &&
-                tracker.Attackers.Any(attacker => SameFighter(attacker, target, master)))
-                return true;
+            // A plain loop over the tracker: the same test as before, without a LINQ query and its closure per decision.
+            if (member.attackComponent?.AttackerTracker is { } tracker)
+                foreach (GameLiving attacker in tracker.Attackers)
+                    if (SameFighter(attacker, target, master))
+                        return true;
         }
         return false;
     }

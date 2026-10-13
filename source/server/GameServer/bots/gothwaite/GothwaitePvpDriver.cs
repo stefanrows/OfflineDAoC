@@ -68,6 +68,8 @@ public static class GothwaitePvpDriver
         public long ProgressAt;
         public bool EdgeLogged;
         public HashSet<int> ChaseLogged;
+        // The scan's acceptance test, built once for this bot (see AcceptFor).
+        public Func<GameLiving, bool> Accept;
     }
 
     /// <summary>
@@ -140,6 +142,22 @@ public static class GothwaitePvpDriver
             default:
                 return Ready(brain, bot, state, placed ? membership : null, now, engaged);
         }
+    }
+
+    /// <summary>
+    /// The phase of a mode bot for the status command (read-only, lock-free). The driver writes its state on the bot's own turn, so
+    /// the answer is a turn stale at most. A bot with no state yet has not had a turn and counts as castle resting, and so does a dead
+    /// bot: it releases to the castle.
+    /// </summary>
+    public static GothwaitePvpBotPhase PhaseOf(GameBot bot)
+    {
+        if (bot == null || !bot.IsAlive || !States.TryGetValue(bot, out State state))
+            return GothwaitePvpBotPhase.CastleResting;
+        if (state.Phase == GothwaitePvpPhase.Arena)
+            return GothwaitePvpBotPhase.Arena;
+        if (state.Phase == GothwaitePvpPhase.Departing)
+            return GothwaitePvpBotPhase.Departing;
+        return state.Step == CastleStep.Ready ? GothwaitePvpBotPhase.CastleReady : GothwaitePvpBotPhase.CastleResting;
     }
 
     // The castle rest: rest until the rest level, then the buff window. The rest ends as recovered or cap, logged once each.
@@ -491,21 +509,30 @@ public static class GothwaitePvpDriver
     /// <summary>
     /// Scans for a legal opening every <see cref="AutonomousBattlegroundDriver.ScanMilliseconds"/>. A leader or a solo always
     /// scans; a follower scans only while its leader has no legal target. A returning bot never scans. True when it attacked.
+    /// The scan clock is read first, so a bot that is not due runs no other test and no FindOpponent.
     /// </summary>
     private static bool Scan(BotBrain brain, GameBot bot, State state, GothwaitePvpGroupFormer.Membership membership, long now)
     {
-        bool leaderHasLegalTarget = !membership.IsLeader && MayAttack(bot, membership.Leader?.TargetObject as GameLiving);
-        bool due = now >= state.NextScan;
-        if (!GothwaitePvpArenaRules.MayScan(due, state.Returning, OutsideEdge(bot, EdgeOf(bot)), membership.IsLeader, leaderHasLegalTarget))
+        if (now < state.NextScan)
             return false;
-        state.NextScan = now + AutonomousBattlegroundDriver.ScanMilliseconds;
-        GameLiving opponent = BattlegroundCombatTargets.FindOpponent(bot, AutonomousBattlegroundDriver.OpponentRange,
-            target => MayAttack(bot, target));
+        bool leaderHasLegalTarget = !membership.IsLeader && MayAttack(bot, membership.Leader?.TargetObject as GameLiving);
+        if (!GothwaitePvpArenaRules.MayScan(true, state.Returning, OutsideEdge(bot, EdgeOf(bot)), membership.IsLeader, leaderHasLegalTarget))
+            return false;
+        state.NextScan = GothwaitePvpArenaRules.NextScanAfter(now);
+        GameLiving opponent;
+        using (GothwaitePvpLoadMeter.MeasureScan())
+        using (BotThinkProfiler.Measure(BotThinkPhase.GothwaitePvpScan))
+            opponent = BattlegroundCombatTargets.FindOpponent(bot, AutonomousBattlegroundDriver.OpponentRange, AcceptFor(bot, state));
         if (opponent == null)
             return false;
         brain.Attack(opponent);
         return true;
     }
+
+    // The scan's acceptance test is built once per bot. Only CreateAccept captures the bot, so a scan allocates nothing here.
+    private static Func<GameLiving, bool> AcceptFor(GameBot bot, State state) => state.Accept ??= CreateAccept(bot);
+
+    private static Func<GameLiving, bool> CreateAccept(GameBot bot) => target => MayAttack(bot, target);
 
     /// <summary>
     /// The return rules of section 6.1, for a bot that is not fighting: low health, low power (a caster), a lost leader, or a
@@ -799,8 +826,9 @@ public static class GothwaitePvpDriver
 
     private static Point3D PointOf(GothwaitePvpSpot spot) => new(spot.X, spot.Y, spot.Z);
 
+    // The cache returns the same points as GothwaitePvpArena.PatrolPointsFor, without a new list on every pick and edge check.
     private static IReadOnlyList<GothwaitePvpSpot> PatrolPoints(GameBot bot) =>
-        GothwaitePvpMode.Arena.PatrolPointsFor(bot.Level, GothwaitePvpMode.Settings);
+        GothwaitePvpPatrolCache.PointsFor(GothwaitePvpMode.Arena, GothwaitePvpMode.Settings, bot.Level);
 
     private static int EdgeOf(GameBot bot) => GothwaitePvpArena.EdgeFor(bot.Level, GothwaitePvpMode.Settings);
 

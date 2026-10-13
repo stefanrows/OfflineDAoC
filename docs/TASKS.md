@@ -309,7 +309,9 @@ Agent sessions on items 45–48: take the role and context from
      Stage 1 (switch, launcher selector, separation hooks, home snapshot and
      restore) built in 0.262.0; stage 2 (castle rest, buffs, group former,
      departure) in 0.263.0; stage 3 (arena roaming, con rule, chase limits,
-     returns, kill log) in 0.264.0; real-client check pending.
+     returns, kill log) in 0.264.0; stage 4 (`/gothpvp` status, load log,
+     kill chat) in 0.265.0. Pending: the owner's load run at 300/600/1,000
+     bots (plan section 12) and the stage 5 live check.
 
 ## Implemented in source; installation verification pending
 

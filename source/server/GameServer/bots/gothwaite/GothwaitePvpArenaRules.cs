@@ -226,4 +226,10 @@ public static class GothwaitePvpArenaRules
         ulong seed = unchecked((ulong)botId * 2654435761UL);
         return (int)((seed >> 9) % (ulong)AutonomousBattlegroundDriver.ScanMilliseconds);
     }
+
+    /// <summary>
+    /// The next due time of a bot's opponent scan after a scan at <paramref name="now"/>: one scan interval later (1.5 s). The driver
+    /// sets it on every scan it runs, so a bot scans at most once per interval however often its turn comes (stage 4 cadence check).
+    /// </summary>
+    public static long NextScanAfter(long now) => now + AutonomousBattlegroundDriver.ScanMilliseconds;
 }

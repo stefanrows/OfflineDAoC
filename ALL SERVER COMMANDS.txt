@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.264.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.265.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 Command reference maintained from server registrations and fork source.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -25,6 +25,7 @@ BATTLEGROUND CAMPAIGN
 /battleground contribute <count> donates a backpack token stack at a sponsored camp. Twenty tokens send a physical escort against native keep doors and the lord. A sponsored hostile captain is attackable outside the safe portal keep; defeating it interrupts contracts/funding for five gameplay minutes. Guild funding lasts thirty minutes; guildless group funding is session-local.
 /battleground lfg xp|pvp|off opts solo players into automatic grouping every thirty seconds. /LFxp [off] and /LFrvr [off] are shortcuts; XP matches stay within three levels, PvP matches within the bracket. Only opted-in players are grouped. The ordinary /bg battlegroup command is preserved.
 /bgsetup (GM) opens the open BG window like /companion: page 1 live state (on/off and readiness, phase, keep 11 owner, achieved world speed, crew per realm with name, level, class, unit and leader, players inside), page 2 the setup values. /bgsetup <key> <value> changes enabled|groups8|small|solos|max_bots|cycle_min|cycle_max|drift, writes the open_bg_* server property and refreshes it live (the roster reads it on its next tick). The open BG is the native Thidranki map (region 252) for levels 1-50 without a realm-rank limit; players enter through the porter line [open BG].
+/gothpvp (GM), also /gothpvp status, shows the Gothwaite PvP world mode: on or off, mode bots online by level band and phase (castle resting, castle ready, departing, arena), forming and departed castle groups by shape, mode bot kills and deaths per band since server start, mode bot kills by con colour (self-defence included), and the measured turn load. With the mode off it prints one line. The mode itself is switched on the launcher's Server population tab (World mode) while the server is stopped.
 
 NORMAL PLAYER COMMANDS
 ======================

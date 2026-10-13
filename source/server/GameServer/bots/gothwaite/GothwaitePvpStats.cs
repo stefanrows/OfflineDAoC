@@ -29,7 +29,20 @@ public readonly record struct GothwaitePvpConCount(ConColor Color, int Kills);
 /// (server start) to <see cref="AsOfGameTime"/>; heat looks back <see cref="HeatWindowMilliseconds"/>.
 /// </summary>
 public sealed record GothwaitePvpStatsSnapshot(long WindowStartGameTime, long AsOfGameTime, int HeatWindowMilliseconds,
-    int TotalKills, int TotalDeaths, IReadOnlyList<GothwaitePvpBandCount> Bands, IReadOnlyList<GothwaitePvpConCount> KillsByCon);
+    int TotalKills, int TotalDeaths, IReadOnlyList<GothwaitePvpBandCount> Bands, IReadOnlyList<GothwaitePvpConCount> KillsByCon)
+{
+    /// <summary>
+    /// Stage 4: the kills made by a mode bot (the killer side is a mode bot, a pet counted as its owner). Players and companions
+    /// are not bound by the con rule, so their kills are left out. <see cref="TotalKills"/> counts every player-shaped killer.
+    /// </summary>
+    public int ModeKills { get; init; }
+    /// <summary>Stage 4: the deaths of a mode bot. <see cref="TotalDeaths"/> also counts the players a mode bot killed.</summary>
+    public int ModeDeaths { get; init; }
+    /// <summary>Stage 4: per band, the mode bot kills (by the killer's band) and the mode bot deaths (by the victim's band).</summary>
+    public IReadOnlyList<GothwaitePvpBandCount> ModeBands { get; init; } = Array.Empty<GothwaitePvpBandCount>();
+    /// <summary>Stage 4: the mode bot kills by the killer's con colour of its victim (self-defence included), GREY to PURPLE.</summary>
+    public IReadOnlyList<GothwaitePvpConCount> ModeKillsByCon { get; init; } = Array.Empty<GothwaitePvpConCount>();
+}
 
 /// <summary>
 /// Mode fight statistics (docs/GOTHWAITE_PVP_MODE.md sections 6.4 and 8): kills and deaths per level band and per con
@@ -61,6 +74,12 @@ public static class GothwaitePvpStats
     private static int _ringNext;
     private static int _ringCount;
     private static long _windowStart;
+    // Stage 4: the same counts for the mode bots alone (kills by a mode bot, deaths of a mode bot), under the same lock.
+    private static readonly int[] ModeKillsByBand = new int[BandCount];
+    private static readonly int[] ModeDeathsByBand = new int[BandCount];
+    private static readonly int[] ModeKillsByColour = new int[ConColourCount];
+    private static int _modeKills;
+    private static int _modeDeaths;
 
     private readonly record struct Position(int X, int Y, long Time);
 
@@ -86,6 +105,9 @@ public static class GothwaitePvpStats
                 new GothwaitePvpFighter(victim.Name, victim.Level, KindOf(victim)),
                 killerSide != null, victim.X, victim.Y, GothwaitePvpMode.Arena.CastleDistance(victim.X, victim.Y)),
             GameLoop.GameLoopTime);
+        // Stage 4: a mode bot that killed a player-shaped target in the arena may say a line (GothwaitePvpKillChat).
+        if (killerSide is GameBot killerBot && GothwaitePvpMode.IsModeBot(killerBot))
+            GothwaitePvpKillChat.OnKill(killerBot, victim.Name);
     }
 
     /// <summary>How hot the area around a patrol point is at <paramref name="now"/>: the summed heat weight of the recent fights within <see cref="HeatRadius"/>. 0 when none.</summary>
@@ -127,10 +149,24 @@ public static class GothwaitePvpStats
                 int colour = ConIndex(killerToVictim);
                 if (colour >= 0)
                     KillsByColour[colour]++;
+                if (fight.Killer.Kind == GothwaitePvpKind.ModeBot)
+                {
+                    _modeKills++;
+                    if (killBand >= 0)
+                        ModeKillsByBand[killBand]++;
+                    if (colour >= 0)
+                        ModeKillsByColour[colour]++;
+                }
             }
             _totalDeaths++;
             if (deathBand >= 0)
                 DeathsByBand[deathBand]++;
+            if (fight.Victim.Kind == GothwaitePvpKind.ModeBot)
+            {
+                _modeDeaths++;
+                if (deathBand >= 0)
+                    ModeDeathsByBand[deathBand]++;
+            }
             Ring[_ringNext] = new Position(fight.X, fight.Y, now);
             _ringNext = (_ringNext + 1) % RingCapacity;
             if (_ringCount < RingCapacity)
@@ -145,14 +181,28 @@ public static class GothwaitePvpStats
         long now = GameLoop.GameLoopTime;
         var bands = new GothwaitePvpBandCount[BandCount];
         var colours = new GothwaitePvpConCount[ConColourCount];
+        var modeBands = new GothwaitePvpBandCount[BandCount];
+        var modeColours = new GothwaitePvpConCount[ConColourCount];
         lock (Sync)
         {
             for (int band = 0; band < BandCount; band++)
+            {
                 bands[band] = new GothwaitePvpBandCount(BandLabels[band], KillsByBand[band], DeathsByBand[band]);
+                modeBands[band] = new GothwaitePvpBandCount(BandLabels[band], ModeKillsByBand[band], ModeDeathsByBand[band]);
+            }
             for (int colour = 0; colour < ConColourCount; colour++)
+            {
                 colours[colour] = new GothwaitePvpConCount((ConColor)(colour + (int)ConColor.GREY), KillsByColour[colour]);
+                modeColours[colour] = new GothwaitePvpConCount((ConColor)(colour + (int)ConColor.GREY), ModeKillsByColour[colour]);
+            }
             return new GothwaitePvpStatsSnapshot(_windowStart, now, HeatWindowMilliseconds, _totalKills, _totalDeaths,
-                bands, colours);
+                bands, colours)
+            {
+                ModeKills = _modeKills,
+                ModeDeaths = _modeDeaths,
+                ModeBands = modeBands,
+                ModeKillsByCon = modeColours,
+            };
         }
     }
 
@@ -164,9 +214,14 @@ public static class GothwaitePvpStats
             Array.Clear(KillsByBand);
             Array.Clear(DeathsByBand);
             Array.Clear(KillsByColour);
+            Array.Clear(ModeKillsByBand);
+            Array.Clear(ModeDeathsByBand);
+            Array.Clear(ModeKillsByColour);
             Array.Clear(Ring);
             _totalKills = 0;
             _totalDeaths = 0;
+            _modeKills = 0;
+            _modeDeaths = 0;
             _ringNext = 0;
             _ringCount = 0;
             _windowStart = GameLoop.GameLoopTime;

@@ -59,4 +59,18 @@ public static class GothwaitePvpLines
 
     /// <summary>A map position as the log writes it: x,y,z, or none for a goal that does not exist.</summary>
     public static string Spot(Point3D point) => point == null ? "none" : $"{point.X},{point.Y},{point.Z}";
+
+    /// <summary>
+    /// The GOTH_PVP_LOAD line of one finished minute (stage 4): the turns, the scans and the former ticks with their average, the turn
+    /// p95 (an upper bound) and the maxima, and the mode bots online. Written once per window while the mode is on.
+    /// </summary>
+    public static string Load(GothwaitePvpLoadSnapshot load, int onlineBots) =>
+        $"GOTH_PVP_LOAD windowS={Number(load.WindowSeconds, "0")} bots={onlineBots} turns={load.Turns} " +
+        $"turnAvgMs={Number(load.TurnAverageMilliseconds, "0.000")} turnP95MsAtMost={Number(load.TurnP95Milliseconds, "0.00")} " +
+        $"turnMaxMs={Number(load.TurnMaxMilliseconds, "0.00")} scans={load.Scans} scanAvgMs={Number(load.ScanAverageMilliseconds, "0.000")} " +
+        $"formers={load.Formers} formerAvgMs={Number(load.FormerAverageMilliseconds, "0.00")} " +
+        $"formerMaxMs={Number(load.FormerMaxMilliseconds, "0.00")}";
+
+    /// <summary>A number with a fixed format in the invariant culture, so a German server writes the same decimal point as an English one.</summary>
+    public static string Number(double value, string format) => value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
 }
