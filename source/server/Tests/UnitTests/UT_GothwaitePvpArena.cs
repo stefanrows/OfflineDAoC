@@ -187,7 +187,7 @@ public class UT_GothwaitePvpArena
         IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(25, GothwaitePvpMode.Settings);
         var random = new Random(5);
         for (int i = 0; i < Draws; i++)
-            Assert.That(Pick(points, null, 25, random, usable: point => point.Name != "GP01")?.Name, Is.Not.EqualTo("GP01"));
+            Assert.That(Pick(points, null, 25, random, usable: point => point.Name != "GP03")?.Name, Is.Not.EqualTo("GP03"));
     }
 
     [Test]
@@ -471,7 +471,7 @@ public class UT_GothwaitePvpArena
     {
         TurnOn();
         IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(25, GothwaitePvpMode.Settings);
-        GothwaitePvpSpot here = PatrolPointNamed("GP01");
+        GothwaitePvpSpot here = PatrolPointNamed("GP03");
 
         GothwaitePvpSpot? nearest = GothwaitePvpArenaRules.NearestPoint(Arena, 30_000, points, here.X, here.Y, _ => true);
         GothwaitePvpSpot? skipped = GothwaitePvpArenaRules.NearestPoint(Arena, 30_000, points, here.X, here.Y, point => point != here);
@@ -480,6 +480,149 @@ public class UT_GothwaitePvpArena
         {
             Assert.That(nearest, Is.EqualTo(here), "the point at the bot's feet");
             Assert.That(skipped.HasValue && skipped.Value != here, Is.True, "the refused point is skipped for another");
+        });
+    }
+
+    [Test]
+    public void TheRoamFloorKeepsPatrolGoalsOutOfTheGateRingBuffer()
+    {
+        TurnOn();
+        GothwaitePvpSettings settings = GothwaitePvpMode.Settings;
+        int floor = Arena.MinimumRoamDistance(settings.GateRing);
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(25, settings);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(floor, Is.EqualTo(4_000 + 1_500 + 500), "the ring's outer edge plus the margin");
+            Assert.That(points.Select(point => point.Name), Does.Not.Contain("GP01"), "GP01 (4,564) lies inside the ring buffer");
+            Assert.That(points.Select(point => point.Name), Does.Contain("GP03"), "GP03 (6,971) lies beyond it");
+            Assert.That(points.All(point => Arena.CastleDistance(point.X, point.Y) > floor), Is.True, "every goal is beyond the floor");
+            Assert.That(Arena.PatrolPoints.Select(point => point.Name), Does.Contain("GP01"), "the point stays in the data");
+        });
+    }
+
+    [Test]
+    public void WithoutAGateRingOnlyTheMarginBeyondTheCastleKeepsGoalsOut()
+    {
+        GothwaitePvpSettings settings = GothwaitePvpSettings.Defaults with { Enabled = true, GateRing = 0 };
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(25, settings);
+
+        Assert.That(points.Select(point => point.Name), Does.Contain("GP01"), "4,564 is beyond 4,500, the castle edge plus the margin");
+    }
+
+    [Test]
+    public void TheGateRingIsTheCastleCircleWidenedByTheRingSetting()
+    {
+        const ushort region = 51;
+        int castleX = Arena.CastleX, castleY = Arena.CastleY;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Arena.InGateRing(region, castleX + 5_499, castleY, 1_500), Is.True, "just inside 4,000 + 1,500");
+            Assert.That(Arena.InGateRing(region, castleX + 5_501, castleY, 1_500), Is.False, "just beyond it");
+            Assert.That(Arena.InGateRing(1, castleX, castleY, 1_500), Is.False, "another region is never in this ring");
+            Assert.That(Arena.InGateRing(region, castleX + 3_999, castleY, 0), Is.True, "with no ring it is the castle circle");
+            Assert.That(Arena.InGateRing(region, castleX + 4_001, castleY, 0), Is.False, "just outside the circle with no ring");
+        });
+    }
+
+    [Test]
+    public void AnOpeningIsRefusedWhileEitherSideStandsInsideTheRing()
+    {
+        const ushort region = 51;
+        const int ring = 1_500;
+        int castleX = Arena.CastleX, castleY = Arena.CastleY;
+        int inside = Arena.SafeRadius + ring - 1_000, beyond = Arena.SafeRadius + ring + 1_000;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpTargetRules.RingAllowsOpening(Arena, ring, region, castleX + inside, castleY, region, castleX + beyond, castleY),
+                Is.False, "the bot stands inside the ring");
+            Assert.That(GothwaitePvpTargetRules.RingAllowsOpening(Arena, ring, region, castleX + beyond, castleY, region, castleX + inside, castleY),
+                Is.False, "the target stands inside the ring");
+            Assert.That(GothwaitePvpTargetRules.RingAllowsOpening(Arena, ring, region, castleX + inside, castleY, region, castleX + inside, castleY),
+                Is.False, "both stand inside the ring");
+            Assert.That(GothwaitePvpTargetRules.RingAllowsOpening(Arena, ring, region, castleX + beyond, castleY, region, castleX + beyond, castleY),
+                Is.True, "both stand beyond the ring");
+        });
+    }
+
+    [Test]
+    public void TheFirstPickAfterTheGateIgnoresHeatAndSpreadsOverEveryAllowedPoint()
+    {
+        TurnOn();
+        GothwaitePvpSpot hot = PatrolPointNamed("GP03");
+        var points = new[] { hot, PatrolPointNamed("GP05"), PatrolPointNamed("GP06"), PatrolPointNamed("GP12") };
+        Func<GothwaitePvpSpot, double> firstWeight = point => GothwaitePvpArenaRules.RoamWeight(true, point == hot ? 50 : 0, 0);
+        var random = new Random(17);
+        var counts = new Dictionary<string, int>();
+        for (int i = 0; i < Draws; i++)
+        {
+            string name = Pick(points, null, 25, random, firstWeight)!.Value.Name;
+            counts[name] = counts.GetValueOrDefault(name) + 1;
+        }
+
+        Assert.Multiple(() =>
+        {
+            foreach (GothwaitePvpSpot point in points)
+                Assert.That(counts.GetValueOrDefault(point.Name) / (double)Draws, Is.EqualTo(0.25).Within(0.02), $"{point.Name} gets its even share");
+        });
+    }
+
+    [Test]
+    public void ALaterPickStillFavoursHeat()
+    {
+        TurnOn();
+        GothwaitePvpSpot hot = PatrolPointNamed("GP03");
+        var points = new[] { hot, PatrolPointNamed("GP05") };
+        Func<GothwaitePvpSpot, double> laterWeight = point => GothwaitePvpArenaRules.RoamWeight(false, point == hot ? 5 : 0, 0);
+        var random = new Random(23);
+        int hotPicks = 0;
+        for (int i = 0; i < Draws; i++)
+            if (Pick(points, null, 25, random, laterWeight) == hot)
+                hotPicks++;
+
+        Assert.That(hotPicks / (double)Draws, Is.EqualTo(6.0 / 7.0).Within(0.02), "heat 5 still weighs six times a cold point after the first pick");
+    }
+
+    [Test]
+    public void TheScanIsRefusedInsideTheGateRing()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: false, outsideOwnEdge: false, isLeader: true,
+                leaderHasLegalTarget: false, inGateRing: true), Is.False, "a leader inside the ring opens nothing");
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: false, outsideOwnEdge: false, isLeader: false,
+                leaderHasLegalTarget: false, inGateRing: true), Is.False, "a follower inside the ring opens nothing");
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: false, outsideOwnEdge: false, isLeader: true,
+                leaderHasLegalTarget: false, inGateRing: false), Is.True, "outside the ring the scan goes on");
+        });
+    }
+
+    [Test]
+    public void AFightOpenedOutsideTheRingIsDroppedInsideItUnlessTheTargetAttacked()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.GateRingReason(targetInRing: true, botInRing: false, targetAttackedUs: false), Is.EqualTo("ring"),
+                "the target walked into the ring");
+            Assert.That(GothwaitePvpArenaRules.GateRingReason(targetInRing: false, botInRing: true, targetAttackedUs: false), Is.EqualTo("ring"),
+                "the bot itself is in the ring");
+            Assert.That(GothwaitePvpArenaRules.GateRingReason(targetInRing: true, botInRing: true, targetAttackedUs: true), Is.Null,
+                "a target that attacked the bot is fought back (self-defence)");
+            Assert.That(GothwaitePvpArenaRules.GateRingReason(targetInRing: false, botInRing: false, targetAttackedUs: false), Is.Null,
+                "nobody is in the ring");
+        });
+    }
+
+    [Test]
+    public void AGroupHasPassedTheGateWhenItsLeaderIsAtTheExitOrOutsideTheRing()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.GateWalkDone(arrivedAtExit: true, outsideGateRing: false), Is.True, "at the exit");
+            Assert.That(GothwaitePvpArenaRules.GateWalkDone(arrivedAtExit: false, outsideGateRing: true), Is.True, "already out on the way");
+            Assert.That(GothwaitePvpArenaRules.GateWalkDone(arrivedAtExit: false, outsideGateRing: false), Is.False, "still walking inside the ring");
         });
     }
 

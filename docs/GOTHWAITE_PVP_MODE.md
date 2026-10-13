@@ -286,6 +286,7 @@ shown in the launcher.
 | `groupShares` | solo 15, duo 15, small 35, eight 35 | Group shape mix (%). |
 | `levelBand` | `5` | ± levels inside one group. |
 | `restPercent` | `80` | Rest level before leaving the castle. |
+| `gateRing` | `1500` | No-fight ring outside the safe circle (0.266.0): no openings within `safeRadius + gateRing`; self-defence allowed. |
 
 Launcher: a **World mode** selector (Normal / Gothwaite PvP), editable only
 while the server is stopped. It is separate from the population preset and
@@ -540,3 +541,25 @@ Findings that shaped the design:
 4. CPU estimate: bots × 1.33 turns/s × turnAvgMs. Turn p95 must stay far
    below the 750 ms think interval.
 5. Repeat at 600 and 1,000 bots, then choose a recommended cap.
+
+### First live run fixes (0.266.0)
+
+Owner's run, 300 fresh level-1 bots: all 71 kills were 4,000–4,300 units from
+the centre (at the north gate); 83 groups departed, 10 reached the gate point,
+50 dissolved (31 leader lost). Some bots logged in at Camelot (an off-floor
+spread landing failed the login check) and some routes from the courtyard to
+the gate were dead ends. Load was 0.09 ms per bot turn at 138 bots.
+
+- No-fight ring: `MayOpen` refuses when the bot or the target is within
+  `safeRadius + gateRing` (5,500); the scan does not run there; an opened fight
+  that drifts into the ring ends (attackers are still fought back). Patrol
+  goals must lie beyond the ring + 500 (6,000), so GP01 is no longer a goal.
+- The gate is a waypoint: a leader roams as soon as it reaches the gate or
+  leaves the ring. Its first pick is uniform over the allowed points; later
+  picks use heat.
+- Departure gate (`GothwaitePvpDepartureGate`): one group or solo leaves per
+  4 s, earliest due first.
+- Castle landings: 16 courtyard spots CL01–CL16 (sampled on a 60-unit grid,
+  232 of 239 candidates passed), each snapped tight on the plateau and routed
+  to the gate and to CL01 by the explicit probe; a bot gets one by id with at
+  most 15 units of spread.

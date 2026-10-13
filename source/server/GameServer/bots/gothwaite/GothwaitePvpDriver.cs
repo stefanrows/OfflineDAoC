@@ -12,8 +12,9 @@ public enum GothwaitePvpPhase { Castle, Departing, Arena }
 
 /// <summary>
 /// The Gothwaite PvP mode driver (docs/GOTHWAITE_PVP_MODE.md section 6). A mode bot rests in the castle to the rest level,
-/// holds a short buff window, and offers itself to the castle group former. A group walks out to the castle exit. In the
-/// arena the leader (or a solo) roams the patrol points with a dwell at each, every bot scans for legal openings every
+/// holds a short buff window, and offers itself to the castle group former. A group walks out to the castle exit, which is
+/// only a waypoint: the leader roams on once it is out of the gate. No bot opens a fight inside the no-fight ring (section 6.2).
+/// In the arena the leader (or a solo) roams the patrol points with a dwell at each, every bot scans for legal openings every
 /// 1.5 s and drops a fight that breaks the castle or edge rules, a bot keeps inside its edge, and a bot goes home when it is
 /// low, its group is gone, or it stalls. <see cref="Turn"/> returns true on every turn that lets the class routine run
 /// (heals, buffs, the native FSM), except for a dead or crowd-controlled bot.
@@ -67,6 +68,8 @@ public static class GothwaitePvpDriver
         public double ProgressY;
         public long ProgressAt;
         public bool EdgeLogged;
+        // The next patrol pick is the first after the group arrived outside the gate: it ignores heat (section 6.4, live-run fix 2026-10-13).
+        public bool FirstPick;
         public HashSet<int> ChaseLogged;
         // The scan's acceptance test, built once for this bot (see AcceptFor).
         public Func<GameLiving, bool> Accept;
@@ -226,7 +229,9 @@ public static class GothwaitePvpDriver
         if (membership == null && !GothwaitePvpCastleRules.RestDone(bot.HealthPercent, bot.ManaPercent, bot.MaxMana > 0,
                 GothwaitePvpMode.Settings.RestPercent))
         {
-            // Back in the castle hurt (e.g. after a walk home from a dissolved group): rest again before the next offer.
+            // Back in the castle hurt (e.g. after a walk home from a dissolved group): rest again before the next offer. A bot that waits
+            // in the pool (a solo in particular) leaves it now, so the departure stagger never releases it hurt.
+            GothwaitePvpGroupFormer.Withdraw(bot);
             state.Step = CastleStep.Resting;
             state.Resting = false;
             return true;
@@ -362,21 +367,23 @@ public static class GothwaitePvpDriver
     }
 
     /// <summary>
-    /// The leader (or a solo) that has not reached the castle exit walks there and holds until the group is out. The exit's
-    /// stall window sends it home at once, since it has no other goal.
+    /// The leader (or a solo) that has not reached the castle exit walks there. The exit is a waypoint, not a post (section 6.4, live-run fix 2026-10-13):
+    /// once the leader is within the arrival distance of it, or already outside the no-fight ring on its way, the group has arrived and the
+    /// leader roams from this turn. The exit's stall window sends it home at once, since it has no other goal.
     /// </summary>
     private static bool WalkToExit(BotBrain brain, GameBot bot, State state, GothwaitePvpGroupFormer.Membership membership, bool engaged, long now)
     {
         Point3D exit = ExitPoint();
         SetGoal(state, exit);
-        if (GothwaitePvpNavigation.Arrived(bot, exit, state.Route))
+        if (GothwaitePvpArenaRules.GateWalkDone(GothwaitePvpNavigation.Arrived(bot, exit, state.Route), OutsideGateRing(bot)))
         {
             GothwaitePvpGroupFormer.MarkArrived(bot);
             state.Goal = null;
+            state.Spot = null;
             state.StuckFailures = 0;
-            if (!engaged)
-                GothwaitePvpNavigation.Stand(bot);
-            return true;
+            state.FirstPick = true;
+            ResetProgress(state);
+            return Roam(brain, bot, state, membership, engaged, now);
         }
         if (engaged)
         {
@@ -516,7 +523,9 @@ public static class GothwaitePvpDriver
         if (now < state.NextScan)
             return false;
         bool leaderHasLegalTarget = !membership.IsLeader && MayAttack(bot, membership.Leader?.TargetObject as GameLiving);
-        if (!GothwaitePvpArenaRules.MayScan(true, state.Returning, OutsideEdge(bot, EdgeOf(bot)), membership.IsLeader, leaderHasLegalTarget))
+        // Inside the no-fight ring no scan runs at all (section 6.2): a bot there opens nothing.
+        if (!GothwaitePvpArenaRules.MayScan(true, state.Returning, OutsideEdge(bot, EdgeOf(bot)), membership.IsLeader, leaderHasLegalTarget,
+                GothwaitePvpTargetRules.InGateRing(bot)))
             return false;
         state.NextScan = GothwaitePvpArenaRules.NextScanAfter(now);
         GameLiving opponent;
@@ -590,6 +599,7 @@ public static class GothwaitePvpDriver
         state.DwellUntil = 0;
         state.StuckFailures = 0;
         state.EdgeLogged = false;
+        state.FirstPick = false;
         ResetProgress(state);
     }
 
@@ -620,6 +630,7 @@ public static class GothwaitePvpDriver
         GothwaitePvpArena arena = GothwaitePvpMode.Arena;
         int edge = EdgeOf(bot);
         double botDistance = bot.CurrentRegionID == arena.RegionId ? arena.CastleDistance(bot.X, bot.Y) : double.PositiveInfinity;
+        bool botInRing = GothwaitePvpTargetRules.InGateRing(bot);
         foreach (GameLiving target in FightTargets(bot))
         {
             bool inArena = target.CurrentRegionID == arena.RegionId;
@@ -628,6 +639,10 @@ public static class GothwaitePvpDriver
                 inArena ? arena.CastleDistance(target.X, target.Y) : double.PositiveInfinity,
                 botDistance,
                 edge);
+            // The no-fight ring (section 6.2): a fight opened outside it does not go on inside it. An attacker is fought back (self-defence).
+            bool targetInRing = GothwaitePvpTargetRules.InGateRing(target);
+            if (reason == null && (targetInRing || botInRing))
+                reason = GothwaitePvpArenaRules.GateRingReason(targetInRing, botInRing, GothwaitePvpSelfDefence.AttackedUs(bot, target));
             if (reason == null)
                 continue;
             LogChaseOnce(bot, state, target, reason);
@@ -697,18 +712,21 @@ public static class GothwaitePvpDriver
     }
 
     // A leader or solo picks its next patrol point: weighted by heat and a little by distance, never the point it has just left,
-    // never a point refused for five minutes, and never outside its goal edge. False when none is left.
+    // never a point refused for five minutes, and never outside its goal edge. The first pick after the gate ignores heat and
+    // distance, so the groups spread (section 6.4, live-run fix 2026-10-13). False when none is left.
     private static bool PickPatrol(GameBot bot, State state, int edge, long now)
     {
         GothwaitePvpArena arena = GothwaitePvpMode.Arena;
+        bool firstPick = state.FirstPick;
         GothwaitePvpSpot? chosen = GothwaitePvpArenaRules.ChoosePatrolPoint(arena, GothwaitePvpArenaRules.GoalEdge(edge), PatrolPoints(bot),
             state.Spot,
             point => !GothwaitePvpNavigation.IsUnreachable(state.Route, PointOf(point), now),
-            point => GothwaitePvpArenaRules.PatrolWeight(GothwaitePvpStats.Heat(point, now),
+            point => GothwaitePvpArenaRules.RoamWeight(firstPick, firstPick ? 0 : GothwaitePvpStats.Heat(point, now),
                 GothwaitePvpArenaRules.Distance2D(bot.X, bot.Y, point.X, point.Y)),
             state.Random);
         if (chosen is not { } spot)
             return false;
+        state.FirstPick = false;
         SetSpot(state, spot);
         return true;
     }
@@ -843,6 +861,10 @@ public static class GothwaitePvpDriver
     // In the arena's region and outside the castle circle.
     private static bool InArena(GameBot bot) =>
         bot.CurrentRegionID == GothwaitePvpMode.Arena.RegionId && !InCastle(bot);
+
+    // In the arena's region and outside the no-fight ring: the walk out of the castle has passed the gate.
+    private static bool OutsideGateRing(GameBot bot) =>
+        bot.CurrentRegionID == GothwaitePvpMode.Arena.RegionId && !GothwaitePvpTargetRules.InGateRing(bot);
 
     private static bool InCastle(GameBot bot) => GothwaitePvpMode.Arena.InCastle(bot.CurrentRegionID, bot.X, bot.Y);
 

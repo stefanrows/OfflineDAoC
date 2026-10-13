@@ -11,8 +11,9 @@ namespace DOL.GS;
 /// world group coordinator, which the mode suppresses. A ready castle bot draws a shape and waits in the pool. A non-solo
 /// bot leads a new open group, or joins one within the leader's level band (same guild, then an allied guild, then
 /// strangers, with a healer before a second non-healer). The real <see cref="Group"/> exists once a second bot is in.
-/// A group leaves when it is full, or at its wait limit with its minimum; a smaller group disbands and its ready members
-/// return to the pool. A departing group walks to the castle exit (the driver does the walking).
+/// A group is due to leave when it is full, or at its wait limit with its minimum; a smaller group disbands and its ready members
+/// return to the pool. Departures are staggered: one due group or solo leaves per interval (<see cref="GothwaitePvpDepartureGate"/>),
+/// the others wait in the castle and keep their place. A departing group walks to the castle exit (the driver does the walking).
 /// All state sits behind one lock. <see cref="TickIfDue"/> runs at most once per <see cref="TickMilliseconds"/>, from any
 /// mode bot's turn, and an error in it is logged, never thrown into the bot's turn.
 /// </summary>
@@ -30,6 +31,8 @@ public static class GothwaitePvpGroupFormer
     private static long _nextNumber;
     private static readonly Dictionary<GameBot, Entry> Entries = new();
     private static readonly List<Record> Records = new();
+    // The departure stagger (docs/GOTHWAITE_PVP_MODE.md section 6.3): one departing group or solo per interval, across the former.
+    private static readonly GothwaitePvpDepartureGate Departures = new();
     // Why a bot's group ended while it was not leaving it (read once by the bot's driver with TakeEndReason).
     private static readonly Dictionary<GameBot, string> EndReasons = new();
 
@@ -69,6 +72,8 @@ public static class GothwaitePvpGroupFormer
         public long DepartedAt { get; set; }
         public bool Departing { get; set; }
         public bool Arrived { get; set; }
+        /// <summary>The tick the group became due to leave (full, or past its wait with its minimum); null while it is not due. Keeps its place in the queue.</summary>
+        public long? DueSince { get; set; }
         public Group Real { get; set; }
         public readonly List<Entry> Members = new();
     }
@@ -102,6 +107,7 @@ public static class GothwaitePvpGroupFormer
                     Prune(now);
                     Match(now);
                     DecideRecords(now);
+                    ReleaseDeparture(now);
                 }
                 catch (Exception exception)
                 {
@@ -112,8 +118,9 @@ public static class GothwaitePvpGroupFormer
     }
 
     /// <summary>
-    /// A ready castle bot offers itself with the shape it drew for this ready cycle. A solo departs at once. A bot already
-    /// in the former only becomes ready again. Called every ready turn, so it is idempotent.
+    /// A ready castle bot offers itself with the shape it drew for this ready cycle. A solo waits in the pool with the others; the departure
+    /// stagger releases it (one departure per interval). A bot already in the former only becomes ready again. Called every ready turn, so
+    /// it is idempotent.
     /// </summary>
     public static void Offer(GameBot bot, GothwaitePvpShape shape, int cycle, long now)
     {
@@ -126,24 +133,7 @@ public static class GothwaitePvpGroupFormer
                 existing.Ready = true;
                 return;
             }
-            var entry = new Entry(bot, shape, cycle, now);
-            Entries[bot] = entry;
-            if (shape != GothwaitePvpShape.Solo)
-                return;
-            var solo = new Record
-            {
-                Id = GothwaitePvpLines.SoloId,
-                Shape = shape,
-                Target = 1,
-                Minimum = 1,
-                Leader = bot,
-                ExpiresAt = now,
-                DepartedAt = now,
-                Departing = true,
-            };
-            AttachMember(solo, entry);
-            Records.Add(solo);
-            LogDeparture(solo);
+            Entries[bot] = new Entry(bot, shape, cycle, now);
         }
     }
 
@@ -394,7 +384,8 @@ public static class GothwaitePvpGroupFormer
         }
     }
 
-    // Every open group decides on this tick: full leaves, its wait limit decides with its minimum.
+    // Every open group decides on this tick: a full group, or one past its wait with its minimum, is due to leave (it keeps the tick it
+    // became due); a smaller group past its wait disbands. Nothing leaves here: ReleaseDeparture lets one due departure go per interval.
     private static void DecideRecords(long now)
     {
         foreach (Record record in Records.Where(record => !record.Departing).ToArray())
@@ -406,13 +397,59 @@ public static class GothwaitePvpGroupFormer
             switch (GothwaitePvpCastleRules.Decide(now, record.ExpiresAt, ready, record.Target, record.Minimum))
             {
                 case GothwaitePvpFormationStep.Depart:
-                    Depart(record, now);
+                    record.DueSince ??= now;
                     break;
                 case GothwaitePvpFormationStep.Disband:
                     Disband(record, now, ready);
                     break;
+                default:
+                    record.DueSince = null;
+                    break;
             }
         }
+    }
+
+    // The departure stagger (section 6.3, live-run fix 2026-10-13): at most one departing group or solo per interval, globally. The earliest due one leaves;
+    // the others stay ready in the castle and keep their place. A solo is due from the tick it became ready.
+    private static void ReleaseDeparture(long now)
+    {
+        if (!Departures.CanRelease(now))
+            return;
+        Record[] groups = Records.Where(record => !record.Departing && record.DueSince != null).ToArray();
+        Entry[] solos = PoolEntries().Where(entry => entry.Shape == GothwaitePvpShape.Solo && IsEligible(entry.Bot)).ToArray();
+        if (groups.Length + solos.Length == 0)
+            return;
+        var queue = new GothwaitePvpDeparture[groups.Length + solos.Length];
+        for (int index = 0; index < groups.Length; index++)
+            queue[index] = new GothwaitePvpDeparture(groups[index].DueSince.Value, Solo: false, BotIdOf(groups[index].Leader));
+        for (int index = 0; index < solos.Length; index++)
+            queue[groups.Length + index] = new GothwaitePvpDeparture(solos[index].ReadyTick, Solo: true, BotIdOf(solos[index].Bot));
+        int chosen = Departures.Release(now, queue);
+        if (chosen < 0)
+            return;
+        if (chosen < groups.Length)
+            Depart(groups[chosen], now);
+        else
+            DepartSolo(solos[chosen - groups.Length], now);
+    }
+
+    // A released solo departs alone: its own one-member record, logged like a group's departure.
+    private static void DepartSolo(Entry entry, long now)
+    {
+        var solo = new Record
+        {
+            Id = GothwaitePvpLines.SoloId,
+            Shape = GothwaitePvpShape.Solo,
+            Target = 1,
+            Minimum = 1,
+            Leader = entry.Bot,
+            ExpiresAt = now,
+            DepartedAt = now,
+            Departing = true,
+        };
+        AttachMember(solo, entry);
+        Records.Add(solo);
+        LogDeparture(solo);
     }
 
     private static void Depart(Record record, long now)
@@ -516,7 +553,8 @@ public static class GothwaitePvpGroupFormer
     // Fills an open group from the pool snapshot of this tick, one best-ranked candidate at a time.
     private static void FillFromPool(Record record, int levelBand, List<Entry> pool)
     {
-        if (record.Departing || record.Members.Count >= record.Target || record.Leader == null)
+        // A due group (full, or past its wait) takes no more members: it keeps its place in the departure queue.
+        if (record.Departing || record.DueSince != null || record.Members.Count >= record.Target || record.Leader == null)
             return;
         var byId = new Dictionary<long, Entry>();
         var candidates = new List<GothwaitePvpCandidate>();

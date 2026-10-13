@@ -19,6 +19,9 @@ namespace DOL.UnitTests;
 /// chained exactly as AutonomousBattlegroundDriver.PathExists does (QueryLeg legs, MaxRouteLegs, blocking-door
 /// filters first). The landings and the castle exit are required; candidates only report, and a failing candidate
 /// gets a GOTH_NUDGE search of +-300..800 units for hand-applied moves.
+/// The castle landings (live-run fix, 2026-10-13) are sampled on a 60-unit grid around the bindstones and every
+/// CastleLanding must pass: tight snap on the plateau, 300 units inside the castle circle, a route to the exit and to
+/// LANDING1. The same check covers CastleLanding(botId) for bot ids 1..64, which carry the 15-unit login spread.
 /// </summary>
 [Explicit("Read-only installed Gothwaite arena probe"), NonParallelizable]
 public class UT_GothwaitePvpArenaInstalledNavigation
@@ -32,6 +35,15 @@ public class UT_GothwaitePvpArenaInstalledNavigation
     private static readonly Vector3 Landing1 = new(535000, 548790, 4800);
     private static readonly Vector3 Landing2 = new(535158, 548589, 4800);
     private static readonly Vector3 CastleExit = new(535020, 544020, 4800);
+    // Castle landings (live-run fix 2026-10-13): the plateau height the bindstone landings stand on, the floor tolerance, the margin inside the castle circle,
+    // the grid spacing and sample radius around the bindstones, and how many landings the arena may use.
+    private const double PlateauZ = 4800;
+    private const double PlateauTolerance = 40;
+    private const double LandingMarginInside = 300;
+    private const double LandingSpacing = 60;
+    private const double LandingSampleRadius = 450;
+    private const int LandingMinimumCount = 12;
+    private const int LandingMaximumCount = 16;
 
     // name, x, y, z (estimate, replaced by the snapped floor), and whether the arena audit allowed the low band.
     private static readonly (string Name, int X, int Y, int Z, bool LowBandOk)[] Candidates =
@@ -151,6 +163,57 @@ public class UT_GothwaitePvpArenaInstalledNavigation
             }
             TestContext.WriteLine($"GOTH_NAV_ARENA points={arenaProbes} failed={arenaFailures}");
 
+            // Castle landings (live-run fix 2026-10-13): a 60-unit grid around the two bindstone landings, each candidate proved on the mesh. The spread picks
+            // are copied into GothwaitePvpArena.Gothwaite.CastleLandings; the arena's own landings are asserted below.
+            List<LandingSample> samples = SampleLandings(nav, region, landingZone, origin, exit.Snapped, queryLeg, nodes);
+            foreach (LandingSample sample in samples)
+                TestContext.WriteLine($"GOTH_NAV_LANDING_SAMPLE name={sample.Name} raw={F0(sample.Raw.X)},{F0(sample.Raw.Y)} snapped={Coords(sample.Snapped)} verdict={sample.Verdict}");
+            List<LandingSample> passing = samples.Where(sample => sample.Verdict == "pass").ToList();
+            TestContext.WriteLine($"GOTH_NAV_LANDING_SUMMARY candidates={samples.Count} passing={passing.Count}");
+            List<LandingSample> picks = PickSpread(passing, LandingMaximumCount, LandingSpacing);
+            for (int index = 0; index < picks.Count; index++)
+            {
+                Vector3 pick = picks[index].Snapped!.Value;
+                TestContext.WriteLine($"GOTH_NAV_LANDING_PICK n={index + 1} name={picks[index].Name} x={Rounded(pick.X)} y={Rounded(pick.Y)} z={Rounded(pick.Z)}");
+            }
+            if (passing.Count < LandingMinimumCount)
+                failures.Add($"only {passing.Count} castle landing candidates pass; {LandingMinimumCount} are needed");
+
+            // The landings the arena uses: each snaps tight on the plateau, is inside the castle circle with the margin, and routes to the exit and LANDING1.
+            var landingSpots = new List<(GothwaitePvpSpot Spot, Vector3 Snapped)>();
+            foreach (GothwaitePvpSpot landing in arena.CastleLandings)
+            {
+                var raw = new Vector3(landing.X, landing.Y, landing.Z);
+                (string verdict, Vector3? snapped) = LandingVerdict(nav, region, landingZone, origin, exit.Snapped, queryLeg, nodes, raw);
+                TestContext.WriteLine($"GOTH_NAV_CASTLE_LANDING name={landing.Name} x={landing.X} y={landing.Y} z={landing.Z} snapped={Coords(snapped)} verdict={verdict}");
+                if (verdict != "pass")
+                    failures.Add($"{landing.Name} castle landing: {verdict}");
+                if (snapped is { } point)
+                    landingSpots.Add((landing, point));
+            }
+            for (int first = 0; first < landingSpots.Count; first++)
+                for (int second = first + 1; second < landingSpots.Count; second++)
+                {
+                    double gap = Distance2D(landingSpots[first].Snapped, landingSpots[second].Snapped);
+                    if (gap < LandingSpacing)
+                        failures.Add($"{landingSpots[first].Spot.Name} and {landingSpots[second].Spot.Name} are {F0(gap)} apart; {LandingSpacing} is needed");
+                }
+            // The points the bots really log in and release at: CastleLanding(botId), with its spread of up to 15 units, must snap tight too.
+            int spreadFailures = 0;
+            for (long botId = 1; botId <= 64; botId++)
+            {
+                GothwaitePvpSpot spot = arena.CastleLanding(botId);
+                var raw = new Vector3(spot.X, spot.Y, spot.Z);
+                (string verdict, _) = LandingVerdict(nav, region, landingZone, origin, exit.Snapped, queryLeg, nodes, raw);
+                if (verdict == "pass")
+                    continue;
+                spreadFailures++;
+                failures.Add($"CastleLanding({botId}) at {spot.X},{spot.Y},{spot.Z}: {verdict}");
+            }
+            TestContext.WriteLine($"GOTH_NAV_CASTLE_LANDING_SPREAD bots=64 failed={spreadFailures}");
+            if (arena.CastleLandings.Count < LandingMinimumCount || arena.CastleLandings.Count > LandingMaximumCount)
+                failures.Add($"{arena.CastleLandings.Count} castle landings; {LandingMinimumCount}-{LandingMaximumCount} are expected");
+
             int within = candidates.Count(p => p.Ok && p.Distance > SpreadFloor && p.Distance <= LowBandLimit);
             int between = candidates.Count(p => p.Ok && p.Distance > LowBandLimit && p.Distance <= ArenaLimit);
             TestContext.WriteLine($"GOTH_NAV_SUMMARY candidates={candidates.Count} routeOkWithin20000={within} routeOkBetween20000And30000={between}");
@@ -262,6 +325,87 @@ public class UT_GothwaitePvpArenaInstalledNavigation
         }
         return null;
     }
+
+    // One castle landing candidate: its name, the grid point, the tight floor (null when none) and the first failed check ("pass" when none).
+    private sealed record LandingSample(string Name, Vector3 Raw, Vector3? Snapped, string Verdict);
+
+    // The 60-unit grid is anchored at LANDING1: i runs -8..11 and j runs -11..8, which covers both 450-unit discs around the two bindstone landings.
+    private static List<LandingSample> SampleLandings(IPathfindingMgr nav, Region region, Zone landingZone, Vector3? origin,
+        Vector3? exit, MethodInfo queryLeg, WrappedPathfindingNode[] nodes)
+    {
+        var samples = new List<LandingSample>();
+        for (int i = -8; i <= 11; i++)
+            for (int j = -11; j <= 8; j++)
+            {
+                var raw = new Vector3((float)(Landing1.X + i * LandingSpacing), (float)(Landing1.Y + j * LandingSpacing), (float)PlateauZ);
+                if (Distance2D(raw, Landing1) > LandingSampleRadius && Distance2D(raw, Landing2) > LandingSampleRadius)
+                    continue;
+                (string verdict, Vector3? snapped) = LandingVerdict(nav, region, landingZone, origin, exit, queryLeg, nodes, raw);
+                samples.Add(new LandingSample($"S{samples.Count + 1:000}", raw, snapped, verdict));
+            }
+        return samples;
+    }
+
+    // A castle landing passes when its floor snaps tight at the plateau height, it stands inside the castle circle with the margin, and a chained
+    // route (blocking doors first, as the driver walks) runs from it to the castle exit and to LANDING1. The first failed check names the verdict.
+    private static (string Verdict, Vector3? Snapped) LandingVerdict(IPathfindingMgr nav, Region region, Zone landingZone, Vector3? origin,
+        Vector3? exit, MethodInfo queryLeg, WrappedPathfindingNode[] nodes, Vector3 raw)
+    {
+        if (region.GetZone((int)raw.X, (int)raw.Y) != landingZone)
+            return ("other_zone", null);
+        Vector3? snapped = SnapTight(nav, landingZone, raw);
+        if (snapped is not { } point)
+            return ("no_snap_tight", null);
+        if (Math.Abs(point.Z - PlateauZ) > PlateauTolerance)
+            return ($"off_plateau_dz={F0(point.Z - PlateauZ)}", point);
+        if (Distance2D(point, CastleCentre) > CastleSafeRadius - LandingMarginInside)
+            return ("inside_margin", point);
+        if (exit is not { } goalExit)
+            return ("no_exit", point);
+        string toExit = RouteReason(nav, landingZone, queryLeg, nodes, point, goalExit).Route;
+        if (toExit != "ok")
+            return ($"exit_{toExit}", point);
+        if (origin is not { } goalLanding)
+            return ("no_landing1", point);
+        string toLanding = RouteReason(nav, landingZone, queryLeg, nodes, point, goalLanding).Route;
+        return toLanding == "ok" ? ("pass", point) : ($"landing1_{toLanding}", point);
+    }
+
+    // The tight floor search of the landing rule: 48 units horizontally and 96 vertically, the first step of Snap.
+    private static Vector3? SnapTight(IPathfindingMgr nav, Zone zone, Vector3 raw) =>
+        nav.GetClosestPoint(zone, raw, 48, 48, 96, nav.DefaultFilters);
+
+    // Farthest-point picks among the passing candidates: the one nearest LANDING1 first, then each next one as far as possible from those
+    // already picked. A pick must stay at least spacing units from every other one, so the picks never stack.
+    private static List<LandingSample> PickSpread(List<LandingSample> passing, int count, double spacing)
+    {
+        var picks = new List<LandingSample>();
+        if (passing.Count == 0)
+            return picks;
+        picks.Add(passing.OrderBy(sample => Distance2D(sample.Snapped!.Value, Landing1)).First());
+        while (picks.Count < count)
+        {
+            LandingSample best = null;
+            double bestGap = -1;
+            foreach (LandingSample candidate in passing)
+            {
+                if (picks.Contains(candidate))
+                    continue;
+                double gap = picks.Min(pick => Distance2D(pick.Snapped!.Value, candidate.Snapped!.Value));
+                if (gap > bestGap)
+                {
+                    bestGap = gap;
+                    best = candidate;
+                }
+            }
+            if (best == null || bestGap < spacing)
+                break;
+            picks.Add(best);
+        }
+        return picks;
+    }
+
+    private static int Rounded(float value) => (int)Math.Round(value);
 
     private static double Distance2D(Vector3 a, Vector3 b)
     {

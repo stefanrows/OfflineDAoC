@@ -21,6 +21,7 @@ public static class GothwaitePvpArenaRules
     public const string ChaseCastle = "castle";
     public const string ChaseEdge = "edge";
     public const string ChaseSelfEdge = "self_edge";
+    public const string ChaseRing = "ring";
     public const string ActionRepick = "repick";
     public const string ActionCastle = "castle";
 
@@ -76,6 +77,13 @@ public static class GothwaitePvpArenaRules
             distance = 0;
         return (1 + heat) / (1 + distance / DistanceScale);
     }
+
+    /// <summary>
+    /// The weight of one patrol point for a pick. The first pick after a group arrives outside the castle gate ignores heat and distance
+    /// (every allowed point weighs 1), so the groups spread over the arena instead of all going back to the last fights. Later picks use
+    /// <see cref="PatrolWeight"/>.
+    /// </summary>
+    public static double RoamWeight(bool firstPick, double heat, double distance) => firstPick ? 1 : PatrolWeight(heat, distance);
 
     /// <summary>
     /// The next patrol point: a weighted random draw among the points inside <paramref name="goalEdge"/>, skipping the point
@@ -185,12 +193,25 @@ public static class GothwaitePvpArenaRules
     }
 
     /// <summary>
-    /// Whether a bot scans for a legal opening this turn: the scan is due, the bot is not returning, and it is not outside its own
-    /// edge (edge keeping comes first, since a fight opened from there would be dropped at once). A leader or a solo always scans;
-    /// a follower scans only while its leader has no legal target.
+    /// The no-fight ring part of the chase limit (section 6.2): a fight that is still open is dropped once the target or the bot stands
+    /// inside the ring, unless the target attacked the bot's side (self-defence is fought back, as in the design). Null while the fight may go on.
     /// </summary>
-    public static bool MayScan(bool due, bool returning, bool outsideOwnEdge, bool isLeader, bool leaderHasLegalTarget) =>
-        due && !returning && !outsideOwnEdge && (isLeader || !leaderHasLegalTarget);
+    public static string GateRingReason(bool targetInRing, bool botInRing, bool targetAttackedUs) =>
+        (targetInRing || botInRing) && !targetAttackedUs ? ChaseRing : null;
+
+    /// <summary>
+    /// The walk out of the castle is done (section 6.4, live-run fix 2026-10-13): the leader is within the arrival distance of the castle exit, or it is already
+    /// outside the no-fight ring on its way. The exit is a waypoint; the leader does not hold there.
+    /// </summary>
+    public static bool GateWalkDone(bool arrivedAtExit, bool outsideGateRing) => arrivedAtExit || outsideGateRing;
+
+    /// <summary>
+    /// Whether a bot scans for a legal opening this turn: the scan is due, the bot is not returning, it is not outside its own
+    /// edge (edge keeping comes first, since a fight opened from there would be dropped at once), and it is not inside the no-fight ring
+    /// (section 6.2). A leader or a solo always scans; a follower scans only while its leader has no legal target.
+    /// </summary>
+    public static bool MayScan(bool due, bool returning, bool outsideOwnEdge, bool isLeader, bool leaderHasLegalTarget, bool inGateRing = false) =>
+        due && !returning && !outsideOwnEdge && !inGateRing && (isLeader || !leaderHasLegalTarget);
 
     /// <summary>A walk made progress when the bot is now at least <see cref="MinimumProgress"/> closer than the reference distance.</summary>
     public static bool MadeProgress(double distance, double reference) => distance <= reference - MinimumProgress;

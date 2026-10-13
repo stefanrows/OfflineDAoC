@@ -33,7 +33,7 @@ public static class GothwaitePvpMode
             settings = GothwaitePvpSettings.Defaults;
         }
         Apply(settings);
-        Log.Info($"GOTH_PVP_MODE active={IsActive} arena={Arena.Name} safe_radius={Settings.SafeRadius} " +
+        Log.Info($"GOTH_PVP_MODE active={IsActive} arena={Arena.Name} safe_radius={Settings.SafeRadius} gate_ring={Settings.GateRing} " +
             $"low_band_max={Settings.LowBandMaxLevel} low_edge={Settings.LowBandEdge} edge={Settings.Edge}");
     }
 

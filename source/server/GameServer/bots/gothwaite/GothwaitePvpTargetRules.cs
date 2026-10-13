@@ -12,8 +12,9 @@ public static class GothwaitePvpTargetRules
     /// <summary>
     /// A legal opening for a mode bot: the target is alive, player-shaped (a player, a companion or another autonomous bot,
     /// or a pet of one), cons green to red to the bot (G4: never grey or purple), stands outside the castle circle and
-    /// inside the bot's arena edge, is not an alliance mate, and the server rules allow the attack (group and guild mates
-    /// are refused there). Monsters are never opened on. False for any bot that is not a mode bot.
+    /// inside the bot's arena edge, neither the bot nor the target stands inside the no-fight ring (section 6.2), is not an
+    /// alliance mate, and the server rules allow the attack (group and guild mates are refused there). Monsters are never
+    /// opened on. False for any bot that is not a mode bot.
     /// </summary>
     public static bool MayOpen(GameBot bot, GameLiving target)
     {
@@ -25,10 +26,25 @@ public static class GothwaitePvpTargetRules
             return false;
         if (!InArena(bot, target))
             return false;
+        if (!RingAllowsOpening(GothwaitePvpMode.Arena, GothwaitePvpMode.Settings.GateRing,
+                bot.CurrentRegionID, bot.X, bot.Y, target.CurrentRegionID, target.X, target.Y))
+            return false;
         if (AllianceMates(bot, master))
             return false;
         return BattlegroundCombatTargets.IsLegal(bot, target, bot.CurrentZone);
     }
+
+    /// <summary>
+    /// The no-fight ring of section 6.2 as a pure predicate: no fight is opened while the bot or the target stands inside the castle
+    /// circle widened by <paramref name="gateRing"/> units. Beyond the ring on both sides, the ring allows the opening.
+    /// </summary>
+    public static bool RingAllowsOpening(GothwaitePvpArena arena, int gateRing, ushort botRegion, int botX, int botY,
+        ushort targetRegion, int targetX, int targetY) =>
+        !arena.InGateRing(botRegion, botX, botY, gateRing) && !arena.InGateRing(targetRegion, targetX, targetY, gateRing);
+
+    /// <summary>True when the object stands inside the no-fight ring of the mode's arena (the mode's gate ring setting).</summary>
+    public static bool InGateRing(GameObject point) =>
+        point != null && GothwaitePvpMode.Arena.InGateRing(point.CurrentRegionID, point.X, point.Y, GothwaitePvpMode.Settings.GateRing);
 
     // G4 for one living: green to red. A pet is judged by its owner's con too, so a grey or purple player's pet is no opening.
     private static bool ConAllows(GameBot bot, GameLiving living) =>

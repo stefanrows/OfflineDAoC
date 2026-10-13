@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.266.0] - 2026-10-13
+
+### Fixed
+
+- **Gothwaite PvP mode: no more permanent gate camp.** The first live run
+  had every kill within 300 units of the Caer Gothwaite safe circle: all
+  groups walked to one exit point and held there, so each new group ran into
+  the last. Now mode bots open no fights within 1,500 units outside the safe
+  circle (new `gateRing` setting; self-defence still allowed), the gate is
+  only a waypoint, a group's first patrol point is drawn evenly over the
+  island instead of toward recent fights, and at most one group or solo
+  leaves the castle every 4 seconds.
+- Mode bots no longer log in at their capital or get stuck in the castle:
+  the random spread around the bindstones could land off the walkable floor.
+  They now use 16 courtyard spots, each proven on the installed navmesh to
+  route to the gate.
+
+### Changed
+
+- `gothwaite-pvp.json` gains `gateRing` (default 1500). The 0.266.0 server
+  and launcher read files with or without it.
 ## [0.265.0] - 2026-10-13
 
 ### Added

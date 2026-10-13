@@ -434,7 +434,98 @@ namespace DOL.GS.Tests
             {
                 GothwaitePvpSpot landing = arena.CastleLanding(bot);
                 Assert.That(arena.InCastle(arena.RegionId, landing.X, landing.Y), Is.True, $"bot {bot}");
+                Assert.That(arena.CastleDistance(landing.X, landing.Y), Is.LessThanOrEqualTo(arena.SafeRadius - 300), $"bot {bot} has no margin");
             }
+        }
+
+        [Test]
+        public void TheProvenCastleLandingsHaveThreeHundredUnitsOfMarginAndTwelveToSixteenOfThem()
+        {
+            GothwaitePvpArena arena = GothwaitePvpArena.Gothwaite;
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(arena.CastleLandings.Count, Is.InRange(12, 16), "twelve to sixteen landings");
+                foreach (GothwaitePvpSpot landing in arena.CastleLandings)
+                    Assert.That(arena.CastleDistance(landing.X, landing.Y), Is.LessThanOrEqualTo(arena.SafeRadius - 300), landing.Name);
+            });
+        }
+
+        [Test]
+        public void TheCastleExitLiesInsideTheGateRingSoAGroupArrivesThereWithoutFighting()
+        {
+            GothwaitePvpArena arena = GothwaitePvpArena.Gothwaite;
+            GothwaitePvpSpot exit = arena.CastleExit;
+
+            Assert.That(arena.InGateRing(arena.RegionId, exit.X, exit.Y, 1_500), Is.True,
+                "the exit (about 4,760 from the centre) is inside 5,500, so the leader opens nothing there and roams on");
+        }
+
+        // The former's tick (every TickMilliseconds) over a queue of due departures: each release is taken off the queue. Returns the releases.
+        private static List<(long Time, GothwaitePvpDeparture Departure)> RunDepartures(List<GothwaitePvpDeparture> pending, long from, long to)
+        {
+            var gate = new GothwaitePvpDepartureGate();
+            var released = new List<(long Time, GothwaitePvpDeparture Departure)>();
+            for (long now = from; now <= to; now += GothwaitePvpGroupFormer.TickMilliseconds)
+            {
+                int index = gate.Release(now, pending);
+                if (index < 0)
+                    continue;
+                released.Add((now, pending[index]));
+                pending.RemoveAt(index);
+            }
+            return released;
+        }
+
+        [Test]
+        public void ADepartureGateReleasesOneDepartureAndNoOtherUntilTheIntervalPasses()
+        {
+            var gate = new GothwaitePvpDepartureGate();
+            var queue = new[] { new GothwaitePvpDeparture(0, false, 1), new GothwaitePvpDeparture(0, false, 2) };
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(gate.Release(0, queue), Is.EqualTo(0), "the first due departure leaves at once");
+                Assert.That(gate.Release(3_999, queue), Is.EqualTo(-1), "no second departure within four seconds");
+                Assert.That(gate.Release(4_000, queue), Is.EqualTo(0), "the next one leaves four seconds after the first");
+                Assert.That(gate.NextAt, Is.EqualTo(8_000));
+                Assert.That(gate.Release(5_000, Array.Empty<GothwaitePvpDeparture>()), Is.EqualTo(-1), "nobody is waiting, so the clock does not move");
+                Assert.That(gate.NextAt, Is.EqualTo(8_000));
+            });
+        }
+
+        [Test]
+        public void EveryWaitingDepartureLeavesFourSecondsApartAndNoneIsLost()
+        {
+            var pending = Enumerable.Range(1, 10).Select(id => new GothwaitePvpDeparture(0, Solo: id % 2 == 0, BotId: id)).ToList();
+
+            List<(long Time, GothwaitePvpDeparture Departure)> released = RunDepartures(pending, 0, 120_000);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(released, Has.Count.EqualTo(10), "ten departures, one at a time");
+                Assert.That(pending, Is.Empty, "every waiting departure leaves");
+                Assert.That(released[0].Time, Is.EqualTo(0));
+                for (int index = 1; index < released.Count; index++)
+                    Assert.That(released[index].Time - released[index - 1].Time,
+                        Is.GreaterThanOrEqualTo(GothwaitePvpDepartureGate.IntervalMilliseconds), $"departure {index + 1}");
+            });
+        }
+
+        [Test]
+        public void TheEarliestDueDepartureLeavesFirstAndAGroupGoesBeforeASoloOnATie()
+        {
+            var pending = new List<GothwaitePvpDeparture>
+            {
+                new(6_000, false, 9),   // a group that became due last
+                new(2_000, true, 5),    // a solo that became ready first
+                new(2_000, false, 7),   // a group due on the same tick as the solo: it goes first
+            };
+
+            List<(long Time, GothwaitePvpDeparture Departure)> released = RunDepartures(pending, 2_000, 20_000);
+
+            Assert.That(released.Select(entry => entry.Departure.BotId), Is.EqualTo(new long[] { 7, 5, 9 }),
+                "the group that was due first, then the solo, then the later group");
         }
 
         private static Dictionary<GothwaitePvpShape, int> CountShapes(GothwaitePvpGroupShares shares, Func<int, long> botId, Func<int, int> cycle)

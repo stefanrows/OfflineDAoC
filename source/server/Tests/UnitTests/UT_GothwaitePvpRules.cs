@@ -102,18 +102,18 @@ namespace DOL.GS.Tests
         }
 
         [Test]
-        public void CastleLandingStaysNearALandingAndInsideTheCircleForEveryBotId()
+        public void CastleLandingIsOneOfTheProvenLandingsWithinTheSpreadForEveryBotId()
         {
             GothwaitePvpArena arena = GothwaitePvpArena.Gothwaite;
 
-            for (long botId = 1; botId <= 500; botId++)
+            for (long botId = 1; botId <= 1_000; botId++)
             {
                 GothwaitePvpSpot landing = arena.CastleLanding(botId);
                 double nearest = double.MaxValue;
                 foreach (GothwaitePvpSpot spot in arena.CastleLandings)
                     nearest = Math.Min(nearest, Math.Sqrt(Math.Pow(landing.X - spot.X, 2) + Math.Pow(landing.Y - spot.Y, 2)));
 
-                Assert.That(nearest, Is.LessThanOrEqualTo(250), $"bot {botId} lands too far from a castle landing");
+                Assert.That(nearest, Is.LessThanOrEqualTo(GothwaitePvpArena.LandingSpread), $"bot {botId} lands further than the spread from a landing");
                 Assert.That(arena.InCastle(Isle, landing.X, landing.Y), Is.True, $"bot {botId} lands outside the circle");
             }
         }
@@ -133,8 +133,36 @@ namespace DOL.GS.Tests
                 Assert.That(defaults.Edge, Is.EqualTo(30000));
                 Assert.That(defaults.LevelBand, Is.EqualTo(5));
                 Assert.That(defaults.RestPercent, Is.EqualTo(80));
+                Assert.That(defaults.GateRing, Is.EqualTo(1500));
                 Assert.That(defaults.GroupShares.Total, Is.EqualTo(100));
                 Assert.That(() => defaults.Validate(), Throws.Nothing);
+            });
+        }
+
+        [Test]
+        public void AFileWrittenBeforeTheGateRingExistedLoadsWithTheDefault()
+        {
+            string path = Path.Combine(_directory, GothwaitePvpSettings.FileName);
+            File.WriteAllText(path, "{ \"enabled\": true, \"safeRadius\": 4000, \"levelBand\": 5 }");
+
+            GothwaitePvpSettings loaded = GothwaitePvpSettings.Load(path);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(loaded.Enabled, Is.True);
+                Assert.That(loaded.GateRing, Is.EqualTo(1500), "a missing gateRing takes the default");
+            });
+        }
+
+        [Test]
+        public void TheGateRingIsValidatedBetweenZeroAndFiveThousandUnits()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(() => (GothwaitePvpSettings.Defaults with { GateRing = -1 }).Validate(), Throws.TypeOf<InvalidDataException>());
+                Assert.That(() => (GothwaitePvpSettings.Defaults with { GateRing = 5_001 }).Validate(), Throws.TypeOf<InvalidDataException>());
+                Assert.That(() => (GothwaitePvpSettings.Defaults with { GateRing = 0 }).Validate(), Throws.Nothing, "no ring is allowed");
+                Assert.That(() => (GothwaitePvpSettings.Defaults with { GateRing = 5_000 }).Validate(), Throws.Nothing);
             });
         }
 
@@ -147,6 +175,7 @@ namespace DOL.GS.Tests
                 SafeRadius = 3500,
                 LevelBand = 7,
                 RestPercent = 90,
+                GateRing = 2000,
                 GroupShares = new GothwaitePvpGroupShares(10, 20, 30, 40),
             };
             string path = Path.Combine(_directory, GothwaitePvpSettings.FileName);
@@ -154,7 +183,11 @@ namespace DOL.GS.Tests
 
             GothwaitePvpSettings loaded = GothwaitePvpSettings.Load(path);
 
-            Assert.That(loaded, Is.EqualTo(settings));
+            Assert.Multiple(() =>
+            {
+                Assert.That(loaded, Is.EqualTo(settings));
+                Assert.That(settings.Serialize(), Does.Contain("\"gateRing\": 2000"), "the key is camelCase like the others");
+            });
         }
 
         [Test]

@@ -31,6 +31,11 @@ public sealed record GothwaitePvpSettings
     public GothwaitePvpGroupShares GroupShares { get; init; } = new(15, 15, 35, 35);
     public int LevelBand { get; init; } = 5;
     public int RestPercent { get; init; } = 80;
+    /// <summary>
+    /// The no-fight ring around the castle, in units beyond the safe circle (docs/GOTHWAITE_PVP_MODE.md section 6.2). A mode bot opens
+    /// no fight with a target, or from a position, inside SafeRadius + GateRing, so the castle gate does not become a camp.
+    /// </summary>
+    public int GateRing { get; init; } = 1500;
 
     public static GothwaitePvpSettings Defaults => new();
 
@@ -51,6 +56,8 @@ public sealed record GothwaitePvpSettings
             throw new InvalidDataException("The group level band must be 1–25.");
         if (RestPercent is < 10 or > 100)
             throw new InvalidDataException("The castle rest level must be 10–100%.");
+        if (GateRing is < 0 or > 5000)
+            throw new InvalidDataException("The gate ring must be 0–5,000 units.");
     }
 
     private static readonly JsonSerializerOptions Json = new()
