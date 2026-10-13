@@ -1,0 +1,505 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using NUnit.Framework;
+using OfflineDaoc.Configuration;
+
+namespace DOL.GS.Tests;
+
+/// <summary>
+/// The Gothwaite PvP arena rules of stage 3 (docs/GOTHWAITE_PVP_MODE.md sections 6.2, 6.4, 6.5 and 8): the patrol choice, the
+/// dwell, the return and chase-limit predicates, the edge margin, the stuck rule, the leader promotion, the scan offset and the
+/// arena log lines. Pure functions only: no GameBot and no database.
+/// </summary>
+[TestFixture]
+public class UT_GothwaitePvpArena
+{
+    private const int Draws = 10_000;
+    private const int EdgeOfLowBand = 20_000;
+    private const int EdgeOfHighBand = 30_000;
+    private static readonly GothwaitePvpArena Arena = GothwaitePvpArena.Gothwaite;
+
+    [SetUp]
+    public void SetUp() => GothwaitePvpMode.Reset();
+
+    [TearDown]
+    public void TearDown() => GothwaitePvpMode.Reset();
+
+    private static void TurnOn() => GothwaitePvpMode.Apply(GothwaitePvpSettings.Defaults with { Enabled = true });
+
+    private static GothwaitePvpSpot PatrolPointNamed(string name) => Arena.PatrolPoints.Single(point => point.Name == name);
+
+    // One patrol choice for a bot of this level, with the arena's own points, the goal edge of the level and the given weights.
+    private static GothwaitePvpSpot? Pick(IReadOnlyList<GothwaitePvpSpot> points, GothwaitePvpSpot? last, int level, Random random,
+        Func<GothwaitePvpSpot, double> weightOf = null, Func<GothwaitePvpSpot, bool> usable = null)
+    {
+        int goalEdge = GothwaitePvpArenaRules.GoalEdge(GothwaitePvpArena.EdgeFor(level, GothwaitePvpMode.Settings));
+        return GothwaitePvpArenaRules.ChoosePatrolPoint(Arena, goalEdge, points, last, usable, weightOf ?? (_ => 1), random);
+    }
+
+    private static List<string> PickSequence(int seed, int level, int count)
+    {
+        var random = new Random(seed);
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(level, GothwaitePvpMode.Settings);
+        var names = new List<string>();
+        GothwaitePvpSpot? last = null;
+        for (int i = 0; i < count; i++)
+        {
+            GothwaitePvpSpot? next = Pick(points, last, level, random);
+            names.Add(next?.Name ?? "none");
+            last = next;
+        }
+        return names;
+    }
+
+    [Test]
+    public void EveryPatrolPointLiesOutsideTheCastleCircle()
+    {
+        Assert.Multiple(() =>
+        {
+            foreach (GothwaitePvpSpot point in Arena.PatrolPoints)
+                Assert.That(Arena.CastleDistance(point.X, point.Y), Is.GreaterThan(Arena.SafeRadius), point.Name);
+        });
+    }
+
+    [Test]
+    public void ThePatrolChoiceNeverRepeatsTheLastPoint()
+    {
+        TurnOn();
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(25, GothwaitePvpMode.Settings);
+        var random = new Random(7);
+        GothwaitePvpSpot last = points[0];
+        int repeats = 0;
+        for (int i = 0; i < Draws; i++)
+        {
+            GothwaitePvpSpot? next = Pick(points, last, 25, random);
+            Assert.That(next, Is.Not.Null, "a patrol point is always left to choose");
+            if (next.Value == last)
+                repeats++;
+            last = next.Value;
+        }
+
+        Assert.That(repeats, Is.Zero, "the point just left is never picked again on the next draw");
+    }
+
+    [TestCase(1)]
+    [TestCase(19)]
+    [TestCase(20)]
+    [TestCase(25)]
+    [TestCase(50)]
+    public void ThePatrolChoiceNeverLeavesTheGoalEdgeForAnyLevel(int level)
+    {
+        TurnOn();
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(level, GothwaitePvpMode.Settings);
+        int goalEdge = GothwaitePvpArenaRules.GoalEdge(GothwaitePvpArena.EdgeFor(level, GothwaitePvpMode.Settings));
+        var random = new Random(level);
+        GothwaitePvpSpot? last = null;
+        for (int i = 0; i < 2_000; i++)
+        {
+            GothwaitePvpSpot? next = Pick(points, last, level, random);
+            Assert.That(next, Is.Not.Null);
+            Assert.That(Arena.CastleDistance(next.Value.X, next.Value.Y), Is.LessThanOrEqualTo(goalEdge), $"level {level}: {next.Value.Name}");
+            last = next;
+        }
+    }
+
+    [Test]
+    public void ALowLevelBotNeverChoosesAPointBeyondItsBand()
+    {
+        TurnOn();
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPoints;
+        var random = new Random(19);
+        GothwaitePvpSpot? last = null;
+        for (int i = 0; i < 2_000; i++)
+        {
+            // The points here are the whole list, the high band included: only the goal edge may filter them out.
+            GothwaitePvpSpot? next = Pick(points, last, 1, random);
+            Assert.That(next, Is.Not.Null);
+            Assert.That(Arena.CastleDistance(next.Value.X, next.Value.Y), Is.LessThanOrEqualTo(EdgeOfLowBand - GothwaitePvpArenaRules.EdgeMargin));
+            last = next;
+        }
+    }
+
+    [Test]
+    public void HeatRaisesThePatrolChanceOfAPoint()
+    {
+        TurnOn();
+        GothwaitePvpSpot hot = PatrolPointNamed("GP01");
+        GothwaitePvpSpot cold = PatrolPointNamed("GP03");
+        var points = new[] { hot, cold };
+        // The same distance to the bot for both points, so only the heat differs: a weight of 6 against 1.
+        Func<GothwaitePvpSpot, double> weightOf = point => GothwaitePvpArenaRules.PatrolWeight(point == hot ? 5 : 0, 0);
+        var random = new Random(11);
+        int hotPicks = 0;
+        for (int i = 0; i < Draws; i++)
+            if (Pick(points, null, 25, random, weightOf) == hot)
+                hotPicks++;
+
+        double share = hotPicks / (double)Draws;
+        Assert.That(share, Is.EqualTo(6.0 / 7.0).Within(0.02), "a point with heat 5 is picked six times as often as a cold one");
+    }
+
+    [Test]
+    public void ANearerPointIsOnlySlightlyPreferred()
+    {
+        Assert.That(GothwaitePvpArenaRules.PatrolWeight(0, 0) / GothwaitePvpArenaRules.PatrolWeight(0, EdgeOfLowBand),
+            Is.EqualTo(3.0).Within(1e-9), "one point at the bot's feet weighs three times a point 20,000 units away");
+
+        TurnOn();
+        GothwaitePvpSpot near = PatrolPointNamed("GP01");
+        GothwaitePvpSpot far = PatrolPointNamed("GP03");
+        var points = new[] { near, far };
+        Func<GothwaitePvpSpot, double> weightOf = point => GothwaitePvpArenaRules.PatrolWeight(0, point == near ? 0 : EdgeOfLowBand);
+        var random = new Random(13);
+        int nearPicks = 0;
+        for (int i = 0; i < Draws; i++)
+            if (Pick(points, null, 25, random, weightOf) == near)
+                nearPicks++;
+
+        Assert.That(nearPicks / (double)Draws, Is.EqualTo(0.75).Within(0.02), "the near point wins three draws in four");
+    }
+
+    [Test]
+    public void ThePatrolWeightFollowsTheHeatAndDistanceFormula()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(0, 0), Is.EqualTo(1.0), "no heat, no distance");
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(5, 0), Is.EqualTo(6.0), "heat adds one per unit");
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(0, 10_000), Is.EqualTo(0.5), "10,000 units halve the weight");
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(-3, 0), Is.EqualTo(1.0), "negative heat counts as none");
+            Assert.That(GothwaitePvpArenaRules.PatrolWeight(double.NaN, 0), Is.EqualTo(1.0), "unknown heat counts as none");
+        });
+    }
+
+    [Test]
+    public void TheSameSeedGivesTheSamePatrolSequence()
+    {
+        TurnOn();
+        Assert.That(PickSequence(42, 25, 200), Is.EqualTo(PickSequence(42, 25, 200)));
+        Assert.That(PickSequence(42, 25, 200), Is.Not.EqualTo(PickSequence(43, 25, 200)), "another seed draws another route");
+    }
+
+    [Test]
+    public void AnUnusablePointIsNeverPicked()
+    {
+        TurnOn();
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(25, GothwaitePvpMode.Settings);
+        var random = new Random(5);
+        for (int i = 0; i < Draws; i++)
+            Assert.That(Pick(points, null, 25, random, usable: point => point.Name != "GP01")?.Name, Is.Not.EqualTo("GP01"));
+    }
+
+    [Test]
+    public void NoPatrolPointLeftGivesNone()
+    {
+        TurnOn();
+        GothwaitePvpSpot only = PatrolPointNamed("GP01");
+        var random = new Random(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Pick(new[] { only }, only, 25, random), Is.Null, "the only point is the one just left");
+            Assert.That(Pick(new[] { only }, null, 25, random, usable: _ => false), Is.Null, "every point is refused");
+            Assert.That(Pick(Array.Empty<GothwaitePvpSpot>(), null, 25, random), Is.Null, "no point at all");
+        });
+    }
+
+    [Test]
+    public void TheDwellIsFifteenToFortySecondsPerVisit()
+    {
+        var random = new Random(3);
+        int shortest = int.MaxValue;
+        int longest = int.MinValue;
+        for (int i = 0; i < Draws; i++)
+        {
+            int dwell = GothwaitePvpArenaRules.DwellMilliseconds(random);
+            shortest = Math.Min(shortest, dwell);
+            longest = Math.Max(longest, dwell);
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(shortest, Is.InRange(GothwaitePvpArenaRules.DwellMinMilliseconds, GothwaitePvpArenaRules.DwellMinMilliseconds + 100));
+            Assert.That(longest, Is.InRange(GothwaitePvpArenaRules.DwellMaxMilliseconds - 100, GothwaitePvpArenaRules.DwellMaxMilliseconds));
+        });
+    }
+
+    [Test]
+    public void AFighterReturnsBelowThirtyFivePercentHealthOnly()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(34, 100, usesPower: false, leaderLost: false, wiped: false),
+                Is.EqualTo("low_health"));
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(35, 100, usesPower: false, leaderLost: false, wiped: false), Is.Null,
+                "35 is not below 35");
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(0, 0, usesPower: false, leaderLost: false, wiped: false),
+                Is.EqualTo("low_health"));
+        });
+    }
+
+    [Test]
+    public void ACasterReturnsBelowTwentyPercentPowerAndAFighterIgnoresPower()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(100, 19, usesPower: true, leaderLost: false, wiped: false),
+                Is.EqualTo("low_power"));
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(100, 20, usesPower: true, leaderLost: false, wiped: false), Is.Null,
+                "20 is not below 20");
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(100, 0, usesPower: false, leaderLost: false, wiped: false), Is.Null,
+                "a fighter without mana does not return for power");
+        });
+    }
+
+    [Test]
+    public void TheReturnReasonsKeepTheirOrder()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(30, 10, usesPower: true, leaderLost: true, wiped: true), Is.EqualTo("low_health"));
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(100, 10, usesPower: true, leaderLost: true, wiped: true), Is.EqualTo("low_power"));
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(100, 100, usesPower: false, leaderLost: true, wiped: true), Is.EqualTo("leader_lost"));
+            Assert.That(GothwaitePvpArenaRules.ReturnReason(100, 100, usesPower: false, leaderLost: false, wiped: true), Is.EqualTo("wiped"));
+        });
+    }
+
+    [Test]
+    public void AFollowerLosesItsGroupOnlyWhenItsLeaderIsGoneAndNoOneElseIsNear()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.FollowerLost(leaderPresent: true, aliveNearOthers: 0), Is.False, "the leader is still here");
+            Assert.That(GothwaitePvpArenaRules.FollowerLost(leaderPresent: false, aliveNearOthers: 1), Is.False, "a member is near");
+            Assert.That(GothwaitePvpArenaRules.FollowerLost(leaderPresent: false, aliveNearOthers: 0), Is.True, "orphaned");
+        });
+    }
+
+    [Test]
+    public void AGroupIsWipedOnlyWhenNoOtherMemberLivesAndASoloNeverIs()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.Wiped(solo: false, aliveOthers: 0), Is.True);
+            Assert.That(GothwaitePvpArenaRules.Wiped(solo: false, aliveOthers: 1), Is.False);
+            Assert.That(GothwaitePvpArenaRules.Wiped(solo: true, aliveOthers: 0), Is.False, "a solo has no group to wipe");
+        });
+    }
+
+    [Test]
+    public void TheChaseLimitDropsAFightForTheCastleTheEdgeOrTheBotsOwnEdgePlusSlack()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(true, 3_000, 5_000, EdgeOfLowBand), Is.EqualTo("castle"), "a target in the circle");
+            Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(false, EdgeOfLowBand + 1, 5_000, EdgeOfLowBand), Is.EqualTo("edge"),
+                "a target one unit beyond the edge");
+            Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(false, double.PositiveInfinity, 5_000, EdgeOfLowBand), Is.EqualTo("edge"),
+                "a target outside the arena region");
+            Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(false, 15_000, EdgeOfLowBand + 1_001, EdgeOfLowBand),
+                Is.EqualTo("self_edge"), "the bot is past its edge plus the slack");
+            Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(false, 15_000, EdgeOfLowBand + 1_000, EdgeOfLowBand), Is.Null,
+                "exactly the slack is still inside");
+            Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(true, EdgeOfLowBand + 5_000, EdgeOfLowBand + 5_000, EdgeOfLowBand),
+                Is.EqualTo("castle"), "the castle is named before the edge");
+            Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(false, 19_999, 19_999, EdgeOfLowBand), Is.Null, "a fight inside the arena goes on");
+        });
+    }
+
+    [Test]
+    public void TheChaseLimitDoesNotLookAtTheTargetsConSoARetaliationStands()
+    {
+        // The predicate has no con input: a grey or purple target that hits the bot from inside the arena is not dropped for its con.
+        Assert.That(GothwaitePvpArenaRules.ChaseLimitReason(false, 12_000, 12_000, EdgeOfLowBand), Is.Null);
+    }
+
+    [Test]
+    public void TheEdgeOfEachBandComesFromTheSettings()
+    {
+        TurnOn();
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArena.EdgeFor(1, GothwaitePvpMode.Settings), Is.EqualTo(EdgeOfLowBand));
+            Assert.That(GothwaitePvpArena.EdgeFor(19, GothwaitePvpMode.Settings), Is.EqualTo(EdgeOfLowBand));
+            Assert.That(GothwaitePvpArena.EdgeFor(20, GothwaitePvpMode.Settings), Is.EqualTo(EdgeOfHighBand));
+            Assert.That(GothwaitePvpArena.EdgeFor(50, GothwaitePvpMode.Settings), Is.EqualTo(EdgeOfHighBand));
+        });
+    }
+
+    [Test]
+    public void TheGoalEdgeKeepsAnArrivingBotInsideItsEdge()
+    {
+        TurnOn();
+        Assert.That(GothwaitePvpArenaRules.GoalEdge(EdgeOfLowBand), Is.EqualTo(EdgeOfLowBand - GothwaitePvpArenaRules.EdgeMargin));
+        foreach (GothwaitePvpSpot point in Arena.PatrolPointsFor(1, GothwaitePvpMode.Settings))
+        {
+            double castleDistance = Arena.CastleDistance(point.X, point.Y);
+            if (castleDistance <= GothwaitePvpArenaRules.GoalEdge(EdgeOfLowBand))
+                Assert.That(castleDistance + GothwaitePvpArenaRules.EdgeMargin, Is.LessThanOrEqualTo(EdgeOfLowBand), point.Name);
+        }
+    }
+
+    [Test]
+    public void OutsideTheEdgeMeansStrictlyBeyondIt()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.OutsideEdge(EdgeOfLowBand, EdgeOfLowBand), Is.False);
+            Assert.That(GothwaitePvpArenaRules.OutsideEdge(EdgeOfLowBand + 1, EdgeOfLowBand), Is.True);
+        });
+    }
+
+    [Test]
+    public void AWalkingLeaderNeedsNinetySixUnitsOfProgressWithinFortyFiveSeconds()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.MadeProgress(distance: 904, reference: 1_000), Is.True, "96 units closer");
+            Assert.That(GothwaitePvpArenaRules.MadeProgress(distance: 905, reference: 1_000), Is.False, "95 units closer is not enough");
+            Assert.That(GothwaitePvpArenaRules.ProgressWindowElapsed(now: 44_999, since: 0), Is.False);
+            Assert.That(GothwaitePvpArenaRules.ProgressWindowElapsed(now: 45_000, since: 0), Is.True);
+        });
+    }
+
+    [Test]
+    public void AFollowerMovesNinetySixUnitsToCountAsProgress()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.MovedEnough(95.9), Is.False);
+            Assert.That(GothwaitePvpArenaRules.MovedEnough(96), Is.True);
+        });
+    }
+
+    [Test]
+    public void TheStuckRuleRepicksTwiceThenSendsAPatrollerHome()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.StuckAction(1, canRepick: true), Is.EqualTo("repick"));
+            Assert.That(GothwaitePvpArenaRules.StuckAction(2, canRepick: true), Is.EqualTo("repick"));
+            Assert.That(GothwaitePvpArenaRules.StuckAction(3, canRepick: true), Is.EqualTo("castle"), "the third in a row");
+            Assert.That(GothwaitePvpArenaRules.StuckAction(1, canRepick: false), Is.EqualTo("castle"), "no patrol goal to pick");
+        });
+    }
+
+    [Test]
+    public void ThePromotionChoosesTheFirstLivingMemberInTheArenaInJoinOrder()
+    {
+        var members = new[]
+        {
+            new GothwaitePvpPromotionCandidate(1, Alive: false, InArena: true),
+            new GothwaitePvpPromotionCandidate(2, Alive: true, InArena: false),
+            new GothwaitePvpPromotionCandidate(3, Alive: true, InArena: true),
+            new GothwaitePvpPromotionCandidate(4, Alive: true, InArena: true),
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.FirstAliveInArena(members), Is.EqualTo(2), "the third member, by join order");
+            Assert.That(GothwaitePvpArenaRules.FirstAliveInArena(new[] { members[0], members[1] }), Is.EqualTo(-1), "none qualifies");
+            Assert.That(GothwaitePvpArenaRules.FirstAliveInArena(Array.Empty<GothwaitePvpPromotionCandidate>()), Is.EqualTo(-1));
+            Assert.That(GothwaitePvpArenaRules.FirstAliveInArena(null), Is.EqualTo(-1));
+        });
+    }
+
+    [Test]
+    public void AScanNeedsItsTurnAndAnArenaBotThatIsNotReturningOrOutsideItsEdge()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: false, outsideOwnEdge: false, isLeader: true, leaderHasLegalTarget: false),
+                Is.True, "a leader scans when its turn comes");
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: false, returning: false, outsideOwnEdge: false, isLeader: true, leaderHasLegalTarget: false),
+                Is.False, "not yet due");
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: true, outsideOwnEdge: false, isLeader: true, leaderHasLegalTarget: false),
+                Is.False, "a returning bot walks home");
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: false, outsideOwnEdge: true, isLeader: true, leaderHasLegalTarget: false),
+                Is.False, "outside its own edge the walk back comes first");
+        });
+    }
+
+    [Test]
+    public void AFollowerScansOnlyWhileItsLeaderHasNoLegalTarget()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: false, outsideOwnEdge: false, isLeader: false, leaderHasLegalTarget: false),
+                Is.True, "the leader has nothing to assist");
+            Assert.That(GothwaitePvpArenaRules.MayScan(due: true, returning: false, outsideOwnEdge: false, isLeader: false, leaderHasLegalTarget: true),
+                Is.False, "the assist covers the leader's target");
+        });
+    }
+
+    [Test]
+    public void TheScanOffsetsSpreadTheBotsAcrossOneScanCycle()
+    {
+        var offsets = new HashSet<int>();
+        for (long bot = 1; bot <= 2_000; bot++)
+        {
+            int offset = GothwaitePvpArenaRules.ScanOffsetMilliseconds(bot);
+            Assert.That(offset, Is.InRange(0, AutonomousBattlegroundDriver.ScanMilliseconds - 1));
+            offsets.Add(offset);
+        }
+
+        Assert.That(offsets.Count, Is.GreaterThan(200), "bots do not all scan on one tick");
+    }
+
+    [Test]
+    public void TheWalkBackPointIsInsideTheGoalEdgeWhenOneIsLeft()
+    {
+        TurnOn();
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(1, GothwaitePvpMode.Settings);
+        // A bot just beyond its edge, on the line to the nearest patrol point of the high band.
+        GothwaitePvpSpot beyond = PatrolPointNamed("GP21");
+        double scale = (EdgeOfLowBand + 200) / Arena.CastleDistance(beyond.X, beyond.Y);
+        int x = Arena.CastleX + (int)Math.Round((beyond.X - Arena.CastleX) * scale);
+        int y = Arena.CastleY + (int)Math.Round((beyond.Y - Arena.CastleY) * scale);
+
+        GothwaitePvpSpot? walkBack = GothwaitePvpArenaRules.WalkBackPoint(Arena, EdgeOfLowBand, points, x, y, _ => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(walkBack, Is.Not.Null);
+            Assert.That(Arena.CastleDistance(walkBack.Value.X, walkBack.Value.Y), Is.LessThanOrEqualTo(EdgeOfLowBand - GothwaitePvpArenaRules.EdgeMargin));
+        });
+    }
+
+    [Test]
+    public void TheNearestUsablePointIsPickedAndAnUnusableOneIsSkipped()
+    {
+        TurnOn();
+        IReadOnlyList<GothwaitePvpSpot> points = Arena.PatrolPointsFor(25, GothwaitePvpMode.Settings);
+        GothwaitePvpSpot here = PatrolPointNamed("GP01");
+
+        GothwaitePvpSpot? nearest = GothwaitePvpArenaRules.NearestPoint(Arena, 30_000, points, here.X, here.Y, _ => true);
+        GothwaitePvpSpot? skipped = GothwaitePvpArenaRules.NearestPoint(Arena, 30_000, points, here.X, here.Y, point => point != here);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(nearest, Is.EqualTo(here), "the point at the bot's feet");
+            Assert.That(skipped.HasValue && skipped.Value != here, Is.True, "the refused point is skipped for another");
+        });
+    }
+
+    [Test]
+    public void TheArenaLogLinesKeepTheOwnersGrepFormat()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GothwaitePvpLines.Chase("Ana", "Bo", "castle"),
+                Is.EqualTo("GOTH_PVP_CHASE_LIMIT bot=\"Ana\" target=\"Bo\" reason=castle"));
+            Assert.That(GothwaitePvpLines.Stuck("Ana", "1,2,3", "repick"),
+                Is.EqualTo("GOTH_PVP_STUCK bot=\"Ana\" goal=1,2,3 action=repick"));
+            Assert.That(GothwaitePvpLines.Edge("Ana", 20500, 20000),
+                Is.EqualTo("GOTH_PVP_EDGE bot=\"Ana\" distance=20500 edge=20000"));
+            Assert.That(GothwaitePvpLines.GroupLeader("7", "Bo", "Ana", "leader_lost"),
+                Is.EqualTo("GOTH_PVP_GROUP_LEADER group=7 leader=\"Bo\" previous=\"Ana\" reason=leader_lost"));
+            Assert.That(GothwaitePvpLines.Return("Ana", "low_health", "health=30 power=10"),
+                Is.EqualTo("GOTH_PVP_RETURN bot=\"Ana\" reason=low_health health=30 power=10"));
+            Assert.That(GothwaitePvpLines.Spot(null), Is.EqualTo("none"));
+            Assert.That(GothwaitePvpLines.Spot(new Point3D(1, 2, 3)), Is.EqualTo("1,2,3"));
+        });
+    }
+}

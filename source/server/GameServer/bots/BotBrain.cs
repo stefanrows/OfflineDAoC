@@ -197,6 +197,7 @@ namespace DOL.AI.Brain
         public void ForceAddToAggroList(GameLiving living, long aggroAmount)
         {
             if (!CompanionEngagementMode.Allows(Body, living)) return;
+            if (GothwaitePvpSelfDefence.Drops(BotBody, living)) return;
             if (aggroAmount > 0)
             {
                 foreach (ProtectECSGameEffect protect in living.effectListComponent.GetAbilityEffects().Where(e => e.EffectType is eEffect.Protect))
@@ -239,7 +240,7 @@ namespace DOL.AI.Brain
                 {
                     foreach (GamePlayer playerInGroup in player.Group.GetPlayersInTheGroup())
                     {
-                        if (playerInGroup != living)
+                        if (playerInGroup != living && !GothwaitePvpSelfDefence.Drops(BotBody, playerInGroup))
                             AggroList.TryAdd((GameLiving)playerInGroup, new());
                     }
                 }
@@ -318,6 +319,7 @@ namespace DOL.AI.Brain
 
         protected virtual bool ShouldBeRemovedFromAggroList(GameLiving living)
         {
+            if (GothwaitePvpSelfDefence.Drops(BotBody, living)) return true;
             return !living.IsAlive ||
                    living.ObjectState != GameObject.eObjectState.Active ||
                    living.CurrentRegion != Body.CurrentRegion ||
@@ -415,7 +417,7 @@ namespace DOL.AI.Brain
 
         protected virtual GameLiving CalculateNextAttackTarget()
         {
-            GameLiving highest = CleanUpAggroListAndGetHighestModifiedThreat();
+            GameLiving highest = GothwaitePvpSelfDefence.Keep(BotBody, CleanUpAggroListAndGetHighestModifiedThreat());
             return ApplyRvrCombatHabits(highest) ?? highest;
         }
 
@@ -441,6 +443,7 @@ namespace DOL.AI.Brain
 
         public virtual bool CanAggroTarget(GameLiving target)
         {
+            if (GothwaitePvpSelfDefence.Drops(BotBody, target)) return false;
             if (!CompanionEngagementMode.Allows(Body, target)) return false;
             if (BotBody != null && PvpCombatant.IsPlayerShaped(target) && AutonomousSiegeMarch.IsMarching(BotBody)) return false;
             if (!GameServer.ServerRules.IsAllowedToAttack(Body, target, true))
@@ -489,7 +492,7 @@ namespace DOL.AI.Brain
             CompanionEngagementMode.Allows(Body, target) &&
             target.ObjectState == GameObject.eObjectState.Active &&
             target.CurrentRegion == Body.CurrentRegion &&
-            GameServer.ServerRules.IsAllowedToAttack(Body, target, true);
+            GameServer.ServerRules.IsAllowedToAttack(Body, target, true) && !GothwaitePvpSelfDefence.Drops(BotBody, target);
 
         /// <summary>Recall may discard old pulls, never a current legal attacker.</summary>
         public GameLiving FindRecallDefenseTarget()
@@ -505,6 +508,7 @@ namespace DOL.AI.Brain
 
         public virtual void OnAttackedByEnemy(AttackData ad)
         {
+            GothwaitePvpSelfDefence.NoteAttacker(BotBody, ad?.Attacker);
             CompanionPvpEngagement.RecordThreat(BotBody, Body, ad);
             if (!Body.IsAlive || Body.ObjectState != GameObject.eObjectState.Active || FSM.GetCurrentState() == FSM.GetState(eFSMStateType.PASSIVE))
                 return;
@@ -650,6 +654,7 @@ namespace DOL.AI.Brain
         public void OnGuildmateAttacked(GameLiving victim, GameLiving attacker)
         {
             if (AutonomousSiegeMarch.IsMarching(BotBody)) return;
+            if (GothwaitePvpSelfDefence.Drops(BotBody, attacker)) return;
             if (Body == null || !Body.IsAlive || victim.CurrentRegionID != Body.CurrentRegionID ||
                 Body.CurrentZone == null || !Body.IsWithinRadius(victim, AutonomousGuildCohesion.HelpRadius) ||
                 !GameServer.ServerRules.IsAllowedToAttack(Body, attacker, true) ||
@@ -3327,7 +3332,7 @@ namespace DOL.AI.Brain
 
             GameObject previousAttackTarget = Body.TargetObject;
             GameLiving activePetTarget = BotBody?.IsAutonomousWorldBot == true && !BotBody.IsPlayerLedGroup
-                ? AutonomousPetSupport.ActiveOwnedPetCombatTarget(BotBody)
+                ? GothwaitePvpSelfDefence.Keep(BotBody, AutonomousPetSupport.ActiveOwnedPetCombatTarget(BotBody))
                 : null;
             if (activePetTarget != null)
                 AddToAggroList(activePetTarget, Math.Max(1, activePetTarget.EffectiveLevel));
@@ -4594,6 +4599,7 @@ namespace DOL.AI.Brain
                     return false;
 
                 Spell payload = SkillBase.GetSpellByID(spell.SubSpellID);
+                if (GothwaitePvpSelfDefence.RefusesCast(Body, payload, target)) return false;
                 return !CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) ||
                     !CompanionRangedAoePolicy.IsDamageAreaPayload(payload) ||
                     CompanionRangedAoePolicy.CanCastServantAreaCommand(

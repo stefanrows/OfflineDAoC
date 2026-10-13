@@ -1,8 +1,8 @@
 # Gothwaite PvP mode: plan
 
 **Status:** in progress. Stage 0 (audit) done 2026-10-13 (0.261.2), results
-in section 11. Stage 1 built in 0.262.0, stage 2 in 0.263.0 (section 12). Stages 3–4
-follow in order, each as its own version.
+in section 11. Stage 1 built in 0.262.0, stage 2 in 0.263.0, stage 3 in 0.264.0
+(section 12). Stage 4 follows.
 
 **This is a separate world mode.** It is not a population preset, it is not
 part of the Camlann world bot work, and it does not change that work. With the
@@ -477,3 +477,34 @@ Findings that shaped the design:
   `GOTH_PVP_ARRIVE`, `GOTH_PVP_RETURN`, `GOTH_PVP_ROUTE_FAILED`.
 - Navmesh probe: all 30 candidate patrol points snap and route from the
   castle landing in one leg with the blocking-door filters.
+
+### Stage 3 (0.264.0)
+
+- Patrol points: 29 points in `GothwaitePvpArena.PatrolPoints`, snapped to the
+  installed navmesh and asserted to route from the castle by
+  `UT_GothwaitePvpArenaInstalledNavigation` (explicit; needs
+  `OFFLINE_DAOC_NAV_ROOT` and Windows Detour). A bot uses the points within
+  its edge (`lowBandEdge` up to `lowBandMaxLevel`, else `edge`); a group uses
+  its lowest living member's edge.
+- Roaming (`GothwaitePvpArenaRules`): weight (1 + heat) / (1 + distance /
+  10,000), never the point just left, stalled points skipped for 5 minutes;
+  dwell 15–40 s. Heat = kills within 2,500 units, fading over 10 minutes.
+- Opening rule: `GothwaitePvpTargetRules.MayOpen` (player-shaped, green to
+  red to the bot and, for a pet, to its owner; outside the castle; inside the
+  edge; not an alliance mate; server-legal). Scan every 1.5 s at 2,400 units.
+- Class brain: `GothwaitePvpSelfDefence` filters aggro adds, the next target,
+  proactive aggro, retaliation, guild-mate calls, crowd control, PvE add
+  control, servant payloads, FNF turrets and every harmful area cast
+  (`GameLiving.CastSpell`): a mode bot fights only `MayOpen` targets or those
+  that attacked it, its group or its pet. Area spells are refused when a
+  living thing it may not fight (a monster included) stands in the area.
+- Chase limit: castle, target beyond the edge, or the bot beyond edge +
+  1,000 → the fight is dropped (`GOTH_PVP_CHASE_LIMIT`).
+- Returns: health < 35%, caster power < 20%, leader lost (no living member
+  within 2,400), group wiped. A returning leader hands the group to the first
+  living arena member (`GOTH_PVP_GROUP_LEADER`) or the group dissolves.
+- Stuck: 96 units of progress per 45 s; two repicks, then home
+  (`GOTH_PVP_STUCK`).
+- Kills: `AbstractServerRules.OnNpcKilled` / `OnPlayerKilled` call
+  `GothwaitePvpStats.RecordKill` (`GOTH_PVP_KILL` with levels, kinds and both
+  con colours). A mode bot killed by a monster is logged as `killer_kind=other`.

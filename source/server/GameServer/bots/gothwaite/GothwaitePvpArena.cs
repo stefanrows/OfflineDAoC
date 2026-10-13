@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using OfflineDaoc.Configuration;
 
 namespace DOL.GS;
 
@@ -45,10 +46,45 @@ public sealed record GothwaitePvpArena
         },
         CastleApproaches = new GothwaitePvpSpot[]
         {
-            // About 4,800 units north of the centre (y grows southward), just outside the 4,000 safe circle, in front of the gate.
+            // About 4,800 units north of the centre (y grows southward), just outside the 4,000 safe circle, in front of the
+            // gate. Floor snapped on the installed navmesh (the plateau is at 4,800, the ground outside at 3,898).
             // The Z is an estimate: the installed mesh floor under this point is at Z 3,898 (installed-mesh probe 2026-10-13),
             // so the navigation snaps the goal to the floor and does not reject it for its height.
-            new("castle approach N", 535020, 544020, 4800),
+            new("castle approach N", 535020, 544051, 3898),
+        },
+        // Stage 0 candidates, snapped to the installed navmesh and each proven to route from the castle landing
+        // (UT_GothwaitePvpArenaInstalledNavigation, 2026-10-13). GP02 is the castle exit itself and is left out.
+        PatrolPoints = new GothwaitePvpSpot[]
+        {
+            new("GP01", 532069, 545280, 4643), // 4,564 from the centre
+            new("GP03", 540020, 544020, 3169), // 6,971 from the centre
+            new("GP04", 528538, 542032, 3379), // 9,338 from the centre
+            new("GP05", 544020, 546020, 3162), // 9,483 from the centre
+            new("GP06", 543020, 542020, 3125), // 10,542 from the centre
+            new("GP07", 525020, 545020, 2915), // 10,637 from the centre
+            new("GP08", 526020, 539020, 3188), // 13,259 from the centre
+            new("GP09", 540020, 536020, 3732), // 13,758 from the centre
+            new("GP10", 522020, 544020, 3168), // 13,797 from the centre
+            new("GP11", 527651, 536998, 3169), // 13,892 from the centre
+            new("GP12", 548020, 544020, 3168), // 13,914 from the centre
+            new("GP13", 525020, 537020, 3125), // 15,422 from the centre
+            new("GP14", 520020, 542020, 3324), // 16,410 from the centre
+            new("GP15", 539020, 532020, 3524), // 17,277 from the centre
+            new("GP16", 526020, 534020, 3044), // 17,284 from the centre
+            new("GP17", 524020, 533020, 2853), // 19,211 from the centre
+            new("GP18", 541020, 530020, 3827), // 19,747 from the centre
+            new("GP19", 526122, 541138, 3168), // 11,704 from the centre
+            new("GP20", 524020, 542020, 3168), // 12,876 from the centre
+            new("GP21", 522020, 532020, 3023), // 21,199 from the centre
+            new("GP22", 550020, 531020, 3124), // 23,312 from the centre
+            new("GP23", 519020, 531020, 3306), // 23,887 from the centre
+            new("GP24", 511020, 548020, 3138), // 23,951 from the centre
+            new("GP25", 511020, 550020, 3168), // 23,968 from the centre
+            new("GP26", 514020, 537020, 3305), // 24,031 from the centre
+            new("GP27", 512020, 538020, 3240), // 25,350 from the centre
+            new("GP28", 514020, 533020, 3161), // 26,226 from the centre
+            new("GP29", 512020, 536020, 3263), // 26,264 from the centre
+            new("GP30", 537990, 522470, 3350), // 26,517 from the centre
         },
     };
 
@@ -69,6 +105,21 @@ public sealed record GothwaitePvpArena
     /// <summary>Inside the castle safe circle of this arena's region. Z is ignored.</summary>
     public bool InCastle(ushort regionId, int x, int y) =>
         regionId == RegionId && CastleDistanceSquared(x, y) <= (double)SafeRadius * SafeRadius;
+
+    /// <summary>The farthest a bot of this level may roam or chase from the castle centre (section 6.5).</summary>
+    public static int EdgeFor(int level, GothwaitePvpSettings settings) =>
+        level <= settings.LowBandMaxLevel ? settings.LowBandEdge : settings.Edge;
+
+    /// <summary>The patrol points a bot of this level may use: those within its arena edge.</summary>
+    public IReadOnlyList<GothwaitePvpSpot> PatrolPointsFor(int level, GothwaitePvpSettings settings)
+    {
+        double edge = EdgeFor(level, settings);
+        var points = new List<GothwaitePvpSpot>();
+        foreach (GothwaitePvpSpot point in PatrolPoints)
+            if (CastleDistanceSquared(point.X, point.Y) <= edge * edge)
+                points.Add(point);
+        return points;
+    }
 
     /// <summary>A castle landing for one bot, chosen and spread by its id so bots do not stack on one spot.</summary>
     public GothwaitePvpSpot CastleLanding(long botId)

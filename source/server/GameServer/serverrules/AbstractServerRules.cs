@@ -1043,6 +1043,7 @@ namespace DOL.GS.ServerRules
 
         public virtual void OnNpcKilled(GameNPC killedNpc, GameObject killer)
         {
+            GothwaitePvpStats.RecordKill(killer as GameLiving, killedNpc);
             // Persistent autonomous bots represent real realm opponents in RvR.
             // Award their RP through the player-equivalent path, then stop here:
             // they must not also be paid as an NPC. Controlled pets and temporary
@@ -2049,6 +2050,7 @@ namespace DOL.GS.ServerRules
 
         public virtual void OnPlayerKilled(GamePlayer killedPlayer, GameObject killer)
         {
+            GothwaitePvpStats.RecordKill(killer as GameLiving, killedPlayer);
             if (Properties.ENABLE_WARMAPMGR && killer is GamePlayer && killer.CurrentRegion.ID == 163)
                 WarMapMgr.AddFight((byte) killer.CurrentZone.ID, killer.X, killer.Y, (byte) killer.Realm, (byte) killedPlayer.Realm);
 

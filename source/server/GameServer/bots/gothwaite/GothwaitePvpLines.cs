@@ -40,4 +40,23 @@ public static class GothwaitePvpLines
 
     public static string RouteFailed(string bot, string goal, string reason) =>
         $"GOTH_PVP_ROUTE_FAILED bot=\"{bot}\" goal={goal} reason={reason}";
+
+    /// <summary>A fight dropped by the chase limit (castle, edge or self_edge). Logged once per target.</summary>
+    public static string Chase(string bot, string target, string reason) =>
+        $"GOTH_PVP_CHASE_LIMIT bot=\"{bot}\" target=\"{target}\" reason={reason}";
+
+    /// <summary>A stalled walk: the goal is refused and another picked (repick), or the bot goes back to the castle.</summary>
+    public static string Stuck(string bot, string goal, string action) =>
+        $"GOTH_PVP_STUCK bot=\"{bot}\" goal={goal} action={action}";
+
+    /// <summary>A bot outside its arena edge walks back inside it. Logged once per excursion.</summary>
+    public static string Edge(string bot, int distance, int edge) =>
+        $"GOTH_PVP_EDGE bot=\"{bot}\" distance={distance} edge={edge}";
+
+    /// <summary>A group passes to a new leader, when its leader returns or dies and another member is alive in the arena.</summary>
+    public static string GroupLeader(string id, string leader, string previous, string reason) =>
+        $"GOTH_PVP_GROUP_LEADER group={id} leader=\"{leader}\" previous=\"{previous}\" reason={reason}";
+
+    /// <summary>A map position as the log writes it: x,y,z, or none for a goal that does not exist.</summary>
+    public static string Spot(Point3D point) => point == null ? "none" : $"{point.X},{point.Y},{point.Z}";
 }

@@ -227,13 +227,31 @@ public static class GothwaitePvpNavigation
         return false;
     }
 
-    private static void MarkUnreachable(GothwaitePvpRoute route, (int, int, int) key, long now)
+    private static void MarkUnreachable(GothwaitePvpRoute route, (int, int, int) key, long now) =>
+        Store(route, key, now, now + UnreachableRetryMilliseconds);
+
+    /// <summary>
+    /// Refuses a goal for <paramref name="milliseconds"/>: <see cref="GoTo"/> returns false for it without a proof. The stage 3
+    /// stuck rule uses it for a patrol point that stalled (5 minutes), so the bot picks another.
+    /// </summary>
+    public static void MarkUnreachableFor(GothwaitePvpRoute route, Point3D goal, long now, int milliseconds)
     {
-        // Goals move with a leader; drop expired keys so the table stays small.
+        if (route == null || goal == null)
+            return;
+        Store(route, (goal.X, goal.Y, goal.Z), now, now + milliseconds);
+    }
+
+    /// <summary>True while a goal sits in the unreachable table (see <see cref="MarkUnreachableFor"/>).</summary>
+    public static bool IsUnreachable(GothwaitePvpRoute route, Point3D goal, long now) =>
+        route != null && goal != null && route.UnreachableUntil.TryGetValue((goal.X, goal.Y, goal.Z), out long until) && now < until;
+
+    // Goals move with a leader; expired keys are dropped once the table is full, so it stays small.
+    private static void Store(GothwaitePvpRoute route, (int, int, int) key, long now, long until)
+    {
         if (route.UnreachableUntil.Count >= UnreachableCacheLimit)
             foreach ((int, int, int) stale in route.UnreachableUntil.Keys.ToArray())
                 if (route.UnreachableUntil[stale] <= now)
                     route.UnreachableUntil.Remove(stale);
-        route.UnreachableUntil[key] = now + UnreachableRetryMilliseconds;
+        route.UnreachableUntil[key] = until;
     }
 }

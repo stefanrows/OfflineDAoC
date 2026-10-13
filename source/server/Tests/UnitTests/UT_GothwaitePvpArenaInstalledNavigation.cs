@@ -135,6 +135,22 @@ public class UT_GothwaitePvpArenaInstalledNavigation
                     TestContext.WriteLine($"GOTH_NUDGE name={candidate.Name} result=none");
             }
 
+            // The arena's own data, read from code: every castle approach and every patrol point must snap and route from the castle landing.
+            GothwaitePvpArena arena = GothwaitePvpArena.Gothwaite;
+            Assert.That(arena.CastleApproaches, Is.Not.Empty, "The arena must define castle approaches");
+            Assert.That(arena.PatrolPoints, Is.Not.Empty, "The arena must define patrol points");
+            int arenaProbes = 0, arenaFailures = 0;
+            foreach (GothwaitePvpSpot spot in arena.CastleApproaches.Concat(arena.PatrolPoints))
+            {
+                ProbeResult probe = ProbePoint(nav, region, landingZone, origin, queryLeg, nodes, spot.Name, new Vector3(spot.X, spot.Y, spot.Z));
+                arenaProbes++;
+                if (probe.Ok)
+                    continue;
+                arenaFailures++;
+                failures.Add($"{spot.Name} snap={probe.Snap} route={probe.Route}");
+            }
+            TestContext.WriteLine($"GOTH_NAV_ARENA points={arenaProbes} failed={arenaFailures}");
+
             int within = candidates.Count(p => p.Ok && p.Distance > SpreadFloor && p.Distance <= LowBandLimit);
             int between = candidates.Count(p => p.Ok && p.Distance > LowBandLimit && p.Distance <= ArenaLimit);
             TestContext.WriteLine($"GOTH_NAV_SUMMARY candidates={candidates.Count} routeOkWithin20000={within} routeOkBetween20000And30000={between}");

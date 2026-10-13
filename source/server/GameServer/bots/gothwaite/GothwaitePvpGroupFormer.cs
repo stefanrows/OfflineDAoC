@@ -30,6 +30,8 @@ public static class GothwaitePvpGroupFormer
     private static long _nextNumber;
     private static readonly Dictionary<GameBot, Entry> Entries = new();
     private static readonly List<Record> Records = new();
+    // Why a bot's group ended while it was not leaving it (read once by the bot's driver with TakeEndReason).
+    private static readonly Dictionary<GameBot, string> EndReasons = new();
 
     /// <summary>What a driver needs to know about its bot's group.</summary>
     public readonly record struct Membership(string Id, GothwaitePvpShape Shape, GameBot Leader, bool IsLeader, bool Departing, bool Arrived);
@@ -61,7 +63,8 @@ public static class GothwaitePvpGroupFormer
         public GothwaitePvpShape Shape { get; init; }
         public int Target { get; init; }
         public int Minimum { get; init; }
-        public GameBot Leader { get; init; }
+        /// <summary>The leader. A departed group passes it on when its leader returns or dies (stage 3).</summary>
+        public GameBot Leader { get; set; }
         public long ExpiresAt { get; init; }
         public long DepartedAt { get; set; }
         public bool Departing { get; set; }
@@ -170,11 +173,95 @@ public static class GothwaitePvpGroupFormer
             }
             if (record.Leader == bot)
             {
-                Close(record, GameLoop.GameLoopTime, reason);
+                Close(record, GameLoop.GameLoopTime, reason, except: bot);
                 return;
             }
             RemoveFromRecord(record, entry);
             Entries.Remove(bot);
+        }
+    }
+
+    /// <summary>
+    /// The bot returns to the castle from the arena (stage 3). A follower leaves its group. A leader hands the group to the
+    /// first alive member in the arena, in join order, and its real group follows the new leader; with none, the group ends
+    /// and its other members learn why (<see cref="TakeEndReason"/>).
+    /// </summary>
+    public static void Retire(GameBot bot, string reason)
+    {
+        lock (Sync)
+        {
+            if (bot == null || !Entries.TryGetValue(bot, out Entry entry))
+                return;
+            entry.Ready = false;
+            Record record = entry.Record;
+            if (record == null)
+            {
+                Entries.Remove(bot);
+                return;
+            }
+            long now = GameLoop.GameLoopTime;
+            if (record.Leader == bot && !PromoteFrom(record, now, reason, bot))
+            {
+                Close(record, now, reason, except: bot);
+                Entries.Remove(bot);
+                return;
+            }
+            RemoveFromRecord(record, entry);
+            Entries.Remove(bot);
+        }
+    }
+
+    /// <summary>
+    /// The reason a bot's group ended while the bot was not leaving it: leader_lost, or wiped for any other end. Read once;
+    /// null when there is none.
+    /// </summary>
+    public static string TakeEndReason(GameBot bot)
+    {
+        lock (Sync)
+        {
+            return bot != null && EndReasons.Remove(bot, out string reason) ? reason : null;
+        }
+    }
+
+    /// <summary>
+    /// The lowest level among the living members of the bot's group, the bot included. The bot's own level outside a group.
+    /// A leader keeps the group inside the edge of its lowest member, so no follower is left beyond its own edge.
+    /// </summary>
+    public static int LowestAliveLevel(GameBot bot)
+    {
+        if (bot == null)
+            return 0;
+        lock (Sync)
+        {
+            int lowest = bot.Level;
+            if (Entries.TryGetValue(bot, out Entry entry) && entry.Record is { } record)
+                foreach (Entry member in record.Members)
+                    if (member.Bot.IsAlive && IsActive(member.Bot) && member.Bot.Level < lowest)
+                        lowest = member.Bot.Level;
+            return lowest;
+        }
+    }
+
+    /// <summary>
+    /// The living members of the bot's group other than the bot: all of them, and those within <paramref name="nearRange"/>.
+    /// Zero for a bot that is in no group.
+    /// </summary>
+    public static (int Others, int Near) CountAliveOthers(GameBot bot, int nearRange)
+    {
+        lock (Sync)
+        {
+            if (bot == null || !Entries.TryGetValue(bot, out Entry entry) || entry.Record is not { } record)
+                return (0, 0);
+            int others = 0, near = 0;
+            foreach (Entry member in record.Members)
+            {
+                if (member.Bot == bot || !member.Bot.IsAlive || !IsActive(member.Bot))
+                    continue;
+                others++;
+                if (member.Bot.IsWithinRadius(bot, nearRange))
+                    near++;
+            }
+            return (others, near);
         }
     }
 
@@ -207,7 +294,8 @@ public static class GothwaitePvpGroupFormer
     }
 
     // Drops what no longer belongs: a pooled bot that is no longer eligible, a member that left its group, that left the
-    // castle while gathering, or that is no longer active. A record whose leader is gone ends.
+    // castle while gathering, or that is no longer active. A record whose leader is gone ends, unless a dead leader can hand
+    // the group to a living member in the arena (stage 3).
     private static void Prune(long now)
     {
         foreach (Entry entry in Entries.Values.Where(entry => entry.Record == null).ToArray())
@@ -219,9 +307,14 @@ public static class GothwaitePvpGroupFormer
             if (record.Real != null && record.Leader.Group != record.Real)
                 record.Real = null; // a native break-up left the leader alone; the record carries on without a real group
 
-            if (!IsActive(record.Leader) || !record.Leader.IsAlive)
+            if (!IsActive(record.Leader))
             {
-                Close(record, now, "leader_lost");
+                Close(record, now, GothwaitePvpArenaRules.ReasonLeaderLost);
+                continue;
+            }
+            if (!record.Leader.IsAlive && !PromoteFrom(record, now, GothwaitePvpArenaRules.ReasonLeaderLost, null))
+            {
+                Close(record, now, GothwaitePvpArenaRules.ReasonLeaderLost);
                 continue;
             }
             if (!record.Departing && !InCastle(record.Leader))
@@ -241,6 +334,10 @@ public static class GothwaitePvpGroupFormer
                     Entries.Remove(member.Bot);
                 }
         }
+
+        // An end reason no driver read (its bot left the world) is dropped, so the table stays small.
+        foreach (GameBot bot in EndReasons.Keys.Where(bot => !IsActive(bot)).ToArray())
+            EndReasons.Remove(bot);
     }
 
     // Pool bots that are eligible join open groups (oldest first); each leftover bot that is not a solo leads a new group.
@@ -301,11 +398,38 @@ public static class GothwaitePvpGroupFormer
         Unplace(record, now);
     }
 
-    private static void Close(Record record, long now, string reason)
+    // The group ends. Its members (but <paramref name="except"/>) learn why, for the driver's return line.
+    private static void Close(Record record, long now, string reason, GameBot except = null)
     {
         Log.Info(GothwaitePvpLines.Dissolved(record.Id, record.Shape, record.Members.Count, reason));
+        foreach (Entry member in record.Members)
+            if (member.Bot != except)
+                EndReasons[member.Bot] = EndReasonFor(reason);
         Records.Remove(record);
         Unplace(record, now);
+    }
+
+    // A lost leader ends a group as leader_lost; any other end leaves its members wiped.
+    private static string EndReasonFor(string reason) =>
+        reason == GothwaitePvpArenaRules.ReasonLeaderLost ? GothwaitePvpArenaRules.ReasonLeaderLost : GothwaitePvpArenaRules.ReasonWiped;
+
+    // Hands the group to the first alive member in the arena, in join order, skipping the leader and <paramref name="leaving"/>.
+    // The real group's leader follows. False when no member qualifies, and the record is left as it was.
+    private static bool PromoteFrom(Record record, long now, string reason, GameBot leaving)
+    {
+        Entry[] members = record.Members.Where(member => member.Bot != record.Leader && member.Bot != leaving).ToArray();
+        GothwaitePvpPromotionCandidate[] candidates = members.Select(member => new GothwaitePvpPromotionCandidate(
+            BotIdOf(member.Bot), member.Bot.IsAlive && IsActive(member.Bot), OutsideCastle(member.Bot))).ToArray();
+        int index = GothwaitePvpArenaRules.FirstAliveInArena(candidates);
+        if (index < 0)
+            return false;
+        GameBot previous = record.Leader;
+        GameBot next = members[index].Bot;
+        if (record.Real != null && next.Group == record.Real)
+            record.Real.MakeLeader(next);
+        record.Leader = next;
+        Log.Info(GothwaitePvpLines.GroupLeader(record.Id, next.Name, previous.Name, reason));
+        return true;
     }
 
     // The group ends: its real group is disbanded and each member leaves it. A member that is ready and eligible returns
@@ -445,6 +569,10 @@ public static class GothwaitePvpGroupFormer
         bot != null && bot.ObjectState == GameObject.eObjectState.Active && !bot.IsPlayerLedGroup;
 
     private static bool InCastle(GameBot bot) => GothwaitePvpMode.Arena.InCastle(bot.CurrentRegionID, bot.X, bot.Y);
+
+    // In the arena's region and outside the castle circle: where a group member can take over a group.
+    private static bool OutsideCastle(GameBot bot) =>
+        bot.CurrentRegionID == GothwaitePvpMode.Arena.RegionId && !InCastle(bot);
 
     private static long BotIdOf(GameBot bot) => bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID;
 

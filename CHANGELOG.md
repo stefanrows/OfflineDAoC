@@ -12,6 +12,35 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.264.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP mode, stage 3: arena PvP** (`docs/GOTHWAITE_PVP_MODE.md`,
+  TASKS 125). With the mode on, groups and solos leave the castle gate and
+  roam 29 navmesh-proven patrol points around the Isle of Glass, preferring
+  points with recent fights, and dwell 15–40 seconds at each. Levels 1–19
+  stay within 20,000 units of the castle, levels 20+ within 30,000; a group
+  roams only as far as its lowest member may.
+- Mode bots open fights only on players, companions and other bots that con
+  green to red to them, outside the castle and inside their edge, and never
+  on alliance mates. Greys and purples are left alone in both directions;
+  the bot's own class brain, its pets, turrets and area spells follow the
+  same rule. Anyone who attacks a mode bot or its group can be fought back.
+  Mode bots do not pull monsters; they only fight a monster that attacks.
+- Chase limits: a fight ends when the target reaches the castle or leaves
+  the bot's edge. Bots return to the castle below 35% health or 20% power,
+  when their leader is lost or their group is wiped; a group gets a new
+  leader when its leader leaves. Stuck leaders pick another point, then go
+  home.
+- `GOTH_PVP_KILL` logs every arena kill with both levels and both con colours;
+  kills and deaths are counted per level band for stage 4.
+
+### Changed
+
+- Nothing changes with the mode off: every new hook in the bot brain, the
+  cast path, the turret brain and the kill handlers returns at once unless
+  the bot is a mode bot.
 ## [0.263.0] - 2026-10-13
 
 ### Added

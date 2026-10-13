@@ -70,6 +70,7 @@ namespace DOL.AI.Brain
         /// </summary>
         private GameLiving[] SparedFromPvpControl(ushort radius)
         {
+            if (GothwaitePvpMode.IsModeBot(BotBody)) return GothwaitePvpSelfDefence.SparedAround(BotBody, radius);
             if (!AutonomousBattlegroundDriver.HoldsOpenBattlegroundRule(BotBody)) return [];
             return Body.GetNPCsInRadius(radius).Where(BotPvpCrowdControl.PlayerLike).Cast<GameLiving>()
                 .Concat(Body.GetPlayersInRadius(radius))
