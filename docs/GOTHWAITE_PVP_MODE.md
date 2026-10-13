@@ -1,7 +1,7 @@
 # Gothwaite PvP mode: plan
 
-**Status:** plan only (2026-10-13). Nothing is built yet. Build it stage by
-stage (section 8), each stage only when the owner asks for it.
+**Status:** in progress. Stage 0 (audit) done 2026-10-13, results in
+section 11. Stages 1–4 are being built in order, each as its own version.
 
 **This is a separate world mode.** It is not a population preset, it is not
 part of the Camlann world bot work, and it does not change that work. With the
@@ -359,3 +359,67 @@ belong to the owner.
   Don't rebuild the navmesh globally to fix one route (`AGENTS.md`).
 - **Leaks into normal mode:** guarded by the separation contract and the
   mode-off regression tests. Any new touchpoint must be added to section 5.4.
+
+## 11. Stage 0 audit results (2026-10-13)
+
+Read-only audit of the source and of a copy of the installed world database
+(`before-classic165-spawns-20260926-115731`). No navmesh probe yet; stage 3
+proves the patrol points with an installed-mesh test.
+
+### 11.1 Touchpoints (completes section 5.4)
+
+| Hook | Place | Mode-on effect |
+|---|---|---|
+| Brain branch | `BotBrain.ThinkCore`, before the battleground participant branch | Mode bots run `ThinkGothwaitePvp()`. This alone cuts off the world controller, keep defense, frontier, RvR events, siege, guild armies, Darkness Falls camps, seal shopping, capital transit and the stuck watchdog. |
+| Coordinator | `AutonomousBotGroupCoordinator.PrepareCoordinatorTick` | Returns at once: keep-defense pulse, realm event controls, realm raids and forced parties, raid schedule, objective reconcile and world group formation stop. |
+| Open BG | `OpenBattlegroundRoster.Tick`, `OpenBattlegroundDirector.Tick`, `AutonomousBattlegroundParticipation.DirectorCap` and its admission | No autonomous bot is recruited or admitted. Real players' battleground access is unchanged. |
+| Attack observers | `AutonomousRvrEventLayer.ObserveKeepAttack`, `AutonomousGuildKeepDefense.ObserveAttack`, `AutonomousRealmRaid.ClaimNearbyDefenseBroadcast` | No defense calls; arena fights would otherwise pull bots away on every hit. |
+| Alt trickle | `AutonomousPopulationController.TryCreateAlt` | Paused (G9). |
+| Login | `AutonomousPopulationController.SpawnOnGameLoop`, after the stored/fresh placement | Mode bots are placed at a castle landing. `RepairInvalidLoginPosition` still runs and accepts it. |
+| Home snapshot | `AutonomousPopulationController.OnServerStarted`, before the roster loads | Snapshot (mode on) or restore (mode off) of `offline_gothwaite_pvp_home`. |
+| Release | `GameBot.ReleaseToNearestBindAndReturn`, after `SpreadSafe` | Mode bots release at a castle landing. |
+| Safe area | `PvpCombatant.IsSafeArea`, `IsSafeReleasePoint` | Castle circle is safe. |
+| Sub-10 rule | `PvpCombatant.IsSafetyProtected(GameLiving)` bot arm | Lifted for mode bots (G6). `BlocksLowLevelAutonomousPvp` and `BlocksAutonomousPvp` follow without edits. |
+| Constitution | `AutonomousBotRealmPointRewards.Award`, the `PVP_DEATH_CON_LOSS` write | Skipped for mode bots (G8). Bots only count lost constitution; nothing applies it to their stats today. |
+| Switch | `GameServer.Start`, next to `AutonomousBotGoalPolicy.Initialize` | Reads `gothwaite-pvp.json` once. |
+
+Findings that shaped the design:
+
+- No director needs its own guard beyond the table: `AutonomousRvrDirector` is
+  test-only, `AutonomousRealmLoginBalancer.SelectNext` has no callers, and
+  realm raids are already hard-off (`RealmRaidRecruitmentPolicy`).
+- `OpenBattlegroundPolicy.IsEnabled` must not be used as the switch; it also
+  stops player battlegrounds.
+- `offline_world_bots` stores region, X, Y, Z, zone, bind, camp and itinerary
+  but **no heading**, so the snapshot cannot restore heading.
+- A bot's stored bind is read only at death release; the mode does not rewrite
+  it, because mode bots always release at the castle.
+- New `[DataTable]` classes are created at database init, so the home table
+  needs no registration and leaves older saves alone.
+- Autonomous bots in a group led by a real player keep their normal
+  behaviour (they follow that player).
+
+### 11.2 Guards and NPCs
+
+- Town guards are `GameGuard` with `GuardBrain`; `PvPServerRules` never lets a
+  realm NPC that is not a keep guard attack a realm-bearing target. The 5
+  castle and 4 harbor guards (all Albion) therefore leave Midgard and Hibernia
+  bots alone, and bots cannot attack them or PEACE NPCs.
+- Castle bindstones: 534,978 / 548,786 and 535,083 / 548,794 (Z 4,800). The
+  `Caer Gothwaite` area row has Z 4,755. Teleport rows to Gothwaite exist only
+  for Albion; mode bots are placed directly, so this does not matter.
+
+### 11.3 Area re-check
+
+- Zone 51 bounds confirmed. Zones 52–57 are the other islands of region 51.
+- The mob table in section 3 reproduces exactly when distance is measured from
+  the teleporter landing (535,158 / 548,589). From the area centre the counts
+  differ by at most 2 per band (64 / 132 / 295 in the 10–30k bands). The edges
+  in section 6.5 stand: no aggressive mob within 15,000 and only 6 within
+  20,000.
+- The castle is 8,243 units from the zone's south edge. South of y 551,000 is
+  coast; the playable land lies north and west of the castle.
+- 30 candidate patrol points were picked (18 low band within 20,000, 12 high
+  band up to 26,500), at least 2,000 apart, away from water, doors and
+  aggressive mobs for the low band. Their Z values are estimates; stage 3 snaps
+  them to the navmesh and drops any that do not route from the castle.

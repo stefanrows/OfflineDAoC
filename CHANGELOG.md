@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.261.2] - 2026-10-13
+
+### Added
+
+- Gothwaite PvP mode, stage 0 audit (`docs/GOTHWAITE_PVP_MODE.md` section
+  11, TASKS 125): the exact hooks that keep the mode separate from normal bot
+  behaviour, a check that the Caer Gothwaite and harbor guards leave other
+  realms' bots alone, a re-check of the mob table and arena edges, and 30
+  candidate patrol points. Documentation only; no gameplay change.
+
 ## [0.261.1] - 2026-10-13
 
 ### Added

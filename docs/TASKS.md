@@ -304,6 +304,8 @@ Agent sessions on items 45–48: take the role and context from
      for mode bots only), progress carries over (only position and bind are
      restored), no constitution loss, alt trickle paused, bots may attack
      the owner and companions, harbor not safe.
+     Stage 0 (audit) done in 0.261.2: touchpoints, guard check, arena re-check
+     and candidate patrol points in section 11 of the plan.
 
 ## Implemented in source; installation verification pending
 
