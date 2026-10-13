@@ -291,6 +291,20 @@ Agent sessions on items 45–48: take the role and context from
     relic home as in 1.65. Do not build it before Aaron asks; the relic
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
+125. **Gothwaite PvP mode: a separate world mode where all autonomous bots
+     PvP around Caer Gothwaite.** Owner, 2026-10-13. Plan:
+     [GOTHWAITE_PVP_MODE.md](GOTHWAITE_PVP_MODE.md). All autonomous bots of
+     all levels live on the Isle of Glass (region 51) and only PvP. Caer
+     Gothwaite is a safe area for binding, resting, buffing and grouping.
+     Greys never attack purples, and purples never attack greys. It is
+     completely separate from the normal bot behaviour: off by default, own
+     folder and settings file, guarded one-line hooks only, mode-off
+     regression tests. Built in stages 0–5, each only when the owner asks.
+     Owner decisions 2026-10-13: PvP from level 1 (sub-10 protection lifted
+     for mode bots only), progress carries over (only position and bind are
+     restored), no constitution loss, alt trickle paused, bots may attack
+     the owner and companions, harbor not safe.
+
 ## Implemented in source; installation verification pending
 
 124. **Copy one character's UI layout to other characters.** Owner,

@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.261.1] - 2026-10-13
+
+### Added
+
+- Plan for a separate **Gothwaite PvP** world mode
+  (`docs/GOTHWAITE_PVP_MODE.md`, TASKS 125): every autonomous bot PvPs
+  around Caer Gothwaite from level 1, the castle is a safe hub, and greys
+  and purples leave each other alone. Owner decisions are recorded. Planning
+  only; no gameplay change.
+
 ## [0.261.0] - 2026-10-12
 
 ### Added
