@@ -119,6 +119,9 @@ namespace DOL.GS.ServerRules
 			if (living == null)
 				return false;
 
+			// Gothwaite PvP mode: the castle circle is safe while the mode is on (G3). Off, this is a no-op.
+			if (GothwaitePvpRules.IsCastleSafe(living)) return true;
+
 			if (SafeRegions.Contains(living.CurrentRegionID))
 				return true;
 
@@ -145,7 +148,8 @@ namespace DOL.GS.ServerRules
         {
             Region region = WorldMgr.GetRegion(regionId);
             return point != null && region != null && region.GetZone(point.X, point.Y) != null &&
-                (IsSafeRegion(regionId) || IsSafeBorderHub(regionId, point.X, point.Y) ||
+                (GothwaitePvpRules.IsCastleSafe(regionId, point.X, point.Y) ||
+                 IsSafeRegion(regionId) || IsSafeBorderHub(regionId, point.X, point.Y) ||
                  IsSafeHubLanding(regionId, point.X, point.Y) ||
                  region.GetAreasOfSpot(point).OfType<KeepArea>().Any(area => area.Keep?.IsPortalKeep == true));
         }
@@ -243,7 +247,7 @@ namespace DOL.GS.ServerRules
 		{
 			GamePlayer player => IsSafetyProtected(player, safetyLevel),
 			GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false } bot =>
-				bot.Level < safetyLevel,
+				bot.Level < safetyLevel && !GothwaitePvpRules.LiftsLowLevelProtection(bot),
 			_ => false
 		};
 

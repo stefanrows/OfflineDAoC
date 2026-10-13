@@ -15,6 +15,7 @@
     <Compile Include="../../server/GameServer/bots/autonomous/AutonomousPopulationShape.cs" Link="Configuration/AutonomousPopulationShape.cs" />
     <Compile Include="../../server/GameServer/bots/autonomous/BotCharacterGenerator.cs" Link="Configuration/BotCharacterGenerator.cs" />
     <Compile Include="../../server/GameServer/bots/autonomous/PopulationBenchmarks.cs" Link="Configuration/PopulationBenchmarks.cs" />
+    <Compile Include="../../server/GameServer/bots/gothwaite/GothwaitePvpSettings.cs" Link="Configuration/GothwaitePvpSettings.cs" />
     <Compile Include="../../server/GameServer/bots/autonomous/RealmEventRecordStore.cs" Link="Records/RealmEventRecordStore.cs" />
   </ItemGroup>
   <ItemGroup>

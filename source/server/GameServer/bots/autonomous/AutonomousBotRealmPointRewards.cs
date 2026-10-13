@@ -112,7 +112,7 @@ public static class AutonomousBotRealmPointRewards
         if (totalDamage <= 0)
             return false;
 
-        if (Properties.PVP_DEATH_CON_LOSS)
+        if (Properties.PVP_DEATH_CON_LOSS && !GothwaitePvpRules.SkipsConstitutionLoss(killedBot))
             killedBot.TotalConstitutionLostAtDeath += 3;
 
         Dictionary<GamePlayer, EntityCountTotalDamagePair> playerContributions = new();

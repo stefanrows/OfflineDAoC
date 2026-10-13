@@ -1319,6 +1319,9 @@ namespace DOL.GS
             }
             if (safeWorldRelease && !battlegroundLanding && release != null)
                 release = BotReleaseBindPoints.SpreadSafe(releaseRegion, release, DatabaseID > 0 ? DatabaseID : ObjectID);
+            // Gothwaite PvP mode: a mode bot always releases at its castle landing, never at the capital fallback.
+            if (GothwaitePvpRules.TryCastleLanding(this, out ushort castleRegion, out Point3D castleLanding))
+                (releaseRegion, release, releaseReason) = (castleRegion, castleLanding, "gothwaite-castle");
             // A PvE bind is not a sanctuary (Mularn is not); it only has to exist.
             if (safeWorldRelease && !battlegroundLanding &&
                 (pveBindRelease ? release == null : !PvpCombatant.IsSafeReleasePoint(releaseRegion, release)))

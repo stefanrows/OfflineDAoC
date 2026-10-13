@@ -1524,6 +1524,13 @@ namespace DOL.AI.Brain
                 return;
             }
 
+            // Gothwaite PvP mode bots run the mode's own driver; the world controller never runs for them.
+            if (GothwaitePvpMode.IsModeBot(BotBody))
+            {
+                ThinkGothwaitePvp();
+                return;
+            }
+
             // Autonomous campaign participants fight inside their battleground through the
             // bounded driver; ordinary world-bot routines wait until they leave it.
             if (AutonomousBattlegroundParticipation.IsParticipant(BotBody))

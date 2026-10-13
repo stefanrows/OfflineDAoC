@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.262.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP world mode, stage 1: the switch and its separation**
+  (`docs/GOTHWAITE_PVP_MODE.md`, TASKS 125). A **World mode** selector
+  (Normal / Gothwaite PvP) on the launcher's Server population tab, editable
+  only while the server is stopped. It writes `server/gothwaite-pvp.json`; the
+  server reads it once at start. The first switch into the mode copies the
+  save database to `data/gothwaite-pvp-backups/` and refuses if the database
+  was not closed cleanly.
+- With the mode on, every autonomous world bot logs in and releases at Caer
+  Gothwaite, which becomes a safe area, and stands there (stage 1 stub; castle
+  life and arena PvP follow in stages 2 and 3). The sub-10 PvP protection and
+  constitution loss do not apply to mode bots. No director, raid, siege, keep
+  defense, battleground roster or alt trickle recruits world bots.
+- Each bot's home (region, position, zone, bind, camp, itinerary) is stored in
+  the new table `offline_gothwaite_pvp_home` before the first bot moves. The
+  first start with the mode off puts every bot back and clears the table
+  (`GOTH_PVP_RESTORE`). Levels, XP, realm points and items earned in the mode
+  stay. The new table leaves older saves loadable.
+
+### Changed
+
+- With the mode off (the default) nothing changes. Mode-off regression tests
+  cover the castle, sub-10 protection, recruitment and the home store.
 ## [0.261.2] - 2026-10-13
 
 ### Added

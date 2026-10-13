@@ -1,7 +1,8 @@
 # Gothwaite PvP mode: plan
 
-**Status:** in progress. Stage 0 (audit) done 2026-10-13, results in
-section 11. Stages 1–4 are being built in order, each as its own version.
+**Status:** in progress. Stage 0 (audit) done 2026-10-13 (0.261.2), results
+in section 11. Stage 1 built in 0.262.0 (section 12). Stages 2–4 follow in
+order, each as its own version.
 
 **This is a separate world mode.** It is not a population preset, it is not
 part of the Camlann world bot work, and it does not change that work. With the
@@ -423,3 +424,29 @@ Findings that shaped the design:
   band up to 26,500), at least 2,000 apart, away from water, doors and
   aggressive mobs for the low band. Their Z values are estimates; stage 3 snaps
   them to the navmesh and drops any that do not route from the castle.
+
+## 12. Built so far
+
+### Stage 1 (0.262.0)
+
+- Code: `source/server/GameServer/bots/gothwaite/` (`GothwaitePvpSettings`,
+  `GothwaitePvpMode`, `GothwaitePvpArena`, `GothwaitePvpRules`,
+  `GothwaitePvpHomeRecord`, `GothwaitePvpHomeStore`, `GothwaitePvpDriver`,
+  `BotBrain.GothwaitePvp`). Touchpoints as in section 11.1.
+- Launcher: World mode row on the Server population tab
+  (`BotGoalsSettingsControl`), saved with the population settings. The first
+  switch into the mode backs up the save with `SaveDatabaseBackup` to
+  `data/gothwaite-pvp-backups/`.
+- Deviations from section 5.4, decided in review:
+  - `AutonomousBattlegroundParticipation.DirectorCap` is not zeroed: it also
+    sizes the campaign battlegrounds' NPC director squads that real players
+    fight. Admission (`Admit`, `AssignOpenUnit`) is guarded instead, so no
+    autonomous bot enters.
+  - The coordinator guard also pauses realm event notices and the GM realm
+    event controls while the mode is on.
+  - Heading is not stored (no column); a bot logging in at the castle faces
+    the castle centre.
+- Logs: `GOTH_PVP_MODE`, `GOTH_PVP_SNAPSHOT`, `GOTH_PVP_RESTORE`,
+  `GOTH_PVP_ENTER`, plus `GOTH_PVP_*_FAILED` lines on errors.
+- Tests: `UT_GothwaitePvpModeOff`, `UT_GothwaitePvpRules`,
+  `UT_GothwaitePvpHome`; launcher `GothwaitePvpSettingsTests`.

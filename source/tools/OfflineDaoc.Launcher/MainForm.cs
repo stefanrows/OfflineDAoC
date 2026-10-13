@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.261.2";
+    internal const string DisplayVersion = "0.262.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -696,7 +696,8 @@ internal sealed partial class MainForm : Form
             Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName),
             _worldSpeedStatusPath,
             Path.Combine(_serverDirectory, PopulationTypeMixProtocol.RequestFileName),
-            BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued));
+            BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued),
+            () => SaveDatabaseBackup.Create(_database, Path.Combine(Path.GetDirectoryName(_database)!, "gothwaite-pvp-backups"), "gothwaite-pvp"));
         botGoals.Controls.Add(_botGoalsSettings);
         tabs.TabPages.Add(botGoals);
         var openBg = new TabPage("open BG") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };

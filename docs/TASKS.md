@@ -306,6 +306,8 @@ Agent sessions on items 45–48: take the role and context from
      the owner and companions, harbor not safe.
      Stage 0 (audit) done in 0.261.2: touchpoints, guard check, arena re-check
      and candidate patrol points in section 11 of the plan.
+     Stage 1 (switch, launcher selector, separation hooks, home snapshot and
+     restore) built in 0.262.0; real-client check pending.
 
 ## Implemented in source; installation verification pending
 

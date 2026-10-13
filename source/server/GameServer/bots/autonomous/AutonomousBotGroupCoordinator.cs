@@ -189,6 +189,8 @@ public static partial class AutonomousBotGroupCoordinator
     /// member of every group. Own-party validity is still checked on each pulse.</summary>
     public static void PrepareCoordinatorTick()
     {
+        // Gothwaite PvP mode: no keep defense, realm raid, schedule or group formation for world bots (G9, section 5.4).
+        if (GothwaitePvpRules.SuppressesWorldRecruitment) return;
         long now = GameLoop.GameLoopTime;
         if (Interlocked.Read(ref _lastMaintenanceTick) == now || now < Interlocked.Read(ref _maintenanceRetryTick)) return;
         try

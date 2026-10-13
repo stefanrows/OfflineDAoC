@@ -67,6 +67,8 @@ public static class AutonomousPopulationController
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                 GameServer.Database.SaveObject(previouslyOnline.Cast<DataObject>());
         }
+        // Gothwaite PvP mode: store the homes before the first bot is moved, or restore them after a mode run.
+        GothwaitePvpHomeStore.ReconcileAtStartup();
         AutonomousBotTypeMixControl.Start();
         AutonomousCrewManager.ReconcileResult guilds = AutonomousCrewManager.Reconcile();
         if (!guilds.Succeeded)
@@ -258,6 +260,8 @@ public static class AutonomousPopulationController
 
     private static void TryCreateAlt(DateTime nowUtc, OfflineWorldBotRecord[] roster)
     {
+        // Gothwaite PvP mode pauses the alt trickle (G9).
+        if (GothwaitePvpRules.SuppressesWorldRecruitment) return;
         BotGoalSettings settings = AutonomousBotGoalPolicy.Settings;
         if (!_cachedEnabled || !AutonomousAltTrickle.IsDue(settings, roster.Length, nowUtc, _nextAltUtc))
             return;
@@ -305,6 +309,8 @@ public static class AutonomousPopulationController
                 // capital-based and are not part of new-character placement.
                 PlaceAtCapitalFallback(bot, record);
             }
+            // Gothwaite PvP mode: a mode bot logs in at the castle (no-op while the mode is off).
+            GothwaitePvpHomeStore.TryPlaceAtCastle(bot);
 
             // GameNPC keeps a separate interpolated movement position. Before
             // AddToWorld it still contains the constructor default (0,0,0),

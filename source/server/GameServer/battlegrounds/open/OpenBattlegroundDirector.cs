@@ -461,6 +461,12 @@ namespace DOL.GS
             }
             // The /bgsetup window and the launcher status file read the phase through this hook.
             OpenBattlegroundStatus.PhaseSource ??= PhaseStatus;
+            // Gothwaite PvP mode: no bot crew, so no cycle, raid or order is computed (section 5.4).
+            if (GothwaitePvpRules.SuppressesWorldRecruitment)
+            {
+                Reset();
+                return;
+            }
             Stopwatch watch = Stopwatch.StartNew();
             AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
             bool realGuild = keep?.Guild != null && PvpCombatant.IsRealGuild(keep.Guild);
