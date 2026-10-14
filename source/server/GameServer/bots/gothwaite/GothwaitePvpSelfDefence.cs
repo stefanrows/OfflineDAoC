@@ -53,6 +53,9 @@ public static class GothwaitePvpSelfDefence
             return true;
         if (target == null || target == bot || !target.IsAlive)
             return false;
+        // Stage 6: a bot that runs from a lost fight fights nothing, not even back; it keeps running (players did not turn around).
+        if (GothwaitePvpDriver.IsRetreating(bot))
+            return false;
         bool mayOpen = GothwaitePvpTargetRules.MayOpen(bot, target) && OwnerConAllows(bot, target);
         return Allows(true, mayOpen, !mayOpen && Defends(bot, target));
     }

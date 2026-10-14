@@ -3,8 +3,8 @@ using System.Collections.Generic;
 
 namespace DOL.GS;
 
-/// <summary>One member of a group, in join order, as the leader choice sees it.</summary>
-public readonly record struct GothwaitePvpPromotionCandidate(long BotId, bool Alive, bool InArena);
+/// <summary>One member of a group, in join order, as the leader choice sees it. <paramref name="Rank"/> is its leader rank (stage 6, lower leads).</summary>
+public readonly record struct GothwaitePvpPromotionCandidate(long BotId, bool Alive, bool InArena, int Rank = 0);
 
 /// <summary>
 /// The arena decisions of the Gothwaite PvP driver as pure functions (docs/GOTHWAITE_PVP_MODE.md sections 6.2, 6.4, 6.5 and
@@ -22,6 +22,9 @@ public static class GothwaitePvpArenaRules
     public const string ChaseEdge = "edge";
     public const string ChaseSelfEdge = "self_edge";
     public const string ChaseRing = "ring";
+    /// <summary>Stage 6: a follower's target ran beyond its healers, or a leader chased too far from where the fight began.</summary>
+    public const string ChaseOverextended = "overextended";
+    public const string ChaseFar = "far";
     public const string ActionRepick = "repick";
     public const string ActionCastle = "castle";
 
@@ -273,6 +276,23 @@ public static class GothwaitePvpArenaRules
             if (members[index].Alive && members[index].InArena)
                 return index;
         return -1;
+    }
+
+    /// <summary>
+    /// Stage 6: the member, alive and in the arena, with the lowest leader rank (a tank before a healer); ties keep the first in join
+    /// order. -1 when none qualifies. The leader is not in the list.
+    /// </summary>
+    public static int BestAliveInArena(IReadOnlyList<GothwaitePvpPromotionCandidate> members)
+    {
+        int best = -1;
+        for (int index = 0; members != null && index < members.Count; index++)
+        {
+            if (!members[index].Alive || !members[index].InArena)
+                continue;
+            if (best < 0 || members[index].Rank < members[best].Rank)
+                best = index;
+        }
+        return best;
     }
 
     /// <summary>

@@ -12,6 +12,71 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.268.0] - 2026-10-14
+
+### Added
+
+- **Gothwaite PvP mode: the bots fight the way DAoC players fought** (stage
+  6, `docs/GOTHWAITE_PVP_MODE.md` section 13). The rules were read from
+  player guides and forum accounts of 2002–2004 group RvR, the Thidranki
+  battleground and the PvP servers (sources in the plan):
+  - **A tank leads.** When a group walks out, its best main assist takes the
+    lead (a guard tank, then any melee, an archer, a caster, a healer last),
+    and a dead leader hands the group to the best-ranked living member. In
+    the last live run 753 groups dissolved because their leader died first;
+    many were led by a healer or caster.
+  - **Kill order.** Inside a fight a mode bot now picks its target the way
+    the world warbands do: it sticks to a target for a while, a damage dealer
+    follows the leader's call after the 1–2 s `/assist` delay (and now and
+    then ignores it), bots that can interrupt turn on an enemy caster who
+    starts a cast, and healers, mezzers, wounded enemies and whoever hits our
+    support weigh more. Before this the mode kept pure threat order.
+  - **Picking fights.** A leader or solo only opens on a party its group can
+    take: a solo takes a solo, a small-man avoids full groups, an eight takes
+    nine and rarely dares more; the leader's aggression colours it, and the
+    opening target is drawn by the kill-order weights instead of "nearest".
+  - **Retreats.** A group breaks off a fight it is losing (its healer dead,
+    half of it down, or clearly outnumbered; the leader's risk tolerance
+    decides) and a solo flees when it is added on or losing. The run goes back
+    toward the castle gate with sprint, nobody fights back meanwhile, and the
+    group either takes a new leg or goes home.
+  - **Regroup after a fight.** An arrived group sits down where it won, waits
+    for its members and recovers to 70 % health and 50 % power (at most 45 s)
+    before it moves on; low health and power no longer send a bot straight
+    home from a won fight. In the last run 505 returns were low health or
+    power.
+  - **Formation.** Followers walk in their doctrine's travel shape: a column
+    behind the leader with guards and melee first, healers in the middle and
+    casters behind, or a loose fan for stealth groups, instead of piling onto
+    the leader's spot. A slot that is off the mesh falls back to the leader.
+  - **Chase discipline.** A follower drops a runner beyond 1,500 units of its
+    leader and a leader a chase 2,500 units from where the fight began,
+    unless the target is about to die.
+  - **Adds.** A roaming leader hears a fight within 5,000 units of it from the
+    last 45 s and walks to it about a third to two thirds of the time by its
+    aggression. Hunters do not add.
+  - **Hunting stealthers.** An assassin or archer alone (or in a stealth pack,
+    gank squad or archer group) stays stealthed outside the castle, waits
+    30–90 s at a point, opens only on a lone target, a caster or healer in a
+    duo, or a wounded one, uses its stealth opener, and breaks away after
+    the fight.
+  - `/gothpvp` shows a tactics line (tanks took the lead, openings refused,
+    retreats, regroups, adds, stealth openings). New logs `GOTH_PVP_RETREAT`,
+    `GOTH_PVP_RETREAT_END`, `GOTH_PVP_REGROUP`, `GOTH_PVP_ADD`,
+    `GOTH_PVP_AMBUSH`, `GOTH_PVP_GROUP_LEADER reason=main_assist`,
+    `GOTH_PVP_CHASE_LIMIT reason=overextended|far`, and `doctrine=` on
+    `GOTH_PVP_DEPART`.
+
+### Changed
+
+- Three guarded hooks outside the mode folder: the brain's RvR target choice
+  returns the mode's kill order for a mode bot, and the two stealth gates
+  (keep stealth while idle, use a stealth opener) also accept a mode hunter.
+  With the mode off every one of them answers as before (mode-off test).
+- Tests: `UT_GothwaitePvpTactics` (pure rules, lines, counters, status) and a
+  stage 6 mode-off check. Automated tests were run for the Gothwaite
+  fixtures; real-client verification is left to the owner (stage 5).
+
 ## [0.267.0] - 2026-10-13
 
 ### Fixed

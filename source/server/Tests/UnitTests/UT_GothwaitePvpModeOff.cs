@@ -111,6 +111,22 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void TheStageSixTacticsHooksAnswerNoChangeWhileTheModeIsOff()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(GothwaitePvpCombat.ChooseTarget(null, Array.Empty<GameLiving>(), null, null), Is.Null, "the brain keeps its threat order");
+                Assert.That(GothwaitePvpCombat.DoctrineOf(null), Is.Null);
+                Assert.That(GothwaitePvpStealth.Applies(null), Is.False, "the brain's stealth gates are unchanged");
+                Assert.That(GothwaitePvpStealth.KeepsStealth(null), Is.False);
+                Assert.That(GothwaitePvpDriver.IsRetreating(null), Is.False, "self-defence is unchanged");
+                Assert.That(GothwaitePvpDriver.IsRegrouping(null), Is.False);
+                Assert.That(GothwaitePvpDriver.WantsStealth(null), Is.False);
+                Assert.That(GothwaitePvpStats.TryRecentFightNear(0, 0, 10_000, 60_000, 1, out _, out _), Is.False, "nothing is recorded while the mode is off");
+            });
+        }
+
+        [Test]
         public void ThePlannerNeverSnapshotsWhileTheModeIsOff()
         {
             var bots = new[]

@@ -1,8 +1,9 @@
 # Gothwaite PvP mode: plan
 
 **Status:** in progress. Stage 0 (audit) done 2026-10-13 (0.261.2), results
-in section 11. Stages 1–4 built in 0.262.0–0.265.0 (section 12). Open: the owner's
-load run (section 12, stage 4) and stage 5, the live check.
+in section 11. Stages 1–4 built in 0.262.0–0.265.0 (section 12), stage 6
+(player tactics) in 0.268.0 (section 13). Open: the owner's load run (section
+12, stage 4), stage 5, the live check, and the stage 6 live check (13.4).
 
 **This is a separate world mode.** It is not a population preset, it is not
 part of the Camlann world bot work, and it does not change that work. With the
@@ -385,6 +386,8 @@ proves the patrol points with an installed-mesh test.
 | Sub-10 rule | `PvpCombatant.IsSafetyProtected(GameLiving)` bot arm | Lifted for mode bots (G6). `BlocksLowLevelAutonomousPvp` and `BlocksAutonomousPvp` follow without edits. |
 | Constitution | `AutonomousBotRealmPointRewards.Award`, the `PVP_DEATH_CON_LOSS` write | Skipped for mode bots (G8). Bots only count lost constitution; nothing applies it to their stats today. |
 | Switch | `GameServer.Start`, next to `AutonomousBotGoalPolicy.Initialize` | Reads `gothwaite-pvp.json` once. |
+| Kill order (0.268.0) | `BotBrain.ApplyRvrCombatHabits`, first line | A mode bot's next target comes from `GothwaitePvpCombat.ChooseTarget` (section 13); null keeps the threat order. |
+| Stealth gates (0.268.0) | `BotBrain.TryEnterStealthWhileIdle`, `BotBrain.TryStartStealthOpener`, `BotRvrAmbush.CanUseStealthOpener` | A mode hunter (`GothwaitePvpStealth.Applies`) keeps stealth while idle and may use its stealth opener. |
 
 Findings that shaped the design:
 
@@ -623,3 +626,137 @@ Live check: positions spread over the island and the harbor, kills spread
 by distance rather than piled at 5,000–6,000, far fewer than 900
 `reason=ring` drops per 10 minutes, and departures above 15 per minute when
 many bots are ready.
+
+## 13. Stage 6: player tactics (0.268.0)
+
+Built 2026-10-14. The question was: how did DAoC players actually fight, and
+what of that was missing from the mode bots? The answer came from the sources
+in 13.1 and from the log of the third live run (0.266.0, 2026-10-13
+21:04–21:59, about 300 bots): 2,538 kills, 1,061 departures (473 solos, 237
+eights), 753 groups dissolved as `leader_lost` (the leader died first), 505
+returns for `low_power` or `low_health` straight after a fight, and 2,348
+`reason=ring` chase drops. The bots opened on the nearest legal target
+whatever its party, fought to the death, and the group fell apart as soon as
+its (randomly chosen) leader fell.
+
+### 13.1 What players did (evidence)
+
+Read 2026-10-14. Forum threads are player accounts of their time, not
+systematic data; they agree on the habits below.
+
+| Habit | Source |
+|---|---|
+| The assist train: one main assist, everyone `/assist`s it; the MA is a melee with Charge and Determination (Berserker, Savage, Warrior with the 9 s slam); "stick to the stickleader, who is the only one running". | [DAoC Wiki: Warrior](https://camelotherald.fandom.com/wiki/Warrior); Uthgard "[RvR] A brief guide to group RvR" (search excerpts, the page itself refuses fetches). |
+| Kill order: healers and mezzers first; "kill casters by keeping them locked down with CC/interrupts until the DPS gets around to them"; "ASSIST, ASSIST, ASSIST"; "the absolutely worst thing you can do when pushing into a group is to over-commit 2–3 classes to a single target". | [DAoC Wiki: Healer](https://camelotherald.fandom.com/wiki/Healer), [Spiritmaster](https://camelotherald.fandom.com/wiki/Spiritmaster); Uthgard tank guide excerpt. |
+| Peel and don't overextend: "Am I more valuable hitting someone right now, or stopping someone from hitting my teammates?"; "don't overextend to the point of being cut off from your healers"; "do I have a realistic chance to kill this target?". | [Blackthorn: Mercenary guide](https://blackthorn-daoc.com/wiki/mercenary-guide); [Eden: Friars in 8v8](https://eden-daoc.net/viewtopic.php?t=97). |
+| Pick your fights: a small-man hunts solos, duos and small-mans and avoids full groups; "this ability to pick your fights is one of the strongest mechanics in DAoC PvP"; "if not, they vanish and move on". | [Blackthorn: Infiltrator guide](https://blackthorn-daoc.com/wiki/infiltrator-guide); [docs/RVR_GROUP_DOCTRINE.md](RVR_GROUP_DOCTRINE.md) (the fork's own evidence base, D-numbered). |
+| Retreat: "back off when the healer dies", "retreat at 2:1", "hide immediately when you see groups, or stay with the group and have group purge ready", "DoT them, snare them, and peg it", "retreat to the nearest safe zone". | Uthgard Druid RvR healing guide excerpt; [Freddy's House: Reflections of a Thidranki Infiltrator](https://forums.freddyshouse.com/threads/reflections-of-a-thidranki-infiltrator.105399/). |
+| Spacing: "there is nothing inviting mezzes and rootspam like two healers standing within 350 locs of each other. Keep your distance from your group mates"; healers behind the tanks. | Uthgard Healer guide excerpt; RVR_GROUP_DOCTRINE formation notes. |
+| Rest and rez after a fight instead of releasing: "come back and let you guys rez, that way you don't have to release"; the rez cycle with few healers "dragged on". | [Freddy's House: lessons from Thidranki](https://forums.freddyshouse.com/threads/yawns-lessons-from-thidranki.102553/). |
+| Adds and zergs: early Camlann "became crowded with adds"; Thidranki groups "zerged by more than twice our number", groups "attacked from both sides"; pickup groups "follow bigger fights". | [Freddy's House: Save Mordred](https://forums.freddyshouse.com/threads/save-mordred-once-for-all.244577/); lessons from Thidranki (above). |
+| Stealthers: hunt the road between the hubs, take solo hunters and casters ("very rarely will you struggle to kill these from stealth, if they're solo"), leave "targets with a group around them", wait for the drop ("line yourself up so they walk into your PA"), "pick the weakest one in the crowd", run after one kill. | Reflections of a Thidranki Infiltrator (above); Blackthorn Infiltrator guide. |
+| Camping the safe spot when there is nothing to fight: "when there is no one to fight they run to the PK to look for a fight"; defenders "run immediately back to the PK". | Lessons from Thidranki (above). This one the mode already has: the castle is the PK, and the no-fight ring keeps the camp from becoming the whole game (0.266.0–0.267.0). |
+
+Not found: any account of Gothwaite itself on Camlann or Mordred beyond the
+general "goth fights at the harbor" memory the plan already records; video
+commentary with usable tactics (the search results were event footage without
+narration).
+
+### 13.2 What the mode does now
+
+All of it lives in `bots/gothwaite/` (`GothwaitePvpTactics` pure rules,
+`GothwaitePvpCombat` live glue, `GothwaitePvpStealth`, driver and former
+changes) and applies to mode bots only. The shared world-bot code is read
+(`AutonomousRvrDoctrine.Derive`, `ShouldRetreat`, `StickMilliseconds`,
+`AutonomousRvrCombatHabits.Choose` and `Weight`, `AutonomousRvrStealthLoop`'s
+pure scoring, `AutonomousRvrDoctrineGeometry.TravelSlot`), never changed.
+
+1. **Doctrine.** When a group departs, its doctrine is read from its members
+   the way the world warbands read theirs (small-man, assist train, melee
+   train, bomb group, caster duo, stealth pack, gank squad, archer group,
+   pickup, lone roamer, solo assassin), tuned by the leader's Aggression,
+   RiskTolerance and Patience. `GOTH_PVP_DEPART ... doctrine=SmallMan`.
+2. **A tank leads.** `GothwaitePvpTactics.LeaderRank`: guard tank 0, melee
+   1, archer 2, caster or stealther 3, healer 5. At departure the best-ranked
+   ready member takes the lead (`GOTH_PVP_GROUP_LEADER reason=main_assist`),
+   and a promotion after the leader's death takes the best-ranked living
+   member in the arena.
+3. **Kill order.** `BotBrain.ApplyRvrCombatHabits` has one guarded line that
+   returns `GothwaitePvpCombat.ChooseTarget` for a mode bot: stickiness by
+   doctrine and Patience, the leader's call for damage dealers (1–2 s delay,
+   5–15 % ignored), interrupt awareness (archers, melee in reach, instant
+   casters look again when an enemy caster casts), and the weights of
+   `AutonomousRvrCombatHabits.Weight` (healers 3×, mezzers, wounded, whoever
+   hits our healer or caster 1.6×, pets 0.35×).
+4. **Picking fights.** The scan (`GothwaitePvpCombat.FindOpening`) collects
+   every legal opening within 2,400, judges each by
+   `GothwaitePvpTactics.TakesFight` (own living members near the bot ×
+   appetite × level factor against the target's living party within 2,000;
+   a solo always takes a solo of its con; a dare roll stable per minute lets
+   an eager group try a bigger one), then draws by the kill-order weights.
+   Refusals count once per bot per minute in `/gothpvp`.
+5. **Retreat.** A leader weighs its fight every 3 s with the doctrine's
+   `ShouldRetreat` (healer dead +0.45, half down +0.4, outnumbered 1.5:1
+   +0.35, the doctrine's bias, a 15 % stay roll); a solo flees with 2+
+   player-shaped attackers on it or below 40 % health against an enemy above
+   60 %, by its RiskTolerance. The run lasts 20–35 s toward the castle exit
+   with sprint; `GothwaitePvpSelfDefence.MayFight` is false meanwhile, so a
+   running bot fights nothing and followers run behind the leader. At the
+   end a leader with 60 %+ health starts a new outbound leg; below that it
+   goes home. `GOTH_PVP_RETREAT bot reason health power`,
+   `GOTH_PVP_RETREAT_END bot reason=resume|home health`.
+6. **Regroup.** When an arrived leader's fight ends, the group holds: the
+   leader and the followers at their slots sit (the recovery rest, woken by
+   any hit) until every living member is within 600 and the lowest health is
+   70 % and power 50 %, or 45 s pass. No scan runs meanwhile; self-defence
+   does. Low health and power do not send a member home during the regroup;
+   a lost leader or a wipe does. `GOTH_PVP_REGROUP bot reason=start|recovered|time|fight`.
+7. **Formation.** A follower's goal is its travel slot
+   (`AutonomousRvrDoctrineGeometry.TravelSlot` with the leader's facing):
+   column for small-man, assist train, melee train; loose fan for stealth
+   doctrines; the leader's spot for clump doctrines. Order: guards, speed,
+   melee, healers, casters and archers, stealthers wide. A slot the navmesh
+   refuses falls back to the leader's spot.
+8. **Chase discipline.** `GOTH_PVP_CHASE_LIMIT reason=overextended` (a
+   follower's target beyond 1,500 of the leader) and `reason=far` (a leader
+   2,500 from where its fight began), unless the target is below 25 % or is
+   still attacking the group.
+9. **Adds.** Every 10 s a roaming leader (not a hunter, not outbound) looks
+   for the newest kill within 5,000 in the last 45 s, outside the roam floor
+   and inside its edge, and walks there with chance 0.25 + Aggression/200.
+   `GOTH_PVP_ADD bot fight=x,y distance`.
+10. **Hunting stealthers.** `GothwaitePvpStealth.Applies`: an assassin or
+    archer (not a Minstrel) with the Stealth skill, alone or in a stealth
+    doctrine. It stealths outside the castle whenever it is not fighting
+    (the brain's idle gate and opener gate accept it through one guarded
+    condition each), dwells 30–90 s at a point, opens only by
+    `StealtherMayOpen` (lone, a soft class in a duo, or below 50 %), scores
+    victims with the stealth loop's rules, approaches stealthed and uses its
+    stealth opener, then breaks away on a 20 s outbound leg.
+    `GOTH_PVP_AMBUSH bot target party health`.
+
+### 13.3 Mode-off contract
+
+Three guarded touchpoints were added, all answering "no change" with the
+mode off (`UT_GothwaitePvpModeOff.TheStageSixTacticsHooksAnswerNoChangeWhileTheModeIsOff`):
+`BotBrain.ApplyRvrCombatHabits` (mode bot → mode kill order),
+`BotBrain.TryEnterStealthWhileIdle` and `TryStartStealthOpener`,
+`BotRvrAmbush.CanUseStealthOpener` (mode hunter → stealth allowed). They are
+listed in the touchpoint table of section 11.1.
+
+### 13.4 Live check (owner)
+
+Run 300 bots for 15–20 minutes and compare with the 0.266.0 run above:
+
+- `GOTH_PVP_GROUP_DISSOLVED reason=leader_lost` well below 753 per hour, and
+  `GOTH_PVP_GROUP_LEADER reason=main_assist` on most multi-class departures.
+- `GOTH_PVP_RETREAT` and `GOTH_PVP_RETREAT_END reason=resume` present;
+  returns for `low_health`/`low_power` well below 505 per hour.
+- `GOTH_PVP_REGROUP reason=recovered` more often than `reason=time`.
+- `GOTH_PVP_AMBUSH` lines from solo assassins and archers, with `party=1`
+  dominant; `GOTH_PVP_ADD` lines from groups.
+- Kills per departure above 2.4 (2,538 / 1,061), and the `/gothpvp` tactics
+  line counting all six kinds.
+- Watch for a regression: bots sitting (regroup) when a player walks up
+  should stand and fight when hit; a retreating group should not stop at the
+  ring with nothing to do (it starts a new leg or goes home).

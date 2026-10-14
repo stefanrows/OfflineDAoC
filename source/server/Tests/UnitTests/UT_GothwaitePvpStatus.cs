@@ -360,6 +360,7 @@ public class UT_GothwaitePvpStatus
             "  Levels 40-50: kills 0, deaths 0.",
             "Mode bot kills by con (incl. self-defence): GREY 0, GREEN 1, BLUE 1, YELLOW 1, ORANGE 1, RED 0, PURPLE 0.",
             "All arena fights with a mode bot on either side (players included): kills 7, deaths 6.",
+            "Tactics: tanks took the lead 0, openings refused (party too big) 0, retreats 0, regroups 0, adds 0, stealth openings 0.",
             "Load at 6 bots over the last 120 s (real time): turn avg 1.25 ms, p95 <= 2.50 ms, max 40.00 ms (1200 turns); scan avg 0.30 ms (300); castle former avg 0.50 ms, max 3.00 ms (60 ticks).",
         }));
     }

@@ -20,6 +20,30 @@ public static class GothwaitePvpLines
     public static string Depart(string id, string leader, int size) =>
         $"GOTH_PVP_DEPART group={id} leader=\"{leader}\" size={size}";
 
+    /// <summary>Stage 6: the departure line also names the group's doctrine (the world doctrine's reading of its classes).</summary>
+    public static string Depart(string id, string leader, int size, string doctrine) =>
+        $"{Depart(id, leader, size)} doctrine={doctrine}";
+
+    /// <summary>Stage 6: a leader or solo breaks off a fight it is losing (healer_dead, half_down, outnumbered, doctrine, added_on, low_health).</summary>
+    public static string Retreat(string bot, string reason, string detail) =>
+        $"GOTH_PVP_RETREAT bot=\"{bot}\" reason={reason} {detail}";
+
+    /// <summary>Stage 6: the retreat is over: the bot takes a new leg (resume) or goes home (home).</summary>
+    public static string RetreatEnd(string bot, string reason, int health) =>
+        $"GOTH_PVP_RETREAT_END bot=\"{bot}\" reason={reason} health={health}";
+
+    /// <summary>Stage 6: a group rests and gathers after a fight (start), or the regroup is over (recovered, time).</summary>
+    public static string Regroup(string bot, string reason, string detail) =>
+        $"GOTH_PVP_REGROUP bot=\"{bot}\" reason={reason} {detail}";
+
+    /// <summary>Stage 6: a leader or solo walks to a fight it heard nearby. <paramref name="distance"/> is how far away it is.</summary>
+    public static string Add(string bot, int x, int y, int distance) =>
+        $"GOTH_PVP_ADD bot=\"{bot}\" fight={x},{y} distance={distance}";
+
+    /// <summary>Stage 6: a hunting stealther opens on a victim: its party size and health at the opening.</summary>
+    public static string Ambush(string bot, string target, int party, int health) =>
+        $"GOTH_PVP_AMBUSH bot=\"{bot}\" target=\"{target}\" party={party} health={health}";
+
     public static string Arrive(string id, string leader, int size) =>
         $"GOTH_PVP_ARRIVE group={id} leader=\"{leader}\" size={size}";
 

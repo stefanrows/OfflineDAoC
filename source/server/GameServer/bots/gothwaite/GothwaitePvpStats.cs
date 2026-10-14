@@ -25,6 +25,13 @@ public readonly record struct GothwaitePvpBandCount(string Label, int Kills, int
 public readonly record struct GothwaitePvpConCount(ConColor Color, int Kills);
 
 /// <summary>
+/// Stage 6: how often the player tactics acted since the last reset: a tank took the lead of a departing group, a leader or solo
+/// refused an opening because the enemy party was too big, broke off a fight, rested and gathered after one, walked to a fight it
+/// heard, or opened from stealth.
+/// </summary>
+public readonly record struct GothwaitePvpTacticsCount(int MainAssists, int RefusedOpenings, int Retreats, int Regroups, int Adds, int Ambushes);
+
+/// <summary>
 /// A read-only copy of the mode's fight statistics for the stage 4 status command. The window runs from the last reset
 /// (server start) to <see cref="AsOfGameTime"/>; heat looks back <see cref="HeatWindowMilliseconds"/>.
 /// </summary>
@@ -42,6 +49,8 @@ public sealed record GothwaitePvpStatsSnapshot(long WindowStartGameTime, long As
     public IReadOnlyList<GothwaitePvpBandCount> ModeBands { get; init; } = Array.Empty<GothwaitePvpBandCount>();
     /// <summary>Stage 4: the mode bot kills by the killer's con colour of its victim (self-defence included), GREY to PURPLE.</summary>
     public IReadOnlyList<GothwaitePvpConCount> ModeKillsByCon { get; init; } = Array.Empty<GothwaitePvpConCount>();
+    /// <summary>Stage 6: the tactics counters.</summary>
+    public GothwaitePvpTacticsCount Tactics { get; init; }
 }
 
 /// <summary>
@@ -80,8 +89,47 @@ public static class GothwaitePvpStats
     private static readonly int[] ModeKillsByColour = new int[ConColourCount];
     private static int _modeKills;
     private static int _modeDeaths;
+    // Stage 6 tactics counters: bumped from many bot turns, so they are Interlocked rather than locked.
+    private static int _mainAssists, _refusedOpenings, _retreats, _regroups, _adds, _ambushes;
 
     private readonly record struct Position(int X, int Y, long Time);
+
+    public static void CountMainAssist() => System.Threading.Interlocked.Increment(ref _mainAssists);
+    public static void CountRefusedOpening() => System.Threading.Interlocked.Increment(ref _refusedOpenings);
+    public static void CountRetreat() => System.Threading.Interlocked.Increment(ref _retreats);
+    public static void CountRegroup() => System.Threading.Interlocked.Increment(ref _regroups);
+    public static void CountAdd() => System.Threading.Interlocked.Increment(ref _adds);
+    public static void CountAmbush() => System.Threading.Interlocked.Increment(ref _ambushes);
+
+    /// <summary>The stage 6 tactics counters now.</summary>
+    public static GothwaitePvpTacticsCount Tactics => new(_mainAssists, _refusedOpenings, _retreats, _regroups, _adds, _ambushes);
+
+    /// <summary>
+    /// The most recent fight (a kill) within <paramref name="radius"/> of a point and no older than <paramref name="maxAge"/>, for the
+    /// stage 6 add draw. False when there is none. The ring is read under the lock, like the heat.
+    /// </summary>
+    public static bool TryRecentFightNear(int x, int y, int radius, int maxAge, long now, out int fightX, out int fightY)
+    {
+        fightX = 0;
+        fightY = 0;
+        long newest = long.MinValue;
+        lock (Sync)
+        {
+            for (int index = 0; index < _ringCount; index++)
+            {
+                Position fight = Ring[index];
+                if (now - fight.Time > maxAge || fight.Time <= newest)
+                    continue;
+                double dx = fight.X - x, dy = fight.Y - y;
+                if (dx * dx + dy * dy > (double)radius * radius)
+                    continue;
+                newest = fight.Time;
+                fightX = fight.X;
+                fightY = fight.Y;
+            }
+        }
+        return newest != long.MinValue;
+    }
 
     /// <summary>
     /// Records one fight from the server's death hooks (an NPC or a player died with its killer). It does nothing while the
@@ -202,6 +250,7 @@ public static class GothwaitePvpStats
                 ModeDeaths = _modeDeaths,
                 ModeBands = modeBands,
                 ModeKillsByCon = modeColours,
+                Tactics = Tactics,
             };
         }
     }
@@ -225,6 +274,12 @@ public static class GothwaitePvpStats
             _ringNext = 0;
             _ringCount = 0;
             _windowStart = GameLoop.GameLoopTime;
+            _mainAssists = 0;
+            _refusedOpenings = 0;
+            _retreats = 0;
+            _regroups = 0;
+            _adds = 0;
+            _ambushes = 0;
         }
     }
 

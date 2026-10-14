@@ -142,6 +142,9 @@ public static class GothwaitePvpStatus
                     string.Join(", ", fights.ModeKillsByCon.Select(con => $"{con.Color} {con.Kills}")) + ".");
             lines.Add($"All arena fights with a mode bot on either side (players included): kills {fights.TotalKills}, " +
                 $"deaths {fights.TotalDeaths}.");
+            GothwaitePvpTacticsCount tactics = fights.Tactics;
+            lines.Add($"Tactics: tanks took the lead {tactics.MainAssists}, openings refused (party too big) {tactics.RefusedOpenings}, " +
+                $"retreats {tactics.Retreats}, regroups {tactics.Regroups}, adds {tactics.Adds}, stealth openings {tactics.Ambushes}.");
         }
 
         lines.Add(LoadLine(report.Load, bots.Count));

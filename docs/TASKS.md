@@ -313,8 +313,12 @@ Agent sessions on items 45–48: take the role and context from
      kill chat) in 0.265.0; first live run fixed in 0.266.0 (gate camp,
      off-floor landings); second live run fixed in 0.267.0 (bots clumped on
      the no-fight ring below the castle: outbound leg, heat cap, claimed
-     points, 1 s departures). Pending: the owner's load run at 300/600/1,000
-     bots (plan section 12) and the stage 5 live check.
+     points, 1 s departures); stage 6 (player tactics read from DAoC
+     guides and forum accounts: a tank leads, kill order, fight appetite,
+     retreats, regroup after a fight, formation, chase discipline, adds,
+     hunting stealthers) in 0.268.0 (plan section 13). Pending: the owner's
+     load run at 300/600/1,000 bots (plan section 12), the stage 5 live
+     check, and the stage 6 live check (section 13.4).
 
 ## Implemented in source; installation verification pending
 

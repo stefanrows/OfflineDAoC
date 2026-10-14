@@ -428,6 +428,8 @@ namespace DOL.AI.Brain
         /// </summary>
         private GameLiving ApplyRvrCombatHabits(GameLiving highest)
         {
+            // Gothwaite PvP mode bots pick by the mode's kill order (stage 6); null keeps the threat order.
+            if (GothwaitePvpMode.IsModeBot(BotBody)) return GothwaitePvpCombat.ChooseTarget(BotBody, AggroList.Keys, highest, Body.TargetObject as GameLiving);
             if (highest == null || !BotPvpCrowdControl.PlayerLike(highest) ||
                 !AutonomousRvrDoctrineRuntime.Applies(BotBody))
                 return null;
@@ -3581,13 +3583,13 @@ namespace DOL.AI.Brain
         {
             // Idle is not a reason to hide (and slow travel). Stealth belongs to
             // the approach to a legal enemy player/bot, not random PvE pauses.
-            if (Body.IsStealthed && !AutonomousRvrStealthLoop.KeepsStealth(BotBody)) Body.Stealth(false);
+            if (Body.IsStealthed && !AutonomousRvrStealthLoop.KeepsStealth(BotBody) && !GothwaitePvpStealth.KeepsStealth(BotBody)) Body.Stealth(false);
         }
 
         private bool TryStartStealthOpener(GameLiving target)
         {
             if (!(BotBody.HasSelectedAutomaticCompanionPlan && BotBody.IsPlayerLedGroup ||
-                  AutonomousRvrStealthLoop.Applies(BotBody)) ||
+                  AutonomousRvrStealthLoop.Applies(BotBody) || GothwaitePvpStealth.Applies(BotBody)) ||
                 !BotPoisonSupply.IsAssassin((eCharacterClass)BotBody.CharacterClass.ID) ||
                 !Body.IsWithinRadius(target, Body.MeleeAttackRange) ||
                 !CompanionEngagementMode.Allows(BotBody, target) ||

@@ -36,8 +36,12 @@ public static class GothwaitePvpGroupFormer
     // Why a bot's group ended while it was not leaving it (read once by the bot's driver with TakeEndReason).
     private static readonly Dictionary<GameBot, string> EndReasons = new();
 
-    /// <summary>What a driver needs to know about its bot's group.</summary>
-    public readonly record struct Membership(string Id, GothwaitePvpShape Shape, GameBot Leader, bool IsLeader, bool Departing, bool Arrived);
+    /// <summary>
+    /// What a driver needs to know about its bot's group. Stage 6 adds the group's doctrine (read from its members when it departed)
+    /// and the members and healers it departed with, which the retreat rule compares with the living ones.
+    /// </summary>
+    public readonly record struct Membership(string Id, GothwaitePvpShape Shape, GameBot Leader, bool IsLeader, bool Departing, bool Arrived,
+        RvrDoctrine Doctrine = null, int FormedMembers = 0, int FormedHealers = 0);
 
     // One bot in the former: waiting in the pool (Record null) or placed in a group or solo record.
     private sealed class Entry
@@ -76,6 +80,10 @@ public static class GothwaitePvpGroupFormer
         public long? DueSince { get; set; }
         public Group Real { get; set; }
         public readonly List<Entry> Members = new();
+        /// <summary>Stage 6: the doctrine read from the members at departure, and the members and healers the group departed with.</summary>
+        public RvrDoctrine Doctrine { get; set; }
+        public int FormedMembers { get; set; }
+        public int FormedHealers { get; set; }
     }
 
     /// <summary>
@@ -262,6 +270,67 @@ public static class GothwaitePvpGroupFormer
         }
     }
 
+    /// <summary>The living members of a group as the stage 6 rules read them: how many, how many near the bot, how many healers, and the lowest health and power.</summary>
+    public readonly record struct Vitals(int Alive, int Near, int AliveHealers, int LowestHealth, int LowestPower, bool AnyPowerUser);
+
+    /// <summary>
+    /// The living members of the bot's group, the bot included (stage 6): their count, those within <paramref name="nearRange"/> of the
+    /// bot (the bot not counted), the healers among them, the lowest health and power, and whether any of them uses power. A bot in
+    /// no group reads its own values.
+    /// </summary>
+    public static Vitals VitalsOf(GameBot bot, int nearRange = 0)
+    {
+        if (bot == null)
+            return default;
+        int alive = 1, near = 0, healers = IsHealerBot(bot) ? 1 : 0;
+        int lowestHealth = bot.HealthPercent, lowestPower = bot.MaxMana > 0 ? bot.ManaPercent : 100;
+        bool anyPower = bot.MaxMana > 0;
+        lock (Sync)
+        {
+            if (Entries.TryGetValue(bot, out Entry entry) && entry.Record is { } record)
+                foreach (Entry member in record.Members)
+                {
+                    GameBot other = member.Bot;
+                    if (other == bot || !other.IsAlive || !IsActive(other))
+                        continue;
+                    alive++;
+                    if (nearRange > 0 && other.CurrentRegionID == bot.CurrentRegionID && other.IsWithinRadius(bot, nearRange))
+                        near++;
+                    if (IsHealerBot(other))
+                        healers++;
+                    lowestHealth = Math.Min(lowestHealth, other.HealthPercent);
+                    if (other.MaxMana > 0)
+                    {
+                        anyPower = true;
+                        lowestPower = Math.Min(lowestPower, other.ManaPercent);
+                    }
+                }
+        }
+        return new Vitals(alive, near, healers, lowestHealth, lowestPower, anyPower);
+    }
+
+    /// <summary>
+    /// The follower's place in its group's marching order (stage 6): the index of the bot among the living followers sorted by
+    /// <see cref="GothwaitePvpTactics.MarchRank"/> then id, and their count. (-1, 0) for a leader or a bot in no departed group.
+    /// </summary>
+    public static (int Slot, int Count) MarchSlot(GameBot bot)
+    {
+        lock (Sync)
+        {
+            if (bot == null || !Entries.TryGetValue(bot, out Entry entry) || entry.Record is not { } record || record.Leader == bot)
+                return (-1, 0);
+            GameBot[] followers = record.Members.Select(member => member.Bot)
+                .Where(member => member != record.Leader && member.IsAlive && IsActive(member))
+                .OrderBy(member => GothwaitePvpTactics.MarchRank(GothwaitePvpCombat.ClassTraits(member)))
+                .ThenBy(BotIdOf)
+                .ToArray();
+            return (Array.IndexOf(followers, bot), followers.Length);
+        }
+    }
+
+    private static bool IsHealerBot(GameBot bot) =>
+        bot.CharacterClass != null && GothwaitePvpCastleRules.IsHealer((eCharacterClass)bot.CharacterClass.ID);
+
     /// <summary>The bot's group, when it is in one (gathering, departing or arrived). False for a pooled or unplaced bot.</summary>
     public static bool TryGetMembership(GameBot bot, out Membership membership)
     {
@@ -269,7 +338,8 @@ public static class GothwaitePvpGroupFormer
         {
             if (bot != null && Entries.TryGetValue(bot, out Entry entry) && entry.Record is { } record)
             {
-                membership = new Membership(record.Id, record.Shape, record.Leader, record.Leader == bot, record.Departing, record.Arrived);
+                membership = new Membership(record.Id, record.Shape, record.Leader, record.Leader == bot, record.Departing, record.Arrived,
+                    record.Doctrine, record.FormedMembers, record.FormedHealers);
                 return true;
             }
         }
@@ -457,6 +527,7 @@ public static class GothwaitePvpGroupFormer
         };
         AttachMember(solo, entry);
         Records.Add(solo);
+        SetDoctrine(solo);
         LogDeparture(solo);
     }
 
@@ -469,9 +540,41 @@ public static class GothwaitePvpGroupFormer
                 RemoveFromRecord(record, member);
                 Entries.Remove(member.Bot);
             }
+        ElectLeader(record);
         record.Departing = true;
         record.DepartedAt = now;
+        SetDoctrine(record);
         LogDeparture(record);
+    }
+
+    // Stage 6: the main assist leads. The best-ranked member (a guard tank, then any melee, an archer, a caster, a healer last) takes
+    // the lead before the group walks out, and the real group follows; players put a tank up front and assisted it. Logged when
+    // the lead changes hands. Only members that are alive and active may lead.
+    private static void ElectLeader(Record record)
+    {
+        GothwaitePvpLeaderCandidate[] candidates = record.Members.Select(member => new GothwaitePvpLeaderCandidate(BotIdOf(member.Bot),
+            GothwaitePvpTactics.LeaderRank(GothwaitePvpCombat.ClassTraits(member.Bot)), member.Bot.IsAlive && IsActive(member.Bot))).ToArray();
+        int index = GothwaitePvpTactics.ChooseLeader(candidates);
+        if (index < 0)
+            return;
+        GameBot next = record.Members[index].Bot;
+        if (next == record.Leader)
+            return;
+        GameBot previous = record.Leader;
+        if (record.Real != null && next.Group == record.Real)
+            record.Real.MakeLeader(next);
+        record.Leader = next;
+        GothwaitePvpStats.CountMainAssist();
+        Log.Info(GothwaitePvpLines.GroupLeader(record.Id, next.Name, previous.Name, "main_assist"));
+    }
+
+    // Stage 6: what the group is, read once from the members it departs with (the world doctrine's own reading of a group's classes).
+    private static void SetDoctrine(Record record)
+    {
+        GameBot[] bots = record.Members.Select(member => member.Bot).ToArray();
+        record.Doctrine = GothwaitePvpCombat.Derive(bots, record.Leader);
+        record.FormedMembers = bots.Length;
+        record.FormedHealers = bots.Count(bot => bot.CharacterClass != null && GothwaitePvpCastleRules.IsHealer((eCharacterClass)bot.CharacterClass.ID));
     }
 
     private static void Disband(Record record, long now, int readyCount)
@@ -496,14 +599,16 @@ public static class GothwaitePvpGroupFormer
     private static string EndReasonFor(string reason) =>
         reason == GothwaitePvpArenaRules.ReasonLeaderLost ? GothwaitePvpArenaRules.ReasonLeaderLost : GothwaitePvpArenaRules.ReasonWiped;
 
-    // Hands the group to the first alive member in the arena, in join order, skipping the leader and <paramref name="leaving"/>.
-    // The real group's leader follows. False when no member qualifies, and the record is left as it was.
+    // Hands the group to the best-ranked alive member in the arena (stage 6: a tank before a healer; ties by join order), skipping
+    // the leader and <paramref name="leaving"/>. The real group's leader follows. False when no member qualifies, and the record is
+    // left as it was.
     private static bool PromoteFrom(Record record, long now, string reason, GameBot leaving)
     {
         Entry[] members = record.Members.Where(member => member.Bot != record.Leader && member.Bot != leaving).ToArray();
         GothwaitePvpPromotionCandidate[] candidates = members.Select(member => new GothwaitePvpPromotionCandidate(
-            BotIdOf(member.Bot), member.Bot.IsAlive && IsActive(member.Bot), OutsideCastle(member.Bot))).ToArray();
-        int index = GothwaitePvpArenaRules.FirstAliveInArena(candidates);
+            BotIdOf(member.Bot), member.Bot.IsAlive && IsActive(member.Bot), OutsideCastle(member.Bot),
+            GothwaitePvpTactics.LeaderRank(GothwaitePvpCombat.ClassTraits(member.Bot)))).ToArray();
+        int index = GothwaitePvpArenaRules.BestAliveInArena(candidates);
         if (index < 0)
             return false;
         GameBot previous = record.Leader;
@@ -681,6 +786,6 @@ public static class GothwaitePvpGroupFormer
         int maxLevel = bots.Max(bot => (int)bot.Level);
         Log.Info(GothwaitePvpLines.Formed(record.Id, record.Shape, bots.Length, minLevel, maxLevel,
             bots.Select(bot => GlobalConstants.RealmToName(bot.Realm)).Distinct(), bots.Select(bot => bot.Name)));
-        Log.Info(GothwaitePvpLines.Depart(record.Id, record.Leader.Name, bots.Length));
+        Log.Info(GothwaitePvpLines.Depart(record.Id, record.Leader.Name, bots.Length, record.Doctrine?.Kind.ToString() ?? "none"));
     }
 }
