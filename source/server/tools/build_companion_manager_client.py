@@ -19,9 +19,11 @@ Protocol version 3 (16-bit label index in bytes 4-5, because the layout has more
   ``/companions find `` using the same calls as the chat window's own
   channel-prefix menu. No native edit box is used.
 * COMPANIONS window (Custom7, window 0x74): operations 5 and 6 show and hide it. Its
-  tiles send controls 0xA8-0xBF through the same command path, gated by their own flag,
-  so they work while the manager is closed. Its member rows use the stock group
-  adapters (group_name/level/color/health) and SelectGroupMember<i> clicks.
+  tiles and row clicks send controls 0xA8-0xBF through the same command path, gated by
+  their own flag, so they work while the manager is closed. Its member rows are a full
+  group window built from the stock group adapters (group_name/color/level/class/
+  health/power/endurance) with SelectGroupMember<i> clicks; the stance column and the
+  leader mark are server labels, and the Invite tile is the stock GroupInvite event.
 
 The layout below is the single source for label and control numbers. The C#
 constants in CompanionManagerProtocol.cs are checked against it by
@@ -83,21 +85,38 @@ OP_LABEL, OP_SHOW, OP_HIDE, OP_TOKEN = 1, 2, 3, 4
 BAR_WINDOW = 0x74                      # Custom7: the ShowCustomN switch pushes 0x6D + N (0x4E0B4A: 6a 01 6a 74)
 OP_BAR_SHOW, OP_BAR_HIDE = 5, 6
 BAR_CONTROL_FIRST, BAR_CONTROL_LIMIT, BAR_READY_CONTROL = 0xA8, 0xC0, 0xBF
+# Server tiles in control order (BAR_CONTROL_FIRST + index): two rows of five stance and camp tiles, then the
+# group row (after the native Invite tile): Kick, Leader, Leave, Grind.
 BAR_TILE_NAMES = ("Aggressive", "Defensive", "Passive", "Assist", "Default", "Follow", "Stay", "PetPull", "Pull",
-                  "Manager")
+                  "Manager", "Kick", "Leader", "Leave", "Grind")
 BAR_TILES = len(BAR_TILE_NAMES)
+BAR_TILES_PER_ROW = 5
+# Tiles that fire a stock client event instead of a server control: (name, caption, event, row, column).
+BAR_NATIVE_TILES = (("Invite", "Invite", "GroupInvite", 2, 0),)
 BAR_SLOTS = 8
+# A row's stance click (cycle the companion's saved stance) is control BAR_CONTROL_SLOT_BASE + slot.
+BAR_CONTROL_SLOT_BASE = BAR_CONTROL_FIRST + BAR_TILES
+assert BAR_CONTROL_SLOT_BASE + BAR_SLOTS < BAR_READY_CONTROL
 BAR_TILE_STRIDE = 4
-BAR_SLOT_STRIDE = 4
+# Per member row: four stance colours, then the leader mark.
+BAR_SLOT_STRIDE = 5
+BAR_SLOT_LEADER_OFFSET = 4
 # Offsets inside a tile's four labels: inactive text, active text, disabled text, underline.
 BAR_TILE_INACTIVE_OFFSET, BAR_TILE_ACTIVE_OFFSET, BAR_TILE_DISABLED_OFFSET, BAR_TILE_UNDERLINE_OFFSET = 0, 1, 2, 3
-BAR_WIDTH, BAR_HEIGHT = 332, 296
-BAR_TILE_W, BAR_WIDE_W, BAR_TILE_H = 76, 156, 22
-BAR_SLOT_TOP, BAR_SLOT_PITCH = 128, 20
+BAR_WIDTH, BAR_HEIGHT = 440, 312
+BAR_TILE_W, BAR_TILE_H, BAR_TILE_PITCH_X, BAR_TILE_PITCH_Y, BAR_TILE_TOP = 80, 22, 84, 26, 22
+BAR_SLOT_TOP, BAR_SLOT_PITCH = 128, 22
 BAR_TILE_TEMPLATE = "tool_tip_background"
-BAR_WIDTH_STATUS, BAR_WIDTH_MESSAGE, BAR_WIDTH_SLOT = 170, 312, 118
+# Member row columns (x, width): power %, endurance %, health bar (name over it, health % at its right end),
+# class, level, stance. The leader mark sits just left of the bar.
+# "100" is 24 px in arial14, so the percent columns are 24 wide; the mark has its own 10 px gap before the bar.
+BAR_COLUMN_POWER, BAR_COLUMN_ENDURANCE, BAR_COLUMN_LEADER = (8, 24), (34, 24), (60, 10)
+BAR_COLUMN_BAR, BAR_COLUMN_NAME, BAR_COLUMN_HEALTH = (70, 168), (74, 130), (208, 26)
+BAR_COLUMN_CLASS, BAR_COLUMN_LEVEL, BAR_COLUMN_STANCE = (240, 86), (328, 26), (356, 78)
+BAR_WIDTH_STATUS, BAR_WIDTH_MESSAGE, BAR_WIDTH_SLOT = 290, 420, BAR_COLUMN_STANCE[1]
 # Stance colours in eCompanionEngagementMode order: Aggressive, Defensive, Passive, AssistTrain.
 STANCE_COLORS = ((235, 120, 100), (120, 170, 240), (165, 165, 165), (255, 210, 90))
+POWER_COLOR, ENDURANCE_COLOR, HEALTH_COLOR = (204, 204, 0), (0, 204, 0), (255, 255, 255)
 
 # Window geometry. The text font is the client's registered "arial14" bitmap font
 # (ui/fonts/Arial14.tga, never used by the stock windows). It is roughly a third
@@ -249,13 +268,20 @@ BAR_LABEL_COUNT = TOTAL_LABEL_COUNT - BAR_LABEL_BASE                    # 74
 SCROLL_LINK_LABELS = {"DetailUp": LABEL_DETAIL_UP, "DetailDown": LABEL_DETAIL_DOWN}
 
 
+def bar_tile_at(row, column):
+    """Top-left corner of a COMPANIONS tile cell: five per row, three rows under the title."""
+    return 8 + BAR_TILE_PITCH_X * column, BAR_TILE_TOP + BAR_TILE_PITCH_Y * row
+
+
 def bar_tile(index):
-    """(name, control, x, y, width) of COMPANIONS tile index: four per row on two rows, then two wide ones."""
+    """(name, control, x, y, width) of server tile index. The third row starts after the native Invite tile."""
     name = BAR_TILE_NAMES[index]
     control = BAR_CONTROL_FIRST + index
-    if index < 8:
-        return name, control, 8 + 80 * (index % 4), 22 + 26 * (index // 4), BAR_TILE_W
-    return name, control, 8 + 160 * (index - 8), 74, BAR_WIDE_W
+    row, column = divmod(index, BAR_TILES_PER_ROW)
+    if row >= 2:
+        row, column = 2, index - 2 * BAR_TILES_PER_ROW + len(BAR_NATIVE_TILES)
+    x, y = bar_tile_at(row, column)
+    return name, control, x, y, BAR_TILE_W
 
 CONTROL_ROW_BASE = 0x00
 CONTROL_DETAIL_BASE = 0x30
@@ -291,14 +317,14 @@ def layout_constants():
         "BarLabelStatus": BAR_LABEL_STATUS, "BarLabelMessage": BAR_LABEL_MESSAGE,
         "BarLabelTileBase": BAR_LABEL_TILE_BASE, "BarTileStride": BAR_TILE_STRIDE, "BarTiles": BAR_TILES,
         "BarLabelSlotBase": BAR_LABEL_SLOT_BASE, "BarSlotStride": BAR_SLOT_STRIDE, "BarSlots": BAR_SLOTS,
-        "BarLabelCount": BAR_LABEL_COUNT,
+        "BarSlotLeader": BAR_SLOT_LEADER_OFFSET, "BarLabelCount": BAR_LABEL_COUNT,
         "BarTileInactive": BAR_TILE_INACTIVE_OFFSET, "BarTileActive": BAR_TILE_ACTIVE_OFFSET,
         "BarTileDisabled": BAR_TILE_DISABLED_OFFSET, "BarTileUnderline": BAR_TILE_UNDERLINE_OFFSET,
         "OpBarShow": OP_BAR_SHOW, "OpBarHide": OP_BAR_HIDE,
         "BarControlFirst": BAR_CONTROL_FIRST, "BarControlLimit": BAR_CONTROL_LIMIT,
-        "BarControlReady": BAR_READY_CONTROL,
+        "BarControlSlotBase": BAR_CONTROL_SLOT_BASE, "BarControlReady": BAR_READY_CONTROL,
         "BarWidthStatus": BAR_WIDTH_STATUS, "BarWidthMessage": BAR_WIDTH_MESSAGE,
-        "BarWidthTile": BAR_TILE_W, "BarWidthWideTile": BAR_WIDE_W, "BarWidthSlot": BAR_WIDTH_SLOT,
+        "BarWidthTile": BAR_TILE_W, "BarWidthSlot": BAR_WIDTH_SLOT,
     })
     for index, name in enumerate(BAR_TILE_NAMES):
         values["BarControl" + name] = BAR_CONTROL_FIRST + index
@@ -658,7 +684,7 @@ def _status_bar(panel, x, y, width, adapter):
     ET.SubElement(bar, "Width").text = str(width)
 
 
-def _scalar_label(panel, x, y, width, adapter):
+def _scalar_label(panel, x, y, width, adapter, color=HEALTH_COLOR):
     """Stock ScalarLabelDef for a native integer adapter such as group_level<i>, hidden when the value is -1."""
     label = ET.SubElement(panel, "ScalarLabelDef")
     ET.SubElement(label, "ControlId")
@@ -670,7 +696,7 @@ def _scalar_label(panel, x, y, width, adapter):
     ET.SubElement(label, "Height").text = "18"
     ET.SubElement(label, "MaxCharacters").text = "8"
     rgba = ET.SubElement(label, "Color")
-    for channel, value in zip("RGBA", (255, 255, 255, 255)):
+    for channel, value in zip("RGBA", (*color, 255)):
         ET.SubElement(rgba, channel).text = str(value)
     ET.SubElement(label, "Data")
     ET.SubElement(label, "EndAligned").text = "false"
@@ -814,12 +840,14 @@ def window():
 
 
 def bar_window():
-    """Custom7 XML: the fixed 332x296 COMPANIONS panel, built from stock controls only.
+    """Custom7 XML: the fixed 440x312 COMPANIONS panel, built from stock controls only.
 
     A tile is a template image, three state labels and an underline label, with one click area over it.
-    Member rows mirror the stock group window: the native group_name, group_color, group_level and
-    group_health adapters fill the row, and the stock SelectGroupMember<i> event is its click area.
-    Stance text comes from the server through four overlapping manager labels per row.
+    The native Invite tile has fixed text and the stock GroupInvite event. Member rows are a group window:
+    the native group_power, group_endurance, group_health (bar and percent), group_name with group_color,
+    group_class and group_level adapters fill the row, the stock SelectGroupMember<i> event is its click
+    area, and the server fills the stance (four overlapping colour labels) and the gold leader mark. The
+    stance column has its own click area, which cycles the companion's saved stance.
     """
     root = ET.Element("Root_Element", ID="DAOCUi")
     panel = ET.SubElement(root, "WindowTemplate")
@@ -836,15 +864,20 @@ def bar_window():
     # Images first.
     _image(panel, 0, 0, BAR_WIDTH, BAR_HEIGHT, "dlg_sm_title_noresize")
     tiles = [bar_tile(index) for index in range(BAR_TILES)]
+    native_tiles = [(name, caption, event, *bar_tile_at(row, column), BAR_TILE_W)
+                    for name, caption, event, row, column in BAR_NATIVE_TILES]
     for _name, _control, x, y, width in tiles:
         _image(panel, x, y, width, BAR_TILE_H, BAR_TILE_TEMPLATE)
-    _hr_image(panel, 8, 122, 316, "context_hr_image_divider")
+    for _name, _text, _event, x, y, width in native_tiles:
+        _image(panel, x, y, width, BAR_TILE_H, BAR_TILE_TEMPLATE)
+    _hr_image(panel, 8, 122, BAR_WIDTH - 16, "context_hr_image_divider")
 
     # Native status bars, then the labels.
     for slot in range(BAR_SLOTS):
-        _status_bar(panel, 8, BAR_SLOT_TOP + BAR_SLOT_PITCH * slot + 3, 160, f"group_health{slot}")
-    _label(panel, 12, 1, 120, GOLD, text="COMPANIONS", characters=32)
-    _label(panel, 136, 1, BAR_WIDTH_STATUS, STATUS, BAR_LABEL_STATUS, characters=120)
+        _status_bar(panel, BAR_COLUMN_BAR[0], BAR_SLOT_TOP + BAR_SLOT_PITCH * slot + 3, BAR_COLUMN_BAR[1],
+                    f"group_health{slot}")
+    _label(panel, 12, 1, 114, GOLD, text="COMPANIONS", characters=32)
+    _label(panel, 130, 1, BAR_WIDTH_STATUS, STATUS, BAR_LABEL_STATUS, characters=120)
     _label(panel, 10, 100, BAR_WIDTH_MESSAGE, MESSAGE, BAR_LABEL_MESSAGE, characters=120)
     for index, (_name, _control, x, y, width) in enumerate(tiles):
         base = BAR_LABEL_TILE_BASE + BAR_TILE_STRIDE * index
@@ -853,21 +886,37 @@ def bar_window():
         _label(panel, x, y + 3, width, DISABLED, base + BAR_TILE_DISABLED_OFFSET, characters=32, centered=True)
         _label(panel, x + 6, y + 8, width - 12, GOLD, base + BAR_TILE_UNDERLINE_OFFSET, characters=64,
                height=14)
+    for _name, text, _event, x, y, width in native_tiles:
+        _label(panel, x, y + 3, width, TEXT, text=text, characters=32, centered=True)
     for slot in range(BAR_SLOTS):
         y = BAR_SLOT_TOP + BAR_SLOT_PITCH * slot
-        _label(panel, 14, y, 150, TEXT, native_adapter=f"group_name{slot}", color_adapter=f"group_color{slot}",
-               characters=24)
-        _scalar_label(panel, 172, y, 26, f"group_level{slot}")
+        _scalar_label(panel, BAR_COLUMN_POWER[0], y, BAR_COLUMN_POWER[1], f"group_power{slot}", POWER_COLOR)
+        _scalar_label(panel, BAR_COLUMN_ENDURANCE[0], y, BAR_COLUMN_ENDURANCE[1], f"group_endurance{slot}",
+                      ENDURANCE_COLOR)
+        _label(panel, BAR_COLUMN_NAME[0], y, BAR_COLUMN_NAME[1], TEXT, native_adapter=f"group_name{slot}",
+               color_adapter=f"group_color{slot}", characters=24)
+        _scalar_label(panel, BAR_COLUMN_HEALTH[0], y, BAR_COLUMN_HEALTH[1], f"group_health{slot}", HEALTH_COLOR)
+        _label(panel, BAR_COLUMN_CLASS[0], y, BAR_COLUMN_CLASS[1], TEXT, native_adapter=f"group_class{slot}",
+               characters=32)
+        _scalar_label(panel, BAR_COLUMN_LEVEL[0], y, BAR_COLUMN_LEVEL[1], f"group_level{slot}")
+        base = BAR_LABEL_SLOT_BASE + BAR_SLOT_STRIDE * slot
         for mode, color in enumerate(STANCE_COLORS):
-            _label(panel, 206, y, BAR_WIDTH_SLOT, color, BAR_LABEL_SLOT_BASE + BAR_SLOT_STRIDE * slot + mode,
-                   characters=24)
+            _label(panel, BAR_COLUMN_STANCE[0], y, BAR_COLUMN_STANCE[1], color, base + mode, characters=24)
+        _label(panel, BAR_COLUMN_LEADER[0], y, BAR_COLUMN_LEADER[1], GOLD, base + BAR_SLOT_LEADER_OFFSET,
+               characters=4)
 
-    # Click areas last, like the raid's z-order: tiles send the manager's event, rows the stock member click.
+    # Click areas last, like the raid's z-order: tiles send the manager's event, the Invite tile the stock
+    # GroupInvite event, rows the stock member click, and the stance column the row's own control.
     for name, control, x, y, width in tiles:
         _click(panel, x, y, width, control, _caption(name), BAR_TILE_H)
+    for name, _text, event, x, y, width in native_tiles:
+        _click(panel, x, y, width, None, name, BAR_TILE_H, event=event)
     for slot in range(BAR_SLOTS):
-        _click(panel, 6, BAR_SLOT_TOP + BAR_SLOT_PITCH * slot - 1, 320, None, f"Group member {slot + 1}", 20,
+        y = BAR_SLOT_TOP + BAR_SLOT_PITCH * slot - 1
+        _click(panel, 6, y, BAR_COLUMN_STANCE[0] - 8, None, f"Group member {slot + 1}", BAR_SLOT_PITCH,
                event=f"SelectGroupMember{slot}")
+        _click(panel, BAR_COLUMN_STANCE[0] - 2, y, BAR_COLUMN_STANCE[1] + 4, BAR_CONTROL_SLOT_BASE + slot,
+               f"Stance of member {slot + 1}", BAR_SLOT_PITCH)
     ET.indent(root)
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
 

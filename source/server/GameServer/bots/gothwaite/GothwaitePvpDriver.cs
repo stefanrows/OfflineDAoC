@@ -391,11 +391,17 @@ public static class GothwaitePvpDriver
         if (!state.FightStartSet)
         {
             // The fight's start is where the target stood when it began (it may have been a full scan range away), so a runner is
-            // measured from its own start, not from the leader's (review 2026-10-14).
-            GameLiving opened = bot.TargetObject as GameLiving;
-            state.FightStartSet = true;
-            state.FightStartX = opened is { IsAlive: true } && opened.CurrentRegionID == bot.CurrentRegionID ? opened.X : bot.X;
-            state.FightStartY = opened is { IsAlive: true } && opened.CurrentRegionID == bot.CurrentRegionID ? opened.Y : bot.Y;
+            // measured from its own start, not from the leader's (review 2026-10-14). A bot that was hit and is still reacting
+            // (BotIncomingFireReaction) has no enemy target yet: its first attacker stands in for it, and with neither the start
+            // waits for the next turn rather than being fixed on the bot's own spot (0.271.0).
+            GameLiving opened = bot.TargetObject is GameLiving { IsAlive: true } target && PvpCombatant.IsPlayerShaped(target) &&
+                !PvpCombatant.AreAllied(bot, target) ? target : FirstAttacker(bot);
+            if (opened is { IsAlive: true } && opened.CurrentRegionID == bot.CurrentRegionID)
+            {
+                state.FightStartSet = true;
+                state.FightStartX = opened.X;
+                state.FightStartY = opened.Y;
+            }
         }
         if (state.Regrouping)
             EndRegroup(bot, state, "fight", now);

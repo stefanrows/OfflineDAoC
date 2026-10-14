@@ -28,8 +28,11 @@ namespace DOL.GS.PacketHandler.Client.v168
                 target = null;
             }
 
+            GameObject previousTarget = actionSource.TargetObject;
             actionSource.TargetObject = target;
             actionSource.TargetInView = targetInView;
+            // The assist train's main assist switches his companions by retargeting while he swings.
+            CompanionAssistTrain.OnRetarget(actionSource, previousTarget, target);
 
             if (target != null)
             {

@@ -2,8 +2,9 @@
 
 **Status:** in progress. Stage 0 (audit) done 2026-10-13 (0.261.2), results
 in section 11. Stages 1–4 built in 0.262.0–0.265.0 (section 12), stage 6
-(player tactics) in 0.268.0 with review fixes in 0.269.0 (section 13). Open: the owner's load run (section
-12, stage 4), stage 5, the live check, and the stage 6 live check (13.4).
+(player tactics) in 0.268.0 with review fixes in 0.269.0 and the reaction to
+incoming fire in 0.271.0 (section 13). Open: the owner's load run (section
+12, stage 4), stage 5, the live check, and the stage 6 live check (13.4, 13.6).
 
 **This is a separate world mode.** It is not a population preset, it is not
 part of the Camlann world bot work, and it does not change that work. With the
@@ -782,3 +783,49 @@ nits: the former's lock is taken several times per follower turn (march
 slots could be cached per tick), stealthed hunters are invisible to every
 scan (no stealther-to-stealther detection), and no test drives the live
 retreat or regroup flow (the rules are pure-tested only).
+
+### 13.6 Reaction to incoming fire (0.271.0)
+
+Owner report 2026-10-14: a Cabalist AoE-dotting a group saw every bot turn
+and run at it the same tick, like a mob camp. The cause was shared with the
+normal world bots: every hit (each DoT tick included) set the bot's personal
+"direct attacker", which beats the kill order in `AttackMostWanted`, entered
+the combat state at once, and woke every group mate the same tick
+(`NotifyNearbyGroupBots`). The fix is shared too, in `bots/BotIncomingFireReaction.cs`
+(pure rules) and `BotBrain.IncomingFire.cs` (the brain's hold), and applies
+to every autonomous world bot hit by a player-shaped fighter, mode bot or
+not; companions, helpers, battleground bots and mob hits keep the old
+immediate reaction:
+
+1. **Reaction delay.** The hit that pulls a bot into its combat state draws
+   a hold once (`BotState_Aggro.Enter`): melee 300–800 ms, a single-target
+   spell or arrow 500–1,200, an area splash 900–2,200, a mate's hit
+   800–1,800; guard tanks ×0.8, pure casters ×1.15, Aggression 15 ×1.3 to
+   85 ×0.75, +0.5–1 s when the attacker was not in front of the bot; capped
+   at 2.5 s. While it runs the combat state only heals and cures; a melee
+   attacker in reach (melee range + 200) ends it. A damage dealer whose
+   leader is alive, within 2,000 and not yet fighting a legal target then
+   waits up to 1.5 s more for the call, unless there is only one enemy on
+   its list. The held turn shortens its own think interval to the time
+   left, so the answer comes when the hold ends, not a cadence later.
+2. **An area splash is no personal call.** `OnAttackedByEnemy` adds the
+   threat but does not set `_recentDirectAttacker` for an area spell cast
+   from a distance; the kill order decides (`CalculateNextAttackTarget`,
+   for a mode bot `GothwaitePvpCombat.ChooseTarget`). A bomber inside
+   the group (point-blank radius + 100, or melee reach) is a direct hit.
+3. **The direct attacker overrides the kill order only in melee reach**, or
+   when the bot has no other player-shaped target (`KillOrderAttacker`). A
+   bot on a mob still drops the mob for a ganker at once.
+4. Mates woken by `OnGroupMemberAttacked` for an area spell draw the area
+   delay, not the mate delay. A healer with three or more dotted members
+   casts the group cure first (`CheckHeals`).
+5. The driver's fight start (`Fighting`) is the first attacker's position
+   when the fight was forced on the group and the bot has no enemy target
+   yet; it is never fixed on the bot's own spot.
+
+What to watch in the live check: a group AoE-dotted from range should turn
+over about 1–3 s, tanks first and healers curing, with the casters nuking
+from their range rather than running in; a PBAoE bomber inside the group
+should be focused at once; `BOT_INCOMING_FIRE` (debug level) shows each
+drawn hold. Pure rules: `UT_BotIncomingFireReaction` (12 tests). Not done:
+spreading out of a repeated AoE (a follow-up to the formation slots).

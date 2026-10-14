@@ -6,6 +6,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+160. **Five `UT_PlayerCompanionStage6Integration` tests fail at HEAD with a
+     null lock.** Found 2026-10-14 while running the companion tests for
+     0.272.0. `InvitingAReservedCompanionFromTheOtherCharacterMovesAndRestampsIt`,
+     `LegacyActiveCompanionIsClaimedByTheFirstLoginOnlyOnce`,
+     `OwnerLogoutSavesActiveProgressAndFreshDatabaseLoadRestoresItsRosterMarker`,
+     `PersistentCompanionsAcceptNpcAndPvpXpButRejectQuestXpAndRealmPoints` and
+     `RemovingPersistentCompanionFromGroupSavesBenchStateAndDeletesOnlyItsRuntimeActor`
+     throw `ArgumentNullException` in `GameBot.CopyPvpKillStatsTo`
+     (`lock (_pvpKillStatsGate)`), reached from
+     `PlayerCompanionRoster.SaveBotState`. The fixture builds its bots with
+     `RuntimeHelpers.GetUninitializedObject`, so the readonly gate object that
+     the 0.252.0 PvP kill counters added is null there. Test-only; the live
+     server constructs bots normally. Fix idea: a null-tolerant gate, or
+     initialise it in the test double. Not fixed in 0.272.0.
+
 154. **Two Midgard world bots loop in capital egress recovery for over an
      hour.** Installed 0.244.0, 2026-10-11 08:40–10:25 (20×):
      `AUTONOMOUS_CAPITAL_EGRESS_RECOVERY bot="Ragungrim" id=1579 realm=Midgard

@@ -5751,6 +5751,8 @@ namespace DOL.GS
             bool killingBlowByEnemyRealm = killer != null && killer.Realm != eRealm.None && killer.Realm != Realm;
 
             TargetObject = null;
+            // A dead main assist drops his assist-train call; the companions fight on under ordinary rules.
+            CompanionAssistTrain.Reset(this);
             UpdateWaterBreathState(eWaterBreath.None);
             if (IsOnHorse)
                 IsOnHorse = false;
@@ -11819,6 +11821,7 @@ namespace DOL.GS
 
             Out.SendMessage(LanguageMgr.GetTranslation(Client.Account.Language, "GamePlayer.CommandNpcAttack.KillTarget", npc.Body.GetName(0, false)), eChatType.CT_System, eChatLoc.CL_SystemWindow);
             npc.Attack(TargetObject);
+            CompanionAssistTrain.OnPetOrder(this, TargetObject as GameLiving);
         }
 
         /// <summary>

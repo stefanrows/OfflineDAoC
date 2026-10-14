@@ -12,6 +12,131 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.272.0] - 2026-10-14
+
+### Added
+
+- **COMPANIONS window as a group window** (Custom7, task 128, offline only).
+  The window can now stand in for the stock group window:
+  - Member rows show what the group window shows, from the client's own
+    group adapters: power and endurance percent, a health bar with the name
+    over it and the health percent, class and level. The server adds each
+    companion's stance (Aggressive, Defensive, Passive, Assist train, Dead,
+    Away) and a gold leader mark. Rows cover every group member, players
+    included, and a click on a row still targets it.
+  - A click on a companion's stance cycles its saved stance (aggressive,
+    defensive, passive) through the roster's tactics path; the reply names a
+    group order that still overrides it.
+  - A third tile row: **Invite** (the client's stock invite on your target),
+    **Kick** (benches your targeted companion, dismisses a temporary helper,
+    or removes a player when you lead), **Leader** (hands the lead to the
+    targeted player), **Leave** (twice within 10 s; closes a companion raid
+    and dismisses temporary helpers like bare `/disband`) and
+    **Grind / Stop grind** (`/grind`). Disabled tiles explain why.
+  - The window now shows while you are in any group, not only while an owned
+    companion is with you; the status line reads "Group of N | no
+    companions" for a plain player group.
+  - Window 440×312 with five tiles per row; status and message lines widened.
+
+### Changed
+
+- Companion Manager client files (protocol 3 unchanged): `game.dll` now
+  registers 538 label adapters (98 for the COMPANIONS window: 14 tiles ×
+  4, 8 rows × 5) and `custom7_window.xml` is rebuilt; `custom8_window.xml`
+  and `uimain.xml` are byte-identical to 0.251.0. Controls 0xB2–0xB5 are
+  the new tiles and 0xB6–0xBD the row stance clicks. Install the new stage
+  with `tools/dev/Install-CompanionManager.ps1`: it now upgrades an
+  installed 0.251.0 build in place and backs up its window files. The
+  release pack defaults to `companion-manager-stage-0.272.0` and may replace
+  the 0.251.0 `game.dll` and `custom7_window.xml`. Until the client files
+  are updated the old window keeps working with the old tiles only; a
+  0.251.0 client ignores the new labels and sends no new controls.
+- `/companions bar` help, `docs/QUICK-COMMANDS.md`, `ALL SERVER COMMANDS.txt`
+  and `docs/COMPANION_MANAGER_INTEGRATION.md` describe the new window.
+- Offline checks: `UT_CompanionBar` (30 tests) and `UT_CompanionManager`
+  pass; the client emulation test passes on the 0.272.0 stage (538 adapters,
+  stock `GroupInvite` and `SelectGroupMember` events, no overlapping click
+  areas, server constants match); the installer's upgrade, re-apply and
+  restore were exercised on a scratch copy of the installed 0.251.0 client.
+  The real-client check is the owner's (task 128). The stage 6 integration
+  fixture fails at HEAD for an unrelated reason (see `docs/BUGS.md`).
+
+## [0.271.0] - 2026-10-14
+
+### Changed
+
+- **World bots answer a player's attack like players, not like mobs**
+  (`bots/BotIncomingFireReaction.cs`, `BotBrain.IncomingFire.cs`, task 127).
+  Owner report 2026-10-14: a Cabalist AoE-dotting a group of autonomous bots
+  saw every one of them turn and run at it the same tick, the way a mob camp
+  does. Every hit (each DoT tick included) made the bot adopt the attacker as
+  its personal priority target, entered its combat state at once and woke
+  its whole group the same tick. Now, for autonomous world bots hit by a
+  player-shaped fighter (a player, a companion, a world bot, or their pets),
+  in Gothwaite PvP mode and in the normal world:
+  - **A reaction delay.** The hit that pulls the bot into combat draws a
+    hold once: melee 300–800 ms, a single-target spell or arrow 500–1,200,
+    an area spell from a distance 900–2,200, a mate's hit 800–1,800; guard
+    tanks ×0.8, pure casters ×1.15, Aggression 15 ×1.3 down to 85 ×0.75,
+    +0.5–1 s when the attacker was behind the bot; capped at 2.5 s. During
+    the hold the bot only heals and cures. A melee attacker in reach ends
+    it at once. A damage dealer in a called group then waits up to 1.5 s
+    more for its leader's call, unless there is only one enemy to pick.
+  - **An area splash is not a personal call.** It adds threat but never
+    becomes the bot's priority attacker; the kill order (leader's call,
+    healers first, stickiness) decides. A bomber casting from inside the
+    group (point-blank radius + 100, or melee reach) is a direct hit.
+  - **A direct attacker overrides the kill order only in melee reach**, or
+    when the bot has no other player-shaped target. A bot fighting a mob
+    still drops the mob for a ganker at once.
+  - Mates hit by the same area spell draw the area delay, not the shorter
+    mate delay, so a group does not react faster to an AoE than a solo.
+  - **Group cure.** A healer with three or more dotted group members casts
+    the group cure first instead of one cure per member.
+  - Gothwaite PvP: the leader's "far chase" start is now the first
+    attacker's position when the fight was forced on the group; while the
+    group is still reacting it is not fixed on the leader's own spot.
+  - Unchanged: companions led by a player, temporary helpers, battleground
+    encounter bots, every hit from a mob, the casters' standoff range, the
+    retreat and fight-appetite rules, the 1–2 s /assist switch delay.
+  - A `BOT_INCOMING_FIRE` debug log line records each drawn hold (bot,
+    kind, hold, attacker). Rules in `docs/GOTHWAITE_PVP_MODE.md` 13.6.
+- Offline checks: server Release build passed; `UT_BotIncomingFireReaction`
+  (12 tests) and the Gothwaite, RvR doctrine and assist-train fixtures (276
+  tests) pass; the full suite was skipped under project policy. Real-client
+  check pending (task 127).
+
+## [0.270.0] - 2026-10-14
+
+### Added
+
+- **Assist train: `/assisttrain call`.** The main assist calls the selected
+  enemy without attacking it, the DAoC "on X" call, so a healer, mezzer or
+  bard owner can lead a companion train. Calling the same target again
+  re-engages companions that lost it. Every new call prints
+  "Assist train: calling X." to the owner.
+
+### Changed
+
+- **Assist train review against the DAoC main-assist model**
+  (`docs/COMPANION_BOTS.md`, task 126). In a classic train everyone mashes
+  `/assist <MA>` and lands on whatever the main assist is hitting; the
+  companion train now follows the owner the same way:
+  - With weapon attack mode on, selecting another enemy switches the call
+    at once, because the next swing goes there, instead of after the first
+    contact. A cast keeps its captured target and a bow on auto-fire keeps
+    its auto-fire target; selecting without attack mode still calls nothing.
+  - The pet window's attack order calls the ordered target, so a pet-class
+    main assist (Cabalist, Enchanter, Spiritmaster, Bonedancer, Theurgist)
+    calls by sending the pet. A pet's own aggro and pet casts still do not.
+  - A dead main assist drops the call, and until the owner lives again the
+    companions fight under the ordinary aggressive rules (finishing what
+    they are on, defending themselves) instead of standing idle in the train.
+- Solution Release build (server and tests) passed. The new
+  `UT_CompanionAssistTrain` fixture (damage versus control calls, damage
+  ranking, the retarget rule) was run and passes; the full suite was skipped
+  under project policy. Real-client checks are pending (task 126).
+
 ## [0.269.0] - 2026-10-14
 
 ### Fixed

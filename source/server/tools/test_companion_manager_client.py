@@ -262,6 +262,10 @@ click(0x7A8)
 assert commands[-1].endswith(" a8"), commands[-1]
 click(0x7B1)
 assert commands[-1].endswith(" b1"), commands[-1]
+click(0x700 + builder.BAR_CONTROL_SLOT_BASE + builder.BAR_SLOTS - 1)
+assert commands[-1].endswith(f" {builder.BAR_CONTROL_SLOT_BASE + builder.BAR_SLOTS - 1:02x}"), commands[-1]
+click(0x700 + builder.BAR_TILES + builder.BAR_CONTROL_FIRST - 1)
+assert commands[-1].endswith(f" {builder.BAR_CONTROL_FIRST + builder.BAR_TILES - 1:02x}"), commands[-1]
 sent = len(commands)
 click(0x705)
 assert len(commands) == sent, "Manager clicks while only the bar is shown must not send commands"
@@ -328,10 +332,15 @@ assert builder.SEARCH_CONTROL in controls and builder.READY_CONTROL not in contr
 assert not any(builder.BAR_CONTROL_FIRST <= value < builder.BAR_CONTROL_LIMIT for value in controls), \
     "Manager controls must stay out of the COMPANIONS range"
 
-# COMPANIONS window (Custom7): 74 labels, stock member rows, and tile clicks in the bar range only.
+# COMPANIONS window (Custom7): 98 labels, stock group rows, the stock GroupInvite tile, and tile and row clicks in
+# the bar range only.
 assert b"<Include>custom7_window.xml</Include>" in (args.stage / "uimain.xml").read_bytes()
 assert builder.BAR_LABEL_BASE == LABELS and TOTAL == builder.TOTAL_LABEL_COUNT
-bar_tile_events = set()
+assert builder.BAR_LABEL_COUNT == 2 + builder.BAR_TILE_STRIDE * builder.BAR_TILES + builder.BAR_SLOT_STRIDE * builder.BAR_SLOTS
+assert builder.BAR_CONTROL_SLOT_BASE == builder.BAR_CONTROL_FIRST + builder.BAR_TILES
+assert builder.BAR_CONTROL_SLOT_BASE + builder.BAR_SLOTS < builder.BAR_READY_CONTROL < builder.BAR_CONTROL_LIMIT
+bar_events = set()
+native_tile_events = set()
 for skin in ("atlantis", "isles"):
     root = ET.parse(args.stage / skin / "custom7_window.xml").getroot()
     window = root.find("WindowTemplate")
@@ -343,11 +352,13 @@ for skin in ("atlantis", "isles"):
     bar_adapters = sorted(element.text for element in window.iter("Adapter") if element.text.startswith("cmgr_"))
     assert bar_adapters == sorted(builder.adapter_name(index) for index in range(builder.BAR_LABEL_BASE, TOTAL)), \
         "Each COMPANIONS label adapter appears exactly once"
-    native = {element.text for element in window.iter("Adapter") if not element.text.startswith("cmgr_")}
-    assert native == {f"group_name{i}" for i in range(8)} | {f"group_level{i}" for i in range(8)}
+    native = sorted(element.text for element in window.iter("Adapter") if not element.text.startswith("cmgr_"))
+    assert native == sorted(f"group_{kind}{i}" for kind in ("name", "level", "class", "health", "power", "endurance")
+                            for i in range(8)), "Each native group adapter is shown exactly once"
     assert {element.text for element in window.iter("ColorAdapter") if element.text} == \
         {f"group_color{i}" for i in range(8)}
     assert {element.text for element in window.iter("AdapterName")} == {f"group_health{i}" for i in range(8)}
+    assert {element.find("TemplateName").text for element in window.iter("StatusBarDef")} == {"red_status_thick"}
     member_events = set()
     for button in window.iter("InvisibleButtonDef"):
         text = button.find("OnClickEvent").text
@@ -355,10 +366,14 @@ for skin in ("atlantis", "isles"):
             assert text in {f"SelectGroupMember{i}" for i in range(8)}, text
             member_events.add(text)
             continue
-        assert re.fullmatch(r"[0-9]+", text), text
+        if not re.fullmatch(r"[0-9]+", text):
+            assert text in {event for _name, _caption, event, _row, _column in builder.BAR_NATIVE_TILES}, text
+            assert stock_click_event(text) >= 0, text
+            native_tile_events.add(text)
+            continue
         event = stock_click_event(text)
-        assert 0x7A8 <= event < 0x7C0, text
-        bar_tile_events.add(event)
+        assert 0x700 + builder.BAR_CONTROL_FIRST <= event < 0x700 + builder.BAR_CONTROL_LIMIT, text
+        bar_events.add(event)
     assert member_events == {f"SelectGroupMember{i}" for i in range(8)}
     for element in window.iter():
         assert element.tag in BAR_XML_TAGS, element.tag
@@ -366,16 +381,32 @@ for skin in ("atlantis", "isles"):
               int(element.find("Width").text), int(element.find("Height").text))
              for element in window.iter("FullResizeImageDef")
              if element.find("TemplateName").text == builder.BAR_TILE_TEMPLATE]
-    assert len(tiles) == builder.BAR_TILES
+    assert len(tiles) == builder.BAR_TILES + len(builder.BAR_NATIVE_TILES)
+    # Click areas never overlap each other, and every row's stance click sits right of its member click.
+    areas = [(int(element.find("Position/X").text), int(element.find("Position/Y").text),
+              int(element.find("Width").text), int(element.find("Height").text), element.find("OnClickEvent").text)
+             for element in window.iter("InvisibleButtonDef")]
+    for index, (ax, ay, aw, ah, aname) in enumerate(areas):
+        assert 0 <= ax and 0 <= ay and ax + aw <= width and ay + ah <= height, (aname, ax, ay, aw, ah)
+        for bx, by, bw, bh, bname in areas[index + 1:]:
+            assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, (aname, bname)
+    for slot in range(builder.BAR_SLOTS):
+        row = next(a for a in areas if a[4] == f"SelectGroupMember{slot}")
+        stance = next(a for a in areas if a[4] == str(0x700 + builder.BAR_CONTROL_SLOT_BASE + slot))
+        assert row[0] + row[2] <= stance[0] and row[1] == stance[1], (row, stance)
     for x, y, w, h in tiles:
         assert 0 <= x and 0 <= y and x + w <= width and y + h <= height, (x, y, w, h)
     for index, (ax, ay, aw, ah) in enumerate(tiles):
         for bx, by, bw, bh in tiles[index + 1:]:
             assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, ((ax, ay, aw, ah), (bx, by, bw, bh))
-assert bar_tile_events == set(range(0x7A8, 0x7A8 + builder.BAR_TILES)), sorted(bar_tile_events)
-assert stock_click_event("SelectGroupMember3") == 125
+assert bar_events == set(range(0x700 + builder.BAR_CONTROL_FIRST, 0x700 + builder.BAR_CONTROL_FIRST + builder.BAR_TILES)) | \
+    set(range(0x700 + builder.BAR_CONTROL_SLOT_BASE, 0x700 + builder.BAR_CONTROL_SLOT_BASE + builder.BAR_SLOTS)), sorted(bar_events)
+assert 0x700 + builder.BAR_READY_CONTROL not in bar_events
+assert native_tile_events == {"GroupInvite"}
+assert stock_click_event("SelectGroupMember3") == 125 and stock_click_event("GroupInvite") == 158
 for needle in (b"custom7_window\0", b"group_health%d\0", b"group_name%d\0", b"group_level%d\0",
-               b"group_color%d\0", b"SelectGroupMember0\0"):
+               b"group_color%d\0", b"group_class%d\0", b"group_power%d\0", b"group_endurance%d\0",
+               b"SelectGroupMember0\0", b"GroupInvite\0"):
     assert needle in image, needle
 # Static: the COMPANIONS window is Custom7 (0x74): the ShowCustomN switch pushes 0x6D + N, so Custom7 is 0x6D + 7.
 assert image[pe.get_offset_from_rva(0x4E0B4A - 0x400000):][:4] == bytes.fromhex("6a016a74")
@@ -436,5 +467,6 @@ print("PASS (offline only): the stock OnClickEvent mapper turns every XML click 
 print("PASS (offline only): clicks send &companions ui <token> <control>; Search opens the chat line")
 print("PASS (offline only): raid events, raid packets, and stock DebugMode packets pass through")
 print("PASS (offline only): Custom8 XML uses only raid-proven controls; server constants match")
-print("PASS (offline only): COMPANIONS Custom7 bar: ops 5/6, 74 labels, controls 0xA8-0xBF, stock member rows")
+print("PASS (offline only): COMPANIONS Custom7 window: ops 5/6, 98 labels, tile and row controls 0xA8-0xBF, "
+      "stock group rows and GroupInvite")
 print("NOTE: emulation is not acceptance; the owner's combined real-client check is still required")

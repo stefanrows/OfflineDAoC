@@ -323,6 +323,68 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+128. **COMPANIONS window as a group window replacement.** Owner, 2026-10-14:
+     "Improve the Companion Control Window (where we set group modes and
+     behaviour). It should be able to replace the group window too."
+     Implemented in source **0.272.0** (offline only): the Custom7 window is
+     440×312 with full group rows from the stock adapters (power, endurance,
+     health bar and percent, name, class, level) plus the server's stance and
+     leader mark; a stance click cycles the companion's saved stance; new
+     tiles Invite (stock GroupInvite), Kick, Leader, Leave (two clicks) and
+     Grind; the window also shows while grouped without companions. Rebuilt
+     client stage `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.272.0`
+     (game.dll `c938e6b5…`, custom7 `5b820574…`; custom8 and uimain
+     unchanged); the installer upgrades 0.251.0 in place. Offline: unit and
+     emulation tests pass, installer upgrade/re-apply/restore exercised on a
+     scratch copy. Checks pending (real client, after installing the stage
+     with the game, server and launcher closed): the window fits and the
+     arial14 text reads at 440×312; power/endurance/health numbers and the
+     health bar fill for players and companions and blank rows draw nothing;
+     the leader mark follows `/makeleader`; a row click targets; a stance
+     click cycles aggressive → defensive → passive and the row colour
+     follows; Invite on a targeted player and on a targeted companion; Kick
+     benches a companion, dismisses a `/spawn` helper and removes a player
+     (and refuses when not leader); Leader hands the lead; Leave needs the
+     second click and leaves; Grind starts and stops; a plain player group
+     shows the window with "Group of N | no companions"; the manager
+     (`/companions`) and raid windows still work with 538 adapters; a 0.251.0
+     client with this server keeps the old tiles working.
+
+127. **World bots hit by a player react like players, not like mobs.** Owner,
+     2026-10-14: a Cabalist AoE-dotting a large group of autonomous bots saw
+     all of them aggro and run at it at once. Implemented in source
+     **0.271.0** (`BotIncomingFireReaction`): a per-bot reaction delay by
+     kind of hit, class, Aggression and facing (capped 2.5 s, heals and cures
+     still go out, a melee attacker in reach ends it), a follower's wait for
+     the leader's call when there is more than one enemy, an area splash
+     that is threat but no personal call (a bomber in reach is), a direct
+     attacker that overrides the kill order only in melee reach or without
+     another player-shaped target, mates sharing the area delay, the group
+     cure with three or more dotted members, and the Gothwaite chase start
+     from the first attacker. Companions, helpers, battleground bots and mob
+     hits are unchanged. Server Release build passed; 12 new tests and 276
+     related tests pass, full suite skipped. Checks pending: AoE-dot a
+     Gothwaite group and a normal-world warband (bots should turn over 1–3 s,
+     tanks first, casters nuke from range, healers cure), a solo bot on a
+     mob hit by a player (drops the mob at once), a PBAoE bomber inside a
+     group (focused at once), and `BOT_INCOMING_FIRE` lines at debug level.
+126. **Assist train review: main-assist calls like DAoC.** Owner, 2026-10-14.
+     Implemented in source **0.270.0**: with weapon attack mode on,
+     retargeting switches the call at once (the `/assist` macro behavior; a
+     cast keeps its captured target, a bow its auto-fire target); the pet
+     window's attack order calls for pet-class main assists; `/assisttrain
+     call` calls the selected enemy without attacking, for a healer or mezzer
+     main assist; a new call prints "Assist train: calling X."; a dead main
+     assist drops the call and his companions fight under ordinary aggressive
+     rules until he lives again. Rules in
+     [COMPANION_BOTS.md](COMPANION_BOTS.md#assist-train-assisttrain).
+     Solution Release build passed; `UT_CompanionAssistTrain` (3 tests) run
+     and passing, full suite skipped. Checks pending: a melee MA tabbing
+     between enemies while swinging, a caster MA retargeting mid-cast (no
+     switch), a Cabalist or Spiritmaster MA sending the pet, a Cleric MA using
+     `/assisttrain call`, the MA dying mid-fight and being rezzed, and the
+     caster/tank/CC/pet checks still open from task 108.
+
 124. **Copy one character's UI layout to other characters.** Owner,
      2026-10-12. Implemented in source **0.261.0**: the launcher header has a
      UI PRESET button that opens `ClientUiPresetForm` (preset code from

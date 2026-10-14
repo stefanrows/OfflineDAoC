@@ -13,22 +13,33 @@ namespace DOL.GS.Commands
 
     /// <summary>
     /// The text the server writes into the COMPANIONS window (Custom7) for one refresh: a status line, a
-    /// message line, ten tiles (four stance orders, Default, Follow, Stay, Pet pull, PULL, MANAGER) and eight
-    /// member rows. ToLabels returns the 74 label values in the order the native window expects.
+    /// message line, fourteen tiles (four stance orders, Default, Follow, Stay, Pet pull, PULL, MANAGER, then the
+    /// group row's Kick, Leader, Leave and Grind) and eight member rows (a stance in one of four colours and a
+    /// leader mark). The Invite tile is native and has no label. The native group adapters draw the rest of a
+    /// row. ToLabels returns the 98 label values in the order the native window expects.
     /// </summary>
     public sealed class CompanionBarView
     {
         public static readonly string[] TileTexts =
         {
             "Aggressive", "Defensive", "Passive", "Assist", "Default", "Follow", "Stay", "Pet pull", "PULL", "MANAGER",
+            "Kick", "Leader", "Leave", "Grind",
         };
+
+        public const string GrindActiveText = "Stop grind";
+        public const string LeaderMark = "*";
 
         public string Status { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public CompanionBarTileState[] Tiles { get; } = new CompanionBarTileState[BarTiles];
-        public (string Text, eCompanionEngagementMode Color)?[] Slots { get; } = new (string Text, eCompanionEngagementMode Color)?[BarSlots];
 
-        /// <summary>The 74 values for labels BarLabelBase..TotalLabelCount-1; unused labels are empty strings.</summary>
+        /// <summary>A tile's text; defaults to TileTexts, the Grind tile reads "Stop grind" while grinding.</summary>
+        public string[] TileLabels { get; } = (string[])TileTexts.Clone();
+
+        public (string Text, eCompanionEngagementMode Color)?[] Slots { get; } = new (string Text, eCompanionEngagementMode Color)?[BarSlots];
+        public bool[] Leaders { get; } = new bool[BarSlots];
+
+        /// <summary>The 98 values for labels BarLabelBase..TotalLabelCount-1; unused labels are empty strings.</summary>
         public string[] ToLabels()
         {
             var labels = new string[BarLabelCount];
@@ -37,19 +48,19 @@ namespace DOL.GS.Commands
             labels[BarLabelMessage - BarLabelBase] = Fit(Sanitize(Message), BarWidthMessage);
             for (int tile = 0; tile < BarTiles; tile++)
             {
-                int width = tile >= BarControlPull - BarControlFirst ? BarWidthWideTile : BarWidthTile;
                 int at = BarLabelTileBase - BarLabelBase + BarTileStride * tile;
                 CompanionBarTileState state = Tiles[tile];
-                labels[at + (int)state] = Fit(TileTexts[tile], width);
+                labels[at + (int)state] = Fit(Sanitize(TileLabels[tile]), BarWidthTile);
                 if (state == CompanionBarTileState.Active)
-                    labels[at + BarTileUnderline] = Underline(width);
+                    labels[at + BarTileUnderline] = Underline(BarWidthTile);
             }
             for (int slot = 0; slot < BarSlots; slot++)
             {
-                if (Slots[slot] is not { } value)
-                    continue;
                 int at = BarLabelSlotBase - BarLabelBase + BarSlotStride * slot;
-                labels[at + (int)value.Color] = Fit(value.Text, BarWidthSlot);
+                if (Slots[slot] is { } value)
+                    labels[at + (int)value.Color] = Fit(Sanitize(value.Text), BarWidthSlot);
+                if (Leaders[slot])
+                    labels[at + BarSlotLeader] = LeaderMark;
             }
             return labels;
         }
@@ -60,10 +71,13 @@ namespace DOL.GS.Commands
         /// <summary>
         /// The tile table. An order tile is active when that order is set; Default when none is set. Stay is
         /// disabled while pet pull is off and the companions are not staying. Pet pull is disabled under Assist
-        /// train. PULL is disabled with no owned companion. MANAGER is always enabled.
+        /// train. PULL is disabled with no owned companion. MANAGER is always enabled. Kick and Leave need a group,
+        /// Leave is active (gold) while its confirmation is pending, Leader needs the player to lead a group of at
+        /// least two, and Grind is active while grinding.
         /// </summary>
         public static CompanionBarTileState[] ComputeTiles(bool ordered, eCompanionEngagementMode order, bool petPull,
-            bool staying, bool assistTrain, bool hasCompanions)
+            bool staying, bool assistTrain, bool hasCompanions, bool grouped = false, bool leads = false,
+            bool leavePending = false, bool grinding = false)
         {
             var tiles = new CompanionBarTileState[BarTiles];
             tiles[BarControlAggressive - BarControlFirst] = Mark(ordered && order == eCompanionEngagementMode.Aggressive);
@@ -76,12 +90,17 @@ namespace DOL.GS.Commands
             tiles[BarControlPetPull - BarControlFirst] = Mark(petPull, disabled: assistTrain && !petPull);
             tiles[BarControlPull - BarControlFirst] = Mark(false, disabled: !hasCompanions);
             tiles[BarControlManager - BarControlFirst] = Mark(false);
+            tiles[BarControlKick - BarControlFirst] = Mark(false, disabled: !grouped);
+            tiles[BarControlLeader - BarControlFirst] = Mark(false, disabled: !leads);
+            tiles[BarControlLeave - BarControlFirst] = Mark(grouped && leavePending, disabled: !grouped);
+            tiles[BarControlGrind - BarControlFirst] = Mark(grinding);
             return tiles;
         }
 
         /// <summary>
-        /// One member row. Null when the group member is not an owned companion (the row stays empty). A dead or
-        /// out-of-region companion shows Dead or Away in the passive colour. Otherwise its effective stance.
+        /// One member row. Null when the group member is not an owned companion (the row's stance stays empty; the
+        /// native adapters still draw the member). A dead or out-of-region companion shows Dead or Away in the
+        /// passive colour. Otherwise its effective stance.
         /// </summary>
         public static (string Text, eCompanionEngagementMode Color)? DescribeSlot(bool owned, bool alive, bool sameRegion,
             eCompanionEngagementMode effective)
@@ -99,6 +118,20 @@ namespace DOL.GS.Commands
                 eCompanionEngagementMode.Passive => ("Passive", effective),
                 eCompanionEngagementMode.AssistTrain => ("Assist train", effective),
                 _ => throw new ArgumentOutOfRangeException(nameof(effective)),
+            };
+        }
+
+        /// <summary>The saved stance a row click cycles to: aggressive, defensive, passive, then aggressive again.</summary>
+        public static string NextSavedStance(string saved)
+        {
+            string current = (saved ?? string.Empty).Trim().ToLowerInvariant();
+            if (current.Length == 0)
+                current = "aggressive"; // An unset preference is the aggressive default.
+            return current switch
+            {
+                "aggressive" => "defensive",
+                "defensive" => "passive",
+                _ => "aggressive",
             };
         }
 

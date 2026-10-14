@@ -28,7 +28,7 @@ namespace DOL.GS.Commands
                     BotAnimistPolicy.ReleaseGrove(bot);
                     brain.NextThinkTick = GameLoop.GameLoopTime;
                 }
-            return "Companions: ASSIST TRAIN. Your damage casts and weapon attacks call one target. Single-target offense; healing and add control continue. Petpull/stay cleared. Use /passive to stop or another mode to leave.";
+            return "Companions: ASSIST TRAIN. You are the main assist: your weapon attacks, damage casts, pet attack orders and /assisttrain call pick the one target; retargeting while you swing switches it. Single-target offense; healing and add control continue. Petpull/stay cleared. Use /passive to stop or another mode to leave.";
         }
 
         public static string Aggressive(GamePlayer player)
@@ -60,11 +60,20 @@ namespace DOL.GS.Commands
         }
     }
 
-    [CmdAttribute("&assisttrain", ePrivLevel.Player, "Coordinate single-target damage on your damage calls", "/assisttrain")]
+    [CmdAttribute("&assisttrain", ePrivLevel.Player, "Coordinate single-target damage on your damage calls",
+        "/assisttrain - you are the main assist; your swings, damage casts and pet orders call the target",
+        "/assisttrain call - call your selected enemy without attacking it")]
     public class CompanionAssistTrainCommand : AbstractCommandHandler, ICommandHandler
     {
-        public void OnCommand(GameClient client, string[] args) =>
+        public void OnCommand(GameClient client, string[] args)
+        {
+            if (args.Length > 1 && args[1].Equals("call", System.StringComparison.OrdinalIgnoreCase))
+            {
+                DisplayMessage(client, CompanionAssistTrain.CallSelected(client.Player));
+                return;
+            }
             DisplayMessage(client, CompanionGroupOrders.AssistTrain(client.Player));
+        }
     }
 
     [CmdAttribute("&defensive", ePrivLevel.Player, "Companions wait for enemies to approach you", "/defensive")]

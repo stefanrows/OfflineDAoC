@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 # Installs the staged Companion Manager client files (game.dll, ui/uimain.xml, Atlantis and Isles
 # custom8_window.xml, and since 0.251.0 the COMPANIONS window's Atlantis and Isles custom7_window.xml)
 # built by source/server/tools/build_companion_manager_client.py. Dry run by default.
-# An installation that already has an earlier manager build (0.32.1, 0.33.0 through 0.169.0, or the
+# An installation that already has an earlier manager build (0.32.1, 0.33.0 through 0.169.0, 0.251.0, or the
 # manager-only UI) is upgraded in place: game.dll, uimain.xml and the window files are backed up and
 # replaced, and -RestoreBackup puts the previous files back.
 # Every file is hash checked; the game, server, and launcher must be closed.
@@ -39,7 +39,12 @@ function RequireStopped {
 $KnownManagerBuilds = @(
     '3b6274dc385b90bf892f27d96c9e56cb457e1e94cbf45b5892d462a9e4d70890', # 0.32.1
     '88530c0093b285fd38fd6759e464373baa65ebb20473a949bc3b79fccbb41fd3', # 0.33.0 through 0.166.0
-    '49095c51e792200daf824f8a00880c70815a0cacbc37f452cf062cffacb3b63d'  # 0.169.0 (protocol 3, no COMPANIONS window)
+    '49095c51e792200daf824f8a00880c70815a0cacbc37f452cf062cffacb3b63d', # 0.169.0 (protocol 3, no COMPANIONS window)
+    '73223deffd8455944974b555f5bce5762c43a642c4442b5102194e337e47daf4'  # 0.251.0 (first COMPANIONS window)
+)
+# Builds whose own COMPANIONS window files (custom7_window.xml) an upgrade replaces after backing them up.
+$KnownBarBuilds = @(
+    '73223deffd8455944974b555f5bce5762c43a642c4442b5102194e337e47daf4'  # 0.251.0
 )
 
 function CopyVerified([string]$Source, [string]$Destination, [string]$Expected) {
@@ -179,10 +184,13 @@ if ($upgrade) {
     foreach ($path in @($atlantis, $isles)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Earlier manager window file missing: $path" }
     }
-    foreach ($path in @($atlantisBar, $islesBar)) {
-        $existing = Hash $path
-        if ($existing -and $existing -ne $manifest.barWindowSha256) {
-            throw "A COMPANIONS window file differs from this stage: $path ($existing). Refused."
+    # An installed window from an earlier COMPANIONS build is backed up and replaced; any other stray file is refused.
+    if ($KnownBarBuilds -notcontains $installedGame) {
+        foreach ($path in @($atlantisBar, $islesBar)) {
+            $existing = Hash $path
+            if ($existing -and $existing -ne $manifest.barWindowSha256) {
+                throw "A COMPANIONS window file differs from this stage: $path ($existing). Refused."
+            }
         }
     }
 }

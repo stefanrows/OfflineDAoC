@@ -39,7 +39,8 @@ public sealed class UT_CompanionBar
             Assert.That(new CompanionBarView().ToLabels(), Has.Length.EqualTo(BarLabelCount));
             Assert.That(CompanionBarView.TileTexts, Has.Length.EqualTo(BarTiles));
             Assert.That(BarTileStride, Is.EqualTo(4), "Four state labels per tile");
-            Assert.That(BarSlotStride, Is.EqualTo(4), "Four stance colours per member row");
+            Assert.That(BarSlotStride, Is.EqualTo(5), "Four stance colours and the leader mark per member row");
+            Assert.That(BarSlotLeader, Is.EqualTo(BarSlotStride - 1));
             Assert.That((BarTileInactive, BarTileActive, BarTileDisabled, BarTileUnderline), Is.EqualTo((0, 1, 2, 3)));
         });
     }
@@ -48,13 +49,15 @@ public sealed class UT_CompanionBar
     public void BarControlsSitInsideTheBarRangeAndClearTheManagerControls()
     {
         int[] barControls = IntConstants(field => field.Name.StartsWith("BarControl", StringComparison.Ordinal)
-            && field.Name is not ("BarControlFirst" or "BarControlLimit"));
-        Assert.That(barControls, Has.Length.EqualTo(BarTiles + 1), "Ten tiles and the ready control");
+            && field.Name is not ("BarControlFirst" or "BarControlLimit" or "BarControlSlotBase"));
+        Assert.That(barControls, Has.Length.EqualTo(BarTiles + 1), "The tiles and the ready control");
         Assert.Multiple(() =>
         {
             Assert.That(BarControlLimit, Is.LessThanOrEqualTo(ControlLimit));
             Assert.That(barControls, Is.All.InRange(BarControlFirst, BarControlLimit - 1));
             Assert.That(BarControlReady, Is.EqualTo(BarControlLimit - 1));
+            Assert.That(BarControlSlotBase, Is.EqualTo(BarControlFirst + BarTiles), "Row controls follow the tiles");
+            Assert.That(BarControlSlotBase + BarSlots, Is.LessThan(BarControlReady), "Row controls stay below the ready control");
         });
         int[] managerControls = IntConstants(field => field.Name.StartsWith("Control", StringComparison.Ordinal));
         Assert.That(managerControls.Where(value => value is >= BarControlFirst and < BarControlLimit), Is.Empty,
@@ -69,6 +72,7 @@ public sealed class UT_CompanionBar
         {
             BarControlAggressive, BarControlDefensive, BarControlPassive, BarControlAssist, BarControlDefault,
             BarControlFollow, BarControlStay, BarControlPetPull, BarControlPull, BarControlManager,
+            BarControlKick, BarControlLeader, BarControlLeave, BarControlGrind,
         };
         Assert.That(tiles, Is.EqualTo(Enumerable.Range(BarControlFirst, BarTiles)));
     }
@@ -115,26 +119,27 @@ public sealed class UT_CompanionBar
     }
 
     [Test]
-    public void WideTilesUseTheWideUnderlineAndPullAndManagerAreWide()
+    public void TileLabelsCanBeOverriddenPerView()
     {
         var view = new CompanionBarView();
-        view.Tiles[BarControlPull - BarControlFirst] = CompanionBarTileState.Active;
+        view.TileLabels[BarControlGrind - BarControlFirst] = CompanionBarView.GrindActiveText;
+        view.Tiles[BarControlGrind - BarControlFirst] = CompanionBarTileState.Active;
         string[] labels = view.ToLabels();
-        string underline = labels[TileOffset(BarControlPull - BarControlFirst) + BarTileUnderline];
-        Assert.That(underline, Is.EqualTo(CompanionBarView.Underline(BarWidthWideTile)));
-        Assert.That(underline.Length, Is.GreaterThan(CompanionBarView.Underline(BarWidthTile).Length));
-        Assert.That(CompanionBarView.Underline(1), Is.EqualTo("_"), "The underline never comes out empty");
+        int grindAt = TileOffset(BarControlGrind - BarControlFirst);
+        Assert.Multiple(() =>
+        {
+            Assert.That(labels[grindAt + BarTileActive], Is.EqualTo("Stop grind"));
+            Assert.That(CompanionBarView.TileTexts[BarControlGrind - BarControlFirst], Is.EqualTo("Grind"), "The defaults are untouched");
+            Assert.That(new CompanionBarView().TileLabels[BarControlGrind - BarControlFirst], Is.EqualTo("Grind"));
+            Assert.That(CompanionBarView.Underline(1), Is.EqualTo("_"), "The underline never comes out empty");
+        });
     }
 
     [Test]
     public void TileTextsFitTheirTiles()
     {
-        for (int tile = 0; tile < BarTiles; tile++)
-        {
-            int width = tile >= BarControlPull - BarControlFirst ? BarWidthWideTile : BarWidthTile;
-            Assert.That(TextWidth(CompanionBarView.TileTexts[tile]), Is.LessThanOrEqualTo(width),
-                CompanionBarView.TileTexts[tile]);
-        }
+        foreach (string text in CompanionBarView.TileTexts.Append(CompanionBarView.GrindActiveText).Append("Invite"))
+            Assert.That(TextWidth(text), Is.LessThanOrEqualTo(BarWidthTile), text);
     }
 
     [Test]
@@ -152,13 +157,31 @@ public sealed class UT_CompanionBar
             Assert.That(labels[second + (int)eCompanionEngagementMode.Aggressive], Is.Empty);
             Assert.That(labels[second + (int)eCompanionEngagementMode.Passive], Is.Empty);
             Assert.That(labels[second + (int)eCompanionEngagementMode.AssistTrain], Is.Empty);
+            Assert.That(labels[second + BarSlotLeader], Is.Empty);
             Assert.That(labels[fifth + (int)eCompanionEngagementMode.Passive], Is.EqualTo("Dead"));
             Assert.That(NonEmptyIndices(labels).Where(index => index >= SlotOffset(0)), Is.EqualTo(new[] { second + 1, fifth + 2 }));
         });
     }
 
     [Test]
-    public void NullSlotLeavesItsFourLabelsBlank()
+    public void LeaderMarkIsIndependentOfTheStance()
+    {
+        var view = new CompanionBarView();
+        view.Leaders[0] = true;
+        view.Leaders[3] = true;
+        view.Slots[3] = ("Aggressive", eCompanionEngagementMode.Aggressive);
+        string[] labels = view.ToLabels();
+        Assert.Multiple(() =>
+        {
+            Assert.That(labels[SlotOffset(0) + BarSlotLeader], Is.EqualTo(CompanionBarView.LeaderMark), "A player row gets the mark without a stance");
+            Assert.That(labels[SlotOffset(3) + BarSlotLeader], Is.EqualTo(CompanionBarView.LeaderMark));
+            Assert.That(labels[SlotOffset(3) + (int)eCompanionEngagementMode.Aggressive], Is.EqualTo("Aggressive"));
+            Assert.That(labels[SlotOffset(1) + BarSlotLeader], Is.Empty);
+        });
+    }
+
+    [Test]
+    public void NullSlotLeavesItsLabelsBlank()
     {
         var view = new CompanionBarView();
         view.Slots[0] = ("Aggressive", eCompanionEngagementMode.Aggressive);
@@ -192,6 +215,7 @@ public sealed class UT_CompanionBar
             Assert.That(tiles[BarControlAggressive - BarControlFirst], Is.EqualTo(CompanionBarTileState.Inactive));
             Assert.That(tiles[BarControlFollow - BarControlFirst], Is.EqualTo(CompanionBarTileState.Active), "Not staying");
             Assert.That(tiles[BarControlManager - BarControlFirst], Is.EqualTo(CompanionBarTileState.Inactive));
+            Assert.That(tiles[BarControlGrind - BarControlFirst], Is.EqualTo(CompanionBarTileState.Inactive), "Grind is always clickable");
         });
     }
 
@@ -251,6 +275,33 @@ public sealed class UT_CompanionBar
     }
 
     [Test]
+    public void GroupTilesFollowGroupMembershipAndLeadership()
+    {
+        CompanionBarTileState[] Tiles(bool grouped, bool leads, bool leavePending = false, bool grinding = false) =>
+            CompanionBarView.ComputeTiles(false, eCompanionEngagementMode.Aggressive, false, false, false, true,
+                grouped: grouped, leads: leads, leavePending: leavePending, grinding: grinding);
+        Assert.Multiple(() =>
+        {
+            CompanionBarTileState[] solo = Tiles(grouped: false, leads: false);
+            Assert.That(solo[BarControlKick - BarControlFirst], Is.EqualTo(CompanionBarTileState.Disabled));
+            Assert.That(solo[BarControlLeader - BarControlFirst], Is.EqualTo(CompanionBarTileState.Disabled));
+            Assert.That(solo[BarControlLeave - BarControlFirst], Is.EqualTo(CompanionBarTileState.Disabled));
+            Assert.That(Tiles(grouped: false, leads: false, leavePending: true)[BarControlLeave - BarControlFirst],
+                Is.EqualTo(CompanionBarTileState.Disabled), "A pending leave means nothing without a group");
+
+            CompanionBarTileState[] member = Tiles(grouped: true, leads: false);
+            Assert.That(member[BarControlKick - BarControlFirst], Is.EqualTo(CompanionBarTileState.Inactive), "Kick still benches own companions");
+            Assert.That(member[BarControlLeader - BarControlFirst], Is.EqualTo(CompanionBarTileState.Disabled));
+            Assert.That(member[BarControlLeave - BarControlFirst], Is.EqualTo(CompanionBarTileState.Inactive));
+
+            CompanionBarTileState[] leader = Tiles(grouped: true, leads: true, leavePending: true, grinding: true);
+            Assert.That(leader[BarControlLeader - BarControlFirst], Is.EqualTo(CompanionBarTileState.Inactive));
+            Assert.That(leader[BarControlLeave - BarControlFirst], Is.EqualTo(CompanionBarTileState.Active), "Pending confirmation is shown gold");
+            Assert.That(leader[BarControlGrind - BarControlFirst], Is.EqualTo(CompanionBarTileState.Active));
+        });
+    }
+
+    [Test]
     public void DescribeSlotShowsOwnedCompanionsAndNothingElse()
     {
         Assert.That(CompanionBarView.DescribeSlot(false, true, true, eCompanionEngagementMode.Aggressive), Is.Null);
@@ -278,6 +329,20 @@ public sealed class UT_CompanionBar
         }
         Assert.That(TextWidth("Dead"), Is.LessThanOrEqualTo(BarWidthSlot));
         Assert.That(TextWidth("Away"), Is.LessThanOrEqualTo(BarWidthSlot));
+    }
+
+    [Test]
+    public void SavedStanceCyclesAggressiveDefensivePassive()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(CompanionBarView.NextSavedStance("aggressive"), Is.EqualTo("defensive"));
+            Assert.That(CompanionBarView.NextSavedStance(" Defensive "), Is.EqualTo("passive"));
+            Assert.That(CompanionBarView.NextSavedStance("passive"), Is.EqualTo("aggressive"));
+            Assert.That(CompanionBarView.NextSavedStance(string.Empty), Is.EqualTo("defensive"), "An unset preference is aggressive");
+            Assert.That(CompanionBarView.NextSavedStance(null), Is.EqualTo("defensive"));
+            Assert.That(CompanionBarView.NextSavedStance("assisttrain"), Is.EqualTo("aggressive"), "Anything else restarts the cycle");
+        });
     }
 
     [Test]
@@ -335,27 +400,41 @@ public sealed class UT_CompanionBar
     }
 
     [Test]
-    public void RoutingPredicateClaimsOnlyTheBarControls()
+    public void RoutingPredicatesClaimOnlyTheBarControls()
     {
         Assert.Multiple(() =>
         {
             Assert.That(CompanionBar.IsBarControl(BarControlFirst), Is.True);
-            Assert.That(CompanionBar.IsBarControl(BarControlManager), Is.True);
+            Assert.That(CompanionBar.IsBarControl(BarControlGrind), Is.True);
+            Assert.That(CompanionBar.IsBarControl(BarControlSlotBase + BarSlots - 1), Is.True, "Row stance clicks are bar controls");
             Assert.That(CompanionBar.IsBarControl(BarControlReady), Is.True, "The ready control is a bar control too");
             Assert.That(CompanionBar.IsBarControl(BarControlLimit - 1), Is.True);
             Assert.That(CompanionBar.IsBarControl(BarControlFirst - 1), Is.False, "Manager rows and tabs stay with the manager");
             Assert.That(CompanionBar.IsBarControl(BarControlLimit), Is.False, "List paging stays with the manager");
             Assert.That(CompanionBar.IsBarControl(ControlSearch), Is.False);
             Assert.That(CompanionBar.IsBarControl(ControlClose), Is.False);
+            Assert.That(CompanionBar.IsSlotControl(BarControlSlotBase), Is.True);
+            Assert.That(CompanionBar.IsSlotControl(BarControlSlotBase + BarSlots - 1), Is.True);
+            Assert.That(CompanionBar.IsSlotControl(BarControlSlotBase + BarSlots), Is.False, "The spare control is nobody's");
+            Assert.That(CompanionBar.IsSlotControl(BarControlGrind), Is.False);
+            Assert.That(CompanionBar.IsSlotControl(BarControlReady), Is.False);
         });
     }
 
     [Test]
     public void StatusTextNamesTheOrderAndCounts()
     {
-        Assert.That(CompanionBar.StatusText("Defensive", 4, 2), Is.EqualTo("Defensive | 4 with you | 2 in squads"));
-        Assert.That(CompanionBar.StatusText("Own stances", 1, 0), Is.EqualTo("Own stances | 1 with you"),
-            "No squad part when no companion is in a squad");
+        Assert.Multiple(() =>
+        {
+            Assert.That(CompanionBar.StatusText("Defensive", 4, 2, 5), Is.EqualTo("Defensive | 4 with you | 2 in squads"));
+            Assert.That(CompanionBar.StatusText("Own stances", 1, 0, 2), Is.EqualTo("Own stances | 1 with you"),
+                "No squad part when no companion is in a squad");
+            Assert.That(CompanionBar.StatusText("Own stances", 0, 0, 3), Is.EqualTo("Group of 3 | no companions"),
+                "A player group without companions says so");
+            Assert.That(CompanionBar.StatusText("Own stances", 0, 2, 1), Is.EqualTo("Own stances | 0 with you | 2 in squads"),
+                "Squads away from the group still count");
+            Assert.That(TextWidth(CompanionBar.StatusText("Assist train", 7, 8, 8)), Is.LessThanOrEqualTo(BarWidthStatus));
+        });
     }
 
     [Test]
@@ -384,10 +463,23 @@ public sealed class UT_CompanionBar
     }
 
     [Test]
+    public void MessagesFitTheMessageLine()
+    {
+        foreach (string text in new[]
+                 {
+                     CompanionBar.KickNoTargetMessage, CompanionBar.KickSelfMessage, CompanionBar.LeaderNoTargetMessage,
+                     CompanionBar.LeaderNotPlayerMessage, CompanionBar.LeaveConfirmMessage, CompanionBar.LeftGroupMessage,
+                     CompanionBar.NotGroupedMessage, CompanionBar.NotLeaderMessage, CompanionBar.EmptyRowMessage,
+                 })
+            Assert.That(TextWidth(text), Is.LessThanOrEqualTo(BarWidthMessage), text);
+    }
+
+    [Test]
     public void MissingPlayerKeepsTheDefaultAndSaveReportsFailure()
     {
         Assert.That(CompanionBarPreferences.DefaultEnabled, Is.True, "The window is on by default");
         Assert.That(CompanionBarPreferences.Load(null), Is.True);
         Assert.That(CompanionBarPreferences.Save(null, false), Is.False);
+        Assert.That(CompanionBar.WantsWindow(null), Is.False);
     }
 }

@@ -148,7 +148,7 @@ namespace DOL.GS
         public const int WidthAction = 152;
         public const int SpaceAdvance = 5;
 
-        // COMPANIONS window (Custom7): protocol 3 extension, operations 5 and 6 and label adapters 440-513.
+        // COMPANIONS window (Custom7): protocol 3 extension, operations 5 and 6 and label adapters 440-537.
         // Literal values only; source/server/tools/build_companion_manager_client.py holds the native layout and
         // test_companion_manager_client.py checks each name below against it. LabelCount is unchanged.
         public const int BarLabelBase = 440;
@@ -156,12 +156,13 @@ namespace DOL.GS
         public const int BarLabelMessage = 441;
         public const int BarLabelTileBase = 442;
         public const int BarTileStride = 4;
-        public const int BarTiles = 10;
-        public const int BarLabelSlotBase = 482;
-        public const int BarSlotStride = 4;
+        public const int BarTiles = 14;
+        public const int BarLabelSlotBase = 498;
+        public const int BarSlotStride = 5;
         public const int BarSlots = 8;
-        public const int TotalLabelCount = 514;
-        public const int BarLabelCount = 74;
+        public const int BarSlotLeader = 4;
+        public const int TotalLabelCount = 538;
+        public const int BarLabelCount = 98;
         public const int BarTileInactive = 0;
         public const int BarTileActive = 1;
         public const int BarTileDisabled = 2;
@@ -170,6 +171,7 @@ namespace DOL.GS
         public const byte OpBarHide = 6;
         public const int BarControlFirst = 0xA8;
         public const int BarControlLimit = 0xC0;
+        public const int BarControlSlotBase = 0xB6;
         public const int BarControlReady = 0xBF;
         public const int BarControlAggressive = 0xA8;
         public const int BarControlDefensive = 0xA9;
@@ -181,11 +183,14 @@ namespace DOL.GS
         public const int BarControlPetPull = 0xAF;
         public const int BarControlPull = 0xB0;
         public const int BarControlManager = 0xB1;
-        public const int BarWidthStatus = 170;
-        public const int BarWidthMessage = 312;
-        public const int BarWidthTile = 76;
-        public const int BarWidthWideTile = 156;
-        public const int BarWidthSlot = 118;
+        public const int BarControlKick = 0xB2;
+        public const int BarControlLeader = 0xB3;
+        public const int BarControlLeave = 0xB4;
+        public const int BarControlGrind = 0xB5;
+        public const int BarWidthStatus = 290;
+        public const int BarWidthMessage = 420;
+        public const int BarWidthTile = 80;
+        public const int BarWidthSlot = 78;
 
         // Advance widths of the client's arial14 bitmap font (ui/fonts/Arial14.tga), measured from its
         // glyph width markers for '!' through '~'. A space has no glyph; SpaceAdvance overestimates it.

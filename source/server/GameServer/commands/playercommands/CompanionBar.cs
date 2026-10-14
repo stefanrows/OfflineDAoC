@@ -11,19 +11,19 @@ namespace DOL.GS.Commands
     public enum CompanionBarArgument { Show, On, Off, Usage }
 
     /// <summary>
-    /// Server side of the COMPANIONS window (Custom7). It shows while the account's setting is on and at least one
-    /// owned companion is with the player, sends the tile and member-row labels, and turns tile clicks into the same
-    /// commands the chat commands use. Clicks arrive through the Companion Manager's command path as controls
-    /// 0xA8-0xBF and are routed here before the manager's view-token checks.
+    /// Server side of the COMPANIONS window (Custom7). It shows while the account's setting is on and the player
+    /// is in a group or has an owned companion with him, sends the tile and member-row labels, and turns tile and
+    /// row clicks into the same commands the chat commands use. Clicks arrive through the Companion Manager's
+    /// command path as controls 0xA8-0xBF and are routed here before the manager's view-token checks.
     /// </summary>
     public static class CompanionBar
     {
         public const string UsageText = "Usage: /companions bar [on|off]. Bare /companions bar shows the COMPANIONS window again after you closed it.";
-        public const string OnMessage = "COMPANIONS window on. It appears while a companion is with you.";
+        public const string OnMessage = "COMPANIONS window on. It appears while you are grouped or a companion is with you.";
         public const string OffMessage = "COMPANIONS window off. /companions bar on brings it back.";
         public const string DisabledMessage = "COMPANIONS window is off. /companions bar on turns it on.";
         public const string ShownMessage = "COMPANIONS window shown.";
-        public const string NoCompanionsMessage = "No companions are with you; the window appears when one joins.";
+        public const string NoCompanionsMessage = "You are not grouped and no companion is with you; the window appears when one joins.";
         public const string GuidanceMessage = "No COMPANIONS window? It needs the updated Companion Manager client files. " +
                                               "Orders still work by command: /aggressive, /defensive, /passive, /pull.";
         public const string NoPullTargetMessage = "No companions are with you to pull.";
@@ -31,11 +31,23 @@ namespace DOL.GS.Commands
         public const string StayRefusalMessage = "Stay works in pet pull mode only: type /petpull on first.";
         public const string PetPullRefusalMessage = "Choose /aggressive or /defensive before enabling /petpull; AssistTrain follows your damage calls.";
         public const string NoPullFallbackMessage = "That target cannot be attacked, so nobody was sent.";
+        public const string NotGroupedMessage = "You are not in a group.";
+        public const string NotLeaderMessage = "You are not the leader of your group.";
+        public const string KickNoTargetMessage = "Click a member's row first, then Kick.";
+        public const string KickSelfMessage = "Use Leave to leave the group yourself.";
+        public const string LeaderNoTargetMessage = "Click a player's row first, then Leader.";
+        public const string LeaderNotPlayerMessage = "Only a player can lead the group.";
+        public const string LeaderAlreadyMessage = "You are the group leader already.";
+        public const string LeaveConfirmMessage = "Click Leave again within 10 seconds to leave the group.";
+        public const string LeftGroupMessage = "You left the group.";
+        public const string EmptyRowMessage = "That row is empty.";
+        public const string GrindStoppedMessage = "Grind mode stopped.";
 
         private const int TickMilliseconds = 1000;
         private const int StartDelayMilliseconds = 2000;
         private const int GuidanceDelayMilliseconds = 3000;
         private const int SlotLimit = BarSlots;
+        private static readonly TimeSpan LeaveConfirmWindow = TimeSpan.FromSeconds(10);
 
         private sealed class Session
         {
@@ -46,8 +58,11 @@ namespace DOL.GS.Commands
             public bool GuidancePending;
             public ushort Region;
             public string Message = string.Empty;
+            public DateTime LeaveConfirmUntil = DateTime.MinValue;
             public readonly string[] SentLabels = new string[BarLabelCount];
             public ECSGameTimer Timer;
+
+            public bool LeavePending(DateTime now) => LeaveConfirmUntil > now;
         }
 
         private static readonly ConditionalWeakTable<GamePlayer, Session> Sessions = new();
@@ -104,6 +119,9 @@ namespace DOL.GS.Commands
         /// <summary>True for the controls the COMPANIONS window owns, so the manager must not treat them as its own.</summary>
         public static bool IsBarControl(int control) => control >= BarControlFirst && control < BarControlLimit;
 
+        /// <summary>True for a member row's stance click; the row is control - BarControlSlotBase.</summary>
+        public static bool IsSlotControl(int control) => control >= BarControlSlotBase && control < BarControlSlotBase + BarSlots;
+
         /// <summary>Maps an argument after "/companions bar": empty shows, "on" and "off" set the setting.</summary>
         public static CompanionBarArgument ParseArgument(string argument)
         {
@@ -153,7 +171,7 @@ namespace DOL.GS.Commands
             Session session = GetOrCreate(player);
             if (!session.Enabled)
                 return DisabledMessage;
-            if (OwnedCompanions(player).Count == 0)
+            if (!WantsWindow(player))
                 return NoCompanionsMessage;
             session.Shown = false;
             if (IsLive(player))
@@ -161,6 +179,10 @@ namespace DOL.GS.Commands
             ScheduleGuidance(player, session);
             return ShownMessage;
         }
+
+        /// <summary>The window has something to show while the player is grouped or an owned companion is with him.</summary>
+        public static bool WantsWindow(GamePlayer player) =>
+            player != null && (player.Group != null || OwnedCompanions(player).Count > 0);
 
         /// <summary>
         /// Companions the owner has with him: his own group plus his squads, persistent or temporary, never autonomous
@@ -171,38 +193,65 @@ namespace DOL.GS.Commands
             if (player == null)
                 return new List<GameBot>();
             return CompanionSquads.OwnerForceBots(player)
-                .Where(bot => (bot.PlayerGroupLeader ?? bot.Owner) == player &&
-                              (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && !bot.IsAutonomousWorldBot)
+                .Where(bot => IsOwned(bot, player))
                 .Distinct()
                 .ToList();
         }
 
-        /// <summary>Tile states for the current state of the player's group orders, pet pull, stay and owned companions.</summary>
-        public static CompanionBarTileState[] ComputeTiles(GamePlayer player, int ownedCount)
+        private static bool IsOwned(GameBot bot, GamePlayer player) =>
+            (bot.PlayerGroupLeader ?? bot.Owner) == player &&
+            (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && !bot.IsAutonomousWorldBot;
+
+        /// <summary>Tile states for the current state of the player's group orders, pet pull, stay, group and owned companions.</summary>
+        public static CompanionBarTileState[] ComputeTiles(GamePlayer player, int ownedCount, bool leavePending = false)
         {
             bool ordered = CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order);
+            Group group = player.Group;
             return CompanionBarView.ComputeTiles(ordered, order, CompanionPetPull.IsModeOn(player),
-                CompanionPetPull.IsStaying(player), CompanionAssistTrain.Active(player), ownedCount > 0);
+                CompanionPetPull.IsStaying(player), CompanionAssistTrain.Active(player), ownedCount > 0,
+                grouped: group != null, leads: group != null && group.Leader == player && group.MemberCount >= 2,
+                leavePending: leavePending, grinding: PlayerCompanionGrind.IsActive(player));
+        }
+
+        /// <summary>The group members by window row: the group's slot order, which the native adapters also use.</summary>
+        public static GameLiving[] MembersBySlot(GamePlayer player)
+        {
+            var members = new GameLiving[SlotLimit];
+            Group group = player?.Group;
+            if (group == null)
+                return members;
+            foreach (GameLiving member in group.GetMembersInTheGroup())
+            {
+                int slot = member.GroupIndex;
+                if (slot >= 0 && slot < SlotLimit && members[slot] == null)
+                    members[slot] = member;
+            }
+            return members;
         }
 
         /// <summary>Builds the view from live state. Member rows follow the group window's member order.</summary>
-        public static CompanionBarView BuildView(GamePlayer player, string message, IReadOnlyCollection<GameBot> owned)
+        public static CompanionBarView BuildView(GamePlayer player, string message, IReadOnlyCollection<GameBot> owned,
+            bool leavePending = false)
         {
             var view = new CompanionBarView { Message = message ?? string.Empty };
-            CompanionBarTileState[] tiles = ComputeTiles(player, owned.Count);
+            CompanionBarTileState[] tiles = ComputeTiles(player, owned.Count, leavePending);
             Array.Copy(tiles, view.Tiles, tiles.Length);
+            if (PlayerCompanionGrind.IsActive(player))
+                view.TileLabels[BarControlGrind - BarControlFirst] = CompanionBarView.GrindActiveText;
 
             bool ordered = CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order);
-            int inGroup = owned.Count(bot => player.Group?.IsInTheGroup(bot) == true);
-            view.Status = StatusText(OrderLabel(ordered, order), inGroup, owned.Count - inGroup);
+            Group group = player.Group;
+            int inGroup = owned.Count(bot => group?.IsInTheGroup(bot) == true);
+            view.Status = StatusText(OrderLabel(ordered, order), inGroup, owned.Count - inGroup, group?.MemberCount ?? 0);
 
-            IEnumerable<GameLiving> rows = player.Group?.GetMembersInTheGroup() ?? Enumerable.Empty<GameLiving>();
-            if (player.Group?.IsCompanionRaid == true)
-                rows = rows.Where(member => member.GroupIndex < 8);
-            GameLiving[] members = rows.Take(SlotLimit).ToArray();
+            GameLiving[] members = MembersBySlot(player);
+            GameLiving leader = group?.LivingLeader;
             for (int slot = 0; slot < members.Length; slot++)
             {
                 GameLiving member = members[slot];
+                if (member == null)
+                    continue;
+                view.Leaders[slot] = leader != null && member == leader;
                 bool isOwned = member is GameBot bot && owned.Contains(bot);
                 eCompanionEngagementMode effective = isOwned
                     ? CompanionEngagementMode.Effective(member) : eCompanionEngagementMode.Aggressive;
@@ -212,9 +261,14 @@ namespace DOL.GS.Commands
             return view;
         }
 
-        /// <summary>The status line: "{order} | {n} with you", plus " | {m} in squads" when some are in squads.</summary>
-        public static string StatusText(string orderLabel, int withYou, int inSquads)
+        /// <summary>
+        /// The status line: "{order} | {n} with you", plus " | {m} in squads" when some are in squads. A group
+        /// without companions reads "Group of {size} | no companions".
+        /// </summary>
+        public static string StatusText(string orderLabel, int withYou, int inSquads, int groupSize)
         {
+            if (withYou == 0 && inSquads == 0 && groupSize > 0)
+                return $"Group of {groupSize} | no companions";
             string text = $"{orderLabel} | {withYou} with you";
             return inSquads > 0 ? $"{text} | {inSquads} in squads" : text;
         }
@@ -234,7 +288,8 @@ namespace DOL.GS.Commands
 
         /// <summary>
         /// A click from the window (control 0xA8-0xBF). The ready control arrives once the client has shown the window;
-        /// every other control runs its tile. Only PULL and refusals are echoed to chat; stances and camp stay quiet.
+        /// a tile control runs its tile and a row control cycles that member's saved stance. Only PULL and refusals
+        /// are echoed to chat; stances, camp and group changes stay quiet (the group itself reports joins and leaves).
         /// </summary>
         public static void HandleClientControl(GamePlayer player, int control)
         {
@@ -249,10 +304,22 @@ namespace DOL.GS.Commands
                 return;
             }
 
-            int tile = control - BarControlFirst;
+            DateTime now = DateTime.UtcNow;
+            bool leavePending = session.LeavePending(now);
             List<GameBot> owned = OwnedCompanions(player);
-            CompanionBarTileState state = tile < BarTiles ? ComputeTiles(player, owned.Count)[tile] : CompanionBarTileState.Disabled;
-            (string message, bool echo) = tile < BarTiles ? ApplyTile(player, tile, state) : (UnknownControlMessage, true);
+            (string message, bool echo) = (UnknownControlMessage, true);
+            int tile = control - BarControlFirst;
+            if (tile < BarTiles)
+            {
+                CompanionBarTileState state = ComputeTiles(player, owned.Count, leavePending)[tile];
+                (message, echo) = ApplyTile(player, session, tile, state, now);
+            }
+            else if (IsSlotControl(control))
+            {
+                (message, echo) = ApplyStanceClick(player, control - BarControlSlotBase);
+            }
+            if (control != BarControlLeave)
+                session.LeaveConfirmUntil = DateTime.MinValue;
             session.Message = message;
             if (echo && !string.IsNullOrEmpty(message) && IsLive(player))
                 CompanionManager.Tell(player, message);
@@ -260,7 +327,8 @@ namespace DOL.GS.Commands
                 Render(player, session);
         }
 
-        private static (string Message, bool Echo) ApplyTile(GamePlayer player, int tile, CompanionBarTileState state)
+        private static (string Message, bool Echo) ApplyTile(GamePlayer player, Session session, int tile,
+            CompanionBarTileState state, DateTime now)
         {
             if (state == CompanionBarTileState.Disabled)
                 return tile switch
@@ -268,6 +336,10 @@ namespace DOL.GS.Commands
                     BarControlStay - BarControlFirst => (StayRefusalMessage, true),
                     BarControlPetPull - BarControlFirst => (PetPullRefusalMessage, true),
                     BarControlPull - BarControlFirst => (NoPullTargetMessage, true),
+                    BarControlKick - BarControlFirst => (NotGroupedMessage, true),
+                    BarControlLeave - BarControlFirst => (NotGroupedMessage, true),
+                    BarControlLeader - BarControlFirst => (player.Group == null || player.Group.MemberCount < 2
+                        ? NotGroupedMessage : NotLeaderMessage, true),
                     _ => (UnknownControlMessage, true),
                 };
 
@@ -306,9 +378,119 @@ namespace DOL.GS.Commands
                 case BarControlManager:
                     CompanionManager.OpenGroupOrders(player);
                     return (string.Empty, false);
+                case BarControlKick:
+                    return Kick(player);
+                case BarControlLeader:
+                    return MakeLeader(player);
+                case BarControlLeave:
+                {
+                    if (session.LeavePending(now))
+                    {
+                        session.LeaveConfirmUntil = DateTime.MinValue;
+                        LeaveGroup(player);
+                        return (LeftGroupMessage, false);
+                    }
+                    session.LeaveConfirmUntil = now + LeaveConfirmWindow;
+                    return (LeaveConfirmMessage, false);
+                }
+                case BarControlGrind:
+                {
+                    if (PlayerCompanionGrind.IsActive(player))
+                    {
+                        // Stop tells the player in chat itself; only the window line is set here.
+                        PlayerCompanionGrind.Stop(player, "cancelled by you");
+                        return (GrindStoppedMessage, false);
+                    }
+                    bool started = PlayerCompanionGrind.TryStart(player, out string reply);
+                    return (ShortMessage(reply), !started);
+                }
                 default:
                     return (UnknownControlMessage, true);
             }
+        }
+
+        /// <summary>
+        /// Kick acts on the targeted group member (a row click targets it): an owned persistent companion is benched
+        /// through the roster, an owned temporary helper is dismissed, and any other member is removed the way
+        /// /disband &lt;name&gt; does, which needs the leader.
+        /// </summary>
+        private static (string Message, bool Echo) Kick(GamePlayer player)
+        {
+            Group group = player.Group;
+            if (group == null)
+                return (NotGroupedMessage, true);
+            if (player.TargetObject is not GameLiving target || target.Group != group)
+                return (KickNoTargetMessage, true);
+            if (target == player)
+                return (KickSelfMessage, true);
+            if (target is GameBot bot && IsOwned(bot, player))
+            {
+                if (bot.PlayerCompanionRecord is { } record)
+                {
+                    bool benched = PlayerCompanionRoster.TryBench(player, record.CompanionId, out string reply);
+                    return (ShortMessage(reply), !benched);
+                }
+                group.RemoveMember(bot);
+                bot.Delete();
+                return ($"{bot.Name} dismissed.", false);
+            }
+            if (group.Leader != player)
+                return (NotLeaderMessage, true);
+            group.RemoveMember(target);
+            return ($"{target.Name} removed from the group.", false);
+        }
+
+        /// <summary>Leader hands the group to the targeted player, like /makeleader on a target.</summary>
+        private static (string Message, bool Echo) MakeLeader(GamePlayer player)
+        {
+            Group group = player.Group;
+            if (group == null || group.MemberCount < 2)
+                return (NotGroupedMessage, true);
+            if (group.Leader != player)
+                return (NotLeaderMessage, true);
+            if (player.TargetObject is not GameLiving target || target.Group != group)
+                return (LeaderNoTargetMessage, true);
+            if (target == player)
+                return (LeaderAlreadyMessage, true);
+            if (target is not GamePlayer next)
+                return (LeaderNotPlayerMessage, true);
+            group.MakeLeader(next);
+            return ($"{next.Name} leads the group now.", false);
+        }
+
+        /// <summary>Leave does what bare /disband does: closes a companion raid, dismisses temporary helpers, leaves.</summary>
+        private static void LeaveGroup(GamePlayer player)
+        {
+            Group group = player.Group;
+            if (group == null)
+                return;
+            CompanionRaid.Close(player);
+            GameBot[] helpers = group.GetMembersInTheGroup().OfType<GameBot>()
+                .Where(bot => bot.IsTemporaryGroupHelper && bot.Owner == player)
+                .ToArray();
+            foreach (GameBot helper in helpers)
+                helper.Delete();
+            player.Group?.RemoveMember(player);
+        }
+
+        /// <summary>
+        /// A click on a row's stance column cycles that companion's saved stance (aggressive, defensive, passive).
+        /// A group order keeps overriding it, and the reply says so.
+        /// </summary>
+        private static (string Message, bool Echo) ApplyStanceClick(GamePlayer player, int slot)
+        {
+            GameLiving member = slot >= 0 && slot < SlotLimit ? MembersBySlot(player)[slot] : null;
+            if (member == null)
+                return (EmptyRowMessage, false);
+            if (member is not GameBot bot || !IsOwned(bot, player))
+                return ($"{member.Name} is not your companion.", false);
+            if (bot.PlayerCompanionRecord is not { } record)
+                return ($"{bot.Name} is a temporary helper; the group order sets its stance.", false);
+            string next = CompanionBarView.NextSavedStance(record.EngagementPreference);
+            bool changed = PlayerCompanionRoster.TrySetTactics(player, record.CompanionId, "stance", next, out string reply);
+            if (changed && CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order))
+                reply = $"{ShortMessage(reply)} Group order {OrderLabel(true, order)} overrides it.";
+            return (changed ? reply : ShortMessage(reply), !changed);
         }
 
         private static Session GetOrCreate(GamePlayer player)
@@ -342,7 +524,7 @@ namespace DOL.GS.Commands
         private static bool IsLive(GamePlayer player) =>
             player.ObjectState == GameObject.eObjectState.Active && player.Client?.ClientState == GameClient.eClientState.Playing;
 
-        /// <summary>Shows or hides the window to match the setting and owned companions; sends labels once confirmed.</summary>
+        /// <summary>Shows or hides the window to match the setting, the group and owned companions; sends labels once confirmed.</summary>
         private static void Reconcile(GamePlayer player, Session session)
         {
             if (session.Region != player.CurrentRegionID)
@@ -350,7 +532,7 @@ namespace DOL.GS.Commands
                 session.Region = player.CurrentRegionID;
                 ResetClientState(session);
             }
-            bool want = session.Enabled && OwnedCompanions(player).Count > 0;
+            bool want = session.Enabled && WantsWindow(player);
             if (want && !session.Shown)
             {
                 session.Shown = true;
@@ -369,7 +551,7 @@ namespace DOL.GS.Commands
         /// <summary>Sends the labels that differ from what the client already has.</summary>
         private static void Render(GamePlayer player, Session session)
         {
-            string[] labels = BuildView(player, session.Message, OwnedCompanions(player)).ToLabels();
+            string[] labels = BuildView(player, session.Message, OwnedCompanions(player), session.LeavePending(DateTime.UtcNow)).ToLabels();
             for (int index = 0; index < labels.Length; index++)
             {
                 if (string.Equals(session.SentLabels[index], labels[index], StringComparison.Ordinal))

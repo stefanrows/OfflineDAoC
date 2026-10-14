@@ -533,3 +533,95 @@ The game, server and launcher must be closed; the script stops nothing.
    tabs and the raid windows (`/raid 40`).
 8. An unpatched 0.169.0 client with this server: `/companions` and every command
    still work, and no bar appears.
+
+## COMPANIONS window as a group window (0.272.0)
+
+Status: **offline only; the owner's real-client check is pending (task 128).**
+The owner asked for a better Companion Control Window that can replace the
+group window. The window keeps its Custom7 id, protocol 3 and its show/hide
+rules, and grows to a 440×312 group window.
+
+### Layout
+
+| Row | Content |
+| --- | --- |
+| Title | "COMPANIONS" and the status line (290 px): `{order} \| n with you [\| m in squads]`, or `Group of N \| no companions` for a player group. |
+| Tiles 1 | Aggressive, Defensive, Passive, Assist, Default (five 80 px tiles, pitch 84). |
+| Tiles 2 | Follow, Stay, Pet pull, PULL, MANAGER. |
+| Tiles 3 | **Invite** (native, stock `GroupInvite` event: `/invite` on the target), **Kick**, **Leader**, **Leave**, **Grind** / **Stop grind**. |
+| Message | The reply to the last click (420 px). |
+| Member rows | Eight rows, pitch 22: power % (yellow) and endurance % (green) as `ScalarLabelDef` on `group_power<i>` / `group_endurance<i>`; the gold leader mark (server); a `red_status_thick` bar on `group_health<i>` (180 px) with the name (`group_name<i>`, colour `group_color<i>`) over it and the health % at its right end; class (`group_class<i>`, 86 px); level (`group_level<i>`); the stance (server, four colour labels, 78 px). The row's left part is the stock `SelectGroupMember<i>` click; the stance column is control `0xB6 + i`. |
+
+Rows cover every group member, players included: the native adapters fill
+them, the server only adds the stance of its owner's companions (blank for
+anyone else) and the leader mark. Slot `i` is the member's `GroupIndex`, the
+same slot the group packet writes.
+
+### Controls and labels
+
+| Control | Action |
+| --- | --- |
+| 0xA8–0xB1 | The 0.251.0 tiles, unchanged. |
+| 0xB2 Kick | On the targeted group member (a row click targets it): an owned persistent companion is benched through `PlayerCompanionRoster.TryBench`; an owned temporary helper is removed from the group and deleted; any other member is removed like `/disband <name>`, which needs the leader. Yourself: "Use Leave". |
+| 0xB3 Leader | `Group.MakeLeader` on the targeted player (needs the leader, a group of two or more, a player target). |
+| 0xB4 Leave | First click arms a 10 s confirmation (the tile turns gold); the second click does what bare `/disband` does: closes a companion raid, deletes owned temporary helpers, leaves the group. Any other click disarms it. |
+| 0xB5 Grind | `PlayerCompanionGrind.TryStart` / `Stop`; the tile reads "Stop grind" while active. |
+| 0xB6–0xBD | Row stance click: cycles the companion's saved stance aggressive → defensive → passive through `TrySetTactics(..., "stance", ...)`; a temporary helper or someone else's member only gets a message; an active group order is named as still overriding it. |
+| 0xBE | Spare. 0xBF stays the ready control. |
+
+Labels 440–537 (98): status 440, message 441, tiles 442–497 (14 × 4:
+inactive, active, disabled, underline), rows 498–537 (8 × 5: the four
+stance colours, then the leader mark). `TotalLabelCount` is 538; the
+manager's 440 are unchanged. Tile states: Kick and Leave need a group, Leader
+needs the lead of a group of two or more, Grind is always enabled; disabled
+tiles answer with the reason. Only PULL and refusals go to chat; the group
+itself reports joins and leaves.
+
+The window now shows while the player is in a group **or** an owned companion
+is with him (`CompanionBar.WantsWindow`), so a plain player group gets it too.
+
+### Build, test and install
+
+Same builder and baseline as 0.251.0; the output is deterministic.
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (538 adapters) | `c938e6b50057a4a99ec39211004765dcacb3ffa47880e4ba3fc193add87e612d` |
+| custom7_window.xml (both skins) | `5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac` |
+| custom8_window.xml (unchanged) | `9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` |
+| uimain.xml (unchanged since 0.251.0) | `7d573c315a56bcacae8e8ebc871646654bfe8da5bb1dc745d6023da7f93b9dd9` |
+
+The stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.272.0`.
+`Install-CompanionManager.ps1` upgrades an installed 0.251.0 build
+(`73223def…`) in place: it backs up `game.dll`, `uimain.xml` and all four
+window files to `companion-manager-upgrade-<stamp>` and replaces the 0.251.0
+`custom7_window.xml` files (other stray window files are still refused);
+`-RestoreBackup` puts the 0.251.0 files back. The release pack
+(`build_fork_release.py`) defaults to this stage and allows the 0.251.0
+`game.dll` and window hashes. Offline results (2026-10-14): emulation test
+passed (538 adapters, tile and row controls, `GroupInvite` = 158 through the
+client's own mapper, no overlapping click areas, server constants match);
+installer dry run, apply, re-apply and restore on a scratch copy of the
+installed 0.251.0 client; `UT_CompanionBar` 30/30.
+
+Known limits: the arial14 rendering of the row columns has only been
+measured, not seen; the native `group_class` text of a long class name
+("Spiritmaster", 80 px) fills its 86 px column. A 0.251.0 client with this
+server keeps its old tiles working and ignores the new labels.
+
+### Real-client checklist
+
+1. Install the stage with the game, server and launcher closed; log in with a
+   companion: the window shows at 440×312 and the text reads.
+2. Rows: power, endurance and health percent, the health bar, class and level
+   fill for you, a player and a companion; blank rows draw nothing; the gold
+   mark sits on the leader and moves with `/makeleader`.
+3. Clicking a row targets; clicking a companion's stance cycles aggressive →
+   defensive → passive and the row colour follows; under a group order the
+   message names the order.
+4. Invite on a targeted player and on a targeted companion. Kick benches a
+   companion, dismisses a `/spawn` helper, removes a player as leader and
+   refuses when you are not the leader. Leader hands the lead. Leave needs the
+   second click within 10 s. Grind starts and stops.
+5. A plain player group shows the window with "Group of N | no companions".
+6. `/companions` (the manager) and `/raid 40` still work with 538 adapters.

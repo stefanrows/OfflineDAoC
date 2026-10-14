@@ -80,6 +80,13 @@ namespace DOL.GS
             return null;
         }
 
+        /// <summary>The player a companion, or a companion's pet, takes its orders from; null for anyone else.</summary>
+        public static GamePlayer Leader(GameLiving actor)
+        {
+            GameBot bot = Companion(actor);
+            return bot == null ? null : bot.PlayerGroupLeader ?? bot.Owner;
+        }
+
         public static eCompanionEngagementMode Effective(GameLiving actor)
         {
             GameBot bot = Companion(actor);

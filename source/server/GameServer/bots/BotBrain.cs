@@ -520,7 +520,10 @@ namespace DOL.AI.Brain
                 if (BotBody?.IsRecoveryResting == true)
                     BotBody.WakeRecoveryRest();
                 ConvertDamageToAggroAmount(ad.Attacker, Math.Max(1, ad.Damage + ad.CriticalDamage));
-                if (ad.Attacker?.IsAlive == true && ad.Attacker != Body)
+                // A world bot reacts to another player-shaped fighter the way a person does (BotIncomingFireReaction): an area
+                // hit is threat but no personal call, and the entry into combat draws a short reaction delay.
+                BotIncomingFireKind fire = BotIncomingFireReaction.KindOf(BotBody, ad);
+                if (ad.Attacker?.IsAlive == true && ad.Attacker != Body && BotIncomingFireReaction.IsPersonalCall(fire))
                 {
                     _recentDirectAttacker = ad.Attacker;
                     _recentDirectAttackTick = GameLoop.GameLoopTime;
@@ -533,7 +536,7 @@ namespace DOL.AI.Brain
                 if (ShouldEnterAggroStateAfterDirectAttack(
                         HasAggro,
                         FSM.GetCurrentState() == FSM.GetState(eFSMStateType.AGGRO)))
-                    FSM.SetCurrentState(eFSMStateType.AGGRO);
+                    EnterAggroFromIncomingFire(fire, ad.Attacker);
 
                 // Damage is an event, so wake combat immediately without
                 // increasing the ordinary idle/travel AI cadence.
@@ -594,7 +597,7 @@ namespace DOL.AI.Brain
         {
             if (ad?.Attacker is GameLiving guildAttacker && guildAttacker.IsAlive)
                 foreach (GameBot guildmate in AutonomousGuildCohesion.Helpers(victim, guildAttacker))
-                    (guildmate.Brain as BotBrain)?.OnGuildmateAttacked(victim, guildAttacker);
+                    (guildmate.Brain as BotBrain)?.OnGuildmateAttacked(victim, guildAttacker, AutonomousDeathAttribution.IsAreaEffect(ad));
 
             GameLiving groupMember = GroupMemberForCombat(victim);
             // Attached sub-pets also enlist their human-led raid in PvP. The
@@ -653,7 +656,7 @@ namespace DOL.AI.Brain
         }
 
         /// <summary>A guildmate outside this bot's group is attacked nearby: go and help.</summary>
-        public void OnGuildmateAttacked(GameLiving victim, GameLiving attacker)
+        public void OnGuildmateAttacked(GameLiving victim, GameLiving attacker, bool area = false)
         {
             if (AutonomousSiegeMarch.IsMarching(BotBody)) return;
             if (GothwaitePvpSelfDefence.Drops(BotBody, attacker)) return;
@@ -671,8 +674,7 @@ namespace DOL.AI.Brain
             if (BotBody?.IsRecoveryResting == true)
                 BotBody.WakeRecoveryRest();
             NextThinkTick = GameLoop.GameLoopTime;
-            if (FSM.GetState(eFSMStateType.AGGRO) != FSM.GetCurrentState())
-                FSM.SetCurrentState(eFSMStateType.AGGRO);
+            EnterAggroFromIncomingFire(BotIncomingFireReaction.MateKindOf(BotBody, attacker, area), attacker);
         }
 
         public void OnGroupMemberAttacked(GameLiving victim, AttackData ad)
@@ -738,8 +740,7 @@ namespace DOL.AI.Brain
                 if (BotBody?.IsRecoveryResting == true)
                     BotBody.WakeRecoveryRest();
                 NextThinkTick = GameLoop.GameLoopTime;
-                if (FSM.GetState(eFSMStateType.AGGRO) != FSM.GetCurrentState())
-                    FSM.SetCurrentState(eFSMStateType.AGGRO);
+                EnterAggroFromIncomingFire(BotIncomingFireReaction.MateKindOf(BotBody, attacker, AutonomousDeathAttribution.IsAreaEffect(ad)), attacker);
             }
         }
 
@@ -3181,10 +3182,12 @@ namespace DOL.AI.Brain
             {
                 _brain._ambientWanderMovement = false;
                 _aggroEndTime = GameLoop.GameLoopTime + LEAVE_WHEN_OUT_OF_COMBAT_FOR;
+                _brain.BeginIncomingFireHold();
             }
 
             public override void Exit()
             {
+                _brain.EndIncomingFireHold();
                 _brain.Body.StopAttack();
                 _brain.Body.TargetObject = null;
                 _brain.ClearAggroList();
@@ -3227,6 +3230,13 @@ namespace DOL.AI.Brain
 
                 // Passive stance: heals only, no attacking
                 if (_brain.BotBody.Stance == eBotStance.Passive)
+                {
+                    _brain.CheckHeals();
+                    return;
+                }
+
+                // A world bot that was just hit by another player takes a moment before it answers (heals go out at once).
+                if (_brain.HoldsIncomingFire())
                 {
                     _brain.CheckHeals();
                     return;
@@ -3313,7 +3323,7 @@ namespace DOL.AI.Brain
                 AddToAggroList(protectionTarget, 10000);
             }
 
-            GameLiving directAttacker = CompanionAssistTrain.Active(Body) ? null : RecentDirectAttacker();
+            GameLiving directAttacker = CompanionAssistTrain.Active(Body) ? null : KillOrderAttacker(RecentDirectAttacker());
 
             // Bow release is driven by AttackAction, not by this brain pulse.
             // Re-entering the general target/movement decision while Aim is
@@ -5911,6 +5921,17 @@ namespace DOL.AI.Brain
 
                     if (spellToCast == null && nextCureTime < GameLoop.GameLoopTime)
                     {
+                        // An area DoT on the group is answered with the group cure, not one cure per member: with several members
+                        // dotted, a healer that knows the group cure casts it first (BotIncomingFireReaction.GroupCureMembers).
+                        if (BotIncomingFireReaction.Applies(BotBody) && BotBody.CurePoisonGroup is { } groupCure && CheckHealSpell(groupCure) &&
+                            Body.Group.GetMembersInTheGroup().Count(member => member != null && member.IsAlive && member.IsPoisoned &&
+                                Body.IsWithinRadius(member, groupCure.Range > 0 ? groupCure.Range : groupCure.Radius > 0 ? groupCure.Radius : 1_000)) >=
+                            BotIncomingFireReaction.GroupCureMembers)
+                        {
+                            spellToCast = BotBody.CurePoisonGroup;
+                            spellTarget = Body;
+                        }
+                        if (spellToCast == null)
                         foreach (GameLiving member in Body.Group.GetMembersInTheGroup().OrderBy(member => member == AssistedPlayer ? 0 : 1))
                         {
                             if (member.IsDiseased)

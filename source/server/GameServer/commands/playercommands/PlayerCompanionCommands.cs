@@ -688,7 +688,8 @@ namespace DOL.GS.Commands
                 "bar" => new[]
                 {
                     "/companions bar on|off turns the COMPANIONS window on or off for this account.",
-                    "The window appears while a companion is with you and hides when none is left.",
+                    "It appears while you are grouped or a companion is with you: a group window with stance tiles,",
+                    "Invite, Kick, Leader, Leave and Grind. Click a row to target; click a stance to cycle it.",
                     "Bare /companions bar shows it again after you closed it with its X.",
                     "The Companion Manager's Group orders panel has the same switch."
                 },
