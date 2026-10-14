@@ -251,6 +251,8 @@ public static class GothwaitePvpCombat
                 weight = AutonomousRvrCombatHabits.Weight(new RvrTargetView(traits, bot.GetDistanceTo(candidate), candidate.HealthPercent,
                     false, false, false, master != candidate, candidate.IsCasting), doctrine, new RvrChooser(true, false));
             }
+            if (!BotSiegeRuntime.Visible(bot, candidate))
+                continue;
             weighted.Add((candidate, weight));
             total += weight;
         }
@@ -331,9 +333,10 @@ public static class GothwaitePvpCombat
         return chosen;
     }
 
+    // The cheap tests; the line-of-sight raycast runs after the appetite test, once per surviving candidate.
     private static bool IsOpening(GameBot bot, GameLiving target, Zone zone, Func<GameLiving, bool> accept) =>
         BattlegroundCombatTargets.IsLegal(bot, target, zone) && !target.IsStealthed && !BotPvpCrowdControl.Protected(bot, target) &&
-        (accept == null || accept(target)) && BotSiegeRuntime.Visible(bot, target);
+        (accept == null || accept(target));
 
     private static bool IsFightingEnemy(GameBot bot, GameLiving living) =>
         living != null && living != bot && living.IsAlive && living.InCombat && living.ObjectState == GameObject.eObjectState.Active &&

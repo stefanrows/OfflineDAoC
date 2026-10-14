@@ -104,6 +104,10 @@ public static class GothwaitePvpDriver
         public bool Hunter;
         public long NextStealthTry;
         public long NextRefusedCount;
+        // The run reached its goal (the bot stands there and may defend itself when caught); a formation slot that the mesh refused is
+        // not proved again for a few seconds.
+        public volatile bool RetreatArrived;
+        public long SlotFailedUntil;
     }
 
     /// <summary>
@@ -166,6 +170,7 @@ public static class GothwaitePvpDriver
 
         state.WalkBackLogged = false;
         state.Returning = false;
+        ClearTactics(bot, state);
         bool engaged = brain.HasAggro || bot.InCombat;
         switch (state.Step)
         {
@@ -205,6 +210,22 @@ public static class GothwaitePvpDriver
     /// Read-only and lock-free, like <see cref="IsOutbound"/>. False for a bot with no driver state.
     /// </summary>
     public static bool IsRetreating(GameBot bot) => bot != null && States.TryGetValue(bot, out State state) && state.Retreating;
+
+    /// <summary>The game time a retreating leader's run ends; <paramref name="now"/> for a bot that is not retreating or has no state.</summary>
+    public static long RetreatEndOf(GameBot bot, long now) =>
+        bot != null && States.TryGetValue(bot, out State state) && state.Retreating ? state.RetreatUntil : now;
+
+    /// <summary>
+    /// A retreating bot that has been caught fights back after all (review 2026-10-14): it is crowd-controlled, it has reached the end
+    /// of its run, or the attacker is in melee range. Players who were caught turned and fought. False for a bot that is not retreating.
+    /// </summary>
+    public static bool CaughtWhileRetreating(GameBot bot, GameLiving attacker)
+    {
+        if (bot == null || !States.TryGetValue(bot, out State state) || !state.Retreating)
+            return false;
+        return bot.IsCrowdControlled || state.RetreatArrived ||
+            attacker != null && attacker.CurrentRegionID == bot.CurrentRegionID && bot.IsWithinRadius(attacker, bot.MeleeAttackRange + 50);
+    }
 
     /// <summary>True while the bot's group rests and gathers after a fight (stage 6). False for a bot with no driver state.</summary>
     public static bool IsRegrouping(GameBot bot) => bot != null && States.TryGetValue(bot, out State state) && state.Regrouping;
@@ -314,16 +335,29 @@ public static class GothwaitePvpDriver
             FollowOutbound(state, membership, now);
             FollowRetreat(bot, state, membership);
         }
+        // A follower promoted to leader mid-run carries its old leader's open-ended clock: the run ends now (review 2026-10-14).
+        if (membership.IsLeader && state.Retreating && state.RetreatUntil == long.MaxValue)
+            state.RetreatUntil = now;
         if (state.Retreating && now >= state.RetreatUntil && EndRetreat(bot, state, membership, now))
             return GoHome(brain, bot, state, membership, "retreat", now, logReturn: true);
         bool engaged = FightNow(brain, bot, state, membership, now);
         if (state.Retreating)
         {
             // Running (stage 6): no fight, no scan, no return rule. The walk below is the run: the leader's goal, a follower's slot behind it.
-            if (engaged)
-                StandDown(brain, bot, state);
-            engaged = false;
-            Run(bot);
+            // A bot that was caught (crowd-controlled, at the end of its run, or hit in melee) turns and fights, and its run is over.
+            if (engaged && CaughtWhileRetreating(bot, bot.TargetObject as GameLiving ?? FirstAttacker(bot)))
+            {
+                state.RetreatUntil = now;
+                if (membership.IsLeader)
+                    Log.Info(GothwaitePvpLines.RetreatEnd(bot.Name, "caught", bot.HealthPercent));
+            }
+            else
+            {
+                if (engaged)
+                    StandDown(brain, bot, state);
+                engaged = false;
+                Run(bot);
+            }
         }
         else if (engaged)
         {
@@ -334,7 +368,7 @@ public static class GothwaitePvpDriver
             if (state.WasEngaged)
                 FightOver(bot, state, membership, now);
             string reason = ReturnReasonOf(bot, membership);
-            if (state.Regrouping)
+            if (state.Regrouping || !membership.IsLeader && IsRegrouping(membership.Leader))
                 reason = GothwaitePvpTactics.ReturnWhileRegrouping(reason);
             if (reason != null)
                 return GoHome(brain, bot, state, membership, reason, now, logReturn: true);
@@ -356,9 +390,12 @@ public static class GothwaitePvpDriver
     {
         if (!state.FightStartSet)
         {
+            // The fight's start is where the target stood when it began (it may have been a full scan range away), so a runner is
+            // measured from its own start, not from the leader's (review 2026-10-14).
+            GameLiving opened = bot.TargetObject as GameLiving;
             state.FightStartSet = true;
-            state.FightStartX = bot.X;
-            state.FightStartY = bot.Y;
+            state.FightStartX = opened is { IsAlive: true } && opened.CurrentRegionID == bot.CurrentRegionID ? opened.X : bot.X;
+            state.FightStartY = opened is { IsAlive: true } && opened.CurrentRegionID == bot.CurrentRegionID ? opened.Y : bot.Y;
         }
         if (state.Regrouping)
             EndRegroup(bot, state, "fight", now);
@@ -412,6 +449,7 @@ public static class GothwaitePvpDriver
     private static void BeginRetreat(BotBrain brain, GameBot bot, State state, string reason, long now)
     {
         state.Retreating = true;
+        state.RetreatArrived = false;
         state.RetreatUntil = now + GothwaitePvpTactics.RetreatMilliseconds(state.Random);
         state.Regrouping = false;
         state.AddLeg = false;
@@ -430,6 +468,7 @@ public static class GothwaitePvpDriver
     private static bool EndRetreat(GameBot bot, State state, GothwaitePvpGroupFormer.Membership membership, long now)
     {
         state.Retreating = false;
+        state.RetreatArrived = false;
         if (bot.IsSprinting)
             bot.Sprint(false);
         if (!membership.IsLeader)
@@ -452,8 +491,11 @@ public static class GothwaitePvpDriver
         bool retreating = IsRetreating(membership.Leader);
         if (state.Retreating && !retreating && bot.IsSprinting)
             bot.Sprint(false);
+        if (!retreating)
+            state.RetreatArrived = false;
         state.Retreating = retreating;
-        state.RetreatUntil = long.MaxValue;
+        // The leader's own clock, so a follower promoted mid-run inherits a run that ends (review 2026-10-14).
+        state.RetreatUntil = retreating ? GothwaitePvpDriver.RetreatEndOf(membership.Leader, long.MaxValue) : long.MaxValue;
     }
 
     // Sprint while running, as long as there is endurance for it.
@@ -611,10 +653,12 @@ public static class GothwaitePvpDriver
     private static void GroupEnded(GameBot bot, State state, long now)
     {
         string ended = GothwaitePvpGroupFormer.TakeEndReason(bot);
+        // Whatever ended the group, a run or a regroup does not carry over to the walk home or the next outing (review 2026-10-14).
+        ClearTactics(bot, state);
         if (ended == null || state.Returning || InCastle(bot))
             return;
         Log.Info(GothwaitePvpLines.Return(bot.Name, ended, Detail(bot)));
-        BeginWalkHome(state, now);
+        BeginWalkHome(bot, state, now);
     }
 
     /// <summary>
@@ -674,7 +718,10 @@ public static class GothwaitePvpDriver
             if (state.Goal != null && !GothwaitePvpNavigation.Arrived(bot, state.Goal, state.Route))
                 GothwaitePvpNavigation.GoTo(bot, state.Route, state.Goal, now);
             else
+            {
+                state.RetreatArrived = true;
                 GothwaitePvpNavigation.Stand(bot);
+            }
             ResetProgress(state);
             return true;
         }
@@ -744,16 +791,16 @@ public static class GothwaitePvpDriver
         if (state.Hunter)
             return false;
         GothwaitePvpArena arena = GothwaitePvpMode.Arena;
+        // Fights within the own range are the group's own kills (review 2026-10-14); only farther ones draw it.
         if (!GothwaitePvpStats.TryRecentFightNear(bot.X, bot.Y, GothwaitePvpTactics.AddRange, GothwaitePvpTactics.AddMaxAgeMilliseconds, now,
-                out int fightX, out int fightY))
+                out int fightX, out int fightY, GothwaitePvpTactics.AddOwnRange))
             return false;
         double castleDistance = arena.CastleDistance(fightX, fightY);
         if (castleDistance < arena.MinimumRoamDistance(GothwaitePvpMode.Settings.GateRing) ||
             castleDistance > GothwaitePvpArenaRules.GoalEdge(edge))
             return false;
         int distance = (int)GothwaitePvpArenaRules.Distance2D(bot.X, bot.Y, fightX, fightY);
-        if (distance <= 2 * GothwaitePvpNavigation.ArrivalDistance ||
-            !GothwaitePvpTactics.JoinsFight(bot.PersistentRecord?.Aggression ?? 50, state.Random.NextDouble()))
+        if (!GothwaitePvpTactics.JoinsFight(bot.PersistentRecord?.Aggression ?? 50, state.Random.NextDouble()))
             return false;
         state.Spot = null;
         state.Claim = null;
@@ -804,7 +851,7 @@ public static class GothwaitePvpDriver
         else
         {
             state.EdgeLogged = false;
-            if (!FollowGoal(bot, membership, edge, state.Spot == null ? state.Goal : null, out goal, out slot))
+            if (!FollowGoal(bot, state, membership, edge, state.Spot == null ? state.Goal : null, out goal, out slot))
             {
                 HoldWithLeader(bot, membership);
                 ResetProgress(state);
@@ -823,7 +870,9 @@ public static class GothwaitePvpDriver
         WakeRest(bot);
         if (!GothwaitePvpNavigation.GoTo(bot, state.Route, goal, now) && slot && membership.Leader is { } leader)
         {
-            // The slot lies off the mesh (a slope, a wall): fall back to the leader's own spot, as before stage 6.
+            // The slot lies off the mesh (a slope, a wall): fall back to the leader's own spot, as before stage 6, and do not prove
+            // a slot again for a few seconds (the slot moves with the leader, so the unreachable cache would never hit).
+            state.SlotFailedUntil = now + GothwaitePvpTactics.SlotRetryMilliseconds;
             goal = new Point3D(leader.X, leader.Y, leader.Z);
             SetGoal(state, goal, resetProgress: false);
             GothwaitePvpNavigation.GoTo(bot, state.Route, goal, now);
@@ -926,13 +975,15 @@ public static class GothwaitePvpDriver
             GothwaitePvpGroupFormer.Retire(bot, reason);
         else
             GothwaitePvpGroupFormer.Leave(bot, reason);
-        BeginWalkHome(state, now);
+        BeginWalkHome(bot, state, now);
         return WalkBack(bot, state, now, engaged: false);
     }
 
     // The bot is on its way back to the castle: it rests and buffs there, and regroups once it is ready.
-    private static void BeginWalkHome(State state, long now)
+    private static void BeginWalkHome(GameBot bot, State state, long now)
     {
+        if (bot.IsSprinting)
+            bot.Sprint(false);
         state.Returning = true;
         state.InGroup = false;
         state.Step = CastleStep.Resting;
@@ -941,6 +992,31 @@ public static class GothwaitePvpDriver
         state.WalkBackSince = now;
         state.RouteFailureLogged = false;
         ClearArenaWalk(state);
+    }
+
+    // The stage 6 state of one outing: a run, a regroup, a fight's start, an add leg. Cleared on every way back to the castle and in the
+    // castle itself, so none of it carries into the next outing (review 2026-10-14). Sprint ends with the run.
+    private static void ClearTactics(GameBot bot, State state)
+    {
+        if (state.Retreating && bot.IsSprinting)
+            bot.Sprint(false);
+        state.Retreating = false;
+        state.RetreatArrived = false;
+        state.RetreatUntil = 0;
+        state.Regrouping = false;
+        state.WasEngaged = false;
+        state.FightStartSet = false;
+        state.AddLeg = false;
+    }
+
+    // The first living player-shaped attacker the tracker holds, for a retreating bot without a target.
+    private static GameLiving FirstAttacker(GameBot bot)
+    {
+        if (bot.attackComponent?.AttackerTracker is { } tracker)
+            foreach (GameLiving attacker in tracker.Attackers)
+                if (attacker is { IsAlive: true } && attacker != bot && PvpCombatant.IsPlayerShaped(attacker))
+                    return attacker;
+        return null;
     }
 
     private static void ClearArenaWalk(State state)
@@ -1181,8 +1257,8 @@ public static class GothwaitePvpDriver
     // follow distance of it. The previous follow goal is kept while the slot stays within the arrival distance of it, so a moving
     // leader does not make the route be proved again every turn. False to stand where it is. <paramref name="slot"/> says the goal
     // is a formation slot (the walk falls back to the leader's spot when the slot is off the mesh).
-    private static bool FollowGoal(GameBot bot, GothwaitePvpGroupFormer.Membership membership, int edge, Point3D previous, out Point3D goal,
-        out bool slot)
+    private static bool FollowGoal(GameBot bot, State state, GothwaitePvpGroupFormer.Membership membership, int edge, Point3D previous,
+        out Point3D goal, out bool slot)
     {
         goal = null;
         slot = false;
@@ -1193,7 +1269,7 @@ public static class GothwaitePvpDriver
         if (leader.CurrentRegionID != arena.RegionId ||
             GothwaitePvpArenaRules.OutsideEdge(arena.CastleDistance(leader.X, leader.Y), GothwaitePvpArenaRules.GoalEdge(edge)))
             return false;
-        Point3D at = FormationSpot(bot, leader, membership, out slot);
+        Point3D at = FormationSpot(bot, leader, membership, state.SlotFailedUntil, out slot);
         int hold = slot ? GothwaitePvpNavigation.FollowDistance / 2 : GothwaitePvpNavigation.FollowDistance;
         if (bot.GetDistanceTo(at) <= hold)
             return false;
@@ -1204,11 +1280,11 @@ public static class GothwaitePvpDriver
 
     // The follower's travel slot: by the group's travel shape and the follower's place in the marching order (guards and melee first,
     // healers in the middle, casters and archers behind), relative to the leader's facing. The leader's spot for a clump doctrine.
-    private static Point3D FormationSpot(GameBot bot, GameBot leader, GothwaitePvpGroupFormer.Membership membership, out bool slot)
+    private static Point3D FormationSpot(GameBot bot, GameBot leader, GothwaitePvpGroupFormer.Membership membership, long slotFailedUntil, out bool slot)
     {
         slot = false;
         RvrTravelShape shape = membership.Doctrine?.Travel ?? RvrTravelShape.Clump;
-        if (shape == RvrTravelShape.Clump)
+        if (shape == RvrTravelShape.Clump || GameLoop.GameLoopTime < slotFailedUntil)
             return new Point3D(leader.X, leader.Y, leader.Z);
         (int index, int count) = GothwaitePvpGroupFormer.MarchSlot(bot);
         if (index < 0)
@@ -1228,6 +1304,11 @@ public static class GothwaitePvpDriver
             return false;
         if (!GothwaitePvpSelfDefence.MayFight(bot, target) || !BotSiegeRuntime.Visible(bot, target) ||
             !bot.IsWithinRadius(target, AutonomousBattlegroundDriver.OpponentRange))
+            return false;
+        // A target the chase rule would drop at once (beyond the healers, not about to die, not hitting us) is not assisted; the
+        // follower keeps following its leader instead of flapping between assist and drop (review 2026-10-14).
+        if (leader.CurrentRegionID == target.CurrentRegionID && !GothwaitePvpSelfDefence.AttackedUs(bot, target) &&
+            GothwaitePvpTactics.Overextended(leader.GetDistanceTo(target), target.HealthPercent))
             return false;
         brain.Attack(target);
         return true;

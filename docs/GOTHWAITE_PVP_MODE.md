@@ -2,7 +2,7 @@
 
 **Status:** in progress. Stage 0 (audit) done 2026-10-13 (0.261.2), results
 in section 11. Stages 1–4 built in 0.262.0–0.265.0 (section 12), stage 6
-(player tactics) in 0.268.0 (section 13). Open: the owner's load run (section
+(player tactics) in 0.268.0 with review fixes in 0.269.0 (section 13). Open: the owner's load run (section
 12, stage 4), stage 5, the live check, and the stage 6 live check (13.4).
 
 **This is a separate world mode.** It is not a population preset, it is not
@@ -737,7 +737,7 @@ pure scoring, `AutonomousRvrDoctrineGeometry.TravelSlot`), never changed.
 
 ### 13.3 Mode-off contract
 
-Three guarded touchpoints were added, all answering "no change" with the
+Four guarded touchpoints were added, all answering "no change" with the
 mode off (`UT_GothwaitePvpModeOff.TheStageSixTacticsHooksAnswerNoChangeWhileTheModeIsOff`):
 `BotBrain.ApplyRvrCombatHabits` (mode bot → mode kill order),
 `BotBrain.TryEnterStealthWhileIdle` and `TryStartStealthOpener`,
@@ -760,3 +760,25 @@ Run 300 bots for 15–20 minutes and compare with the 0.266.0 run above:
 - Watch for a regression: bots sitting (regroup) when a player walks up
   should stand and fight when hit; a retreating group should not stop at the
   ring with nothing to do (it starts a new leg or goes home).
+
+### 13.5 Review fixes (0.269.0)
+
+An Opus review of 0.268.0 (2026-10-14) found one blocker and seven defects in
+the per-turn flow, all fixed the same day: a follower promoted to leader
+mid-run kept an open-ended run (followers now copy the leader's run clock,
+`RetreatEndOf`, and a promoted leader's open clock ends at once); run and
+regroup state leaked into the next outing (`ClearTactics` on every return
+path and in the castle, sprint off with it); a running bot never fought back
+even when caught (`CaughtWhileRetreating`: crowd-controlled, run goal
+reached, or an attacker in melee range; the self-defence rule allows the
+fight and the run ends with `reason=caught`); followers still went home for
+low health or power during the leader's regroup; followers flapped between
+assist and the overextension drop (`AssistLeader` now refuses such a target);
+the "far" chase was measured from the leader's spot (now from the target's
+position when the fight opened); the add draw walked back to the group's own
+last kill (fights within `AddOwnRange` 1,000 are skipped); and an off-mesh
+formation slot was proved twice per turn (`SlotRetryMilliseconds` 5 s). Open
+nits: the former's lock is taken several times per follower turn (march
+slots could be cached per tick), stealthed hunters are invisible to every
+scan (no stealther-to-stealther detection), and no test drives the live
+retreat or regroup flow (the rules are pure-tested only).

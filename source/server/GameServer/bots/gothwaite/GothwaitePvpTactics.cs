@@ -226,6 +226,10 @@ public static class GothwaitePvpTactics
     public const int AddMaxAgeMilliseconds = 45_000;
     /// <summary>The leader listens this often.</summary>
     public const int AddCheckMilliseconds = 10_000;
+    /// <summary>A fight closer than this is the group's own (its last kill) and draws nobody.</summary>
+    public const int AddOwnRange = 1_000;
+    /// <summary>A formation slot the navmesh refused is not proved again for this long; the follower walks to the leader's spot meanwhile.</summary>
+    public const int SlotRetryMilliseconds = 5_000;
 
     /// <summary>
     /// Whether a group walks to a nearby fight it has heard (<paramref name="roll"/> in [0,1)): about a third of the time at

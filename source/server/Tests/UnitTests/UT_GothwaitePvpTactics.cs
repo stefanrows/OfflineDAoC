@@ -327,6 +327,10 @@ namespace DOL.GS.Tests
                 Assert.That((x, y), Is.EqualTo((11_000, 10_000)), "the newest fight in range");
                 Assert.That(GothwaitePvpStats.TryRecentFightNear(10_500, 10_000, 2_000, 45_000, 170_000, out _, out _), Is.False, "too old");
                 Assert.That(GothwaitePvpStats.TryRecentFightNear(30_000, 30_000, 2_000, 45_000, 140_000, out _, out _), Is.False, "none in range");
+                Assert.That(GothwaitePvpStats.TryRecentFightNear(11_000, 10_000, 2_000, 45_000, 140_000, out x, out y, GothwaitePvpTactics.AddOwnRange), Is.True);
+                Assert.That((x, y), Is.EqualTo((10_000, 10_000)), "the group's own kill under it is skipped; the next one draws it");
+                Assert.That(GothwaitePvpStats.TryRecentFightNear(10_500, 10_000, 2_000, 45_000, 140_000, out _, out _, GothwaitePvpTactics.AddOwnRange), Is.False,
+                    "both fights are within the own range");
             });
         }
 

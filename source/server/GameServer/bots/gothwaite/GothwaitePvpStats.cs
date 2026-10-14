@@ -105,10 +105,11 @@ public static class GothwaitePvpStats
     public static GothwaitePvpTacticsCount Tactics => new(_mainAssists, _refusedOpenings, _retreats, _regroups, _adds, _ambushes);
 
     /// <summary>
-    /// The most recent fight (a kill) within <paramref name="radius"/> of a point and no older than <paramref name="maxAge"/>, for the
-    /// stage 6 add draw. False when there is none. The ring is read under the lock, like the heat.
+    /// The most recent fight (a kill) within <paramref name="radius"/> of a point, at least <paramref name="minDistance"/> away (the group's own
+    /// kills are closer), and no older than <paramref name="maxAge"/>, for the stage 6 add draw. False when there is none. The ring is read
+    /// under the lock, like the heat.
     /// </summary>
-    public static bool TryRecentFightNear(int x, int y, int radius, int maxAge, long now, out int fightX, out int fightY)
+    public static bool TryRecentFightNear(int x, int y, int radius, int maxAge, long now, out int fightX, out int fightY, int minDistance = 0)
     {
         fightX = 0;
         fightY = 0;
@@ -121,7 +122,8 @@ public static class GothwaitePvpStats
                 if (now - fight.Time > maxAge || fight.Time <= newest)
                     continue;
                 double dx = fight.X - x, dy = fight.Y - y;
-                if (dx * dx + dy * dy > (double)radius * radius)
+                double squared = dx * dx + dy * dy;
+                if (squared > (double)radius * radius || squared < (double)minDistance * minDistance)
                     continue;
                 newest = fight.Time;
                 fightX = fight.X;

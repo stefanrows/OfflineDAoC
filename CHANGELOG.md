@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.269.0] - 2026-10-14
+
+### Fixed
+
+- **Gothwaite PvP mode: review fixes to the stage 6 tactics** (an Opus
+  review of 0.268.0, `docs/GOTHWAITE_PVP_MODE.md` 13.5):
+  - A follower promoted to leader while its group was running (its leader
+    died, or went home after the run) inherited a run with no end: it never
+    scanned, never fought back and held its followers with it. A follower now
+    carries its leader's own run clock, and a promoted leader's open clock
+    ends at once.
+  - A run or a regroup no longer carries into the walk home or the next
+    outing (every return path and the castle clear it; sprint ends with it).
+  - A running bot that is caught (crowd-controlled, at the end of its run,
+    or hit in melee) turns and fights instead of standing as a free kill;
+    `GOTH_PVP_RETREAT_END reason=caught`.
+  - Followers no longer go home for low health or power while their
+    leader's group rests; the regroup filter now reads the leader's state.
+  - A follower no longer flaps between assisting and dropping a target that
+    stands beyond 1,500 units of its leader; it follows instead.
+  - The leader's "far" chase rule measures from where the target stood when
+    the fight opened, not from the leader's spot a scan range away.
+  - The add draw skips fights within 1,000 units (the group's own last kill)
+    and takes the newest beyond that.
+  - A formation slot the navmesh refuses is not proved again for 5 s; the
+    opening scan runs the appetite test before the line-of-sight raycast.
+
 ## [0.268.0] - 2026-10-14
 
 ### Added
