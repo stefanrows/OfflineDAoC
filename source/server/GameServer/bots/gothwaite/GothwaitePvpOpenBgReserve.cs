@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -12,21 +13,26 @@ namespace DOL.GS;
 /// </summary>
 public static class GothwaitePvpOpenBgReserve
 {
-    private static readonly IReadOnlySet<long> Empty = new HashSet<long>();
+    private static readonly IReadOnlySet<long> Empty = FrozenSet<long>.Empty;
     private static IReadOnlySet<long> _set = Empty;
 
     /// <summary>The current reserved bot ids. Never null, never mutated after publication.</summary>
     public static IReadOnlySet<long> Set => Volatile.Read(ref _set);
 
-    public static void Install(IReadOnlySet<long> set) => Volatile.Write(ref _set, set ?? Empty);
+    public static void Install(IReadOnlySet<long> set) => Volatile.Write(ref _set, set == null || set.Count == 0 ? Empty : set.ToFrozenSet());
 
     public static bool IsReserved(long botId) => Set.Contains(botId);
 
     /// <summary>True for a mode-on autonomous world bot whose database id is reserved.</summary>
     public static bool IsOpenBgReserved(GameLiving living) =>
-        GothwaitePvpMode.IsActive &&
-        living is GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false, IsBattlegroundEncounterBot: false, IsPersistentPlayerCompanion: false } bot &&
-        IsReserved(bot.DatabaseID);
+        living is GameBot bot &&
+        IsReservedWorldBot(GothwaitePvpMode.IsActive, bot.IsAutonomousWorldBot, bot.IsTemporaryGroupHelper,
+            bot.IsBattlegroundEncounterBot, bot.IsPersistentPlayerCompanion, bot.DatabaseID);
+
+    /// <summary>Pure form of <see cref="IsOpenBgReserved"/>: the id is the bot's DatabaseID (the BotId of its row).</summary>
+    public static bool IsReservedWorldBot(bool modeActive, bool autonomousWorldBot, bool temporaryHelper, bool encounterBot,
+        bool companion, long databaseId) =>
+        modeActive && autonomousWorldBot && !temporaryHelper && !encounterBot && !companion && IsReserved(databaseId);
 
     /// <summary>ceil(2.5 * min(seats, ceil(maxBots / 3))): the crew's seats plus a replacement margin.</summary>
     public static int ReserveSize(int seats, int maxBots)
@@ -40,16 +46,16 @@ public static class GothwaitePvpOpenBgReserve
 
     /// <summary>The reserved ids: empty when the mode or the open BG is off; per realm 1-3 the first
     /// <see cref="ReserveSize"/> non-retired in-band candidates by <see cref="Order"/>, capped at 30% of the candidates.</summary>
-    public static IReadOnlySet<long> Choose(bool modeActive, bool openBgEnabled, int bandMin, int bandMax, int seatsPerRealm,
+    public static IReadOnlySet<long> Choose(bool modeActive, bool openBgEnabled, int bandMin, int bandMax, Func<int, int> seatsFor,
         int maxBots, IEnumerable<(long BotId, int Realm, int Level, bool Retired)> bots)
     {
         var result = new HashSet<long>();
         if (!modeActive || !openBgEnabled || bots == null)
             return result;
-        int size = ReserveSize(seatsPerRealm, maxBots);
         foreach (var realm in bots.Where(b => b.Realm is >= 1 and <= 3 && !b.Retired && b.Level >= bandMin && b.Level <= bandMax)
                      .GroupBy(b => b.Realm))
         {
+            int size = ReserveSize(seatsFor(realm.Key), maxBots);
             long[] candidates = realm.Select(b => b.BotId).OrderBy(Order).ThenBy(id => id).ToArray();
             int take = Math.Min(size, (int)Math.Ceiling(candidates.Length * 0.3));
             foreach (long id in candidates.Take(Math.Max(0, take)))

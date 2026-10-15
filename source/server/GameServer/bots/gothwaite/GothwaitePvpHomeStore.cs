@@ -133,7 +133,6 @@ public static class GothwaitePvpHomeStore
 
             OfflineWorldBotRecord[] bots = DOLDB<OfflineWorldBotRecord>.SelectAllObjects().ToArray();
             GothwaitePvpHomePlan plan = Plan(active, bots, homes);
-            ChooseOpenBgReserve(active, bots);
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
             {
                 if (active)
@@ -141,6 +140,7 @@ public static class GothwaitePvpHomeStore
                 else
                     RestoreHomes(plan);
             }
+            ChooseOpenBgReserveSafely(active, bots);
         }
         catch (Exception exception)
         {
@@ -148,20 +148,30 @@ public static class GothwaitePvpHomeStore
         }
     }
 
+    /// <summary>Never blocks the home snapshot/restore: a failure installs the empty set and is logged.</summary>
+    private static void ChooseOpenBgReserveSafely(bool active, OfflineWorldBotRecord[] bots)
+    {
+        try
+        {
+            ChooseOpenBgReserve(active, bots);
+        }
+        catch (Exception exception)
+        {
+            GothwaitePvpOpenBgReserve.Install(null);
+            Log.Error($"GOTH_PVP_OPENBG_RESERVE_FAILED error=\"{exception.Message}\"; no bot is reserved.");
+        }
+    }
+
     private static void ChooseOpenBgReserve(bool active, OfflineWorldBotRecord[] bots)
     {
-        int seats = 0;
-        foreach (eRealm realm in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
-        {
-            OpenBgSetup setup = OpenBgSetup.FromProperties();
-            seats = Math.Max(seats, 8 * setup.Groups8For(realm) + 4 * setup.SmallFor(realm) + setup.SolosFor(realm));
-        }
+        OpenBgSetup setup = OpenBgSetup.FromProperties();
+        int Seats(int realm) => 8 * setup.Groups8For((eRealm)realm) + 4 * setup.SmallFor((eRealm)realm) + setup.SolosFor((eRealm)realm);
         int min = OpenBattlegroundRoster.MinLevel, max = OpenBattlegroundRoster.MaxLevel;
         var rows = bots.Select(b => (b.BotId, b.Realm, b.Level, b.IsRetired)).ToArray();
-        var set = GothwaitePvpOpenBgReserve.Choose(active, OpenBattlegroundPolicy.IsEnabled, min, max, seats,
+        var set = GothwaitePvpOpenBgReserve.Choose(active, OpenBattlegroundPolicy.IsEnabled, min, max, Seats,
             OpenBattlegroundProperties.MaxBots, rows);
         GothwaitePvpOpenBgReserve.Install(set);
-        if (set.Count > 0)
+        if (active)
             Log.Info($"GOTH_PVP_OPENBG_RESERVE reserve={set.Count} per_realm={GothwaitePvpOpenBgReserve.PerRealm(set, rows)} band={min}-{max}");
     }
 

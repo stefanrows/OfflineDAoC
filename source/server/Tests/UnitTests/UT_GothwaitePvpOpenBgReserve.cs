@@ -35,8 +35,8 @@ namespace DOL.GS.Tests
         public void Choose_Is_Empty_When_Mode_Or_OpenBg_Off()
         {
             var bots = Bots(1, 100);
-            Assert.That(GothwaitePvpOpenBgReserve.Choose(false, true, 40, 50, 20, 72, bots), Is.Empty);
-            Assert.That(GothwaitePvpOpenBgReserve.Choose(true, false, 40, 50, 20, 72, bots), Is.Empty);
+            Assert.That(GothwaitePvpOpenBgReserve.Choose(false, true, 40, 50, _ => 20, 72, bots), Is.Empty);
+            Assert.That(GothwaitePvpOpenBgReserve.Choose(true, false, 40, 50, _ => 20, 72, bots), Is.Empty);
         }
 
         [Test]
@@ -46,7 +46,7 @@ namespace DOL.GS.Tests
             bots.AddRange(Bots(4, 20, start: 100));
             bots.AddRange(Bots(2, 20, level: 30, start: 200));
             bots.AddRange(Enumerable.Range(0, 20).Select(i => ((long)300 + i, 3, 45, true)));
-            var set = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, 20, 72, bots);
+            var set = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, bots);
             Assert.That(set, Is.Not.Empty);
             Assert.That(set.All(id => id <= 20), Is.True);
         }
@@ -54,7 +54,7 @@ namespace DOL.GS.Tests
         [Test]
         public void Choose_Caps_At_30_Percent_Rounded_Up()
         {
-            var set = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, 20, 72, Bots(1, 10));
+            var set = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, Bots(1, 10));
             Assert.That(set.Count, Is.EqualTo(3));
         }
 
@@ -63,9 +63,9 @@ namespace DOL.GS.Tests
         {
             var bots = Bots(1, 60);
             bots.AddRange(Bots(2, 60, start: 100));
-            var a = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, 6, 72, bots);
-            var b = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, 6, 72, Enumerable.Reverse(bots));
-            var c = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, 6, 72, bots);
+            var a = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 6, 72, bots);
+            var b = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 6, 72, Enumerable.Reverse(bots));
+            var c = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 6, 72, bots);
             Assert.That(b.OrderBy(x => x), Is.EqualTo(a.OrderBy(x => x)));
             Assert.That(c.OrderBy(x => x), Is.EqualTo(a.OrderBy(x => x)));
         }
@@ -74,9 +74,43 @@ namespace DOL.GS.Tests
         public void Choose_Ignores_Bot_Outside_Band()
         {
             var bots = Bots(1, 60);
-            var before = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, 6, 72, bots);
+            var before = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 6, 72, bots);
             bots.Add((999, 1, 20, false));
-            Assert.That(GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, 6, 72, bots).OrderBy(x => x), Is.EqualTo(before.OrderBy(x => x)));
+            Assert.That(GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 6, 72, bots).OrderBy(x => x), Is.EqualTo(before.OrderBy(x => x)));
+        }
+
+        [Test]
+        public void Choose_Band_Edges_Are_Inclusive()
+        {
+            var bots = new List<(long BotId, int Realm, int Level, bool Retired)> { (1, 1, 40, false), (2, 1, 50, false), (3, 1, 39, false), (4, 1, 51, false) };
+            var set = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, bots);
+            Assert.That(set.OrderBy(x => x), Is.EqualTo(new long[] { 1, 2 }).Or.EqualTo(new long[] { 1 }).Or.EqualTo(new long[] { 2 }));
+            var many = Bots(1, 10, level: 40).Concat(Bots(1, 10, level: 50, start: 100)).Concat(Bots(1, 10, level: 39, start: 200)).Concat(Bots(1, 10, level: 51, start: 300));
+            var big = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, many);
+            Assert.That(big.Count, Is.EqualTo(6));
+            Assert.That(big.All(id => id < 200), Is.True);
+        }
+
+        [Test]
+        public void Choose_Reserves_Per_Realm_Seats()
+        {
+            var bots = Bots(1, 100).Concat(Bots(2, 100, start: 1000)).ToList();
+            var set = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, r => r == 1 ? 4 : 20, 72, bots);
+            Assert.That(set.Count(id => id < 1000), Is.EqualTo(10));
+            Assert.That(set.Count(id => id >= 1000), Is.EqualTo(30));
+        }
+
+        [Test]
+        public void ReservedWorldBot_Excludes_NonWorldBots_And_Uses_DatabaseId()
+        {
+            GothwaitePvpOpenBgReserve.Install(new HashSet<long> { 5 });
+            Assert.That(GothwaitePvpOpenBgReserve.IsReservedWorldBot(true, true, false, false, false, 5), Is.True);
+            Assert.That(GothwaitePvpOpenBgReserve.IsReservedWorldBot(true, true, false, false, false, 6), Is.False);
+            Assert.That(GothwaitePvpOpenBgReserve.IsReservedWorldBot(false, true, false, false, false, 5), Is.False);
+            Assert.That(GothwaitePvpOpenBgReserve.IsReservedWorldBot(true, true, true, false, false, 5), Is.False);
+            Assert.That(GothwaitePvpOpenBgReserve.IsReservedWorldBot(true, true, false, true, false, 5), Is.False);
+            Assert.That(GothwaitePvpOpenBgReserve.IsReservedWorldBot(true, true, false, false, true, 5), Is.False);
+            Assert.That(GothwaitePvpOpenBgReserve.IsReservedWorldBot(true, false, false, false, false, 5), Is.False);
         }
 
         [Test]
