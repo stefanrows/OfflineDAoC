@@ -67,6 +67,23 @@ namespace DOL.GS
         }
 
         /// <summary>
+        /// The archetype for the unit with this ordinal among the units of <paramref name="size"/>: the entries of that size
+        /// expanded in listed order, each repeated by its count, indexed by ordinal modulo the length (never negative).
+        /// Null when no listed archetype has that size.
+        /// </summary>
+        public static OpenBgArchetype PickForSize(IReadOnlyList<(OpenBgArchetype Archetype, int Count)> mix, int size, long ordinal)
+        {
+            var expanded = new List<OpenBgArchetype>();
+            foreach ((OpenBgArchetype archetype, int count) in mix)
+                if (archetype.Size == size)
+                    for (int i = 0; i < count; i++) expanded.Add(archetype);
+            if (expanded.Count == 0) return null;
+            long index = ordinal % expanded.Count;
+            if (index < 0) index += expanded.Count;
+            return expanded[(int)index];
+        }
+
+        /// <summary>
         /// Slots first (min, then wish) in the listed order, each filled from the first unpicked candidate whose class is in
         /// the role; the group is then topped up to its size from what is left, in candidate order (the caller sorts by
         /// distance). <paramref name="forcedIndex"/> is a candidate that is in the group regardless (the seed leader): it is

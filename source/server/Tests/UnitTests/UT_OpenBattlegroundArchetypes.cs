@@ -95,4 +95,39 @@ public sealed class UT_OpenBattlegroundArchetypes
             Assert.That(OpenBattlegroundRoster.IsRosterHealer(eCharacterClass.Bard), Is.False);
         });
     }
+
+    [Test]
+    public void UnitsOfOneSizeCycleThroughTheArchetypesInProportionToTheirCounts()
+    {
+        var mix = OpenBattlegroundArchetypes.ParseMix("std8:2,caster8:1,raid8:1,stealth4:1,small:2");
+        string[] keys = Enumerable.Range(0, 8).Select(ordinal => OpenBattlegroundArchetypes.PickForSize(mix, 8, ordinal).Key).ToArray();
+        Assert.That(keys, Is.EqualTo(new[] { "std8", "std8", "caster8", "raid8", "std8", "std8", "caster8", "raid8" }));
+        Assert.That(Enumerable.Range(0, 3).Select(ordinal => OpenBattlegroundArchetypes.PickForSize(mix, 4, ordinal).Key),
+            Is.EqualTo(new[] { "stealth4", "small", "small" }));
+    }
+
+    [Test]
+    public void ASizeWithoutAnArchetypeGivesNullAndZeroOrBadEntriesNeverAppear()
+    {
+        var mix = OpenBattlegroundArchetypes.ParseMix("std8:2,caster8:0,raid8:x,duo:-1");
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundArchetypes.PickForSize(mix, 4, 0), Is.Null);
+            Assert.That(OpenBattlegroundArchetypes.PickForSize(OpenBattlegroundArchetypes.ParseMix(""), 8, 0), Is.Null);
+            Assert.That(Enumerable.Range(0, 6).Select(ordinal => OpenBattlegroundArchetypes.PickForSize(mix, 8, ordinal).Key), Is.All.EqualTo("std8"));
+        });
+    }
+
+    [Test]
+    public void ASingleArchetypeIsAlwaysPickedAndOddOrdinalsDoNotThrow()
+    {
+        var mix = OpenBattlegroundArchetypes.ParseMix("std8:2,caster8:1");
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundArchetypes.PickForSize(OpenBattlegroundArchetypes.ParseMix("small:3"), 4, 12345).Key, Is.EqualTo("small"));
+            Assert.That(OpenBattlegroundArchetypes.PickForSize(mix, 8, -1), Is.Not.Null);
+            Assert.That(OpenBattlegroundArchetypes.PickForSize(mix, 8, long.MinValue), Is.Not.Null);
+            Assert.That(OpenBattlegroundArchetypes.PickForSize(mix, 8, long.MaxValue), Is.Not.Null);
+        });
+    }
 }

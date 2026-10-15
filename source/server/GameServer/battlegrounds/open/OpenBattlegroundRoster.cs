@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
+using System.Threading;
 using DOL.GS.Keeps;
 using DOL.GS.Scripts;
 using DOL.GS.ServerRules;
@@ -834,6 +835,7 @@ namespace DOL.GS
                     group.DisbandGroup();
                     continue;
                 }
+                if (PresetFor(size) != null) AdvancePreset(size);
                 free -= members.Length;
                 formed++;
             }
@@ -1121,9 +1123,19 @@ namespace DOL.GS
         /// (two for an 8-man), then the nearest level-compatible bots on the leader's side of the keep's owner guild
         /// (<see cref="MayJoinUnit"/>).
         /// </summary>
+        // Units formed so far per unit size; PresetFor reads the counter (a peek, safe to call repeatedly for one
+        // formation attempt) and AdvancePreset moves it once per unit that was actually registered.
+        private static readonly long[] PresetOrdinals = new long[9];
+
         private static OpenBgArchetype PresetFor(int size) =>
-            OpenBattlegroundArchetypes.ParseMix(OpenBattlegroundProperties.Presets).Select(entry => entry.Archetype)
-                .FirstOrDefault(candidate => candidate.Size == size);
+            size < 0 || size >= PresetOrdinals.Length ? null
+                : OpenBattlegroundArchetypes.PickForSize(OpenBattlegroundArchetypes.ParseMix(OpenBattlegroundProperties.Presets), size,
+                    Interlocked.Read(ref PresetOrdinals[size]));
+
+        private static void AdvancePreset(int size)
+        {
+            if (size >= 0 && size < PresetOrdinals.Length) Interlocked.Increment(ref PresetOrdinals[size]);
+        }
 
         private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now, GuildIds keepOwner, bool merged, eRealm admitRealm,
             out GameBot leader, out GameBot[] others, out OFTeleporter porter, out Dictionary<OpenBgReject, int> mateRejections)
@@ -1156,7 +1168,7 @@ namespace DOL.GS
                     continue;
                 }
                 GameBot[] picked = null;
-                // Several presets may be configured: the first parsed archetype whose Size equals this unit's size fills it.
+                // Several presets may be configured: this unit's size picks among the archetypes of that size by their counts (PresetFor peeks; the counter advances when the unit is registered).
                 OpenBgArchetype archetype = PresetFor(size);
                 if (archetype != null && seed.CharacterClass != null && near.All(bot => bot.CharacterClass != null))
                 {
