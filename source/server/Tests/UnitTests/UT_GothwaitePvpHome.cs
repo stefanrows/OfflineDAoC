@@ -252,5 +252,23 @@ namespace DOL.GS.Tests
                 Assert.That(off.Orphans, Is.Empty);
             });
         }
+
+        [Test]
+        public void Plan_Is_Independent_Of_The_Reserved_Set()
+        {
+            var bots = new[] { Bot(1), Bot(2) };
+            try
+            {
+                GothwaitePvpOpenBgReserve.Install(new System.Collections.Generic.HashSet<long>());
+                var without = GothwaitePvpHomeStore.Plan(true, bots, Array.Empty<GothwaitePvpHomeRecord>());
+                GothwaitePvpOpenBgReserve.Install(new System.Collections.Generic.HashSet<long> { 1 });
+                var with = GothwaitePvpHomeStore.Plan(true, bots, Array.Empty<GothwaitePvpHomeRecord>());
+                Assert.That(with.ToSnapshot.Select(b => b.BotId), Is.EqualTo(without.ToSnapshot.Select(b => b.BotId)));
+            }
+            finally
+            {
+                GothwaitePvpOpenBgReserve.Install(null);
+            }
+        }
     }
 }

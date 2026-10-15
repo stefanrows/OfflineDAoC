@@ -133,6 +133,7 @@ public static class GothwaitePvpHomeStore
 
             OfflineWorldBotRecord[] bots = DOLDB<OfflineWorldBotRecord>.SelectAllObjects().ToArray();
             GothwaitePvpHomePlan plan = Plan(active, bots, homes);
+            ChooseOpenBgReserve(active, bots);
             lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
             {
                 if (active)
@@ -145,6 +146,23 @@ public static class GothwaitePvpHomeStore
         {
             Log.Error("GOTH_PVP_HOME_RECONCILE_FAILED: the home table was not changed at start.", exception);
         }
+    }
+
+    private static void ChooseOpenBgReserve(bool active, OfflineWorldBotRecord[] bots)
+    {
+        int seats = 0;
+        foreach (eRealm realm in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
+        {
+            OpenBgSetup setup = OpenBgSetup.FromProperties();
+            seats = Math.Max(seats, 8 * setup.Groups8For(realm) + 4 * setup.SmallFor(realm) + setup.SolosFor(realm));
+        }
+        int min = OpenBattlegroundRoster.MinLevel, max = OpenBattlegroundRoster.MaxLevel;
+        var rows = bots.Select(b => (b.BotId, b.Realm, b.Level, b.IsRetired)).ToArray();
+        var set = GothwaitePvpOpenBgReserve.Choose(active, OpenBattlegroundPolicy.IsEnabled, min, max, seats,
+            OpenBattlegroundProperties.MaxBots, rows);
+        GothwaitePvpOpenBgReserve.Install(set);
+        if (set.Count > 0)
+            Log.Info($"GOTH_PVP_OPENBG_RESERVE reserve={set.Count} per_realm={GothwaitePvpOpenBgReserve.PerRealm(set, rows)} band={min}-{max}");
     }
 
     /// <summary>Login placement of a mode bot at a castle landing. False, with nothing changed, outside the mode.</summary>

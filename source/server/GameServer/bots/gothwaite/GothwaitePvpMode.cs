@@ -46,7 +46,11 @@ public static class GothwaitePvpMode
     }
 
     /// <summary>Back to the default (mode off). Tests call it in their teardown.</summary>
-    public static void Reset() => Apply(GothwaitePvpSettings.Defaults);
+    public static void Reset()
+    {
+        Apply(GothwaitePvpSettings.Defaults);
+        GothwaitePvpOpenBgReserve.Install(null);
+    }
 
     /// <summary>
     /// An autonomous world bot that the mode drives: the mode is on and the bot is an
@@ -55,9 +59,10 @@ public static class GothwaitePvpMode
     /// </summary>
     public static bool IsModeBot(GameLiving living) =>
         IsActive && living is GameBot { IsAutonomousWorldBot: true, IsTemporaryGroupHelper: false, IsBattlegroundEncounterBot: false } bot &&
-        !bot.IsPlayerLedGroup;
+        !bot.IsPlayerLedGroup && !GothwaitePvpOpenBgReserve.IsReserved(bot.DatabaseID);
 
     /// <summary>Pure form of <see cref="IsModeBot"/> for tests.</summary>
-    public static bool IsModeBot(bool active, bool autonomousWorldBot, bool temporaryHelper, bool encounterBot, bool playerLed) =>
-        active && autonomousWorldBot && !temporaryHelper && !encounterBot && !playerLed;
+    public static bool IsModeBot(bool active, bool autonomousWorldBot, bool temporaryHelper, bool encounterBot, bool playerLed,
+        bool reserved = false) =>
+        active && autonomousWorldBot && !temporaryHelper && !encounterBot && !playerLed && !reserved;
 }
