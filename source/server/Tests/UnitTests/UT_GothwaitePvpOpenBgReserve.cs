@@ -122,6 +122,20 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void OpenBgGuards_ModeOn_EmptySetSuppressesTheCrew_ReserveLetsReservedJoin()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(GothwaitePvpRules.SuppressesOpenBattlegroundCrew(true, 0), Is.True);
+                Assert.That(GothwaitePvpRules.SuppressesOpenBattlegroundCrew(true, 5), Is.False);
+                Assert.That(GothwaitePvpRules.MayJoinOpenBattleground(true, true), Is.True);
+                Assert.That(GothwaitePvpRules.MayJoinOpenBattleground(true, false), Is.False);
+                Assert.That(GothwaitePvpRules.RefusesOpenUnit(true, true), Is.False);
+                Assert.That(GothwaitePvpRules.RefusesOpenUnit(true, false), Is.True, "a unit with a non-reserved member is refused");
+            });
+        }
+
+        [Test]
         public void Install_And_Reset()
         {
             GothwaitePvpOpenBgReserve.Install(new HashSet<long> { 5 });

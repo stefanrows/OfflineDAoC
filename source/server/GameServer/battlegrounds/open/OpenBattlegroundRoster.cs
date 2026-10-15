@@ -633,8 +633,8 @@ namespace DOL.GS
                 Reset();
                 return;
             }
-            // Gothwaite PvP mode: no bot crew is formed, so the roster keeps no units (as when the open BG is off).
-            if (GothwaitePvpRules.SuppressesWorldRecruitment)
+            // Gothwaite PvP mode: no bot crew is formed while no bot is reserved, so the roster keeps no units (as when the open BG is off).
+            if (GothwaitePvpRules.SuppressesOpenBattlegroundCrew(GothwaitePvpMode.IsActive, GothwaitePvpOpenBgReserve.Set.Count))
             {
                 Reset();
                 return;
@@ -1011,6 +1011,8 @@ namespace DOL.GS
             }
             foreach (GameBot bot in AutonomousBotRegistry.Snapshot())
             {
+                // Gothwaite PvP mode: only the reserved set is recruited; every other world bot stays a mode bot.
+                if (!GothwaitePvpRules.MayJoinOpenBattleground(bot)) continue;
                 if (!pools.TryGetValue(bot.Realm, out List<GameBot> pool)) continue;
                 bool isResting = resting.TryGetValue(bot, out long until) && IsResting(until, now);
                 if (bot.Group != null || isResting || !IsCandidate(bot))

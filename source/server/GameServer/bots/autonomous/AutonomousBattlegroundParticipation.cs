@@ -312,8 +312,8 @@ public static class AutonomousBattlegroundParticipation
     /// </summary>
     public static bool AssignOpenUnit(int unit, string label, IReadOnlyList<GameBot> members, Group group, long now)
     {
-        // Gothwaite PvP mode: no autonomous bot is assigned to the open battleground (section 5.4).
-        if (GothwaitePvpRules.SuppressesWorldRecruitment) return false;
+        // Gothwaite PvP mode: a unit is assigned to the open battleground only when every member is reserved (section 5.4).
+        if (GothwaitePvpRules.RefusesOpenUnit(members)) return false;
         BattlegroundDefinition open = BattlegroundCampaignCatalog.FindOpen();
         if (!IsOpenUnit(open, unit) || members == null || members.Count == 0 || members.Any(member => member == null)) return false;
         lock (Sync)

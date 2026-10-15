@@ -42,6 +42,24 @@ public static class GothwaitePvpRules
     /// <summary>G9 and section 5.4: no director, scheduler or alt trickle recruits world bots while the mode is on.</summary>
     public static bool SuppressesWorldRecruitment => GothwaitePvpMode.IsActive;
 
+    /// <summary>The open BG crew is off only while the mode is on and no bot is reserved for it (docs/superpowers/specs/2026-10-15-open-bg-gothwaite-design.md, section 3).</summary>
+    public static bool SuppressesOpenBattlegroundCrew(bool active, int reservedCount) => active && reservedCount == 0;
+
+    /// <summary>The open BG may recruit a bot: always with the mode off, with the mode on only a reserved one.</summary>
+    public static bool MayJoinOpenBattleground(bool active, bool reserved) => !active || reserved;
+
+    /// <summary>Live form: the bot's reservation is read through <see cref="GothwaitePvpOpenBgReserve.IsOpenBgReserved"/>.</summary>
+    public static bool MayJoinOpenBattleground(GameLiving bot) =>
+        MayJoinOpenBattleground(GothwaitePvpMode.IsActive, GothwaitePvpMode.IsActive && GothwaitePvpOpenBgReserve.IsOpenBgReserved(bot));
+
+    /// <summary>An open BG unit is refused while the mode is on and any member is not reserved.</summary>
+    public static bool RefusesOpenUnit(bool active, bool allMembersReserved) => active && !allMembersReserved;
+
+    /// <summary>Live form of <see cref="RefusesOpenUnit(bool, bool)"/> over the unit's members.</summary>
+    public static bool RefusesOpenUnit(System.Collections.Generic.IEnumerable<GameBot> members) =>
+        RefusesOpenUnit(GothwaitePvpMode.IsActive,
+            !GothwaitePvpMode.IsActive || (members != null && System.Linq.Enumerable.All(members, GothwaitePvpOpenBgReserve.IsOpenBgReserved)));
+
     /// <summary>A mode bot logs in and releases at a castle landing (section 6.1, 6.6). False outside the mode.</summary>
     public static bool TryCastleLanding(GameLiving living, out ushort regionId, out Point3D point)
     {

@@ -66,6 +66,22 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void TheOpenBattlegroundGuardsAnswerAsTodayWhileTheModeIsOff()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(GothwaitePvpRules.SuppressesOpenBattlegroundCrew(false, 0), Is.False);
+                Assert.That(GothwaitePvpRules.SuppressesOpenBattlegroundCrew(false, 12), Is.False);
+                Assert.That(GothwaitePvpRules.MayJoinOpenBattleground(false, false), Is.True);
+                Assert.That(GothwaitePvpRules.MayJoinOpenBattleground(false, true), Is.True);
+                Assert.That(GothwaitePvpRules.RefusesOpenUnit(false, false), Is.False);
+                Assert.That(GothwaitePvpRules.RefusesOpenUnit(false, true), Is.False);
+                Assert.That(GothwaitePvpRules.MayJoinOpenBattleground(null), Is.True);
+                Assert.That(GothwaitePvpRules.RefusesOpenUnit(null), Is.False);
+            });
+        }
+
+        [Test]
         public void NoCastleLandingIsAssignedWhileTheModeIsOff()
         {
             bool assigned = GothwaitePvpRules.TryCastleLanding(null, out ushort regionId, out Point3D point);
