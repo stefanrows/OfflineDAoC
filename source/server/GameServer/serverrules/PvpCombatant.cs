@@ -85,8 +85,16 @@ namespace DOL.GS.ServerRules
 			if (firstBattleGroup != null && firstBattleGroup == secondBattleGroup)
 				return true;
 
+			if (a.CurrentRegionID == b.CurrentRegionID &&
+				RealmFriendInOpenBg(OpenBattlegroundMode.Current, a.CurrentRegionID, a.Realm, b.Realm))
+				return true;
+
 			return CompanionProtects(a, b) || CompanionProtects(b, a);
 		}
+
+		/// <summary>Per realm mode: inside the open BG the same realm is a friend (classic DAoC); everywhere else Camlann.</summary>
+		public static bool RealmFriendInOpenBg(OpenBgMode mode, ushort region, eRealm first, eRealm second) =>
+			OpenBattlegroundMode.RealmsAreFriends(mode, region, first, second);
 
 		private static GameLiving EncounterSponsor(GameLiving actor)
 		{

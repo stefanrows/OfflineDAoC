@@ -1,4 +1,5 @@
 using DOL.GS;
+using DOL.GS.ServerRules;
 using NUnit.Framework;
 
 namespace DOL.UnitTests;
@@ -44,6 +45,18 @@ public sealed class UT_OpenBattlegroundMode
             Assert.That(OpenBattlegroundMode.RealmsAreFriends(OpenBgMode.PerRealm, 1, eRealm.Albion, eRealm.Albion), Is.False, "region 1 stays Camlann");
             Assert.That(OpenBattlegroundMode.RealmsAreFriends(OpenBgMode.PerRealm, 238, eRealm.Midgard, eRealm.Midgard), Is.False, "238 stays Camlann");
             Assert.That(OpenBattlegroundMode.RealmsAreFriends(OpenBgMode.PerRealm, 252, eRealm.None, eRealm.None), Is.False, "no realm is never a friend");
+        });
+    }
+
+    [Test]
+    public void ThePvpRuleReadsTheModeOnlyInsideTheOpenBg()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.RealmFriendInOpenBg(OpenBgMode.PerRealm, 252, eRealm.Hibernia, eRealm.Hibernia), Is.True);
+            Assert.That(PvpCombatant.RealmFriendInOpenBg(OpenBgMode.PerRealm, 252, eRealm.Hibernia, eRealm.Albion), Is.False);
+            Assert.That(PvpCombatant.RealmFriendInOpenBg(OpenBgMode.ServerPvp, 252, eRealm.Hibernia, eRealm.Hibernia), Is.False);
+            Assert.That(PvpCombatant.RealmFriendInOpenBg(OpenBgMode.PerRealm, 200, eRealm.Hibernia, eRealm.Hibernia), Is.False);
         });
     }
 }
