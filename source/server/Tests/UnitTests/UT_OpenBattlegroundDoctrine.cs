@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DOL.GS;
 using NUnit.Framework;
 
@@ -20,14 +21,36 @@ public sealed class UT_OpenBattlegroundDoctrine
     }
 
     [Test]
-    public void TwoBombersWithAreaMezMakeABombGroup()
+    public void PetsAndTheSameOwnerCountOnceAndOnlyRealGroupsCountAsGroups()
     {
-        var members = new[]
+        var eightWithPets = new List<(int, int)>();
+        for (int owner = 1; owner <= 8; owner++)
         {
-            new RvrDoctrineMember(eCharacterClass.Wizard, 50), new RvrDoctrineMember(eCharacterClass.Wizard, 50),
-            new RvrDoctrineMember(eCharacterClass.Sorcerer, 50), new RvrDoctrineMember(eCharacterClass.Cleric, 50),
-        };
-        Assert.That(AutonomousRvrDoctrine.Derive(members, AutonomousPlayerType.Roamer, RvrLeaderTraits.Neutral).Kind,
-            Is.EqualTo(RvrDoctrineKind.BombGroup));
+            eightWithPets.Add((owner, 1));
+            eightWithPets.Add((owner, 1)); // his pet, resolved to him
+        }
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBattlegroundDriver.CountEnemies(eightWithPets), Is.EqualTo((8, 1)), "pets of one 8-man");
+            Assert.That(AutonomousBattlegroundDriver.CountEnemies(new List<(int, int)> { (1, 1), (2, 1), (3, 2), (4, 2) }), Is.EqualTo((4, 2)), "two groups");
+            Assert.That(AutonomousBattlegroundDriver.CountEnemies(new List<(int, int)> { (1, 1), (2, 1), (9, 0) }), Is.EqualTo((3, 1)), "a lone passer-by");
+            Assert.That(AutonomousBattlegroundDriver.CountEnemies(new List<(int, int)> { (7, 0), (7, 0) }), Is.EqualTo((1, 0)), "same owner twice");
+            Assert.That(AutonomousBattlegroundDriver.CountEnemies(new List<(int, int)> { (1, 1), (3, 2) }), Is.EqualTo((2, 0)), "single members of two groups are not groups");
+        });
+    }
+
+    [Test]
+    public void TheKeepOrderIsExemptAndTheImmunityWindowBlocksANewBreakOff()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Assault, true), Is.True, "at the keep");
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Defend, false), Is.True);
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Retreat, false), Is.True);
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Assault, false), Is.False, "assault still on the way (muster)");
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Roam, false), Is.False);
+            Assert.That(AutonomousBattlegroundDriver.BreakOffAllowed(100_000, 200_000), Is.False, "inside the window");
+            Assert.That(AutonomousBattlegroundDriver.BreakOffAllowed(200_000, 200_000), Is.True, "after the window");
+        });
     }
 }

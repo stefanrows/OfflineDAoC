@@ -137,8 +137,8 @@ public static class AutonomousBattlegroundDriver
         // open BG break-off: the group leader's retreat to its own landing runs until this game time; followers read the leader's.
         public long BreakOffUntil;
         public Point3D BreakOffPoint;
-        // The BreakOffUntil value the bot already cleared its fight for, so each break-off drops the aggro once.
-        public long BreakOffCleared;
+        // Group head: no new break-off before this game time (the end of the last one plus the immunity window).
+        public long BreakOffImmuneUntil;
     }
 
     /// <summary>A closed outer gate of a keep and its proven floor points outside, nearest distance first.</summary>
@@ -199,27 +199,31 @@ public static class AutonomousBattlegroundDriver
             GameLiving opponent = definition.Kind == BattlegroundDefinitionKind.Open
                 ? BattlegroundCombatTargets.FindOpponent(bot, OpponentRange, target => MayAcquire(bot, target))
                 : BattlegroundCombatTargets.FindOpponent(bot, OpponentRange);
-            if (state.Open && BreakingOff(bot, state, now, out _))
+            // A group that broke off takes no new target while it retreats; otherwise the head may break the group off first.
+            if (opponent != null && !(state.Open && BreakingOff(bot, state, now, out _)) &&
+                !(state.Open && IsGroupHead(bot) && ConsiderBreakOff(bot, state, now)))
+                brain.Attack(opponent);
+        }
+
+        // Break-off walks even while the group is still engaged: the fight is dropped every turn, so the class brain does
+        // not drag the group back. A landing without a provable route cancels the break-off; the normal loop goes on.
+        if (state.Open && !restHold && !walkingHome && !AutonomousBattlegroundParticipation.IsLeaving(bot) &&
+            BreakingOff(bot, state, now, out Point3D retreat))
+        {
+            if (brain.HasAggro || bot.IsAttacking)
             {
-                // A group that broke off drops its fight once and takes no new target while it retreats; a bot that is
-                // attacked on the way still defends itself through the class brain.
-                if (opponent != null && state.BreakOffCleared != BreakOffUntilOf(bot, state))
-                {
-                    state.BreakOffCleared = BreakOffUntilOf(bot, state);
-                    brain.ClearAggroList();
-                    bot.StopAttack();
-                }
+                brain.ClearAggroList();
+                bot.StopAttack();
             }
-            else if (opponent != null)
+            state.Action = "break-off";
+            state.HoldProgress = false;
+            if (GoTo(bot, state, retreat, now))
             {
-                if (state.Open && IsGroupHead(bot) && ConsiderBreakOff(bot, state, now))
-                {
-                    state.BreakOffCleared = state.BreakOffUntil;
-                    brain.ClearAggroList();
-                    bot.StopAttack();
-                }
-                else brain.Attack(opponent);
+                AutonomousBattlegroundParticipation.RecordDriverTurn(bot, bot.CurrentRegionID, state.Action);
+                Observe(bot, state, bot.InCombat);
+                return true;
             }
+            CancelBreakOff(bot, state, now);
         }
 
         bool engaged = brain.HasAggro || bot.InCombat;
@@ -239,11 +243,6 @@ public static class AutonomousBattlegroundDriver
                 if (!GoTo(bot, state, home, now)) AutonomousBattlegroundParticipation.EndReliefWalk(bot);
             }
             else if (AutonomousBattlegroundParticipation.IsLeaving(bot)) { state.Action = "leaving"; Stand(bot); }
-            else if (state.Open && BreakingOff(bot, state, now, out Point3D retreat))
-            {
-                state.Action = "break-off";
-                if (!GoTo(bot, state, retreat, now)) Stand(bot);
-            }
             else if (leader != null && leader != bot && leader.IsAlive && leader.CurrentRegion == bot.CurrentRegion)
                 Assist(brain, bot, leader, state, now);
             else Lead(brain, bot, definition, state, now);
@@ -256,29 +255,62 @@ public static class AutonomousBattlegroundDriver
     /// <summary>The group's lead bot, or a bot without a group: the one that decides a break-off for the whole group.</summary>
     private static bool IsGroupHead(GameBot bot) => bot.Group == null || bot.Group.LivingLeader == bot;
 
-    // The break-off end time that applies to the bot: its own as group head, else its group leader's.
-    private static long BreakOffUntilOf(GameBot bot, State state) =>
-        !IsGroupHead(bot) && bot.Group.LivingLeader is GameBot lead && States.TryGetValue(lead, out State leadState)
-            ? leadState.BreakOffUntil : state.BreakOffUntil;
-
     /// <summary>Whether the bot's group is breaking off now, and the landing it walks to (open BG only; the group head decides).</summary>
     private static bool BreakingOff(GameBot bot, State state, long now, out Point3D retreat)
     {
-        State source = state;
-        if (!IsGroupHead(bot) && bot.Group.LivingLeader is GameBot lead && States.TryGetValue(lead, out State leadState)) source = leadState;
+        State source = BreakOffSource(bot, state);
         retreat = source.BreakOffPoint;
         return retreat != null && now < source.BreakOffUntil;
     }
 
+    // The state that holds the group's break-off: the head's own, else its group leader's.
+    private static State BreakOffSource(GameBot bot, State state) =>
+        !IsGroupHead(bot) && bot.Group.LivingLeader is GameBot lead && States.TryGetValue(lead, out State leadState) ? leadState : state;
+
+    // A landing that cannot be routed ends the break-off for the whole group and starts the immunity window.
+    private static void CancelBreakOff(GameBot bot, State state, long now)
+    {
+        State source = BreakOffSource(bot, state);
+        source.BreakOffUntil = now;
+        source.BreakOffImmuneUntil = now + BreakOffImmuneMilliseconds;
+    }
+
+    /// <summary>open BG: after a break-off ends the group cannot break off again for this long (no oscillation).</summary>
+    public const int BreakOffImmuneMilliseconds = 120_000;
+
+    /// <summary>Pure: a group may break off only outside the immunity window that follows its last break-off.</summary>
+    public static bool BreakOffAllowed(long now, long immuneUntil) => now >= immuneUntil;
+
+    /// <summary>Pure: defenders hold the keep, a retreat order already retreats, and a unit with its order at the keep never breaks off.</summary>
+    public static bool BreakOffExempt(OpenBgRole role, bool atKeep) => atKeep || role is OpenBgRole.Defend or OpenBgRole.Retreat;
+
+    /// <summary>
+    /// Pure enemy count of the break-off rule over the legal enemies near (already resolved to their player-shaped owner):
+    /// every distinct owner counts once however many pets or turrets reach him; only a group with two or more owners
+    /// near counts as an enemy group (GroupId 0 = ungrouped, never a group).
+    /// </summary>
+    public static (int Enemies, int Groups) CountEnemies(IReadOnlyList<(int OwnerId, int GroupId)> sightings)
+    {
+        var owners = new HashSet<int>();
+        var members = new Dictionary<int, HashSet<int>>();
+        foreach ((int owner, int group) in sightings)
+        {
+            if (!owners.Add(owner) || group == 0) continue;
+            if (!members.TryGetValue(group, out HashSet<int> set)) members[group] = set = new HashSet<int>();
+            set.Add(owner);
+        }
+        return (owners.Count, members.Values.Count(set => set.Count >= 2));
+    }
+
     /// <summary>
     /// The world RvR break-off rule for an open-BG group head with an enemy near: counts its living group and the legal
-    /// enemies within <see cref="OpponentRange"/> (the second enemy group is a different <see cref="Group"/>; ungrouped
-    /// enemies count as one), and on <see cref="ShouldBreakOff"/> starts a <see cref="BreakOffMilliseconds"/> retreat to the
-    /// realm's own landing. Defenders hold the keep and a retreat order is already retreating, so neither breaks off.
+    /// enemies within <see cref="OpponentRange"/> (<see cref="CountEnemies"/>), and on <see cref="ShouldBreakOff"/> starts a
+    /// <see cref="BreakOffMilliseconds"/> retreat to the realm's own landing.
     /// </summary>
     private static bool ConsiderBreakOff(GameBot bot, State state, long now)
     {
-        if (!OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) || order.Role is OpenBgRole.Defend or OpenBgRole.Retreat) return false;
+        if (!BreakOffAllowed(now, state.BreakOffImmuneUntil)) return false;
+        if (!OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) || BreakOffExempt(order.Role, order.AtKeep)) return false;
         Zone zone = bot.CurrentZone;
         if (zone == null) return false;
         Point3D landing = null;
@@ -298,26 +330,32 @@ public static class AutonomousBattlegroundDriver
             }
 
         ushort radius = (ushort)OpponentRange;
-        int enemies = 0;
-        Group firstGroup = null;
-        bool secondGroup = false, ungrouped = false;
-        void Count(GameLiving target)
+        var sightings = new List<(int OwnerId, int GroupId)>();
+        var groups = new List<Group>();
+        void Add(GameLiving target)
         {
             if (!BattlegroundCombatTargets.IsLegal(bot, target, zone) || !MayAcquire(bot, target)) return;
-            enemies++;
-            Group group = (target as GamePlayer)?.Group ?? (target as GameBot)?.Group;
-            if (group == null) ungrouped = true;
-            else if (firstGroup == null) firstGroup = group;
-            else if (!ReferenceEquals(firstGroup, group)) secondGroup = true;
+            GameLiving owner = PvpCombatant.Resolve(target);
+            if (owner == null) return;
+            Group group = (owner as GamePlayer)?.Group ?? (owner as GameBot)?.Group;
+            int groupId = 0;
+            if (group != null)
+            {
+                int index = groups.FindIndex(known => ReferenceEquals(known, group));
+                if (index < 0) { groups.Add(group); index = groups.Count - 1; }
+                groupId = index + 1;
+            }
+            sightings.Add((owner.ObjectID, groupId));
         }
-        foreach (GamePlayer player in bot.GetPlayersInRadius(radius)) Count(player);
-        foreach (GameNPC npc in bot.GetNPCsInRadius(radius)) if (PvpCombatant.IsPlayerShaped(npc)) Count(npc);
-        int groups = (firstGroup != null ? 1 : 0) + (secondGroup ? 1 : 0) + (ungrouped ? 1 : 0);
+        foreach (GamePlayer player in bot.GetPlayersInRadius(radius)) Add(player);
+        foreach (GameNPC npc in bot.GetNPCsInRadius(radius)) Add(npc);
+        (int enemies, int enemyGroups) = CountEnemies(sightings);
 
-        if (!ShouldBreakOff(healerDead, groups, friends, enemies)) return false;
+        if (!ShouldBreakOff(healerDead, enemyGroups, friends, enemies)) return false;
         state.BreakOffPoint = landing;
         state.BreakOffUntil = now + BreakOffMilliseconds;
-        Log.Info($"OPEN_BG_BREAK_OFF region={bot.CurrentRegionID} bot=\"{bot.Name}\" healer_dead={healerDead} enemy_groups={groups} " +
+        state.BreakOffImmuneUntil = state.BreakOffUntil + BreakOffImmuneMilliseconds;
+        Log.Info($"OPEN_BG_BREAK_OFF region={bot.CurrentRegionID} bot=\"{bot.Name}\" healer_dead={healerDead} enemy_groups={enemyGroups} " +
             $"friends={friends} enemies={enemies} seconds={BreakOffMilliseconds / 1000}");
         return true;
     }
