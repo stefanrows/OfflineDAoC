@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 import pefile
 from unicorn import Uc, UC_ARCH_X86, UC_HOOK_CODE, UC_MODE_32
-from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX
+from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX
 from unicorn.x86_const import UC_X86_REG_EDI, UC_X86_REG_EIP, UC_X86_REG_ESI, UC_X86_REG_ESP
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -46,6 +46,7 @@ uc.mem_map(0x5000000, 0x10000)
 uc.mem_map(0x6000000, 0x40000)
 sp, frame, body, sentinel = 0x5008000, 0x5008100, 0x6030000, 0x603F000
 labels, texts, windows, commands, chat = [], {}, [], [], []
+scalars, setter_calls, moves, drags, end_drags = {}, [], [], [], []
 
 
 def read32(address):
@@ -63,15 +64,39 @@ def ret(cleanup=0):
     uc.reg_write(UC_X86_REG_EIP, address)
 
 
+def clobber(machine):
+    """Natives may change EAX, ECX and EDX; the patch must not rely on them afterwards."""
+    for register in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EDX):
+        machine.reg_write(register, 0xDEADBEEF)
+
+
 def stub(machine, address, size, user):
     stack = machine.reg_read(UC_X86_REG_ESP)
-    if address in (0x4B6BC0, builder.REGISTER_TEXT_ADAPTER):
+    if address in (builder.REGISTER_SCALAR_ADAPTER, builder.REGISTER_TEXT_ADAPTER):
         slot = read32(stack + 8)
         label = cstring(read32(stack + 12))
-        obj = 0x6000000 + 64 * len(labels)
+        obj = 0x6000000 + 48 * len(labels)
         machine.mem_write(slot, struct.pack("<I", obj))
         labels.append(label)
-        ret(20 if address == 0x4B6BC0 else 12)
+        if address == builder.REGISTER_SCALAR_ADAPTER:
+            scalars[label] = (obj, read32(stack + 16), read32(stack + 20), read32(stack + 4))
+        ret(20 if address == builder.REGISTER_SCALAR_ADAPTER else 12)
+    elif address == builder.SET_SCALAR_VALUE:
+        setter_calls.append((machine.reg_read(UC_X86_REG_ECX), struct.unpack("<f", machine.mem_read(stack + 4, 4))[0]))
+        clobber(machine)
+        ret(4)
+    elif address == builder.SEND_MOVE_ITEM:
+        moves.append(tuple(read32(stack + 4 * index) for index in (1, 2, 3)))
+        clobber(machine)
+        ret()
+    elif address == builder.BEGIN_DRAG:
+        drags.append((machine.reg_read(UC_X86_REG_EAX), tuple(read32(stack + 4 * index) for index in range(1, 7))))
+        clobber(machine)
+        ret(0x18)
+    elif address == builder.END_DRAG:
+        end_drags.append(True)
+        clobber(machine)
+        ret()
     elif address == builder.SET_ADAPTER_TEXT:
         texts[machine.reg_read(UC_X86_REG_EBX)] = cstring(read32(stack + 4))
         ret(4)
@@ -121,8 +146,15 @@ def adapter(index):
 setup()
 uc.emu_start(manifest["blocks"]["init"]["address"], 0x4DA940, count=400000)
 assert uc.reg_read(UC_X86_REG_EDI) == 0x123456
+GEAR_SLOTS = layout["GearSlots"]
 assert labels[:TOTAL] == [builder.adapter_name(index) for index in range(TOTAL)]
-assert len(labels) == TOTAL + 240 and len(set(labels)) == len(labels), "Raid adapter registration was changed"
+assert labels[TOTAL:TOTAL + GEAR_SLOTS] == builder.gear_icon_names() == manifest["gear"]["iconAdapters"]
+assert len(labels) == TOTAL + GEAR_SLOTS + 240 and len(set(labels)) == len(labels), "Raid adapter registration was changed"
+for index, name in enumerate(builder.gear_icon_names()):
+    obj, maximum, initial, registry = scalars[name]
+    assert read32(manifest["gear"]["iconSlots"] + 4 * index) == obj
+    assert (maximum, initial, registry) == (builder.float_bits(1000000.0), builder.float_bits(-1.0), 0x123456), \
+        "Gear icon adapters: max 1e6, initial -1 (the quiver's values), registry EDI"
 assert read32(manifest["activeFlag"]) == 0
 assert read32(manifest["barActiveFlag"]) == 0
 
@@ -281,6 +313,108 @@ assert click(0x7A, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLE
 packet(3)
 assert read32(manifest["activeFlag"]) == 0
 
+# COMPANION GEAR window (Custom6): operations 7-9 and the slot clicks 0x900 + n (the 0.273.0 probe's proven logic).
+UI, DRAG = 0x600F000, 0x6038000
+GEAR_EVENT = builder.GEAR_EVENT_BASE
+uc.mem_write(UI + builder.DRAG_RECORD, struct.pack("<I", DRAG))
+uc.mem_write(builder.CURSOR_X, struct.pack("<II", 412, 233))
+icon_objects = [scalars[name][0] for name in builder.gear_icon_names()]
+
+
+def set_item(slot, name, template):
+    record = builder.ITEM_ARRAY + slot * builder.ITEM_STRIDE
+    uc.mem_write(record, bytes(builder.ITEM_STRIDE))
+    uc.mem_write(record + builder.ITEM_TEMPLATE, struct.pack("<I", template))
+    uc.mem_write(record + builder.ITEM_NAME, name.encode("ascii") + b"\0")
+
+
+def set_icon(template, icon):
+    uc.mem_write(builder.ICON_TABLE + template * builder.ICON_STRIDE, struct.pack("<h", icon))
+
+
+def set_drag(kind, index, count=0):
+    uc.mem_write(DRAG + builder.DRAG_KIND, struct.pack("<II", kind & 0xFFFFFFFF, index & 0xFFFFFFFF))
+    uc.mem_write(UI + builder.DRAG_COUNT, struct.pack("<I", count))
+
+
+assert list(builder.GEAR_CLIENT_SLOTS) == list(range(150, 169)) + list(range(170, 210)) == manifest["gear"]["clientSlots"]
+assert manifest["gear"]["clickEvents"] == [str(value) for value in range(2304, 2363)]
+assert [builder.inventory_source(i) for i in (0, 3, 4, 9, 10, 27, 28, 39, 40, 79, 80)] == \
+    [10, 13, None, None, 21, 38, None, None, 40, 79, None]
+# Helm present (icon 0x1a2), chest empty, bag 1 with an out-of-range template, bag 2 present.
+set_item(150, "Matterbender Chain Helm", 17)
+set_icon(17, 0x1A2)
+set_item(151, "", 0)
+set_item(170, "Broken Record", 0x20000)
+set_item(171, "Willful Ring", 0x2B0)
+set_icon(0x2B0, 0x38D)
+expected_icons = [0x1A2] + [-1] * 19 + [0x38D] + [-1] * 38
+shown, sent = len(windows), len(commands)
+packet(builder.OP_GEAR_REFRESH)
+assert len(windows) == shown and len(commands) == sent, "Refresh alone must not show the window or send a command"
+assert setter_calls[-GEAR_SLOTS:] == [(obj, float(value)) for obj, value in zip(icon_objects, expected_icons)]
+packet(builder.OP_GEAR_SHOW)
+assert windows[-1] == (builder.GEAR_WINDOW, 1) and builder.GEAR_WINDOW == 0x6D + 6
+assert setter_calls[-GEAR_SLOTS:] == [(obj, float(value)) for obj, value in zip(icon_objects, expected_icons)]
+assert len(setter_calls) == 2 * GEAR_SLOTS
+assert commands[-1].endswith(f" {builder.GEAR_READY_CONTROL:02x}") and len(commands) == sent + 1, commands[-1]
+assert read32(manifest["activeFlag"]) == 0 and read32(manifest["barActiveFlag"]) == 0, "Gear show leaves both flags"
+packet(builder.OP_GEAR_HIDE)
+assert windows[-1] == (builder.GEAR_WINDOW, 0) and len(setter_calls) == 2 * GEAR_SLOTS
+uc.mem_write(builder.WINDOW_MANAGER, struct.pack("<I", 0))
+shown = len(windows)
+packet(builder.OP_GEAR_SHOW)
+assert len(windows) == shown and len(commands) == sent + 1, "A null window manager skips the show"
+uc.mem_write(builder.WINDOW_MANAGER, struct.pack("<I", UI))
+
+# Drops: a kind-9 bag drag and the weapon/armour hotspot maps of the stock inventory drop (0x408151).
+sent = len(commands)
+for kind, index, count, event, move in ((9, 0x28, 1, 0, (150, 40, 1)), (9, 2, 0, 1, (151, 12, 0)),
+                                        (9, 15, 0, 19, (170, 26, 0)), (9, 79, 0, 20, (171, 79, 0)),
+                                        (0x66, 150, 0, 19, (170, 150, 0))):
+    set_drag(kind, index, count)
+    ended = len(end_drags)
+    click(GEAR_EVENT + event)
+    assert moves[-1] == move and len(end_drags) == ended + 1, (moves[-1], move)
+set_drag(0x66, 170)
+moved, ended = len(moves), len(end_drags)
+click(GEAR_EVENT + 19)
+assert len(moves) == moved and len(end_drags) == ended + 1, "A pick-up dropped on its own slot only ends the drag"
+for kind, index in ((9, 5), (9, 0x50), (9, 0x1C), (9, -2), (0x5B, 3), (0x39, 7)):
+    set_drag(kind, index)
+    moved, ended = len(moves), len(end_drags)
+    click(GEAR_EVENT)
+    assert len(moves) == moved and len(end_drags) == ended, (kind, index)
+# Empty cursor: a filled slot starts a kind-0x66 drag at the cursor; an empty one or a bad template does nothing.
+set_drag(-1, -1)
+click(GEAR_EVENT)
+assert drags[-1] == (0x1A2, (UI, 0x66, 150, 0, 412, 233))
+click(GEAR_EVENT + 20)
+assert drags[-1] == (0x38D, (UI, 0x66, 171, 0, 412, 233))
+picked = len(drags)
+click(GEAR_EVENT + 1)
+click(GEAR_EVENT + 19)
+assert len(drags) == picked
+uc.mem_write(UI + builder.DRAG_RECORD, struct.pack("<I", 0))
+click(GEAR_EVENT)
+assert len(drags) == picked + 1 and drags[-1][1][2] == 150, "No drag record: a filled slot still picks up"
+uc.mem_write(UI + builder.DRAG_RECORD, struct.pack("<I", DRAG))
+uc.mem_write(builder.WINDOW_MANAGER, struct.pack("<I", 0))
+calls = (len(moves), len(drags), len(end_drags))
+click(GEAR_EVENT + GEAR_SLOTS - 1)
+assert (len(moves), len(drags), len(end_drags)) == calls, "A null UI manager returns AL=1 without any call"
+uc.mem_write(builder.WINDOW_MANAGER, struct.pack("<I", UI))
+assert len(commands) == sent, "Gear clicks never send slash commands"
+for event_id in (GEAR_EVENT - 1, GEAR_EVENT + GEAR_SLOTS, 0x93F, 0xA00, 0x8FF):
+    assert click(event_id, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER, hex(event_id)
+assert [stock_click_event(value) for value in manifest["gear"]["clickEvents"]] == \
+    list(range(GEAR_EVENT, GEAR_EVENT + GEAR_SLOTS))
+assert not any(GEAR_EVENT <= 0x700 + value < GEAR_EVENT + GEAR_SLOTS for value in range(builder.CONTROL_LIMIT))
+assert manifest["gear"]["nativeReturnBytes"] == {f"{address:#x}": size for address, size in builder.NATIVE_RETURN_BYTES.items()}
+for name, limit in (("gearRefresh", builder.GEAR_EVENT_OFFSET - builder.GEAR_REFRESH_OFFSET),
+                    ("gearEvent", builder.GEAR_CODE_LIMIT - builder.GEAR_EVENT_OFFSET)):
+    assert manifest["blocks"][name]["length"] <= limit, name
+
 # A raid show message still reaches the existing 40/80 native parser.
 packet(2, marker=0x52, version=1)
 assert windows[-1] == (0x76, 1)
@@ -335,7 +469,8 @@ assert not any(builder.BAR_CONTROL_FIRST <= value < builder.BAR_CONTROL_LIMIT fo
 # COMPANIONS window (Custom7): 98 labels, stock group rows, the stock GroupInvite tile, and tile and row clicks in
 # the bar range only.
 assert b"<Include>custom7_window.xml</Include>" in (args.stage / "uimain.xml").read_bytes()
-assert builder.BAR_LABEL_BASE == LABELS and TOTAL == builder.TOTAL_LABEL_COUNT
+assert builder.BAR_LABEL_BASE == LABELS and TOTAL == builder.TOTAL_LABEL_COUNT == builder.GEAR_LABEL_END
+assert builder.GEAR_LABEL_BASE == builder.BAR_LABEL_END == builder.BAR_LABEL_BASE + builder.BAR_LABEL_COUNT
 assert builder.BAR_LABEL_COUNT == 2 + builder.BAR_TILE_STRIDE * builder.BAR_TILES + builder.BAR_SLOT_STRIDE * builder.BAR_SLOTS
 assert builder.BAR_CONTROL_SLOT_BASE == builder.BAR_CONTROL_FIRST + builder.BAR_TILES
 assert builder.BAR_CONTROL_SLOT_BASE + builder.BAR_SLOTS < builder.BAR_READY_CONTROL < builder.BAR_CONTROL_LIMIT
@@ -350,7 +485,7 @@ for skin in ("atlantis", "isles"):
     assert (width, height) == (builder.BAR_WIDTH, builder.BAR_HEIGHT) and width <= 760 and height <= 540
     assert {element.find("FontName").text for element in window.iter("LabelDef")} == {builder.FONT}
     bar_adapters = sorted(element.text for element in window.iter("Adapter") if element.text.startswith("cmgr_"))
-    assert bar_adapters == sorted(builder.adapter_name(index) for index in range(builder.BAR_LABEL_BASE, TOTAL)), \
+    assert bar_adapters == sorted(builder.adapter_name(index) for index in range(builder.BAR_LABEL_BASE, builder.BAR_LABEL_END)), \
         "Each COMPANIONS label adapter appears exactly once"
     native = sorted(element.text for element in window.iter("Adapter") if not element.text.startswith("cmgr_"))
     assert native == sorted(f"group_{kind}{i}" for kind in ("name", "level", "class", "health", "power", "endurance")
@@ -418,6 +553,56 @@ assert hashlib.sha256((args.stage / "uimain.xml").read_bytes()).hexdigest() == m
 # Pins: the manager's own window and UI stay byte-identical to the 0.169.0 build.
 assert manifest["windowSha256"] == "9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd"
 assert manifest["uimainManagerOnlySha256"] == "e1266fcceb954b5e835d3e3ca6563d682f4bb0f6430d36947923a74974dfd2a0"
+# The COMPANIONS window and its UI stay byte-identical to the 0.272.0 build; the full UI equals the 0.273.0-0.275.0
+# paperdoll probe's uimain.xml, so an upgrade from the probe leaves uimain.xml alone.
+assert manifest["barWindowSha256"] == "5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac"
+assert manifest["uimainBarSha256"] == "7d573c315a56bcacae8e8ebc871646654bfe8da5bb1dc745d6023da7f93b9dd9"
+assert manifest["uimainOutputSha256"] == "cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a1328c"
+
+# COMPANION GEAR window (Custom6): sockets, icons and click areas on the same squares; every gear label once.
+GEAR_XML_TAGS = MANAGER_XML_TAGS | {"ImageAreaDef", "IconDef", "IconId", "AdapterName"}
+gear_bytes = {skin: (args.stage / skin / "custom6_window.xml").read_bytes() for skin in ("atlantis", "isles")}
+assert gear_bytes["atlantis"] == gear_bytes["isles"]
+assert hashlib.sha256(gear_bytes["atlantis"]).hexdigest() == manifest["gearWindowSha256"]
+assert b"<Include>custom6_window.xml</Include>" in (args.stage / "uimain.xml").read_bytes()
+window = ET.fromstring(gear_bytes["atlantis"]).find("WindowTemplate")
+assert (window.find("Name").text, window.find("WindowId").text) == ("custom6_window", "Custom6")
+width, height = int(window.find("Width").text), int(window.find("Height").text)
+assert (width, height) == (builder.GEAR_WIDTH, builder.GEAR_HEIGHT) == (518, 386)
+assert {element.find("FontName").text for element in window.iter("LabelDef")} == {builder.FONT}
+icons, buttons, sockets = window.findall("IconDef"), window.findall("InvisibleButtonDef"), window.findall("ImageAreaDef")
+assert [icon.find("AdapterName").text for icon in icons] == builder.gear_icon_names()
+assert all(icon.find("TemplateName").text == "plain_icon_large" and icon.find("IconId").text == "-1" for icon in icons)
+assert len(sockets) == GEAR_SLOTS and all(socket.find("TemplateName").text == "icon_socket_large" for socket in sockets)
+assert [button.find("OnClickEvent").text for button in buttons] == manifest["gear"]["clickEvents"]
+rectangles = manifest["gear"]["slotRectangles"]
+for index, (icon, button) in enumerate(zip(icons, buttons)):
+    position = [int(icon.find("Position/X").text), int(icon.find("Position/Y").text)]
+    assert position == [int(button.find("Position/X").text), int(button.find("Position/Y").text)]
+    assert position + [int(button.find("Width").text), int(button.find("Height").text)] == rectangles[index]
+for a in range(GEAR_SLOTS):
+    ax, ay, aw, ah = rectangles[a]
+    assert 0 <= ax and ax + aw <= width and 18 <= ay and ay + ah <= height
+    for bx, by, bw, bh in rectangles[a + 1:]:
+        assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, "Gear slots overlap"
+gear_adapters = sorted(element.text for element in window.iter("Adapter"))
+assert gear_adapters == sorted(builder.adapter_name(index) for index in range(builder.GEAR_LABEL_BASE, TOTAL)), \
+    "Each gear label adapter appears exactly once"
+for element in window.iter("LabelDef"):
+    x, y = int(element.find("Position/X").text), int(element.find("Position/Y").text)
+    assert 0 <= x and x + int(element.find("Width").text) <= width and 0 <= y and y + int(element.find("Height").text) <= height
+for element in window.iter():
+    assert element.tag in GEAR_XML_TAGS, element.tag
+gear_templates = {element.text for element in window.iter("TemplateName")}
+stock_ui = Path("/mnt/d/Games/OfflineDAoC/runtime/client-opendaoc/app/ui")
+if stock_ui.is_dir():
+    for skin in ("atlantis", "isles"):
+        stock = b"".join(path.read_bytes() for path in (stock_ui / skin).glob("*.xml") if not path.name.startswith("custom"))
+        for template in gear_templates:
+            assert f"<Name>{template}</Name>".encode() in stock, f"{template} is not a stock {skin} template"
+assert hashlib.sha256((args.stage / "uimain.xml").read_bytes()).hexdigest() == manifest["uimainOutputSha256"]
+uimain = (args.stage / "uimain.xml").read_bytes()
+assert uimain.index(b"custom8_window.xml") < uimain.index(b"custom7_window.xml") < uimain.index(b"custom6_window.xml")
 
 # Geometry: the chosen list sizes must fit a window of the advertised height without overlap.
 for size in builder.ROW_SIZES:
@@ -469,4 +654,6 @@ print("PASS (offline only): raid events, raid packets, and stock DebugMode packe
 print("PASS (offline only): Custom8 XML uses only raid-proven controls; server constants match")
 print("PASS (offline only): COMPANIONS Custom7 window: ops 5/6, 98 labels, tile and row controls 0xA8-0xBF, "
       "stock group rows and GroupInvite")
+print(f"PASS (offline only): COMPANION GEAR Custom6 window: ops 7/8/9, {GEAR_SLOTS} scalar icon adapters, ready control, "
+      "slot clicks 0x900-0x93a send move(slot, source, count) or start a kind-0x66 pick-up")
 print("NOTE: emulation is not acceptance; the owner's combined real-client check is still required")

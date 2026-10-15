@@ -12,6 +12,40 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.276.0] - 2026-10-15
+
+### Added
+
+- **Starter gear is marked in the companion gear window** (TASKS 129): a
+  gold `*` in the corner of a slot marks an item that stays with the
+  companion, so you see it before a give is refused.
+
+### Changed
+
+- **The companion gear window is now part of the Companion Manager
+  client** (TASKS 129). `build_companion_manager_client.py` builds it into
+  the manager's own `game.dll` section, without the probe's debug status
+  codes. The title shows the companion's name, the backpack heading counts
+  its items, and the last reply to a move stays in the window.
+- **[Open inventory] in the Companion Manager opens the gear window**
+  instead of the House Vault list. An older manager client, which cannot
+  show the window, gets the House Vault list after three seconds, and at
+  once on later opens.
+- The command is now `/companions gear [name]` (`/companions gear off`
+  closes it). `/companions gearprobe` still works.
+- The manager client stage is `companion-manager-stage-0.276.0`
+  (`game.dll` `bfefe97d…`). `Install-CompanionManager.ps1` upgrades an
+  installed 0.272.0 manager or either paperdoll probe in place. It backs up
+  and restores `custom6_window.xml` too. The release pack ships the new
+  stage and may replace the 0.272.0 and probe client files.
+
+### Removed
+
+- The paperdoll probe tooling (`probe_companion_paperdoll.py`, its test
+  and `Install-CompanionPaperdollProbe.ps1`). The manager builder and its
+  emulation test now cover the window; the probe files remain in the
+  v0.275.0 history.
+
 ## [0.275.0] - 2026-10-15
 
 ### Added

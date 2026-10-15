@@ -73,8 +73,9 @@ namespace DOL.GS.Commands
                 case "bar":
                     DisplayMessage(client, CompanionBar.Command(player, args.Length > 2 ? args[2] : null));
                     break;
+                case "gear":
                 case "gearprobe":
-                    DisplayMessage(client, CompanionPaperdollProbe.Command(player, args.Skip(2)));
+                    DisplayMessage(client, CompanionGearWindow.Command(player, args.Skip(2)));
                     break;
                 case "invite":
                     UpdateCompanion(client, player, args, invite: true);
@@ -701,7 +702,8 @@ namespace DOL.GS.Commands
                     "/companions list | status [page or name] | profile <name>",
                     "/companions recruit <class> [build] (free, level 1, anywhere). /classes lists names.",
                     "/companions cast [realm] [page] | recruit authored <name> [build]",
-                    "/companions invite <name> | bench <name> | guild leave <name>"
+                    "/companions invite <name> | bench <name> | guild leave <name>",
+                    "/companions gear [name] opens a companion's gear window: click your item, then a slot."
                 },
                 "tactics" => new[]
                 {

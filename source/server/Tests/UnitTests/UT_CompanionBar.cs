@@ -34,8 +34,9 @@ public sealed class UT_CompanionBar
             Assert.That(BarLabelMessage, Is.EqualTo(BarLabelStatus + 1));
             Assert.That(BarLabelTileBase, Is.EqualTo(BarLabelMessage + 1));
             Assert.That(BarLabelSlotBase, Is.EqualTo(BarLabelTileBase + BarTileStride * BarTiles));
-            Assert.That(BarLabelSlotBase + BarSlotStride * BarSlots, Is.EqualTo(TotalLabelCount));
-            Assert.That(BarLabelCount, Is.EqualTo(TotalLabelCount - BarLabelBase));
+            Assert.That(BarLabelSlotBase + BarSlotStride * BarSlots, Is.EqualTo(GearLabelBase),
+                "The gear window's labels follow the bar's");
+            Assert.That(BarLabelCount, Is.EqualTo(GearLabelBase - BarLabelBase));
             Assert.That(new CompanionBarView().ToLabels(), Has.Length.EqualTo(BarLabelCount));
             Assert.That(CompanionBarView.TileTexts, Has.Length.EqualTo(BarTiles));
             Assert.That(BarTileStride, Is.EqualTo(4), "Four state labels per tile");

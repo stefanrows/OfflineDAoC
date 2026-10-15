@@ -238,8 +238,8 @@ subcommand still works. Install the matching client files.
 Server to client uses fixed 128-byte DebugMode bodies: byte 0 is `0`, marker
 `0x43`, version `3`, then operation, a 16-bit label index (bytes 4-5), and
 NUL-terminated ASCII text
-from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 514
-label adapters (440 manager plus 74 COMPANIONS window since 0.251.0; 440 before 0.251.0, 132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
+from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 620
+label adapters (440 manager, 98 COMPANIONS window and since 0.276.0 82 COMPANION GEAR window; 538 before 0.276.0, 440 before 0.251.0, 132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits), `5`/`6` show/hide the COMPANIONS window, `7` refresh the gear icons, `8` show the gear window (the client then sends control `dc`), `9` hide it. Version-1 probe packets,
 short bodies, bad terminators, unknown operations, and out-of-range indexes are
 ignored. Raid marker `0x52` and ordinary DebugMode packets pass through. An
 unpatched client sees only a DebugMode packet whose flag byte is `0`, as with
@@ -625,3 +625,94 @@ server keeps its old tiles working and ignores the new labels.
    second click within 10 s. Grind starts and stops.
 5. A plain player group shows the window with "Group of N | no companions".
 6. `/companions` (the manager) and `/raid 40` still work with 538 adapters.
+
+## COMPANION GEAR window (Custom6), 0.276.0
+
+TASKS 129. The 0.273.0 probe and the 0.275.0 quick build proved the pattern in
+the real client (`docs/COMPANION_PAPERDOLL_RE.md` sections 6-8); 0.276.0 moves
+it into the manager builder.
+
+### Layout and behaviour
+
+- 518×386, the 0.275.0 geometry: the 19 worn slots in three captioned columns
+  (character-sheet order) and the 40-slot backpack as an 8×5 grid. Each slot
+  is a stock socket, an `IconDef` on the scalar adapter `cmgr_icon_<n>` and a
+  click area with `OnClickEvent` `2304 + n` (`0x900 + n`).
+- Click handling is the stock quiver window's: an item on the cursor (your
+  bag or paperdoll, kind 9, or a gear pick-up, kind `0x66`) goes to the slot
+  with the stock move-item packet; an empty cursor on a filled slot picks the
+  item up. Every move is handled by `PersistentCompanionInventoryView`
+  (house-vault client slots 150-168 worn, 170-209 backpack), exactly as from
+  the House Vault list.
+- Server labels 538-619: the title (`COMPANION GEAR - <name>`), the backpack
+  heading (`Backpack n/40`), two lines for the last reply, the 19 worn
+  captions and one gold `*` per slot for an item that stays with the
+  companion (`CanReturnItemToOwner` is false: starter gear, unknown origin,
+  bound items). Three muted help lines are fixed text.
+
+### Opening, ready and fallback
+
+`/companions gear [name]` and the manager's **[Open inventory]** open the view
+with a plain slot update (the stock vault window stays closed), send
+operation `8` and the labels. Operation `8` shows Custom6, refreshes the icons
+and sends control `0xDC` through the manager's command path; the server routes
+it before the view-token checks, marks the client as able and sends every
+label again. Every later slot update is followed by operation `7`. Removing
+the view (another inventory window, `/companions gear off`) sends operation
+`9`. A client that has not answered within three seconds (a manager client
+before 0.276.0) gets the stock House Vault list instead and a one-line
+explanation; later opens in that session go to the list at once.
+
+### Build, test and install
+
+Same builder and raid baseline as 0.251.0; deterministic.
+
+```bash
+python3 source/server/tools/build_companion_manager_client.py \
+  --client /mnt/d/Games/OfflineDAoC-dev/raid-baseline-client --output <new stage dir>
+python3 source/server/tools/test_companion_manager_client.py --stage <stage dir>
+```
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (620 label and 59 icon adapters) | `bfefe97d7f7175204ae18c6d23a6958e13819e45155e84738bc5ae9c8d90c264` |
+| custom6_window.xml (both skins) | `dfc5bbdb8d9fd30b59bfce26bae924e27888ca4b89431532bccdac3f028b2338` |
+| custom7_window.xml (unchanged since 0.272.0) | `5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac` |
+| custom8_window.xml (unchanged) | `9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` |
+| uimain.xml (three includes; the same file as the paperdoll probe's) | `cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a1328c` |
+
+The stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.276.0`.
+The emulation test runs the init (620 text adapters, then the 59 icon
+adapters with the quiver's max/initial values, then the unchanged raid
+adapters), operations 7-9, the ready control, the drop and pick-up paths with
+the stock hotspot map, refused drag kinds, pass-through of every other event
+ID, the stock `OnClickEvent` mapper on all 59 click values, the XML (sockets,
+icons and click areas on the same non-overlapping squares, every gear label
+once, stock templates only) and the server constants.
+
+`Install-CompanionManager.ps1` upgrades an installed 0.272.0 manager
+(`c938e6b5…`) or either paperdoll probe (0.273.0 `ff5fb523…`, 0.275.0
+`f1f5c399…`) in place. It backs up `game.dll`, `uimain.xml` and the window
+files, including an existing probe `custom6_window.xml`, and `-RestoreBackup`
+puts them back. A `custom6_window.xml` that is neither this stage's nor a
+known probe window is refused. The release pack (`build_fork_release.py`)
+defaults to this stage and allows the 0.272.0 and probe `game.dll`, the
+0.251.0-0.272.0 `uimain.xml` and the probe `custom6_window.xml` hashes.
+
+The research lever probe (`probe_companion_manager_levers.py`, 0.169.0 input)
+also used IDs `0x900`-`0x90F`; it is not installed and cannot be combined
+with this stage.
+
+### Real-client checklist
+
+1. Install the stage with the game, server and launcher closed (dry run
+   first). `/companions gear` with a companion: the window opens without the
+   House Vault list; the title names the companion, the icons and the
+   backpack count are right, and starter items carry a gold `*`.
+2. [Open inventory] in the manager opens the same window.
+3. The moves in section 8 of `docs/COMPANION_PAPERDOLL_RE.md` (give to a worn
+   and a backpack slot, equip from the backpack, unequip to the backpack and
+   to your bag, ring and wrist pairs, two-hand and shield conflicts); each
+   reply appears in the window.
+4. The Isles skin.
+5. The manager, the COMPANIONS window and `/raid 40` still work.

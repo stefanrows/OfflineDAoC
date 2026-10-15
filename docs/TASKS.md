@@ -318,6 +318,14 @@ Agent sessions on items 45–48: take the role and context from
      `/companions gearprobe [name] [plain]`. What is still open (release
      pack, manager integration, marking protected items, untested moves,
      unit tests) is listed in section 8 of the analysis.
+     **Source 0.276.0: the window is part of the Companion Manager client**
+     (offline only, owner check pending): one manager stage
+     (`companion-manager-stage-0.276.0`) with server labels for the name,
+     backpack count and last reply, a gold `*` on items that stay with the
+     companion, `/companions gear [name]`, and [Open inventory] opening it
+     (an older client gets the House Vault list). `Install-CompanionManager.ps1`
+     upgrades 0.272.0 and the probes; the release pack ships the stage.
+     Section 9 of the analysis lists what is still open.
 
 125. **Gothwaite PvP mode: a separate world mode where all autonomous bots
      PvP around Caer Gothwaite.** Owner, 2026-10-13. Plan:

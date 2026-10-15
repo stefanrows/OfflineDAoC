@@ -367,16 +367,16 @@ move was refused ("Brakka is attacking or casting; wait a moment").
 
 ### Still open
 
-1. **Not in the release pack or the manager installer.** The client files are
+1. *Done in 0.276.0 (section 9).* **Not in the release pack or the manager installer.** The client files are
    installed only with `Install-CompanionPaperdollProbe.ps1` over the 0.272.0
    manager. Restore its backup before any Companion Manager client upgrade.
-2. **Still the probe builder.** Manifest `probe: true`, command
+2. *Done in 0.276.0 (section 9).* **Still the probe builder.** Manifest `probe: true`, command
    `gearprobe`, debug status codes. Proper integration: move the window into
    `build_companion_manager_client.py` (server labels for the companion's
    name, captions and the last reply), a manager stage and an
    `Install-CompanionManager.ps1` upgrade path, and `[Open inventory]` opening
    this window instead of the House Vault list.
-3. **Protected items are not marked** in the grid; only the refusal message
+3. *Done in 0.276.0 (section 9).* **Protected items are not marked** in the grid; only the refusal message
    tells the owner.
 4. **Real-client moves not yet clicked in the full window:** give from the
    owner's bag to a worn slot and to a backpack slot, equip from the
@@ -388,3 +388,44 @@ move was refused ("Brakka is attacking or casting; wait a moment").
    manager's **[Info]**.
 7. The 0.274.0 unequip mark (the slot stays empty) has not been checked in
    the real client.
+
+## 9. Manager integration (0.276.0)
+
+Items 1-3 of section 8, built offline on 2026-10-15. Not yet seen in the real
+client.
+
+- **One manager stage.** `build_companion_manager_client.py` builds the window
+  into the manager's own `.cmgr` section from the raid baseline: the init
+  registers 59 scalar icon adapters `cmgr_icon_0`-`58` after the 620 label
+  adapters, the packet block handles operations 7-9, the event handler sends
+  `0x900`-`0x93A` to the gear click code (`.cmgr+0x2A00`), and the icon refresh
+  lives at `.cmgr+0x2800`. The click and refresh logic is the probe's, without
+  the status codes. The natives' return sizes are checked at build time. Stage
+  `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.276.0`, `game.dll`
+  `bfefe97d…`; hashes and the install path are in
+  `COMPANION_MANAGER_INTEGRATION.md`, section "COMPANION GEAR window".
+- **Server labels** (538-619): the title with the companion's name, the
+  backpack count, two lines for the last reply, the worn captions, and a gold
+  `*` on every slot whose item stays with the companion (item 3).
+- **Ready and fallback.** Operation 8 makes the client send control `0xDC`.
+  `/companions gear` and the manager's [Open inventory] open the window; a
+  client that does not answer within three seconds gets the House Vault list.
+- **Install and release.** `Install-CompanionManager.ps1` upgrades 0.272.0
+  and both probes in place, with backup and restore of `custom6_window.xml`.
+  The release pack ships the stage. The probe builder, its test and its
+  installer were removed (they remain in the v0.275.0 history).
+
+Offline checks: the manager emulation test passes, including the gear
+window; two builds are byte-identical; `UT_CompanionManager` and
+`UT_CompanionBar` pass. The installer dry run against the installation
+accepts the installed 0.275.0 probe as an upgrade source.
+
+### Still open
+
+1. Real-client check of the 0.276.0 stage (checklist in
+   `COMPANION_MANAGER_INTEGRATION.md`), including the `*` marks drawn over
+   the icons and the reply lines.
+2. The moves of section 8 item 4 and the 0.274.0 unequip mark (item 7).
+3. Unit tests for the dropped-slot parameters and the all-items view
+   (item 5).
+4. Delve on a slot (item 6) stays unsupported.

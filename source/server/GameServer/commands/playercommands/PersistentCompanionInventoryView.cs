@@ -9,7 +9,8 @@ namespace DOL.GS.Commands
     /// <summary>
     /// Owner-only native vault view of one companion's inventory: worn slots at positions
     /// 1-19 in character-sheet order, the backpack at positions 21-60. Drag from the owner's
-    /// backpack onto a worn position to hand an item over and equip it.
+    /// backpack onto a worn position to hand an item over and equip it. The COMPANION GEAR
+    /// window (CompanionGearWindow) shows the same positions with icons.
     /// </summary>
     public sealed class PersistentCompanionInventoryView : GameVault
     {
@@ -22,22 +23,22 @@ namespace DOL.GS.Commands
 
         private readonly GamePlayer _owner;
         private readonly string _companionId;
-        private readonly bool _paperdoll;
+        private readonly bool _gearWindow;
         private readonly bool _stockWindow;
 
-        /// <param name="paperdoll">Also drive the Custom6 paperdoll probe (TASKS 129): show it on open and refresh
-        /// its slot icons after every slot update.</param>
+        /// <param name="gearWindow">Also drive the COMPANION GEAR window (Custom6, TASKS 129): show it on open,
+        /// refresh its slot icons and labels after every slot update, and hide it when the view closes.</param>
         /// <param name="stockWindow">Open with the house-vault window type, which opens the stock vault window;
         /// otherwise the slots are sent as a plain update.</param>
-        public PersistentCompanionInventoryView(GamePlayer owner, string companionId, bool paperdoll = false, bool stockWindow = true)
+        public PersistentCompanionInventoryView(GamePlayer owner, string companionId, bool gearWindow = false, bool stockWindow = true)
         {
             _owner = owner;
             _companionId = companionId;
-            _paperdoll = paperdoll;
+            _gearWindow = gearWindow;
             _stockWindow = stockWindow;
         }
 
-        public bool IsPaperdoll => _paperdoll;
+        public bool IsGearWindow => _gearWindow;
 
         public string CompanionId => _companionId;
 
@@ -48,6 +49,11 @@ namespace DOL.GS.Commands
 
         /// <summary>1-based window position of a worn slot, or 0 when it is not shown.</summary>
         public static int WornPosition(eInventorySlot worn) => Array.IndexOf(PersistentCompanionGear.SheetSlots, worn) + 1;
+
+        /// <summary>Window position of gear window slot <paramref name="index"/> (0-18 worn, 19-58 backpack).</summary>
+        public static int GearPosition(int index) => index < PersistentCompanionGear.SheetSlots.Length
+            ? index + 1
+            : BackpackFirstPosition + index - PersistentCompanionGear.SheetSlots.Length;
 
         public static MoveKind ClassifyMove(Area from, Area to) => (from, to) switch
         {
@@ -97,8 +103,22 @@ namespace DOL.GS.Commands
             _owner.ActiveInventoryObject = this;
             AddObserver(_owner);
             Refresh(open: true);
-            if (_paperdoll)
-                CompanionManager.Send(_owner, CompanionManagerProtocol.OpPaperdollShow);
+            if (_gearWindow)
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpGearShow);
+        }
+
+        public override void RemoveObserver(GamePlayer player)
+        {
+            base.RemoveObserver(player);
+            if (_gearWindow && ReferenceEquals(player, _owner))
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpGearHide);
+        }
+
+        /// <summary>Re-sends every slot with the house-vault window type, which opens the stock House Vault list.</summary>
+        public void ShowStockWindow()
+        {
+            if (ReferenceEquals(_owner.ActiveInventoryObject, this))
+                SendSlots(GetClientInventory(_owner), eInventoryWindowType.HouseVault);
         }
 
         /// <summary>
@@ -112,13 +132,35 @@ namespace DOL.GS.Commands
                 return;
 
             Dictionary<int, DbInventoryItem> items = GetClientInventory(_owner);
+            SendSlots(items, open && _stockWindow ? eInventoryWindowType.HouseVault : eInventoryWindowType.Update);
+            if (!_gearWindow)
+                return;
+            // The gear window reads its icons from the client's item array, so the refresh follows the slot update.
+            // Opening sends the show operation instead, which refreshes too.
+            if (!open)
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpGearRefresh);
+            RenderGearLabels(items);
+        }
+
+        private void SendSlots(Dictionary<int, DbInventoryItem> items, eInventoryWindowType type)
+        {
             var slots = new Dictionary<int, DbInventoryItem>(VaultSize);
             for (int slot = (int)FirstClientSlot; slot <= (int)LastClientSlot; slot++)
                 slots[slot] = items.GetValueOrDefault(slot);
-            _owner.Out.SendInventoryItemsUpdate(slots, open && _stockWindow ? eInventoryWindowType.HouseVault : eInventoryWindowType.Update);
-            // The probe reads the icons from the client's item array, so the refresh follows the slot update.
-            if (_paperdoll && !open)
-                CompanionManager.Send(_owner, CompanionManagerProtocol.OpPaperdollRefresh);
+            _owner.Out.SendInventoryItemsUpdate(slots, type);
+        }
+
+        private void RenderGearLabels(Dictionary<int, DbInventoryItem> items)
+        {
+            if (!TryGetCompanion(_owner, out GameBot companion))
+                return;
+            var slots = new Dictionary<int, DbInventoryItem>();
+            for (int index = 0; index < CompanionManagerProtocol.GearSlots; index++)
+                if (items.TryGetValue(ClientSlotAt(GearPosition(index)), out DbInventoryItem item))
+                    slots[index] = item;
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            CompanionGearWindow.Render(_owner, companion.Name, slots,
+                item => !PlayerCompanionRoster.CanReturnItemToOwner(item, record, out _));
         }
 
         public override bool CanHandleMove(GamePlayer player, eInventorySlot fromSlot, eInventorySlot toSlot) =>
@@ -249,7 +291,11 @@ namespace DOL.GS.Commands
         private static bool IsBackpack(eInventorySlot slot) =>
             slot >= eInventorySlot.FirstBackpack && slot <= eInventorySlot.LastBackpack;
 
-        private void Tell(string message) =>
+        private void Tell(string message)
+        {
             _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            if (_gearWindow)
+                CompanionGearWindow.SetMessage(_owner, message);
+        }
     }
 }

@@ -101,6 +101,12 @@ namespace DOL.GS.Commands
                 CompanionBar.HandleClientControl(player, control);
                 return;
             }
+            // The COMPANION GEAR window answers every show the same way, whether or not the manager is open.
+            if (control == ControlGearReady)
+            {
+                CompanionGearWindow.HandleClientControl(player);
+                return;
+            }
             if (!Sessions.TryGetValue(player, out CompanionManagerSession session))
             {
                 if (control != ControlReady)
@@ -1254,16 +1260,14 @@ namespace DOL.GS.Commands
 
         private static void OpenBag(GamePlayer player, CompanionManagerSession session, string id)
         {
-            if (!PlayerCompanionRoster.TryGetActiveCompanionById(player, id, out GameBot companion))
+            if (!CompanionGearWindow.TryOpen(player, id, out PersistentCompanionInventoryView view, out string message))
             {
-                Report(player, session, "Invite that companion first; the bag opens only for an active companion.");
+                Report(player, session, message);
                 return;
             }
-            session.Bag = new PersistentCompanionInventoryView(player, id);
-            session.Bag.Open();
+            session.Bag = view;
             session.DetailTab = CompanionManagerDetailTab.Gear;
-            session.Message = $"{companion.Name}'s inventory is open: worn slots 1-19, backpack 21-60. " +
-                              "Drag from your bag onto a worn slot to equip.";
+            session.Message = message;
         }
 
         private static void ShowInRoster(CompanionManagerSession session, string recordKey)

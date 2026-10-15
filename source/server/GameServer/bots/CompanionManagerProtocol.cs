@@ -161,7 +161,7 @@ namespace DOL.GS
         public const int BarSlotStride = 5;
         public const int BarSlots = 8;
         public const int BarSlotLeader = 4;
-        public const int TotalLabelCount = 538;
+        public const int TotalLabelCount = 620;
         public const int BarLabelCount = 98;
         public const int BarTileInactive = 0;
         public const int BarTileActive = 1;
@@ -169,12 +169,26 @@ namespace DOL.GS
         public const int BarTileUnderline = 3;
         public const byte OpBarShow = 5;
         public const byte OpBarHide = 6;
-        // Companion paperdoll probe (TASKS 129, source/server/tools/probe_companion_paperdoll.py): Custom6. A client
-        // without the probe stage ignores these operations. 7 refreshes the slot icons from the client's item array,
-        // 8 shows Custom6 and refreshes, 9 hides it.
-        public const byte OpPaperdollRefresh = 7;
-        public const byte OpPaperdollShow = 8;
-        public const byte OpPaperdollHide = 9;
+        // COMPANION GEAR window (Custom6, TASKS 129): protocol 3 extension, operations 7-9 and label adapters 538-619.
+        // A client without the 0.276.0 manager stage ignores these operations. 7 refreshes the slot icons from the
+        // client's item array, 8 shows the window, refreshes it and answers with ControlGearReady, 9 hides it.
+        public const byte OpGearRefresh = 7;
+        public const byte OpGearShow = 8;
+        public const byte OpGearHide = 9;
+        public const int ControlGearReady = 0xDC;
+        public const int GearWornSlots = 19;
+        public const int GearSlots = 59;
+        public const int GearLabelBase = 538;
+        public const int GearLabelTitle = 538;
+        public const int GearLabelBackpack = 539;
+        public const int GearLabelMessageBase = 540;
+        public const int GearMessageLines = 2;
+        public const int GearLabelCaptionBase = 542;
+        public const int GearLabelMarkBase = 561;
+        public const int GearLabelCount = 82;
+        public const int GearWidthTitle = 478;
+        public const int GearWidthMessage = 304;
+        public const int GearWidthCaption = 56;
         public const int BarControlFirst = 0xA8;
         public const int BarControlLimit = 0xC0;
         public const int BarControlSlotBase = 0xB6;

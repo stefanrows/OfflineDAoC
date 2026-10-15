@@ -24,6 +24,15 @@ Protocol version 3 (16-bit label index in bytes 4-5, because the layout has more
   group window built from the stock group adapters (group_name/color/level/class/
   health/power/endurance) with SelectGroupMember<i> clicks; the stance column and the
   leader mark are server labels, and the Invite tile is the stock GroupInvite event.
+* COMPANION GEAR window (Custom6, window 0x73, TASKS 129): 19 worn slots and the 40-slot backpack of one
+  companion, shown from the house-vault client slots 150-168 and 170-209 that
+  PersistentCompanionInventoryView fills. Each slot is an IconDef on a scalar icon adapter (cmgr_icon_<n>) and a
+  click area with OnClickEvent 0x900 + n. The click copies the stock quiver window (0x534F40): an item on the
+  cursor is sent to the slot with the stock move-item packet; an empty cursor on a filled slot starts a kind-0x66
+  drag whose index is the client slot. Operations 7, 8 and 9 refresh the icons from the client's item array, show
+  the window (then refresh it and send the gear ready control), and hide it. The title, the backpack heading, the
+  worn captions, the last reply and a "*" mark per slot are server labels. The real-client behaviour of this
+  pattern was proven by the 0.273.0 probe (docs/COMPANION_PAPERDOLL_RE.md sections 6-8).
 
 The layout below is the single source for label and control numbers. The C#
 constants in CompanionManagerProtocol.cs are checked against it by
@@ -39,6 +48,7 @@ import struct
 import xml.etree.ElementTree as ET
 
 import pefile
+from capstone import Cs, CS_ARCH_X86, CS_MODE_32
 from keystone import Ks, KS_ARCH_X86, KS_MODE_32
 
 
@@ -65,6 +75,29 @@ CHAT_SCROLL_INDEX = 0x10498D8
 PACKET_DONE = 0x4113AD
 # Stock OnClickEvent mapper used by ButtonDef and InvisibleButtonDef parsers.
 CLICK_EVENT_MAPPER = 0x4EA06F
+# Gear window natives (docs/COMPANION_PAPERDOLL_RE.md section 2). Each return size is checked by verify_natives().
+REGISTER_SCALAR_ADAPTER = 0x4B6BC0  # stdcall(registry, slot*, name, maxBits, initialBits)
+SET_SCALAR_VALUE = 0x524370        # ECX = scalar object, stdcall(float)
+SEND_MOVE_ITEM = 0x42A976          # cdecl(to, from, count): opcode 0xDD
+BEGIN_DRAG = 0x4C34CC              # stdcall(ui, kind, index, flag, x, y), EAX = cursor icon
+END_DRAG = 0x47FC63                # no arguments: EAX = 0x20, ECX = ui, call 0x4C2D72
+NATIVE_RETURN_BYTES = {
+    REGISTER_TEXT_ADAPTER: 12,
+    REGISTER_SCALAR_ADAPTER: 20,
+    SET_SCALAR_VALUE: 4,
+    SET_ADAPTER_TEXT: 4,
+    SEND_MOVE_ITEM: 0,
+    BEGIN_DRAG: 0x18,
+    END_DRAG: 0,
+}
+DRAG_RECORD, DRAG_COUNT = 0x168, 0x16C   # [ui+0x168]: +0x80 kind, +0x84 index (-1 none); [ui+0x16C] count
+DRAG_KIND, DRAG_INDEX = 0x80, 0x84
+CURSOR_X, CURSOR_Y = 0x99DFE8, 0x99DFEC  # cursor in UI coordinates (stock BeginDrag callers)
+ITEM_ARRAY, ITEM_STRIDE = 0xF96FB4, 0x1D4  # record(s) = ITEM_ARRAY + s * ITEM_STRIDE
+ITEM_TEMPLATE, ITEM_NAME = 0x00, 0x48      # template index (int), name (char[64]; empty = no item)
+ICON_TABLE, ICON_STRIDE = 0x106A7F2, 0xC4  # *(short *)(ICON_TABLE + template * ICON_STRIDE)
+TEMPLATE_LIMIT = 0x10000                   # 0x106A7F2 + 0xFFFF * 0xC4 stays inside .data
+KIND_INVENTORY, KIND_QUIVER = 9, 0x66      # player paperdoll/bag (hotspot index); quiver (client slot index)
 
 CUSTOM8_WINDOW = 0x75
 MARKER = 0x43
@@ -263,9 +296,60 @@ BAR_LABEL_BASE = LABEL_COUNT
 BAR_LABEL_STATUS, BAR_LABEL_MESSAGE = BAR_LABEL_BASE, BAR_LABEL_BASE + 1
 BAR_LABEL_TILE_BASE = BAR_LABEL_BASE + 2                              # +4k inactive, +1 active, +2 disabled, +3 underline
 BAR_LABEL_SLOT_BASE = BAR_LABEL_TILE_BASE + BAR_TILE_STRIDE * BAR_TILES  # +4i + stance colour index
-TOTAL_LABEL_COUNT = BAR_LABEL_SLOT_BASE + BAR_SLOT_STRIDE * BAR_SLOTS   # 514
-BAR_LABEL_COUNT = TOTAL_LABEL_COUNT - BAR_LABEL_BASE                    # 74
+BAR_LABEL_END = BAR_LABEL_SLOT_BASE + BAR_SLOT_STRIDE * BAR_SLOTS       # 538
+BAR_LABEL_COUNT = BAR_LABEL_END - BAR_LABEL_BASE                        # 98
 SCROLL_LINK_LABELS = {"DetailUp": LABEL_DETAIL_UP, "DetailDown": LABEL_DETAIL_DOWN}
+
+# COMPANION GEAR window (Custom6). Slot n (0-18 worn in character-sheet order, 19-58 backpack) is client slot
+# GEAR_CLIENT_SLOTS[n]: PersistentCompanionInventoryView positions 1-19 and 21-60 from house-vault slot 150.
+GEAR_WINDOW = 0x73                       # Custom6: the ShowCustomN switch pushes 0x6D + N
+OP_GEAR_REFRESH, OP_GEAR_SHOW, OP_GEAR_HIDE = 7, 8, 9
+GEAR_EVENT_BASE = 0x900                  # OnClickEvent 2304-2362; raid 0x600-0x64F, manager 0x700-0x7DF
+GEAR_READY_CONTROL = 0xDC                # sent by operation 8 through the manager's command path
+GEAR_WORN_CAPTIONS = ("Helm", "Chest", "Arms", "Hands", "Legs", "Feet", "Cloak", "Neck", "Jewel", "Belt",
+                      "L Wrist", "R Wrist", "L Ring", "R Ring", "R Hand", "L Hand", "2 Hand", "Ranged", "Mythic")
+GEAR_WORN_SLOTS = len(GEAR_WORN_CAPTIONS)
+GEAR_BACKPACK_SLOTS = 40
+GEAR_SLOTS = GEAR_WORN_SLOTS + GEAR_BACKPACK_SLOTS
+GEAR_FIRST_CLIENT_SLOT = 150             # eInventorySlot.HousingInventory_First
+GEAR_BACKPACK_FIRST_POSITION = 21
+GEAR_CLIENT_SLOTS = tuple(GEAR_FIRST_CLIENT_SLOT + position - 1 for position in
+                          (*range(1, GEAR_WORN_SLOTS + 1),
+                           *range(GEAR_BACKPACK_FIRST_POSITION, GEAR_BACKPACK_FIRST_POSITION + GEAR_BACKPACK_SLOTS)))
+GEAR_REFRESH_OFFSET, GEAR_EVENT_OFFSET, GEAR_CODE_LIMIT = 0x2800, 0x2A00, 0x3000   # inside .cmgr, before the data
+GEAR_ICON_ADAPTER = "cmgr_icon_{}"
+GEAR_ICON_MAX, GEAR_ICON_INITIAL, GEAR_ICON_EMPTY = 1000000.0, -1.0, -1   # the quiver's icon adapter values
+# Server labels follow the COMPANIONS window's: title, backpack heading, two reply lines, the worn captions, then one
+# mark per slot ("*" = the item stays with the companion).
+GEAR_LABEL_BASE = BAR_LABEL_END
+GEAR_LABEL_TITLE = GEAR_LABEL_BASE
+GEAR_LABEL_BACKPACK = GEAR_LABEL_BASE + 1
+GEAR_LABEL_MESSAGE_BASE = GEAR_LABEL_BASE + 2
+GEAR_MESSAGE_LINES = 2
+GEAR_LABEL_CAPTION_BASE = GEAR_LABEL_MESSAGE_BASE + GEAR_MESSAGE_LINES
+GEAR_LABEL_MARK_BASE = GEAR_LABEL_CAPTION_BASE + GEAR_WORN_SLOTS
+GEAR_LABEL_END = GEAR_LABEL_MARK_BASE + GEAR_SLOTS
+GEAR_LABEL_COUNT = GEAR_LABEL_END - GEAR_LABEL_BASE                     # 82
+TOTAL_LABEL_COUNT = GEAR_LABEL_END                                      # 620
+# Geometry (the 0.275.0 layout): worn gear in three captioned columns, the backpack as an 8 x 5 grid.
+GEAR_SOCKET, GEAR_ICON = 34, 32
+GEAR_WORN_X, GEAR_WORN_Y, GEAR_WORN_PITCH_X, GEAR_WORN_PITCH_Y = 14, 30, 58, 50
+# Worn slot index (character-sheet order) at each (column, row) of the worn panel.
+GEAR_WORN_LAYOUT = ((0, 0), (0, 1), (2, 1), (0, 2), (2, 2), (0, 3),   # helm, chest, arms, hands, legs, feet
+                    (2, 0), (1, 0), (1, 1), (1, 2),                   # cloak, neck, jewel, belt
+                    (1, 3), (2, 3), (0, 4), (1, 4),                   # wrists, left ring, right ring
+                    (0, 5), (1, 5), (2, 5), (0, 6), (2, 4))           # right hand, left hand, two hand, ranged, mythic
+GEAR_BAG_X, GEAR_BAG_Y, GEAR_BAG_PITCH, GEAR_BAG_COLUMNS = 206, 48, 38, 8
+GEAR_WIDTH, GEAR_HEIGHT = GEAR_BAG_X + GEAR_BAG_COLUMNS * GEAR_BAG_PITCH + 8, GEAR_WORN_Y + 7 * GEAR_WORN_PITCH_Y + 6
+GEAR_WIDTH_TITLE = GEAR_WIDTH - 40
+GEAR_WIDTH_CAPTION = 56
+GEAR_WIDTH_MESSAGE = GEAR_BAG_COLUMNS * GEAR_BAG_PITCH
+GEAR_WIDTH_MARK = 10
+GEAR_MESSAGE_Y = GEAR_BAG_Y + 5 * GEAR_BAG_PITCH + 10
+GEAR_HELP_Y = GEAR_MESSAGE_Y + 44
+GEAR_HELP_TEXT = ("Click your item, then a slot: give or equip.",
+                  "Click a filled slot to pick its item up.",
+                  "* = stays with the companion (starter gear).")
 
 
 def bar_tile_at(row, column):
@@ -325,6 +409,13 @@ def layout_constants():
         "BarControlSlotBase": BAR_CONTROL_SLOT_BASE, "BarControlReady": BAR_READY_CONTROL,
         "BarWidthStatus": BAR_WIDTH_STATUS, "BarWidthMessage": BAR_WIDTH_MESSAGE,
         "BarWidthTile": BAR_TILE_W, "BarWidthSlot": BAR_WIDTH_SLOT,
+        "OpGearRefresh": OP_GEAR_REFRESH, "OpGearShow": OP_GEAR_SHOW, "OpGearHide": OP_GEAR_HIDE,
+        "ControlGearReady": GEAR_READY_CONTROL, "GearWornSlots": GEAR_WORN_SLOTS, "GearSlots": GEAR_SLOTS,
+        "GearLabelBase": GEAR_LABEL_BASE, "GearLabelTitle": GEAR_LABEL_TITLE, "GearLabelBackpack": GEAR_LABEL_BACKPACK,
+        "GearLabelMessageBase": GEAR_LABEL_MESSAGE_BASE, "GearMessageLines": GEAR_MESSAGE_LINES,
+        "GearLabelCaptionBase": GEAR_LABEL_CAPTION_BASE, "GearLabelMarkBase": GEAR_LABEL_MARK_BASE,
+        "GearLabelCount": GEAR_LABEL_COUNT, "GearWidthTitle": GEAR_WIDTH_TITLE,
+        "GearWidthMessage": GEAR_WIDTH_MESSAGE, "GearWidthCaption": GEAR_WIDTH_CAPTION,
     })
     for index, name in enumerate(BAR_TILE_NAMES):
         values["BarControl" + name] = BAR_CONTROL_FIRST + index
@@ -349,6 +440,57 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def float_bits(value):
+    return struct.unpack("<I", struct.pack("<f", value))[0]
+
+
+def gear_icon_names():
+    return [GEAR_ICON_ADAPTER.format(index) for index in range(GEAR_SLOTS)]
+
+
+def gear_slot_origin(index):
+    """Top-left of gear slot `index`'s socket (0-18 worn, 19-58 backpack)."""
+    if index < GEAR_WORN_SLOTS:
+        column, row = GEAR_WORN_LAYOUT[index]
+        return GEAR_WORN_X + column * GEAR_WORN_PITCH_X, GEAR_WORN_Y + row * GEAR_WORN_PITCH_Y
+    bag = index - GEAR_WORN_SLOTS
+    return GEAR_BAG_X + (bag % GEAR_BAG_COLUMNS) * GEAR_BAG_PITCH, GEAR_BAG_Y + (bag // GEAR_BAG_COLUMNS) * GEAR_BAG_PITCH
+
+
+def gear_slot_rectangles():
+    """(x, y, width, height) of each gear slot's icon and click area, in slot order."""
+    return [(x + 1, y + 1, GEAR_ICON, GEAR_ICON) for x, y in map(gear_slot_origin, range(GEAR_SLOTS))]
+
+
+def inventory_source(index):
+    """Client slot for a kind-9 drag index, exactly as the stock inventory drop maps it (0x408151), or None."""
+    if 0 <= index <= 3:
+        return index + 10
+    if 10 <= index <= 27:
+        return index + 11
+    if 40 <= index <= 79:
+        return index
+    return None
+
+
+def verify_natives(pe, image):
+    """The first ret of each native entry point the patch calls must pop the expected byte count."""
+    base = pe.OPTIONAL_HEADER.ImageBase
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    report = {}
+    for address, expected in NATIVE_RETURN_BYTES.items():
+        code = image[pe.get_offset_from_rva(address - base):][:0x800]
+        found = None
+        for insn in md.disasm(code, address):
+            if insn.mnemonic == "ret":
+                found = int(insn.op_str, 16) if insn.op_str else 0
+                break
+        if found != expected:
+            raise ValueError(f"Native entry {address:#x} returns {found} bytes, expected {expected}")
+        report[f"{address:#x}"] = expected
+    return report
+
+
 def build(image):
     if sha256(image) != RAID_SHA256:
         raise ValueError("Unknown game.dll: expected the verified native-raid client")
@@ -357,6 +499,7 @@ def build(image):
         raise ValueError("Expected the verified Windows x86 client")
     if pe.sections[-1].Name.rstrip(b"\0") != b".raid":
         raise ValueError("Native raid section was changed")
+    natives = verify_natives(pe, image)
     align = lambda value, unit: (value + unit - 1) // unit * unit
     last = pe.sections[-1]
     rva = align(last.VirtualAddress + max(last.Misc_VirtualSize, last.SizeOfRawData),
@@ -373,8 +516,18 @@ def build(image):
     search_text = hex_digits + 16
     counter = search_text + 32
     names = counter + 16
-    payload = bytearray(data_base + 4 * TOTAL_LABEL_COUNT + 16 + 32 + 16 + 32 + 16 + 16 * TOTAL_LABEL_COUNT)
+    # Gear window data: icon adapter objects, client slot per gear slot, int -> float scratch, icon adapter names.
+    gear_icon_slots = names + 16 * TOTAL_LABEL_COUNT
+    gear_slot_table = gear_icon_slots + 4 * GEAR_SLOTS
+    gear_scratch = gear_slot_table + 4 * GEAR_SLOTS
+    gear_names = gear_scratch + 16
+    payload = bytearray(gear_names - va + 16 * GEAR_SLOTS)
     offset = lambda address: address - va
+    for index, slot in enumerate(GEAR_CLIENT_SLOTS):
+        struct.pack_into("<I", payload, offset(gear_slot_table) + 4 * index, slot)
+    for index, name in enumerate(gear_icon_names()):
+        encoded = name.encode("ascii") + b"\0"
+        payload[offset(gear_names) + 16 * index:offset(gear_names) + 16 * index + len(encoded)] = encoded
     initial_command = (COMMAND_PREFIX + "0000 00").encode("ascii") + b"\0"
     payload[offset(command):offset(command) + len(initial_command)] = initial_command
     payload[offset(hex_digits):offset(hex_digits) + 16] = b"0123456789abcdef"
@@ -418,6 +571,23 @@ def build(image):
         inc dword ptr [{counter}]
         cmp dword ptr [{counter}], {TOTAL_LABEL_COUNT}
         jb register
+        mov dword ptr [{counter}], 0
+    register_icon:
+        push {float_bits(GEAR_ICON_INITIAL):#x}
+        push {float_bits(GEAR_ICON_MAX):#x}
+        mov eax, dword ptr [{counter}]
+        shl eax, 4
+        add eax, {gear_names}
+        push eax
+        mov eax, dword ptr [{counter}]
+        shl eax, 2
+        add eax, {gear_icon_slots}
+        push eax
+        push edi
+        call {REGISTER_SCALAR_ADAPTER}
+        inc dword ptr [{counter}]
+        cmp dword ptr [{counter}], {GEAR_SLOTS}
+        jb register_icon
         popad; popfd
         jmp {RAID_INIT}
     """, 0x1000)
@@ -450,6 +620,12 @@ def build(image):
         je bar_show
         cmp eax, {OP_BAR_HIDE}
         je bar_hide
+        cmp eax, {OP_GEAR_REFRESH}
+        je gear_refresh
+        cmp eax, {OP_GEAR_SHOW}
+        je gear_show
+        cmp eax, {OP_GEAR_HIDE}
+        je gear_hide
         jmp done
     label:
         movzx ecx, word ptr [esi+4]
@@ -506,6 +682,30 @@ def build(image):
         mov eax, dword ptr [ecx]
         call dword ptr [eax+8]
         jmp done
+    gear_refresh:
+        call {va + GEAR_REFRESH_OFFSET}
+        jmp done
+    gear_show:
+        mov ecx, dword ptr [{WINDOW_MANAGER}]
+        test ecx, ecx
+        jz done
+        push 1
+        push {GEAR_WINDOW}
+        mov eax, dword ptr [ecx]
+        call dword ptr [eax+8]
+        call {va + GEAR_REFRESH_OFFSET}
+        mov eax, {GEAR_READY_CONTROL}
+        call {va + 0x2600}
+        jmp done
+    gear_hide:
+        mov ecx, dword ptr [{WINDOW_MANAGER}]
+        test ecx, ecx
+        jz done
+        push 0
+        push {GEAR_WINDOW}
+        mov eax, dword ptr [ecx]
+        call dword ptr [eax+8]
+        jmp done
     token:
         xor ecx, ecx
     token_check:
@@ -534,6 +734,11 @@ def build(image):
 
     # EAX is the event record and [EAX+8] its ID; unrelated IDs keep the raid chain intact.
     put("eventHandler", 0x1C00, f"""
+        cmp dword ptr [eax+8], {GEAR_EVENT_BASE}
+        jb manager_range
+        cmp dword ptr [eax+8], {GEAR_EVENT_BASE + GEAR_SLOTS - 1}
+        jbe {va + GEAR_EVENT_OFFSET}
+    manager_range:
         cmp dword ptr [eax+8], {EVENT_BASE}
         jb raid
         cmp dword ptr [eax+8], {EVENT_BASE + CONTROL_LIMIT}
@@ -589,7 +794,113 @@ def build(image):
         call {SEND_SLASH_COMMAND}
         add esp, 4
         ret
-    """, 0x2800)
+    """, GEAR_REFRESH_OFFSET)
+
+    # Called from the packet block (registers already saved). For each gear slot: the client item record's icon
+    # (empty name or out-of-range template -> -1) into the slot's scalar adapter. ESI survives the stdcall setter.
+    put("gearRefresh", GEAR_REFRESH_OFFSET, f"""
+        xor esi, esi
+    refresh_slot:
+        mov eax, dword ptr [{gear_slot_table}+esi*4]
+        imul eax, eax, {ITEM_STRIDE:#x}
+        mov ecx, {GEAR_ICON_EMPTY}
+        cmp byte ptr [eax+{ITEM_ARRAY + ITEM_NAME:#x}], 0
+        je have_icon
+        mov edx, dword ptr [eax+{ITEM_ARRAY + ITEM_TEMPLATE:#x}]
+        cmp edx, {TEMPLATE_LIMIT:#x}
+        jae have_icon
+        imul edx, edx, {ICON_STRIDE:#x}
+        movsx ecx, word ptr [edx+{ICON_TABLE:#x}]
+    have_icon:
+        mov dword ptr [{gear_scratch}], ecx
+        fild dword ptr [{gear_scratch}]
+        fstp dword ptr [{gear_scratch + 4}]
+        mov ecx, dword ptr [{gear_icon_slots}+esi*4]
+        test ecx, ecx
+        jz icon_set
+        push dword ptr [{gear_scratch + 4}]
+        call {SET_SCALAR_VALUE}
+    icon_set:
+        inc esi
+        cmp esi, {GEAR_SLOTS}
+        jb refresh_slot
+        ret
+    """, GEAR_EVENT_OFFSET)
+
+    # Gear slot click (event GEAR_EVENT_BASE + n), entered from the eventHandler with EAX = the event record. The
+    # stock quiver pattern: an inventory drag (kind 9, hotspot mapped like 0x408151) or a gear pick-up (kind 0x66,
+    # index = client slot) dropped here sends move(slot, source, count) and ends the drag; dropped on its own slot it
+    # only ends the drag; other drag kinds do nothing. An empty cursor on a filled slot starts a kind-0x66 drag.
+    put("gearEvent", GEAR_EVENT_OFFSET, f"""
+        pushfd; pushad
+        mov ecx, dword ptr [eax+8]
+        sub ecx, {GEAR_EVENT_BASE}
+        mov esi, dword ptr [{gear_slot_table}+ecx*4]
+        mov edx, dword ptr [{WINDOW_MANAGER}]
+        test edx, edx
+        jz handled
+        mov ebp, dword ptr [edx+{DRAG_RECORD:#x}]
+        test ebp, ebp
+        jz no_drag
+        mov ebx, dword ptr [ebp+{DRAG_INDEX:#x}]
+        cmp ebx, -1
+        je no_drag
+        mov eax, dword ptr [ebp+{DRAG_KIND:#x}]
+        cmp eax, {KIND_QUIVER:#x}
+        je have_source
+        cmp eax, {KIND_INVENTORY}
+        jne handled
+        cmp ebx, 0
+        jl handled
+        cmp ebx, 3
+        jle weapon
+        cmp ebx, 10
+        jl handled
+        cmp ebx, 27
+        jle armour
+        cmp ebx, 40
+        jl handled
+        cmp ebx, 79
+        jle have_source
+        jmp handled
+    weapon:
+        add ebx, 10
+        jmp have_source
+    armour:
+        add ebx, 11
+    have_source:
+        cmp ebx, esi
+        je end_drag
+        push dword ptr [edx+{DRAG_COUNT:#x}]
+        push ebx
+        push esi
+        call {SEND_MOVE_ITEM}
+        add esp, 12
+    end_drag:
+        call {END_DRAG}
+        jmp handled
+    no_drag:
+        mov eax, esi
+        imul eax, eax, {ITEM_STRIDE:#x}
+        cmp byte ptr [eax+{ITEM_ARRAY + ITEM_NAME:#x}], 0
+        je handled
+        mov ecx, dword ptr [eax+{ITEM_ARRAY + ITEM_TEMPLATE:#x}]
+        cmp ecx, {TEMPLATE_LIMIT:#x}
+        jae handled
+        imul ecx, ecx, {ICON_STRIDE:#x}
+        movsx eax, word ptr [ecx+{ICON_TABLE:#x}]
+        push dword ptr [{CURSOR_Y}]
+        push dword ptr [{CURSOR_X}]
+        push 0
+        push esi
+        push {KIND_QUIVER:#x}
+        push edx
+        call {BEGIN_DRAG}
+    handled:
+        popad; popfd
+        mov al, 1
+        ret
+    """, GEAR_CODE_LIMIT)
 
     data = bytearray(image)
     for address, expected, target_offset in HOOKS:
@@ -619,7 +930,12 @@ def build(image):
                          "protocolVersion": PROTOCOL_VERSION, "sectionVa": va, "blocks": blocks,
                          "adapterSlots": slots, "activeFlag": active, "barActiveFlag": bar_active,
                          "command": command,
-                         "searchText": search_text, "layout": layout_constants()}
+                         "searchText": search_text, "layout": layout_constants(),
+                         "gear": {"window": {"name": "Custom6", "id": GEAR_WINDOW},
+                                  "iconSlots": gear_icon_slots, "clientSlotTable": gear_slot_table,
+                                  "iconAdapters": gear_icon_names(), "clientSlots": list(GEAR_CLIENT_SLOTS),
+                                  "clickEvents": [str(GEAR_EVENT_BASE + index) for index in range(GEAR_SLOTS)],
+                                  "nativeReturnBytes": natives}}
 
 
 def _position(parent, x, y, width, height, *, grow_width=False, grow_height=False,
@@ -921,6 +1237,70 @@ def bar_window():
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
 
 
+def _socket(panel, x, y):
+    socket = ET.SubElement(panel, "ImageAreaDef")
+    ET.SubElement(socket, "ControlId").text = "1000"
+    position = ET.SubElement(socket, "Position")
+    ET.SubElement(position, "X").text = str(x)
+    ET.SubElement(position, "Y").text = str(y)
+    ET.SubElement(socket, "TemplateName").text = "icon_socket_large"
+
+
+def _icon(panel, x, y, adapter):
+    """IconDef as in the stock quiver window, with the large icon template; the scalar adapter holds the icon id."""
+    icon = ET.SubElement(panel, "IconDef")
+    ET.SubElement(icon, "ControlId").text = "1000"
+    position = ET.SubElement(icon, "Position")
+    ET.SubElement(position, "X").text = str(x)
+    ET.SubElement(position, "Y").text = str(y)
+    ET.SubElement(icon, "IconId").text = str(GEAR_ICON_EMPTY)
+    ET.SubElement(icon, "TemplateName").text = "plain_icon_large"
+    ET.SubElement(icon, "AdapterName").text = adapter
+
+
+def gear_window():
+    """Custom6 XML: the fixed COMPANION GEAR window (0.275.0 geometry) with server labels.
+
+    Sockets, icons, labels, then the slot click areas last (the raid's z-order). Each slot's "*" mark sits in the top
+    right corner of its icon; the worn captions sit under their sockets.
+    """
+    root = ET.Element("Root_Element", ID="DAOCUi")
+    panel = ET.SubElement(root, "WindowTemplate")
+    for key, value in (("Name", "custom6_window"), ("WindowId", "Custom6"), ("CloseButton", "true"),
+                       ("MoveButton", "true"), ("TopRightResizeButton", "false"),
+                       ("BottomRightResizeButton", "false"), ("BottomLeftResizeButton", "false"),
+                       ("ResizeButtonOffsetX", "0"), ("ResizeButtonOffsetY", "0"), ("TitleWidth", "0"),
+                       ("TitleHeight", "0"), ("Width", str(GEAR_WIDTH)), ("Height", str(GEAR_HEIGHT)),
+                       ("ResizeableWidth", "0"), ("ResizeableHeight", "0"), ("ResizeableTwoWayWidth", "0"),
+                       ("ResizeableTwoWayHeight", "0"), ("MinWidth", "0"), ("MinHeight", "0"),
+                       ("ContextTemplateName", None)):
+        ET.SubElement(panel, key).text = value
+    _image(panel, 0, 0, GEAR_WIDTH, GEAR_HEIGHT, "dlg_sm_title_noresize")
+    origins = [gear_slot_origin(index) for index in range(GEAR_SLOTS)]
+    for x, y in origins:
+        _socket(panel, x, y)
+    for index, (x, y) in enumerate(origins):
+        _icon(panel, x + 1, y + 1, GEAR_ICON_ADAPTER.format(index))
+    _label(panel, 12, 1, GEAR_WIDTH_TITLE, GOLD, GEAR_LABEL_TITLE, characters=64)
+    for index, (x, y) in enumerate(origins[:GEAR_WORN_SLOTS]):
+        _label(panel, x + GEAR_SOCKET // 2 - GEAR_WIDTH_CAPTION // 2, y + GEAR_SOCKET + 1, GEAR_WIDTH_CAPTION, TEXT,
+               GEAR_LABEL_CAPTION_BASE + index, characters=16, centered=True)
+    _label(panel, GEAR_BAG_X, GEAR_BAG_Y - 20, GEAR_WIDTH_MESSAGE, GOLD, GEAR_LABEL_BACKPACK, characters=32)
+    for line in range(GEAR_MESSAGE_LINES):
+        _label(panel, GEAR_BAG_X, GEAR_MESSAGE_Y + 18 * line, GEAR_WIDTH_MESSAGE, MESSAGE,
+               GEAR_LABEL_MESSAGE_BASE + line, characters=72)
+    for line, text in enumerate(GEAR_HELP_TEXT):
+        _label(panel, GEAR_BAG_X, GEAR_HELP_Y + 16 * line, GEAR_WIDTH_MESSAGE, MUTED, text=text, characters=72)
+    for index, (x, y) in enumerate(origins):
+        _label(panel, x + GEAR_SOCKET - GEAR_WIDTH_MARK - 1, y + 1, GEAR_WIDTH_MARK, GOLD, GEAR_LABEL_MARK_BASE + index,
+               characters=2, height=14)
+    captions = GEAR_WORN_CAPTIONS + tuple(f"Bag {index + 1}" for index in range(GEAR_BACKPACK_SLOTS))
+    for index, (x, y, width, height) in enumerate(gear_slot_rectangles()):
+        _click(panel, x, y, width, None, captions[index], height=height, event=str(GEAR_EVENT_BASE + index))
+    ET.indent(root)
+    return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--client", type=Path, required=True, help="Verified client app directory (read only)")
@@ -934,18 +1314,22 @@ def main():
     except ValueError as error:
         parser.error(str(error))
     main_xml = (args.client / "ui/uimain.xml").read_bytes()
-    if b"custom8_window.xml" in main_xml or b"custom7_window.xml" in main_xml or b"</XML>" not in main_xml:
+    if any(name in main_xml for name in (b"custom8_window.xml", b"custom7_window.xml", b"custom6_window.xml")) or \
+            b"</XML>" not in main_xml:
         parser.error("Unexpected UI include state")
-    # The manager-only UI (0.169.0) and the manager plus COMPANIONS window (0.251.0) differ only in the include list.
+    # The manager-only UI (0.169.0), the manager plus COMPANIONS window (0.251.0-0.272.0) and the manager plus both
+    # windows (0.276.0; byte-identical to the 0.273.0-0.275.0 paperdoll probe UI) differ only in the include list.
     manager_only = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n</XML>")
-    output_main = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n"
-                                   b"\t<Include>custom7_window.xml</Include>\r\n</XML>")
+    with_bar = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n"
+                                b"\t<Include>custom7_window.xml</Include>\r\n</XML>")
+    output_main = with_bar.replace(b"</XML>", b"\t<Include>custom6_window.xml</Include>\r\n</XML>")
     for skin in ("atlantis", "isles"):
-        for window_file in ("custom8_window.xml", "custom7_window.xml"):
+        for window_file in ("custom8_window.xml", "custom7_window.xml", "custom6_window.xml"):
             if (args.client / "ui" / skin / window_file).exists():
                 parser.error(f"{window_file} is already in use in {skin}")
     xml = window()
     bar_xml = bar_window()
+    gear_xml = gear_window()
     args.output.mkdir(parents=True)
     (args.output / "game.dll").write_bytes(patched)
     (args.output / "uimain.xml").write_bytes(output_main)
@@ -953,17 +1337,22 @@ def main():
         (args.output / skin).mkdir()
         (args.output / skin / "custom8_window.xml").write_bytes(xml)
         (args.output / skin / "custom7_window.xml").write_bytes(bar_xml)
+        (args.output / skin / "custom6_window.xml").write_bytes(gear_xml)
     report["uimainBaselineSha256"] = sha256(main_xml)
     report["uimainOutputSha256"] = sha256(output_main)
     report["uimainManagerOnlySha256"] = sha256(manager_only)
+    report["uimainBarSha256"] = sha256(with_bar)
     report["windowSha256"] = sha256(xml)
     report["barWindowSha256"] = sha256(bar_xml)
-    report["status"] = ("staged Companion Manager client with the COMPANIONS window; offline emulation only until "
-                        "the owner's combined real-client gate passes")
+    report["gearWindowSha256"] = sha256(gear_xml)
+    report["gear"]["slotRectangles"] = gear_slot_rectangles()
+    report["status"] = ("staged Companion Manager client with the COMPANIONS and COMPANION GEAR windows; offline "
+                        "emulation only until the owner's real-client check passes")
     (args.output / "manifest.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: report[key] for key in ("baselineSha256", "outputSha256", "windowSha256",
-                                                   "barWindowSha256", "uimainOutputSha256",
-                                                   "uimainManagerOnlySha256", "protocolVersion")}, indent=2))
+                                                   "barWindowSha256", "gearWindowSha256", "uimainOutputSha256",
+                                                   "uimainManagerOnlySha256", "uimainBarSha256", "protocolVersion")},
+                     indent=2))
 
 
 if __name__ == "__main__":

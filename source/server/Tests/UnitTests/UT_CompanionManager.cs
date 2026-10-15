@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using DOL.Database;
 using DOL.GS;
 using DOL.GS.Commands;
 using NUnit.Framework;
@@ -492,16 +493,73 @@ public sealed class UT_CompanionManager
     }
 
     [Test]
-    public void PaperdollProbeSlotsAreHelmChestAndFirstTwoBackpackPositions()
+    public void GearWindowSlotsAreTheViewPositionsFromHouseVaultSlot150()
     {
-        // probe_companion_paperdoll.py: client slots 150, 151, 170, 171 are view positions 1, 2, 21, 22.
+        // build_companion_manager_client.py: gear slot n is client slot 150-168 (worn) or 170-209 (backpack).
         const int firstClientSlot = (int)eInventorySlot.HousingInventory_First;
         Assert.That(firstClientSlot, Is.EqualTo(150));
-        Assert.That(firstClientSlot + PersistentCompanionInventoryView.WornPosition(eInventorySlot.HeadArmor) - 1, Is.EqualTo(150));
-        Assert.That(firstClientSlot + PersistentCompanionInventoryView.WornPosition(eInventorySlot.TorsoArmor) - 1, Is.EqualTo(151));
-        Assert.That(firstClientSlot + PersistentCompanionInventoryView.BackpackFirstPosition - 1, Is.EqualTo(170));
-        Assert.That(new[] { OpPaperdollRefresh, OpPaperdollShow, OpPaperdollHide }, Is.EqualTo(new byte[] { 7, 8, 9 }));
-        Assert.That(BuildBody(OpPaperdollShow)[1..4], Is.EqualTo(new byte[] { Marker, ProtocolVersion, 8 }));
+        Assert.That(GearWornSlots, Is.EqualTo(PersistentCompanionGear.SheetSlots.Length));
+        Assert.That(GearSlots, Is.EqualTo(GearWornSlots + CompanionGearWindow.BackpackSlots));
+        Assert.That(CompanionGearWindow.WornCaptions, Has.Length.EqualTo(GearWornSlots));
+        int[] clientSlots = Enumerable.Range(0, GearSlots)
+            .Select(index => firstClientSlot + PersistentCompanionInventoryView.GearPosition(index) - 1).ToArray();
+        Assert.That(clientSlots, Is.EqualTo(Enumerable.Range(150, 19).Concat(Enumerable.Range(170, 40))));
+        for (int index = 0; index < GearWornSlots; index++)
+            Assert.That(PersistentCompanionInventoryView.GearPosition(index),
+                Is.EqualTo(PersistentCompanionInventoryView.WornPosition(PersistentCompanionGear.SheetSlots[index])));
+        Assert.That(new[] { OpGearRefresh, OpGearShow, OpGearHide }, Is.EqualTo(new byte[] { 7, 8, 9 }));
+        Assert.That(BuildBody(OpGearShow)[1..4], Is.EqualTo(new byte[] { Marker, ProtocolVersion, 8 }));
+    }
+
+    [Test]
+    public void GearLabelsFollowTheBarLabelsWithoutGaps()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(GearLabelBase, Is.EqualTo(BarLabelBase + BarLabelCount));
+            Assert.That(GearLabelTitle, Is.EqualTo(GearLabelBase));
+            Assert.That(GearLabelBackpack, Is.EqualTo(GearLabelTitle + 1));
+            Assert.That(GearLabelMessageBase, Is.EqualTo(GearLabelBackpack + 1));
+            Assert.That(GearLabelCaptionBase, Is.EqualTo(GearLabelMessageBase + GearMessageLines));
+            Assert.That(GearLabelMarkBase, Is.EqualTo(GearLabelCaptionBase + GearWornSlots));
+            Assert.That(GearLabelMarkBase + GearSlots, Is.EqualTo(TotalLabelCount));
+            Assert.That(GearLabelCount, Is.EqualTo(TotalLabelCount - GearLabelBase));
+            Assert.That(ControlGearReady, Is.LessThan(ControlLimit));
+            Assert.That(CompanionBar.IsBarControl(ControlGearReady), Is.False);
+            Assert.That(new[] { ControlReady, ControlRefresh, ControlClose, ControlSearch }, Has.No.Member(ControlGearReady));
+        });
+    }
+
+    [Test]
+    public void GearLabelsShowNameBackpackCountMarksAndWrappedReply()
+    {
+        var helm = new DbInventoryItem { Name = "Matterbender Chain Helm" };
+        var ring = new DbInventoryItem { Name = "Ancestral Ring" };
+        var mace = new DbInventoryItem { Name = "Willful Mace" };
+        var slots = new Dictionary<int, DbInventoryItem> { [0] = helm, [GearWornSlots] = ring, [GearWornSlots + 1] = mace };
+        const string reply = "Brakka is attacking or casting; wait a moment before you trade gear with this companion again, " +
+                             "and try once more when the fight is over.";
+
+        string[] labels = CompanionGearWindow.BuildLabels("Brakka", slots, item => item != mace, reply);
+
+        Assert.That(labels, Has.Length.EqualTo(GearLabelCount));
+        Assert.That(labels[GearLabelTitle - GearLabelBase], Is.EqualTo("COMPANION GEAR - Brakka"));
+        Assert.That(labels[GearLabelBackpack - GearLabelBase], Is.EqualTo("Backpack 2/40"));
+        Assert.That(labels[GearLabelCaptionBase - GearLabelBase], Is.EqualTo("Helm"));
+        Assert.That(labels[GearLabelCaptionBase - GearLabelBase + GearWornSlots - 1], Is.EqualTo("Mythic"));
+        string[] marks = labels[(GearLabelMarkBase - GearLabelBase)..];
+        Assert.That(Enumerable.Range(0, GearSlots).Where(index => marks[index] == CompanionGearWindow.MarkText),
+            Is.EqualTo(new[] { 0, GearWornSlots }), "Only items that stay with the companion are marked");
+        string[] lines = labels[(GearLabelMessageBase - GearLabelBase)..(GearLabelMessageBase - GearLabelBase + GearMessageLines)];
+        Assert.That(lines[0], Does.StartWith("Brakka is attacking"));
+        Assert.That(lines[1], Does.EndWith("..."), "A reply longer than two lines is cut");
+        Assert.That(lines.Select(TextWidth), Has.All.LessThanOrEqualTo(GearWidthMessage));
+
+        string[] empty = CompanionGearWindow.BuildLabels("Brakka", new Dictionary<int, DbInventoryItem>(), null, null);
+        Assert.That(empty[GearLabelBackpack - GearLabelBase], Is.EqualTo("Backpack 0/40"));
+        Assert.That(empty[(GearLabelMessageBase - GearLabelBase)..(GearLabelMarkBase - GearLabelBase - GearWornSlots)],
+            Has.All.Empty);
+        Assert.That(empty[(GearLabelMarkBase - GearLabelBase)..], Has.All.Empty);
     }
 
     [TestCase(PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.MoveKind.GiveAndEquip)]
