@@ -122,3 +122,49 @@ D72694 ("Group setup", 2006 Gaheris co-op server) is a PvE thread and not used.
 URLs: search the knowledge base by thread ID with
 `/mnt/e/daoc-knowledge/tools/search.py`; the exact archive links are stored with
 each document.
+
+## 6. Second pass: role to class table and the cross-realm source
+
+The research was repeated with the cross-realm rule. New key source: **D29041**
+"Debate: Best 8 man RvR group with players from all 3 realms" (10/2003),
+http://web.archive.org/web/20040909001105/http://vnboards.ign.com:80/Realm_of_Albion/b22184/57762732/?27 .
+Cross-realm groups are almost only theory in the sources ("if you could mix");
+they were played mixed only on the Gaheris co-op server (2006, keep PvE, D72694,
+used only as support for the keep and bomb logic). The role logic still holds
+because every realm fills the same roles.
+
+| Role | Trait today | Albion | Midgard | Hibernia |
+| --- | --- | --- | --- | --- |
+| Main healer | Healer | Cleric | Healer | Druid |
+| Hybrid / second healer | Healer | Friar | Shaman | Warden, (Bard) |
+| Area CC (mez / stun) | AreaMez / AreaStun | Sorcerer, Minstrel | Healer (pacify) | Bard, (Eldritch Light, D20737) |
+| Speed | Speed | Minstrel | Skald | Bard |
+| Endurance regeneration | none (missing) | Paladin | Shaman | Bard |
+| Tank / peeler | Guard | Armsman, Paladin | Warrior, (Thane) | Hero, (Blademaster) |
+| Melee damage | Melee | Mercenary, Reaver, Armsman | Savage, Berserker | Blademaster, Hero, Champion, Valewalker |
+| PBAE bomber | PointBlankBomb | Wizard | Spiritmaster | Eldritch, Enchanter |
+| Caster / debuff | Caster | Cabalist, Theurgist, Sorcerer | Runemaster, Bonedancer | Mentalist, Eldritch |
+| Assassin | Stealth | Infiltrator, (Minstrel) | Shadowblade | Nightshade |
+| Archer | Archer + Stealth | Scout | Hunter | Ranger |
+| Pet | Pets | Theurgist, Necromancer, Cabalist | Bonedancer, Spiritmaster | Animist, Enchanter |
+
+Endurance regeneration needs the class list {Paladin, Shaman, Bard}, the main
+healer the list {Cleric, Healer, Druid}; neither is a trait.
+
+Cross-realm examples from D29041 for the Standard 8: Minstrel, Healer, Cleric x2,
+Shaman, Savage x2, Mercenary or Blademaster (several posters alike); Healer,
+Cleric, Druid, Minstrel, Paladin, Savage x3. A Pac-Healer as CC plus a Cleric as
+healer appears in most of about 20 proposals; two CC timers beat one. Caster 8
+example: Cleric, Druid, Sorcerer, Minstrel, Enchanter x4 ("no one does anymore").
+Stealth example: 2 Minstrel, 4 Infiltrator, Hunter, Scout.
+
+Additional code findings of this pass (verified in the worktree at 13cf0c2):
+`CandidatePools` filters by `bot.Realm` (`OpenBattlegroundRoster.cs:985-1000`),
+`FormUnits` and the refill use `pools[admit.Realm]` (:784, :1082), members must
+be in the leader's region and porter range (:1127), targets and plan are per
+realm (:157, :354). So today the code builds **no cross-realm groups**; this is
+the real blocker for cross-realm crews and needs the owner's decision (how do
+targets count without realms, and where is the muster point). The guild-side
+check `UnitMates` / `MayJoinUnit` (:540) already exists. `StealthPack` requires
+0 healers (`AutonomousRvrDoctrine.cs:181`); Mentalist has AreaMez and Eldritch
+not (:119-120), while D20737 names Bard and Eldritch (Light): unresolved.
