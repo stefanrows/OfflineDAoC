@@ -22,6 +22,9 @@ namespace DOL.GS.Commands
         "/bgsetup - opens the open BG window: live crew per realm, + and - units per realm, setup",
         "/bgsetup text [page] - the same as text pages (page 1 live, page 2 setup, 3+ more crew)",
         "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, drift on|off",
+        "/bgsetup mode serverpvp|perrealm - the friend rule: Server PvP (Camlann rule, mixed crews) or Per realm (same realm is a friend in region 252)",
+        "/bgsetup peace all|realm|auto - whose landing peace holds at a landing circle (auto = by mode)",
+        "/bgsetup presets <list>|off - group presets, e.g. std8:2,caster8:1,small:2 (off = the group counts as before)",
         "/bgsetup albion|midgard|hibernia <8-man/small/solos> - a realm's own crew, e.g. 1/2/4; global = the groups8/small/solos values",
         "/bgsetup relieve <unit> - that unit leaves within a game minute; the roster forms a replacement if the setup still wants one")]
     public sealed class OpenBgSetupCommandHandler : AbstractCommandHandler, ICommandHandler
@@ -79,7 +82,7 @@ namespace DOL.GS.Commands
                 return;
             }
             OpenBgSetupKey written = OpenBgSetupParser.Find(key);
-            string shown = written.IsUnits && value.Length == 0 ? "global" : value;
+            string shown = value.Length > 0 ? value : written.IsUnits ? "global" : written.Name == "peace" ? "auto" : written.Name == "presets" ? "off" : value;
             string message = $"open BG setup: {written.Name} = {shown}. Properties refreshed; the roster reads it on its next tick.";
             DisplayMessage(client, message);
             if (!OpenBgManager.RefreshIfOpen(player, message))
@@ -166,20 +169,24 @@ namespace DOL.GS.Commands
     /// One /bgsetup key: the short name, its server property row, the range and a one-line help. <paramref name="IsUnits"/>
     /// marks a realm's own crew row (text "8-man/small/solos", empty for the global targets).
     /// </summary>
-    public sealed record OpenBgSetupKey(string Name, string RowKey, bool IsSwitch, int Min, int Max, string Help, bool IsUnits = false)
+    public sealed record OpenBgSetupKey(string Name, string RowKey, bool IsSwitch, int Min, int Max, string Help, bool IsUnits = false, string Choices = null)
     {
-        public string Range => IsSwitch ? "on|off" : IsUnits ? "8-man/small/solos or global" : $"{Min}-{Max}";
+        /// <summary>A text key (mode, peace, presets): its allowed values instead of a number range.</summary>
+        public bool IsText => Choices != null;
+
+        public string Range => IsSwitch ? "on|off" : IsUnits ? "8-man/small/solos or global" : Choices ?? $"{Min}-{Max}";
     }
 
     /// <summary>The raw open_bg_* values as the rows hold them (before the clamping at use); a realm's units text is "" for the global targets.</summary>
     public sealed record OpenBgSetupValues(bool Enabled, int Groups8, int Small, int Solos, int MaxBots, int CycleMin, int CycleMax, bool Drift,
-        string AlbionUnits = "", string MidgardUnits = "", string HiberniaUnits = "")
+        string AlbionUnits = "", string MidgardUnits = "", string HiberniaUnits = "", string Mode = "serverpvp", string Peace = "", string Presets = "")
     {
         public static OpenBgSetupValues Current() => new(OpenBattlegroundProperties.OPEN_BG_ENABLED, OpenBattlegroundProperties.OPEN_BG_GROUPS8,
             OpenBattlegroundProperties.OPEN_BG_GROUPS_SMALL, OpenBattlegroundProperties.OPEN_BG_SOLOS, OpenBattlegroundProperties.OPEN_BG_MAX_BOTS,
             OpenBattlegroundProperties.OPEN_BG_CYCLE_MIN_MINUTES, OpenBattlegroundProperties.OPEN_BG_CYCLE_MAX_MINUTES,
             OpenBattlegroundProperties.OPEN_BG_PLAYER_DRIFT, OpenBattlegroundProperties.UnitsText(eRealm.Albion),
-            OpenBattlegroundProperties.UnitsText(eRealm.Midgard), OpenBattlegroundProperties.UnitsText(eRealm.Hibernia));
+            OpenBattlegroundProperties.UnitsText(eRealm.Midgard), OpenBattlegroundProperties.UnitsText(eRealm.Hibernia),
+            OpenBattlegroundProperties.Mode, OpenBattlegroundProperties.LandingPeace, OpenBattlegroundProperties.Presets);
 
         /// <summary>A realm's raw units text ("" for the global targets or another realm).</summary>
         public string UnitsOf(eRealm realm) => (realm switch
@@ -214,6 +221,9 @@ namespace DOL.GS.Commands
             "albion" => UnitsShown(AlbionUnits),
             "midgard" => UnitsShown(MidgardUnits),
             "hibernia" => UnitsShown(HiberniaUnits),
+            "mode" => OpenBattlegroundMode.ParseMode(Mode) == OpenBgMode.PerRealm ? "perrealm" : "serverpvp",
+            "peace" => string.IsNullOrWhiteSpace(Peace) ? "auto" : Peace.Trim().ToLowerInvariant(),
+            "presets" => string.IsNullOrWhiteSpace(Presets) ? "off" : Presets.Trim(),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown open BG setup key."),
         };
 
@@ -236,11 +246,15 @@ namespace DOL.GS.Commands
             new("albion", "open_bg_units_albion", false, 0, 0, "Albion's own crew; global uses groups8/small/solos", IsUnits: true),
             new("midgard", "open_bg_units_midgard", false, 0, 0, "Midgard's own crew; global uses groups8/small/solos", IsUnits: true),
             new("hibernia", "open_bg_units_hibernia", false, 0, 0, "Hibernia's own crew; global uses groups8/small/solos", IsUnits: true),
+            new("mode", "open_bg_mode", false, 0, 0, "friend rule: serverpvp = group, guild and battlegroup only, mixed crews; perrealm = the same realm is a friend in region 252", Choices: "serverpvp|perrealm"),
+            new("peace", "open_bg_landing_peace", false, 0, 0, "whose landing peace holds at a landing circle: all realms, only the landing's own realm, or auto = by mode", Choices: "all|realm|auto"),
+            new("presets", "open_bg_presets", false, 0, 0, "group presets as name:count, e.g. std8:2,caster8:1,small:2 (std8 caster8 raid8 stealth4 small duo); off = the group counts as before", Choices: "list|off"),
         };
 
         public const string Usage = "Use /bgsetup <key> <value>. Keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, " +
             "max_bots 8-120, cycle_min 5-120, cycle_max 5-120 (min not above max), drift on|off, " +
-            "albion|midgard|hibernia 8-man/small/solos (e.g. 1/2/4) or global.";
+            "albion|midgard|hibernia 8-man/small/solos (e.g. 1/2/4) or global, mode serverpvp|perrealm, peace all|realm|auto, " +
+            "presets name:count list (e.g. std8:2,caster8:1) or off.";
 
         /// <summary>The words that put a realm back on the global targets.</summary>
         public static bool IsGlobalWord(string text) =>
@@ -257,16 +271,40 @@ namespace DOL.GS.Commands
         public static (bool ok, string key, string value, string error) Parse(string[] args) =>
             Parse(args, OpenBattlegroundProperties.CycleMinMinutes, OpenBattlegroundProperties.CycleMaxMinutes);
 
+        // mode, peace and presets: a rejected value returns no row, so the stored value stays as it was.
+        private static (bool ok, string key, string value, string error) ParseText(OpenBgSetupKey key, string text)
+        {
+            string word = text.ToLowerInvariant();
+            switch (key.Name)
+            {
+                case "mode" when word is "serverpvp" or "perrealm":
+                    return (true, key.RowKey, word, null);
+                case "peace" when word is "all" or "realm":
+                    return (true, key.RowKey, word, null);
+                case "peace" when word == "auto":
+                    return (true, key.RowKey, string.Empty, null);
+                case "presets" when word == "off":
+                    return (true, key.RowKey, string.Empty, null);
+                case "presets" when OpenBattlegroundArchetypes.ParseMix(text).Count > 0:
+                    return (true, key.RowKey, text, null);
+            }
+            string expected = key.Name == "presets" ? "a list of name:count such as std8:2,caster8:1 (std8 caster8 raid8 stealth4 small duo), or off" : key.Range.Replace("|", " or ");
+            return (false, key.RowKey, null, $"{key.Name} takes {expected}, not '{text}'. See /bgsetup help.");
+        }
+
         /// <summary>
         /// ok with the row key and the value to store ("True"/"False" or an integer), or an error line. A new
         /// cycle_min may not exceed the current maximum, a new cycle_max may not fall below the current minimum.
         /// </summary>
         public static (bool ok, string key, string value, string error) Parse(string[] args, int currentCycleMin, int currentCycleMax)
         {
-            if (args == null || args.Length != 3) return (false, null, null, Usage);
+            if (args == null || args.Length < 3) return (false, null, null, Usage);
             OpenBgSetupKey key = Find(args[1]);
             if (key == null) return (false, null, null, $"Unknown key '{args[1]}'. {Usage}");
-            string text = args[2]?.Trim() ?? string.Empty;
+            // Only a presets list may be typed with spaces after its commas.
+            if (args.Length != 3 && key.Name != "presets") return (false, null, null, Usage);
+            string text = (args.Length == 3 ? args[2] : string.Join(" ", args.Skip(2)))?.Trim() ?? string.Empty;
+            if (key.IsText) return ParseText(key, text);
             if (key.IsUnits)
             {
                 if (IsGlobalWord(text)) return (true, key.RowKey, string.Empty, null);

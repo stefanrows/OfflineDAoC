@@ -111,6 +111,75 @@ namespace DOL.GS.Tests
             });
         }
 
+        [TestCase("mode", "perrealm", "open_bg_mode", "perrealm")]
+        [TestCase("mode", "ServerPvp", "open_bg_mode", "serverpvp")]
+        [TestCase("open_bg_mode", " PERREALM ", "open_bg_mode", "perrealm")]
+        [TestCase("peace", "all", "open_bg_landing_peace", "all")]
+        [TestCase("peace", "Realm", "open_bg_landing_peace", "realm")]
+        [TestCase("peace", "auto", "open_bg_landing_peace", "")]
+        [TestCase("presets", "std8:2,solo:6", "open_bg_presets", "std8:2,solo:6")]
+        [TestCase("presets", "std8:2, caster8:1", "open_bg_presets", "std8:2, caster8:1")]
+        [TestCase("presets", "off", "open_bg_presets", "")]
+        public void ParseAcceptsModePeaceAndPresets(string key, string value, string rowKey, string stored)
+        {
+            var result = Parse(key, value);
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.ok, Is.True, result.error);
+                Assert.That(result.key, Is.EqualTo(rowKey));
+                Assert.That(result.value, Is.EqualTo(stored));
+                Assert.That(result.error, Is.Null);
+            });
+        }
+
+        [TestCase("mode", "coop")]
+        [TestCase("mode", "")]
+        [TestCase("peace", "everyone")]
+        [TestCase("peace", "")]
+        [TestCase("presets", "nonsense")]
+        [TestCase("presets", "unknown:3")]
+        [TestCase("presets", "std8:0")]
+        [TestCase("presets", "")]
+        public void ParseRejectsABadModePeaceOrPresets(string key, string value)
+        {
+            // A rejected value yields no row to write, so the stored value stays unchanged.
+            var result = Parse(key, value);
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.ok, Is.False);
+                Assert.That(result.value, Is.Null);
+                Assert.That(result.error, Does.Contain(key));
+                Assert.That(result.error, Does.Contain("/bgsetup").Or.Contain("takes"));
+            });
+        }
+
+        [Test]
+        public void ParseJoinsAPresetsListThatWasTypedWithSpaces()
+        {
+            var result = OpenBgSetupParser.Parse(new[] { "&bgsetup", "presets", "std8:2,", "caster8:1" }, 15, 45);
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.ok, Is.True, result.error);
+                Assert.That(result.value, Is.EqualTo("std8:2, caster8:1"));
+            });
+        }
+
+        [Test]
+        public void SetupValuesShowModePeaceAndPresets()
+        {
+            OpenBgSetupValues values = Defaults with { Mode = "perrealm", Peace = "", Presets = "std8:2" };
+            string setup = string.Join("\n", OpenBgSetupPages.SetupLines(values));
+            Assert.Multiple(() =>
+            {
+                Assert.That(values.ValueOf("mode"), Is.EqualTo("perrealm"));
+                Assert.That(values.ValueOf("peace"), Is.EqualTo("auto"));
+                Assert.That(values.ValueOf("presets"), Is.EqualTo("std8:2"));
+                Assert.That(Defaults.ValueOf("presets"), Is.EqualTo("off"));
+                Assert.That(setup, Does.Contain("mode = perrealm (serverpvp|perrealm)"));
+                Assert.That(setup, Does.Contain("peace = auto (all|realm|auto)"));
+            });
+        }
+
         [Test]
         public void SetupPageShowsEachRealmsCrew()
         {
