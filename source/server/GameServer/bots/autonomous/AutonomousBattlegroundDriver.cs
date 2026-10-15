@@ -42,6 +42,13 @@ public static class AutonomousBattlegroundDriver
         OpenBgRole.Assault => isRaidLeadGuild || msSinceLordDown >= ClaimLeadMilliseconds,
         _ => false,
     };
+
+    /// <summary>Pure break-off rule of the world RvR doctrine, used by open-BG groups: healer dead, a second enemy group near, or three to one against.</summary>
+    public static bool ShouldBreakOff(bool healerDead, int enemyGroupsNear, int aliveFriends, int aliveEnemies) =>
+        aliveEnemies > 0 && (healerDead || enemyGroupsNear >= 2 || aliveEnemies >= 3 * Math.Max(1, aliveFriends));
+
+    /// <summary>open BG: a group that broke off walks to its own landing for this long (game time), then the normal loop resumes.</summary>
+    public const int BreakOffMilliseconds = 90_000;
     private const int ProgressDistance = 96;
     // Detour returns at most 256 polygons per path, so a far camp is proved by chaining capped legs.
     public const int MaxRouteLegs = 8;
@@ -127,6 +134,11 @@ public static class AutonomousBattlegroundDriver
         // open BG siege: assaulting allies of this bot (raid battlegroup, group, guild) at the gate, counted on the route interval.
         public int SiegePresent;
         public long NextSiegeCount;
+        // open BG break-off: the group leader's retreat to its own landing runs until this game time; followers read the leader's.
+        public long BreakOffUntil;
+        public Point3D BreakOffPoint;
+        // The BreakOffUntil value the bot already cleared its fight for, so each break-off drops the aggro once.
+        public long BreakOffCleared;
     }
 
     /// <summary>A closed outer gate of a keep and its proven floor points outside, nearest distance first.</summary>
@@ -187,7 +199,27 @@ public static class AutonomousBattlegroundDriver
             GameLiving opponent = definition.Kind == BattlegroundDefinitionKind.Open
                 ? BattlegroundCombatTargets.FindOpponent(bot, OpponentRange, target => MayAcquire(bot, target))
                 : BattlegroundCombatTargets.FindOpponent(bot, OpponentRange);
-            if (opponent != null) brain.Attack(opponent);
+            if (state.Open && BreakingOff(bot, state, now, out _))
+            {
+                // A group that broke off drops its fight once and takes no new target while it retreats; a bot that is
+                // attacked on the way still defends itself through the class brain.
+                if (opponent != null && state.BreakOffCleared != BreakOffUntilOf(bot, state))
+                {
+                    state.BreakOffCleared = BreakOffUntilOf(bot, state);
+                    brain.ClearAggroList();
+                    bot.StopAttack();
+                }
+            }
+            else if (opponent != null)
+            {
+                if (state.Open && IsGroupHead(bot) && ConsiderBreakOff(bot, state, now))
+                {
+                    state.BreakOffCleared = state.BreakOffUntil;
+                    brain.ClearAggroList();
+                    bot.StopAttack();
+                }
+                else brain.Attack(opponent);
+            }
         }
 
         bool engaged = brain.HasAggro || bot.InCombat;
@@ -207,12 +239,86 @@ public static class AutonomousBattlegroundDriver
                 if (!GoTo(bot, state, home, now)) AutonomousBattlegroundParticipation.EndReliefWalk(bot);
             }
             else if (AutonomousBattlegroundParticipation.IsLeaving(bot)) { state.Action = "leaving"; Stand(bot); }
+            else if (state.Open && BreakingOff(bot, state, now, out Point3D retreat))
+            {
+                state.Action = "break-off";
+                if (!GoTo(bot, state, retreat, now)) Stand(bot);
+            }
             else if (leader != null && leader != bot && leader.IsAlive && leader.CurrentRegion == bot.CurrentRegion)
                 Assist(brain, bot, leader, state, now);
             else Lead(brain, bot, definition, state, now);
         }
         AutonomousBattlegroundParticipation.RecordDriverTurn(bot, bot.CurrentRegionID, state.Action);
         Observe(bot, state, engaged);
+        return true;
+    }
+
+    /// <summary>The group's lead bot, or a bot without a group: the one that decides a break-off for the whole group.</summary>
+    private static bool IsGroupHead(GameBot bot) => bot.Group == null || bot.Group.LivingLeader == bot;
+
+    // The break-off end time that applies to the bot: its own as group head, else its group leader's.
+    private static long BreakOffUntilOf(GameBot bot, State state) =>
+        !IsGroupHead(bot) && bot.Group.LivingLeader is GameBot lead && States.TryGetValue(lead, out State leadState)
+            ? leadState.BreakOffUntil : state.BreakOffUntil;
+
+    /// <summary>Whether the bot's group is breaking off now, and the landing it walks to (open BG only; the group head decides).</summary>
+    private static bool BreakingOff(GameBot bot, State state, long now, out Point3D retreat)
+    {
+        State source = state;
+        if (!IsGroupHead(bot) && bot.Group.LivingLeader is GameBot lead && States.TryGetValue(lead, out State leadState)) source = leadState;
+        retreat = source.BreakOffPoint;
+        return retreat != null && now < source.BreakOffUntil;
+    }
+
+    /// <summary>
+    /// The world RvR break-off rule for an open-BG group head with an enemy near: counts its living group and the legal
+    /// enemies within <see cref="OpponentRange"/> (the second enemy group is a different <see cref="Group"/>; ungrouped
+    /// enemies count as one), and on <see cref="ShouldBreakOff"/> starts a <see cref="BreakOffMilliseconds"/> retreat to the
+    /// realm's own landing. Defenders hold the keep and a retreat order is already retreating, so neither breaks off.
+    /// </summary>
+    private static bool ConsiderBreakOff(GameBot bot, State state, long now)
+    {
+        if (!OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) || order.Role is OpenBgRole.Defend or OpenBgRole.Retreat) return false;
+        Zone zone = bot.CurrentZone;
+        if (zone == null) return false;
+        Point3D landing = null;
+        foreach ((ushort region, int x, int y, eRealm realm) in AutonomousHubDeparture.OpenBgLandings())
+            if (region == bot.CurrentRegionID && realm == bot.Realm) { landing = new Point3D(x, y, bot.Z); break; }
+        if (landing == null) return false;
+
+        int friends = 0;
+        bool healerDead = false;
+        if (bot.Group == null) friends = 1;
+        else
+            foreach (GameLiving member in bot.Group.GetMembersInTheGroup())
+            {
+                if (member.IsAlive) friends++;
+                else if (member is GameBot dead && AutonomousRvrDoctrine.TraitsOf((eCharacterClass)(dead.CharacterClass?.ID ?? 0)) is var kind &&
+                         kind.HasFlag(RvrClassTraits.Healer) && !kind.HasFlag(RvrClassTraits.Melee)) healerDead = true;
+            }
+
+        ushort radius = (ushort)OpponentRange;
+        int enemies = 0;
+        Group firstGroup = null;
+        bool secondGroup = false, ungrouped = false;
+        void Count(GameLiving target)
+        {
+            if (!BattlegroundCombatTargets.IsLegal(bot, target, zone) || !MayAcquire(bot, target)) return;
+            enemies++;
+            Group group = (target as GamePlayer)?.Group ?? (target as GameBot)?.Group;
+            if (group == null) ungrouped = true;
+            else if (firstGroup == null) firstGroup = group;
+            else if (!ReferenceEquals(firstGroup, group)) secondGroup = true;
+        }
+        foreach (GamePlayer player in bot.GetPlayersInRadius(radius)) Count(player);
+        foreach (GameNPC npc in bot.GetNPCsInRadius(radius)) if (PvpCombatant.IsPlayerShaped(npc)) Count(npc);
+        int groups = (firstGroup != null ? 1 : 0) + (secondGroup ? 1 : 0) + (ungrouped ? 1 : 0);
+
+        if (!ShouldBreakOff(healerDead, groups, friends, enemies)) return false;
+        state.BreakOffPoint = landing;
+        state.BreakOffUntil = now + BreakOffMilliseconds;
+        Log.Info($"OPEN_BG_BREAK_OFF region={bot.CurrentRegionID} bot=\"{bot.Name}\" healer_dead={healerDead} enemy_groups={groups} " +
+            $"friends={friends} enemies={enemies} seconds={BreakOffMilliseconds / 1000}");
         return true;
     }
 

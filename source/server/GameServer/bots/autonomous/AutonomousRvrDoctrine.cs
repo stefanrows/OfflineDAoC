@@ -170,6 +170,8 @@ public static class AutonomousRvrDoctrine
         bool areaControl = kinds.Any(kind => kind.HasFlag(RvrClassTraits.AreaMez) || kind.HasFlag(RvrClassTraits.AreaStun));
         bool areaStun = members.Any(member => member.Class == eCharacterClass.Healer && member.Level >= 32);
         bool bomber = members.Any(member => TraitsOf(member.Class).HasFlag(RvrClassTraits.PointBlankBomb) && member.Level >= 20);
+        // Two or more point-blank bombers with one area mez or area stun among them are a bomb group, whatever class holds the control.
+        bool bombPair = Count(RvrClassTraits.PointBlankBomb) >= 2 && areaControl;
         bool speed = Count(RvrClassTraits.Speed) > 0;
 
         RvrDoctrineKind kind =
@@ -182,7 +184,7 @@ public static class AutonomousRvrDoctrine
             archers >= 2 && archers * 2 >= count ? RvrDoctrineKind.ArcherGroup :
             count == 2 && (healers >= 1 || areaControl) && kinds.Any(k => k.HasFlag(RvrClassTraits.Caster))
                 ? RvrDoctrineKind.CasterDuo :
-            count >= 4 && bomber && areaStun ? RvrDoctrineKind.BombGroup :
+            count >= 4 && (bomber && areaStun || bombPair) ? RvrDoctrineKind.BombGroup :
             pets * 2 >= count && count >= 3 ? RvrDoctrineKind.PetCasters :
             count >= 6 && healers >= 2 && areaControl && melee >= 2 ? RvrDoctrineKind.AssistTrain :
             count >= 5 && speed && melee * 2 > count && healers >= 1 ? RvrDoctrineKind.MeleeTrain :
