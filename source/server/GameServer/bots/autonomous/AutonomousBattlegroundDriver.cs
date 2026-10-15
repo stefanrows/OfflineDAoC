@@ -31,6 +31,17 @@ public static class AutonomousBattlegroundDriver
     public const int FollowDistance = 300;
     private const int RouteIntervalMilliseconds = 3_000;
     private const int ClaimRetryMilliseconds = 5_000;
+
+    /// <summary>The raid's lead guild claims first; partners wait this long after the lord fell (the allied claim flip: 10 of 18 claims in run L2 came within 3 minutes of the previous one).</summary>
+    public const long ClaimLeadMilliseconds = 60_000;
+
+    /// <summary>Pure claim rule: only assault and defend units walk to the steward, the lead guild first.</summary>
+    public static bool ClaimAllowed(OpenBgRole role, bool isRaidLeadGuild, long msSinceLordDown) => role switch
+    {
+        OpenBgRole.Defend => true,
+        OpenBgRole.Assault => isRaidLeadGuild || msSinceLordDown >= ClaimLeadMilliseconds,
+        _ => false,
+    };
     private const int ProgressDistance = 96;
     // Detour returns at most 256 polygons per path, so a far camp is proved by chaining capped legs.
     public const int MaxRouteLegs = 8;
@@ -76,6 +87,8 @@ public static class AutonomousBattlegroundDriver
         public string Action = "none";
         public long NextScan;
         public long NextClaim;
+        // Game time the lord was first seen defeated (open BG claim lock); 0 while he stands.
+        public long LordDownAt;
         public long NextAssault;
         public GameLiving AssaultTarget;
         public Point3D AssaultApproach;
@@ -334,7 +347,7 @@ public static class AutonomousBattlegroundDriver
     /// </summary>
     private static bool LeadOpen(BotBrain brain, GameBot bot, AbstractGameKeep keep, Point3D[] camps, OpenBgOrder order, State state, long now)
     {
-        if (keep != null && TryClaim(bot, keep, state, now)) return true;
+        if (keep != null && ClaimAllowed(order.Role, IsRaidLeadGuild(bot), MsSinceLordDown(keep, state, now)) && TryClaim(bot, keep, state, now)) return true;
         if (keep != null && GoesToKeep(order))
         {
             KeepOrderStep step = StepAtKeep(order, order.Role == OpenBgRole.Defend ? 0 : SiegePresent(bot, keep, state, now));
@@ -693,6 +706,26 @@ public static class AutonomousBattlegroundDriver
             state.HoldProgress = AutonomousBattlegroundParticipation.IsProgressing(leader);
             Stand(bot);
         }
+    }
+
+    /// <summary>Whether the bot's guild is the guild of the current open BG raid's lead unit; a guildless bot never is.</summary>
+    private static bool IsRaidLeadGuild(GameBot bot)
+    {
+        string lead = OpenBattlegroundDirector.Raid?.LeadGuild?.Trim();
+        string own = bot.Guild?.Name?.Trim();
+        return !string.IsNullOrEmpty(lead) && !string.IsNullOrEmpty(own) && string.Equals(lead, own, StringComparison.Ordinal);
+    }
+
+    /// <summary>Milliseconds since the lord was first seen defeated; the stamp is reset when he stands again.</summary>
+    private static long MsSinceLordDown(AbstractGameKeep keep, State state, long now)
+    {
+        if (keep?.DBKeep == null || !keep.DBKeep.LordDefeated)
+        {
+            state.LordDownAt = 0;
+            return 0;
+        }
+        if (state.LordDownAt == 0) state.LordDownAt = now;
+        return now - state.LordDownAt;
     }
 
     private static bool TryClaim(GameBot bot, AbstractGameKeep keep, State state, long now)
