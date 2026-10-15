@@ -16,6 +16,10 @@ internal sealed class OpenBgSettingsControl : UserControl
     private readonly CheckBox _drift = new() { AutoSize = true, Text = "Player drift" };
     private readonly Dictionary<string, NumericUpDown> _numbers = new();
     private readonly Dictionary<string, TextBox> _units = new();
+    private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130, AccessibleName = "Mode" };
+    private readonly ComboBox _peace = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130, AccessibleName = "Landing peace" };
+    private readonly TextBox _presets = new() { Width = 420, BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text, AccessibleName = "Group presets",
+        PlaceholderText = "off" };
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
     private readonly Label _live = new() { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 12, 3, 3) };
     private readonly Button _save = DaocTheme.ToolButton("Save");
@@ -71,6 +75,18 @@ internal sealed class OpenBgSettingsControl : UserControl
             }
         }
         body.Controls.Add(SwitchRow(_drift, OpenBgSettings.Field("drift")));
+        // Mode, landing peace and presets: "serverpvp"/"perrealm" and "auto"/"all"/"realm" shown as words, stored as the rows hold them.
+        _mode.Items.AddRange(["Server PvP", "Per realm"]);
+        _peace.Items.AddRange(["Auto (by mode)", "All realms", "Own realm only"]);
+        foreach (ComboBox box in new[] { _mode, _peace })
+        {
+            DaocTheme.StyleInput(box);
+            box.SelectedIndexChanged += (_, _) => Edited();
+        }
+        _presets.TextChanged += (_, _) => Edited();
+        body.Controls.Add(TextRow(_mode, OpenBgSettings.TextFields[0]));
+        body.Controls.Add(TextRow(_peace, OpenBgSettings.TextFields[1]));
+        body.Controls.Add(TextRow(_presets, OpenBgSettings.TextFields[2]));
         _enabled.CheckedChanged += (_, _) => Edited();
         _drift.CheckedChanged += (_, _) => Edited();
 
@@ -136,6 +152,33 @@ internal sealed class OpenBgSettingsControl : UserControl
         return row;
     }
 
+    private Control TextRow(Control input, OpenBgTextField field)
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(0, 4, 0, 2) };
+        var line = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        var label = new Label { Text = field.Label, Width = 190, Height = 28, TextAlign = ContentAlignment.MiddleLeft };
+        _toolTips.SetToolTip(label, field.Help);
+        _toolTips.SetToolTip(input, field.Help);
+        line.Controls.Add(label);
+        line.Controls.Add(input);
+        row.Controls.Add(line);
+        row.Controls.Add(new Label
+        {
+            AutoSize = true, MaximumSize = new Size(820, 0), ForeColor = DaocTheme.Parchment, Text = field.Help, Margin = new Padding(3, 0, 3, 2),
+        });
+        return row;
+    }
+
+    private static readonly string[] ModeValues = ["serverpvp", "perrealm"];
+    private static readonly string[] PeaceValues = ["", "all", "realm"];
+
+    // The presets as typed: a readable list in its stored form, anything else as it stands (it blocks Save).
+    private string PresetsText() =>
+        OpenBgSettings.TryNormalizePresets(_presets.Text, out string normalized) ? normalized : _presets.Text;
+
+    private string? InvalidPresets() => OpenBgSettings.TryNormalizePresets(_presets.Text, out _) ? null :
+        "Group presets: use name:count entries such as std8:2,caster8:1, or leave it empty.";
+
     // The realm crews as typed: a readable text in its stored form, anything else as it stands (it blocks Save).
     private string UnitsText(string name) =>
         OpenBgSettings.TryNormalizeUnits(_units[name].Text, out string normalized) ? normalized : _units[name].Text;
@@ -171,6 +214,9 @@ internal sealed class OpenBgSettingsControl : UserControl
         AlbionUnits = UnitsText("albion"),
         MidgardUnits = UnitsText("midgard"),
         HiberniaUnits = UnitsText("hibernia"),
+        Mode = ModeValues[Math.Max(0, _mode.SelectedIndex)],
+        LandingPeace = PeaceValues[Math.Max(0, _peace.SelectedIndex)],
+        Presets = PresetsText(),
     };
 
     private void SetValues(OpenBgSettings settings)
@@ -187,6 +233,9 @@ internal sealed class OpenBgSettingsControl : UserControl
         _numbers["cycle_max"].Value = value.CycleMax;
         foreach (OpenBgUnitsField field in OpenBgSettings.UnitFields)
             _units[field.Name].Text = value.UnitsOf(field.Name);
+        _mode.SelectedIndex = Math.Max(0, Array.IndexOf(ModeValues, value.Mode));
+        _peace.SelectedIndex = Math.Max(0, Array.IndexOf(PeaceValues, value.LandingPeace));
+        _presets.Text = value.Presets;
         _loading = false;
     }
 
@@ -217,6 +266,8 @@ internal sealed class OpenBgSettingsControl : UserControl
                 throw new InvalidOperationException("The longest cycle must not be shorter than the shortest cycle.");
             if (InvalidUnits() is string invalid)
                 throw new InvalidOperationException(invalid);
+            if (InvalidPresets() is string invalidPresets)
+                throw new InvalidOperationException(invalidPresets);
             OpenBgSettings.Save(_database, values, _serverStopped);
             _saved = values.Clamped();
             _loadFailed = false;
@@ -240,15 +291,18 @@ internal sealed class OpenBgSettingsControl : UserControl
         _wasStopped = stopped;
         OpenBgSettings values = ReadValues();
         string? invalidUnits = InvalidUnits();
-        bool valid = values.CycleMax >= values.CycleMin && invalidUnits == null;
+        string? invalidPresets = InvalidPresets();
+        bool valid = values.CycleMax >= values.CycleMin && invalidUnits == null && invalidPresets == null;
         _enabled.Enabled = _drift.Enabled = stopped;
         foreach (NumericUpDown number in _numbers.Values) number.Enabled = stopped;
         foreach (TextBox units in _units.Values) units.Enabled = stopped;
+        _mode.Enabled = _peace.Enabled = _presets.Enabled = stopped;
         _save.Enabled = stopped && valid;
         _undo.Enabled = _defaults.Enabled = stopped;
         _status.Text = !stopped ? "The server is running: these fields are read-only. Change the setup live in game with /bgsetup (window) or /bgsetup <key> <value>." :
             _notice.Length > 0 ? _notice :
             invalidUnits != null ? invalidUnits :
+            invalidPresets != null ? invalidPresets :
             !valid ? "The longest cycle must not be shorter than the shortest cycle." :
             HasUnsavedChanges ? "Unsaved changes — click Save before starting the server." :
             "Saved setup shown. The server reads it at its next start.";

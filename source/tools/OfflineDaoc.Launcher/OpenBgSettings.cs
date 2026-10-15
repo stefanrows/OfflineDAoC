@@ -12,6 +12,9 @@ public sealed record OpenBgField(string Name, string RowKey, string Label, int M
 /// <summary>One realm's own crew row: open_bg_units_&lt;realm&gt;, text "8-man/small/solos" or empty for the global values.</summary>
 public sealed record OpenBgUnitsField(string Name, string RowKey, string Label, string Help, string Description);
 
+/// <summary>One text row of the open BG: mode, landing peace or the presets list, with the value the server uses when the row is empty.</summary>
+public sealed record OpenBgTextField(string Name, string RowKey, string Label, string DefaultText, string Help, string Description);
+
 /// <summary>
 /// The open BG setup (Thidranki 252, spec 2026-10-11 §7) as the launcher edits it: the same open_bg_* server property
 /// rows and ranges as the in-game /bgsetup command, eight numbers and switches plus each realm's own crew
@@ -26,6 +29,61 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
     public string AlbionUnits { get; init; } = string.Empty;
     public string MidgardUnits { get; init; } = string.Empty;
     public string HiberniaUnits { get; init; } = string.Empty;
+
+    /// <summary>The friend rule: "serverpvp" (Camlann rule, mixed crews) or "perrealm" (same realm is a friend in region 252).</summary>
+    public string Mode { get; init; } = "serverpvp";
+
+    /// <summary>Landing peace: "all", "realm" or empty (by mode).</summary>
+    public string LandingPeace { get; init; } = string.Empty;
+
+    /// <summary>Group presets as "std8:2,caster8:1"; empty means the group counts as before.</summary>
+    public string Presets { get; init; } = string.Empty;
+
+    public static readonly OpenBgTextField[] TextFields =
+    [
+        new("mode", "open_bg_mode", "Mode", "serverpvp",
+            "Server PvP: friends are group, guild and battlegroup, crews mixed across realms. Per realm: the same realm is a friend inside region 252, crews per realm.",
+            "Open BG mode: serverpvp (Camlann rule) or perrealm (classic DAoC rule inside region 252)"),
+        new("peace", "open_bg_landing_peace", "Landing peace", string.Empty,
+            "Whose landing peace holds at a landing circle. Auto: all realms in Server PvP, only the landing's own realm in Per realm.",
+            "Open BG landing peace: all, realm, or empty (by mode)"),
+        new("presets", "open_bg_presets", "Group presets", string.Empty,
+            "Role presets as name:count, e.g. std8:2,caster8:1,raid8:1,stealth4:1,small:2,duo:0 (std8, caster8, raid8, stealth4, small, duo). Empty: the group counts as before.",
+            "Open BG group presets as name:count, e.g. std8:2,caster8:1,small:2 (empty: the 8-man/small/solo counts as before)"),
+    ];
+
+    /// <summary>The mode as stored: "perrealm" or "serverpvp" (anything else is the server's default).</summary>
+    public static string NormalizeMode(string? text) =>
+        string.Equals(text?.Trim(), "perrealm", StringComparison.OrdinalIgnoreCase) ? "perrealm" : "serverpvp";
+
+    /// <summary>The landing peace as stored: "all", "realm" or "" (auto).</summary>
+    public static string NormalizePeace(string? text) => text?.Trim().ToLowerInvariant() switch { "all" => "all", "realm" => "realm", _ => string.Empty };
+
+    /// <summary>
+    /// A presets list as stored: empty or "off" gives "", otherwise every entry must be name:count (a name of letters and
+    /// digits, a whole count) and is joined by commas without spaces. False for any other text. Which names exist is the
+    /// server's catalog; it skips an unknown name.
+    /// </summary>
+    public static bool TryNormalizePresets(string? text, out string normalized)
+    {
+        normalized = string.Empty;
+        string trimmed = text?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0 || trimmed.Equals("off", StringComparison.OrdinalIgnoreCase)) return true;
+        var entries = new List<string>();
+        foreach (string part in trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string[] pair = part.Split(':', 2, StringSplitOptions.TrimEntries);
+            if (pair.Length != 2 || pair[0].Length == 0 || !pair[0].All(char.IsLetterOrDigit) ||
+                !int.TryParse(pair[1], NumberStyles.None, CultureInfo.InvariantCulture, out int count))
+                return false;
+            entries.Add(string.Create(CultureInfo.InvariantCulture, $"{pair[0].ToLowerInvariant()}:{count}"));
+        }
+        if (entries.Count == 0) return false;
+        normalized = string.Join(",", entries);
+        return true;
+    }
+
+    private static string NormalizePresets(string? text) => TryNormalizePresets(text, out string normalized) ? normalized : string.Empty;
 
     public static readonly OpenBgUnitsField[] UnitFields =
     [
@@ -128,6 +186,9 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             AlbionUnits = NormalizeUnits(AlbionUnits),
             MidgardUnits = NormalizeUnits(MidgardUnits),
             HiberniaUnits = NormalizeUnits(HiberniaUnits),
+            Mode = NormalizeMode(Mode),
+            LandingPeace = NormalizePeace(LandingPeace),
+            Presets = NormalizePresets(Presets),
         };
     }
 
@@ -138,7 +199,7 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
     }
 
     /// <summary>
-    /// The eleven rows (row key, stored value): the eight fields in order, then the realms' crews; clamped, switches as
+    /// The fourteen rows (row key, stored value): the eight fields in order, the realms' crews, then mode, landing peace and presets; clamped, switches as
     /// "True"/"False" like the server writes them.
     /// </summary>
     public static IReadOnlyList<(string key, string value)> ToRows(OpenBgSettings settings)
@@ -154,8 +215,18 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             "cycle_min" => Number(value.CycleMin),
             "cycle_max" => Number(value.CycleMax),
             _ => Switch(value.Drift),
-        })).Concat(UnitFields.Select(field => (field.RowKey, value.UnitsOf(field.Name)))).ToArray();
+        })).Concat(UnitFields.Select(field => (field.RowKey, value.UnitsOf(field.Name))))
+            .Concat(TextFields.Select(field => (field.RowKey, value.TextOf(field.Name)))).ToArray();
     }
+
+    /// <summary>A text field's stored value by field name (mode, peace, presets).</summary>
+    public string TextOf(string name) => name switch
+    {
+        "mode" => Mode,
+        "peace" => LandingPeace,
+        "presets" => Presets,
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown open BG text field."),
+    };
 
     /// <summary>Settings from saved rows: a missing or unreadable row gives that field's default; numbers are clamped.</summary>
     public static OpenBgSettings FromRows(IEnumerable<(string key, string value)>? rows)
@@ -182,6 +253,9 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             AlbionUnits = saved.GetValueOrDefault("open_bg_units_albion") ?? string.Empty,
             MidgardUnits = saved.GetValueOrDefault("open_bg_units_midgard") ?? string.Empty,
             HiberniaUnits = saved.GetValueOrDefault("open_bg_units_hibernia") ?? string.Empty,
+            Mode = saved.GetValueOrDefault("open_bg_mode") ?? string.Empty,
+            LandingPeace = saved.GetValueOrDefault("open_bg_landing_peace") ?? string.Empty,
+            Presets = saved.GetValueOrDefault("open_bg_presets") ?? string.Empty,
         }.Clamped();
     }
 
@@ -197,9 +271,9 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
 
     /// <summary>Reads the open_bg_* rows of the save (read-only; missing table or rows give the defaults).</summary>
     public static OpenBgSettings Load(string database) =>
-        FromRows(ServerPropertyRows.Read(database, Fields.Select(field => field.RowKey).Concat(UnitFields.Select(field => field.RowKey))));
+        FromRows(ServerPropertyRows.Read(database, Fields.Select(field => field.RowKey).Concat(UnitFields.Select(field => field.RowKey)).Concat(TextFields.Select(field => field.RowKey))));
 
-    /// <summary>Writes all eleven rows through the launcher's server-property writer. Only while the server is stopped.</summary>
+    /// <summary>Writes all fourteen rows through the launcher's server-property writer. Only while the server is stopped.</summary>
     public static void Save(string database, OpenBgSettings settings, Func<bool> serverStopped)
     {
         if (!serverStopped()) throw new InvalidOperationException("Stop the server before saving the open BG setup; while it runs, use /bgsetup in game.");
@@ -208,7 +282,9 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             new ServerPropertyRow(field.RowKey, field.Description, DefaultText(field), rows[index].value)).ToArray();
         ServerPropertyRow[] realms = UnitFields.Select((field, index) =>
             new ServerPropertyRow(field.RowKey, field.Description, string.Empty, rows[Fields.Length + index].value)).ToArray();
-        ServerPropertyRows.Upsert(database, Category, numbers.Concat(realms).ToArray(), serverStopped);
+        ServerPropertyRow[] texts = TextFields.Select((field, index) =>
+            new ServerPropertyRow(field.RowKey, field.Description, field.DefaultText, rows[Fields.Length + UnitFields.Length + index].value)).ToArray();
+        ServerPropertyRows.Upsert(database, Category, numbers.Concat(realms).Concat(texts).ToArray(), serverStopped);
     }
 
     private static string DefaultText(OpenBgField field) => field.IsSwitch ? Switch(field.Default == 1) : Number(field.Default);
