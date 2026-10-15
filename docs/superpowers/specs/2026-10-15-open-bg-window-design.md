@@ -91,6 +91,13 @@ view (nothing to click, no live picture).
    frontier regions. To prove first: that a bot can be placed into region 252
    directly, without the porter cast.
 
+   Built (0.278.0) differently: no port-out and no port-in. Each bot boards at
+   its own porter (members of another region at the open BG porter of their
+   own region, after the leader entered) and lands at the leader's landing,
+   without travel into the enemy frontier; a member that cannot board is
+   dropped by the straggler timeout (`OPEN_BG_STRAGGLER_DROPPED`). Still open:
+   the Custom5 window (Plan 2) and the porter-menu landing choice for players.
+
 ## 3. Server side
 
 - `OpenBgWindow` (new, replaces `OpenBgManager` + `OpenBgManagerSession`'s

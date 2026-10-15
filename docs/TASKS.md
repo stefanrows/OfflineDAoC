@@ -568,6 +568,28 @@ Agent sessions on items 45–48: take the role and context from
      Follow-ups: allied raid guilds still claim keep 11 over each other
      within seconds (4 claims in 37 s); Midgard's 40+ pool is mostly bound
      in guild keep defense; bug 154 egress loop; realm enum aliases in logs.
+     0.278.0 (2026-10-15, modes and presets; offline checks only, real-game
+     verification pending): `open_bg_mode` (Server PvP default, Per realm
+     classic rule in region 252), `open_bg_landing_peace` (all realms at
+     every landing circle by default in Server PvP, own realm only in Per
+     realm, the property overrides), `open_bg_presets` with an archetype
+     catalog (`std8`, `caster8`, `raid8`, `stealth4`, `small`, `duo`) that
+     fills groups by role slots, mixed groups (members of another region board
+     at their own porter and land at the leader's landing), team-fight
+     break-off, `OPEN_BG_FIELD` / `OPEN_BG_ARCHETYPE_MISS` /
+     `OPEN_BG_BREAK_OFF` logs, `/bgsetup mode|peace|presets`, launcher
+     fields. The allied claim flip follow-up is fixed in source (claim lock:
+     only Assault and Defend claim, the raid's lead guild first within 60 s
+     after the lord falls); verification pending in the real game, as is the
+     roster healer test without Paladin. Still open: the own client window
+     (Custom5, Plan 2, spec
+     `docs/superpowers/specs/2026-10-15-open-bg-window-design.md`); the
+     Minstrel stealth capability for the doctrine (needs a separate flag, a
+     change to `TraitsOf` breaks `UT_GothwaitePvpTactics`); an open-BG-only
+     bomb-group doctrine (the shared `Derive` must not change); the vulture
+     rule and a second raid (waiting for the owner's OK); a defender unit
+     kind; the porter-menu landing choice for players; leadership passing to
+     a member still outside the BG when the leader dies.
      0.245.0 (deployed 11:04, 20×, ~7× achieved, 11:05–11:31): raids form
      at the push and top up (5–6 units, 13–22 bots, all three realms mixed),
      keep 11 claimed 8 times (4 of them within 19 s by partner guilds of one

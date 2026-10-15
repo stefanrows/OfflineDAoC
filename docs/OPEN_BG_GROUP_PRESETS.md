@@ -20,12 +20,17 @@ in two or more threads, ☑ one or two posts, ❓ assumption only.
 
 | Archetype | Size | Roles (min / wish) | Class options per role | Job in the BG | Conf. |
 | --- | --- | --- | --- | --- | --- |
-| **Standard 8** | 8 | H 2/2 · CC 1/1 · Sp 1/1 · T 1/2 · M 3/3 | H: Cleric, Healer, Druid (second: Friar, Shaman, Warden). CC: Sorcerer, Shaman/Healer (pacify), Bard, Eldritch. Sp: Minstrel, Skald, Bard. T: Paladin, Armsman, Warrior, Hero. M: Mercenary, Savage, Berserker, Blademaster, Champion | roamer, seeks 8v8 | ✅ |
-| **Caster / bomb 8** | 8 | H 2/2 · CC 1/2 · Sp 1/1 · T 0/1 · C 3/4 | C: Wizard, Cabalist, Theurgist, Sorcerer (Albion); Spiritmaster, Runemaster, Bonedancer at most 1 (Midgard); Eldritch, Enchanter, Mentalist (Hibernia) | keep raid support, keep defense, against zergs; weak in the open field | ✅ |
-| **Raider 8** | 8 | as Standard 8, T 1/2, M 3/4, one siege carrier | the Standard 8 options plus Animist (Hibernia) for keep fights | takes part in a keep raid, escorts rams | ☑ (derived from the Standard 8 and the keep-fight notes) |
-| **Stealth gank** | 3-5 | St 2/4 · Sp 0/1 · CC 0/1 · bow 0/2 | Infiltrator, Scout, Minstrel (Albion); Shadowblade, Hunter (Midgard); Nightshade, Ranger (Hibernia) | ganks on bridges and roads, camps milegates | ☑ (anecdotal; no setup thread for Midgard and Hibernia) |
-| **Small group** | 3-4 | H 1/1 · CC 1/1 · M 1/2 | H and CC as in the Standard 8, one speed class where possible | roamer against solos and duos; threes without CC are "gimpy" | ✅ |
+| **Standard 8** | 8 | H 2/2 · CC 1/1 · Sp 1/1 · T 1/2 · M 2/3 | H: Cleric, Healer, Druid (second: Friar, Shaman, Warden). CC: Sorcerer, Shaman/Healer (pacify), Bard, Eldritch. Sp: Minstrel, Skald, Bard. T: Paladin, Armsman, Warrior, Hero. M: Mercenary, Savage, Berserker, Blademaster, Champion | roamer, seeks 8v8 | ✅ |
+| **Caster / bomb 8** | 8 | H 2/2 · CC 1/2 · T 1/2 · Bomber 2/3 · C 0/1 (no speed slot) | C: Wizard, Cabalist, Theurgist, Sorcerer (Albion); Spiritmaster, Runemaster, Bonedancer at most 1 (Midgard); Eldritch, Enchanter, Mentalist (Hibernia) | keep raid support, keep defense, against zergs; weak in the open field | ✅ |
+| **Raider 8** | 8 | H 2/2 · Sp 1/1 · T 1/1 · M 1/2 · Bomber 1/2 · P 0/1 (no CC slot) | the Standard 8 options plus Animist (Hibernia) for keep fights | takes part in a keep raid, escorts rams | ☑ (derived from the Standard 8 and the keep-fight notes) |
+| **Stealth gank** | 4 (max) | St 2/3 · bow 0/1 | Infiltrator, Scout, Minstrel (Albion); Shadowblade, Hunter (Midgard); Nightshade, Ranger (Hibernia) | ganks on bridges and roads, camps milegates | ☑ (anecdotal; no setup thread for Midgard and Hibernia) |
+| **Small group** | 4 (max) | H 1/1 · CC 1/1 · M 1/2 | H and CC as in the Standard 8, one speed class where possible | roamer against solos and duos; threes without CC are "gimpy" | ✅ |
 | **Duo** | 2 | none fixed | healer + speed or melee; stealther pairs | stragglers and gank | ☑ (mostly PvE threads) |
+
+The numbers above are the catalog in `OpenBattlegroundArchetypes.cs` (keys
+`std8`, `caster8`, `raid8`, `stealth4`, `small`, `duo`); where this table and
+the code differ, the code is the truth. The roster fills the slots minimum
+first, tops the group up to its size and never leaves a crew short.
 
 Replacements when a class is missing: second healer ↔ third melee; Shaman has
 no substitute in a Midgard group (stamina regeneration, "Shaman dead = group

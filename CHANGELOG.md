@@ -12,6 +12,59 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.278.0] - 2026-10-15
+
+### Added
+
+- **Open BG modes.** `open_bg_mode` is `serverpvp` (default, the Camlann
+  rule: friends are group, guild and battlegroup) or `perrealm` (the classic
+  DAoC rule inside region 252 only: the same realm is a friend). Read at use,
+  so a live change applies on the next check.
+- **Landing peace by mode.** `open_bg_landing_peace` is `all`, `realm` or
+  empty (by mode): Server PvP protects all realms at every landing circle
+  (5,500), Per realm only the matching realm at its own landing. The explicit
+  value overrides the mode default.
+- **Group presets.** `open_bg_presets` (for example
+  `std8:2,caster8:1,raid8:1,stealth4:1,small:2,duo:0`) names archetypes
+  (`std8`, `caster8`, `raid8`, `stealth4`, `small`, `duo`); the roster fills a
+  group by role slots, logs `OPEN_BG_ARCHETYPE_MISS` when a minimum slot
+  cannot be filled and never leaves a crew short. Empty keeps the group
+  counts as before.
+- **Mixed groups with own-porter boarding.** Preset units in Server PvP draw
+  from a merged three-realm pool under a leader of the admit realm; members
+  of another region board at the open BG porter of their own region after the
+  leader entered and land at the leader's landing, without travel into the
+  enemy frontier. A member that cannot board is dropped by the straggler
+  timeout (`OPEN_BG_STRAGGLER_DROPPED`).
+- **Team-fight break-off** for open BG groups: a group walks toward its
+  realm's own landing (90 s, then 120 s immune) when its healer is dead, a
+  second enemy group is near or the odds are 3:1; units at the keep, Defend
+  and Retreat never break off (`OPEN_BG_BREAK_OFF`).
+- **`/bgsetup mode <serverpvp|perrealm>`, `/bgsetup peace <all|realm|auto>`
+  and `/bgsetup presets <list|off>`**, with the same validation and live
+  refresh as the other keys; an invalid value is rejected and the row stays.
+- **Launcher fields** for mode, landing peace and presets on the open BG tab.
+- **`OPEN_BG_FIELD` log line** every 60 game seconds (`units_out`,
+  `bots_out`, `pct`).
+
+### Changed
+
+- **Landing peace default in Server PvP** now covers all realms at every
+  landing circle, not only the landing's own realm.
+
+### Fixed
+
+- **Allied claim flip at keep 11:** only Assault and Defend units claim the
+  keep, the raid's lead guild first within 60 s after the lord falls.
+- **Roster healer test** no longer counts a Paladin as a healer (Cleric,
+  Healer and Druid are primary, Friar, Shaman and Warden secondary).
+- **Per realm rule in region 252:** the same realm counts as a friend there
+  in Per realm mode, and only there.
+
+### Removed
+
+- None.
+
 ## [0.277.0] - 2026-10-15
 
 ### Fixed
