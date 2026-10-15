@@ -330,7 +330,27 @@ GEAR_LABEL_CAPTION_BASE = GEAR_LABEL_MESSAGE_BASE + GEAR_MESSAGE_LINES
 GEAR_LABEL_MARK_BASE = GEAR_LABEL_CAPTION_BASE + GEAR_WORN_SLOTS
 GEAR_LABEL_END = GEAR_LABEL_MARK_BASE + GEAR_SLOTS
 GEAR_LABEL_COUNT = GEAR_LABEL_END - GEAR_LABEL_BASE                     # 82
-TOTAL_LABEL_COUNT = GEAR_LABEL_END                                      # 620
+# OPEN BG window (Custom5, 0x72): label adapters 620-984 follow the gear labels, operations 10-12, own click range.
+# Spec docs/superpowers/specs/2026-10-16-open-bg-window-client-design.md sections 4 and 5.
+BG_WINDOW = 0x72                         # Custom5: the ShowCustomN switch pushes 0x6D + N
+OP_BG_SHOW, OP_BG_HIDE, OP_BG_TOKEN = 10, 11, 12
+BG_EVENT_BASE = 0xA00                    # OnClickEvent 2560-2815; gear 0x900-0x93A, lever probe 0x800-0x8DF
+BG_READY_CONTROL = 0xFF                  # sent by operation 10, not a click
+BG_COMMAND_PREFIX = "&bgsetup ui "
+BG_ROW_COUNT, BG_ROW_STRIDE, BG_HEADER_LABELS, BG_REPLY_LINES = 22, 16, 5, 2
+BG_LABEL_BASE = GEAR_LABEL_END
+BG_LABEL_STATUS = BG_LABEL_BASE                                          # 620
+BG_LABEL_TAB_BASE = BG_LABEL_STATUS + 1                                  # 621-624: Lage and Steuern, inactive/active
+BG_LABEL_PAGE = BG_LABEL_TAB_BASE + 4                                    # 625
+BG_LABEL_HEADER_BASE = BG_LABEL_PAGE + 1                                 # 626-630
+BG_LABEL_REPLY_BASE = BG_LABEL_HEADER_BASE + BG_HEADER_LABELS            # 631-632
+BG_LABEL_ROW_BASE = BG_LABEL_REPLY_BASE + BG_REPLY_LINES                 # 633
+BG_LABEL_END = BG_LABEL_ROW_BASE + BG_ROW_COUNT * BG_ROW_STRIDE          # 985
+BG_CONTROL_LINK_BASE, BG_CONTROL_MINUS_BASE, BG_CONTROL_PLUS_BASE = 0x00, 0x20, 0x40
+BG_CONTROL_TAB_SITUATION, BG_CONTROL_TAB_CONTROL = 0xE0, 0xE1
+BG_CONTROL_UP, BG_CONTROL_DOWN, BG_CONTROL_PAGE_UP, BG_CONTROL_PAGE_DOWN = 0xE8, 0xE9, 0xEA, 0xEB
+BG_CONTROL_CLOSE, BG_CONTROL_REFRESH = 0xFD, 0xFE
+TOTAL_LABEL_COUNT = BG_LABEL_END                                        # 985
 # Geometry (the 0.275.0 layout): worn gear in three captioned columns, the backpack as an 8 x 5 grid.
 GEAR_SOCKET, GEAR_ICON = 34, 32
 GEAR_WORN_X, GEAR_WORN_Y, GEAR_WORN_PITCH_X, GEAR_WORN_PITCH_Y = 14, 30, 58, 50
@@ -417,6 +437,14 @@ def layout_constants():
         "GearLabelCount": GEAR_LABEL_COUNT, "GearWidthTitle": GEAR_WIDTH_TITLE,
         "GearWidthMessage": GEAR_WIDTH_MESSAGE, "GearWidthCaption": GEAR_WIDTH_CAPTION,
     })
+    for name in ("BG_WINDOW", "OP_BG_SHOW", "OP_BG_HIDE", "OP_BG_TOKEN", "BG_EVENT_BASE", "BG_READY_CONTROL",
+                 "BG_LABEL_BASE", "BG_ROW_COUNT", "BG_ROW_STRIDE", "BG_HEADER_LABELS", "BG_LABEL_STATUS",
+                 "BG_LABEL_TAB_BASE", "BG_LABEL_PAGE", "BG_LABEL_HEADER_BASE", "BG_LABEL_REPLY_BASE",
+                 "BG_REPLY_LINES", "BG_LABEL_ROW_BASE", "BG_LABEL_END", "BG_CONTROL_LINK_BASE",
+                 "BG_CONTROL_MINUS_BASE", "BG_CONTROL_PLUS_BASE", "BG_CONTROL_TAB_SITUATION",
+                 "BG_CONTROL_TAB_CONTROL", "BG_CONTROL_UP", "BG_CONTROL_DOWN", "BG_CONTROL_PAGE_UP",
+                 "BG_CONTROL_PAGE_DOWN", "BG_CONTROL_CLOSE", "BG_CONTROL_REFRESH"):
+        values["".join(part.capitalize() for part in name.split("_"))] = globals()[name]
     for index, name in enumerate(BAR_TILE_NAMES):
         values["BarControl" + name] = BAR_CONTROL_FIRST + index
     for index, (name, control, *_rest) in enumerate(TOGGLES):

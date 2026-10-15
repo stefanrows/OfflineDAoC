@@ -522,8 +522,8 @@ public sealed class UT_CompanionManager
             Assert.That(GearLabelMessageBase, Is.EqualTo(GearLabelBackpack + 1));
             Assert.That(GearLabelCaptionBase, Is.EqualTo(GearLabelMessageBase + GearMessageLines));
             Assert.That(GearLabelMarkBase, Is.EqualTo(GearLabelCaptionBase + GearWornSlots));
-            Assert.That(GearLabelMarkBase + GearSlots, Is.EqualTo(TotalLabelCount));
-            Assert.That(GearLabelCount, Is.EqualTo(TotalLabelCount - GearLabelBase));
+            Assert.That(GearLabelMarkBase + GearSlots, Is.EqualTo(BgLabelBase));
+            Assert.That(GearLabelCount, Is.EqualTo(BgLabelBase - GearLabelBase));
             Assert.That(ControlGearReady, Is.LessThan(ControlLimit));
             Assert.That(CompanionBar.IsBarControl(ControlGearReady), Is.False);
             Assert.That(new[] { ControlReady, ControlRefresh, ControlClose, ControlSearch }, Has.No.Member(ControlGearReady));

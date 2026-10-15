@@ -161,7 +161,7 @@ namespace DOL.GS
         public const int BarSlotStride = 5;
         public const int BarSlots = 8;
         public const int BarSlotLeader = 4;
-        public const int TotalLabelCount = 620;
+        public const int TotalLabelCount = 985;
         public const int BarLabelCount = 98;
         public const int BarTileInactive = 0;
         public const int BarTileActive = 1;
@@ -189,6 +189,38 @@ namespace DOL.GS
         public const int GearWidthTitle = 478;
         public const int GearWidthMessage = 304;
         public const int GearWidthCaption = 56;
+        // OPEN BG window (Custom5, spec 2026-10-16-open-bg-window-client-design.md): operations 10-12, label adapters
+        // 620-984, click events 0xA00 + control. A client without this stage ignores operations 10-12 and those labels.
+        public const int BgWindow = 0x72;
+        public const byte OpBgShow = 10;
+        public const byte OpBgHide = 11;
+        public const byte OpBgToken = 12;
+        public const int BgEventBase = 0xA00;
+        public const int BgReadyControl = 0xFF;
+        public const string BgCommandPrefix = "&bgsetup ui ";
+        public const int BgLabelBase = 620;
+        public const int BgRowCount = 22;
+        public const int BgRowStride = 16;
+        public const int BgHeaderLabels = 5;
+        public const int BgLabelStatus = 620;
+        public const int BgLabelTabBase = 621;
+        public const int BgLabelPage = 625;
+        public const int BgLabelHeaderBase = 626;
+        public const int BgLabelReplyBase = 631;
+        public const int BgReplyLines = 2;
+        public const int BgLabelRowBase = 633;
+        public const int BgLabelEnd = 985;
+        public const int BgControlLinkBase = 0x00;
+        public const int BgControlMinusBase = 0x20;
+        public const int BgControlPlusBase = 0x40;
+        public const int BgControlTabSituation = 0xE0;
+        public const int BgControlTabControl = 0xE1;
+        public const int BgControlUp = 0xE8;
+        public const int BgControlDown = 0xE9;
+        public const int BgControlPageUp = 0xEA;
+        public const int BgControlPageDown = 0xEB;
+        public const int BgControlClose = 0xFD;
+        public const int BgControlRefresh = 0xFE;
         public const int BarControlFirst = 0xA8;
         public const int BarControlLimit = 0xC0;
         public const int BarControlSlotBase = 0xB6;
@@ -271,6 +303,18 @@ namespace DOL.GS
             revision = ushort.Parse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
             value = int.Parse(control, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
             return value < ControlLimit;
+        }
+
+        /// <summary>OPEN BG window click: four lower-case hex token digits and a two-digit lower-case hex control 00-ff.</summary>
+        public static bool TryParseBgControl(string token, string control, out ushort revision, out int value)
+        {
+            revision = 0;
+            value = -1;
+            if (!IsLowerHex(token, 4) || !IsLowerHex(control, 2))
+                return false;
+            revision = ushort.Parse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            value = int.Parse(control, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            return true;
         }
 
         /// <summary>Printable ASCII only; typographic punctuation is folded to ASCII.</summary>

@@ -469,7 +469,8 @@ assert not any(builder.BAR_CONTROL_FIRST <= value < builder.BAR_CONTROL_LIMIT fo
 # COMPANIONS window (Custom7): 98 labels, stock group rows, the stock GroupInvite tile, and tile and row clicks in
 # the bar range only.
 assert b"<Include>custom7_window.xml</Include>" in (args.stage / "uimain.xml").read_bytes()
-assert builder.BAR_LABEL_BASE == LABELS and TOTAL == builder.TOTAL_LABEL_COUNT == builder.GEAR_LABEL_END
+assert builder.BAR_LABEL_BASE == LABELS and TOTAL == builder.TOTAL_LABEL_COUNT == builder.BG_LABEL_END == 985
+assert builder.BG_LABEL_BASE == builder.GEAR_LABEL_END == 620
 assert builder.GEAR_LABEL_BASE == builder.BAR_LABEL_END == builder.BAR_LABEL_BASE + builder.BAR_LABEL_COUNT
 assert builder.BAR_LABEL_COUNT == 2 + builder.BAR_TILE_STRIDE * builder.BAR_TILES + builder.BAR_SLOT_STRIDE * builder.BAR_SLOTS
 assert builder.BAR_CONTROL_SLOT_BASE == builder.BAR_CONTROL_FIRST + builder.BAR_TILES
@@ -586,7 +587,7 @@ for a in range(GEAR_SLOTS):
     for bx, by, bw, bh in rectangles[a + 1:]:
         assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, "Gear slots overlap"
 gear_adapters = sorted(element.text for element in window.iter("Adapter"))
-assert gear_adapters == sorted(builder.adapter_name(index) for index in range(builder.GEAR_LABEL_BASE, TOTAL)), \
+assert gear_adapters == sorted(builder.adapter_name(index) for index in range(builder.GEAR_LABEL_BASE, builder.GEAR_LABEL_END)), \
     "Each gear label adapter appears exactly once"
 for element in window.iter("LabelDef"):
     x, y = int(element.find("Position/X").text), int(element.find("Position/Y").text)
@@ -643,6 +644,30 @@ declared = {name: int(value, 0) for name, value in
             re.findall(r"public const (?:int|byte) (\w+) = (0x[0-9A-Fa-f]+|\d+);", protocol)}
 for name, value in layout.items():
     assert declared.get(name) == value, f"CompanionManagerProtocol.{name} = {declared.get(name)}, native {value}"
+# OPEN BG window (Custom5): protocol constants are mirrored in C# under the same names (CamelCase).
+BG_EXPECTED = {
+    "BG_WINDOW": 0x72, "OP_BG_SHOW": 10, "OP_BG_HIDE": 11, "OP_BG_TOKEN": 12, "BG_EVENT_BASE": 0xA00,
+    "BG_READY_CONTROL": 0xFF, "BG_LABEL_BASE": 620, "BG_ROW_COUNT": 22, "BG_ROW_STRIDE": 16, "BG_HEADER_LABELS": 5,
+    "BG_LABEL_STATUS": 620, "BG_LABEL_TAB_BASE": 621, "BG_LABEL_PAGE": 625, "BG_LABEL_HEADER_BASE": 626,
+    "BG_LABEL_REPLY_BASE": 631, "BG_REPLY_LINES": 2, "BG_LABEL_ROW_BASE": 633, "BG_LABEL_END": 985,
+    "BG_CONTROL_LINK_BASE": 0x00, "BG_CONTROL_MINUS_BASE": 0x20, "BG_CONTROL_PLUS_BASE": 0x40,
+    "BG_CONTROL_TAB_SITUATION": 0xE0, "BG_CONTROL_TAB_CONTROL": 0xE1, "BG_CONTROL_UP": 0xE8,
+    "BG_CONTROL_DOWN": 0xE9, "BG_CONTROL_PAGE_UP": 0xEA, "BG_CONTROL_PAGE_DOWN": 0xEB,
+    "BG_CONTROL_CLOSE": 0xFD, "BG_CONTROL_REFRESH": 0xFE,
+}
+assert builder.BG_COMMAND_PREFIX == "&bgsetup ui "
+assert builder.BG_LABEL_ROW_BASE + builder.BG_ROW_COUNT * builder.BG_ROW_STRIDE == builder.BG_LABEL_END == builder.TOTAL_LABEL_COUNT
+assert builder.BG_LABEL_ROW_BASE == builder.BG_LABEL_REPLY_BASE + builder.BG_REPLY_LINES
+assert builder.BG_LABEL_HEADER_BASE + builder.BG_HEADER_LABELS == builder.BG_LABEL_REPLY_BASE
+assert builder.BG_LABEL_PAGE + 1 == builder.BG_LABEL_HEADER_BASE and builder.BG_LABEL_TAB_BASE + 4 == builder.BG_LABEL_PAGE
+for name, value in BG_EXPECTED.items():
+    assert getattr(builder, name) == value, f"builder.{name} = {getattr(builder, name)}, expected {value}"
+    csharp = "".join(part.capitalize() for part in name.split("_"))
+    assert declared.get(csharp) == value, f"CompanionManagerProtocol.{csharp} = {declared.get(csharp)}, expected {value}"
+assert 'public const string BgCommandPrefix = "&bgsetup ui ";' in protocol
+bg_controls = [*range(0x00, 0x16), *range(0x20, 0x36), *range(0x40, 0x56), 0xE0, 0xE1, 0xE8, 0xE9, 0xEA, 0xEB, 0xFD, 0xFE, 0xFF]
+assert len(bg_controls) == len(set(bg_controls)) == 75 and max(bg_controls) < 256
+assert builder.BG_EVENT_BASE > max(builder.EVENT_BASE, builder.GEAR_EVENT_BASE, builder.BAR_CONTROL_LIMIT) + 0xFF
 advances = re.search(r"Arial14Advances =\s*\{(.*?)\};", protocol, re.S).group(1)
 assert tuple(int(value) for value in re.findall(r"\d+", advances)) == builder.ARIAL14_ADVANCES, "Server font table differs"
 
