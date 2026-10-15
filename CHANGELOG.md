@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.274.0] - 2026-10-15
+
+### Changed
+
+- **Unequipping a companion's item leaves the slot empty.** The Companion
+  Manager's [Unequip] and the paperdoll pick-up now mark the slot as your
+  choice. The starter kit no longer fills it at once with a newly created
+  piece, while earned gear may still go there. The reply now reads "...
+  stays empty until you equip something or <name> finds better gear".
+
+### Fixed
+
+- **Companions of another realm than yours can equip their armor again**
+  (bug 161). An owned companion takes its owner's realm, and so does the
+  starter gear made for it. The item rule then looked up the owner realm's
+  armor skill (a Midgard Shaman with an Albion owner has no Albion armor
+  skill) and refused class-realm loot. Manual equips, automatic upgrades
+  and merchant buys of armor failed for every such companion. The rule now
+  judges armor and weapon skills by the companion's class realm and
+  accepts items of either realm. Found when the manager's [Equip] refused
+  a Shaman's starter Chain Helm after the paperdoll probe (TASKS 129).
+- The real-client results of the 0.273.0 paperdoll probe (R1-R5 pass) and
+  the server findings for the full window are recorded in section 7 of
+  `docs/COMPANION_PAPERDOLL_RE.md`.
+
 ## [0.273.0] - 2026-10-15
 
 ### Added

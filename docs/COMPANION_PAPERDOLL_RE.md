@@ -276,3 +276,53 @@ Install with the game, server and launcher closed (dry run first):
 
 Record each status line and chat reply. Restore with `-RestoreBackup`
 before the next manager client update.
+
+## 7. Real-client result (2026-10-15, probe 0.273.0)
+
+Run in the installed game by the agent (window capture with `PrintWindow`,
+input with `SendInput`), owner present. Brakka (Midgard Shaman) in the group.
+
+| Check | Observation | Result |
+|---|---|---|
+| R2 icons | `R 0065 006a ffff 0070`: helm, hauberk and sleeves icons drawn; the empty-looking Bag 21 shows only its socket | Pass |
+| R1 drop | Willful Mace clicked in the bag (sticks to the cursor), then Bag 21: "Transferred Willful Mace to Brakka" | Pass |
+| R3/R4 pick-up | Click on the Helm slot: `P 096 i=0065`, the helm stays on the cursor; a click on Bag 21 unequipped it ("moved to Brakka's backpack") | Pass |
+| R5 plain | With the House Vault window closed, `gearprobe plain` shows the icons; a pick-up from Bag 22 and a drop on Bag 21 reached the server | Pass |
+| Show again | `gearprobe off` then `gearprobe` / `plain` shows Custom6 again | Pass |
+| Other windows | Companion Manager, COMPANIONS window, House Vault drag still work | Pass |
+
+Findings for the full window (server side, not client):
+
+1. The view hides protected companion gear (starter items) but those items
+   still occupy their backpack positions: Bag 21 looked empty yet held the
+   Ancestral Ring, and the drop was refused ("That slot holds gear that stays
+   with the companion"). The paperdoll must show every backpack item, marking
+   the ones that cannot leave.
+2. Giving an item to the companion and unequipping both use the first free
+   backpack slot (`TryTransferItem`, `TryUnequip` with `FindFirstEmptySlot`),
+   not the slot the item was dropped on. The mace landed in bag 35 and the
+   helm in bag 37.
+3. The companion's equipment AI refilled the empty helm slot at once (Speedy
+   Chain Helm), and the manager's **[Equip]** then refused the original
+   Matterbender Chain Helm (starter gear) with "not a legal choice, its slot
+   is protected, or the companion is busy". Investigated and fixed in
+   source 0.274.0, two causes:
+   - **Cross-realm usability.** Brakka is a Midgard Shaman with an Albion
+     owner. A companion's `GameNPC.Realm` follows its owner (its `BotBrain`
+     is an `IControlledBrain`), and the starter gear generated for it
+     carries that realm: the Matterbender helm is `Realm` 1 (Albion), and
+     so is every non-tradable starter item of a cross-realm companion in
+     the save. `CheckAbilityToUseItem` then judged the helm's armor by its
+     item realm (`AlbArmor`, which a Shaman lacks) and refused it. Earned
+     Midgard loot failed the realm filter instead (item realm 2 against
+     the borrowed realm 1). The rule now uses the bot's class realm
+     (`GameBot.ClassRealm`) for armor and weapon skills when the bot has
+     an owner, and accepts items of either realm.
+   - **The refill was not the AI.** The Speedy Chain Helm was created by
+     `PlayerCompanionRoster.UpgradeStarterEquipment` 0.2 s after the
+     unequip, because an empty armor slot without a mark gets a fresh
+     starter piece. `TryUnequip` now marks the emptied slot as the owner's
+     choice (`Manual`), so the starter refresh leaves it empty while
+     earned gear may still fill it.
+4. In the stock House Vault list, an item is picked up by clicking its icon,
+   not its name.

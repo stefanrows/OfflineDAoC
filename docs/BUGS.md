@@ -20,6 +20,9 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      the 0.252.0 PvP kill counters added is null there. Test-only; the live
      server constructs bots normally. Fix idea: a null-tolerant gate, or
      initialise it in the test double. Not fixed in 0.272.0.
+     At 0.273.0 a sixth test fails the same way:
+     `UT_AutonomousBotRealmPointRewards.GainRealmPointsCreditsAutonomousBotsAndPersistentCompanionsOnly`
+     (null lock in `GameBot.GainRealmPoints`).
 
 154. **Two Midgard world bots loop in capital egress recovery for over an
      hour.** Installed 0.244.0, 2026-10-11 08:40–10:25 (20×):
@@ -127,6 +130,25 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+161. **A cross-realm companion cannot equip its own starter armor or its
+     class realm's armor.** Live 0.273.0, 2026-10-15: after an unequip,
+     the Companion Manager's [Equip] refused Brakka's (Midgard Shaman,
+     Albion owner) Matterbender Chain Helm with "not a legal choice, its
+     slot is protected, or the companion is busy". Cause: an owned bot's
+     `Realm` is its owner's realm, so its generated starter gear carries
+     the owner's realm and `CheckAbilityToUseItem` looked up that realm's
+     armor ability (`AlbArmor`); class-realm loot failed the realm filter.
+     Manual equips, automatic upgrades and merchant purchases of armor
+     were all affected for every companion whose class realm differs from
+     its owner's. Separately, an unequipped armor slot was at once refilled
+     with a newly created starter piece (`UpgradeStarterEquipment`). Source
+     0.274.0: the rule judges armor and weapon skills by
+     `GameBot.ClassRealm` for owned bots and accepts both realms; an
+     unequip marks the slot as the owner's choice. Regression test
+     `CrossRealmCompanionJudgesArmorByItsClassRealm`. Pending: install and
+     re-equip the helm in the real client (details in section 7 of
+     [COMPANION_PAPERDOLL_RE.md](COMPANION_PAPERDOLL_RE.md)).
 
 159. **Too few automatic sieges open for the number of ready warbands.**
      Live 0.255.0, 2026-10-12 20:34–21:00: 43 distinct siege-ready warbands

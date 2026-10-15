@@ -98,7 +98,8 @@ namespace DOL.GS.Commands
                     if (backpack == eInventorySlot.Invalid ||
                         !companion.Inventory.MoveItem(slot, backpack, Math.Max(1, item.Count)))
                         return false;
-                    PlayerCompanionRoster.SetEquipmentSlotLocked(companion.PlayerCompanionRecord, slot, false);
+                    // The owner's empty slot: earned gear may still fill it, the starter kit refresh may not.
+                    PlayerCompanionRoster.SetEquipmentSlotMark(companion.PlayerCompanionRecord, slot, eCompanionSlotMark.Manual);
                     return true;
                 }, out _, requiredFreeBackpackSlots: 1))
             {
@@ -107,7 +108,8 @@ namespace DOL.GS.Commands
             }
             companion.RefreshPersistentCompanionEquipment(
                 slot is eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon);
-            message = $"{item.Name} moved to {companion.Name}'s backpack; the {SlotName(slot)} slot is unlocked.";
+            message = $"{item.Name} moved to {companion.Name}'s backpack. The {SlotName(slot)} slot stays empty until you " +
+                      $"equip something or {companion.Name} finds better gear.";
             return true;
         }
 

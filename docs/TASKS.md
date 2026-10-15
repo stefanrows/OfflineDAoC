@@ -305,6 +305,15 @@ Agent sessions on items 45–48: take the role and context from
      `/companions gearprobe`). Next: the owner installs the probe and runs
      the real-client checklist in section 6 of the analysis (R1-R5); the
      full 19 + 40 slot window is built only after the probe passes.
+     **2026-10-15: probe installed and R1-R5 pass in the real client**
+     (section 7 of the analysis), with three server findings for the full
+     window: show hidden protected bag items, honour the dropped bag slot,
+     and the refused manual equip of a starter helm.
+     **Source 0.274.0 fixes the refused equip** (bug 161: cross-realm
+     companions judged armor by the borrowed owner realm; unequipping left
+     the slot open to a fresh starter piece). Pending: install 0.274.0, then
+     re-equip Brakka's Matterbender Chain Helm with the manager's [Equip].
+     Next: the full 19 + 40 slot window with findings 1 and 2.
 
 125. **Gothwaite PvP mode: a separate world mode where all autonomous bots
      PvP around Caer Gothwaite.** Owner, 2026-10-13. Plan:

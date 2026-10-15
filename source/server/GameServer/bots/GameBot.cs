@@ -693,6 +693,22 @@ namespace DOL.GS
 
         public ushort CreationModel => _creationModel == 0 ? Model : _creationModel;
 
+        /// <summary>
+        /// The realm of this bot's class. An owned bot's <see cref="GameNPC.Realm"/> follows its
+        /// owner, so a cross-realm companion's armor and weapon skills are judged by this realm.
+        /// </summary>
+        public eRealm ClassRealm
+        {
+            get
+            {
+                if (CharacterClass != null)
+                    foreach (var entry in GlobalConstants.STARTING_CLASSES_DICT)
+                        if (entry.Value.Contains((eCharacterClass)CharacterClass.ID))
+                            return entry.Key;
+                return Realm;
+            }
+        }
+
         public ushort ShadeModel
         {
             get

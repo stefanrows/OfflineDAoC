@@ -256,6 +256,28 @@ namespace DOL.UnitTests
             Assert.That(bot.GetSpecList().All(spec => spec.Level <= expected), Is.True);
         }
 
+        // A cross-realm companion takes its owner's realm (GameNPC.Realm), and the gear generated
+        // for it carries that realm. Its armor skill still comes from its class realm.
+        [TestCase(eRealm.Albion, eObjectType.Chain, true)]
+        [TestCase(eRealm.Midgard, eObjectType.Chain, true)]
+        [TestCase(eRealm.Hibernia, eObjectType.Scale, false)]
+        [TestCase(eRealm.Albion, eObjectType.Plate, false)]
+        public void CrossRealmCompanionJudgesArmorByItsClassRealm(eRealm itemRealm, eObjectType type, bool usable)
+        {
+            var owner = (Owner)RuntimeHelpers.GetUninitializedObject(typeof(Owner));
+            owner.Level = 50;
+            owner.Realm = eRealm.Albion;
+            var bot = new GameBot(owner, (byte)eCharacterClass.Shaman, "RealmTester", (byte)eRace.Troll,
+                temporaryGroupHelper: true, botLevel: 50);
+            _constructed.Add(bot);
+            bot.AddAbility(new Ability(Abilities.MidArmor, "Midgard Armor", "", 0, 0, ArmorLevel.Chain, 0), false);
+            var helm = new DbItemTemplate { Object_Type = (int)type, Item_Type = (int)eInventorySlot.HeadArmor, Realm = (int)itemRealm };
+
+            Assert.That(bot.Realm, Is.EqualTo(eRealm.Albion));
+            Assert.That(bot.ClassRealm, Is.EqualTo(eRealm.Midgard));
+            Assert.That(GameServer.ServerRules.CheckAbilityToUseItem(bot, helm), Is.EqualTo(usable));
+        }
+
         [TestCase(1, 100L)]
         [TestCase(10, 1000L)]
         public void TemporaryCompanionUsesPlayerXpRateAndStartsWithCurrentLevelProgress(double rate, long expected)
