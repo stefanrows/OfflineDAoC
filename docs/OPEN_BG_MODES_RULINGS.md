@@ -41,3 +41,15 @@ Collected from the subagent-driven execution ledger of docs/superpowers/plans/20
 - Deaths: about 5 per game minute without presets, 6 with; cross-realm deaths 95% without presets (landing peace works), same-realm 8% with presets.
 - Keep 11 claims: 5 and 7 per run, 2 and 3 of them within about 3 game minutes of the previous: the claim lock did not remove quick re-claims; cause not yet analysed.
 - OPEN_BG_BREAK_OFF: 155 and 142 per run, 70-80% by solos (friends=1) with ungrouped enemies; solos that lurk or hold a bridge walk away from their post: needs an exemption.
+
+## Live run 2026-10-16 (0.279.0, Gothwaite PvP mode ON, 20x, about 8x achieved, local server)
+
+- Start: `GOTH_PVP_MODE active=True`, `GOTH_PVP_OPENBG_RESERVE reserve=150 per_realm=50/50/50 band=40-50`.
+- The Gothwaite arena kept running: 1,660 mode bots entered, 11,045 mode kills in about 12 wall minutes.
+- Open BG crew filled at once: 48-51 of 54 seats (16/15/17 per realm), 102 `AUTONOMOUS_BG_ENTERED`, 41 units assigned, `OPEN_BG_FIELD` 47-72% of the crew in the field.
+- No leakage: of 84 distinct crew bots none entered Gothwaite as a mode bot, none was released at the castle; 50 reserved bots parked at their hubs (`GOTH_PVP_OPENBG_PARK`, 66 lines, no steady loop).
+- Solo break-offs: 0 of 94 break-offs (was 70-80% solos). Break-off rate 94 per run.
+- Keep 11: 5 claims, 4 `OPEN_BG_KEEP_CHANGED`, each followed by the retreat phase and a new raid only in the next cycle; one non-lead claim 7 wall seconds after the lord fell, then the lead guild retook it after 18 s (the window is per bot and counted in game time).
+- `OPEN_BG_ARCHETYPE_MISS` 6 with presets (std8 missing speed/tank/melee, caster8 missing bombers): the preset mix works but a single missing slot is common; deaths 471 in about 100 game minutes.
+- Open: Stefan's real server (bot levels unknown: an empty reserve means no open BG, check the `reserve=` log line), medallion porter reach at the hubs under load (`OPEN_BG_STRAGGLER_DROPPED` 11), the preset quality, leaders passing to a member outside the BG, and the own Custom5 window (Plan 2).
+- Test state restored: `open_bg_presets` empty again, Gothwaite mode enabled as before, server stopped.
