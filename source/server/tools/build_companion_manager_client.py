@@ -33,6 +33,11 @@ Protocol version 3 (16-bit label index in bytes 4-5, because the layout has more
   the window (then refresh it and send the gear ready control), and hide it. The title, the backpack heading, the
   worn captions, the last reply and a "*" mark per slot are server labels. The real-client behaviour of this
   pattern was proven by the 0.273.0 probe (docs/COMPANION_PAPERDOLL_RE.md sections 6-8).
+* OPEN BG window (Custom5, window 0x72): operations 10 and 11 show and hide it (show also sends the ready control
+  0xFF), operation 12 sets its own view token. Its clicks use OnClickEvent 0xA00 + control; the event handler sends
+  them as ``&bgsetup ui <token> <control>`` from a separate command buffer through a copy of the manager's sender, gated
+  by the window's own flag, so the manager's and the OPEN BG window's tokens never invalidate each other. Labels
+  620-984 use operation 1.
 
 The layout below is the single source for label and control numbers. The C#
 constants in CompanionManagerProtocol.cs are checked against it by
@@ -350,6 +355,10 @@ BG_CONTROL_LINK_BASE, BG_CONTROL_MINUS_BASE, BG_CONTROL_PLUS_BASE = 0x00, 0x20, 
 BG_CONTROL_TAB_SITUATION, BG_CONTROL_TAB_CONTROL = 0xE0, 0xE1
 BG_CONTROL_UP, BG_CONTROL_DOWN, BG_CONTROL_PAGE_UP, BG_CONTROL_PAGE_DOWN = 0xE8, 0xE9, 0xEA, 0xEB
 BG_CONTROL_CLOSE, BG_CONTROL_REFRESH = 0xFD, 0xFE
+# Native code for the OPEN BG window in the free .cmgr area after the gear code and before the data (0x4000).
+BG_EVENT_OFFSET, BG_SEND_OFFSET, BG_CODE_LIMIT = 0x3000, 0x3200, 0x4000
+# Hash guard: the ShowCustomN switch must push 0x72 for Custom5 (0x6D + 5), as 0x4E0B4A pushes 0x74 for Custom7.
+BG_WINDOW_GUARD = (0x4E0B3E, bytes.fromhex("6a 01 6a 72"))
 TOTAL_LABEL_COUNT = BG_LABEL_END                                        # 985
 # Geometry (the 0.275.0 layout): worn gear in three captioned columns, the backpack as an 8 x 5 grid.
 GEAR_SOCKET, GEAR_ICON = 34, 32
@@ -537,8 +546,10 @@ def build(image):
     data_base = 0x4000
     slots = va + data_base
     active = slots + 4 * TOTAL_LABEL_COUNT
-    # The 16 bytes after the manager flag are free: active+0 is the manager flag, active+4 the COMPANIONS flag.
+    # The 16 bytes after the manager flag: active+0 is the manager flag, active+4 the COMPANIONS flag, active+8 the
+    # OPEN BG flag; active+12 is still free.
     bar_active = active + 4
+    bg_active = active + 8
     command = active + 16
     hex_digits = command + 32
     search_text = hex_digits + 16
@@ -549,7 +560,12 @@ def build(image):
     gear_slot_table = gear_icon_slots + 4 * GEAR_SLOTS
     gear_scratch = gear_slot_table + 4 * GEAR_SLOTS
     gear_names = gear_scratch + 16
-    payload = bytearray(gear_names - va + 16 * GEAR_SLOTS)
+    # OPEN BG command line "&bgsetup ui <tttt> <cc>", separate from the &companions buffer so neither window's token
+    # or control bytes can change the other's.
+    bg_command = gear_names + 16 * GEAR_SLOTS
+    payload = bytearray(bg_command - va + 32)
+    if BG_CODE_LIMIT > data_base:
+        raise ValueError("OPEN BG code would overlap the data area")
     offset = lambda address: address - va
     for index, slot in enumerate(GEAR_CLIENT_SLOTS):
         struct.pack_into("<I", payload, offset(gear_slot_table) + 4 * index, slot)
@@ -566,6 +582,10 @@ def build(image):
         payload[offset(names) + 16 * index:offset(names) + 16 * index + len(encoded)] = encoded
     token_offset = len(COMMAND_PREFIX)
     control_offset = token_offset + 5
+    initial_bg_command = (BG_COMMAND_PREFIX + "0000 00").encode("ascii") + b"\0"
+    payload[offset(bg_command):offset(bg_command) + len(initial_bg_command)] = initial_bg_command
+    bg_token_offset = len(BG_COMMAND_PREFIX)
+    bg_control_offset = bg_token_offset + 5
 
     ks = Ks(KS_ARCH_X86, KS_MODE_32)
     blocks = {}
@@ -584,6 +604,7 @@ def build(image):
         pushfd; pushad
         mov dword ptr [{active}], 0
         mov dword ptr [{bar_active}], 0
+        mov dword ptr [{bg_active}], 0
         mov dword ptr [{counter}], 0
     register:
         mov eax, dword ptr [{counter}]
@@ -654,6 +675,12 @@ def build(image):
         je gear_show
         cmp eax, {OP_GEAR_HIDE}
         je gear_hide
+        cmp eax, {OP_BG_SHOW}
+        je bg_show
+        cmp eax, {OP_BG_HIDE}
+        je bg_hide
+        cmp eax, {OP_BG_TOKEN}
+        je bg_token
         jmp done
     label:
         movzx ecx, word ptr [esi+4]
@@ -734,6 +761,47 @@ def build(image):
         mov eax, dword ptr [ecx]
         call dword ptr [eax+8]
         jmp done
+    bg_show:
+        mov dword ptr [{bg_active}], 1
+        mov ecx, dword ptr [{WINDOW_MANAGER}]
+        test ecx, ecx
+        jz done
+        push 1
+        push {BG_WINDOW}
+        mov eax, dword ptr [ecx]
+        call dword ptr [eax+8]
+        mov eax, {BG_READY_CONTROL}
+        call {va + BG_SEND_OFFSET}
+        jmp done
+    bg_hide:
+        mov dword ptr [{bg_active}], 0
+        mov ecx, dword ptr [{WINDOW_MANAGER}]
+        test ecx, ecx
+        jz done
+        push 0
+        push {BG_WINDOW}
+        mov eax, dword ptr [ecx]
+        call dword ptr [eax+8]
+        jmp done
+    bg_token:
+        xor ecx, ecx
+    bg_token_check:
+        movzx eax, byte ptr [esi+{TEXT_OFFSET}+ecx]
+        cmp eax, 0x30
+        jb done
+        cmp eax, 0x39
+        jbe bg_token_next
+        cmp eax, 0x61
+        jb done
+        cmp eax, 0x66
+        ja done
+    bg_token_next:
+        inc ecx
+        cmp ecx, 4
+        jb bg_token_check
+        mov eax, dword ptr [esi+{TEXT_OFFSET}]
+        mov dword ptr [{bg_command + bg_token_offset}], eax
+        jmp done
     token:
         xor ecx, ecx
     token_check:
@@ -760,8 +828,14 @@ def build(image):
         jmp {RAID_PACKET}
     """, 0x1800)
 
-    # EAX is the event record and [EAX+8] its ID; unrelated IDs keep the raid chain intact.
+    # EAX is the event record and [EAX+8] its ID; unrelated IDs keep the raid chain intact. The OPEN BG range
+    # 0xA00-0xAFF is checked first and goes to its own block; every other ID takes the unchanged path below.
     put("eventHandler", 0x1C00, f"""
+        cmp dword ptr [eax+8], {BG_EVENT_BASE}
+        jb gear_range
+        cmp dword ptr [eax+8], {BG_EVENT_BASE + 0xFF}
+        jbe {va + BG_EVENT_OFFSET}
+    gear_range:
         cmp dword ptr [eax+8], {GEAR_EVENT_BASE}
         jb manager_range
         cmp dword ptr [eax+8], {GEAR_EVENT_BASE + GEAR_SLOTS - 1}
@@ -930,7 +1004,43 @@ def build(image):
         ret
     """, GEAR_CODE_LIMIT)
 
+    # OPEN BG click (event BG_EVENT_BASE + cc), entered from the eventHandler with EAX = the event record. Sends
+    # "&bgsetup ui <token> <cc>" only while the server has the window shown; always returns AL = 1 (handled).
+    put("bgEvent", BG_EVENT_OFFSET, f"""
+        pushfd; pushad
+        cmp dword ptr [{bg_active}], 1
+        jne handled
+        mov eax, dword ptr [eax+8]
+        sub eax, {BG_EVENT_BASE}
+        call {va + BG_SEND_OFFSET}
+    handled:
+        popad; popfd
+        mov al, 1
+        ret
+    """, BG_SEND_OFFSET)
+
+    # sendControl on the OPEN BG buffer. EAX = control; two lowercase hex digits, then the client's slash-command
+    # sender. Callers have saved the registers.
+    put("bgSend", BG_SEND_OFFSET, f"""
+        and eax, 0xff
+        mov edx, eax
+        shr edx, 4
+        mov dl, byte ptr [{hex_digits}+edx]
+        mov byte ptr [{bg_command + bg_control_offset}], dl
+        and eax, 15
+        mov al, byte ptr [{hex_digits}+eax]
+        mov byte ptr [{bg_command + bg_control_offset + 1}], al
+        push {bg_command}
+        call {SEND_SLASH_COMMAND}
+        add esp, 4
+        ret
+    """, BG_CODE_LIMIT)
+
     data = bytearray(image)
+    guard_address, guard_bytes = BG_WINDOW_GUARD
+    guard_offset = pe.get_offset_from_rva(guard_address - pe.OPTIONAL_HEADER.ImageBase)
+    if data[guard_offset:guard_offset + len(guard_bytes)] != guard_bytes:
+        raise ValueError(f"ShowCustom5 at {guard_address:#x} does not push window {BG_WINDOW:#x}")
     for address, expected, target_offset in HOOKS:
         file_offset = pe.get_offset_from_rva(address - pe.OPTIONAL_HEADER.ImageBase)
         if data[file_offset:file_offset + len(expected)] != expected:
@@ -963,7 +1073,12 @@ def build(image):
                                   "iconSlots": gear_icon_slots, "clientSlotTable": gear_slot_table,
                                   "iconAdapters": gear_icon_names(), "clientSlots": list(GEAR_CLIENT_SLOTS),
                                   "clickEvents": [str(GEAR_EVENT_BASE + index) for index in range(GEAR_SLOTS)],
-                                  "nativeReturnBytes": natives}}
+                                  "nativeReturnBytes": natives},
+                         "openBg": {"window": {"name": "Custom5", "id": BG_WINDOW},
+                                    "activeFlag": bg_active, "command": bg_command,
+                                    "clickEvents": [BG_EVENT_BASE, BG_EVENT_BASE + 0xFF],
+                                    "windowGuard": {"address": guard_address, "bytes": guard_bytes.hex()},
+                                    "blocks": {name: blocks[name] for name in ("bgEvent", "bgSend")}}}
 
 
 def _position(parent, x, y, width, height, *, grow_width=False, grow_height=False,

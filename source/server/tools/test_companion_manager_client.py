@@ -144,6 +144,7 @@ def adapter(index):
 
 
 setup()
+uc.mem_write(manifest["openBg"]["activeFlag"], struct.pack("<I", 1))  # init must clear the OPEN BG flag itself
 uc.emu_start(manifest["blocks"]["init"]["address"], 0x4DA940, count=400000)
 assert uc.reg_read(UC_X86_REG_EDI) == 0x123456
 GEAR_SLOTS = layout["GearSlots"]
@@ -157,6 +158,7 @@ for index, name in enumerate(builder.gear_icon_names()):
         "Gear icon adapters: max 1e6, initial -1 (the quiver's values), registry EDI"
 assert read32(manifest["activeFlag"]) == 0
 assert read32(manifest["barActiveFlag"]) == 0
+assert read32(manifest["openBg"]["activeFlag"]) == 0
 
 
 def packet(operation, index=0, text="", marker=0x43, version=builder.PROTOCOL_VERSION, length=128, terminator=0,
@@ -405,7 +407,7 @@ click(GEAR_EVENT + GEAR_SLOTS - 1)
 assert (len(moves), len(drags), len(end_drags)) == calls, "A null UI manager returns AL=1 without any call"
 uc.mem_write(builder.WINDOW_MANAGER, struct.pack("<I", UI))
 assert len(commands) == sent, "Gear clicks never send slash commands"
-for event_id in (GEAR_EVENT - 1, GEAR_EVENT + GEAR_SLOTS, 0x93F, 0xA00, 0x8FF):
+for event_id in (GEAR_EVENT - 1, GEAR_EVENT + GEAR_SLOTS, 0x93F, 0x9FF, 0xB00, 0x8FF):
     assert click(event_id, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER, hex(event_id)
 assert [stock_click_event(value) for value in manifest["gear"]["clickEvents"]] == \
     list(range(GEAR_EVENT, GEAR_EVENT + GEAR_SLOTS))
@@ -414,6 +416,86 @@ assert manifest["gear"]["nativeReturnBytes"] == {f"{address:#x}": size for addre
 for name, limit in (("gearRefresh", builder.GEAR_EVENT_OFFSET - builder.GEAR_REFRESH_OFFSET),
                     ("gearEvent", builder.GEAR_CODE_LIMIT - builder.GEAR_EVENT_OFFSET)):
     assert manifest["blocks"][name]["length"] <= limit, name
+
+# OPEN BG window (Custom5): operations 10-12, clicks 0xA00 + cc through its own sender, flag and token buffer.
+BG = manifest["openBg"]
+BG_EVENT = builder.BG_EVENT_BASE
+BG_CLICKS = [*range(0x00, 0x16), *range(0x20, 0x36), *range(0x40, 0x56), 0xE0, 0xE1, 0xE8, 0xE9, 0xEA, 0xEB, 0xFD, 0xFE]
+assert len(BG_CLICKS) == 74
+assert BG["window"] == {"name": "Custom5", "id": builder.BG_WINDOW} and builder.BG_WINDOW == 0x6D + 5
+assert BG["activeFlag"] == manifest["activeFlag"] + 8, "bg_active uses the free bytes after the COMPANIONS flag"
+assert BG["windowGuard"] == {"address": 0x4E0B3E, "bytes": "6a016a72"}
+assert image[pe.get_offset_from_rva(0x4E0B3E - 0x400000):][:4] == bytes.fromhex("6a016a72")
+assert BG["clickEvents"] == [BG_EVENT, BG_EVENT + 0xFF]
+section_va = manifest["sectionVa"]
+for name, start, limit in (("bgEvent", builder.BG_EVENT_OFFSET, builder.BG_SEND_OFFSET),
+                           ("bgSend", builder.BG_SEND_OFFSET, builder.BG_CODE_LIMIT)):
+    block = manifest["blocks"][name]
+    assert BG["blocks"][name] == block
+    assert block["address"] == section_va + start and start + block["length"] <= limit, name
+assert 0x3000 <= builder.BG_EVENT_OFFSET < builder.BG_SEND_OFFSET < builder.BG_CODE_LIMIT <= 0x4000
+assert builder.GEAR_CODE_LIMIT <= builder.BG_EVENT_OFFSET
+assert manifest["blocks"]["packet"]["address"] + manifest["blocks"]["packet"]["length"] <= section_va + 0x1800
+assert manifest["blocks"]["eventHandler"]["address"] + manifest["blocks"]["eventHandler"]["length"] <= section_va + 0x2600
+
+
+def bg_command():
+    return cstring(BG["command"])
+
+
+assert bg_command() == "&bgsetup ui 0000 00"
+manager_command = command()
+packet(1, builder.BG_LABEL_END - 1, "Last OPEN BG row label")
+assert texts[adapter(builder.BG_LABEL_END - 1)] == "Last OPEN BG row label"
+packet(1, builder.BG_LABEL_STATUS, "OPEN BG status")
+assert texts[adapter(builder.BG_LABEL_STATUS)] == "OPEN BG status"
+before = dict(texts)
+packet(1, builder.BG_LABEL_END, "One past the last label")
+assert texts == before, "Label index 985 is ignored"
+sent = len(commands)
+for control in BG_CLICKS:
+    click(BG_EVENT + control)
+assert len(commands) == sent, "OPEN BG clicks before the window is shown must not send commands"
+packet(builder.OP_BG_SHOW)
+assert windows[-1] == (builder.BG_WINDOW, 1)
+assert read32(BG["activeFlag"]) == 1
+assert commands[sent:] == ["&bgsetup ui 0000 ff"], commands[sent:]
+assert read32(manifest["activeFlag"]) == 0 and read32(manifest["barActiveFlag"]) == 0, "BG show leaves the other flags"
+packet(builder.OP_BG_TOKEN, text="3c4d")
+assert bg_command() == "&bgsetup ui 3c4d ff"
+for bad in ("3C4D", "3c4g", "3c4", "zzzz", "3c\x004"):
+    packet(builder.OP_BG_TOKEN, raw_text=bad.encode("ascii"))
+    assert bg_command() == "&bgsetup ui 3c4d ff", bad
+assert command() == manager_command, "The BG token never touches the &companions buffer"
+packet(4, text="5e6f")
+assert bg_command() == "&bgsetup ui 3c4d ff", "The manager token never touches the BG buffer"
+manager_command = command()
+assert manager_command.startswith("&companions ui 5e6f "), manager_command
+sent = len(commands)
+for control in BG_CLICKS:
+    click(BG_EVENT + control)
+    assert commands[-1] == f"&bgsetup ui 3c4d {control:02x}" and len(commands) == sent + 1, (hex(control), commands[-1])
+    sent += 1
+assert command() == manager_command, "BG clicks never touch the &companions buffer"
+for event_id in (BG_EVENT - 1, BG_EVENT + 0x100, 0x8FF):
+    assert click(event_id, stop=builder.RAID_EVENT_HANDLER) == builder.RAID_EVENT_HANDLER, hex(event_id)
+click(0x705)
+click(0x7A8)
+assert len(commands) == sent, "Manager and bar clicks stay gated while only the BG window is shown"
+assert [stock_click_event(str(BG_EVENT + control)) for control in BG_CLICKS] == [BG_EVENT + c for c in BG_CLICKS]
+packet(builder.OP_BG_HIDE)
+assert windows[-1] == (builder.BG_WINDOW, 0)
+assert read32(BG["activeFlag"]) == 0 and len(commands) == sent
+for control in BG_CLICKS:
+    click(BG_EVENT + control)
+assert len(commands) == sent, "OPEN BG clicks after hide must not send commands"
+uc.mem_write(builder.WINDOW_MANAGER, struct.pack("<I", 0))
+shown = len(windows)
+packet(builder.OP_BG_SHOW)
+assert len(windows) == shown and len(commands) == sent, "A null window manager skips the BG show and ready"
+packet(builder.OP_BG_HIDE)
+assert read32(BG["activeFlag"]) == 0 and len(windows) == shown
+uc.mem_write(builder.WINDOW_MANAGER, struct.pack("<I", UI))
 
 # A raid show message still reaches the existing 40/80 native parser.
 packet(2, marker=0x52, version=1)
@@ -681,4 +763,6 @@ print("PASS (offline only): COMPANIONS Custom7 window: ops 5/6, 98 labels, tile 
       "stock group rows and GroupInvite")
 print(f"PASS (offline only): COMPANION GEAR Custom6 window: ops 7/8/9, {GEAR_SLOTS} scalar icon adapters, ready control, "
       "slot clicks 0x900-0x93a send move(slot, source, count) or start a kind-0x66 pick-up")
+print("PASS (offline only): OPEN BG Custom5: ops 10/11/12, own flag and token buffer, clicks 0xa00-0xaff send "
+      "&bgsetup ui <token> <control> through their own sender; 0x9ff and 0xb00 pass through")
 print("NOTE: emulation is not acceptance; the owner's combined real-client check is still required")
