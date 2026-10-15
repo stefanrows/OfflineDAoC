@@ -57,6 +57,40 @@ view (nothing to click, no live picture).
   then presets and the mode switch on the server (usable through the Custom8
   version and `/bgsetup text`), then the own window.
 
+## 2b. Owner decisions 2026-10-15 (supersede the earlier text where they differ)
+
+1. **Two BG modes, one switch** in the window and in `/bgsetup` (property
+   `open_bg_mode`):
+   - **Server PvP**: the Camlann rule built for this server, friends are only
+     group, guild and battlegroup (`PvpCombatant.AreAllied`); crews are mixed
+     across realms. Today's behaviour of the open BG.
+   - **Per realm** (classic DAoC): the realm counts, same realm is friend. The
+     classic rule set exists in the code (`NormalServerRules.IsSameRealm`) but is
+     not active on this server; it is switched on for region 252 only, nowhere
+     else. Crews are built per realm as today. To be proven when the switch is
+     built: that the classic realm check still works.
+2. **Landing peace by mode** (`open_bg_landing_peace`, default set by the mode,
+   overridable): Server PvP = peace for **all realms** in the keep and the
+   radius around every landing; Per realm = peace only for the **matching
+   realm** at its own landing (enemies may camp there, as in classic DAoC).
+   Circle 5,500, band 8,000 and the eight-minute departure clock stay as
+   built in 0.246.0-0.247.0.
+3. **Presets are for roles**: choosing "Caster group" pulls suitably skilled and
+   equipped bots (the world bots already carry specs and build plans) **and**
+   they fight as that team (doctrine behaviour in the BG driver: observe,
+   break off, bomb group). Without the doctrine step a caster group is only a
+   group of caster classes.
+4. **One UI**: Lage (status) and Setup are pages of the same window, as `/bgsetup`
+   already shows two pages on main. "Window 8" is only the client slot name of
+   the Custom8 version; the own window on Custom5 replaces it. The launcher tab
+   stays for settings while the server is stopped.
+5. **Muster point replaced** by the normal RvR logic: a group is ported to the
+   landing keep of its leader; a member standing in the wrong place is ported
+   out when it joins the group and ports in again at the leader's landing. This
+   removes the need for a muster point inside the BG and solves the separate
+   frontier regions. To prove first: that a bot can be placed into region 252
+   directly, without the porter cast.
+
 ## 3. Server side
 
 - `OpenBgWindow` (new, replaces `OpenBgManager` + `OpenBgManagerSession`'s
