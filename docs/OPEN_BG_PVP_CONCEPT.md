@@ -152,3 +152,53 @@ without rework; the age of the save copy; how it feels in the real client.
 
 Steps 1-2 are the open bug strand (allied claim flip) and do not depend on the
 window.
+
+## 7. Cross-realm findings (second pass, parties = groups and guilds)
+
+The concept agent re-ran the analysis with the owner's correction (cross-realm,
+group and guild as the party). Code references are main 0.277.0.
+
+How parties are decided today (C): `PvpCombatant.AreAllied`
+(`serverrules/PvpCombatant.cs:55-89`) treats the same group, guild or alliance,
+the same battlegroup and companions as allied; the realm plays no part. The keep
+raid is a battlegroup (`OpenBgRaidBattleGroup`, `OpenBattlegroundDirector.cs:53-96`).
+Guilds are already cross-realm today: "Bandit Farmers" claimed from Hibernia and
+Midgard (M).
+
+Where the crew build still works per realm (C), and what a cross-realm crew
+needs:
+
+| Place | Realm tie | Change |
+| --- | --- | --- |
+| `OpenBattlegroundRoster.Plan/CountRealms/CapSurplusPick` (`:135-261`), `RealmCount`, `OpenBgAdmit(Realm, Kind)`, relief clock per realm (`:640-651`) | target, relief and cap per realm | one target for the whole map as a list of units (archetype, size), one relief clock per unit |
+| `FormUnits`: `pools[admit.Realm]` (`:663`), `TryPickGroup` (same region, same porter, `:888-925`), `MateRejection.OtherRegion` | units are in effect single-realm because the frontier regions 1/100/200 and their porters are separate | single bots enter the BG through their own porter; the unit forms **inside the BG** at a gather point, guild before chance; or take over whole world RvR groups or guild squads |
+| `open_bg_units_<realm>` (branch `obg-window` only, `OpenBattlegroundProperties.cs:40-69`) | targets per realm | replace by targets per archetype, e.g. `open_bg_units="std8:2,caster8:1,raid8:2,stealth4:2,solo:8"`; settle before merging the window branch |
+| Director: `groupIndex` per realm (bridge watch = the realm's first group), `OwnBridge(realm)`, muster and retreat at the own bridge, `LandingByRealm` (`OpenBattlegroundDirector.cs:602-614,685-690,775-786`) | geography hangs on the leader's realm | landing and bridge as a property of the unit ("home landing"), bridge watch as an archetype role |
+| Landing peace: same realm within 5,500 (`AutonomousHubDeparture.cs:158`) | peace per realm | tension with the parties model. Option A: peace for everyone at every landing (pure sanctuary). Option B: leave it. **Owner decision** (today his 0.246/0.247 decision) |
+| Logs `realm=`, `realms=` in `OPEN_BG_RAID` | display only | add `parties=` (guilds or battlegroups) |
+
+World group forming prefers the same realm (`AutonomousBotGroupCoordinator.cs:1791`;
+cross-realm only for GroupPve, `:1859`). Taking over world RvR groups would bring
+single-realm groups back; only the guild level would be mixed.
+
+Revised build plan (agent proposal, to be merged with section 6):
+
+| # | Step | Files | Visible effect | Risk |
+| --- | --- | --- | --- | --- |
+| 1 | claim lock; steward only with an assault or defend role | `AutonomousBattlegroundDriver.cs:337,698` | no flips, the keep falls in the keep fight | low |
+| 2 | defenders as their own unit instead of a split | `OpenBattlegroundRoster.cs:447`, director | raids stay whole | medium |
+| 3 | doctrine break-off and observation in the BG driver | driver, `AutonomousRvr*` | fewer deaths, more groups out, phases felt | medium to high |
+| 4 | vulture ring and second raid | `OpenBattlegroundRoles.cs:56`, director `:177-250` | three-party fights at the keep | medium |
+| 5 | cross-realm archetype target, forming in the BG, targets per archetype instead of per realm | roster, properties (also branch `obg-window`), status | mixed groups, presets | high |
+| 6 | new metric logs | director, driver | measurable | low |
+
+New properties named: `open_bg_units`, `open_bg_raids_max`,
+`open_bg_second_raid_pct`, `open_bg_vulture_ring`, `open_bg_claim_lead_seconds`,
+`open_bg_bridge_camp_pct`. Claim rule: only the raid's lead guild may claim in
+the first 60 s after the lord dies; a leader without an assault or defend order
+never walks to the steward.
+
+Sources: Camelot Herald "Fun in Thidranki"
+(web.archive.org/web/20060324091206/http://www.camelotherald.com/communitymore/98.shtml),
+Thidranki Survival Guide
+(web.archive.org/web/20040926221319/http://vnboards.ign.com:80/Camelot_RvR_Forum/b22330/72008185/?4).
