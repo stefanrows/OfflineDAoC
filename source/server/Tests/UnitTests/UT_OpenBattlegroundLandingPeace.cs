@@ -80,4 +80,32 @@ public sealed class UT_OpenBattlegroundLandingPeace
             AutonomousHubDeparture.OverrideOpenBgLandings(null);
         }
     }
+
+    [Test]
+    public void AllPeaceCoversEveryLandingForEveryRealmAndRealmPeaceOnlyTheOwn()
+    {
+        Assert.Multiple(() =>
+        {
+            // An Albion bot standing at the Midgard camp.
+            Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.All, 252, 50500, 27000, eRealm.Albion,
+                Landings), Is.True, "all: any landing protects any realm");
+            Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.Realm, 252, 50500, 27000, eRealm.Albion,
+                Landings), Is.False, "realm: only the own landing");
+            Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.Realm, 252, 54053, 24680, eRealm.Midgard,
+                Landings), Is.True);
+            Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.All, 252, 34333, 38275, eRealm.Albion,
+                Landings), Is.False, "the keep gate is open field in both");
+            Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.All, 238, 50500, 27000, eRealm.Albion,
+                Landings), Is.False, "another region");
+            Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.All, 252, 50500, 27000, eRealm.None,
+                Landings), Is.False, "no realm, no peace");
+        });
+    }
+
+    [Test]
+    public void OpenBgPeaceModeNeverChangesRegionsOutsideTheOpenBg()
+    {
+        Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.All, 1, 37301, 52362, eRealm.Albion, Landings), Is.False,
+            "the same coordinates in region 1 are not a landing");
+    }
 }

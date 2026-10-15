@@ -219,6 +219,38 @@ public static class AutonomousHubDeparture
         return false;
     }
 
+    /// <summary>Whether (x, y) lies within <paramref name="radius"/> of any open BG landing, whatever its realm.</summary>
+    public static bool NearAnyLanding(ushort region, int x, int y, int radius,
+        IReadOnlyList<(ushort Region, int X, int Y, eRealm Realm)> landings)
+    {
+        if (landings == null)
+            return false;
+        long radiusSquared = (long)radius * radius;
+        foreach ((ushort landingRegion, int landingX, int landingY, eRealm _) in landings)
+        {
+            if (landingRegion != region)
+                continue;
+            long dx = x - landingX, dy = y - landingY;
+            if (dx * dx + dy * dy <= radiusSquared)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Peace circle by mode (owner decision 2026-10-15): <see cref="OpenBgLandingPeace.All"/> protects every realm at
+    /// every landing (Server PvP); <see cref="OpenBgLandingPeace.Realm"/> only a realm at its own landing (Per realm).
+    /// </summary>
+    public static bool OpenBgPeaceInCircle(OpenBgLandingPeace peace, ushort region, int x, int y, eRealm realm,
+        IReadOnlyList<(ushort Region, int X, int Y, eRealm Realm)> landings)
+    {
+        if ((int)realm is < 1 or > 3)
+            return false;
+        return peace == OpenBgLandingPeace.All
+            ? NearAnyLanding(region, x, y, OpenBgLandingPeaceRadius, landings)
+            : NearOwnLanding(region, x, y, realm, OpenBgLandingPeaceRadius, landings);
+    }
+
     /// <summary>
     /// The own realm's open BG landing circle containing the point, as a safe anchor: the departure track then
     /// records when a crew bot leaves it, and the eight-minute clock keeps the peace just outside (0.246.1 run: the
@@ -323,6 +355,19 @@ public static class AutonomousHubDeparture
     public static bool InHubBand(eRealm realm, ushort regionId, float x, float y) =>
         InHubBand(HubBandOf(realm), regionId, x, y) || InOpenBgLandingBand(realm, regionId, x, y);
 
+    /// <summary>
+    /// Server PvP landing peace <see cref="OpenBgLandingPeace.All"/> only: two autonomous world bots of different
+    /// realms are peaceful when one of them stands in any open BG landing circle of region 252.
+    /// </summary>
+    private static bool OpenBgCrossRealmLandingPeace(GameLiving first, GameLiving second)
+    {
+        if (OpenBattlegroundMode.Current != OpenBgMode.ServerPvp || OpenBattlegroundMode.Peace != OpenBgLandingPeace.All)
+            return false;
+        IReadOnlyList<(ushort Region, int X, int Y, eRealm Realm)> landings = OpenBgLandings();
+        return OpenBgPeaceInCircle(OpenBgLandingPeace.All, first.CurrentRegionID, (int)first.X, (int)first.Y, first.Realm, landings)
+               || OpenBgPeaceInCircle(OpenBgLandingPeace.All, second.CurrentRegionID, (int)second.X, (int)second.Y, second.Realm, landings);
+    }
+
     /// <summary>Whether the living stands in its own realm's hub band.</summary>
     public static bool InHubBand(GameLiving living)
     {
@@ -413,7 +458,11 @@ public static class AutonomousHubDeparture
         if (!IsWorldBot(first))
             return false;
         GameLiving second = PvpCombatant.Resolve(target);
-        if (second == first || !IsWorldBot(second) || first.Realm != second.Realm)
+        if (second == first || !IsWorldBot(second))
+            return false;
+        bool sameRealm = first.Realm == second.Realm;
+        bool crossRealmLandingPeace = !sameRealm && OpenBgCrossRealmLandingPeace(first, second);
+        if (!sameRealm && !crossRealmLandingPeace)
             return false;
         realm = first.Realm;
         // Crew bots in the open BG run the battleground driver, not the world controller's frontier pulse that
@@ -422,6 +471,11 @@ public static class AutonomousHubDeparture
         {
             Observe((GameBot)first, nowUtc);
             Observe((GameBot)second, nowUtc);
+        }
+        if (crossRealmLandingPeace)
+        {
+            rule = HubPeaceRule.Band;
+            return true;
         }
         // Band first (cheap geometry); the clock is read only outside it.
         if (InHubBand(first) || InHubBand(second))
