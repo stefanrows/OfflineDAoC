@@ -85,7 +85,7 @@ namespace DOL.GS.ServerRules
 			if (firstBattleGroup != null && firstBattleGroup == secondBattleGroup)
 				return true;
 
-			if (a.CurrentRegionID == b.CurrentRegionID &&
+			if (a.CurrentRegionID == b.CurrentRegionID && a.CurrentRegionID == OpenBattlegroundMode.OpenBgRegion &&
 				RealmFriendInOpenBg(OpenBattlegroundMode.Current, a.CurrentRegionID, a.Realm, b.Realm))
 				return true;
 

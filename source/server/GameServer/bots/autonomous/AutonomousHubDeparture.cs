@@ -465,6 +465,7 @@ public static class AutonomousHubDeparture
         bool sameRealm = first.Realm == second.Realm;
         // Peace is read only for a cross-realm pair; the landing list is read only when the peace is "all".
         bool crossRealmLandingPeace = !sameRealm && first.CurrentRegionID == second.CurrentRegionID &&
+            IsOpenBgLandingRegion(first.CurrentRegionID) &&
             OpenBattlegroundMode.Peace == OpenBgLandingPeace.All &&
             OpenBgCrossRealmPeace(OpenBgLandingPeace.All, true, first.Realm, second.Realm, first.CurrentRegionID,
                 (int)first.X, (int)first.Y, (int)second.X, (int)second.Y, OpenBgLandings());
