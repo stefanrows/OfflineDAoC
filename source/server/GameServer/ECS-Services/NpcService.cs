@@ -28,6 +28,7 @@ namespace DOL.GS
             AutonomousBotRegistry.PrepareBrainTick();
             AutonomousWorldBotController.PrepareRvrPlanningTick();
             AutonomousBotGroupCoordinator.PrepareCoordinatorTick();
+            GothwaitePvpGroupFormer.PrepareTick();
             AutonomousWorldBotController.PrepareCampPlanningTick();
             int lastValidIndex;
 

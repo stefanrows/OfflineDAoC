@@ -4,20 +4,6 @@ internal sealed partial class MainForm
 {
     private Button? _resetKeepsRelics;
     private bool _resettingKeepsRelics;
-    private DateTime? _keepRelicResetUtc;
-
-    private Control BuildActiveRvrHeader()
-    {
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty, BackColor = DaocTheme.Panel, Font = Font };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.Controls.Add(new Label { Text = "PVP FRONTIER — guild-owned keeps and guild-only relics · see Realm Events", Dock = DockStyle.Fill,
-            ForeColor = DaocTheme.GoldLight, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true }, 0, 0);
-        Button resetKeepsRelics = BuildResetKeepsRelicsButton();
-        resetKeepsRelics.Anchor = AnchorStyles.Right;
-        header.Controls.Add(resetKeepsRelics, 1, 0);
-        return header;
-    }
 
     private Button BuildResetKeepsRelicsButton()
     {
@@ -47,7 +33,6 @@ internal sealed partial class MainForm
         {
             var result = await Task.Run(() => KeepRelicReset.Apply(_database,
                 Path.Combine(_root, "data", "keep-relic-reset-backups"), BotGoalsServerStopped));
-            _keepRelicResetUtc = result.UpdatedUtc;
             _rvrWorld = null; // Never display old ownership or rally attendance after a reset.
             MessageBox.Show(this, $"Reset complete: {result.Keeps} keeps and {result.Relics} relics.\n\nStart the server to load the restored ownership and refresh Realm Events.\n\nBackup: {result.Backup}", "Keeps & relics restored");
         }

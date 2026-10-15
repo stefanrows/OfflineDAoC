@@ -63,8 +63,9 @@ public sealed class UT_AutonomousRvrEventLayer
         Assert.That(joined.TargetId, Is.EqualTo("keep-1"));
     }
 
-    [TestCase(49, 49)] [TestCase(50, 49)]
-    public void UnderFiftyOrMixedLevelForceCannotJoinKeepOrRelicEvents(int average, int minimum)
+    // The siege gate is average 35 and minimum 30 (owner decision 2026-10-12); below it a force only roams.
+    [TestCase(34, 34)] [TestCase(34, 50)] [TestCase(40, 29)] [TestCase(50, 29)]
+    public void ForceBelowTheSiegeGateCannotJoinKeepOrRelicEvents(int average, int minimum)
     {
         var keep = new AutonomousRvrEventLayer.LiveObjective("keep-50", "Test keep", AutonomousRvrEventLayer.Intent.AssaultKeep,
             eRealm.Hibernia, 163, 100, 100, 0, false, 0, 0, 2, 2);
@@ -76,6 +77,22 @@ public sealed class UT_AutonomousRvrEventLayer
         var plan = AutonomousRvrEventLayer.ChooseOrJoin(force, new[] { keep, carrier, roam }, 100, 0);
         Assert.That(plan.IsSharedEvent, Is.False);
         Assert.That(plan.TargetId, Is.EqualTo("roam-50"));
+    }
+
+    [TestCase(35, 30)] [TestCase(35, 50)] [TestCase(50, 30)]
+    public void ForceAtTheSiegeGateOpensAKeepAssault(int average, int minimum)
+    {
+        var keep = new AutonomousRvrEventLayer.LiveObjective("keep-gate", "Gate keep", AutonomousRvrEventLayer.Intent.AssaultKeep,
+            eRealm.Hibernia, 163, 100, 100, 0, false, 0, 0, 2, 2);
+        var roam = new AutonomousRvrEventLayer.LiveObjective("roam-gate", "Patrol", AutonomousRvrEventLayer.Intent.Roam,
+            eRealm.Hibernia, 163, 200, 200, 0, false, 0, 0, 0, 0);
+        var force = new AutonomousRvrEventLayer.Force("gate-level", eRealm.Albion, 8, average, 2, MinimumMemberLevel: minimum);
+        var plan = AutonomousRvrEventLayer.ChooseOrJoin(force, new[] { keep, roam }, 100, 0);
+        Assert.Multiple(() =>
+        {
+            Assert.That(plan.IsSharedEvent, Is.True);
+            Assert.That(plan.TargetId, Is.EqualTo("keep-gate"));
+        });
     }
 
     [Test]

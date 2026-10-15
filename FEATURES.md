@@ -27,6 +27,11 @@ and verification history of the full-PvP conversion.
   claimed guild keep, and their bonuses apply to that guild.
 - Capitals, housing, protected starter dungeons, portal keeps, release immunity,
   stable travel, and the native client-patch hash guards remain protected.
+- Overhead nameplates show the realm rank, such as `Dairoinlan | RR 2L5`, after the
+  names of autonomous bots by default (`show_bot_realm_rank_nameplates`, on). Players and
+  companions get it with `show_realm_rank_nameplates` (off by default). The launcher's XP
+  Settings tab toggles both while the server is stopped. This is presentation only:
+  stored names, guilds and saves never change.
 
 ## Battleground campaign (0.222.0 deployed; gameplay checks pending)
 

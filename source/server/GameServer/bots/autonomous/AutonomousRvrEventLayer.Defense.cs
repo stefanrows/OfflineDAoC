@@ -25,6 +25,8 @@ namespace DOL.GS
         // chat and all population work run in the coordinator service phase.
         public static void ObserveKeepAttack(AbstractGameKeep keep, GameObject source)
         {
+            // Gothwaite PvP mode: keep attacks raise no world-bot defense or event (section 5.4).
+            if (GothwaitePvpRules.SuppressesWorldRecruitment) return;
             if (!AutonomousRvrKeepPolicy.IsSiegeObjective(keep) || !AutonomousRvrKeepPolicy.IsWorldKeep(keep)) return;
             AutonomousGuildKeepDefense.ObserveAttack(keep, source);
             string id = $"rvr-keep-{keep.KeepID}";

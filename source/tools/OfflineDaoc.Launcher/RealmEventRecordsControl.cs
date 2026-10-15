@@ -10,7 +10,7 @@ internal sealed class RealmEventRecordsControl : UserControl
     private readonly ComboBox _kind=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=125};
     private readonly ComboBox _outcome=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=165};
     private readonly TextBox _search=new(){Width=200,PlaceholderText="Search event or outcome details"};
-    private readonly Button _refresh=new(){Text="REFRESH",AutoSize=true},_previous=new(){Text="Previous",AutoSize=true},_next=new(){Text="Next",AutoSize=true};
+    private readonly Button _refresh=DaocTheme.ToolButton("REFRESH"),_previous=DaocTheme.ToolButton("Previous"),_next=DaocTheme.ToolButton("Next");
     private readonly DataGridView _grid=new();
     private readonly Label _status=new(){AutoSize=true,ForeColor=DaocTheme.GoldLight};
     private readonly TextBox _details=new(){ReadOnly=true,Multiline=true,Dock=DockStyle.Fill,ScrollBars=ScrollBars.Vertical,BackColor=DaocTheme.StoneDark,ForeColor=DaocTheme.Text};
@@ -28,12 +28,11 @@ internal sealed class RealmEventRecordsControl : UserControl
         _kind.Items.AddRange(["All events","Dragon","Epic dungeon","Keep","Relic keep","Relic"]);
         _outcome.Items.AddRange(["All outcomes","In progress","Boss defeated","Failed rally","Timed out","Defended (timeout)","Captured","Captured / returned","Relic taken","Interrupted","Ended (unconfirmed)","Encounter unavailable"]);
         _realm.SelectedIndex=_kind.SelectedIndex=_outcome.SelectedIndex=0;
+        foreach(Control input in new Control[]{_realm,_kind,_outcome,_search})DaocTheme.StyleInput(input);
         toolbar.Controls.AddRange([_realm,_kind,_outcome,_search,_refresh]);layout.Controls.Add(toolbar,0,0);
         _grid.Dock=DockStyle.Fill;_grid.ReadOnly=true;_grid.AllowUserToAddRows=false;_grid.AllowUserToDeleteRows=false;
         _grid.AutoGenerateColumns=false;_grid.RowHeadersVisible=false;_grid.MultiSelect=false;_grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
-        _grid.BackgroundColor=DaocTheme.StoneDark;_grid.EnableHeadersVisualStyles=false;
-        _grid.ColumnHeadersDefaultCellStyle=new(){BackColor=DaocTheme.Panel,ForeColor=DaocTheme.GoldLight};
-        _grid.DefaultCellStyle=new(){BackColor=DaocTheme.StoneDark,ForeColor=DaocTheme.Text,SelectionBackColor=Color.FromArgb(90,65,32),SelectionForeColor=Color.White};
+        DaocTheme.StyleGrid(_grid);
         foreach(var (title,property,width) in new[]{("Started (local)","Started",150),("Ended (local)","Ended",150),("Type","Kind",105),("Event","Name",170),("Initiating realm","Realm",115),("Outcome","Outcome",160)})
             _grid.Columns.Add(new DataGridViewTextBoxColumn{HeaderText=title,DataPropertyName=property,Width=width,SortMode=DataGridViewColumnSortMode.NotSortable});
         _grid.Columns[3].AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill;_grid.Columns[3].MinimumWidth=130;

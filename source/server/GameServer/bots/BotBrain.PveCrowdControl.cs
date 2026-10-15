@@ -20,6 +20,7 @@ namespace DOL.AI.Brain
         /// </summary>
         private bool TryPveAddControl()
         {
+            if (GothwaitePvpMode.IsModeBot(BotBody)) return false;
             if (!(BotPartyRoles.HasCrowdControlDuty(BotBody) || AutonomousPveCampRuntime.HasAutonomousMezDuty(BotBody) ||
                   CompanionAssistTrain.Active(BotBody) && BotPartyRoles.IsCrowdControlClass((eCharacterClass)BotBody.CharacterClass.ID)) ||
                 BotBody.Stance == eBotStance.Passive && !CompanionAssistTrain.Active(BotBody) ||

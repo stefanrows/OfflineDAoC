@@ -333,7 +333,12 @@ namespace DOL.GS
         }
 
         public static bool TryTransferItem(GamePlayer owner, string companionNameOrId, string itemId,
-            bool toCompanion, out string message)
+            bool toCompanion, out string message) =>
+            TryTransferItem(owner, companionNameOrId, itemId, toCompanion, eInventorySlot.Invalid, out message);
+
+        /// <param name="preferredSlot">The backpack slot the item was dropped on; used when it is empty.</param>
+        public static bool TryTransferItem(GamePlayer owner, string companionNameOrId, string itemId,
+            bool toCompanion, eInventorySlot preferredSlot, out string message)
         {
             message = "The item could not be transferred.";
             if (owner == null || string.IsNullOrWhiteSpace(itemId) ||
@@ -377,8 +382,11 @@ namespace DOL.GS
                 return false;
             }
 
-            eInventorySlot destinationSlot = destination.FindFirstEmptySlot(
-                eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+            eInventorySlot destinationSlot =
+                preferredSlot is >= eInventorySlot.FirstBackpack and <= eInventorySlot.LastBackpack &&
+                destination.GetItem(preferredSlot) == null
+                    ? preferredSlot
+                    : destination.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
             long saleProceeds = 0;
             if (destinationSlot == eInventorySlot.Invalid && !toCompanion)
             {
@@ -924,6 +932,7 @@ namespace DOL.GS
                     long previousPoints = record.RealmPoints;
                     record.SerializedRealmAbilities = CompanionRealmAbilityTraining.Serialize(allocations);
                     record.RealmPoints = Math.Max(record.RealmPoints, realmPoints);
+                    live?.CopyPvpKillStatsTo(record);
                     record.UpdatedUtc = DateTime.UtcNow.ToString("O");
                     record.Dirty = true;
                     if (!SaveRecord(record))
@@ -1187,6 +1196,66 @@ namespace DOL.GS
             return GameServer.Database.SelectObjects<PlayerCompanionRecord>(
                     DB.Column(nameof(PlayerCompanionRecord.OwnerCharacterId)).IsIn(ids))
                 .Where(record => ids.Contains(record.OwnerCharacterId));
+        }
+
+        /// <summary>
+        /// Per-character groups: an active companion is reserved for the character it was last grouped
+        /// with (LastGroupedCharacterId). Only that character restores it or counts it as active here.
+        /// A legacy active record with no reservation counts as this character's until the first login
+        /// claims it.
+        /// </summary>
+        public static bool IsActiveFor(PlayerCompanionRecord record, GamePlayer owner) =>
+            record != null && record.IsActive &&
+            (string.IsNullOrWhiteSpace(record.LastGroupedCharacterId) ||
+             string.Equals(record.LastGroupedCharacterId, owner?.ObjectId, StringComparison.Ordinal));
+
+        /// <summary>True when another character on this account holds the companion as active. Viewing,
+        /// resetting or benching from here must leave that reservation alone.</summary>
+        public static bool IsReservedByOtherCharacter(PlayerCompanionRecord record, GamePlayer owner) =>
+            record != null && record.IsActive && !string.IsNullOrWhiteSpace(record.LastGroupedCharacterId) &&
+            !string.Equals(record.LastGroupedCharacterId, owner?.ObjectId, StringComparison.Ordinal);
+
+        /// <summary>Name of the character holding a reserved companion, found among the owner's account
+        /// characters; "Other char" when that character is not on this account.</summary>
+        public static string ReservingCharacterName(PlayerCompanionRecord record, GamePlayer owner)
+        {
+            string id = record?.LastGroupedCharacterId;
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                foreach (DbCoreCharacter character in owner?.Client?.Account?.Characters ?? [])
+                {
+                    if (string.Equals(character?.ObjectId, id, StringComparison.Ordinal) &&
+                        !string.IsNullOrWhiteSpace(character.Name))
+                        return character.Name;
+                }
+            }
+            return "Other char";
+        }
+
+        /// <summary>Roster state as this character sees it: "active", "with &lt;Name&gt;" when another
+        /// character holds the companion, or "benched".</summary>
+        public static string RosterStateLabel(PlayerCompanionRecord record, GamePlayer owner) =>
+            IsActiveFor(record, owner) ? "active"
+                : IsReservedByOtherCharacter(record, owner) ? "with " + ReservingCharacterName(record, owner)
+                : "benched";
+
+        /// <summary>Records RestoreActiveForPlayer may re-invite for this character: squad members first
+        /// (leader first within each squad), then the owner's own group. Another character's
+        /// reservations are never included.</summary>
+        public static List<PlayerCompanionRecord> RestoreCandidates(GamePlayer owner, IEnumerable<PlayerCompanionRecord> roster)
+        {
+            List<PlayerCompanionRecord> reserved = roster.Where(entry => IsActiveFor(entry, owner)).ToList();
+            return reserved.Where(entry => entry.SquadIndex > 0)
+                .OrderBy(entry => entry.SquadIndex)
+                .ThenByDescending(entry => entry.IsSquadLeader)
+                .Concat(reserved.Where(entry => entry.SquadIndex <= 0))
+                .ToList();
+        }
+
+        private static void StampGroupedCharacter(PlayerCompanionRecord record, GamePlayer owner)
+        {
+            if (!string.IsNullOrWhiteSpace(owner?.ObjectId))
+                record.LastGroupedCharacterId = owner.ObjectId;
         }
 
         public static bool TryGetRoster(GamePlayer owner, out List<PlayerCompanionRecord> records)
@@ -1470,7 +1539,10 @@ namespace DOL.GS
 
             // An active record without a live actor is a stale login state. Clear it
             // before respawning so a failed world/group insertion cannot duplicate it.
-            if (record.IsActive)
+            // A companion reserved for another character is not stale: its reservation
+            // moves here only when the invite succeeds (SaveBotState stamps this owner),
+            // so a failed takeover leaves the other character's reservation in place.
+            if (IsActiveFor(record, owner))
             {
                 record.IsActive = false;
                 record.Dirty = true;
@@ -1797,6 +1869,12 @@ namespace DOL.GS
                     return true;
                 }
 
+                if (IsReservedByOtherCharacter(record, owner))
+                {
+                    message = $"{record.Name} is grouped with {ReservingCharacterName(record, owner)} on another character. Log in there to bench them.";
+                    return false;
+                }
+
                 lock (AutonomousBotStatusPersistence.DatabaseWriteLock)
                 {
                     if (FailedFinalSaves.TryGetValue(record.CompanionId, out FailedFinalSave pending))
@@ -1840,6 +1918,12 @@ namespace DOL.GS
                 if (record == null)
                 {
                     message = "That companion name or ID is not in your roster. Type /companions list to see names.";
+                    return false;
+                }
+
+                if (IsReservedByOtherCharacter(record, owner))
+                {
+                    message = $"{record.Name} is grouped with {ReservingCharacterName(record, owner)} on another character. Invite moves them here.";
                     return false;
                 }
 
@@ -1889,7 +1973,7 @@ namespace DOL.GS
                     return false;
                 }
 
-                string[] activeCompanionIds = roster.Where(record => record.IsActive)
+                string[] activeCompanionIds = roster.Where(record => IsActiveFor(record, owner))
                     .Select(record => record.CompanionId).ToArray();
                 if (activeCompanionIds.Length == 0)
                 {
@@ -1922,6 +2006,8 @@ namespace DOL.GS
                 {
                     CopyProgressToRecord(companion, record);
                     record.IsActive = active;
+                    if (active)
+                        StampGroupedCharacter(record, companion.Owner);
                     record.StateVersion = 1;
                     record.UpdatedUtc = DateTime.UtcNow.ToString("O");
                     record.Dirty = true;
@@ -2016,6 +2102,7 @@ namespace DOL.GS
             record.Level = Math.Clamp((int)companion.Level, 1, 50);
             record.Experience = Math.Max(0, companion.Experience);
             record.RealmPoints = Math.Max(0, companion.CompanionRealmPoints);
+            companion.CopyPvpKillStatsTo(record);
             record.SerializedSpecs = string.Join(';', companion.GetSpecList()
                 .Where(spec => spec.Trainable).Select(spec => $"{spec.KeyName}|{spec.Level}"));
             record.SerializedBuildPlan = companion.BotSpec == null ? string.Empty : BotLifetimeBuild.Encode(companion.BotSpec);
@@ -2036,15 +2123,15 @@ namespace DOL.GS
                 // Squad-assigned companions (task 42) restore straight into their own
                 // squad Group, leader first per squad, so they never compete with the
                 // owner's own group capacity below.
-                foreach (PlayerCompanionRecord record in roster
-                             .Where(entry => entry.IsActive && entry.SquadIndex > 0)
-                             .OrderBy(entry => entry.SquadIndex)
-                             .ThenByDescending(entry => entry.IsSquadLeader))
+                // Only companions reserved for this character are restored (RestoreCandidates);
+                // one another character grouped stays active for that character.
+                List<PlayerCompanionRecord> candidates = RestoreCandidates(owner, roster);
+                foreach (PlayerCompanionRecord record in candidates.Where(entry => entry.SquadIndex > 0))
                 {
                     RestoreSquadCompanion(owner, record);
                 }
 
-                foreach (PlayerCompanionRecord record in roster.Where(entry => entry.IsActive && entry.SquadIndex <= 0))
+                foreach (PlayerCompanionRecord record in candidates.Where(entry => entry.SquadIndex <= 0))
                 {
                     if (owner.Group != null && owner.Group.MemberCount >= owner.Group.MaximumMemberCount)
                     {
@@ -2408,12 +2495,15 @@ namespace DOL.GS
                 }
 
                 int previousSquadIndex = record.SquadIndex;
+                string previousGroupedWith = record.LastGroupedCharacterId;
                 record.SquadIndex = squadIndex;
                 record.IsSquadLeader = false;
+                StampGroupedCharacter(record, owner);
                 record.Dirty = true;
                 if (!SaveRecord(record))
                 {
                     record.SquadIndex = previousSquadIndex;
+                    record.LastGroupedCharacterId = previousGroupedWith;
                     message = $"{record.Name}'s squad assignment could not be saved.";
                     return false;
                 }
@@ -2421,6 +2511,7 @@ namespace DOL.GS
                 if (!TryPlaceInSquad(owner, record, companion, out string placementError))
                 {
                     record.SquadIndex = previousSquadIndex;
+                    record.LastGroupedCharacterId = previousGroupedWith;
                     record.Dirty = true;
                     SaveRecord(record);
                     message = placementError;
@@ -2455,6 +2546,12 @@ namespace DOL.GS
                 if (record.SquadIndex != squadIndex || squadIndex <= 0)
                 {
                     message = $"{record.Name} is not in squad {squadIndex}.";
+                    return false;
+                }
+
+                if (IsReservedByOtherCharacter(record, owner))
+                {
+                    message = $"{record.Name} is grouped with {ReservingCharacterName(record, owner)} on another character. Invite them here first to move them.";
                     return false;
                 }
 
@@ -2559,7 +2656,9 @@ namespace DOL.GS
                     return true;
                 }
 
-                foreach (PlayerCompanionRecord record in squadRecords)
+                // A companion grouped with another character keeps its squad and reservation here.
+                int keptElsewhere = squadRecords.Count(record => IsReservedByOtherCharacter(record, owner));
+                foreach (PlayerCompanionRecord record in squadRecords.Where(record => !IsReservedByOtherCharacter(record, owner)))
                 {
                     if (ActiveCompanions.TryGetValue(record.CompanionId, out GameBot companion) && companion?.Owner == owner)
                         BenchActiveActor(companion, notifyOwner: false);
@@ -2570,7 +2669,10 @@ namespace DOL.GS
                     SaveRecord(record);
                 }
 
-                message = $"Squad {squadIndex} was disbanded; {squadRecords.Count} companion(s) were benched.";
+                message = keptElsewhere == 0
+                    ? $"Squad {squadIndex} was disbanded; {squadRecords.Count} companion(s) were benched."
+                    : $"Squad {squadIndex} was disbanded; {squadRecords.Count - keptElsewhere} companion(s) were benched. " +
+                      $"{keptElsewhere} grouped with another character kept their squad.";
                 BattleGroupCompanionSync.Resync(owner);
                 return true;
             }
@@ -2591,8 +2693,8 @@ namespace DOL.GS
                 string members = string.Join(", ", squad.OrderByDescending(record => record.IsSquadLeader)
                     .ThenBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(record => record.IsSquadLeader
-                        ? $"{record.Name} (leader{(record.IsActive ? string.Empty : ", benched")})"
-                        : $"{record.Name}{(record.IsActive ? string.Empty : " (benched)")}"));
+                        ? $"{record.Name} (leader{(IsActiveFor(record, owner) ? string.Empty : ", " + RosterStateLabel(record, owner))})"
+                        : record.Name + (IsActiveFor(record, owner) ? string.Empty : " (" + RosterStateLabel(record, owner) + ")")));
                 lines.Add($"Squad {squad.Key}: {members}");
             }
 

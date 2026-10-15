@@ -143,6 +143,31 @@ pane growing with the window, row pitch 22. Controls use event IDs
 edge; the real-client check should confirm they never catch clicks meant for
 the game world.
 
+## Client levers research (2026-10-11, static only)
+
+Read-only analysis of the raid baseline (`67dcf68a…`) and the 0.169.0
+manager `game.dll` (`49095c51…`) with capstone, for a better manager window.
+None of this is real-client proof; the lever probe below exists to get it.
+
+| Lever | Evidence | Result |
+| --- | --- | --- |
+| Window size | `0x53DCAA` stores the final width/height at owner `+0x2C`/`+0x30` (`0x53DE73`/`0x53DE76`); Custom8 stub `[[0x104C2BC]+0x37178]`, owner `[stub+0x1C]` (lookup inferred) | A click can carry the current size, so the server could choose the row count itself |
+| Scalar (bar) adapters | Registrar `0x4B6BC0` stdcall(registry, slot*, name, max, initial), `ret 0x14`; object: dirty `+4`, max `+8`, value `+0xC`, min `+0x10`; setter `0x524370` (ECX = object, float, clamps, sets dirty) | Server-fed `StatusBarDef` bars (HP, power, XP) look feasible |
+| Colour adapters | Registrar `0x4B6F87` stdcall(registry, slot*, name), `ret 0xC`; 0x18-byte object, RGBA floats `+0..+0xC`, unknown dword `+0x14`; no setter found | Direct float writes; live repaint unknown |
+| Shift-click | `OnShiftClickEvent` is parsed on buttons, invisible buttons, list boxes and checkboxes through the same mapper `0x4EA06F`; no runtime reader found; IDs `0x800`–`0x8DF` are unused | Needs the probe; the manager's `sendControl` masks to one byte, so a shift range needs its own send path |
+| Native tabs | Tab records parsed (`0x4ECD60`, `0x4ECCC7`); the stock tab event sends a command and hides nothing locally; no per-control show/hide setter found (window-level only, `0x4BED28`) | Parked |
+| List box, combo box, check box, edit box | Row hit-test exists, but no proof the row or item index reaches an event; edit boxes have no Enter event; right-click and double-click are never read | Parked |
+
+**Lever probe.** `probe_companion_manager_levers.py --input-stage <0.169.0
+stage>` writes a probe stage (`.cprb` section, event IDs `0x900`–`0x90F`
+plain and `0x800`–`0x80F` shift, everything else passed to the manager).
+`test_companion_manager_levers_probe.py --stage <probe> --input-stage <0.169.0
+stage>` emulates it. `Install-CompanionManager.ps1` does not install probe
+stages (no raid baseline in the manifest, and 0.169.0 is not yet a known
+manager build); that is a separate decision. In the client, each `[Probe]`
+click should show `P#nn W=<hex> H=<hex>`, step the bar by 25 %, and cycle
+the label colour; Shift+click should show `S#nn`.
+
 ## What the 2026-09-23 probes proved
 
 The supported client is the verified Windows x86 `game.dll` with the native raid
@@ -214,8 +239,8 @@ subcommand still works. Install the matching client files.
 Server to client uses fixed 128-byte DebugMode bodies: byte 0 is `0`, marker
 `0x43`, version `3`, then operation, a 16-bit label index (bytes 4-5), and
 NUL-terminated ASCII text
-from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 440
-label adapters (132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits). Version-1 probe packets,
+from byte 12, with byte 127 required to be `0`. Operations: `1` set one of 620
+label adapters (440 manager, 98 COMPANIONS window and since 0.276.0 82 COMPANION GEAR window; 538 before 0.276.0, 440 before 0.251.0, 132 before 0.169.0, 130 before 0.33.0), `2` show (the client then sends control `dd`, "ready"), `3` hide, `4` set the token (four lowercase hex digits), `5`/`6` show/hide the COMPANIONS window, `7` refresh the gear icons, `8` show the gear window (the client then sends control `dc`), `9` hide it. Version-1 probe packets,
 short bodies, bad terminators, unknown operations, and out-of-range indexes are
 ignored. Raid marker `0x52` and ordinary DebugMode packets pass through. An
 unpatched client sees only a DebugMode packet whose flag byte is `0`, as with
@@ -394,3 +419,301 @@ roadmap items only after owner confirmation:
   bag; rejected and full-bag actions preserve items and coins.
 - An unsupported client build fails closed, and `/companions` commands keep
   working.
+
+## COMPANIONS window (Custom7), 0.251.0
+
+Status: **offline only; the owner's real-client check is pending.** The window
+is a fixed 332x296 bar that the server shows while the account's setting is on
+and an owned companion is with the player. It is separate from the Companion
+Manager's Custom8 window, which is unchanged.
+
+### Layout and behaviour
+
+| Element | Content |
+| --- | --- |
+| Title and status | "COMPANIONS"; status "{order or Own stances} \| n with you \| m in squads". |
+| Ten tiles | Aggressive, Defensive, Passive, Assist (the group orders); Default (saved stances); Follow; Stay; Pet pull; PULL; MANAGER. Active tiles are gold with an underline; disabled tiles are grey. |
+| Message line | The reply to the last tile click. Only PULL and refusals are echoed to chat. |
+| Member rows | Eight rows that mirror the group window's member slots: native name (group_name), health bar (group_health), level (group_level) and a server-written stance. A row click is the stock SelectGroupMember<i> target. |
+
+Tile rules (`CompanionBarView.ComputeTiles`): Stay is disabled while pet pull is
+off and the companions are not staying; Pet pull is disabled under Assist train;
+PULL is disabled with no owned companion. The owned set is
+`CompanionSquads.OwnerForceBots` filtered to the owner's persistent or temporary
+companions, the same predicate as the manager's group detail.
+
+The window shows only while the setting is on and at least one owned companion
+is present. It hides when the last one leaves, and at login the server always
+sends one hide when the window should not show.
+
+### Protocol (still version 3)
+
+- Operation 5 shows Custom7 (window `0x74`) and sends the ready control `0xBF`;
+  operation 6 hides it. A version-3 client without this stage ignores both.
+- Labels 440-513: 74 new adapters `cmgr_440` to `cmgr_513`. Status 440, message
+  441, tiles 442-481 (four labels each: inactive, active, disabled, underline),
+  member rows 482-513 (four stance colours each: Aggressive, Defensive, Passive,
+  Assist). The label count is 514 in total; `LabelCount` stays 440.
+- Clicks use the manager's own sender, `&companions ui <token> <control>`, with
+  controls 0xA8-0xBF (decimal event IDs 1960-1983). A separate flag
+  (`barActiveFlag`, at `active + 4`) gates them, so the bar works with the
+  manager closed. Manager controls never use 0xA8-0xBF. The server routes these
+  controls before any token or session check (`CompanionManager.HandleClientControl`).
+- Stance and camp tiles are silent; PULL and refusals echo to chat.
+
+### Evidence for the window ID and the ini position
+
+- `ShowCustomN` pushes `0x6D + N`: Custom7 is `0x74`, Custom8 `0x75`. The bytes
+  at 0x4E0B4A are `6a 01 6a 74` (Custom7) and at 0x4E0B50 `6a 01 6a 75` (Custom8)
+  in the raid baseline `game.dll` (`67dcf68a...`). Nothing installed uses Custom7.
+- The client saves a window's position in the ini `[Panels]` line, here
+  `Custom7=x,y,a,b,flag`. The window reopens where it was closed.
+- The member rows use the stock adapters `group_name<i>`, `group_color<i>`,
+  `group_level<i>` and `group_health<i>`, and the stock events
+  `SelectGroupMember0` to `7` (event IDs 122-129, checked through the client's
+  own `0x4EA06F` mapper in the emulation test).
+
+### Setting and commands
+
+- Stored per account in `offline_local_options` as `companion_bar.enabled.<account>`
+  with the value `on` or `off`. A missing or unreadable value means on.
+- `/companions bar on|off` changes it. Bare `/companions bar` shows the window
+  again after its X. If the client does not answer the show within three
+  seconds, one line explains that the client files need updating.
+- The Companion Manager's Group orders panel has a line
+  "COMPANIONS window: on (click to turn it off)" (or the reverse).
+- MANAGER opens the Companion Manager on its Group orders row.
+
+### Build, test and install
+
+```bash
+# Read-only input; writes a fresh stage and manifest.
+python3 source/server/tools/build_companion_manager_client.py \
+  --client /mnt/d/Games/OfflineDAoC-dev/raid-baseline-client --output <new stage dir>
+python3 source/server/tools/test_companion_manager_client.py --stage <stage dir>
+```
+
+The raid-only baseline client is a folder with the `game.dll` (`67dcf68a...`) and
+`ui/uimain.xml` (`637bf806...`) from a `companion-manager-client-*` backup. The
+verified stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.251.0`.
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (manager and COMPANIONS window, protocol 3) | `73223deffd8455944974b555f5bce5762c43a642c4442b5102194e337e47daf4` |
+| custom7_window.xml (both skins) | `7920bcd32909a0e6b5ad2e625902f9f8807fe04ea4370f2ace2b301a8ee59aba` |
+| uimain.xml (with both window includes) | `7d573c315a56bcacae8e8ebc871646654bfe8da5bb1dc745d6023da7f93b9dd9` |
+| uimain.xml, manager only (0.169.0 UI) | `e1266fcceb954b5e835d3e3ca6563d682f4bb0f6430d36947923a74974dfd2a0` |
+| custom8_window.xml (unchanged) | `9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` |
+
+The 0.169.0 manager `game.dll` (`49095c51...`) is the installed build that the
+upgrade starts from. The build is deterministic: a second build gives the same
+`game.dll` and window hashes.
+
+Install with `tools/dev/Install-CompanionManager.ps1`, a dry run by default.
+With `-Apply` it upgrades an installed 0.169.0 manager in place: it backs up
+`game.dll`, `uimain.xml` and the window files (custom8 and custom7) to
+`companion-manager-upgrade-<stamp>`, and rolls back on failure. `-RestoreBackup`
+restores the earlier files and removes the custom7 files this stage installed.
+The game, server and launcher must be closed; the script stops nothing.
+
+### Real-client checklist
+
+1. Login with a companion present: the bar appears once, and no ghost bar
+   remains when no companion is with you.
+2. Zoning, and a companion leaving and rejoining: the bar hides and shows
+   again. The window keeps its position after a relog (ini `Custom7=`).
+3. Member rows: health, level and stance fill for each group member, empty rows
+   draw nothing, and the player's own row is in its slot. Clicking a row targets
+   that member.
+4. Tiles: each click sends its order; PULL echoes; the active gold tile and the
+   underline match the state. Check the "Aggressive" label fit in 76 px.
+5. The status line fits (the label is 170 px; longer text is shortened with "...").
+6. `/companions bar off` hides it at once; `on` shows it again; the manager's
+   Group orders line switches the same setting.
+7. The manager still works with 514 adapters: open `/companions`, check the rows,
+   tabs and the raid windows (`/raid 40`).
+8. An unpatched 0.169.0 client with this server: `/companions` and every command
+   still work, and no bar appears.
+
+## COMPANIONS window as a group window (0.272.0)
+
+Status: **offline only; the owner's real-client check is pending (task 128).**
+The owner asked for a better Companion Control Window that can replace the
+group window. The window keeps its Custom7 id, protocol 3 and its show/hide
+rules, and grows to a 440×312 group window.
+
+### Layout
+
+| Row | Content |
+| --- | --- |
+| Title | "COMPANIONS" and the status line (290 px): `{order} \| n with you [\| m in squads]`, or `Group of N \| no companions` for a player group. |
+| Tiles 1 | Aggressive, Defensive, Passive, Assist, Default (five 80 px tiles, pitch 84). |
+| Tiles 2 | Follow, Stay, Pet pull, PULL, MANAGER. |
+| Tiles 3 | **Invite** (native, stock `GroupInvite` event: `/invite` on the target), **Kick**, **Leader**, **Leave**, **Grind** / **Stop grind**. |
+| Message | The reply to the last click (420 px). |
+| Member rows | Eight rows, pitch 22: power % (yellow) and endurance % (green) as `ScalarLabelDef` on `group_power<i>` / `group_endurance<i>`; the gold leader mark (server); a `red_status_thick` bar on `group_health<i>` (180 px) with the name (`group_name<i>`, colour `group_color<i>`) over it and the health % at its right end; class (`group_class<i>`, 86 px); level (`group_level<i>`); the stance (server, four colour labels, 78 px). The row's left part is the stock `SelectGroupMember<i>` click; the stance column is control `0xB6 + i`. |
+
+Rows cover every group member, players included: the native adapters fill
+them, the server only adds the stance of its owner's companions (blank for
+anyone else) and the leader mark. Slot `i` is the member's `GroupIndex`, the
+same slot the group packet writes.
+
+### Controls and labels
+
+| Control | Action |
+| --- | --- |
+| 0xA8–0xB1 | The 0.251.0 tiles, unchanged. |
+| 0xB2 Kick | On the targeted group member (a row click targets it): an owned persistent companion is benched through `PlayerCompanionRoster.TryBench`; an owned temporary helper is removed from the group and deleted; any other member is removed like `/disband <name>`, which needs the leader. Yourself: "Use Leave". |
+| 0xB3 Leader | `Group.MakeLeader` on the targeted player (needs the leader, a group of two or more, a player target). |
+| 0xB4 Leave | First click arms a 10 s confirmation (the tile turns gold); the second click does what bare `/disband` does: closes a companion raid, deletes owned temporary helpers, leaves the group. Any other click disarms it. |
+| 0xB5 Grind | `PlayerCompanionGrind.TryStart` / `Stop`; the tile reads "Stop grind" while active. |
+| 0xB6–0xBD | Row stance click: cycles the companion's saved stance aggressive → defensive → passive through `TrySetTactics(..., "stance", ...)`; a temporary helper or someone else's member only gets a message; an active group order is named as still overriding it. |
+| 0xBE | Spare. 0xBF stays the ready control. |
+
+Labels 440–537 (98): status 440, message 441, tiles 442–497 (14 × 4:
+inactive, active, disabled, underline), rows 498–537 (8 × 5: the four
+stance colours, then the leader mark). `TotalLabelCount` is 538; the
+manager's 440 are unchanged. Tile states: Kick and Leave need a group, Leader
+needs the lead of a group of two or more, Grind is always enabled; disabled
+tiles answer with the reason. Only PULL and refusals go to chat; the group
+itself reports joins and leaves.
+
+The window now shows while the player is in a group **or** an owned companion
+is with him (`CompanionBar.WantsWindow`), so a plain player group gets it too.
+
+### Build, test and install
+
+Same builder and baseline as 0.251.0; the output is deterministic.
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (538 adapters) | `c938e6b50057a4a99ec39211004765dcacb3ffa47880e4ba3fc193add87e612d` |
+| custom7_window.xml (both skins) | `5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac` |
+| custom8_window.xml (unchanged) | `9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` |
+| uimain.xml (unchanged since 0.251.0) | `7d573c315a56bcacae8e8ebc871646654bfe8da5bb1dc745d6023da7f93b9dd9` |
+
+The stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.272.0`.
+`Install-CompanionManager.ps1` upgrades an installed 0.251.0 build
+(`73223def…`) in place: it backs up `game.dll`, `uimain.xml` and all four
+window files to `companion-manager-upgrade-<stamp>` and replaces the 0.251.0
+`custom7_window.xml` files (other stray window files are still refused);
+`-RestoreBackup` puts the 0.251.0 files back. The release pack
+(`build_fork_release.py`) defaults to this stage and allows the 0.251.0
+`game.dll` and window hashes. Offline results (2026-10-14): emulation test
+passed (538 adapters, tile and row controls, `GroupInvite` = 158 through the
+client's own mapper, no overlapping click areas, server constants match);
+installer dry run, apply, re-apply and restore on a scratch copy of the
+installed 0.251.0 client; `UT_CompanionBar` 30/30.
+
+Known limits: the arial14 rendering of the row columns has only been
+measured, not seen; the native `group_class` text of a long class name
+("Spiritmaster", 80 px) fills its 86 px column. A 0.251.0 client with this
+server keeps its old tiles working and ignores the new labels.
+
+### Real-client checklist
+
+1. Install the stage with the game, server and launcher closed; log in with a
+   companion: the window shows at 440×312 and the text reads.
+2. Rows: power, endurance and health percent, the health bar, class and level
+   fill for you, a player and a companion; blank rows draw nothing; the gold
+   mark sits on the leader and moves with `/makeleader`.
+3. Clicking a row targets; clicking a companion's stance cycles aggressive →
+   defensive → passive and the row colour follows; under a group order the
+   message names the order.
+4. Invite on a targeted player and on a targeted companion. Kick benches a
+   companion, dismisses a `/spawn` helper, removes a player as leader and
+   refuses when you are not the leader. Leader hands the lead. Leave needs the
+   second click within 10 s. Grind starts and stops.
+5. A plain player group shows the window with "Group of N | no companions".
+6. `/companions` (the manager) and `/raid 40` still work with 538 adapters.
+
+## COMPANION GEAR window (Custom6), 0.276.0
+
+TASKS 129. The 0.273.0 probe and the 0.275.0 quick build proved the pattern in
+the real client (`docs/COMPANION_PAPERDOLL_RE.md` sections 6-8); 0.276.0 moves
+it into the manager builder.
+
+### Layout and behaviour
+
+- 518×386, the 0.275.0 geometry: the 19 worn slots in three captioned columns
+  (character-sheet order) and the 40-slot backpack as an 8×5 grid. Each slot
+  is a stock socket, an `IconDef` on the scalar adapter `cmgr_icon_<n>` and a
+  click area with `OnClickEvent` `2304 + n` (`0x900 + n`).
+- Click handling is the stock quiver window's: an item on the cursor (your
+  bag or paperdoll, kind 9, or a gear pick-up, kind `0x66`) goes to the slot
+  with the stock move-item packet; an empty cursor on a filled slot picks the
+  item up. Every move is handled by `PersistentCompanionInventoryView`
+  (house-vault client slots 150-168 worn, 170-209 backpack), exactly as from
+  the House Vault list.
+- Server labels 538-619: the title (`COMPANION GEAR - <name>`), the backpack
+  heading (`Backpack n/40`), two lines for the last reply, the 19 worn
+  captions and one gold `*` per slot for an item that stays with the
+  companion (`CanReturnItemToOwner` is false: starter gear, unknown origin,
+  bound items). Three muted help lines are fixed text.
+
+### Opening, ready and fallback
+
+`/companions gear [name]` and the manager's **[Open inventory]** open the view
+with a plain slot update (the stock vault window stays closed), send
+operation `8` and the labels. Operation `8` shows Custom6, refreshes the icons
+and sends control `0xDC` through the manager's command path; the server routes
+it before the view-token checks, marks the client as able and sends every
+label again. Every later slot update is followed by operation `7`. Removing
+the view (another inventory window, `/companions gear off`) sends operation
+`9`. A client that has not answered within three seconds (a manager client
+before 0.276.0) gets the stock House Vault list instead and a one-line
+explanation; later opens in that session go to the list at once.
+
+### Build, test and install
+
+Same builder and raid baseline as 0.251.0; deterministic.
+
+```bash
+python3 source/server/tools/build_companion_manager_client.py \
+  --client /mnt/d/Games/OfflineDAoC-dev/raid-baseline-client --output <new stage dir>
+python3 source/server/tools/test_companion_manager_client.py --stage <stage dir>
+```
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (620 label and 59 icon adapters) | `bfefe97d7f7175204ae18c6d23a6958e13819e45155e84738bc5ae9c8d90c264` |
+| custom6_window.xml (both skins) | `dfc5bbdb8d9fd30b59bfce26bae924e27888ca4b89431532bccdac3f028b2338` |
+| custom7_window.xml (unchanged since 0.272.0) | `5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac` |
+| custom8_window.xml (unchanged) | `9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` |
+| uimain.xml (three includes; the same file as the paperdoll probe's) | `cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a1328c` |
+
+The stage is `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.276.0`.
+The emulation test runs the init (620 text adapters, then the 59 icon
+adapters with the quiver's max/initial values, then the unchanged raid
+adapters), operations 7-9, the ready control, the drop and pick-up paths with
+the stock hotspot map, refused drag kinds, pass-through of every other event
+ID, the stock `OnClickEvent` mapper on all 59 click values, the XML (sockets,
+icons and click areas on the same non-overlapping squares, every gear label
+once, stock templates only) and the server constants.
+
+`Install-CompanionManager.ps1` upgrades an installed 0.272.0 manager
+(`c938e6b5…`) or either paperdoll probe (0.273.0 `ff5fb523…`, 0.275.0
+`f1f5c399…`) in place. It backs up `game.dll`, `uimain.xml` and the window
+files, including an existing probe `custom6_window.xml`, and `-RestoreBackup`
+puts them back. A `custom6_window.xml` that is neither this stage's nor a
+known probe window is refused. The release pack (`build_fork_release.py`)
+defaults to this stage and allows the 0.272.0 and probe `game.dll`, the
+0.251.0-0.272.0 `uimain.xml` and the probe `custom6_window.xml` hashes.
+
+The research lever probe (`probe_companion_manager_levers.py`, 0.169.0 input)
+also used IDs `0x900`-`0x90F`; it is not installed and cannot be combined
+with this stage.
+
+### Real-client checklist
+
+1. Install the stage with the game, server and launcher closed (dry run
+   first). `/companions gear` with a companion: the window opens without the
+   House Vault list; the title names the companion, the icons and the
+   backpack count are right, and starter items carry a gold `*`.
+2. [Open inventory] in the manager opens the same window.
+3. The moves in section 8 of `docs/COMPANION_PAPERDOLL_RE.md` (give to a worn
+   and a backpack slot, equip from the backpack, unequip to the backpack and
+   to your bag, ring and wrist pairs, two-hand and shield conflicts); each
+   reply appears in the window.
+4. The Isles skin.
+5. The manager, the COMPANIONS window and `/raid 40` still work.

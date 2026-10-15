@@ -9,7 +9,8 @@ namespace DOL.GS.Commands
     /// <summary>
     /// Owner-only native vault view of one companion's inventory: worn slots at positions
     /// 1-19 in character-sheet order, the backpack at positions 21-60. Drag from the owner's
-    /// backpack onto a worn position to hand an item over and equip it.
+    /// backpack onto a worn position to hand an item over and equip it. The COMPANION GEAR
+    /// window (CompanionGearWindow) shows the same positions with icons.
     /// </summary>
     public sealed class PersistentCompanionInventoryView : GameVault
     {
@@ -22,12 +23,24 @@ namespace DOL.GS.Commands
 
         private readonly GamePlayer _owner;
         private readonly string _companionId;
+        private readonly bool _gearWindow;
+        private readonly bool _stockWindow;
 
-        public PersistentCompanionInventoryView(GamePlayer owner, string companionId)
+        /// <param name="gearWindow">Also drive the COMPANION GEAR window (Custom6, TASKS 129): show it on open,
+        /// refresh its slot icons and labels after every slot update, and hide it when the view closes.</param>
+        /// <param name="stockWindow">Open with the house-vault window type, which opens the stock vault window;
+        /// otherwise the slots are sent as a plain update.</param>
+        public PersistentCompanionInventoryView(GamePlayer owner, string companionId, bool gearWindow = false, bool stockWindow = true)
         {
             _owner = owner;
             _companionId = companionId;
+            _gearWindow = gearWindow;
+            _stockWindow = stockWindow;
         }
+
+        public bool IsGearWindow => _gearWindow;
+
+        public string CompanionId => _companionId;
 
         public override int VaultSize => 100;
         public override int FirstDbSlot => (int)eInventorySlot.FirstBackpack;
@@ -36,6 +49,11 @@ namespace DOL.GS.Commands
 
         /// <summary>1-based window position of a worn slot, or 0 when it is not shown.</summary>
         public static int WornPosition(eInventorySlot worn) => Array.IndexOf(PersistentCompanionGear.SheetSlots, worn) + 1;
+
+        /// <summary>Window position of gear window slot <paramref name="index"/> (0-18 worn, 19-58 backpack).</summary>
+        public static int GearPosition(int index) => index < PersistentCompanionGear.SheetSlots.Length
+            ? index + 1
+            : BackpackFirstPosition + index - PersistentCompanionGear.SheetSlots.Length;
 
         public static MoveKind ClassifyMove(Area from, Area to) => (from, to) switch
         {
@@ -64,8 +82,8 @@ namespace DOL.GS.Commands
 
         public override IEnumerable<DbInventoryItem> GetDbItems(GamePlayer player) => GetClientInventory(player).Values;
 
-        // Worn gear is always shown so the slots are complete; the backpack shows only what
-        // the owner can take out. Starter and protected backpack items stay in the Gear tab.
+        // Every worn and backpack item is shown so no slot looks empty while it is taken.
+        // Starter and protected items still cannot leave: TryTransferItem refuses them.
         public override Dictionary<int, DbInventoryItem> GetClientInventory(GamePlayer player)
         {
             var items = new Dictionary<int, DbInventoryItem>();
@@ -74,8 +92,7 @@ namespace DOL.GS.Commands
             foreach (eInventorySlot worn in PersistentCompanionGear.SheetSlots)
                 if (companion.Inventory.GetItem(worn) is DbInventoryItem item)
                     items[ClientSlotAt(WornPosition(worn))] = item;
-            foreach (DbInventoryItem item in PlayerCompanionRoster.OwnerTakeableBackpack(companion.PlayerCompanionRecord,
-                         companion.Inventory.AllItems.Where(entry => IsBackpack((eInventorySlot)entry.SlotPosition))))
+            foreach (DbInventoryItem item in companion.Inventory.AllItems.Where(entry => IsBackpack((eInventorySlot)entry.SlotPosition)))
                 items[ClientSlotAt(BackpackFirstPosition + item.SlotPosition - (int)eInventorySlot.FirstBackpack)] = item;
             return items;
         }
@@ -86,6 +103,22 @@ namespace DOL.GS.Commands
             _owner.ActiveInventoryObject = this;
             AddObserver(_owner);
             Refresh(open: true);
+            if (_gearWindow)
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpGearShow);
+        }
+
+        public override void RemoveObserver(GamePlayer player)
+        {
+            base.RemoveObserver(player);
+            if (_gearWindow && ReferenceEquals(player, _owner))
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpGearHide);
+        }
+
+        /// <summary>Re-sends every slot with the house-vault window type, which opens the stock House Vault list.</summary>
+        public void ShowStockWindow()
+        {
+            if (ReferenceEquals(_owner.ActiveInventoryObject, this))
+                SendSlots(GetClientInventory(_owner), eInventoryWindowType.HouseVault);
         }
 
         /// <summary>
@@ -99,10 +132,35 @@ namespace DOL.GS.Commands
                 return;
 
             Dictionary<int, DbInventoryItem> items = GetClientInventory(_owner);
+            SendSlots(items, open && _stockWindow ? eInventoryWindowType.HouseVault : eInventoryWindowType.Update);
+            if (!_gearWindow)
+                return;
+            // The gear window reads its icons from the client's item array, so the refresh follows the slot update.
+            // Opening sends the show operation instead, which refreshes too.
+            if (!open)
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpGearRefresh);
+            RenderGearLabels(items);
+        }
+
+        private void SendSlots(Dictionary<int, DbInventoryItem> items, eInventoryWindowType type)
+        {
             var slots = new Dictionary<int, DbInventoryItem>(VaultSize);
             for (int slot = (int)FirstClientSlot; slot <= (int)LastClientSlot; slot++)
                 slots[slot] = items.GetValueOrDefault(slot);
-            _owner.Out.SendInventoryItemsUpdate(slots, open ? eInventoryWindowType.HouseVault : eInventoryWindowType.Update);
+            _owner.Out.SendInventoryItemsUpdate(slots, type);
+        }
+
+        private void RenderGearLabels(Dictionary<int, DbInventoryItem> items)
+        {
+            if (!TryGetCompanion(_owner, out GameBot companion))
+                return;
+            var slots = new Dictionary<int, DbInventoryItem>();
+            for (int index = 0; index < CompanionManagerProtocol.GearSlots; index++)
+                if (items.TryGetValue(ClientSlotAt(GearPosition(index)), out DbInventoryItem item))
+                    slots[index] = item;
+            PlayerCompanionRecord record = companion.PlayerCompanionRecord;
+            CompanionGearWindow.Render(_owner, companion.Name, slots,
+                item => !PlayerCompanionRoster.CanReturnItemToOwner(item, record, out _));
         }
 
         public override bool CanHandleMove(GamePlayer player, eInventorySlot fromSlot, eInventorySlot toSlot) =>
@@ -154,14 +212,13 @@ namespace DOL.GS.Commands
                         moved = PersistentCompanionGear.TryEquip(player, _companionId, item.ObjectId, worn, out message);
                     break;
                 case MoveKind.Unequip:
-                    moved = PersistentCompanionGear.TryUnequip(player, _companionId, WornSlotAt(fromSlot), item.ObjectId, out message);
+                    moved = PersistentCompanionGear.TryUnequip(player, _companionId, WornSlotAt(fromSlot), item.ObjectId,
+                        IsVaultWindowSlot(toSlot) ? BackpackSlotAt(toSlot) : eInventorySlot.Invalid, out message);
                     break;
                 case MoveKind.WithinCompanion:
                     eInventorySlot destination = BackpackSlotAt(toSlot);
                     if (fromSlot == toSlot || companion.Inventory.GetItem(destination) != null)
-                        message = companion.Inventory.GetItem(destination) != null && !GetClientInventory(player).ContainsKey((int)toSlot)
-                            ? "That slot holds gear that stays with the companion; see the Gear tab. Choose another slot."
-                            : "Choose an empty companion backpack slot to move this item.";
+                        message = "Choose an empty companion backpack slot to move this item.";
                     else
                         moved = PlayerCompanionRoster.TryApplyEquipmentMutation(companion,
                             () => companion.Inventory.GetItem((eInventorySlot)item.SlotPosition)?.ObjectId == item.ObjectId &&
@@ -176,14 +233,14 @@ namespace DOL.GS.Commands
                         message = "Choose an empty companion backpack slot.";
                     else
                         moved = PlayerCompanionRoster.TryTransferItem(player, _companionId, item.ObjectId,
-                            toCompanion: true, out message);
+                            toCompanion: true, IsVaultWindowSlot(toSlot) ? BackpackSlotAt(toSlot) : eInventorySlot.Invalid, out message);
                     break;
                 case MoveKind.ReturnToOwner:
                     if (IsBackpack(toSlot) && player.Inventory.GetItem(toSlot) != null)
                         message = "Choose an empty slot in your backpack.";
                     else
                         moved = PlayerCompanionRoster.TryTransferItem(player, _companionId, item.ObjectId,
-                            toCompanion: false, out message);
+                            toCompanion: false, toSlot, out message);
                     break;
                 default:
                     message = "Drag between your backpack, the worn slots (1-19) and the companion's backpack (21-60).";
@@ -234,7 +291,11 @@ namespace DOL.GS.Commands
         private static bool IsBackpack(eInventorySlot slot) =>
             slot >= eInventorySlot.FirstBackpack && slot <= eInventorySlot.LastBackpack;
 
-        private void Tell(string message) =>
+        private void Tell(string message)
+        {
             _owner.Out.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+            if (_gearWindow)
+                CompanionGearWindow.SetMessage(_owner, message);
+        }
     }
 }

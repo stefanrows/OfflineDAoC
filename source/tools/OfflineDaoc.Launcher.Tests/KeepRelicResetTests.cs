@@ -74,25 +74,36 @@ public class KeepRelicResetTests
         Assert.That(Sql("SELECT Realm FROM [Keep] WHERE KeepID=1"), Is.EqualTo(2L));
     }
 
-    [Test, Apartment(ApartmentState.STA)] public void ButtonFitsMarkedHeaderAtCompactAndLargeWidths()
+    // The live reset button sits in the Realm Events panel (its actions row inside the controls row).
+    [Test, Apartment(ApartmentState.STA)] public void ResetButtonFitsRealmEventsAtCompactAndLargeWidths()
     {
         var type = Assembly.Load("OfflineDAoC").GetType("OfflineDaoc.Launcher.MainForm")!;
         using var form = (Form)Activator.CreateInstance(type)!;
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        using var header = (Control)type.GetMethod("BuildActiveRvrHeader",flags)!.Invoke(form,null)!;
-        header.Dock = DockStyle.None;
+        var button = (Button)type.GetField("_resetKeepsRelics", flags)!.GetValue(form)!;
+        Control panel = button.Parent!.Parent!.Parent!;
+        panel.Parent!.Controls.Remove(panel);
+        panel.Dock = DockStyle.None;
         foreach (int width in new[] { 850, 1100, 1850 })
         {
-            header.Size = new System.Drawing.Size(width,42); header.CreateControl(); header.PerformLayout();
-            var button = header.Controls.OfType<Button>().Single();
+            panel.Size = new System.Drawing.Size(width, 600); panel.CreateControl(); panel.PerformLayout();
             Assert.That(button.Text, Is.EqualTo("RESET ALL KEEPS && RELICS…"));
             Assert.That(button.AccessibleName, Is.EqualTo("Reset all keeps & relics"));
-            Assert.That(header.ClientRectangle.Contains(button.Bounds), Is.True, button.Bounds.ToString());
+            Rectangle bounds = BoundsIn(panel, button);
+            Assert.That(panel.ClientRectangle.Contains(bounds), Is.True, $"{width}: {bounds}");
             Assert.That(TextRenderer.MeasureText(button.Text,button.Font).Width, Is.LessThan(button.Width));
             Assert.That(button.Enabled, Is.False, "Must stay disabled until stopped status is established");
-            using var bitmap = new System.Drawing.Bitmap(width,42);
-            header.DrawToBitmap(bitmap,header.ClientRectangle);
-            bitmap.Save(Path.Combine(TestContext.CurrentContext.WorkDirectory,$"active-rvr-header-{width}.png"));
+            using var bitmap = new System.Drawing.Bitmap(width,600);
+            panel.DrawToBitmap(bitmap,panel.ClientRectangle);
+            bitmap.Save(Path.Combine(TestContext.CurrentContext.WorkDirectory,$"realm-events-reset-button-{width}.png"));
         }
+    }
+
+    private static Rectangle BoundsIn(Control ancestor, Control descendant)
+    {
+        Rectangle bounds = descendant.Bounds;
+        for (Control? parent = descendant.Parent; parent != null && parent != ancestor; parent = parent.Parent)
+            bounds.Offset(parent.Location);
+        return bounds;
     }
 }

@@ -62,6 +62,13 @@ public enum BotThinkPhase
     DatabaseOpen,
     /// <summary>One slice of the stable-route first-leg corridor checks.</summary>
     StableRouteSearchSlice,
+    // Stage 4 of the Gothwaite PvP mode (appended: existing indices do not move; the window keeps counts only in memory).
+    /// <summary>One mode driver turn of a Gothwaite PvP bot (castle, group, roaming, return); the class routine is not included.</summary>
+    GothwaitePvpDriver,
+    /// <summary>One opponent scan of a Gothwaite PvP bot (FindOpponent), at most once per 1.5 s per bot.</summary>
+    GothwaitePvpScan,
+    /// <summary>One castle group former tick (service thread, every 2 s while the mode is on).</summary>
+    GothwaitePvpFormer,
 }
 
 /// <summary>

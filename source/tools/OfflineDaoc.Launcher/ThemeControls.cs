@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.ComponentModel;
 using System.Reflection;
 
@@ -24,6 +25,130 @@ internal static class DaocTheme
     internal static readonly Color Albion = Color.FromArgb(171, 64, 58);
     internal static readonly Color Midgard = Color.FromArgb(62, 94, 144);
     internal static readonly Color Hibernia = Color.FromArgb(57, 117, 66);
+    internal static readonly Color Input = Color.FromArgb(59, 53, 43);
+    internal static readonly Color GridHeader = Color.FromArgb(61, 54, 43);
+    internal static readonly Color GridRow = Color.FromArgb(35, 31, 26);
+    internal static readonly Color GridRowAlternate = Color.FromArgb(42, 37, 30);
+    internal static readonly Color GridSelection = Color.FromArgb(90, 72, 43);
+    internal static readonly Color GridLine = Color.FromArgb(78, 70, 56);
+    // Realm names in lists are drawn in these lighter tints; the card accents above stay as they are.
+    internal static readonly Color RealmTextAlbion = Color.FromArgb(225, 116, 105);
+    internal static readonly Color RealmTextMidgard = Color.FromArgb(124, 161, 215);
+    internal static readonly Color RealmTextHibernia = Color.FromArgb(112, 178, 112);
+
+    /// <summary>Shared font instances. They are never disposed; controls only reference them.</summary>
+    internal static class Fonts
+    {
+        internal static readonly Font Body = new("Georgia", 8.25f);
+        internal static readonly Font Bold = new("Georgia", 8.25f, FontStyle.Bold);
+        internal static readonly Font Caption = new("Georgia", 8f, FontStyle.Bold);
+        internal static readonly Font Title = new("Georgia", 13f, FontStyle.Bold);
+    }
+
+    internal static Color RealmColor(string? realmName) => realmName switch
+    {
+        "Albion" => RealmTextAlbion,
+        "Midgard" => RealmTextMidgard,
+        "Hibernia" => RealmTextHibernia,
+        _ => Color.White,
+    };
+
+    internal static Color RealmColor(int realm) => realm switch
+    {
+        1 => RealmTextAlbion,
+        2 => RealmTextMidgard,
+        3 => RealmTextHibernia,
+        _ => Color.White,
+    };
+
+    internal static void StyleInput(Control input)
+    {
+        input.BackColor = Input;
+        input.ForeColor = Text;
+        input.Font = Fonts.Body;
+        input.Margin = new Padding(0, 0, 8, 0);
+        input.Height = 27;
+        if (input is TextBox textBox) textBox.BorderStyle = BorderStyle.FixedSingle;
+    }
+
+    /// <summary>Secondary action inside a launcher panel: a rune button sized to its label.</summary>
+    internal static RuneButton ToolButton(string text) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        Padding = new Padding(16, 0, 16, 0),
+        MinimumSize = new Size(0, 31),
+    };
+
+    /// <summary>Flat check box with a gold outline and a dark check fill, for the launcher's switches.</summary>
+    internal static void StyleCheckBox(CheckBox box)
+    {
+        box.FlatStyle = FlatStyle.Flat;
+        box.BackColor = Panel;
+        box.FlatAppearance.BorderColor = Gold;
+        box.FlatAppearance.BorderSize = 1;
+        box.FlatAppearance.CheckedBackColor = Input;
+    }
+
+    internal static void StyleNumeric(NumericUpDown number)
+    {
+        number.BackColor = Input;
+        number.ForeColor = Text;
+        number.Font = Fonts.Body;
+        number.BorderStyle = BorderStyle.FixedSingle;
+    }
+
+    /// <summary>
+    /// One grid look for every launcher list: dark (or, for the exchange, parchment) rows, a gold
+    /// header drawn without visual styles, a selection colour and horizontal grid lines. Columns,
+    /// data bindings and behaviour are left to the caller.
+    /// </summary>
+    internal static void StyleGrid(DataGridView grid, DaocGridTone tone = DaocGridTone.Stone)
+    {
+        bool parchment = tone == DaocGridTone.Parchment;
+        Color background = parchment ? Color.FromArgb(205, 187, 144) : StoneDark;
+        Color header = parchment ? Color.FromArgb(80, 59, 35) : GridHeader;
+        Color row = parchment ? Color.FromArgb(215, 199, 157) : GridRow;
+        Color alternate = parchment ? Color.FromArgb(201, 182, 138) : GridRowAlternate;
+        Color rowText = parchment ? Ink : Text;
+        Color selection = parchment ? Color.FromArgb(117, 85, 45) : GridSelection;
+        Color selectionText = parchment ? Color.White : GoldLight;
+
+        grid.EnableHeadersVisualStyles = false;
+        grid.RowHeadersVisible = false;
+        grid.BackgroundColor = background;
+        grid.BorderStyle = BorderStyle.FixedSingle;
+        grid.GridColor = parchment ? Color.FromArgb(127, 103, 64) : GridLine;
+        grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = header,
+            ForeColor = GoldLight,
+            SelectionBackColor = header,
+            SelectionForeColor = GoldLight,
+            Font = Fonts.Bold,
+            Padding = new Padding(2),
+        };
+        grid.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = row,
+            ForeColor = rowText,
+            SelectionBackColor = selection,
+            SelectionForeColor = selectionText,
+            Font = Fonts.Body,
+            Padding = new Padding(2),
+        };
+        grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = alternate };
+        grid.ColumnHeadersHeight = 28;
+        grid.RowTemplate.Height = 25;
+    }
+}
+
+internal enum DaocGridTone
+{
+    Stone,
+    Parchment,
 }
 
 internal sealed class StoneSurface : Panel
@@ -101,7 +226,7 @@ internal sealed class RuneButton : Button
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
         Cursor = Cursors.Hand;
-        Font = new Font("Georgia", 8.25f, FontStyle.Bold);
+        Font = DaocTheme.Fonts.Bold;
         ForeColor = DaocTheme.GoldLight;
         Width = 104;
         Height = 31;
@@ -213,44 +338,272 @@ internal sealed class RealmShieldPicture : PictureBox
     }
 }
 
+/// <summary>
+/// Tab strip sized to its text: every tab stays on one row at the 960 px minimum width, with no
+/// scroll arrows. Title-case labels and a font step that narrows only on small windows keep the
+/// nine launcher tabs inside the strip. The selected tab has a gold underline; hover is highlighted.
+/// </summary>
 internal sealed class DaocTabControl : TabControl
 {
+    private const int StripHeight = 29;
+    private const int MinimumTabPadding = 6;
+    private const int MaximumTabPadding = 14;
+    private const TextFormatFlags TextFlags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+        TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis;
+    // Widest step first; the first one that leaves the minimum padding in the strip is used.
+    private static readonly Font[] TabFonts = new float[] { 8.5f, 8f, 7.5f }
+        .Select(size => new Font("Georgia", size, FontStyle.Bold)).ToArray();
+    private Color _stripColor = DaocTheme.StoneDark;
+    private int _hoverIndex = -1;
+
     public DaocTabControl()
     {
         DrawMode = TabDrawMode.OwnerDrawFixed;
-        SizeMode = TabSizeMode.Fixed;
-        ItemSize = new Size(172, 29);
-        Padding = new Point(8, 3);
-        Font = new Font("Georgia", 9f, FontStyle.Bold);
+        SizeMode = TabSizeMode.Normal;
+        ItemSize = new Size(0, StripHeight);
+        Font = TabFonts[0];
+        Padding = new Point(MinimumTabPadding, 0);
+        BackColor = _stripColor;
+    }
+
+    /// <summary>Colour of the strip behind and beyond the tabs.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    internal Color StripColor
+    {
+        get => _stripColor;
+        set
+        {
+            _stripColor = value;
+            BackColor = value;
+            Invalidate();
+        }
+    }
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        FitTabs();
+        base.OnLayout(levent);
+    }
+
+    // Resize is not raised for a size set before the handle exists, so the fit is refreshed here too.
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        FitTabs();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        FitTabs();
+    }
+
+    protected override void OnControlAdded(ControlEventArgs e)
+    {
+        base.OnControlAdded(e);
+        FitTabs();
+    }
+
+    protected override void OnControlRemoved(ControlEventArgs e)
+    {
+        base.OnControlRemoved(e);
+        FitTabs();
     }
 
     protected override void OnDrawItem(DrawItemEventArgs e)
     {
-        var selected = e.Index == SelectedIndex;
-        var rectangle = GetTabRect(e.Index);
+        bool selected = e.Index == SelectedIndex;
+        bool hovered = !selected && e.Index == _hoverIndex;
+        Rectangle rectangle = GetTabRect(e.Index);
         rectangle.Inflate(-1, 0);
-        using var fill = new LinearGradientBrush(rectangle,
-            selected ? Color.FromArgb(79, 65, 42) : Color.FromArgb(47, 43, 36),
-            selected ? Color.FromArgb(39, 32, 23) : Color.FromArgb(25, 24, 21), 90f);
-        e.Graphics.FillRectangle(fill, rectangle);
-        using var border = new Pen(selected ? DaocTheme.Gold : DaocTheme.Iron);
-        e.Graphics.DrawRectangle(border, rectangle.X, rectangle.Y, rectangle.Width - 1, rectangle.Height - 1);
-        TextRenderer.DrawText(e.Graphics, TabPages[e.Index].Text.ToUpperInvariant(), Font, rectangle,
-            selected ? DaocTheme.GoldLight : DaocTheme.Muted,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        Color top = selected ? Color.FromArgb(79, 65, 42) : hovered ? Color.FromArgb(70, 62, 48) : Color.FromArgb(47, 43, 36);
+        Color bottom = selected ? Color.FromArgb(39, 32, 23) : hovered ? Color.FromArgb(36, 33, 28) : Color.FromArgb(25, 24, 21);
+        using (var fill = new LinearGradientBrush(rectangle, top, bottom, 90f))
+            e.Graphics.FillRectangle(fill, rectangle);
+        using (var border = new Pen(selected ? DaocTheme.Gold : hovered ? DaocTheme.StoneLight : DaocTheme.Iron))
+            e.Graphics.DrawRectangle(border, rectangle.X, rectangle.Y, rectangle.Width - 1, rectangle.Height - 1);
+        if (selected)
+        {
+            using var underline = new SolidBrush(DaocTheme.GoldLight);
+            e.Graphics.FillRectangle(underline, rectangle.X, rectangle.Bottom - 3, rectangle.Width, 3);
+        }
+        Color text = selected ? DaocTheme.GoldLight : hovered ? DaocTheme.Parchment : DaocTheme.Muted;
+        TextRenderer.DrawText(e.Graphics, TabPages[e.Index].Text, Font, rectangle, text, TextFlags);
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int hover = TabIndexAt(e.Location);
+        if (hover == _hoverIndex) return;
+        _hoverIndex = hover;
+        InvalidateStrip();
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (_hoverIndex < 0) return;
+        _hoverIndex = -1;
+        InvalidateStrip();
     }
 
     protected override void WndProc(ref Message message)
     {
+        const int WmEraseBackground = 0x0014;
+        // The native control erases the strip in the system colour (white) before every owner-draw
+        // repaint; hovering a tab repaints it, which showed as a white flash. Erase in the strip colour.
+        if (message.Msg == WmEraseBackground && IsHandleCreated)
+        {
+            using var eraseGraphics = Graphics.FromHdc(message.WParam);
+            using var erase = new SolidBrush(_stripColor);
+            eraseGraphics.FillRectangle(erase, ClientRectangle);
+            message.Result = (IntPtr)1;
+            return;
+        }
         base.WndProc(ref message);
-        if (message.Msg != 0x000F || !IsHandleCreated || TabCount == 0) return;
+        const int WmPaint = 0x000F;
+        const int WmPrint = 0x0317;
+        const int WmPrintClient = 0x0318;
+        if (message.Msg is not (WmPaint or WmPrint or WmPrintClient) || !IsHandleCreated || TabCount == 0) return;
 
-        using var graphics = Graphics.FromHwnd(Handle);
+        // Printing (DrawToBitmap, screenshots) passes its device context; painting uses the window.
+        using var graphics = message.Msg == WmPaint ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(message.WParam);
         var lastTab = GetTabRect(TabCount - 1);
         var headerHeight = Math.Max(lastTab.Bottom + 2, DisplayRectangle.Top);
-        using var fill = new SolidBrush(DaocTheme.StoneDark);
+        using var fill = new SolidBrush(_stripColor);
         graphics.FillRectangle(fill, lastTab.Right, 0, Math.Max(0, Width - lastTab.Right), headerHeight);
         using var edge = new Pen(Color.FromArgb(116, 88, 48));
         graphics.DrawLine(edge, lastTab.Right, headerHeight - 1, Width, headerHeight - 1);
+    }
+
+    private void FitTabs()
+    {
+        int count = TabPages.Count;
+        if (count == 0 || Width <= 0) return;
+        // The strip starts 2 px in; keep a small margin before the right edge.
+        int available = Width - 6;
+        Font chosen = TabFonts[^1];
+        int textWidth = 0;
+        foreach (Font candidate in TabFonts)
+        {
+            textWidth = 0;
+            foreach (TabPage page in TabPages)
+                // Measured without EndEllipsis: that flag needs a bounded width and would under-measure.
+                textWidth += TextRenderer.MeasureText(page.Text, candidate, Size.Empty, TextFormatFlags.NoPadding).Width + 1;
+            chosen = candidate;
+            if (textWidth + 2 * MinimumTabPadding * count <= available) break;
+        }
+        int padding = Math.Clamp((available - textWidth) / (2 * count), MinimumTabPadding, MaximumTabPadding);
+        if (!ReferenceEquals(Font, chosen)) Font = chosen;
+        if (Padding.X != padding) Padding = new Point(padding, 0);
+    }
+
+    private int TabIndexAt(Point point)
+    {
+        for (int index = 0; index < TabCount; index++)
+            if (GetTabRect(index).Contains(point)) return index;
+        return -1;
+    }
+
+    private void InvalidateStrip() =>
+        Invalidate(new Rectangle(0, 0, Width, Math.Max(StripHeight + 2, DisplayRectangle.Top)));
+}
+
+/// <summary>Dark colour table for the launcher's context menus.</summary>
+internal sealed class DaocMenuColors : ProfessionalColorTable
+{
+    public override Color ToolStripDropDownBackground => DaocTheme.StoneDark;
+    public override Color ImageMarginGradientBegin => DaocTheme.Panel;
+    public override Color ImageMarginGradientMiddle => DaocTheme.Panel;
+    public override Color ImageMarginGradientEnd => DaocTheme.Panel;
+    public override Color MenuBorder => DaocTheme.StoneLight;
+    public override Color MenuItemBorder => DaocTheme.Gold;
+    public override Color MenuItemSelected => DaocTheme.GridSelection;
+    public override Color MenuItemSelectedGradientBegin => DaocTheme.GridSelection;
+    public override Color MenuItemSelectedGradientEnd => Color.FromArgb(70, 58, 36);
+    public override Color MenuItemPressedGradientBegin => DaocTheme.GridHeader;
+    public override Color MenuItemPressedGradientEnd => DaocTheme.GridHeader;
+    public override Color SeparatorDark => DaocTheme.StoneLight;
+    public override Color SeparatorLight => DaocTheme.StoneDark;
+    public override Color CheckBackground => DaocTheme.Input;
+    public override Color CheckSelectedBackground => DaocTheme.Input;
+    public override Color CheckPressedBackground => DaocTheme.Input;
+}
+
+internal static class DaocMenu
+{
+    private static readonly ToolStripRenderer Renderer = new ToolStripProfessionalRenderer(new DaocMenuColors()) { RoundedEdges = false };
+
+    /// <summary>Applies the dark renderer and gold-tinted text to a strip and its items.</summary>
+    internal static void Style(ToolStrip strip)
+    {
+        strip.Renderer = Renderer;
+        strip.BackColor = DaocTheme.StoneDark;
+        strip.ForeColor = DaocTheme.Text;
+        foreach (ToolStripItem item in strip.Items)
+            item.ForeColor = DaocTheme.Text;
+    }
+}
+
+/// <summary>
+/// Window icon built at runtime from the embedded realm shield: a multi-size .ico (16, 32, 48, 256)
+/// held in memory. The caller owns the returned Icon and disposes it after its window is destroyed.
+/// </summary>
+internal static class LauncherIcon
+{
+    private const string ShieldResource = "OfflineDaoc.Launcher.Assets.offline-daoc-realm-shield.png";
+    private static readonly int[] FrameSizes = [16, 32, 48, 256];
+
+    internal static Icon? Create()
+    {
+        using Stream? source = Assembly.GetExecutingAssembly().GetManifestResourceStream(ShieldResource);
+        if (source is null)
+            return null;
+        using var shield = new Bitmap(source);
+        var frames = FrameSizes.Select(size => RenderFrame(shield, size)).ToArray();
+
+        using var icon = new MemoryStream();
+        using (var writer = new BinaryWriter(icon, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write((ushort)0);
+            writer.Write((ushort)1);
+            writer.Write((ushort)frames.Length);
+            uint offset = (uint)(6 + 16 * frames.Length);
+            for (int index = 0; index < frames.Length; index++)
+            {
+                byte dimension = (byte)(FrameSizes[index] >= 256 ? 0 : FrameSizes[index]);
+                writer.Write(dimension);
+                writer.Write(dimension);
+                writer.Write((byte)0);
+                writer.Write((byte)0);
+                writer.Write((ushort)1);
+                writer.Write((ushort)32);
+                writer.Write((uint)frames[index].Length);
+                writer.Write(offset);
+                offset += (uint)frames[index].Length;
+            }
+            foreach (byte[] frame in frames)
+                writer.Write(frame);
+        }
+        icon.Position = 0;
+        return new Icon(icon);
+    }
+
+    private static byte[] RenderFrame(Bitmap shield, int size)
+    {
+        using var canvas = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(canvas))
+        {
+            graphics.Clear(Color.Transparent);
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            int width = (int)Math.Round(size * shield.Width / (double)shield.Height);
+            graphics.DrawImage(shield, (size - width) / 2f, 0f, width, size);
+        }
+        using var png = new MemoryStream();
+        canvas.Save(png, ImageFormat.Png);
+        return png.ToArray();
     }
 }

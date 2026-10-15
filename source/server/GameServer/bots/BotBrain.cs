@@ -197,6 +197,7 @@ namespace DOL.AI.Brain
         public void ForceAddToAggroList(GameLiving living, long aggroAmount)
         {
             if (!CompanionEngagementMode.Allows(Body, living)) return;
+            if (GothwaitePvpSelfDefence.Drops(BotBody, living)) return;
             if (aggroAmount > 0)
             {
                 foreach (ProtectECSGameEffect protect in living.effectListComponent.GetAbilityEffects().Where(e => e.EffectType is eEffect.Protect))
@@ -239,7 +240,7 @@ namespace DOL.AI.Brain
                 {
                     foreach (GamePlayer playerInGroup in player.Group.GetPlayersInTheGroup())
                     {
-                        if (playerInGroup != living)
+                        if (playerInGroup != living && !GothwaitePvpSelfDefence.Drops(BotBody, playerInGroup))
                             AggroList.TryAdd((GameLiving)playerInGroup, new());
                     }
                 }
@@ -318,6 +319,7 @@ namespace DOL.AI.Brain
 
         protected virtual bool ShouldBeRemovedFromAggroList(GameLiving living)
         {
+            if (GothwaitePvpSelfDefence.Drops(BotBody, living)) return true;
             return !living.IsAlive ||
                    living.ObjectState != GameObject.eObjectState.Active ||
                    living.CurrentRegion != Body.CurrentRegion ||
@@ -415,7 +417,7 @@ namespace DOL.AI.Brain
 
         protected virtual GameLiving CalculateNextAttackTarget()
         {
-            GameLiving highest = CleanUpAggroListAndGetHighestModifiedThreat();
+            GameLiving highest = GothwaitePvpSelfDefence.Keep(BotBody, CleanUpAggroListAndGetHighestModifiedThreat());
             return ApplyRvrCombatHabits(highest) ?? highest;
         }
 
@@ -426,6 +428,8 @@ namespace DOL.AI.Brain
         /// </summary>
         private GameLiving ApplyRvrCombatHabits(GameLiving highest)
         {
+            // Gothwaite PvP mode bots pick by the mode's kill order (stage 6); null keeps the threat order.
+            if (GothwaitePvpMode.IsModeBot(BotBody)) return GothwaitePvpCombat.ChooseTarget(BotBody, AggroList.Keys, highest, Body.TargetObject as GameLiving);
             if (highest == null || !BotPvpCrowdControl.PlayerLike(highest) ||
                 !AutonomousRvrDoctrineRuntime.Applies(BotBody))
                 return null;
@@ -441,6 +445,7 @@ namespace DOL.AI.Brain
 
         public virtual bool CanAggroTarget(GameLiving target)
         {
+            if (GothwaitePvpSelfDefence.Drops(BotBody, target)) return false;
             if (!CompanionEngagementMode.Allows(Body, target)) return false;
             if (BotBody != null && PvpCombatant.IsPlayerShaped(target) && AutonomousSiegeMarch.IsMarching(BotBody)) return false;
             if (!GameServer.ServerRules.IsAllowedToAttack(Body, target, true))
@@ -489,7 +494,7 @@ namespace DOL.AI.Brain
             CompanionEngagementMode.Allows(Body, target) &&
             target.ObjectState == GameObject.eObjectState.Active &&
             target.CurrentRegion == Body.CurrentRegion &&
-            GameServer.ServerRules.IsAllowedToAttack(Body, target, true);
+            GameServer.ServerRules.IsAllowedToAttack(Body, target, true) && !GothwaitePvpSelfDefence.Drops(BotBody, target);
 
         /// <summary>Recall may discard old pulls, never a current legal attacker.</summary>
         public GameLiving FindRecallDefenseTarget()
@@ -505,6 +510,7 @@ namespace DOL.AI.Brain
 
         public virtual void OnAttackedByEnemy(AttackData ad)
         {
+            GothwaitePvpSelfDefence.NoteAttacker(BotBody, ad?.Attacker);
             CompanionPvpEngagement.RecordThreat(BotBody, Body, ad);
             if (!Body.IsAlive || Body.ObjectState != GameObject.eObjectState.Active || FSM.GetCurrentState() == FSM.GetState(eFSMStateType.PASSIVE))
                 return;
@@ -514,7 +520,10 @@ namespace DOL.AI.Brain
                 if (BotBody?.IsRecoveryResting == true)
                     BotBody.WakeRecoveryRest();
                 ConvertDamageToAggroAmount(ad.Attacker, Math.Max(1, ad.Damage + ad.CriticalDamage));
-                if (ad.Attacker?.IsAlive == true && ad.Attacker != Body)
+                // A world bot reacts to another player-shaped fighter the way a person does (BotIncomingFireReaction): an area
+                // hit is threat but no personal call, and the entry into combat draws a short reaction delay.
+                BotIncomingFireKind fire = BotIncomingFireReaction.KindOf(BotBody, ad);
+                if (ad.Attacker?.IsAlive == true && ad.Attacker != Body && BotIncomingFireReaction.IsPersonalCall(fire))
                 {
                     _recentDirectAttacker = ad.Attacker;
                     _recentDirectAttackTick = GameLoop.GameLoopTime;
@@ -527,7 +536,7 @@ namespace DOL.AI.Brain
                 if (ShouldEnterAggroStateAfterDirectAttack(
                         HasAggro,
                         FSM.GetCurrentState() == FSM.GetState(eFSMStateType.AGGRO)))
-                    FSM.SetCurrentState(eFSMStateType.AGGRO);
+                    EnterAggroFromIncomingFire(fire, ad.Attacker);
 
                 // Damage is an event, so wake combat immediately without
                 // increasing the ordinary idle/travel AI cadence.
@@ -588,7 +597,7 @@ namespace DOL.AI.Brain
         {
             if (ad?.Attacker is GameLiving guildAttacker && guildAttacker.IsAlive)
                 foreach (GameBot guildmate in AutonomousGuildCohesion.Helpers(victim, guildAttacker))
-                    (guildmate.Brain as BotBrain)?.OnGuildmateAttacked(victim, guildAttacker);
+                    (guildmate.Brain as BotBrain)?.OnGuildmateAttacked(victim, guildAttacker, AutonomousDeathAttribution.IsAreaEffect(ad));
 
             GameLiving groupMember = GroupMemberForCombat(victim);
             // Attached sub-pets also enlist their human-led raid in PvP. The
@@ -647,9 +656,10 @@ namespace DOL.AI.Brain
         }
 
         /// <summary>A guildmate outside this bot's group is attacked nearby: go and help.</summary>
-        public void OnGuildmateAttacked(GameLiving victim, GameLiving attacker)
+        public void OnGuildmateAttacked(GameLiving victim, GameLiving attacker, bool area = false)
         {
             if (AutonomousSiegeMarch.IsMarching(BotBody)) return;
+            if (GothwaitePvpSelfDefence.Drops(BotBody, attacker)) return;
             if (Body == null || !Body.IsAlive || victim.CurrentRegionID != Body.CurrentRegionID ||
                 Body.CurrentZone == null || !Body.IsWithinRadius(victim, AutonomousGuildCohesion.HelpRadius) ||
                 !GameServer.ServerRules.IsAllowedToAttack(Body, attacker, true) ||
@@ -664,8 +674,7 @@ namespace DOL.AI.Brain
             if (BotBody?.IsRecoveryResting == true)
                 BotBody.WakeRecoveryRest();
             NextThinkTick = GameLoop.GameLoopTime;
-            if (FSM.GetState(eFSMStateType.AGGRO) != FSM.GetCurrentState())
-                FSM.SetCurrentState(eFSMStateType.AGGRO);
+            EnterAggroFromIncomingFire(BotIncomingFireReaction.MateKindOf(BotBody, attacker, area), attacker);
         }
 
         public void OnGroupMemberAttacked(GameLiving victim, AttackData ad)
@@ -731,8 +740,7 @@ namespace DOL.AI.Brain
                 if (BotBody?.IsRecoveryResting == true)
                     BotBody.WakeRecoveryRest();
                 NextThinkTick = GameLoop.GameLoopTime;
-                if (FSM.GetState(eFSMStateType.AGGRO) != FSM.GetCurrentState())
-                    FSM.SetCurrentState(eFSMStateType.AGGRO);
+                EnterAggroFromIncomingFire(BotIncomingFireReaction.MateKindOf(BotBody, attacker, AutonomousDeathAttribution.IsAreaEffect(ad)), attacker);
             }
         }
 
@@ -746,6 +754,7 @@ namespace DOL.AI.Brain
         private long _nextDeployablePetTick;
         private long _nextCombatProgressTick;
         private long _nextMaintenanceBuffTick;
+        private long _optionalConcentrationHoldUntil;
         private long _nextCompanionProtectionTick;
         private GameLiving _groupPeelTarget;
         private int _groupPeelPriority;
@@ -1523,6 +1532,13 @@ namespace DOL.AI.Brain
                 return;
             }
 
+            // Gothwaite PvP mode bots run the mode's own driver; the world controller never runs for them.
+            if (GothwaitePvpMode.IsModeBot(BotBody))
+            {
+                ThinkGothwaitePvp();
+                return;
+            }
+
             // Autonomous campaign participants fight inside their battleground through the
             // bounded driver; ordinary world-bot routines wait until they leave it.
             if (AutonomousBattlegroundParticipation.IsParticipant(BotBody))
@@ -2268,6 +2284,11 @@ namespace DOL.AI.Brain
                     .Select(spell => (Spell: spell, Target: FindMissingMaintenanceTarget(spell, true)))
                     .Where(entry => entry.Target != null)
                     .ToList();
+            // Required targets first (bug 157): concentration freed for a required
+            // newcomer must reach it before an optional buff refills the points.
+            pending = pending
+                .OrderBy(entry => BuffNeedOf(entry.Target, entry.Spell) == BotBuffTargetPolicy.Need.Optional)
+                .ToList();
 
             // Dexterity shortens every cast, so the buffer takes its own dex
             // and dex/quickness buffs before working through anyone else.
@@ -2287,6 +2308,9 @@ namespace DOL.AI.Brain
                 if (spell.NeedInstrument && !TryEquipRealInstrument(bot, spell.InstrumentRequirement))
                     continue;
 
+                if (BotBuffTargetPolicy.HoldsOptionalCast(BuffNeedOf(target, spell), spell.Concentration > 0,
+                        GameLoop.GameLoopTime, _optionalConcentrationHoldUntil))
+                    continue;
                 if (!bot.CanAffordConcentration(spell))
                 {
                     if (IsGroupedShamanEnduranceBuff(bot, spell) &&
@@ -2792,7 +2816,7 @@ namespace DOL.AI.Brain
         /// this buffer's largest optional concentration buff on a bot (never
         /// on a real player) so the next pulse can cast the required one.
         /// </summary>
-        private static bool TryReclaimOptionalConcentration(GameBot bot)
+        private bool TryReclaimOptionalConcentration(GameBot bot)
         {
             ECSGameSpellEffect optional = bot.effectListComponent.GetConcentrationEffects()
                 .Where(effect => effect is { IsEnding: false, IsEnded: false } && effect.Owner is GameBot holder &&
@@ -2800,9 +2824,10 @@ namespace DOL.AI.Brain
                                  BuffNeedOf(holder, spell) == BotBuffTargetPolicy.Need.Optional)
                 .OrderByDescending(effect => effect.SpellHandler.Spell.Concentration)
                 .FirstOrDefault();
-            if (optional == null)
+            if (optional == null || !optional.End())
                 return false;
-            optional.End();
+            // The freed points are for the required newcomer; optional buffs wait (see HoldsOptionalCast).
+            _optionalConcentrationHoldUntil = GameLoop.GameLoopTime + BotBuffTargetPolicy.ReclaimHoldMilliseconds;
             return true;
         }
 
@@ -3157,10 +3182,12 @@ namespace DOL.AI.Brain
             {
                 _brain._ambientWanderMovement = false;
                 _aggroEndTime = GameLoop.GameLoopTime + LEAVE_WHEN_OUT_OF_COMBAT_FOR;
+                _brain.BeginIncomingFireHold();
             }
 
             public override void Exit()
             {
+                _brain.EndIncomingFireHold();
                 _brain.Body.StopAttack();
                 _brain.Body.TargetObject = null;
                 _brain.ClearAggroList();
@@ -3203,6 +3230,13 @@ namespace DOL.AI.Brain
 
                 // Passive stance: heals only, no attacking
                 if (_brain.BotBody.Stance == eBotStance.Passive)
+                {
+                    _brain.CheckHeals();
+                    return;
+                }
+
+                // A world bot that was just hit by another player takes a moment before it answers (heals go out at once).
+                if (_brain.HoldsIncomingFire())
                 {
                     _brain.CheckHeals();
                     return;
@@ -3289,7 +3323,7 @@ namespace DOL.AI.Brain
                 AddToAggroList(protectionTarget, 10000);
             }
 
-            GameLiving directAttacker = CompanionAssistTrain.Active(Body) ? null : RecentDirectAttacker();
+            GameLiving directAttacker = CompanionAssistTrain.Active(Body) ? null : KillOrderAttacker(RecentDirectAttacker());
 
             // Bow release is driven by AttackAction, not by this brain pulse.
             // Re-entering the general target/movement decision while Aim is
@@ -3310,7 +3344,7 @@ namespace DOL.AI.Brain
 
             GameObject previousAttackTarget = Body.TargetObject;
             GameLiving activePetTarget = BotBody?.IsAutonomousWorldBot == true && !BotBody.IsPlayerLedGroup
-                ? AutonomousPetSupport.ActiveOwnedPetCombatTarget(BotBody)
+                ? GothwaitePvpSelfDefence.Keep(BotBody, AutonomousPetSupport.ActiveOwnedPetCombatTarget(BotBody))
                 : null;
             if (activePetTarget != null)
                 AddToAggroList(activePetTarget, Math.Max(1, activePetTarget.EffectiveLevel));
@@ -3533,9 +3567,10 @@ namespace DOL.AI.Brain
                             }
                             if (!weaponReady)
                             {
-                                Body.StopAttack();
-                                Body.TargetObject = null;
-                                return;
+                                // No legal melee weapon: keep the target and swing unarmed instead of
+                                // standing idle. Drop an unusable distance weapon first.
+                                if (Body.ActiveWeaponSlot == eActiveWeaponSlot.Distance)
+                                    Body.SwitchWeapon(eActiveWeaponSlot.Standard);
                             }
                             QueueUsableMeleeStyle();
                         }
@@ -3558,13 +3593,13 @@ namespace DOL.AI.Brain
         {
             // Idle is not a reason to hide (and slow travel). Stealth belongs to
             // the approach to a legal enemy player/bot, not random PvE pauses.
-            if (Body.IsStealthed && !AutonomousRvrStealthLoop.KeepsStealth(BotBody)) Body.Stealth(false);
+            if (Body.IsStealthed && !AutonomousRvrStealthLoop.KeepsStealth(BotBody) && !GothwaitePvpStealth.KeepsStealth(BotBody)) Body.Stealth(false);
         }
 
         private bool TryStartStealthOpener(GameLiving target)
         {
             if (!(BotBody.HasSelectedAutomaticCompanionPlan && BotBody.IsPlayerLedGroup ||
-                  AutonomousRvrStealthLoop.Applies(BotBody)) ||
+                  AutonomousRvrStealthLoop.Applies(BotBody) || GothwaitePvpStealth.Applies(BotBody)) ||
                 !BotPoisonSupply.IsAssassin((eCharacterClass)BotBody.CharacterClass.ID) ||
                 !Body.IsWithinRadius(target, Body.MeleeAttackRange) ||
                 !CompanionEngagementMode.Allows(BotBody, target) ||
@@ -4576,6 +4611,7 @@ namespace DOL.AI.Brain
                     return false;
 
                 Spell payload = SkillBase.GetSpellByID(spell.SubSpellID);
+                if (GothwaitePvpSelfDefence.RefusesCast(Body, payload, target)) return false;
                 return !CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) ||
                     !CompanionRangedAoePolicy.IsDamageAreaPayload(payload) ||
                     CompanionRangedAoePolicy.CanCastServantAreaCommand(
@@ -5885,6 +5921,17 @@ namespace DOL.AI.Brain
 
                     if (spellToCast == null && nextCureTime < GameLoop.GameLoopTime)
                     {
+                        // An area DoT on the group is answered with the group cure, not one cure per member: with several members
+                        // dotted, a healer that knows the group cure casts it first (BotIncomingFireReaction.GroupCureMembers).
+                        if (BotIncomingFireReaction.Applies(BotBody) && BotBody.CurePoisonGroup is { } groupCure && CheckHealSpell(groupCure) &&
+                            Body.Group.GetMembersInTheGroup().Count(member => member != null && member.IsAlive && member.IsPoisoned &&
+                                Body.IsWithinRadius(member, groupCure.Range > 0 ? groupCure.Range : groupCure.Radius > 0 ? groupCure.Radius : 1_000)) >=
+                            BotIncomingFireReaction.GroupCureMembers)
+                        {
+                            spellToCast = BotBody.CurePoisonGroup;
+                            spellTarget = Body;
+                        }
+                        if (spellToCast == null)
                         foreach (GameLiving member in Body.Group.GetMembersInTheGroup().OrderBy(member => member == AssistedPlayer ? 0 : 1))
                         {
                             if (member.IsDiseased)

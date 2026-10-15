@@ -1,0 +1,1207 @@
+{
+  "_comment": "Hand-painted place names from the stock 256x256 maps that the world database lacks. x,y = label centre in stock texels (0..256). kind: place | water. Read by render_client_maps.py.",
+  "zones": {
+    "0": [
+      {
+        "name": "Castle Sauvage",
+        "x": 164,
+        "y": 15,
+        "kind": "place"
+      },
+      {
+        "name": "Nob's Stable",
+        "x": 114,
+        "y": 79,
+        "kind": "place"
+      },
+      {
+        "name": "Gronyr's Farm",
+        "x": 120,
+        "y": 107,
+        "kind": "place"
+      },
+      {
+        "name": "Mithra's Tomb",
+        "x": 205,
+        "y": 169,
+        "kind": "place"
+      },
+      {
+        "name": "Prydwen Bridge",
+        "x": 145,
+        "y": 221,
+        "kind": "place"
+      },
+      {
+        "name": "Camelot East Gate",
+        "x": 34,
+        "y": 135,
+        "kind": "place"
+      },
+      {
+        "name": "Avalon",
+        "x": 80,
+        "y": 100,
+        "kind": "place"
+      }
+    ],
+    "1": [
+      {
+        "name": "Bandit Camp",
+        "x": 162,
+        "y": 17,
+        "kind": "place"
+      },
+      {
+        "name": "Stonehenge Barrows",
+        "x": 144,
+        "y": 156,
+        "kind": "place"
+      },
+      {
+        "name": "Fallen Tower",
+        "x": 222,
+        "y": 216,
+        "kind": "place"
+      }
+    ],
+    "2": [
+      {
+        "name": "Goblin Camp",
+        "x": 15,
+        "y": 37,
+        "kind": "place"
+      },
+      {
+        "name": "Camelot North Gate",
+        "x": 134,
+        "y": 220,
+        "kind": "place"
+      }
+    ],
+    "3": [
+      {
+        "name": "Snowdonia Fortress",
+        "x": 159,
+        "y": 11,
+        "kind": "place"
+      },
+      {
+        "name": "Goblin Camp",
+        "x": 69,
+        "y": 122,
+        "kind": "place"
+      }
+    ],
+    "4": [],
+    "6": [
+      {
+        "name": "Ghostly Church",
+        "x": 184,
+        "y": 45,
+        "kind": "place"
+      },
+      {
+        "name": "Boogey Fort",
+        "x": 107,
+        "y": 88,
+        "kind": "place"
+      },
+      {
+        "name": "Tumbled Tower",
+        "x": 75,
+        "y": 145,
+        "kind": "place"
+      },
+      {
+        "name": "Yarley's Farm",
+        "x": 65,
+        "y": 204,
+        "kind": "place"
+      },
+      {
+        "name": "Roman Fort",
+        "x": 212,
+        "y": 210,
+        "kind": "place"
+      }
+    ],
+    "7": [
+      {
+        "name": "Monastery",
+        "x": 204,
+        "y": 35,
+        "kind": "place"
+      },
+      {
+        "name": "Bwgan Camp",
+        "x": 77,
+        "y": 95,
+        "kind": "place"
+      },
+      {
+        "name": "Llyn Barfog Merchants",
+        "x": 139,
+        "y": 136,
+        "kind": "place"
+      }
+    ],
+    "8": [
+      {
+        "name": "Ogre Fortress",
+        "x": 98,
+        "y": 146,
+        "kind": "place"
+      }
+    ],
+    "9": [
+      {
+        "name": "Bogmen Village",
+        "x": 120,
+        "y": 181,
+        "kind": "place"
+      },
+      {
+        "name": "Church Ruins",
+        "x": 159,
+        "y": 202,
+        "kind": "place"
+      }
+    ],
+    "10": [
+      {
+        "name": "Cailleach Uragaig",
+        "x": 112,
+        "y": 114,
+        "kind": "water"
+      },
+      {
+        "name": "Sister Blythe",
+        "x": 137,
+        "y": 171,
+        "kind": "water"
+      }
+    ],
+    "11": [],
+    "12": [],
+    "13": [
+      {
+        "name": "Eccleston",
+        "x": 45,
+        "y": 44,
+        "kind": "place"
+      },
+      {
+        "name": "Worton",
+        "x": 204,
+        "y": 26,
+        "kind": "place"
+      },
+      {
+        "name": "Revington",
+        "x": 107,
+        "y": 47,
+        "kind": "place"
+      },
+      {
+        "name": "Hoghton",
+        "x": 157,
+        "y": 56,
+        "kind": "place"
+      },
+      {
+        "name": "Eastby",
+        "x": 222,
+        "y": 69,
+        "kind": "place"
+      },
+      {
+        "name": "Devonshire",
+        "x": 52,
+        "y": 92,
+        "kind": "place"
+      },
+      {
+        "name": "Bardale",
+        "x": 115,
+        "y": 90,
+        "kind": "place"
+      },
+      {
+        "name": "Rylestone",
+        "x": 167,
+        "y": 104,
+        "kind": "place"
+      },
+      {
+        "name": "Oakwick",
+        "x": 82,
+        "y": 114,
+        "kind": "place"
+      },
+      {
+        "name": "Silverdale",
+        "x": 217,
+        "y": 125,
+        "kind": "place"
+      },
+      {
+        "name": "Winterburn",
+        "x": 40,
+        "y": 163,
+        "kind": "place"
+      },
+      {
+        "name": "Ingleton",
+        "x": 99,
+        "y": 163,
+        "kind": "place"
+      },
+      {
+        "name": "Kilnsey",
+        "x": 189,
+        "y": 162,
+        "kind": "place"
+      },
+      {
+        "name": "Hawkswick",
+        "x": 227,
+        "y": 190,
+        "kind": "place"
+      },
+      {
+        "name": "Foxup",
+        "x": 64,
+        "y": 190,
+        "kind": "place"
+      },
+      {
+        "name": "Waterford",
+        "x": 142,
+        "y": 202,
+        "kind": "place"
+      },
+      {
+        "name": "Twistleton",
+        "x": 187,
+        "y": 210,
+        "kind": "place"
+      },
+      {
+        "name": "Arncliffe",
+        "x": 67,
+        "y": 229,
+        "kind": "place"
+      },
+      {
+        "name": "Gawthrop",
+        "x": 224,
+        "y": 232,
+        "kind": "place"
+      },
+      {
+        "name": "Illis",
+        "x": 99,
+        "y": 70,
+        "kind": "place"
+      },
+      {
+        "name": "Allis",
+        "x": 219,
+        "y": 157,
+        "kind": "place"
+      },
+      {
+        "name": "Cora",
+        "x": 102,
+        "y": 201,
+        "kind": "place"
+      },
+      {
+        "name": "Market",
+        "x": 125,
+        "y": 125,
+        "kind": "place"
+      }
+    ],
+    "14": [],
+    "15": [],
+    "51": [
+      {
+        "name": "Caerfelle",
+        "x": 214,
+        "y": 94,
+        "kind": "place"
+      },
+      {
+        "name": "Annlogel",
+        "x": 149,
+        "y": 101,
+        "kind": "place"
+      }
+    ],
+    "52": [
+      {
+        "name": "Nalsor",
+        "x": 49,
+        "y": 42,
+        "kind": "place"
+      },
+      {
+        "name": "Torvarg",
+        "x": 114,
+        "y": 68,
+        "kind": "place"
+      },
+      {
+        "name": "Kovos",
+        "x": 147,
+        "y": 87,
+        "kind": "place"
+      },
+      {
+        "name": "Lord Caddug",
+        "x": 195,
+        "y": 54,
+        "kind": "place"
+      },
+      {
+        "name": "Yorvan",
+        "x": 227,
+        "y": 94,
+        "kind": "place"
+      },
+      {
+        "name": "Prios",
+        "x": 225,
+        "y": 142,
+        "kind": "place"
+      },
+      {
+        "name": "Kelsanor",
+        "x": 107,
+        "y": 197,
+        "kind": "place"
+      }
+    ],
+    "53": [
+      {
+        "name": "Village of the Damned",
+        "x": 206,
+        "y": 31,
+        "kind": "place"
+      },
+      {
+        "name": "Lindon Family",
+        "x": 42,
+        "y": 191,
+        "kind": "place"
+      }
+    ],
+    "54": [
+      {
+        "name": "Barbarian Town",
+        "x": 169,
+        "y": 55,
+        "kind": "place"
+      }
+    ],
+    "55": [
+      {
+        "name": "Ancient Zombie Camp",
+        "x": 62,
+        "y": 66,
+        "kind": "place"
+      },
+      {
+        "name": "Clifton",
+        "x": 155,
+        "y": 122,
+        "kind": "place"
+      },
+      {
+        "name": "Viking Camp",
+        "x": 89,
+        "y": 210,
+        "kind": "place"
+      }
+    ],
+    "56": [],
+    "57": [
+      {
+        "name": "Orc Encampment",
+        "x": 39,
+        "y": 63,
+        "kind": "place"
+      },
+      {
+        "name": "Lammia Camp",
+        "x": 33,
+        "y": 205,
+        "kind": "place"
+      }
+    ],
+    "70": [
+      {
+        "name": "Hall of Heroes",
+        "x": 208,
+        "y": 20,
+        "kind": "place"
+      }
+    ],
+    "100": [
+      {
+        "name": "Svasud Faste",
+        "x": 59,
+        "y": 18,
+        "kind": "place"
+      },
+      {
+        "name": "Vendo Caverns",
+        "x": 122,
+        "y": 27,
+        "kind": "place"
+      },
+      {
+        "name": "Huldu Camp",
+        "x": 41,
+        "y": 149,
+        "kind": "place"
+      },
+      {
+        "name": "Aegir",
+        "x": 220,
+        "y": 215,
+        "kind": "place"
+      }
+    ],
+    "101": [
+      {
+        "name": "Tomte Camp",
+        "x": 160,
+        "y": 100,
+        "kind": "place"
+      }
+    ],
+    "102": [
+      {
+        "name": "Blodfelag Fortress",
+        "x": 68,
+        "y": 72,
+        "kind": "place"
+      },
+      {
+        "name": "Blodfelag Encampment",
+        "x": 133,
+        "y": 165,
+        "kind": "place"
+      }
+    ],
+    "103": [
+      {
+        "name": "Meandering Ruins",
+        "x": 122,
+        "y": 113,
+        "kind": "place"
+      }
+    ],
+    "104": [
+      {
+        "name": "Charred Skeleton",
+        "x": 134,
+        "y": 177,
+        "kind": "place"
+      },
+      {
+        "name": "Dverge Forge",
+        "x": 102,
+        "y": 224,
+        "kind": "place"
+      },
+      {
+        "name": "Fire Giant Bridge",
+        "x": 214,
+        "y": 185,
+        "kind": "place"
+      }
+    ],
+    "105": [
+      {
+        "name": "Askheim",
+        "x": 59,
+        "y": 185,
+        "kind": "place"
+      },
+      {
+        "name": "Storehouse Remains",
+        "x": 202,
+        "y": 125,
+        "kind": "place"
+      }
+    ],
+    "106": [
+      {
+        "name": "Werewolf Ravine",
+        "x": 184,
+        "y": 114,
+        "kind": "place"
+      },
+      {
+        "name": "West Skona",
+        "x": 95,
+        "y": 80,
+        "kind": "place"
+      },
+      {
+        "name": "Sidhe Draoi Camp",
+        "x": 30,
+        "y": 192,
+        "kind": "place"
+      },
+      {
+        "name": "Werewolf Camp",
+        "x": 100,
+        "y": 206,
+        "kind": "place"
+      }
+    ],
+    "107": [
+      {
+        "name": "Hagbui Farmhouse",
+        "x": 39,
+        "y": 30,
+        "kind": "place"
+      },
+      {
+        "name": "Jotun Camp",
+        "x": 224,
+        "y": 35,
+        "kind": "place"
+      },
+      {
+        "name": "Stone House Ruins",
+        "x": 119,
+        "y": 74,
+        "kind": "place"
+      },
+      {
+        "name": "Clay Jotun Camp",
+        "x": 109,
+        "y": 161,
+        "kind": "place"
+      },
+      {
+        "name": "Hagbui Settlement",
+        "x": 34,
+        "y": 185,
+        "kind": "place"
+      }
+    ],
+    "108": [
+      {
+        "name": "Raumarik Revenant Camp",
+        "x": 44,
+        "y": 61,
+        "kind": "place"
+      },
+      {
+        "name": "Lookout Tower",
+        "x": 225,
+        "y": 110,
+        "kind": "place"
+      }
+    ],
+    "111": [],
+    "112": [],
+    "113": [],
+    "114": [
+      {
+        "name": "Ormthwaite",
+        "x": 33,
+        "y": 20,
+        "kind": "place"
+      },
+      {
+        "name": "Heggby",
+        "x": 95,
+        "y": 44,
+        "kind": "place"
+      },
+      {
+        "name": "Keld",
+        "x": 166,
+        "y": 25,
+        "kind": "place"
+      },
+      {
+        "name": "Veida",
+        "x": 212,
+        "y": 14,
+        "kind": "place"
+      },
+      {
+        "name": "Lunds",
+        "x": 219,
+        "y": 40,
+        "kind": "place"
+      },
+      {
+        "name": "Thoraldwick",
+        "x": 32,
+        "y": 65,
+        "kind": "place"
+      },
+      {
+        "name": "Havelock",
+        "x": 75,
+        "y": 83,
+        "kind": "place"
+      },
+      {
+        "name": "Sedbergh",
+        "x": 164,
+        "y": 84,
+        "kind": "place"
+      },
+      {
+        "name": "North Threapland",
+        "x": 222,
+        "y": 88,
+        "kind": "place"
+      },
+      {
+        "name": "Kirkolafur",
+        "x": 36,
+        "y": 110,
+        "kind": "place"
+      },
+      {
+        "name": "Eiriksborg",
+        "x": 107,
+        "y": 112,
+        "kind": "place"
+      },
+      {
+        "name": "South Threapland",
+        "x": 195,
+        "y": 120,
+        "kind": "place"
+      },
+      {
+        "name": "Uldale",
+        "x": 74,
+        "y": 143,
+        "kind": "place"
+      },
+      {
+        "name": "Cotterdale",
+        "x": 160,
+        "y": 157,
+        "kind": "place"
+      },
+      {
+        "name": "Malhamdale",
+        "x": 219,
+        "y": 164,
+        "kind": "place"
+      },
+      {
+        "name": "Arkleside",
+        "x": 35,
+        "y": 180,
+        "kind": "place"
+      },
+      {
+        "name": "Jervaulx",
+        "x": 87,
+        "y": 191,
+        "kind": "place"
+      },
+      {
+        "name": "Birkwith",
+        "x": 216,
+        "y": 197,
+        "kind": "place"
+      },
+      {
+        "name": "Feizor",
+        "x": 125,
+        "y": 220,
+        "kind": "place"
+      },
+      {
+        "name": "Winskill",
+        "x": 170,
+        "y": 226,
+        "kind": "place"
+      },
+      {
+        "name": "Raisgill",
+        "x": 33,
+        "y": 235,
+        "kind": "place"
+      },
+      {
+        "name": "Ingrill",
+        "x": 120,
+        "y": 175,
+        "kind": "place"
+      },
+      {
+        "name": "Market",
+        "x": 115,
+        "y": 154,
+        "kind": "place"
+      },
+      {
+        "name": "Jorund",
+        "x": 25,
+        "y": 154,
+        "kind": "place"
+      }
+    ],
+    "115": [],
+    "116": [],
+    "151": [
+      {
+        "name": "Dyrfjell",
+        "x": 121,
+        "y": 65,
+        "kind": "place"
+      }
+    ],
+    "152": [],
+    "153": [
+      {
+        "name": "Griffon Territory",
+        "x": 117,
+        "y": 78,
+        "kind": "place"
+      },
+      {
+        "name": "Dellingstad",
+        "x": 111,
+        "y": 231,
+        "kind": "place"
+      }
+    ],
+    "154": [
+      {
+        "name": "Trude Unne",
+        "x": 19,
+        "y": 32,
+        "kind": "place"
+      },
+      {
+        "name": "Boko",
+        "x": 22,
+        "y": 81,
+        "kind": "place"
+      },
+      {
+        "name": "Morbax",
+        "x": 209,
+        "y": 61,
+        "kind": "place"
+      },
+      {
+        "name": "Dalicren",
+        "x": 106,
+        "y": 157,
+        "kind": "place"
+      },
+      {
+        "name": "Pathfinder Folar",
+        "x": 159,
+        "y": 163,
+        "kind": "place"
+      },
+      {
+        "name": "Boligar",
+        "x": 195,
+        "y": 182,
+        "kind": "place"
+      },
+      {
+        "name": "Iarn Dwarf Camp",
+        "x": 214,
+        "y": 226,
+        "kind": "place"
+      }
+    ],
+    "155": [],
+    "156": [
+      {
+        "name": "Iarn Dwarf Encampment",
+        "x": 214,
+        "y": 64,
+        "kind": "place"
+      },
+      {
+        "name": "Vasrem",
+        "x": 215,
+        "y": 195,
+        "kind": "place"
+      }
+    ],
+    "158": [
+      {
+        "name": "Skogsra Village",
+        "x": 53,
+        "y": 130,
+        "kind": "place"
+      },
+      {
+        "name": "Iarn Dwarf Encampment",
+        "x": 49,
+        "y": 231,
+        "kind": "place"
+      }
+    ],
+    "165": [
+      {
+        "name": "Cathal Valley",
+        "x": 165,
+        "y": 139,
+        "kind": "place"
+      }
+    ],
+    "181": [
+      {
+        "name": "Bann-didein",
+        "x": 124,
+        "y": 34,
+        "kind": "place"
+      }
+    ],
+    "182": [
+      {
+        "name": "Fomorian Homestead",
+        "x": 71,
+        "y": 75,
+        "kind": "place"
+      }
+    ],
+    "183": [
+      {
+        "name": "Ixthiar Woods",
+        "x": 76,
+        "y": 79,
+        "kind": "place"
+      }
+    ],
+    "184": [
+      {
+        "name": "Waterfall",
+        "x": 102,
+        "y": 127,
+        "kind": "water"
+      },
+      {
+        "name": "Allan Garran",
+        "x": 224,
+        "y": 185,
+        "kind": "place"
+      }
+    ],
+    "185": [
+      {
+        "name": "Krizek",
+        "x": 92,
+        "y": 113,
+        "kind": "place"
+      }
+    ],
+    "186": [
+      {
+        "name": "Sylvanshade Camp",
+        "x": 189,
+        "y": 207,
+        "kind": "place"
+      }
+    ],
+    "187": [
+      {
+        "name": "Meteor Impact",
+        "x": 128,
+        "y": 47,
+        "kind": "place"
+      },
+      {
+        "name": "Mantid Town",
+        "x": 196,
+        "y": 164,
+        "kind": "place"
+      }
+    ],
+    "200": [
+      {
+        "name": "Hy Brasil",
+        "x": 135,
+        "y": 33,
+        "kind": "water"
+      },
+      {
+        "name": "Parthanan Farm",
+        "x": 230,
+        "y": 80,
+        "kind": "place"
+      },
+      {
+        "name": "Dergan Island",
+        "x": 155,
+        "y": 199,
+        "kind": "water"
+      }
+    ],
+    "201": [
+      {
+        "name": "Fishing Bear Island",
+        "x": 139,
+        "y": 94,
+        "kind": "water"
+      }
+    ],
+    "202": [
+      {
+        "name": "Connla's Well",
+        "x": 209,
+        "y": 125,
+        "kind": "place"
+      },
+      {
+        "name": "Dalgean Bridge",
+        "x": 129,
+        "y": 87,
+        "kind": "place"
+      },
+      {
+        "name": "Merrow Island",
+        "x": 24,
+        "y": 135,
+        "kind": "water"
+      }
+    ],
+    "203": [
+      {
+        "name": "Tir Garda",
+        "x": 151,
+        "y": 55,
+        "kind": "place"
+      },
+      {
+        "name": "Cliff Dwellers",
+        "x": 33,
+        "y": 115,
+        "kind": "place"
+      }
+    ],
+    "204": [
+      {
+        "name": "Faerie Horse Island",
+        "x": 144,
+        "y": 135,
+        "kind": "water"
+      },
+      {
+        "name": "Gurite Camp",
+        "x": 28,
+        "y": 221,
+        "kind": "place"
+      },
+      {
+        "name": "Parthanan Stable",
+        "x": 225,
+        "y": 84,
+        "kind": "place"
+      }
+    ],
+    "206": [
+      {
+        "name": "Druid Circle",
+        "x": 72,
+        "y": 71,
+        "kind": "place"
+      },
+      {
+        "name": "Keeper Rasa's Hut",
+        "x": 199,
+        "y": 71,
+        "kind": "place"
+      },
+      {
+        "name": "Moon Lake",
+        "x": 207,
+        "y": 224,
+        "kind": "water"
+      }
+    ],
+    "207": [
+      {
+        "name": "Parthanan Farm",
+        "x": 35,
+        "y": 52,
+        "kind": "place"
+      },
+      {
+        "name": "Cluricaun Camp",
+        "x": 38,
+        "y": 157,
+        "kind": "place"
+      },
+      {
+        "name": "Muire Tomb",
+        "x": 141,
+        "y": 160,
+        "kind": "place"
+      }
+    ],
+    "210": [],
+    "211": [],
+    "212": [],
+    "213": [
+      {
+        "name": "Lough Neagh",
+        "x": 31,
+        "y": 38,
+        "kind": "place"
+      },
+      {
+        "name": "Ionad Coill",
+        "x": 86,
+        "y": 29,
+        "kind": "place"
+      },
+      {
+        "name": "Fanach Mala",
+        "x": 123,
+        "y": 54,
+        "kind": "place"
+      },
+      {
+        "name": "An Bhaile",
+        "x": 169,
+        "y": 33,
+        "kind": "place"
+      },
+      {
+        "name": "Spring Forrest",
+        "x": 225,
+        "y": 30,
+        "kind": "place"
+      },
+      {
+        "name": "Ainslie",
+        "x": 225,
+        "y": 62,
+        "kind": "place"
+      },
+      {
+        "name": "Duilleog",
+        "x": 193,
+        "y": 79,
+        "kind": "place"
+      },
+      {
+        "name": "Solas",
+        "x": 227,
+        "y": 94,
+        "kind": "place"
+      },
+      {
+        "name": "Summerhill",
+        "x": 148,
+        "y": 102,
+        "kind": "place"
+      },
+      {
+        "name": "Ailleacht",
+        "x": 90,
+        "y": 107,
+        "kind": "place"
+      },
+      {
+        "name": "Ciorr Barr",
+        "x": 32,
+        "y": 110,
+        "kind": "place"
+      },
+      {
+        "name": "Foynes",
+        "x": 31,
+        "y": 169,
+        "kind": "place"
+      },
+      {
+        "name": "Tullahien",
+        "x": 74,
+        "y": 155,
+        "kind": "place"
+      },
+      {
+        "name": "Dromaneen",
+        "x": 127,
+        "y": 164,
+        "kind": "place"
+      },
+      {
+        "name": "Rossmore",
+        "x": 174,
+        "y": 154,
+        "kind": "place"
+      },
+      {
+        "name": "Strathclyde",
+        "x": 220,
+        "y": 142,
+        "kind": "place"
+      },
+      {
+        "name": "Syluan",
+        "x": 156,
+        "y": 200,
+        "kind": "place"
+      },
+      {
+        "name": "Oughterard",
+        "x": 219,
+        "y": 211,
+        "kind": "place"
+      },
+      {
+        "name": "Veagh",
+        "x": 116,
+        "y": 230,
+        "kind": "place"
+      },
+      {
+        "name": "Ushnagh",
+        "x": 69,
+        "y": 217,
+        "kind": "place"
+      },
+      {
+        "name": "Glantane",
+        "x": 26,
+        "y": 240,
+        "kind": "place"
+      },
+      {
+        "name": "Market",
+        "x": 153,
+        "y": 129,
+        "kind": "place"
+      },
+      {
+        "name": "Kennet",
+        "x": 56,
+        "y": 70,
+        "kind": "place"
+      }
+    ],
+    "214": [],
+    "216": [],
+    "270": [],
+    "271": []
+  }
+}

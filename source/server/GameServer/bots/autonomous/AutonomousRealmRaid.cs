@@ -736,6 +736,8 @@ namespace DOL.GS
         // immediate and unchanged; this only wakes nearby sister parties.
         public static GameLiving[] ClaimNearbyDefenseBroadcast(GameBot victim, long now)
         {
+            // Gothwaite PvP mode: no realm raid party is woken in the castle (section 5.4).
+            if (GothwaitePvpRules.SuppressesWorldRecruitment) return [];
             if (victim?.Group == null || !DefenseGroups.ContainsKey(victim.Group)) return [];
             lock (Sync)
             {

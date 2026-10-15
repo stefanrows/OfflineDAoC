@@ -247,6 +247,9 @@ namespace DOL.GS.PacketHandler
 							guildName = ((DbLanguageGameNpc)translation).GuildName;
 					}
 
+					// Presentation only: autonomous bots and persistent companions show their realm rank after the name.
+					name = RealmRankNameplate.NpcName(npc, name);
+
 					ReadOnlySpan<char> nameSpan = name;
 					int maxNameLength = 47 - add.Length - 2;
 
@@ -428,7 +431,7 @@ namespace DOL.GS.PacketHandler
 				pak.WriteByte(0x00); //unknown
 				pak.WritePascalString(GameServer.ServerRules.GetPlayerName(m_gameClient.Player, playerToCreate));
 				pak.WritePascalString(GameServer.ServerRules.GetPlayerGuildName(m_gameClient.Player, playerToCreate));
-				pak.WritePascalString(GameServer.ServerRules.GetPlayerLastName(m_gameClient.Player, playerToCreate));
+				pak.WritePascalString(RealmRankNameplate.PlayerLastName(playerToCreate, GameServer.ServerRules.GetPlayerLastName(m_gameClient.Player, playerToCreate)));
 				//RR 12 / 13
 				pak.WritePascalString(GameServer.ServerRules.GetPlayerPrefixName(m_gameClient.Player, playerToCreate));
 				pak.WritePascalString(GameServer.ServerRules.GetPlayerTitle(m_gameClient.Player, playerToCreate)); // new in 1.74, NewTitle

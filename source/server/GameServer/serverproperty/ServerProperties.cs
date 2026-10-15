@@ -1378,6 +1378,21 @@ namespace DOL.GS.ServerProperties
 		[ServerProperty("pvp", "bg_release_to_portal_keep", "Whether releasing in a battleground should teleport the player to the portal keep", false)]
 		public static bool BG_RELEASE_TO_PORTAL_KEEP;
 
+		/// <summary>
+		/// Show the realm rank (RR xLy) after the names of persistent companions and players on overhead
+		/// nameplates. Autonomous world bots use show_bot_realm_rank_nameplates. Presentation only: stored names
+		/// are never changed. Read by RealmRankNameplate.
+		/// </summary>
+		[ServerProperty("pvp", "show_realm_rank_nameplates", "Show realm rank (RR xLy) after the names of companions and players on nameplates. Presentation only.", false)]
+		public static bool SHOW_REALM_RANK_NAMEPLATES;
+
+		/// <summary>
+		/// Show the realm rank (RR xLy) after the names of autonomous world bots on overhead nameplates (on by
+		/// default). Presentation only: stored names are never changed. Read by RealmRankNameplate.
+		/// </summary>
+		[ServerProperty("pvp", "show_bot_realm_rank_nameplates", "Show realm rank (RR xLy) after the names of autonomous world bots on nameplates. Presentation only.", true)]
+		public static bool SHOW_BOT_REALM_RANK_NAMEPLATES;
+
 		#endregion
 
 		#region Daily / Weekly / Monthly / Beetle Quest
@@ -2202,6 +2217,12 @@ namespace DOL.GS.ServerProperties
 
 		[ServerProperty("classes", "theurgist_pet_cap", "Maximum Theurgist pets; 0 preserves uncapped 1.65 behavior limited by cast time, power and duration", 0)]
 		public static int THEURGIST_PET_CAP;
+
+		/// <summary>
+		/// Fork rule: real players may equip and use any item regardless of realm, allowed-class list, or armor/weapon skill.
+		/// </summary>
+		[ServerProperty("classes", "allow_all_items_all_classes", "Can real players equip any item regardless of realm, allowed-class list, and armor or weapon skill? Companions and autonomous bots keep class rules.", true)]
+		public static bool ALLOW_ALL_ITEMS_ALL_CLASSES;
 
 		/// <summary>
 		/// Do we want to allow items to be equipped regardless of realm?

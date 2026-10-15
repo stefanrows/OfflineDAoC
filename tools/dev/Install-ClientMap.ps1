@@ -12,7 +12,8 @@ $ErrorActionPreference = 'Stop'
 # source/server/tools/build_map_client.py: Atlantis and Isles map_window.xml,
 # the Isles map_icons.tga marker atlas, and any staged ui/maps/*.dds. Dry run by
 # default. Every file is hash checked; the game, server, and launcher must be
-# closed. Nothing is stopped by this script.
+# closed. Nothing is stopped by this script. A staged map the stock client does
+# not ship (baselineSha256 'absent') is added as a new file and deleted on restore.
 
 $BaselineFixed = @{
     'ui/atlantis/map_window.xml' = 'cd1c6cf793363e8eecbdc922af34c83e3dc84b8c86d65ac4b8abd4bf480913f7'
@@ -45,6 +46,16 @@ function CopyVerified([string]$Source, [string]$Destination, [string]$Expected) 
     RequireHash $Destination $Expected 'Installed'
 }
 
+# Deletes a file this install added. Missing is reported, not an error; any other
+# content than the installed hash is refused.
+function RemoveVerified([string]$Path, [string]$Expected) {
+    $actual = Hash $Path
+    if ($null -eq $actual) { Write-Host "  Already missing: $Path"; return }
+    if ($actual -ne $Expected) { throw "Refusing to remove $Path ($actual): not the installed file" }
+    Remove-Item -LiteralPath $Path -Force
+    if ($null -ne (Hash $Path)) { throw "Remove failed: $Path" }
+}
+
 function ToWindowsPath([string]$Relative) {
     return ($Relative -replace '/', '\')
 }
@@ -63,13 +74,24 @@ if ($PSCmdlet.ParameterSetName -eq 'Restore') {
     $files = @($record.Files)
     foreach ($file in $files) {
         if ($file.Path -notmatch $AllowedPath) { throw "Unexpected path in backup manifest: $($file.Path)" }
-        RequireHash (Join-Path $backup (ToWindowsPath $file.Path)) $file.PreSha256 'Backup'
         $current = Hash (Join-Path $client (ToWindowsPath $file.Path))
+        if ($file.PreSha256 -eq 'absent') {
+            # Added by the install: a missing file is fine, otherwise it must still be the installed file.
+            if ($null -ne $current -and $current -ne $file.OutputSha256) {
+                throw "Installed file changed since the map install: $($file.Path) ($current). Restore refused."
+            }
+            continue
+        }
+        RequireHash (Join-Path $backup (ToWindowsPath $file.Path)) $file.PreSha256 'Backup'
         if ($current -ne $file.OutputSha256 -and $current -ne $file.PreSha256) {
             throw "Installed file changed since the map install: $($file.Path) ($current). Restore refused."
         }
     }
     foreach ($file in $files) {
+        if ($file.PreSha256 -eq 'absent') {
+            RemoveVerified (Join-Path $client (ToWindowsPath $file.Path)) $file.OutputSha256
+            continue
+        }
         CopyVerified (Join-Path $backup (ToWindowsPath $file.Path)) (Join-Path $client (ToWindowsPath $file.Path)) $file.PreSha256
     }
     Write-Host "Map window restored from $backup; backup retained."
@@ -95,15 +117,21 @@ $installs = foreach ($entry in $entries) {
     }
     $installed = Join-Path $client (ToWindowsPath $entry.path)
     $pre = Hash $installed
-    if ($pre -ne $entry.baselineSha256 -and $pre -ne $entry.sha256) {
+    if ($entry.baselineSha256 -eq 'absent') {
+        # A map the stock client does not ship: the file must be missing or already the staged file.
+        if ($null -ne $pre -and $pre -ne $entry.sha256) { throw "Installed $($entry.path) exists but is not the staged file" }
+    }
+    elseif ($pre -ne $entry.baselineSha256 -and $pre -ne $entry.sha256) {
         throw "Installed $($entry.path) matches neither the stock nor the staged hash ($pre)."
     }
     RequireHash (Join-Path $stageRoot (ToWindowsPath $entry.stagePath)) $entry.sha256 "Stage $($entry.path)"
+    # Missing files are recorded as 'absent' so restore knows to delete them rather than copy back.
+    $preRecord = if ($null -eq $pre) { 'absent' } else { $pre }
     [pscustomobject]@{
         Path = $entry.path
         Local = $installed
         Stage = (Join-Path $stageRoot (ToWindowsPath $entry.stagePath))
-        Pre = $pre
+        Pre = $preRecord
         Output = $entry.sha256
     }
 }
@@ -111,7 +139,7 @@ $installs = @($installs)
 
 Write-Host 'Files to install (stock or already staged hashes verified):'
 foreach ($file in $installs) {
-    $state = if ($file.Pre -eq $file.Output) { 'already staged' } else { 'stock' }
+    $state = if ($file.Pre -eq $file.Output) { 'already staged' } elseif ($file.Pre -eq 'absent') { 'new' } else { 'stock' }
     Write-Host "  $($file.Path) [$state]"
 }
 if (-not $Apply) { Write-Host 'Dry run only. Pass -Apply to install.'; return }
@@ -121,6 +149,7 @@ $backup = "$root-backups\client-map-$stamp"
 if (Test-Path -LiteralPath $backup) { throw "Backup already exists: $backup" }
 New-Item -ItemType Directory -Path $backup -Force | Out-Null
 foreach ($file in $installs) {
+    if ($file.Pre -eq 'absent') { continue }  # nothing to back up; restore deletes the new file
     $target = Join-Path $backup (ToWindowsPath $file.Path)
     New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
     CopyVerified $file.Local $target $file.Pre
@@ -147,6 +176,7 @@ catch {
     try {
         RequireStopped
         foreach ($file in $installs) {
+            if ($file.Pre -eq 'absent') { RemoveVerified $file.Local $file.Output; continue }
             CopyVerified (Join-Path $backup (ToWindowsPath $file.Path)) $file.Local $file.Pre
         }
     }

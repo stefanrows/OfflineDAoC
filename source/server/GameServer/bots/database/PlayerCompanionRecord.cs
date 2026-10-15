@@ -126,6 +126,14 @@ namespace DOL.GS
         [DataElement(AllowDbNull = false)]
         public bool IsSquadLeader { get; set; }
 
+        // Additive per-character group reservation. Saved active for an owner, it holds the
+        // owner character's ObjectId: the companion stays active for that character only and
+        // other characters on the account neither restore nor bench it. Empty (or NULL on
+        // rows saved before this column) means unclaimed: the first character to log in
+        // claims it. Benched records keep the character they last grouped with.
+        [DataElement(AllowDbNull = true, Varchar = 255)]
+        public string LastGroupedCharacterId { get; set; } = string.Empty;
+
         [DataElement(AllowDbNull = false)]
         public int AppearanceSize { get; set; }
 
@@ -137,5 +145,38 @@ namespace DOL.GS
 
         [DataElement(AllowDbNull = false, Varchar = 32)]
         public string UpdatedUtc { get; set; } = string.Empty;
+
+        // Additive PvP kill credit and death counters with the same names as the
+        // DOLCharacters columns that the Herald leaderboard reads for players.
+        // Existing companions start at zero; no earlier save is rewritten.
+        [DataElement(AllowDbNull = false)]
+        public int KillsAlbionPlayers { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsMidgardPlayers { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsHiberniaPlayers { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsAlbionDeathBlows { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsMidgardDeathBlows { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsHiberniaDeathBlows { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsAlbionSolo { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsMidgardSolo { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int KillsHiberniaSolo { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public int DeathsPvP { get; set; }
     }
 }

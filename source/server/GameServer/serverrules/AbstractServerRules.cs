@@ -662,10 +662,18 @@ namespace DOL.GS.ServerRules
             if ((item.Object_Type == 0 || item.Object_Type >= (int)eObjectType._FirstHouse) && item.Object_Type <= (int)eObjectType._LastHouse)
                 return true;
 
+            // fork rule: real players may use any item of any realm and class (poison still needs Envenom)
+            if (player != null && ServerProperties.Properties.ALLOW_ALL_ITEMS_ALL_CLASSES && item.Object_Type != (int)eObjectType.Poison)
+                return true;
+
+            // A companion borrows its owner's realm to stay friendly, but its armor and weapon
+            // skills come from its class realm, and its generated gear carries the owner's realm.
+            eRealm skillRealm = living is GameBot { Owner: not null } ownedBot ? ownedBot.ClassRealm : living.Realm;
+
             // on some servers we may wish for dropped items to be used by all realms regardless of what is set in the db
             if (!ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
             {
-                if (item.Realm != 0 && item.Realm != (int)living.Realm)
+                if (item.Realm != 0 && item.Realm != (int)living.Realm && item.Realm != (int)skillRealm)
                     return false;
             }
 
@@ -683,7 +691,7 @@ namespace DOL.GS.ServerRules
 
                 if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && item.Item_Type != (int)eEquipmentItems.HEAD)
                 {
-                    switch (living.Realm) // Choose based on the player-like living rather than item region.
+                    switch (skillRealm) // Choose based on the player-like living rather than item region.
                     {
                         case eRealm.Albion: armorAbility = living.GetAbilityLevel(Abilities.AlbArmor); break;
                         case eRealm.Hibernia: armorAbility = living.GetAbilityLevel(Abilities.HibArmor); break;
@@ -693,7 +701,7 @@ namespace DOL.GS.ServerRules
                 }
                 else
                 {
-                    switch ((eRealm)item.Realm)
+                    switch (item.Realm == (int)living.Realm ? skillRealm : (eRealm)item.Realm)
                     {
                         case eRealm.Albion: armorAbility = living.GetAbilityLevel(Abilities.AlbArmor); break;
                         case eRealm.Hibernia: armorAbility = living.GetAbilityLevel(Abilities.HibArmor); break;
@@ -737,7 +745,7 @@ namespace DOL.GS.ServerRules
                 //alb
                 case eObjectType.CrushingWeapon:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Crushing; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_Blunt; break;
@@ -748,7 +756,7 @@ namespace DOL.GS.ServerRules
                     break;
                 case eObjectType.SlashingWeapon:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Slashing; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_Blades; break;
@@ -758,19 +766,19 @@ namespace DOL.GS.ServerRules
                     else abilityCheck = Abilities.Weapon_Slashing;
                     break;
                 case eObjectType.ThrustWeapon:
-                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && living.Realm == eRealm.Hibernia)
+                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && skillRealm == eRealm.Hibernia)
                         abilityCheck = Abilities.Weapon_Piercing;
                     else
                         abilityCheck = Abilities.Weapon_Thrusting;
                     break;
                 case eObjectType.TwoHandedWeapon:
-                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && living.Realm == eRealm.Hibernia)
+                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && skillRealm == eRealm.Hibernia)
                         abilityCheck = Abilities.Weapon_LargeWeapons;
                     else abilityCheck = Abilities.Weapon_TwoHanded;
                     break;
                 case eObjectType.PolearmWeapon:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Polearms; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_CelticSpear; break;
@@ -789,7 +797,7 @@ namespace DOL.GS.ServerRules
                 //mid
                 case eObjectType.Sword:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Slashing; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_Blades; break;
@@ -800,7 +808,7 @@ namespace DOL.GS.ServerRules
                     break;
                 case eObjectType.Hammer:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Crushing; break;
                             case eRealm.Midgard: abilityCheck = Abilities.Weapon_Hammers; break;
@@ -812,7 +820,7 @@ namespace DOL.GS.ServerRules
                 case eObjectType.LeftAxe:
                 case eObjectType.Axe:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Slashing; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_Blades; break;
@@ -823,7 +831,7 @@ namespace DOL.GS.ServerRules
                     break;
                 case eObjectType.Spear:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Polearms; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_CelticSpear; break;
@@ -844,7 +852,7 @@ namespace DOL.GS.ServerRules
                     break;
                 case eObjectType.Blades:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Slashing; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_Blades; break;
@@ -855,7 +863,7 @@ namespace DOL.GS.ServerRules
                     break;
                 case eObjectType.Blunt:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Crushing; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_Blunt; break;
@@ -865,17 +873,17 @@ namespace DOL.GS.ServerRules
                     else abilityCheck = Abilities.Weapon_Blunt;
                     break;
                 case eObjectType.Piercing:
-                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && living.Realm == eRealm.Albion)
+                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && skillRealm == eRealm.Albion)
                         abilityCheck = Abilities.Weapon_Thrusting;
                     else abilityCheck = Abilities.Weapon_Piercing;
                     break;
                 case eObjectType.LargeWeapons:
-                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && living.Realm == eRealm.Albion)
+                    if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS && skillRealm == eRealm.Albion)
                         abilityCheck = Abilities.Weapon_TwoHanded;
                     else abilityCheck = Abilities.Weapon_LargeWeapons; break;
                 case eObjectType.CelticSpear:
                     if (ServerProperties.Properties.ALLOW_CROSS_REALM_ITEMS)
-                        switch (living.Realm)
+                        switch (skillRealm)
                         {
                             case eRealm.Albion: abilityCheck = Abilities.Weapon_Polearms; break;
                             case eRealm.Hibernia: abilityCheck = Abilities.Weapon_CelticSpear; break;
@@ -1039,6 +1047,7 @@ namespace DOL.GS.ServerRules
 
         public virtual void OnNpcKilled(GameNPC killedNpc, GameObject killer)
         {
+            GothwaitePvpStats.RecordKill(killer as GameLiving, killedNpc);
             // Persistent autonomous bots represent real realm opponents in RvR.
             // Award their RP through the player-equivalent path, then stop here:
             // they must not also be paid as an NPC. Controlled pets and temporary
@@ -2045,6 +2054,7 @@ namespace DOL.GS.ServerRules
 
         public virtual void OnPlayerKilled(GamePlayer killedPlayer, GameObject killer)
         {
+            GothwaitePvpStats.RecordKill(killer as GameLiving, killedPlayer);
             if (Properties.ENABLE_WARMAPMGR && killer is GamePlayer && killer.CurrentRegion.ID == 163)
                 WarMapMgr.AddFight((byte) killer.CurrentZone.ID, killer.X, killer.Y, (byte) killer.Realm, (byte) killedPlayer.Realm);
 
@@ -2092,7 +2102,7 @@ namespace DOL.GS.ServerRules
             // Persistent companions earn realm points and PvP experience through
             // the same award paths as autonomous bots (see AwardBotOnPlayerKill).
             foreach (var pair in companionCountAndDamage)
-                AwardCompanionRealmPointsOnPlayerKill(pair.Key, totalDamage, killedPlayer,
+                AwardCompanionRealmPointsOnPlayerKill(pair.Key, totalDamage, killedPlayer, killer,
                     companionCountAndDamage, groupCountAndDamage, out isWorthAnything);
 
             killedPlayer.DeathsPvP++;
@@ -2292,6 +2302,13 @@ namespace DOL.GS.ServerRules
 
             if (realmPoints > 0)
                 botToAward.GainRealmPoints(realmPoints, true);
+
+            // Kill credit follows the realm point award: the same worth check, the victim's
+            // realm, a death blow for the resolved killer, and a solo kill when one contributor
+            // dealt all of the damage.
+            botToAward.CreditPvpKill(killedPlayer.Realm,
+                ReferenceEquals(botToAward, AutonomousBotRealmPointRewards.ResolveRootRewardOwner(killer as GameLiving)),
+                BotPvpKillStats.IsSoloKill(damagePercent, contributorCount));
         }
 
         // Persistent companions use this same formula, GainRealmPoints path and
@@ -2300,6 +2317,7 @@ namespace DOL.GS.ServerRules
         private static void AwardCompanionRealmPointsOnPlayerKill(GameBot companion,
             double playerTotalDamageReceived,
             GamePlayer killedPlayer,
+            GameObject killer,
             Dictionary<GameBot, EntityCountTotalDamagePair> companionCountAndDamage,
             Dictionary<Group, EntityCountTotalDamagePair> groupCountAndDamage,
             out bool isWorthAnything)
@@ -2344,6 +2362,11 @@ namespace DOL.GS.ServerRules
 
             if (realmPoints > 0)
                 companion.GainRealmPoints(realmPoints, true);
+
+            // Same kill credit rule as the autonomous bot path above.
+            companion.CreditPvpKill(killedPlayer.Realm,
+                ReferenceEquals(companion, AutonomousBotRealmPointRewards.ResolveRootRewardOwner(killer as GameLiving)),
+                BotPvpKillStats.IsSoloKill(damagePercent, contributorCount));
         }
 
         private static void AwardPlayerOnPlayerKill(GamePlayer playerToAward,

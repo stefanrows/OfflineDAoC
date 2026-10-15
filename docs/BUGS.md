@@ -6,6 +6,24 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+160. **Five `UT_PlayerCompanionStage6Integration` tests fail at HEAD with a
+     null lock.** Found 2026-10-14 while running the companion tests for
+     0.272.0. `InvitingAReservedCompanionFromTheOtherCharacterMovesAndRestampsIt`,
+     `LegacyActiveCompanionIsClaimedByTheFirstLoginOnlyOnce`,
+     `OwnerLogoutSavesActiveProgressAndFreshDatabaseLoadRestoresItsRosterMarker`,
+     `PersistentCompanionsAcceptNpcAndPvpXpButRejectQuestXpAndRealmPoints` and
+     `RemovingPersistentCompanionFromGroupSavesBenchStateAndDeletesOnlyItsRuntimeActor`
+     throw `ArgumentNullException` in `GameBot.CopyPvpKillStatsTo`
+     (`lock (_pvpKillStatsGate)`), reached from
+     `PlayerCompanionRoster.SaveBotState`. The fixture builds its bots with
+     `RuntimeHelpers.GetUninitializedObject`, so the readonly gate object that
+     the 0.252.0 PvP kill counters added is null there. Test-only; the live
+     server constructs bots normally. Fix idea: a null-tolerant gate, or
+     initialise it in the test double. Not fixed in 0.272.0.
+     At 0.273.0 a sixth test fails the same way:
+     `UT_AutonomousBotRealmPointRewards.GainRealmPointsCreditsAutonomousBotsAndPersistentCompanionsOnly`
+     (null lock in `GameBot.GainRealmPoints`).
+
 154. **Two Midgard world bots loop in capital egress recovery for over an
      hour.** Installed 0.244.0, 2026-10-11 08:40–10:25 (20×):
      `AUTONOMOUS_CAPITAL_EGRESS_RECOVERY bot="Ragungrim" id=1579 realm=Midgard
@@ -112,6 +130,117 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+159. **Too few automatic sieges open for the number of ready warbands.**
+     Live 0.255.0, 2026-10-12 20:34–21:00: 43 distinct siege-ready warbands
+     logged `RVR_ASSAULT_GATE` but only one frontier siege opened. Gates in
+     order: `ChooseCore` required average and minimum level 50 unless the
+     leader is a KeepWarrior (90 of 121 not-ready 8-member checks averaged
+     below 35; bug 133 noted the 35/50 mismatch), a 30–70 % roaming reserve
+     by leader type, one siege per guild (owner decision 2b), and the intent
+     roll. Owner decision 2026-10-12 ("fix it"): source 0.260.0 aligns the
+     gate to average 35 / minimum 30 (`SiegeGateAverageLevel`,
+     `SiegeGateMinimumLevel`), cuts the roaming reserve to Roamer 40 /
+     Hybrid 25 / KeepWarrior 5 / other 15 %, allows two automatic sieges per
+     side (`MaxSiegesPerSide`, server cap 6 unchanged), skips cross-region
+     ram purchases and departs a quorum without supplies (see bug 75);
+     `RVR_ASSAULT_GATE` now logs the plan `reason`. Installation and a live
+     log check pending: expect several `RVR_SIEGE_STARTED` per real hour.
+
+157. **Companion healer cycles one strength buff around the group forever.**
+     Owner report with screenshot, 2026-10-12 (installed 0.255.0): companion
+     healer Eydis keeps casting her strength concentration buff (Midgard
+     Augmentation "Strength of the Viking" family, `StrengthBuff`, Target
+     Realm, Duration 0, Concentration > 0). The combat log repeats
+     `Isolde feels stronger!` / `Brakka's extra strength fades.` /
+     `Eydis casts a spell!` / `Eydis feels stronger!` / `Isolde's extra
+     strength fades.` / ... : every new application is followed at once by
+     the previous holder losing it, and the three members take turns.
+     Expected: the buff lands on the members it suits and stays; no recast
+     while it is up. Suspects (not yet traced): (a) the server keeps only
+     one instance of a caster's concentration spell, so each cast moves it
+     and the companion upkeep (`BotBrain.FindRandomMissingRealmBuffTarget` /
+     `NeedsUpkeep`) sees a member missing it again; (b) the
+     concentration-reclaim path (`TryReclaimOptionalConcentration`, owner
+     rule 2026-10-02 in `BotBuffTargetPolicy`) ends one member's buff to
+     cast it on another and the next pulse repeats.
+     Root cause: (b). (a) is ruled out: a test probe put the same strength
+     concentration buff from one caster on two targets and both stayed (20
+     points used); `ConcentrationList` has no same-spell replacement. Eydis
+     (Healer), Isolde (Wizard) and Brakka (Shaman) are all strengthless
+     casters, so strength is Optional on each. When another member's
+     Required buff was unaffordable, `TryReclaimOptionalConcentration` ended
+     the oldest Optional strength buff, but the next pass met the strength
+     entry first (pending order is spell value) and spent the freed points
+     on the next Optional member; the Required buff stayed unaffordable and
+     the reclaim repeated. Which Required buff triggered it is not proven.
+     Source fix 0.260.0: pending buff entries go Required targets
+     first, and after a reclaim Optional concentration casts are held for
+     30 s (`BotBuffTargetPolicy.HoldsOptionalCast`,
+     `ReclaimHoldMilliseconds`); a failed `End()` no longer counts as a
+     reclaim. Tests: `UT_BotBuffTargetPolicy` (2 new).
+
+158. **Companion Blademaster stands idle with a bow in hand.** Owner report,
+     2026-10-12 (installed 0.255.0): companion Blademaster Lethira (levels
+     34→37 between 21:12 and 21:16, so her group was fighting) stands
+     around holding a bow and does nothing. Log only shows
+     `BOT_THINK_SLOW bot="Lethira" kind=Companion ... CompanionUpgrades=385ms`
+     (21:09:24). Not traced. Suspects: the 0.254.0
+     `allow_all_items_all_classes` rule or a loot upgrade put a bow in her
+     distance slot; the ranged path (`BotRangedCombat.ShouldUseRangedWeapon`,
+     `BotBrain.cs` ~3500) switches to it, but a Blademaster has no archery
+     skill or arrows, so she never fires and never switches back to melee.
+     Same evening the owner reported companion Savage Terk (same group) also
+     doing nothing.
+     Root cause (Lethira, proven from the save and source): her build plan is
+     Blades (`WeaponOneType` 19) but she wears a level-16 Icebender Mace and
+     Bodybender Club (Blunt) with a "training Fired" shortbow in the distance
+     slot, and owns no Blades weapon. `BotBrain.SwitchToUsableMeleeWeapon`
+     accepts the mace through `BotWeaponStats.CanUseEquippedMeleeFallback`
+     and calls `StartAttack`, but `GameNPC.StartAttackWithMeleeWeapon`'s
+     GameBot branch checked only the strict `CanUseMelee` (plan type) and
+     returned silently, leaving the bow active and the bot idle. Terk's gear
+     is valid (level-48 Bodybender Claw, Hand to Hand plan), so his idling is
+     not this cause; both use the `defensive` stance (engage only within 350
+     units of the leader). Not yet explained.
+     Source fix 0.260.0: GameNPC applies the same equipped-gear
+     fallback; with no legal weapon at all a bot now swings from the
+     standard slot instead of returning (`BotWeaponStats.ResolveMeleeAttackSlot`),
+     and BotBrain drops an active distance weapon instead of clearing its
+     target. Tests: `UT_BotWeaponStats` (7 new cases).
+
+156. **The COMPANIONS window goes dead after a zone change.** Owner report,
+     2026-10-11 (0.252.0): after porting to another zone the window stays
+     on screen but no tile reacts; a relog fixes it until the next port.
+     Cause: the client's native init hook (`game.dll` 0x4DA938) runs on every
+     zone load and zeroes the window's click flag (`barActiveFlag`), while the
+     server kept `Session.Shown` true and never sent operation 5 again, so
+     clicks were dropped and the labels were not resent. Source: `CompanionBar`
+     now handles `GamePlayerEvent.RegionChanged` (fired by each PlayerInit) and
+     on any region change resets `Shown`, `InitialStateSent` and the sent
+     labels, so the next tick shows the window again (flag set, ready control,
+     full label resend). No client file change. Installation and real-client
+     check pending: port between zones (also a dungeon and back) with a
+     companion present and click tiles each time; with no companion the
+     window must stay hidden. Not checked: the Companion Manager window
+     (Custom8) shares the init hook and may need the same treatment.
+
+155. **Companions grouped with one character join whichever character logs
+     in next.** Owner report, 2026-10-11 (0.169.0 manager): after playing a
+     level 50 character with a companion group, logging in on a level 20
+     character of the same account auto-grouped the same companions with it.
+     Cause: companions belong to the account and `IsActive` was account-wide,
+     so `PlayerCompanionRoster.RestoreActiveForPlayer` re-invited every active
+     companion of the shared roster. Source 0.250.0: the additive column
+     `LastGroupedCharacterId` records the character a companion was last
+     grouped with; login restores only that character's companions (legacy
+     rows are claimed once by the first login), other characters see them as
+     `With <Name>` in the manager and `/companions`, and Invite moves them.
+     Bench, reset, squad remove and disband from another character leave the
+     reservation alone. Installation and real-client check pending: group
+     companions on character A, log out, log in on B (they stay away and show
+     `With A`), log back in on A (they rejoin), then invite one from B (it
+     moves to B).
 
 153. **World bots re-plan their zone-boundary step on every think, 65 nav
      queries each, and the game loop stalls.** Installed 0.244.0, 2026-10-11
@@ -879,6 +1008,15 @@ This confirms installation only. Keep the required real-client checks pending.
     `UT_SiegeColumnQuorum`. Pending: a live run shows `action=quorum`,
     `RVR_LEADER_HANDOVER` and `relaxed=True` and a siege that reaches the
     gate; real-client watch of one siege from rally to the walls.
+    Live 0.255.0 observation 2026-10-12 20:34–21:00 (world speed 2.5x):
+    one frontier siege (rvr-keep-51) opened in 23 real minutes; 3 of its 6
+    musters failed with "Siege supply trip did not finish before departure".
+    Every ram purchase whose merchant lay in another region than the rally
+    timed out (6–12 min round trips; same-region trips took 12–56 s). Source
+    0.260.0 (bug 159) skips cross-region ram purchases (`supply_skipped`) and
+    lets a quorum depart without supplies at the muster's hard end ("mustered
+    without supplies"). The column stop-and-go and the 6-member-quorum fix
+    plan above remain open.
 
 
 115. **Closed console input spins the server console loop.** Confirmed in
@@ -1947,15 +2085,6 @@ not install the Setup tool; their disposable-input verification is pending.
     bombs where it stands after 3 s. Real-client check pending: PvE pulls
     with two Suppression Spiritmasters.
 
-41. **Casters run out of mana too quickly, especially while bombing.** The
-    2026-09-26 source audit found bot damaging spells use native mana costs and
-    continuous high-rank PBAoE could outpace combat regeneration. Source 0.89.0
-    reduced damaging spell mana costs by 50% for offensive caster classes.
-    Source 0.95.0 raises that reduction to 70% and reduces mana costs by 90%
-    for all buffs and pet summons. Other spells keep their existing costs.
-    Installation and real-client checks across companion and
-    player caster groups remain pending.
-
 40. **Grouped bot Healers do not cast their learned Celerity buff.** Reported while source was 0.87.0 (installed version unknown): a grouped Healer bot with Celerity available does not cast it. Expected: Celerity is applied to the Healer and eligible group members when missing, including during combat. The defensive selector omitted Celerity from its target choices, the in-combat filter skipped maintained buffs, and effect handling returned Unknown for Celerity, preventing reliable coverage checks. Source fix 0.88.0 recognizes Celerity group targets, permits this buff during combat, and tracks its dedicated melee-speed effect. Installation and real-client verification pending.
 
 39. **Hostile keep guards attack companions but cannot be attacked by a player; hostile doors admit players.** Reported at Fensalir Faste while source was 0.85.0 (installed version unconfirmed): guards attack companions and players, but the player cannot attack them; a normal-player friend right-clicked all doors to traverse them while the lord was alive. The keep enemy check accepted companion `IGamePlayer` objects but excluded real `GamePlayer` objects, so the server treated humans as friendly at both guards and doors. The PvP NPC-create packet also gave realm NPCs the viewer's guild ID; neutral Warden guards need an enemy display realm. Source fix 0.86.0 evaluates human and bot players against keep ownership, withholds friendly guild presentation from hostile guards, and displays them as enemies. Installation and real-client guard targeting, player/companion attack, hostile door blocking, and friendly-owned keep checks pending.
@@ -2004,6 +2133,37 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
 
 ## Finished
+
+161. **Done — A cross-realm companion cannot equip its own starter armor or its
+     class realm's armor.** Live 0.273.0, 2026-10-15: after an unequip,
+     the Companion Manager's [Equip] refused Brakka's (Midgard Shaman,
+     Albion owner) Matterbender Chain Helm with "not a legal choice, its
+     slot is protected, or the companion is busy". Cause: an owned bot's
+     `Realm` is its owner's realm, so its generated starter gear carries
+     the owner's realm and `CheckAbilityToUseItem` looked up that realm's
+     armor ability (`AlbArmor`); class-realm loot failed the realm filter.
+     Manual equips, automatic upgrades and merchant purchases of armor
+     were all affected for every companion whose class realm differs from
+     its owner's. Separately, an unequipped armor slot was at once refilled
+     with a newly created starter piece (`UpgradeStarterEquipment`). Source
+     0.274.0: the rule judges armor and weapon skills by
+     `GameBot.ClassRealm` for owned bots and accepts both realms; an
+     unequip marks the slot as the owner's choice. Regression test
+     `CrossRealmCompanionJudgesArmorByItsClassRealm`. Installed 0.274.0 and verified in the real client, 2026-10-15: the
+     manager's [Equip] put the Matterbender Chain Helm back on Brakka
+     ("Matterbender Chain Helm is equipped in the helm slot"). Details in
+     section 7 of [COMPANION_PAPERDOLL_RE.md](COMPANION_PAPERDOLL_RE.md).
+
+41. **Reverted — Casters run out of mana too quickly, especially while bombing.** The
+    2026-09-26 source audit found bot damaging spells use native mana costs and
+    continuous high-rank PBAoE could outpace combat regeneration. Source 0.89.0
+    reduced damaging spell mana costs by 50% for offensive caster classes.
+    Source 0.95.0 raises that reduction to 70% and reduces mana costs by 90%
+    for all buffs and pet summons. Other spells keep their existing costs.
+    Reverted by owner request in source 0.255.0, 2026-10-11: all spell mana
+    costs are native again. Source 0.258.0, 2026-10-12 (owner: self-buffs
+    cost too much again): buffs and pet summons cost 10% again; damage spells
+    stay native.
 
 143. **Done — Claiming a keep freezes the game loop for about a second.** Installed
      0.235.0, 2026-10-10: every claim stalled ~1 s in the claimer's own tick:

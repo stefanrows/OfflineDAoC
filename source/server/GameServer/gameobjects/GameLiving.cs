@@ -3710,6 +3710,7 @@ namespace DOL.GS
 
 		public virtual bool CastSpell(Spell spell, SpellLine line, ISpellCastingAbilityHandler spellCastingAbilityHandler = null, bool checkLos = true)
 		{
+			if (GothwaitePvpSelfDefence.RefusesCast(this, spell, TargetObject)) return false;
 			return castingComponent.RequestCastSpell(spell, line, spellCastingAbilityHandler, TargetObject as GameLiving, checkLos);
 		}
 

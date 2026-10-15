@@ -7,6 +7,10 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private static readonly string[] PresetNames = ["Classic PvP", "Peaceful", "Bloodbath", "Keep Wars", "Custom"];
     private static readonly string[] DangerNames = ["Mild", "Authentic", "Aggressive"];
     private static readonly string[] ShapeNames = ["Fresh launch", "Established live server"];
+    private static readonly string[] WorldModeNames = ["Normal", "Gothwaite PvP"];
+    private const int GothwaiteWorldModeIndex = 1;
+    private const string WorldModeToolTip = "Normal is the standard autonomous bot world. Gothwaite PvP moves every autonomous bot to the Isle of Glass around Caer Gothwaite for PvP only: no leveling, raids or sieges. The first switch saves a backup of the save database. Positions are restored when you switch back to Normal. Takes effect at the next server start.";
+    private const string GothwaiteWorldModeHint = "All autonomous bots PvP around Caer Gothwaite. They do not level, raid or siege. Their positions are restored when you switch back to Normal. Takes effect at the next server start.";
     private static readonly string[] TypeNames = ["Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "Keep warrior"];
     private const string TypeMixHint = "\n\nHigher values give this type more weight for new bots. Existing saved types stay as they are until you apply the mix while the server is running. Keep all six sliders at 100% total.";
     private static readonly string[] TypeToolTips =
@@ -21,12 +25,15 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private readonly string _path;
     private readonly string _worldSpeedStatusPath;
     private readonly string _mixRequestPath;
+    private readonly string _worldModePath;
     private readonly Func<bool> _serverStopped;
     private readonly Func<int> _rosterCount;
+    private readonly Func<string>? _createWorldModeBackup;
     private readonly ToolTip _toolTips = new() { InitialDelay = 450, ReshowDelay = 100, AutoPopDelay = 20000, ShowAlways = true };
     private readonly ComboBox _preset = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly ComboBox _danger = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly ComboBox _worldShape = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+    private readonly ComboBox _worldMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly NumericUpDown _altHours = new() { Minimum = 0, Maximum = 720, Width = 90 };
     private readonly NumericUpDown _altCap = new() { Minimum = 0, Maximum = 100000, Width = 100 };
     private readonly TrackBar[] _sliders = new TrackBar[6];
@@ -34,31 +41,45 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private readonly Label _total = new() { AutoSize = true };
     private readonly Label _population = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
-    private readonly Button _save = new() { Text = "Save settings", AutoSize = true };
-    private readonly Button _undo = new() { Text = "Undo edits", AutoSize = true };
-    private readonly Button _defaults = new() { Text = "Restore defaults", AutoSize = true };
-    private readonly Button _applyMix = new() { Text = "Apply mix to existing bots", AutoSize = true };
+    private readonly Label _worldModeHint = new() { AutoSize = true, MaximumSize = new Size(840, 0),
+        Margin = new Padding(3, 0, 3, 6), Visible = false, Text = GothwaiteWorldModeHint };
+    private readonly Button _save = DaocTheme.ToolButton("Save settings");
+    private readonly Button _undo = DaocTheme.ToolButton("Undo edits");
+    private readonly Button _defaults = DaocTheme.ToolButton("Restore defaults");
+    private readonly Button _applyMix = DaocTheme.ToolButton("Apply mix to existing bots");
     private readonly System.Windows.Forms.Timer _poll = new() { Interval = 2000 };
     private BotGoalSettings _saved = BotGoalSettings.Defaults;
     private bool _loading, _loadFailed, _savedFile, _legacyMapping;
+    private bool _worldModeSaved, _worldModeLoadFailed;
     private string _notice = string.Empty;
     private string? _pendingMixRequestId;
     private DateTime _pendingMixRequestSinceUtc;
     private string _lastAppliedRequestId = string.Empty;
-    public bool HasUnsavedChanges => _legacyMapping || _loadFailed || ReadValues() != _saved;
+    public bool HasUnsavedChanges => _legacyMapping || _loadFailed || _worldModeLoadFailed || ReadValues() != _saved || WorldModeSelected != _worldModeSaved;
+    private bool WorldModeSelected => _worldMode.SelectedIndex == GothwaiteWorldModeIndex;
 
     public BotGoalsSettingsControl(string path, string worldSpeedStatusPath, string mixRequestPath,
         Func<bool> serverStopped, Func<int> rosterCount)
+        : this(path, worldSpeedStatusPath, mixRequestPath, serverStopped, rosterCount, null) { }
+
+    public BotGoalsSettingsControl(string path, string worldSpeedStatusPath, string mixRequestPath,
+        Func<bool> serverStopped, Func<int> rosterCount, Func<string>? createWorldModeBackup)
     {
         _path = path;
         _worldSpeedStatusPath = worldSpeedStatusPath;
         _mixRequestPath = mixRequestPath;
+        _worldModePath = Path.Combine(Path.GetDirectoryName(path)!, GothwaitePvpSettings.FileName);
         _serverStopped = serverStopped;
         _rosterCount = rosterCount;
+        _createWorldModeBackup = createWorldModeBackup;
         Dock = DockStyle.Fill;
         BackColor = DaocTheme.Panel;
         ForeColor = DaocTheme.Text;
         AutoScroll = true;
+        foreach (ComboBox choice in new[] { _worldMode, _preset, _danger, _worldShape })
+            DaocTheme.StyleInput(choice);
+        foreach (NumericUpDown number in new[] { _altHours, _altCap })
+            DaocTheme.StyleNumeric(number);
         var body = new FlowLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown,
@@ -69,9 +90,12 @@ internal sealed class BotGoalsSettingsControl : UserControl
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 9, 3, 12),
             Text = "Choose the mix for new autonomous guilds and bots. Existing bot types stay saved until you apply the mix while the server is running. Levels, items, money, and other character progress are preserved." });
 
+        _worldMode.Items.AddRange(WorldModeNames);
         _preset.Items.AddRange(PresetNames);
         _danger.Items.AddRange(DangerNames);
         _worldShape.Items.AddRange(ShapeNames);
+        body.Controls.Add(ChoiceRow("World mode", _worldMode, WorldModeToolTip));
+        body.Controls.Add(_worldModeHint);
         body.Controls.Add(ChoiceRow("Preset", _preset,
             "Quick starting mixes: Classic PvP is balanced; Peaceful favors leveling and mild danger; Bloodbath favors Hunters and Roamers with Aggressive danger; Keep Wars favors Keep warriors and Roamers. Selecting a preset replaces the six percentages and danger. Choose Custom to edit them. Saving a preset changes future type assignments; use Apply mix to existing bots for a live rebalance."));
         var mixHeading = new Label { Text = "Player-type mix — total must equal 100%", AutoSize = true,
@@ -84,11 +108,11 @@ internal sealed class BotGoalsSettingsControl : UserControl
             int captured = index;
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
             var typeLabel = new Label { Text = TypeNames[index], Width = 130, Height = 35, TextAlign = ContentAlignment.MiddleLeft };
-            var slider = new TrackBar { Minimum = 0, Maximum = 100, TickFrequency = 10, Width = 390,
+            var slider = new DaocTrackBar { Minimum = 0, Maximum = 100, Width = 390,
                 Height = 42, AccessibleName = TypeNames[index] + " percentage" };
             var value = new NumericUpDown { Minimum = 0, Maximum = 100, Width = 64,
-                BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text,
                 AccessibleName = TypeNames[index] + " exact percentage" };
+            DaocTheme.StyleNumeric(value);
             var percentLabel = new Label { Text = "%", AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
             _toolTips.SetToolTip(typeLabel, TypeToolTips[index]);
             _toolTips.SetToolTip(slider, TypeToolTips[index]);
@@ -138,6 +162,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
             _notice = string.Empty;
             UpdateState();
         };
+        _worldMode.SelectedIndexChanged += (_, _) => { if (!_loading) { _notice = string.Empty; UpdateState(); } };
         _danger.SelectedIndexChanged += (_, _) => { if (!_loading) { SetCustom(); UpdateState(); } };
         _worldShape.SelectedIndexChanged += (_, _) => { if (!_loading) UpdateState(); };
         _altHours.ValueChanged += (_, _) => { if (!_loading) UpdateState(); };
@@ -214,6 +239,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
 
     private void LoadSettings()
     {
+        string worldModeNotice = LoadWorldMode();
         try
         {
             BotGoalLoadResult loaded = BotGoalSettings.LoadDetailed(_path);
@@ -233,7 +259,37 @@ internal sealed class BotGoalsSettingsControl : UserControl
             SetValues(BotGoalSettings.Defaults);
             _notice = "Cannot read saved population settings: " + ex.Message + " Review and Save to repair the file.";
         }
+        if (worldModeNotice.Length > 0)
+            _notice = _notice.Length > 0 ? _notice + " " + worldModeNotice : worldModeNotice;
         UpdateState();
+    }
+
+    /// <summary>Reads the world mode switch. An unreadable file shows Normal and blocks start until a Save repairs it.</summary>
+    private string LoadWorldMode()
+    {
+        try
+        {
+            GothwaitePvpSettings settings = GothwaitePvpSettings.Load(_worldModePath);
+            _worldModeSaved = settings.Enabled;
+            _worldModeLoadFailed = false;
+            SetWorldMode(settings.Enabled);
+            return string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _worldModeSaved = false;
+            _worldModeLoadFailed = true;
+            SetWorldMode(false);
+            return "Cannot read saved world mode settings: " + ex.Message + " Review and Save to repair the file.";
+        }
+    }
+
+    private void SetWorldMode(bool enabled)
+    {
+        bool wasLoading = _loading;
+        _loading = true;
+        _worldMode.SelectedIndex = enabled ? GothwaiteWorldModeIndex : 0;
+        _loading = wasLoading;
     }
 
     private void SaveSettings()
@@ -241,15 +297,54 @@ internal sealed class BotGoalsSettingsControl : UserControl
         try
         {
             BotGoalSettings values = ReadValues();
+            values.Validate();
+            bool worldModeOn = WorldModeSelected;
+            bool writeWorldMode = worldModeOn || File.Exists(_worldModePath);
+            string? backup = null;
+            if (worldModeOn && !_worldModeSaved)
+            {
+                // The first switch into Gothwaite PvP backs up the save before anything is written (docs/GOTHWAITE_PVP_MODE.md 6.7).
+                if (!_serverStopped()) throw new InvalidOperationException("Stop the server before changing the world mode.");
+                backup = CreateWorldModeBackup();
+            }
             values.Save(_path, _serverStopped);
             _saved = values;
             _savedFile = true;
             _loadFailed = _legacyMapping = false;
             _notice = "Saved. Population settings apply on the next server start.";
+            if (writeWorldMode)
+            {
+                try
+                {
+                    SaveWorldMode(worldModeOn);
+                    _notice = "Saved. Population and world mode settings apply on the next server start." +
+                        (backup is null ? string.Empty : " Save backup: " + backup);
+                }
+                catch (Exception ex) { _notice = "World mode not saved: " + ex.Message + " Population settings were saved."; }
+            }
         }
         catch (Exception ex) { _notice = "Not saved: " + ex.Message; }
         UpdateState();
     }
+
+    /// <summary>Writes the mode switch and keeps every other field of an existing settings file.</summary>
+    private void SaveWorldMode(bool enabled)
+    {
+        GothwaitePvpSettings basis;
+        try { basis = GothwaitePvpSettings.Load(_worldModePath); }
+        catch (Exception) { basis = GothwaitePvpSettings.Defaults; } // unreadable: its error was shown, and this save repairs the file
+        (basis with { Enabled = enabled }).Save(_worldModePath, _serverStopped);
+        _worldModeSaved = enabled;
+        _worldModeLoadFailed = false;
+    }
+
+    /// <summary>
+    /// Save-database backup for the first switch into Gothwaite PvP (MainForm passes
+    /// <see cref="SaveDatabaseBackup.Create"/>). Returns the backup folder and throws on failure, so nothing is written.
+    /// </summary>
+    private string CreateWorldModeBackup() =>
+        _createWorldModeBackup?.Invoke() ??
+        throw new InvalidOperationException("Gothwaite PvP needs a save backup first, and no backup routine is configured. Nothing was changed.");
 
     private void ApplyMixToExistingBots()
     {
@@ -334,7 +429,8 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _total.ForeColor = valid ? Color.LightGreen : Color.Salmon;
         foreach (Control control in _sliders.Cast<Control>().Concat(_values))
             control.Enabled = !mixOperationPending && (stopped || liveStatus != null);
-        _preset.Enabled = _danger.Enabled = _worldShape.Enabled = stopped && !mixOperationPending;
+        _preset.Enabled = _danger.Enabled = _worldShape.Enabled = _worldMode.Enabled = stopped && !mixOperationPending;
+        _worldModeHint.Visible = WorldModeSelected;
         _altHours.Enabled = _altCap.Enabled = stopped && !mixOperationPending;
         _save.Enabled = stopped && valid && !mixOperationPending;
         _undo.Enabled = _defaults.Enabled = stopped && !mixOperationPending;
@@ -383,8 +479,9 @@ internal sealed class BotGoalsSettingsControl : UserControl
                            _notice.StartsWith("Mix apply failed", StringComparison.OrdinalIgnoreCase) ||
                            _notice.StartsWith("The server did not acknowledge", StringComparison.OrdinalIgnoreCase) ||
                            _notice.StartsWith("Cannot read", StringComparison.OrdinalIgnoreCase) ||
+                           _notice.StartsWith("World mode not saved", StringComparison.OrdinalIgnoreCase) ||
                            mixPending && !string.IsNullOrWhiteSpace(mixStatus?.Error);
-        _status.ForeColor = valid && !_loadFailed && !statusError ? DaocTheme.GoldLight : Color.Salmon;
+        _status.ForeColor = valid && !_loadFailed && !_worldModeLoadFailed && !statusError ? DaocTheme.GoldLight : Color.Salmon;
     }
 
     protected override void Dispose(bool disposing)

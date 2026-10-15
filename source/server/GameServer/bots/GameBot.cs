@@ -120,6 +120,13 @@ namespace DOL.GS
         private bool _autonomousRealmAllocationsValid = true;
         /// <summary>RvR realm points earned by a persistent player companion; saved additively in PlayerCompanionRecord.RealmPoints.</summary>
         public long CompanionRealmPoints { get; private set; }
+        /// <summary>
+        /// PvP kill and death counters for autonomous bots and companions. They save on
+        /// OfflineWorldBotRecord and PlayerCompanionRecord. Every read and write holds
+        /// _pvpKillStatsGate, the same leaf-lock discipline as the realm point gate.
+        /// </summary>
+        private readonly object _pvpKillStatsGate = new();
+        private readonly BotPvpKillStats _pvpKillStats = new();
         public bool AutonomousStateDirty { get; private set; }
         public eAutonomousFidelity AutonomousFidelity { get; set; } = eAutonomousFidelity.Efficient;
         public bool IsOnStableMasterRoute { get; private set; }
@@ -686,6 +693,22 @@ namespace DOL.GS
 
         public ushort CreationModel => _creationModel == 0 ? Model : _creationModel;
 
+        /// <summary>
+        /// The realm of this bot's class. An owned bot's <see cref="GameNPC.Realm"/> follows its
+        /// owner, so a cross-realm companion's armor and weapon skills are judged by this realm.
+        /// </summary>
+        public eRealm ClassRealm
+        {
+            get
+            {
+                if (CharacterClass != null)
+                    foreach (var entry in GlobalConstants.STARTING_CLASSES_DICT)
+                        if (entry.Value.Contains((eCharacterClass)CharacterClass.ID))
+                            return entry.Key;
+                return Realm;
+            }
+        }
+
         public ushort ShadeModel
         {
             get
@@ -1107,6 +1130,11 @@ namespace DOL.GS
                 MarkAutonomousStateDirty();
             }
 
+            // Mirrors the player DeathsPvP rule. The base death path clears XPGainers,
+            // so the credited attackers are checked before it runs.
+            if (TracksPvpKillStats && HasCreditedPvpAttacker())
+                CountPvpDeath();
+
             base.ProcessDeath(killer);
             if (IsAutonomousWorldBot)
                 AutonomousBotStatusPersistence.Queue(this);
@@ -1307,6 +1335,9 @@ namespace DOL.GS
             }
             if (safeWorldRelease && !battlegroundLanding && release != null)
                 release = BotReleaseBindPoints.SpreadSafe(releaseRegion, release, DatabaseID > 0 ? DatabaseID : ObjectID);
+            // Gothwaite PvP mode: a mode bot always releases at its castle landing, never at the capital fallback.
+            if (GothwaitePvpRules.TryCastleLanding(this, out ushort castleRegion, out Point3D castleLanding))
+                (releaseRegion, release, releaseReason) = (castleRegion, castleLanding, "gothwaite-castle");
             // A PvE bind is not a sanctuary (Mularn is not); it only has to exist.
             if (safeWorldRelease && !battlegroundLanding &&
                 (pveBindRelease ? release == null : !PvpCombatant.IsSafeReleasePoint(releaseRegion, release)))
@@ -1836,6 +1867,7 @@ namespace DOL.GS
                     return;
             }
 
+            bool realmLevelChanged = false;
             if (IsAutonomousWorldBot)
             {
                 lock (_autonomousRealmAbilityGate)
@@ -1844,6 +1876,7 @@ namespace DOL.GS
                         ? long.MaxValue : AutonomousRealmPoints + amount;
                     int previousRealmLevel = RealmLevel;
                     RealmLevel = CompanionRealmAbilityTraining.RealmLevel(AutonomousRealmPoints);
+                    realmLevelChanged = RealmLevel != previousRealmLevel;
                     if (_autonomousRealmAllocationsValid && RealmLevel > previousRealmLevel)
                         AutonomousRealmAbilityTraining.Advance(this, _autonomousRealmAllocations);
                 }
@@ -1856,13 +1889,114 @@ namespace DOL.GS
                 // Persistent companions earn RvR realm points through the same award
                 // path as autonomous bots. Their PvP XP goes through GainExperience,
                 // which caps it at the owner's experience total.
+                int previousRealmLevel = RealmLevel;
                 CompanionRealmPoints += amount;
                 RealmLevel = CompanionRealmAbilityTraining.RealmLevel(CompanionRealmPoints);
+                realmLevelChanged = RealmLevel != previousRealmLevel;
+                PlayerCompanionProgressPersistence.Queue(this);
+            }
+
+            // The nameplate shows the realm level, so only a level change resends the create packet.
+            // Runs after the RP lock above is released.
+            if (realmLevelChanged)
+                RefreshRealmRankNameplate();
+        }
+
+        /// <summary>
+        /// Re-sends this bot's create packet so nearby players see its new realm rank on the nameplate.
+        /// Only an in-world autonomous bot or persistent companion, and only while its property is on.
+        /// </summary>
+        private void RefreshRealmRankNameplate()
+        {
+            if (ObjectState != eObjectState.Active || !RealmRankNameplate.ShowsRank(this))
+                return;
+            ClientService.CreateObjectForPlayers(this);
+        }
+
+        public override void GainRealmPoints(long amount) => GainRealmPoints(amount, true);
+
+        /// <summary>
+        /// Autonomous world bots and persistent companions keep PvP kill and death counters.
+        /// /spawn helpers and battleground encounter bots never save, so they keep none.
+        /// </summary>
+        public bool TracksPvpKillStats => IsPersistentPlayerCompanion ||
+            (IsAutonomousWorldBot && !IsTemporaryGroupHelper && !IsBattlegroundEncounterBot);
+
+        /// <summary>
+        /// Credits one PvP kill of a realm opponent. Call it only where this bot is credited
+        /// realm points for a worth-it kill, so the counters and realm points move together.
+        /// </summary>
+        public void CreditPvpKill(eRealm victimRealm, bool deathBlow, bool soloKill)
+        {
+            if (!TracksPvpKillStats)
+                return;
+
+            lock (_pvpKillStatsGate)
+                _pvpKillStats.RecordKill(victimRealm, deathBlow, soloKill);
+            MarkPvpKillStatsChanged();
+        }
+
+        /// <summary>Counts a PvP death: a credited player, autonomous bot or companion did damage.</summary>
+        public void CountPvpDeath()
+        {
+            if (!TracksPvpKillStats)
+                return;
+
+            lock (_pvpKillStatsGate)
+                _pvpKillStats.RecordDeath();
+            MarkPvpKillStatsChanged();
+        }
+
+        /// <summary>Copies the live counters onto the autonomous record that is about to be saved.</summary>
+        public void CopyPvpKillStatsTo(OfflineWorldBotRecord record)
+        {
+            lock (_pvpKillStatsGate)
+                _pvpKillStats.CopyTo(record);
+        }
+
+        /// <summary>Copies the live counters onto the companion record that is about to be saved.</summary>
+        public void CopyPvpKillStatsTo(PlayerCompanionRecord record)
+        {
+            lock (_pvpKillStatsGate)
+                _pvpKillStats.CopyTo(record);
+        }
+
+        private void LoadPvpKillStats(OfflineWorldBotRecord record)
+        {
+            lock (_pvpKillStatsGate)
+                _pvpKillStats.LoadFrom(record);
+        }
+
+        private void LoadPvpKillStats(PlayerCompanionRecord record)
+        {
+            lock (_pvpKillStatsGate)
+                _pvpKillStats.LoadFrom(record);
+        }
+
+        private void MarkPvpKillStatsChanged()
+        {
+            if (IsAutonomousWorldBot)
+            {
+                MarkAutonomousStateDirty();
+                AutonomousBotStatusPersistence.Queue(this);
+            }
+            else
+            {
                 PlayerCompanionProgressPersistence.Queue(this);
             }
         }
 
-        public override void GainRealmPoints(long amount) => GainRealmPoints(amount, true);
+        /// <summary>
+        /// Reads the attackers that the base death path is about to clear, using the same
+        /// filter as the player PvP kill path (BotPvpKillStats.HasCreditedPvpAttacker).
+        /// </summary>
+        private bool HasCreditedPvpAttacker()
+        {
+            List<GameLiving> attackers;
+            lock (XpGainersLock)
+                attackers = new List<GameLiving>(XPGainers.Keys);
+            return BotPvpKillStats.HasCreditedPvpAttacker(this, attackers);
+        }
 
         public override void GainExperience(GainedExperienceEventArgs arguments, bool notify = true)
         {
@@ -3177,6 +3311,7 @@ namespace DOL.GS
             {
                 Experience = Math.Max(0, PlayerCompanionRecord.Experience);
                 CompanionRealmPoints = Math.Max(0, PlayerCompanionRecord.RealmPoints);
+                LoadPvpKillStats(PlayerCompanionRecord);
                 RealmLevel = CompanionRealmAbilityTraining.RealmLevel(CompanionRealmPoints);
                 CompanionRealmAbilityTraining.Restore(this);
             }
@@ -3329,6 +3464,7 @@ namespace DOL.GS
             RefreshItemBonuses();
             Experience = Math.Max(0, record.Experience);
             AutonomousRealmPoints = Math.Max(0, record.RealmPoints);
+            LoadPvpKillStats(record);
             RealmLevel = CompanionRealmAbilityTraining.RealmLevel(AutonomousRealmPoints);
             _autonomousRealmAllocationsValid = AutonomousRealmAbilityTraining.TryRead(
                 record.SerializedAbilities, ClassId,
@@ -4113,6 +4249,7 @@ namespace DOL.GS
                     record.SerializedAbilities = AutonomousRealmAbilityTraining.UpdateTrainingLevelPreservingInvalidAllocations(
                         record.SerializedAbilities, _lastAutonomousTrainedLevel);
             }
+            CopyPvpKillStatsTo(record);
             record.RegionId = CurrentRegionID;
             record.ZoneId = CurrentZone?.ID ?? 0;
             record.ZoneName = CurrentZone?.Description;

@@ -699,7 +699,7 @@ namespace DOL.GS
 
         private bool CheckItemRealmRestriction(DbInventoryItem item, eInventorySlot slot)
         {
-            if (item == null || item.Realm <= 0 || (eRealm) item.Realm == m_player.Realm || m_player.Client.Account.PrivLevel > 1)
+            if (item == null || ServerProperties.Properties.ALLOW_ALL_ITEMS_ALL_CLASSES || item.Realm <= 0 || (eRealm) item.Realm == m_player.Realm || m_player.Client.Account.PrivLevel > 1)
                 return true;
 
             if (slot is > eInventorySlot.MaxEquipable or (>= eInventorySlot.FirstBackpack and <= eInventorySlot.LastBackpack) or eInventorySlot.HorseArmor or eInventorySlot.HorseBarding)
@@ -711,7 +711,7 @@ namespace DOL.GS
 
         private bool CheckItemClassRestriction(DbInventoryItem item, eInventorySlot slot)
         {
-            if (item == null || string.IsNullOrEmpty(item.AllowedClasses) || m_player.Client.Account.PrivLevel > 1)
+            if (item == null || ServerProperties.Properties.ALLOW_ALL_ITEMS_ALL_CLASSES || string.IsNullOrEmpty(item.AllowedClasses) || m_player.Client.Account.PrivLevel > 1)
                 return true;
 
             if (slot is > eInventorySlot.MaxEquipable or (>= eInventorySlot.FirstBackpack and <= eInventorySlot.LastBackpack))

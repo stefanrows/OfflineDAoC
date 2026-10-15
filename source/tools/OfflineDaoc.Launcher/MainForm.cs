@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.249.0";
+    internal const string DisplayVersion = "0.277.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -68,12 +68,12 @@ internal sealed partial class MainForm : Form
         TextAlign = ContentAlignment.MiddleCenter,
     };
     private readonly ComboBox _realmFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
-    private readonly TextBox _search = new() { PlaceholderText = "Search name, type, guild, zone or activity", Width = 280 };
+    private readonly TextBox _search = new() { PlaceholderText = "Search name, type, guild, zone or activity", Width = 200 };
     private readonly CheckBox _onlineOnly = new()
     {
         Text = "ONLINE ONLY",
         AutoSize = false,
-        Size = new Size(132, 31),
+        Size = new Size(118, 31),
         Margin = new Padding(8, 0, 0, 0),
         Padding = new Padding(4, 0, 0, 0),
         FlatStyle = FlatStyle.Flat,
@@ -84,8 +84,23 @@ internal sealed partial class MainForm : Form
         Cursor = Cursors.Hand,
         AccessibleName = "Show online bots only",
     };
+    private readonly CheckBox _showCompanions = new()
+    {
+        Text = "COMPANIONS",
+        AutoSize = false,
+        Size = new Size(118, 31),
+        Margin = new Padding(8, 0, 0, 0),
+        Padding = new Padding(4, 0, 0, 0),
+        FlatStyle = FlatStyle.Flat,
+        ForeColor = DaocTheme.GoldLight,
+        BackColor = DaocTheme.Panel,
+        Font = new Font("Georgia", 8.25f, FontStyle.Bold),
+        TextAlign = ContentAlignment.MiddleLeft,
+        Cursor = Cursors.Hand,
+        AccessibleName = "Show companions",
+    };
     private readonly TextBox _auctionSearch = new() { PlaceholderText = "Search item, seller or state", Width = 300 };
-    private readonly TabControl _auctionRealmTabs = new() { Width = 280, Height = 29, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(87, 22) };
+    private readonly DaocTabControl _auctionRealmTabs = new() { Width = 280, Height = 29, StripColor = Color.FromArgb(48, 38, 26) };
     private readonly TextBox _groupSearch = new() { PlaceholderText = "Search bot, class, zone or task", Width = 340 };
     private readonly ComboBox _groupRealm = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 125 };
     private readonly ComboBox _playerXpRate = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
@@ -98,6 +113,26 @@ internal sealed partial class MainForm : Form
     private readonly Label _worldSpeedErrorText = new() { AutoSize = false, Dock = DockStyle.Fill };
     private readonly Label _worldSpeedClockText = new() { AutoSize = false, Dock = DockStyle.Fill };
     private readonly CheckBox _makeMeGm = new() { Text = "Make Me a GM", AutoSize = true, ForeColor = DaocTheme.Parchment, Font = new Font("Georgia", 9f, FontStyle.Bold) };
+    private const string RealmRankNameplateKey = "show_realm_rank_nameplates";
+    private const string RealmRankNameplateDescription = "Show realm rank (RR xLy) after the names of companions and players on nameplates. Presentation only.";
+    private const string BotRealmRankNameplateKey = "show_bot_realm_rank_nameplates";
+    private const string BotRealmRankNameplateDescription = "Show realm rank (RR xLy) after the names of autonomous world bots on nameplates. Presentation only.";
+    private readonly CheckBox _realmRankNameplates = new()
+    {
+        Text = "Realm rank on companion and player nameplates",
+        AutoSize = true,
+        ForeColor = DaocTheme.Parchment,
+        Font = new Font("Georgia", 9f, FontStyle.Bold),
+    };
+    private readonly Label _realmRankNameplatesNote = XpRateDescription("Adds RR xLy after companion and player names. Applies at the next server startup.");
+    private readonly CheckBox _botRealmRankNameplates = new()
+    {
+        Text = "Realm rank on autonomous bot nameplates",
+        AutoSize = true,
+        ForeColor = DaocTheme.Parchment,
+        Font = new Font("Georgia", 9f, FontStyle.Bold),
+    };
+    private readonly Label _botRealmRankNameplatesNote = XpRateDescription("On by default. Adds RR xLy after autonomous bot names. Applies at the next server startup.");
     private readonly Label _xpSettingsStatus = new()
     {
         AutoSize = true,
@@ -123,16 +158,10 @@ internal sealed partial class MainForm : Form
     };
     private readonly DataGridView _grid = new();
     private readonly DataGridView _auctionGrid = new();
-    private readonly BindingSource _rvrSource = new();
-    private readonly DataGridView _rvrGrid = new();
     private readonly DataGridView _rvrObjectivesGrid = new();
     private readonly Label _rvrUpdated = new();
-    private readonly ComboBox _rvrRealm = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-    private readonly TextBox _rvrSearch = new() { Width = 240, PlaceholderText = "Search frontier name, zone or task" };
     private RvrWorldSnapshot? _rvrWorld;
     private bool _rvrServerRunning;
-    private string _rvrSortProperty = "Name";
-    private bool _rvrSortAscending = true;
     private string _groupSortProperty = "Realm";
     private bool _groupSortAscending = true;
     private bool _updatingGroupGrid;
@@ -145,11 +174,15 @@ internal sealed partial class MainForm : Form
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly Button _playButton;
+    private readonly Button _heraldButton;
+    private readonly Button _uiPresetButton;
     private Process? _serverProcess;
     private RollingServerLog? _serverLog;
     private bool _stoppingServer;
     private bool _worldReady;
     private bool _refreshing;
+    private bool _livePollInFlight;
+    private Icon? _windowIcon;
     private bool _refreshingExchange;
     private bool _loadingXpRates;
     private bool _savingXpRates;
@@ -173,6 +206,7 @@ internal sealed partial class MainForm : Form
     private string _auctionSortProperty = "ItemName";
     private bool _auctionSortAscending = true;
     private ExchangeSalesForm? _salesLedger;
+    private HeraldForm? _herald;
 
     public MainForm()
     {
@@ -196,6 +230,8 @@ internal sealed partial class MainForm : Form
         ForeColor = DaocTheme.Text;
         Font = new Font("Georgia", 8.5f);
         AutoScaleMode = AutoScaleMode.Dpi;
+        _windowIcon = LauncherIcon.Create();
+        if (_windowIcon is not null) Icon = _windowIcon;
 
         var stoneFrame = new StoneSurface { Dock = DockStyle.Fill };
         Controls.Add(stoneFrame);
@@ -212,6 +248,8 @@ internal sealed partial class MainForm : Form
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        // Fixed to the window width: a wrapping filter bar must not widen the whole layout.
+        rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         stoneFrame.Controls.Add(rootLayout);
 
         _startButton = ActionButton("START SERVER", Color.FromArgb(110, 128, 70));
@@ -220,6 +258,14 @@ internal sealed partial class MainForm : Form
         _startButton.Click += (_, _) => StartServer();
         _stopButton.Click += async (_, _) => await StopServerAsync();
         _playButton.Click += (_, _) => LaunchClient();
+        _heraldButton = ActionButton("HERALD", DaocTheme.Gold);
+        _heraldButton.Click += (_, _) => _herald = HeraldForm.ShowOrFocus(this, _database, _herald);
+        _uiPresetButton = ActionButton("UI PRESET", DaocTheme.Iron);
+        _uiPresetButton.Click += (_, _) =>
+        {
+            using var presets = new ClientUiPresetForm(_clientDirectory);
+            presets.ShowDialog(this);
+        };
 
         rootLayout.Controls.Add(BuildHeader(), 0, 0);
         rootLayout.Controls.Add(BuildCards(), 0, 1);
@@ -231,6 +277,11 @@ internal sealed partial class MainForm : Form
         _realmFilter.SelectedIndexChanged += (_, _) => ApplyFilter();
         _search.TextChanged += (_, _) => ApplyFilter();
         _onlineOnly.CheckedChanged += (_, _) => ApplyFilter();
+        _showCompanions.CheckedChanged += (_, _) => ApplyFilter();
+        DaocTheme.StyleCheckBox(_makeMeGm);
+        DaocTheme.StyleCheckBox(_realmRankNameplates);
+        DaocTheme.StyleCheckBox(_botRealmRankNameplates);
+        DaocTheme.StyleCheckBox(_eventActiveOnly);
         _auctionSearch.TextChanged += (_, _) => ApplyAuctionFilter();
         _auctionRealmTabs.SelectedIndexChanged += (_, _) => ApplyAuctionFilter();
         ConfigureXpRateSelector(_playerXpRate);
@@ -249,7 +300,7 @@ internal sealed partial class MainForm : Form
             if (e.KeyCode == Keys.Enter) { ApplyGroupSearch(); e.SuppressKeyPress = true; }
         };
 
-        _displayClock.Tick += (_, _) => RefreshVisibleCountdowns();
+        _displayClock.Tick += async (_, _) => await RefreshVisibleCountdownsAsync();
         _autoRefresh.Tick += async (_, _) =>
         {
             ScheduleNextAutoRefresh();
@@ -298,26 +349,32 @@ internal sealed partial class MainForm : Form
             _helpTip.Dispose();
         }
         base.Dispose(disposing);
+        // The window icon must outlive the window handle that uses it.
+        if (disposing)
+            _windowIcon?.Dispose();
     }
 
-    private void RefreshVisibleCountdowns()
+    private async Task RefreshVisibleCountdownsAsync()
     {
-        RefreshWorldSpeedState();
+        // World speed, and the RVR snapshot every 30 s, are read off the UI thread.
+        await PollLiveStateAsync();
+        if (IsDisposed) return;
+        UpdateAutoRefreshCountdown();
+        InvalidateCountdownCells();
+    }
+
+    private void InvalidateCountdownCells()
+    {
         // Repaint visible clock cells from the last snapshot. No resort or
         // card reconstruction occurs on this one-second display timer.
-        UpdateAutoRefreshCountdown();
-        RefreshRvrSnapshotIfDue();
         if (_rvrObjectivesGrid.Visible)
             foreach (DataGridViewColumn column in _rvrObjectivesGrid.Columns)
                 if (column.DataPropertyName == "PhaseRemainingMilliseconds")
                     _rvrObjectivesGrid.InvalidateColumn(column.Index);
-        foreach (DataGridView grid in new[] { _grid, _rvrGrid })
-        {
-            if (!grid.Visible) continue;
-            foreach (DataGridViewColumn column in grid.Columns)
+        if (_grid.Visible)
+            foreach (DataGridViewColumn column in _grid.Columns)
                 if (column.DataPropertyName is "TaskRemaining" or "NameWithMeetUpTimer")
-                    grid.InvalidateColumn(column.Index);
-        }
+                    _grid.InvalidateColumn(column.Index);
         if (_auctionGrid.Visible)
             foreach (DataGridViewColumn column in _auctionGrid.Columns)
                 if (column.DataPropertyName == "Expires")
@@ -336,17 +393,48 @@ internal sealed partial class MainForm : Form
                     _groupMembersGrid.InvalidateColumn(column.Index);
     }
 
-    private void RefreshRvrSnapshotIfDue()
+    // Single in-flight guard: a slow read is never stacked behind another one.
+    private async Task PollLiveStateAsync()
     {
-        DateTime nowUtc = DateTime.UtcNow;
-        if (_refreshing || nowUtc < _nextRvrSnapshotRefreshUtc)
-            return;
-        _nextRvrSnapshotRefreshUtc = nowUtc.AddMilliseconds(RvrSnapshotRefreshMilliseconds);
-        RvrWorldSnapshot? latest = ReadRvrWorld();
+        if (_livePollInFlight || IsDisposed) return;
+        _livePollInFlight = true;
+        try
+        {
+            DateTime nowUtc = DateTime.UtcNow;
+            bool readRvr = !_refreshing && nowUtc >= _nextRvrSnapshotRefreshUtc;
+            if (readRvr)
+                _nextRvrSnapshotRefreshUtc = nowUtc.AddMilliseconds(RvrSnapshotRefreshMilliseconds);
+            var request = new LiveStateRequest(nowUtc, _serverProcess is { HasExited: false },
+                !_stoppedSimulationClockLoaded || _lastWorldSpeedServerRunning == true, readRvr);
+            LiveStateReading reading = await Task.Run(() => ReadLiveState(request));
+            if (IsDisposed) return;
+            ApplyWorldSpeedReading(reading.WorldSpeed, nowUtc);
+            if (reading.RvrRead)
+                ApplyRvrSnapshot(reading.Rvr);
+        }
+        finally
+        {
+            _livePollInFlight = false;
+        }
+    }
+
+    private void ApplyRvrSnapshot(RvrWorldSnapshot? latest)
+    {
         if (latest == null || _rvrWorld != null && latest.UpdatedUtc <= _rvrWorld.UpdatedUtc)
             return;
         _rvrWorld = latest;
         RenderActiveRvr();
+    }
+
+    // Used right after an event command is acknowledged; the snapshot is read off the UI thread.
+    private async Task RefreshRvrSnapshotAsync()
+    {
+        string serverDirectory = _serverDirectory;
+        string database = _database;
+        _nextRvrSnapshotRefreshUtc = DateTime.UtcNow.AddMilliseconds(RvrSnapshotRefreshMilliseconds);
+        RvrWorldSnapshot? latest = await Task.Run(() => ReadRvrWorldSnapshot(serverDirectory, database));
+        if (!IsDisposed)
+            ApplyRvrSnapshot(latest);
     }
 
     private void ScheduleNextAutoRefresh() =>
@@ -373,42 +461,69 @@ internal sealed partial class MainForm : Form
         var banner = new FantasyBanner { Dock = DockStyle.Fill, Margin = new Padding(2, 2, 2, 3) };
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, BackColor = Color.Transparent, Padding = new Padding(12, 7, 10, 6) };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 290));
 
-        var titlePanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
-        titlePanel.Controls.Add(new RealmShieldPicture
+        // Flowing rows instead of fixed pixel positions: the lines keep their place at any
+        // DPI and window width, and the shield spans all three lines.
+        var titlePanel = new TableLayoutPanel
         {
-            Size = new Size(43, 58),
-            Location = new Point(3, 7),
-        });
-        titlePanel.Controls.Add(new Label
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 3,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 1, 0, 0),
+        };
+        titlePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        titlePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        for (int row = 0; row < 3; row++)
+            titlePanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var shield = new RealmShieldPicture { Size = new Size(43, 58), Margin = new Padding(3, 7, 9, 0) };
+        titlePanel.Controls.Add(shield, 0, 0);
+        titlePanel.SetRowSpan(shield, 3);
+        // UseMnemonic is off so the ampersands in these labels are shown rather than swallowed.
+        var title = new Label
         {
             AutoSize = true,
+            UseMnemonic = false,
             Text = "OFFLINE DAoC — PVP & CO-OP",
             Font = new Font("Georgia", 28f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
-            Location = new Point(52, 5),
-        });
+        };
+        titlePanel.Controls.Add(title, 1, 0);
+        // On narrow windows the 28 pt title would wrap and push the version line out of the
+        // banner; step down to a smaller size that stays on one line.
+        var titleLarge = title.Font;
+        var titleSmall = new Font("Georgia", 21f, FontStyle.Bold);
+        titlePanel.Resize += (_, _) =>
+        {
+            int available = titlePanel.ClientSize.Width - shield.Width - shield.Margin.Horizontal - title.Margin.Horizontal;
+            var wanted = TextRenderer.MeasureText(title.Text, titleLarge).Width <= available ? titleLarge : titleSmall;
+            if (!ReferenceEquals(title.Font, wanted))
+                title.Font = wanted;
+        };
+        titlePanel.Disposed += (_, _) => { titleLarge.Dispose(); titleSmall.Dispose(); };
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
+            UseMnemonic = false,
             Text = "OLD FRONTIERS 1.65  •  FULL-PVP WORLD  •  BOTS & CO-OP",
             Font = new Font("Georgia", 9f),
             ForeColor = Color.FromArgb(196, 145, 70),
-            Location = new Point(55, 57),
-        });
+            Margin = new Padding(2, 0, 0, 0),
+        }, 1, 1);
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
             Text = $"VERSION {DisplayVersion}",
             Font = new Font("Georgia", 12f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
-            Location = new Point(55, 79),
-        });
+            Margin = new Padding(2, 0, 0, 0),
+        }, 1, 2);
         header.Controls.Add(titlePanel, 0, 0);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(3, 5, 0, 0), BackColor = Color.Transparent };
-        foreach (var button in new[] { _startButton, _stopButton, _playButton })
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(3, 5, 0, 0), BackColor = Color.Transparent };
+        foreach (var button in new[] { _startButton, _stopButton, _playButton, _heraldButton, _uiPresetButton })
         {
             button.Width = 132;
             button.Height = 26;
@@ -417,6 +532,8 @@ internal sealed partial class MainForm : Form
         actions.Controls.Add(_startButton);
         actions.Controls.Add(_stopButton);
         actions.Controls.Add(_playButton);
+        actions.Controls.Add(_heraldButton);
+        actions.Controls.Add(_uiPresetButton);
         header.Controls.Add(actions, 1, 0);
         banner.Controls.Add(header);
         return banner;
@@ -426,7 +543,7 @@ internal sealed partial class MainForm : Form
     {
         var cards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 1, Padding = new Padding(0, 4, 0, 5), BackColor = Color.Transparent };
         // Realm cards need room for two generation actions; status cards do not.
-        foreach (float width in new[] { 16f, 13f, 19f, 19f, 19f, 14f })
+        foreach (float width in new[] { 12f, 12f, 21.33f, 21.33f, 21.33f, 12f })
             cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, width));
         cards.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         cards.Controls.Add(Card("SERVER", _serverState, DaocTheme.Iron), 0, 0);
@@ -451,12 +568,13 @@ internal sealed partial class MainForm : Form
 
     private Control RealmGenerateButton(int realm, string realmName, Color accent)
     {
-        var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty, Padding = Padding.Empty };
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        // Stacked and full width: side by side, "ADD LV.50 CREW" cannot fit a realm card at 960 px.
+        var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty, Padding = Padding.Empty };
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        split.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        split.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         split.Controls.Add(RealmGenerateLevelButton(realm, realmName, accent, 1), 0, 0);
-        split.Controls.Add(RealmGenerateLevelButton(realm, realmName, accent, 50), 1, 0);
+        split.Controls.Add(RealmGenerateLevelButton(realm, realmName, accent, 50), 0, 1);
         return split;
     }
 
@@ -464,9 +582,8 @@ internal sealed partial class MainForm : Form
     {
         Button button = ActionButton(level == 1 ? "ADD CREW" : "ADD LV.50 CREW", accent);
         if (button is RuneButton rune) rune.ShowOrnaments = false;
-        button.Margin = new Padding(1, 0, 1, 0);
-        button.Font = new Font("Georgia", 8f, FontStyle.Bold);
-        button.Height = 22;
+        button.Margin = new Padding(0, 1, 0, 1);
+        button.Font = DaocTheme.Fonts.Caption;
         button.Dock = DockStyle.Fill;
         _realmGenerateButtons.Add(button);
         button.Click += async (_, _) =>
@@ -530,8 +647,10 @@ internal sealed partial class MainForm : Form
         var tabs = new DaocTabControl { Dock = DockStyle.Fill };
         var population = new TabPage("Active Population") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         var populationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
+        populationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         populationLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
-        populationLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
+        // Auto height: the filter bar wraps onto a second line on narrow windows.
+        populationLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         populationLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         populationLayout.Controls.Add(new Label
         {
@@ -551,8 +670,10 @@ internal sealed partial class MainForm : Form
         auction.Controls.Add(BuildAuctionPanel());
         var groups = new TabPage("Active Groups") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         groups.Controls.Add(BuildActiveGroupsPanel());
-        var xpSettings = new TabPage("XP Settings") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
+        // Scrolls on short windows instead of clipping the bottom settings.
+        var xpSettings = new TabPage("XP Settings") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text, AutoScroll = true };
         xpSettings.Controls.Add(BuildXpSettingsPanel());
+        HeraldPalette.UseDarkScrollbars(xpSettings);
         var worldSpeed = new TabPage("World Speed") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         worldSpeed.Controls.Add(BuildWorldSpeedPanel());
         tabs.TabPages.Add(population);
@@ -575,7 +696,8 @@ internal sealed partial class MainForm : Form
             Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName),
             _worldSpeedStatusPath,
             Path.Combine(_serverDirectory, PopulationTypeMixProtocol.RequestFileName),
-            BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued));
+            BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued),
+            () => SaveDatabaseBackup.Create(_database, Path.Combine(Path.GetDirectoryName(_database)!, "gothwaite-pvp-backups"), "gothwaite-pvp"));
         botGoals.Controls.Add(_botGoalsSettings);
         tabs.TabPages.Add(botGoals);
         var openBg = new TabPage("open BG") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
@@ -592,37 +714,40 @@ internal sealed partial class MainForm : Form
         var surface = new InsetPanel
         {
             Dock = DockStyle.Top,
-            Height = 370,
+            Height = 332,
             Margin = new Padding(18),
-            Padding = new Padding(20),
+            Padding = new Padding(16, 12, 16, 12),
             Accent = DaocTheme.Gold,
         };
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 7,
+            RowCount = 9,
             BackColor = Color.Transparent,
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 135));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var titlePanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
         titlePanel.Controls.Add(new Label
         {
             AutoSize = true,
+            UseMnemonic = false,
             Text = "EXPERIENCE & REALM POINT RATES",
             Font = new Font("Georgia", 13f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
-            Location = new Point(0, 12),
+            Location = new Point(0, 6),
         });
         layout.Controls.Add(titlePanel, 0, 0);
         layout.SetColumnSpan(titlePanel, 3);
@@ -645,7 +770,17 @@ internal sealed partial class MainForm : Form
         layout.SetColumnSpan(_makeMeGm, 2);
         layout.Controls.Add(XpRateDescription("Applies to your account at the next server startup."), 2, 5);
         _makeMeGm.CheckedChanged += async (_, _) => await SaveGmSettingAsync();
-        layout.Controls.Add(_xpSettingsStatus, 0, 6);
+        layout.Controls.Add(_realmRankNameplates, 0, 6);
+        layout.SetColumnSpan(_realmRankNameplates, 2);
+        layout.Controls.Add(_realmRankNameplatesNote, 2, 6);
+        _realmRankNameplates.CheckedChanged += async (_, _) =>
+            await SaveNameplateSettingAsync(_realmRankNameplates, RealmRankNameplateKey, RealmRankNameplateDescription, "false");
+        layout.Controls.Add(_botRealmRankNameplates, 0, 7);
+        layout.SetColumnSpan(_botRealmRankNameplates, 2);
+        layout.Controls.Add(_botRealmRankNameplatesNote, 2, 7);
+        _botRealmRankNameplates.CheckedChanged += async (_, _) =>
+            await SaveNameplateSettingAsync(_botRealmRankNameplates, BotRealmRankNameplateKey, BotRealmRankNameplateDescription, "true");
+        layout.Controls.Add(_xpSettingsStatus, 0, 8);
         layout.SetColumnSpan(_xpSettingsStatus, 3);
         surface.Controls.Add(layout);
         return surface;
@@ -794,18 +929,27 @@ internal sealed partial class MainForm : Form
         }
     }
 
+    // Synchronous path for user actions and dashboard refreshes. The one-second timer uses
+    // PollLiveStateAsync, which performs the same reads on a worker thread.
     private void RefreshWorldSpeedState()
     {
         DateTime nowUtc = DateTime.UtcNow;
-        bool running = IsServerRunning() || _serverProcess is { HasExited: false };
+        WorldSpeedReading reading = ReadWorldSpeedReading(nowUtc, _serverProcess is { HasExited: false },
+            !_stoppedSimulationClockLoaded || _lastWorldSpeedServerRunning == true, _worldSpeedStatusPath, _database);
+        ApplyWorldSpeedReading(reading, nowUtc);
+    }
+
+    private void ApplyWorldSpeedReading(WorldSpeedReading reading, DateTime nowUtc)
+    {
+        bool running = reading.Running;
         bool justStopped = _lastWorldSpeedServerRunning == true && !running;
         _lastWorldSpeedServerRunning = running;
 
         if (running)
         {
             _stoppedSimulationClockLoaded = false;
-            _worldSpeedSnapshot = WorldSpeedProtocol.ReadFreshStatus(
-                _worldSpeedStatusPath, nowUtc, out _worldSpeedUnavailableReason);
+            _worldSpeedSnapshot = reading.Status;
+            _worldSpeedUnavailableReason = reading.UnavailableReason;
             if (_worldSpeedSnapshot is WorldSpeedStatus status)
             {
                 if (_worldSpeedSessionId != status.SessionId)
@@ -846,22 +990,47 @@ internal sealed partial class MainForm : Form
 
         _worldSpeedSnapshot = null;
         _pendingWorldSpeedMultiplier = null;
-        if (!_stoppedSimulationClockLoaded || justStopped)
+        if (reading.SavedClock is not null)
         {
-            _savedSimulationClock = ReadSavedSimulationClock();
+            _savedSimulationClock = reading.SavedClock;
+            _stoppedSimulationClockLoaded = true;
+        }
+        else if (!_stoppedSimulationClockLoaded || justStopped)
+        {
+            // Reached only when the server stopped after the worker read was planned.
+            _savedSimulationClock = ReadSavedSimulationClock(_database);
             _stoppedSimulationClockLoaded = true;
         }
         _simulationUtc = WorldSimulationClock.AdvanceStoppedClock(_savedSimulationClock, nowUtc);
         UpdateWorldSpeedPresentation(false, null);
     }
 
-    private WorldSimulationClockRead ReadSavedSimulationClock()
+    // Worker-thread safe: reads only the status file, the saved clock and the local TCP table.
+    private LiveStateReading ReadLiveState(LiveStateRequest request) => new(
+        ReadWorldSpeedReading(request.NowUtc, request.ProcessAlive, request.ReadSavedClock, _worldSpeedStatusPath, _database),
+        request.ReadRvr ? ReadRvrWorldSnapshot(_serverDirectory, _database) : null,
+        request.ReadRvr);
+
+    private static WorldSpeedReading ReadWorldSpeedReading(DateTime nowUtc, bool processAlive, bool readSavedClock,
+        string statusPath, string database)
     {
-        if (!File.Exists(_database))
+        // The process check is free; the TCP table scan is not, so it only runs when needed.
+        bool running = processAlive || IsServerRunning();
+        if (running)
+        {
+            WorldSpeedStatus? status = WorldSpeedProtocol.ReadFreshStatus(statusPath, nowUtc, out string? unavailableReason);
+            return new WorldSpeedReading(true, status, unavailableReason, null);
+        }
+        return new WorldSpeedReading(false, null, null, readSavedClock ? ReadSavedSimulationClock(database) : null);
+    }
+
+    private static WorldSimulationClockRead ReadSavedSimulationClock(string database)
+    {
+        if (!File.Exists(database))
             return new WorldSimulationClockRead(null, false, null);
         try
         {
-            using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Read Only=True;Pooling=False;Default Timeout=5");
+            using var connection = new SQLiteConnection($"Data Source={database};Version=3;Read Only=True;Pooling=False;Default Timeout=5");
             connection.Open();
             return WorldSimulationClock.ReadCheckpoint(connection);
         }
@@ -1030,6 +1199,7 @@ internal sealed partial class MainForm : Form
         _groupsGrid.Columns.Add(TextColumn("Meet-up / area", "Location", 145));
         _groupsGrid.Columns.Add(TextColumn("Time left", "TimeRemaining", 115));
         _groupsGrid.Columns.Add(TextColumn("Shared goal", "SharedGoal", 220, DataGridViewAutoSizeColumnMode.Fill));
+        UseFillColumns(_groupsGrid);
         foreach (DataGridViewColumn column in _groupsGrid.Columns)
             column.SortMode = DataGridViewColumnSortMode.Programmatic;
         _groupsGrid.ColumnHeaderMouseClick += (_, eventArgs) =>
@@ -1050,7 +1220,7 @@ internal sealed partial class MainForm : Form
                 _groupsGrid.Rows[eventArgs.RowIndex].DataBoundItem is not GroupRow group)
                 return;
             if (_groupsGrid.Columns[eventArgs.ColumnIndex].DataPropertyName == "Realm")
-                eventArgs.CellStyle.ForeColor = GroupRealmColor(group.Realm);
+                eventArgs.CellStyle.ForeColor = DaocTheme.RealmColor(group.Realm);
         };
         _groupSearch.TextChanged += (_, _) => ApplyGroupSearch();
         _groupRealm.SelectedIndexChanged += (_, _) => ApplyGroupSearch();
@@ -1128,33 +1298,7 @@ internal sealed partial class MainForm : Form
         grid.RowHeadersVisible = false;
         grid.MultiSelect = false;
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        grid.BackgroundColor = DaocTheme.StoneDark;
-        grid.BorderStyle = BorderStyle.Fixed3D;
-        grid.GridColor = Color.FromArgb(78, 70, 56);
-        grid.EnableHeadersVisualStyles = false;
-        grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(61, 54, 43),
-            ForeColor = DaocTheme.GoldLight,
-            SelectionBackColor = Color.FromArgb(61, 54, 43),
-            Font = new Font("Georgia", 8.25f, FontStyle.Bold),
-            Padding = new Padding(2),
-        };
-        grid.DefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(35, 31, 26),
-            ForeColor = DaocTheme.Text,
-            SelectionBackColor = Color.FromArgb(90, 72, 43),
-            SelectionForeColor = DaocTheme.GoldLight,
-            Padding = new Padding(2),
-            Font = new Font("Georgia", 8.25f),
-        };
-        grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(42, 37, 30),
-        };
-        grid.ColumnHeadersHeight = 28;
-        grid.RowTemplate.Height = 25;
+        DaocTheme.StyleGrid(grid);
     }
 
     private static DataGridViewTextBoxColumn GroupMemberColumn(string header, string name, int width) => new()
@@ -1164,110 +1308,6 @@ internal sealed partial class MainForm : Form
         Width = width,
         SortMode = DataGridViewColumnSortMode.NotSortable,
     };
-
-    private Control BuildActiveRvrPanel()
-    {
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            RowCount = 4,
-            ColumnCount = 1,
-            Padding = new Padding(7),
-            BackColor = DaocTheme.Panel,
-        };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _rvrUpdated.Dock = DockStyle.Fill;
-        _rvrUpdated.TextAlign = ContentAlignment.MiddleLeft;
-        _rvrUpdated.Font = new Font("Georgia", 9f, FontStyle.Bold);
-        _rvrUpdated.ForeColor = DaocTheme.GoldLight;
-        _rvrUpdated.Padding = new Padding(8, 0, 0, 0);
-        layout.Controls.Add(BuildActiveRvrHeader(), 0, 0);
-
-        _rvrGrid.Dock = DockStyle.Fill;
-        _rvrGrid.ReadOnly = true;
-        _rvrGrid.AllowUserToAddRows = false;
-        _rvrGrid.AllowUserToDeleteRows = false;
-        _rvrGrid.AllowUserToResizeRows = false;
-        _rvrGrid.AutoGenerateColumns = false;
-        _rvrGrid.RowHeadersVisible = false;
-        _rvrGrid.MultiSelect = false;
-        _rvrGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _rvrGrid.BackgroundColor = DaocTheme.StoneDark;
-        _rvrGrid.BorderStyle = BorderStyle.Fixed3D;
-        _rvrGrid.GridColor = Color.FromArgb(78, 70, 56);
-        _rvrGrid.EnableHeadersVisualStyles = false;
-        _rvrGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(61, 54, 43),
-            ForeColor = DaocTheme.GoldLight,
-            SelectionBackColor = Color.FromArgb(61, 54, 43),
-            Font = new Font("Georgia", 8.25f, FontStyle.Bold),
-            Padding = new Padding(2),
-        };
-        _rvrGrid.DefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(35, 31, 26),
-            ForeColor = DaocTheme.Text,
-            SelectionBackColor = Color.FromArgb(90, 72, 43),
-            SelectionForeColor = DaocTheme.GoldLight,
-            Padding = new Padding(2),
-            Font = new Font("Georgia", 8.25f),
-        };
-        _rvrGrid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(42, 37, 30) };
-        _rvrGrid.ColumnHeadersHeight = 28;
-        _rvrGrid.RowTemplate.Height = 25;
-        _rvrGrid.DataSource = _rvrSource;
-        _rvrGrid.Columns.Add(TextColumn("Name / meet-up", "NameWithMeetUpTimer", 135));
-        _rvrGrid.Columns.Add(TextColumn("Realm", "Realm", 70));
-        _rvrGrid.Columns.Add(TextColumn("Class", "ClassName", 95));
-        _rvrGrid.Columns.Add(TextColumn("Lvl", "Level", 45));
-        _rvrGrid.Columns.Add(TextColumn("Zone", "ZoneName", 100));
-        _rvrGrid.Columns.Add(TextColumn("Formation", "RvrFormation", 100));
-        _rvrGrid.Columns.Add(TextColumn("Phase", "ObjectivePhase", 85));
-        _rvrGrid.Columns.Add(TextColumn("Task left", "TaskRemaining", 90));
-        _rvrGrid.Columns.Add(TextColumn("Current objective", "Activity", 260, DataGridViewAutoSizeColumnMode.Fill));
-        _rvrGrid.CellFormatting += (_, eventArgs) =>
-        {
-            if (eventArgs.RowIndex < 0 || eventArgs.ColumnIndex < 0 || _rvrGrid.Rows[eventArgs.RowIndex].DataBoundItem is not BotRow bot)
-                return;
-            if (_rvrGrid.Columns[eventArgs.ColumnIndex].DataPropertyName == "Realm")
-            {
-                eventArgs.CellStyle.ForeColor = bot.Realm switch
-                {
-                    "Albion" => Color.FromArgb(225, 116, 105),
-                    "Midgard" => Color.FromArgb(124, 161, 215),
-                    "Hibernia" => Color.FromArgb(112, 178, 112),
-                    _ => Color.White,
-                };
-            }
-        };
-        foreach (DataGridViewColumn column in _rvrGrid.Columns)
-            column.SortMode = DataGridViewColumnSortMode.Programmatic;
-        _rvrGrid.ColumnHeaderMouseClick += (_, e) =>
-        {
-            string property = _rvrGrid.Columns[e.ColumnIndex].DataPropertyName;
-            _rvrSortAscending = property == _rvrSortProperty ? !_rvrSortAscending : true;
-            _rvrSortProperty = property;
-            RenderActiveRvr();
-        };
-
-        ConfigureRvrObjectiveGrid();
-        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        _rvrRealm.Items.AddRange(["All realms", "Albion", "Midgard", "Hibernia"]);
-        _rvrRealm.SelectedIndex = 0;
-        _rvrRealm.SelectedIndexChanged += (_, _) => RenderActiveRvr();
-        _rvrSearch.TextChanged += (_, _) => RenderActiveRvr();
-        filters.Controls.Add(new Label { AutoSize = true, Text = "Filter:", ForeColor = DaocTheme.GoldLight, Padding = new Padding(0, 5, 0, 0) });
-        filters.Controls.Add(_rvrRealm);
-        filters.Controls.Add(_rvrSearch);
-        filters.Controls.Add(new Label { AutoSize = true, Text = "Click column headings to sort · uses the main Refresh", ForeColor = DaocTheme.GoldLight, Padding = new Padding(5, 5, 0, 0) });
-        layout.Controls.Add(filters, 0, 2);
-        layout.Controls.Add(_rvrGrid, 0, 3);
-        return layout;
-    }
 
     private void ConfigureRvrObjectiveGrid()
     {
@@ -1280,10 +1320,8 @@ internal sealed partial class MainForm : Form
         _rvrObjectivesGrid.AllowUserToDeleteRows = false;
         _rvrObjectivesGrid.RowHeadersVisible = false;
         _rvrObjectivesGrid.AutoGenerateColumns = false;
-        _rvrObjectivesGrid.BackgroundColor = DaocTheme.StoneDark;
-        _rvrObjectivesGrid.EnableHeadersVisualStyles = false;
-        _rvrObjectivesGrid.ColumnHeadersDefaultCellStyle = _rvrGrid.ColumnHeadersDefaultCellStyle.Clone();
-        _rvrObjectivesGrid.DefaultCellStyle = _rvrGrid.DefaultCellStyle.Clone();
+        // Styled directly: these grids used to copy styles from a grid that was never built.
+        DaocTheme.StyleGrid(_rvrObjectivesGrid);
         _rvrObjectivesGrid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
         _rvrObjectivesGrid.Columns.Add(TextColumn("Type", "Marker", 110));
         _rvrObjectivesGrid.Columns.Add(TextColumn("Keep / relic", "Name", 165));
@@ -1433,17 +1471,9 @@ internal sealed partial class MainForm : Form
     private static string GroupDetailsSummary(GroupRow group) =>
         $"LEADER: {group.LeaderName}    TOWN: {group.RendezvousName}    PULLER: {group.PullerName}    {group.TimeRemaining}\n{group.SharedGoal}\n{group.Status}";
 
-    private static Color GroupRealmColor(string realm) => realm switch
-    {
-        "Albion" => Color.FromArgb(225, 116, 105),
-        "Midgard" => Color.FromArgb(124, 161, 215),
-        "Hibernia" => Color.FromArgb(112, 178, 112),
-        _ => Color.White,
-    };
-
     private Control BuildFilters()
     {
-        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(5, 7, 0, 4), BackColor = DaocTheme.Panel };
+        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(5, 7, 0, 4), BackColor = DaocTheme.Panel };
         StyleInput(_realmFilter);
         StyleInput(_search);
         panel.Controls.Add(_realmFilter);
@@ -1458,13 +1488,15 @@ internal sealed partial class MainForm : Form
         _deleteBotButton.Click += async (_, _) => await DeleteSelectedBotAsync();
         panel.Controls.Add(_deleteBotButton);
         _deleteOrphansButton = ActionButton("DELETE ORPHANED COMPANIONS…", Color.FromArgb(151, 67, 57));
-        _deleteOrphansButton.Width = 250;
+        _deleteOrphansButton.Width = 236;
         _deleteOrphansButton.Enabled = false;
         _deleteOrphansButton.Click += async (_, _) => await DeleteOrphanedCompanionsAsync();
         _helpTip.SetToolTip(_deleteOrphansButton, "Permanently delete every companion whose owning character no longer exists, with their items. Server must be stopped.");
         panel.Controls.Add(_deleteOrphansButton);
         panel.Controls.Add(_onlineOnly);
         _helpTip.SetToolTip(_onlineOnly, "Show only online bots in the current realm and search results. Uncheck to show all bots.");
+        panel.Controls.Add(_showCompanions);
+        _helpTip.SetToolTip(_showCompanions, "Include companion bots in the list. Unchecked shows only autonomous gamebots.");
         return panel;
     }
 
@@ -1508,7 +1540,7 @@ internal sealed partial class MainForm : Form
             Dock = DockStyle.Fill,
             Text = "✦  THE REALM EXCHANGE  ✦    Camelot • Jordheim • Tir na Nog",
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Georgia", 10f, FontStyle.Bold),
+            Font = new Font("Georgia", 9f, FontStyle.Bold),
             ForeColor = DaocTheme.GoldLight,
             BackColor = Color.FromArgb(69, 51, 31),
             Padding = new Padding(11, 0, 0, 0),
@@ -1568,24 +1600,8 @@ internal sealed partial class MainForm : Form
         _auctionGrid.AutoGenerateColumns = false;
         _auctionGrid.RowHeadersVisible = false;
         _auctionGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _auctionGrid.BackgroundColor = Color.FromArgb(205, 187, 144);
-        _auctionGrid.BorderStyle = BorderStyle.Fixed3D;
-        _auctionGrid.GridColor = Color.FromArgb(127, 103, 64);
-        _auctionGrid.EnableHeadersVisualStyles = false;
-        _auctionGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(80, 59, 35), ForeColor = DaocTheme.GoldLight,
-            SelectionBackColor = Color.FromArgb(80, 59, 35), Font = new Font("Georgia", 8.25f, FontStyle.Bold), Padding = new Padding(2),
-        };
-        _auctionGrid.DefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(215, 199, 157), ForeColor = DaocTheme.Ink,
-            SelectionBackColor = Color.FromArgb(117, 85, 45), SelectionForeColor = Color.White, Padding = new Padding(2),
-            Font = new Font("Georgia", 8.25f),
-        };
-        _auctionGrid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(201, 182, 138) };
-        _auctionGrid.ColumnHeadersHeight = 28;
-        _auctionGrid.RowTemplate.Height = 25;
+        // Parchment, not stone: the exchange keeps its own look inside the dark launcher.
+        DaocTheme.StyleGrid(_auctionGrid, DaocGridTone.Parchment);
         _auctionGrid.DataSource = _auctionSource;
         _auctionGrid.Columns.Add(TextColumn("Item", "ItemName", 230, DataGridViewAutoSizeColumnMode.Fill));
         _auctionGrid.Columns.Add(TextColumn("Seller", "Seller", 130));
@@ -1611,34 +1627,14 @@ internal sealed partial class MainForm : Form
         _grid.RowHeadersVisible = false;
         _grid.MultiSelect = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.BackgroundColor = DaocTheme.StoneDark;
-        _grid.BorderStyle = BorderStyle.Fixed3D;
-        _grid.GridColor = Color.FromArgb(78, 70, 56);
-        _grid.EnableHeadersVisualStyles = false;
-        _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(61, 54, 43),
-            ForeColor = DaocTheme.GoldLight,
-            SelectionBackColor = Color.FromArgb(61, 54, 43),
-            Font = new Font("Georgia", 8.25f, FontStyle.Bold),
-            Padding = new Padding(2),
-        };
-        _grid.DefaultCellStyle = new DataGridViewCellStyle
-        {
-            BackColor = Color.FromArgb(35, 31, 26),
-            ForeColor = DaocTheme.Text,
-            SelectionBackColor = Color.FromArgb(90, 72, 43),
-            SelectionForeColor = DaocTheme.GoldLight,
-            Padding = new Padding(2),
-            Font = new Font("Georgia", 8.25f),
-        };
-        _grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(42, 37, 30) };
-        _grid.ColumnHeadersHeight = 28;
-        _grid.RowTemplate.Height = 25;
+        DaocTheme.StyleGrid(_grid);
+        // Long headers ("Realm Points") wrap onto two lines so the columns can narrow at 960 px.
+        _grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
         _grid.DataSource = _botSource;
         _grid.Columns.Add(TextColumn("Name", "Name", 120));
-        _grid.Columns.Add(TextColumn("Realm", "Realm", 70));
-        _grid.Columns.Add(TextColumn("Race", "RaceName", 85));
+        _grid.Columns.Add(TextColumn("Realm", "Realm", 88));
+        _grid.Columns.Add(TextColumn("Race", "RaceName", 95));
         _grid.Columns.Add(TextColumn("Gender", "Gender", 60));
         _grid.Columns.Add(TextColumn("Class", "ClassName", 105));
         _grid.Columns.Add(TextColumn("Type", "PlayerType", 95));
@@ -1651,6 +1647,7 @@ internal sealed partial class MainForm : Form
         _grid.Columns.Add(TextColumn("Task left", "TaskRemaining", 95));
         _grid.Columns.Add(TextColumn("Activity", "Activity", 210, DataGridViewAutoSizeColumnMode.Fill));
         _grid.Columns.Add(TextColumn("State", "State", 65));
+        UseFillColumns(_grid);
         foreach (DataGridViewColumn column in _grid.Columns)
             column.SortMode = DataGridViewColumnSortMode.Programmatic;
         _grid.ColumnHeaderMouseClick += (_, eventArgs) => SortBotsByColumn(eventArgs.ColumnIndex);
@@ -1658,15 +1655,7 @@ internal sealed partial class MainForm : Form
         {
             if (eventArgs.RowIndex < 0 || eventArgs.ColumnIndex < 0 || _grid.Rows[eventArgs.RowIndex].DataBoundItem is not BotRow bot) return;
             if (_grid.Columns[eventArgs.ColumnIndex].DataPropertyName == "Realm")
-            {
-                eventArgs.CellStyle.ForeColor = bot.Realm switch
-                {
-                    "Albion" => Color.FromArgb(225, 116, 105),
-                    "Midgard" => Color.FromArgb(124, 161, 215),
-                    "Hibernia" => Color.FromArgb(112, 178, 112),
-                    _ => Color.White,
-                };
-            }
+                eventArgs.CellStyle.ForeColor = DaocTheme.RealmColor(bot.Realm);
 
             if (!bot.IsOnline)
             {
@@ -1709,8 +1698,28 @@ internal sealed partial class MainForm : Form
             deleteItem.Enabled = canDelete;
             args.Cancel = bot == null || !canTeleport && !canDelete;
         };
+        DaocMenu.Style(menu);
         _grid.ContextMenuStrip = menu;
         return _grid;
+    }
+
+    // Fill mode keeps every column on screen at the default width. Each column keeps its
+    // original width as its share of the free space. With wrapped headers a column may narrow to
+    // its widest header word; otherwise it keeps its whole one-line header.
+    private static void UseFillColumns(DataGridView grid, bool wrapHeaders = true)
+    {
+        foreach (DataGridViewColumn column in grid.Columns)
+        {
+            int headerWidth = wrapHeaders
+                ? column.HeaderText.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(word => TextRenderer.MeasureText(word, DaocTheme.Fonts.Bold, Size.Empty, TextFormatFlags.NoPadding).Width)
+                    .DefaultIfEmpty(0).Max()
+                : TextRenderer.MeasureText(column.HeaderText, DaocTheme.Fonts.Bold, Size.Empty, TextFormatFlags.NoPadding).Width;
+            column.FillWeight = Math.Max(2f, column.Width);
+            // Sortable headers reserve room for the sort glyph and padding (about 24 px).
+            column.MinimumWidth = Math.Max(44, headerWidth + 24);
+            column.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        }
     }
 
     private async Task RefreshDashboardAsync()
@@ -1924,6 +1933,20 @@ internal sealed partial class MainForm : Form
             _botRpRate.Enabled = editable;
             _makeMeGm.Checked = snapshot.MakeMeGm;
             _makeMeGm.Enabled = editable;
+            _realmRankNameplates.Checked = snapshot.RealmRankNameplates;
+            _realmRankNameplates.Enabled = editable;
+            _botRealmRankNameplates.Checked = snapshot.BotRealmRankNameplates;
+            _botRealmRankNameplates.Enabled = editable;
+            string nameplateHelp = editable
+                ? "Shows the realm rank after companion and player names on nameplates. Applies at the next server startup."
+                : "Stop the server before changing this setting.";
+            string botNameplateHelp = editable
+                ? "Shows the realm rank after autonomous world bot names on nameplates (on by default). Applies at the next server startup."
+                : "Stop the server before changing this setting.";
+            _helpTip.SetToolTip(_realmRankNameplates, nameplateHelp);
+            _helpTip.SetToolTip(_realmRankNameplatesNote, nameplateHelp);
+            _helpTip.SetToolTip(_botRealmRankNameplates, botNameplateHelp);
+            _helpTip.SetToolTip(_botRealmRankNameplatesNote, botNameplateHelp);
             if (_savingXpRates)
             {
                 _xpSettingsStatus.ForeColor = DaocTheme.Success;
@@ -1993,7 +2016,7 @@ internal sealed partial class MainForm : Form
             return;
         }
         _savingXpRates = true;
-        _makeMeGm.Enabled = _playerXpRate.Enabled = _botXpRate.Enabled = _playerRpRate.Enabled = _botRpRate.Enabled = _startButton.Enabled = false;
+        _makeMeGm.Enabled = _realmRankNameplates.Enabled = _botRealmRankNameplates.Enabled = _playerXpRate.Enabled = _botXpRate.Enabled = _playerRpRate.Enabled = _botRpRate.Enabled = _startButton.Enabled = false;
         _xpSettingsStatus.Text = "APPLYING GM SETTING…";
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         try { await Task.Run(() => PersistGmSetting(enabled)); }
@@ -2036,6 +2059,8 @@ internal sealed partial class MainForm : Form
         _playerRpRate.Enabled = false;
         _botRpRate.Enabled = false;
         _makeMeGm.Enabled = false;
+        _realmRankNameplates.Enabled = false;
+        _botRealmRankNameplates.Enabled = false;
         _startButton.Enabled = false;
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         string target = key switch
@@ -2068,6 +2093,49 @@ internal sealed partial class MainForm : Form
             _ => "Autonomous player-bot realm point rate selected in the Offline DAoC launcher.",
         };
         ServerPropertyRows.Upsert(_database, "rates", [new ServerPropertyRow(key, description, "1", stored)]);
+    }
+
+    private async Task SaveNameplateSettingAsync(CheckBox checkBox, string key, string description, string defaultValue)
+    {
+        if (_loadingXpRates || _savingXpRates) return;
+        bool enabled = checkBox.Checked;
+        if (IsServerRunning() || HasExactServerProcess())
+        {
+            MessageBox.Show(this, "Stop the server before changing the nameplate setting.", "Server is running",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            await RefreshDashboardAsync();
+            return;
+        }
+
+        _savingXpRates = true;
+        _realmRankNameplates.Enabled = false;
+        _botRealmRankNameplates.Enabled = false;
+        _xpSettingsStatus.ForeColor = DaocTheme.Success;
+        _xpSettingsStatus.Text = "APPLYING NAMEPLATE SETTING…";
+        try
+        {
+            await Task.Run(() => PersistNameplateSetting(key, description, defaultValue, enabled));
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "Unable to save nameplate setting", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _savingXpRates = false;
+            await RefreshDashboardAsync();
+        }
+    }
+
+    private void PersistNameplateSetting(string key, string description, string defaultValue, bool enabled)
+    {
+        bool serverRunning = _persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess());
+        if (serverRunning)
+            throw new InvalidOperationException("The server started before the setting could be saved. Stop it and try again.");
+        if (!File.Exists(_database))
+            throw new InvalidOperationException("The prepared world database is missing.");
+        ServerPropertyRows.Upsert(_database, "pvp",
+            [new ServerPropertyRow(key, description, defaultValue, enabled ? "true" : "false")]);
     }
 
     private LiveBotSnapshot? RequestLiveBotSnapshot()
@@ -2335,7 +2403,11 @@ internal sealed partial class MainForm : Form
             makeMeGm = string.Equals(gm.ExecuteScalar()?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         }
         return new DashboardSnapshot(serverState, bots, groups, active, memoryMb, tickP95Ms, playerXpRate, botXpRate,
-            playerRpRate, botRpRate, makeMeGm, ReadRvrWorld(), WorldSimulationClock.ReadCheckpoint(connection));
+            playerRpRate, botRpRate, makeMeGm, ReadRvrWorldSnapshot(_serverDirectory, _database), WorldSimulationClock.ReadCheckpoint(connection))
+        {
+            RealmRankNameplates = ReadServerFlag(connection, RealmRankNameplateKey),
+            BotRealmRankNameplates = ReadServerFlag(connection, BotRealmRankNameplateKey, fallback: true),
+        };
     }
 
     private static double ReadServerRate(SQLiteConnection connection, string key, double fallback)
@@ -2350,6 +2422,20 @@ internal sealed partial class MainForm : Form
             System.Globalization.CultureInfo.InvariantCulture, out double parsed) && parsed > 0
             ? parsed
             : fallback;
+    }
+
+    // A missing row means the server has not stored the property yet, so it will start with its default (fallback).
+    private static bool ReadServerFlag(SQLiteConnection connection, string key, bool fallback = false)
+    {
+        if (!TableExists(connection, "ServerProperty"))
+            return fallback;
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Value FROM ServerProperty WHERE `Key`=@key LIMIT 1";
+        command.Parameters.AddWithValue("@key", key);
+        object? value = command.ExecuteScalar();
+        if (value == null || value is DBNull)
+            return fallback;
+        return string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static GroupMetadata? ParseGroupMetadata(string raw)
@@ -2385,43 +2471,22 @@ internal sealed partial class MainForm : Form
 
     private void RenderActiveRvr()
     {
-        string realm = _rvrRealm.SelectedItem?.ToString() ?? "All realms";
-        string search = _rvrSearch.Text.Trim();
-        List<BotRow> activeRvr = _bots
-            .Where(bot => bot.IsOnline && !bot.DeletionQueued && bot.ObjectiveKind.Equals("RvR", StringComparison.OrdinalIgnoreCase))
-            .Where(bot => (realm == "All realms" || bot.Realm == realm) &&
-                (search.Length == 0 || $"{bot.Name} {bot.ClassName} {bot.ZoneName} {bot.Activity}".Contains(search, StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(bot => bot.Realm, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(bot => bot.GroupId.Length == 0 ? "~" : bot.GroupId, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(bot => bot.Level)
-            .ThenBy(bot => bot.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        object Key(BotRow bot) => _rvrSortProperty switch
-        {
-            "Level" => bot.Level,
-            "TaskRemaining" => bot.RemainingMilliseconds ?? long.MaxValue,
-            _ => typeof(BotRow).GetProperty(_rvrSortProperty)?.GetValue(bot)?.ToString() ?? bot.Name
-        };
-        activeRvr = (_rvrSortAscending ? activeRvr.OrderBy(Key) : activeRvr.OrderByDescending(Key)).ThenBy(bot => bot.Name).ToList();
-        _rvrSource.DataSource = activeRvr;
-        _rvrSource.ResetBindings(false);
-        foreach (DataGridViewColumn column in _rvrGrid.Columns)
-            column.HeaderCell.SortGlyphDirection = column.DataPropertyName == _rvrSortProperty
-                ? _rvrSortAscending ? SortOrder.Ascending : SortOrder.Descending : SortOrder.None;
         RenderRealmEvents();
         _rvrUpdated.Text = _rvrWorld == null ? "FRONTIER EVENTS — awaiting the server's first snapshot"
             : $"FRONTIER EVENTS  ·  {(_rvrServerRunning ? DateTime.UtcNow - _rvrWorld.UpdatedUtc > TimeSpan.FromMinutes(6) ? "Old snapshot" : "Snapshot" : "Server stopped — last known state")} {_rvrWorld.UpdatedUtc.ToLocalTime():g}  ·  Red: battle/drop  ·  Purple: relic carrier  ·  Gold: rally";
     }
 
-    private RvrWorldSnapshot? ReadRvrWorld()
+    // Runs on a worker thread. The keep/relic reset time is read from the save on each call, so a
+    // reset hides older snapshots without any UI-thread cache.
+    private static RvrWorldSnapshot? ReadRvrWorldSnapshot(string serverDirectory, string database)
     {
         try
         {
-            string path = Path.Combine(_serverDirectory, "rvr-world.json");
+            string path = Path.Combine(serverDirectory, "rvr-world.json");
             if (!File.Exists(path) || new FileInfo(path).Length > 4_000_000) return null;
             var snapshot = System.Text.Json.JsonSerializer.Deserialize<RvrWorldSnapshot>(File.ReadAllText(path));
-            _keepRelicResetUtc ??= KeepRelicReset.ReadResetUtc(_database);
-            return snapshot?.UpdatedUtc.ToUniversalTime() < _keepRelicResetUtc.Value ? null : snapshot;
+            DateTime resetUtc = KeepRelicReset.ReadResetUtc(database);
+            return snapshot?.UpdatedUtc.ToUniversalTime() < resetUtc ? null : snapshot;
         }
         catch (SQLiteException) { return null; }
         catch (IOException) { return null; }
@@ -2434,6 +2499,7 @@ internal sealed partial class MainForm : Form
         var search = _search.Text.Trim();
         IEnumerable<BotRow> filtered = _bots.Where(bot =>
             (!_onlineOnly.Checked || bot.IsOnline) &&
+            (_showCompanions.Checked || !(bot.IsCompanion || bot.Activity == "Companion")) &&
             (realm == "All realms" || bot.Realm == realm) &&
             (search.Length == 0 || $"{bot.Name} {bot.Realm} {bot.RaceName} {bot.Gender} {bot.ClassName} {bot.PlayerType} {bot.GuildName} {bot.GuildCharter} {bot.ZoneName} {bot.Activity}".Contains(search, StringComparison.OrdinalIgnoreCase)));
         _botSource.DataSource = SortBots(filtered).ToList();
@@ -3531,7 +3597,7 @@ internal sealed partial class MainForm : Form
         }
     }
 
-    private bool IsServerRunning()
+    private static bool IsServerRunning()
     {
         return IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(endpoint => endpoint.Port == 10300);
     }
@@ -3732,7 +3798,7 @@ internal sealed partial class MainForm : Form
         content.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         if (action != null)
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
         var captionLabel = new Label
         {
@@ -3783,15 +3849,7 @@ internal sealed partial class MainForm : Form
         SortMode = DataGridViewColumnSortMode.Automatic,
     };
 
-    private static void StyleInput(Control input)
-    {
-        input.BackColor = Color.FromArgb(59, 53, 43);
-        input.ForeColor = DaocTheme.Text;
-        input.Font = new Font("Georgia", 8.25f);
-        input.Margin = new Padding(0, 0, 8, 0);
-        input.Height = 27;
-        if (input is TextBox textBox) textBox.BorderStyle = BorderStyle.FixedSingle;
-    }
+    private static void StyleInput(Control input) => DaocTheme.StyleInput(input);
 
     private void OpenFolder(string path)
     {
@@ -3953,7 +4011,12 @@ internal sealed partial class MainForm : Form
     }
     private sealed record DashboardSnapshot(string ServerState, List<BotRow> Bots, List<GroupRow> Groups,
         int Active, double ServerMemoryMb, double TickP95Ms, double PlayerXpRate, double BotXpRate,
-        double PlayerRpRate, double BotRpRate, bool MakeMeGm = false, RvrWorldSnapshot? RvrWorld = null, WorldSimulationClockRead? SavedSimulationClock = null);
+        double PlayerRpRate, double BotRpRate, bool MakeMeGm = false, RvrWorldSnapshot? RvrWorld = null, WorldSimulationClockRead? SavedSimulationClock = null)
+    {
+        // Set by the snapshot reader; not a constructor parameter, so the positional shape stays as it was.
+        public bool RealmRankNameplates { get; init; }
+        public bool BotRealmRankNameplates { get; init; } = true;
+    }
 
     private sealed record LiveBotStatus(long BotId, int Level, string ZoneName, string Activity,
         string CurrentGoal, string TargetName, string TravelDestination, string ObjectiveProgress,
@@ -3993,4 +4056,7 @@ internal sealed partial class MainForm : Form
     {
         public override string ToString() => Label;
     }
+    private sealed record LiveStateRequest(DateTime NowUtc, bool ProcessAlive, bool ReadSavedClock, bool ReadRvr);
+    private sealed record WorldSpeedReading(bool Running, WorldSpeedStatus? Status, string? UnavailableReason, WorldSimulationClockRead? SavedClock);
+    private sealed record LiveStateReading(WorldSpeedReading WorldSpeed, RvrWorldSnapshot? Rvr, bool RvrRead);
 }

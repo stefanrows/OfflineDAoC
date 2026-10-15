@@ -343,6 +343,30 @@ spell over one, unless it is the assist target (the caller's target, or its
 own when it leads or roams alone). Log: `RVR_ASSIST_SWITCH switches=...
 ignored=... median_delay_ms=...` every five minutes.
 
+## Being attacked (0.271.0)
+
+A world bot hit by another player-shaped fighter (a player, a companion, a
+world bot, or their pets) reacts like a person, not like a mob
+(`bots/BotIncomingFireReaction.cs`, `BotBrain.IncomingFire.cs`; the full
+rules are in `GOTHWAITE_PVP_MODE.md` 13.6, they apply in both modes):
+
+- The hit that pulls it into combat draws one reaction hold: melee 300–800
+  ms, a single-target spell or arrow 500–1,200, an area splash 900–2,200, a
+  mate's hit 800–1,800; guard tanks ×0.8, pure casters ×1.15, Aggression 15
+  ×1.3 to 85 ×0.75, +0.5–1 s for an attacker behind the bot; capped at
+  2.5 s. While it runs the bot only heals and cures. A melee attacker in
+  reach ends it. A damage dealer in a called group then waits up to 1.5 s
+  more for the caller, unless there is only one enemy on its list.
+- An area splash from a distance is threat, not a personal call: the kill
+  order above decides. A bomber inside the group is a direct hit.
+- A direct attacker overrides the kill order only in melee reach, or when
+  the bot has no other player-shaped target; a bot on a mob drops the mob
+  for a ganker at once.
+- A healer with three or more dotted members casts the group cure first.
+
+Companions led by a player, temporary helpers, battleground encounter bots
+and hits from mobs keep the immediate reaction.
+
 ## After a fight
 
 Evidence: "just 2 minutes to rebuff and reg" (1-2 min normal, about 5 after

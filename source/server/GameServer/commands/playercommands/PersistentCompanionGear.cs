@@ -80,7 +80,12 @@ namespace DOL.GS.Commands
         }
 
         public static bool TryUnequip(GamePlayer owner, string companionId, eInventorySlot slot, string expectedItemId,
-            out string message)
+            out string message) =>
+            TryUnequip(owner, companionId, slot, expectedItemId, eInventorySlot.Invalid, out message);
+
+        /// <param name="backpackSlot">The companion backpack slot the item was dropped on; used when it is empty.</param>
+        public static bool TryUnequip(GamePlayer owner, string companionId, eInventorySlot slot, string expectedItemId,
+            eInventorySlot backpackSlot, out string message)
         {
             if (!PlayerCompanionRoster.TryGetActiveCompanionById(owner, companionId, out GameBot companion) ||
                 companion.Inventory == null)
@@ -93,12 +98,16 @@ namespace DOL.GS.Commands
                 {
                     if (!ReferenceEquals(companion.Inventory.GetItem(slot), item))
                         return false;
-                    eInventorySlot backpack = companion.Inventory.FindFirstEmptySlot(
-                        eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+                    eInventorySlot backpack =
+                        backpackSlot is >= eInventorySlot.FirstBackpack and <= eInventorySlot.LastBackpack &&
+                        companion.Inventory.GetItem(backpackSlot) == null
+                            ? backpackSlot
+                            : companion.Inventory.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
                     if (backpack == eInventorySlot.Invalid ||
                         !companion.Inventory.MoveItem(slot, backpack, Math.Max(1, item.Count)))
                         return false;
-                    PlayerCompanionRoster.SetEquipmentSlotLocked(companion.PlayerCompanionRecord, slot, false);
+                    // The owner's empty slot: earned gear may still fill it, the starter kit refresh may not.
+                    PlayerCompanionRoster.SetEquipmentSlotMark(companion.PlayerCompanionRecord, slot, eCompanionSlotMark.Manual);
                     return true;
                 }, out _, requiredFreeBackpackSlots: 1))
             {
@@ -107,7 +116,8 @@ namespace DOL.GS.Commands
             }
             companion.RefreshPersistentCompanionEquipment(
                 slot is eInventorySlot.RightHandWeapon or eInventorySlot.LeftHandWeapon or eInventorySlot.TwoHandWeapon);
-            message = $"{item.Name} moved to {companion.Name}'s backpack; the {SlotName(slot)} slot is unlocked.";
+            message = $"{item.Name} moved to {companion.Name}'s backpack. The {SlotName(slot)} slot stays empty until you " +
+                      $"equip something or {companion.Name} finds better gear.";
             return true;
         }
 

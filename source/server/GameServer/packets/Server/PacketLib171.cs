@@ -351,7 +351,7 @@ namespace DOL.GS.PacketHandler
 				if (player != null)
 				{
 					pak.WritePascalString(GameServer.ServerRules.GetPlayerGuildName(m_gameClient.Player, player));
-					pak.WritePascalString(GameServer.ServerRules.GetPlayerLastName(m_gameClient.Player, player));
+					pak.WritePascalString(RealmRankNameplate.PlayerLastName(player, GameServer.ServerRules.GetPlayerLastName(m_gameClient.Player, player)));
 				}
 				else if (!updateStrings)
 				{
@@ -360,7 +360,7 @@ namespace DOL.GS.PacketHandler
 				else
 				{
 					pak.WritePascalString(living.GuildName);
-					pak.WritePascalString(living.Name);
+					pak.WritePascalString(RealmRankNameplate.NpcName(living as GameNPC, living.Name));
 				}
 
 				SendTCP(pak);

@@ -70,6 +70,30 @@ namespace DOL.UnitTests
         }
 
         [Test]
+        public void ReclaimHoldKeepsOptionalConcentrationOffUntilItExpires()
+        {
+            const long now = 100_000;
+            long holdUntil = now + BotBuffTargetPolicy.ReclaimHoldMilliseconds;
+            Assert.That(BotBuffTargetPolicy.HoldsOptionalCast(Need.Optional, true, now, holdUntil), Is.True,
+                "the optional refill must not take the points a required newcomer was just given");
+            Assert.That(BotBuffTargetPolicy.HoldsOptionalCast(Need.Optional, true, holdUntil - 1, holdUntil), Is.True);
+            Assert.That(BotBuffTargetPolicy.HoldsOptionalCast(Need.Optional, true, holdUntil, holdUntil), Is.False,
+                "the hold ends at its deadline");
+        }
+
+        [Test]
+        public void ReclaimHoldNeverDelaysRequiredOrNonConcentrationBuffs()
+        {
+            const long now = 100_000;
+            long holdUntil = now + BotBuffTargetPolicy.ReclaimHoldMilliseconds;
+            Assert.That(BotBuffTargetPolicy.HoldsOptionalCast(Need.Required, true, now, holdUntil), Is.False,
+                "the required newcomer itself is cast");
+            Assert.That(BotBuffTargetPolicy.HoldsOptionalCast(Need.None, true, now, holdUntil), Is.False);
+            Assert.That(BotBuffTargetPolicy.HoldsOptionalCast(Need.Optional, false, now, holdUntil), Is.False,
+                "a duration buff does not use concentration, so it is not held");
+        }
+
+        [Test]
         public void PetsAndUnknownTargetsTakeEverything() =>
             Assert.That(BotBuffTargetPolicy.NeedOf(Buff("AcuityBuff"), null, false, false), Is.EqualTo(Need.Required));
     }

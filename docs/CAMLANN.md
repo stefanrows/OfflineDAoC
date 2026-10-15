@@ -535,6 +535,22 @@ before building on it. If the client cannot target or attack a same-realm NPC,
 per-viewer realm spoofing in `GetLivingRealm` (hostile bot → a realm different
 from the viewer) is the likely fix. Verify; do not assume.
 
+Realm rank on nameplates is a presentation-only suffix. Autonomous world bots
+follow `show_bot_realm_rank_nameplates` (on by default, 0.259.0); persistent
+companions and players follow `show_realm_rank_nameplates` (off by default).
+Autonomous bots and persistent companions get
+` | RR xLy` after their name in the NPC create and the living-data name; players
+get it in the last-name string of the player create and the living-data update
+(`| RR xLy` when the player has no last name). The suffix is only sent when it fits
+the limits the create packets are sized for: 45 characters for NPC names and 31 for
+player last names (from static analysis of game.dll; not yet re-checked in a client).
+Otherwise the plain text is sent; names are never cut to make room.
+Temporary `/spawn` helpers, battleground actors and ordinary NPCs stay plain. The
+viewer's own character panel (`PacketLib179.SendUpdatePlayer`) and the group window
+are not suffixed. A rank change re-sends the bot's create packet, or the player's
+living strings, to nearby players. Real-client checks are pending: the last-name
+slot on screen for characters below RR5, and the bot nameplate after a rank-up.
+
 ---
 
 ## Tier 0 — Project bootstrap and world reset

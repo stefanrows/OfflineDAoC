@@ -8,7 +8,7 @@ namespace DOL.GS.Commands
 {
 
     [CmdAttribute("&companions", ePrivLevel.Player,
-        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help [topic] | status [page or name] | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
+        "Open the Companion Manager, or manage your roster, cast, tactics, training, and equipment by command", "/companions [find <name or class> | help [topic] | status [page or name] | list | cast | recruit <class> [build] | recruit authored <name> [build] | invite <name> | bench <name> | guild leave <name> | reset [name] | profile <name> | role <name> tank|healer|buffer|attacker|cc | stance <name> aggressive|defensive|passive | group default | bar [on|off] | mode <name> manual|automatic | plan <name> | build <name> [build] | train <name> <line> <level> | respec <name> | squad <1-5> add|remove|lead <name> | squad <1-5> disband | squad list]")]
     public sealed class PlayerCompanionCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         internal const string CompanionRespecProperty = "PLAYER_COMPANION_FULL_RESPEC_ID";
@@ -41,8 +41,8 @@ namespace DOL.GS.Commands
                     ShowStatus(client, player, args);
                     break;
                 case "ui":
-                    // One Custom8 window per client: the click goes to the manager that owns it (the open BG manager or this one).
-                    if (args.Length == 4 && CompanionWindowOwner.RoutesToOpenBg(player))
+                    // One Custom8 window per client: the click goes to the manager that owns it (the open BG manager or this one); the COMPANIONS and GEAR windows are independent of it.
+                    if (args.Length == 4 && CompanionWindowOwner.RoutesToOpenBg(player) && !CompanionManager.IsIndependentWindowControl(args[2], args[3]))
                         OpenBgManager.HandleClientControl(player, args[2], args[3]);
                     else if (args.Length == 4)
                         CompanionManager.HandleClientControl(player, args[2], args[3]);
@@ -76,6 +76,13 @@ namespace DOL.GS.Commands
                         DisplayMessage(client, CompanionGroupOrders.UseSavedStances(player));
                     }
                     else ShowUsage(client);
+                    break;
+                case "bar":
+                    DisplayMessage(client, CompanionBar.Command(player, args.Length > 2 ? args[2] : null));
+                    break;
+                case "gear":
+                case "gearprobe":
+                    DisplayMessage(client, CompanionGearWindow.Command(player, args.Skip(2)));
                     break;
                 case "invite":
                     UpdateCompanion(client, player, args, invite: true);
@@ -146,7 +153,7 @@ namespace DOL.GS.Commands
                 DisplayMessage(client, $"{TemporaryGroupClassCatalog.RealmName((eRealm)realmGroup.Key)}:");
                 foreach (PlayerCompanionRecord record in realmGroup)
                 {
-                    string state = record.IsActive ? "active" : "benched";
+                    string state = PlayerCompanionRoster.RosterStateLabel(record, player);
                     string xpProgress = record.Level >= 50
                         ? $"XP {record.Experience:N0} (max level)"
                         : $"XP {record.Experience:N0}/{GamePlayer.GetExperienceAmountForLevel(record.Level):N0}";
@@ -628,7 +635,7 @@ namespace DOL.GS.Commands
                     DisplayMessage(client, "Use /companions status [page or name].");
                     return;
                 }
-                selected = roster.Where(record => record.IsActive)
+                selected = roster.Where(record => PlayerCompanionRoster.IsActiveFor(record, player))
                     .OrderBy(record => record.SquadIndex).ThenBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }
@@ -637,7 +644,7 @@ namespace DOL.GS.Commands
             page = named ? 1 : Math.Clamp(page, 1, pages);
             var lines = new List<string>
             {
-                $"Roster: {roster.Count} saved; {roster.Count(record => record.IsActive)} marked active.",
+                $"Roster: {roster.Count} saved; {roster.Count(record => PlayerCompanionRoster.IsActiveFor(record, player))} marked active.",
                 CompanionEngagementMode.TryGetGroupOrder(player, out eCompanionEngagementMode order)
                     ? $"Group order: {order.ToString().ToLowerInvariant()} (overrides saved stances)."
                     : "Group order: saved individual stances."
@@ -670,7 +677,9 @@ namespace DOL.GS.Commands
                         $"{bot.UnspentSpecPoints} spec points; bag {bagCount}/40";
                 }
                 else
-                    readiness = record.IsActive ? "active elsewhere or unavailable here" : "benched";
+                    readiness = PlayerCompanionRoster.IsReservedByOtherCharacter(record, player)
+                        ? $"grouped with {PlayerCompanionRoster.ReservingCharacterName(record, player)} on another character"
+                        : PlayerCompanionRoster.IsActiveFor(record, player) ? "active elsewhere or unavailable here" : "benched";
 
                 lines.Add($"{record.Name}, level {record.Level}: {assignment}; {readiness}.");
                 lines.Add($"  {details}.");
@@ -687,12 +696,21 @@ namespace DOL.GS.Commands
         {
             string[] lines = (topic ?? string.Empty).ToLowerInvariant() switch
             {
+                "bar" => new[]
+                {
+                    "/companions bar on|off turns the COMPANIONS window on or off for this account.",
+                    "It appears while you are grouped or a companion is with you: a group window with stance tiles,",
+                    "Invite, Kick, Leader, Leave and Grind. Click a row to target; click a stance to cycle it.",
+                    "Bare /companions bar shows it again after you closed it with its X.",
+                    "The Companion Manager's Group orders panel has the same switch."
+                },
                 "roster" => new[]
                 {
                     "/companions list | status [page or name] | profile <name>",
                     "/companions recruit <class> [build] (free, level 1, anywhere). /classes lists names.",
                     "/companions cast [realm] [page] | recruit authored <name> [build]",
-                    "/companions invite <name> | bench <name> | guild leave <name>"
+                    "/companions invite <name> | bench <name> | guild leave <name>",
+                    "/companions gear [name] opens a companion's gear window: click your item, then a slot."
                 },
                 "tactics" => new[]
                 {
@@ -733,7 +751,7 @@ namespace DOL.GS.Commands
                     "Bare /companions opens the Companion Manager with its client extension.",
                     "/companions find <name or class> searches the manager; /companions list works by chat.",
                     "/companions status [page or name] opens a live readiness snapshot.",
-                    "/companions help roster | tactics | training | squads | recovery",
+                    "/companions help roster | tactics | training | squads | recovery | bar",
                     "Start: /classes, then /companions recruit <class>, then /companions invite <name>.",
                     "Saved companions keep progress and gear. /spawn helpers are temporary."
                 }

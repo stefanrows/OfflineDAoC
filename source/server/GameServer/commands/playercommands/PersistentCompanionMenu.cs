@@ -99,7 +99,7 @@ namespace DOL.GS.Commands
             page = Math.Clamp(page, 0, pageCount - 1);
             var lines = new List<string> { $"Companions ({roster.Count}/{PlayerCompanionRoster.MaximumRosterSize}), page {page + 1}/{pageCount}:" };
             var entries = roster.OrderBy(record => record.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(record => (Label: $"{record.Name}, level {record.Level} {(eCharacterClass)record.ClassId} ({(record.IsActive ? "active" : "benched")})",
+                .Select(record => (Label: $"{record.Name}, level {record.Level} {(eCharacterClass)record.ClassId} ({PlayerCompanionRoster.RosterStateLabel(record, _owner)})",
                     Action: (Action)(() => ShowDetails(record.CompanionId))))
                 .Append((Label: "Recruit generated or browse authored", Action: (Action)(() => ShowRecruit(0))))
                 .Skip(page * PageSize).Take(PageSize).ToArray();
@@ -225,7 +225,7 @@ namespace DOL.GS.Commands
             {
                 $"{record.Name} — level {record.Level} {(eCharacterClass)record.ClassId}",
                 $"Training: {record.TrainingMode}; {record.UnspentSpecPoints} unspent points.",
-                Link(record.IsActive ? "Bench" : "Invite", () => RunRosterAction(companionId)),
+                Link(PlayerCompanionRoster.IsActiveFor(record, _owner) ? "Bench" : "Invite", () => RunRosterAction(companionId)),
                 Link("Manual training mode", () => SetTrainingMode(companionId, automatic: false)),
                 Link("Automatic training plan", () => SetTrainingMode(companionId, automatic: true)),
                 Link("Character and tactics", () => ShowCharacter(companionId)),

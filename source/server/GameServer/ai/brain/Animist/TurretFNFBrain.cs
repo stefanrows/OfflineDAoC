@@ -86,6 +86,7 @@ namespace DOL.AI.Brain
 
         protected bool CanConsiderProximityTarget(GameLiving target)
         {
+            if (Owner is GameBot ownerBot && GothwaitePvpSelfDefence.Drops(ownerBot, target)) return false;
             if (Body is TurretFnfPet && Owner is GameBot { IsAutonomousWorldBot: true } bot && BotAnimistPolicy.AppliesTo(bot))
                 return AggroLevel > 0 && target != null && !bot.IsObjectGreyCon(target) &&
                     GameServer.ServerRules.IsAllowedToAttack(Body, target, true);

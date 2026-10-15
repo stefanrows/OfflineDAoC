@@ -10,7 +10,8 @@ internal sealed class ExchangeSalesForm : Form
     private readonly DataGridView _grid = new();
     private readonly ComboBox _realm = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 135 };
     private readonly Label _status = new() { Dock = DockStyle.Fill, ForeColor = DaocTheme.GoldLight, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Button _refresh = new() { Text = "REFRESH", AutoSize = true, BackColor = DaocTheme.Panel, ForeColor = DaocTheme.GoldLight };
+    private readonly Button _refresh = DaocTheme.ToolButton("REFRESH");
+    private readonly Icon? _windowIcon;
     private List<SaleRow> _rows = [];
     private bool _loading;
 
@@ -25,6 +26,8 @@ internal sealed class ExchangeSalesForm : Form
         ForeColor = DaocTheme.GoldLight;
         Font = new Font("Georgia", 9f);
         AutoScaleMode = AutoScaleMode.Dpi;
+        _windowIcon = LauncherIcon.Create();
+        if (_windowIcon is not null) Icon = _windowIcon;
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(10) };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -32,6 +35,7 @@ internal sealed class ExchangeSalesForm : Form
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill };
         _realm.Items.AddRange(["All realms", "Albion", "Midgard", "Hibernia"]);
         _realm.SelectedIndex = 0;
+        DaocTheme.StyleInput(_realm);
         _realm.SelectedIndexChanged += (_, _) => BindRows();
         _refresh.Click += async (_, _) => await RefreshAsync();
         toolbar.Controls.Add(_realm);
@@ -46,11 +50,7 @@ internal sealed class ExchangeSalesForm : Form
         _grid.AutoGenerateColumns = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.RowHeadersVisible = false;
-        _grid.BackgroundColor = Color.FromArgb(205, 187, 144);
-        _grid.EnableHeadersVisualStyles = false;
-        _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(80, 59, 35), ForeColor = DaocTheme.GoldLight, Font = new Font("Georgia", 9f, FontStyle.Bold) };
-        _grid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(215, 199, 157), ForeColor = DaocTheme.Ink, SelectionBackColor = Color.FromArgb(117, 85, 45), SelectionForeColor = Color.White, Padding = new Padding(2) };
-        _grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(201, 182, 138) };
+        DaocTheme.StyleGrid(_grid, DaocGridTone.Parchment);
         _grid.RowTemplate.Height = 27;
         AddColumn("Sold (local time)", nameof(SaleRow.Sold), 155);
         AddColumn("Realm", nameof(SaleRow.Realm), 85);
@@ -65,6 +65,13 @@ internal sealed class ExchangeSalesForm : Form
         layout.Controls.Add(_status, 0, 2);
         Controls.Add(layout);
         Shown += async (_, _) => await RefreshAsync();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+            _windowIcon?.Dispose();
     }
 
     private void AddColumn(string title, string property, int width) => _grid.Columns.Add(new DataGridViewTextBoxColumn

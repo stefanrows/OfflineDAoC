@@ -12,6 +12,838 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.277.0] - 2026-10-15
+
+### Fixed
+
+- **The launcher's tab strip no longer flashes white when you hover a tab.**
+  The native tab control erased the strip in the system colour before every
+  owner-draw repaint, and hovering repaints it. The strip is now erased in
+  its own dark colour.
+
+## [0.276.0] - 2026-10-15
+
+### Added
+
+- **Starter gear is marked in the companion gear window** (TASKS 129): a
+  gold `*` in the corner of a slot marks an item that stays with the
+  companion, so you see it before a give is refused.
+
+### Changed
+
+- **The companion gear window is now part of the Companion Manager
+  client** (TASKS 129). `build_companion_manager_client.py` builds it into
+  the manager's own `game.dll` section, without the probe's debug status
+  codes. The title shows the companion's name, the backpack heading counts
+  its items, and the last reply to a move stays in the window.
+- **[Open inventory] in the Companion Manager opens the gear window**
+  instead of the House Vault list. An older manager client, which cannot
+  show the window, gets the House Vault list after three seconds, and at
+  once on later opens.
+- The command is now `/companions gear [name]` (`/companions gear off`
+  closes it). `/companions gearprobe` still works.
+- The manager client stage is `companion-manager-stage-0.276.0`
+  (`game.dll` `bfefe97d…`). `Install-CompanionManager.ps1` upgrades an
+  installed 0.272.0 manager or either paperdoll probe in place. It backs up
+  and restores `custom6_window.xml` too. The release pack ships the new
+  stage and may replace the 0.272.0 and probe client files.
+
+### Removed
+
+- The paperdoll probe tooling (`probe_companion_paperdoll.py`, its test
+  and `Install-CompanionPaperdollProbe.ps1`). The manager builder and its
+  emulation test now cover the window; the probe files remain in the
+  v0.275.0 history.
+
+## [0.275.0] - 2026-10-15
+
+### Added
+
+- **Companion gear window** with drag and drop (TASKS 129): the companion's
+  19 worn slots, labelled in three columns, and its 40-slot backpack as a
+  grid, with the items' real icons. Click one of your items, then a slot to
+  give or equip it; click a filled slot to pick its item up, then click
+  where it goes (another slot or your own bag). Open it with
+  `/companions gearprobe [name] [plain]` (`plain`: without the House Vault
+  list). Works in the real client. The window's client files are a
+  separate install (`tools/dev/Install-CompanionPaperdollProbe.ps1`, stage
+  built by `source/server/tools/probe_companion_paperdoll.py`) and are not
+  in the release pack yet. What is still open is listed in section 8 of
+  `docs/COMPANION_PAPERDOLL_RE.md`.
+
+### Changed
+
+- The companion inventory view (the paperdoll window, the House Vault list
+  of [Open inventory]) shows every backpack item, starter gear included.
+  Starter gear still stays with the companion: taking it out is refused
+  with a message.
+- An item given to a companion, unequipped into its backpack or returned to
+  you lands in the slot it was dropped on when that slot is empty, instead
+  of the first free one.
+- Bug 161 (0.274.0) is verified in the real client and moved to Finished.
+
+## [0.274.0] - 2026-10-15
+
+### Changed
+
+- **Unequipping a companion's item leaves the slot empty.** The Companion
+  Manager's [Unequip] and the paperdoll pick-up now mark the slot as your
+  choice. The starter kit no longer fills it at once with a newly created
+  piece, while earned gear may still go there. The reply now reads "...
+  stays empty until you equip something or <name> finds better gear".
+
+### Fixed
+
+- **Companions of another realm than yours can equip their armor again**
+  (bug 161). An owned companion takes its owner's realm, and so does the
+  starter gear made for it. The item rule then looked up the owner realm's
+  armor skill (a Midgard Shaman with an Albion owner has no Albion armor
+  skill) and refused class-realm loot. Manual equips, automatic upgrades
+  and merchant buys of armor failed for every such companion. The rule now
+  judges armor and weapon skills by the companion's class realm and
+  accepts items of either realm. Found when the manager's [Equip] refused
+  a Shaman's starter Chain Helm after the paperdoll probe (TASKS 129).
+- The real-client results of the 0.273.0 paperdoll probe (R1-R5 pass) and
+  the server findings for the full window are recorded in section 7 of
+  `docs/COMPANION_PAPERDOLL_RE.md`.
+
+## [0.273.0] - 2026-10-15
+
+### Added
+
+- game.dll analysis for a **companion paperdoll** with drag and drop
+  (`docs/COMPANION_PAPERDOLL_RE.md`, TASKS 129): the client's move-item
+  sender, item array and icon lookup, drag record and drag-source kinds,
+  and the stock quiver window as the pattern for item slots in an XML
+  window.
+- **Companion paperdoll probe** (research only, offline-tested; the owner's
+  real-client check is pending). A four-slot Custom6 window (the
+  companion's helm, chest and first two backpack slots) built on the
+  0.272.0 Companion Manager client:
+  - Click an item in your bag, then a slot: the client sends the stock
+    move-item packet and the companion equips or takes the item through the
+    existing inventory view and its protections. Click a filled slot to pick
+    its item up and click your bag to take it back.
+  - The window shows the items' real icons and a status line that reports
+    what the client did, for the probe's four questions.
+  - `/companions gearprobe [name] [plain]` opens it (`plain`: without the
+    House Vault window), `/companions gearprobe off` closes it.
+  - Builder `source/server/tools/probe_companion_paperdoll.py`, Unicorn test
+    `test_companion_paperdoll_probe.py`, installer
+    `tools/dev/Install-CompanionPaperdollProbe.ps1` (dry run by default,
+    backup and `-RestoreBackup`). The probe client files are not part of the
+    release pack.
+
+### Changed
+
+- Companion Manager protocol 3 gains operations 7-9 (paperdoll icon refresh,
+  show and hide Custom6); clients without the probe ignore them.
+
+## [0.272.0] - 2026-10-14
+
+### Added
+
+- **COMPANIONS window as a group window** (Custom7, task 128, offline only).
+  The window can now stand in for the stock group window:
+  - Member rows show what the group window shows, from the client's own
+    group adapters: power and endurance percent, a health bar with the name
+    over it and the health percent, class and level. The server adds each
+    companion's stance (Aggressive, Defensive, Passive, Assist train, Dead,
+    Away) and a gold leader mark. Rows cover every group member, players
+    included, and a click on a row still targets it.
+  - A click on a companion's stance cycles its saved stance (aggressive,
+    defensive, passive) through the roster's tactics path; the reply names a
+    group order that still overrides it.
+  - A third tile row: **Invite** (the client's stock invite on your target),
+    **Kick** (benches your targeted companion, dismisses a temporary helper,
+    or removes a player when you lead), **Leader** (hands the lead to the
+    targeted player), **Leave** (twice within 10 s; closes a companion raid
+    and dismisses temporary helpers like bare `/disband`) and
+    **Grind / Stop grind** (`/grind`). Disabled tiles explain why.
+  - The window now shows while you are in any group, not only while an owned
+    companion is with you; the status line reads "Group of N | no
+    companions" for a plain player group.
+  - Window 440×312 with five tiles per row; status and message lines widened.
+
+### Changed
+
+- Companion Manager client files (protocol 3 unchanged): `game.dll` now
+  registers 538 label adapters (98 for the COMPANIONS window: 14 tiles ×
+  4, 8 rows × 5) and `custom7_window.xml` is rebuilt; `custom8_window.xml`
+  and `uimain.xml` are byte-identical to 0.251.0. Controls 0xB2–0xB5 are
+  the new tiles and 0xB6–0xBD the row stance clicks. Install the new stage
+  with `tools/dev/Install-CompanionManager.ps1`: it now upgrades an
+  installed 0.251.0 build in place and backs up its window files. The
+  release pack defaults to `companion-manager-stage-0.272.0` and may replace
+  the 0.251.0 `game.dll` and `custom7_window.xml`. Until the client files
+  are updated the old window keeps working with the old tiles only; a
+  0.251.0 client ignores the new labels and sends no new controls.
+- `/companions bar` help, `docs/QUICK-COMMANDS.md`, `ALL SERVER COMMANDS.txt`
+  and `docs/COMPANION_MANAGER_INTEGRATION.md` describe the new window.
+- Offline checks: `UT_CompanionBar` (30 tests) and `UT_CompanionManager`
+  pass; the client emulation test passes on the 0.272.0 stage (538 adapters,
+  stock `GroupInvite` and `SelectGroupMember` events, no overlapping click
+  areas, server constants match); the installer's upgrade, re-apply and
+  restore were exercised on a scratch copy of the installed 0.251.0 client.
+  The real-client check is the owner's (task 128). The stage 6 integration
+  fixture fails at HEAD for an unrelated reason (see `docs/BUGS.md`).
+
+## [0.271.0] - 2026-10-14
+
+### Changed
+
+- **World bots answer a player's attack like players, not like mobs**
+  (`bots/BotIncomingFireReaction.cs`, `BotBrain.IncomingFire.cs`, task 127).
+  Owner report 2026-10-14: a Cabalist AoE-dotting a group of autonomous bots
+  saw every one of them turn and run at it the same tick, the way a mob camp
+  does. Every hit (each DoT tick included) made the bot adopt the attacker as
+  its personal priority target, entered its combat state at once and woke
+  its whole group the same tick. Now, for autonomous world bots hit by a
+  player-shaped fighter (a player, a companion, a world bot, or their pets),
+  in Gothwaite PvP mode and in the normal world:
+  - **A reaction delay.** The hit that pulls the bot into combat draws a
+    hold once: melee 300–800 ms, a single-target spell or arrow 500–1,200,
+    an area spell from a distance 900–2,200, a mate's hit 800–1,800; guard
+    tanks ×0.8, pure casters ×1.15, Aggression 15 ×1.3 down to 85 ×0.75,
+    +0.5–1 s when the attacker was behind the bot; capped at 2.5 s. During
+    the hold the bot only heals and cures. A melee attacker in reach ends
+    it at once. A damage dealer in a called group then waits up to 1.5 s
+    more for its leader's call, unless there is only one enemy to pick.
+  - **An area splash is not a personal call.** It adds threat but never
+    becomes the bot's priority attacker; the kill order (leader's call,
+    healers first, stickiness) decides. A bomber casting from inside the
+    group (point-blank radius + 100, or melee reach) is a direct hit.
+  - **A direct attacker overrides the kill order only in melee reach**, or
+    when the bot has no other player-shaped target. A bot fighting a mob
+    still drops the mob for a ganker at once.
+  - Mates hit by the same area spell draw the area delay, not the shorter
+    mate delay, so a group does not react faster to an AoE than a solo.
+  - **Group cure.** A healer with three or more dotted group members casts
+    the group cure first instead of one cure per member.
+  - Gothwaite PvP: the leader's "far chase" start is now the first
+    attacker's position when the fight was forced on the group; while the
+    group is still reacting it is not fixed on the leader's own spot.
+  - Unchanged: companions led by a player, temporary helpers, battleground
+    encounter bots, every hit from a mob, the casters' standoff range, the
+    retreat and fight-appetite rules, the 1–2 s /assist switch delay.
+  - A `BOT_INCOMING_FIRE` debug log line records each drawn hold (bot,
+    kind, hold, attacker). Rules in `docs/GOTHWAITE_PVP_MODE.md` 13.6.
+- Offline checks: server Release build passed; `UT_BotIncomingFireReaction`
+  (12 tests) and the Gothwaite, RvR doctrine and assist-train fixtures (276
+  tests) pass; the full suite was skipped under project policy. Real-client
+  check pending (task 127).
+
+## [0.270.0] - 2026-10-14
+
+### Added
+
+- **Assist train: `/assisttrain call`.** The main assist calls the selected
+  enemy without attacking it, the DAoC "on X" call, so a healer, mezzer or
+  bard owner can lead a companion train. Calling the same target again
+  re-engages companions that lost it. Every new call prints
+  "Assist train: calling X." to the owner.
+
+### Changed
+
+- **Assist train review against the DAoC main-assist model**
+  (`docs/COMPANION_BOTS.md`, task 126). In a classic train everyone mashes
+  `/assist <MA>` and lands on whatever the main assist is hitting; the
+  companion train now follows the owner the same way:
+  - With weapon attack mode on, selecting another enemy switches the call
+    at once, because the next swing goes there, instead of after the first
+    contact. A cast keeps its captured target and a bow on auto-fire keeps
+    its auto-fire target; selecting without attack mode still calls nothing.
+  - The pet window's attack order calls the ordered target, so a pet-class
+    main assist (Cabalist, Enchanter, Spiritmaster, Bonedancer, Theurgist)
+    calls by sending the pet. A pet's own aggro and pet casts still do not.
+  - A dead main assist drops the call, and until the owner lives again the
+    companions fight under the ordinary aggressive rules (finishing what
+    they are on, defending themselves) instead of standing idle in the train.
+- Solution Release build (server and tests) passed. The new
+  `UT_CompanionAssistTrain` fixture (damage versus control calls, damage
+  ranking, the retarget rule) was run and passes; the full suite was skipped
+  under project policy. Real-client checks are pending (task 126).
+
+## [0.269.0] - 2026-10-14
+
+### Fixed
+
+- **Gothwaite PvP mode: review fixes to the stage 6 tactics** (an Opus
+  review of 0.268.0, `docs/GOTHWAITE_PVP_MODE.md` 13.5):
+  - A follower promoted to leader while its group was running (its leader
+    died, or went home after the run) inherited a run with no end: it never
+    scanned, never fought back and held its followers with it. A follower now
+    carries its leader's own run clock, and a promoted leader's open clock
+    ends at once.
+  - A run or a regroup no longer carries into the walk home or the next
+    outing (every return path and the castle clear it; sprint ends with it).
+  - A running bot that is caught (crowd-controlled, at the end of its run,
+    or hit in melee) turns and fights instead of standing as a free kill;
+    `GOTH_PVP_RETREAT_END reason=caught`.
+  - Followers no longer go home for low health or power while their
+    leader's group rests; the regroup filter now reads the leader's state.
+  - A follower no longer flaps between assisting and dropping a target that
+    stands beyond 1,500 units of its leader; it follows instead.
+  - The leader's "far" chase rule measures from where the target stood when
+    the fight opened, not from the leader's spot a scan range away.
+  - The add draw skips fights within 1,000 units (the group's own last kill)
+    and takes the newest beyond that.
+  - A formation slot the navmesh refuses is not proved again for 5 s; the
+    opening scan runs the appetite test before the line-of-sight raycast.
+
+## [0.268.0] - 2026-10-14
+
+### Added
+
+- **Gothwaite PvP mode: the bots fight the way DAoC players fought** (stage
+  6, `docs/GOTHWAITE_PVP_MODE.md` section 13). The rules were read from
+  player guides and forum accounts of 2002–2004 group RvR, the Thidranki
+  battleground and the PvP servers (sources in the plan):
+  - **A tank leads.** When a group walks out, its best main assist takes the
+    lead (a guard tank, then any melee, an archer, a caster, a healer last),
+    and a dead leader hands the group to the best-ranked living member. In
+    the last live run 753 groups dissolved because their leader died first;
+    many were led by a healer or caster.
+  - **Kill order.** Inside a fight a mode bot now picks its target the way
+    the world warbands do: it sticks to a target for a while, a damage dealer
+    follows the leader's call after the 1–2 s `/assist` delay (and now and
+    then ignores it), bots that can interrupt turn on an enemy caster who
+    starts a cast, and healers, mezzers, wounded enemies and whoever hits our
+    support weigh more. Before this the mode kept pure threat order.
+  - **Picking fights.** A leader or solo only opens on a party its group can
+    take: a solo takes a solo, a small-man avoids full groups, an eight takes
+    nine and rarely dares more; the leader's aggression colours it, and the
+    opening target is drawn by the kill-order weights instead of "nearest".
+  - **Retreats.** A group breaks off a fight it is losing (its healer dead,
+    half of it down, or clearly outnumbered; the leader's risk tolerance
+    decides) and a solo flees when it is added on or losing. The run goes back
+    toward the castle gate with sprint, nobody fights back meanwhile, and the
+    group either takes a new leg or goes home.
+  - **Regroup after a fight.** An arrived group sits down where it won, waits
+    for its members and recovers to 70 % health and 50 % power (at most 45 s)
+    before it moves on; low health and power no longer send a bot straight
+    home from a won fight. In the last run 505 returns were low health or
+    power.
+  - **Formation.** Followers walk in their doctrine's travel shape: a column
+    behind the leader with guards and melee first, healers in the middle and
+    casters behind, or a loose fan for stealth groups, instead of piling onto
+    the leader's spot. A slot that is off the mesh falls back to the leader.
+  - **Chase discipline.** A follower drops a runner beyond 1,500 units of its
+    leader and a leader a chase 2,500 units from where the fight began,
+    unless the target is about to die.
+  - **Adds.** A roaming leader hears a fight within 5,000 units of it from the
+    last 45 s and walks to it about a third to two thirds of the time by its
+    aggression. Hunters do not add.
+  - **Hunting stealthers.** An assassin or archer alone (or in a stealth pack,
+    gank squad or archer group) stays stealthed outside the castle, waits
+    30–90 s at a point, opens only on a lone target, a caster or healer in a
+    duo, or a wounded one, uses its stealth opener, and breaks away after
+    the fight.
+  - `/gothpvp` shows a tactics line (tanks took the lead, openings refused,
+    retreats, regroups, adds, stealth openings). New logs `GOTH_PVP_RETREAT`,
+    `GOTH_PVP_RETREAT_END`, `GOTH_PVP_REGROUP`, `GOTH_PVP_ADD`,
+    `GOTH_PVP_AMBUSH`, `GOTH_PVP_GROUP_LEADER reason=main_assist`,
+    `GOTH_PVP_CHASE_LIMIT reason=overextended|far`, and `doctrine=` on
+    `GOTH_PVP_DEPART`.
+
+### Changed
+
+- Three guarded hooks outside the mode folder: the brain's RvR target choice
+  returns the mode's kill order for a mode bot, and the two stealth gates
+  (keep stealth while idle, use a stealth opener) also accept a mode hunter.
+  With the mode off every one of them answers as before (mode-off test).
+- Tests: `UT_GothwaitePvpTactics` (pure rules, lines, counters, status) and a
+  stage 6 mode-off check. Automated tests were run for the Gothwaite
+  fixtures; real-client verification is left to the owner (stage 5).
+
+## [0.267.0] - 2026-10-13
+
+### Fixed
+
+- **Gothwaite PvP mode: bots no longer clump on the slope below Caer
+  Gothwaite.** In the second live run (300 bots, watched with a position
+  sampler), fewer than one bot on average stood beyond 7,000 units of the
+  castle, the harbor stayed nearly empty, and 778 of 892 kills fell in the band 5,000–6,000 units out.
+  The bots stood in one line where the no-fight ring ends below the gate.
+  Groups leaving the gate now walk to a patrol point picked at random over
+  the island before they open any fight; they still fight back when
+  attacked, as a group. A fight that ends because the target ran back toward
+  the castle sends the leader to a new random point instead of the nearest
+  one, which was next to the gate.
+- Mode bots spread over the whole island: one spot full of recent fights now
+  draws a group at most four times as often as a quiet spot (it was about a
+  hundred times by the gate), and spots that other groups are already
+  heading to are picked less often. Bots wait 6–15 seconds at a spot instead
+  of 15–40.
+- About 70% of mode bots stood queued in the castle: only 15 groups or solos
+  could leave per minute. Now one leaves per second on average.
+- Mode bots could still die inside the Caer Gothwaite safe area. A bolt,
+  arrow or damage-over-time spell that hit outside could finish its target
+  after it was back in the castle, often at its landing spot. Spell damage
+  between players and bots now stops at the castle edge, also for a real
+  player's spells, while the mode is on.
+
+## [0.266.0] - 2026-10-13
+
+### Fixed
+
+- **Gothwaite PvP mode: no more permanent gate camp.** The first live run
+  had every kill within 300 units of the Caer Gothwaite safe circle: all
+  groups walked to one exit point and held there, so each new group ran into
+  the last. Now mode bots open no fights within 1,500 units outside the safe
+  circle (new `gateRing` setting; self-defence still allowed), the gate is
+  only a waypoint, a group's first patrol point is drawn evenly over the
+  island instead of toward recent fights, and at most one group or solo
+  leaves the castle every 4 seconds.
+- Mode bots no longer log in at their capital or get stuck in the castle:
+  the random spread around the bindstones could land off the walkable floor.
+  They now use 16 courtyard spots, each proven on the installed navmesh to
+  route to the gate.
+
+### Changed
+
+- `gothwaite-pvp.json` gains `gateRing` (default 1500). The 0.266.0 server
+  and launcher read files with or without it.
+## [0.265.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP mode, stage 4: status and load** (`docs/GOTHWAITE_PVP_MODE.md`,
+  TASKS 125). `/gothpvp` (GM) shows the mode bots by level band and phase,
+  the castle groups by shape, mode bot kills and deaths per band, kills by
+  con colour, and the mode's turn load.
+- A `GOTH_PVP_LOAD` log line once a minute while the mode is on (bots, turn
+  average, p95 and maximum, scan and group-former cost), and three new
+  `BOT_THINK_PROFILE` phases (`GothwaitePvpDriver`, `GothwaitePvpScan`,
+  `GothwaitePvpFormer`). The plan's section 12 describes how to measure the
+  mode at 300, 600 and 1,000 bots.
+- Mode bots now and then say a short line in local chat after an arena kill
+  (15%, at most once per 2 minutes per bot and once per 30 seconds in the
+  arena).
+
+### Changed
+
+- Cheaper mode turns: patrol points are cached per arena edge, and a bot's
+  opponent scan runs only when it is due (every 1.5 s).
+## [0.264.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP mode, stage 3: arena PvP** (`docs/GOTHWAITE_PVP_MODE.md`,
+  TASKS 125). With the mode on, groups and solos leave the castle gate and
+  roam 29 navmesh-proven patrol points around the Isle of Glass, preferring
+  points with recent fights, and dwell 15–40 seconds at each. Levels 1–19
+  stay within 20,000 units of the castle, levels 20+ within 30,000; a group
+  roams only as far as its lowest member may.
+- Mode bots open fights only on players, companions and other bots that con
+  green to red to them, outside the castle and inside their edge, and never
+  on alliance mates. Greys and purples are left alone in both directions;
+  the bot's own class brain, its pets, turrets and area spells follow the
+  same rule. Anyone who attacks a mode bot or its group can be fought back.
+  Mode bots do not pull monsters; they only fight a monster that attacks.
+- Chase limits: a fight ends when the target reaches the castle or leaves
+  the bot's edge. Bots return to the castle below 35% health or 20% power,
+  when their leader is lost or their group is wiped; a group gets a new
+  leader when its leader leaves. Stuck leaders pick another point, then go
+  home.
+- `GOTH_PVP_KILL` logs every arena kill with both levels and both con colours;
+  kills and deaths are counted per level band for stage 4.
+
+### Changed
+
+- Nothing changes with the mode off: every new hook in the bot brain, the
+  cast path, the turret brain and the kill handlers returns at once unless
+  the bot is a mode bot.
+## [0.263.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP mode, stage 2: castle life** (`docs/GOTHWAITE_PVP_MODE.md`,
+  TASKS 125). With the mode on, a bot in Caer Gothwaite rests to 80% health
+  and power, buffs, and then joins the mode's own group former: solos, duos,
+  small groups and 8-man groups in the configured shares, members within ±5
+  levels of the leader, same guild and alliance first, a healer before a
+  second of any other role. A group leaves when full, or after 90 seconds
+  with at least its minimum, and walks out to the castle gate (stage 3 adds
+  roaming and fights). A released bot rests and regroups in the castle; a bot
+  outside the castle without a group walks back.
+- An explicit installed-navmesh probe (`UT_GothwaitePvpArenaInstalledNavigation`)
+  proves the castle landings, the gate and 30 patrol points route from the
+  castle.
+
+### Changed
+
+- Nothing changes with the mode off. The former runs in the NPC service phase
+  and returns at once while the mode is off.
+## [0.262.0] - 2026-10-13
+
+### Added
+
+- **Gothwaite PvP world mode, stage 1: the switch and its separation**
+  (`docs/GOTHWAITE_PVP_MODE.md`, TASKS 125). A **World mode** selector
+  (Normal / Gothwaite PvP) on the launcher's Server population tab, editable
+  only while the server is stopped. It writes `server/gothwaite-pvp.json`; the
+  server reads it once at start. The first switch into the mode copies the
+  save database to `data/gothwaite-pvp-backups/` and refuses if the database
+  was not closed cleanly.
+- With the mode on, every autonomous world bot logs in and releases at Caer
+  Gothwaite, which becomes a safe area, and stands there (stage 1 stub; castle
+  life and arena PvP follow in stages 2 and 3). The sub-10 PvP protection and
+  constitution loss do not apply to mode bots. No director, raid, siege, keep
+  defense, battleground roster or alt trickle recruits world bots.
+- Each bot's home (region, position, zone, bind, camp, itinerary) is stored in
+  the new table `offline_gothwaite_pvp_home` before the first bot moves. The
+  first start with the mode off puts every bot back and clears the table
+  (`GOTH_PVP_RESTORE`). Levels, XP, realm points and items earned in the mode
+  stay. The new table leaves older saves loadable.
+
+### Changed
+
+- With the mode off (the default) nothing changes. Mode-off regression tests
+  cover the castle, sub-10 protection, recruitment and the home store.
+## [0.261.2] - 2026-10-13
+
+### Added
+
+- Gothwaite PvP mode, stage 0 audit (`docs/GOTHWAITE_PVP_MODE.md` section
+  11, TASKS 125): the exact hooks that keep the mode separate from normal bot
+  behaviour, a check that the Caer Gothwaite and harbor guards leave other
+  realms' bots alone, a re-check of the mob table and arena edges, and 30
+  candidate patrol points. Documentation only; no gameplay change.
+
+## [0.261.1] - 2026-10-13
+
+### Added
+
+- Plan for a separate **Gothwaite PvP** world mode
+  (`docs/GOTHWAITE_PVP_MODE.md`, TASKS 125): every autonomous bot PvPs
+  around Caer Gothwaite from level 1, the castle is a safe hub, and greys
+  and purples leave each other alone. Owner decisions are recorded. Planning
+  only; no gameplay change.
+
+## [0.261.0] - 2026-10-12
+
+### Added
+
+- A UI PRESET button in the launcher header opens the client UI preset window
+  (code added in 0.254.0, until now not reachable). Save one character's
+  window layout and quickbar macros as a preset, apply it to another
+  character (the original file is backed up), or clear it. Saving also
+  installs the preset as the layout for newly created characters. Spell slots
+  are class-specific and are never copied. The window refuses to change files
+  while the game client is running.
+
+### Changed
+
+- None.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.260.0] - 2026-10-12
+
+### Added
+
+- `RVR_ASSAULT_GATE` log lines now carry the plan `reason`, so it is visible
+  why a ready warband did not open an assault.
+
+### Changed
+
+- More keep fights: an autonomous warband may open or join a keep assault at
+  average level 35 with every member at least 30 (was all level 50 unless led
+  by a KeepWarrior), the roaming reserve is smaller (Roamer 40 %, Hybrid 25 %,
+  KeepWarrior 5 %, others 15 %), and each guild may run two automatic sieges
+  at once (server cap still six) (bug 159).
+- A siege ram operator no longer travels to a siege merchant in another
+  region than its warband's rally; it marches without a purchase. A muster
+  that reaches its quorum departs at the hard end even if supplies are
+  missing, instead of failing (bugs 75, 159).
+
+### Fixed
+
+- A companion healer no longer passes one optional strength concentration
+  buff around the group forever: members who need a buff are served first,
+  and optional concentration buffs wait 30 s after a reclaim (bug 157).
+- A companion whose equipped melee weapon differs from its build plan (for
+  example a Blademaster with a mace) fights with it instead of standing idle
+  with its bow out; a bot with no usable melee weapon at all still swings
+  (bug 158).
+
+### Removed
+
+- None.
+
+## [0.259.0] - 2026-10-12
+
+### Added
+
+- New server setting `show_bot_realm_rank_nameplates` (category `pvp`, on by
+  default): autonomous world bots show their realm rank after their name,
+  such as "Dairoinlan | RR 2L5". The launcher's XP Settings tab has a
+  "Realm rank on autonomous bot nameplates" checkbox for it.
+
+### Changed
+
+- `show_realm_rank_nameplates` (still off by default) now covers only
+  persistent companions and players; its launcher checkbox reads "Realm
+  rank on companion and player nameplates". Temporary helpers and
+  battleground bots stay plain. Presentation only; stored names are
+  untouched.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.258.0] - 2026-10-12
+
+### Added
+
+- None.
+
+### Changed
+
+- Buffs (self-buffs and every other helpful spell with a duration or
+  concentration upkeep) and pet summons cost 10% of their native mana again
+  for real players, companions and autonomous gamebots. Damage spells keep
+  the native 1.65 cost restored in 0.255.0. Focus, quickcast and power-pool
+  rules are unchanged; the discount applies after them.
+
+### Fixed
+
+- Keeping self-buffs and pets up drained too much mana after 0.255.0.
+
+### Removed
+
+- None.
+
+## [0.257.0] - 2026-10-12
+
+### Added
+
+- Map pack: new terrain maps for the zones the stock client ships without a
+  map: the Atlantis zones Oceanus Hesperos, Mesothalassa, Oceanus Boreal,
+  Notos and Anatole, Stygian Delta, Land of Atum, Typhon's Reach, Ashen
+  Isles, Green Glades and Arbor Glen, and the three Foothills zones
+  (z330/z334/z335). Placeholder zones (Dummy Zone, TestBG) are skipped.
+- `build_map_client.py --allow-new-maps` stages maps the client lacks;
+  `Install-ClientMap.ps1` adds them as new files (dry run shows `[new]`) and
+  restore or rollback deletes them again after a hash check.
+
+### Changed
+
+- Map renderer v5: water bodies painted on the stock map but missing from the
+  terrain water data are filled in from the stock art (Aldland's southern
+  bay, the Gripklosa and Delling Crater lakes, Vale of Balor pools). Bodies
+  the terrain already draws, shore fringes, blue realm shields and foggy
+  all-blue stock maps are left alone.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.256.0] - 2026-10-12
+
+### Added
+
+- Map pack: hand-painted place names from the stock maps that the world
+  database lacks (Tomte Camp, Nob's Stable, Gronyr's Farm, Mithra's Tomb,
+  Dergan Island, Hy Brasil, housing neighbourhoods and others; 181 names in 48
+  zones) are painted back from the new curated
+  `source/server/tools/client_map_labels.json` (`--labels`).
+- Map pack: keep names on every frontier keep, with the stock relic sub-line
+  such as "(Hammer Relic)" read from the static Relic table.
+- Map pack: interior zone exits are labelled "to <zone>"; the manifest lists
+  every drawn label per zone.
+
+### Changed
+
+- Map pack labels are larger (towns 15 px, keeps 13 px, dungeons 12 px, edge
+  labels 11 px) and placed by priority: edges, keeps, towns, dungeons and
+  exits, curated names, service icons, then grid ticks.
+- Map pack trees are dark canopy stipple instead of bright green dots that
+  looked like the client's NPC and quest-giver markers.
+- Renderer version v4 (`render_client_maps.py`).
+
+### Fixed
+
+- Keeps were drawn as bare icons with no name (for example Mjollner Faste and
+  Fensalir Faste in Uppland).
+- A dungeon entrance next to a keep (Darkness Falls at Mjollner Faste) was
+  dropped because no icon offset was free.
+- Edge exit names such as Jordheim never drew because the label overlapped its
+  own icon.
+- A neighbour edge label read "DUMMY ZONE".
+
+### Removed
+
+- None.
+
+## [0.255.0] - 2026-10-11
+
+### Added
+
+- None.
+
+### Changed
+
+- Spell mana costs are back to their native 1.65 values for real players,
+  companions and autonomous gamebots. The 70% discount on offensive caster
+  damage spells and the 90% discount on buffs and pet summons (0.89.0, 0.95.0)
+  are removed. Focus, quickcast and power-pool rules are unchanged.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The caster damage, buff and pet-summon mana cost reductions in
+  `BotSpellPower`.
+
+## [0.254.0] - 2026-10-11
+
+### Added
+
+- New server setting `allow_all_items_all_classes` (category `classes`, on by
+  default). Real players may equip and use any item regardless of its realm,
+  allowed-class list, or armor and weapon skill. Poison still needs Envenom.
+  Companions and autonomous gamebots keep the normal class rules.
+- Client UI preset code for the launcher (`ClientUiPreset`,
+  `ClientUiPresetForm`, with tests): save one character's quickbar macros as a
+  preset and apply it to other characters, skipping class-specific spell
+  slots and backing up the target files. Not yet reachable from the launcher
+  window.
+- `docs/CLIENT_UI_XML_REFERENCE.md`: how the client's `game.dll` reads its UI
+  XML (element types, child elements, value mappers and the full OnClickEvent
+  table), from static analysis of the raid baseline `game.dll`.
+
+### Changed
+
+- `docs/DEVELOPMENT.md`: the OnClickEvent mapper compares 365 names (364 stock
+  events plus `Unspecified`), not 218, and links the new UI XML reference.
+
+## [0.253.0] - 2026-10-11
+
+### Fixed
+
+- The COMPANIONS window no longer goes dead after a zone change. The client
+  resets the window's click flag whenever a zone loads, but the server only
+  showed the window once per session, so it stayed on screen and ignored every
+  click until a relog. The server now shows it again, with all labels, after
+  each zone load. No client file changes; a server update is enough.
+
+## [0.252.0] - 2026-10-11
+
+### Added
+
+- Camlann Herald in the launcher: a HERALD button opens a read-only
+  ranking and statistics window over the save (also while the server runs,
+  read once on open and on REFRESH). Rankings for players, gamebots and
+  companions by realm points, kills, deaths, death blows or solo kills, with
+  type, realm, class, count and name filters and a per-character profile;
+  guilds (members, member RP, claimed keeps); keeps and relics; PvP kill and
+  keep titles with their holders; server statistics (realm balance bars,
+  class donuts per realm, level distribution). Characters hidden with
+  `/statsanon` or `/anonymous` are left out.
+- Autonomous gamebots and persistent companions keep PvP kill counters like
+  players: kills, death blows and solo kills per victim realm, and PvP
+  deaths. They move only where the bot is credited realm points for a kill;
+  RP and XP awards are unchanged. New columns on `offline_world_bots` and
+  `player_companions` start at 0; the first start of this build rebuilds
+  both tables once, keeping every row.
+- Realm rank on nameplates (`show_realm_rank_nameplates`, off by default;
+  launcher XP Settings checkbox, applies at the next server start):
+  gamebots and companions show "Name | RR 2L5", players get the rank in the
+  last-name slot. Only the outgoing packets change; stored names, last
+  names and guilds are untouched. Temporary group helpers and battleground
+  bots keep plain names. A bot's nameplate refreshes when its realm level
+  changes.
+
+### Changed
+
+- The launcher's PvP bot population list hides companions by default; a
+  COMPANIONS checkbox beside ONLINE ONLY shows them again (needed to select
+  one for DELETE CHARACTER…). DELETE ORPHANED COMPANIONS… still finds
+  orphans while they are hidden.
+- Launcher facelift: all nine tabs fit in one row from 960 px (title-case
+  labels, gold underline), the population and group grids fit the window,
+  one shared dark grid style, dark context menu, styled buttons, inputs,
+  sliders and checkboxes, a window icon from the realm shield, the header
+  ampersands show ("PVP & CO-OP") and the title steps down a size on narrow
+  windows, XP Settings scrolls on short windows. The per-second world-speed
+  and 30-second RvR file reads moved off the UI thread.
+- LauncherLayoutCheck now checks the real ADD CREW buttons and tab fit and
+  fails when it finds nothing to check.
+
+### Removed
+
+- The launcher's unused Active RvR panel code.
+
+## [0.251.0] - 2026-10-11
+
+### Added
+
+- COMPANIONS window (Custom7): a small bar in the native client that appears
+  while an owned companion is with you. Ten tiles: the four group orders
+  (Aggressive, Defensive, Passive, Assist), Default saved stances, Follow, Stay,
+  Pet pull, PULL and MANAGER. Eight member rows show each group member's name,
+  health, level and stance, and clicking a row targets that member. Tile clicks
+  run the same commands as /aggressive, /defensive, /passive, /assisttrain,
+  /companions group default, /stay, /petpull and /pull, and MANAGER opens the
+  Companion Manager's Group orders row. Chat echoes only PULL and refusals.
+- `/companions bar [on|off]` turns the window on or off for the account; bare
+  `/companions bar` shows it again after it was closed with its X. The
+  Companion Manager's Group orders panel has the same switch. The setting is
+  one row in the save's fork-local options table; no schema change.
+
+### Changed
+
+- Companion Manager client files, still protocol 3: game.dll gains two
+  operations and 74 label adapters, and the UI includes a custom7_window.xml in
+  both skins. The COMPANIONS window needs the new stage installed with
+  tools/dev/Install-CompanionManager.ps1 (upgrades the installed 0.169.0
+  manager; close the game, server and launcher first). Until it is installed the
+  window stays absent and every /companions command still works. The manager's
+  Custom8 window and its files are unchanged.
+- Release packaging: the update pack takes the companion stage from
+  companion-manager-stage-0.251.0 and refuses a stage that predates the window.
+
+## [0.250.0] - 2026-10-11
+
+### Added
+
+- `source/server/tools/probe_companion_manager_levers.py` and
+  `test_companion_manager_levers_probe.py`: an offline research probe over the
+  0.169.0 Companion Manager `game.dll`. It adds a `[Probe]` strip to Custom8
+  that shows the window size, moves a status bar from a server-style scalar
+  adapter, recolours a label through a colour adapter, and tells a plain from
+  a shift click. Unicorn emulation only; no tool installs it and the shipped
+  manager is unchanged. The static research behind it is summarised in
+  docs/COMPANION_MANAGER_INTEGRATION.md ("Client levers research").
+
+### Fixed
+
+- Companions no longer follow you to another character. Each companion
+  remembers the character it was last grouped with and rejoins only that
+  character at login. Other characters on the account see it as
+  `With <Name>` in the Companion Manager and `/companions`, and Invite moves
+  it over. Existing saves load unchanged (one additive column); companions
+  that were active before this version join the first character that logs
+  in, then stay with it.
+
 ## [0.249.0] - 2026-10-11
 
 ### Added

@@ -87,14 +87,17 @@ public static partial class AutonomousRvrEventLayer
                 var decision = waited < AutonomousRvrSiegeMuster.PreparationWindowMilliseconds
                     ? AutonomousRvrSiegeMuster.Decision.Wait
                     : !suppliesReady
+                        // At the hard end a quorum marches without the missing kit; below it the force fails.
                         ? waited >= AutonomousRvrSiegeMuster.MaximumWaitMilliseconds
-                            ? AutonomousRvrSiegeMuster.Decision.Fail : AutonomousRvrSiegeMuster.Decision.Wait
+                            ? present >= AutonomousRvrSiegeMuster.Quorum(assigned) ? AutonomousRvrSiegeMuster.Decision.Depart : AutonomousRvrSiegeMuster.Decision.Fail
+                            : AutonomousRvrSiegeMuster.Decision.Wait
                         : skip ? AutonomousRvrSiegeMuster.Decision.Depart :
                             AutonomousRvrSiegeMuster.Decide(alive, present, assigned, muster.StartedTick, nowTick);
                 switch (decision)
                 {
                     case AutonomousRvrSiegeMuster.Decision.Depart:
-                        DepartLocked(active, forceId, muster, nowTick, skip ? "already near the keep" : "mustered");
+                        DepartLocked(active, forceId, muster, nowTick,
+                            !suppliesReady ? "mustered without supplies" : skip ? "already near the keep" : "mustered");
                         return AutonomousRvrSiegeMuster.Phase.Marching;
                     case AutonomousRvrSiegeMuster.Decision.Fail:
                         FailMusterLocked(active, forceId, nowTick, !suppliesReady && present >= Math.Max(2, assigned / 2)

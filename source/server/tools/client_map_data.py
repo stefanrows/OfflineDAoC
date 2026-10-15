@@ -8,6 +8,7 @@ Dependencies: Python 3 standard library, numpy, Pillow.
 """
 import collections
 import hashlib
+import json
 import math
 import os
 import re
@@ -624,6 +625,70 @@ def extract_roads(stock_rgb, join_texels=5.0, min_texels=4.0):
 
 
 # ---------------------------------------------------------------------------
+# Stock water (blue areas painted on the 256 texel stock map)
+# ---------------------------------------------------------------------------
+
+STOCK_WATER_MIN_TEXELS = 12   # smaller blue specks (lettering, icons) are dropped
+
+
+def dilate_mask(mask, steps=1):
+    """Grow a bool mask by steps texels (4-connected)."""
+    for _ in range(steps):
+        mask = _dilate(mask)
+    return mask
+
+
+def stock_water_mask(stock_rgb, min_texels=STOCK_WATER_MIN_TEXELS):
+    """Bool 256x256 mask of the water painted on a stock map.
+
+    Blue-dominant texels are closed (dilate then erode, one texel), then components smaller
+    than min_texels are dropped. That removes blue text and icons on the stock art.
+    """
+    if stock_rgb.size != (256, 256):
+        stock_rgb = stock_rgb.resize((256, 256), Image.BOX)
+    a = np.asarray(stock_rgb).astype(np.int32)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    raw = (b > r + 25) & (b >= g) & (b > 60)
+    closed = ~dilate_mask(~dilate_mask(raw))
+    out = np.zeros(closed.shape, bool)
+    for comp in water_components(closed, min_texels):
+        out |= comp
+    return out
+
+
+def label_components(mask):
+    """8-connected labels of a bool mask: (int32 array with 0 for background, component count)."""
+    labels = np.zeros(mask.shape, np.int32)
+    h, w = mask.shape
+    count = 0
+    rows, cols = np.nonzero(mask)
+    for sr, sc in zip(rows.tolist(), cols.tolist()):
+        if labels[sr, sc]:
+            continue
+        count += 1
+        labels[sr, sc] = count
+        stack = [(sr, sc)]
+        while stack:
+            r, c = stack.pop()
+            for rr in range(max(0, r - 1), min(h, r + 2)):
+                for cc in range(max(0, c - 1), min(w, c + 2)):
+                    if mask[rr, cc] and not labels[rr, cc]:
+                        labels[rr, cc] = count
+                        stack.append((rr, cc))
+    return labels, count
+
+
+def water_components(mask, min_texels=1):
+    """8-connected components of a bool mask as a list of bool arrays, each with at least
+    min_texels texels, in label order."""
+    labels, count = label_components(mask)
+    if count == 0:
+        return []
+    areas = np.bincount(labels.ravel(), minlength=count + 1)
+    return [labels == i for i in range(1, count + 1) if areas[i] >= min_texels]
+
+
+# ---------------------------------------------------------------------------
 # World database (read-only copy)
 # ---------------------------------------------------------------------------
 
@@ -631,9 +696,9 @@ class WorldDb:
     """Opens a private copy of the world database read-only.
 
     The live database and its -wal/-shm files are copied to a temporary directory first.
-    Only static world tables are queried: Area, BindPoint, Keep, Mob (static NPC rows
-    filtered by class), ZonePoint, JumpPoint, Teleport. Bot and companion tables, account
-    and character tables are never read.
+    Only static world tables are queried: Area, BindPoint, Keep, Relic (optional), Mob (static
+    NPC rows filtered by class), ZonePoint, JumpPoint, Teleport. Bot and companion tables,
+    account and character tables are never read.
     """
 
     def __init__(self, source_path):
@@ -654,6 +719,10 @@ class WorldDb:
             self.con.close()
         finally:
             shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _has_table(self, name):
+        return self.cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() is not None
 
     def zone_name(self, region):
         """Name of a zone or region from the static Zones table (fallback for zone-exit labels)."""
@@ -685,8 +754,19 @@ class WorldDb:
             if inside(x, y):
                 pois.append({'type': 'bind', 'name': 'Bind point', 'x': x, 'y': y, 'source': 'BindPoint'})
         for name, x, y in self.cur.execute('SELECT Name, X, Y FROM Keep WHERE Region = ?', (reg,)):
-            if inside(x, y):
+            if name and inside(x, y):
                 pois.append({'type': 'keep', 'name': name, 'x': x, 'y': y, 'source': 'Keep'})
+        keeps = [p for p in pois if p['type'] == 'keep']
+        if keeps and self._has_table('Relic'):
+            # a relic belongs to the nearest keep within 3000 loc; the keep shows its sub-line
+            for x, y, realm, rtype in self.cur.execute(
+                    'SELECT X, Y, OriginalRealm, relicType FROM Relic WHERE Region = ?', (reg,)):
+                label = relic_label(realm, rtype)
+                if label is None:
+                    continue
+                best = min(keeps, key=lambda k: math.hypot(k['x'] - x, k['y'] - y))
+                if math.hypot(best['x'] - x, best['y'] - y) <= 3000 and best.get('relic') is None:
+                    best['relic'] = label
 
         classes = sorted(MERCHANT_CLASSES | PORTER_CLASSES | STABLE_CLASSES | TRAINER_EXTRA)
         placeholders = ','.join('?' * len(classes))
@@ -733,6 +813,66 @@ class WorldDb:
             if inside(x, y):
                 pois.append({'type': 'portal', 'name': tid, 'x': x, 'y': y, 'source': 'Teleport'})
         return {'towns': towns, 'pois': pois}
+
+
+# Relic keep sub-lines keyed by (OriginalRealm, relicType). Realm 1 Albion, 2 Midgard, 3 Hibernia.
+RELIC_LABELS = {
+    (1, 0): 'Scabbard Relic', (1, 1): 'Staff Relic',
+    (2, 0): 'Hammer Relic', (2, 1): 'Horn Relic',
+    (3, 0): 'Spear Relic', (3, 1): 'Cauldron Relic',
+}
+
+
+def relic_label(realm, relic_type):
+    """Sub-line for a relic keep such as 'Hammer Relic', or None for any other pair."""
+    return RELIC_LABELS.get((realm, relic_type))
+
+
+EXTRA_LABEL_KINDS = ('place', 'water')
+
+
+def load_extra_labels(path):
+    """Curated map labels from a JSON file shaped {"zones": {"101": [{name, x, y, kind}]}}.
+
+    x and y are stock 256-texel units of that zone's map (the label centre). kind is 'place'
+    or 'water'. A missing file (or no path) gives {}. Unknown kinds, empty names and
+    coordinates outside 0..256 raise ValueError. Other top-level keys are ignored.
+    """
+    if not path or not os.path.isfile(path):
+        return {}
+    with open(path, encoding='utf-8') as f:
+        doc = json.load(f)
+    zones = doc.get('zones', {}) if isinstance(doc, dict) else None
+    if not isinstance(zones, dict):
+        raise ValueError(f'{path}: expected an object with a "zones" object')
+    out = {}
+    for key, entries in zones.items():
+        try:
+            zid = int(key)
+        except ValueError:
+            raise ValueError(f'{path}: zone key {key!r} is not a zone id') from None
+        if not isinstance(entries, list):
+            raise ValueError(f'{path}: zone {zid} must map to a list of labels')
+        out[zid] = [_extra_label_row(zid, i, e) for i, e in enumerate(entries)]
+    return out
+
+
+def _extra_label_row(zid, index, entry):
+    where = f'zone {zid} entry {index}'
+    if not isinstance(entry, dict):
+        raise ValueError(f'{where}: not an object')
+    name = entry.get('name')
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f'{where}: empty name')
+    name = name.strip()
+    kind = entry.get('kind')
+    if kind not in EXTRA_LABEL_KINDS:
+        raise ValueError(f'{where} ({name!r}): unknown kind {kind!r}')
+    for axis in ('x', 'y'):
+        v = entry.get(axis)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 256:
+            raise ValueError(f'{where} ({name!r}): {axis} must be a number from 0 to 256, got {v!r}')
+    return {'name': name, 'x': float(entry['x']), 'y': float(entry['y']), 'kind': kind}
 
 
 def service_category(class_type):

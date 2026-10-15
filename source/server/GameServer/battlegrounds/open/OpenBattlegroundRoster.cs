@@ -631,6 +631,12 @@ namespace DOL.GS
                 Reset();
                 return;
             }
+            // Gothwaite PvP mode: no bot crew is formed, so the roster keeps no units (as when the open BG is off).
+            if (GothwaitePvpRules.SuppressesWorldRecruitment)
+            {
+                Reset();
+                return;
+            }
             Stopwatch watch = Stopwatch.StartNew();
             OpenBgSetup setup = OpenBgSetup.FromProperties();
             AutonomousBattlegroundParticipation.OpenCrewMember[] crew = AutonomousBattlegroundParticipation.OpenCrew();

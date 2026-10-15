@@ -301,6 +301,19 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void CompanionsAndGearWindowClicksStayIndependentOfCustom8Ownership()
+        {
+            // COMPANIONS tiles (0xA8-0xBF) and the gear ready control (0xDC) are not Custom8 clicks: they must reach
+            // the Companion Manager's handler even while the open BG manager owns the window.
+            Assert.That(CompanionManager.IsIndependentWindowControl("0001", "a8"), Is.True, "first COMPANIONS tile");
+            Assert.That(CompanionManager.IsIndependentWindowControl("0001", "bf"), Is.True, "COMPANIONS ready");
+            Assert.That(CompanionManager.IsIndependentWindowControl("0001", "dc"), Is.True, "gear ready");
+            Assert.That(CompanionManager.IsIndependentWindowControl("0001", "dd"), Is.False, "the window's own ready stays with its owner");
+            Assert.That(CompanionManager.IsIndependentWindowControl("0001", "00"), Is.False, "a tab click stays with its owner");
+            Assert.That(CompanionManager.IsIndependentWindowControl("zz", "a8"), Is.False, "a malformed token is not routed");
+        }
+
+        [Test]
         public void OneWindowPerClientOpeningOneClosesTheOther()
         {
             object player = new();

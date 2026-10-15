@@ -148,6 +148,70 @@ namespace DOL.GS
         public const int WidthAction = 152;
         public const int SpaceAdvance = 5;
 
+        // COMPANIONS window (Custom7): protocol 3 extension, operations 5 and 6 and label adapters 440-537.
+        // Literal values only; source/server/tools/build_companion_manager_client.py holds the native layout and
+        // test_companion_manager_client.py checks each name below against it. LabelCount is unchanged.
+        public const int BarLabelBase = 440;
+        public const int BarLabelStatus = 440;
+        public const int BarLabelMessage = 441;
+        public const int BarLabelTileBase = 442;
+        public const int BarTileStride = 4;
+        public const int BarTiles = 14;
+        public const int BarLabelSlotBase = 498;
+        public const int BarSlotStride = 5;
+        public const int BarSlots = 8;
+        public const int BarSlotLeader = 4;
+        public const int TotalLabelCount = 620;
+        public const int BarLabelCount = 98;
+        public const int BarTileInactive = 0;
+        public const int BarTileActive = 1;
+        public const int BarTileDisabled = 2;
+        public const int BarTileUnderline = 3;
+        public const byte OpBarShow = 5;
+        public const byte OpBarHide = 6;
+        // COMPANION GEAR window (Custom6, TASKS 129): protocol 3 extension, operations 7-9 and label adapters 538-619.
+        // A client without the 0.276.0 manager stage ignores these operations. 7 refreshes the slot icons from the
+        // client's item array, 8 shows the window, refreshes it and answers with ControlGearReady, 9 hides it.
+        public const byte OpGearRefresh = 7;
+        public const byte OpGearShow = 8;
+        public const byte OpGearHide = 9;
+        public const int ControlGearReady = 0xDC;
+        public const int GearWornSlots = 19;
+        public const int GearSlots = 59;
+        public const int GearLabelBase = 538;
+        public const int GearLabelTitle = 538;
+        public const int GearLabelBackpack = 539;
+        public const int GearLabelMessageBase = 540;
+        public const int GearMessageLines = 2;
+        public const int GearLabelCaptionBase = 542;
+        public const int GearLabelMarkBase = 561;
+        public const int GearLabelCount = 82;
+        public const int GearWidthTitle = 478;
+        public const int GearWidthMessage = 304;
+        public const int GearWidthCaption = 56;
+        public const int BarControlFirst = 0xA8;
+        public const int BarControlLimit = 0xC0;
+        public const int BarControlSlotBase = 0xB6;
+        public const int BarControlReady = 0xBF;
+        public const int BarControlAggressive = 0xA8;
+        public const int BarControlDefensive = 0xA9;
+        public const int BarControlPassive = 0xAA;
+        public const int BarControlAssist = 0xAB;
+        public const int BarControlDefault = 0xAC;
+        public const int BarControlFollow = 0xAD;
+        public const int BarControlStay = 0xAE;
+        public const int BarControlPetPull = 0xAF;
+        public const int BarControlPull = 0xB0;
+        public const int BarControlManager = 0xB1;
+        public const int BarControlKick = 0xB2;
+        public const int BarControlLeader = 0xB3;
+        public const int BarControlLeave = 0xB4;
+        public const int BarControlGrind = 0xB5;
+        public const int BarWidthStatus = 290;
+        public const int BarWidthMessage = 420;
+        public const int BarWidthTile = 80;
+        public const int BarWidthSlot = 78;
+
         // Advance widths of the client's arial14 bitmap font (ui/fonts/Arial14.tga), measured from its
         // glyph width markers for '!' through '~'. A space has no glyph; SpaceAdvance overestimates it.
         private static readonly byte[] Arial14Advances =

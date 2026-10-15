@@ -286,4 +286,30 @@ public class UT_BotWeaponStats
             else Assert.That((int)damage, Is.GreaterThan(0));
         }
     }
+
+    // Bug 158: a companion without a legal melee weapon used to return from the
+    // melee branch with its unusable bow still active and never attack.
+    [TestCase(true, false, false, BotWeaponStats.eMeleeAttackSlot.Standard)]
+    [TestCase(true, true, false, BotWeaponStats.eMeleeAttackSlot.Standard)]
+    [TestCase(true, true, true, BotWeaponStats.eMeleeAttackSlot.TwoHanded)]
+    [TestCase(false, true, false, BotWeaponStats.eMeleeAttackSlot.TwoHanded)]
+    [TestCase(false, false, false, BotWeaponStats.eMeleeAttackSlot.Unarmed)]
+    [TestCase(false, false, true, BotWeaponStats.eMeleeAttackSlot.Unarmed)]
+    public void MeleeAttackAlwaysHasASlotAndNeverIdlesWithoutALegalWeapon(
+        bool standardUsable, bool twoHandUsable, bool preferTwoHand, BotWeaponStats.eMeleeAttackSlot expected)
+    {
+        Assert.That(BotWeaponStats.ResolveMeleeAttackSlot(standardUsable, twoHandUsable, preferTwoHand),
+            Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void SavageHandToHandStaysOnStandardSlotAndSwingsUnarmedWhenItsWeaponIsIllegal()
+    {
+        // Terk-style Savage: a legal hand-to-hand weapon in the one-hand slot.
+        Assert.That(BotWeaponStats.ResolveMeleeAttackSlot(standardUsable: true, twoHandUsable: false,
+            preferTwoHand: false), Is.EqualTo(BotWeaponStats.eMeleeAttackSlot.Standard));
+        // A two-hander the Savage cannot use and no other legal melee item: fight unarmed, do not idle.
+        Assert.That(BotWeaponStats.ResolveMeleeAttackSlot(standardUsable: false, twoHandUsable: false,
+            preferTwoHand: true), Is.EqualTo(BotWeaponStats.eMeleeAttackSlot.Unarmed));
+    }
 }

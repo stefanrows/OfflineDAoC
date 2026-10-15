@@ -33,6 +33,8 @@ public static class AutonomousGuildKeepDefense
 
     public static void ObserveAttack(AbstractGameKeep keep, GameObject source)
     {
+        // Gothwaite PvP mode: keep attacks never recall world-bot guild troops (section 5.4).
+        if (GothwaitePvpRules.SuppressesWorldRecruitment) return;
         Guild owner = keep?.Guild;
         // A battleground keep is defended by that battleground's crew inside its region;
         // the guild's world bots are never recalled to it (0.242.0: 52 bots, keep 11).

@@ -291,7 +291,208 @@ Agent sessions on items 45–48: take the role and context from
     relic home as in 1.65. Do not build it before Aaron asks; the relic
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
+129. **Companion paperdoll: drag and drop into a companion's character
+     window.** Owner, 2026-10-15: build better inventory management for
+     companions; drag and drop items into a companion's character window the
+     same way as on the player's character. game.dll analysis:
+     [COMPANION_PAPERDOLL_RE.md](COMPANION_PAPERDOLL_RE.md). The stock
+     paperdoll is native and player-only; a Custom6 XML paperdoll copies the
+     quiver window's pattern (scalar icon adapters; a click handler that
+     reads the drag record and sends the stock move-item packet; pick-up as
+     a kind-0x66 drag). The server's house-vault companion view handles
+     every move. **0.273.0: four-slot probe built and emulated offline**
+     (stage `D:\Games\OfflineDAoC-dev\companion-paperdoll-probe-0.273.0`,
+     `/companions gearprobe`). Next: the owner installs the probe and runs
+     the real-client checklist in section 6 of the analysis (R1-R5); the
+     full 19 + 40 slot window is built only after the probe passes.
+     **2026-10-15: probe installed and R1-R5 pass in the real client**
+     (section 7 of the analysis), with three server findings for the full
+     window: show hidden protected bag items, honour the dropped bag slot,
+     and the refused manual equip of a starter helm.
+     **Source 0.274.0 fixes the refused equip** (bug 161: cross-realm
+     companions judged armor by the borrowed owner realm; unequipping left
+     the slot open to a fresh starter piece). Installed 0.274.0; the manager's
+     [Equip] put the Matterbender Chain Helm back on Brakka (real client).
+     **0.275.0: full 19 + 40 slot window (quick build) installed and
+     working in the real client** with findings 1 and 2 fixed; open with
+     `/companions gearprobe [name] [plain]`. What is still open (release
+     pack, manager integration, marking protected items, untested moves,
+     unit tests) is listed in section 8 of the analysis.
+     **Source 0.276.0: the window is part of the Companion Manager client**
+     (offline only, owner check pending): one manager stage
+     (`companion-manager-stage-0.276.0`) with server labels for the name,
+     backpack count and last reply, a gold `*` on items that stay with the
+     companion, `/companions gear [name]`, and [Open inventory] opening it
+     (an older client gets the House Vault list). `Install-CompanionManager.ps1`
+     upgrades 0.272.0 and the probes; the release pack ships the stage.
+     Section 9 of the analysis lists what is still open.
+
+125. **Gothwaite PvP mode: a separate world mode where all autonomous bots
+     PvP around Caer Gothwaite.** Owner, 2026-10-13. Plan:
+     [GOTHWAITE_PVP_MODE.md](GOTHWAITE_PVP_MODE.md). All autonomous bots of
+     all levels live on the Isle of Glass (region 51) and only PvP. Caer
+     Gothwaite is a safe area for binding, resting, buffing and grouping.
+     Greys never attack purples, and purples never attack greys. It is
+     completely separate from the normal bot behaviour: off by default, own
+     folder and settings file, guarded one-line hooks only, mode-off
+     regression tests. Built in stages 0–5, each only when the owner asks.
+     Owner decisions 2026-10-13: PvP from level 1 (sub-10 protection lifted
+     for mode bots only), progress carries over (only position and bind are
+     restored), no constitution loss, alt trickle paused, bots may attack
+     the owner and companions, harbor not safe.
+     Stage 0 (audit) done in 0.261.2: touchpoints, guard check, arena re-check
+     and candidate patrol points in section 11 of the plan.
+     Stage 1 (switch, launcher selector, separation hooks, home snapshot and
+     restore) built in 0.262.0; stage 2 (castle rest, buffs, group former,
+     departure) in 0.263.0; stage 3 (arena roaming, con rule, chase limits,
+     returns, kill log) in 0.264.0; stage 4 (`/gothpvp` status, load log,
+     kill chat) in 0.265.0; first live run fixed in 0.266.0 (gate camp,
+     off-floor landings); second live run fixed in 0.267.0 (bots clumped on
+     the no-fight ring below the castle: outbound leg, heat cap, claimed
+     points, 1 s departures); stage 6 (player tactics read from DAoC
+     guides and forum accounts: a tank leads, kill order, fight appetite,
+     retreats, regroup after a fight, formation, chase discipline, adds,
+     hunting stealthers) in 0.268.0 (plan section 13), review fixes in
+     0.269.0 (section 13.5). Pending: the owner's
+     load run at 300/600/1,000 bots (plan section 12), the stage 5 live
+     check, and the stage 6 live check (section 13.4).
+
 ## Implemented in source; installation verification pending
+
+128. **COMPANIONS window as a group window replacement.** Owner, 2026-10-14:
+     "Improve the Companion Control Window (where we set group modes and
+     behaviour). It should be able to replace the group window too."
+     Implemented in source **0.272.0** (offline only): the Custom7 window is
+     440×312 with full group rows from the stock adapters (power, endurance,
+     health bar and percent, name, class, level) plus the server's stance and
+     leader mark; a stance click cycles the companion's saved stance; new
+     tiles Invite (stock GroupInvite), Kick, Leader, Leave (two clicks) and
+     Grind; the window also shows while grouped without companions. Rebuilt
+     client stage `D:\Games\OfflineDAoC-dev\companion-manager-stage-0.272.0`
+     (game.dll `c938e6b5…`, custom7 `5b820574…`; custom8 and uimain
+     unchanged); the installer upgrades 0.251.0 in place. Offline: unit and
+     emulation tests pass, installer upgrade/re-apply/restore exercised on a
+     scratch copy. Checks pending (real client, after installing the stage
+     with the game, server and launcher closed): the window fits and the
+     arial14 text reads at 440×312; power/endurance/health numbers and the
+     health bar fill for players and companions and blank rows draw nothing;
+     the leader mark follows `/makeleader`; a row click targets; a stance
+     click cycles aggressive → defensive → passive and the row colour
+     follows; Invite on a targeted player and on a targeted companion; Kick
+     benches a companion, dismisses a `/spawn` helper and removes a player
+     (and refuses when not leader); Leader hands the lead; Leave needs the
+     second click and leaves; Grind starts and stops; a plain player group
+     shows the window with "Group of N | no companions"; the manager
+     (`/companions`) and raid windows still work with 538 adapters; a 0.251.0
+     client with this server keeps the old tiles working.
+
+127. **World bots hit by a player react like players, not like mobs.** Owner,
+     2026-10-14: a Cabalist AoE-dotting a large group of autonomous bots saw
+     all of them aggro and run at it at once. Implemented in source
+     **0.271.0** (`BotIncomingFireReaction`): a per-bot reaction delay by
+     kind of hit, class, Aggression and facing (capped 2.5 s, heals and cures
+     still go out, a melee attacker in reach ends it), a follower's wait for
+     the leader's call when there is more than one enemy, an area splash
+     that is threat but no personal call (a bomber in reach is), a direct
+     attacker that overrides the kill order only in melee reach or without
+     another player-shaped target, mates sharing the area delay, the group
+     cure with three or more dotted members, and the Gothwaite chase start
+     from the first attacker. Companions, helpers, battleground bots and mob
+     hits are unchanged. Server Release build passed; 12 new tests and 276
+     related tests pass, full suite skipped. Checks pending: AoE-dot a
+     Gothwaite group and a normal-world warband (bots should turn over 1–3 s,
+     tanks first, casters nuke from range, healers cure), a solo bot on a
+     mob hit by a player (drops the mob at once), a PBAoE bomber inside a
+     group (focused at once), and `BOT_INCOMING_FIRE` lines at debug level.
+126. **Assist train review: main-assist calls like DAoC.** Owner, 2026-10-14.
+     Implemented in source **0.270.0**: with weapon attack mode on,
+     retargeting switches the call at once (the `/assist` macro behavior; a
+     cast keeps its captured target, a bow its auto-fire target); the pet
+     window's attack order calls for pet-class main assists; `/assisttrain
+     call` calls the selected enemy without attacking, for a healer or mezzer
+     main assist; a new call prints "Assist train: calling X."; a dead main
+     assist drops the call and his companions fight under ordinary aggressive
+     rules until he lives again. Rules in
+     [COMPANION_BOTS.md](COMPANION_BOTS.md#assist-train-assisttrain).
+     Solution Release build passed; `UT_CompanionAssistTrain` (3 tests) run
+     and passing, full suite skipped. Checks pending: a melee MA tabbing
+     between enemies while swinging, a caster MA retargeting mid-cast (no
+     switch), a Cabalist or Spiritmaster MA sending the pet, a Cleric MA using
+     `/assisttrain call`, the MA dying mid-fight and being rezzed, and the
+     caster/tank/CC/pet checks still open from task 108.
+
+124. **Copy one character's UI layout to other characters.** Owner,
+     2026-10-12. Implemented in source **0.261.0**: the launcher header has a
+     UI PRESET button that opens `ClientUiPresetForm` (preset code from
+     0.254.0). It saves a character's window layout and quickbar macros as a
+     preset, applies it to another character with a `.uipreset-backup` of the
+     original, installs it as the new-character default
+     (`default<screen width>.ini`), and can clear it. Spell slots are never
+     copied. Launcher Release build succeeds; tests not run. Checks pending:
+     with the client closed, save a preset from a configured character, apply
+     it to another character and log in to confirm windows and macros match;
+     create a new character and confirm it starts with the preset layout;
+     CLEAR PRESET restores the previous default.
+
+123. **Autonomous bot realm ranks on nameplates by default.** Owner,
+     2026-10-12. Implemented in source **0.259.0**: new server property
+     `show_bot_realm_rank_nameplates` (pvp, default on) gives autonomous
+     world bots "Name | RR xLy"; `show_realm_rank_nameplates` (still off by
+     default) now covers only companions and players. The launcher's XP
+     Settings tab has a checkbox for each. Server (with tests project) and
+     launcher Release builds succeed; tests not run. Checks pending: after the
+     next server start, autonomous bot nameplates show the rank without
+     touching any setting; companions and your character stay plain until
+     the other checkbox is ticked; unticking the bot checkbox restores plain
+     bot names.
+
+122. **Camlann Herald, bot kill counters, realm rank nameplates and a
+     launcher facelift.** Owner, 2026-10-11, inspired by another fork's herald
+     and "Name | RR 2L5" nameplates. Implemented in source **0.252.0**:
+     launcher HERALD window (rankings, guilds, keeps & relics, titles, server
+     statistics) reading the save read-only; PvP kill/death-blow/solo/death
+     counters for autonomous gamebots and persistent companions (additive
+     columns, credited only with realm points); `show_realm_rank_nameplates`
+     (default off, XP Settings checkbox) adding the rank to bot names and the
+     player last-name slot in outgoing packets only; launcher facelift (tabs
+     and grids fit from 960 px, shared dark styles, icon, off-UI-thread
+     polls, dead RvR code removed, LauncherLayoutCheck fixed). Static RE of
+     game.dll (baseline 67dcf68a): NPC create strings fit 47 characters,
+     player create strings must stay <= 31, '|' has no markup meaning.
+     Server and launcher Release builds verified; launcher tests 242/242 on
+     the merged tree; focused server tests (UT_BotPvpKillStats 18,
+     UT_RealmRankNameplate 16) pass; full server suite showed the same 7
+     failures as clean HEAD. Checks pending: first start rebuilds
+     `offline_world_bots`/`player_companions` without losing rows; bot and
+     companion kill counters rise in RvR and show in the Herald; with the
+     setting on, gamebot/companion nameplates read "Name | RR xLy", the
+     player rank shows in the last-name slot (and whether the client draws
+     last names below RR5), no target flicker on rank-up, `/target`, `/send`
+     and group invites still work by plain name; launcher look at the active
+     Windows DPI, custom sliders respond in a real window.
+
+121. **Hide companions in the launcher's PvP bot population list.** Owner,
+     2026-10-11. Implemented in source **0.252.0**: companions (including
+     legacy `/bot` rows) are filtered out by default; a COMPANIONS checkbox
+     beside ONLINE ONLY shows them again. Checks pending: the list shows only
+     autonomous gamebots, ticking COMPANIONS brings companion rows back and
+     lets DELETE CHARACTER… select them, and DELETE ORPHANED COMPANIONS…
+     still enables while they are hidden.
+
+120. **COMPANIONS window: a native bar with the stance orders, Pet pull, Stay,
+     PULL, a Manager shortcut, and each group member's health, level and
+     stance.** Owner request 2026-10-11; planner defaults adopted: the window
+     appears only while an owned companion is with the player, has the eight
+     member rows, is silent except for PULL and refusals, and is switched per
+     account by `/companions bar on|off` and the Group orders panel. Implemented
+     in source **0.251.0** (offline only): Custom7 window `0x74` (ops 5/6, 74
+     label adapters 440-513, controls 0xA8-0xBF, the stock SelectGroupMember
+     rows), server `CompanionBar`, installer and release-pack upgrade paths.
+     Real-client checks pending (see docs/COMPANION_MANAGER_INTEGRATION.md,
+     "COMPANIONS window"): auto-show at login and after zoning, ini position
+     persistence, native group adapters and empty-row drawing, row click
+     targeting from the window, tile look and label fit, the 0.169.0 upgrade
+     through the installer, and the manager with 514 adapters.
 
 117. **Bigger, sharper Map window (client map pack).** Owner, 2026-10-11:
      "build a new, better, kickass Map" with the REA findings. Scope chosen:
@@ -310,6 +511,14 @@ Agent sessions on items 45–48: take the role and context from
      rivers and forests traced from the stock maps, hand-painted names
      (Tomte Camp, Dergan Island) missing from the DB, new maps for zones
      73-87 (`--include-new`), and adding the pack to the release.
+     0.256.0 (owner, 2026-10-12: "can't see any keep names"): keep names with
+     relic sub-lines, curated stock place names (`client_map_labels.json`,
+     181 names), larger priority-placed labels, dark tree stipple instead of
+     marker-like green dots, interior exit labels, no "DUMMY ZONE". Pending:
+     install of the 0.256.0 stage and real-client readability checks.
+     0.257.0: stock-only water bodies filled in (renderer v5) and new maps
+     for the Atlantis zones 73-87 and Foothills 330/334/335 with installer
+     support for added files. Pending: install and real-client checks.
 
 116. **open BG: a permanently open Thidranki (region 252) for levels 1–50.**
      Owner request 2026-10-11 ~02:00; decisions and design in

@@ -117,17 +117,49 @@ their once-per-owner recruitment rules are Stage 5.
 ## Assist train (`/assisttrain`)
 
 Use `/assisttrain` or **Assist train** in the Companion Manager group orders.
-The player who leads the companions is the main assist, including their squads.
-This session-only group order overrides individual stances.
+The player who leads the companions is the main assist (MA), including their
+squads. This session-only group order overrides individual stances.
 
-- Starting an accepted damage cast or weapon attack calls that enemy. A damage
-  spell calls its captured target at cast start, even if the spell later misses
-  or is interrupted. Selecting an enemy, mezzing (including area mez), rooting,
-  stunning, healing, or applying a pure debuff does not call it.
-- Companions retain the call while you select or control another enemy. An
-  ordinary damage tick or a human pet attack cannot switch it. Call a new enemy
-  with another damage cast or weapon attack; after the target dies or becomes
-  invalid, damage dealers wait for another call.
+DAoC context: a classic assist train (the 2002-2004 group RvR and PvE
+standard) names one main assist, usually a tank; everyone else `/stick`s to
+him and mashes an `/assist <MA>` macro, so the whole group lands on whatever
+he is hitting within a second or two and switches with him. Crowd control
+keeps the other enemies out of the fight, healers heal through it, and the
+MA calls the kill order (healer or mezzer first). The official
+[slash-command list](https://www.darkageofcamelot.com/slash-commands/) documents
+`/assist`; the official [Sorcerer library](https://www.darkageofcamelot.com/class-library-sorcerer/)
+explains that damage breaks mesmerize. Here the companions are the train and
+the human is the MA; the automatic calls below replace the assist macro and
+are this fork's companion behavior, not a live DAoC slash-command feature.
+
+How the MA calls (source 0.270.0):
+
+- **Weapon attack.** Starting a weapon attack calls that enemy, and every
+  swing contact (hit, miss, block, parry, evade) confirms it. While weapon
+  attack mode is on, selecting another enemy switches the call at once,
+  because the next swing goes there; this is the `/assist` macro behavior.
+  A bow on auto-fire keeps its auto-fire target.
+- **Damage cast.** A damage spell calls its captured target at cast start,
+  even if the spell later misses or is interrupted. Selecting another enemy
+  during the cast does not switch; the cast keeps its target. Mez (including
+  area mez), root, stun, pure debuffs and heals never call.
+- **Pet attack order.** The pet window's attack command calls the ordered
+  target, so a pet-class MA calls by sending the pet. A pet's own aggro, pet
+  casts and ordinary spell ticks never call.
+- **`/assisttrain call`.** Calls the selected enemy without attacking it,
+  the "on X" chat call, for a healer, mezzer or bard MA. Calling the same
+  target again re-engages companions that lost it.
+- Every new call prints "Assist train: calling X." to the MA. Selecting an
+  enemy without attack mode, examining it or controlling it keeps the
+  current call. After the target dies or becomes invalid (dead, another
+  region, beyond 2,100 units, no longer attackable) damage dealers wait for
+  the next call.
+- If the MA dies, the call is dropped and the companions fight under the
+  ordinary aggressive rules (they finish what they are on and defend
+  themselves) until the MA lives again; then call again.
+
+How the train fights:
+
 - Damage dealers concentrate single-target offense. They rank available damage
   spells by damage per cast time (minimum 1.5 seconds for this estimate), then
   level, and select the highest-growth usable melee style, including legal
@@ -144,14 +176,6 @@ This session-only group order overrides individual stances.
   offense; `/aggressive`, `/defensive`, or `/companions group default` leaves
   AssistTrain. Existing effects already applied before entering are not erased.
 
-DAoC context: an assist train concentrates damage on the main assist
-while crowd control keeps other enemies out of the fight. The official
-[slash-command list](https://www.darkageofcamelot.com/slash-commands/) documents
-`/assist`; the official [Sorcerer library](https://www.darkageofcamelot.com/class-library-sorcerer/)
-explains that damage or other negative effects break mesmerize. Our automatic
-damage-call trigger is this fork's companion behavior, not an extra live DAoC
-slash-command feature.
-
 Review of existing modes (source 0.224.0): **Aggressive** assists the human's
 damage casts and weapon attacks, responds to party threats, lets tanks peel,
 and may choose bombs
@@ -167,10 +191,13 @@ explicit pulls and human-pet assistance remain unchanged; those ordinary
 combat behaviors can still damage controlled enemies. Choose AssistTrain for
 strict focused offense.
 
-Source implementation: 0.223.0. Real-client checks remain pending: caster and
-tank groups, CC before the first call, target switches during casts, killing
-a called target while selecting a mezzed add, healing under pressure, pets,
-PvP/CC immunity, and switching back to passive/ordinary modes.
+Source implementation: 0.223.0; main-assist calls (retarget while swinging,
+pet orders, `/assisttrain call`, dead-MA fallback) 0.270.0. Real-client
+checks remain pending: caster and tank groups, CC before the first call,
+target switches during casts and by retargeting while swinging, a pet-class
+MA, a healer MA using `/assisttrain call`, killing a called target while
+selecting a mezzed add, healing under pressure, PvP/CC immunity, the MA dying
+mid-fight, and switching back to passive/ordinary modes.
 
 ## Companion squads and battlegroups
 
@@ -412,6 +439,16 @@ autonomous bot's is (not tracked separately), and a companion never becomes
 a PvP kill's loot owner; its personal gear still comes only from
 `PlayerCompanionGearRewards`. Temporary `/spawn` helpers remain excluded
 from both PvP XP and Realm Points.
+
+Persistent companions and autonomous world bots also keep the PvP kill and death
+counters that players keep: the `Kills{Albion,Midgard,Hibernia}Players`,
+`...DeathBlows` and `...Solo` columns and `DeathsPvP`, saved under the same names on
+`PlayerCompanionRecord` and `offline_world_bots`. The kill counters move only where the bot
+earns Realm Points for a worth-it kill. The victim's realm selects the column, the
+resolved killer takes the death blow (a controlled pet credits its root owner, as it
+does for Realm Points), and a solo kill needs one contributor who dealt all of the
+damage. A death counts as PvP when a credited player, autonomous bot or companion
+did damage. `/spawn` helpers and battleground encounter bots keep no counters.
 
 The owner can earn PvP XP and Realm Points from qualifying personal damage or
 damage by a controlled pet credited to that player. Damage dealt by a

@@ -3,26 +3,18 @@ using System;
 namespace DOL.GS
 {
     /// <summary>
-    /// Bot affordability shares caster damage, buff and pet-summon cost reductions with player spell costs.
+    /// Bot affordability uses the player spell cost, including the buff and pet-summon discount.
     /// Only native settlement rolls free-cast effects, never AI evaluation.
     /// Quickcast is never used by a GameBot.
     /// </summary>
     public static class BotSpellPower
     {
-        private const double OffensiveCasterDamageCostMultiplier = 0.3;
+        // Owner rule 2026-10-12: buffs and pet summons cost 10% of their native
+        // mana so keeping self-buffs and pets up is cheap. Damage stays native.
         private const double BuffAndPetSummonManaCostMultiplier = 0.1;
 
-        public static bool IsOffensiveCaster(GameBot bot) => bot != null && IsOffensiveCaster(bot.CharacterClass);
-
-        private static bool IsOffensiveCaster(ICharacterClass characterClass) =>
-            characterClass?.ClassType == eClassType.ListCaster &&
-            characterClass.ID is not (int)eCharacterClass.Valewalker and not (int)eCharacterClass.Vampiir;
-
         public static double ApplyBuffAndPetSummonCostReduction(Spell spell, double cost) =>
-            HasNinetyPercentCostReduction(spell) ? cost * BuffAndPetSummonManaCostMultiplier : cost;
-
-        private static bool HasNinetyPercentCostReduction(Spell spell) =>
-            spell is { IsBuff: true } || IsPetSummoningSpell(spell);
+            spell is { IsBuff: true } || IsPetSummoningSpell(spell) ? cost * BuffAndPetSummonManaCostMultiplier : cost;
 
         private static bool IsPetSummoningSpell(Spell spell) => spell?.SpellType is
             eSpellType.Bomber or
@@ -48,11 +40,11 @@ namespace DOL.GS
             eSpellType.SummonElemental or
             eSpellType.SummonTitan;
 
-        public static double ApplyDamageCostReduction(ICharacterClass characterClass, Spell spell, double cost) =>
-            !HasNinetyPercentCostReduction(spell) && IsOffensiveCaster(characterClass) &&
-            spell is { IsHarmful: true } && BotCasterPriority.IsDamage(spell)
-                ? cost * OffensiveCasterDamageCostMultiplier
-                : cost;
+        public static bool IsOffensiveCaster(GameBot bot) => bot != null && IsOffensiveCaster(bot.CharacterClass);
+
+        private static bool IsOffensiveCaster(ICharacterClass characterClass) =>
+            characterClass?.ClassType == eClassType.ListCaster &&
+            characterClass.ID is not (int)eCharacterClass.Valewalker and not (int)eCharacterClass.Vampiir;
 
         // A focus root channels until canceled, spending power while preventing
         // the aggressive caster rotation. Use ordinary roots/DoTs/nukes instead.
@@ -97,8 +89,6 @@ namespace DOL.GS
             }
 
             cost = ApplyBuffAndPetSummonCostReduction(spell, cost);
-            cost = ApplyDamageCostReduction(bot.CharacterClass, spell, cost);
-
             return Math.Max(0, (int)cost);
         }
     }
