@@ -175,8 +175,9 @@ namespace DOL.GS
     {
         public const int TickMilliseconds = 60_000;
         public const int LogIntervalMilliseconds = 5 * 60_000;
-        public const int MinLevel = 40;
-        public const int MaxLevel = 50;
+        // The crew level band (open_bg_band_min / open_bg_band_max, default 40-50), read live.
+        public static int MinLevel => OpenBattlegroundProperties.BandMin;
+        public static int MaxLevel => OpenBattlegroundProperties.BandMax;
         public const int Group8Size = 8;
         // An "8-man" short of candidates still forms with six; fewer waits for the next tick.
         public const int Group8Minimum = 6;
@@ -369,7 +370,7 @@ namespace DOL.GS
         }
 
         /// <summary>
-        /// A crew candidate: an autonomous world bot of level 40-50, not in a player-led group, carrying no relic, in no
+        /// A crew candidate: an autonomous world bot inside the crew level band (default 40-50), not in a player-led group, carrying no relic, in no
         /// battleground, on a home frontier region (1, 100, 200), and either on an RvR tour or idle between tasks.
         /// </summary>
         public static bool IsCandidate(bool autonomousWorldBot, int level, bool playerLed, bool relic, bool inBattleground,
@@ -880,7 +881,7 @@ namespace DOL.GS
             string reasons = string.Join(", ", (rejections ?? new Dictionary<OpenBgReject, int>()).Where(pair => pair.Value > 0)
                 .OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key).Take(4).Select(pair => $"{RejectionText(pair.Key)} {pair.Value}"));
             string candidates = kind == OpenBgUnitKind.Solo ? $"{pool} candidates" : $"{pool} RvR candidates";
-            return $"needs {need}, {candidates} in the pool" + (reasons.Length == 0 ? "; no level 40-50 bot of the realm was free" : "; " + reasons);
+            return $"needs {need}, {candidates} in the pool" + (reasons.Length == 0 ? $"; no level {MinLevel}-{MaxLevel} bot of the realm was free" : "; " + reasons);
         }
 
         /// <summary>A rejection in words for the open BG window.</summary>
@@ -1043,7 +1044,7 @@ namespace DOL.GS
             return pools;
         }
 
-        // The bots whose rejection the FORM_FAILED line counts: level 40-50 autonomous world bots on a home frontier
+        // The bots whose rejection the FORM_FAILED line counts: crew-band autonomous world bots on a home frontier
         // outside every battleground, i.e. those the roster could recruit at all.
         private static bool InCrewBand(GameBot bot) =>
             bot.ObjectState == GameObject.eObjectState.Active && bot.IsAutonomousWorldBot && !bot.IsTemporaryGroupHelper &&

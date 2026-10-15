@@ -21,7 +21,7 @@ namespace DOL.GS.Commands
         "Open BG (Thidranki 252) manager: live crew, units per realm and setup",
         "/bgsetup - opens the open BG window: live crew per realm, + and - units per realm, setup",
         "/bgsetup text [page] - the same as text pages (page 1 live, page 2 setup, 3+ more crew)",
-        "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, drift on|off",
+        "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, band_min 1-50, band_max 1-50, drift on|off",
         "/bgsetup mode serverpvp|perrealm - the friend rule: Server PvP (Camlann rule, mixed crews) or Per realm (same realm is a friend in region 252)",
         "/bgsetup peace all|realm|auto - whose landing peace holds at a landing circle (auto = by mode)",
         "/bgsetup presets <list>|off - group presets, e.g. std8:2,caster8:1,small:2; matched by unit size, same-size units cycle through the listed archetypes by count, the group counts still decide how many units exist (off = the group counts as before)",
@@ -179,14 +179,16 @@ namespace DOL.GS.Commands
 
     /// <summary>The raw open_bg_* values as the rows hold them (before the clamping at use); a realm's units text is "" for the global targets.</summary>
     public sealed record OpenBgSetupValues(bool Enabled, int Groups8, int Small, int Solos, int MaxBots, int CycleMin, int CycleMax, bool Drift,
-        string AlbionUnits = "", string MidgardUnits = "", string HiberniaUnits = "", string Mode = "serverpvp", string Peace = "", string Presets = "")
+        string AlbionUnits = "", string MidgardUnits = "", string HiberniaUnits = "", string Mode = "serverpvp", string Peace = "", string Presets = "",
+        int BandMin = OpenBattlegroundProperties.DefaultBandMin, int BandMax = OpenBattlegroundProperties.DefaultBandMax)
     {
         public static OpenBgSetupValues Current() => new(OpenBattlegroundProperties.OPEN_BG_ENABLED, OpenBattlegroundProperties.OPEN_BG_GROUPS8,
             OpenBattlegroundProperties.OPEN_BG_GROUPS_SMALL, OpenBattlegroundProperties.OPEN_BG_SOLOS, OpenBattlegroundProperties.OPEN_BG_MAX_BOTS,
             OpenBattlegroundProperties.OPEN_BG_CYCLE_MIN_MINUTES, OpenBattlegroundProperties.OPEN_BG_CYCLE_MAX_MINUTES,
             OpenBattlegroundProperties.OPEN_BG_PLAYER_DRIFT, OpenBattlegroundProperties.UnitsText(eRealm.Albion),
             OpenBattlegroundProperties.UnitsText(eRealm.Midgard), OpenBattlegroundProperties.UnitsText(eRealm.Hibernia),
-            OpenBattlegroundProperties.Mode, OpenBattlegroundProperties.LandingPeace, OpenBattlegroundProperties.Presets);
+            OpenBattlegroundProperties.Mode, OpenBattlegroundProperties.LandingPeace, OpenBattlegroundProperties.Presets,
+            OpenBattlegroundProperties.OPEN_BG_BAND_MIN, OpenBattlegroundProperties.OPEN_BG_BAND_MAX);
 
         /// <summary>A realm's raw units text ("" for the global targets or another realm).</summary>
         public string UnitsOf(eRealm realm) => (realm switch
@@ -217,6 +219,8 @@ namespace DOL.GS.Commands
             "max_bots" => MaxBots.ToString(CultureInfo.InvariantCulture),
             "cycle_min" => CycleMin.ToString(CultureInfo.InvariantCulture),
             "cycle_max" => CycleMax.ToString(CultureInfo.InvariantCulture),
+            "band_min" => BandMin.ToString(CultureInfo.InvariantCulture),
+            "band_max" => BandMax.ToString(CultureInfo.InvariantCulture),
             "drift" => OpenBgSetupParser.Switch(Drift),
             "albion" => UnitsShown(AlbionUnits),
             "midgard" => UnitsShown(MidgardUnits),
@@ -242,6 +246,8 @@ namespace DOL.GS.Commands
             new("max_bots", "open_bg_max_bots", false, OpenBattlegroundProperties.MaxBotsMin, OpenBattlegroundProperties.MaxBotsMax, "most bots inside, all realms together"),
             new("cycle_min", "open_bg_cycle_min_minutes", false, OpenBattlegroundProperties.CycleMinutesMin, OpenBattlegroundProperties.CycleMinutesMax, "shortest quiet-push-fight-retreat cycle, game minutes"),
             new("cycle_max", "open_bg_cycle_max_minutes", false, OpenBattlegroundProperties.CycleMinutesMin, OpenBattlegroundProperties.CycleMinutesMax, "longest cycle, game minutes"),
+            new("band_min", "open_bg_band_min", false, OpenBattlegroundProperties.BandLevelMin, OpenBattlegroundProperties.BandLevelMax, "lowest crew bot level"),
+            new("band_max", "open_bg_band_max", false, OpenBattlegroundProperties.BandLevelMin, OpenBattlegroundProperties.BandLevelMax, "highest crew bot level"),
             new("drift", "open_bg_player_drift", true, 0, 1, "roamers and solos prefer points within sight of a player"),
             new("albion", "open_bg_units_albion", false, 0, 0, "Albion's own crew; global uses groups8/small/solos", IsUnits: true),
             new("midgard", "open_bg_units_midgard", false, 0, 0, "Midgard's own crew; global uses groups8/small/solos", IsUnits: true),
@@ -252,7 +258,7 @@ namespace DOL.GS.Commands
         };
 
         public const string Usage = "Use /bgsetup <key> <value>. Keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, " +
-            "max_bots 8-120, cycle_min 5-120, cycle_max 5-120 (min not above max), drift on|off, " +
+            "max_bots 8-120, cycle_min 5-120, cycle_max 5-120 (min not above max), band_min 1-50, band_max 1-50 (min not above max), drift on|off, " +
             "albion|midgard|hibernia 8-man/small/solos (e.g. 1/2/4) or global, mode serverpvp|perrealm, peace all|realm|auto, " +
             "presets name:count list (e.g. std8:2,caster8:1; same-size units cycle through the archetypes by count) or off.";
 
@@ -269,7 +275,8 @@ namespace DOL.GS.Commands
 
         /// <summary>Parses against the current cycle bounds (the clamped properties).</summary>
         public static (bool ok, string key, string value, string error) Parse(string[] args) =>
-            Parse(args, OpenBattlegroundProperties.CycleMinMinutes, OpenBattlegroundProperties.CycleMaxMinutes);
+            Parse(args, OpenBattlegroundProperties.CycleMinMinutes, OpenBattlegroundProperties.CycleMaxMinutes,
+                OpenBattlegroundProperties.BandMin, OpenBattlegroundProperties.BandMax);
 
         // mode, peace and presets: a rejected value returns no row, so the stored value stays as it was.
         private static (bool ok, string key, string value, string error) ParseText(OpenBgSetupKey key, string text)
@@ -296,7 +303,8 @@ namespace DOL.GS.Commands
         /// ok with the row key and the value to store ("True"/"False" or an integer), or an error line. A new
         /// cycle_min may not exceed the current maximum, a new cycle_max may not fall below the current minimum.
         /// </summary>
-        public static (bool ok, string key, string value, string error) Parse(string[] args, int currentCycleMin, int currentCycleMax)
+        public static (bool ok, string key, string value, string error) Parse(string[] args, int currentCycleMin, int currentCycleMax,
+            int currentBandMin = OpenBattlegroundProperties.DefaultBandMin, int currentBandMax = OpenBattlegroundProperties.DefaultBandMax)
         {
             if (args == null || args.Length < 3) return (false, null, null, Usage);
             OpenBgSetupKey key = Find(args[1]);
@@ -341,6 +349,10 @@ namespace DOL.GS.Commands
                 return (false, key.RowKey, null, $"cycle_min {number} is above cycle_max {currentCycleMax}; raise cycle_max first.");
             if (key.Name == "cycle_max" && number < currentCycleMin)
                 return (false, key.RowKey, null, $"cycle_max {number} is below cycle_min {currentCycleMin}; lower cycle_min first.");
+            if (key.Name == "band_min" && number > currentBandMax)
+                return (false, key.RowKey, null, $"band_min {number} is above band_max {currentBandMax}; raise band_max first.");
+            if (key.Name == "band_max" && number < currentBandMin)
+                return (false, key.RowKey, null, $"band_max {number} is below band_min {currentBandMin}; lower band_min first.");
             return (true, key.RowKey, number.ToString(CultureInfo.InvariantCulture), null);
         }
     }
@@ -503,6 +515,8 @@ namespace DOL.GS.Commands
                 "solos" => OpenBattlegroundProperties.Clamped("open_bg_solos", values.Solos, 0, OpenBattlegroundProperties.SolosMax),
                 "max_bots" => OpenBattlegroundProperties.Clamped("open_bg_max_bots", values.MaxBots, OpenBattlegroundProperties.MaxBotsMin,
                     OpenBattlegroundProperties.MaxBotsMax),
+                "band_min" => OpenBattlegroundProperties.ResolveBand(values.BandMin, values.BandMax).Min,
+                "band_max" => OpenBattlegroundProperties.ResolveBand(values.BandMin, values.BandMax).Max,
                 "cycle_min" => cycleMin,
                 "cycle_max" => OpenBattlegroundProperties.Clamped("open_bg_cycle_max_minutes", values.CycleMax, cycleMin, OpenBattlegroundProperties.CycleMinutesMax),
                 _ => null,

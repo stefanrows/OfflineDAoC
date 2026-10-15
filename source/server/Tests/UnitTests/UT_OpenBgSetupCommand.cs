@@ -9,8 +9,9 @@ namespace DOL.GS.Tests
     [TestFixture]
     public class UT_OpenBgSetupCommand
     {
-        private static (bool ok, string key, string value, string error) Parse(string key, string value, int cycleMin = 15, int cycleMax = 45) =>
-            OpenBgSetupParser.Parse(new[] { "&bgsetup", key, value }, cycleMin, cycleMax);
+        private static (bool ok, string key, string value, string error) Parse(string key, string value, int cycleMin = 15, int cycleMax = 45,
+            int bandMin = 40, int bandMax = 50) =>
+            OpenBgSetupParser.Parse(new[] { "&bgsetup", key, value }, cycleMin, cycleMax, bandMin, bandMax);
 
         [TestCase("enabled", "on", "open_bg_enabled", "True")]
         [TestCase("enabled", "off", "open_bg_enabled", "False")]
@@ -20,6 +21,9 @@ namespace DOL.GS.Tests
         [TestCase("max_bots", "120", "open_bg_max_bots", "120")]
         [TestCase("cycle_min", "5", "open_bg_cycle_min_minutes", "5")]
         [TestCase("cycle_max", "120", "open_bg_cycle_max_minutes", "120")]
+        [TestCase("band_min", "30", "open_bg_band_min", "30")]
+        [TestCase("band_max", "45", "open_bg_band_max", "45")]
+        [TestCase("band_min", "1", "open_bg_band_min", "1")]
         [TestCase("drift", "false", "open_bg_player_drift", "False")]
         [TestCase("DRIFT", "Yes", "open_bg_player_drift", "True")]
         [TestCase("open_bg_solos", "12", "open_bg_solos", "12")]
@@ -54,6 +58,9 @@ namespace DOL.GS.Tests
         [TestCase("max_bots", "121")]
         [TestCase("cycle_min", "4")]
         [TestCase("cycle_max", "121")]
+        [TestCase("band_min", "51")]
+        [TestCase("band_min", "x")]
+        [TestCase("band_max", "0")]
         [TestCase("solos", "four")]
         [TestCase("enabled", "maybe")]
         public void ParseRejectsOutOfRange(string key, string value)
@@ -194,6 +201,19 @@ namespace DOL.GS.Tests
             });
             string live = string.Join("\n", OpenBgSetupPages.Pages(Snapshot(Array.Empty<OpenBgBotStatus>()), Defaults with { MidgardUnits = "2/0/9" })[0]);
             Assert.That(live, Does.Contain("Own setup: Midgard 2/0/9."));
+        }
+
+        [Test]
+        public void ParseRejectsAnInvertedBand()
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(Parse("band_min", "46", bandMin: 30, bandMax: 45).ok, Is.False);
+                Assert.That(Parse("band_min", "46", bandMin: 30, bandMax: 45).error, Does.Contain("band_max 45"));
+                Assert.That(Parse("band_max", "29", bandMin: 30, bandMax: 45).ok, Is.False);
+                Assert.That(Parse("band_min", "45", bandMin: 30, bandMax: 45).ok, Is.True, "min equal to max is allowed");
+                Assert.That(Parse("band_max", "30", bandMin: 30, bandMax: 45).ok, Is.True);
+            });
         }
 
         [Test]

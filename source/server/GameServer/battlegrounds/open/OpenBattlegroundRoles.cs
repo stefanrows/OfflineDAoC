@@ -35,7 +35,6 @@ namespace DOL.GS
         public const int DriftMinDistance = 800;
         /// <summary>Persistent 40-50 bots leave humans below this level alone unless the human attacked first.</summary>
         public const int ProtectedHumanLevel = 30;
-        public const int CrewMinimumLevel = 40;
 
         /// <summary>
         /// The three Thidranki bridges over the river around Thidranki Faste (zone 252 fixtures, deck floors read from
@@ -241,11 +240,11 @@ namespace DOL.GS
         }
 
         /// <summary>
-        /// Low-level protection: a crew bot (level 40 or more) does not pick a human below level 30 as its target unless
+        /// Low-level protection: a crew bot (level at the band minimum, default 40, or more) does not pick a human below level 30 as its target unless
         /// that human (or its group or companions) attacked it or its group first. Self-defence always stays allowed.
         /// </summary>
         public static bool MayHuntHuman(int botLevel, int humanLevel, bool humanAttackedBot) =>
-            humanAttackedBot || botLevel < CrewMinimumLevel || humanLevel >= ProtectedHumanLevel;
+            humanAttackedBot || botLevel < OpenBattlegroundProperties.BandMin || humanLevel >= ProtectedHumanLevel;
 
         /// <summary>
         /// The one target rule for an open-BG crew bot, shared by the driver's opponent scan and the class brain's PvP

@@ -7,7 +7,7 @@ namespace OfflineDaoc.Launcher;
 /// </summary>
 internal sealed class OpenBgSettingsControl : UserControl
 {
-    private static readonly string[] NumberFields = ["groups8", "small", "solos", "max_bots", "cycle_min", "cycle_max"];
+    private static readonly string[] NumberFields = ["groups8", "small", "solos", "max_bots", "cycle_min", "cycle_max", "band_min", "band_max"];
     private readonly string _database;
     private readonly string _statusPath;
     private readonly Func<bool> _serverStopped;
@@ -52,7 +52,7 @@ internal sealed class OpenBgSettingsControl : UserControl
         body.Controls.Add(new Label { Text = "open BG — Thidranki", AutoSize = true,
             Font = new Font(Font.FontFamily, 15, FontStyle.Bold), ForeColor = DaocTheme.GoldLight });
         body.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 9, 3, 12),
-            Text = "A permanently open battleground for levels 1-50, reached through the porters' [open BG] line. Its own bot crew per realm comes from the level 40-50 world bots and is relieved in part every 20-30 minutes. Bots keep their levels, gear and realm points." });
+            Text = "A permanently open battleground for levels 1-50, reached through the porters' [open BG] line. Its own bot crew per realm comes from the world bots inside the crew level band (default 40-50) and is relieved in part every 20-30 minutes. Bots keep their levels, gear and realm points." });
 
         body.Controls.Add(SwitchRow(_enabled, OpenBgSettings.Field("enabled")));
         foreach (string name in NumberFields)
@@ -211,6 +211,8 @@ internal sealed class OpenBgSettingsControl : UserControl
         (int)_numbers["cycle_max"].Value,
         _drift.Checked)
     {
+        BandMin = (int)_numbers["band_min"].Value,
+        BandMax = (int)_numbers["band_max"].Value,
         AlbionUnits = UnitsText("albion"),
         MidgardUnits = UnitsText("midgard"),
         HiberniaUnits = UnitsText("hibernia"),
@@ -231,6 +233,8 @@ internal sealed class OpenBgSettingsControl : UserControl
         _numbers["max_bots"].Value = value.MaxBots;
         _numbers["cycle_min"].Value = value.CycleMin;
         _numbers["cycle_max"].Value = value.CycleMax;
+        _numbers["band_min"].Value = value.BandMin;
+        _numbers["band_max"].Value = value.BandMax;
         foreach (OpenBgUnitsField field in OpenBgSettings.UnitFields)
             _units[field.Name].Text = value.UnitsOf(field.Name);
         _mode.SelectedIndex = Math.Max(0, Array.IndexOf(ModeValues, value.Mode));
@@ -264,6 +268,8 @@ internal sealed class OpenBgSettingsControl : UserControl
             OpenBgSettings values = ReadValues();
             if (values.CycleMax < values.CycleMin)
                 throw new InvalidOperationException("The longest cycle must not be shorter than the shortest cycle.");
+            if (values.BandMax < values.BandMin)
+                throw new InvalidOperationException("The highest crew level must not be below the lowest crew level.");
             if (InvalidUnits() is string invalid)
                 throw new InvalidOperationException(invalid);
             if (InvalidPresets() is string invalidPresets)
@@ -292,7 +298,7 @@ internal sealed class OpenBgSettingsControl : UserControl
         OpenBgSettings values = ReadValues();
         string? invalidUnits = InvalidUnits();
         string? invalidPresets = InvalidPresets();
-        bool valid = values.CycleMax >= values.CycleMin && invalidUnits == null && invalidPresets == null;
+        bool valid = values.CycleMax >= values.CycleMin && values.BandMax >= values.BandMin && invalidUnits == null && invalidPresets == null;
         _enabled.Enabled = _drift.Enabled = stopped;
         foreach (NumericUpDown number in _numbers.Values) number.Enabled = stopped;
         foreach (TextBox units in _units.Values) units.Enabled = stopped;

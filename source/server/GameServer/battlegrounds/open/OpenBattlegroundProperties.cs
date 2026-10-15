@@ -55,6 +55,13 @@ namespace DOL.GS
         [ServerProperty("pvp", "open_bg_presets", "Open BG crew archetypes as name:count list, e.g. std8:2,caster8:1,raid8:1,stealth4:1,small:2; archetypes are matched by unit size, units of the same size cycle through the listed archetypes in proportion to their counts, the group counts above (or open_bg_units_*) still decide how many units exist, a size without a listed archetype is unchanged; empty = the group counts above", "")]
         public static string OPEN_BG_PRESETS = "";
 
+        [ServerProperty("pvp", "open_bg_band_min", "Open BG crew level band, lowest level of the world bots that may crew it (1-50)", 40)]
+        public static int OPEN_BG_BAND_MIN = 40;
+
+        [ServerProperty("pvp", "open_bg_band_max", "Open BG crew level band, highest level of the world bots that may crew it (1-50)", 50)]
+        public static int OPEN_BG_BAND_MAX = 50;
+
+        public const int BandLevelMin = 1, BandLevelMax = 50, DefaultBandMin = 40, DefaultBandMax = 50;
         public const int MaxBotsMin = 8, MaxBotsMax = 120;
         public const int Groups8Max = 4, GroupsSmallMax = 6, SolosMax = 12;
         public const int CycleMinutesMin = 5, CycleMinutesMax = 120;
@@ -66,6 +73,17 @@ namespace DOL.GS
         public static int Groups8 => Clamped("open_bg_groups8", OPEN_BG_GROUPS8, 0, Groups8Max);
         public static int GroupsSmall => Clamped("open_bg_groups_small", OPEN_BG_GROUPS_SMALL, 0, GroupsSmallMax);
         public static int Solos => Clamped("open_bg_solos", OPEN_BG_SOLOS, 0, SolosMax);
+        /// <summary>The crew level band, both ends clamped to 1-50; a band whose minimum is above its maximum is the default 40-50.</summary>
+        public static int BandMin => ResolveBand(OPEN_BG_BAND_MIN, OPEN_BG_BAND_MAX).Min;
+        public static int BandMax => ResolveBand(OPEN_BG_BAND_MIN, OPEN_BG_BAND_MAX).Max;
+
+        /// <summary>Pure: each end clamped to 1-50; if the minimum then exceeds the maximum the pair is the defaults 40 / 50.</summary>
+        public static (int Min, int Max) ResolveBand(int min, int max)
+        {
+            int low = Math.Clamp(min, BandLevelMin, BandLevelMax), high = Math.Clamp(max, BandLevelMin, BandLevelMax);
+            return low > high ? (DefaultBandMin, DefaultBandMax) : (low, high);
+        }
+
         public static string Mode => OPEN_BG_MODE ?? string.Empty;
         public static string LandingPeace => OPEN_BG_LANDING_PEACE ?? string.Empty;
         public static string Presets => OPEN_BG_PRESETS ?? string.Empty;

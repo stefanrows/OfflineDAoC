@@ -511,13 +511,14 @@ namespace DOL.GS.Commands
                     $"{SettingLabel(key.Name)}: {(on ? "off" : "on")}.", key.RowKey, value)));
                 return;
             }
+            (int Min, int Max) band = OpenBattlegroundProperties.ResolveBand(values.BandMin, values.BandMax);
             int current = int.Parse(values.ValueOf(key.Name), CultureInfo.InvariantCulture);
             int[] steps = key.Max - key.Min >= 20 ? new[] { 1, 5, -1, -5 } : new[] { 1, -1 };
             foreach (int step in steps)
             {
                 int next = Math.Clamp(current, key.Min, key.Max) + step;
                 (bool ok, string rowKey, string value, _) = OpenBgSetupParser.Parse(new[] { "&bgsetup", key.Name, next.ToString(CultureInfo.InvariantCulture) },
-                    cycleMin, cycleMax);
+                    cycleMin, cycleMax, band.Min, band.Max);
                 if (!ok) continue;
                 lines.Add(new Line($"[{(step > 0 ? "Raise" : "Lower")} to {next}]", new OpenBgIntent(OpenBgIntentKind.Write,
                     $"{SettingLabel(key.Name)}: {current} -> {next}." + (key.Name is "groups8" or "small" or "solos"
@@ -676,6 +677,8 @@ namespace DOL.GS.Commands
             "solos" => "Solos per realm",
             "cycle_min" => "Shortest cycle",
             "cycle_max" => "Longest cycle",
+            "band_min" => "Crew level from",
+            "band_max" => "Crew level to",
             "drift" => "Player drift",
             _ => name,
         };

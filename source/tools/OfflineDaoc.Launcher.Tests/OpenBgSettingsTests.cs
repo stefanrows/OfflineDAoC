@@ -42,7 +42,7 @@ public sealed class OpenBgSettingsTests
         {
             ("open_bg_enabled", "True"), ("open_bg_groups8", "2"), ("open_bg_groups_small", "3"), ("open_bg_solos", "5"),
             ("open_bg_max_bots", "60"), ("open_bg_cycle_min_minutes", "10"), ("open_bg_cycle_max_minutes", "30"),
-            ("open_bg_player_drift", "False"), ("open_bg_units_albion", ""), ("open_bg_units_midgard", ""), ("open_bg_units_hibernia", ""),
+            ("open_bg_player_drift", "False"), ("open_bg_band_min", "40"), ("open_bg_band_max", "50"), ("open_bg_units_albion", ""), ("open_bg_units_midgard", ""), ("open_bg_units_hibernia", ""),
             ("open_bg_mode", "serverpvp"), ("open_bg_landing_peace", ""), ("open_bg_presets", ""),
         }));
     }
@@ -68,7 +68,7 @@ public sealed class OpenBgSettingsTests
         Assert.Multiple(() =>
         {
             Assert.That(settings.Clamped().HiberniaUnits, Is.Empty, "unreadable text means the global values, as on the server");
-            Assert.That(OpenBgSettings.ToRows(settings).Skip(8).Take(3), Is.EqualTo(new[]
+            Assert.That(OpenBgSettings.ToRows(settings).Skip(10).Take(3), Is.EqualTo(new[]
             {
                 ("open_bg_units_albion", "2/0/9"), ("open_bg_units_midgard", ""), ("open_bg_units_hibernia", ""),
             }));
@@ -83,7 +83,7 @@ public sealed class OpenBgSettingsTests
         var rows = OpenBgSettings.ToRows(settings);
         Assert.Multiple(() =>
         {
-            Assert.That(rows.Skip(11), Is.EqualTo(new[] { ("open_bg_mode", "perrealm"), ("open_bg_landing_peace", "all"), ("open_bg_presets", "std8:2,caster8:1,duo:0") }));
+            Assert.That(rows.Skip(13), Is.EqualTo(new[] { ("open_bg_mode", "perrealm"), ("open_bg_landing_peace", "all"), ("open_bg_presets", "std8:2,caster8:1,duo:0") }));
             Assert.That(OpenBgSettings.FromRows(rows), Is.EqualTo(settings));
             Assert.That(OpenBgSettings.FromRows([]).Mode, Is.EqualTo("serverpvp"), "the server's default mode");
             Assert.That(OpenBgSettings.FromRows([("open_bg_mode", "PerRealm"), ("open_bg_landing_peace", " Realm ")]),
@@ -124,6 +124,23 @@ public sealed class OpenBgSettingsTests
         });
     }
 
+    [Test] public void CrewBandRoundTripsAndAnOldConfigLoadsTheDefaults()
+    {
+        var settings = OpenBgSettings.Defaults with { BandMin = 20, BandMax = 35 };
+        var rows = OpenBgSettings.ToRows(settings);
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows.Where(row => row.key.StartsWith("open_bg_band")), Is.EqualTo(new[] { ("open_bg_band_min", "20"), ("open_bg_band_max", "35") }));
+            Assert.That(OpenBgSettings.FromRows(rows), Is.EqualTo(settings));
+            OpenBgSettings old = OpenBgSettings.FromRows([("open_bg_solos", "7")]);
+            Assert.That((old.BandMin, old.BandMax), Is.EqualTo((40, 50)), "an old config without the rows");
+            Assert.That((OpenBgSettings.Defaults with { BandMin = 0, BandMax = 99 }).Clamped().BandMin, Is.EqualTo(1));
+            Assert.That((OpenBgSettings.Defaults with { BandMin = 0, BandMax = 99 }).Clamped().BandMax, Is.EqualTo(50));
+            OpenBgSettings inverted = (OpenBgSettings.Defaults with { BandMin = 45, BandMax = 30 }).Clamped();
+            Assert.That((inverted.BandMin, inverted.BandMax), Is.EqualTo((40, 50)), "an inverted pair falls back to the defaults, like the server");
+        });
+    }
+
     [Test] public void RangesClamp()
     {
         var wild = new OpenBgSettings(true, 9, -1, 40, 500, 1, 3, true);
@@ -131,7 +148,7 @@ public sealed class OpenBgSettingsTests
         {
             Assert.That(wild.Clamped(), Is.EqualTo(new OpenBgSettings(true, 4, 0, 12, 120, 5, 5, true)), "cycle max never below the min");
             Assert.That(OpenBgSettings.ToRows(wild).Select(row => row.value),
-                Is.EqualTo(new[] { "True", "4", "0", "12", "120", "5", "5", "True", "", "", "", "serverpvp", "", "" }));
+                Is.EqualTo(new[] { "True", "4", "0", "12", "120", "5", "5", "True", "40", "50", "", "", "", "serverpvp", "", "" }));
             Assert.That(OpenBgSettings.FromRows([("open_bg_max_bots", "2"), ("open_bg_cycle_min_minutes", "200"), ("open_bg_cycle_max_minutes", "10")]),
                 Is.EqualTo(OpenBgSettings.Defaults with { MaxBots = 8, CycleMin = 120, CycleMax = 120 }));
             foreach (OpenBgField field in OpenBgSettings.Fields)
@@ -145,7 +162,7 @@ public sealed class OpenBgSettingsTests
         {
             "enabled:open_bg_enabled:0-1", "groups8:open_bg_groups8:0-4", "small:open_bg_groups_small:0-6", "solos:open_bg_solos:0-12",
             "max_bots:open_bg_max_bots:8-120", "cycle_min:open_bg_cycle_min_minutes:5-120", "cycle_max:open_bg_cycle_max_minutes:5-120",
-            "drift:open_bg_player_drift:0-1",
+            "drift:open_bg_player_drift:0-1", "band_min:open_bg_band_min:1-50", "band_max:open_bg_band_max:1-50",
         }));
         Assert.That(OpenBgSettings.Fields.All(field => field.Help.Length > 0 && field.Description.Length > 0));
     }
@@ -158,7 +175,7 @@ public sealed class OpenBgSettingsTests
         Assert.Multiple(() =>
         {
             Assert.That(OpenBgSettings.Load(_database), Is.EqualTo(settings));
-            Assert.That(Sql("SELECT count(*) FROM ServerProperty WHERE `Key` LIKE 'open_bg_%'"), Is.EqualTo(14L));
+            Assert.That(Sql("SELECT count(*) FROM ServerProperty WHERE `Key` LIKE 'open_bg_%'"), Is.EqualTo(16L));
             Assert.That(Sql("SELECT count(*) FROM ServerProperty WHERE ServerProperty_ID IS NOT NULL"), Is.EqualTo(0L), "new rows and the legacy '' id stay NULL");
             Assert.That(Sql("SELECT Description FROM ServerProperty WHERE `Key`='open_bg_solos'"), Is.EqualTo("server text"));
             Assert.That(Sql("SELECT Category || '|' || DefaultValue || '|' || Value FROM ServerProperty WHERE `Key`='open_bg_enabled'"), Is.EqualTo("pvp|False|True"));

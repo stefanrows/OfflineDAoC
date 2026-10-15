@@ -30,6 +30,10 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
     public string MidgardUnits { get; init; } = string.Empty;
     public string HiberniaUnits { get; init; } = string.Empty;
 
+    /// <summary>Crew level band of the world bots that may crew the open BG (1-50); an old config without the rows is 40-50.</summary>
+    public int BandMin { get; init; } = 40;
+    public int BandMax { get; init; } = 50;
+
     /// <summary>The friend rule: "serverpvp" (Camlann rule, mixed crews) or "perrealm" (same realm is a friend in region 252).</summary>
     public string Mode { get; init; } = "serverpvp";
 
@@ -165,6 +169,12 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
         new("drift", "open_bg_player_drift", "Player drift", 0, 1, 1,
             "Roamers and solos prefer field points within sight of a player; the keep cycle runs on regardless.",
             "Open BG roamers and solos prefer field points within sight of a player; the keep cycle runs independently"),
+        new("band_min", "open_bg_band_min", "Crew level from", 1, 50, 40,
+            "Lowest level of the world bots that may crew the open BG (1-50, not above the highest).",
+            "Open BG crew level band, lowest level of the world bots that may crew it (1-50)"),
+        new("band_max", "open_bg_band_max", "Crew level to", 1, 50, 50,
+            "Highest level of the world bots that may crew the open BG (1-50, not below the lowest).",
+            "Open BG crew level band, highest level of the world bots that may crew it (1-50)"),
     ];
 
     public static OpenBgSettings Defaults => new(false, 1, 2, 4, 72, 15, 45, true);
@@ -175,8 +185,13 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
     public OpenBgSettings Clamped()
     {
         int min = Clamp("cycle_min", CycleMin);
+        int bandMin = Clamp("band_min", BandMin), bandMax = Clamp("band_max", BandMax);
+        // Like the server: a minimum above the maximum is the default 40-50.
+        if (bandMin > bandMax) (bandMin, bandMax) = (Field("band_min").Default, Field("band_max").Default);
         return this with
         {
+            BandMin = bandMin,
+            BandMax = bandMax,
             Groups8 = Clamp("groups8", Groups8),
             Small = Clamp("small", Small),
             Solos = Clamp("solos", Solos),
@@ -199,7 +214,7 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
     }
 
     /// <summary>
-    /// The fourteen rows (row key, stored value): the eight fields in order, the realms' crews, then mode, landing peace and presets; clamped, switches as
+    /// The sixteen rows (row key, stored value): the ten fields in order, the realms' crews, then mode, landing peace and presets; clamped, switches as
     /// "True"/"False" like the server writes them.
     /// </summary>
     public static IReadOnlyList<(string key, string value)> ToRows(OpenBgSettings settings)
@@ -214,6 +229,8 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             "max_bots" => Number(value.MaxBots),
             "cycle_min" => Number(value.CycleMin),
             "cycle_max" => Number(value.CycleMax),
+            "band_min" => Number(value.BandMin),
+            "band_max" => Number(value.BandMax),
             _ => Switch(value.Drift),
         })).Concat(UnitFields.Select(field => (field.RowKey, value.UnitsOf(field.Name))))
             .Concat(TextFields.Select(field => (field.RowKey, value.TextOf(field.Name)))).ToArray();
@@ -250,6 +267,8 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             ReadNumber("cycle_max", defaults.CycleMax),
             ReadSwitch("drift", defaults.Drift))
         {
+            BandMin = ReadNumber("band_min", defaults.BandMin),
+            BandMax = ReadNumber("band_max", defaults.BandMax),
             AlbionUnits = saved.GetValueOrDefault("open_bg_units_albion") ?? string.Empty,
             MidgardUnits = saved.GetValueOrDefault("open_bg_units_midgard") ?? string.Empty,
             HiberniaUnits = saved.GetValueOrDefault("open_bg_units_hibernia") ?? string.Empty,
