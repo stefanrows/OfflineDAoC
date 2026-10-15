@@ -168,6 +168,21 @@ public class UT_GothwaitePvpStatus
     }
 
     [Test]
+    public void TheOpenBgReserveLineComesLastWhenTheReportCarriesTheCounts()
+    {
+        GothwaitePvpStatusReport report = SampleReport() with { OpenBg = new GothwaitePvpOpenBgReserveCounts(12, 9, 3) };
+        IReadOnlyList<string> lines = GothwaitePvpStatus.Lines(report);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lines[^1], Is.EqualTo("open BG reserve 12, standby 9, crew 3"));
+            Assert.That(GothwaitePvpStatus.Lines(SampleReport()).Count, Is.EqualTo(lines.Count - 1));
+            Assert.That(GothwaitePvpStatus.Lines(SampleReport(active: false) with { OpenBg = new GothwaitePvpOpenBgReserveCounts(1, 1, 1) }),
+                Is.EqualTo(new[] { GothwaitePvpStatus.OffLine }));
+        });
+    }
+
+    [Test]
     public void TheBotsOnlineLineCountsEachPhaseAndNotesTheDeadBots()
     {
         IReadOnlyList<string> lines = GothwaitePvpStatus.Lines(SampleReport());

@@ -11,6 +11,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private const int GothwaiteWorldModeIndex = 1;
     private const string WorldModeToolTip = "Normal is the standard autonomous bot world. Gothwaite PvP moves every autonomous bot to the Isle of Glass around Caer Gothwaite for PvP only: no leveling, raids or sieges. The first switch saves a backup of the save database. Positions are restored when you switch back to Normal. Takes effect at the next server start.";
     private const string GothwaiteWorldModeHint = "All autonomous bots PvP around Caer Gothwaite. They do not level, raid or siege. Their positions are restored when you switch back to Normal. Takes effect at the next server start.";
+    private const string OpenBgWorldModeHint = "Open BG runs with a reserved crew in this mode (level band: open BG tab).";
     private static readonly string[] TypeNames = ["Leveler", "Casual", "Hybrid", "Hunter", "Roamer", "Keep warrior"];
     private const string TypeMixHint = "\n\nHigher values give this type more weight for new bots. Existing saved types stay as they are until you apply the mix while the server is running. Keep all six sliders at 100% total.";
     private static readonly string[] TypeToolTips =
@@ -43,6 +44,8 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
     private readonly Label _worldModeHint = new() { AutoSize = true, MaximumSize = new Size(840, 0),
         Margin = new Padding(3, 0, 3, 6), Visible = false, Text = GothwaiteWorldModeHint };
+    private readonly Label _openBgHint = new() { AutoSize = true, MaximumSize = new Size(840, 0),
+        Margin = new Padding(3, 0, 3, 6), Visible = false, Text = OpenBgWorldModeHint };
     private readonly Button _save = DaocTheme.ToolButton("Save settings");
     private readonly Button _undo = DaocTheme.ToolButton("Undo edits");
     private readonly Button _defaults = DaocTheme.ToolButton("Restore defaults");
@@ -96,6 +99,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _worldShape.Items.AddRange(ShapeNames);
         body.Controls.Add(ChoiceRow("World mode", _worldMode, WorldModeToolTip));
         body.Controls.Add(_worldModeHint);
+        body.Controls.Add(_openBgHint);
         body.Controls.Add(ChoiceRow("Preset", _preset,
             "Quick starting mixes: Classic PvP is balanced; Peaceful favors leveling and mild danger; Bloodbath favors Hunters and Roamers with Aggressive danger; Keep Wars favors Keep warriors and Roamers. Selecting a preset replaces the six percentages and danger. Choose Custom to edit them. Saving a preset changes future type assignments; use Apply mix to existing bots for a live rebalance."));
         var mixHeading = new Label { Text = "Player-type mix — total must equal 100%", AutoSize = true,
@@ -430,7 +434,7 @@ internal sealed class BotGoalsSettingsControl : UserControl
         foreach (Control control in _sliders.Cast<Control>().Concat(_values))
             control.Enabled = !mixOperationPending && (stopped || liveStatus != null);
         _preset.Enabled = _danger.Enabled = _worldShape.Enabled = _worldMode.Enabled = stopped && !mixOperationPending;
-        _worldModeHint.Visible = WorldModeSelected;
+        _worldModeHint.Visible = _openBgHint.Visible = WorldModeSelected;
         _altHours.Enabled = _altCap.Enabled = stopped && !mixOperationPending;
         _save.Enabled = stopped && valid && !mixOperationPending;
         _undo.Enabled = _defaults.Enabled = stopped && !mixOperationPending;

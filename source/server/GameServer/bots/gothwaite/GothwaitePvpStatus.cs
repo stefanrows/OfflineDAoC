@@ -29,12 +29,15 @@ public sealed record GothwaitePvpGroupCensus(int Forming, int FormingMembers, in
     public static GothwaitePvpGroupCensus Empty { get; } = new(0, 0, 0, new int[4], 0, 0);
 }
 
+/// <summary>The open BG reserve: set size, reserved bots on standby (alive, in no battleground) and reserved bots in the open BG crew.</summary>
+public readonly record struct GothwaitePvpOpenBgReserveCounts(int Size, int Standby, int Crew);
+
 /// <summary>
 /// Everything the status command prints (docs/GOTHWAITE_PVP_MODE.md section 8, stage 4). Fights and load are null while the mode is off.
 /// </summary>
 public sealed record GothwaitePvpStatusReport(bool Active, ushort Region, string Arena, int SafeRadius,
     IReadOnlyList<GothwaitePvpBotSample> Bots, GothwaitePvpGroupCensus Groups, GothwaitePvpStatsSnapshot Fights,
-    GothwaitePvpLoadSnapshot Load);
+    GothwaitePvpLoadSnapshot Load, GothwaitePvpOpenBgReserveCounts? OpenBg = null);
 
 /// <summary>
 /// The Gothwaite PvP status (stage 4): the bots online in the mode by level band and phase, the castle groups, the fights with
@@ -86,13 +89,28 @@ public static class GothwaitePvpStatus
             return new GothwaitePvpStatusReport(false, arena.RegionId, arena.Name, arena.SafeRadius,
                 Array.Empty<GothwaitePvpBotSample>(), GothwaitePvpGroupCensus.Empty, null, null);
         var bots = new List<GothwaitePvpBotSample>();
+        int standby = 0, crew = 0;
         foreach (GameBot bot in AutonomousBotRegistry.Snapshot())
+        {
             if (GothwaitePvpMode.IsModeBot(bot))
                 bots.Add(new GothwaitePvpBotSample(bot.Level, GothwaitePvpDriver.PhaseOf(bot)));
+            else if (GothwaitePvpOpenBgReserve.IsOpenBgReserved(bot))
+            {
+                if (AutonomousBattlegroundParticipation.IsOpenCrew(bot))
+                    crew++;
+                else if (bot.IsAlive && !AutonomousBattlegroundParticipation.IsInAnyBattleground(bot))
+                    standby++;
+            }
+        }
         return new GothwaitePvpStatusReport(true, arena.RegionId, arena.Name, arena.SafeRadius, bots,
             GothwaitePvpGroupFormer.Census(), GothwaitePvpStats.Snapshot(),
-            GothwaitePvpLoadMeter.Snapshot(Environment.TickCount64));
+            GothwaitePvpLoadMeter.Snapshot(Environment.TickCount64),
+            new GothwaitePvpOpenBgReserveCounts(GothwaitePvpOpenBgReserve.Set.Count, standby, crew));
     }
+
+    /// <summary>The open BG reserve line (pure).</summary>
+    public static string OpenBgReserveLine(GothwaitePvpOpenBgReserveCounts counts) =>
+        $"open BG reserve {counts.Size}, standby {counts.Standby}, crew {counts.Crew}";
 
     /// <summary>
     /// The status as chat lines (pure). With the mode off it is the single <see cref="OffLine"/>. Numbers use the invariant culture,
@@ -148,6 +166,8 @@ public static class GothwaitePvpStatus
         }
 
         lines.Add(LoadLine(report.Load, bots.Count));
+        if (report.OpenBg is GothwaitePvpOpenBgReserveCounts reserve)
+            lines.Add(OpenBgReserveLine(reserve));
         return lines;
     }
 
