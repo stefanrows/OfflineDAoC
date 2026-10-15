@@ -35,11 +35,15 @@ public static class AutonomousBattlegroundDriver
     /// <summary>The raid's lead guild claims first; partners wait this long after the lord fell (the allied claim flip: 10 of 18 claims in run L2 came within 3 minutes of the previous one).</summary>
     public const long ClaimLeadMilliseconds = 60_000;
 
-    /// <summary>Pure claim rule: only assault and defend units walk to the steward, the lead guild first.</summary>
+    /// <summary>
+    /// Pure claim rule: only assault and defend units walk to the steward, the lead guild first. Defend and assault are
+    /// the same here: while the lord lies defeated the whole raid has the defend role (it acts as the keep's friends),
+    /// and the current owner's defenders cannot claim an owned keep anyway (TryClaim rejects it). The time is game time
+    /// (<c>GameLoop.GameLoopTime</c> advances by the speed-scaled logical tick), so the window holds at any world speed.
+    /// </summary>
     public static bool ClaimAllowed(OpenBgRole role, bool isRaidLeadGuild, long msSinceLordDown) => role switch
     {
-        OpenBgRole.Defend => true,
-        OpenBgRole.Assault => isRaidLeadGuild || msSinceLordDown >= ClaimLeadMilliseconds,
+        OpenBgRole.Defend or OpenBgRole.Assault => isRaidLeadGuild || msSinceLordDown >= ClaimLeadMilliseconds,
         _ => false,
     };
 
