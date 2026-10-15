@@ -938,6 +938,36 @@ If `main` moved, merge it into `obg-window` first and rebuild; never force-push.
 
 - [ ] **Step 6: Live measurement hand-off (owner decides when).** After a deploy the owner runs the open BG 30 minutes in each mode; the numbers to read are `OPEN_BG_FIELD`, `KEEP_CLAIMED keep=11`, `OPEN_BG_ARCHETYPE_MISS` and the death split by phase (concept section 4).
 
+
+### Task 11: Members of another region board at their own porter (replaces the remote meetup of Task 8)
+
+Owner decision 2026-10-15: no travel into the enemy frontier and no new porter NPC. Every bot of a mixed group goes to the open BG porter of **its own region** (it is usually already there or walks to it) and boards; the porter already lands a group member at its **leader's landing** (`GetLanding`, `BattlegroundCampaignPolicy.cs` ~line 81). The leader boards first, the members follow at their own porters.
+
+**Files:**
+- Modify: `source/server/GameServer/bots/autonomous/AutonomousBotGroupCoordinator.OpenBattleground.cs` (`TryFormOpenBattlegroundParty`, session set-up around `NewSession`), `AutonomousBotGroupCoordinator.cs` (rendezvous slots ~1121, `NewSession` remote members ~1861, assembly gate ~2724), `source/server/GameServer/bots/autonomous/AutonomousBattlegroundParticipation.cs` (`OpenBoarders` ~500-540, `OpenGroupMayBoard` ~626)
+- Test: `source/server/Tests/UnitTests/UT_OpenBattlegroundMuster.cs` (extend), plus an installed-data probe `UT_OpenBattlegroundOwnPorter.cs` (new)
+
+**Interfaces:**
+- Consumes: `OpenBattlegroundMuster.PoolsMerged/AcceptsMember/RegionAccepted/SeedAllowed` (Task 8), `OpenGroupMayBoard(bool, int, int)`, `Participation.OpenBoarders`.
+- Produces: `OpenBattlegroundMuster.BoardsAtOwnPorter(bool presetServerPvpUnit, ushort memberRegion, ushort leaderRegion) -> bool` (true only for a preset unit in Server PvP when the member is in another region than the leader); `AutonomousBattlegroundParticipation.OpenOwnPorterMayBoard(bool leaderEntered, bool memberReady) -> bool` (a member of another region boards only after its leader has entered the BG and it is itself ready at its porter).
+
+- [ ] **Step 1: Prove the data first (offline, installed data).** Write `UT_OpenBattlegroundOwnPorter` in the style of `UT_BattlegroundLanding`/`UT_GothwaitePvpArenaInstalledNavigation`: for each realm frontier region (1, 100, 200) assert that an open BG porter exists (`AutonomousBattlegroundParticipation.SourcePorters(region)` is non-empty) and that `BattlegroundCampaignPolicy.GetLanding` for a member whose group leader stands in the BG returns the leader's landing, not the member's own realm landing. If the data does not hold, stop and report BLOCKED with the evidence.
+
+- [ ] **Step 2: Write the failing pure tests** for `BoardsAtOwnPorter` (true only: preset Server PvP unit and other region; false for same region, for a non-preset unit, for Per realm) and `OpenOwnPorterMayBoard` (leader not entered => false; leader entered and member ready => true; member not ready => false).
+
+- [ ] **Step 3: Run to verify they fail** (CS0117 on the two predicates).
+
+- [ ] **Step 4: Implement the predicates**, then the minimal wiring: for a preset Server PvP unit the session no longer treats a member of another region as a remote member that travels to the leader's rendezvous; that member's pickup destination is the porter of its OWN region (nearest `SourcePorters(memberRegion)`), the assembly gate no longer waits for it to arrive at the leader's porter, and `OpenBoarders` lets it board at that porter once `OpenOwnPorterMayBoard` allows it (leader entered). Members in the leader's region keep today's whole-group boarding with `OpenGroupMayBoard`. Remove the `allowRemoteMembers` remote-meetup use from Task 8 for these members (keep `RegionAccepted` as the formation check). A member whose porter or boarding fails is dropped by the existing straggler timeout (`OPEN_BG_STRAGGLER_DROPPED`), the group continues.
+
+- [ ] **Step 5: Run the filtered suites** (`UT_OpenBattlegroundMuster|UT_OpenBattlegroundOwnPorter|UT_OpenBattleground|UT_OpenBg|UT_AutonomousBattleground|UT_BattlegroundLanding`); expect no new failure besides the known `EveryPropertyRowHasAKey`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add source/server/GameServer/bots/autonomous source/server/Tests/UnitTests/UT_OpenBattlegroundMuster.cs source/server/Tests/UnitTests/UT_OpenBattlegroundOwnPorter.cs
+git commit -m "feat(open-bg): members of another region board at their own porter and land at the leader's landing"
+```
+
 ---
 
 ## Self-Review
