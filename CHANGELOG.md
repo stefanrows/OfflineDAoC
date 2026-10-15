@@ -12,6 +12,46 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.279.0] - 2026-10-15
+
+### Added
+
+- **Open BG together with the Gothwaite PvP mode.** With `gothwaite-pvp.json`
+  enabled, a reserved set of world bots from the crew level band (per realm
+  2.5 x the realm's seats, at most 30% of the realm's band bots, chosen by
+  an id hash once at server start) is kept out of the mode bots. Reserved
+  bots log in at their realm's border hub and park there between open BG
+  deployments; the open BG roster, director and unit assignment recruit only
+  them while the mode is on. All other world bots stay mode bots; bracket
+  battlegrounds stay off in the mode. Logs `GOTH_PVP_OPENBG_RESERVE` and
+  `GOTH_PVP_OPENBG_PARK`. Mode off, and the open BG without the mode, behave
+  as before.
+- **Crew level band.** `open_bg_band_min` / `open_bg_band_max` (defaults 40 /
+  50), `/bgsetup band_min|band_max` and launcher fields.
+- `/gothpvp` ends with `open BG reserve <N>, standby <a>, crew <b>` while the
+  mode is on.
+- Launcher hint under the World mode selector: the open BG runs with a
+  reserved crew in this mode.
+
+### Changed
+
+- None beyond the above.
+
+### Fixed
+
+- Solo units never break off in the open BG team fight; lurkers and bridge
+  watchers keep their post.
+- The claim window (lead guild first, others after 60 s game time) now also
+  holds for defend units while the lord lies defeated; before, the whole raid
+  counted as keep friends and every leader claimed at once.
+- A keep change during the push or keep fight ends it and the cycle goes on in
+  the retreat phase instead of forming a new raid at once (log
+  `OPEN_BG_KEEP_CHANGED`).
+
+### Removed
+
+- None.
+
 ## [0.278.0] - 2026-10-15
 
 ### Added

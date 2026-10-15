@@ -356,6 +356,12 @@ Agent sessions on items 45–48: take the role and context from
      0.269.0 (section 13.5). Pending: the owner's
      load run at 300/600/1,000 bots (plan section 12), the stage 5 live
      check, and the stage 6 live check (section 13.4).
+     0.279.0: the open BG now runs with the mode through a reserved set of
+     world bots (plan section 14, decision G12); `/gothpvp` shows
+     `open BG reserve N, standby a, crew b`. Open: the reserve is frozen at
+     server start; an empty reserve (bots below the band) means no open BG;
+     live checks pending (hub login point, medallion porter reach at the
+     hubs, reserved bots filling the crew).
 
 ## Implemented in source; installation verification pending
 
@@ -590,6 +596,16 @@ Agent sessions on items 45–48: take the role and context from
      rule and a second raid (waiting for the owner's OK); a defender unit
      kind; the porter-menu landing choice for players; leadership passing to
      a member still outside the BG when the leader dies.
+     0.279.0 (2026-10-15, offline checks only): the open BG runs together with
+     the Gothwaite PvP mode through a reserved bot set (plan section 14),
+     `open_bg_band_min` / `open_bg_band_max` (`/bgsetup`, launcher), solo
+     units never break off, the claim window also holds for defend units
+     while the lord lies defeated, and a keep change ends the push or fight
+     (`OPEN_BG_KEEP_CHANGED`). Open: the reserve is frozen at server start (a
+     changed band or `open_bg_max_bots` applies after a restart while the mode
+     is on); a server whose bots are below the band gets an empty reserve and
+     so no open BG; live checks pending (hub login point validity, medallion
+     porter reach at the hubs, reserved bots filling the crew).
      0.245.0 (deployed 11:04, 20×, ~7× achieved, 11:05–11:31): raids form
      at the push and top up (5–6 units, 13–22 bots, all three realms mixed),
      keep 11 claimed 8 times (4 of them within 19 s by partner guilds of one

@@ -51,6 +51,7 @@ the server starts. Switching needs a restart.
 | G9 (O3) | **Alt trickle paused** while the mode is on. |
 | G10 (O4) | Mode bots **may attack the owner's character and companions**, under the same con rule. The castle stays safe for everyone. |
 | G11 (O5) | **Gothwaite Harbor is not a safe area.** The castle is the only safe hub. |
+| G12 | **The open BG runs with a reserved set** (0.279.0, section 14). With the mode on, a fixed set of world bots of the open BG level band is kept out of the mode and serves only as open BG crew; every other world bot stays a mode bot. |
 
 All open questions are decided (section 9).
 
@@ -135,9 +136,10 @@ against the live database layout before you rely on them.
      active (G8).
    - Every director or scheduler that **recruits** world bots (RvR director
      and event layer, sieges, guild armies, realm raids and their schedule,
-     battleground participation including the open BG roster, Darkness Falls,
+     bracket battleground participation, Darkness Falls,
      crew/group coordinator, alt trickle) does not recruit while the mode is
-     active.
+     active. The open BG roster and director are the exception since 0.279.0
+     (G12): they run and recruit only the reserved set (section 14).
    - `AutonomousPopulationController` login placement: while the mode is
      active, a bot logs in at the castle.
    - Position and bind persistence: section 6.7.
@@ -376,7 +378,7 @@ proves the patrol points with an installed-mesh test.
 |---|---|---|
 | Brain branch | `BotBrain.ThinkCore`, before the battleground participant branch | Mode bots run `ThinkGothwaitePvp()`. This alone cuts off the world controller, keep defense, frontier, RvR events, siege, guild armies, Darkness Falls camps, seal shopping, capital transit and the stuck watchdog. |
 | Coordinator | `AutonomousBotGroupCoordinator.PrepareCoordinatorTick` | Returns at once: keep-defense pulse, realm event controls, realm raids and forced parties, raid schedule, objective reconcile and world group formation stop. |
-| Open BG | `OpenBattlegroundRoster.Tick`, `OpenBattlegroundDirector.Tick`, `AutonomousBattlegroundParticipation.DirectorCap` and its admission | No autonomous bot is recruited or admitted. Real players' battleground access is unchanged. |
+| Open BG | `OpenBattlegroundRoster.Tick`, `OpenBattlegroundDirector.Tick`, `AutonomousBattlegroundParticipation.DirectorCap` and its admission | Bracket battlegrounds: no autonomous bot is recruited or admitted. Open BG (0.279.0, G12): the roster, director and unit assignment run and recruit only reserved bots; the other world bots are not recruited. Real players' battleground access is unchanged. |
 | Attack observers | `AutonomousRvrEventLayer.ObserveKeepAttack`, `AutonomousGuildKeepDefense.ObserveAttack`, `AutonomousRealmRaid.ClaimNearbyDefenseBroadcast` | No defense calls; arena fights would otherwise pull bots away on every hit. |
 | Alt trickle | `AutonomousPopulationController.TryCreateAlt` | Paused (G9). |
 | Login | `AutonomousPopulationController.SpawnOnGameLoop`, after the stored/fresh placement | Mode bots are placed at a castle landing. `RepairInvalidLoginPosition` still runs and accepts it. |
@@ -388,6 +390,11 @@ proves the patrol points with an installed-mesh test.
 | Constitution | `AutonomousBotRealmPointRewards.Award`, the `PVP_DEATH_CON_LOSS` write | Skipped for mode bots (G8). Bots only count lost constitution; nothing applies it to their stats today. |
 | Switch | `GameServer.Start`, next to `AutonomousBotGoalPolicy.Initialize` | Reads `gothwaite-pvp.json` once. |
 | Kill order (0.268.0) | `BotBrain.ApplyRvrCombatHabits`, first line | A mode bot's next target comes from `GothwaitePvpCombat.ChooseTarget` (section 13); null keeps the threat order. |
+| Mode bot test (0.279.0) | `GothwaitePvpMode.IsModeBot` | A reserved bot (`GothwaitePvpOpenBgReserve`) is not a mode bot: no mode driver, no mode group, no castle login or release. |
+| Reserve (0.279.0) | `GothwaitePvpHomeStore` (`ChooseOpenBgReserve`, at the home snapshot/restore on server start, before any login) | `GothwaitePvpOpenBgReserve.Choose` fixes the reserved set once, logs `GOTH_PVP_OPENBG_RESERVE`. |
+| Hub login (0.279.0) | `GothwaitePvpHomeStore.TryPlaceAtCastle` (called from the login placement) | A reserved bot logs in at its realm's border hub instead of the castle. |
+| Standby (0.279.0) | `BotBrain.ThinkCore` (`ThinkOpenBgStandby`, in `BotBrain.GothwaitePvpOpenBgStandby.cs`) | A reserved bot outside every battleground runs a standby turn: park at the hub (`GOTH_PVP_OPENBG_PARK`), stamp the RvR objective so the open BG roster accepts it; the world controller does not run for it. |
+| Open BG guards (0.279.0) | open BG roster, director, unit assignment | While the mode is on they take only reserved bots (`IsOpenBgReserved`). Mode off: unchanged. |
 | Stealth gates (0.268.0) | `BotBrain.TryEnterStealthWhileIdle`, `BotBrain.TryStartStealthOpener`, `BotRvrAmbush.CanUseStealthOpener` | A mode hunter (`GothwaitePvpStealth.Applies`) keeps stealth while idle and may use its stealth opener. |
 
 Findings that shaped the design:
@@ -829,3 +836,33 @@ from their range rather than running in; a PBAoE bomber inside the group
 should be focused at once; `BOT_INCOMING_FIRE` (debug level) shows each
 drawn hold. Pure rules: `UT_BotIncomingFireReaction` (12 tests). Not done:
 spreading out of a repeated AoE (a follow-up to the formation slots).
+
+## 14. Open BG together with the mode (0.279.0)
+
+Before 0.279.0 the mode switched the open BG crew off with the rest of the
+recruiting. Now both run side by side (G12).
+
+- **Reserved set.** Per realm, the level band `open_bg_band_min` /
+  `open_bg_band_max` (default 40 to 50) supplies the candidates. The set takes
+  2.5 times the realm's crew seats, at most 30% of that realm's band bots,
+  ordered by an id hash. It is chosen once at server start, before any login,
+  and logged as `GOTH_PVP_OPENBG_RESERVE`. Without the mode, or with the open
+  BG off, the set is empty and nothing changes.
+- **Not mode bots.** A reserved bot never joins the castle or the arena.
+  Every other world bot stays a mode bot.
+- **Standby.** A reserved bot logs in at its realm's border hub and parks
+  there between open BG deployments (`GOTH_PVP_OPENBG_PARK`). The standby
+  turn also stamps the RvR objective, because the roster only accepts bots
+  with one. The open BG roster, director and unit assignment recruit only
+  reserved bots while the mode is on. Crews board and return as without the
+  mode.
+- **Bracket battlegrounds** stay off in the mode.
+- **Status.** `/gothpvp` ends with `open BG reserve <N>, standby <a>, crew <b>`:
+  the set size, reserved bots alive and in no battleground, reserved bots in
+  the open BG. The launcher shows a hint under the World mode selector.
+- **Mode off, and open BG without the mode:** behave as before.
+- **Known limits.** The reserve is frozen at server start; a changed band or
+  `open_bg_max_bots` applies after a restart. A server whose bots are below
+  the band gets an empty reserve and so no open BG. Live checks pending: hub
+  login point validity, medallion porter reach at the hubs, reserved bots
+  filling the crew.
