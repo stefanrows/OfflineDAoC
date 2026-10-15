@@ -28,7 +28,7 @@ namespace DOL.GS
             GameBot[] all = [leader, .. others];
             if (all.Distinct().Count() != all.Length ||
                 all.Any(bot => bot == null || !bot.IsAutonomousWorldBot || bot.IsTemporaryGroupHelper || bot.Group != null ||
-                    !bot.IsAlive || (!allowRemoteMembers && bot.CurrentRegionID != leader.CurrentRegionID)))
+                    !bot.IsAlive || !OpenBattlegroundMuster.RegionAccepted(allowRemoteMembers, bot.CurrentRegionID, leader.CurrentRegionID)))
             {
                 reason = "a member is not free in the leader's region";
                 return false;

@@ -806,7 +806,7 @@ namespace DOL.GS
                 List<GameBot> pickFrom = merged
                     ? pool.Concat(pools.Where(entry => entry.Key != admit.Realm).SelectMany(entry => entry.Value)).ToList()
                     : pool;
-                if (!TryPickGroup(pickFrom, size, minimum, now, keepOwner, merged, out GameBot leader, out GameBot[] others, out OFTeleporter porter,
+                if (!TryPickGroup(pickFrom, size, minimum, now, keepOwner, merged, admit.Realm, out GameBot leader, out GameBot[] others, out OFTeleporter porter,
                         out Dictionary<OpenBgReject, int> mateRejections))
                 {
                     NoteFormFailed(admit, minimum, pool, poolRejections?.GetValueOrDefault(admit.Realm), mateRejections, now);
@@ -1125,7 +1125,7 @@ namespace DOL.GS
             OpenBattlegroundArchetypes.ParseMix(OpenBattlegroundProperties.Presets).Select(entry => entry.Archetype)
                 .FirstOrDefault(candidate => candidate.Size == size);
 
-        private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now, GuildIds keepOwner, bool merged,
+        private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now, GuildIds keepOwner, bool merged, eRealm admitRealm,
             out GameBot leader, out GameBot[] others, out OFTeleporter porter, out Dictionary<OpenBgReject, int> mateRejections)
         {
             leader = null;
@@ -1135,7 +1135,7 @@ namespace DOL.GS
             GameBot[] rvr = pool.Where(bot => AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) && bot.Group == null).ToArray();
             if (rvr.Length < minimum) return false;
             int bestNear = -1;
-            foreach (GameBot seed in rvr.OrderBy(bot => bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true ? 0 : 1).Take(4))
+            foreach (GameBot seed in rvr.Where(bot => OpenBattlegroundMuster.SeedAllowed(merged, bot.Realm, admitRealm)).OrderBy(bot => bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true ? 0 : 1).Take(4))
             {
                 OFTeleporter nearest = PortersIn(seed.CurrentRegionID, now).OrderBy(candidate => seed.GetDistanceTo(candidate)).FirstOrDefault();
                 if (nearest == null) continue;
@@ -1182,7 +1182,7 @@ namespace DOL.GS
             return false;
         }
 
-        private static Dictionary<OpenBgReject, int> MateRejections(GameBot seed, GameBot[] rvr, OFTeleporter porter, GuildIds keepOwner, bool merged = false)
+        private static Dictionary<OpenBgReject, int> MateRejections(GameBot seed, GameBot[] rvr, OFTeleporter porter, GuildIds keepOwner, bool merged)
         {
             var counts = new Dictionary<OpenBgReject, int>();
             var sameSide = UnitMates(seed, rvr, GuildIdsOf, keepOwner).ToHashSet(ReferenceEqualityComparer.Instance);
