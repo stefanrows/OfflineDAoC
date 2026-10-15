@@ -46,6 +46,15 @@ namespace DOL.GS
         [ServerProperty("pvp", "open_bg_units_hibernia", "Hibernia's open BG crew as 8-man/small/solos, e.g. 1/2/4 (empty: open_bg_groups8, open_bg_groups_small and open_bg_solos)", "")]
         public static string OPEN_BG_UNITS_HIBERNIA = "";
 
+        [ServerProperty("pvp", "open_bg_mode", "Open BG friend rule: serverpvp (Camlann: friends are group, guild and battlegroup, crews mixed) or perrealm (classic DAoC: inside the open BG the same realm is a friend)", "serverpvp")]
+        public static string OPEN_BG_MODE = "serverpvp";
+
+        [ServerProperty("pvp", "open_bg_landing_peace", "Landing peace at the open BG landings: all (every realm) or realm (only the landing's own realm); empty = by mode (serverpvp: all, perrealm: realm)", "")]
+        public static string OPEN_BG_LANDING_PEACE = "";
+
+        [ServerProperty("pvp", "open_bg_presets", "Open BG crew archetypes as name:count list, e.g. std8:2,caster8:1,raid8:1,stealth4:1,small:2,solo:6; empty = the group counts above", "")]
+        public static string OPEN_BG_PRESETS = "";
+
         public const int MaxBotsMin = 8, MaxBotsMax = 120;
         public const int Groups8Max = 4, GroupsSmallMax = 6, SolosMax = 12;
         public const int CycleMinutesMin = 5, CycleMinutesMax = 120;
@@ -57,6 +66,9 @@ namespace DOL.GS
         public static int Groups8 => Clamped("open_bg_groups8", OPEN_BG_GROUPS8, 0, Groups8Max);
         public static int GroupsSmall => Clamped("open_bg_groups_small", OPEN_BG_GROUPS_SMALL, 0, GroupsSmallMax);
         public static int Solos => Clamped("open_bg_solos", OPEN_BG_SOLOS, 0, SolosMax);
+        public static string Mode => OPEN_BG_MODE ?? string.Empty;
+        public static string LandingPeace => OPEN_BG_LANDING_PEACE ?? string.Empty;
+        public static string Presets => OPEN_BG_PRESETS ?? string.Empty;
         public static int CycleMinMinutes => Clamped("open_bg_cycle_min_minutes", OPEN_BG_CYCLE_MIN_MINUTES, CycleMinutesMin, CycleMinutesMax);
         // The maximum never falls below the (clamped) minimum.
         public static int CycleMaxMinutes => Clamped("open_bg_cycle_max_minutes", OPEN_BG_CYCLE_MAX_MINUTES, CycleMinMinutes, CycleMinutesMax);
