@@ -44,7 +44,7 @@ namespace DOL.GS.Tests
         {
             var record = new OfflineWorldBotRecord
             {
-                ObjectiveKind = "SoloPve", ObjectivePveMode = "Time", ObjectivePveKills = 7, ObjectiveRvrEligibleUtc = "x",
+                ObjectiveKind = "SoloPve", ObjectivePveMode = "Time", ObjectivePveKills = 7, ObjectiveRvrEligibleUtc = "x", PveBlockUntilUtc = "2026-10-15T13:00:00.0000000Z",
             };
             DateTime now = new(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
             GothwaitePvpOpenBgStandby.Stamp(record, 42, now, TimeSpan.FromMinutes(90));
@@ -53,10 +53,28 @@ namespace DOL.GS.Tests
             Assert.That(record.ObjectiveAssignedUtc, Is.EqualTo(now.ToString("O")));
             Assert.That(record.ObjectiveExpiresUtc, Is.EqualTo(now.AddMinutes(90).ToString("O")));
             Assert.That(record.ObjectivePveMode, Is.Empty);
+            Assert.That(record.PveBlockUntilUtc, Is.Empty);
+            Assert.That(record.ObjectivePhase, Is.EqualTo("Open BG reserve"));
             Assert.That(record.ObjectivePveKills, Is.EqualTo(0));
             Assert.That(record.ObjectivePveKillTarget, Is.EqualTo(0));
             Assert.That(record.ObjectiveRvrEligibleUtc, Is.Empty);
             Assert.That(GothwaitePvpOpenBgStandby.NeedsRvrStamp(record.ObjectiveKind), Is.False);
         }
+
+        [Test]
+        public void HubKey_Is_Deterministic_And_Differs_Per_Bot_And_Realm()
+        {
+            Assert.That(GothwaitePvpOpenBgStandby.HubKey(5, 1), Is.EqualTo(GothwaitePvpOpenBgStandby.HubKey(5, 1)));
+            Assert.That(GothwaitePvpOpenBgStandby.HubKey(5, 1), Is.Not.EqualTo(GothwaitePvpOpenBgStandby.HubKey(5, 2)));
+            Assert.That(GothwaitePvpOpenBgStandby.HubKey(5, 3), Is.Not.EqualTo(GothwaitePvpOpenBgStandby.HubKey(6, 3)));
+        }
+
+        [Test]
+        public void RunsStableRoute_Only_On_A_Route() =>
+            Assert.Multiple(() =>
+            {
+                Assert.That(GothwaitePvpOpenBgStandby.RunsStableRoute(true), Is.True);
+                Assert.That(GothwaitePvpOpenBgStandby.RunsStableRoute(false), Is.False);
+            });
     }
 }

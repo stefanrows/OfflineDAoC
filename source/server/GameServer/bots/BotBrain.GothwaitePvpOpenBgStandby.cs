@@ -8,12 +8,22 @@ namespace DOL.AI.Brain
 
         /// <summary>
         /// The turn of a reserved open-BG bot between deployments: stamp the RvR objective (the roster takes it as candidate),
-        /// leave a plain bot group, walk to the own border hub, rest and buff there. The world controller never runs here.
+        /// leave a plain bot group, teleport to the own border hub (MoveTo), rest and buff there. The world controller never runs here.
         /// </summary>
         private void ThinkOpenBgStandby()
         {
             ThinkInterval = 1500;
             GameBot bot = BotBody;
+            // Like the other drivers: a release walk left running would re-path against the park.
+            bot.HandOverReleaseReturnToGroup();
+            // A stable route owns movement until its final point (as in ThinkCore): maintain and complete it, park afterwards.
+            if (GothwaitePvpOpenBgStandby.RunsStableRoute(bot.IsOnStableMasterRoute))
+            {
+                bot.MaintainStableMasterRoute();
+                if (!bot.IsMovingOnPath && bot.CurrentPathPoint == null)
+                    bot.TryCompleteStableMasterRouteAfterArrival();
+                return;
+            }
             if (GothwaitePvpOpenBgStandby.NeedsRvrStamp(bot.PersistentRecord?.ObjectiveKind) && bot.PersistentRecord != null)
             {
                 GothwaitePvpOpenBgStandby.Stamp(bot.PersistentRecord, bot.DatabaseID, WorldSimulationClock.UtcNow,

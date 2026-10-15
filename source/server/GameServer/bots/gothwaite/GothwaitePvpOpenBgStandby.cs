@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using DOL.GS.ServerRules;
 
@@ -37,6 +38,8 @@ public static class GothwaitePvpOpenBgStandby
         record.ObjectiveAssignedUtc = utcNow.ToString("O");
         record.ObjectiveExpiresUtc = utcNow.Add(tenure).ToString("O");
         record.ObjectivePveMode = string.Empty;
+        record.PveBlockUntilUtc = string.Empty;
+        record.ObjectivePhase = "Open BG reserve";
         record.ObjectivePveKills = 0;
         record.ObjectivePveKillTarget = 0;
         record.ObjectiveRvrEligibleUtc = string.Empty;
@@ -45,13 +48,29 @@ public static class GothwaitePvpOpenBgStandby
     /// <summary>Within this distance of the hub release point a bot counts as parked (the spread is 240).</summary>
     public const int HubRadius = 1000;
 
-    /// <summary>The own-realm border hub release point and the bot's spread point there (read-only).</summary>
+    private static readonly ConcurrentDictionary<long, (ushort Region, Point3D Anchor, Point3D Spread)> HubCache = new();
+
+    /// <summary>Cache key of a bot's hub: deterministic per bot id and realm.</summary>
+    public static long HubKey(long botId, int realm) => unchecked(botId * 8 + realm);
+
+    /// <summary>A standby turn clears a running stable route first (maintain, then complete) before it may park.</summary>
+    public static bool RunsStableRoute(bool onStableRoute) => onStableRoute;
+
+    /// <summary>The own-realm border hub release point and the bot's spread point there (read-only). Deterministic per bot, cached after the first success.</summary>
     public static bool TryHub(GameBot bot, out ushort region, out Point3D anchor, out Point3D spread)
     {
+        long id = bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID;
+        long key = HubKey(id, (int)bot.Realm);
+        if (HubCache.TryGetValue(key, out var cached))
+        {
+            (region, anchor, spread) = cached;
+            return true;
+        }
         spread = null;
         if (!AutonomousRvrStaging.TrySafeRvrRelease(bot.Realm, true, out region, out anchor))
             return false;
-        spread = BotReleaseBindPoints.SpreadSafe(region, anchor, bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID);
+        spread = BotReleaseBindPoints.SpreadSafe(region, anchor, id);
+        HubCache[key] = (region, anchor, spread);
         return true;
     }
 
