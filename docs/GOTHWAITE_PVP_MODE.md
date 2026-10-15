@@ -861,8 +861,10 @@ recruiting. Now both run side by side (G12).
   the set size, reserved bots alive and in no battleground, reserved bots in
   the open BG. The launcher shows a hint under the World mode selector.
 - **Mode off, and open BG without the mode:** behave as before.
-- **Known limits.** The reserve is frozen at server start; a changed band or
-  `open_bg_max_bots` applies after a restart. A server whose bots are below
+- **Known limits.** The reserve is frozen at server start. While the mode is
+  on, changing the band or `open_bg_max_bots`, or enabling the open BG, at run
+  time does not extend the reserve; the crew can shrink or empty until the next
+  restart (`/bgsetup` says so in its reply). A server whose bots are below
   the band gets an empty reserve and so no open BG. Live checks pending: hub
   login point validity, medallion porter reach at the hubs, reserved bots
   filling the crew.

@@ -42,8 +42,10 @@ package, not this fork's version.
 - Solo units never break off in the open BG team fight; lurkers and bridge
   watchers keep their post.
 - The claim window (lead guild first, others after 60 s game time) now also
-  holds for defend units while the lord lies defeated; before, the whole raid
-  counted as keep friends and every leader claimed at once.
+  holds for defend units while the lord lies defeated; the former owner's defend
+  units also wait, and the 60 s count from when each bot first sees the lord
+  down; before, the whole raid counted as keep friends and every leader claimed
+  at once.
 - A keep change during the push or keep fight ends it and the cycle goes on in
   the retreat phase instead of forming a new raid at once (log
   `OPEN_BG_KEEP_CHANGED`).

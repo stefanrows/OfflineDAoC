@@ -84,6 +84,11 @@ namespace DOL.GS.Commands
             OpenBgSetupKey written = OpenBgSetupParser.Find(key);
             string shown = value.Length > 0 ? value : written.IsUnits ? "global" : written.Name == "peace" ? "auto" : written.Name == "presets" ? "off" : value;
             string message = $"open BG setup: {written.Name} = {shown}. Properties refreshed; the roster reads it on its next tick.";
+            if (written.Name is "band_min" or "band_max" or "enabled" or "max_bots")
+            {
+                string note = OpenBgSetupPages.GothwaiteReserveNote(GothwaitePvpMode.IsActive, GothwaitePvpOpenBgReserve.Set.Count);
+                if (note.Length > 0) message += " " + note;
+            }
             DisplayMessage(client, message);
             if (!OpenBgManager.RefreshIfOpen(player, message))
                 ShowPage(client, 2);
@@ -369,6 +374,11 @@ namespace DOL.GS.Commands
 
         /// <summary>What a line costs in the detail packet: a line byte and a length byte per 255 characters, plus the text.</summary>
         public static int LineCost(string line) => (line?.Length ?? 0) + 2 * (1 + (line?.Length ?? 0) / 255);
+
+        /// <summary>With the Gothwaite mode on the open BG reserve is fixed at server start; empty when the mode is off.</summary>
+        public static string GothwaiteReserveNote(bool modeActive, int reserveCount) => modeActive
+            ? $"Gothwaite mode: the open BG reserve is fixed at server start (reserve {reserveCount}); restart the server to apply."
+            : string.Empty;
 
         public static IReadOnlyList<IReadOnlyList<string>> Pages(OpenBgStatusSnapshot status, OpenBgSetupValues values)
         {

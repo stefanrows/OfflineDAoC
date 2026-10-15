@@ -333,5 +333,34 @@ namespace DOL.GS.Tests
                 Assert.That(OpenBattlegroundStatus.GameIntervalFor(15_000, 0), Is.EqualTo(15_000));
             });
         }
+
+        [Test]
+        public void GothwaiteReserveNoteIsEmptyWhenTheModeIsOff()
+        {
+            Assert.That(OpenBgSetupPages.GothwaiteReserveNote(false, 12), Is.Empty);
+        }
+
+        [Test]
+        public void GothwaiteReserveNoteNamesTheCountAndTheRestart()
+        {
+            string note = OpenBgSetupPages.GothwaiteReserveNote(true, 37);
+            Assert.Multiple(() =>
+            {
+                Assert.That(note, Does.Contain("37"));
+                Assert.That(note, Does.Contain("restart"));
+                Assert.That(note.Length, Is.LessThan(200));
+            });
+        }
+
+        [Test]
+        public void SetupPageWithDefaultsAndALongPresetsListStaysWithinThePageBudget()
+        {
+            OpenBgSetupValues values = Defaults with { Presets = "std8:2,caster8:1,raid8:2,stealth4:2,small:2,duo:3,std8:1,caster8:2,raid8:1,stealth4:1" };
+            foreach (OpenBgSetupValues v in new[] { Defaults, values })
+            {
+                int cost = OpenBgSetupPages.SetupLines(v).Sum(OpenBgSetupPages.LineCost);
+                Assert.That(cost, Is.LessThanOrEqualTo(OpenBgSetupPages.PageBudgetBytes), "setup page bytes");
+            }
+        }
     }
 }
