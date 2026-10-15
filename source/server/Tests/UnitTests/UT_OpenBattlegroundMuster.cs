@@ -52,4 +52,27 @@ public sealed class UT_OpenBattlegroundMuster
             Assert.That(OpenBattlegroundMuster.SeedAllowed(false, eRealm.Hibernia, eRealm.Albion), Is.True);
         });
     }
+
+    [Test]
+    public void OnlyAPresetServerPvpMemberOfAnotherRegionBoardsAtItsOwnPorter()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundMuster.BoardsAtOwnPorter(true, 200, 1), Is.True, "preset Server PvP unit, other region");
+            Assert.That(OpenBattlegroundMuster.BoardsAtOwnPorter(true, 1, 1), Is.False, "same region boards with the whole group");
+            Assert.That(OpenBattlegroundMuster.BoardsAtOwnPorter(false, 200, 1), Is.False, "non-preset unit or Per realm: as today");
+        });
+    }
+
+    [Test]
+    public void AMemberAtItsOwnPorterBoardsOnlyAfterItsLeaderEnteredAndItIsReady()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBattlegroundParticipation.OpenOwnPorterMayBoard(false, true), Is.False, "leader not inside yet");
+            Assert.That(AutonomousBattlegroundParticipation.OpenOwnPorterMayBoard(true, true), Is.True);
+            Assert.That(AutonomousBattlegroundParticipation.OpenOwnPorterMayBoard(true, false), Is.False, "not ready at its porter");
+            Assert.That(AutonomousBattlegroundParticipation.OpenOwnPorterMayBoard(false, false), Is.False);
+        });
+    }
 }

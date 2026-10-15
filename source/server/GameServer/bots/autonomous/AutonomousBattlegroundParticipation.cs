@@ -626,6 +626,12 @@ public static class AutonomousBattlegroundParticipation
     public static bool OpenGroupMayBoard(bool assemblyPhase, int liveWaiting, int readyWaiting) =>
         !assemblyPhase && liveWaiting > 0 && readyWaiting >= liveWaiting;
 
+    /// <summary>
+    /// A member of another region than its group leader (preset Server PvP unit) boards at the porter of its own region
+    /// once its leader has entered the battleground and it stands ready there; the porter then lands it at the leader's landing.
+    /// </summary>
+    public static bool OpenOwnPorterMayBoard(bool leaderEntered, bool memberReady) => leaderEntered && memberReady;
+
     private static void Board(OFTeleporter porter, GameBot[] boarders)
     {
         foreach (GameBot bot in boarders)
