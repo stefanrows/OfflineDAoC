@@ -29,6 +29,9 @@ public static class GothwaitePvpOpenBgReserve
         IsReservedWorldBot(GothwaitePvpMode.IsActive, bot.IsAutonomousWorldBot, bot.IsTemporaryGroupHelper,
             bot.IsBattlegroundEncounterBot, bot.IsPersistentPlayerCompanion, bot.DatabaseID);
 
+    /// <summary>Reserved bot that is idle between deployments (see <see cref="GothwaitePvpOpenBgStandby"/>).</summary>
+    public static bool IsStandby(GameLiving living) => GothwaitePvpOpenBgStandby.IsStandby(living);
+
     /// <summary>Pure form of <see cref="IsOpenBgReserved"/>: the id is the bot's DatabaseID (the BotId of its row).</summary>
     public static bool IsReservedWorldBot(bool modeActive, bool autonomousWorldBot, bool temporaryHelper, bool encounterBot,
         bool companion, long databaseId) =>

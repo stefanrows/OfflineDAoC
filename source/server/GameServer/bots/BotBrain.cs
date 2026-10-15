@@ -1547,6 +1547,9 @@ namespace DOL.AI.Brain
                 return;
             }
 
+            // Open BG reserve (Gothwaite PvP mode): parked at the own border hub between deployments.
+            if (GothwaitePvpOpenBgReserve.IsStandby(BotBody)) { ThinkOpenBgStandby(); return; }
+
             AutonomousRealmAbilityActives.UseActives(BotBody);
 
             if (AutonomousGuildKeepDefense.Eligible(BotBody))

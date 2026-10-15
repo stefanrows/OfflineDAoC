@@ -178,6 +178,17 @@ public static class GothwaitePvpHomeStore
     /// <summary>Login placement of a mode bot at a castle landing. False, with nothing changed, outside the mode.</summary>
     public static bool TryPlaceAtCastle(GameBot bot)
     {
+        // A reserved open-BG bot is no mode bot: it logs in at its own border hub, never in the castle.
+        if (GothwaitePvpOpenBgReserve.IsOpenBgReserved(bot))
+        {
+            if (!GothwaitePvpOpenBgStandby.TryHub(bot, out ushort hubRegion, out _, out Point3D hubPoint))
+                return false;
+            bot.CurrentRegionID = hubRegion;
+            bot.X = hubPoint.X;
+            bot.Y = hubPoint.Y;
+            bot.Z = hubPoint.Z;
+            return true;
+        }
         if (!GothwaitePvpRules.TryCastleLanding(bot, out ushort regionId, out Point3D point))
             return false;
         GothwaitePvpArena arena = GothwaitePvpMode.Arena;
