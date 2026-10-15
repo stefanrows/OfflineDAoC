@@ -346,6 +346,37 @@ namespace DOL.GS.Tests
         }
 
         [Test]
+        public void AKeepChangeEndsThePushAndTheFightInTheRetreat()
+        {
+            // Live run 2026-10-15: every claim re-picked a raid at once and the keep changed hands every few game minutes.
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundDirector.PhaseAfterKeepChange(OpenBgPhase.Push, true), Is.EqualTo(OpenBgPhase.Retreat));
+                Assert.That(OpenBattlegroundDirector.PhaseAfterKeepChange(OpenBgPhase.KeepFight, true), Is.EqualTo(OpenBgPhase.Retreat));
+                Assert.That(OpenBattlegroundDirector.PhaseAfterKeepChange(OpenBgPhase.Quiet, true), Is.EqualTo(OpenBgPhase.Quiet));
+                Assert.That(OpenBattlegroundDirector.PhaseAfterKeepChange(OpenBgPhase.Retreat, true), Is.EqualTo(OpenBgPhase.Retreat));
+                foreach (OpenBgPhase phase in new[] { OpenBgPhase.Quiet, OpenBgPhase.Push, OpenBgPhase.KeepFight, OpenBgPhase.Retreat })
+                    Assert.That(OpenBattlegroundDirector.PhaseAfterKeepChange(phase, false), Is.EqualTo(phase), phase + " without a change");
+            });
+
+            // The cycle keeps its start and its retreat length; the phases before it end at the change.
+            var cycle = new OpenBgCycle(10_000, 300, 200, 350, 150, OpenBgRaid.None);
+            OpenBgCycle inPush = OpenBattlegroundDirector.CycleRetreatingAt(cycle, 10_400);
+            OpenBgCycle inFight = OpenBattlegroundDirector.CycleRetreatingAt(cycle, 10_600);
+            Assert.Multiple(() =>
+            {
+                Assert.That(OpenBattlegroundDirector.PhaseAt(inPush, 10_399), Is.EqualTo(OpenBgPhase.Push));
+                Assert.That(OpenBattlegroundDirector.PhaseAt(inPush, 10_400), Is.EqualTo(OpenBgPhase.Retreat));
+                Assert.That(inPush.EndTick, Is.EqualTo(10_550), "the retreat lasts its normal length");
+                Assert.That(OpenBattlegroundDirector.PhaseAt(inFight, 10_599), Is.EqualTo(OpenBgPhase.KeepFight));
+                Assert.That(OpenBattlegroundDirector.PhaseAt(inFight, 10_600), Is.EqualTo(OpenBgPhase.Retreat));
+                Assert.That(inFight.EndTick, Is.EqualTo(10_750));
+                Assert.That(OpenBattlegroundDirector.CycleRetreatingAt(cycle, 10_900).EndTick, Is.EqualTo(11_000), "already in the retreat: unchanged");
+                Assert.That(OpenBattlegroundDirector.CycleRetreatingAt(cycle, 10_100).EndTick, Is.EqualTo(10_250), "in the quiet: the phases up to now, then the retreat");
+            });
+        }
+
+        [Test]
         public void OwnerFollowsTheClaimingGuild()
         {
             Assert.Multiple(() =>

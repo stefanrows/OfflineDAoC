@@ -308,6 +308,29 @@ namespace DOL.GS
             phase is OpenBgPhase.KeepFight or OpenBgPhase.Retreat && raid != null && !raid.IsEmpty &&
             (inside ?? Array.Empty<OpenBgRaidCandidate>()).Any(unit => unit.KeepFriend && raid.Contains(unit.Unit));
 
+        /// <summary>
+        /// A keep that changed hands to a raid unit ends the fight (owner decision 2026-10-15: about one change per cycle,
+        /// not one every few game minutes): in the push and the keep fight the cycle goes on in the retreat; quiet and
+        /// retreat stay as they are.
+        /// </summary>
+        public static OpenBgPhase PhaseAfterKeepChange(OpenBgPhase current, bool keepChangedToRaidUnit) =>
+            keepChangedToRaidUnit && current is OpenBgPhase.Push or OpenBgPhase.KeepFight ? OpenBgPhase.Retreat : current;
+
+        /// <summary>
+        /// The cycle with its phases before the retreat ended at <paramref name="now"/>: start and retreat length stay, so
+        /// <see cref="PhaseAt"/> answers retreat from now on and the cycle ends one retreat later.
+        /// </summary>
+        public static OpenBgCycle CycleRetreatingAt(OpenBgCycle cycle, long now)
+        {
+            long left = Math.Max(0, now - cycle.StartTick);
+            int quiet = (int)Math.Min(cycle.QuietMs, left);
+            left -= quiet;
+            int push = (int)Math.Min(cycle.PushMs, left);
+            left -= push;
+            int fight = (int)Math.Min(cycle.FightMs, left);
+            return cycle with { QuietMs = quiet, PushMs = push, FightMs = fight };
+        }
+
         /// <summary>The phase at a game tick: quiet before and at the start, retreat from its start on (also past the end).</summary>
         public static OpenBgPhase PhaseAt(OpenBgCycle cycle, long now)
         {
@@ -602,6 +625,14 @@ namespace DOL.GS
                 DeadLurkSpots.Clear();
             }
             OpenBgPhase phase = PhaseAt(_cycle, now);
+            // A keep that changed hands to a raid unit ends the fight: no new raid, the cycle goes on in the retreat (its
+            // orders: the raid's claiming guild defends, the rest hold the approaches or leave as in any retreat).
+            if (PhaseAfterKeepChange(phase, RaidNeedsRepick(_cycle.Raid, candidates)) != phase)
+            {
+                Log.Info($"OPEN_BG_KEEP_CHANGED cycle={_cycleIndex} from={Describe(phase)} owner_guild=\"{ownerGuild ?? "none"}\" lead=\"{_cycle.Raid.LeadGuild ?? "unguilded"}\"");
+                _cycle = CycleRetreatingAt(_cycle, now);
+                phase = PhaseAt(_cycle, now);
+            }
             // The raid forms when the push starts and is topped up through the push (late entries, reliefs).
             OpenBgRaid raid = RaidForTick(Rng, phase, _cycle.Raid, candidates, RecentWins(), out string reason);
             if (reason != null)
