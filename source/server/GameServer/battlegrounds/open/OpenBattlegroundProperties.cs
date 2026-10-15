@@ -52,7 +52,7 @@ namespace DOL.GS
         [ServerProperty("pvp", "open_bg_landing_peace", "Landing peace at the open BG landings: all (every realm) or realm (only the landing's own realm); empty = by mode (serverpvp: all, perrealm: realm)", "")]
         public static string OPEN_BG_LANDING_PEACE = "";
 
-        [ServerProperty("pvp", "open_bg_presets", "Open BG crew archetypes as name:count list, e.g. std8:2,caster8:1,raid8:1,stealth4:1,small:2,solo:6; empty = the group counts above", "")]
+        [ServerProperty("pvp", "open_bg_presets", "Open BG crew archetypes as name:count list, e.g. std8:2,caster8:1,raid8:1,stealth4:1,small:2; archetypes are matched by unit size, units of the same size cycle through the listed archetypes in proportion to their counts, the group counts above (or open_bg_units_*) still decide how many units exist, a size without a listed archetype is unchanged; empty = the group counts above", "")]
         public static string OPEN_BG_PRESETS = "";
 
         public const int MaxBotsMin = 8, MaxBotsMax = 120;

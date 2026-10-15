@@ -48,7 +48,7 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             "Whose landing peace holds at a landing circle. Auto: all realms in Server PvP, only the landing's own realm in Per realm.",
             "Open BG landing peace: all, realm, or empty (by mode)"),
         new("presets", "open_bg_presets", "Group presets", string.Empty,
-            "Role presets as name:count, e.g. std8:2,caster8:1,raid8:1,stealth4:1,small:2,duo:0 (std8, caster8, raid8, stealth4, small, duo). Empty: the group counts as before.",
+            "Role presets as name:count, e.g. std8:2,caster8:1,raid8:1,stealth4:1,small:2,duo:0 (std8, caster8, raid8, stealth4, small, duo). Archetypes are matched by unit size; units of the same size cycle through the listed archetypes in proportion to their counts; the 8-man/small/solo targets still decide how many units exist; a size without a listed archetype is unchanged. Empty: the group counts as before.",
             "Open BG group presets as name:count, e.g. std8:2,caster8:1,small:2 (empty: the 8-man/small/solo counts as before)"),
     ];
 

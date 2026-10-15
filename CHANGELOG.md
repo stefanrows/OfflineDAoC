@@ -28,8 +28,14 @@ package, not this fork's version.
   `std8:2,caster8:1,raid8:1,stealth4:1,small:2,duo:0`) names archetypes
   (`std8`, `caster8`, `raid8`, `stealth4`, `small`, `duo`); the roster fills a
   group by role slots, logs `OPEN_BG_ARCHETYPE_MISS` when a minimum slot
-  cannot be filled and never leaves a crew short. Empty keeps the group
-  counts as before.
+  cannot be filled and never leaves a crew short. Archetypes are matched by
+  unit size; units of the same size cycle through the listed archetypes in
+  proportion to their counts (`std8:2,caster8:1` gives std8, std8, caster8,
+  std8, ...); the 8-man/small/solo targets (or `open_bg_units_*`) still decide
+  how many units exist, and a size without a listed archetype is unchanged.
+  Empty keeps the group counts as before.
+- **Per realm rule in region 252:** the same realm counts as a friend there
+  in Per realm mode, and only there.
 - **Mixed groups with own-porter boarding.** Preset units in Server PvP draw
   from a merged three-realm pool under a leader of the admit realm; members
   of another region board at the open BG porter of their own region after the
@@ -58,8 +64,6 @@ package, not this fork's version.
   keep, the raid's lead guild first within 60 s after the lord falls.
 - **Roster healer test** no longer counts a Paladin as a healer (Cleric,
   Healer and Druid are primary, Friar, Shaman and Warden secondary).
-- **Per realm rule in region 252:** the same realm counts as a friend there
-  in Per realm mode, and only there.
 
 ### Removed
 

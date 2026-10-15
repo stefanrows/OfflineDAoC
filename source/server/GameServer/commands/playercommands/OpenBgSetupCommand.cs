@@ -24,7 +24,7 @@ namespace DOL.GS.Commands
         "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, drift on|off",
         "/bgsetup mode serverpvp|perrealm - the friend rule: Server PvP (Camlann rule, mixed crews) or Per realm (same realm is a friend in region 252)",
         "/bgsetup peace all|realm|auto - whose landing peace holds at a landing circle (auto = by mode)",
-        "/bgsetup presets <list>|off - group presets, e.g. std8:2,caster8:1,small:2 (off = the group counts as before)",
+        "/bgsetup presets <list>|off - group presets, e.g. std8:2,caster8:1,small:2; matched by unit size, same-size units cycle through the listed archetypes by count, the group counts still decide how many units exist (off = the group counts as before)",
         "/bgsetup albion|midgard|hibernia <8-man/small/solos> - a realm's own crew, e.g. 1/2/4; global = the groups8/small/solos values",
         "/bgsetup relieve <unit> - that unit leaves within a game minute; the roster forms a replacement if the setup still wants one")]
     public sealed class OpenBgSetupCommandHandler : AbstractCommandHandler, ICommandHandler
@@ -248,13 +248,13 @@ namespace DOL.GS.Commands
             new("hibernia", "open_bg_units_hibernia", false, 0, 0, "Hibernia's own crew; global uses groups8/small/solos", IsUnits: true),
             new("mode", "open_bg_mode", false, 0, 0, "friend rule: serverpvp = group, guild and battlegroup only, mixed crews; perrealm = the same realm is a friend in region 252", Choices: "serverpvp|perrealm"),
             new("peace", "open_bg_landing_peace", false, 0, 0, "whose landing peace holds at a landing circle: all realms, only the landing's own realm, or auto = by mode", Choices: "all|realm|auto"),
-            new("presets", "open_bg_presets", false, 0, 0, "group presets as name:count, e.g. std8:2,caster8:1,small:2 (std8 caster8 raid8 stealth4 small duo); off = the group counts as before", Choices: "list|off"),
+            new("presets", "open_bg_presets", false, 0, 0, "group presets as name:count, e.g. std8:2,caster8:1,small:2 (std8 caster8 raid8 stealth4 small duo); matched by unit size, same-size units cycle through the listed archetypes by count, the unit targets still decide how many units exist; off = the group counts as before", Choices: "list|off"),
         };
 
         public const string Usage = "Use /bgsetup <key> <value>. Keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, " +
             "max_bots 8-120, cycle_min 5-120, cycle_max 5-120 (min not above max), drift on|off, " +
             "albion|midgard|hibernia 8-man/small/solos (e.g. 1/2/4) or global, mode serverpvp|perrealm, peace all|realm|auto, " +
-            "presets name:count list (e.g. std8:2,caster8:1) or off.";
+            "presets name:count list (e.g. std8:2,caster8:1; same-size units cycle through the archetypes by count) or off.";
 
         /// <summary>The words that put a realm back on the global targets.</summary>
         public static bool IsGlobalWord(string text) =>
