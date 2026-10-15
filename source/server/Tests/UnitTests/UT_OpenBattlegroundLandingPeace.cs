@@ -108,4 +108,72 @@ public sealed class UT_OpenBattlegroundLandingPeace
         Assert.That(AutonomousHubDeparture.OpenBgPeaceInCircle(OpenBgLandingPeace.All, 1, 37301, 52362, eRealm.Albion, Landings), Is.False,
             "the same coordinates in region 1 are not a landing");
     }
+
+    // Open field, outside every landing circle (Midgard, Albion, Hibernia landings are all more than 5,500 away).
+    private const int FieldX = 30000, FieldY = 40000;
+
+    private static bool CrossRealm(OpenBgLandingPeace peace, bool bothWorldBots, eRealm attacker, eRealm target,
+        ushort region, int ax, int ay, int tx, int ty) =>
+        AutonomousHubDeparture.OpenBgCrossRealmPeace(peace, bothWorldBots, attacker, target, region, ax, ay, tx, ty, Landings);
+
+    [Test]
+    public void CrossRealmPeaceAllHoldsWhenEitherSideStandsInAnyLandingCircle()
+    {
+        Assert.Multiple(() =>
+        {
+            // Albion attacker at the Midgard camp (inside the Midgard circle), Hibernia target in the field.
+            Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.Albion, eRealm.Hibernia, 252,
+                50500, 27000, FieldX, FieldY), Is.True, "attacker in a circle");
+            // Field attacker, Midgard target at the camp.
+            Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.Albion, eRealm.Midgard, 252,
+                FieldX, FieldY, 50500, 27000), Is.True, "target in a circle");
+            // Both in circles of other realms' landings.
+            Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.Albion, eRealm.Midgard, 252,
+                37301, 47000, 54053, 24680), Is.True, "both in circles");
+        });
+    }
+
+    [Test]
+    public void CrossRealmPeaceRealmModeNeverHoldsAcrossRealms()
+    {
+        Assert.That(CrossRealm(OpenBgLandingPeace.Realm, true, eRealm.Albion, eRealm.Hibernia, 252,
+            50500, 27000, FieldX, FieldY), Is.False, "realm: only the own landing counts, and the own landing is not here");
+    }
+
+    [Test]
+    public void CrossRealmPeaceIsNotDecidedForSameRealmPairs()
+    {
+        Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.Albion, eRealm.Albion, 252,
+            50500, 27000, FieldX, FieldY), Is.False, "same realm is handled by the same-realm rule");
+    }
+
+    [Test]
+    public void CrossRealmPeaceNeedsBothFieldPositionsOutsideTheCircles()
+    {
+        Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.Albion, eRealm.Hibernia, 252,
+            FieldX, FieldY, FieldX + 100, FieldY + 100), Is.False, "both in the field");
+    }
+
+    [Test]
+    public void CrossRealmPeaceIsOnlyForTheOpenBgRegion()
+    {
+        Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.Albion, eRealm.Midgard, 238,
+            50500, 27000, 54053, 24680), Is.False, "another region");
+    }
+
+    [Test]
+    public void CrossRealmPeaceNeedsBothSidesToBeWorldBots()
+    {
+        Assert.That(CrossRealm(OpenBgLandingPeace.All, false, eRealm.Albion, eRealm.Hibernia, 252,
+            50500, 27000, FieldX, FieldY), Is.False, "one side is a companion, helper or player-led");
+    }
+
+    [Test]
+    public void CrossRealmPeaceNeedsARealmOnBothSides()
+    {
+        Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.None, eRealm.Hibernia, 252,
+            50500, 27000, FieldX, FieldY), Is.False, "attacker without realm");
+        Assert.That(CrossRealm(OpenBgLandingPeace.All, true, eRealm.Albion, eRealm.None, 252,
+            50500, 27000, FieldX, FieldY), Is.False, "target without realm");
+    }
 }

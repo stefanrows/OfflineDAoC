@@ -252,6 +252,21 @@ public static class AutonomousHubDeparture
     }
 
     /// <summary>
+    /// Cross-realm landing peace (Server PvP "all" only): two autonomous world bots of different realms are peaceful
+    /// when one of them stands in any open BG landing circle. Same-realm pairs are not decided here.
+    /// </summary>
+    public static bool OpenBgCrossRealmPeace(OpenBgLandingPeace peace, bool bothWorldBots, eRealm attackerRealm, eRealm targetRealm,
+        ushort region, int ax, int ay, int tx, int ty, IReadOnlyList<(ushort Region, int X, int Y, eRealm Realm)> landings)
+    {
+        if (peace != OpenBgLandingPeace.All || !bothWorldBots || attackerRealm == targetRealm)
+            return false;
+        if ((int)attackerRealm is < 1 or > 3 || (int)targetRealm is < 1 or > 3)
+            return false;
+        return OpenBgPeaceInCircle(peace, region, ax, ay, attackerRealm, landings)
+               || OpenBgPeaceInCircle(peace, region, tx, ty, targetRealm, landings);
+    }
+
+    /// <summary>
     /// The own realm's open BG landing circle containing the point, as a safe anchor: the departure track then
     /// records when a crew bot leaves it, and the eight-minute clock keeps the peace just outside (0.246.1 run: the
     /// same-realm grinder had moved to 6,400 from the landing, right past the 5,500 circle, as it once did at the
@@ -355,19 +370,6 @@ public static class AutonomousHubDeparture
     public static bool InHubBand(eRealm realm, ushort regionId, float x, float y) =>
         InHubBand(HubBandOf(realm), regionId, x, y) || InOpenBgLandingBand(realm, regionId, x, y);
 
-    /// <summary>
-    /// Server PvP landing peace <see cref="OpenBgLandingPeace.All"/> only: two autonomous world bots of different
-    /// realms are peaceful when one of them stands in any open BG landing circle of region 252.
-    /// </summary>
-    private static bool OpenBgCrossRealmLandingPeace(GameLiving first, GameLiving second)
-    {
-        if (OpenBattlegroundMode.Current != OpenBgMode.ServerPvp || OpenBattlegroundMode.Peace != OpenBgLandingPeace.All)
-            return false;
-        IReadOnlyList<(ushort Region, int X, int Y, eRealm Realm)> landings = OpenBgLandings();
-        return OpenBgPeaceInCircle(OpenBgLandingPeace.All, first.CurrentRegionID, (int)first.X, (int)first.Y, first.Realm, landings)
-               || OpenBgPeaceInCircle(OpenBgLandingPeace.All, second.CurrentRegionID, (int)second.X, (int)second.Y, second.Realm, landings);
-    }
-
     /// <summary>Whether the living stands in its own realm's hub band.</summary>
     public static bool InHubBand(GameLiving living)
     {
@@ -461,7 +463,11 @@ public static class AutonomousHubDeparture
         if (second == first || !IsWorldBot(second))
             return false;
         bool sameRealm = first.Realm == second.Realm;
-        bool crossRealmLandingPeace = !sameRealm && OpenBgCrossRealmLandingPeace(first, second);
+        // Peace is read only for a cross-realm pair; the landing list is read only when the peace is "all".
+        bool crossRealmLandingPeace = !sameRealm && first.CurrentRegionID == second.CurrentRegionID &&
+            OpenBattlegroundMode.Peace == OpenBgLandingPeace.All &&
+            OpenBgCrossRealmPeace(OpenBgLandingPeace.All, true, first.Realm, second.Realm, first.CurrentRegionID,
+                (int)first.X, (int)first.Y, (int)second.X, (int)second.Y, OpenBgLandings());
         if (!sameRealm && !crossRealmLandingPeace)
             return false;
         realm = first.Realm;
