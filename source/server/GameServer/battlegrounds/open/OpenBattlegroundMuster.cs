@@ -11,11 +11,11 @@ namespace DOL.GS
 
         /// <summary>
         /// A mate in the leader's region must be within porter reach as before; a mate of another region is accepted only
-        /// from a merged pool, where the coordinator's remote meetup brings it to the leader's porter.
+        /// from a merged pool, where it boards at the porter of its own region.
         /// </summary>
         public static bool AcceptsMember(bool merged, bool sameRegion, bool withinPorterReach) => sameRegion ? withinPorterReach : merged;
 
-        /// <summary>The leader's region test: another region is accepted only when the coordinator's remote meetup brings the member.</summary>
+        /// <summary>The leader's region test: another region is accepted only for a merged unit, whose member boards at its own porter.</summary>
         public static bool RegionAccepted(bool allowRemoteMembers, ushort memberRegion, ushort leaderRegion) =>
             allowRemoteMembers || memberRegion == leaderRegion;
 

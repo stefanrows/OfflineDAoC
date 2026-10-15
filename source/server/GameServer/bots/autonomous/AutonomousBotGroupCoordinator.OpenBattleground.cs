@@ -14,8 +14,13 @@ namespace DOL.GS
     /// </summary>
     public static partial class AutonomousBotGroupCoordinator
     {
+        /// <summary>
+        /// <paramref name="ownPorterMembers"/> (preset Server PvP unit): members of another region than the leader are
+        /// accepted; they board at the open BG porter of their own region and land at the leader's landing, they do not
+        /// travel to <paramref name="muster"/>.
+        /// </summary>
         public static bool TryFormOpenBattlegroundParty(GameBot leader, IReadOnlyList<GameBot> others, Vector3 muster, string musterName,
-            out Group group, out string groupId, out string reason, bool allowRemoteMembers = false)
+            out Group group, out string groupId, out string reason, bool ownPorterMembers = false)
         {
             group = null;
             groupId = null;
@@ -28,7 +33,7 @@ namespace DOL.GS
             GameBot[] all = [leader, .. others];
             if (all.Distinct().Count() != all.Length ||
                 all.Any(bot => bot == null || !bot.IsAutonomousWorldBot || bot.IsTemporaryGroupHelper || bot.Group != null ||
-                    !bot.IsAlive || !OpenBattlegroundMuster.RegionAccepted(allowRemoteMembers, bot.CurrentRegionID, leader.CurrentRegionID)))
+                    !bot.IsAlive || !OpenBattlegroundMuster.RegionAccepted(ownPorterMembers, bot.CurrentRegionID, leader.CurrentRegionID)))
             {
                 reason = "a member is not free in the leader's region";
                 return false;
@@ -58,7 +63,8 @@ namespace DOL.GS
                     return false;
                 }
                 Session session = NewSession(created, leader, created.MemberCount, eAutonomousObjectiveKind.RvR,
-                    pickupDestination: new PickupDestination(null, muster, musterName ?? "battleground porter", leader.CurrentRegionID));
+                    pickupDestination: new PickupDestination(null, muster, musterName ?? "battleground porter", leader.CurrentRegionID),
+                    openBgOwnPorterMembers: ownPorterMembers);
                 if (session == null)
                 {
                     // The members were alone before; they stay alone with their own tours.

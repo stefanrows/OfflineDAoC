@@ -510,7 +510,27 @@ public static class AutonomousBattlegroundParticipation
                          Members: unit.Select(member => member.Bot).ToArray()))
                      .OrderBy(unit => (unit.Group?.LivingLeader as GameBot ?? unit.Members[0]).DatabaseID))
         {
-            GameBot[] live = unit.Members.Where(Live).ToArray();
+            // Members of another region than the leader (preset Server PvP unit) board at their own region's porter
+            // after the leader; they never hold the leader's whole-group boarding back.
+            GameBot[] ownPorter = unit.Group == null ? [] : unit.Members.Where(AutonomousBotGroupCoordinator.IsOpenOwnPorterMember).ToArray();
+            GameBot[] groupMembers = ownPorter.Length == 0 ? unit.Members : unit.Members.Except(ownPorter).ToArray();
+            if (ownPorter.Length > 0)
+            {
+                GameBot leaderBot = unit.Group.LivingLeader as GameBot;
+                long leaderEnteredTick = OpenLeaderEnteredTick(leaderBot);
+                foreach (GameBot member in ownPorter.Where(Live))
+                {
+                    bool leaderEntered = member == leaderBot || leaderEnteredTick > 0;
+                    if (OpenOwnPorterMayBoard(leaderEntered, Ready(member)))
+                    {
+                        if (boarders.Count < DepartureLimit) boarders.Add(member);
+                    }
+                    else if (leaderEnteredTick > 0 && member.CurrentRegion == porter.CurrentRegion &&
+                        OpenBoardingWaitOver(leaderEnteredTick, now))
+                        stragglers.Add((unit.Id, [member]));
+                }
+            }
+            GameBot[] live = groupMembers.Where(Live).ToArray();
             GameBot[] ready = live.Where(Ready).ToArray();
             if (ready.Length == 0) continue;
             if (unit.Group != null)
@@ -540,6 +560,13 @@ public static class AutonomousBattlegroundParticipation
             boarders.AddRange(ready.OrderBy(bot => unit.Group?.LivingLeader == bot ? 0 : 1).ThenBy(bot => bot.DatabaseID));
         }
         return boarders.ToArray();
+    }
+
+    // The game time the unit's leader entered the battleground; 0 while it has not (or has no entry any more).
+    private static long OpenLeaderEnteredTick(GameBot leader)
+    {
+        lock (Sync)
+            return leader != null && Entries.TryGetValue(leader, out Entry entry) && entry.Entered ? Math.Max(1, entry.EnteredTick) : 0;
     }
 
     // Stamps the members standing ready now; returns the game time the first of them was ready.

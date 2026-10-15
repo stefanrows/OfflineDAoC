@@ -1198,6 +1198,12 @@ namespace DOL.GS
         {
             GameBot leader = directive.Leader;
             bool leaderStaging = directive.Phase == "Leader staging";
+            // Open BG: a member of another region than its leader walks to the porter of its own region, buys the
+            // medallion and boards there once the leader is inside; it never travels to the leader's rendezvous.
+            if (bot != leader && directive.OwnPorterMemberIds.Contains(bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID) &&
+                AutonomousBotGroupCoordinator.IsOpenOwnPorterMember(bot))
+                return TryBattlegroundTravel(bot) ||
+                    HoldsOpenBattlegroundCrew(bot) && HoldOpenBattlegroundCrew(bot.Brain as BotBrain, bot);
             // Invited remote members can approach/use their porter while the
             // local leader stages; their shared deadline already started at formation.
             if (leaderStaging && bot != leader && bot.CurrentRegionID != directive.RendezvousRegion &&

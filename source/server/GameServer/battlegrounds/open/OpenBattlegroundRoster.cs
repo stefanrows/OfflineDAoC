@@ -820,7 +820,7 @@ namespace DOL.GS
                 }
                 Vector3 muster = new(porter.X, porter.Y, porter.Z);
                 if (!AutonomousBotGroupCoordinator.TryFormOpenBattlegroundParty(leader, others, muster, porter.Name,
-                        out Group group, out string groupId, out string reason, allowRemoteMembers: merged))
+                        out Group group, out string groupId, out string reason, ownPorterMembers: merged))
                 {
                     Log.Info($"OPEN_BG_GROUP_FAILED realm={RealmName(admit.Realm)} kind={Describe(admit.Kind)} leader=\"{leader.Name}\" size={others.Length + 1} reason=\"{reason}\"");
                     continue;

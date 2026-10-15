@@ -65,6 +65,7 @@ public static partial class AutonomousBotGroupCoordinator
         public bool IsCrossRealmPve { get; init; }
         public string PreferredPickupCampId { get; init; } = string.Empty;
         public IReadOnlySet<long> RemoteMemberIds { get; init; } = new HashSet<long>();
+        public IReadOnlySet<long> OwnPorterMemberIds { get; init; } = new HashSet<long>();
         public DateTime? RemoteMeetupDeadlineUtc { get; init; }
     }
 
@@ -132,6 +133,9 @@ public static partial class AutonomousBotGroupCoordinator
         public HashSet<long> HeldUnreachableMembers { get; } = new();
         public Dictionary<long, long> ExpeditionRouteRetry { get; } = new();
         public HashSet<long> RemoteMemberIds { get; } = new();
+        // Open BG preset Server PvP unit: members of another region than the leader. They board at the open BG porter of
+        // their own region (never travel to the rendezvous), count as arrived and hold no formation slot.
+        public HashSet<long> OwnPorterMemberIds { get; } = new();
         public long? RemoteMeetupDeadlineTick { get; set; }
         public DateTime RemoteMeetupDeadlineUtc { get; set; }
         public bool RendezvousReselectionAttempted { get; set; }
@@ -660,6 +664,15 @@ public static partial class AutonomousBotGroupCoordinator
             return TryGetSession(bot.Group, out Session session) && IsAssemblyPhase(session.Phase);
     }
 
+    /// <summary>The member boards at the open BG porter of its own region (see <see cref="Session.OwnPorterMemberIds"/>).</summary>
+    public static bool IsOpenOwnPorterMember(GameBot bot)
+    {
+        if (bot?.Group == null) return false;
+        using (EnterSync())
+            return TryGetSession(bot.Group, out Session session) && session.OpenBattleground &&
+                session.OwnPorterMemberIds.Contains(MemberKey(bot));
+    }
+
     public static bool IsRemoteMeetupMember(GameBot bot, Directive directive)
     {
         if (bot?.Group == null || directive == null ||
@@ -1126,6 +1139,9 @@ public static partial class AutonomousBotGroupCoordinator
             return false;
         bool tight = zone.IsDungeon;
         var resolved = new Dictionary<long, Vector3>();
+        // A member that boards at its own porter holds no slot at the leader's rendezvous.
+        if (session.OwnPorterMemberIds.Count > 0)
+            members = members.Where(member => !session.OwnPorterMemberIds.Contains(MemberKey(member))).ToArray();
         foreach (GameBot member in members)
         {
             Vector3 desired = DesiredFormationPoint(member, session.Rendezvous, tight, members);
@@ -1817,7 +1833,7 @@ public static partial class AutonomousBotGroupCoordinator
                  $"crew=\"{bot.Guild?.Name ?? "unassigned"}\" waitedSeconds={(int)waitedSeconds} reason=\"{reason}\"");
     }
 
-    private static Session NewSession(Group group, GameBot leader, int lockedSize = 0, eAutonomousObjectiveKind objectiveKind = eAutonomousObjectiveKind.GroupPve, SharedCamp raidStaging = null, PickupDestination pickupDestination = null)
+    private static Session NewSession(Group group, GameBot leader, int lockedSize = 0, eAutonomousObjectiveKind objectiveKind = eAutonomousObjectiveKind.GroupPve, SharedCamp raidStaging = null, PickupDestination pickupDestination = null, bool openBgOwnPorterMembers = false)
     {
         Vector3 center;
         string rendezvousName;
@@ -1858,7 +1874,12 @@ public static partial class AutonomousBotGroupCoordinator
         {
             session.IsCrossRealmPve = objectiveKind == eAutonomousObjectiveKind.GroupPve &&
                 sessionMembers.Select(member => member.Realm).Distinct().Skip(1).Any();
-            foreach (GameBot member in sessionMembers.Where(member => member.CurrentRegionID != rendezvousRegion))
+            // Open BG preset Server PvP unit: a member of another region boards at its own porter instead of travelling here.
+            foreach (GameBot member in sessionMembers.Where(member => OpenBattlegroundMuster.BoardsAtOwnPorter(openBgOwnPorterMembers,
+                         member.CurrentRegionID, rendezvousRegion)))
+                session.OwnPorterMemberIds.Add(MemberKey(member));
+            foreach (GameBot member in sessionMembers.Where(member => member.CurrentRegionID != rendezvousRegion &&
+                         !session.OwnPorterMemberIds.Contains(MemberKey(member))))
                 session.RemoteMemberIds.Add(MemberKey(member));
             long remoteTimeout = AutonomousRvrHubMuster.RemoteMeetupTimeoutMilliseconds(objectiveKind);
             if (session.RemoteMemberIds.Count > 0)
@@ -2295,6 +2316,8 @@ public static partial class AutonomousBotGroupCoordinator
     }
 
     private static bool AtRendezvous(Session session, GameBot member) =>
+        // A member that boards at its own porter is never waited for at the leader's rendezvous.
+        session.OwnPorterMemberIds.Contains(MemberKey(member)) ||
         // Physical attendance is authoritative. IsReturningAfterRelease can
         // remain set for a pulse after a living bot has already reached its
         // assigned slot; rejecting that real arrival produced leader timeouts
@@ -2583,7 +2606,7 @@ public static partial class AutonomousBotGroupCoordinator
             long key = MemberKey(member);
             if (!AtRendezvous(session, member))
                 session.HubArrivalEstimates[key] = EstimateHubArrival(session, member, now);
-            if (member.CurrentRegionID != session.RendezvousRegion)
+            if (member.CurrentRegionID != session.RendezvousRegion && !session.OwnPorterMemberIds.Contains(key))
             {
                 if (session.RemoteMemberIds.Add(key))
                 {
@@ -3156,6 +3179,7 @@ public static partial class AutonomousBotGroupCoordinator
             IsCrossRealmPve = session.ObjectiveKind == eAutonomousObjectiveKind.GroupPve && session.IsCrossRealmPve,
             PreferredPickupCampId = session.PreferredPickupCampId,
             RemoteMemberIds = session.RemoteMemberIds,
+            OwnPorterMemberIds = session.OwnPorterMemberIds,
             RemoteMeetupDeadlineUtc = session.RemoteMeetupDeadlineTick.HasValue
                 ? session.RemoteMeetupDeadlineUtc : null
         };
