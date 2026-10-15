@@ -281,8 +281,12 @@ public static class AutonomousBattlegroundDriver
     /// <summary>Pure: a group may break off only outside the immunity window that follows its last break-off.</summary>
     public static bool BreakOffAllowed(long now, long immuneUntil) => now >= immuneUntil;
 
-    /// <summary>Pure: defenders hold the keep, a retreat order already retreats, and a unit with its order at the keep never breaks off.</summary>
-    public static bool BreakOffExempt(OpenBgRole role, bool atKeep) => atKeep || role is OpenBgRole.Defend or OpenBgRole.Retreat;
+    /// <summary>
+    /// Pure: defenders hold the keep, a retreat order already retreats, a unit with its order at the keep never breaks off,
+    /// and a unit that is not a group (fewer than 2 living members: lurkers, bridge watchers, roamers) keeps its post.
+    /// </summary>
+    public static bool BreakOffExempt(OpenBgRole role, bool atKeep, int groupMembers) =>
+        atKeep || groupMembers < 2 || role is OpenBgRole.Defend or OpenBgRole.Retreat;
 
     /// <summary>
     /// Pure enemy count of the break-off rule over the legal enemies near (already resolved to their player-shaped owner):
@@ -310,15 +314,8 @@ public static class AutonomousBattlegroundDriver
     private static bool ConsiderBreakOff(GameBot bot, State state, long now)
     {
         if (!BreakOffAllowed(now, state.BreakOffImmuneUntil)) return false;
-        if (!OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) || BreakOffExempt(order.Role, order.AtKeep)) return false;
-        Zone zone = bot.CurrentZone;
-        if (zone == null) return false;
-        Point3D landing = null;
-        foreach ((ushort region, int x, int y, eRealm realm) in AutonomousHubDeparture.OpenBgLandings())
-            if (region == bot.CurrentRegionID && realm == bot.Realm) { landing = new Point3D(x, y, bot.Z); break; }
-        if (landing == null) return false;
-
-        int friends = 0;
+        if (!OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order)) return false;
+        int friends = 0; // living group members (a head without a group counts as 1)
         bool healerDead = false;
         if (bot.Group == null) friends = 1;
         else
@@ -328,6 +325,14 @@ public static class AutonomousBattlegroundDriver
                 else if (member is GameBot dead && AutonomousRvrDoctrine.TraitsOf((eCharacterClass)(dead.CharacterClass?.ID ?? 0)) is var kind &&
                          kind.HasFlag(RvrClassTraits.Healer) && !kind.HasFlag(RvrClassTraits.Melee)) healerDead = true;
             }
+
+        if (BreakOffExempt(order.Role, order.AtKeep, friends)) return false;
+        Zone zone = bot.CurrentZone;
+        if (zone == null) return false;
+        Point3D landing = null;
+        foreach ((ushort region, int x, int y, eRealm realm) in AutonomousHubDeparture.OpenBgLandings())
+            if (region == bot.CurrentRegionID && realm == bot.Realm) { landing = new Point3D(x, y, bot.Z); break; }
+        if (landing == null) return false;
 
         ushort radius = (ushort)OpponentRange;
         var sightings = new List<(int OwnerId, int GroupId)>();

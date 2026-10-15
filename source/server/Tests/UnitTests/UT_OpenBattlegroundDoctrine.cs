@@ -44,13 +44,27 @@ public sealed class UT_OpenBattlegroundDoctrine
     {
         Assert.Multiple(() =>
         {
-            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Assault, true), Is.True, "at the keep");
-            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Defend, false), Is.True);
-            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Retreat, false), Is.True);
-            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Assault, false), Is.False, "assault still on the way (muster)");
-            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Roam, false), Is.False);
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Assault, true, 5), Is.True, "at the keep");
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Defend, false, 5), Is.True);
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Retreat, false, 5), Is.True);
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Assault, false, 5), Is.False, "assault still on the way (muster)");
+            Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(OpenBgRole.Roam, false, 5), Is.False);
             Assert.That(AutonomousBattlegroundDriver.BreakOffAllowed(100_000, 200_000), Is.False, "inside the window");
             Assert.That(AutonomousBattlegroundDriver.BreakOffAllowed(200_000, 200_000), Is.True, "after the window");
+        });
+    }
+
+    [Test]
+    public void ASoloUnitNeverBreaksOffButATwoManGroupDoes()
+    {
+        Assert.Multiple(() =>
+        {
+            foreach (OpenBgRole role in new[] { OpenBgRole.Roam, OpenBgRole.BridgeWatch, OpenBgRole.Lurk, OpenBgRole.Assault })
+            {
+                Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(role, false, 0), Is.True, role + " with no group");
+                Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(role, false, 1), Is.True, role + " alone");
+                Assert.That(AutonomousBattlegroundDriver.BreakOffExempt(role, false, 2), Is.False, role + " as a 2-man group");
+            }
         });
     }
 }
