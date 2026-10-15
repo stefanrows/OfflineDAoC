@@ -42,6 +42,21 @@ Rejected: sharing Custom8 (one window at a time, title and layout tied to the
 manager, every later manager change touches the BG view too) and a chat-only
 view (nothing to click, no live picture).
 
+## 2a. Additions after the research round (2026-10-15)
+
+- **Crew mode switch** on the Steuern page and in `/bgsetup`: *per realm*
+  (today, default) or *cross-realm*. The window shows realm blocks in the first
+  mode and groups by archetype in the second.
+- **Presets per unit**: archetypes (Standard 8, Caster 8, Raider 8, Stealth
+  gank, small group, duo) as role slots, see `docs/OPEN_BG_GROUP_PRESETS.md`.
+  The unit's archetype is shown on the Lage page and chosen on Steuern.
+- The behaviour concept for the map (raids, roamers, vulture rule, metrics) is
+  `docs/OPEN_BG_PVP_CONCEPT.md`; the window only needs the new metrics as
+  Lage fields (groups out, raids at the gate) once their logs exist.
+- Revised build order: metric logs and the claim-flip fix first (bug strand),
+  then presets and the mode switch on the server (usable through the Custom8
+  version and `/bgsetup text`), then the own window.
+
 ## 3. Server side
 
 - `OpenBgWindow` (new, replaces `OpenBgManager` + `OpenBgManagerSession`'s
