@@ -451,6 +451,17 @@ internal sealed class DaocTabControl : TabControl
 
     protected override void WndProc(ref Message message)
     {
+        const int WmEraseBackground = 0x0014;
+        // The native control erases the strip in the system colour (white) before every owner-draw
+        // repaint; hovering a tab repaints it, which showed as a white flash. Erase in the strip colour.
+        if (message.Msg == WmEraseBackground && IsHandleCreated)
+        {
+            using var eraseGraphics = Graphics.FromHdc(message.WParam);
+            using var erase = new SolidBrush(_stripColor);
+            eraseGraphics.FillRectangle(erase, ClientRectangle);
+            message.Result = (IntPtr)1;
+            return;
+        }
         base.WndProc(ref message);
         const int WmPaint = 0x000F;
         const int WmPrint = 0x0317;

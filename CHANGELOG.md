@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.277.0] - 2026-10-15
+
+### Fixed
+
+- **The launcher's tab strip no longer flashes white when you hover a tab.**
+  The native tab control erased the strip in the system colour before every
+  owner-draw repaint, and hovering repaints it. The strip is now erased in
+  its own dark colour.
+
 ## [0.276.0] - 2026-10-15
 
 ### Added
