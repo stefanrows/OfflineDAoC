@@ -340,6 +340,14 @@ action leaves items and coins intact.
 **Owner decision (2026-09-24):** option 2, the second vault page. Option 1
 stays a possible later probe; it is not planned.
 
+**Owner request (2026-10-15, TASKS 129):** drag and drop into a companion
+character window like the player's own. Option 1 is back: the game.dll
+analysis in [COMPANION_PAPERDOLL_RE.md](COMPANION_PAPERDOLL_RE.md) finds both
+missing capabilities in the stock quiver window (scalar icon adapters on
+`IconDef`, and a click handler that reads the drag record and calls the
+stock move-item sender) and proposes a Custom6 paperdoll over the existing
+house-vault view, gated by one probe.
+
 **Owner decision (2026-09-24, later):** the vault page (0.38.0) is
 unintuitive. Replace it with a slot sheet in the Gear tab (M3b below) and
 return the bag window to the backpack only.

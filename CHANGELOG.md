@@ -12,6 +12,38 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.273.0] - 2026-10-15
+
+### Added
+
+- game.dll analysis for a **companion paperdoll** with drag and drop
+  (`docs/COMPANION_PAPERDOLL_RE.md`, TASKS 129): the client's move-item
+  sender, item array and icon lookup, drag record and drag-source kinds,
+  and the stock quiver window as the pattern for item slots in an XML
+  window.
+- **Companion paperdoll probe** (research only, offline-tested; the owner's
+  real-client check is pending). A four-slot Custom6 window (the
+  companion's helm, chest and first two backpack slots) built on the
+  0.272.0 Companion Manager client:
+  - Click an item in your bag, then a slot: the client sends the stock
+    move-item packet and the companion equips or takes the item through the
+    existing inventory view and its protections. Click a filled slot to pick
+    its item up and click your bag to take it back.
+  - The window shows the items' real icons and a status line that reports
+    what the client did, for the probe's four questions.
+  - `/companions gearprobe [name] [plain]` opens it (`plain`: without the
+    House Vault window), `/companions gearprobe off` closes it.
+  - Builder `source/server/tools/probe_companion_paperdoll.py`, Unicorn test
+    `test_companion_paperdoll_probe.py`, installer
+    `tools/dev/Install-CompanionPaperdollProbe.ps1` (dry run by default,
+    backup and `-RestoreBackup`). The probe client files are not part of the
+    release pack.
+
+### Changed
+
+- Companion Manager protocol 3 gains operations 7-9 (paperdoll icon refresh,
+  show and hide Custom6); clients without the probe ignore them.
+
 ## [0.272.0] - 2026-10-14
 
 ### Added

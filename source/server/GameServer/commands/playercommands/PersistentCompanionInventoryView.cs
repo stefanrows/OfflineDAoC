@@ -22,12 +22,24 @@ namespace DOL.GS.Commands
 
         private readonly GamePlayer _owner;
         private readonly string _companionId;
+        private readonly bool _paperdoll;
+        private readonly bool _stockWindow;
 
-        public PersistentCompanionInventoryView(GamePlayer owner, string companionId)
+        /// <param name="paperdoll">Also drive the Custom6 paperdoll probe (TASKS 129): show it on open and refresh
+        /// its slot icons after every slot update.</param>
+        /// <param name="stockWindow">Open with the house-vault window type, which opens the stock vault window;
+        /// otherwise the slots are sent as a plain update.</param>
+        public PersistentCompanionInventoryView(GamePlayer owner, string companionId, bool paperdoll = false, bool stockWindow = true)
         {
             _owner = owner;
             _companionId = companionId;
+            _paperdoll = paperdoll;
+            _stockWindow = stockWindow;
         }
+
+        public bool IsPaperdoll => _paperdoll;
+
+        public string CompanionId => _companionId;
 
         public override int VaultSize => 100;
         public override int FirstDbSlot => (int)eInventorySlot.FirstBackpack;
@@ -86,6 +98,8 @@ namespace DOL.GS.Commands
             _owner.ActiveInventoryObject = this;
             AddObserver(_owner);
             Refresh(open: true);
+            if (_paperdoll)
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpPaperdollShow);
         }
 
         /// <summary>
@@ -102,7 +116,10 @@ namespace DOL.GS.Commands
             var slots = new Dictionary<int, DbInventoryItem>(VaultSize);
             for (int slot = (int)FirstClientSlot; slot <= (int)LastClientSlot; slot++)
                 slots[slot] = items.GetValueOrDefault(slot);
-            _owner.Out.SendInventoryItemsUpdate(slots, open ? eInventoryWindowType.HouseVault : eInventoryWindowType.Update);
+            _owner.Out.SendInventoryItemsUpdate(slots, open && _stockWindow ? eInventoryWindowType.HouseVault : eInventoryWindowType.Update);
+            // The probe reads the icons from the client's item array, so the refresh follows the slot update.
+            if (_paperdoll && !open)
+                CompanionManager.Send(_owner, CompanionManagerProtocol.OpPaperdollRefresh);
         }
 
         public override bool CanHandleMove(GamePlayer player, eInventorySlot fromSlot, eInventorySlot toSlot) =>

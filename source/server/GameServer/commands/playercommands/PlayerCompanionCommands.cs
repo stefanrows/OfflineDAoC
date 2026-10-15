@@ -73,6 +73,9 @@ namespace DOL.GS.Commands
                 case "bar":
                     DisplayMessage(client, CompanionBar.Command(player, args.Length > 2 ? args[2] : null));
                     break;
+                case "gearprobe":
+                    DisplayMessage(client, CompanionPaperdollProbe.Command(player, args.Skip(2)));
+                    break;
                 case "invite":
                     UpdateCompanion(client, player, args, invite: true);
                     break;

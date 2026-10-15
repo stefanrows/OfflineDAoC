@@ -229,7 +229,9 @@ for text starting with a digit, and otherwise returns `-1`. Its 21 call sites
 include `0x4EDA7F`/`0x4EDAA5` inside the InvisibleButtonDef parser `0x4ED9B4`.
 See [Companion Manager integration](COMPANION_MANAGER_INTEGRATION.md). The
 full XML vocabulary, the value mappers and the event table are in the
-[Client UI XML reference](CLIENT_UI_XML_REFERENCE.md).
+[Client UI XML reference](CLIENT_UI_XML_REFERENCE.md). Item slots, drag and
+drop and the move-item packet are in the
+[companion paperdoll analysis](COMPANION_PAPERDOLL_RE.md).
 
 Test texture-tool source with `python tools/test-assets.py --distribution playable`
 (or the actual complete-download path). The wrapper resolves the read-only fixtures

@@ -291,6 +291,21 @@ Agent sessions on items 45–48: take the role and context from
     relic home as in 1.65. Do not build it before Aaron asks; the relic
     carrier and escort code in AutonomousRvrEventLayer stays as it is.
 
+129. **Companion paperdoll: drag and drop into a companion's character
+     window.** Owner, 2026-10-15: build better inventory management for
+     companions; drag and drop items into a companion's character window the
+     same way as on the player's character. game.dll analysis:
+     [COMPANION_PAPERDOLL_RE.md](COMPANION_PAPERDOLL_RE.md). The stock
+     paperdoll is native and player-only; a Custom6 XML paperdoll copies the
+     quiver window's pattern (scalar icon adapters; a click handler that
+     reads the drag record and sends the stock move-item packet; pick-up as
+     a kind-0x66 drag). The server's house-vault companion view handles
+     every move. **0.273.0: four-slot probe built and emulated offline**
+     (stage `D:\Games\OfflineDAoC-dev\companion-paperdoll-probe-0.273.0`,
+     `/companions gearprobe`). Next: the owner installs the probe and runs
+     the real-client checklist in section 6 of the analysis (R1-R5); the
+     full 19 + 40 slot window is built only after the probe passes.
+
 125. **Gothwaite PvP mode: a separate world mode where all autonomous bots
      PvP around Caer Gothwaite.** Owner, 2026-10-13. Plan:
      [GOTHWAITE_PVP_MODE.md](GOTHWAITE_PVP_MODE.md). All autonomous bots of

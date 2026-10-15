@@ -169,6 +169,12 @@ namespace DOL.GS
         public const int BarTileUnderline = 3;
         public const byte OpBarShow = 5;
         public const byte OpBarHide = 6;
+        // Companion paperdoll probe (TASKS 129, source/server/tools/probe_companion_paperdoll.py): Custom6. A client
+        // without the probe stage ignores these operations. 7 refreshes the slot icons from the client's item array,
+        // 8 shows Custom6 and refreshes, 9 hides it.
+        public const byte OpPaperdollRefresh = 7;
+        public const byte OpPaperdollShow = 8;
+        public const byte OpPaperdollHide = 9;
         public const int BarControlFirst = 0xA8;
         public const int BarControlLimit = 0xC0;
         public const int BarControlSlotBase = 0xB6;

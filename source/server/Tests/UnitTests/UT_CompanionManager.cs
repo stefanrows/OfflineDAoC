@@ -491,6 +491,19 @@ public sealed class UT_CompanionManager
         Assert.That(PersistentCompanionInventoryView.BackpackFirstPosition + 39, Is.LessThanOrEqualTo(100));
     }
 
+    [Test]
+    public void PaperdollProbeSlotsAreHelmChestAndFirstTwoBackpackPositions()
+    {
+        // probe_companion_paperdoll.py: client slots 150, 151, 170, 171 are view positions 1, 2, 21, 22.
+        const int firstClientSlot = (int)eInventorySlot.HousingInventory_First;
+        Assert.That(firstClientSlot, Is.EqualTo(150));
+        Assert.That(firstClientSlot + PersistentCompanionInventoryView.WornPosition(eInventorySlot.HeadArmor) - 1, Is.EqualTo(150));
+        Assert.That(firstClientSlot + PersistentCompanionInventoryView.WornPosition(eInventorySlot.TorsoArmor) - 1, Is.EqualTo(151));
+        Assert.That(firstClientSlot + PersistentCompanionInventoryView.BackpackFirstPosition - 1, Is.EqualTo(170));
+        Assert.That(new[] { OpPaperdollRefresh, OpPaperdollShow, OpPaperdollHide }, Is.EqualTo(new byte[] { 7, 8, 9 }));
+        Assert.That(BuildBody(OpPaperdollShow)[1..4], Is.EqualTo(new byte[] { Marker, ProtocolVersion, 8 }));
+    }
+
     [TestCase(PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.MoveKind.GiveAndEquip)]
     [TestCase(PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.Area.OwnerBackpack, PersistentCompanionInventoryView.MoveKind.UnequipToOwner)]
     [TestCase(PersistentCompanionInventoryView.Area.CompanionBackpack, PersistentCompanionInventoryView.Area.Worn, PersistentCompanionInventoryView.MoveKind.Equip)]
