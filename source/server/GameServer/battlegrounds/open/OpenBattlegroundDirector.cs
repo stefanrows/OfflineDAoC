@@ -102,6 +102,13 @@ namespace DOL.GS
     /// </summary>
     public sealed record OpenBgOrder(int Unit, OpenBgRole Role, Point3D Point, bool Muster, bool AtKeep, long Cycle);
 
+    /// <summary>Metric log lines of the open BG (concept section 4).</summary>
+    public static class OpenBgMetrics
+    {
+        public static string FieldLine(int unitsOut, int units, int botsOut, int bots) =>
+            $"OPEN_BG_FIELD units_out={unitsOut}/{units} bots_out={botsOut}/{bots} pct={(bots == 0 ? 0 : (int)Math.Round(100.0 * botsOut / bots))}";
+    }
+
     /// <summary>
     /// The open BG's phase machine (spec 2026-10-11 §6): quiet, push, keep fight, retreat, one random 15-45 game-minute
     /// cycle after another, with a new keep raid each cycle: units of any realm that are not friends of the keep, the
@@ -414,6 +421,8 @@ namespace DOL.GS
         private static OpenBgRaid _loggedRaid;
         private static bool _logged;
         private static Snapshot _snapshot = Snapshot.Empty;
+        private static long _fieldLoggedAt;
+        private const long FieldLogMilliseconds = 60_000;
 
         public static OpenBgPhase Phase => Volatile.Read(ref _snapshot).Phase;
         /// <summary>This cycle's keep raid (empty before the first tick or when no unit may raid).</summary>
@@ -492,9 +501,39 @@ namespace DOL.GS
                 InsideUnit[] inside = InsideUnits(definition, keep, ownerGuild, crew);
                 AdvanceCycle(now, owner, ownerGuild, lordDown, inside);
                 units = UpdateOrders(definition, keep, owner, lordDown, inside, crew, now);
+                LogField(inside, now);
             }
             if (watch.ElapsedMilliseconds > SlowTickMilliseconds)
                 Log.Warn($"OPEN_BG_TICK_SLOW part=director ms={watch.ElapsedMilliseconds} units={units}");
+        }
+
+        // Callers hold Sync. Once per 60 game seconds: how much of the roster stands out in the field, i.e. has a field order
+        // (Roam, Assault, Defend, BridgeWatch) and is farther than the landing peace radius from its own realm's landing.
+        // Per-bot cost is a position test against at most a few landings; nothing is allocated.
+        private static void LogField(InsideUnit[] inside, long now)
+        {
+            if (now - _fieldLoggedAt < FieldLogMilliseconds) return;
+            _fieldLoggedAt = now;
+            var landings = AutonomousHubDeparture.OpenBgLandings();
+            Dictionary<int, OpenBgOrder> orders = Volatile.Read(ref _snapshot).Orders;
+            int unitsOut = 0, bots = 0, botsOut = 0;
+            foreach (InsideUnit unit in inside)
+            {
+                bots += unit.Members.Length;
+                if (!orders.TryGetValue(unit.Id, out OpenBgOrder order) || order == null) continue;
+                if (order.Role is not (OpenBgRole.Roam or OpenBgRole.Assault or OpenBgRole.Defend or OpenBgRole.BridgeWatch)) continue;
+                int outCount = 0;
+                foreach (AutonomousBattlegroundParticipation.OpenCrewMember member in unit.Members)
+                {
+                    GameBot bot = member.Bot;
+                    if (!AutonomousHubDeparture.NearOwnLanding(bot.CurrentRegionID, bot.X, bot.Y, bot.Realm,
+                            AutonomousHubDeparture.OpenBgLandingPeaceRadius, landings)) outCount++;
+                }
+                if (outCount == 0) continue;
+                unitsOut++;
+                botsOut += outCount;
+            }
+            Log.Info(OpenBgMetrics.FieldLine(unitsOut, inside.Length, botsOut, bots));
         }
 
         /// <summary>Forgets the cycle, the map and every order (open BG switched off or the server stopped).</summary>
