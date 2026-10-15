@@ -10,6 +10,9 @@ namespace DOL.GS
 
     public sealed record OpenBgArchetype(string Key, int Size, OpenBgSlot[] Slots);
 
+    /// <summary>The candidate indexes a fill picked (the forced one first) and the roles whose minimum could not be met.</summary>
+    public sealed record OpenBgFill(int[] PickedIndexes, OpenBgSlotRole[] MissedMinimums);
+
     /// <summary>
     /// Role archetypes for open BG crews (docs/OPEN_BG_GROUP_PRESETS.md): slots of roles, each role a set of classes
     /// of all three realms. Cross-realm by construction; in Per realm mode the roster filters the sets to one realm.
@@ -61,6 +64,39 @@ namespace DOL.GS
                     result.Add((archetype, Math.Min(count, 8)));
             }
             return result;
+        }
+
+        /// <summary>
+        /// Slots first (min, then wish) in the listed order, each filled from the first unpicked candidate whose class is in
+        /// the role; the group is then topped up to its size from what is left, in candidate order (the caller sorts by
+        /// distance). <paramref name="forcedIndex"/> is a candidate that is in the group regardless (the seed leader): it is
+        /// picked first and counts toward every slot whose role fits its class. <paramref name="mode"/> is reserved for
+        /// the Per realm filter, which the roster applies by passing only candidates of one realm.
+        /// </summary>
+        public static OpenBgFill Fill(OpenBgArchetype archetype, IReadOnlyList<eCharacterClass> candidates, OpenBgMode mode, int forcedIndex = -1)
+        {
+            var picked = new List<int>();
+            var missed = new List<OpenBgSlotRole>();
+            if (forcedIndex >= 0 && forcedIndex < candidates.Count) picked.Add(forcedIndex);
+            foreach (OpenBgSlot slot in archetype.Slots)
+            {
+                IReadOnlySet<eCharacterClass> classes = ClassesFor(slot.Role);
+                // Members already picked for an earlier slot count here too (a Minstrel is area CC and speed at once).
+                int have = picked.Count(index => classes.Contains(candidates[index]));
+                for (int pass = have; pass < slot.Wish && picked.Count < archetype.Size; pass++)
+                {
+                    int index = -1;
+                    for (int i = 0; i < candidates.Count; i++)
+                        if (!picked.Contains(i) && classes.Contains(candidates[i])) { index = i; break; }
+                    if (index < 0) break;
+                    picked.Add(index);
+                    have++;
+                }
+                if (have < slot.Min) missed.Add(slot.Role);
+            }
+            for (int i = 0; i < candidates.Count && picked.Count < archetype.Size; i++)
+                if (!picked.Contains(i)) picked.Add(i);
+            return new OpenBgFill(picked.ToArray(), missed.ToArray());
         }
     }
 }

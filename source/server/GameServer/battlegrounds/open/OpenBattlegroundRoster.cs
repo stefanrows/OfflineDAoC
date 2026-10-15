@@ -1137,9 +1137,26 @@ namespace DOL.GS
                     }
                     continue;
                 }
-                int healersWanted = (size >= 6 ? 2 : 1) - (IsHealer(seed) ? 1 : 0);
-                GameBot[] healers = near.Where(IsHealer).Take(Math.Max(0, healersWanted)).ToArray();
-                GameBot[] picked = healers.Concat(near.Where(bot => !healers.Contains(bot)).Take(size - 1 - healers.Length)).ToArray();
+                GameBot[] picked = null;
+                // Several presets may be configured: the first parsed archetype whose Size equals this unit's size fills it.
+                OpenBgArchetype archetype = OpenBattlegroundArchetypes.ParseMix(OpenBattlegroundProperties.Presets)
+                    .Select(entry => entry.Archetype).FirstOrDefault(candidate => candidate.Size == size);
+                if (archetype != null && seed.CharacterClass != null && near.All(bot => bot.CharacterClass != null))
+                {
+                    // The seed leads and is candidate 0 (forced: it counts toward the slots); near is sorted by distance.
+                    var classes = new List<eCharacterClass> { (eCharacterClass)seed.CharacterClass.ID };
+                    classes.AddRange(near.Select(bot => (eCharacterClass)bot.CharacterClass.ID));
+                    OpenBgFill fill = OpenBattlegroundArchetypes.Fill(archetype, classes, OpenBattlegroundMode.Current, 0);
+                    picked = fill.PickedIndexes.Where(index => index > 0).Take(size - 1).Select(index => near[index - 1]).ToArray();
+                    if (fill.MissedMinimums.Length > 0)
+                        Log.Info($"OPEN_BG_ARCHETYPE_MISS archetype={archetype.Key} missed={string.Join(",", fill.MissedMinimums)}");
+                }
+                if (picked == null)
+                {
+                    int healersWanted = (size >= 6 ? 2 : 1) - (IsHealer(seed) ? 1 : 0);
+                    GameBot[] healers = near.Where(IsHealer).Take(Math.Max(0, healersWanted)).ToArray();
+                    picked = healers.Concat(near.Where(bot => !healers.Contains(bot)).Take(size - 1 - healers.Length)).ToArray();
+                }
                 leader = seed;
                 others = picked;
                 porter = nearest;
@@ -1234,8 +1251,14 @@ namespace DOL.GS
         /// <summary>The short name of a unit kind as the roster logs it: group8, small or solo.</summary>
         public static string KindName(OpenBgUnitKind kind) => Describe(kind);
 
+        private static readonly HashSet<eCharacterClass> RosterHealers = new()
+        { eCharacterClass.Cleric, eCharacterClass.Healer, eCharacterClass.Druid, eCharacterClass.Friar, eCharacterClass.Shaman, eCharacterClass.Warden };
+
+        /// <summary>The roster's healer test: a Paladin is no healer (<see cref="BotPartyRoles.IsHealingClass"/> stays for companions).</summary>
+        public static bool IsRosterHealer(eCharacterClass characterClass) => RosterHealers.Contains(characterClass);
+
         private static bool IsHealer(GameBot bot) =>
-            bot.CharacterClass != null && BotPartyRoles.IsHealingClass((eCharacterClass)bot.CharacterClass.ID);
+            bot.CharacterClass != null && IsRosterHealer((eCharacterClass)bot.CharacterClass.ID);
 
         private static string Describe(OpenBgUnitKind kind) => kind switch
         {

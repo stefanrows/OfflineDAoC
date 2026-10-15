@@ -57,4 +57,42 @@ public sealed class UT_OpenBattlegroundArchetypes
         Assert.That(OpenBattlegroundArchetypes.ParseMix(""), Is.Empty);
         Assert.That(OpenBattlegroundArchetypes.ParseMix(null), Is.Empty);
     }
+
+    [Test]
+    public void FillPicksSlotsInPriorityOrderAndReportsMissedMinimums()
+    {
+        var pool = new[]
+        {
+            eCharacterClass.Paladin, eCharacterClass.Paladin, eCharacterClass.Friar, eCharacterClass.Cleric, eCharacterClass.Minstrel,
+            eCharacterClass.Mercenary, eCharacterClass.Mercenary, eCharacterClass.Savage, eCharacterClass.Wizard,
+        };
+        OpenBgFill fill = OpenBattlegroundArchetypes.Fill(OpenBattlegroundArchetypes.Get("std8"), pool, OpenBgMode.ServerPvp);
+        var picked = fill.PickedIndexes.Select(index => pool[index]).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(picked.Count(OpenBattlegroundRoster.IsRosterHealer), Is.EqualTo(2), "Cleric and Friar are the two healers");
+            Assert.That(picked, Does.Contain(eCharacterClass.Minstrel), "speed and mez come from the Minstrel");
+            Assert.That(fill.MissedMinimums, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void FillWithoutAnyHealerReportsTheMissAndStillFillsTheRest()
+    {
+        var pool = Enumerable.Repeat(eCharacterClass.Mercenary, 9).ToArray();
+        OpenBgFill fill = OpenBattlegroundArchetypes.Fill(OpenBattlegroundArchetypes.Get("std8"), pool, OpenBgMode.ServerPvp);
+        Assert.That(fill.MissedMinimums, Does.Contain(OpenBgSlotRole.Healer));
+        Assert.That(fill.PickedIndexes, Has.Length.EqualTo(8), "never a crew short because of a missed slot");
+    }
+
+    [Test]
+    public void APaladinIsNeverARosterHealer()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundRoster.IsRosterHealer(eCharacterClass.Paladin), Is.False);
+            Assert.That(OpenBattlegroundRoster.IsRosterHealer(eCharacterClass.Druid), Is.True);
+            Assert.That(OpenBattlegroundRoster.IsRosterHealer(eCharacterClass.Bard), Is.False);
+        });
+    }
 }
