@@ -118,13 +118,14 @@ else:
     print("NOTE: byte-identity against the 0.272.0 input skipped (no --input-stage)")
 
 ids = probe.probe_ids()
-assert ids == tuple(range(0x900, 0x904)) and manifest["clickEvents"] == ["2304", "2305", "2306", "2307"]
-assert probe.CLIENT_SLOTS == (150, 151, 170, 171) and manifest["clientSlots"] == [150, 151, 170, 171]
+assert ids == tuple(range(0x900, 0x93B)) and manifest["clickEvents"] == [str(v) for v in range(2304, 2363)]
+expected_slots = list(range(150, 169)) + list(range(170, 210))
+assert list(probe.CLIENT_SLOTS) == expected_slots and manifest["clientSlots"] == expected_slots
 assert [probe.inventory_source(i) for i in (0, 3, 4, 9, 10, 27, 28, 39, 40, 79, 80)] == \
     [10, 13, None, None, 21, 38, None, None, 40, 79, None]
 assert probe.is_installation_path(Path("/mnt/d/Games/OfflineDAoC/runtime"))
 assert not probe.is_installation_path(probe.default_output())
-print("PASS: events 0x900-0x903 map to client slots 150, 151, 170, 171; output never inside the installation")
+print("PASS: events 0x900-0x93a map to client slots 150-168 (worn) and 170-209 (backpack); output never inside the installation")
 
 # Emulation setup.
 uc = Uc(UC_ARCH_X86, UC_MODE_32)
@@ -408,18 +409,18 @@ set_item(151, "", 0)
 set_item(170, "Broken Record", 0x20000)
 set_item(171, "Willful Ring", 0x2B0)
 set_icon(0x2B0, 0x38D)
-expected_icons = [0x1A2, -1, -1, 0x38D]
+expected_icons = [0x1A2] + [-1] * 19 + [0x38D] + [-1] * 38
 packet(probe.OP_REFRESH)
 run_packet(expect_manager=False)
 assert windows == [], "Refresh alone must not show the window"
-assert setter_calls[-4:] == [{"ecx": obj, "value": float(value)} for obj, value in zip(icon_objects, expected_icons)]
-assert texts[text_object][-1] == "R 01a2 ffff ffff 038d", texts[text_object][-1]
-print("PASS: op 7 sets the four icons from the item array (-1 for empty or out-of-range); status 'R 01a2 ffff ffff 038d'")
+assert setter_calls[-59:] == [{"ecx": obj, "value": float(value)} for obj, value in zip(icon_objects, expected_icons)]
+assert texts[text_object][-1] == "R 02", texts[text_object][-1]
+print("PASS: op 7 sets all 59 icons from the item array (-1 for empty or out-of-range); status 'R 02'")
 
 packet(probe.OP_SHOW)
 run_packet(expect_manager=False)
-assert windows[-1] == {"this": UI, "window": 0x73, "visible": 1} and len(setter_calls) % 4 == 0
-assert setter_calls[-4:] == [{"ecx": obj, "value": float(value)} for obj, value in zip(icon_objects, expected_icons)]
+assert windows[-1] == {"this": UI, "window": 0x73, "visible": 1} and len(setter_calls) % 59 == 0
+assert setter_calls[-59:] == [{"ecx": obj, "value": float(value)} for obj, value in zip(icon_objects, expected_icons)]
 packet(probe.OP_HIDE)
 setters = len(setter_calls)
 run_packet(expect_manager=False)
@@ -462,21 +463,21 @@ set_drag(9, 2)
 click(0x901, "D 09:000c>097")
 assert moves[-1] == (151, 12, 0)
 set_drag(9, 15)
-click(0x902, "D 09:001a>0aa")
+click(0x913, "D 09:001a>0aa")
 assert moves[-1] == (170, 26, 0)
 set_drag(9, 79)
-click(0x903, "D 09:004f>0ab")
+click(0x914, "D 09:004f>0ab")
 assert moves[-1] == (171, 79, 0) and len(end_drags) == 4
 print("PASS: an inventory drag (kind 9) dropped on a slot sends move(slot, source, count) and ends the drag")
 print("PASS: hotspots 0-3 -> 10-13, 10-27 -> 21-38, 40-79 as is (the stock 0x408151 mapping)")
 
 # A probe pick-up (kind 0x66) dropped on another slot, and back on its own slot.
 set_drag(0x66, 150)
-click(0x902, "D 66:0096>0aa")
+click(0x913, "D 66:0096>0aa")
 assert moves[-1] == (170, 150, 0) and len(end_drags) == 5
 set_drag(0x66, 170)
 sent = len(moves)
-click(0x902, "C 0aa")
+click(0x913, "C 0aa")
 assert len(moves) == sent and len(end_drags) == 6
 print("PASS: a kind-0x66 drag moves between slots; dropping it on its own slot only ends the drag")
 
@@ -493,11 +494,11 @@ print("PASS: unmapped hotspots and other drag kinds (house vault, player vault) 
 set_drag(0xFFFFFFFF, 0xFFFFFFFF)
 click(0x900, "P 096 i=01a2")
 assert drags[-1] == {"eax": 0x1A2, "args": (UI, 0x66, 150, 0, 412, 233)}
-click(0x903, "P 0ab i=038d")
+click(0x914, "P 0ab i=038d")
 assert drags[-1]["args"][2] == 171 and drags[-1]["eax"] == 0x38D
 picked = len(drags)
 click(0x901, "E 097")
-click(0x902, "E 0aa")
+click(0x913, "E 0aa")
 assert len(drags) == picked and not any(m for m in moves[sent:])
 write32(UI + probe.DRAG_RECORD, 0)
 click(0x900, "P 096 i=01a2")
@@ -513,7 +514,7 @@ write32(probe.WINDOW_MANAGER, UI)
 print("PASS: a null UI manager returns AL=1 without any call")
 
 # Pass-through: every other ID reaches the manager eventHandler unchanged.
-raid_ids = (0x123, 0x5FF, 0x600, 0x64F, 0x650, 0x6FF, 0x7E0, 0x7E1, 0x7FF, 0x8FF, 0x904, 0x90F, 0xA00)
+raid_ids = (0x123, 0x5FF, 0x600, 0x64F, 0x650, 0x6FF, 0x7E0, 0x7E1, 0x7FF, 0x8FF, 0x93B, 0x93F, 0xA00)
 for event_id in raid_ids + (0x700, 0x7DF):
     entry, arrival = fire(event_id, stop=manager_event)
     assert arrival["eax"] == body and arrival["esp"] == sp and arrival["eflags"] == entry["eflags"]
@@ -521,7 +522,7 @@ for event_id in raid_ids + (0x700, 0x7DF):
         assert arrival[name] == entry[name], f"{event_id:#x} changed {name}"
     if event_id in raid_ids:
         run(manager_event, manager.RAID_EVENT_HANDLER, count=100000)
-print("PASS: IDs outside 0x900-0x903 reach the manager eventHandler unchanged; raid IDs reach the raid handler")
+print("PASS: IDs outside 0x900-0x93a reach the manager eventHandler unchanged; raid IDs reach the raid handler")
 
 
 def stock_click_event(value):
@@ -534,7 +535,7 @@ def stock_click_event(value):
 
 
 assert [stock_click_event(value) for value in manifest["clickEvents"]] == list(ids)
-print("PASS: the stock OnClickEvent mapper turns 2304-2307 into 0x900-0x903")
+print("PASS: the stock OnClickEvent mapper turns 2304-2362 into 0x900-0x93a")
 
 # XML: Custom6, four sockets/icons/click areas on the same squares, registered adapter names only.
 window = ET.fromstring(window_bytes["atlantis"]).find("WindowTemplate")
@@ -543,18 +544,18 @@ assert (window.find("Width").text, window.find("Height").text) == (str(probe.WIN
 icons = window.findall("IconDef")
 buttons = window.findall("InvisibleButtonDef")
 sockets = window.findall("ImageAreaDef")
-assert [icon.find("AdapterName").text for icon in icons] == [f"cpdl_icon_{i}" for i in range(4)]
+assert [icon.find("AdapterName").text for icon in icons] == [f"cpdl_icon_{i}" for i in range(59)]
 assert all(icon.find("TemplateName").text == "plain_icon_large" for icon in icons)
 assert [button.find("OnClickEvent").text for button in buttons] == manifest["clickEvents"]
-assert all(socket.find("TemplateName").text == "icon_socket_large" for socket in sockets) and len(sockets) == 4
+assert all(socket.find("TemplateName").text == "icon_socket_large" for socket in sockets) and len(sockets) == 59
 for index, (icon, button) in enumerate(zip(icons, buttons)):
     position = (int(icon.find("Position/X").text), int(icon.find("Position/Y").text))
     assert position == (int(button.find("Position/X").text), int(button.find("Position/Y").text))
     assert (int(button.find("Width").text), int(button.find("Height").text)) == (probe.ICON, probe.ICON)
     assert list(position) + [probe.ICON, probe.ICON] == manifest["slotRectangles"][index]
 rectangles = manifest["slotRectangles"]
-for a in range(4):
-    for b in range(a + 1, 4):
+for a in range(59):
+    for b in range(a + 1, 59):
         ax, ay, aw, ah = rectangles[a]
         bx, by, bw, bh = rectangles[b]
         assert not (ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah), "Slots overlap"

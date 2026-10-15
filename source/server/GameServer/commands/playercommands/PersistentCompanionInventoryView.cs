@@ -76,8 +76,8 @@ namespace DOL.GS.Commands
 
         public override IEnumerable<DbInventoryItem> GetDbItems(GamePlayer player) => GetClientInventory(player).Values;
 
-        // Worn gear is always shown so the slots are complete; the backpack shows only what
-        // the owner can take out. Starter and protected backpack items stay in the Gear tab.
+        // Every worn and backpack item is shown so no slot looks empty while it is taken.
+        // Starter and protected items still cannot leave: TryTransferItem refuses them.
         public override Dictionary<int, DbInventoryItem> GetClientInventory(GamePlayer player)
         {
             var items = new Dictionary<int, DbInventoryItem>();
@@ -86,8 +86,7 @@ namespace DOL.GS.Commands
             foreach (eInventorySlot worn in PersistentCompanionGear.SheetSlots)
                 if (companion.Inventory.GetItem(worn) is DbInventoryItem item)
                     items[ClientSlotAt(WornPosition(worn))] = item;
-            foreach (DbInventoryItem item in PlayerCompanionRoster.OwnerTakeableBackpack(companion.PlayerCompanionRecord,
-                         companion.Inventory.AllItems.Where(entry => IsBackpack((eInventorySlot)entry.SlotPosition))))
+            foreach (DbInventoryItem item in companion.Inventory.AllItems.Where(entry => IsBackpack((eInventorySlot)entry.SlotPosition)))
                 items[ClientSlotAt(BackpackFirstPosition + item.SlotPosition - (int)eInventorySlot.FirstBackpack)] = item;
             return items;
         }
@@ -171,14 +170,13 @@ namespace DOL.GS.Commands
                         moved = PersistentCompanionGear.TryEquip(player, _companionId, item.ObjectId, worn, out message);
                     break;
                 case MoveKind.Unequip:
-                    moved = PersistentCompanionGear.TryUnequip(player, _companionId, WornSlotAt(fromSlot), item.ObjectId, out message);
+                    moved = PersistentCompanionGear.TryUnequip(player, _companionId, WornSlotAt(fromSlot), item.ObjectId,
+                        IsVaultWindowSlot(toSlot) ? BackpackSlotAt(toSlot) : eInventorySlot.Invalid, out message);
                     break;
                 case MoveKind.WithinCompanion:
                     eInventorySlot destination = BackpackSlotAt(toSlot);
                     if (fromSlot == toSlot || companion.Inventory.GetItem(destination) != null)
-                        message = companion.Inventory.GetItem(destination) != null && !GetClientInventory(player).ContainsKey((int)toSlot)
-                            ? "That slot holds gear that stays with the companion; see the Gear tab. Choose another slot."
-                            : "Choose an empty companion backpack slot to move this item.";
+                        message = "Choose an empty companion backpack slot to move this item.";
                     else
                         moved = PlayerCompanionRoster.TryApplyEquipmentMutation(companion,
                             () => companion.Inventory.GetItem((eInventorySlot)item.SlotPosition)?.ObjectId == item.ObjectId &&
@@ -193,14 +191,14 @@ namespace DOL.GS.Commands
                         message = "Choose an empty companion backpack slot.";
                     else
                         moved = PlayerCompanionRoster.TryTransferItem(player, _companionId, item.ObjectId,
-                            toCompanion: true, out message);
+                            toCompanion: true, IsVaultWindowSlot(toSlot) ? BackpackSlotAt(toSlot) : eInventorySlot.Invalid, out message);
                     break;
                 case MoveKind.ReturnToOwner:
                     if (IsBackpack(toSlot) && player.Inventory.GetItem(toSlot) != null)
                         message = "Choose an empty slot in your backpack.";
                     else
                         moved = PlayerCompanionRoster.TryTransferItem(player, _companionId, item.ObjectId,
-                            toCompanion: false, out message);
+                            toCompanion: false, toSlot, out message);
                     break;
                 default:
                     message = "Drag between your backpack, the worn slots (1-19) and the companion's backpack (21-60).";

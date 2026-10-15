@@ -311,9 +311,13 @@ Agent sessions on items 45–48: take the role and context from
      and the refused manual equip of a starter helm.
      **Source 0.274.0 fixes the refused equip** (bug 161: cross-realm
      companions judged armor by the borrowed owner realm; unequipping left
-     the slot open to a fresh starter piece). Pending: install 0.274.0, then
-     re-equip Brakka's Matterbender Chain Helm with the manager's [Equip].
-     Next: the full 19 + 40 slot window with findings 1 and 2.
+     the slot open to a fresh starter piece). Installed 0.274.0; the manager's
+     [Equip] put the Matterbender Chain Helm back on Brakka (real client).
+     **0.275.0: full 19 + 40 slot window (quick build) installed and
+     working in the real client** with findings 1 and 2 fixed; open with
+     `/companions gearprobe [name] [plain]`. What is still open (release
+     pack, manager integration, marking protected items, untested moves,
+     unit tests) is listed in section 8 of the analysis.
 
 125. **Gothwaite PvP mode: a separate world mode where all autonomous bots
      PvP around Caer Gothwaite.** Owner, 2026-10-13. Plan:

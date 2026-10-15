@@ -326,3 +326,65 @@ Findings for the full window (server side, not client):
      earned gear may still fill it.
 4. In the stock House Vault list, an item is picked up by clicking its icon,
    not its name.
+
+## 8. Full window, quick build (0.275.0)
+
+Built on 2026-10-15 for the owner's video by widening the probe builder in
+place. The click and icon logic is the probe's (section 6, passed R1-R5); only
+the slot count, the data layout and the window changed.
+
+- **Client.** `probe_companion_paperdoll.py` now builds 59 slots: the 19 worn
+  slots (client slots 150-168, character-sheet order) in three labelled
+  columns and the 40 backpack slots (170-209) as an 8 x 5 grid, events
+  `0x900`-`0x93A` (OnClickEvent 2304-2362), adapters `cpdl_icon_0`-`58`
+  registered in a loop. The status line keeps the probe codes; a refresh now
+  reads `R <filled slot count, hex>`. Window "COMPANION GEAR", 518 x 386.
+  The emulation test (`test_companion_paperdoll_probe.py`) passes for all 59
+  slots.
+- **Server.** `PersistentCompanionInventoryView` shows every backpack item,
+  starter gear included (finding 1); `TryTransferItem` refuses to hand the
+  protected ones out as before. A give, an unequip and a move back to the
+  owner use the slot the item was dropped on when it is empty, otherwise the
+  first free one (finding 2). `/companions gearprobe [name] [plain]` opens
+  the window.
+
+| Output | SHA-256 |
+|---|---|
+| game.dll | `f1f5c399ab79a6966b623746059e3e57a22665929a97a5ccff3e6ca093768394` |
+| uimain.xml (unchanged from the probe) | `cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a1328c` |
+| custom6_window.xml (both skins) | `9a47faa82bd3daaec0c99d26cbd6db12170a01f14af0805c3a384d295e1755ee` |
+
+Stage `D:\Games\OfflineDAoC-dev\companion-paperdoll-0.275.0`. Installed with
+`Install-CompanionPaperdollProbe.ps1` after restoring the probe backup; the
+new backup `D:\Games\OfflineDAoC-backups\companion-paperdoll-probe-20261015-134639`
+restores the 0.272.0 manager files.
+
+Real client (2026-10-15, agent-driven, owner present): the window opened with
+all worn icons and the 43 backpack items (`R 2b`); a pick-up of Bag 1 and a
+drop on the empty Bag 7 moved the formerly hidden Ancestral Ring there
+("Moved Ancestral Ring within Brakka's backpack"). During a fight the same
+move was refused ("Brakka is attacking or casting; wait a moment").
+
+### Still open
+
+1. **Not in the release pack or the manager installer.** The client files are
+   installed only with `Install-CompanionPaperdollProbe.ps1` over the 0.272.0
+   manager. Restore its backup before any Companion Manager client upgrade.
+2. **Still the probe builder.** Manifest `probe: true`, command
+   `gearprobe`, debug status codes. Proper integration: move the window into
+   `build_companion_manager_client.py` (server labels for the companion's
+   name, captions and the last reply), a manager stage and an
+   `Install-CompanionManager.ps1` upgrade path, and `[Open inventory]` opening
+   this window instead of the House Vault list.
+3. **Protected items are not marked** in the grid; only the refusal message
+   tells the owner.
+4. **Real-client moves not yet clicked in the full window:** give from the
+   owner's bag to a worn slot and to a backpack slot, equip from the
+   backpack, unequip to the backpack and to the owner's bag, the ring and
+   wrist pairs, two-hand and shield conflicts, the Isles skin.
+5. **No unit tests** for the dropped-slot parameters (`TryTransferItem`
+   `preferredSlot`, `TryUnequip` `backpackSlot`) or the all-items view.
+6. Delve (item info) on a slot: not supported (section 3.3); use the
+   manager's **[Info]**.
+7. The 0.274.0 unequip mark (the slot stays empty) has not been checked in
+   the real client.

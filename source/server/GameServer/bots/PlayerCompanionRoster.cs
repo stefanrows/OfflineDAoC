@@ -333,7 +333,12 @@ namespace DOL.GS
         }
 
         public static bool TryTransferItem(GamePlayer owner, string companionNameOrId, string itemId,
-            bool toCompanion, out string message)
+            bool toCompanion, out string message) =>
+            TryTransferItem(owner, companionNameOrId, itemId, toCompanion, eInventorySlot.Invalid, out message);
+
+        /// <param name="preferredSlot">The backpack slot the item was dropped on; used when it is empty.</param>
+        public static bool TryTransferItem(GamePlayer owner, string companionNameOrId, string itemId,
+            bool toCompanion, eInventorySlot preferredSlot, out string message)
         {
             message = "The item could not be transferred.";
             if (owner == null || string.IsNullOrWhiteSpace(itemId) ||
@@ -377,8 +382,11 @@ namespace DOL.GS
                 return false;
             }
 
-            eInventorySlot destinationSlot = destination.FindFirstEmptySlot(
-                eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
+            eInventorySlot destinationSlot =
+                preferredSlot is >= eInventorySlot.FirstBackpack and <= eInventorySlot.LastBackpack &&
+                destination.GetItem(preferredSlot) == null
+                    ? preferredSlot
+                    : destination.FindFirstEmptySlot(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack);
             long saleProceeds = 0;
             if (destinationSlot == eInventorySlot.Invalid && !toCompanion)
             {

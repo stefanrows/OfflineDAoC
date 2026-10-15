@@ -65,8 +65,12 @@ HOOK_EVENT = 0x4E04DE    # stock event dispatch -> manager eventHandler (target 
 
 # Probe events (OnClickEvent 2304-2307). Raid 0x600-0x64F, manager 0x700-0x7DF, client helpers 0x7E0/0x7E1.
 EVENT_BASE = 0x900
-SLOT_POSITIONS = (1, 2, 21, 22)          # PersistentCompanionInventoryView positions
-SLOT_CAPTIONS = ("Helm", "Chest", "Bag 21", "Bag 22")
+# PersistentCompanionInventoryView positions: 1-19 worn (character-sheet order), 21-60 backpack.
+WORN_CAPTIONS = ("Helm", "Chest", "Arms", "Hands", "Legs", "Feet", "Cloak", "Neck", "Jewel", "Belt",
+                 "L Wrist", "R Wrist", "L Ring", "R Ring", "R Hand", "L Hand", "2 Hand", "Ranged", "Mythic")
+BACKPACK_SLOTS = 40
+SLOT_POSITIONS = tuple(range(1, len(WORN_CAPTIONS) + 1)) + tuple(range(21, 21 + BACKPACK_SLOTS))
+SLOT_CAPTIONS = WORN_CAPTIONS + tuple(f"Bag {index + 1}" for index in range(BACKPACK_SLOTS))
 FIRST_CLIENT_SLOT = 150                  # eInventorySlot.HousingInventory_First
 CLIENT_SLOTS = tuple(FIRST_CLIENT_SLOT + position - 1 for position in SLOT_POSITIONS)
 SLOTS = len(CLIENT_SLOTS)
@@ -125,27 +129,44 @@ HANDLER_OFFSET = 0x0300
 CODE_LIMIT = 0x1000
 DATA_OFFSET = 0x1000
 HEX_DIGITS = DATA_OFFSET + 0x00
-ICON_SLOTS = DATA_OFFSET + 0x10           # SLOTS adapter object pointers
-TEXT_SLOT = DATA_OFFSET + 0x30
-CLIENT_SLOT_TABLE = DATA_OFFSET + 0x40    # SLOTS dwords
-ICON_VALUES = DATA_OFFSET + 0x60          # last icon written per slot (int)
-SCRATCH = DATA_OFFSET + 0x80              # int -> float conversion
-TEXT_BUFFER = DATA_OFFSET + 0xA0
-NAMES = DATA_OFFSET + 0x100               # 16 bytes per name: SLOTS icons, then the text adapter
+TEXT_SLOT = DATA_OFFSET + 0x10
+SCRATCH = DATA_OFFSET + 0x20              # int -> float conversion
+TEXT_BUFFER = DATA_OFFSET + 0x40          # status line, at most 63 characters
+ICON_SLOTS = DATA_OFFSET + 0x100          # SLOTS adapter object pointers
+CLIENT_SLOT_TABLE = DATA_OFFSET + 0x200   # SLOTS dwords
+ICON_VALUES = DATA_OFFSET + 0x300         # last icon written per slot (int)
+NAMES = DATA_OFFSET + 0x400               # 16 bytes per name: SLOTS icons, then the text adapter
 PAYLOAD_SIZE = NAMES + 16 * (SLOTS + 1)
 SECTION_NAME = b".cpdl\0\0\0"
 SECTION_CHARACTERISTICS = 0xE0000060
 
-# Custom6 geometry.
-WINDOW_WIDTH, WINDOW_HEIGHT = 300, 156
+# Custom6 geometry: worn gear in three columns with captions, the backpack as an 8 x 5 grid.
 SOCKET = 34
 ICON = 32
-SLOT_Y = 30
-SLOT_XS = (24, 82, 168, 226)
-CAPTION_Y, CAPTION_WIDTH = 68, 58
-STATUS_X, STATUS_Y, STATUS_WIDTH = 10, 96, 280
-HELP_Y = 118
-HELP_TEXT = ("Click a bag item, then a slot.", "Click a filled slot to pick it up.")
+WORN_X, WORN_Y, WORN_PITCH_X, WORN_PITCH_Y, WORN_COLUMNS = 14, 30, 58, 50, 3
+# Worn slot index (SheetSlots order) at each (column, row) of the worn panel.
+WORN_LAYOUT = ((0, 0), (0, 1), (2, 1), (0, 2), (2, 2), (0, 3),   # helm, chest, arms, hands, legs, feet
+               (2, 0), (1, 0), (1, 1), (1, 2),                   # cloak, neck, jewel, belt
+               (1, 3), (2, 3), (0, 4), (1, 4),                   # wrists, left ring, right ring
+               (0, 5), (1, 5), (2, 5), (0, 6), (2, 4))           # right hand, left hand, two hand, ranged, mythic
+BAG_X, BAG_Y, BAG_PITCH, BAG_COLUMNS = 206, 48, 38, 8
+CAPTION_WIDTH = 56
+WINDOW_WIDTH = BAG_X + BAG_COLUMNS * BAG_PITCH + 8
+WINDOW_HEIGHT = WORN_Y + 7 * WORN_PITCH_Y + 6
+STATUS_X, STATUS_Y, STATUS_WIDTH = BAG_X, BAG_Y + 5 * BAG_PITCH + 10, BAG_COLUMNS * BAG_PITCH
+HELP_Y = STATUS_Y + 22
+HELP_TEXT = ("Click your item, then a slot: give or equip.",
+             "Click a filled slot to pick its item up.",
+             "Starter gear stays with the companion.")
+
+
+def slot_origin(index):
+    """Top-left of slot `index`'s socket (0-18 worn, 19-58 backpack)."""
+    if index < len(WORN_CAPTIONS):
+        column, row = WORN_LAYOUT[index]
+        return WORN_X + column * WORN_PITCH_X, WORN_Y + row * WORN_PITCH_Y
+    bag = index - len(WORN_CAPTIONS)
+    return BAG_X + (bag % BAG_COLUMNS) * BAG_PITCH, BAG_Y + (bag // BAG_COLUMNS) * BAG_PITCH
 
 
 def sha256(data):
@@ -248,18 +269,26 @@ def assemble(va, manager_packet_va, manager_event_va, ks):
     icon_slots, text_slot = va + ICON_SLOTS, va + TEXT_SLOT
     slot_table, icon_values, scratch = va + CLIENT_SLOT_TABLE, va + ICON_VALUES, va + SCRATCH
     text, hex_digits, names = va + TEXT_BUFFER, va + HEX_DIGITS, va + NAMES
-    registrations = "\n".join(f"""
-        push {float_bits(ICON_INITIAL):#x}
-        push {float_bits(ICON_MAX):#x}
-        push {names + 16 * index:#x}
-        push {icon_slots + 4 * index:#x}
-        push edi
-        call {REGISTER_SCALAR_ADAPTER:#x}""" for index in range(SLOTS))
-    # EDI is the adapter registry, as at the manager's own registrations.
+    # EDI is the adapter registry, as at the manager's own registrations. ESI and EDI survive the
+    # stdcall registrar.
     put("init", INIT_OFFSET, f"""
         pushfd
         pushad
-        {registrations}
+        xor esi, esi
+    register_icon:
+        push {float_bits(ICON_INITIAL):#x}
+        push {float_bits(ICON_MAX):#x}
+        mov eax, esi
+        shl eax, 4
+        add eax, {names:#x}
+        push eax
+        lea eax, [{icon_slots:#x}+esi*4]
+        push eax
+        push edi
+        call {REGISTER_SCALAR_ADAPTER:#x}
+        inc esi
+        cmp esi, {SLOTS}
+        jb register_icon
         push {names + 16 * SLOTS:#x}
         push {text_slot:#x}
         push edi
@@ -336,8 +365,10 @@ def assemble(va, manager_packet_va, manager_event_va, ks):
     refresh:
         mov edi, {text:#x}
         mov byte ptr [edi], 0x52
-        inc edi
+        mov byte ptr [edi+1], 0x20
+        add edi, 2
         xor esi, esi
+        xor ebx, ebx
     refresh_slot:
         mov eax, dword ptr [{slot_table:#x}+esi*4]
         imul eax, eax, {ITEM_STRIDE:#x}
@@ -360,15 +391,17 @@ def assemble(va, manager_packet_va, manager_event_va, ks):
         push dword ptr [{scratch + 4:#x}]
         call {SET_SCALAR_VALUE:#x}
     icon_set:
-        mov byte ptr [edi], 0x20
-        inc edi
-        mov eax, dword ptr [{icon_values:#x}+esi*4]
-        mov ecx, 4
-        call {hexfmt:#x}
-        add edi, 4
+        cmp dword ptr [{icon_values:#x}+esi*4], {ICON_EMPTY}
+        je icon_counted
+        inc ebx
+    icon_counted:
         inc esi
         cmp esi, {SLOTS}
         jb refresh_slot
+        mov eax, ebx
+        mov ecx, 2
+        call {hexfmt:#x}
+        add edi, 2
         mov byte ptr [edi], 0
         call {show_text:#x}
     packet_done:
@@ -613,7 +646,7 @@ def build(image, manifest):
             "pickup": "P <slot %03x> i=<icon %04x>  (kind-0x66 drag started)",
             "putBack": "C <slot %03x>  (item dropped on its own slot: drag ended, nothing sent)",
             "empty": "E <slot %03x>  (no item, nothing sent)",
-            "refresh": "R <icon %04x> x4  (ffff = empty)",
+            "refresh": "R <filled slot count %02x>",
         },
         "nativeReturnBytes": natives,
         "inputUimainSha256": INPUT_UIMAIN_SHA256,
@@ -646,7 +679,7 @@ def _icon(panel, x, y, adapter):
 
 def slot_rectangles():
     """(x, y, width, height) of each slot's click area, in slot order."""
-    return [(x + 1, SLOT_Y + 1, ICON, ICON) for x in SLOT_XS]
+    return [(x + 1, y + 1, ICON, ICON) for x, y in map(slot_origin, range(SLOTS))]
 
 
 def probe_window():
@@ -663,18 +696,20 @@ def probe_window():
                        ("ContextTemplateName", None)):
         ET.SubElement(panel, key).text = value
     manager._image(panel, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, "dlg_sm_title_noresize")
-    for x in SLOT_XS:
-        _socket(panel, x, SLOT_Y)
-    for index, x in enumerate(SLOT_XS):
-        _icon(panel, x + 1, SLOT_Y + 1, ADAPTER_ICON.format(index))
-    manager._label(panel, 12, 1, 276, manager.GOLD, text="COMPANION GEAR PROBE", characters=32)
-    for index, x in enumerate(SLOT_XS):
-        manager._label(panel, x + SOCKET // 2 - CAPTION_WIDTH // 2, CAPTION_Y, CAPTION_WIDTH, manager.TEXT,
+    origins = [slot_origin(index) for index in range(SLOTS)]
+    for x, y in origins:
+        _socket(panel, x, y)
+    for index, (x, y) in enumerate(origins):
+        _icon(panel, x + 1, y + 1, ADAPTER_ICON.format(index))
+    manager._label(panel, 12, 1, WINDOW_WIDTH - 40, manager.GOLD, text="COMPANION GEAR", characters=32)
+    for index, (x, y) in enumerate(origins[:len(WORN_CAPTIONS)]):
+        manager._label(panel, x + SOCKET // 2 - CAPTION_WIDTH // 2, y + SOCKET + 1, CAPTION_WIDTH, manager.TEXT,
                        text=SLOT_CAPTIONS[index], characters=16, centered=True)
+    manager._label(panel, BAG_X, BAG_Y - 20, 200, manager.GOLD, text="Backpack", characters=16)
     manager._label(panel, STATUS_X, STATUS_Y, STATUS_WIDTH, manager.MESSAGE, native_adapter=ADAPTER_TEXT,
-                   text="probe: no click yet", characters=48)
+                   text="", characters=48)
     for line, text in enumerate(HELP_TEXT):
-        manager._label(panel, STATUS_X, HELP_Y + 16 * line, STATUS_WIDTH, manager.MUTED, text=text, characters=48)
+        manager._label(panel, STATUS_X, HELP_Y + 16 * line, STATUS_WIDTH, manager.MUTED, text=text, characters=72)
     for index, (x, y, width, height) in enumerate(slot_rectangles()):
         manager._click(panel, x, y, width, None, SLOT_CAPTIONS[index], height=height, event=str(EVENT_BASE + index))
     ET.indent(root)

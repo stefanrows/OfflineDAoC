@@ -131,25 +131,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
-161. **A cross-realm companion cannot equip its own starter armor or its
-     class realm's armor.** Live 0.273.0, 2026-10-15: after an unequip,
-     the Companion Manager's [Equip] refused Brakka's (Midgard Shaman,
-     Albion owner) Matterbender Chain Helm with "not a legal choice, its
-     slot is protected, or the companion is busy". Cause: an owned bot's
-     `Realm` is its owner's realm, so its generated starter gear carries
-     the owner's realm and `CheckAbilityToUseItem` looked up that realm's
-     armor ability (`AlbArmor`); class-realm loot failed the realm filter.
-     Manual equips, automatic upgrades and merchant purchases of armor
-     were all affected for every companion whose class realm differs from
-     its owner's. Separately, an unequipped armor slot was at once refilled
-     with a newly created starter piece (`UpgradeStarterEquipment`). Source
-     0.274.0: the rule judges armor and weapon skills by
-     `GameBot.ClassRealm` for owned bots and accepts both realms; an
-     unequip marks the slot as the owner's choice. Regression test
-     `CrossRealmCompanionJudgesArmorByItsClassRealm`. Pending: install and
-     re-equip the helm in the real client (details in section 7 of
-     [COMPANION_PAPERDOLL_RE.md](COMPANION_PAPERDOLL_RE.md)).
-
 159. **Too few automatic sieges open for the number of ready warbands.**
      Live 0.255.0, 2026-10-12 20:34–21:00: 43 distinct siege-ready warbands
      logged `RVR_ASSAULT_GATE` but only one frontier siege opened. Gates in
@@ -2152,6 +2133,26 @@ Source inventory audit 2026-09-26: the implementations cited in entries 1–17 r
 21. **Server freezes when simultaneous effect changes deadlock.** Effect transitions now release their state lock before processing the owner's effect list, and an expiring same-spell effect can be replaced without waiting on its state lock. A bounded concurrency regression covers the expiration/replacement cycle. Source fix: 0.71.0; installation and sustained real-client server verification pending.
 
 ## Finished
+
+161. **Done — A cross-realm companion cannot equip its own starter armor or its
+     class realm's armor.** Live 0.273.0, 2026-10-15: after an unequip,
+     the Companion Manager's [Equip] refused Brakka's (Midgard Shaman,
+     Albion owner) Matterbender Chain Helm with "not a legal choice, its
+     slot is protected, or the companion is busy". Cause: an owned bot's
+     `Realm` is its owner's realm, so its generated starter gear carries
+     the owner's realm and `CheckAbilityToUseItem` looked up that realm's
+     armor ability (`AlbArmor`); class-realm loot failed the realm filter.
+     Manual equips, automatic upgrades and merchant purchases of armor
+     were all affected for every companion whose class realm differs from
+     its owner's. Separately, an unequipped armor slot was at once refilled
+     with a newly created starter piece (`UpgradeStarterEquipment`). Source
+     0.274.0: the rule judges armor and weapon skills by
+     `GameBot.ClassRealm` for owned bots and accepts both realms; an
+     unequip marks the slot as the owner's choice. Regression test
+     `CrossRealmCompanionJudgesArmorByItsClassRealm`. Installed 0.274.0 and verified in the real client, 2026-10-15: the
+     manager's [Equip] put the Matterbender Chain Helm back on Brakka
+     ("Matterbender Chain Helm is equipped in the helm slot"). Details in
+     section 7 of [COMPANION_PAPERDOLL_RE.md](COMPANION_PAPERDOLL_RE.md).
 
 41. **Reverted — Casters run out of mana too quickly, especially while bombing.** The
     2026-09-26 source audit found bot damaging spells use native mana costs and

@@ -36,10 +36,9 @@ namespace DOL.GS.Commands
             var view = new PersistentCompanionInventoryView(player, companion.PlayerCompanionRecord.CompanionId,
                 paperdoll: true, stockWindow: !plain);
             view.Open();
-            return $"Gear probe open for {companion.Name}: Helm, Chest, Bag 21, Bag 22" +
-                   (plain ? " (without the House Vault window). " : " (the House Vault window opens too). ") +
-                   "Click a bag item, then a slot; click a filled slot to pick its item up. " +
-                   "The window's status line shows what the client did.";
+            return $"Companion gear window open for {companion.Name}: 19 worn slots and the 40-slot backpack" +
+                   (plain ? ". " : " (the House Vault window opens too). ") +
+                   "Click one of your items, then a slot; click a filled slot to pick its item up.";
         }
 
         private static bool TryChooseCompanion(GamePlayer player, string name, out GameBot companion, out string message)

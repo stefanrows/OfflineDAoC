@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.275.0] - 2026-10-15
+
+### Added
+
+- **Companion gear window** with drag and drop (TASKS 129): the companion's
+  19 worn slots, labelled in three columns, and its 40-slot backpack as a
+  grid, with the items' real icons. Click one of your items, then a slot to
+  give or equip it; click a filled slot to pick its item up, then click
+  where it goes (another slot or your own bag). Open it with
+  `/companions gearprobe [name] [plain]` (`plain`: without the House Vault
+  list). Works in the real client. The window's client files are a
+  separate install (`tools/dev/Install-CompanionPaperdollProbe.ps1`, stage
+  built by `source/server/tools/probe_companion_paperdoll.py`) and are not
+  in the release pack yet. What is still open is listed in section 8 of
+  `docs/COMPANION_PAPERDOLL_RE.md`.
+
+### Changed
+
+- The companion inventory view (the paperdoll window, the House Vault list
+  of [Open inventory]) shows every backpack item, starter gear included.
+  Starter gear still stays with the companion: taking it out is refused
+  with a message.
+- An item given to a companion, unequipped into its backpack or returned to
+  you lands in the slot it was dropped on when that slot is empty, instead
+  of the first free one.
+- Bug 161 (0.274.0) is verified in the real client and moved to Finished.
+
 ## [0.274.0] - 2026-10-15
 
 ### Changed
