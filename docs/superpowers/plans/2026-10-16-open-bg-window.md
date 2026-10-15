@@ -21,6 +21,10 @@
 - Build only into default output trees; never into the install. Run tests with filters named per task.
 - Commands from `C:\OfflineDAoC-wt-obgwindow`, `export OFFLINE_DAOC_ROOT=/mnt/c/OfflineDAoC/playable`. C# build: `tools/dev/winnet.sh build source/server/Tests/Tests.csproj -c Release --no-restore 2>&1 | grep -E ' error |Fehler$'`; C# test: `tools/dev/winnet.sh test source/server/Tests/Tests.csproj -c Release --no-build --no-restore --filter "<filter>" 2>&1 | grep -E 'Fehler|Bestanden'`.
 
+## Owner amendment 2026-10-16 (binding, supersedes every GM mention in this plan and in the spec)
+
+**There is NO GM lock.** Every player may change the open BG settings and relieve units, in the window (Steuern page: all `[-]`/`[+]`/switch/`[Relieve]` intents exist for every viewer) and by chat (`/bgsetup <key> <value>`, `relieve`), exactly as `/bgsetup` already allows today (`ePrivLevel.Player`). Where a task below says GM, GM-only, `isGm`, `PrivLevel`, "GM message" or "non-GM": ignore it. Do not add any privilege check; add a regression test that a plain player can still write a setting and relieve a unit. The server still validates every value against the parser limits and ignores unknown controls. The Lage/Steuern split stays as pages only.
+
 ## Review Focus
 
 - A click arriving for the closed window, with a stale token, or an unknown control must do nothing harmful; navigation clicks are always safe.

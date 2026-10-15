@@ -4,6 +4,8 @@ Date 2026-10-16. Supersedes the open points of `2026-10-15-open-bg-window-design
 
 Plan: `docs/superpowers/plans/2026-10-16-open-bg-window.md`.
 
+> **Owner amendment 2026-10-16:** no GM lock. Every player may change the settings and relieve units, in the window and by chat, as `/bgsetup` already allows today. All GM-only statements in sections 2, 6 and 9 are void.
+
 ## 1. Facts that changed the picture
 
 - **The owner's installation already has the 0.276.0 manager stage** (`game.dll` `bfefe97d...`, `uimain.xml` `cef698f3...`, custom6/7/8 files of 15.10. 17:36; backup `playable-backups/companion-manager-upgrade-20261015-173803`). The installer must accept 0.169.0 **and** 0.276.0 as starting state (Stefan's D: install not inspected).
