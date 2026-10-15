@@ -9,13 +9,77 @@ public sealed record OpenBgField(string Name, string RowKey, string Label, int M
     public bool IsSwitch => Name is "enabled" or "drift";
 }
 
+/// <summary>One realm's own crew row: open_bg_units_&lt;realm&gt;, text "8-man/small/solos" or empty for the global values.</summary>
+public sealed record OpenBgUnitsField(string Name, string RowKey, string Label, string Help, string Description);
+
 /// <summary>
-/// The open BG setup (Thidranki 252, spec 2026-10-11 §7) as the launcher edits it: the same eight open_bg_* server
-/// property rows and ranges as the in-game /bgsetup command. Values are clamped on the way in and out.
+/// The open BG setup (Thidranki 252, spec 2026-10-11 §7) as the launcher edits it: the same open_bg_* server property
+/// rows and ranges as the in-game /bgsetup command, eight numbers and switches plus each realm's own crew
+/// (owner decision 2026-10-11 14:50). Values are clamped on the way in and out; an unreadable realm crew means the
+/// global values, as on the server.
 /// </summary>
 public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int Solos, int MaxBots, int CycleMin, int CycleMax, bool Drift)
 {
     public const string Category = "pvp";
+
+    /// <summary>Albion's own crew, "8-man/small/solos" such as "1/2/4"; empty for the global values.</summary>
+    public string AlbionUnits { get; init; } = string.Empty;
+    public string MidgardUnits { get; init; } = string.Empty;
+    public string HiberniaUnits { get; init; } = string.Empty;
+
+    public static readonly OpenBgUnitsField[] UnitFields =
+    [
+        new("albion", "open_bg_units_albion", "Albion units",
+            "Albion's own crew as 8-man/small/solos, e.g. 1/2/4 (0-4, 0-6, 0-12). Empty: the three per-realm values above.",
+            "Albion's open BG crew as 8-man/small/solos, e.g. 1/2/4 (empty: open_bg_groups8, open_bg_groups_small and open_bg_solos)"),
+        new("midgard", "open_bg_units_midgard", "Midgard units",
+            "Midgard's own crew as 8-man/small/solos, e.g. 1/2/4 (0-4, 0-6, 0-12). Empty: the three per-realm values above.",
+            "Midgard's open BG crew as 8-man/small/solos, e.g. 1/2/4 (empty: open_bg_groups8, open_bg_groups_small and open_bg_solos)"),
+        new("hibernia", "open_bg_units_hibernia", "Hibernia units",
+            "Hibernia's own crew as 8-man/small/solos, e.g. 1/2/4 (0-4, 0-6, 0-12). Empty: the three per-realm values above.",
+            "Hibernia's open BG crew as 8-man/small/solos, e.g. 1/2/4 (empty: open_bg_groups8, open_bg_groups_small and open_bg_solos)"),
+    ];
+
+    /// <summary>A realm's units text by field name (albion, midgard, hibernia).</summary>
+    public string UnitsOf(string name) => name switch
+    {
+        "albion" => AlbionUnits,
+        "midgard" => MidgardUnits,
+        "hibernia" => HiberniaUnits,
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown realm units field."),
+    };
+
+    /// <summary>These settings with one realm's units text.</summary>
+    public OpenBgSettings WithUnits(string name, string text) => name switch
+    {
+        "albion" => this with { AlbionUnits = text ?? string.Empty },
+        "midgard" => this with { MidgardUnits = text ?? string.Empty },
+        "hibernia" => this with { HiberniaUnits = text ?? string.Empty },
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown realm units field."),
+    };
+
+    /// <summary>
+    /// A realm crew as stored: empty (or "global") gives "", three whole numbers separated by '/' give them clamped
+    /// ("9/1/2" gives "4/1/2"). False for any other text.
+    /// </summary>
+    public static bool TryNormalizeUnits(string? text, out string normalized)
+    {
+        normalized = string.Empty;
+        string trimmed = text?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0 || trimmed.Equals("global", StringComparison.OrdinalIgnoreCase)) return true;
+        string[] parts = trimmed.Split('/');
+        if (parts.Length != 3) return false;
+        var values = new int[3];
+        for (int index = 0; index < 3; index++)
+            if (!int.TryParse(parts[index].Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out values[index]))
+                return false;
+        normalized = string.Create(CultureInfo.InvariantCulture,
+            $"{Clamp("groups8", values[0])}/{Clamp("small", values[1])}/{Clamp("solos", values[2])}");
+        return true;
+    }
+
+    // Unreadable text means the global values, as the server reads it.
+    private static string NormalizeUnits(string? text) => TryNormalizeUnits(text, out string normalized) ? normalized : string.Empty;
 
     public static readonly OpenBgField[] Fields =
     [
@@ -61,6 +125,9 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             MaxBots = Clamp("max_bots", MaxBots),
             CycleMin = min,
             CycleMax = Math.Max(min, Clamp("cycle_max", CycleMax)),
+            AlbionUnits = NormalizeUnits(AlbionUnits),
+            MidgardUnits = NormalizeUnits(MidgardUnits),
+            HiberniaUnits = NormalizeUnits(HiberniaUnits),
         };
     }
 
@@ -70,7 +137,10 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
         return Math.Clamp(value, field.Min, field.Max);
     }
 
-    /// <summary>The eight rows (row key, stored value) in field order, clamped; switches as "True"/"False" like the server writes them.</summary>
+    /// <summary>
+    /// The eleven rows (row key, stored value): the eight fields in order, then the realms' crews; clamped, switches as
+    /// "True"/"False" like the server writes them.
+    /// </summary>
     public static IReadOnlyList<(string key, string value)> ToRows(OpenBgSettings settings)
     {
         OpenBgSettings value = (settings ?? Defaults).Clamped();
@@ -84,7 +154,7 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             "cycle_min" => Number(value.CycleMin),
             "cycle_max" => Number(value.CycleMax),
             _ => Switch(value.Drift),
-        })).ToArray();
+        })).Concat(UnitFields.Select(field => (field.RowKey, value.UnitsOf(field.Name)))).ToArray();
     }
 
     /// <summary>Settings from saved rows: a missing or unreadable row gives that field's default; numbers are clamped.</summary>
@@ -107,7 +177,12 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
             ReadNumber("max_bots", defaults.MaxBots),
             ReadNumber("cycle_min", defaults.CycleMin),
             ReadNumber("cycle_max", defaults.CycleMax),
-            ReadSwitch("drift", defaults.Drift)).Clamped();
+            ReadSwitch("drift", defaults.Drift))
+        {
+            AlbionUnits = saved.GetValueOrDefault("open_bg_units_albion") ?? string.Empty,
+            MidgardUnits = saved.GetValueOrDefault("open_bg_units_midgard") ?? string.Empty,
+            HiberniaUnits = saved.GetValueOrDefault("open_bg_units_hibernia") ?? string.Empty,
+        }.Clamped();
     }
 
     public static bool TryParseSwitch(string? text, out bool on)
@@ -122,15 +197,18 @@ public sealed record OpenBgSettings(bool Enabled, int Groups8, int Small, int So
 
     /// <summary>Reads the open_bg_* rows of the save (read-only; missing table or rows give the defaults).</summary>
     public static OpenBgSettings Load(string database) =>
-        FromRows(ServerPropertyRows.Read(database, Fields.Select(field => field.RowKey)));
+        FromRows(ServerPropertyRows.Read(database, Fields.Select(field => field.RowKey).Concat(UnitFields.Select(field => field.RowKey))));
 
-    /// <summary>Writes all eight rows through the launcher's server-property writer. Only while the server is stopped.</summary>
+    /// <summary>Writes all eleven rows through the launcher's server-property writer. Only while the server is stopped.</summary>
     public static void Save(string database, OpenBgSettings settings, Func<bool> serverStopped)
     {
         if (!serverStopped()) throw new InvalidOperationException("Stop the server before saving the open BG setup; while it runs, use /bgsetup in game.");
         IReadOnlyList<(string key, string value)> rows = ToRows(settings);
-        ServerPropertyRows.Upsert(database, Category, Fields.Select((field, index) =>
-            new ServerPropertyRow(field.RowKey, field.Description, DefaultText(field), rows[index].value)).ToArray(), serverStopped);
+        ServerPropertyRow[] numbers = Fields.Select((field, index) =>
+            new ServerPropertyRow(field.RowKey, field.Description, DefaultText(field), rows[index].value)).ToArray();
+        ServerPropertyRow[] realms = UnitFields.Select((field, index) =>
+            new ServerPropertyRow(field.RowKey, field.Description, string.Empty, rows[Fields.Length + index].value)).ToArray();
+        ServerPropertyRows.Upsert(database, Category, numbers.Concat(realms).ToArray(), serverStopped);
     }
 
     private static string DefaultText(OpenBgField field) => field.IsSwitch ? Switch(field.Default == 1) : Number(field.Default);
@@ -190,15 +268,40 @@ public static class OpenBgLiveStatus
                 ? playerArray.GetArrayLength() : 0;
             double speed = root.TryGetProperty("AchievedSpeed", out JsonElement speedElement) && speedElement.TryGetDouble(out double achieved) ? achieved : 0;
             int cap = root.TryGetProperty("Cap", out JsonElement capElement) && capElement.TryGetInt32(out int capValue) ? capValue : 0;
-            return string.Join(Environment.NewLine,
+            var lines = new List<string>
+            {
                 $"Live ({Math.Max(0, (int)age.TotalSeconds)} s ago): open BG {state}. Phase: {phase}.",
                 $"Keep 11: {Text(root, "KeepOwner") ?? "unknown"}.",
                 $"Bots inside: {inside} (travelling {bots.Count(bot => bot.State == "travelling")}, leaving {bots.Count(bot => bot.State == "leaving")}), cap {cap}. " +
-                $"Players inside: {players}. World speed {speed.ToString("0.0", CultureInfo.InvariantCulture)}x.");
+                $"Players inside: {players}. World speed {speed.ToString("0.0", CultureInfo.InvariantCulture)}x.",
+            };
+            lines.AddRange(RealmLines(root));
+            return string.Join(Environment.NewLine, lines);
         }
         catch (JsonException) { return null; }
         catch (InvalidOperationException) { return null; }
     }
+
+    // Per realm: present/target units, whether the realm has its own setup, and its last form failures.
+    private static IEnumerable<string> RealmLines(JsonElement root)
+    {
+        if (!root.TryGetProperty("Realms", out JsonElement realms) || realms.ValueKind != JsonValueKind.Array) yield break;
+        foreach (JsonElement realm in realms.EnumerateArray())
+        {
+            string line = $"{Text(realm, "Realm") ?? "?"}: 8-man {Number(realm, "Groups8Present")}/{Number(realm, "Groups8")}, " +
+                $"small {Number(realm, "SmallPresent")}/{Number(realm, "Small")}, solo {Number(realm, "SolosPresent")}/{Number(realm, "Solos")}" +
+                (Bool(realm, "OwnSetup") ? " (own setup)" : string.Empty) + ".";
+            if (realm.TryGetProperty("FormFailures", out JsonElement failures) && failures.ValueKind == JsonValueKind.Array)
+                foreach (JsonElement failure in failures.EnumerateArray())
+                    line += $" Last {KindLabel(Text(failure, "Kind"))} form failure ({Number(failure, "AgeSeconds") / 60} game min ago): {Text(failure, "Text") ?? "?"}.";
+            yield return line;
+        }
+    }
+
+    private static string KindLabel(string? kind) => kind switch { "group8" => "8-man", null => "?", _ => kind };
+
+    private static int Number(JsonElement root, string name) =>
+        root.TryGetProperty(name, out JsonElement value) && value.TryGetInt32(out int number) ? number : 0;
 
     private static bool Bool(JsonElement root, string name) =>
         root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.True;

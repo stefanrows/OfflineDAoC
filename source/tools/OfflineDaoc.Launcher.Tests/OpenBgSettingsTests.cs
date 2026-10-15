@@ -42,8 +42,38 @@ public sealed class OpenBgSettingsTests
         {
             ("open_bg_enabled", "True"), ("open_bg_groups8", "2"), ("open_bg_groups_small", "3"), ("open_bg_solos", "5"),
             ("open_bg_max_bots", "60"), ("open_bg_cycle_min_minutes", "10"), ("open_bg_cycle_max_minutes", "30"),
-            ("open_bg_player_drift", "False"),
+            ("open_bg_player_drift", "False"), ("open_bg_units_albion", ""), ("open_bg_units_midgard", ""), ("open_bg_units_hibernia", ""),
         }));
+    }
+
+    [Test] public void RealmUnitsAreParsedClampedAndWritten()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBgSettings.TryNormalizeUnits(" 1 / 2 / 4 ", out string text), Is.True);
+            Assert.That(text, Is.EqualTo("1/2/4"));
+            Assert.That(OpenBgSettings.TryNormalizeUnits("9/-1/40", out text), Is.True);
+            Assert.That(text, Is.EqualTo("4/0/12"), "the same clamps as the per-realm values");
+            Assert.That(OpenBgSettings.TryNormalizeUnits("", out text) && text == "", Is.True, "empty: the global values");
+            Assert.That(OpenBgSettings.TryNormalizeUnits("Global", out text) && text == "", Is.True);
+            Assert.That(OpenBgSettings.TryNormalizeUnits("1/2", out _), Is.False);
+            Assert.That(OpenBgSettings.TryNormalizeUnits("a/b/c", out _), Is.False);
+            Assert.That(OpenBgSettings.UnitFields.Select(field => $"{field.Name}:{field.RowKey}:{field.Label}"), Is.EqualTo(new[]
+            {
+                "albion:open_bg_units_albion:Albion units", "midgard:open_bg_units_midgard:Midgard units", "hibernia:open_bg_units_hibernia:Hibernia units",
+            }));
+        });
+        var settings = OpenBgSettings.Defaults with { AlbionUnits = "2/0/9", HiberniaUnits = "junk" };
+        Assert.Multiple(() =>
+        {
+            Assert.That(settings.Clamped().HiberniaUnits, Is.Empty, "unreadable text means the global values, as on the server");
+            Assert.That(OpenBgSettings.ToRows(settings).Skip(8), Is.EqualTo(new[]
+            {
+                ("open_bg_units_albion", "2/0/9"), ("open_bg_units_midgard", ""), ("open_bg_units_hibernia", ""),
+            }));
+            Assert.That(OpenBgSettings.FromRows([("open_bg_units_midgard", "1/6/0"), ("open_bg_units_hibernia", "x")]),
+                Is.EqualTo(OpenBgSettings.Defaults with { MidgardUnits = "1/6/0" }));
+        });
     }
 
     [Test] public void FromRowsReadsDefaultsWhenMissing()
@@ -68,7 +98,7 @@ public sealed class OpenBgSettingsTests
         {
             Assert.That(wild.Clamped(), Is.EqualTo(new OpenBgSettings(true, 4, 0, 12, 120, 5, 5, true)), "cycle max never below the min");
             Assert.That(OpenBgSettings.ToRows(wild).Select(row => row.value),
-                Is.EqualTo(new[] { "True", "4", "0", "12", "120", "5", "5", "True" }));
+                Is.EqualTo(new[] { "True", "4", "0", "12", "120", "5", "5", "True", "", "", "" }));
             Assert.That(OpenBgSettings.FromRows([("open_bg_max_bots", "2"), ("open_bg_cycle_min_minutes", "200"), ("open_bg_cycle_max_minutes", "10")]),
                 Is.EqualTo(OpenBgSettings.Defaults with { MaxBots = 8, CycleMin = 120, CycleMax = 120 }));
             foreach (OpenBgField field in OpenBgSettings.Fields)
@@ -95,11 +125,24 @@ public sealed class OpenBgSettingsTests
         Assert.Multiple(() =>
         {
             Assert.That(OpenBgSettings.Load(_database), Is.EqualTo(settings));
-            Assert.That(Sql("SELECT count(*) FROM ServerProperty WHERE `Key` LIKE 'open_bg_%'"), Is.EqualTo(8L));
+            Assert.That(Sql("SELECT count(*) FROM ServerProperty WHERE `Key` LIKE 'open_bg_%'"), Is.EqualTo(11L));
             Assert.That(Sql("SELECT count(*) FROM ServerProperty WHERE ServerProperty_ID IS NOT NULL"), Is.EqualTo(0L), "new rows and the legacy '' id stay NULL");
             Assert.That(Sql("SELECT Description FROM ServerProperty WHERE `Key`='open_bg_solos'"), Is.EqualTo("server text"));
             Assert.That(Sql("SELECT Category || '|' || DefaultValue || '|' || Value FROM ServerProperty WHERE `Key`='open_bg_enabled'"), Is.EqualTo("pvp|False|True"));
             Assert.That(Sql("SELECT Value FROM ServerProperty WHERE `Key`='xp_rate'"), Is.EqualTo("5"), "other rows untouched");
+        });
+    }
+
+    [Test] public void SaveWritesEachRealmsCrewAndLoadReadsItBack()
+    {
+        var settings = OpenBgSettings.Defaults with { Enabled = true, AlbionUnits = "2/2/4", HiberniaUnits = "0/0/12" };
+        OpenBgSettings.Save(_database, settings, () => true);
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBgSettings.Load(_database), Is.EqualTo(settings));
+            Assert.That(Sql("SELECT Category || '|' || DefaultValue || '|' || Value FROM ServerProperty WHERE `Key`='open_bg_units_albion'"),
+                Is.EqualTo("pvp||2/2/4"));
+            Assert.That(Sql("SELECT Value FROM ServerProperty WHERE `Key`='open_bg_units_midgard'"), Is.EqualTo(""));
         });
     }
 
@@ -139,6 +182,24 @@ public sealed class OpenBgSettingsTests
         });
     }
 
+    [Test] public void LiveStatusShowsEachRealmsTargetsAndLastFormFailure()
+    {
+        DateTime now = new(2026, 10, 11, 3, 0, 10, DateTimeKind.Utc);
+        string json = LiveJson.TrimEnd().TrimEnd('}') + """
+            ,"Realms":[{"Realm":"Albion","Groups8":2,"Small":2,"Solos":4,"OwnSetup":true,"Groups8Present":1,"SmallPresent":2,"SolosPresent":4,"Bots":17,
+              "FormFailures":[{"Kind":"group8","Text":"needs 6, 3 RvR candidates in the pool; far from a porter 5","AgeSeconds":180}]},
+             {"Realm":"Midgard","Groups8":1,"Small":2,"Solos":4,"OwnSetup":false,"Groups8Present":1,"SmallPresent":2,"SolosPresent":4,"Bots":15,"FormFailures":[]}]}
+            """;
+        string text = OpenBgLiveStatus.Describe(json, now);
+        Assert.That(text, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(text, Does.Contain("Albion: 8-man 1/2, small 2/2, solo 4/4 (own setup). " +
+                "Last 8-man form failure (3 game min ago): needs 6, 3 RvR candidates in the pool; far from a porter 5."));
+            Assert.That(text, Does.Contain("Midgard: 8-man 1/1, small 2/2, solo 4/4."));
+        });
+    }
+
     [Test] public void LiveStatusIgnoresStaleStoppedOrBrokenSnapshots()
     {
         DateTime now = new(2026, 10, 11, 3, 0, 10, DateTimeKind.Utc);
@@ -171,5 +232,20 @@ public sealed class OpenBgSettingsTests
         stopped = true;
         Update();
         Assert.That(save.Enabled, Is.True);
+
+        // An unreadable realm crew blocks Save until it is fixed or emptied.
+        var units = (Dictionary<string, TextBox>)type.GetField("_units", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(panel)!;
+        Label status = (Label)type.GetField("_status", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(panel)!;
+        units["midgard"].Text = "1/2";
+        Update();
+        Assert.Multiple(() =>
+        {
+            Assert.That(save.Enabled, Is.False);
+            Assert.That(status.Text, Does.StartWith("Midgard units: use 8-man/small/solos"));
+        });
+        units["midgard"].Text = "1/2/0";
+        Update();
+        Assert.That(save.Enabled, Is.True);
+        Assert.That((bool)type.GetProperty("HasUnsavedChanges")!.GetValue(panel)!, Is.True);
     }
 }

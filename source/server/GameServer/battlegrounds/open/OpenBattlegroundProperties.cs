@@ -37,6 +37,15 @@ namespace DOL.GS
         [ServerProperty("pvp", "open_bg_player_drift", "Open BG roamers and solos prefer field points within sight of a player; the keep cycle runs independently", true)]
         public static bool OPEN_BG_PLAYER_DRIFT = true;
 
+        [ServerProperty("pvp", "open_bg_units_albion", "Albion's open BG crew as 8-man/small/solos, e.g. 1/2/4 (empty: open_bg_groups8, open_bg_groups_small and open_bg_solos)", "")]
+        public static string OPEN_BG_UNITS_ALBION = "";
+
+        [ServerProperty("pvp", "open_bg_units_midgard", "Midgard's open BG crew as 8-man/small/solos, e.g. 1/2/4 (empty: open_bg_groups8, open_bg_groups_small and open_bg_solos)", "")]
+        public static string OPEN_BG_UNITS_MIDGARD = "";
+
+        [ServerProperty("pvp", "open_bg_units_hibernia", "Hibernia's open BG crew as 8-man/small/solos, e.g. 1/2/4 (empty: open_bg_groups8, open_bg_groups_small and open_bg_solos)", "")]
+        public static string OPEN_BG_UNITS_HIBERNIA = "";
+
         public const int MaxBotsMin = 8, MaxBotsMax = 120;
         public const int Groups8Max = 4, GroupsSmallMax = 6, SolosMax = 12;
         public const int CycleMinutesMin = 5, CycleMinutesMax = 120;
@@ -51,6 +60,28 @@ namespace DOL.GS
         public static int CycleMinMinutes => Clamped("open_bg_cycle_min_minutes", OPEN_BG_CYCLE_MIN_MINUTES, CycleMinutesMin, CycleMinutesMax);
         // The maximum never falls below the (clamped) minimum.
         public static int CycleMaxMinutes => Clamped("open_bg_cycle_max_minutes", OPEN_BG_CYCLE_MAX_MINUTES, CycleMinMinutes, CycleMinutesMax);
+
+        /// <summary>The server property row of a realm's own crew targets (open_bg_units_albion|midgard|hibernia); null for other realms.</summary>
+        public static string UnitsRowKey(eRealm realm) => realm switch
+        {
+            eRealm.Albion => "open_bg_units_albion",
+            eRealm.Midgard => "open_bg_units_midgard",
+            eRealm.Hibernia => "open_bg_units_hibernia",
+            _ => null,
+        };
+
+        /// <summary>The raw text of a realm's own crew targets ("" for none or another realm).</summary>
+        public static string UnitsText(eRealm realm) => realm switch
+        {
+            eRealm.Albion => OPEN_BG_UNITS_ALBION ?? string.Empty,
+            eRealm.Midgard => OPEN_BG_UNITS_MIDGARD ?? string.Empty,
+            eRealm.Hibernia => OPEN_BG_UNITS_HIBERNIA ?? string.Empty,
+            _ => string.Empty,
+        };
+
+        /// <summary>A realm's own targets, clamped like the globals; null when its row is empty or unreadable (the globals apply).</summary>
+        public static OpenBgRealmTargets? UnitsFor(eRealm realm) =>
+            OpenBgRealmTargets.TryParse(UnitsText(realm), out OpenBgRealmTargets targets) ? targets : null;
 
         /// <summary>The value inside [min, max]; an out-of-range value is logged once per key and value.</summary>
         public static int Clamped(string key, int value, int min, int max)

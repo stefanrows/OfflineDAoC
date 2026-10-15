@@ -430,6 +430,15 @@ namespace DOL.GS
             return unit > 0 && Volatile.Read(ref _snapshot).Orders.TryGetValue(unit, out order) && order != null;
         }
 
+        /// <summary>The current role of a roster unit inside (the open BG window). False for a unit without an order yet.</summary>
+        public static bool TryGetUnitRole(int unit, out OpenBgRole role)
+        {
+            role = OpenBgRole.Roam;
+            if (unit <= 0 || !Volatile.Read(ref _snapshot).Orders.TryGetValue(unit, out OpenBgOrder order) || order == null) return false;
+            role = order.Role;
+            return true;
+        }
+
         /// <summary>The driver found no route to the order's point: the next tick gives the unit another one.</summary>
         public static void ReportUnreachable(int unit, Point3D point)
         {

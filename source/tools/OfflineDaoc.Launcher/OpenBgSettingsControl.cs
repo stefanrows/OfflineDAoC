@@ -1,9 +1,9 @@
 namespace OfflineDaoc.Launcher;
 
 /// <summary>
-/// Launcher tab "open BG": the open BG switch and its seven numbers (the same open_bg_* rows and ranges as
-/// /bgsetup). Saving writes the server property rows and is possible only while the server is stopped; while it
-/// runs the tab shows the live state from open-bg-status.json, or points to /bgsetup in game.
+/// Launcher tab "open BG": the open BG switch, its seven numbers and each realm's own crew (the same open_bg_* rows
+/// and ranges as /bgsetup). Saving writes the server property rows and is possible only while the server is stopped;
+/// while it runs the tab shows the live state from open-bg-status.json, or points to /bgsetup in game.
 /// </summary>
 internal sealed class OpenBgSettingsControl : UserControl
 {
@@ -15,6 +15,7 @@ internal sealed class OpenBgSettingsControl : UserControl
     private readonly CheckBox _enabled = new() { AutoSize = true, Text = "Open BG on" };
     private readonly CheckBox _drift = new() { AutoSize = true, Text = "Player drift" };
     private readonly Dictionary<string, NumericUpDown> _numbers = new();
+    private readonly Dictionary<string, TextBox> _units = new();
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
     private readonly Label _live = new() { AutoSize = true, MaximumSize = new Size(840, 0), Margin = new Padding(3, 12, 3, 3) };
     private readonly Button _save = new() { Text = "Save", AutoSize = true };
@@ -56,6 +57,16 @@ internal sealed class OpenBgSettingsControl : UserControl
             _numbers[name] = number;
             number.ValueChanged += (_, _) => Edited();
             body.Controls.Add(NumberRow(number, field));
+            if (name != "solos") continue;
+            // Each realm's own crew right below the three per-realm values it overrides.
+            foreach (OpenBgUnitsField units in OpenBgSettings.UnitFields)
+            {
+                var text = new TextBox { Width = 80, BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text, AccessibleName = units.Label,
+                    PlaceholderText = "global" };
+                _units[units.Name] = text;
+                text.TextChanged += (_, _) => Edited();
+                body.Controls.Add(UnitsRow(text, units));
+            }
         }
         body.Controls.Add(SwitchRow(_drift, OpenBgSettings.Field("drift")));
         _enabled.CheckedChanged += (_, _) => Edited();
@@ -107,6 +118,31 @@ internal sealed class OpenBgSettingsControl : UserControl
         return row;
     }
 
+    private Control UnitsRow(TextBox text, OpenBgUnitsField field)
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 2) };
+        var label = new Label { Text = field.Label, Width = 190, Height = 28, TextAlign = ContentAlignment.MiddleLeft };
+        _toolTips.SetToolTip(label, field.Help);
+        _toolTips.SetToolTip(text, field.Help);
+        row.Controls.Add(label);
+        row.Controls.Add(text);
+        row.Controls.Add(new Label
+        {
+            AutoSize = true, MaximumSize = new Size(560, 0), ForeColor = DaocTheme.Parchment, Text = field.Help,
+            Margin = new Padding(3, 0, 3, 2), Padding = new Padding(0, 6, 0, 0),
+        });
+        return row;
+    }
+
+    // The realm crews as typed: a readable text in its stored form, anything else as it stands (it blocks Save).
+    private string UnitsText(string name) =>
+        OpenBgSettings.TryNormalizeUnits(_units[name].Text, out string normalized) ? normalized : _units[name].Text;
+
+    private string? InvalidUnits() => OpenBgSettings.UnitFields
+        .Where(field => !OpenBgSettings.TryNormalizeUnits(_units[field.Name].Text, out _))
+        .Select(field => $"{field.Label}: use 8-man/small/solos such as 1/2/4, or leave it empty for the global values.")
+        .FirstOrDefault();
+
     private static Label HelpLabel(OpenBgField field) => new()
     {
         AutoSize = true, MaximumSize = new Size(820, 0), ForeColor = DaocTheme.Parchment,
@@ -128,7 +164,12 @@ internal sealed class OpenBgSettingsControl : UserControl
         (int)_numbers["max_bots"].Value,
         (int)_numbers["cycle_min"].Value,
         (int)_numbers["cycle_max"].Value,
-        _drift.Checked);
+        _drift.Checked)
+    {
+        AlbionUnits = UnitsText("albion"),
+        MidgardUnits = UnitsText("midgard"),
+        HiberniaUnits = UnitsText("hibernia"),
+    };
 
     private void SetValues(OpenBgSettings settings)
     {
@@ -142,6 +183,8 @@ internal sealed class OpenBgSettingsControl : UserControl
         _numbers["max_bots"].Value = value.MaxBots;
         _numbers["cycle_min"].Value = value.CycleMin;
         _numbers["cycle_max"].Value = value.CycleMax;
+        foreach (OpenBgUnitsField field in OpenBgSettings.UnitFields)
+            _units[field.Name].Text = value.UnitsOf(field.Name);
         _loading = false;
     }
 
@@ -170,6 +213,8 @@ internal sealed class OpenBgSettingsControl : UserControl
             OpenBgSettings values = ReadValues();
             if (values.CycleMax < values.CycleMin)
                 throw new InvalidOperationException("The longest cycle must not be shorter than the shortest cycle.");
+            if (InvalidUnits() is string invalid)
+                throw new InvalidOperationException(invalid);
             OpenBgSettings.Save(_database, values, _serverStopped);
             _saved = values.Clamped();
             _loadFailed = false;
@@ -192,13 +237,16 @@ internal sealed class OpenBgSettingsControl : UserControl
         }
         _wasStopped = stopped;
         OpenBgSettings values = ReadValues();
-        bool valid = values.CycleMax >= values.CycleMin;
+        string? invalidUnits = InvalidUnits();
+        bool valid = values.CycleMax >= values.CycleMin && invalidUnits == null;
         _enabled.Enabled = _drift.Enabled = stopped;
         foreach (NumericUpDown number in _numbers.Values) number.Enabled = stopped;
+        foreach (TextBox units in _units.Values) units.Enabled = stopped;
         _save.Enabled = stopped && valid;
         _undo.Enabled = _defaults.Enabled = stopped;
-        _status.Text = !stopped ? "The server is running: these fields are read-only. Change the setup live with /bgsetup <key> <value> in game." :
+        _status.Text = !stopped ? "The server is running: these fields are read-only. Change the setup live in game with /bgsetup (window) or /bgsetup <key> <value>." :
             _notice.Length > 0 ? _notice :
+            invalidUnits != null ? invalidUnits :
             !valid ? "The longest cycle must not be shorter than the shortest cycle." :
             HasUnsavedChanges ? "Unsaved changes — click Save before starting the server." :
             "Saved setup shown. The server reads it at its next start.";

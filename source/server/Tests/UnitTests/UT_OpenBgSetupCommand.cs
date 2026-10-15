@@ -79,6 +79,54 @@ namespace DOL.GS.Tests
             });
         }
 
+        [TestCase("albion", "1/2/4", "open_bg_units_albion", "1/2/4")]
+        [TestCase("Midgard", " 0/6/12 ", "open_bg_units_midgard", "0/6/12")]
+        [TestCase("hibernia", "global", "open_bg_units_hibernia", "")]
+        [TestCase("open_bg_units_albion", "default", "open_bg_units_albion", "")]
+        public void ParseAcceptsARealmsOwnCrew(string key, string value, string rowKey, string stored)
+        {
+            var result = Parse(key, value);
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.ok, Is.True, result.error);
+                Assert.That(result.key, Is.EqualTo(rowKey));
+                Assert.That(result.value, Is.EqualTo(stored));
+            });
+        }
+
+        [TestCase("albion", "5/0/0")]
+        [TestCase("albion", "0/7/0")]
+        [TestCase("midgard", "0/0/13")]
+        [TestCase("hibernia", "-1/0/0")]
+        [TestCase("hibernia", "1/2")]
+        [TestCase("albion", "lots")]
+        public void ParseRejectsABadRealmCrew(string key, string value)
+        {
+            var result = Parse(key, value);
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.ok, Is.False);
+                Assert.That(result.value, Is.Null);
+                Assert.That(result.error, Does.Contain(key));
+            });
+        }
+
+        [Test]
+        public void SetupPageShowsEachRealmsCrew()
+        {
+            string setup = string.Join("\n", OpenBgSetupPages.SetupLines(Defaults with { MidgardUnits = "2/0/9", HiberniaUnits = "junk" }));
+            Assert.Multiple(() =>
+            {
+                Assert.That(setup, Does.Contain("albion = global (8-man/small/solos or global)"));
+                Assert.That(setup, Does.Contain("midgard = 2/0/9 (8-man/small/solos or global)"));
+                Assert.That(setup, Does.Contain("hibernia = junk (8-man/small/solos or global): Hibernia's own crew; global uses groups8/small/solos. In use: global (unreadable text)."));
+                Assert.That(Defaults.ToSetup().IsOverridden(eRealm.Albion), Is.False);
+                Assert.That((Defaults with { MidgardUnits = "2/0/9" }).ToSetup().TargetsFor(eRealm.Midgard), Is.EqualTo(new OpenBgRealmTargets(2, 0, 9)));
+            });
+            string live = string.Join("\n", OpenBgSetupPages.Pages(Snapshot(Array.Empty<OpenBgBotStatus>()), Defaults with { MidgardUnits = "2/0/9" })[0]);
+            Assert.That(live, Does.Contain("Own setup: Midgard 2/0/9."));
+        }
+
         [Test]
         public void ParseRejectsCycleMinAboveMax()
         {

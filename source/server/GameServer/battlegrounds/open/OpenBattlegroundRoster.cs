@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using DOL.GS.Keeps;
@@ -10,13 +11,114 @@ using DOL.Logging;
 
 namespace DOL.GS
 {
-    /// <summary>Per-realm setup of the open BG crew and the hard cap over all realms (spec 2026-10-11 §5).</summary>
+    /// <summary>
+    /// Per-realm setup of the open BG crew and the hard cap over all realms (spec 2026-10-11 §5). <see cref="Groups8"/>,
+    /// <see cref="GroupsSmall"/> and <see cref="Solos"/> are the global targets every realm uses unless it has its own
+    /// (<see cref="Albion"/>, <see cref="Midgard"/>, <see cref="Hibernia"/>: the open_bg_units_* rows, owner decision
+    /// 2026-10-11 14:50). The cap stays global.
+    /// </summary>
     public sealed record OpenBgSetup(int Groups8, int GroupsSmall, int Solos, int MaxBots)
     {
-        /// <summary>The clamped server properties (open_bg_groups8, open_bg_groups_small, open_bg_solos, open_bg_max_bots).</summary>
+        public OpenBgRealmTargets? Albion { get; init; }
+        public OpenBgRealmTargets? Midgard { get; init; }
+        public OpenBgRealmTargets? Hibernia { get; init; }
+
+        /// <summary>The clamped server properties (open_bg_groups8, open_bg_groups_small, open_bg_solos, open_bg_max_bots and the realms' open_bg_units_*).</summary>
         public static OpenBgSetup FromProperties() =>
             new(OpenBattlegroundProperties.Groups8, OpenBattlegroundProperties.GroupsSmall, OpenBattlegroundProperties.Solos,
-                OpenBattlegroundProperties.MaxBots);
+                OpenBattlegroundProperties.MaxBots)
+            {
+                Albion = OpenBattlegroundProperties.UnitsFor(eRealm.Albion),
+                Midgard = OpenBattlegroundProperties.UnitsFor(eRealm.Midgard),
+                Hibernia = OpenBattlegroundProperties.UnitsFor(eRealm.Hibernia),
+            };
+
+        /// <summary>A realm's own targets, or null when it uses the global ones.</summary>
+        public OpenBgRealmTargets? OverrideFor(eRealm realm) => realm switch
+        {
+            eRealm.Albion => Albion,
+            eRealm.Midgard => Midgard,
+            eRealm.Hibernia => Hibernia,
+            _ => null,
+        };
+
+        public bool IsOverridden(eRealm realm) => OverrideFor(realm) != null;
+
+        /// <summary>The targets the roster plans a realm with: its own, else the global ones.</summary>
+        public OpenBgRealmTargets TargetsFor(eRealm realm) =>
+            OverrideFor(realm) ?? new OpenBgRealmTargets(Math.Max(0, Groups8), Math.Max(0, GroupsSmall), Math.Max(0, Solos));
+
+        public int Groups8For(eRealm realm) => TargetsFor(realm).Groups8;
+        public int SmallFor(eRealm realm) => TargetsFor(realm).Small;
+        public int SolosFor(eRealm realm) => TargetsFor(realm).Solos;
+
+        /// <summary>This setup with a realm's own targets set (null: back to the global ones).</summary>
+        public OpenBgSetup WithOverride(eRealm realm, OpenBgRealmTargets? targets) => realm switch
+        {
+            eRealm.Albion => this with { Albion = targets },
+            eRealm.Midgard => this with { Midgard = targets },
+            eRealm.Hibernia => this with { Hibernia = targets },
+            _ => this,
+        };
+    }
+
+    /// <summary>
+    /// One realm's crew targets: 8-man groups, small groups and solos, clamped like the global properties. The text
+    /// form "8-man/small/solos" (e.g. "1/2/4") is what the open_bg_units_* rows, /bgsetup and the launcher store.
+    /// </summary>
+    public readonly record struct OpenBgRealmTargets(int Groups8, int Small, int Solos)
+    {
+        /// <summary>Each number inside its range (0-4, 0-6, 0-12).</summary>
+        public static OpenBgRealmTargets Clamped(int groups8, int small, int solos) =>
+            new(Math.Clamp(groups8, 0, OpenBattlegroundProperties.Groups8Max), Math.Clamp(small, 0, OpenBattlegroundProperties.GroupsSmallMax),
+                Math.Clamp(solos, 0, OpenBattlegroundProperties.SolosMax));
+
+        /// <summary>
+        /// Three whole numbers separated by '/', each clamped to its range; false for empty or any other text (the realm
+        /// then uses the global targets).
+        /// </summary>
+        public static bool TryParse(string text, out OpenBgRealmTargets targets)
+        {
+            targets = default;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            string[] parts = text.Split('/');
+            if (parts.Length != 3) return false;
+            var values = new int[3];
+            for (int index = 0; index < 3; index++)
+                if (!int.TryParse(parts[index].Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out values[index]))
+                    return false;
+            targets = Clamped(values[0], values[1], values[2]);
+            return true;
+        }
+
+        /// <summary>The highest target of a kind (Groups8Max, GroupsSmallMax, SolosMax).</summary>
+        public static int Max(OpenBgUnitKind kind) => kind switch
+        {
+            OpenBgUnitKind.Group8 => OpenBattlegroundProperties.Groups8Max,
+            OpenBgUnitKind.Small => OpenBattlegroundProperties.GroupsSmallMax,
+            _ => OpenBattlegroundProperties.SolosMax,
+        };
+
+        public int Count(OpenBgUnitKind kind) => kind switch
+        {
+            OpenBgUnitKind.Group8 => Groups8,
+            OpenBgUnitKind.Small => Small,
+            _ => Solos,
+        };
+
+        /// <summary>These targets with one kind set to <paramref name="value"/>, clamped.</summary>
+        public OpenBgRealmTargets With(OpenBgUnitKind kind, int value) => kind switch
+        {
+            OpenBgUnitKind.Group8 => Clamped(value, Small, Solos),
+            OpenBgUnitKind.Small => Clamped(Groups8, value, Solos),
+            _ => Clamped(Groups8, Small, value),
+        };
+
+        /// <summary>The seats these targets book against the cap while planning (an 8-man 8, a small group 2, a solo 1).</summary>
+        public int PlannedBots => Groups8 * OpenBattlegroundRoster.PlannedSize(OpenBgUnitKind.Group8) +
+            Small * OpenBattlegroundRoster.PlannedSize(OpenBgUnitKind.Small) + Solos * OpenBattlegroundRoster.PlannedSize(OpenBgUnitKind.Solo);
+
+        public string Format() => string.Create(CultureInfo.InvariantCulture, $"{Groups8}/{Small}/{Solos}");
     }
 
     public enum OpenBgUnitKind { Group8, Small, Solo }
@@ -130,33 +232,38 @@ namespace DOL.GS
         /// fit under the cap. A group inside below its minimum (<see cref="RelievedBelowMinimum"/>) is relieved and
         /// counts as missing, so a new one is formed; a group still travelling below its minimum
         /// (<see cref="RefilledBelowMinimum"/>) is refilled instead, and its missing members book their seats before
-        /// any new unit. Never throws for a cap below the setup.
+        /// any new unit. Never throws for a cap below the setup. Each realm is planned with its own targets
+        /// (<see cref="OpenBgSetup.TargetsFor"/>). <paramref name="forced"/> are units the player relieved by hand
+        /// (<see cref="RequestRelief"/>): they go first, and the plan forms a replacement when the targets still want one.
         /// </summary>
-        public static OpenBgPlan Plan(OpenBgSetup setup, IReadOnlyList<RealmCount> present)
+        public static OpenBgPlan Plan(OpenBgSetup setup, IReadOnlyList<RealmCount> present, IReadOnlyCollection<int> forced = null)
         {
             setup ??= new OpenBgSetup(0, 0, 0, 0);
             present ??= Array.Empty<RealmCount>();
+            forced ??= Array.Empty<int>();
             int cap = Math.Max(0, setup.MaxBots);
             int total = present.Sum(realm => realm.Bots + Math.Max(0, realm.LeavingBots));
             var needs = new Dictionary<eRealm, int[]>();
             var relieved = new Dictionary<eRealm, List<int>>();
             foreach (RealmCount realm in present)
             {
-                var relieve = new List<int>();
+                OpenBgRealmTargets targets = setup.TargetsFor(realm.Realm);
+                // A unit the player relieved by hand goes first.
+                var relieve = realm.Units.Where(unit => forced.Contains(unit.Id)).Select(unit => unit.Id).ToList();
                 // Counted by members, not units: a group shrunk below its minimum inside is replaced.
-                relieve.AddRange(realm.Units.Where(RelievedBelowMinimum).Select(unit => unit.Id));
+                relieve.AddRange(realm.Units.Where(unit => RelievedBelowMinimum(unit) && !relieve.Contains(unit.Id)).Select(unit => unit.Id));
                 if (realm.ReliefDue) relieve.AddRange(ReliefPick(realm.Units.Where(unit => !relieve.Contains(unit.Id)).ToArray()));
-                relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Group8, setup.Groups8, relieve));
-                relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Small, setup.GroupsSmall, relieve));
-                relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Solo, setup.Solos, relieve));
+                relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Group8, targets.Groups8, relieve));
+                relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Small, targets.Small, relieve));
+                relieve.AddRange(SurplusPick(realm.Units, OpenBgUnitKind.Solo, targets.Solos, relieve));
                 relieved[realm.Realm] = relieve;
                 int Remaining(OpenBgUnitKind kind, int wanted) =>
                     Math.Max(0, Math.Max(0, wanted) - realm.Units.Count(unit => unit.Kind == kind && !relieve.Contains(unit.Id)));
                 needs[realm.Realm] = new[]
                 {
-                    Remaining(OpenBgUnitKind.Group8, setup.Groups8),
-                    Remaining(OpenBgUnitKind.Small, setup.GroupsSmall),
-                    Remaining(OpenBgUnitKind.Solo, setup.Solos),
+                    Remaining(OpenBgUnitKind.Group8, targets.Groups8),
+                    Remaining(OpenBgUnitKind.Small, targets.Small),
+                    Remaining(OpenBgUnitKind.Solo, targets.Solos),
                 };
             }
             CapSurplusPick(present, cap, relieved);
@@ -502,6 +609,10 @@ namespace DOL.GS
         // Bots whose running rest is the long one after a relief (not a drop or below-minimum cooldown); only logged.
         private static readonly HashSet<GameBot> RestIsRelief = new(ReferenceEqualityComparer.Instance);
         private static readonly Dictionary<(eRealm, OpenBgUnitKind), (long NextTick, int Repeats)> FormFailedLog = new();
+        // The last reason a unit of a realm and kind could not form, for the open BG window; cleared once one forms.
+        private static readonly Dictionary<(eRealm, OpenBgUnitKind), (string Text, long Tick)> LastFormFailure = new();
+        // Units the player relieved by hand in the open BG window or with /bgsetup relieve; the next tick relieves them first.
+        private static readonly HashSet<int> PendingRelief = new();
         private static readonly Random Rng = new();
         private static int _nextUnit;
         private static long _nextLogTick;
@@ -546,21 +657,29 @@ namespace DOL.GS
             foreach (Group group in released)
                 AutonomousBotGroupCoordinator.ReleaseOpenBattlegroundParty(group);
 
-            OpenBgPlan plan = Plan(setup, counts);
+            int[] forced;
+            lock (Sync)
+            {
+                forced = PendingRelief.ToArray();
+                PendingRelief.Clear();
+            }
+            OpenBgPlan plan = Plan(setup, counts, forced);
             var belowMinimum = counts.SelectMany(count => count.Units).Where(RelievedBelowMinimum).Select(unit => unit.Id).ToHashSet();
             foreach (OpenBgRealmPlan realm in plan.Realms)
             {
                 if (realm.Relieve.Count == 0) continue;
                 foreach (int unit in realm.Relieve)
                 {
+                    bool manual = forced.Contains(unit);
                     bool shrunk = belowMinimum.Contains(unit);
-                    long rest = RestAfterRelief(shrunk);
+                    // A hand relief gets the short cooldown, so its bots may come back soon.
+                    long rest = RestAfterRelief(shrunk, manual);
                     GameBot[] relieved = AutonomousBattlegroundParticipation.RelieveOpenUnit(unit, now);
                     foreach (GameBot bot in relieved)
                         StartRest(bot, now, rest);
                     if (relieved.Length > 0)
                         Log.Info($"OPEN_BG_UNIT_RELIEVED realm={RealmName(realm.Realm)} unit={unit} size={relieved.Length} " +
-                            $"reason={(shrunk ? "below_minimum" : "scheduled")} rest_min={rest / 60_000}");
+                            $"reason={ReliefReason(manual, shrunk)} rest_min={rest / 60_000}");
                 }
                 // Only a due relief restarts the realm's clock; a lowered setup's surplus does not.
                 if (counts.FirstOrDefault(count => count.Realm == realm.Realm)?.ReliefDue != true) continue;
@@ -609,6 +728,8 @@ namespace DOL.GS
                 RestingUntil.Clear();
                 RestIsRelief.Clear();
                 FormFailedLog.Clear();
+                LastFormFailure.Clear();
+                PendingRelief.Clear();
                 PorterCache.Clear();
                 _nextLogTick = 0;
             }
@@ -658,7 +779,11 @@ namespace DOL.GS
                 if (admit.Kind == OpenBgUnitKind.Solo)
                 {
                     GameBot solo = pool.FirstOrDefault();
-                    if (solo == null) continue;
+                    if (solo == null)
+                    {
+                        NoteFormFailed(admit, 1, pool, poolRejections?.GetValueOrDefault(admit.Realm), null, now, log: false);
+                        continue;
+                    }
                     pool.Remove(solo);
                     if (Register(admit, new[] { solo }, null, "solo", now)) { free--; formed++; }
                     continue;
@@ -699,12 +824,19 @@ namespace DOL.GS
         }
 
         // An 8-man or small group of a realm could not form: one OPEN_BG_FORM_FAILED line per realm and kind every
-        // FormFailedLogMilliseconds, counting the failures in between.
+        // FormFailedLogMilliseconds, counting the failures in between. Every failure (a solo's too, without a log
+        // line) is kept for the open BG window as the realm's and kind's last form failure.
         private static void NoteFormFailed(OpenBgAdmit admit, int need, List<GameBot> pool, Dictionary<OpenBgReject, int> poolStage,
-            Dictionary<OpenBgReject, int> mateStage, long now)
+            Dictionary<OpenBgReject, int> mateStage, long now, bool log = true)
         {
-            int rvr = pool.Count(bot => AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) && bot.Group == null);
+            int rvr = admit.Kind == OpenBgUnitKind.Solo ? pool.Count
+                : pool.Count(bot => AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) && bot.Group == null);
+            IReadOnlyDictionary<OpenBgReject, int> rejections = admit.Kind == OpenBgUnitKind.Solo
+                ? FormFailureRejections(rvr, need, 0, poolStage, null)
+                : FormFailureRejections(rvr, need, pool.Count - rvr, poolStage, mateStage);
             int repeats;
+            RecordFormFailure(admit.Realm, admit.Kind, FormFailureText(admit.Kind, need, rvr, rejections), now);
+            if (!log) return;
             lock (Sync)
             {
                 var key = (admit.Realm, admit.Kind);
@@ -717,8 +849,95 @@ namespace DOL.GS
                 FormFailedLog[key] = (now + FormFailedLogMilliseconds, 0);
                 repeats = suppressed;
             }
-            Log.Info(FormFailedLine(admit.Realm, admit.Kind, need, rvr,
-                FormFailureRejections(rvr, need, pool.Count - rvr, poolStage, mateStage), repeats));
+            Log.Info(FormFailedLine(admit.Realm, admit.Kind, need, rvr, rejections, repeats));
+        }
+
+        /// <summary>
+        /// The window's text of a failed formation, e.g. "needs 6, 3 RvR candidates in the pool; far from a porter 5,
+        /// resting after a relief 2". A solo counts every candidate, not only those on an RvR tour.
+        /// </summary>
+        public static string FormFailureText(OpenBgUnitKind kind, int need, int pool, IReadOnlyDictionary<OpenBgReject, int> rejections)
+        {
+            string reasons = string.Join(", ", (rejections ?? new Dictionary<OpenBgReject, int>()).Where(pair => pair.Value > 0)
+                .OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key).Take(4).Select(pair => $"{RejectionText(pair.Key)} {pair.Value}"));
+            string candidates = kind == OpenBgUnitKind.Solo ? $"{pool} candidates" : $"{pool} RvR candidates";
+            return $"needs {need}, {candidates} in the pool" + (reasons.Length == 0 ? "; no level 40-50 bot of the realm was free" : "; " + reasons);
+        }
+
+        /// <summary>A rejection in words for the open BG window.</summary>
+        public static string RejectionText(OpenBgReject reject) => reject switch
+        {
+            OpenBgReject.KeepDefenseOrRaid => "held for a keep defense or raid",
+            OpenBgReject.InGroup => "in a group",
+            OpenBgReject.Busy => "busy (fighting, dead, dungeon, PvP wall)",
+            OpenBgReject.Objective => "on PvE work",
+            OpenBgReject.Rest => "resting after a relief",
+            OpenBgReject.Cooldown => "cooling down after a drop",
+            OpenBgReject.FarFromPorter => "far from a porter",
+            OpenBgReject.OtherRegion => "in another frontier",
+            OpenBgReject.KeepOwnerSide => "on the keep owner's side",
+            OpenBgReject.LevelBand => "outside the leader's level band",
+            _ => "other",
+        };
+
+        /// <summary>Keeps a realm's and kind's last form failure for the open BG window (game time).</summary>
+        public static void RecordFormFailure(eRealm realm, OpenBgUnitKind kind, string text, long now)
+        {
+            lock (Sync)
+                LastFormFailure[(realm, kind)] = (text, now);
+        }
+
+        /// <summary>A unit of this realm and kind formed: its last failure no longer explains anything.</summary>
+        public static void ClearFormFailure(eRealm realm, OpenBgUnitKind kind)
+        {
+            lock (Sync)
+                LastFormFailure.Remove((realm, kind));
+        }
+
+        /// <summary>The rest of a relieved unit's members: a hand relief or one below its minimum gets the short cooldown.</summary>
+        public static long RestAfterRelief(bool belowMinimum, bool manual) => RestAfterRelief(belowMinimum || manual);
+
+        /// <summary>The <c>OPEN_BG_UNIT_RELIEVED</c> reason: manual before below_minimum before scheduled (due, surplus or cap).</summary>
+        public static string ReliefReason(bool manual, bool belowMinimum) => manual ? "manual" : belowMinimum ? "below_minimum" : "scheduled";
+
+        /// <summary>
+        /// The last time a unit of this realm and kind could not form (game time, <see cref="GameLoop.GameLoopTime"/>) and
+        /// why. False when none failed since the last one formed.
+        /// </summary>
+        public static bool TryGetLastFormFailure(eRealm realm, OpenBgUnitKind kind, out string text, out long tick)
+        {
+            lock (Sync)
+                if (LastFormFailure.TryGetValue((realm, kind), out var failure))
+                {
+                    text = failure.Text;
+                    tick = failure.Tick;
+                    return true;
+                }
+            text = null;
+            tick = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// Queues a unit for a hand relief (open BG window, /bgsetup relieve): the next roster tick relieves it first with
+        /// the short <see cref="RecruitCooldownMilliseconds"/> rest and forms a replacement if the targets still want one.
+        /// False for a unit the roster does not know.
+        /// </summary>
+        public static bool RequestRelief(int unit)
+        {
+            lock (Sync)
+            {
+                if (unit <= 0 || !Units.ContainsKey(unit)) return false;
+                PendingRelief.Add(unit);
+                return true;
+            }
+        }
+
+        /// <summary>Whether a hand relief of this unit waits for the next roster tick.</summary>
+        public static bool IsReliefPending(int unit)
+        {
+            lock (Sync)
+                return PendingRelief.Contains(unit);
         }
 
         // Starts or extends a bot's rest; remembers whether the running rest is the long one after a relief.
@@ -740,8 +959,12 @@ namespace DOL.GS
             int id;
             lock (Sync) id = ++_nextUnit;
             if (!AutonomousBattlegroundParticipation.AssignOpenUnit(id, label, members, group, now)) return false;
-            lock (Sync) Units[id] = new UnitInfo { Id = id, Realm = admit.Realm, Kind = admit.Kind, Group = group, Porter = porter,
-                FormedSize = members.Length };
+            lock (Sync)
+            {
+                Units[id] = new UnitInfo { Id = id, Realm = admit.Realm, Kind = admit.Kind, Group = group, Porter = porter,
+                    FormedSize = members.Length };
+            }
+            ClearFormFailure(admit.Realm, admit.Kind);
             Log.Info($"OPEN_BG_UNIT_ASSIGNED realm={RealmName(admit.Realm)} unit={id} kind={Describe(admit.Kind)} group=\"{label}\" size={members.Length} " +
                 $"leader=\"{members[0].Name}\" members=\"{string.Join(",", members.Select(member => member.Name))}\"");
             return true;
@@ -1029,8 +1252,9 @@ namespace DOL.GS
             foreach (RealmCount realm in counts)
             {
                 int inside = realm.Units.Where(unit => unit.Inside).Sum(unit => unit.Size);
-                Log.Info($"OPEN_BG_ROSTER realm={RealmName(realm.Realm)} groups8={realm.Groups8}/{setup.Groups8} small={realm.GroupsSmall}/{setup.GroupsSmall} " +
-                    $"solos={realm.Solos}/{setup.Solos} present={inside} assigned={realm.Bots} leaving={realm.LeavingBots} " +
+                OpenBgRealmTargets targets = setup.TargetsFor(realm.Realm);
+                Log.Info($"OPEN_BG_ROSTER realm={RealmName(realm.Realm)} groups8={realm.Groups8}/{targets.Groups8} small={realm.GroupsSmall}/{targets.Small} " +
+                    $"solos={realm.Solos}/{targets.Solos} own_setup={setup.IsOverridden(realm.Realm)} present={inside} assigned={realm.Bots} leaving={realm.LeavingBots} " +
                     $"total={plan.Present} cap={plan.Cap} cap_binds={plan.CapBinds}");
             }
         }

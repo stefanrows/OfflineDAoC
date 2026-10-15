@@ -10,28 +10,38 @@ using DOL.Logging;
 namespace DOL.GS.Commands
 {
     /// <summary>
-    /// /bgsetup (GM): the open BG's live state and setup (spec 2026-10-11 §7). Without arguments it opens the status
-    /// window (page 1 live state, page 2 setup) and prints the setup to the chat; /bgsetup &lt;page&gt; opens another
-    /// page; /bgsetup &lt;key&gt; &lt;value&gt; writes the open_bg_* server property row and refreshes the properties like
-    /// /serverproperties refresh. The roster (and the director, stage 2) read the new value on their next tick.
+    /// /bgsetup (every player, owner decision 2026-10-11 14:50; alias /openbg): the open BG's manager window, the same
+    /// Custom8 window as the Companion Manager (<see cref="OpenBgManager"/>), with the live crew, the per-realm units and
+    /// the setup (spec 2026-10-11 §7). /bgsetup text [page] keeps the earlier text pages for a client without that
+    /// window; /bgsetup &lt;key&gt; &lt;value&gt; writes the open_bg_* server property row and refreshes the properties like
+    /// /serverproperties refresh; /bgsetup relieve &lt;unit&gt; relieves a unit by hand. The roster and the director read
+    /// a new value on their next tick.
     /// </summary>
-    [CmdAttribute("&bgsetup", ePrivLevel.GM,
-        "Open BG (Thidranki 252) live state and setup",
-        "/bgsetup - live state window (page 1) and setup (page 2); the setup is also printed to the chat",
-        "/bgsetup <page> - another page; pages 3+ continue the crew list",
-        "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, drift on|off")]
+    [CmdAttribute("&bgsetup", new[] { "&openbg" }, ePrivLevel.Player,
+        "Open BG (Thidranki 252) manager: live crew, units per realm and setup",
+        "/bgsetup - opens the open BG window: live crew per realm, + and - units per realm, setup",
+        "/bgsetup text [page] - the same as text pages (page 1 live, page 2 setup, 3+ more crew)",
+        "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, drift on|off",
+        "/bgsetup albion|midgard|hibernia <8-man/small/solos> - a realm's own crew, e.g. 1/2/4; global = the groups8/small/solos values",
+        "/bgsetup relieve <unit> - that unit leaves within a game minute; the roster forms a replacement if the setup still wants one")]
     public sealed class OpenBgSetupCommandHandler : AbstractCommandHandler, ICommandHandler
     {
-        private static readonly Logger Log = LoggerManager.Create(typeof(OpenBgSetupCommandHandler));
-
         public void OnCommand(GameClient client, string[] args)
         {
-            if (client?.Player == null) return;
+            GamePlayer player = client?.Player;
+            if (player == null) return;
             if (args.Length == 1)
             {
-                ShowPage(client, 1);
-                foreach (string line in OpenBgSetupPages.ChatLines(OpenBgSetupValues.Current()))
-                    DisplayMessage(client, line);
+                OpenBgManager.Open(player);
+                return;
+            }
+            if (args[1].Equals("text", StringComparison.OrdinalIgnoreCase))
+            {
+                int textPage = args.Length > 2 && int.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) ? number : 1;
+                ShowPage(client, textPage);
+                if (textPage <= 1)
+                    foreach (string line in OpenBgSetupPages.ChatLines(OpenBgSetupValues.Current()))
+                        DisplayMessage(client, line);
                 return;
             }
             if (args.Length == 2 && int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int page))
@@ -44,6 +54,18 @@ namespace DOL.GS.Commands
                 DisplaySyntax(client);
                 return;
             }
+            if (args[1].Equals("relieve", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length != 3 || !int.TryParse(args[2].TrimStart('#'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int unit))
+                {
+                    DisplayMessage(client, "Use /bgsetup relieve <unit>, e.g. /bgsetup relieve 12. The unit numbers are in the window and in /bgsetup text.");
+                    return;
+                }
+                OpenBgSetupStore.Relieve(unit, player.Name, out string relieveMessage);
+                DisplayMessage(client, relieveMessage);
+                OpenBgManager.RefreshIfOpen(player, relieveMessage);
+                return;
+            }
 
             (bool ok, string key, string value, string error) = OpenBgSetupParser.Parse(args);
             if (!ok)
@@ -51,19 +73,17 @@ namespace DOL.GS.Commands
                 DisplayMessage(client, error);
                 return;
             }
-            try
+            if (!OpenBgSetupStore.TryWrite(key, value, player.Name, out string writeError))
             {
-                WriteProperty(key, value);
-            }
-            catch (Exception exception)
-            {
-                Log.Error($"OPEN_BG_SETUP key={key} value={value} by={client.Player.Name} failed", exception);
-                DisplayMessage(client, $"open BG setup: could not write {key}: {exception.Message}");
+                DisplayMessage(client, $"open BG setup: could not write {key}: {writeError}");
                 return;
             }
-            Log.Info($"OPEN_BG_SETUP key={key} value={value} by={client.Player.Name}");
-            DisplayMessage(client, $"open BG setup: {OpenBgSetupParser.Find(key).Name} = {value}. Properties refreshed; the roster reads it on its next tick.");
-            ShowPage(client, 2);
+            OpenBgSetupKey written = OpenBgSetupParser.Find(key);
+            string shown = written.IsUnits && value.Length == 0 ? "global" : value;
+            string message = $"open BG setup: {written.Name} = {shown}. Properties refreshed; the roster reads it on its next tick.";
+            DisplayMessage(client, message);
+            if (!OpenBgManager.RefreshIfOpen(player, message))
+                ShowPage(client, 2);
         }
 
         private static void ShowPage(GameClient client, int page)
@@ -73,6 +93,46 @@ namespace DOL.GS.Commands
             string caption = page == 2 ? "open BG setup" : "open BG live";
             client.Out.SendCustomTextWindow($"{caption} {page}/{pages.Count}", pages[page - 1].ToArray());
         }
+    }
+
+    /// <summary>Writes the open BG setup rows and queues hand reliefs for the command and the window alike.</summary>
+    public static class OpenBgSetupStore
+    {
+        private static readonly Logger Log = LoggerManager.Create(typeof(OpenBgSetupStore));
+
+        /// <summary>Writes the row, logs <c>OPEN_BG_SETUP</c> and refreshes the properties; false with the reason on a database error.</summary>
+        public static bool TryWrite(string rowKey, string value, string by, out string error)
+        {
+            error = null;
+            try
+            {
+                WriteProperty(rowKey, value ?? string.Empty);
+            }
+            catch (Exception exception)
+            {
+                Log.Error($"OPEN_BG_SETUP key={rowKey} value={value} by={by} failed", exception);
+                error = exception.Message;
+                return false;
+            }
+            Log.Info($"OPEN_BG_SETUP key={rowKey} value={value} by={by}");
+            return true;
+        }
+
+        /// <summary>Queues a hand relief (<see cref="OpenBattlegroundRoster.RequestRelief"/>) and words the result.</summary>
+        public static bool Relieve(int unit, string by, out string message)
+        {
+            if (!OpenBattlegroundRoster.RequestRelief(unit))
+            {
+                message = $"Unit #{unit} is not in the open BG crew (it may have left already).";
+                return false;
+            }
+            Log.Info($"OPEN_BG_RELIEF_REQUESTED unit={unit} by={by}");
+            message = ReliefMessage(unit);
+            return true;
+        }
+
+        public static string ReliefMessage(int unit) =>
+            $"Unit #{unit} leaves within a minute; its bots may return after the short cooldown.";
 
         /// <summary>Writes the row (pattern FrontierKeepBalanceUpdate) and refreshes every property like /serverproperties refresh.</summary>
         private static void WriteProperty(string rowKey, string value)
@@ -102,19 +162,44 @@ namespace DOL.GS.Commands
         }
     }
 
-    /// <summary>One /bgsetup key: the short name, its server property row, the range and a one-line help.</summary>
-    public sealed record OpenBgSetupKey(string Name, string RowKey, bool IsSwitch, int Min, int Max, string Help)
+    /// <summary>
+    /// One /bgsetup key: the short name, its server property row, the range and a one-line help. <paramref name="IsUnits"/>
+    /// marks a realm's own crew row (text "8-man/small/solos", empty for the global targets).
+    /// </summary>
+    public sealed record OpenBgSetupKey(string Name, string RowKey, bool IsSwitch, int Min, int Max, string Help, bool IsUnits = false)
     {
-        public string Range => IsSwitch ? "on|off" : $"{Min}-{Max}";
+        public string Range => IsSwitch ? "on|off" : IsUnits ? "8-man/small/solos or global" : $"{Min}-{Max}";
     }
 
-    /// <summary>The raw open_bg_* values as the rows hold them (before the clamping at use).</summary>
-    public sealed record OpenBgSetupValues(bool Enabled, int Groups8, int Small, int Solos, int MaxBots, int CycleMin, int CycleMax, bool Drift)
+    /// <summary>The raw open_bg_* values as the rows hold them (before the clamping at use); a realm's units text is "" for the global targets.</summary>
+    public sealed record OpenBgSetupValues(bool Enabled, int Groups8, int Small, int Solos, int MaxBots, int CycleMin, int CycleMax, bool Drift,
+        string AlbionUnits = "", string MidgardUnits = "", string HiberniaUnits = "")
     {
         public static OpenBgSetupValues Current() => new(OpenBattlegroundProperties.OPEN_BG_ENABLED, OpenBattlegroundProperties.OPEN_BG_GROUPS8,
             OpenBattlegroundProperties.OPEN_BG_GROUPS_SMALL, OpenBattlegroundProperties.OPEN_BG_SOLOS, OpenBattlegroundProperties.OPEN_BG_MAX_BOTS,
             OpenBattlegroundProperties.OPEN_BG_CYCLE_MIN_MINUTES, OpenBattlegroundProperties.OPEN_BG_CYCLE_MAX_MINUTES,
-            OpenBattlegroundProperties.OPEN_BG_PLAYER_DRIFT);
+            OpenBattlegroundProperties.OPEN_BG_PLAYER_DRIFT, OpenBattlegroundProperties.UnitsText(eRealm.Albion),
+            OpenBattlegroundProperties.UnitsText(eRealm.Midgard), OpenBattlegroundProperties.UnitsText(eRealm.Hibernia));
+
+        /// <summary>A realm's raw units text ("" for the global targets or another realm).</summary>
+        public string UnitsOf(eRealm realm) => (realm switch
+        {
+            eRealm.Albion => AlbionUnits,
+            eRealm.Midgard => MidgardUnits,
+            eRealm.Hibernia => HiberniaUnits,
+            _ => null,
+        }) ?? string.Empty;
+
+        /// <summary>The setup the roster plans with: the clamped globals and each realm's readable own targets.</summary>
+        public OpenBgSetup ToSetup() =>
+            new(Math.Clamp(Groups8, 0, OpenBattlegroundProperties.Groups8Max), Math.Clamp(Small, 0, OpenBattlegroundProperties.GroupsSmallMax),
+                Math.Clamp(Solos, 0, OpenBattlegroundProperties.SolosMax),
+                Math.Clamp(MaxBots, OpenBattlegroundProperties.MaxBotsMin, OpenBattlegroundProperties.MaxBotsMax))
+            {
+                Albion = OpenBgRealmTargets.TryParse(AlbionUnits, out OpenBgRealmTargets albion) ? albion : null,
+                Midgard = OpenBgRealmTargets.TryParse(MidgardUnits, out OpenBgRealmTargets midgard) ? midgard : null,
+                Hibernia = OpenBgRealmTargets.TryParse(HiberniaUnits, out OpenBgRealmTargets hibernia) ? hibernia : null,
+            };
 
         public string ValueOf(string name) => name switch
         {
@@ -126,8 +211,13 @@ namespace DOL.GS.Commands
             "cycle_min" => CycleMin.ToString(CultureInfo.InvariantCulture),
             "cycle_max" => CycleMax.ToString(CultureInfo.InvariantCulture),
             "drift" => OpenBgSetupParser.Switch(Drift),
+            "albion" => UnitsShown(AlbionUnits),
+            "midgard" => UnitsShown(MidgardUnits),
+            "hibernia" => UnitsShown(HiberniaUnits),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown open BG setup key."),
         };
+
+        private static string UnitsShown(string text) => string.IsNullOrWhiteSpace(text) ? "global" : text.Trim();
     }
 
     /// <summary>Pure parser of /bgsetup &lt;key&gt; &lt;value&gt;. The args are the handler's: args[0] is the command word.</summary>
@@ -143,10 +233,18 @@ namespace DOL.GS.Commands
             new("cycle_min", "open_bg_cycle_min_minutes", false, OpenBattlegroundProperties.CycleMinutesMin, OpenBattlegroundProperties.CycleMinutesMax, "shortest quiet-push-fight-retreat cycle, game minutes"),
             new("cycle_max", "open_bg_cycle_max_minutes", false, OpenBattlegroundProperties.CycleMinutesMin, OpenBattlegroundProperties.CycleMinutesMax, "longest cycle, game minutes"),
             new("drift", "open_bg_player_drift", true, 0, 1, "roamers and solos prefer points within sight of a player"),
+            new("albion", "open_bg_units_albion", false, 0, 0, "Albion's own crew; global uses groups8/small/solos", IsUnits: true),
+            new("midgard", "open_bg_units_midgard", false, 0, 0, "Midgard's own crew; global uses groups8/small/solos", IsUnits: true),
+            new("hibernia", "open_bg_units_hibernia", false, 0, 0, "Hibernia's own crew; global uses groups8/small/solos", IsUnits: true),
         };
 
         public const string Usage = "Use /bgsetup <key> <value>. Keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, " +
-            "max_bots 8-120, cycle_min 5-120, cycle_max 5-120 (min not above max), drift on|off.";
+            "max_bots 8-120, cycle_min 5-120, cycle_max 5-120 (min not above max), drift on|off, " +
+            "albion|midgard|hibernia 8-man/small/solos (e.g. 1/2/4) or global.";
+
+        /// <summary>The words that put a realm back on the global targets.</summary>
+        public static bool IsGlobalWord(string text) =>
+            string.IsNullOrWhiteSpace(text) || text.Trim().ToLowerInvariant() is "global" or "default" or "none" or "-" or "off";
 
         public static string Switch(bool on) => on ? "True" : "False";
 
@@ -169,6 +267,22 @@ namespace DOL.GS.Commands
             OpenBgSetupKey key = Find(args[1]);
             if (key == null) return (false, null, null, $"Unknown key '{args[1]}'. {Usage}");
             string text = args[2]?.Trim() ?? string.Empty;
+            if (key.IsUnits)
+            {
+                if (IsGlobalWord(text)) return (true, key.RowKey, string.Empty, null);
+                string[] parts = text.Split('/');
+                var values = new int[3];
+                bool numbers = parts.Length == 3;
+                for (int index = 0; numbers && index < 3; index++)
+                    numbers = int.TryParse(parts[index].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out values[index]);
+                if (!numbers)
+                    return (false, key.RowKey, null, $"{key.Name} takes 8-man/small/solos such as 1/2/4, or global; not '{text}'.");
+                if (values[0] is < 0 or > OpenBattlegroundProperties.Groups8Max || values[1] is < 0 or > OpenBattlegroundProperties.GroupsSmallMax ||
+                    values[2] is < 0 or > OpenBattlegroundProperties.SolosMax)
+                    return (false, key.RowKey, null, $"{key.Name} must be 8-man 0-{OpenBattlegroundProperties.Groups8Max}, small " +
+                        $"0-{OpenBattlegroundProperties.GroupsSmallMax}, solos 0-{OpenBattlegroundProperties.SolosMax}; '{text}' is out of range.");
+                return (true, key.RowKey, new OpenBgRealmTargets(values[0], values[1], values[2]).Format(), null);
+            }
             if (key.IsSwitch)
             {
                 bool? on = text.ToLowerInvariant() switch
@@ -263,12 +377,22 @@ namespace DOL.GS.Commands
                 string.Format(CultureInfo.InvariantCulture, "World speed: achieved {0:0.0}x (effective {1}x); cycles and relief run in game time.",
                     status.AchievedSpeed, status.SelectedSpeed),
                 $"Crew: {Count(bots, "inside")} inside, {Count(bots, "travelling")} travelling, {Count(bots, "leaving")} leaving, " +
-                $"{Count(bots, "outside")} outside; cap {status.Cap}. Setup per realm: {values.Groups8}x8, {values.Small} small, {values.Solos} solos.",
+                $"{Count(bots, "outside")} outside; cap {status.Cap}. Setup per realm: {values.Groups8}x8, {values.Small} small, {values.Solos} solos." +
+                OwnSetups(values),
                 players.Length == 0 ? "Players inside: none."
                     : $"Players inside ({players.Length}): " + string.Join(", ", players.Select(player => $"{player.Name} {player.Level} {player.Realm}")) + ".",
                 GuestLine(status.Guests),
             };
             return lines.Select(Fit).ToList();
+        }
+
+        // " Own setup: Albion 1/2/4." for the realms whose open_bg_units_* row overrides the global targets.
+        private static string OwnSetups(OpenBgSetupValues values)
+        {
+            string[] own = new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia }
+                .Where(realm => OpenBgRealmTargets.TryParse(values.UnitsOf(realm), out _))
+                .Select(realm => $"{OpenBattlegroundRoster.RealmName(realm)} {values.ToSetup().TargetsFor(realm).Format()}").ToArray();
+            return own.Length == 0 ? string.Empty : " Own setup: " + string.Join(", ", own) + ".";
         }
 
         /// <summary>The guest squads on a low human's level (spec 2026-10-11 §8), one entry per realm.</summary>
@@ -317,26 +441,39 @@ namespace DOL.GS.Commands
         public static List<string> SetupLines(OpenBgSetupValues values)
         {
             var lines = new List<string> { "Change with /bgsetup <key> <value>. The roster reads it on its next tick (60 game s)." };
-            int[] inUse =
+            foreach (OpenBgSetupKey key in OpenBgSetupParser.Keys)
             {
-                0, OpenBattlegroundProperties.Clamped("open_bg_groups8", values.Groups8, 0, OpenBattlegroundProperties.Groups8Max),
-                OpenBattlegroundProperties.Clamped("open_bg_groups_small", values.Small, 0, OpenBattlegroundProperties.GroupsSmallMax),
-                OpenBattlegroundProperties.Clamped("open_bg_solos", values.Solos, 0, OpenBattlegroundProperties.SolosMax),
-                OpenBattlegroundProperties.Clamped("open_bg_max_bots", values.MaxBots, OpenBattlegroundProperties.MaxBotsMin, OpenBattlegroundProperties.MaxBotsMax),
-                OpenBattlegroundProperties.Clamped("open_bg_cycle_min_minutes", values.CycleMin, OpenBattlegroundProperties.CycleMinutesMin, OpenBattlegroundProperties.CycleMinutesMax),
-                0, 0,
-            };
-            inUse[6] = OpenBattlegroundProperties.Clamped("open_bg_cycle_max_minutes", values.CycleMax, inUse[5], OpenBattlegroundProperties.CycleMinutesMax);
-            for (int index = 0; index < OpenBgSetupParser.Keys.Length; index++)
-            {
-                OpenBgSetupKey key = OpenBgSetupParser.Keys[index];
                 string value = values.ValueOf(key.Name);
                 string line = $"{key.Name} = {value} ({key.Range}): {key.Help}.";
-                if (!key.IsSwitch && inUse[index].ToString(CultureInfo.InvariantCulture) != value) line += $" In use: {inUse[index]}.";
+                string inUse = InUse(key, values);
+                if (inUse != null && inUse != value) line += $" In use: {inUse}.";
                 lines.Add(line);
             }
             lines.Add("Rows: server properties open_bg_* (category pvp). The launcher's open BG tab edits them while the server is stopped.");
             return lines.Select(Fit).ToList();
+        }
+
+        // The clamped value the roster uses for a number or a realm's units; null for a switch.
+        private static string InUse(OpenBgSetupKey key, OpenBgSetupValues values)
+        {
+            int cycleMin = OpenBattlegroundProperties.Clamped("open_bg_cycle_min_minutes", values.CycleMin, OpenBattlegroundProperties.CycleMinutesMin,
+                OpenBattlegroundProperties.CycleMinutesMax);
+            int? number = key.Name switch
+            {
+                "groups8" => OpenBattlegroundProperties.Clamped("open_bg_groups8", values.Groups8, 0, OpenBattlegroundProperties.Groups8Max),
+                "small" => OpenBattlegroundProperties.Clamped("open_bg_groups_small", values.Small, 0, OpenBattlegroundProperties.GroupsSmallMax),
+                "solos" => OpenBattlegroundProperties.Clamped("open_bg_solos", values.Solos, 0, OpenBattlegroundProperties.SolosMax),
+                "max_bots" => OpenBattlegroundProperties.Clamped("open_bg_max_bots", values.MaxBots, OpenBattlegroundProperties.MaxBotsMin,
+                    OpenBattlegroundProperties.MaxBotsMax),
+                "cycle_min" => cycleMin,
+                "cycle_max" => OpenBattlegroundProperties.Clamped("open_bg_cycle_max_minutes", values.CycleMax, cycleMin, OpenBattlegroundProperties.CycleMinutesMax),
+                _ => null,
+            };
+            if (number != null) return number.Value.ToString(CultureInfo.InvariantCulture);
+            if (!key.IsUnits) return null;
+            string text = values.ValueOf(key.Name);
+            if (text == "global") return "global";
+            return OpenBgRealmTargets.TryParse(text, out OpenBgRealmTargets targets) ? targets.Format() : "global (unreadable text)";
         }
 
         /// <summary>The setup as chat lines: one per key with its range.</summary>

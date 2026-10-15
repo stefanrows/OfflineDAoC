@@ -42,7 +42,7 @@ namespace DOL.GS.Commands
     }
 
     /// <summary>Server-held state for one player's Companion Manager window.</summary>
-    public sealed class CompanionManagerSession
+    public sealed class CompanionManagerSession : ICompanionWindowState
     {
         public const int MaximumQueryLength = 24;
         public static readonly TimeSpan IdleLimit = TimeSpan.FromMinutes(30);

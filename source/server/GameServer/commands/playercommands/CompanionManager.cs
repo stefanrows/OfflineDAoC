@@ -19,7 +19,6 @@ namespace DOL.GS.Commands
         public const string StoryCopy = "Story companions (authored): Named characters with their own background and personality. You can recruit each one once.";
         public const string CreateCopy = "Create a companion (generated): Choose a class and a new person is created for your roster.";
         public const string PermanenceCopy = "Both are permanent companions who earn XP and keep their training and gear. /spawn helpers are temporary.";
-        private const int GuidanceDelayMilliseconds = 3000;
         private const int DetailWidth = WidthDetail - 6;
         private const string BuildIndent = "    ";
         private const string GroupKey = "group";
@@ -39,6 +38,12 @@ namespace DOL.GS.Commands
         {
             if (player == null)
                 return;
+            // One Custom8 window per client: an open BG manager session gives way (the window is reused, not hidden).
+            CompanionWindowOwner.Claim(player, CompanionWindowKind.Companions, previous =>
+            {
+                if (previous == CompanionWindowKind.OpenBg)
+                    OpenBgManager.Close(player, hide: false);
+            });
             CompanionManagerSession session = Sessions.GetValue(player, CreateSession);
             session.Region = player.CurrentRegionID;
             session.LastUseUtc = DateTime.UtcNow;
@@ -63,12 +68,17 @@ namespace DOL.GS.Commands
             Open(player);
         }
 
-        public static void Close(GamePlayer player)
+        public static void Close(GamePlayer player) => Close(player, hide: true);
+
+        /// <summary>Ends the session; <paramref name="hide"/> false when the open BG manager takes the window over.</summary>
+        public static void Close(GamePlayer player, bool hide)
         {
             if (player == null || !Sessions.TryGetValue(player, out _))
                 return;
             Sessions.Remove(player);
-            Send(player, OpHide);
+            CompanionWindowOwner.Release(player, CompanionWindowKind.Companions);
+            if (hide)
+                CompanionWindowTransport.Hide(player);
         }
 
         public static void HandleClientControl(GamePlayer player, string tokenText, string controlText)
@@ -364,18 +374,7 @@ namespace DOL.GS.Commands
             view.Message = session.Message;
 
             bool changed = session.CommitView(string.Join('|', keys));
-            string[] labels = view.ToLabels();
-            for (int index = 0; index < labels.Length; index++)
-            {
-                if (string.Equals(session.SentLabels[index], labels[index], StringComparison.Ordinal))
-                    continue;
-                Send(player, OpLabel, index, labels[index]);
-                session.SentLabels[index] = labels[index];
-            }
-            if (changed || forceToken)
-                Send(player, OpToken, 0, FormatToken(session.Revision));
-            if (show)
-                Send(player, OpShow);
+            CompanionWindowTransport.Publish(player, session.SentLabels, view.ToLabels(), changed || forceToken, session.Revision, show);
         }
 
         private static string RecordKey(PlayerCompanionRecord record) => "c:" + record.CompanionId;
@@ -1297,34 +1296,11 @@ namespace DOL.GS.Commands
             Tell(player, message);
         }
 
-        private static void Tell(GamePlayer player, string message) =>
-            player.Out?.SendMessage(message, eChatType.CT_System, eChatLoc.CL_SystemWindow);
+        private static void Tell(GamePlayer player, string message) => CompanionWindowTransport.Tell(player, message);
 
-        private static void ScheduleGuidance(GamePlayer player, CompanionManagerSession session)
-        {
-            if (session.ClientConfirmed || session.GuidancePending || player.Client?.ClientState != GameClient.eClientState.Playing)
-                return;
-            session.GuidancePending = true;
-            _ = new ECSGameTimer(player, _ =>
-            {
-                session.GuidancePending = false;
-                if (!session.ClientConfirmed && Sessions.TryGetValue(player, out CompanionManagerSession current) &&
-                    ReferenceEquals(current, session) && player.Client?.ClientState == GameClient.eClientState.Playing)
-                    PlayerCompanionCommandHandler.ShowClientGuidance(player.Client);
-                return 0;
-            }, GuidanceDelayMilliseconds);
-        }
-
-        private static void Send(GamePlayer player, byte operation, int index = 0, string text = "")
-        {
-            if (player.Client?.ClientState != GameClient.eClientState.Playing)
-                return;
-            // Fixed 128-byte body; the native parser validates marker, version,
-            // operation, label index, and the terminator before use.
-            byte[] body = BuildBody(operation, index, text);
-            using var packet = PooledObjectFactory.GetForTick<GSTCPPacketOut>().Init((byte)eServerPackets.DebugMode);
-            packet.Write(body, 0, body.Length);
-            player.Out.SendTCP(packet);
-        }
+        private static void ScheduleGuidance(GamePlayer player, CompanionManagerSession session) =>
+            CompanionWindowTransport.ScheduleGuidance(player, session,
+                () => Sessions.TryGetValue(player, out CompanionManagerSession current) && ReferenceEquals(current, session),
+                () => PlayerCompanionCommandHandler.ShowClientGuidance(player.Client));
     }
 }

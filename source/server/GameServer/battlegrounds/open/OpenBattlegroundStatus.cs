@@ -16,8 +16,22 @@ namespace DOL.GS
 
     /// <summary>One open-BG crew member as the status page and the launcher see it.</summary>
     /// <param name="State">inside, outside (entered but not in region 252 now), travelling or leaving.</param>
+    /// <param name="Role">The unit's director role as logged (bridge_watch, roam, lurk, assault, defend, retreat); null without an order.</param>
+    /// <param name="InRaid">The unit belongs to this cycle's keep raid.</param>
+    /// <param name="InsideSeconds">Game seconds since the bot entered the open BG; 0 while it has not.</param>
     public sealed record OpenBgBotStatus(string Realm, string Name, int Level, string ClassName, int Unit, string Kind,
-        string Leader, string State, bool Alive);
+        string Leader, string State, bool Alive, string Role = null, bool InRaid = false, int InsideSeconds = 0);
+
+    /// <summary>The last reason a unit of a realm and kind (group8, small, solo) could not form, and how long ago (game seconds).</summary>
+    public sealed record OpenBgFormFailureStatus(string Kind, string Text, int AgeSeconds);
+
+    /// <summary>
+    /// One realm's crew targets and what it has: <paramref name="OwnSetup"/> when the realm's open_bg_units_* row
+    /// overrides the global targets; present counts are the units not leaving; <paramref name="Bots"/> its crew members
+    /// not leaving; the last form failure per kind, if any.
+    /// </summary>
+    public sealed record OpenBgRealmStatus(string Realm, int Groups8, int Small, int Solos, bool OwnSetup, int Groups8Present,
+        int SmallPresent, int SolosPresent, int Bots, OpenBgFormFailureStatus[] FormFailures);
 
     /// <summary>A human player standing in region 252.</summary>
     public sealed record OpenBgPlayerStatus(string Realm, string Name, int Level);
@@ -30,7 +44,7 @@ namespace DOL.GS
     public sealed record OpenBgStatusSnapshot(DateTime UpdatedUtc, bool Running, bool CampaignEnabled, bool OpenEnabled,
         bool Ready, string NotReadyReason, string Phase, string Attacker, int PhaseSecondsLeft, string KeepOwner,
         double AchievedSpeed, int SelectedSpeed, int Cap, OpenBgPlayerStatus[] Players, OpenBgBotStatus[] Bots,
-        OpenBgGuestStatus[] Guests = null)
+        OpenBgGuestStatus[] Guests = null, OpenBgRealmStatus[] Realms = null)
     {
         public const string PhaseNotAvailable = "n/a (stage 2)";
     }
@@ -65,6 +79,35 @@ namespace DOL.GS
         /// <summary>A crew member's state: leaving wins, then travelling, then inside or outside region 252.</summary>
         public static string StateOf(bool entered, bool leaving, bool inRegion) =>
             leaving ? "leaving" : !entered ? "travelling" : inRegion ? "inside" : "outside";
+
+        private static readonly eRealm[] RealmOrder = { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia };
+
+        /// <summary>
+        /// Per realm the targets the roster plans with, the units present by kind (not leaving) and the last form failure
+        /// per kind. <paramref name="failures"/> gives a realm's and kind's last failure text and game tick, or null.
+        /// </summary>
+        public static OpenBgRealmStatus[] RealmStatuses(OpenBgSetup setup, IReadOnlyList<OpenBgBotStatus> bots,
+            Func<eRealm, OpenBgUnitKind, (string Text, long Tick)?> failures, long now)
+        {
+            setup ??= new OpenBgSetup(0, 0, 0, 0);
+            bots ??= Array.Empty<OpenBgBotStatus>();
+            return RealmOrder.Select(realm =>
+            {
+                string name = OpenBattlegroundRoster.RealmName(realm);
+                OpenBgBotStatus[] mine = bots.Where(bot => bot.Realm == name && bot.State != "leaving").ToArray();
+                int Present(OpenBgUnitKind kind) => mine.Where(bot => bot.Kind == OpenBattlegroundRoster.KindName(kind))
+                    .Select(bot => bot.Unit).Distinct().Count();
+                OpenBgRealmTargets targets = setup.TargetsFor(realm);
+                OpenBgFormFailureStatus[] failed = new[] { OpenBgUnitKind.Group8, OpenBgUnitKind.Small, OpenBgUnitKind.Solo }
+                    .Select(kind => (Kind: kind, Failure: failures?.Invoke(realm, kind)))
+                    .Where(item => item.Failure != null)
+                    .Select(item => new OpenBgFormFailureStatus(OpenBattlegroundRoster.KindName(item.Kind), item.Failure.Value.Text,
+                        (int)Math.Clamp((now - item.Failure.Value.Tick) / 1000, 0, int.MaxValue)))
+                    .ToArray();
+                return new OpenBgRealmStatus(name, targets.Groups8, targets.Small, targets.Solos, setup.IsOverridden(realm),
+                    Present(OpenBgUnitKind.Group8), Present(OpenBgUnitKind.Small), Present(OpenBgUnitKind.Solo), mine.Length, failed);
+            }).ToArray();
+        }
 
         /// <summary>The live state now. Call on the game loop (command handler or the publish timer).</summary>
         public static OpenBgStatusSnapshot Capture(bool running = true)
@@ -104,21 +147,28 @@ namespace DOL.GS
 
             AutonomousBattlegroundParticipation.OpenCrewMember[] crew = AutonomousBattlegroundParticipation.OpenCrew();
             var unitSizes = crew.GroupBy(member => member.Unit).ToDictionary(unit => unit.Key, unit => unit.Count());
+            long now = GameLoop.GameLoopTime;
+            OpenBgRaid raid = OpenBattlegroundDirector.Raid;
             OpenBgBotStatus[] bots = crew.Where(member => member.Bot != null).Select(member =>
             {
                 GameBot bot = member.Bot;
                 string kind = OpenBattlegroundRoster.TryGetUnitKind(member.Unit, out OpenBgUnitKind known)
                     ? OpenBattlegroundRoster.KindName(known) : KindFromSize(unitSizes[member.Unit]);
                 string leader = bot.Group?.Leader?.Name;
+                string role = OpenBattlegroundDirector.TryGetUnitRole(member.Unit, out OpenBgRole unitRole) ? OpenBattlegroundRoles.Describe(unitRole) : null;
+                int insideSeconds = member.Entered ? (int)Math.Clamp((now - member.EnteredTick) / 1000, 0, int.MaxValue) : 0;
                 return new OpenBgBotStatus(GlobalConstants.RealmToName(bot.Realm), bot.Name, bot.Level,
                     bot.CharacterClass?.Name ?? "unknown", member.Unit, kind, leader,
-                    StateOf(member.Entered, member.Leaving, open != null && bot.CurrentRegionID == open.RegionId), bot.IsAlive);
+                    StateOf(member.Entered, member.Leaving, open != null && bot.CurrentRegionID == open.RegionId), bot.IsAlive,
+                    role, raid?.Contains(member.Unit) == true, insideSeconds);
             }).ToArray();
+            OpenBgRealmStatus[] realms = RealmStatuses(OpenBgSetup.FromProperties(), bots,
+                (realm, kind) => OpenBattlegroundRoster.TryGetLastFormFailure(realm, kind, out string text, out long tick) ? (text, tick) : null, now);
 
             return new OpenBgStatusSnapshot(DateTime.UtcNow, running, BattlegroundCampaignPolicy.IsEnabled,
                 OpenBattlegroundProperties.OPEN_BG_ENABLED, ready, ready ? null : reason, phase, attacker, secondsLeft, owner,
                 Math.Round(OfflineWorldSpeedControl.AchievedMultiplier, 2), OfflineWorldSpeedControl.EffectiveMultiplier,
-                OpenBattlegroundProperties.MaxBots, players, bots, OpenBattlegroundGuestSquads.Status());
+                OpenBattlegroundProperties.MaxBots, players, bots, OpenBattlegroundGuestSquads.Status(), realms);
         }
 
         [GameServerStartedEvent]
