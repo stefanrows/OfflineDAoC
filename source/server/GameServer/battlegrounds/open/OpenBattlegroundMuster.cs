@@ -7,6 +7,15 @@ namespace DOL.GS
         public static bool NeedsPortOut(ushort memberRegion, ushort leaderRegion, bool atLeaderLanding) =>
             leaderRegion == OpenBattlegroundMode.OpenBgRegion && !(memberRegion == leaderRegion && atLeaderLanding);
 
+        /// <summary>One candidate pool of all realms for a unit: archetype preset units in Server PvP only.</summary>
+        public static bool PoolsMerged(OpenBgMode mode, bool presetUnit) => mode == OpenBgMode.ServerPvp && presetUnit;
+
+        /// <summary>
+        /// A mate in the leader's region must be within porter reach as before; a mate of another region is accepted only
+        /// from a merged pool, where the coordinator's remote meetup brings it to the leader's porter.
+        /// </summary>
+        public static bool AcceptsMember(bool merged, bool sameRegion, bool withinPorterReach) => sameRegion ? withinPorterReach : merged;
+
         public static (int X, int Y)? LandingFor(GameBot leader, System.Collections.Generic.IReadOnlyList<(ushort Region, int X, int Y, eRealm Realm)> landings)
         {
             if (leader == null || landings == null) return null;

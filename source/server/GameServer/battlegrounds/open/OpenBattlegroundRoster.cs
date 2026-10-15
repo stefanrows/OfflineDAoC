@@ -698,9 +698,12 @@ namespace DOL.GS
             }
             bool refilling = plan.Realms.Any(realm => realm.Refill?.Count > 0);
             Dictionary<eRealm, Dictionary<OpenBgReject, int>> poolRejections = null;
+            // A preset unit in Server PvP draws on all three realms (merged pool), so every realm's pool is built.
+            eRealm[] poolRealms = OpenBattlegroundMuster.PoolsMerged(OpenBattlegroundMode.Current, OpenBattlegroundProperties.Presets.Length > 0)
+                ? new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia } : Array.Empty<eRealm>();
             Dictionary<eRealm, List<GameBot>> pools = plan.Admits.Count > 0 || refilling
                 ? CandidatePools(plan.Admits.Select(admit => admit.Realm)
-                    .Concat(plan.Realms.Where(realm => realm.Refill?.Count > 0).Select(realm => realm.Realm)).Distinct().ToArray(), now,
+                    .Concat(plan.Realms.Where(realm => realm.Refill?.Count > 0).Select(realm => realm.Realm)).Concat(poolRealms).Distinct().ToArray(), now,
                     out poolRejections)
                 : null;
             if (refilling) RefillUnits(plan, setup, crew, pools, keepOwner, now);
@@ -798,18 +801,26 @@ namespace DOL.GS
                 int size = admit.Kind == OpenBgUnitKind.Group8 ? Math.Min(Group8Size, free) : Math.Min(SmallGroupSize(Rng), free);
                 int minimum = admit.Kind == OpenBgUnitKind.Group8 ? Group8Minimum : SmallGroupMin;
                 if (size < minimum) continue;
-                if (!TryPickGroup(pool, size, minimum, now, keepOwner, out GameBot leader, out GameBot[] others, out OFTeleporter porter,
+                // Merged pool (preset unit of this size, Server PvP): the admit's realm first, then the other realms.
+                bool merged = OpenBattlegroundMuster.PoolsMerged(OpenBattlegroundMode.Current, PresetFor(size) != null);
+                List<GameBot> pickFrom = merged
+                    ? pool.Concat(pools.Where(entry => entry.Key != admit.Realm).SelectMany(entry => entry.Value)).ToList()
+                    : pool;
+                if (!TryPickGroup(pickFrom, size, minimum, now, keepOwner, merged, out GameBot leader, out GameBot[] others, out OFTeleporter porter,
                         out Dictionary<OpenBgReject, int> mateRejections))
                 {
                     NoteFormFailed(admit, minimum, pool, poolRejections?.GetValueOrDefault(admit.Realm), mateRejections, now);
                     continue;
                 }
                 groupsFormed++;
-                pool.Remove(leader);
-                foreach (GameBot other in others) pool.Remove(other);
+                foreach (List<GameBot> realmPool in pools.Values)
+                {
+                    realmPool.Remove(leader);
+                    foreach (GameBot other in others) realmPool.Remove(other);
+                }
                 Vector3 muster = new(porter.X, porter.Y, porter.Z);
                 if (!AutonomousBotGroupCoordinator.TryFormOpenBattlegroundParty(leader, others, muster, porter.Name,
-                        out Group group, out string groupId, out string reason))
+                        out Group group, out string groupId, out string reason, allowRemoteMembers: merged))
                 {
                     Log.Info($"OPEN_BG_GROUP_FAILED realm={RealmName(admit.Realm)} kind={Describe(admit.Kind)} leader=\"{leader.Name}\" size={others.Length + 1} reason=\"{reason}\"");
                     continue;
@@ -1110,7 +1121,11 @@ namespace DOL.GS
         /// (two for an 8-man), then the nearest level-compatible bots on the leader's side of the keep's owner guild
         /// (<see cref="MayJoinUnit"/>).
         /// </summary>
-        private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now, GuildIds keepOwner,
+        private static OpenBgArchetype PresetFor(int size) =>
+            OpenBattlegroundArchetypes.ParseMix(OpenBattlegroundProperties.Presets).Select(entry => entry.Archetype)
+                .FirstOrDefault(candidate => candidate.Size == size);
+
+        private static bool TryPickGroup(List<GameBot> pool, int size, int minimum, long now, GuildIds keepOwner, bool merged,
             out GameBot leader, out GameBot[] others, out OFTeleporter porter, out Dictionary<OpenBgReject, int> mateRejections)
         {
             leader = null;
@@ -1124,23 +1139,25 @@ namespace DOL.GS
             {
                 OFTeleporter nearest = PortersIn(seed.CurrentRegionID, now).OrderBy(candidate => seed.GetDistanceTo(candidate)).FirstOrDefault();
                 if (nearest == null) continue;
-                GameBot[] near = UnitMates(seed, rvr, GuildIdsOf, keepOwner).Where(bot => bot != seed && bot.CurrentRegionID == seed.CurrentRegionID &&
-                        AutonomousBotGroupCoordinator.LevelsCompatible(seed.Level, bot.Level) && WithinPorterReach(bot.GetDistanceTo(nearest)))
-                    .OrderBy(bot => bot.GetDistanceTo(nearest)).ToArray();
+                GameBot[] near = UnitMates(seed, rvr, GuildIdsOf, keepOwner).Where(bot => bot != seed &&
+                        AutonomousBotGroupCoordinator.LevelsCompatible(seed.Level, bot.Level) &&
+                        OpenBattlegroundMuster.AcceptsMember(merged, bot.CurrentRegionID == seed.CurrentRegionID,
+                            bot.CurrentRegionID == seed.CurrentRegionID && WithinPorterReach(bot.GetDistanceTo(nearest))))
+                    .OrderBy(bot => bot.CurrentRegionID == seed.CurrentRegionID ? 0 : 1)
+                    .ThenBy(bot => bot.CurrentRegionID == seed.CurrentRegionID ? bot.GetDistanceTo(nearest) : 0).ToArray();
                 if (near.Length + 1 < minimum)
                 {
                     // For the log: why the others did not fit the leader that came closest.
                     if (near.Length > bestNear)
                     {
                         bestNear = near.Length;
-                        mateRejections = MateRejections(seed, rvr, nearest, keepOwner);
+                        mateRejections = MateRejections(seed, rvr, nearest, keepOwner, merged);
                     }
                     continue;
                 }
                 GameBot[] picked = null;
                 // Several presets may be configured: the first parsed archetype whose Size equals this unit's size fills it.
-                OpenBgArchetype archetype = OpenBattlegroundArchetypes.ParseMix(OpenBattlegroundProperties.Presets)
-                    .Select(entry => entry.Archetype).FirstOrDefault(candidate => candidate.Size == size);
+                OpenBgArchetype archetype = PresetFor(size);
                 if (archetype != null && seed.CharacterClass != null && near.All(bot => bot.CharacterClass != null))
                 {
                     // The seed leads and is candidate 0 (forced: it counts toward the slots); near is sorted by distance.
@@ -1165,7 +1182,7 @@ namespace DOL.GS
             return false;
         }
 
-        private static Dictionary<OpenBgReject, int> MateRejections(GameBot seed, GameBot[] rvr, OFTeleporter porter, GuildIds keepOwner)
+        private static Dictionary<OpenBgReject, int> MateRejections(GameBot seed, GameBot[] rvr, OFTeleporter porter, GuildIds keepOwner, bool merged = false)
         {
             var counts = new Dictionary<OpenBgReject, int>();
             var sameSide = UnitMates(seed, rvr, GuildIdsOf, keepOwner).ToHashSet(ReferenceEqualityComparer.Instance);
@@ -1173,8 +1190,9 @@ namespace DOL.GS
             {
                 if (bot == seed) continue;
                 bool sameRegion = bot.CurrentRegionID == seed.CurrentRegionID;
-                OpenBgReject? reject = MateRejection(sameRegion, sameSide.Contains(bot),
-                    AutonomousBotGroupCoordinator.LevelsCompatible(seed.Level, bot.Level), sameRegion && WithinPorterReach(bot.GetDistanceTo(porter)));
+                bool accepted = OpenBattlegroundMuster.AcceptsMember(merged, sameRegion, sameRegion && WithinPorterReach(bot.GetDistanceTo(porter)));
+                OpenBgReject? reject = MateRejection(sameRegion || merged, sameSide.Contains(bot),
+                    AutonomousBotGroupCoordinator.LevelsCompatible(seed.Level, bot.Level), accepted);
                 if (reject is OpenBgReject value) Count(counts, value);
             }
             return counts;

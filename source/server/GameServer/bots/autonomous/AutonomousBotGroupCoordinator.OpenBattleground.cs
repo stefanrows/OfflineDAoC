@@ -15,7 +15,7 @@ namespace DOL.GS
     public static partial class AutonomousBotGroupCoordinator
     {
         public static bool TryFormOpenBattlegroundParty(GameBot leader, IReadOnlyList<GameBot> others, Vector3 muster, string musterName,
-            out Group group, out string groupId, out string reason)
+            out Group group, out string groupId, out string reason, bool allowRemoteMembers = false)
         {
             group = null;
             groupId = null;
@@ -28,7 +28,7 @@ namespace DOL.GS
             GameBot[] all = [leader, .. others];
             if (all.Distinct().Count() != all.Length ||
                 all.Any(bot => bot == null || !bot.IsAutonomousWorldBot || bot.IsTemporaryGroupHelper || bot.Group != null ||
-                    !bot.IsAlive || bot.CurrentRegionID != leader.CurrentRegionID))
+                    !bot.IsAlive || (!allowRemoteMembers && bot.CurrentRegionID != leader.CurrentRegionID)))
             {
                 reason = "a member is not free in the leader's region";
                 return false;
