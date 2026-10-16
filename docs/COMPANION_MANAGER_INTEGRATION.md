@@ -554,8 +554,10 @@ rules, and grows to a 440×312 group window.
 | Member rows | Eight rows, pitch 22: power % (yellow) and endurance % (green) as `ScalarLabelDef` on `group_power<i>` / `group_endurance<i>`; the gold leader mark (server); a `red_status_thick` bar on `group_health<i>` (180 px) with the name (`group_name<i>`, colour `group_color<i>`) over it and the health % at its right end; class (`group_class<i>`, 86 px); level (`group_level<i>`); the stance (server, four colour labels, 78 px). The row's left part is the stock `SelectGroupMember<i>` click; the stance column is control `0xB6 + i`. |
 
 Rows cover every group member, players included: the native adapters fill
-them, the server only adds the stance of its owner's companions (blank for
-anyone else) and the leader mark. Slot `i` is the member's `GroupIndex`, the
+them, the server only adds the stance of every companion in the group, whoever
+owns it (0.285.0; blank for players and world bots), and the leader mark.
+A friend's companion shows the stance from its own leader (his group order,
+otherwise its saved stance); only the owner's rows react to a click. Slot `i` is the member's `GroupIndex`, the
 same slot the group packet writes.
 
 ### Controls and labels

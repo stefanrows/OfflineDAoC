@@ -365,6 +365,17 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+132. **No "killed recently" timer in the Thidranki open BG.** Owner,
+     2026-10-17: remove the "no realm points and experience after death"
+     timer in the Thidranki open BG mode as in Gothwaite. Implemented in
+     source **0.284.0** (`OpenBattlegroundMode.LiftsRepeatKillTimer`): with the
+     open BG on, a victim that dies in region 252 pays RP and XP every time
+     (real players, companions and world bots as victims). Loot drops and
+     party gear keep the timer; the quest credit and the rest of the world
+     are unchanged. Real-client check: kill the same enemy twice inside
+     `RP_WORTH_SECONDS` in Thidranki: RP and XP both times, no message, loot
+     only the first time.
+
 131. **Assist-mode tanks sprint behind targets and use Charge.** Owner,
      2026-10-16: "tanks in assist mode do not sprint behind targets when
      chasing them and they dont use the charge ability. Both should be

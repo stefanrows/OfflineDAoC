@@ -87,8 +87,9 @@ public static class AutonomousBotRealmPointRewards
             LastRealmPointDeathTickProperty, -1);
         long worthInterval = Math.Max(0, Properties.RP_WORTH_SECONDS) * 1000L;
         bool isWorthLoot = previousDeath < 0 || now - previousDeath >= worthInterval;
-        // The Gothwaite arena lifts the repeat-kill timer for realm points and experience; the loot drop keeps it.
-        bool isWorthRealmPoints = isWorthLoot || GothwaitePvpRules.LiftsRepeatKillTimer(killedBot);
+        // The Gothwaite arena and the open BG lift the repeat-kill timer for realm points and experience; the loot drop keeps it.
+        bool isWorthRealmPoints = isWorthLoot || GothwaitePvpRules.LiftsRepeatKillTimer(killedBot) ||
+            OpenBattlegroundMode.LiftsRepeatKillTimer(killedBot);
 
         // Every death resets the same repeat-kill window used for a real player,
         // including a death caused by an NPC or by somebody who receives no RP.

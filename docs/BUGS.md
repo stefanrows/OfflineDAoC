@@ -148,6 +148,17 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+164. **A friend's companions show no stance in the COMPANIONS window.** Owner
+     report 2026-10-17 with a screenshot (two players grouped, each with
+     companions): the friend's companion rows had health, power, name, class and
+     level, but a blank stance column. Cause: `CompanionBar.BuildView` described
+     a row only for companions the viewer owns (`DescribeSlot` returned null for
+     the rest, by the 0.272.0 design). Fixed in 0.285.0: any player companion or
+     temporary helper in the group gets a stance, from its own leader through
+     `CompanionEngagementMode.Effective`. The status line, tiles and clicks stay
+     owner-only. Verification pending: group with a friend who has companions
+     and check their stance column, and that it follows his stance changes.
+
 163. **The open BG never opened on the installed server: `zone252.nav` was
      not installed.** Owner report 2026-10-16 ("I started the server in Open BG
      mode, but somehow no bots go there"). Every start since the feature

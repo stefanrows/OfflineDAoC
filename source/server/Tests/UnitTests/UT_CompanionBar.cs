@@ -303,7 +303,7 @@ public sealed class UT_CompanionBar
     }
 
     [Test]
-    public void DescribeSlotShowsOwnedCompanionsAndNothingElse()
+    public void DescribeSlotShowsCompanionsOfAnyOwnerAndNothingElse()
     {
         Assert.That(CompanionBarView.DescribeSlot(false, true, true, eCompanionEngagementMode.Aggressive), Is.Null);
         Assert.That(CompanionBarView.DescribeSlot(true, false, true, eCompanionEngagementMode.Aggressive),

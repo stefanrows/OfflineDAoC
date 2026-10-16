@@ -199,8 +199,12 @@ namespace DOL.GS.Commands
         }
 
         private static bool IsOwned(GameBot bot, GamePlayer player) =>
-            (bot.PlayerGroupLeader ?? bot.Owner) == player &&
-            (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && !bot.IsAutonomousWorldBot;
+            (bot.PlayerGroupLeader ?? bot.Owner) == player && IsCompanion(bot);
+
+        /// <summary>A player's companion or temporary helper, whoever the owner is; never an autonomous world bot.</summary>
+        private static bool IsCompanion(GameBot bot) =>
+            (bot.IsPersistentPlayerCompanion || bot.IsTemporaryGroupHelper) && !bot.IsAutonomousWorldBot &&
+            (bot.PlayerGroupLeader ?? bot.Owner) != null;
 
         /// <summary>Tile states for the current state of the player's group orders, pet pull, stay, group and owned companions.</summary>
         public static CompanionBarTileState[] ComputeTiles(GamePlayer player, int ownedCount, bool leavePending = false)
@@ -252,10 +256,12 @@ namespace DOL.GS.Commands
                 if (member == null)
                     continue;
                 view.Leaders[slot] = leader != null && member == leader;
-                bool isOwned = member is GameBot bot && owned.Contains(bot);
-                eCompanionEngagementMode effective = isOwned
+                // Any companion in the group shows its stance, also another player's: Effective resolves the
+                // companion's own leader. Only the owner's rows react to clicks (ApplyStanceClick).
+                bool isCompanion = member is GameBot bot && (owned.Contains(bot) || IsCompanion(bot));
+                eCompanionEngagementMode effective = isCompanion
                     ? CompanionEngagementMode.Effective(member) : eCompanionEngagementMode.Aggressive;
-                view.Slots[slot] = CompanionBarView.DescribeSlot(isOwned, member.IsAlive,
+                view.Slots[slot] = CompanionBarView.DescribeSlot(isCompanion, member.IsAlive,
                     member.CurrentRegionID == player.CurrentRegionID, effective);
             }
             return view;

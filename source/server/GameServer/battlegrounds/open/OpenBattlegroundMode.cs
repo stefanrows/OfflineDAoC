@@ -19,6 +19,17 @@ namespace DOL.GS
         /// <summary>Native Thidranki, the open BG's region.</summary>
         public const ushort OpenBgRegion = 252;
 
+        /// <summary>
+        /// The repeat-kill timer (RP_WORTH_SECONDS) is lifted for realm points and experience while the open BG is
+        /// switched on and the victim died in its region. Loot drops and party gear keep the timer.
+        /// </summary>
+        public static bool LiftsRepeatKillTimer(GameLiving victim) =>
+            victim != null && LiftsRepeatKillTimer(OpenBattlegroundPolicy.IsEnabled, victim.CurrentRegionID);
+
+        /// <summary>Pure form of <see cref="LiftsRepeatKillTimer(GameLiving)"/> for tests.</summary>
+        public static bool LiftsRepeatKillTimer(bool enabled, ushort victimRegion) =>
+            enabled && victimRegion == OpenBgRegion;
+
         public static OpenBgMode ParseMode(string text) =>
             string.Equals(text?.Trim(), "perrealm", StringComparison.OrdinalIgnoreCase) ? OpenBgMode.PerRealm : OpenBgMode.ServerPvp;
 

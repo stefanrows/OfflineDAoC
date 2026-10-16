@@ -98,14 +98,14 @@ namespace DOL.GS.Commands
         }
 
         /// <summary>
-        /// One member row. Null when the group member is not an owned companion (the row's stance stays empty; the
-        /// native adapters still draw the member). A dead or out-of-region companion shows Dead or Away in the
-        /// passive colour. Otherwise its effective stance.
+        /// One member row. Null when the group member is not a companion (the row's stance stays empty; the native
+        /// adapters still draw the member). Companions of any owner count. A dead or out-of-region companion shows
+        /// Dead or Away in the passive colour. Otherwise its effective stance.
         /// </summary>
-        public static (string Text, eCompanionEngagementMode Color)? DescribeSlot(bool owned, bool alive, bool sameRegion,
+        public static (string Text, eCompanionEngagementMode Color)? DescribeSlot(bool companion, bool alive, bool sameRegion,
             eCompanionEngagementMode effective)
         {
-            if (!owned)
+            if (!companion)
                 return null;
             if (!alive)
                 return ("Dead", eCompanionEngagementMode.Passive);

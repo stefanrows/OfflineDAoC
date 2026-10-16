@@ -22,6 +22,18 @@ public sealed class UT_OpenBattlegroundMode
     }
 
     [Test]
+    public void RepeatKillTimerLiftsOnlyInRegion252WhileEnabled()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundMode.LiftsRepeatKillTimer(false, OpenBattlegroundMode.OpenBgRegion), Is.False, "open BG off");
+            Assert.That(OpenBattlegroundMode.LiftsRepeatKillTimer(true, 51), Is.False, "other region");
+            Assert.That(OpenBattlegroundMode.LiftsRepeatKillTimer(true, OpenBattlegroundMode.OpenBgRegion), Is.True, "open BG region");
+            Assert.That(OpenBattlegroundMode.LiftsRepeatKillTimer(null), Is.False, "no victim");
+        });
+    }
+
+    [Test]
     public void PeaceDefaultFollowsTheModeAndAnExplicitValueWins()
     {
         Assert.Multiple(() =>

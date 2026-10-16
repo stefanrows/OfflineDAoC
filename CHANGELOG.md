@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.285.0] - 2026-10-17
+
+### Changed
+
+- **The COMPANIONS window shows the stance of every companion in the group,
+  also another player's.** With a friend in the group, his companions had
+  health, power, name, class and level but a blank stance column, because the
+  server only wrote the stance of the viewer's own companions. A row now reads
+  Aggressive, Defensive, Passive, Assist train, Dead or Away for any player
+  companion or temporary helper in the group, taken from that companion's own
+  leader (his group order, otherwise the saved stance). Real players and world
+  bots keep a blank stance. The status line, the tiles and the controls still
+  concern your own companions: a click on a friend's companion still answers
+  "not your companion".
+
+## [0.284.0] - 2026-10-17
+
+### Changed
+
+- **No repeat-kill timer for realm points and experience in the open BG.**
+  While the open battleground is switched on, a victim that dies in Thidranki
+  (region 252) pays RP and XP every time, whatever `RP_WORTH_SECONDS` says,
+  as the Gothwaite arena has done since 0.280.0. Real players, companions and
+  world bots count as victims. Loot drops and companion party gear keep the
+  timer, the campaign quest credit is unchanged, and region 252 is untouched
+  while the open BG is off (`OpenBattlegroundMode.LiftsRepeatKillTimer`).
+
 ## [0.283.1] - 2026-10-17
 
 ### Fixed
