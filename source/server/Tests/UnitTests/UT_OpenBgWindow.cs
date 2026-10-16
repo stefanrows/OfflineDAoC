@@ -705,7 +705,7 @@ public sealed class UT_OpenBgWindow
 
     /// <summary>
     /// Not a check: writes the labels 620-984 of an Overview and a Setup drawing of a status snapshot as JSON for the mock
-    /// renderer (docs/open-bg-redesign/render.py). OPEN_BG_SAMPLE is an open-bg-status.json, OPEN_BG_LABEL_DUMP the output
+    /// renderer (source/server/tools/render_open_bg_mock.py). OPEN_BG_SAMPLE is an open-bg-status.json, OPEN_BG_LABEL_DUMP the output
     /// directory (Windows paths; pass both through WSLENV from WSL).
     /// </summary>
     [Test, Explicit("writes the mock renderer's input")]
