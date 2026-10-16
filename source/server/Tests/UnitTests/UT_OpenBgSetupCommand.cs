@@ -362,5 +362,37 @@ namespace DOL.GS.Tests
                 Assert.That(cost, Is.LessThanOrEqualTo(OpenBgSetupPages.PageBudgetBytes), "setup page bytes");
             }
         }
+
+        // Owner amendment 2026-10-16: no GM lock. /bgsetup stays a player command; writing a setting, relieving a unit,
+        // the text pages and the window are open to every player.
+        [Test]
+        public void BgsetupStaysAPlayerCommandForEveryForm()
+        {
+            CmdAttribute attribute = (CmdAttribute)Attribute.GetCustomAttribute(typeof(OpenBgSetupCommandHandler), typeof(CmdAttribute));
+            Assert.That(attribute.Level, Is.EqualTo((uint)ePrivLevel.Player));
+            Assert.That(attribute.Usage, Has.Some.Contains("OPEN BG window"));
+        }
+
+        [Test]
+        public void APlainPlayersWriteAndRelieveKeepTheirPaths()
+        {
+            Assert.That(OpenBgWindow.RouteBgsetup(new[] { "&bgsetup", "groups8", "2" }), Is.EqualTo(OpenBgSetupRoute.Write));
+            var parsed = Parse("groups8", "2");
+            Assert.That((parsed.ok, parsed.key, parsed.value), Is.EqualTo((true, "open_bg_groups8", "2")));
+            Assert.That(OpenBgWindow.RouteBgsetup(new[] { "&bgsetup", "relieve", "5" }), Is.EqualTo(OpenBgSetupRoute.Relieve));
+            Assert.That(OpenBgWindow.RouteBgsetup(new[] { "&bgsetup", "text" }), Is.EqualTo(OpenBgSetupRoute.Text));
+            Assert.That(OpenBgWindow.RouteBgsetup(new[] { "&bgsetup" }), Is.EqualTo(OpenBgSetupRoute.Open));
+        }
+
+        [Test]
+        public void UiIsNoKeyAndNeverReachesTheParser()
+        {
+            // "ui" would be an unknown key for the parser; the route takes it first whatever follows.
+            Assert.That(OpenBgSetupParser.Find("ui"), Is.Null);
+            foreach (string[] args in new[] { new[] { "&bgsetup", "ui" }, new[] { "&bgsetup", "ui", "0001" }, new[] { "&bgsetup", "ui", "0001", "zz" },
+                         new[] { "&bgsetup", "ui", "0001", "e0", "extra" } })
+                Assert.That(OpenBgWindow.RouteBgsetup(args), Is.EqualTo(OpenBgSetupRoute.Ui), string.Join(' ', args));
+            Assert.DoesNotThrow(() => OpenBgWindow.HandleClientControl(null, "0001", "zz"));
+        }
     }
 }

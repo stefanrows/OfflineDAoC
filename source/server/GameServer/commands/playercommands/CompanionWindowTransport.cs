@@ -91,20 +91,36 @@ namespace DOL.GS.Commands
         }
 
         /// <summary>
-        /// Sends the labels that changed (and records them as sent), then the view token when a click could now resolve
-        /// differently, then shows the window when asked.
+        /// The packets of one publish, in order: the labels that changed (recorded as sent; wire index
+        /// <paramref name="labelBase"/> + array index), then the view token, then show. Pure apart from updating
+        /// <paramref name="sent"/>. The defaults are the Custom8 window's (label base 0, token op 4, show op 2).
         /// </summary>
-        public static void Publish(GamePlayer player, string[] sent, string[] labels, bool sendToken, ushort revision, bool show)
+        public static IReadOnlyList<(byte Operation, int Index, string Text)> Plan(string[] sent, string[] labels, bool sendToken, ushort revision,
+            bool show, int labelBase = 0, byte tokenOp = OpToken, byte showOp = OpShow)
         {
+            var steps = new List<(byte Operation, int Index, string Text)>();
             foreach (int index in ChangedLabels(sent, labels))
             {
-                Send(player, OpLabel, index, labels[index]);
+                steps.Add((OpLabel, labelBase + index, labels[index]));
                 sent[index] = labels[index];
             }
             if (sendToken)
-                Send(player, OpToken, 0, FormatToken(revision));
+                steps.Add((tokenOp, 0, FormatToken(revision)));
             if (show)
-                Send(player, OpShow);
+                steps.Add((showOp, 0, string.Empty));
+            return steps;
+        }
+
+        /// <summary>
+        /// Sends the labels that changed (and records them as sent), then the view token when a click could now resolve
+        /// differently, then shows the window when asked. Existing Custom8 callers keep the defaults; the OPEN BG window
+        /// (Custom5) passes its label base 620 and its operations 12 (token) and 10 (show).
+        /// </summary>
+        public static void Publish(GamePlayer player, string[] sent, string[] labels, bool sendToken, ushort revision, bool show,
+            int labelBase = 0, byte tokenOp = OpToken, byte showOp = OpShow)
+        {
+            foreach ((byte operation, int index, string text) in Plan(sent, labels, sendToken, revision, show, labelBase, tokenOp, showOp))
+                Send(player, operation, index, text);
         }
 
         public static void Hide(GamePlayer player) => Send(player, OpHide);

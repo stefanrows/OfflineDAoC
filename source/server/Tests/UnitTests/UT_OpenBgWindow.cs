@@ -253,4 +253,164 @@ public sealed class UT_OpenBgWindow
         session.Navigate(new OpenBgWindowIntent(OpenBgWindowIntentKind.Tab, "Lage"));
         Assert.That(session.Offset, Is.EqualTo(3));
     }
+
+    // ---- Task 6: runtime decisions, routing, transport, client probe ---------------------------------------------
+
+    [TestCase(new[] { "&bgsetup" }, OpenBgSetupRoute.Open)]
+    [TestCase(new[] { "&bgsetup", "ui", "0001", "ff" }, OpenBgSetupRoute.Ui)]
+    [TestCase(new[] { "&bgsetup", "UI", "0001", "e0" }, OpenBgSetupRoute.Ui)]
+    [TestCase(new[] { "&bgsetup", "ui" }, OpenBgSetupRoute.Ui)]
+    [TestCase(new[] { "&bgsetup", "ui", "zz", "q", "x" }, OpenBgSetupRoute.Ui)]
+    [TestCase(new[] { "&bgsetup", "text" }, OpenBgSetupRoute.Text)]
+    [TestCase(new[] { "&bgsetup", "text", "3" }, OpenBgSetupRoute.Text)]
+    [TestCase(new[] { "&bgsetup", "2" }, OpenBgSetupRoute.Page)]
+    [TestCase(new[] { "&bgsetup", "help" }, OpenBgSetupRoute.Help)]
+    [TestCase(new[] { "&bgsetup", "relieve", "5" }, OpenBgSetupRoute.Relieve)]
+    [TestCase(new[] { "&bgsetup", "relieve" }, OpenBgSetupRoute.Relieve)]
+    [TestCase(new[] { "&bgsetup", "groups8", "2" }, OpenBgSetupRoute.Write)]
+    [TestCase(new[] { "&bgsetup", "presets", "std8:2,", "small:1" }, OpenBgSetupRoute.Write)]
+    [TestCase(new[] { "&bgsetup", "nonsense" }, OpenBgSetupRoute.Write)]
+    public void RouteBgsetup_SendsEachFormToItsPath(string[] args, OpenBgSetupRoute expected)
+    {
+        Assert.That(OpenBgWindow.RouteBgsetup(args), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void RouteBgsetup_EmptyOrNullArgsOpenTheWindow()
+    {
+        Assert.That(OpenBgWindow.RouteBgsetup(null), Is.EqualTo(OpenBgSetupRoute.Open));
+        Assert.That(OpenBgWindow.RouteBgsetup(Array.Empty<string>()), Is.EqualTo(OpenBgSetupRoute.Open));
+    }
+
+    [Test]
+    public void ClientProbe_MissingAfterThreeSecondsWithoutReady_ConfirmedByReady()
+    {
+        DateTime t0 = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
+        var probe = new OpenBgClientProbe();
+        Assert.That(probe.State, Is.EqualTo(OpenBgClientState.Unknown));
+        Assert.That(probe.UsesWindow, Is.True);
+        Assert.That(probe.Sent(t0), Is.True, "the first open waits for the ready control");
+        Assert.That(probe.State, Is.EqualTo(OpenBgClientState.Waiting));
+        Assert.That(probe.Expire(t0.AddMilliseconds(2999)), Is.False, "still inside the 3 s");
+        Assert.That(probe.Remaining(t0.AddMilliseconds(2000)), Is.EqualTo(TimeSpan.FromSeconds(1)));
+        Assert.That(probe.Expire(t0.AddSeconds(3)), Is.True, "no ready within 3 s");
+        Assert.That(probe.State, Is.EqualTo(OpenBgClientState.Missing));
+        Assert.That(probe.UsesWindow, Is.False, "later /bgsetup calls go to the text page");
+        Assert.That(probe.Expire(t0.AddSeconds(10)), Is.False, "the fallback fires once");
+        Assert.That(probe.Sent(t0.AddSeconds(20)), Is.False);
+
+        var patched = new OpenBgClientProbe();
+        patched.Sent(t0);
+        patched.Ready();
+        Assert.That(patched.State, Is.EqualTo(OpenBgClientState.Confirmed));
+        Assert.That(patched.Expire(t0.AddSeconds(5)), Is.False, "a ready client never falls back");
+        Assert.That(patched.Sent(t0.AddSeconds(6)), Is.False, "a confirmed client needs no new wait");
+        Assert.That(patched.UsesWindow, Is.True);
+
+        var reopened = new OpenBgClientProbe();
+        reopened.Sent(t0);
+        reopened.Sent(t0.AddSeconds(2));
+        Assert.That(reopened.Expire(t0.AddSeconds(3)), Is.False, "a second open restarts the wait");
+        Assert.That(reopened.Expire(t0.AddSeconds(5)), Is.True);
+        Assert.That(OpenBgWindow.ClientMissingHint, Is.EqualTo(
+            "This client has no OPEN BG window; update the client files (UPDATE OFFLINE DAOC.cmd / Install-CompanionManager.ps1)"));
+    }
+
+    [Test]
+    public void PlanClick_StaleRowTokenIsRejected_NavigationAndReadyAreNot()
+    {
+        var session = new OpenBgWindowSession();
+        DateTime now = DateTime.UtcNow;
+        session.Touch(now);
+        session.Page = OpenBgWindowPage.Steuern;
+        OpenBgWindowView view = session.Render(ThreeRealms(), Values());
+        int row = Array.FindIndex(view.Rows.ToArray(), item => item.Key == "k:groups8");
+        ushort token = session.Revision;
+        OpenBgWindowAction stale = OpenBgWindow.PlanClick(session, CompanionManagerProtocol.BgControlPlusBase + row, (ushort)(token + 1), now, Values());
+        Assert.That(stale.Kind, Is.EqualTo(OpenBgWindowActionKind.Stale));
+        Assert.That(stale.Message, Does.Contain("nothing was done"));
+        Assert.That(OpenBgWindow.PlanClick(session, CompanionManagerProtocol.BgReadyControl, 0, now, Values()).Kind, Is.EqualTo(OpenBgWindowActionKind.Ready));
+        Assert.That(OpenBgWindow.PlanClick(session, CompanionManagerProtocol.BgControlTabSituation, (ushort)(token + 1), now, Values()).Kind,
+            Is.EqualTo(OpenBgWindowActionKind.Navigate));
+        Assert.That(OpenBgWindow.PlanClick(session, CompanionManagerProtocol.BgControlClose, 0, now, Values()).Kind, Is.EqualTo(OpenBgWindowActionKind.Close));
+        Assert.That(OpenBgWindow.PlanClick(session, 0x80, token, now, Values()).Kind, Is.EqualTo(OpenBgWindowActionKind.Ignore));
+        OpenBgWindowAction write = OpenBgWindow.PlanClick(session, CompanionManagerProtocol.BgControlPlusBase + row, token, now, Values());
+        Assert.That((write.Kind, write.RowKey, write.Value), Is.EqualTo((OpenBgWindowActionKind.Write, "open_bg_groups8", "2")));
+    }
+
+    [Test]
+    public void PlanIntent_WritesAndRelievesForEveryPlayer_WithoutARightsCheck()
+    {
+        // Owner amendment 2026-10-16: no GM lock. The plan has no privilege input: any player's click writes or relieves.
+        OpenBgWindowAction write = OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "groups8", 1), Values());
+        Assert.That((write.Kind, write.RowKey, write.Value), Is.EqualTo((OpenBgWindowActionKind.Write, "open_bg_groups8", "2")));
+        Assert.That(write.Message, Does.Contain("1 -> 2"));
+        OpenBgWindowAction relieve = OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Relieve, Unit: 5), Values());
+        Assert.That((relieve.Kind, relieve.Unit), Is.EqualTo((OpenBgWindowActionKind.Relieve, 5)));
+        OpenBgWindowAction refused = OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "groups8", 1), Values() with { Groups8 = 4 });
+        Assert.That(refused.Kind, Is.EqualTo(OpenBgWindowActionKind.Refused));
+        Assert.That(refused.Message, Does.Contain("cannot go further"));
+        Assert.That(OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Scroll, Amount: 1), Values()).Kind, Is.EqualTo(OpenBgWindowActionKind.Navigate));
+        Assert.That(OpenBgWindow.PlanIntent(null, Values()).Kind, Is.EqualTo(OpenBgWindowActionKind.Ignore));
+        Assert.That(typeof(OpenBgWindow).GetMethod(nameof(OpenBgWindow.PlanIntent)).GetParameters().Select(p => p.ParameterType),
+            Is.EqualTo(new[] { typeof(OpenBgWindowIntent), typeof(OpenBgSetupValues) }), "no rights parameter");
+    }
+
+    [Test]
+    public void HandleClientControl_IgnoresNullPlayerAndBadArguments()
+    {
+        Assert.DoesNotThrow(() => OpenBgWindow.HandleClientControl(null, "zz", "q"));
+        Assert.DoesNotThrow(() => OpenBgWindow.HandleClientControl(null, null, null));
+        Assert.DoesNotThrow(() => OpenBgWindow.Open(null));
+        Assert.DoesNotThrow(() => OpenBgWindow.Close(null));
+    }
+
+    [Test]
+    public void Transport_DefaultsKeepTheCustom8Sequence_AndBgUsesItsOwnBaseAndOps()
+    {
+        var sent = new string[3] { "a", null, null };
+        var steps = CompanionWindowTransport.Plan(sent, new[] { "a", "b", "" }, true, 0x0012, true);
+        Assert.That(steps, Is.EqualTo(new[]
+        {
+            (CompanionManagerProtocol.OpLabel, 1, "b"), (CompanionManagerProtocol.OpLabel, 2, ""),
+            (CompanionManagerProtocol.OpToken, 0, "0012"), (CompanionManagerProtocol.OpShow, 0, ""),
+        }));
+        Assert.That(sent, Is.EqualTo(new[] { "a", "b", "" }), "sent labels are recorded");
+        Assert.That(CompanionWindowTransport.Plan(sent, new[] { "a", "b", "" }, false, 1, false), Is.Empty);
+        var bg = CompanionWindowTransport.Plan(new string[2], new[] { "x", "y" }, true, 0x0003, true,
+            CompanionManagerProtocol.BgLabelBase, CompanionManagerProtocol.OpBgToken, CompanionManagerProtocol.OpBgShow);
+        Assert.That(bg, Is.EqualTo(new[]
+        {
+            (CompanionManagerProtocol.OpLabel, 620, "x"), (CompanionManagerProtocol.OpLabel, 621, "y"),
+            (CompanionManagerProtocol.OpBgToken, 0, "0003"), (CompanionManagerProtocol.OpBgShow, 0, ""),
+        }));
+        var publish = typeof(CompanionWindowTransport).GetMethod(nameof(CompanionWindowTransport.Publish)).GetParameters();
+        Assert.That(publish.Single(p => p.Name == "labelBase").DefaultValue, Is.EqualTo(0));
+        Assert.That(publish.Single(p => p.Name == "tokenOp").DefaultValue, Is.EqualTo(CompanionManagerProtocol.OpToken));
+        Assert.That(publish.Single(p => p.Name == "showOp").DefaultValue, Is.EqualTo(CompanionManagerProtocol.OpShow));
+    }
+
+    [Test]
+    public void OnlyChangedLabelsAreSent()
+    {
+        var sent = new string[3] { "a", "b", null };
+        Assert.That(CompanionWindowTransport.ChangedLabels(sent, new[] { "a", "x", string.Empty }), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(CompanionWindowTransport.ChangedLabels(new[] { "a" }, new[] { "a" }), Is.Empty);
+    }
+
+    [Test]
+    public void TheWindowRefreshesOnlyWhileOpenPlayedAndUsed()
+    {
+        DateTime now = new(2026, 10, 16, 15, 0, 0, DateTimeKind.Utc);
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBgWindow.KeepsRefreshing(true, true, now.AddMinutes(-29), now), Is.True);
+            Assert.That(OpenBgWindow.KeepsRefreshing(true, true, now.AddMinutes(-31), now), Is.False, "idle half an hour counts as closed");
+            Assert.That(OpenBgWindow.KeepsRefreshing(false, true, now, now), Is.False, "closed");
+            Assert.That(OpenBgWindow.KeepsRefreshing(true, false, now, now), Is.False, "logged out");
+            Assert.That(OpenBgWindow.IsOpen(true, now.AddMinutes(-31), now), Is.False, "the stock close X does not tell the server");
+            Assert.That(OpenBgWindow.IsOpen(true, now.AddMinutes(-1), now), Is.True);
+            Assert.That(OpenBgWindow.RefreshWallMilliseconds, Is.EqualTo(15_000));
+        });
+    }
 }

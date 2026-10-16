@@ -10,16 +10,16 @@ using DOL.Logging;
 namespace DOL.GS.Commands
 {
     /// <summary>
-    /// /bgsetup (every player, owner decision 2026-10-11 14:50; alias /openbg): the open BG's manager window, the same
-    /// Custom8 window as the Companion Manager (<see cref="OpenBgManager"/>), with the live crew, the per-realm units and
-    /// the setup (spec 2026-10-11 §7). /bgsetup text [page] keeps the earlier text pages for a client without that
-    /// window; /bgsetup &lt;key&gt; &lt;value&gt; writes the open_bg_* server property row and refreshes the properties like
+    /// /bgsetup (every player, owner decision 2026-10-11 14:50, kept without a GM lock 2026-10-16; alias /openbg): the
+    /// OPEN BG window (Custom5, <see cref="OpenBgWindow"/>) with the pages Lage (live crew, raid, field) and Steuern (setup,
+    /// units, reliefs); its clicks arrive as /bgsetup ui &lt;token&gt; &lt;control&gt;. /bgsetup text [page] keeps the text
+    /// pages, also the fallback for a client without that window; /bgsetup &lt;key&gt; &lt;value&gt; writes the open_bg_* server property row and refreshes the properties like
     /// /serverproperties refresh; /bgsetup relieve &lt;unit&gt; relieves a unit by hand. The roster and the director read
     /// a new value on their next tick.
     /// </summary>
     [CmdAttribute("&bgsetup", new[] { "&openbg" }, ePrivLevel.Player,
         "Open BG (Thidranki 252) manager: live crew, units per realm and setup",
-        "/bgsetup - opens the open BG window: live crew per realm, + and - units per realm, setup",
+        "/bgsetup - opens the OPEN BG window (every player): page Lage (live crew, raid, field) and page Steuern (setup, + and - steps, units, relieve)",
         "/bgsetup text [page] - the same as text pages (page 1 live, page 2 setup, 3+ more crew)",
         "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, band_min 1-50, band_max 1-50, drift on|off",
         "/bgsetup mode serverpvp|perrealm - the friend rule: Server PvP (Camlann rule, mixed crews) or Per realm (same realm is a friend in region 252)",
@@ -33,12 +33,23 @@ namespace DOL.GS.Commands
         {
             GamePlayer player = client?.Player;
             if (player == null) return;
-            if (args.Length == 1)
+            // No rights check on any form: every player may open, read, write and relieve (owner amendment 2026-10-16).
+            OpenBgSetupRoute route = OpenBgWindow.RouteBgsetup(args);
+            if (route == OpenBgSetupRoute.Open)
             {
-                OpenBgManager.Open(player);
+                OpenBgWindow.Open(player);
                 return;
             }
-            if (args[1].Equals("text", StringComparison.OrdinalIgnoreCase))
+            // The window's click; "ui" is no key, so it is taken before the parser.
+            if (route == OpenBgSetupRoute.Ui)
+            {
+                if (args.Length == 4)
+                    OpenBgWindow.HandleClientControl(player, args[2], args[3]);
+                else
+                    DisplayMessage(client, "/bgsetup ui is the OPEN BG window's click; use /bgsetup to open the window or /bgsetup text for the text pages.");
+                return;
+            }
+            if (route == OpenBgSetupRoute.Text)
             {
                 int textPage = args.Length > 2 && int.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) ? number : 1;
                 ShowPage(client, textPage);
@@ -47,17 +58,17 @@ namespace DOL.GS.Commands
                         DisplayMessage(client, line);
                 return;
             }
-            if (args.Length == 2 && int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int page))
+            if (route == OpenBgSetupRoute.Page)
             {
-                ShowPage(client, page);
+                ShowPage(client, int.Parse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture));
                 return;
             }
-            if (args.Length == 2 && args[1].Equals("help", StringComparison.OrdinalIgnoreCase))
+            if (route == OpenBgSetupRoute.Help)
             {
                 DisplaySyntax(client);
                 return;
             }
-            if (args[1].Equals("relieve", StringComparison.OrdinalIgnoreCase))
+            if (route == OpenBgSetupRoute.Relieve)
             {
                 if (args.Length != 3 || !int.TryParse(args[2].TrimStart('#'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int unit))
                 {
@@ -66,7 +77,7 @@ namespace DOL.GS.Commands
                 }
                 OpenBgSetupStore.Relieve(unit, player.Name, out string relieveMessage);
                 DisplayMessage(client, relieveMessage);
-                OpenBgManager.RefreshIfOpen(player, relieveMessage);
+                OpenBgWindow.RefreshIfOpen(player, relieveMessage);
                 return;
             }
 
@@ -90,11 +101,11 @@ namespace DOL.GS.Commands
                 if (note.Length > 0) message += " " + note;
             }
             DisplayMessage(client, message);
-            if (!OpenBgManager.RefreshIfOpen(player, message))
+            if (!OpenBgWindow.RefreshIfOpen(player, message))
                 ShowPage(client, 2);
         }
 
-        private static void ShowPage(GameClient client, int page)
+        internal static void ShowPage(GameClient client, int page)
         {
             IReadOnlyList<IReadOnlyList<string>> pages = OpenBgSetupPages.Pages(OpenBattlegroundStatus.Capture(), OpenBgSetupValues.Current());
             page = Math.Clamp(page, 1, pages.Count);
