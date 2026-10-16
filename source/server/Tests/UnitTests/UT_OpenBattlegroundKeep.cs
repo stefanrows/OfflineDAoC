@@ -139,5 +139,26 @@ namespace DOL.GS.Tests
             Assert.That(native, Is.EqualTo(new[] { 12, 13, 14 }));
             Assert.That(BattlegroundKeepLayouts.PortalSites.Any(site => site.Region == 252), Is.False, "a native portal keep is never server-built");
         }
+
+        [Test]
+        public void OpenBgKeepGuardsAreBuiltFromFrontierBaseLevel()
+        {
+            BattlegroundDefinition open = BattlegroundCampaignCatalog.Find(252);
+            BattlegroundDefinition bracket = BattlegroundCampaignCatalog.Find(238);
+            byte savedBase = SavedThidrankiRow().BaseLevel;
+            double multiplier = 1.6;
+            byte openBase = AbstractGameKeep.GuardKeepBaseLevel(savedBase, open.Kind);
+            Assert.Multiple(() =>
+            {
+                Assert.That(open.Kind, Is.EqualTo(BattlegroundDefinitionKind.Open));
+                Assert.That(openBase, Is.EqualTo(50), "guards use the frontier base level");
+                Assert.That(AbstractGameKeep.GuardKeepBaseLevel(savedBase, bracket.Kind), Is.EqualTo(savedBase), "a bracket keep is unchanged");
+                Assert.That(AbstractGameKeep.GuardKeepBaseLevel(savedBase, null), Is.EqualTo(savedBase), "a frontier keep is unchanged");
+                // A GameKeep guard is base + 1, the lord base + (base / 10 + 1) * 2, at keep level 1 with the 1.6 multiplier.
+                Assert.That(AbstractGameKeep.GuardLevelFor((byte)(openBase + 1), 1, multiplier), Is.EqualTo(52));
+                Assert.That(AbstractGameKeep.GuardLevelFor((byte)(openBase + (openBase / 10 + 1) * 2), 1, multiplier), Is.EqualTo(63));
+                Assert.That(AbstractGameKeep.GuardLevelFor((byte)(savedBase + 1), 1, multiplier), Is.EqualTo(28), "the saved base level gave the gray guards");
+            });
+        }
     }
 }

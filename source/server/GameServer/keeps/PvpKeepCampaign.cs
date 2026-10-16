@@ -128,6 +128,29 @@ namespace DOL.GS.Keeps
             LogSlowKeepStep(keep, "defeat_lord", "steward", mark);
         }
 
+        /// <summary>A claimed campaign keep stands whole: every gate and wall is healed and the gates are closed and
+        /// announced. The lord's death never goes through AbstractGameKeep.Reset, which is the only other place that
+        /// does this, so a raided keep would otherwise keep its broken gates until the slow 30 minute repair ticks.</summary>
+        public static void RestoreDefences(AbstractGameKeep keep)
+        {
+            int components = 0;
+            foreach (GameKeepComponent component in keep.KeepComponents)
+            {
+                if (component.IsRaized) continue;
+                component.Repair(component.MaxHealth - component.Health);
+                components++;
+            }
+            int doors = 0;
+            foreach (GameKeepDoor door in keep.Doors.Values)
+            {
+                door.Reset(keep.Realm);
+                doors++;
+            }
+            foreach (GamePlayer player in ClientService.Instance.GetPlayersOfRegion(keep.CurrentRegion))
+                player.Out.SendKeepComponentUpdate(keep, false);
+            log.Info($"KEEP_DEFENCES_RESTORED keep={keep.KeepID} name={keep.Name} doors={doors} components={components}");
+        }
+
         public static void CompleteClaim(AbstractGameKeep keep, GameLiving claimer)
         {
             keep.DBKeep.LordDefeated = false;
@@ -140,6 +163,7 @@ namespace DOL.GS.Keeps
                 lord.Health = lord.MaxHealth;
                 if (lord.ObjectState != GameObject.eObjectState.Active) lord.AddToWorld();
             }
+            RestoreDefences(keep);
             // Campaign objectives own bracket-scaled capture rewards.
             if (BattlegroundCampaignCatalog.Find((ushort)keep.Region) != null) return;
             bool rewardReady = WorldSimulationClock.UtcNow - keep.DBKeep.LastCaptureRewardAt >= TimeSpan.FromMinutes(30);

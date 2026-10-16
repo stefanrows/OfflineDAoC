@@ -148,6 +148,54 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+166. **Open BG keep: every guard and the lord con gray to level 50, and the
+     gates stay broken and open after a claim.** Owner report 2026-10-17 after
+     a raid on Thidranki Faste (keep 11, region 252). (a) The adopted keep row
+     keeps its old 20-24 bracket base level 26, and nothing in the open BG
+     lifts it, so at keep level 1 the guards were level 28 and the lord 33. (b)
+     A campaign keep's lord death goes through `PvpKeepCampaign.DefeatLord`
+     and the claim through `CompleteClaim`; neither calls
+     `AbstractGameKeep.Reset`, the only code that heals walls and runs
+     `GameKeepDoor.Reset`, so a broken gate stayed open at 0 HP until the
+     30-minute repair ticks lifted it above 15 % (about 2 hours without
+     combat). This applies to every campaign keep (open BG, Camlann
+     battlegrounds, frontier keeps). Fixed in 0.287.0: the guards of an open
+     BG keep are built from base level 50 (guards 52, lord 63; the saved base
+     level stays for gate and wall HP, claim checks and rewards;
+     `AbstractGameKeep.GuardKeepBaseLevel`), and `PvpKeepCampaign.RestoreDefences`
+     (new, in `CompleteClaim`) repairs every standing component and resets and
+     closes every gate, logging `KEEP_DEFENCES_RESTORED`. Offline: new
+     `UT_OpenBattlegroundKeep` test for the guard levels; the restore itself
+     needs a live keep. Verification pending: guards con red or orange and the
+     lord purple at level 50, and after a claim every gate is whole and closed.
+
+165. **Sorcerer and Cabalist companions run out of power within a few
+     fights.** Owner report 2026-10-16 (Nerisse, Sorcerer, and Merrow,
+     Cabalist, both level 46). Max power, the cost formula and regeneration
+     match a real player's; the drain was wasted casts. (a) The Cabalist's
+     Puncture to Lance Spirit are radius `DamageOverTime` spells, so
+     `CompanionRangedAoePolicy.IsRangedDamageSpell` counts them as ranged area
+     damage, and all three area paths in `BotBrain` (candidate filter,
+     `CanCastOffensiveSpell`, `CheckOffensiveSpells`) skipped the "already on
+     the target" check: on every pull of 3+ mobs (the default) the same 24 s
+     DoT was recast about every 3 s at the top rank, roughly 15-19 power per
+     second against under 1 per second of combat regeneration. (b) A
+     Sorcerer's charm (Power -25, about 30 % of the base pool without a focus
+     staff) was not covered by the 10 % pet-summon rule, so each recharm after
+     a pet death or a zone change was expensive. (c) The Cabalist healed its
+     pet up to 92 % out of combat with full-price heals, and that upkeep runs
+     before the companion may sit down to rest. Fixed in 0.286.0: a ranged area
+     DoT/debuff is cast once per mob (`RangedAoeAlreadyApplied`; instant area
+     nukes still repeat), a companion's charm costs 10 % (players keep the
+     native cost; owner rule 2026-10-16), and out-of-combat pet heals start
+     below 50 % (65 % in combat, unchanged). Damage spell costs stay native.
+     Not changed: the Cabalist pet speed buffs recast after each fight, and
+     there is still no power-conservation threshold for long fights. Offline:
+     two unit tests in `UT_BotSpellPower`. Verification pending: on a 3+ mob
+     pull the Cabalist should cast its area DoT once and then switch spells,
+     a Sorcerer recharm should cost about 3 % of the pool, and both should sit
+     down to rest after the fight (`CABALIST_REST` lines in the server log).
+
 164. **A friend's companions show no stance in the COMPANIONS window.** Owner
      report 2026-10-17 with a screenshot (two players grouped, each with
      companions): the friend's companion rows had health, power, name, class and

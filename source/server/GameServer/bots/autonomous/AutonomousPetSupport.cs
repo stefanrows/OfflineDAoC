@@ -482,7 +482,7 @@ public static class AutonomousPetSupport
                 }
             }
 
-            int healBelow = combatTarget == null ? 92 : 65;
+            int healBelow = combatTarget == null ? 50 : 65;
             if (petActionReady && pet.HealthPercent < healBelow)
             {
                 (Spell Spell, SpellLine Line) heal = spells

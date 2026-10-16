@@ -668,6 +668,10 @@ Agent sessions on items 45–48: take the role and context from
      incl. the Isles skin); install with `Install-CompanionManager.ps1`
      (upgrades 0.282.0 in place). Preview without the client:
      `docs/open-bg-redesign/README.md`.
+     0.287.0 (2026-10-17, offline checks only): keep 11's guards and lord are
+     level 52 and 63 (were 28 and 33, gray to level 50) and every campaign
+     keep claim heals and closes the gates (BUGS 166). Real-client check
+     pending; if bot raids stop taking the keep, tune the guard level.
      0.245.0 (deployed 11:04, 20×, ~7× achieved, 11:05–11:31): raids form
      at the push and top up (5–6 units, 13–22 bots, all three realms mixed),
      keep 11 claimed 8 times (4 of them within 19 s by partner guilds of one

@@ -89,6 +89,10 @@ namespace DOL.GS
             }
 
             cost = ApplyBuffAndPetSummonCostReduction(spell, cost);
+            // Owner rule 2026-10-16: a companion's charm is a pet summon too, so
+            // Sorcerer recharms cost 10%. Players keep the native charm cost.
+            if (spell.SpellType == eSpellType.Charm)
+                cost *= BuffAndPetSummonManaCostMultiplier;
             return Math.Max(0, (int)cost);
         }
     }

@@ -12,6 +12,54 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.287.0] - 2026-10-17
+
+### Changed
+
+- **The open BG keep's guards are built like a frontier keep's.** Thidranki
+  Faste kept its old 20-24 bracket base level, so its guards were level 28 and
+  its lord 33 and all of them con gray to a level-50 player. Its guards and
+  lord are now level 52 and 63 (base level 50, as the Frontier Wardens keep).
+  Gate and wall HP, claim checks and rewards still use the keep's own base
+  level.
+
+### Fixed
+
+- **Claiming a keep in the battlegrounds or the frontier restores its gates.**
+  A lord's death and the claim never went through the keep reset, so a raided
+  keep kept its broken, open gates for about two hours. The claim now heals
+  every standing wall and gate and closes the gates at once (log line
+  `KEEP_DEFENCES_RESTORED`). Applies to every campaign keep: the open BG, the
+  Camlann battlegrounds and the frontier keeps.
+- Offline checks: new `UT_OpenBattlegroundKeep` test for the guard levels (the
+  keep, claim-lock, save-batch and level-progression tests pass, 39 in all).
+  The gate restore needs a live keep. Real-client check pending (BUGS 166).
+
+## [0.286.0] - 2026-10-17
+
+### Changed
+
+- **A companion's charm costs 10 % of its power.** A Sorcerer's recharm (after
+  its pet dies or a zone change) cost about 30 % of the base pool. It now
+  follows the same 10 % rule as pet summons and buffs. Players keep the native
+  charm cost; damage spells stay native.
+- **Companions heal a pet out of combat only below 50 %** (was 92 %), so a
+  Cabalist or other pet caster sits down to rest instead of spending power on
+  full-price heals first. The in-combat threshold stays 65 %.
+
+### Fixed
+
+- **Cabalist companions no longer recast their area damage-over-time on mobs
+  that already have it.** Puncture to Lance Spirit counted as ranged area
+  damage, which skipped the "already applied" check, so on every pull of three
+  or more mobs the same 24 s DoT was recast about every 3 s at the top rank
+  and the Cabalist was out of power in a few fights. A ranged area DoT or
+  debuff is now cast once per mob; instant area nukes still repeat.
+- Offline checks: two new `UT_BotSpellPower` tests (area DoT guard, charm
+  cost for companions versus players) and the 105 tests of the bot power,
+  ranged-area, Cabalist and pet-support filters pass. Real-client check
+  pending (BUGS 165).
+
 ## [0.285.0] - 2026-10-17
 
 ### Changed

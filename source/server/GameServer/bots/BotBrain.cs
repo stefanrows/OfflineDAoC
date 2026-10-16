@@ -3688,6 +3688,12 @@ namespace DOL.AI.Brain
             spell != null && (spell.Duration == 0 || !LivingHasEffect(target, spell) ||
                 spell.SpellType is eSpellType.DirectDamageWithDebuff or eSpellType.DamageSpeedDecrease);
 
+        // A ranged area DoT/debuff is applied once per mob. Only instant area
+        // damage may repeat; recasting a live DoT burned the Cabalist's power.
+        private bool RangedAoeAlreadyApplied(GameLiving target, Spell spell) =>
+            CompanionRangedAoePolicy.IsRangedDamageSpell(spell) && spell.Duration > 0 &&
+            target != null && !NeedsOffensiveSpellApplication(target, spell);
+
         private int OffensiveApproachRange(GameLiving target)
         {
             int bombRange = CompanionBombApproachRange(target);
@@ -4427,6 +4433,7 @@ namespace DOL.AI.Brain
                             !(CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
                               CompanionRangedAoePolicy.IsRangedDamageSpell(spell)) &&
                             !NeedsOffensiveSpellApplication((GameLiving)Body.TargetObject, spell) ||
+                        RangedAoeAlreadyApplied(Body.TargetObject as GameLiving, spell) ||
                         !DebuffBudgetAllows(spell) ||
                         CompanionAddControl.BreaksProtectedMezz(BotBody, spell, Body, Body.TargetObject as GameLiving));
                     if (spellsToCast.Count == 0) return Body.IsCasting;
@@ -4740,7 +4747,8 @@ namespace DOL.AI.Brain
 
             if (CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
                 CompanionRangedAoePolicy.IsRangedDamageSpell(spell))
-                return CompanionRangedAoePolicy.CanCast(BotBody, target, spell);
+                return !RangedAoeAlreadyApplied(target, spell) &&
+                    CompanionRangedAoePolicy.CanCast(BotBody, target, spell);
 
             if (BotBody.HasSelectedAutomaticCompanionPlan &&
                 BotCasterPriority.IsDurationDamageOrDebuff(spell) && LivingHasEffect(target, spell))
@@ -4804,7 +4812,8 @@ namespace DOL.AI.Brain
             {
                 if (CompanionBombingPolicy.IsPlayerLedCompanion(BotBody) &&
                     CompanionRangedAoePolicy.IsRangedDamageSpell(spell))
-                    casted = CompanionRangedAoePolicy.CanCast(BotBody, living, spell) &&
+                    casted = !RangedAoeAlreadyApplied(living, spell) &&
+                        CompanionRangedAoePolicy.CanCast(BotBody, living, spell) &&
                         CastRangedAoeSpell(spell, living);
                 else
                     casted = Body.CastSpell(spell, m_mobSpellLine);

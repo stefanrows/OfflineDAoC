@@ -943,19 +943,30 @@ namespace DOL.GS.Keeps
 					return 65;
 			}
 
+			AbstractGameKeep keep = guard.Component.Keep;
+			byte keepBase = GuardKeepBaseLevel(keep.BaseLevel, BattlegroundCampaignCatalog.Find((ushort)keep.Region)?.Kind);
+
 			if (guard is GuardLord)
 			{
-				if (guard.Component.Keep is GameKeep)
-					return (byte)(guard.Component.Keep.BaseLevel + ((guard.Component.Keep.BaseLevel / 10) + 1) * 2);
+				if (keep is GameKeep)
+					return (byte)(keepBase + ((keepBase / 10) + 1) * 2);
 				else
-					return (byte)(guard.Component.Keep.BaseLevel + 2); // flat increase for tower captains
+					return (byte)(keepBase + 2); // flat increase for tower captains
 			}
 
-			if (guard.Component.Keep is GameKeep)
-				return (byte)(guard.Component.Keep.BaseLevel + 1);
+			if (keep is GameKeep)
+				return (byte)(keepBase + 1);
 
-			return guard.Component.Keep.BaseLevel;
+			return keepBase;
 		}
+
+
+		/// <summary>The open BG keep keeps its saved 20-24 bracket base level for doors, walls and rewards, but its
+		/// guards are built from a frontier keep's base level 50 so they are not gray to a level-50 player.</summary>
+		public const byte OpenBattlegroundGuardBaseLevel = 50;
+
+		public static byte GuardKeepBaseLevel(byte keepBaseLevel, BattlegroundDefinitionKind? kind) =>
+			kind == BattlegroundDefinitionKind.Open ? OpenBattlegroundGuardBaseLevel : keepBaseLevel;
 
 
 		/// <summary>Guard level: base level plus keep level times the guard level multiplier

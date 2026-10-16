@@ -606,6 +606,45 @@ namespace DOL.UnitTests
                 Assert.That(needs.Invoke(bot.Brain, new object[] { bot, S(2, 3) }), Is.EqualTo(true));
         }
 
+        [Test] public void RangedAreaDotIsNotRecastWhileItIsOnTheTarget_InstantAreaNukesStillRepeat()
+        {
+            Bot bot = MakeBot(typeof(ClassCabalist), 46);
+            Spell areaDot = new(new DbSpell { SpellID = 99985, Name = "Area DoT", Type = "DamageOverTime",
+                Target = "Enemy", Duration = 24, Damage = 10, Power = 2, CastTime = 3, Range = 1500, Radius = 350 }, 1);
+            Spell areaNuke = new(new DbSpell { SpellID = 99986, Name = "Area nuke", Type = "DirectDamage",
+                Target = "Enemy", Damage = 10, Power = 2, CastTime = 3, Range = 1500, Radius = 350 }, 1);
+            Assert.That(CompanionRangedAoePolicy.IsRangedDamageSpell(areaDot), Is.True);
+            Assert.That(CompanionRangedAoePolicy.IsRangedDamageSpell(areaNuke), Is.True);
+            var already = typeof(BotBrain).GetMethod("RangedAoeAlreadyApplied", Hidden);
+            object[] dotArgs = { bot, areaDot };
+
+            Assert.That(already.Invoke(bot.Brain, dotArgs), Is.EqualTo(false), "first application is allowed");
+
+            var effect = new ECSGameSpellEffect(new(bot, 24000, 1,
+                new SpellHandler(bot, areaDot, new SpellLine("test", "test", "", true))));
+            var effects = (Dictionary<eEffect, List<ECSGameEffect>>)typeof(EffectListComponent)
+                .GetField("_effects", Hidden).GetValue(bot.effectListComponent);
+            effects[EffectHelper.GetEffectFromSpell(areaDot)] = new() { effect };
+
+            Assert.That(already.Invoke(bot.Brain, dotArgs), Is.EqualTo(true), "live DoT is not recast");
+            Assert.That(already.Invoke(bot.Brain, new object[] { bot, areaNuke }), Is.EqualTo(false));
+        }
+
+        [Test] public void CharmCostsTenPercentForCompanionsButNativeForPlayers()
+        {
+            Bot bot = MakeBot(typeof(ClassSorcerer), 46);
+            Player player = Actor<Player>(); player.Class = bot.Class; player.Level = 46;
+            var line = new SpellLine("test", "test", "", true);
+            Spell charm = S(-25, 3, 46, "Charm");
+            Spell nativeEquivalent = S(-25, 3, 46);
+
+            int nativeBot = BotSpellPower.Cost(bot, nativeEquivalent, null);
+            Assert.That(nativeBot, Is.GreaterThan(10));
+            Assert.That(BotSpellPower.Cost(bot, charm, null), Is.EqualTo((int)(nativeBot * 0.1)).Within(1));
+            Assert.That(new SpellHandler(player, charm, line).PowerCost(player),
+                Is.EqualTo(new SpellHandler(player, nativeEquivalent, line).PowerCost(player)));
+        }
+
         [TestCase(typeof(ClassSkald))] [TestCase(typeof(ClassBard))] [TestCase(typeof(ClassMinstrel))]
         public void AllGenericDefensivePathsLeaveSongRotationToItsScheduler(Type cls)
         {
