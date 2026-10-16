@@ -16,6 +16,7 @@ package, not this fork's version.
 
 ### Added
 
+- The OPEN BG window and its client stage have only run in the offline emulation so far; the real-client check is pending (see docs/COMPANION_MANAGER_INTEGRATION.md).
 - **The OPEN BG window.** `/bgsetup` (alias `/openbg`) opens its own client
   window next to the Companion Manager, with the pages Lage (phase, raid, keep
   11 owner, world speed, field figures, players, every crew bot by realm and

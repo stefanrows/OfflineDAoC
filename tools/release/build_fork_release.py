@@ -16,7 +16,7 @@ UPSTREAM_GAME_DLL = '67dcf68a37b95a93946a943b99d5e19b4a03e08cd6469275e25c7b909de
 # The Companion Manager client stage packaged by default, and the COMPANIONS window files (custom7_window.xml)
 # and companion paperdoll probe windows (custom6_window.xml) of earlier builds that the update pack may replace.
 # The OPEN BG window (custom5_window.xml) is new in this stage, so it may only be added.
-COMPANION_STAGE = 'companion-manager-stage-0.282.0'
+COMPANION_STAGE = 'stage-companion-manager-0.282.0'
 KNOWN_BAR_WINDOWS = ['7920bcd32909a0e6b5ad2e625902f9f8807fe04ea4370f2ace2b301a8ee59aba']  # 0.251.0
 KNOWN_GEAR_WINDOWS = ['60d41e0817463f6a17a1e2a053e960ae4d8f4f4b75b4aaf5e3f740d3dd626cd5',  # 0.273.0 probe
                       '9a47faa82bd3daaec0c99d26cbd6db12170a01f14af0805c3a384d295e1755ee']  # 0.275.0 probe
