@@ -40,8 +40,8 @@ namespace DOL.GS.Commands
         public OpenBgWindowPage Page { get; init; }
         public string Status { get; init; } = string.Empty;
         public string PageIndicator { get; init; } = string.Empty;
-        public string[] Header { get; init; } = new string[BgHeaderLabels];
-        public string[] Reply { get; init; } = new string[BgReplyLines];
+        public string[] Header { get; init; } = new string[OpenBgWindowScreen.HeaderLines];
+        public string[] Reply { get; init; } = new string[OpenBgWindowScreen.ReplyLines];
         public IReadOnlyList<OpenBgWindowRow> Rows { get; init; } = Array.Empty<OpenBgWindowRow>();
         public int TotalRows { get; init; }
         /// <summary>The offset after clamping.</summary>
@@ -59,10 +59,10 @@ namespace DOL.GS.Commands
             labels[3] = lage ? "Steuern" : string.Empty;
             labels[4] = lage ? string.Empty : "Steuern";
             labels[BgLabelPage - BgLabelBase] = PageIndicator;
-            for (int line = 0; line < BgHeaderLabels; line++)
-                labels[BgLabelHeaderBase - BgLabelBase + line] = Header[line] ?? string.Empty;
-            for (int line = 0; line < BgReplyLines; line++)
-                labels[BgLabelReplyBase - BgLabelBase + line] = Reply[line] ?? string.Empty;
+            // Interim mapping onto the 0.283.0 Kriegstafel labels until the screen is rebuilt for them (redesign Task 3):
+            // the first header line goes to the phase line, the reply to the reply line.
+            labels[BgLabelPhase - BgLabelBase] = Header.Length > 0 ? Header[0] ?? string.Empty : string.Empty;
+            labels[BgLabelReply - BgLabelBase] = Reply.Length > 0 ? Reply[0] ?? string.Empty : string.Empty;
             for (int index = 0; index < Rows.Count && index < BgRowCount; index++)
             {
                 OpenBgWindowRow row = Rows[index];
@@ -103,6 +103,8 @@ namespace DOL.GS.Commands
             (740, 120), (740, 120), (140, 32), (140, 32), (140, 32), (140, 32), (26, 6), (104, 32), (100, 24), (150, 40), (150, 40),
             (110, 32), (36, 6), (36, 6), (36, 6), (36, 6),
         };
+        // Header and reply line counts of the 0.282.0 screen; the 0.283.0 window has one phase and one reply line.
+        internal const int HeaderLines = 5, ReplyLines = 1;
         private const int StatusWidth = 630, StatusCharacters = 120, LineWidth = 740, LineCharacters = 120, PageWidth = 130, PageCharacters = 24;
         private static readonly eRealm[] RealmOrder = { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia };
         private static readonly OpenBgUnitKind[] Kinds = { OpenBgUnitKind.Group8, OpenBgUnitKind.Small, OpenBgUnitKind.Solo };
@@ -122,7 +124,7 @@ namespace DOL.GS.Commands
             OpenBgWindowRow[] visible = rows.Skip(clamped).Take(BgRowCount).Select(Clipped).ToArray();
             string[] header = (page == OpenBgWindowPage.Lage ? LageHeader(status, values) : SteuernHeader(values))
                 .Select(line => Clip(line, LineWidth, LineCharacters)).ToArray();
-            string[] replies = Wrap(reply ?? string.Empty, BgReplyLines);
+            string[] replies = Wrap(reply ?? string.Empty, ReplyLines);
             return new OpenBgWindowView
             {
                 Page = page,
@@ -190,7 +192,7 @@ namespace DOL.GS.Commands
 
         private static string[] LageHeader(OpenBgStatusSnapshot status, OpenBgSetupValues values)
         {
-            string[] lines = new string[BgHeaderLabels];
+            string[] lines = new string[HeaderLines];
             if (status == null)
             {
                 lines[0] = "No open BG state yet.";

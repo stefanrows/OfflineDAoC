@@ -189,8 +189,10 @@ namespace DOL.GS
         public const int GearWidthTitle = 478;
         public const int GearWidthMessage = 304;
         public const int GearWidthCaption = 56;
-        // OPEN BG window (Custom5, spec 2026-10-16-open-bg-window-client-design.md): operations 10-12, label adapters
-        // 620-984, click events 0xA00 + control. A client without this stage ignores operations 10-12 and those labels.
+        // OPEN BG window (Custom5, spec 2026-10-16-open-bg-window-client-design.md; 0.283.0 "Kriegstafel" layout from
+        // 2026-10-16-open-bg-window-redesign-analysis.md concept A): operations 10-12, label adapters 620-984 (357 used),
+        // click events 0xA00 + control. A client without this stage ignores operations 10-12 and those labels. The label
+        // and slot table is documented in open_bg_window() / open_bg_row_slots() of build_companion_manager_client.py.
         public const int BgWindow = 0x72;
         public const byte OpBgShow = 10;
         public const byte OpBgHide = 11;
@@ -199,26 +201,61 @@ namespace DOL.GS
         public const int BgReadyControl = 0xFF;
         public const string BgCommandPrefix = "&bgsetup ui ";
         public const int BgLabelBase = 620;
-        public const int BgRowCount = 22;
-        public const int BgRowStride = 16;
-        public const int BgHeaderLabels = 5;
+        public const int BgRowCount = 18;
+        public const int BgRowStride = 18;
         public const int BgLabelStatus = 620;
         public const int BgLabelTabBase = 621;
         public const int BgLabelPage = 625;
-        public const int BgLabelHeaderBase = 626;
-        public const int BgLabelReplyBase = 631;
-        public const int BgReplyLines = 2;
+        public const int BgLabelBanner = 626;
+        public const int BgLabelPhase = 627;
+        public const int BgLabelHint = 628;
+        public const int BgLabelReply = 629;
+        public const int BgLabelOpenAll = 630;
+        public const int BgLabelFoldAll = 631;
         public const int BgLabelRowBase = 633;
+        public const int BgLabelRowEnd = 957;
+        public const int BgLabelHeadBase = 957;
+        public const int BgHeadLabels = 6;
+        public const int BgLabelRealmBase = 963;
+        public const int BgRealmStride = 5;
+        public const int BgLabelUsedEnd = 978;
         public const int BgLabelEnd = 985;
+        // Row slots (0-17) and realm band offsets (0-4).
+        public const int BgSlotMark = 0;
+        public const int BgSlotTitle = 1;
+        public const int BgSlotText = 2;
+        public const int BgSlotNameBase = 3;
+        public const int BgSlotLevel = 6;
+        public const int BgSlotClass = 7;
+        public const int BgSlotAsh = 8;
+        public const int BgSlotStateField = 9;
+        public const int BgSlotStateBlood = 10;
+        public const int BgSlotStateAsh = 11;
+        public const int BgSlotBarDim = 12;
+        public const int BgSlotBarField = 13;
+        public const int BgSlotNote = 14;
+        public const int BgSlotLink = 15;
+        public const int BgSlotMinus = 16;
+        public const int BgSlotPlus = 17;
+        public const int BgRealmName = 0;
+        public const int BgRealmDetail = 1;
+        public const int BgRealmBarDim = 2;
+        public const int BgRealmBarField = 3;
+        public const int BgRealmCount = 4;
         public const int BgControlLinkBase = 0x00;
         public const int BgControlMinusBase = 0x20;
         public const int BgControlPlusBase = 0x40;
+        public const int BgControlFoldBase = 0x60;
+        public const int BgControlSelectBase = 0x80;
         public const int BgControlTabSituation = 0xE0;
         public const int BgControlTabControl = 0xE1;
         public const int BgControlUp = 0xE8;
         public const int BgControlDown = 0xE9;
         public const int BgControlPageUp = 0xEA;
         public const int BgControlPageDown = 0xEB;
+        public const int BgControlOpenAll = 0xEC;
+        public const int BgControlFoldAll = 0xED;
+        public const int BgControlCrestBase = 0xF0;
         public const int BgControlClose = 0xFD;
         public const int BgControlRefresh = 0xFE;
         public const int BarControlFirst = 0xA8;

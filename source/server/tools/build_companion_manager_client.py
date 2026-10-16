@@ -218,6 +218,8 @@ STATUS = (200, 200, 200)
 MESSAGE = (255, 235, 160)
 DISABLED = (115, 115, 115)
 ACTIVE = (120, 215, 130)
+BLOOD = (230, 110, 100)                  # OPEN BG: dead / at a limit
+DIM = (70, 70, 70)                       # OPEN BG: bar ground under the Field bar
 REALM_COLORS = ((220, 125, 120), (135, 165, 235), (125, 200, 135))  # Albion, Midgard, Hibernia
 
 
@@ -336,24 +338,40 @@ GEAR_LABEL_MARK_BASE = GEAR_LABEL_CAPTION_BASE + GEAR_WORN_SLOTS
 GEAR_LABEL_END = GEAR_LABEL_MARK_BASE + GEAR_SLOTS
 GEAR_LABEL_COUNT = GEAR_LABEL_END - GEAR_LABEL_BASE                     # 82
 # OPEN BG window (Custom5, 0x72): label adapters 620-984 follow the gear labels, operations 10-12, own click range.
-# Spec docs/superpowers/specs/2026-10-16-open-bg-window-client-design.md sections 4 and 5.
+# Spec docs/superpowers/specs/2026-10-16-open-bg-window-client-design.md sections 4 and 5; the 0.283.0 "Kriegstafel" layout
+# is concept A of docs/superpowers/specs/2026-10-16-open-bg-window-redesign-analysis.md (see open_bg_window()).
 BG_WINDOW = 0x72                         # Custom5: the ShowCustomN switch pushes 0x6D + N
 OP_BG_SHOW, OP_BG_HIDE, OP_BG_TOKEN = 10, 11, 12
 BG_EVENT_BASE = 0xA00                    # OnClickEvent 2560-2815; gear 0x900-0x93A, lever probe 0x800-0x8DF
 BG_READY_CONTROL = 0xFF                  # sent by operation 10, not a click
 BG_COMMAND_PREFIX = "&bgsetup ui "
-BG_ROW_COUNT, BG_ROW_STRIDE, BG_HEADER_LABELS, BG_REPLY_LINES = 22, 16, 5, 2
+BG_ROW_COUNT, BG_ROW_STRIDE = 18, 18
 BG_LABEL_BASE = GEAR_LABEL_END
 BG_LABEL_STATUS = BG_LABEL_BASE                                          # 620
-BG_LABEL_TAB_BASE = BG_LABEL_STATUS + 1                                  # 621-624: Lage and Steuern, inactive/active
+BG_LABEL_TAB_BASE = BG_LABEL_STATUS + 1                                  # 621-624: Overview and Setup, inactive/active
 BG_LABEL_PAGE = BG_LABEL_TAB_BASE + 4                                    # 625
-BG_LABEL_HEADER_BASE = BG_LABEL_PAGE + 1                                 # 626-630
-BG_LABEL_REPLY_BASE = BG_LABEL_HEADER_BASE + BG_HEADER_LABELS            # 631-632
-BG_LABEL_ROW_BASE = BG_LABEL_REPLY_BASE + BG_REPLY_LINES                 # 633
-BG_LABEL_END = BG_LABEL_ROW_BASE + BG_ROW_COUNT * BG_ROW_STRIDE          # 985
-BG_CONTROL_LINK_BASE, BG_CONTROL_MINUS_BASE, BG_CONTROL_PLUS_BASE = 0x00, 0x20, 0x40
-BG_CONTROL_TAB_SITUATION, BG_CONTROL_TAB_CONTROL = 0xE0, 0xE1
+BG_LABEL_BANNER = BG_LABEL_PAGE + 1                                      # 626 (title font)
+BG_LABEL_PHASE = BG_LABEL_BANNER + 1                                     # 627
+BG_LABEL_HINT = BG_LABEL_PHASE + 1                                       # 628
+BG_LABEL_REPLY = BG_LABEL_HINT + 1                                       # 629
+BG_LABEL_OPEN_ALL, BG_LABEL_FOLD_ALL = BG_LABEL_REPLY + 1, BG_LABEL_REPLY + 2   # 630, 631 (Overview only); 632 stays free
+BG_LABEL_ROW_BASE = BG_LABEL_REPLY + 4                                   # 633, as in 0.282.0
+BG_LABEL_ROW_END = BG_LABEL_ROW_BASE + BG_ROW_COUNT * BG_ROW_STRIDE      # 957
+BG_LABEL_HEAD_BASE, BG_HEAD_LABELS = BG_LABEL_ROW_END, 6                 # 957-962 column headings
+BG_LABEL_REALM_BASE, BG_REALM_STRIDE = BG_LABEL_HEAD_BASE + BG_HEAD_LABELS, 5   # 963-977: three realms x 5
+BG_LABEL_USED_END = BG_LABEL_REALM_BASE + 3 * BG_REALM_STRIDE            # 978; 978-984 stay free
+BG_LABEL_END = BG_LABEL_BASE + 365                                       # 985: the native label count is unchanged
+# Row slots (open_bg_row_slots) and realm band offsets (open_bg_realm_labels).
+BG_SLOT_MARK, BG_SLOT_TITLE, BG_SLOT_TEXT, BG_SLOT_NAME_BASE = 0, 1, 2, 3        # names: +0 Albion, +1 Midgard, +2 Hibernia
+BG_SLOT_LEVEL, BG_SLOT_CLASS, BG_SLOT_ASH = 6, 7, 8
+BG_SLOT_STATE_FIELD, BG_SLOT_STATE_BLOOD, BG_SLOT_STATE_ASH = 9, 10, 11
+BG_SLOT_BAR_DIM, BG_SLOT_BAR_FIELD, BG_SLOT_NOTE, BG_SLOT_LINK, BG_SLOT_MINUS, BG_SLOT_PLUS = 12, 13, 14, 15, 16, 17
+BG_REALM_NAME, BG_REALM_DETAIL, BG_REALM_BAR_DIM, BG_REALM_BAR_FIELD, BG_REALM_COUNT = 0, 1, 2, 3, 4
+BG_CONTROL_LINK_BASE, BG_CONTROL_MINUS_BASE, BG_CONTROL_PLUS_BASE = 0x00, 0x20, 0x40   # + row 0-17
+BG_CONTROL_FOLD_BASE, BG_CONTROL_SELECT_BASE = 0x60, 0x80                               # + row 0-17
+BG_CONTROL_TAB_SITUATION, BG_CONTROL_TAB_CONTROL = 0xE0, 0xE1                           # Overview, Setup
 BG_CONTROL_UP, BG_CONTROL_DOWN, BG_CONTROL_PAGE_UP, BG_CONTROL_PAGE_DOWN = 0xE8, 0xE9, 0xEA, 0xEB
+BG_CONTROL_OPEN_ALL, BG_CONTROL_FOLD_ALL, BG_CONTROL_CREST_BASE = 0xEC, 0xED, 0xF0      # crests: + realm 0-2
 BG_CONTROL_CLOSE, BG_CONTROL_REFRESH = 0xFD, 0xFE
 # Native code for the OPEN BG window in the free .cmgr area after the gear code and before the data (0x4000).
 BG_EVENT_OFFSET, BG_SEND_OFFSET, BG_CODE_LIMIT = 0x3000, 0x3200, 0x4000
@@ -447,12 +465,19 @@ def layout_constants():
         "GearWidthMessage": GEAR_WIDTH_MESSAGE, "GearWidthCaption": GEAR_WIDTH_CAPTION,
     })
     for name in ("BG_WINDOW", "OP_BG_SHOW", "OP_BG_HIDE", "OP_BG_TOKEN", "BG_EVENT_BASE", "BG_READY_CONTROL",
-                 "BG_LABEL_BASE", "BG_ROW_COUNT", "BG_ROW_STRIDE", "BG_HEADER_LABELS", "BG_LABEL_STATUS",
-                 "BG_LABEL_TAB_BASE", "BG_LABEL_PAGE", "BG_LABEL_HEADER_BASE", "BG_LABEL_REPLY_BASE",
-                 "BG_REPLY_LINES", "BG_LABEL_ROW_BASE", "BG_LABEL_END", "BG_CONTROL_LINK_BASE",
-                 "BG_CONTROL_MINUS_BASE", "BG_CONTROL_PLUS_BASE", "BG_CONTROL_TAB_SITUATION",
-                 "BG_CONTROL_TAB_CONTROL", "BG_CONTROL_UP", "BG_CONTROL_DOWN", "BG_CONTROL_PAGE_UP",
-                 "BG_CONTROL_PAGE_DOWN", "BG_CONTROL_CLOSE", "BG_CONTROL_REFRESH"):
+                 "BG_LABEL_BASE", "BG_ROW_COUNT", "BG_ROW_STRIDE", "BG_LABEL_STATUS", "BG_LABEL_TAB_BASE", "BG_LABEL_PAGE",
+                 "BG_LABEL_BANNER", "BG_LABEL_PHASE", "BG_LABEL_HINT", "BG_LABEL_REPLY", "BG_LABEL_OPEN_ALL",
+                 "BG_LABEL_FOLD_ALL", "BG_LABEL_ROW_BASE",
+                 "BG_LABEL_ROW_END", "BG_LABEL_HEAD_BASE", "BG_HEAD_LABELS", "BG_LABEL_REALM_BASE", "BG_REALM_STRIDE",
+                 "BG_LABEL_USED_END", "BG_LABEL_END",
+                 "BG_SLOT_MARK", "BG_SLOT_TITLE", "BG_SLOT_TEXT", "BG_SLOT_NAME_BASE", "BG_SLOT_LEVEL", "BG_SLOT_CLASS",
+                 "BG_SLOT_ASH", "BG_SLOT_STATE_FIELD", "BG_SLOT_STATE_BLOOD", "BG_SLOT_STATE_ASH", "BG_SLOT_BAR_DIM",
+                 "BG_SLOT_BAR_FIELD", "BG_SLOT_NOTE", "BG_SLOT_LINK", "BG_SLOT_MINUS", "BG_SLOT_PLUS",
+                 "BG_REALM_NAME", "BG_REALM_DETAIL", "BG_REALM_BAR_DIM", "BG_REALM_BAR_FIELD", "BG_REALM_COUNT",
+                 "BG_CONTROL_LINK_BASE", "BG_CONTROL_MINUS_BASE", "BG_CONTROL_PLUS_BASE", "BG_CONTROL_FOLD_BASE",
+                 "BG_CONTROL_SELECT_BASE", "BG_CONTROL_TAB_SITUATION", "BG_CONTROL_TAB_CONTROL", "BG_CONTROL_UP",
+                 "BG_CONTROL_DOWN", "BG_CONTROL_PAGE_UP", "BG_CONTROL_PAGE_DOWN", "BG_CONTROL_OPEN_ALL",
+                 "BG_CONTROL_FOLD_ALL", "BG_CONTROL_CREST_BASE", "BG_CONTROL_CLOSE", "BG_CONTROL_REFRESH"):
         values["".join(part.capitalize() for part in name.split("_"))] = globals()[name]
     for index, name in enumerate(BAR_TILE_NAMES):
         values["BarControl" + name] = BAR_CONTROL_FIRST + index
@@ -1444,68 +1469,208 @@ def gear_window():
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
 
 
-# OPEN BG window geometry (spec section 4): fixed 760 x 648, rows from y=164 every 20 px.
-BG_WIDTH, BG_HEIGHT = 760, 648
-BG_LINE_X, BG_LINE_WIDTH = 10, 740
-BG_TITLE_Y, BG_BAR_Y, BG_HEADER_Y, BG_HEADER_PITCH = 1, 24, 46, 18
-BG_SEPARATOR_Y, BG_COLUMN_HEADS_Y, BG_ROW_TOP, BG_ROW_PITCH = 140, 144, 164, 20
-BG_REPLY_Y = (606, 624)
-# (x, width) of each row column.
-BG_COLUMN_NAME, BG_COLUMN_LEVEL, BG_COLUMN_CLASS, BG_COLUMN_UNIT = (10, 140), (154, 26), (186, 104), (296, 100)
-BG_COLUMN_STATE, BG_COLUMN_VALUE, BG_COLUMN_MINUS, BG_COLUMN_PLUS = (402, 150), (558, 110), (672, 36), (712, 36)
-BG_TAB_SITUATION, BG_TAB_CONTROL, BG_PAGE_INDICATOR = (12, 96), (116, 96), (224, 130)
+# OPEN BG window geometry, 0.283.0 "Kriegstafel" (concept A of docs/superpowers/specs/2026-10-16-open-bg-window-redesign-
+# analysis.md): fixed 760 x 640; title bar, crest band, banner, phase line, tab line, column heads, 18 rows every 20 px from
+# y=232, hint and reply line. Paddings 8/12/16 px; every text column starts at the same x in every row.
+BG_WIDTH, BG_HEIGHT = 760, 640
+BG_LEFT, BG_RIGHT = 12, 748                              # text edge left and right (12 px inside the window)
+BG_TITLE_Y = 1
+BG_BAND = (8, 24, 744, 100)                              # inner_frame around the three realm columns
+BG_REALM_PITCH, BG_CREST_Y = 248, 42                     # crests are the stock 64 x 64 templates
+BG_REALM_LINES = (44, 64, 86)                            # name, detail, bar + count
+BG_REALM_TEXT_WIDTH, BG_REALM_BAR_WIDTH, BG_REALM_COUNT_WIDTH = 148, 104, 38
+BG_BANNER = (130, 130, 500)                              # obg_banner (25 px high), the title label 2 px lower
+BG_PHASE_Y, BG_RULE_TOP_Y = 159, 179
+BG_TAB_Y, BG_TABS = 184, ((12, 96), (112, 96))           # Overview, Setup plates (tab_button_normal, 17 px)
+BG_PAGE_INDICATOR = (220, 160)
+BG_HEADS_Y, BG_RULE_HEADS_Y = 208, 226
+BG_HEADS = ((28, 128), (160, 128), (190, 98), (292, 122), (418, 80), (504, 132))
+BG_ROW_TOP, BG_ROW_PITCH = 232, 20
+BG_RULE_BOTTOM_Y, BG_HINT_Y, BG_REPLY_Y = 592, 596, 614
+BG_REPLY_WIDTH = 600
+# Click bands of a row (x, width); the band is y - 2 .. y + 18, which is also the zebra band.
+BG_CLICK_FOLD, BG_CLICK_SELECT = (8, 28), (36, 252)
+BG_CLICK_MINUS, BG_CLICK_PLUS, BG_CLICK_LINK = (502, 44), (546, 44), (638, 110)
+# Own templates, cut from stock textures only (frames_win: the gold-framed leather bar of the character frame; page1: the
+# stone ground that the stock listbox_row_bg tiles, 20 px instead of 16 so one band is exactly one row).
+BG_OWN_TEMPLATES = (
+    ("obg_banner", 25, (14, 24, 28), "frames_win", ((9, 61), (44, 61), (106, 61))),
+    ("obg_zebra", BG_ROW_PITCH, (0, 15, 0), "page1", ((0, 0), (149, 42), (0, 0))),
+)
+# [Open all] / [Fold all] are server labels (the server leaves them empty on Setup); the other links are fixed text.
+BG_LINK_LABELS = {BG_CONTROL_OPEN_ALL: BG_LABEL_OPEN_ALL, BG_CONTROL_FOLD_ALL: BG_LABEL_FOLD_ALL}
+BG_CRESTS = ("alb_symbol", "mid_symbol", "hib_symbol")   # stock ImageAreaTemplates (realmwar_*.xml, texture realm_symbols)
+BG_TITLE_FONT = "title"                                  # stock gold engraved font (assets.xml, fonts/title_24.tga)
+WHITE = (255, 255, 255)
+# Advance widths of the title font for '!' through '~', read from fonts/title_24.tga like the arial14 table; the server
+# fits the banner text to BG_BANNER's width with it. A space has no glyph; 7 is an estimate.
+TITLE_ADVANCES = (
+    7, 9, 12, 12, 15, 15, 6, 9, 9, 10, 10, 6, 9, 6, 10, 12, 8, 10, 10, 13, 10, 11, 11, 11, 12, 6, 6, 10, 11, 10, 9, 15,
+    13, 11, 12, 14, 10, 10, 13, 13, 6, 9, 12, 10, 18, 13, 14, 11, 16, 12, 9, 10, 12, 12, 18, 12, 12, 11, 8, 10, 8, 10, 12,
+    6, 10, 11, 9, 11, 10, 8, 10, 12, 6, 8, 10, 6, 15, 11, 11, 10, 10, 7, 9, 8, 12, 10, 15, 9, 10, 10, 9, 6, 8, 11,
+)
+TITLE_SPACE_ADVANCE = 7
+
+
+def title_width(text):
+    return sum(TITLE_ADVANCES[ord(ch) - 33] if "!" <= ch <= "~" else TITLE_SPACE_ADVANCE for ch in text)
+
+
+def _hr_template(root, name, height, widths, texture, pieces):
+    """A HorizontalResizeImageTemplate at file level, in the stock styles.xml form."""
+    template = ET.SubElement(root, "HorizontalResizeImageTemplate")
+    ET.SubElement(template, "Name").text = name
+    ET.SubElement(template, "Height").text = str(height)
+    for key, value in zip(("LeftWidth", "RepeatWidth", "RightWidth"), widths):
+        ET.SubElement(template, key).text = str(value)
+    source = ET.SubElement(template, "Texture")
+    ET.SubElement(source, "TextureName").text = texture
+    for key, (x, y) in zip(("Left", "Repeat", "Right"), pieces):
+        position = ET.SubElement(source, key)
+        ET.SubElement(position, "X").text = str(x)
+        ET.SubElement(position, "Y").text = str(y)
+
+
+def _image_area(panel, x, y, template):
+    """ImageAreaDef in the stock realmwar_alb.xml form (position and template only)."""
+    image = ET.SubElement(panel, "ImageAreaDef")
+    position = ET.SubElement(image, "Position")
+    ET.SubElement(position, "X").text = str(x)
+    ET.SubElement(position, "Y").text = str(y)
+    ET.SubElement(image, "TemplateName").text = template
 
 
 def open_bg_tabs():
-    """(control, x, width) of the two tabs; each tab is an inactive and an active label on the same spot."""
-    return ((BG_CONTROL_TAB_SITUATION, *BG_TAB_SITUATION), (BG_CONTROL_TAB_CONTROL, *BG_TAB_CONTROL))
+    """(control, x, width) of the two tab plates; each carries an inactive and an active label on the same spot."""
+    return ((BG_CONTROL_TAB_SITUATION, *BG_TABS[0]), (BG_CONTROL_TAB_CONTROL, *BG_TABS[1]))
 
 
 def open_bg_links():
-    """(name, text, control, x, y, width) of the fixed links on the y=24 bar: paging left, Refresh and Close right."""
-    links = list(_links(BG_BAR_Y, BG_PAGE_INDICATOR[0] + BG_PAGE_INDICATOR[1] + 10,
-                        (("Up", "[Up]", BG_CONTROL_UP), ("Down", "[Down]", BG_CONTROL_DOWN),
-                         ("PageUp", "[PgUp]", BG_CONTROL_PAGE_UP), ("PageDown", "[PgDn]", BG_CONTROL_PAGE_DOWN))))
-    edge = BG_LINE_X + BG_LINE_WIDTH - 2
-    for name, text, control in (("Close", "[Close]", BG_CONTROL_CLOSE), ("Refresh", "[Refresh]", BG_CONTROL_REFRESH)):
-        width = text_width(text) + 6
-        links.append((name, text, control, edge - width, BG_BAR_Y, width))
-        edge -= width + 10
-    return tuple(links)
+    """(name, text, control, x, y, width) of the fixed links: Open/Fold all and paging right-aligned on the tab line (two
+    groups 16 px apart, 6 px between links), Refresh and Close bottom right on the reply line."""
+    def chain(y, groups):
+        placed, edge = [], BG_RIGHT
+        for group in groups:
+            for name, text, control in reversed(group):
+                width = text_width(text) + 6
+                placed.append((name, text, control, edge - width, y, width))
+                edge -= width + 6
+            edge -= 10
+        return sorted(placed, key=lambda link: link[3])
+    return (*chain(BG_TAB_Y + 1, ((("OpenAll", "[Open all]", BG_CONTROL_OPEN_ALL),
+                                    ("FoldAll", "[Fold all]", BG_CONTROL_FOLD_ALL)),
+                                   (("Up", "[Up]", BG_CONTROL_UP), ("Down", "[Down]", BG_CONTROL_DOWN),
+                                    ("PageUp", "[PgUp]", BG_CONTROL_PAGE_UP), ("PageDown", "[PgDn]", BG_CONTROL_PAGE_DOWN)))[::-1]),
+            *chain(BG_REPLY_Y, ((("Refresh", "[Refresh]", BG_CONTROL_REFRESH), ("Close", "[Close]", BG_CONTROL_CLOSE)),)))
 
 
 def open_bg_row_slots():
-    """(x, width, colour, characters) of the 16 label slots of one row, in slot order (see ``open_bg_window``)."""
-    full = (BG_LINE_X, BG_LINE_WIDTH)
-    return ((*full, GOLD, 120), (*full, TEXT, 120),
-            *((*BG_COLUMN_NAME, color, 32) for color in REALM_COLORS), (*BG_COLUMN_NAME, TEXT, 32),
-            (*BG_COLUMN_LEVEL, STATUS, 6), (*BG_COLUMN_CLASS, TEXT, 32), (*BG_COLUMN_UNIT, MUTED, 24),
-            (*BG_COLUMN_STATE, ACTIVE, 40), (*BG_COLUMN_STATE, MUTED, 40), (*BG_COLUMN_VALUE, GOLD, 32),
-            (*BG_COLUMN_MINUS, LINK, 6), (*BG_COLUMN_MINUS, DISABLED, 6),
-            (*BG_COLUMN_PLUS, LINK, 6), (*BG_COLUMN_PLUS, DISABLED, 6))
+    """(x, width, colour, MaxCharacters, centered) of the 18 label slots of one row, in slot order.
+
+    Row r (0-17) has label base 633 + 18 r and sits at y = 232 + 20 r (label height 18; its click and zebra band is
+    y - 2 .. y + 18). Overlaid slots share a spot and the server fills at most one of each group.
+
+      slot  x    width colour            MaxChars  use
+       0    12   14    Gold, centered     2        mark: "+" folded unit, "-" opened unit, "*" leader, ">" selected row
+       1    28   460   Gold               115      title: unit header ("caster8 #31"), Setup section ("Crew")
+       2    28   720   Ink                115      plain text: Setup setting name, full-width message (empty states)
+       3    40   116   Albion  #DC7D78    40       name (realm row "ALBION", member, solo); one of 3-5
+       4    40   116   Midgard #87A5EB    40
+       5    40   116   Hibernia #7DC887   40
+       6    160  24    Ink                4        level (left, under the "Lv" head)
+       7    190  98    Ink                32       class
+       8    160  128   Ash #969696        42       secondary text over level+class ("6 bots", Setup range "8-120, step 4")
+       9    292  122   Field #78D782      40       state/value: alive, on, in the field; one of 9-11
+      10    292  122   Blood #E66E64      40       state/value: dead, at a limit
+      11    292  122   Ash                40       state/value: travelling, outside, off
+      12    418  80    Dim #464646        40       bar ground: "|" x 40 (2 px each) or "=" x n (8 px each)
+      13    418  80    Field              40       bar value on top of slot 12, same glyph, fewer of them
+      14    504  132   Ash                44       note ("Raid", "12 min" inside); Lage only (shares its spot with 16/17)
+      15    640  108   Link #F0C86E       36       link ("[Relieve]", "[Turn off]", "[Use Per realm]", "[Next: All]")
+      16    502  44    Link, centered     4        "[-]" (Setup steppers, next to the bar)
+      17    546  44    Link, centered     4        "[+]"
+
+    MaxCharacters never exceeds MaximumTextLength (115); the server clips every text to the label width with the arial14
+    advance table (ARIAL14_ADVANCES, SPACE_ADVANCE) and to MaxCharacters. Server text is ASCII only.
+    """
+    return ((12, 14, GOLD, 2, True), (28, 460, GOLD, 115, False), (28, 720, TEXT, 115, False),
+            *((40, 116, color, 40, False) for color in REALM_COLORS),
+            (160, 24, TEXT, 4, False), (190, 98, TEXT, 32, False), (160, 128, MUTED, 42, False),
+            (292, 122, ACTIVE, 40, False), (292, 122, BLOOD, 40, False), (292, 122, MUTED, 40, False),
+            (418, 80, DIM, 40, False), (418, 80, ACTIVE, 40, False),
+            (504, 132, MUTED, 44, False), (640, 108, LINK, 36, False),
+            (502, 44, LINK, 4, True), (546, 44, LINK, 4, True))
+
+
+def open_bg_realm_labels(realm):
+    """(index, x, y, width, colour, MaxCharacters) of one realm column's five labels in the crest band (realm 0-2)."""
+    base = BG_LABEL_REALM_BASE + BG_REALM_STRIDE * realm
+    x = BG_BAND[0] + BG_REALM_PITCH * realm + 84
+    name_y, detail_y, bar_y = BG_REALM_LINES
+    bar_characters = BG_REALM_BAR_WIDTH // text_width("|")
+    return ((base + BG_REALM_NAME, x, name_y, BG_REALM_TEXT_WIDTH, REALM_COLORS[realm], 40),
+            (base + BG_REALM_DETAIL, x, detail_y, BG_REALM_TEXT_WIDTH, MUTED, 48),
+            (base + BG_REALM_BAR_DIM, x, bar_y, BG_REALM_BAR_WIDTH, DIM, bar_characters),
+            (base + BG_REALM_BAR_FIELD, x, bar_y, BG_REALM_BAR_WIDTH, ACTIVE, bar_characters),
+            (base + BG_REALM_COUNT, x + BG_REALM_TEXT_WIDTH - BG_REALM_COUNT_WIDTH, bar_y, BG_REALM_COUNT_WIDTH, MUTED, 8))
+
+
+def open_bg_crest(realm):
+    """(x, y) of a realm's 64 px crest and the (x, y, width, height) of its click area (the whole realm column)."""
+    column = BG_BAND[0] + BG_REALM_PITCH * realm
+    return (column + 12, BG_CREST_Y), (column + 4, BG_BAND[1] + 4, BG_REALM_PITCH - 8, BG_BAND[3] - 8)
 
 
 def open_bg_window():
-    """Custom5 XML: the fixed 760 x 648 OPEN BG window (spec docs/superpowers/specs/2026-10-16-open-bg-window-client-
-    design.md sections 4 and 5), stock templates and controls only.
+    """Custom5 XML: the fixed 760 x 640 OPEN BG window "Kriegstafel" (0.283.0; concept A of
+    docs/superpowers/specs/2026-10-16-open-bg-window-redesign-analysis.md). Stock frame, controls and textures only; the two
+    own templates obg_banner and obg_zebra cut stock textures (frames_win, page1) and come before the WindowTemplate, as
+    realmwar_key.xml does. No game.dll change: labels 620-984 (365, of which 357 are used) keep operation 1.
 
-    Label adapters (contract with the server's OpenBgWindowScreen, which fills them in exactly this order):
-      620       status right of the fixed title "OPEN BG" (y=1)
-      621-624   tabs at y=24: Lage inactive, Lage active, Steuern inactive, Steuern active (pairs on one spot)
-      625       page indicator ("1-22 of 61"), y=24
-      626-630   header lines, y=46..118 every 18, 740 px
-      631-632   reply lines, y=606 and y=624, 740 px
-      633-984   22 rows x 16 slots; row r has base 633 + 16 r and sits at y = 164 + 20 r:
-                  0 section title (gold, full width)      1 plain text (full width)
-                  2-5 name: Albion, Midgard, Hibernia colour, neutral
-                  6 level   7 class   8 unit/archetype   9 role/state green   10 role/state grey
-                  11 value/link (gold, e.g. "[Relieve]")  12 "[-]" active  13 "[-]" grey  14 "[+]" active  15 "[+]" grey
-    Overlaid slots (2-5, 9-10, 12-13, 14-15 and the full-width 0/1) share a spot; the server fills one of each group.
-    Column headings and the links on the y=24 bar are fixed XML text. Click areas (OnClickEvent 0xA00 + control) come
-    after every other element (the raid's z-order): row link 0x00-0x15 on the value column, row minus 0x20-0x35 and
-    plus 0x40-0x55 on their columns, tabs 0xE0/0xE1, paging 0xE8-0xEB, close 0xFD, refresh 0xFE.
+    Layout (y): 1 title bar ("OPEN BG", status) | 24-124 crest band (inner_frame; per realm a stock 64 px crest at y=42 and
+    four text lines) | 130-155 banner (obg_banner, gold title font) | 159 phase line | 179 rule | 184 tab line (two
+    tab_button_normal plates, page indicator, [Open all] [Fold all], [Up] [Down] [PgUp] [PgDn]) | 208 column heads |
+    226 rule | 232 + 20 r rows 0-17 (zebra obg_zebra behind every odd row) | 592 rule | 596 hint | 614 reply,
+    [Refresh] [Close].
+
+    Label adapters (contract with the server's OpenBgWindowScreen, index: x, y, width, colour, MaxCharacters):
+      620       status on the title bar: 84, 1, 650, Status #C8C8C8, 115
+      621-624   tabs on the plates, centered, 16 each: 621 Overview inactive (Ash) and 622 active (Gold) at 12, 185, 96;
+                623 Setup inactive (Ash) and 624 active (Gold) at 112, 185, 96
+      625       page indicator ("Rows 1-18 of 40"): 220, 185, 160, Ash, 40
+      626       banner ("Keep 11: Albion holds it"): 130, 132, 500, white (the font's own gold), font "title", centered,
+                40; fit it with TITLE_ADVANCES / TITLE_SPACE_ADVANCE (title_width) to 468 px (the banner's end caps)
+      627       phase line: 12, 159, 736, Ash, centered, 115
+      628       hint line (explains the selected row): 12, 596, 736, Ash, 115
+      629       reply line: 12, 614, 600, Message #FFEBA0, 115
+      630, 631  "[Open all]" / "[Fold all]" on the tab line (Link, 16; positions in open_bg_links()); the server fills
+                them on Overview only
+      632       free (registered by the client, not in the XML)
+      633-956   18 rows x 18 slots, row r at y = 232 + 20 r, slot table in open_bg_row_slots()
+      957-962   column heads at y=208, Ash, 24 each: 957 at 28 (128 px), 958 at 160 (128; "Lv" or the Setup "Range"),
+                959 at 190 (98; "Class"; empty on Setup), 960 at 292 (122), 961 at 418 (80), 962 at 504 (132)
+      963-977   crest band, realm k (0 Albion, 1 Midgard, 2 Hibernia) has base 963 + 5 k, x = 92 + 248 k:
+                +0 name line ("Albion  24 crew"), y=44, 148 px, realm colour, 40
+                +1 detail ("11 units, plan 10"), y=64, 148 px, Ash, 48
+                +2 bar ground, y=86, 104 px, Dim, 52 ("|" x 52)   +3 bar value on top, same spot, Field, 52
+                +4 count ("22 in"), x + 110, y=86, 38 px, Ash, 8
+      978-984   free
+
+    Click areas (InvisibleButtonDef, OnClickEvent = decimal 0xA00 + control; placed after every other element, the raid's
+    z-order; none on the title bar, none overlapping). Row r band = y 230 + 20 r, 20 px high:
+      0x00 + r  row link     x 638, 110 px (slot 15)          0x20 + r  row [-]   x 502, 44 px (slot 16)
+      0x40 + r  row [+]      x 546, 44 px (slot 17)           0x60 + r  fold      x 8, 28 px (slot 0, the +/- mark)
+      0x80 + r  name select  x 36, 252 px (slots 3-7; on a unit header the server treats it as fold as well)
+      0xE0 / 0xE1  Overview / Setup tab plates                0xE8-0xEB  [Up] [Down] [PgUp] [PgDn]
+      0xEC / 0xED  [Open all] / [Fold all]                     0xF0-0xF2  crest columns Albion, Midgard, Hibernia
+      0xFD  [Close]   0xFE  [Refresh]   (0xFF is the ready control sent by operation 10, not a click)
+    The row ranges shrank from 22 to 18 rows; every new control lies in the free value space 0x56-0xDF / 0xEC-0xFC.
+    Hover buttons (HorizontalResizeButtonDef) are not used: their decimal OnClickEvent path is unproven in the real client.
+    Fixed XML text: "OPEN BG", [Up] [Down] [PgUp] [PgDn] [Refresh] [Close]. Both skins get the same bytes.
     """
     root = ET.Element("Root_Element", ID="DAOCUi")
+    for name, height, widths, texture, pieces in BG_OWN_TEMPLATES:
+        _hr_template(root, name, height, widths, texture, pieces)
     panel = ET.SubElement(root, "WindowTemplate")
     for key, value in (("Name", "custom5_window"), ("WindowId", "Custom5"), ("CloseButton", "true"),
                        ("MoveButton", "true"), ("TopRightResizeButton", "false"),
@@ -1516,45 +1681,66 @@ def open_bg_window():
                        ("ResizeableTwoWayHeight", "0"), ("MinWidth", "0"), ("MinHeight", "0"),
                        ("ContextTemplateName", None)):
         ET.SubElement(panel, key).text = value
-    _image(panel, 0, 0, BG_WIDTH, BG_HEIGHT, "dlg_sm_title_noresize")
-    _hr_image(panel, 8, BG_SEPARATOR_Y, BG_WIDTH - 16, "context_hr_image_divider")
 
-    _label(panel, 12, BG_TITLE_Y, 70, GOLD, text="OPEN BG", characters=16)
-    _label(panel, 90, BG_TITLE_Y, BG_WIDTH - 90 - 40, STATUS, BG_LABEL_STATUS, characters=120)
+    # Images first: frame, crest band, crests, banner, rules, tab plates, zebra.
+    _image(panel, 0, 0, BG_WIDTH, BG_HEIGHT, "dlg_sm_title_noresize")
+    _image(panel, *BG_BAND, "inner_frame")
+    for realm, template in enumerate(BG_CRESTS):
+        _image_area(panel, *open_bg_crest(realm)[0], template)
+    _hr_image(panel, *BG_BANNER[:2], BG_BANNER[2], "obg_banner")
+    for y in (BG_RULE_TOP_Y, BG_RULE_HEADS_Y, BG_RULE_BOTTOM_Y):
+        _hr_image(panel, 8, y, BG_WIDTH - 16, "context_hr_image_divider")
+    for x, width in BG_TABS:
+        _hr_image(panel, x, BG_TAB_Y, width, "tab_button_normal")
+    for row in range(1, BG_ROW_COUNT, 2):
+        _hr_image(panel, 10, BG_ROW_TOP + BG_ROW_PITCH * row - 2, BG_WIDTH - 20, "obg_zebra")
+
+    # Labels.
+    _label(panel, BG_LEFT, BG_TITLE_Y, 66, GOLD, text="OPEN BG", characters=16)
+    _label(panel, 84, BG_TITLE_Y, 650, STATUS, BG_LABEL_STATUS, characters=115)
+    for realm in range(3):
+        for index, x, y, width, color, characters in open_bg_realm_labels(realm):
+            _label(panel, x, y, width, color, index, characters=characters)
+    _label(panel, BG_BANNER[0], BG_BANNER[1] + 2, BG_BANNER[2], WHITE, BG_LABEL_BANNER, characters=40, height=24,
+           centered=True, font=BG_TITLE_FONT)
+    _label(panel, BG_LEFT, BG_PHASE_Y, BG_RIGHT - BG_LEFT, MUTED, BG_LABEL_PHASE, characters=115, centered=True)
     for index, (_control, x, width) in enumerate(open_bg_tabs()):
-        _label(panel, x, BG_BAR_Y, width, MUTED, BG_LABEL_TAB_BASE + 2 * index, characters=24)
-        _label(panel, x, BG_BAR_Y, width, GOLD, BG_LABEL_TAB_BASE + 2 * index + 1, characters=24)
-    _label(panel, BG_PAGE_INDICATOR[0], BG_BAR_Y, BG_PAGE_INDICATOR[1], STATUS, BG_LABEL_PAGE, characters=24)
-    for _name, text, _control, x, y, width in open_bg_links():
-        _label(panel, x, y, width, LINK, text=text, characters=16)
-    for line in range(BG_HEADER_LABELS):
-        _label(panel, BG_LINE_X, BG_HEADER_Y + BG_HEADER_PITCH * line, BG_LINE_WIDTH, STATUS,
-               BG_LABEL_HEADER_BASE + line, characters=120)
-    for text, (x, width) in (("Name", BG_COLUMN_NAME), ("Lv", BG_COLUMN_LEVEL), ("Class", BG_COLUMN_CLASS),
-                             ("Unit", BG_COLUMN_UNIT), ("State", BG_COLUMN_STATE), ("Value", BG_COLUMN_VALUE)):
-        _label(panel, x, BG_COLUMN_HEADS_Y, width, MUTED, text=text, characters=12)
+        _label(panel, x, BG_TAB_Y + 1, width, MUTED, BG_LABEL_TAB_BASE + 2 * index, characters=16, centered=True)
+        _label(panel, x, BG_TAB_Y + 1, width, GOLD, BG_LABEL_TAB_BASE + 2 * index + 1, characters=16, centered=True)
+    _label(panel, BG_PAGE_INDICATOR[0], BG_TAB_Y + 1, BG_PAGE_INDICATOR[1], MUTED, BG_LABEL_PAGE, characters=40)
+    for _name, text, control, x, y, width in open_bg_links():
+        if control in BG_LINK_LABELS:
+            _label(panel, x, y, width, LINK, BG_LINK_LABELS[control], characters=16)
+        else:
+            _label(panel, x, y, width, LINK, text=text, characters=16)
+    for head, (x, width) in enumerate(BG_HEADS):
+        _label(panel, x, BG_HEADS_Y, width, MUTED, BG_LABEL_HEAD_BASE + head, characters=24)
     slots = open_bg_row_slots()
     for row in range(BG_ROW_COUNT):
         y = BG_ROW_TOP + BG_ROW_PITCH * row
         base = BG_LABEL_ROW_BASE + BG_ROW_STRIDE * row
-        for slot, (x, width, color, characters) in enumerate(slots):
-            _label(panel, x, y, width, color, base + slot, characters=characters,
-                   centered=slot >= 12)
-    for line, y in enumerate(BG_REPLY_Y):
-        _label(panel, BG_LINE_X, y, BG_LINE_WIDTH, MESSAGE, BG_LABEL_REPLY_BASE + line, characters=120)
+        for slot, (x, width, color, characters, centered) in enumerate(slots):
+            _label(panel, x, y, width, color, base + slot, characters=characters, centered=centered)
+    _label(panel, BG_LEFT, BG_HINT_Y, BG_RIGHT - BG_LEFT, MUTED, BG_LABEL_HINT, characters=115)
+    _label(panel, BG_LEFT, BG_REPLY_Y, BG_REPLY_WIDTH, MESSAGE, BG_LABEL_REPLY, characters=115)
 
-    # Click areas last, like the raid's z-order. Row bands are 20 px (y - 1 .. y + 19) and never overlap.
+    # Click areas last, like the raid's z-order.
     event = lambda control: str(BG_EVENT_BASE + control)
     for control, x, width in open_bg_tabs():
-        _click(panel, x, BG_BAR_Y, width, None, "Situation tab" if control == BG_CONTROL_TAB_SITUATION else
-               "Control tab", event=event(control))
+        _click(panel, x, BG_TAB_Y, width, None, "Overview tab" if control == BG_CONTROL_TAB_SITUATION else "Setup tab",
+               event=event(control))
     for name, _text, control, x, y, width in open_bg_links():
         _click(panel, x, y, width, None, _caption(name), event=event(control))
+    for realm, name in enumerate(("Albion", "Midgard", "Hibernia")):
+        x, y, width, height = open_bg_crest(realm)[1]
+        _click(panel, x, y, width, None, f"{name} crest", height, event=event(BG_CONTROL_CREST_BASE + realm))
     for row in range(BG_ROW_COUNT):
-        y = BG_ROW_TOP + BG_ROW_PITCH * row - 1
-        for base, (x, width), caption in ((BG_CONTROL_LINK_BASE, BG_COLUMN_VALUE, "Row link"),
-                                          (BG_CONTROL_MINUS_BASE, BG_COLUMN_MINUS, "Row minus"),
-                                          (BG_CONTROL_PLUS_BASE, BG_COLUMN_PLUS, "Row plus")):
+        y = BG_ROW_TOP + BG_ROW_PITCH * row - 2
+        for base, (x, width), caption in ((BG_CONTROL_FOLD_BASE, BG_CLICK_FOLD, "Row fold"),
+                                          (BG_CONTROL_SELECT_BASE, BG_CLICK_SELECT, "Row select"),
+                                          (BG_CONTROL_MINUS_BASE, BG_CLICK_MINUS, "Row minus"),
+                                          (BG_CONTROL_PLUS_BASE, BG_CLICK_PLUS, "Row plus"),
+                                          (BG_CONTROL_LINK_BASE, BG_CLICK_LINK, "Row link")):
             _click(panel, x, y, width, None, f"{caption} {row + 1}", BG_ROW_PITCH, event=event(base + row))
     ET.indent(root)
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)

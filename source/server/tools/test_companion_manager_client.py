@@ -420,8 +420,10 @@ for name, limit in (("gearRefresh", builder.GEAR_EVENT_OFFSET - builder.GEAR_REF
 # OPEN BG window (Custom5): operations 10-12, clicks 0xA00 + cc through its own sender, flag and token buffer.
 BG = manifest["openBg"]
 BG_EVENT = builder.BG_EVENT_BASE
-BG_CLICKS = [*range(0x00, 0x16), *range(0x20, 0x36), *range(0x40, 0x56), 0xE0, 0xE1, 0xE8, 0xE9, 0xEA, 0xEB, 0xFD, 0xFE]
-assert len(BG_CLICKS) == 74
+# Kriegstafel layout: 18 rows x (link, minus, plus, fold, name select), tabs, paging, open/fold all, crests, close, refresh.
+BG_CLICKS = [*range(0x00, 0x12), *range(0x20, 0x32), *range(0x40, 0x52), *range(0x60, 0x72), *range(0x80, 0x92),
+             0xE0, 0xE1, 0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xF0, 0xF1, 0xF2, 0xFD, 0xFE]
+assert len(BG_CLICKS) == len(set(BG_CLICKS)) == 103
 assert BG["window"] == {"name": "Custom5", "id": builder.BG_WINDOW} and builder.BG_WINDOW == 0x6D + 5
 assert BG["activeFlag"] == manifest["activeFlag"] + 8, "bg_active uses the free bytes after the COMPANIONS flag"
 assert BG["windowGuard"] == {"address": 0x4E0B3E, "bytes": "6a016a72"}
@@ -679,7 +681,13 @@ for element in window.iter("LabelDef"):
 for element in window.iter():
     assert element.tag in GEAR_XML_TAGS, element.tag
 gear_templates = {element.text for element in window.iter("TemplateName")}
-stock_ui = Path("/mnt/d/Games/OfflineDAoC/runtime/client-opendaoc/app/ui")
+# The stock client UI, if one is reachable (OFFLINE_DAOC_STOCK_UI, Stefan's D: install or this PC's C: install); the stock
+# template checks are skipped without one and say so at the end.
+import os
+stock_ui = next((path for path in (Path(os.environ.get("OFFLINE_DAOC_STOCK_UI", "/nonexistent")),
+                                   Path("/mnt/d/Games/OfflineDAoC/runtime/client-opendaoc/app/ui"),
+                                   Path("/mnt/c/OfflineDAoC/playable/runtime/client-opendaoc/app/ui"))
+                 if (path / "atlantis" / "styles.xml").is_file()), Path("/nonexistent"))
 if stock_ui.is_dir():
     for skin in ("atlantis", "isles"):
         stock = b"".join(path.read_bytes() for path in (stock_ui / skin).glob("*.xml") if not path.name.startswith("custom"))
@@ -699,67 +707,218 @@ for skin in ("atlantis", "isles"):
                                 ("custom6_window.xml", "dfc5bbdb8d9fd30b59bfce26bae924e27888ca4b89431532bccdac3f028b2338")):
         assert hashlib.sha256((args.stage / skin / window_file).read_bytes()).hexdigest() == pinned, (skin, window_file)
 
-# OPEN BG window (Custom5): fixed 760 x 648, every BG label once, 74 click controls (the ready control 0xFF is not a click), the
-# click areas last and without overlap, everything inside the window, stock templates only, both skins identical.
+# OPEN BG window (Custom5) "Kriegstafel" (concept A of docs/superpowers/specs/2026-10-16-open-bg-window-redesign-analysis.md):
+# fixed 760 x 640 on the stock frame, three stock realm crests, own banner and zebra templates on stock textures, one
+# gold title-font banner label, 18 rows x 18 slots, 103 click controls (the ready control 0xFF is not a click), click
+# areas last and without overlap, everything inside the window, both skins identical.
 bg_bytes = {skin: (args.stage / skin / "custom5_window.xml").read_bytes() for skin in ("atlantis", "isles")}
 assert bg_bytes["atlantis"] == bg_bytes["isles"]
 assert hashlib.sha256(bg_bytes["atlantis"]).hexdigest() == manifest["bgWindowSha256"]
 assert bg_bytes["atlantis"] == builder.open_bg_window()
-window = ET.fromstring(bg_bytes["atlantis"]).find("WindowTemplate")
+bg_root = ET.fromstring(bg_bytes["atlantis"])
+window = bg_root.find("WindowTemplate")
+assert list(bg_root)[-1] is window, "Own templates come before the WindowTemplate (realmwar_key.xml order)"
 assert (window.find("Name").text, window.find("WindowId").text) == ("custom5_window", "Custom5")
 width, height = int(window.find("Width").text), int(window.find("Height").text)
-assert (width, height) == (builder.BG_WIDTH, builder.BG_HEIGHT) == (760, 648)
+assert (width, height) == (builder.BG_WIDTH, builder.BG_HEIGHT) == (760, 640)
 assert window.find("ResizeableWidth").text == window.find("ResizeableHeight").text == "0"
-assert {element.find("FontName").text for element in window.iter("LabelDef")} == {builder.FONT}
-BG_XML_TAGS = MANAGER_XML_TAGS | {"HorizontalResizeImageDef"}
+BG_XML_TAGS = MANAGER_XML_TAGS | {"HorizontalResizeImageDef", "ImageAreaDef"}
 for element in window.iter():
     assert element.tag in BG_XML_TAGS, element.tag
 assert window.find(".//EditBoxDef") is None and window.find(".//ClickableEditBoxDef") is None
+labels = window.findall("LabelDef")
+# Fonts: arial14 everywhere except exactly one title-font label, the banner adapter, drawn white so the font's baked gold
+# shows (as the stock map_title label in map_window.xml).
+title_labels = [element for element in labels if element.find("FontName").text == "title"]
+assert len(title_labels) == 1 and title_labels[0].find("Adapter").text == builder.adapter_name(builder.BG_LABEL_BANNER)
+assert tuple(int(title_labels[0].find(f"Color/{c}").text) for c in "RGBA") == (255, 255, 255, 255)
+assert {element.find("FontName").text for element in labels if element not in title_labels} == {builder.FONT}
+
+# Own templates (deliberate change of the 0.282.0 rule "exactly the two stock templates dlg_sm_title_noresize and
+# context_hr_image_divider"): the window may now define its own templates, but only HorizontalResizeImageTemplates named
+# obg_* that cut stock textures; no <Texture> or font registration and no template that shadows a stock name.
+OWN_TEMPLATE_TAGS = {"HorizontalResizeImageTemplate", "Name", "Height", "LeftWidth", "RepeatWidth", "RightWidth",
+                     "Texture", "TextureName", "Left", "Repeat", "Right", "X", "Y"}
+own_templates = {}
+for element in bg_root:
+    if element is window:
+        continue
+    assert element.tag == "HorizontalResizeImageTemplate", element.tag
+    for child in element.iter():
+        assert child.tag in OWN_TEMPLATE_TAGS, child.tag
+    name = element.find("Name").text
+    assert name.startswith("obg_") and name not in own_templates, name
+    sizes = {key: int(element.find(key).text) for key in ("Height", "LeftWidth", "RepeatWidth", "RightWidth")}
+    pieces = {key: (int(element.find(f"Texture/{key}/X").text), int(element.find(f"Texture/{key}/Y").text))
+              for key in ("Left", "Repeat", "Right")}
+    own_templates[name] = (element.find("Texture/TextureName").text, sizes, pieces)
+assert set(own_templates) == {"obg_banner", "obg_zebra"}, set(own_templates)
+assert own_templates["obg_banner"][0] == "frames_win" and own_templates["obg_zebra"][0] == "page1"
+assert own_templates["obg_zebra"][1]["Height"] == builder.BG_ROW_PITCH == 20
+STOCK_BG_TEMPLATES = {"dlg_sm_title_noresize", "context_hr_image_divider", "inner_frame", "tab_button_normal",
+                      "alb_symbol", "mid_symbol", "hib_symbol"}
 bg_templates = {element.text for element in window.iter("TemplateName")}
-assert bg_templates == {"dlg_sm_title_noresize", "context_hr_image_divider"}, bg_templates
+assert bg_templates == STOCK_BG_TEMPLATES | set(own_templates), bg_templates
+# The crests are the stock 64 px ImageAreaTemplates of the realm war maps, in realm order, inside the framed band.
+crests = [(element.find("TemplateName").text, int(element.find("Position/X").text), int(element.find("Position/Y").text))
+          for element in window.iter("ImageAreaDef")]
+assert [name for name, _x, _y in crests] == ["alb_symbol", "mid_symbol", "hib_symbol"], crests
+stock_checked = False
 if stock_ui.is_dir():
+    stock_checked = True
     for skin in ("atlantis", "isles"):
         stock = b"".join(path.read_bytes() for path in (stock_ui / skin).glob("*.xml") if not path.name.startswith("custom"))
-        for template in bg_templates:
+        for template in STOCK_BG_TEMPLATES:
             assert f"<Name>{template}</Name>".encode() in stock, f"{template} is not a stock {skin} template"
-bg_adapters = [element.text for element in window.iter("Adapter")]
-assert sorted(bg_adapters) == [builder.adapter_name(index) for index in range(builder.BG_LABEL_BASE, builder.BG_LABEL_END)], \
-    "Each OPEN BG label adapter (620-984) appears exactly once"
-labels = window.findall("LabelDef")
-for element in labels:
-    x, y = int(element.find("Position/X").text), int(element.find("Position/Y").text)
-    assert 0 <= x and x + int(element.find("Width").text) <= width and 0 <= y and y + int(element.find("Height").text) <= height
-    assert len(element.find("Alignment")) == 0, "The OPEN BG window does not resize"
-fixed_texts = [element.find("Data").text for element in labels if element.find("Adapter") is None]
-for text in ("OPEN BG", "Name", "Lv", "Class", "Unit", "State", "Value", "[Up]", "[Down]", "[PgUp]", "[PgDn]",
-             "[Refresh]", "[Close]"):
-    assert fixed_texts.count(text) == 1, text
-# Row slot contract with the server (OpenBgWindowScreen): slot -> (x, width, colour) on the row's band.
+        for template in own_templates:
+            assert f"<Name>{template}</Name>".encode() not in stock, f"{template} shadows a stock {skin} name"
+        # Crest texture: realmwar_{alb,mid,hib}.xml cut alb/mid/hib_symbol from the texture realm_symbols, which the stock
+        # realmwar_key.xml registers (isles/realm_symb.tga) for both skins; the window file needs no registration.
+        key = (stock_ui / skin / "realmwar_key.xml").read_bytes()
+        assert b"<Name>realm_symbols</Name>" in key and b"<File>isles/realm_symb.tga</File>" in key, skin
+        for realm in ("alb", "mid", "hib"):
+            realm_xml = ET.fromstring((stock_ui / skin / f"realmwar_{realm}.xml").read_bytes())
+            symbol = next(element for element in realm_xml if element.tag == "ImageAreaTemplate"
+                          and element.findtext("Name") == f"{realm}_symbol")
+            assert symbol.findtext("TextureName") == "realm_symbols" and symbol.findtext("Size/X") == "64", (skin, realm)
+        assets = (stock_ui / skin / "assets.xml").read_bytes()
+        assert b"<Name>title</Name>" in assets and b"title_24.tga" in assets, f"title font not registered in {skin}"
+    assert (stock_ui / "isles" / "realm_symb.tga").is_file()
+    # Own template pieces lie inside their stock texture (TGA header: width, height at bytes 12-15).
+    for name, (texture, sizes, pieces) in own_templates.items():
+        tga = (stock_ui / {"frames_win": "atlantis/frames_win.tga", "page1": "atlantis/atlantis_01.tga"}[texture]).read_bytes()
+        texture_width, texture_height = struct.unpack_from("<HH", tga, 12)
+        for piece, width_key in (("Left", "LeftWidth"), ("Repeat", "RepeatWidth"), ("Right", "RightWidth")):
+            px, py = pieces[piece]
+            assert px + sizes[width_key] <= texture_width and py + sizes["Height"] <= texture_height, (name, piece)
+# The stage's uimain includes the stock files that register the crest texture, the title font and frames_win/page1
+# before the OPEN BG window.
+for stock_file in (b"styles.xml", b"realmwar_alb.xml", b"realmwar_mid.xml", b"realmwar_hib.xml", b"realmwar_key.xml",
+                   b"community_window.xml", b"assets.xml"):
+    assert uimain.index(b"<Include>" + stock_file) < uimain.index(b"custom5_window.xml"), stock_file
+
+# Label index table (the contract with OpenBgWindowScreen): 357 of the 365 labels 620-984 are used, each exactly once.
+assert (builder.BG_LABEL_STATUS, builder.BG_LABEL_TAB_BASE, builder.BG_LABEL_PAGE, builder.BG_LABEL_BANNER,
+        builder.BG_LABEL_PHASE, builder.BG_LABEL_HINT, builder.BG_LABEL_REPLY, builder.BG_LABEL_OPEN_ALL,
+        builder.BG_LABEL_FOLD_ALL) == (620, 621, 625, 626, 627, 628, 629, 630, 631)
+assert (builder.BG_LABEL_ROW_BASE, builder.BG_LABEL_ROW_END, builder.BG_LABEL_HEAD_BASE, builder.BG_LABEL_REALM_BASE,
+        builder.BG_LABEL_USED_END, builder.BG_LABEL_END) == (633, 957, 957, 963, 978, 985)
+used = [builder.BG_LABEL_STATUS, *range(builder.BG_LABEL_TAB_BASE, builder.BG_LABEL_TAB_BASE + 4), builder.BG_LABEL_PAGE,
+        builder.BG_LABEL_BANNER, builder.BG_LABEL_PHASE, builder.BG_LABEL_HINT, builder.BG_LABEL_REPLY,
+        builder.BG_LABEL_OPEN_ALL, builder.BG_LABEL_FOLD_ALL, *range(builder.BG_LABEL_ROW_BASE, builder.BG_LABEL_USED_END)]
+assert len(used) == len(set(used)) == 357 and set(range(620, 985)) - set(used) == {632, *range(978, 985)}
+bg_adapters = [element.find("Adapter").text for element in labels if element.find("Adapter") is not None]
+assert sorted(bg_adapters) == [builder.adapter_name(index) for index in sorted(used)], "Each used OPEN BG label appears once"
 by_adapter = {element.find("Adapter").text: element for element in labels if element.find("Adapter") is not None}
+
+
 def bg_label(index):
+    """(x, y, width, colour, MaxCharacters, centered) of a label adapter."""
     element = by_adapter[builder.adapter_name(index)]
     return (int(element.find("Position/X").text), int(element.find("Position/Y").text), int(element.find("Width").text),
-            tuple(int(element.find(f"Color/{c}").text) for c in "RGB"))
-ROW_SLOTS = ((10, 740, builder.GOLD), (10, 740, builder.TEXT), *((10, 140, color) for color in builder.REALM_COLORS),
-             (10, 140, builder.TEXT), (154, 26, builder.STATUS), (186, 104, builder.TEXT), (296, 100, builder.MUTED),
-             (402, 150, builder.ACTIVE), (402, 150, builder.MUTED), (558, 110, builder.GOLD),
-             (672, 36, builder.LINK), (672, 36, builder.DISABLED), (712, 36, builder.LINK), (712, 36, builder.DISABLED))
-assert len(ROW_SLOTS) == builder.BG_ROW_STRIDE
+            tuple(int(element.find(f"Color/{c}").text) for c in "RGB"), int(element.find("MaxCharacters").text),
+            element.find("TextCentered").text == "true")
+
+
+def rect(element):
+    return (int(element.find("Position/X").text), int(element.find("Position/Y").text), int(element.find("Width").text),
+            int(element.find("Height").text))
+
+
+def overlaps(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return not (ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay)
+
+
+for element in labels:
+    x, y, w, h = rect(element)
+    assert 0 <= x and x + w <= width and 0 <= y and y + h <= height, (element.find("Adapter"), x, y, w, h)
+    assert len(element.find("Alignment")) == 0, "The OPEN BG window does not resize"
+    assert 0 < int(element.find("MaxCharacters").text) <= layout["MaximumTextLength"]
+for element in window:
+    if element.tag in ("FullResizeImageDef", "HorizontalResizeImageDef", "ImageAreaDef"):
+        x, y = int(element.find("Position/X").text), int(element.find("Position/Y").text)
+        template = element.find("TemplateName").text
+        w = int(element.findtext("Width") or 64)
+        h = int(element.findtext("Height") or {"obg_zebra": 20, "obg_banner": 25, "context_hr_image_divider": 1,
+                                               "tab_button_normal": 17}.get(template, 64))
+        assert 0 <= x and x + w <= width and 0 <= y and y + h <= height, (template, x, y, w)
+fixed_texts = [element.find("Data").text for element in labels if element.find("Adapter") is None]
+assert sorted(fixed_texts) == sorted(["OPEN BG", "[Up]", "[Down]", "[PgUp]", "[PgDn]", "[Refresh]", "[Close]"]), fixed_texts
+# Row slot contract: slot -> (x, width, colour, MaxCharacters, centered); row r sits at y = 232 + 20 r.
+ASH, BLOOD, DIM, FIELD = builder.MUTED, builder.BLOOD, builder.DIM, builder.ACTIVE
+ROW_SLOTS = ((12, 14, builder.GOLD, 2, True),                 # 0 mark + - * >
+             (28, 460, builder.GOLD, 115, False),             # 1 title
+             (28, 720, builder.TEXT, 115, False),             # 2 plain text
+             *((40, 116, color, 40, False) for color in builder.REALM_COLORS),   # 3-5 name Albion, Midgard, Hibernia
+             (160, 24, builder.TEXT, 4, False),               # 6 level (left, under the "Lv" head)
+             (190, 98, builder.TEXT, 32, False),              # 7 class
+             (160, 128, ASH, 42, False),                      # 8 Ash text
+             (292, 122, FIELD, 40, False), (292, 122, BLOOD, 40, False), (292, 122, ASH, 40, False),   # 9-11 state
+             (418, 80, DIM, 40, False), (418, 80, FIELD, 40, False),                                   # 12-13 bar
+             (504, 132, ASH, 44, False),                      # 14 note (Ash: gold is for titles and selection only)
+             (640, 108, builder.LINK, 36, False),             # 15 link
+             (502, 44, builder.LINK, 4, True), (546, 44, builder.LINK, 4, True))                       # 16-17 [-] [+]
+assert len(ROW_SLOTS) == builder.BG_ROW_STRIDE == 18 and builder.BG_ROW_COUNT == 18
+assert tuple(builder.open_bg_row_slots()) == ROW_SLOTS
 for row in range(builder.BG_ROW_COUNT):
-    for slot, (x, w, color) in enumerate(ROW_SLOTS):
-        assert bg_label(builder.BG_LABEL_ROW_BASE + builder.BG_ROW_STRIDE * row + slot) == (x, 164 + 20 * row, w, color), \
-            (row, slot)
-assert bg_label(builder.BG_LABEL_STATUS)[1] == 1
-assert [bg_label(builder.BG_LABEL_TAB_BASE + k)[1] for k in range(4)] + [bg_label(builder.BG_LABEL_PAGE)[1]] == [24] * 5
-assert bg_label(builder.BG_LABEL_TAB_BASE)[:3] == bg_label(builder.BG_LABEL_TAB_BASE + 1)[:3]
-assert bg_label(builder.BG_LABEL_TAB_BASE + 2)[:3] == bg_label(builder.BG_LABEL_TAB_BASE + 3)[:3]
-assert [bg_label(builder.BG_LABEL_HEADER_BASE + k)[1:3] for k in range(builder.BG_HEADER_LABELS)] == \
-    [(46 + 18 * k, 740) for k in range(builder.BG_HEADER_LABELS)]
-assert [bg_label(builder.BG_LABEL_REPLY_BASE + k)[1:3] for k in range(builder.BG_REPLY_LINES)] == [(606, 740), (624, 740)]
-# Click areas: decimal OnClickEvent 0xA00 + control, each control once, all after every other element.
+    for slot, (x, w, color, characters, centered) in enumerate(ROW_SLOTS):
+        assert bg_label(builder.BG_LABEL_ROW_BASE + builder.BG_ROW_STRIDE * row + slot) == \
+            (x, 232 + 20 * row, w, color, characters, centered), (row, slot)
+# Inside a row only declared overlays share pixels: full-width title/text, the name colours, Ash text over level/class,
+# the state colours, the Dim/Field bar pair, and the note under the steppers (Lage uses the note, Setup the steppers).
+OVERLAY_GROUPS = ({3, 4, 5}, {6, 7, 8}, {9, 10, 11}, {12, 13}, {14, 16, 17})
+for a in range(18):
+    for b in range(a + 1, 18):
+        (ax, aw), (bx, bw) = ROW_SLOTS[a][:2], ROW_SLOTS[b][:2]
+        if ax < bx + bw and bx < ax + aw:
+            assert {a, b} & {1, 2} or any({a, b} <= group for group in OVERLAY_GROUPS), (a, b)
+# Bars hold "|" (2 px) or "=" (8 px): MaxCharacters covers the full bar width in "|".
+assert ROW_SLOTS[12][3] == ROW_SLOTS[13][3] == ROW_SLOTS[12][1] // builder.text_width("|")
+# Fixed labels: status on the title bar, crest band, banner, phase, tab line, column heads, hint and reply.
+assert bg_label(builder.BG_LABEL_STATUS)[:2] == (84, 1)
+for k in range(2):
+    inactive, active = bg_label(builder.BG_LABEL_TAB_BASE + 2 * k), bg_label(builder.BG_LABEL_TAB_BASE + 2 * k + 1)
+    assert inactive[:3] == active[:3] and inactive[3] == ASH and active[3] == builder.GOLD and inactive[5] and active[5]
+assert bg_label(builder.BG_LABEL_BANNER)[:3] == (130, 132, 500) and bg_label(builder.BG_LABEL_BANNER)[5]
+assert bg_label(builder.BG_LABEL_PHASE)[1] == 159 and bg_label(builder.BG_LABEL_PHASE)[5]
+assert [bg_label(builder.BG_LABEL_HEAD_BASE + k)[:2] for k in range(builder.BG_HEAD_LABELS)] == \
+    [(28, 208), (160, 208), (190, 208), (292, 208), (418, 208), (504, 208)]
+for realm in range(3):
+    base = builder.BG_LABEL_REALM_BASE + builder.BG_REALM_STRIDE * realm
+    name, detail, dim, field, count = (bg_label(base + k) for k in range(5))
+    assert name[3] == builder.REALM_COLORS[realm] and detail[3] == count[3] == ASH and dim[3] == DIM and field[3] == FIELD
+    assert dim[:3] == field[:3] and dim[4] == dim[2] // builder.text_width("|")
+    crest_name, crest_x, crest_y = crests[realm]
+    assert name[0] == detail[0] == dim[0] >= crest_x + 64 + 8 and crest_y == 42, (realm, name, crest_x)
+    assert count[0] >= dim[0] + dim[2] and count[0] + count[2] <= 8 + 248 * (realm + 1) - 16
+# Non-row labels never overlap each other except the overlaid pairs and the Lv/Setup range head; none enters the rows.
+row_band = (0, 230, width, 20 * builder.BG_ROW_COUNT)
+fixed = [element for element in labels
+         if element.find("Adapter") is None or not
+         builder.BG_LABEL_ROW_BASE <= int(element.find("Adapter").text.split("_")[-1]) < builder.BG_LABEL_ROW_END]
+allowed = {(builder.adapter_name(builder.BG_LABEL_HEAD_BASE + 1), builder.adapter_name(builder.BG_LABEL_HEAD_BASE + 2))}
+for index, a in enumerate(fixed):
+    assert not overlaps(rect(a), row_band), a.find("Adapter")
+    for b in fixed[index + 1:]:
+        if rect(a) != rect(b) and overlaps(rect(a), rect(b)):
+            assert (a.findtext("Adapter"), b.findtext("Adapter")) in allowed, (a.findtext("Adapter") or a.findtext("Data"),
+                                                                              b.findtext("Adapter") or b.findtext("Data"))
+# Zebra: every second row (odd rows) gets one obg_zebra band covering exactly that row's 20 px click band.
+zebra = [(int(element.find("Position/X").text), int(element.find("Position/Y").text), int(element.find("Width").text))
+         for element in window.iter("HorizontalResizeImageDef") if element.find("TemplateName").text == "obg_zebra"]
+assert zebra == [(10, 230 + 20 * row, 740) for row in range(1, builder.BG_ROW_COUNT, 2)], zebra
+banner = [element for element in window.iter("HorizontalResizeImageDef") if element.find("TemplateName").text == "obg_banner"]
+assert len(banner) == 1 and (int(banner[0].find("Position/X").text), int(banner[0].find("Position/Y").text),
+                              int(banner[0].find("Width").text)) == (130, 130, 500)
+
+# Click areas: InvisibleButtonDef (the only click type proven in the real client) with decimal OnClickEvent 0xA00 +
+# control, each control once, all after every other element, on the title-bar-free part of the window, no overlap.
 children = list(window)
 buttons = [element for element in children if element.tag == "InvisibleButtonDef"]
 assert children[-len(buttons):] == buttons, "Click areas must come last (raid z-order)"
+assert window.find(".//HorizontalResizeButtonDef") is None and window.find(".//ButtonDef") is None
 bg_clicks = {}
 for button in buttons:
     text = button.find("OnClickEvent").text
@@ -768,28 +927,58 @@ for button in buttons:
     assert builder.BG_EVENT_BASE <= event <= builder.BG_EVENT_BASE + 0xFF, text
     control = event - builder.BG_EVENT_BASE
     assert control not in bg_clicks, f"control {control:#x} has two click areas"
-    bg_clicks[control] = (int(button.find("Position/X").text), int(button.find("Position/Y").text),
-                          int(button.find("Width").text), int(button.find("Height").text))
-assert sorted(bg_clicks) == [*range(0x00, 0x16), *range(0x20, 0x36), *range(0x40, 0x56), 0xE0, 0xE1, 0xE8, 0xE9, 0xEA,
-                             0xEB, 0xFD, 0xFE], sorted(bg_clicks)
+    bg_clicks[control] = rect(button)
+assert sorted(bg_clicks) == BG_CLICKS, [hex(c) for c in sorted(bg_clicks)]
+# Only the free value space (0x16-0x1F, 0x36-0x3F, 0x56-0xDF, 0xEC-0xFC) is new; the row ranges shrink from 22 to 18.
+OLD_BG_CONTROLS = {*range(0x00, 0x16), *range(0x20, 0x36), *range(0x40, 0x56), 0xE0, 0xE1, 0xE8, 0xE9, 0xEA, 0xEB, 0xFD, 0xFE,
+                   0xFF}
+FREE_BG_CONTROLS = {*range(0x16, 0x20), *range(0x36, 0x40), *range(0x56, 0xE0), *range(0xEC, 0xFD)}
+for control in BG_CLICKS:
+    assert control in OLD_BG_CONTROLS or control in FREE_BG_CONTROLS, hex(control)
 areas = list(bg_clicks.items())
-for index, (a, (ax, ay, aw, ah)) in enumerate(areas):
-    assert 0 <= ax and 18 <= ay and ax + aw <= width and ay + ah <= height, (hex(a), ax, ay, aw, ah)
-    for b, (bx, by, bw, bh) in areas[index + 1:]:
-        assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, (hex(a), hex(b))
+for index, (a, area) in enumerate(areas):
+    ax, ay, aw, ah = area
+    assert 0 <= ax and 18 <= ay and ax + aw <= width and ay + ah <= height - 8, (hex(a), area)
+    for b, other in areas[index + 1:]:
+        assert not overlaps(area, other), (hex(a), hex(b))
+
+
+def contains(outer, inner):
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ox <= ix and iy >= oy and ix + iw <= ox + ow and iy + ih <= oy + oh
+
+
 for row in range(builder.BG_ROW_COUNT):
-    y = 164 + 20 * row
-    for base, (x, w) in ((builder.BG_CONTROL_LINK_BASE, (558, 110)), (builder.BG_CONTROL_MINUS_BASE, (672, 36)),
-                         (builder.BG_CONTROL_PLUS_BASE, (712, 36))):
-        cx, cy, cw, ch = bg_clicks[base + row]
-        assert cx <= x and x + w <= cx + cw and cy <= y and y + 18 <= cy + ch, (hex(base + row), bg_clicks[base + row])
-for control in (builder.BG_CONTROL_TAB_SITUATION, builder.BG_CONTROL_TAB_CONTROL, builder.BG_CONTROL_UP,
-                builder.BG_CONTROL_DOWN, builder.BG_CONTROL_PAGE_UP, builder.BG_CONTROL_PAGE_DOWN,
-                builder.BG_CONTROL_CLOSE, builder.BG_CONTROL_REFRESH):
-    assert bg_clicks[control][1] == 24, hex(control)
+    y = 232 + 20 * row
+    band = lambda x, w: (x, y - 2, w, 20)
+    assert bg_clicks[builder.BG_CONTROL_FOLD_BASE + row] == band(8, 28)
+    assert bg_clicks[builder.BG_CONTROL_SELECT_BASE + row] == band(36, 252)
+    assert bg_clicks[builder.BG_CONTROL_MINUS_BASE + row] == band(502, 44)
+    assert bg_clicks[builder.BG_CONTROL_PLUS_BASE + row] == band(546, 44)
+    assert bg_clicks[builder.BG_CONTROL_LINK_BASE + row] == band(638, 110)
+    for control, slots in ((builder.BG_CONTROL_FOLD_BASE, (0,)), (builder.BG_CONTROL_SELECT_BASE, (3, 4, 5, 6, 7)),
+                           (builder.BG_CONTROL_MINUS_BASE, (16,)), (builder.BG_CONTROL_PLUS_BASE, (17,)),
+                           (builder.BG_CONTROL_LINK_BASE, (15,))):
+        for slot in slots:
+            x, w = ROW_SLOTS[slot][:2]
+            assert contains(bg_clicks[control + row], (x, y, w, 16)), (hex(control + row), slot)
 for k, control in enumerate((builder.BG_CONTROL_TAB_SITUATION, builder.BG_CONTROL_TAB_CONTROL)):
-    x, y, w, _c = bg_label(builder.BG_LABEL_TAB_BASE + 2 * k)
-    assert bg_clicks[control][:3] == (x, y, w), hex(control)
+    x, y, w = bg_label(builder.BG_LABEL_TAB_BASE + 2 * k)[:3]
+    assert bg_clicks[control] == (x, y - 1, w, 18), hex(control)
+link_labels = {element.find("Data").text: rect(element) for element in labels if element.find("Adapter") is None}
+for index, text in ((builder.BG_LABEL_OPEN_ALL, "[Open all]"), (builder.BG_LABEL_FOLD_ALL, "[Fold all]")):
+    link_labels[text] = rect(by_adapter[builder.adapter_name(index)])
+    assert bg_label(index)[3] == builder.LINK
+for control, text in ((builder.BG_CONTROL_OPEN_ALL, "[Open all]"), (builder.BG_CONTROL_FOLD_ALL, "[Fold all]"),
+                      (builder.BG_CONTROL_UP, "[Up]"), (builder.BG_CONTROL_DOWN, "[Down]"),
+                      (builder.BG_CONTROL_PAGE_UP, "[PgUp]"), (builder.BG_CONTROL_PAGE_DOWN, "[PgDn]"),
+                      (builder.BG_CONTROL_REFRESH, "[Refresh]"), (builder.BG_CONTROL_CLOSE, "[Close]")):
+    assert bg_clicks[control] == link_labels[text], (hex(control), text)
+    assert link_labels[text][2] >= builder.text_width(text) + 4, text
+for realm in range(3):
+    _name, cx, cy = crests[realm]
+    assert contains(bg_clicks[builder.BG_CONTROL_CREST_BASE + realm], (cx, cy, 64, 64)), realm
 # main() refuses an input client that already has an OPEN BG window, in a skin or in uimain.xml.
 import subprocess
 import tempfile
@@ -858,26 +1047,41 @@ for name, value in layout.items():
 # OPEN BG window (Custom5): protocol constants are mirrored in C# under the same names (CamelCase).
 BG_EXPECTED = {
     "BG_WINDOW": 0x72, "OP_BG_SHOW": 10, "OP_BG_HIDE": 11, "OP_BG_TOKEN": 12, "BG_EVENT_BASE": 0xA00,
-    "BG_READY_CONTROL": 0xFF, "BG_LABEL_BASE": 620, "BG_ROW_COUNT": 22, "BG_ROW_STRIDE": 16, "BG_HEADER_LABELS": 5,
-    "BG_LABEL_STATUS": 620, "BG_LABEL_TAB_BASE": 621, "BG_LABEL_PAGE": 625, "BG_LABEL_HEADER_BASE": 626,
-    "BG_LABEL_REPLY_BASE": 631, "BG_REPLY_LINES": 2, "BG_LABEL_ROW_BASE": 633, "BG_LABEL_END": 985,
+    "BG_READY_CONTROL": 0xFF, "BG_LABEL_BASE": 620, "BG_ROW_COUNT": 18, "BG_ROW_STRIDE": 18,
+    "BG_LABEL_STATUS": 620, "BG_LABEL_TAB_BASE": 621, "BG_LABEL_PAGE": 625, "BG_LABEL_BANNER": 626,
+    "BG_LABEL_PHASE": 627, "BG_LABEL_HINT": 628, "BG_LABEL_REPLY": 629, "BG_LABEL_OPEN_ALL": 630,
+    "BG_LABEL_FOLD_ALL": 631, "BG_LABEL_ROW_BASE": 633,
+    "BG_LABEL_ROW_END": 957, "BG_LABEL_HEAD_BASE": 957, "BG_HEAD_LABELS": 6, "BG_LABEL_REALM_BASE": 963,
+    "BG_REALM_STRIDE": 5, "BG_LABEL_USED_END": 978, "BG_LABEL_END": 985,
+    "BG_SLOT_MARK": 0, "BG_SLOT_TITLE": 1, "BG_SLOT_TEXT": 2, "BG_SLOT_NAME_BASE": 3, "BG_SLOT_LEVEL": 6,
+    "BG_SLOT_CLASS": 7, "BG_SLOT_ASH": 8, "BG_SLOT_STATE_FIELD": 9, "BG_SLOT_STATE_BLOOD": 10, "BG_SLOT_STATE_ASH": 11,
+    "BG_SLOT_BAR_DIM": 12, "BG_SLOT_BAR_FIELD": 13, "BG_SLOT_NOTE": 14, "BG_SLOT_LINK": 15, "BG_SLOT_MINUS": 16,
+    "BG_SLOT_PLUS": 17, "BG_REALM_NAME": 0, "BG_REALM_DETAIL": 1, "BG_REALM_BAR_DIM": 2, "BG_REALM_BAR_FIELD": 3,
+    "BG_REALM_COUNT": 4,
     "BG_CONTROL_LINK_BASE": 0x00, "BG_CONTROL_MINUS_BASE": 0x20, "BG_CONTROL_PLUS_BASE": 0x40,
+    "BG_CONTROL_FOLD_BASE": 0x60, "BG_CONTROL_SELECT_BASE": 0x80,
     "BG_CONTROL_TAB_SITUATION": 0xE0, "BG_CONTROL_TAB_CONTROL": 0xE1, "BG_CONTROL_UP": 0xE8,
     "BG_CONTROL_DOWN": 0xE9, "BG_CONTROL_PAGE_UP": 0xEA, "BG_CONTROL_PAGE_DOWN": 0xEB,
+    "BG_CONTROL_OPEN_ALL": 0xEC, "BG_CONTROL_FOLD_ALL": 0xED, "BG_CONTROL_CREST_BASE": 0xF0,
     "BG_CONTROL_CLOSE": 0xFD, "BG_CONTROL_REFRESH": 0xFE,
 }
 assert builder.BG_COMMAND_PREFIX == "&bgsetup ui "
-assert builder.BG_LABEL_ROW_BASE + builder.BG_ROW_COUNT * builder.BG_ROW_STRIDE == builder.BG_LABEL_END == builder.TOTAL_LABEL_COUNT
-assert builder.BG_LABEL_ROW_BASE == builder.BG_LABEL_REPLY_BASE + builder.BG_REPLY_LINES
-assert builder.BG_LABEL_HEADER_BASE + builder.BG_HEADER_LABELS == builder.BG_LABEL_REPLY_BASE
-assert builder.BG_LABEL_PAGE + 1 == builder.BG_LABEL_HEADER_BASE and builder.BG_LABEL_TAB_BASE + 4 == builder.BG_LABEL_PAGE
+assert builder.BG_LABEL_ROW_BASE + builder.BG_ROW_COUNT * builder.BG_ROW_STRIDE == builder.BG_LABEL_ROW_END
+assert builder.BG_LABEL_HEAD_BASE == builder.BG_LABEL_ROW_END
+assert builder.BG_LABEL_REALM_BASE == builder.BG_LABEL_HEAD_BASE + builder.BG_HEAD_LABELS
+assert builder.BG_LABEL_USED_END == builder.BG_LABEL_REALM_BASE + 3 * builder.BG_REALM_STRIDE
+assert builder.BG_LABEL_USED_END <= builder.BG_LABEL_END == builder.TOTAL_LABEL_COUNT == 985
+assert builder.BG_LABEL_TAB_BASE + 4 == builder.BG_LABEL_PAGE and builder.BG_LABEL_PAGE + 1 == builder.BG_LABEL_BANNER
+assert builder.BG_LABEL_FOLD_ALL < builder.BG_LABEL_ROW_BASE
 for name, value in BG_EXPECTED.items():
     assert getattr(builder, name) == value, f"builder.{name} = {getattr(builder, name)}, expected {value}"
     csharp = "".join(part.capitalize() for part in name.split("_"))
     assert declared.get(csharp) == value, f"CompanionManagerProtocol.{csharp} = {declared.get(csharp)}, expected {value}"
+for retired in ("BgHeaderLabels", "BgLabelHeaderBase", "BgLabelReplyBase", "BgReplyLines"):
+    assert retired not in declared, f"CompanionManagerProtocol.{retired} belongs to the 0.282.0 layout"
 assert 'public const string BgCommandPrefix = "&bgsetup ui ";' in protocol
-bg_controls = [*range(0x00, 0x16), *range(0x20, 0x36), *range(0x40, 0x56), 0xE0, 0xE1, 0xE8, 0xE9, 0xEA, 0xEB, 0xFD, 0xFE, 0xFF]
-assert len(bg_controls) == len(set(bg_controls)) == 75 and max(bg_controls) < 256
+bg_controls = BG_CLICKS + [builder.BG_READY_CONTROL]
+assert len(bg_controls) == len(set(bg_controls)) == 104 and max(bg_controls) < 256
 assert builder.BG_EVENT_BASE > max(builder.EVENT_BASE, builder.GEAR_EVENT_BASE, builder.BAR_CONTROL_LIMIT) + 0xFF
 advances = re.search(r"Arial14Advances =\s*\{(.*?)\};", protocol, re.S).group(1)
 assert tuple(int(value) for value in re.findall(r"\d+", advances)) == builder.ARIAL14_ADVANCES, "Server font table differs"
@@ -894,6 +1098,9 @@ print(f"PASS (offline only): COMPANION GEAR Custom6 window: ops 7/8/9, {GEAR_SLO
       "slot clicks 0x900-0x93a send move(slot, source, count) or start a kind-0x66 pick-up")
 print("PASS (offline only): OPEN BG Custom5: ops 10/11/12, own flag and token buffer, clicks 0xa00-0xaff send "
       "&bgsetup ui <token> <control> through their own sender; 0x9ff and 0xb00 pass through")
-print("PASS (offline only): OPEN BG Custom5 XML: fixed 760x648, labels 620-984 once in the row slot layout, 74 click "
-      "areas 0xa00 + control last and without overlap; custom6/7/8 unchanged; uimain 8, 7, 6, 5; foreign custom5 refused")
+print("PASS (offline only): OPEN BG Custom5 XML (Kriegstafel): fixed 760x640, 357 labels of 620-984 once in the 18 x 18 "
+      "row slot layout, stock crests, own obg_ templates on stock textures, one title-font banner, 103 click areas "
+      "0xa00 + control last and without overlap; custom6/7/8 unchanged; uimain 8, 7, 6, 5; foreign custom5 refused")
+print("PASS (offline only): stock templates, crest texture and title font checked against " + str(stock_ui) if stock_checked
+      else "SKIP: no stock client UI found; the stock template, crest texture and title font checks did not run")
 print("NOTE: emulation is not acceptance; the owner's combined real-client check is still required")
