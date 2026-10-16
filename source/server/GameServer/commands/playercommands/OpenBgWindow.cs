@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using DOL.Logging;
 using static DOL.GS.CompanionManagerProtocol;
 
 namespace DOL.GS.Commands
@@ -37,8 +38,16 @@ namespace DOL.GS.Commands
             return true;
         }
 
-        /// <summary>The client answered (ready or any click): it has the window.</summary>
-        public void Ready() => State = OpenBgClientState.Confirmed;
+        /// <summary>
+        /// The client answered (ready or any click): it has the window. True when it had been given up as Missing: a late
+        /// window that finally appeared must be treated as open again.
+        /// </summary>
+        public bool Ready()
+        {
+            bool revived = State == OpenBgClientState.Missing;
+            State = OpenBgClientState.Confirmed;
+            return revived;
+        }
 
         /// <summary>True exactly once: the wait ran out without an answer.</summary>
         public bool Expire(DateTime utcNow)
@@ -90,6 +99,7 @@ namespace DOL.GS.Commands
         }
 
         private static readonly ConditionalWeakTable<GamePlayer, Runtime> Sessions = new();
+        private static readonly Logger Log = LoggerManager.Create(typeof(OpenBgWindow));
 
         // ---- pure decisions ----------------------------------------------------------------------------------------
 
@@ -164,6 +174,13 @@ namespace DOL.GS.Commands
         public static bool IsOpen(bool shown, DateTime lastUseUtc, DateTime utcNow) =>
             shown && utcNow - lastUseUtc <= OpenBgWindowSession.IdleLimit;
 
+        /// <summary>
+        /// Whether a /bgsetup change by chat redraws the window, and then shows it again (op 10): the stock close X sends
+        /// nothing, so a window the server believes open may be hidden where the player expects the result.
+        /// </summary>
+        public static bool RedrawsChatChange(bool usesWindow, bool shown, DateTime lastUseUtc, DateTime utcNow) =>
+            usesWindow && IsOpen(shown, lastUseUtc, utcNow);
+
         /// <summary>Whether the 15-second redraw goes on: the window is open, the player plays, and used it within half an hour.</summary>
         public static bool KeepsRefreshing(bool current, bool playing, DateTime lastUseUtc, DateTime utcNow) =>
             playing && IsOpen(current, lastUseUtc, utcNow);
@@ -210,12 +227,12 @@ namespace DOL.GS.Commands
         /// <summary>Redraws an open window with <paramref name="message"/> (a /bgsetup change by chat); false when none is open.</summary>
         public static bool RefreshIfOpen(GamePlayer player, string message)
         {
-            if (player == null || !Sessions.TryGetValue(player, out Runtime runtime) || !runtime.Probe.UsesWindow ||
-                !IsOpen(runtime.Open, runtime.Window.LastUseUtc, DateTime.UtcNow))
+            if (player == null || !Sessions.TryGetValue(player, out Runtime runtime) ||
+                !RedrawsChatChange(runtime.Probe.UsesWindow, runtime.Open, runtime.Window.LastUseUtc, DateTime.UtcNow))
                 return false;
             if (message != null)
                 runtime.Window.Message = message;
-            Render(player, runtime);
+            Render(player, runtime, show: true);
             return true;
         }
 
@@ -235,8 +252,15 @@ namespace DOL.GS.Commands
                     Open(player, ReopenedMessage);
                 return;
             }
-            runtime.Probe.Ready();
+            bool revived = runtime.Probe.Ready();
             DateTime now = DateTime.UtcNow;
+            if (revived)
+            {
+                // A late ready after the text fallback: the window did appear, so it is open and refreshes again.
+                runtime.Window.Touch(now);
+                runtime.Open = true;
+                StartRefresh(player, runtime);
+            }
             OpenBgWindowAction action = PlanClick(runtime.Window, control, token, now, OpenBgSetupValues.Current());
             if (action.Kind is OpenBgWindowActionKind.Ready or OpenBgWindowActionKind.Ignore)
                 return;
@@ -256,7 +280,7 @@ namespace DOL.GS.Commands
                 case OpenBgWindowActionKind.Write:
                 {
                     string reply = OpenBgSetupStore.TryWrite(action.RowKey, action.Value, player.Name, out string error)
-                        ? action.Message
+                        ? OpenBgSetupPages.WithReserveNote(action.Message, OpenBgSetupParser.Find(action.RowKey)?.Name)
                         : $"Could not save the open BG setup ({action.RowKey}): {error}";
                     runtime.Window.Message = reply;
                     CompanionWindowTransport.Tell(player, reply);
@@ -304,24 +328,39 @@ namespace DOL.GS.Commands
         {
             if (runtime.ProbeTimer != null || player.Client?.ClientState != GameClient.eClientState.Playing)
                 return;
+            // A timer callback must never throw: the timer service kicks a GamePlayer owner to the character screen.
             runtime.ProbeTimer = new ECSGameTimer(player, timer =>
             {
-                DateTime now = DateTime.UtcNow;
-                if (runtime.Probe.Expire(now))
+                try
                 {
-                    runtime.ProbeTimer = null;
-                    runtime.Open = false;
-                    runtime.RefreshTimer?.Stop();
-                    runtime.RefreshTimer = null;
-                    if (player.Client?.ClientState == GameClient.eClientState.Playing)
+                    DateTime now = DateTime.UtcNow;
+                    if (runtime.Probe.Expire(now))
                     {
-                        ShowTextPage(player);
-                        CompanionWindowTransport.Tell(player, ClientMissingHint);
+                        runtime.ProbeTimer = null;
+                        runtime.Open = false;
+                        runtime.RefreshTimer?.Stop();
+                        runtime.RefreshTimer = null;
+                        if (player.Client?.ClientState == GameClient.eClientState.Playing)
+                        {
+                            try
+                            {
+                                ShowTextPage(player);
+                                CompanionWindowTransport.Tell(player, ClientMissingHint);
+                            }
+                            catch (Exception exception)
+                            {
+                                Log.Warn($"OPEN_BG_WINDOW fallback text failed player={player.Name}: {exception.Message}");
+                            }
+                        }
+                        return 0;
                     }
-                    return 0;
+                    if (runtime.Probe.State == OpenBgClientState.Waiting && player.Client?.ClientState == GameClient.eClientState.Playing)
+                        return GameInterval((int)Math.Ceiling(runtime.Probe.Remaining(now).TotalMilliseconds));
                 }
-                if (runtime.Probe.State == OpenBgClientState.Waiting && player.Client?.ClientState == GameClient.eClientState.Playing)
-                    return GameInterval((int)Math.Ceiling(runtime.Probe.Remaining(now).TotalMilliseconds));
+                catch (Exception exception)
+                {
+                    Log.Warn($"OPEN_BG_WINDOW probe failed: {exception.Message}");
+                }
                 runtime.ProbeTimer = null;
                 return 0;
             }, GameInterval(CompanionWindowTransport.GuidanceDelayMilliseconds));
@@ -332,25 +371,35 @@ namespace DOL.GS.Commands
         {
             if (runtime.RefreshTimer != null || player.Client?.ClientState != GameClient.eClientState.Playing)
                 return;
+            // A timer callback must never throw: the timer service kicks a GamePlayer owner to the character screen.
             runtime.RefreshTimer = new ECSGameTimer(player, timer =>
             {
-                bool playing = player.Client?.ClientState == GameClient.eClientState.Playing &&
-                    player.ObjectState == GameObject.eObjectState.Active;
-                if (!KeepsRefreshing(IsCurrent(player, runtime), playing, runtime.Window.LastUseUtc, DateTime.UtcNow))
-                {
-                    if (ReferenceEquals(runtime.RefreshTimer, timer))
-                        runtime.RefreshTimer = null;
-                    return 0;
-                }
                 try
                 {
+                    bool playing = player.Client?.ClientState == GameClient.eClientState.Playing &&
+                        player.ObjectState == GameObject.eObjectState.Active;
+                    if (!KeepsRefreshing(IsCurrent(player, runtime), playing, runtime.Window.LastUseUtc, DateTime.UtcNow))
+                    {
+                        if (ReferenceEquals(runtime.RefreshTimer, timer))
+                            runtime.RefreshTimer = null;
+                        return 0;
+                    }
                     Render(player, runtime);
+                    return GameInterval(RefreshWallMilliseconds);
                 }
-                catch (Exception)
+                catch (Exception exception)
                 {
                     // A failed redraw waits for the next one; the window keeps its last labels.
+                    Log.Warn($"OPEN_BG_WINDOW refresh failed: {exception.Message}");
+                    try
+                    {
+                        return GameInterval(RefreshWallMilliseconds);
+                    }
+                    catch (Exception)
+                    {
+                        return RefreshWallMilliseconds;
+                    }
                 }
-                return GameInterval(RefreshWallMilliseconds);
             }, GameInterval(RefreshWallMilliseconds));
         }
     }

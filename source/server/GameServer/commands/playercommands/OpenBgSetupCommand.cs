@@ -95,11 +95,7 @@ namespace DOL.GS.Commands
             OpenBgSetupKey written = OpenBgSetupParser.Find(key);
             string shown = value.Length > 0 ? value : written.IsUnits ? "global" : written.Name == "peace" ? "auto" : written.Name == "presets" ? "off" : value;
             string message = $"open BG setup: {written.Name} = {shown}. Properties refreshed; the roster reads it on its next tick.";
-            if (written.Name is "band_min" or "band_max" or "enabled" or "max_bots")
-            {
-                string note = OpenBgSetupPages.GothwaiteReserveNote(GothwaitePvpMode.IsActive, GothwaitePvpOpenBgReserve.Set.Count);
-                if (note.Length > 0) message += " " + note;
-            }
+            message = OpenBgSetupPages.WithReserveNote(message, written.Name);
             DisplayMessage(client, message);
             if (!OpenBgWindow.RefreshIfOpen(player, message))
                 ShowPage(client, 2);
@@ -390,6 +386,25 @@ namespace DOL.GS.Commands
         public static string GothwaiteReserveNote(bool modeActive, int reserveCount) => modeActive
             ? $"Gothwaite mode: the open BG reserve is fixed at server start (reserve {reserveCount}); restart the server to apply."
             : string.Empty;
+
+        /// <summary>The settings whose change the Gothwaite reserve only takes at the next server start.</summary>
+        public static bool AffectsGothwaiteReserve(string name) => name is "band_min" or "band_max" or "enabled" or "max_bots";
+
+        /// <summary>
+        /// The reply of a setup write with the <see cref="GothwaiteReserveNote"/> appended when <paramref name="name"/>
+        /// affects the reserve and the mode is on; shared by /bgsetup &lt;key&gt; &lt;value&gt; and the OPEN BG window.
+        /// </summary>
+        public static string WithReserveNote(string message, string name, bool modeActive, int reserveCount)
+        {
+            message ??= string.Empty;
+            if (!AffectsGothwaiteReserve(name))
+                return message;
+            string note = GothwaiteReserveNote(modeActive, reserveCount);
+            return note.Length > 0 ? message + " " + note : message;
+        }
+
+        public static string WithReserveNote(string message, string name) =>
+            WithReserveNote(message, name, GothwaitePvpMode.IsActive, GothwaitePvpOpenBgReserve.Set.Count);
 
         public static IReadOnlyList<IReadOnlyList<string>> Pages(OpenBgStatusSnapshot status, OpenBgSetupValues values)
         {

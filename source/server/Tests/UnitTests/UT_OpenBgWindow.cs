@@ -413,4 +413,55 @@ public sealed class UT_OpenBgWindow
             Assert.That(OpenBgWindow.RefreshWallMilliseconds, Is.EqualTo(15_000));
         });
     }
+
+    // ---- Task 6 review fixes ---------------------------------------------------------------------------------------
+
+    [Test]
+    public void ClientProbe_LateReadyAfterMissingRevivesTheWindow()
+    {
+        DateTime t0 = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
+        var probe = new OpenBgClientProbe();
+        probe.Sent(t0);
+        Assert.That(probe.Expire(t0.AddSeconds(3)), Is.True);
+        Assert.That(probe.Ready(), Is.True, "a ready after the fallback revives the window");
+        Assert.That(probe.State, Is.EqualTo(OpenBgClientState.Confirmed));
+        Assert.That(probe.UsesWindow, Is.True);
+        Assert.That(probe.Ready(), Is.False, "a further ready is a plain answer");
+        var waiting = new OpenBgClientProbe();
+        waiting.Sent(t0);
+        Assert.That(waiting.Ready(), Is.False, "an in-time ready is no revival");
+        Assert.That(new OpenBgClientProbe().Ready(), Is.False);
+    }
+
+    [Test]
+    public void ChatChangesRedrawAndShowOnlyAnOpenWindow()
+    {
+        DateTime now = new(2026, 10, 16, 15, 0, 0, DateTimeKind.Utc);
+        Assert.That(OpenBgWindow.RedrawsChatChange(true, true, now.AddMinutes(-5), now), Is.True);
+        Assert.That(OpenBgWindow.RedrawsChatChange(false, true, now, now), Is.False, "client without the window: text page");
+        Assert.That(OpenBgWindow.RedrawsChatChange(true, false, now, now), Is.False, "closed");
+        Assert.That(OpenBgWindow.RedrawsChatChange(true, true, now.AddMinutes(-31), now), Is.False, "idle counts as closed");
+        // the redraw of a chat change shows the window again (op 10 last), so a window closed with the stock X reappears
+        var steps = CompanionWindowTransport.Plan(new string[1], new[] { "x" }, false, 1, true,
+            CompanionManagerProtocol.BgLabelBase, CompanionManagerProtocol.OpBgToken, CompanionManagerProtocol.OpBgShow);
+        Assert.That(steps[^1].Operation, Is.EqualTo(CompanionManagerProtocol.OpBgShow));
+    }
+
+    [Test]
+    public void ClickedAndChatWritesShareTheGothwaiteReserveNote()
+    {
+        string note = OpenBgSetupPages.GothwaiteReserveNote(true, 24);
+        foreach (string name in new[] { "band_min", "band_max", "enabled", "max_bots" })
+        {
+            Assert.That(OpenBgSetupPages.WithReserveNote("done.", name, true, 24), Is.EqualTo("done. " + note), name);
+            Assert.That(OpenBgSetupPages.WithReserveNote("done.", name, false, 24), Is.EqualTo("done."), name + " mode off");
+        }
+        Assert.That(OpenBgSetupPages.WithReserveNote("done.", "groups8", true, 24), Is.EqualTo("done."));
+        Assert.That(OpenBgSetupPages.WithReserveNote("done.", null, true, 24), Is.EqualTo("done."));
+        // the window's write names its setting by row key; the parser maps it back to the name the note checks
+        OpenBgWindowAction write = OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "band_min", 1), Values());
+        Assert.That(OpenBgSetupParser.Find(write.RowKey).Name, Is.EqualTo("band_min"));
+        Assert.That(OpenBgSetupParser.Find(OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.SetEnabled, On: false), Values()).RowKey).Name,
+            Is.EqualTo("enabled"));
+    }
 }
