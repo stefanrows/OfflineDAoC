@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using DOL.GS.PacketHandler;
 using static DOL.GS.CompanionManagerProtocol;
 
@@ -16,63 +15,8 @@ namespace DOL.GS.Commands
         bool GuidancePending { get; set; }
     }
 
-    /// <summary>Which manager drives a player's Custom8 window.</summary>
-    public enum CompanionWindowKind { None, Companions, OpenBg }
-
     /// <summary>
-    /// One Custom8 window per client: the Companion Manager and the open BG manager share it. Opening one claims the
-    /// window and closes the other's session; a click (<c>/companions ui</c>) goes to the manager that owns it.
-    /// Keys are players (any object in tests); the registry holds them weakly.
-    /// </summary>
-    public static class CompanionWindowOwner
-    {
-        private sealed class Holder
-        {
-            public CompanionWindowKind Kind;
-        }
-
-        private static readonly ConditionalWeakTable<object, Holder> Owners = new();
-
-        /// <summary>The manager that owns the window, or None.</summary>
-        public static CompanionWindowKind Current(object player) =>
-            player != null && Owners.TryGetValue(player, out Holder holder) ? holder.Kind : CompanionWindowKind.None;
-
-        /// <summary>
-        /// Gives the window to <paramref name="kind"/>. When another manager owned it, <paramref name="closePrevious"/> is
-        /// called with that manager so it can drop its session. Returns the previous owner.
-        /// </summary>
-        public static CompanionWindowKind Claim(object player, CompanionWindowKind kind, Action<CompanionWindowKind> closePrevious = null)
-        {
-            if (player == null)
-                return CompanionWindowKind.None;
-            Holder holder = Owners.GetValue(player, _ => new Holder());
-            CompanionWindowKind previous;
-            lock (holder)
-            {
-                previous = holder.Kind;
-                holder.Kind = kind;
-            }
-            if (previous != CompanionWindowKind.None && previous != kind)
-                closePrevious?.Invoke(previous);
-            return previous;
-        }
-
-        /// <summary>Frees the window when <paramref name="kind"/> still owns it; another owner is left alone.</summary>
-        public static void Release(object player, CompanionWindowKind kind)
-        {
-            if (player == null || !Owners.TryGetValue(player, out Holder holder))
-                return;
-            lock (holder)
-                if (holder.Kind == kind)
-                    holder.Kind = CompanionWindowKind.None;
-        }
-
-        /// <summary>Whether a <c>/companions ui</c> click belongs to the open BG manager; anything else keeps the Companion Manager's handling.</summary>
-        public static bool RoutesToOpenBg(object player) => Current(player) == CompanionWindowKind.OpenBg;
-    }
-
-    /// <summary>
-    /// The Custom8 packet transport shared by the Companion Manager and the open BG manager: fixed 128-byte DebugMode
+    /// The manager packet transport of the Companion Manager (Custom8) and the OPEN BG window (Custom5): fixed 128-byte DebugMode
     /// bodies (<see cref="CompanionManagerProtocol.BuildBody"/>), label diffing against what the client was last sent,
     /// the view token, show and hide, and the one-line guidance when an unpatched client never answers.
     /// </summary>

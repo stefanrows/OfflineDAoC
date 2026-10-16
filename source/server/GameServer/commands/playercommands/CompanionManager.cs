@@ -38,12 +38,6 @@ namespace DOL.GS.Commands
         {
             if (player == null)
                 return;
-            // One Custom8 window per client: an open BG manager session gives way (the window is reused, not hidden).
-            CompanionWindowOwner.Claim(player, CompanionWindowKind.Companions, previous =>
-            {
-                if (previous == CompanionWindowKind.OpenBg)
-                    OpenBgManager.Close(player, hide: false);
-            });
             CompanionManagerSession session = Sessions.GetValue(player, CreateSession);
             session.Region = player.CurrentRegionID;
             session.LastUseUtc = DateTime.UtcNow;
@@ -68,17 +62,13 @@ namespace DOL.GS.Commands
             Open(player);
         }
 
-        public static void Close(GamePlayer player) => Close(player, hide: true);
-
-        /// <summary>Ends the session; <paramref name="hide"/> false when the open BG manager takes the window over.</summary>
-        public static void Close(GamePlayer player, bool hide)
+        /// <summary>Ends the session and hides the window.</summary>
+        public static void Close(GamePlayer player)
         {
             if (player == null || !Sessions.TryGetValue(player, out _))
                 return;
             Sessions.Remove(player);
-            CompanionWindowOwner.Release(player, CompanionWindowKind.Companions);
-            if (hide)
-                CompanionWindowTransport.Hide(player);
+            CompanionWindowTransport.Hide(player);
         }
 
         /// <summary>Opens the window on its Group orders row, the COMPANIONS window's MANAGER tile.</summary>
@@ -94,11 +84,6 @@ namespace DOL.GS.Commands
             session.DeleteConfirmationId = null;
             Open(player);
         }
-
-        /// <summary>Whether a click belongs to the COMPANIONS or COMPANION GEAR window, which work whoever owns Custom8.</summary>
-        public static bool IsIndependentWindowControl(string tokenText, string controlText) =>
-            TryParseClientControl(tokenText, controlText, out _, out int control) &&
-            (CompanionBar.IsBarControl(control) || control == ControlGearReady);
 
         public static void HandleClientControl(GamePlayer player, string tokenText, string controlText)
         {

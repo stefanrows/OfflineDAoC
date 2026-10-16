@@ -41,21 +41,15 @@ namespace DOL.GS.Commands
                     ShowStatus(client, player, args);
                     break;
                 case "ui":
-                    // One Custom8 window per client: the click goes to the manager that owns it (the open BG manager or this one); the COMPANIONS and GEAR windows are independent of it.
-                    if (args.Length == 4 && CompanionWindowOwner.RoutesToOpenBg(player) && !CompanionManager.IsIndependentWindowControl(args[2], args[3]))
-                        OpenBgManager.HandleClientControl(player, args[2], args[3]);
-                    else if (args.Length == 4)
+                    if (args.Length == 4)
                         CompanionManager.HandleClientControl(player, args[2], args[3]);
                     else
                         ShowUsage(client);
                     break;
                 case "find":
                 case "search":
-                    // The window's [Search] link prefills "/companions find"; it searches whichever list the window shows.
-                    if (CompanionWindowOwner.RoutesToOpenBg(player))
-                        OpenBgManager.SetQuery(player, string.Join(' ', args.Skip(2)));
-                    else
-                        CompanionManager.SetQuery(player, string.Join(' ', args.Skip(2)));
+                    // The window's [Search] link prefills "/companions find".
+                    CompanionManager.SetQuery(player, string.Join(' ', args.Skip(2)));
                     break;
                 case "cast":
                     ShowCast(client, player, args);

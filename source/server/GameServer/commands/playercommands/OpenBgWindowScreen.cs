@@ -454,7 +454,7 @@ namespace DOL.GS.Commands
             return (false, null, null, null);
         }
 
-        // ---- helpers copied from OpenBgManagerScreen (Task 6 deletes the old manager) -----------------------------------
+        // ---- helpers kept from the removed Custom8 open BG manager (OpenBgManagerScreen) ------------------------------
 
         private static Dictionary<string, int> PresetCounts(string presets)
         {
