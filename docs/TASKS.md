@@ -365,6 +365,37 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+131. **Assist-mode tanks sprint behind targets and use Charge.** Owner,
+     2026-10-16: "tanks in assist mode do not sprint behind targets when
+     chasing them and they dont use the charge ability. Both should be
+     true." Implemented in source **0.281.0** (offline only):
+     `CompanionSprint.ShouldChaseSprint`, `BotBrain.UpdateChaseSprint` /
+     `TryCharge`, `GameBot.ChaseSprintUntil`, sprint speed in
+     `MaxSpeedCalculator`. A tank companion in `AssistTrain` sprints (+30%)
+     while its called target is beyond melee range plus 100 units, stops
+     below 20% endurance (resumes at 35%) unless Charge is active, and drops the sprint in
+     melee range. Charge is buyable with companion realm-ability points
+     (the only active ability offered), a tank uses it on an enemy player or
+     bot over 500 units away, and its sprint is free of endurance. `Charge`
+     now accepts an enemy bot target too. **Not verified:** whether the
+     installed world database lists Charge for the tank classes (it is data,
+     not in the repo), and everything in the real client. Real-client
+     check: put a tank companion in assist mode, call a fleeing enemy: it
+     sprints and closes the gap, then walks in melee; buy Charge in the
+     COMPANIONS/manager realm-ability page and check it fires at 500+ units
+     with no endurance drain for 15 s; outside assist mode no chase sprint.
+
+130. **No "killed recently" timer in the Gothwaite arena.** Owner,
+     2026-10-16: remove the "has been killed recently and is worth no realm
+     points and experience" timer in the Gothwaite mode. Implemented in
+     source **0.280.0** (`GothwaitePvpRules.LiftsRepeatKillTimer`, G13 in
+     docs/GOTHWAITE_PVP_MODE.md): with the mode on, a victim that dies in
+     region 51 pays RP and XP every time (real players, companions and
+     world bots as victims). Loot drops and party gear keep the timer; open
+     BG and the rest of the world unchanged. Real-client check: kill the
+     same bot twice inside `RP_WORTH_SECONDS` in Gothwaite: RP and XP both
+     times, no message, loot only the first time.
+
 128. **COMPANIONS window as a group window replacement.** Owner, 2026-10-14:
      "Improve the Companion Control Window (where we set group modes and
      behaviour). It should be able to replace the group window too."

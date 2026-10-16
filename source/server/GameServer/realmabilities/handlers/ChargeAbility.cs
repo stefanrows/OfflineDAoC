@@ -43,10 +43,11 @@ namespace DOL.GS.RealmAbilities
 		{
 			if (living == null) return;
 			if (CheckPreconditions(living, DEAD | SITTING | MEZZED | STUNNED)) return;
-			if (living.TargetObject == null || living.TargetObject is not GamePlayer ||
-			    (living.TargetObject is GamePlayer enemy && enemy.Realm == living.Realm))
+			// Full-PvP servers make same-realm strangers hostile, so use the server's own attack rule, not a realm compare.
+			if (living.TargetObject is not (GamePlayer or GameBot) ||
+			    !GameServer.ServerRules.IsAllowedToAttack(living, (GameLiving) living.TargetObject, true))
 			{
-				if(living is GamePlayer p)p.Out.SendMessage($"You can only charge enemy players.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+				if(living is GamePlayer p)p.Out.SendMessage($"You can only charge enemy players and bots.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				return;
 			}
 

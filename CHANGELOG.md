@@ -12,6 +12,60 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.281.0] - 2026-10-16
+
+### Added
+
+- **Tank companions in assist mode sprint behind their target.** A tank
+  companion (`/assisttrain`, or the Companion Bar assist tile) now sprints
+  at the full +30% sprint speed while it chases a called enemy that is more
+  than a short slack beyond melee range, and drops the sprint once in melee
+  range. It stops below 20% endurance (and resumes at 35%) unless Charge is active. Other roles,
+  other stances and autonomous world bots are unchanged.
+- **Charge for companions.** Charge is now buyable with companion realm
+  ability points (the only active ability on the list). A tank in assist
+  mode uses it on an enemy player or bot more than 500 units away; while
+  Charge lasts the sprint costs no endurance, as it does for a player.
+
+### Changed
+
+- Charge accepts an enemy bot as a target as well as an enemy player (for
+  real players too), judged by the server's own attack rule, so a hostile
+  same-realm player or bot counts on this full-PvP server. Monsters are still
+  refused.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
+## [0.280.0] - 2026-10-16
+
+### Added
+
+- None.
+
+### Changed
+
+- **No repeat-kill timer for realm points and experience in the Gothwaite
+  arena.** While the Gothwaite PvP mode is on, a victim killed again soon
+  after its last death in region 51 still pays realm points and experience;
+  the "has been killed recently and is worth no realm points / experience"
+  message no longer appears there. This covers real players, companions and
+  world bots as victims. Loot drops and companion party gear keep the timer,
+  and the open BG and the rest of the world are unchanged.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- None.
+
 ## [0.279.0] - 2026-10-15
 
 ### Added

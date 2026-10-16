@@ -27,7 +27,7 @@ namespace DOL.GS
 
         public static IReadOnlyList<RealmAbility> ClassAbilities(int classId) =>
             SkillBase.GetClassRealmAbilities(classId)
-                .Where(ability => ability is not TimedRealmAbility && ability.MaxLevel > 0)
+                .Where(ability => (ability is not TimedRealmAbility || ability is ChargeAbility) && ability.MaxLevel > 0)
                 .ToList();
 
         public static Dictionary<string, int> ReadAllocations(string serialized, IReadOnlyList<RealmAbility> abilities,

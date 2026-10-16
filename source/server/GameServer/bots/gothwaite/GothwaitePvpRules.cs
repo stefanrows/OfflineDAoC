@@ -36,6 +36,17 @@ public static class GothwaitePvpRules
     /// <summary>G6: the sub-10 autonomous PvP protection does not apply to mode bots. A player's /safety is untouched.</summary>
     public static bool LiftsLowLevelProtection(GameLiving living) => GothwaitePvpMode.IsModeBot(living);
 
+    /// <summary>
+    /// The repeat-kill timer (RP_WORTH_SECONDS) is lifted for realm points and experience while the mode is on and the
+    /// victim died in the arena region. Loot drops and party gear keep the timer. The rest of the world is unchanged.
+    /// </summary>
+    public static bool LiftsRepeatKillTimer(GameLiving victim) =>
+        victim != null && LiftsRepeatKillTimer(GothwaitePvpMode.IsActive, victim.CurrentRegionID, GothwaitePvpMode.Arena.RegionId);
+
+    /// <summary>Pure form of <see cref="LiftsRepeatKillTimer(GameLiving)"/> for tests.</summary>
+    public static bool LiftsRepeatKillTimer(bool active, ushort victimRegion, ushort arenaRegion) =>
+        active && victimRegion == arenaRegion;
+
     /// <summary>G8: no constitution loss for mode bots.</summary>
     public static bool SkipsConstitutionLoss(GameLiving living) => GothwaitePvpMode.IsModeBot(living);
 

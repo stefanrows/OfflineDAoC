@@ -2253,6 +2253,11 @@ namespace DOL.GS.ServerRules
             killedPlayer.DeathTime <= 0 ||
             killedPlayer.DeathTime + Properties.RP_WORTH_SECONDS <= killedPlayer.PlayedTime;
 
+        // Realm points and experience only: the Gothwaite arena lifts the repeat-kill timer for them.
+        // Loot drops and party gear keep IsWorthPlayerKillRewards.
+        private static bool IsWorthPlayerKillRealmRewards(GamePlayer killedPlayer) =>
+            IsWorthPlayerKillRewards(killedPlayer) || GothwaitePvpRules.LiftsRepeatKillTimer(killedPlayer);
+
         private static void AwardBotOnPlayerKill(GameBot botToAward,
             GameObject killer,
             double playerTotalDamageReceived,
@@ -2278,7 +2283,7 @@ namespace DOL.GS.ServerRules
                 return;
             }
 
-            isWorthAnything = IsWorthPlayerKillRewards(killedPlayer);
+            isWorthAnything = IsWorthPlayerKillRealmRewards(killedPlayer);
             if (!isWorthAnything)
                 return;
 
@@ -2338,7 +2343,7 @@ namespace DOL.GS.ServerRules
                 return;
             }
 
-            isWorthAnything = IsWorthPlayerKillRewards(killedPlayer);
+            isWorthAnything = IsWorthPlayerKillRealmRewards(killedPlayer);
             if (!isWorthAnything)
                 return;
 
@@ -2391,7 +2396,7 @@ namespace DOL.GS.ServerRules
                 return;
             }
 
-            isWorthAnything = IsWorthPlayerKillRewards(killedPlayer);
+            isWorthAnything = IsWorthPlayerKillRealmRewards(killedPlayer);
             double damagePercent = CalculateDamagePercent();
             int baseBpReward;
             long baseXpReward;

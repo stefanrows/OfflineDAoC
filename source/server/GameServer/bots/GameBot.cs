@@ -501,7 +501,8 @@ namespace DOL.GS
             // combat resource for styles/abilities and is never consumed merely
             // because a persistent bot or /spawn companion is moving quickly;
             // only an explicit sprint costs endurance, as it does a player.
-            bool sprintDrain = IsSprinting && IsMoving;
+            // Charge makes the sprint free, as it does for a player.
+            bool sprintDrain = IsSprinting && IsMoving && EffectListService.GetEffectOnTarget(this, eEffect.Charge) == null;
             if (Endurance >= maxEndurance && !sprintDrain)
             {
                 Endurance = maxEndurance;
@@ -1610,6 +1611,14 @@ namespace DOL.GS
 
         public bool IsSprinting => effectListComponent.ContainsEffectForEffectType(eEffect.Sprint);
 
+        /// <summary>
+        /// Game-loop time until which a companion tank's sprint counts as a chase sprint (sprint speed). The brain
+        /// refreshes it every think while the tank chases, so it lapses by itself when the chase ends.
+        /// </summary>
+        public long ChaseSprintUntil { get; set; }
+
+        public bool IsChaseSprinting => IsSprinting && GameLoop.GameLoopTime < ChaseSprintUntil;
+
         public virtual bool Sprint(bool state)
         {
             if (state == IsSprinting)
@@ -1629,6 +1638,11 @@ namespace DOL.GS
             {
                 ECSGameEffect effect = EffectListService.GetEffectOnTarget(this, eEffect.Sprint);
                 effect?.End();
+                if (ChaseSprintUntil != 0)
+                {
+                    ChaseSprintUntil = 0;
+                    OnMaxSpeedChange();
+                }
                 return false;
             }
         }

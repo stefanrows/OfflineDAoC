@@ -160,8 +160,9 @@ namespace DOL.GS.PropertyCalc
 
             // An autonomous world bot's sprint is as fast as a player's (+30 %),
             // applied after the relic cap in the same order as the player path
-            // above; companions keep their old stick pace.
-            if (living is GameBot { IsAutonomousWorldBot: true, IsPlayerLedGroup: false, IsSprinting: true })
+            // above; companions keep their old stick pace, except a tank chasing
+            // its called target in assist mode.
+            if (living is GameBot { IsAutonomousWorldBot: true, IsPlayerLedGroup: false, IsSprinting: true } or GameBot { IsChaseSprinting: true })
                 speedIncrease *= SPRINT;
             return (int) Math.Round(maxSpeedBase * speedIncrease);
         }
