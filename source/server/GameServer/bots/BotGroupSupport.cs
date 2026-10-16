@@ -89,9 +89,13 @@ namespace DOL.GS
                 lock (state.Sync) state.Heals.Remove(bot);
         }
 
+        // Cures act on the member who has the condition; the raid heal reservation would swap in the most wounded member.
+        private static bool IsCure(Spell spell) => spell.SpellType is eSpellType.CureMezz or eSpellType.CureDisease or eSpellType.CurePoison or
+            eSpellType.CureAll or eSpellType.CureNearsight or eSpellType.CureNearsightCustom;
+
         public static GameLiving ReserveHeal(GameBot bot, Spell spell, GameLiving preferred)
         {
-            if ((!CompanionRaid.IsMember(bot) && !AutonomousRealmRaid.HasSharedSupport(bot)) || !spell.IsHealing || spell.Target != eSpellTarget.REALM || spell.IsInstantCast || spell.Duration > 0)
+            if ((!CompanionRaid.IsMember(bot) && !AutonomousRealmRaid.HasSharedSupport(bot)) || !spell.IsHealing || IsCure(spell) || spell.Target != eSpellTarget.REALM || spell.IsInstantCast || spell.Duration > 0)
                 return preferred;
             object scope = AutonomousRealmRaid.SupportScope(bot);
             State state = States.GetOrCreateValue(scope);

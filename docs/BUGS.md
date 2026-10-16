@@ -148,6 +148,33 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+170. **Raid healers cure the wrong member or not at all.** Found 2026-10-17 while
+     tracing bug 168. `BotGroupSupport.ReserveHeal` treated every spell with
+     `IsHealing`, a realm target, a cast time and no duration as a heal, and
+     the cure spells are all of those. In a companion raid or an autonomous
+     realm raid it replaced the cure's target with the most wounded member
+     below 80% health, or returned no target when nobody was, so the cure mezz
+     hit a member who was not mezzed or was never cast. Fixed in 0.292.0:
+     cure spells skip the reservation and keep their target. Offline: Release
+     build only. Verification pending: in a raid, a mezzed mate is freed by
+     the healer's cure mezz.
+
+169. **Companion fights keep the human in combat.** Owner report 2026-10-16:
+     with only the companion group fighting, the player stays in combat and
+     cannot use out-of-combat abilities such as Mystic Crystal Lore
+     (`RealmAbility.CheckPreconditions` INCOMBAT). `GameNPC` mirrors a pet's
+     combat timestamps to its owner whenever its brain is an
+     `IControlledBrain`, and `BotBrain` is one with `Owner` = the companion's
+     human, so every companion swing, spell or hit taken restarted the human's
+     10 s combat timer. Fixed in 0.291.0: the mirror goes through the new
+     `GameNPC.CombatTimerOwner`, which `GameBot` returns as null while it runs
+     its `BotBrain`; pets (the human's own and a companion's pet) still mirror
+     to their owner. The human is in combat only from their own attacks, hits
+     on them, crowd control or their own pet. Offline: new
+     `UT_BotSpellPower.CompanionCombatTimestampDoesNotStampOwner` (87
+     `UT_BotSpellPower` tests pass). Verification pending: let only the
+     companions fight, stay out of it for 10 s, and use Mystic Crystal Lore.
+
 168. **Bot healers recast their cure mezz without end.** Owner report
      2026-10-17 (open BG): healers stand and start the demezz again and again
      instead of finishing one cast. `BotBrain.CheckHeals` picks

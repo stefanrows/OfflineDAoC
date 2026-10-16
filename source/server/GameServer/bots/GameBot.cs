@@ -411,6 +411,12 @@ namespace DOL.GS
             if (Brain is BotBrain brain) brain.NextThinkTick = GameLoop.GameLoopTime;
         }
 
+        // BotBrain's Owner is the companion's human, not a pet owner: a
+        // companion's fights must not stamp the owner's combat timer, or the
+        // human stays in combat and loses out-of-combat abilities while only
+        // companions fight (bug 169). Pets still mirror to their owner.
+        protected override GameLiving CombatTimerOwner => Brain is BotBrain ? null : base.CombatTimerOwner;
+
         public override long LastAttackTickPvE
         {
             set { base.LastAttackTickPvE = value; WakeFromRestOnCombat(value); }

@@ -250,6 +250,28 @@ namespace DOL.UnitTests
             Assert.That(Math.Max(bot.LastAttackTick, bot.LastAttackedByEnemyTick), Is.EqualTo(tick));
         }
 
+        // Bug 167: a companion's fight must not keep its human owner in combat.
+        [TestCase("attackPve")] [TestCase("attackPvp")]
+        [TestCase("hitPve")] [TestCase("hitPvp")]
+        public void CompanionCombatTimestampDoesNotStampOwner(string combatEvent)
+        {
+            var owner = (GamePlayer)RuntimeHelpers.GetUninitializedObject(typeof(GamePlayer));
+            var bot = NewRestBot(typeof(ClassWizard));
+            Field(typeof(GameBot), bot, "<Owner>k__BackingField", owner);
+            Assert.That(((IControlledBrain)bot.Brain).Owner, Is.SameAs(owner));
+            long tick = Math.Max(1, GameLoop.GameLoopTime);
+            switch (combatEvent)
+            {
+                case "attackPve": bot.LastAttackTickPvE = tick; break;
+                case "attackPvp": bot.LastAttackTickPvP = tick; break;
+                case "hitPve": bot.LastAttackedByEnemyTickPvE = tick; break;
+                case "hitPvp": bot.LastAttackedByEnemyTickPvP = tick; break;
+            }
+            Assert.That(Math.Max(bot.LastAttackTick, bot.LastAttackedByEnemyTick), Is.EqualTo(tick));
+            Assert.That(owner.LastAttackTick, Is.Zero);
+            Assert.That(owner.LastAttackedByEnemyTick, Is.Zero);
+        }
+
         [TestCase(500, true)] [TestCase(2001, false)]
         public void OnlyLocalGroupCombatBlocksRest(int distance, bool expected)
         {

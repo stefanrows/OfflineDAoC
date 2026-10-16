@@ -3242,16 +3242,19 @@ namespace DOL.GS
 
 		public virtual bool CanDropLoot => true;
 
+		// Pets mirror their combat timestamps to their owner. Independent
+		// playerbots deliberately implement IControlledBrain so they can reuse
+		// the normal combat FSM, but unlike pets they have no owner to mirror
+		// to; companions override this (see GameBot).
+		protected virtual GameLiving CombatTimerOwner => Brain is IControlledBrain { Owner: GameLiving owner } ? owner : null;
+
 		public override long LastAttackTickPvE
 		{
 			set
 			{
 				base.LastAttackTickPvE = value;
 
-				// Independent playerbots deliberately implement IControlledBrain so
-				// they can reuse the normal combat FSM, but unlike pets they have no
-				// owner to mirror combat timestamps to.
-				if (Brain is IControlledBrain { Owner: GameLiving owner })
+				if (CombatTimerOwner is GameLiving owner)
 					owner.LastAttackTickPvE = value;
 			}
 		}
@@ -3262,7 +3265,7 @@ namespace DOL.GS
 			{
 				base.LastAttackTickPvP = value;
 
-				if (Brain is IControlledBrain { Owner: GameLiving owner })
+				if (CombatTimerOwner is GameLiving owner)
 					owner.LastAttackTickPvP = value;
 			}
 		}
@@ -3273,7 +3276,7 @@ namespace DOL.GS
 			{
 				base.LastAttackedByEnemyTickPvE = value;
 
-				if (Brain is IControlledBrain { Owner: GameLiving owner })
+				if (CombatTimerOwner is GameLiving owner)
 					owner.LastAttackedByEnemyTickPvE = value;
 			}
 		}
@@ -3284,7 +3287,7 @@ namespace DOL.GS
 			{
 				base.LastAttackedByEnemyTickPvP = value;
 
-				if (Brain is IControlledBrain { Owner: GameLiving owner })
+				if (CombatTimerOwner is GameLiving owner)
 					owner.LastAttackedByEnemyTickPvP = value;
 			}
 		}

@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.292.0] - 2026-10-17
+
+### Fixed
+
+- **Raid healers cast cures on the member who needs them.** In a companion raid or
+  an autonomous realm raid the shared heal reservation treated the cure spells
+  (cure mezz, disease, poison and the like) as heals and swapped their target for
+  the most wounded member, or dropped the cast when nobody was hurt, so a mezzed
+  mate was not freed. Cures now keep their target. Offline: Release build only;
+  real-client check pending (BUGS 170).
+
+## [0.291.0] - 2026-10-17
+
+### Fixed
+
+- **Your companions' fights no longer keep you in combat.** Every companion
+  swing, spell or hit taken counted as your own combat, so while only the
+  companion group fought you stayed in combat and could not use
+  out-of-combat abilities such as Mystic Crystal Lore. You are now in combat
+  only from your own attacks, hits on you, crowd control or your own pet, as
+  in a normal group. A companion's pet still counts for that companion.
+- Offline checks: new `UT_BotSpellPower` test for the companion combat timer
+  (87 `UT_BotSpellPower` tests pass). Real-client check pending (BUGS 169).
+
 ## [0.290.0] - 2026-10-17
 
 ### Fixed
