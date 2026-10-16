@@ -9,11 +9,12 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # Installs the staged Companion Manager client files (game.dll, ui/uimain.xml, Atlantis and Isles
-# custom8_window.xml, since 0.251.0 the COMPANIONS window's Atlantis and Isles custom7_window.xml, and since
-# 0.276.0 the COMPANION GEAR window's Atlantis and Isles custom6_window.xml) built by
+# custom8_window.xml, since 0.251.0 the COMPANIONS window's Atlantis and Isles custom7_window.xml, since
+# 0.276.0 the COMPANION GEAR window's Atlantis and Isles custom6_window.xml, and since the OPEN BG window the
+# Atlantis and Isles custom5_window.xml) built by
 # source/server/tools/build_companion_manager_client.py. Dry run by default.
 # An installation that already has an earlier manager build (0.32.1, 0.33.0 through 0.169.0, 0.251.0, 0.272.0,
-# or the 0.273.0 / 0.275.0 companion paperdoll probe) is upgraded in place: game.dll, uimain.xml and the window
+# the 0.273.0 / 0.275.0 companion paperdoll probe, or 0.276.0) is upgraded in place: game.dll, uimain.xml and the window
 # files are backed up and replaced, and -RestoreBackup puts the previous files back.
 # Every file is hash checked; the game, server, and launcher must be closed.
 # Nothing is stopped by this script. Saves and server files are not touched.
@@ -44,7 +45,8 @@ $KnownManagerBuilds = @(
     '73223deffd8455944974b555f5bce5762c43a642c4442b5102194e337e47daf4', # 0.251.0 (first COMPANIONS window)
     'c938e6b50057a4a99ec39211004765dcacb3ffa47880e4ba3fc193add87e612d', # 0.272.0 (COMPANIONS window v2)
     'ff5fb5238fbf473c10503887e66ad1a8679d72342445bfa415e889ded6e5a022', # 0.273.0 companion paperdoll probe
-    'f1f5c399ab79a6966b623746059e3e57a22665929a97a5ccff3e6ca093768394'  # 0.275.0 companion gear window probe
+    'f1f5c399ab79a6966b623746059e3e57a22665929a97a5ccff3e6ca093768394', # 0.275.0 companion gear window probe
+    'bfefe97d7f7175204ae18c6d23a6958e13819e45155e84738bc5ae9c8d90c264'  # 0.276.0 (COMPANION GEAR window, no OPEN BG window)
 )
 # Builds whose own COMPANIONS window files (custom7_window.xml) an upgrade replaces after backing them up.
 $KnownBarBuilds = @(
@@ -53,6 +55,8 @@ $KnownBarBuilds = @(
 # uimain.xml of the 0.251.0-0.272.0 builds (manager plus COMPANIONS window). The paperdoll probe's uimain.xml is the
 # stage's own (same includes), and the manager-only UI is in the stage manifest.
 $KnownBarMain = '7d573c315a56bcacae8e8ebc871646654bfe8da5bb1dc745d6023da7f93b9dd9'
+# uimain.xml of the 0.276.0 build (manager, COMPANIONS and COMPANION GEAR windows, no OPEN BG window).
+$KnownGearMain = 'cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a1328c'
 # The paperdoll probe windows (custom6_window.xml) an upgrade replaces after backing them up.
 $KnownGearWindows = @(
     '60d41e0817463f6a17a1e2a053e960ae4d8f4f4b75b4aaf5e3f740d3dd626cd5', # 0.273.0 four-slot probe
@@ -65,7 +69,7 @@ function CopyVerified([string]$Source, [string]$Destination, [string]$Expected) 
     RequireHash $Destination $Expected 'Installed'
 }
 
-# Puts an added window file (COMPANIONS custom7, COMPANION GEAR custom6) back: the earlier copy when there was
+# Puts an added window file (OPEN BG custom5, COMPANIONS custom7, COMPANION GEAR custom6) back: the earlier copy when there was
 # one, otherwise nothing (the file is removed only while it still holds the window this script installed).
 function RestoreAddedWindow([string]$Path, [string]$PreviousHash, [string]$BackupFile, [string]$InstalledHash) {
     if ($PreviousHash) {
@@ -89,6 +93,8 @@ $atlantisBar = Join-Path $client 'ui\atlantis\custom7_window.xml'
 $islesBar = Join-Path $client 'ui\isles\custom7_window.xml'
 $atlantisGear = Join-Path $client 'ui\atlantis\custom6_window.xml'
 $islesGear = Join-Path $client 'ui\isles\custom6_window.xml'
+$atlantisBg = Join-Path $client 'ui\atlantis\custom5_window.xml'
+$islesBg = Join-Path $client 'ui\isles\custom5_window.xml'
 
 if ($PSCmdlet.ParameterSetName -eq 'Restore') {
     $backup = [IO.Path]::GetFullPath($RestoreBackup)
@@ -122,6 +128,10 @@ if ($PSCmdlet.ParameterSetName -eq 'Restore') {
             $added += , @($atlantisGear, 'atlantis-custom6_window.xml', $record.PreviousGearAtlantisSha256, $record.GearWindowSha256)
             $added += , @($islesGear, 'isles-custom6_window.xml', $record.PreviousGearIslesSha256, $record.GearWindowSha256)
         }
+        if ($record.BgWindowSha256) {
+            $added += , @($atlantisBg, 'atlantis-custom5_window.xml', $record.PreviousBgAtlantisSha256, $record.BgWindowSha256)
+            $added += , @($islesBg, 'isles-custom5_window.xml', $record.PreviousBgIslesSha256, $record.BgWindowSha256)
+        }
         foreach ($item in $added) {
             $current = Hash $item[0]
             if ($current -and $current -ne $item[3] -and $current -ne $item[2]) {
@@ -150,6 +160,10 @@ if ($PSCmdlet.ParameterSetName -eq 'Restore') {
         $pairs += , @($atlantisGear, $record.GearWindowSha256, $null)
         $pairs += , @($islesGear, $record.GearWindowSha256, $null)
     }
+    if ($record.BgWindowSha256) {
+        $pairs += , @($atlantisBg, $record.BgWindowSha256, $null)
+        $pairs += , @($islesBg, $record.BgWindowSha256, $null)
+    }
     foreach ($pair in $pairs) {
         $current = Hash $pair[0]
         if ($current -ne $pair[1] -and $current -ne $pair[2]) {
@@ -166,6 +180,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Restore') {
     }
     if ($record.GearWindowSha256) {
         foreach ($path in @($atlantisGear, $islesGear)) { RestoreAddedWindow $path $null $null $record.GearWindowSha256 }
+    }
+    if ($record.BgWindowSha256) {
+        foreach ($path in @($atlantisBg, $islesBg)) { RestoreAddedWindow $path $null $null $record.BgWindowSha256 }
     }
     Write-Host "Companion Manager client files restored from $backup; backup retained."
     return
@@ -185,6 +202,9 @@ if (-not $manifest.barWindowSha256 -or -not $manifest.uimainManagerOnlySha256) {
 if (-not $manifest.gearWindowSha256 -or -not $manifest.uimainBarSha256) {
     throw 'Stage predates the COMPANION GEAR window; rebuild it with build_companion_manager_client.py.'
 }
+if (-not $manifest.bgWindowSha256 -or -not $manifest.uimainGearSha256) {
+    throw 'Stage predates the OPEN BG window; rebuild it with build_companion_manager_client.py.'
+}
 $stageGame = Join-Path $stageRoot 'game.dll'
 $stageMain = Join-Path $stageRoot 'uimain.xml'
 $stageAtlantis = Join-Path $stageRoot 'atlantis\custom8_window.xml'
@@ -193,6 +213,8 @@ $stageAtlantisBar = Join-Path $stageRoot 'atlantis\custom7_window.xml'
 $stageIslesBar = Join-Path $stageRoot 'isles\custom7_window.xml'
 $stageAtlantisGear = Join-Path $stageRoot 'atlantis\custom6_window.xml'
 $stageIslesGear = Join-Path $stageRoot 'isles\custom6_window.xml'
+$stageAtlantisBg = Join-Path $stageRoot 'atlantis\custom5_window.xml'
+$stageIslesBg = Join-Path $stageRoot 'isles\custom5_window.xml'
 
 # The stage's own game.dll is already installed: nothing to do, or refuse a half-installed set.
 $installedGame = Hash $game
@@ -200,7 +222,8 @@ if ($installedGame -eq $manifest.outputSha256) {
     $complete = (Hash $main) -eq $manifest.uimainOutputSha256 -and
         (Hash $atlantis) -eq $manifest.windowSha256 -and (Hash $isles) -eq $manifest.windowSha256 -and
         (Hash $atlantisBar) -eq $manifest.barWindowSha256 -and (Hash $islesBar) -eq $manifest.barWindowSha256 -and
-        (Hash $atlantisGear) -eq $manifest.gearWindowSha256 -and (Hash $islesGear) -eq $manifest.gearWindowSha256
+        (Hash $atlantisGear) -eq $manifest.gearWindowSha256 -and (Hash $islesGear) -eq $manifest.gearWindowSha256 -and
+        (Hash $atlantisBg) -eq $manifest.bgWindowSha256 -and (Hash $islesBg) -eq $manifest.bgWindowSha256
     if ($complete) {
         Write-Host "Already installed: the manager build $($manifest.outputSha256) and its UI files match this stage. Nothing to do."
         return
@@ -211,7 +234,7 @@ if ($installedGame -eq $manifest.outputSha256) {
 $upgrade = $KnownManagerBuilds -contains $installedGame
 if ($upgrade) {
     $installedMain = Hash $main
-    if (@($manifest.uimainOutputSha256, $manifest.uimainManagerOnlySha256, $manifest.uimainBarSha256, $KnownBarMain) -notcontains $installedMain) {
+    if (@($manifest.uimainOutputSha256, $manifest.uimainManagerOnlySha256, $manifest.uimainBarSha256, $manifest.uimainGearSha256, $KnownGearMain, $KnownBarMain) -notcontains $installedMain) {
         throw "Installed uimain.xml is not a known Companion Manager UI: $main ($installedMain)"
     }
     foreach ($path in @($atlantis, $isles)) {
@@ -233,6 +256,13 @@ if ($upgrade) {
             throw "A custom6_window.xml differs from this stage and from the known probe windows: $path ($existing). Refused."
         }
     }
+    # Only this stage's own OPEN BG window may already exist; any other custom5 file is refused.
+    foreach ($path in @($atlantisBg, $islesBg)) {
+        $existing = Hash $path
+        if ($existing -and $existing -ne $manifest.bgWindowSha256) {
+            throw "A custom5_window.xml differs from this stage: $path ($existing). Refused."
+        }
+    }
 }
 else {
     RequireHash $game $manifest.baselineSha256 'Installed game.dll'
@@ -246,6 +276,9 @@ else {
     if ((Test-Path -LiteralPath $atlantisGear) -or (Test-Path -LiteralPath $islesGear)) {
         throw 'Custom6 XML already exists in the installation.'
     }
+    if ((Test-Path -LiteralPath $atlantisBg) -or (Test-Path -LiteralPath $islesBg)) {
+        throw 'Custom5 XML already exists in the installation.'
+    }
 }
 RequireHash $stageGame $manifest.outputSha256 'Stage game.dll'
 RequireHash $stageMain $manifest.uimainOutputSha256 'Stage uimain.xml'
@@ -255,11 +288,13 @@ RequireHash $stageAtlantisBar $manifest.barWindowSha256 'Stage Atlantis COMPANIO
 RequireHash $stageIslesBar $manifest.barWindowSha256 'Stage Isles COMPANIONS XML'
 RequireHash $stageAtlantisGear $manifest.gearWindowSha256 'Stage Atlantis COMPANION GEAR XML'
 RequireHash $stageIslesGear $manifest.gearWindowSha256 'Stage Isles COMPANION GEAR XML'
+RequireHash $stageAtlantisBg $manifest.bgWindowSha256 'Stage Atlantis OPEN BG XML'
+RequireHash $stageIslesBg $manifest.bgWindowSha256 'Stage Isles OPEN BG XML'
 
 if ($upgrade) { Write-Host "Upgrading an earlier Companion Manager build (installed game.dll $installedGame)." }
 else { Write-Host "Verified baseline game.dll: $($manifest.baselineSha256)" }
 Write-Host "Staged manager game.dll:   $($manifest.outputSha256)"
-Write-Host 'Files: game.dll, ui/uimain.xml, Atlantis and Isles custom8_window.xml, custom7_window.xml (COMPANIONS) and custom6_window.xml (COMPANION GEAR)'
+Write-Host 'Files: game.dll, ui/uimain.xml, Atlantis and Isles custom8_window.xml, custom7_window.xml (COMPANIONS) and custom6_window.xml (COMPANION GEAR) and custom5_window.xml (OPEN BG)'
 if (-not $Apply) { Write-Host 'Dry run only. Pass -Apply to install.'; return }
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -275,6 +310,8 @@ if ($upgrade) {
     $previousBarIsles = Hash $islesBar
     $previousGearAtlantis = Hash $atlantisGear
     $previousGearIsles = Hash $islesGear
+    $previousBgAtlantis = Hash $atlantisBg
+    $previousBgIsles = Hash $islesBg
     CopyVerified $game (Join-Path $backup 'game.dll') $previousGame
     CopyVerified $atlantis (Join-Path $backup 'atlantis-custom8_window.xml') $previousAtlantis
     CopyVerified $isles (Join-Path $backup 'isles-custom8_window.xml') $previousIsles
@@ -283,6 +320,8 @@ if ($upgrade) {
     if ($previousBarIsles) { CopyVerified $islesBar (Join-Path $backup 'isles-custom7_window.xml') $previousBarIsles }
     if ($previousGearAtlantis) { CopyVerified $atlantisGear (Join-Path $backup 'atlantis-custom6_window.xml') $previousGearAtlantis }
     if ($previousGearIsles) { CopyVerified $islesGear (Join-Path $backup 'isles-custom6_window.xml') $previousGearIsles }
+    if ($previousBgAtlantis) { CopyVerified $atlantisBg (Join-Path $backup 'atlantis-custom5_window.xml') $previousBgAtlantis }
+    if ($previousBgIsles) { CopyVerified $islesBg (Join-Path $backup 'isles-custom5_window.xml') $previousBgIsles }
     [pscustomobject]@{
         InstallRoot = $root
         InstallKind = 'upgrade'
@@ -294,11 +333,14 @@ if ($upgrade) {
         PreviousBarIslesSha256 = $previousBarIsles
         PreviousGearAtlantisSha256 = $previousGearAtlantis
         PreviousGearIslesSha256 = $previousGearIsles
+        PreviousBgAtlantisSha256 = $previousBgAtlantis
+        PreviousBgIslesSha256 = $previousBgIsles
         OutputGameSha256 = $manifest.outputSha256
         WindowSha256 = $manifest.windowSha256
         OutputMainSha256 = $manifest.uimainOutputSha256
         BarWindowSha256 = $manifest.barWindowSha256
         GearWindowSha256 = $manifest.gearWindowSha256
+        BgWindowSha256 = $manifest.bgWindowSha256
         Stage = $stageRoot
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $backup 'manifest.json') -Encoding UTF8
     try {
@@ -311,6 +353,8 @@ if ($upgrade) {
         CopyVerified $stageIslesBar $islesBar $manifest.barWindowSha256
         CopyVerified $stageAtlantisGear $atlantisGear $manifest.gearWindowSha256
         CopyVerified $stageIslesGear $islesGear $manifest.gearWindowSha256
+        CopyVerified $stageAtlantisBg $atlantisBg $manifest.bgWindowSha256
+        CopyVerified $stageIslesBg $islesBg $manifest.bgWindowSha256
         Write-Host "Companion Manager client upgraded. Backup: $backup"
         Write-Host "Restore the earlier build with: -InstallRoot '$root' -RestoreBackup '$backup'"
     }
@@ -326,6 +370,8 @@ if ($upgrade) {
             RestoreAddedWindow $islesBar $previousBarIsles (Join-Path $backup 'isles-custom7_window.xml') $manifest.barWindowSha256
             RestoreAddedWindow $atlantisGear $previousGearAtlantis (Join-Path $backup 'atlantis-custom6_window.xml') $manifest.gearWindowSha256
             RestoreAddedWindow $islesGear $previousGearIsles (Join-Path $backup 'isles-custom6_window.xml') $manifest.gearWindowSha256
+            RestoreAddedWindow $atlantisBg $previousBgAtlantis (Join-Path $backup 'atlantis-custom5_window.xml') $manifest.bgWindowSha256
+            RestoreAddedWindow $islesBg $previousBgIsles (Join-Path $backup 'isles-custom5_window.xml') $manifest.bgWindowSha256
         }
         catch { throw "Upgrade failed ($reason); automatic rollback failed ($($_.Exception.Message)). Backup: $backup" }
         throw "Upgrade failed and was rolled back: $reason. Backup: $backup"
@@ -348,6 +394,7 @@ $record = [pscustomobject]@{
     WindowSha256 = $manifest.windowSha256
     BarWindowSha256 = $manifest.barWindowSha256
     GearWindowSha256 = $manifest.gearWindowSha256
+    BgWindowSha256 = $manifest.bgWindowSha256
     Stage = $stageRoot
 }
 $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $backup 'manifest.json') -Encoding UTF8
@@ -361,6 +408,8 @@ try {
     CopyVerified $stageIslesBar $islesBar $manifest.barWindowSha256
     CopyVerified $stageAtlantisGear $atlantisGear $manifest.gearWindowSha256
     CopyVerified $stageIslesGear $islesGear $manifest.gearWindowSha256
+    CopyVerified $stageAtlantisBg $atlantisBg $manifest.bgWindowSha256
+    CopyVerified $stageIslesBg $islesBg $manifest.bgWindowSha256
     Write-Host "Companion Manager client installed. Backup: $backup"
     Write-Host "Restore with: -InstallRoot '$root' -RestoreBackup '$backup'"
 }
@@ -378,6 +427,9 @@ catch {
         }
         foreach ($path in @($atlantisGear, $islesGear)) {
             if ((Hash $path) -eq $manifest.gearWindowSha256) { Remove-Item -LiteralPath $path -Force }
+        }
+        foreach ($path in @($atlantisBg, $islesBg)) {
+            if ((Hash $path) -eq $manifest.bgWindowSha256) { Remove-Item -LiteralPath $path -Force }
         }
     }
     catch { throw "Install failed ($reason); automatic rollback failed ($($_.Exception.Message)). Backup: $backup" }

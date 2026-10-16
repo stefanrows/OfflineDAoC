@@ -15,7 +15,8 @@ RELEASE_TOOLS = pathlib.Path(__file__).resolve().parent
 UPSTREAM_GAME_DLL = '67dcf68a37b95a93946a943b99d5e19b4a03e08cd6469275e25c7b909de21e99'
 # The Companion Manager client stage packaged by default, and the COMPANIONS window files (custom7_window.xml)
 # and companion paperdoll probe windows (custom6_window.xml) of earlier builds that the update pack may replace.
-COMPANION_STAGE = 'companion-manager-stage-0.276.0'
+# The OPEN BG window (custom5_window.xml) is new in this stage, so it may only be added.
+COMPANION_STAGE = 'companion-manager-stage-0.282.0'
 KNOWN_BAR_WINDOWS = ['7920bcd32909a0e6b5ad2e625902f9f8807fe04ea4370f2ace2b301a8ee59aba']  # 0.251.0
 KNOWN_GEAR_WINDOWS = ['60d41e0817463f6a17a1e2a053e960ae4d8f4f4b75b4aaf5e3f740d3dd626cd5',  # 0.273.0 probe
                       '9a47faa82bd3daaec0c99d26cbd6db12170a01f14af0805c3a384d295e1755ee']  # 0.275.0 probe
@@ -115,6 +116,8 @@ def main():
         sys.exit('Companion Manager stage predates the COMPANIONS window; rebuild it first.')
     if not cm.get('gearWindowSha256') or not cm.get('uimainBarSha256'):
         sys.exit('Companion Manager stage predates the COMPANION GEAR window; rebuild it first.')
+    if not cm.get('bgWindowSha256') or not cm.get('uimainGearSha256'):
+        sys.exit('Companion Manager stage predates the OPEN BG window; rebuild it first.')
     client = 'runtime/client-opendaoc/app/'
     known_games = [UPSTREAM_GAME_DLL, '3b6274dc385b90bf892f27d96c9e56cb457e1e94cbf45b5892d462a9e4d70890',
                    '88530c0093b285fd38fd6759e464373baa65ebb20473a949bc3b79fccbb41fd3',
@@ -122,10 +125,12 @@ def main():
                    '73223deffd8455944974b555f5bce5762c43a642c4442b5102194e337e47daf4',   # 0.251.0
                    'c938e6b50057a4a99ec39211004765dcacb3ffa47880e4ba3fc193add87e612d',   # 0.272.0
                    'ff5fb5238fbf473c10503887e66ad1a8679d72342445bfa415e889ded6e5a022',   # 0.273.0 paperdoll probe
-                   'f1f5c399ab79a6966b623746059e3e57a22665929a97a5ccff3e6ca093768394']   # 0.275.0 paperdoll probe
+                   'f1f5c399ab79a6966b623746059e3e57a22665929a97a5ccff3e6ca093768394',   # 0.275.0 paperdoll probe
+                   'bfefe97d7f7175204ae18c6d23a6958e13819e45155e84738bc5ae9c8d90c264']   # 0.276.0 (COMPANION GEAR window)
     add(client + 'game.dll', companion / 'game.dll', 'native', known_games)
     add(client + 'ui/uimain.xml', companion / 'uimain.xml', 'native',
-        [cm['uimainBaselineSha256'], cm['uimainManagerOnlySha256'], cm['uimainBarSha256']])
+        [cm['uimainBaselineSha256'], cm['uimainManagerOnlySha256'], cm['uimainBarSha256'],
+         cm['uimainGearSha256']])  # the last is the 0.276.0 uimain.xml
     for skin in ('atlantis', 'isles'):
         add(client + f'ui/{skin}/custom8_window.xml', companion / skin / 'custom8_window.xml', 'native', ['absent'])
     for skin in ('atlantis', 'isles'):
@@ -134,6 +139,8 @@ def main():
     for skin in ('atlantis', 'isles'):
         add(client + f'ui/{skin}/custom6_window.xml', companion / skin / 'custom6_window.xml', 'native',
             ['absent'] + KNOWN_GEAR_WINDOWS)
+    for skin in ('atlantis', 'isles'):
+        add(client + f'ui/{skin}/custom5_window.xml', companion / skin / 'custom5_window.xml', 'native', ['absent'])
     rm = json.loads((raid / 'manifest.json').read_text(encoding='utf-8'))
     for window, info in rm['windows'].items():
         for skin in ('atlantis', 'isles'):
