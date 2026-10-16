@@ -851,7 +851,7 @@ ASH, BLOOD, DIM, FIELD = builder.MUTED, builder.BLOOD, builder.DIM, builder.ACTI
 ROW_SLOTS = ((12, 14, builder.GOLD, 2, True),                 # 0 mark + - * >
              (28, 460, builder.GOLD, 115, False),             # 1 title
              (28, 720, builder.TEXT, 115, False),             # 2 plain text
-             *((40, 116, color, 40, False) for color in builder.REALM_COLORS),   # 3-5 name Albion, Midgard, Hibernia
+             *((28, 128, color, 40, False) for color in builder.REALM_COLORS),   # 3-5 name Albion, Midgard, Hibernia
              (160, 24, builder.TEXT, 4, False),               # 6 level (left, under the "Lv" head)
              (190, 98, builder.TEXT, 32, False),              # 7 class
              (160, 128, ASH, 42, False),                      # 8 Ash text
@@ -952,8 +952,8 @@ def contains(outer, inner):
 for row in range(builder.BG_ROW_COUNT):
     y = 232 + 20 * row
     band = lambda x, w: (x, y - 2, w, 20)
-    assert bg_clicks[builder.BG_CONTROL_FOLD_BASE + row] == band(8, 28)
-    assert bg_clicks[builder.BG_CONTROL_SELECT_BASE + row] == band(36, 252)
+    assert bg_clicks[builder.BG_CONTROL_FOLD_BASE + row] == band(8, 20)
+    assert bg_clicks[builder.BG_CONTROL_SELECT_BASE + row] == band(28, 260)
     assert bg_clicks[builder.BG_CONTROL_MINUS_BASE + row] == band(502, 44)
     assert bg_clicks[builder.BG_CONTROL_PLUS_BASE + row] == band(546, 44)
     assert bg_clicks[builder.BG_CONTROL_LINK_BASE + row] == band(638, 110)

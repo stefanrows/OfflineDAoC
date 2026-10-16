@@ -1489,7 +1489,7 @@ BG_ROW_TOP, BG_ROW_PITCH = 232, 20
 BG_RULE_BOTTOM_Y, BG_HINT_Y, BG_REPLY_Y = 592, 596, 614
 BG_REPLY_WIDTH = 600
 # Click bands of a row (x, width); the band is y - 2 .. y + 18, which is also the zebra band.
-BG_CLICK_FOLD, BG_CLICK_SELECT = (8, 28), (36, 252)
+BG_CLICK_FOLD, BG_CLICK_SELECT = (8, 20), (28, 260)
 BG_CLICK_MINUS, BG_CLICK_PLUS, BG_CLICK_LINK = (502, 44), (546, 44), (638, 110)
 # Own templates, cut from stock textures only (frames_win: the gold-framed leather bar of the character frame; page1: the
 # stone ground that the stock listbox_row_bg tiles, 20 px instead of 16 so one band is exactly one row).
@@ -1572,11 +1572,12 @@ def open_bg_row_slots():
 
       slot  x    width colour            MaxChars  use
        0    12   14    Gold, centered     2        mark: "+" folded unit, "-" opened unit, "*" leader, ">" selected row
-       1    28   460   Gold               115      title: unit header ("caster8 #31"), Setup section ("Crew")
-       2    28   720   Ink                115      plain text: Setup setting name, full-width message (empty states)
-       3    40   116   Albion  #DC7D78    40       name (realm row "ALBION", member, solo); one of 3-5
-       4    40   116   Midgard #87A5EB    40
-       5    40   116   Hibernia #7DC887   40
+       1    28   460   Gold               115      title: Setup section ("Crew") (gold is for titles, marks, selection)
+       2    28   720   Ink                115      plain text: unit header ("caster8 #31"), Setup setting name, full-width
+                                                    message (empty states)
+       3    28   128   Albion  #DC7D78    40       name (realm row "ALBION", member, solo); one of 3-5; at the title x so a
+       4    28   128   Midgard #87A5EB    40       realm row aligns with the unit titles; the server indents member names
+       5    28   128   Hibernia #7DC887   40       with two leading spaces
        6    160  24    Ink                4        level (left, under the "Lv" head)
        7    190  98    Ink                32       class
        8    160  128   Ash #969696        42       secondary text over level+class ("6 bots", Setup range "8-120, step 4")
@@ -1594,7 +1595,7 @@ def open_bg_row_slots():
     advance table (ARIAL14_ADVANCES, SPACE_ADVANCE) and to MaxCharacters. Server text is ASCII only.
     """
     return ((12, 14, GOLD, 2, True), (28, 460, GOLD, 115, False), (28, 720, TEXT, 115, False),
-            *((40, 116, color, 40, False) for color in REALM_COLORS),
+            *((28, 128, color, 40, False) for color in REALM_COLORS),
             (160, 24, TEXT, 4, False), (190, 98, TEXT, 32, False), (160, 128, MUTED, 42, False),
             (292, 122, ACTIVE, 40, False), (292, 122, BLOOD, 40, False), (292, 122, MUTED, 40, False),
             (418, 80, DIM, 40, False), (418, 80, ACTIVE, 40, False),
@@ -1659,8 +1660,8 @@ def open_bg_window():
     Click areas (InvisibleButtonDef, OnClickEvent = decimal 0xA00 + control; placed after every other element, the raid's
     z-order; none on the title bar, none overlapping). Row r band = y 230 + 20 r, 20 px high:
       0x00 + r  row link     x 638, 110 px (slot 15)          0x20 + r  row [-]   x 502, 44 px (slot 16)
-      0x40 + r  row [+]      x 546, 44 px (slot 17)           0x60 + r  fold      x 8, 28 px (slot 0, the +/- mark)
-      0x80 + r  name select  x 36, 252 px (slots 3-7; on a unit header the server treats it as fold as well)
+      0x40 + r  row [+]      x 546, 44 px (slot 17)           0x60 + r  fold      x 8, 20 px (slot 0, the +/- mark)
+      0x80 + r  name select  x 28, 260 px (slots 1-7; on a unit header the server treats it as fold as well)
       0xE0 / 0xE1  Overview / Setup tab plates                0xE8-0xEB  [Up] [Down] [PgUp] [PgDn]
       0xEC / 0xED  [Open all] / [Fold all]                     0xF0-0xF2  crest columns Albion, Midgard, Hibernia
       0xFD  [Close]   0xFE  [Refresh]   (0xFF is the ready control sent by operation 10, not a click)
