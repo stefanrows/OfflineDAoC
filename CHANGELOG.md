@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.290.0] - 2026-10-17
+
+### Fixed
+
+- **Healers finish their cure mezz.** A bot healer picked the cure mezz for a
+  still-mezzed mate again on every turn, stopped its own running cast and
+  started it anew, so it stood there recasting and never freed the mate. A
+  cast of the same spell already under way now runs to the end.
+
 ## [0.289.0] - 2026-10-17
 
 ### Changed

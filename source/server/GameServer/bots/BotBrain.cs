@@ -6073,6 +6073,10 @@ namespace DOL.AI.Brain
                     CheckHealSpell(BotBody.HealInstant) ? BotBody.HealInstant : null;
             if (spellToCast != null && spellTarget != null)
             {
+                // A cast of this very spell is already under way (a cure mezz on a still-mezzed mate is picked again on
+                // every turn): let it finish. Stopping and restarting it here made the healer recast without end.
+                if (BotBody.IsCasting && BotBody.castingComponent?.SpellHandler?.Spell?.ID == spellToCast.ID)
+                    return true;
                 spellTarget = BotGroupSupport.ReserveHeal(BotBody, spellToCast, spellTarget);
                 if (spellTarget == null || CompanionPetPull.IsHeldPullPet(AssistedPlayer, spellTarget))
                     return isCastingHeal;

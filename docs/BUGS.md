@@ -148,6 +148,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+168. **Bot healers recast their cure mezz without end.** Owner report
+     2026-10-17 (open BG): healers stand and start the demezz again and again
+     instead of finishing one cast. `BotBrain.CheckHeals` picks
+     `CureMezz` for a mezzed group member on every think, regardless of a
+     running cast, and its cast step stops the current cast before starting a
+     non-instant spell, so each turn (about half a second) cancelled the
+     running cure mezz. Fixed in 0.290.0: a cast of the same spell already
+     under way is left to finish. Offline: build and heal/cure tests green.
+     Verification pending: a mezzed mate is freed after one cure cast.
+
 167. **Server PvP open BG: the bot groups all come out of the keep next to
      the central keep.** Owner report 2026-10-17. A bot leader landed at its
      own realm's portal keep (`BattlegroundCampaignPolicy.GetLanding`), so in
