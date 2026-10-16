@@ -640,7 +640,9 @@ assert manifest["uimainManagerOnlySha256"] == "e1266fcceb954b5e835d3e3ca6563d682
 # paperdoll probe's uimain.xml, so an upgrade from the probe leaves uimain.xml alone.
 assert manifest["barWindowSha256"] == "5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac"
 assert manifest["uimainBarSha256"] == "7d573c315a56bcacae8e8ebc871646654bfe8da5bb1dc745d6023da7f93b9dd9"
-assert manifest["uimainOutputSha256"] == "cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a1328c"
+# The 0.276.0 UI (manager, COMPANIONS and COMPANION GEAR) stays the intermediate step; the OPEN BG include follows it.
+assert manifest["uimainGearSha256"] == "cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a1328c"
+assert manifest["uimainOutputSha256"] == manifest["uimainBgSha256"] != manifest["uimainGearSha256"]
 
 # COMPANION GEAR window (Custom6): sockets, icons and click areas on the same squares; every gear label once.
 GEAR_XML_TAGS = MANAGER_XML_TAGS | {"ImageAreaDef", "IconDef", "IconId", "AdapterName"}
@@ -685,7 +687,134 @@ if stock_ui.is_dir():
             assert f"<Name>{template}</Name>".encode() in stock, f"{template} is not a stock {skin} template"
 assert hashlib.sha256((args.stage / "uimain.xml").read_bytes()).hexdigest() == manifest["uimainOutputSha256"]
 uimain = (args.stage / "uimain.xml").read_bytes()
-assert uimain.index(b"custom8_window.xml") < uimain.index(b"custom7_window.xml") < uimain.index(b"custom6_window.xml")
+assert uimain.index(b"custom8_window.xml") < uimain.index(b"custom7_window.xml") < uimain.index(b"custom6_window.xml") \
+    < uimain.index(b"custom5_window.xml")
+INCLUDE_LINES = [f"\t<Include>custom{n}_window.xml</Include>\r\n".encode() for n in (8, 7, 6, 5)]
+assert all(uimain.count(line) == 1 for line in INCLUDE_LINES)
+assert hashlib.sha256(uimain.replace(INCLUDE_LINES[-1], b"")).hexdigest() == manifest["uimainGearSha256"]
+# The other three windows stay byte-identical to the 0.276.0 stage.
+for skin in ("atlantis", "isles"):
+    for window_file, pinned in (("custom8_window.xml", "9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd"),
+                                ("custom7_window.xml", "5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac"),
+                                ("custom6_window.xml", "dfc5bbdb8d9fd30b59bfce26bae924e27888ca4b89431532bccdac3f028b2338")):
+        assert hashlib.sha256((args.stage / skin / window_file).read_bytes()).hexdigest() == pinned, (skin, window_file)
+
+# OPEN BG window (Custom5): fixed 760 x 648, every BG label once, 74 click controls (the ready control 0xFF is not a click), the
+# click areas last and without overlap, everything inside the window, stock templates only, both skins identical.
+bg_bytes = {skin: (args.stage / skin / "custom5_window.xml").read_bytes() for skin in ("atlantis", "isles")}
+assert bg_bytes["atlantis"] == bg_bytes["isles"]
+assert hashlib.sha256(bg_bytes["atlantis"]).hexdigest() == manifest["bgWindowSha256"]
+assert bg_bytes["atlantis"] == builder.open_bg_window()
+window = ET.fromstring(bg_bytes["atlantis"]).find("WindowTemplate")
+assert (window.find("Name").text, window.find("WindowId").text) == ("custom5_window", "Custom5")
+width, height = int(window.find("Width").text), int(window.find("Height").text)
+assert (width, height) == (builder.BG_WIDTH, builder.BG_HEIGHT) == (760, 648)
+assert window.find("ResizeableWidth").text == window.find("ResizeableHeight").text == "0"
+assert {element.find("FontName").text for element in window.iter("LabelDef")} == {builder.FONT}
+BG_XML_TAGS = MANAGER_XML_TAGS | {"HorizontalResizeImageDef"}
+for element in window.iter():
+    assert element.tag in BG_XML_TAGS, element.tag
+assert window.find(".//EditBoxDef") is None and window.find(".//ClickableEditBoxDef") is None
+bg_templates = {element.text for element in window.iter("TemplateName")}
+assert bg_templates == {"dlg_sm_title_noresize", "context_hr_image_divider"}, bg_templates
+if stock_ui.is_dir():
+    for skin in ("atlantis", "isles"):
+        stock = b"".join(path.read_bytes() for path in (stock_ui / skin).glob("*.xml") if not path.name.startswith("custom"))
+        for template in bg_templates:
+            assert f"<Name>{template}</Name>".encode() in stock, f"{template} is not a stock {skin} template"
+bg_adapters = [element.text for element in window.iter("Adapter")]
+assert sorted(bg_adapters) == [builder.adapter_name(index) for index in range(builder.BG_LABEL_BASE, builder.BG_LABEL_END)], \
+    "Each OPEN BG label adapter (620-984) appears exactly once"
+labels = window.findall("LabelDef")
+for element in labels:
+    x, y = int(element.find("Position/X").text), int(element.find("Position/Y").text)
+    assert 0 <= x and x + int(element.find("Width").text) <= width and 0 <= y and y + int(element.find("Height").text) <= height
+    assert len(element.find("Alignment")) == 0, "The OPEN BG window does not resize"
+fixed_texts = [element.find("Data").text for element in labels if element.find("Adapter") is None]
+for text in ("OPEN BG", "Name", "Lv", "Class", "Unit", "State", "Value", "[Up]", "[Down]", "[PgUp]", "[PgDn]",
+             "[Refresh]", "[Close]"):
+    assert fixed_texts.count(text) == 1, text
+# Row slot contract with the server (OpenBgWindowScreen): slot -> (x, width, colour) on the row's band.
+by_adapter = {element.find("Adapter").text: element for element in labels if element.find("Adapter") is not None}
+def bg_label(index):
+    element = by_adapter[builder.adapter_name(index)]
+    return (int(element.find("Position/X").text), int(element.find("Position/Y").text), int(element.find("Width").text),
+            tuple(int(element.find(f"Color/{c}").text) for c in "RGB"))
+ROW_SLOTS = ((10, 740, builder.GOLD), (10, 740, builder.TEXT), *((10, 140, color) for color in builder.REALM_COLORS),
+             (10, 140, builder.TEXT), (154, 26, builder.STATUS), (186, 104, builder.TEXT), (296, 100, builder.MUTED),
+             (402, 150, builder.ACTIVE), (402, 150, builder.MUTED), (558, 110, builder.GOLD),
+             (672, 36, builder.LINK), (672, 36, builder.DISABLED), (712, 36, builder.LINK), (712, 36, builder.DISABLED))
+assert len(ROW_SLOTS) == builder.BG_ROW_STRIDE
+for row in range(builder.BG_ROW_COUNT):
+    for slot, (x, w, color) in enumerate(ROW_SLOTS):
+        assert bg_label(builder.BG_LABEL_ROW_BASE + builder.BG_ROW_STRIDE * row + slot) == (x, 164 + 20 * row, w, color), \
+            (row, slot)
+assert bg_label(builder.BG_LABEL_STATUS)[1] == 1
+assert [bg_label(builder.BG_LABEL_TAB_BASE + k)[1] for k in range(4)] + [bg_label(builder.BG_LABEL_PAGE)[1]] == [24] * 5
+assert bg_label(builder.BG_LABEL_TAB_BASE)[:3] == bg_label(builder.BG_LABEL_TAB_BASE + 1)[:3]
+assert bg_label(builder.BG_LABEL_TAB_BASE + 2)[:3] == bg_label(builder.BG_LABEL_TAB_BASE + 3)[:3]
+assert [bg_label(builder.BG_LABEL_HEADER_BASE + k)[1:3] for k in range(builder.BG_HEADER_LABELS)] == \
+    [(46 + 18 * k, 740) for k in range(builder.BG_HEADER_LABELS)]
+assert [bg_label(builder.BG_LABEL_REPLY_BASE + k)[1:3] for k in range(builder.BG_REPLY_LINES)] == [(606, 740), (624, 740)]
+# Click areas: decimal OnClickEvent 0xA00 + control, each control once, all after every other element.
+children = list(window)
+buttons = [element for element in children if element.tag == "InvisibleButtonDef"]
+assert children[-len(buttons):] == buttons, "Click areas must come last (raid z-order)"
+bg_clicks = {}
+for button in buttons:
+    text = button.find("OnClickEvent").text
+    assert re.fullmatch(r"[0-9]+", text), text
+    event = stock_click_event(text)
+    assert builder.BG_EVENT_BASE <= event <= builder.BG_EVENT_BASE + 0xFF, text
+    control = event - builder.BG_EVENT_BASE
+    assert control not in bg_clicks, f"control {control:#x} has two click areas"
+    bg_clicks[control] = (int(button.find("Position/X").text), int(button.find("Position/Y").text),
+                          int(button.find("Width").text), int(button.find("Height").text))
+assert sorted(bg_clicks) == [*range(0x00, 0x16), *range(0x20, 0x36), *range(0x40, 0x56), 0xE0, 0xE1, 0xE8, 0xE9, 0xEA,
+                             0xEB, 0xFD, 0xFE], sorted(bg_clicks)
+areas = list(bg_clicks.items())
+for index, (a, (ax, ay, aw, ah)) in enumerate(areas):
+    assert 0 <= ax and 18 <= ay and ax + aw <= width and ay + ah <= height, (hex(a), ax, ay, aw, ah)
+    for b, (bx, by, bw, bh) in areas[index + 1:]:
+        assert ax + aw <= bx or bx + bw <= ax or ay + ah <= by or by + bh <= ay, (hex(a), hex(b))
+for row in range(builder.BG_ROW_COUNT):
+    y = 164 + 20 * row
+    for base, (x, w) in ((builder.BG_CONTROL_LINK_BASE, (558, 110)), (builder.BG_CONTROL_MINUS_BASE, (672, 36)),
+                         (builder.BG_CONTROL_PLUS_BASE, (712, 36))):
+        cx, cy, cw, ch = bg_clicks[base + row]
+        assert cx <= x and x + w <= cx + cw and cy <= y and y + 18 <= cy + ch, (hex(base + row), bg_clicks[base + row])
+for control in (builder.BG_CONTROL_TAB_SITUATION, builder.BG_CONTROL_TAB_CONTROL, builder.BG_CONTROL_UP,
+                builder.BG_CONTROL_DOWN, builder.BG_CONTROL_PAGE_UP, builder.BG_CONTROL_PAGE_DOWN,
+                builder.BG_CONTROL_CLOSE, builder.BG_CONTROL_REFRESH):
+    assert bg_clicks[control][1] == 24, hex(control)
+for k, control in enumerate((builder.BG_CONTROL_TAB_SITUATION, builder.BG_CONTROL_TAB_CONTROL)):
+    x, y, w, _c = bg_label(builder.BG_LABEL_TAB_BASE + 2 * k)
+    assert bg_clicks[control][:3] == (x, y, w), hex(control)
+# main() refuses an input client that already has an OPEN BG window, in a skin or in uimain.xml.
+import subprocess
+import tempfile
+baseline_main = uimain
+for line in INCLUDE_LINES:
+    baseline_main = baseline_main.replace(line, b"")
+assert hashlib.sha256(baseline_main).hexdigest() == manifest["uimainBaselineSha256"]
+for case, expected in (("uimain", "custom5_window.xml is already included in uimain.xml"),
+                       ("atlantis", "custom5_window.xml is already in use in atlantis"),
+                       ("isles", "custom5_window.xml is already in use in isles")):
+    with tempfile.TemporaryDirectory() as scratch:
+        client = Path(scratch) / "client"
+        (client / "ui").mkdir(parents=True)
+        (client / "game.dll").write_bytes(b"not a game.dll: the UI checks run first")
+        main_bytes = baseline_main
+        if case == "uimain":
+            main_bytes = baseline_main.replace(b"</XML>", INCLUDE_LINES[-1] + b"</XML>")
+        else:
+            (client / "ui" / case).mkdir()
+            (client / "ui" / case / "custom5_window.xml").write_bytes(b"<foreign/>")
+        (client / "ui" / "uimain.xml").write_bytes(main_bytes)
+        result = subprocess.run([sys.executable, str(Path(builder.__file__)), "--client", str(client),
+                                 "--output", str(Path(scratch) / "out")], capture_output=True, text=True)
+        assert result.returncode == 2 and expected in result.stderr, (case, result.returncode, result.stderr)
+        assert not (Path(scratch) / "out").exists()
 
 # Geometry: the chosen list sizes must fit a window of the advertised height without overlap.
 for size in builder.ROW_SIZES:
@@ -765,4 +894,6 @@ print(f"PASS (offline only): COMPANION GEAR Custom6 window: ops 7/8/9, {GEAR_SLO
       "slot clicks 0x900-0x93a send move(slot, source, count) or start a kind-0x66 pick-up")
 print("PASS (offline only): OPEN BG Custom5: ops 10/11/12, own flag and token buffer, clicks 0xa00-0xaff send "
       "&bgsetup ui <token> <control> through their own sender; 0x9ff and 0xb00 pass through")
+print("PASS (offline only): OPEN BG Custom5 XML: fixed 760x648, labels 620-984 once in the row slot layout, 74 click "
+      "areas 0xa00 + control last and without overlap; custom6/7/8 unchanged; uimain 8, 7, 6, 5; foreign custom5 refused")
 print("NOTE: emulation is not acceptance; the owner's combined real-client check is still required")

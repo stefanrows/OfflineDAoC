@@ -1444,6 +1444,122 @@ def gear_window():
     return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
 
 
+# OPEN BG window geometry (spec section 4): fixed 760 x 648, rows from y=164 every 20 px.
+BG_WIDTH, BG_HEIGHT = 760, 648
+BG_LINE_X, BG_LINE_WIDTH = 10, 740
+BG_TITLE_Y, BG_BAR_Y, BG_HEADER_Y, BG_HEADER_PITCH = 1, 24, 46, 18
+BG_SEPARATOR_Y, BG_COLUMN_HEADS_Y, BG_ROW_TOP, BG_ROW_PITCH = 140, 144, 164, 20
+BG_REPLY_Y = (606, 624)
+# (x, width) of each row column.
+BG_COLUMN_NAME, BG_COLUMN_LEVEL, BG_COLUMN_CLASS, BG_COLUMN_UNIT = (10, 140), (154, 26), (186, 104), (296, 100)
+BG_COLUMN_STATE, BG_COLUMN_VALUE, BG_COLUMN_MINUS, BG_COLUMN_PLUS = (402, 150), (558, 110), (672, 36), (712, 36)
+BG_TAB_SITUATION, BG_TAB_CONTROL, BG_PAGE_INDICATOR = (12, 96), (116, 96), (224, 130)
+
+
+def open_bg_tabs():
+    """(control, x, width) of the two tabs; each tab is an inactive and an active label on the same spot."""
+    return ((BG_CONTROL_TAB_SITUATION, *BG_TAB_SITUATION), (BG_CONTROL_TAB_CONTROL, *BG_TAB_CONTROL))
+
+
+def open_bg_links():
+    """(name, text, control, x, y, width) of the fixed links on the y=24 bar: paging left, Refresh and Close right."""
+    links = list(_links(BG_BAR_Y, BG_PAGE_INDICATOR[0] + BG_PAGE_INDICATOR[1] + 10,
+                        (("Up", "[Up]", BG_CONTROL_UP), ("Down", "[Down]", BG_CONTROL_DOWN),
+                         ("PageUp", "[PgUp]", BG_CONTROL_PAGE_UP), ("PageDown", "[PgDn]", BG_CONTROL_PAGE_DOWN))))
+    edge = BG_LINE_X + BG_LINE_WIDTH - 2
+    for name, text, control in (("Close", "[Close]", BG_CONTROL_CLOSE), ("Refresh", "[Refresh]", BG_CONTROL_REFRESH)):
+        width = text_width(text) + 6
+        links.append((name, text, control, edge - width, BG_BAR_Y, width))
+        edge -= width + 10
+    return tuple(links)
+
+
+def open_bg_row_slots():
+    """(x, width, colour, characters) of the 16 label slots of one row, in slot order (see ``open_bg_window``)."""
+    full = (BG_LINE_X, BG_LINE_WIDTH)
+    return ((*full, GOLD, 120), (*full, TEXT, 120),
+            *((*BG_COLUMN_NAME, color, 32) for color in REALM_COLORS), (*BG_COLUMN_NAME, TEXT, 32),
+            (*BG_COLUMN_LEVEL, STATUS, 6), (*BG_COLUMN_CLASS, TEXT, 32), (*BG_COLUMN_UNIT, MUTED, 24),
+            (*BG_COLUMN_STATE, ACTIVE, 40), (*BG_COLUMN_STATE, MUTED, 40), (*BG_COLUMN_VALUE, GOLD, 32),
+            (*BG_COLUMN_MINUS, LINK, 6), (*BG_COLUMN_MINUS, DISABLED, 6),
+            (*BG_COLUMN_PLUS, LINK, 6), (*BG_COLUMN_PLUS, DISABLED, 6))
+
+
+def open_bg_window():
+    """Custom5 XML: the fixed 760 x 648 OPEN BG window (spec docs/superpowers/specs/2026-10-16-open-bg-window-client-
+    design.md sections 4 and 5), stock templates and controls only.
+
+    Label adapters (contract with the server's OpenBgWindowScreen, which fills them in exactly this order):
+      620       status right of the fixed title "OPEN BG" (y=1)
+      621-624   tabs at y=24: Lage inactive, Lage active, Steuern inactive, Steuern active (pairs on one spot)
+      625       page indicator ("1-22 of 61"), y=24
+      626-630   header lines, y=46..118 every 18, 740 px
+      631-632   reply lines, y=606 and y=624, 740 px
+      633-984   22 rows x 16 slots; row r has base 633 + 16 r and sits at y = 164 + 20 r:
+                  0 section title (gold, full width)      1 plain text (full width)
+                  2-5 name: Albion, Midgard, Hibernia colour, neutral
+                  6 level   7 class   8 unit/archetype   9 role/state green   10 role/state grey
+                  11 value/link (gold, e.g. "[Relieve]")  12 "[-]" active  13 "[-]" grey  14 "[+]" active  15 "[+]" grey
+    Overlaid slots (2-5, 9-10, 12-13, 14-15 and the full-width 0/1) share a spot; the server fills one of each group.
+    Column headings and the links on the y=24 bar are fixed XML text. Click areas (OnClickEvent 0xA00 + control) come
+    after every other element (the raid's z-order): row link 0x00-0x15 on the value column, row minus 0x20-0x35 and
+    plus 0x40-0x55 on their columns, tabs 0xE0/0xE1, paging 0xE8-0xEB, close 0xFD, refresh 0xFE.
+    """
+    root = ET.Element("Root_Element", ID="DAOCUi")
+    panel = ET.SubElement(root, "WindowTemplate")
+    for key, value in (("Name", "custom5_window"), ("WindowId", "Custom5"), ("CloseButton", "true"),
+                       ("MoveButton", "true"), ("TopRightResizeButton", "false"),
+                       ("BottomRightResizeButton", "false"), ("BottomLeftResizeButton", "false"),
+                       ("ResizeButtonOffsetX", "0"), ("ResizeButtonOffsetY", "0"), ("TitleWidth", "0"),
+                       ("TitleHeight", "0"), ("Width", str(BG_WIDTH)), ("Height", str(BG_HEIGHT)),
+                       ("ResizeableWidth", "0"), ("ResizeableHeight", "0"), ("ResizeableTwoWayWidth", "0"),
+                       ("ResizeableTwoWayHeight", "0"), ("MinWidth", "0"), ("MinHeight", "0"),
+                       ("ContextTemplateName", None)):
+        ET.SubElement(panel, key).text = value
+    _image(panel, 0, 0, BG_WIDTH, BG_HEIGHT, "dlg_sm_title_noresize")
+    _hr_image(panel, 8, BG_SEPARATOR_Y, BG_WIDTH - 16, "context_hr_image_divider")
+
+    _label(panel, 12, BG_TITLE_Y, 70, GOLD, text="OPEN BG", characters=16)
+    _label(panel, 90, BG_TITLE_Y, BG_WIDTH - 90 - 40, STATUS, BG_LABEL_STATUS, characters=120)
+    for index, (_control, x, width) in enumerate(open_bg_tabs()):
+        _label(panel, x, BG_BAR_Y, width, MUTED, BG_LABEL_TAB_BASE + 2 * index, characters=24)
+        _label(panel, x, BG_BAR_Y, width, GOLD, BG_LABEL_TAB_BASE + 2 * index + 1, characters=24)
+    _label(panel, BG_PAGE_INDICATOR[0], BG_BAR_Y, BG_PAGE_INDICATOR[1], STATUS, BG_LABEL_PAGE, characters=24)
+    for _name, text, _control, x, y, width in open_bg_links():
+        _label(panel, x, y, width, LINK, text=text, characters=16)
+    for line in range(BG_HEADER_LABELS):
+        _label(panel, BG_LINE_X, BG_HEADER_Y + BG_HEADER_PITCH * line, BG_LINE_WIDTH, STATUS,
+               BG_LABEL_HEADER_BASE + line, characters=120)
+    for text, (x, width) in (("Name", BG_COLUMN_NAME), ("Lv", BG_COLUMN_LEVEL), ("Class", BG_COLUMN_CLASS),
+                             ("Unit", BG_COLUMN_UNIT), ("State", BG_COLUMN_STATE), ("Value", BG_COLUMN_VALUE)):
+        _label(panel, x, BG_COLUMN_HEADS_Y, width, MUTED, text=text, characters=12)
+    slots = open_bg_row_slots()
+    for row in range(BG_ROW_COUNT):
+        y = BG_ROW_TOP + BG_ROW_PITCH * row
+        base = BG_LABEL_ROW_BASE + BG_ROW_STRIDE * row
+        for slot, (x, width, color, characters) in enumerate(slots):
+            _label(panel, x, y, width, color, base + slot, characters=characters,
+                   centered=slot >= 12)
+    for line, y in enumerate(BG_REPLY_Y):
+        _label(panel, BG_LINE_X, y, BG_LINE_WIDTH, MESSAGE, BG_LABEL_REPLY_BASE + line, characters=120)
+
+    # Click areas last, like the raid's z-order. Row bands are 20 px (y - 1 .. y + 19) and never overlap.
+    event = lambda control: str(BG_EVENT_BASE + control)
+    for control, x, width in open_bg_tabs():
+        _click(panel, x, BG_BAR_Y, width, None, "Situation tab" if control == BG_CONTROL_TAB_SITUATION else
+               "Control tab", event=event(control))
+    for name, _text, control, x, y, width in open_bg_links():
+        _click(panel, x, y, width, None, _caption(name), event=event(control))
+    for row in range(BG_ROW_COUNT):
+        y = BG_ROW_TOP + BG_ROW_PITCH * row - 1
+        for base, (x, width), caption in ((BG_CONTROL_LINK_BASE, BG_COLUMN_VALUE, "Row link"),
+                                          (BG_CONTROL_MINUS_BASE, BG_COLUMN_MINUS, "Row minus"),
+                                          (BG_CONTROL_PLUS_BASE, BG_COLUMN_PLUS, "Row plus")):
+            _click(panel, x, y, width, None, f"{caption} {row + 1}", BG_ROW_PITCH, event=event(base + row))
+    ET.indent(root)
+    return ET.tostring(root, encoding="iso-8859-1", xml_declaration=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--client", type=Path, required=True, help="Verified client app directory (read only)")
@@ -1451,28 +1567,34 @@ def main():
     args = parser.parse_args()
     if args.output.exists():
         parser.error("Output directory already exists")
+    # The UI checks run before the game.dll is read, so a foreign window is reported whatever the game.dll is.
+    main_xml = (args.client / "ui/uimain.xml").read_bytes()
+    if b"custom5_window.xml" in main_xml:
+        parser.error("custom5_window.xml is already included in uimain.xml")
+    if any(name in main_xml for name in (b"custom8_window.xml", b"custom7_window.xml", b"custom6_window.xml")) or \
+            b"</XML>" not in main_xml:
+        parser.error("Unexpected UI include state")
+    for skin in ("atlantis", "isles"):
+        for window_file in ("custom8_window.xml", "custom7_window.xml", "custom6_window.xml", "custom5_window.xml"):
+            if (args.client / "ui" / skin / window_file).exists():
+                parser.error(f"{window_file} is already in use in {skin}")
     original = (args.client / "game.dll").read_bytes()
     try:
         patched, report = build(original)
     except ValueError as error:
         parser.error(str(error))
-    main_xml = (args.client / "ui/uimain.xml").read_bytes()
-    if any(name in main_xml for name in (b"custom8_window.xml", b"custom7_window.xml", b"custom6_window.xml")) or \
-            b"</XML>" not in main_xml:
-        parser.error("Unexpected UI include state")
-    # The manager-only UI (0.169.0), the manager plus COMPANIONS window (0.251.0-0.272.0) and the manager plus both
-    # windows (0.276.0; byte-identical to the 0.273.0-0.275.0 paperdoll probe UI) differ only in the include list.
+    # The manager-only UI (0.169.0), the manager plus COMPANIONS window (0.251.0-0.272.0), the manager plus both
+    # windows (0.276.0; byte-identical to the 0.273.0-0.275.0 paperdoll probe UI) and the 0.282.0 UI with the OPEN BG
+    # window differ only in the include list.
     manager_only = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n</XML>")
     with_bar = main_xml.replace(b"</XML>", b"\t<Include>custom8_window.xml</Include>\r\n"
                                 b"\t<Include>custom7_window.xml</Include>\r\n</XML>")
-    output_main = with_bar.replace(b"</XML>", b"\t<Include>custom6_window.xml</Include>\r\n</XML>")
-    for skin in ("atlantis", "isles"):
-        for window_file in ("custom8_window.xml", "custom7_window.xml", "custom6_window.xml"):
-            if (args.client / "ui" / skin / window_file).exists():
-                parser.error(f"{window_file} is already in use in {skin}")
+    with_gear = with_bar.replace(b"</XML>", b"\t<Include>custom6_window.xml</Include>\r\n</XML>")
+    output_main = with_gear.replace(b"</XML>", b"\t<Include>custom5_window.xml</Include>\r\n</XML>")
     xml = window()
     bar_xml = bar_window()
     gear_xml = gear_window()
+    bg_xml = open_bg_window()
     args.output.mkdir(parents=True)
     (args.output / "game.dll").write_bytes(patched)
     (args.output / "uimain.xml").write_bytes(output_main)
@@ -1481,20 +1603,25 @@ def main():
         (args.output / skin / "custom8_window.xml").write_bytes(xml)
         (args.output / skin / "custom7_window.xml").write_bytes(bar_xml)
         (args.output / skin / "custom6_window.xml").write_bytes(gear_xml)
+        (args.output / skin / "custom5_window.xml").write_bytes(bg_xml)
     report["uimainBaselineSha256"] = sha256(main_xml)
     report["uimainOutputSha256"] = sha256(output_main)
     report["uimainManagerOnlySha256"] = sha256(manager_only)
     report["uimainBarSha256"] = sha256(with_bar)
+    report["uimainGearSha256"] = sha256(with_gear)
+    report["uimainBgSha256"] = sha256(output_main)
     report["windowSha256"] = sha256(xml)
     report["barWindowSha256"] = sha256(bar_xml)
     report["gearWindowSha256"] = sha256(gear_xml)
+    report["bgWindowSha256"] = sha256(bg_xml)
     report["gear"]["slotRectangles"] = gear_slot_rectangles()
-    report["status"] = ("staged Companion Manager client with the COMPANIONS and COMPANION GEAR windows; offline "
-                        "emulation only until the owner's real-client check passes")
+    report["status"] = ("staged Companion Manager client with the COMPANIONS, COMPANION GEAR and OPEN BG windows; "
+                        "offline emulation only until the owner's real-client check passes")
     (args.output / "manifest.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: report[key] for key in ("baselineSha256", "outputSha256", "windowSha256",
-                                                   "barWindowSha256", "gearWindowSha256", "uimainOutputSha256",
-                                                   "uimainManagerOnlySha256", "uimainBarSha256", "protocolVersion")},
+                                                   "barWindowSha256", "gearWindowSha256", "bgWindowSha256",
+                                                   "uimainOutputSha256", "uimainManagerOnlySha256", "uimainBarSha256",
+                                                   "uimainGearSha256", "uimainBgSha256", "protocolVersion")},
                      indent=2))
 
 
