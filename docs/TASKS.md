@@ -618,10 +618,7 @@ Agent sessions on items 45–48: take the role and context from
      fields. The allied claim flip follow-up is fixed in source (claim lock:
      only Assault and Defend claim, the raid's lead guild first within 60 s
      after the lord falls); verification pending in the real game, as is the
-     roster healer test without Paladin. Still open: the own client window
-     (Custom5, Plan 2, spec
-     `docs/superpowers/specs/2026-10-15-open-bg-window-design.md`); the
-     Minstrel stealth capability for the doctrine (needs a separate flag, a
+     roster healer test without Paladin. Still open: the Minstrel stealth capability for the doctrine (needs a separate flag, a
      change to `TraitsOf` breaks `UT_GothwaitePvpTactics`); an open-BG-only
      bomb-group doctrine (the shared `Derive` must not change); the vulture
      rule and a second raid (waiting for the owner's OK); a defender unit
@@ -637,6 +634,19 @@ Agent sessions on items 45–48: take the role and context from
      is on); a server whose bots are below the band gets an empty reserve and
      so no open BG; live checks pending (hub login point validity, medallion
      porter reach at the hubs, reserved bots filling the crew).
+     0.282.0 (2026-10-16, offline checks only): the own client window OPEN
+     BG (Custom5, new Companion Manager client stage; spec
+     `docs/superpowers/specs/2026-10-16-open-bg-window-client-design.md`).
+     `/bgsetup` opens it with the pages Lage and Steuern, every player may
+     change settings and relieve units (no GM lock), archetype per unit and
+     the last field figures are in the status, the Custom8 open BG manager
+     variant is removed, `/bgsetup text` and the chat keys are unchanged,
+     clients without the stage get the text page and one hint. Real-client
+     check pending (checklist in `docs/COMPANION_MANAGER_INTEGRATION.md`,
+     section OPEN BG window): the stage must be installed with
+     `Install-CompanionManager.ps1`; Custom5 and the 985 adapters never ran in
+     a real client. Open: bug 162 (fallback timers in game time, stale open
+     state after the stock close X).
      0.245.0 (deployed 11:04, 20×, ~7× achieved, 11:05–11:31): raids form
      at the push and top up (5–6 units, 13–22 bots, all three realms mixed),
      keep 11 claimed 8 times (4 of them within 19 s by partner guilds of one

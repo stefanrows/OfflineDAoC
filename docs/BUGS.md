@@ -6,6 +6,23 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+162. **The Custom8 and gear window fallback timers run in game time; a
+     patched client can get the "unpatched" line; the OPEN BG window counts as
+     open after the stock close X.** Found 2026-10-16 while building the OPEN
+     BG window (0.282.0). (a) The 3 s fallback of the Custom8 manager
+     (`ScheduleGuidance`) and of the gear window (`ClientMissing`) is armed in
+     game time. At world speed 20x it fires after about 150 ms of real time,
+     before a patched client on real latency has answered with its ready
+     control, so a client that has the stage can still get the guidance line
+     and, for the gear window, the stock House Vault list. The OPEN BG window
+     (`OpenBgClientProbe`) decides on the wall clock and is not affected.
+     Fix idea: the same wall-clock probe for both. (b) The stock close X hides
+     Custom5, Custom6 and Custom7 natively and tells nothing to the server, so
+     the OPEN BG session counts as open until its 30 min idle limit; a chat
+     write in that time redraws the hidden window (harmless) and the 15 s
+     refresh keeps running for up to 30 min. Workaround: the window's own
+     [Close] link. Not fixed in 0.282.0.
+
 160. **Five `UT_PlayerCompanionStage6Integration` tests fail at HEAD with a
      null lock.** Found 2026-10-14 while running the companion tests for
      0.272.0. `InvitingAReservedCompanionFromTheOtherCharacterMovesAndRestampsIt`,

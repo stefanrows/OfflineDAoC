@@ -717,3 +717,114 @@ with this stage.
    reply appears in the window.
 4. The Isles skin.
 5. The manager, the COMPANIONS window and `/raid 40` still work.
+
+## OPEN BG window (Custom5), 0.282.0
+
+The open BG manager (`/bgsetup`) is its own client window, next to the
+Companion Manager, the COMPANIONS window and the gear window. Until 0.281.0
+it shared the manager's Custom8 window. Spec
+`docs/superpowers/specs/2026-10-16-open-bg-window-client-design.md`, plan
+`docs/superpowers/plans/2026-10-16-open-bg-window.md`. Offline checks only:
+Custom5 and the 985 label adapters have never run in a real client.
+
+### What it is
+
+- `/bgsetup` (alias `/openbg`) opens the window "OPEN BG", 760x648, with two
+  pages. **Lage**: phase, raid, keep 11 owner, world speed, the field figures
+  of the last cycle and the players, then every crew bot by realm and unit
+  (name, level, class, unit with its archetype, state). **Steuern**: the setup
+  (on/off, mode, landing peace, presets, groups8/small/solos, max_bots,
+  cycle, band, drift, the units per realm in Per realm mode) with `[-]` and
+  `[+]` steps, and a `[Relieve]` link per unit.
+- Every player may change settings and relieve units, in the window and by
+  chat (no GM lock; owner decision 2026-10-16). `/bgsetup text [page]`, the
+  chat keys (`/bgsetup <key> <value>`, `mode`, `peace`, `presets`, `relieve`)
+  are unchanged. The window refreshes every 15 s; rows scroll by 1 and page
+  by 22.
+- Own sender and own token: operations `10` show, `11` hide, `12` token;
+  clicks use `OnClickEvent` `0xA00 + control` (`0x00-0x15` row link,
+  `0x20-0x35` `[-]`, `0x40-0x55` `[+]`, `0xE0`/`0xE1` tabs, `0xE8-0xEB` scroll
+  and page, `0xFD` close, `0xFE` refresh, `0xFF` ready) and send
+  `&bgsetup ui <token> <control>`. The shared `&companions ui` sender and its
+  token are untouched, so click collisions with the three other windows are
+  excluded by construction. Labels 620-984 (365) on the existing text
+  adapters (985 in all); `0x9FF` and `0xB00` still pass to the raid handler.
+- Fallback: a client without the new stage drops operations 10-12 and answers
+  nothing. After 3 s the player gets text page 1 of `/bgsetup text` and one
+  line telling them to update the client files; later `/bgsetup` calls in that
+  session show the text page at once.
+- The Custom8 open BG variant of 0.278.0-0.281.0 is removed (the Custom8
+  window shows only the Companion Manager again).
+
+### Build, test and install
+
+Same builder and raid baseline as 0.251.0-0.276.0; deterministic (two builds,
+the real stage and a scratch copy, give identical files).
+
+```bash
+python3 source/server/tools/build_companion_manager_client.py \
+  --client <raid baseline client dir: game.dll and ui/uimain.xml> --output <new stage dir>
+python3 source/server/tools/test_companion_manager_client.py --stage <stage dir>
+```
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (985 label and 59 icon adapters) | `7d1f52af90de1dc5a6eb608fd6fd8a69273bec91bb8dcd24c6b7701973b96a48` |
+| custom5_window.xml (both skins) | `38739f7d407de64e83d361848a688883de9161b6f56b36970f5e2ecdc8273401` |
+| custom6_window.xml (unchanged since 0.276.0) | `dfc5bbdb8d9fd30b59bfce26bae924e27888ca4b89431532bccdac3f028b2338` |
+| custom7_window.xml (unchanged) | `5b82057450ac1d510fe66bba5813f0f3f4d7a9fda263bfd23d4638be2cd69bac` |
+| custom8_window.xml (unchanged) | `9cd3b8a5fb3d2a4671192b9d52287173e2fe194a4f19979de1c339f408235efd` |
+| uimain.xml (four includes: 8, 7, 6, 5) | `78e1e4a42c43ae99bc8f76242837b49456cd19b1a95f273f8cda213a87c8aa73` |
+
+The 0.276.0 `uimain.xml` (`cef698f3...`) stays accepted as an installed
+starting point. The dev stage is
+`playable-dev/stage-companion-manager-0.282.0` (outside git, outside the
+install). The emulation test covers operations 10-12, the own flag and token
+buffer, clicks `0xA00-0xAFF` with their own sender, pass-through of `0x9FF`
+and `0xB00`, the XML (760x648, every label once, 74 click areas without
+overlap, stock templates only) and that custom6/7/8 are unchanged.
+
+`tools/dev/Test-InstallCompanionManager.ps1` runs the installer against
+scratch copies (0.276.0 and 0.169.0 starts, the raid baseline, a foreign
+custom5, an unknown `game.dll`, a tampered stage; restore byte-identical):
+39 passed, 0 failed. It never touches the real install.
+
+Install with the game, server and launcher closed:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\dev\Install-CompanionManager.ps1 `
+  -Stage <stage dir> -InstallRoot <install root>          # dry run, changes nothing
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\dev\Install-CompanionManager.ps1 `
+  -Stage <stage dir> -InstallRoot <install root> -Apply   # backs up, then installs
+```
+
+The installer upgrades an installed 0.276.0 stage (or 0.272.0 and the older
+known builds) in place. It backs up `game.dll`, `uimain.xml` and the window
+files and verifies hashes; a `custom5_window.xml` that is not this stage's own
+is refused. Roll back with `-InstallRoot <install root> -RestoreBackup <backup folder it
+printed>` (the added `custom5_window.xml` is removed again). The release pack
+(`build_fork_release.py`) uses this stage and accepts the 0.276.0 files as
+starting point.
+
+### Real-client checklist
+
+1. Install the stage (dry run first). Start the game and the server.
+   `/bgsetup` opens a window titled OPEN BG next to the Manager (no overlap
+   with the manager, COMPANIONS and gear windows when they are open).
+2. Page Lage: status line, header lines, crew rows with realm colours; the
+   scroll links and page indicator work; [Refresh] and [Close] work.
+3. Page Steuern (tab click): `[-]` and `[+]` on a plain player account change
+   a value (reply line and the chat line appear, the row updates); `[Relieve]`
+   sends a unit out.
+4. The same writes by chat (`/bgsetup band_min 41`) redraw the open window.
+5. An old client (the 0.276.0 stage, or the restore): `/bgsetup` shows the
+   text page after about 3 s plus one hint line; `/bgsetup text` works.
+6. The Companion Manager (`/companions`), the COMPANIONS window, the gear
+   window and `/raid 40` still work, and clicking in one window never acts in
+   another.
+7. The Isles skin shows the same window.
+8. Note anything wrong: this is the first real-client run of Custom5, the 365
+   new label adapters and operations 10-12.
+
+Known limit (BUGS 162): the stock close X hides the window without telling the
+server, which counts it as open for up to 30 min.
