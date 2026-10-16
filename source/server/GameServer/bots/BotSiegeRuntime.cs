@@ -118,6 +118,36 @@ namespace DOL.GS
             return Visible(weapon, target);
         }
 
+        /// <summary>Highest reach of a ranged bot at a target above it (bow and spell range).</summary>
+        public const int ShootUpRange = 1_500;
+
+        /// <summary>
+        /// Whether a bot may take this target: <see cref="Visible"/> (the navmesh ray, which is a walkability test), or for
+        /// a ranged bot a target up on a wall it stands below (owner report 2026-10-17: defenders on the battlements were
+        /// never attacked, the ray stops at the wall's foot).
+        /// </summary>
+        public static bool CanEngage(GameBot bot, GameLiving target) =>
+            Visible(bot, target) || AutonomousRvrDefense.IsRangedDefender(bot) && ShootsUpAt(bot, target);
+
+        /// <summary>
+        /// A target 120-1,000 above the source within <see cref="ShootUpRange"/>, and the ground from the source to the
+        /// foot of the wall under the target (250 short of it, on the source's side) is open.
+        /// </summary>
+        public static bool ShootsUpAt(GameLiving source, GameLiving target)
+        {
+            if (source?.CurrentZone == null || target == null) return false;
+            int rise = target.Z - source.Z;
+            if (rise < 120 || rise > 1_000 || !source.IsWithinRadius(target, ShootUpRange)) return false;
+            double dx = source.X - target.X, dy = source.Y - target.Y;
+            double flat = Math.Sqrt(dx * dx + dy * dy);
+            if (flat < 1) return false;
+            double back = Math.Min(250, flat);
+            var foot = new Point3D((int)Math.Round(target.X + dx / flat * back), (int)Math.Round(target.Y + dy / flat * back), source.Z);
+            var nav = PathfindingProvider.Instance;
+            return nav.IsAvailable && nav.HasNavmesh(source.CurrentZone) &&
+                nav.HasLineOfSight(source.CurrentZone, new(source.X, source.Y, source.Z + 48), new(foot.X, foot.Y, foot.Z + 48), nav.DefaultFilters);
+        }
+
         public static bool Visible(GameLiving source, GameLiving target)
         {
             var nav = PathfindingProvider.Instance;

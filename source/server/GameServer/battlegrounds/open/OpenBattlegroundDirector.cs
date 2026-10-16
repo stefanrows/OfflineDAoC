@@ -458,6 +458,9 @@ namespace DOL.GS
         private static MapData _map;
         private static OpenBgCycle _cycle;
         private static long _cycleIndex;
+        // The cycle in which a raid unit took the keep; the raid keeps holding it although the roster splits the claiming
+        // guild off its units (log 2026-10-17: the partners left the approaches 10-50 s after each claim).
+        private static long _raidTookKeepCycle = -1;
         private static OpenBgPhase _loggedPhase;
         private static string _loggedOwner;
         private static OpenBgRaid _loggedRaid;
@@ -592,6 +595,7 @@ namespace DOL.GS
                 _map = null;
                 _cycle = null;
                 _cycleIndex = 0;
+                _raidTookKeepCycle = -1;
                 _logged = false;
                 Volatile.Write(ref _snapshot, Snapshot.Empty);
             }
@@ -649,6 +653,7 @@ namespace DOL.GS
             // orders: the raid's claiming guild defends, the rest hold the approaches or leave as in any retreat).
             if (PhaseAfterKeepChange(phase, RaidNeedsRepick(_cycle.Raid, candidates)) != phase)
             {
+                _raidTookKeepCycle = _cycleIndex;
                 Log.Info($"OPEN_BG_KEEP_CHANGED cycle={_cycleIndex} from={Describe(phase)} owner_guild=\"{ownerGuild ?? "none"}\" lead=\"{_cycle.Raid.LeadGuild ?? "unguilded"}\"");
                 _cycle = CycleRetreatingAt(_cycle, now);
                 phase = PhaseAt(_cycle, now);
@@ -695,7 +700,8 @@ namespace DOL.GS
             OpenBgPhase phase = PhaseAt(_cycle, now);
             OpenBgRaid raid = _cycle.Raid;
             // A raid that took the keep stops assaulting it: its claiming guild defends it, its partners hold the approaches.
-            bool raidTookKeep = RaidTookKeep(phase, raid, units.Select(unit => unit.Candidate).ToArray());
+            bool raidTookKeep = RaidTookKeep(phase, raid, units.Select(unit => unit.Candidate).ToArray()) ||
+                phase is OpenBgPhase.KeepFight or OpenBgPhase.Retreat && _raidTookKeepCycle == _cycleIndex && raid != null && !raid.IsEmpty;
             var orders = new Dictionary<int, OpenBgOrder>();
             Point3D[] humans = null;
             var groupIndex = new Dictionary<eRealm, int>();
@@ -809,8 +815,10 @@ namespace DOL.GS
                     point = LurkPoint(leader.CurrentRegion, realm, map);
                     break;
                 default:
-                    point = (bystander ? OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, realm, map.Bridges, map.Keep,
-                            OpenBattlegroundRoles.FieldAwayFromKeep(map.Field, map.Bridges, map.Keep, OpenBattlegroundRoles.BystanderKeepDistance), Rng) : null) ??
+                    // Every roamer, not only a bystander in the keep fight, keeps clear of the keep: units outside the raid
+                    // brawled in front of the gate in the quiet and the retreat and never touched it (log 2026-10-17).
+                    point = OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, realm, map.Bridges, map.Keep,
+                            OpenBattlegroundRoles.FieldAwayFromKeep(map.Field, map.Bridges, map.Keep, OpenBattlegroundRoles.BystanderKeepDistance), Rng) ??
                         OpenBattlegroundRoles.RolePoint(OpenBgRole.Roam, realm, map.Bridges, map.Keep, map.Field, Rng) ?? Nearest(map.Camps, map.Keep);
                     break;
             }

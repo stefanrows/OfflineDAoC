@@ -12,6 +12,34 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.293.0] - 2026-10-17
+
+### Changed
+
+- **Open BG raids take the gate instead of standing in front of it.** A raid
+  unit at the gate waited for four allied attackers; the raid's units leave
+  their bridge musters one by one, so small units stood there. A bot that has
+  waited 30 seconds at the gate now sieges with whoever is there.
+- **Groups outside the raid roam at least 3,000 from the keep in every phase**
+  (before: only in the keep fight), so they no longer brawl in front of the
+  gate without ever touching it.
+- **A raid that took the keep keeps holding it for the rest of the cycle**,
+  also after the roster splits the claiming guild off the mixed units; the
+  partners no longer walk off 10-50 seconds after the claim.
+- **Assaulting bots fight the keep's guards; archers and casters shoot targets
+  on the walls.** Bots only took players and bots they could walk to, so the
+  wall guards and anyone on the battlements were never attacked. Melee bots
+  still only take what they can reach.
+- **Keep defenders hold the floor in front of the closed gate** (inside the
+  walls they saw no attacker), and the open BG keep's wall archers and casters
+  take bots below them at bow range (1,500; owner decision 2026-10-17). Before,
+  no guard ever killed a bot.
+
+### Fixed
+
+- **The open BG break-off walks to the unit's landing floor.** 80 of 83
+  break-offs failed with `off_mesh` because the landing kept the bot's height.
+
 ## [0.292.0] - 2026-10-17
 
 ### Fixed

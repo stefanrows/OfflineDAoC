@@ -138,6 +138,8 @@ public static class AutonomousBattlegroundDriver
         // open BG siege: assaulting allies of this bot (raid battlegroup, group, guild) at the gate, counted on the route interval.
         public int SiegePresent;
         public long NextSiegeCount;
+        // open BG siege: when this bot first stood at the gate without the quorum (0 = not waiting).
+        public long GateWaitSince;
         // open BG break-off: the group leader's retreat to its own landing runs until this game time; followers read the leader's.
         public long BreakOffUntil;
         public Point3D BreakOffPoint;
@@ -201,7 +203,7 @@ public static class AutonomousBattlegroundDriver
             state.NextScan = now + ScanMilliseconds;
             // open BG: the crew leaves humans under level 30 alone unless they attacked (spec 2026-10-11 §6).
             GameLiving opponent = definition.Kind == BattlegroundDefinitionKind.Open
-                ? BattlegroundCombatTargets.FindOpponent(bot, OpponentRange, target => MayAcquire(bot, target))
+                ? BattlegroundCombatTargets.FindOpponent(bot, OpponentRange, target => MayAcquire(bot, target), AssaultsKeep(bot))
                 : BattlegroundCombatTargets.FindOpponent(bot, OpponentRange);
             // A group that broke off takes no new target while it retreats; otherwise the head may break the group off first.
             if (opponent != null && !(state.Open && BreakingOff(bot, state, now, out _)) &&
@@ -333,10 +335,11 @@ public static class AutonomousBattlegroundDriver
         if (BreakOffExempt(order.Role, order.AtKeep, friends)) return false;
         Zone zone = bot.CurrentZone;
         if (zone == null) return false;
-        Point3D landing = null;
-        foreach ((ushort region, int x, int y, eRealm realm) in AutonomousHubDeparture.OpenBgLandings())
-            if (region == bot.CurrentRegionID && realm == bot.Realm) { landing = new Point3D(x, y, bot.Z); break; }
-        if (landing == null) return false;
+        // The unit's own landing floor (its Server PvP side included); the raw landing centre with the bot's height was
+        // off the mesh for 80 of 83 break-offs (log 2026-10-17).
+        GameLocation home = BattlegroundCampaignPolicy.GetLanding(bot, BattlegroundCampaignCatalog.FindOpen());
+        if (home == null || home.RegionID != bot.CurrentRegionID) return false;
+        Point3D landing = new(home.X, home.Y, home.Z);
 
         ushort radius = (ushort)OpponentRange;
         var sightings = new List<(int OwnerId, int GroupId)>();
@@ -503,7 +506,11 @@ public static class AutonomousBattlegroundDriver
         if (keep != null && ClaimAllowed(order.Role, IsRaidLeadGuild(bot), MsSinceLordDown(keep, state, now)) && TryClaim(bot, keep, state, now)) return true;
         if (keep != null && GoesToKeep(order))
         {
-            KeepOrderStep step = StepAtKeep(order, order.Role == OpenBgRole.Defend ? 0 : SiegePresent(bot, keep, state, now));
+            int present = order.Role == OpenBgRole.Defend ? 0 : SiegePresent(bot, keep, state, now);
+            // The bot itself counts once it stands at the gate; from then on the wait for the quorum is timed.
+            if (present == 0) state.GateWaitSince = 0;
+            else if (state.GateWaitSince == 0) state.GateWaitSince = now;
+            KeepOrderStep step = StepAtKeep(order, present, state.GateWaitSince == 0 ? 0 : now - state.GateWaitSince);
             if (step == KeepOrderStep.Defend)
             {
                 DefendKeep(bot, state, keep, camps, now);
@@ -544,9 +551,18 @@ public static class AutonomousBattlegroundDriver
     /// The step of an order at the keep: Defend holds it; an assault sieges once <see cref="AssaultGroupMinimum"/>
     /// assaulting allies stand at the gate (<see cref="SiegeGatherRange"/>) and marches to the gate before.
     /// </summary>
-    public static KeepOrderStep StepAtKeep(OpenBgOrder order, int siegePresent) =>
+    public static KeepOrderStep StepAtKeep(OpenBgOrder order, int siegePresent) => StepAtKeep(order, siegePresent, 0);
+
+    /// <summary>
+    /// As above, and a bot that has waited <see cref="GateWaitMilliseconds"/> at the gate sieges with whoever is there
+    /// (owner report 2026-10-17: the raid's units leave their musters one by one, so small units stood at the gate).
+    /// </summary>
+    public static KeepOrderStep StepAtKeep(OpenBgOrder order, int siegePresent, long waitedMs) =>
         order.Role == OpenBgRole.Defend ? KeepOrderStep.Defend :
-        siegePresent >= AssaultGroupMinimum ? KeepOrderStep.Siege : KeepOrderStep.MarchGate;
+        siegePresent >= AssaultGroupMinimum || siegePresent > 0 && waitedMs >= GateWaitMilliseconds ? KeepOrderStep.Siege : KeepOrderStep.MarchGate;
+
+    /// <summary>How long an assaulting bot waits at the gate for the quorum before it sieges anyway.</summary>
+    public const int GateWaitMilliseconds = 30_000;
 
     /// <summary>
     /// True for a bot that counts toward a siege at a gate: alive, allied with the counting bot (the raid's battlegroup,
@@ -709,8 +725,15 @@ public static class AutonomousBattlegroundDriver
     // Defend: hold the keep, or its nearest camp when the keep has no proven route.
     private static void DefendKeep(GameBot bot, State state, AbstractGameKeep keep, Point3D[] camps, long now)
     {
-        state.Action = "defend-keep";
         Point3D keepPoint = new(keep.X, keep.Y, keep.Z);
+        // While an outer gate stands closed the defenders hold the floor in front of it, under the wall guards, so they
+        // meet every attacker who walks up (owner report 2026-10-17); inside the walls they saw nobody outside. A broken
+        // gate brings them back to the courtyard.
+        Point3D post = GateApproaches.GetValue(keep, BuildGateApproaches)
+            .Where(gate => gate.Points.Length > 0 && gate.Door.IsAlive && gate.Door.State == eDoorState.Closed)
+            .Select(gate => gate.Points[0]).OrderBy(point => bot.GetDistanceTo(point)).FirstOrDefault();
+        state.Action = post != null ? "defend-gate" : "defend-keep";
+        if (post != null && GoTo(bot, state, post, now)) return;
         if (!GoTo(bot, state, keepPoint, now) && camps.Length > 0)
             GoTo(bot, state, Nearest(camps, keepPoint), now);
     }
@@ -744,6 +767,10 @@ public static class AutonomousBattlegroundDriver
     /// it, its group or its companions attacked this bot or its group; everyone else is fair game as before.
     /// </summary>
     private static bool MayAcquire(GameBot bot, GameLiving target) => MayEngage(bot, target, openBattlegroundRule: true);
+
+    /// <summary>An open-BG bot under an assault order also takes the keep's guards as targets (wall archers included).</summary>
+    private static bool AssaultsKeep(GameBot bot) =>
+        OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) && order.Role == OpenBgRole.Assault && !order.Muster;
 
     /// <summary>
     /// The shared open-BG target rule (<see cref="OpenBattlegroundRoles.MayEngageInOpenBattleground"/>) for one target.
@@ -840,7 +867,7 @@ public static class AutonomousBattlegroundDriver
         GameLiving target = leader.TargetObject as GameLiving;
         if (target != null && BattlegroundCombatTargets.IsLegal(bot, target, bot.CurrentZone) &&
             bot.IsWithinRadius(target, OpponentRange) && !BotPvpCrowdControl.Protected(bot, target) &&
-            BotSiegeRuntime.Visible(bot, target))
+            BotSiegeRuntime.CanEngage(bot, target))
         {
             state.Action = "assist-attack";
             brain.Attack(target);

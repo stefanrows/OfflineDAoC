@@ -148,6 +148,28 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+171. **Open BG: bot groups stand in front of the keep gate; nobody fights the
+     wall defenders, and bots stand unharmed right in front of the keep.**
+     Owner report 2026-10-17 (0.292.0). Causes from the code and the 00:00-01:30
+     log: (a) the gate quorum of four allied attackers
+     (`AutonomousBattlegroundDriver.StepAtKeep`) while the raid's 1.6-3.4-bot
+     units arrive one by one; (b) roam points under 3,000 from the keep outside
+     the keep fight (40 crew deaths at the gate in the retreat); (c)
+     `RaidTookKeep` recomputed from keep-friend units the roster had just split
+     off; (d) `BattlegroundCombatTargets.FindOpponent` takes player-shaped
+     targets only, and `BotSiegeRuntime.Visible` is a navmesh walkability ray, so
+     guards and anything on a wall were never targets; (e) the same ray in
+     `KeepGuardBrain.CheckNpcAggro` (0 of 539 crew deaths by guards); (f)
+     defenders stood inside the walls. Fixed in 0.293.0: 30 s gate wait
+     (`GateWaitMilliseconds`), every roamer clear of the keep, a sticky
+     per-cycle raid hold, guards as assault targets and
+     `BotSiegeRuntime.CanEngage`/`ShootsUpAt` (a ranged bot below a wall), the
+     guard side through `ShootsUpAt` with 1,500 for open BG wall archers and
+     casters, defenders at the gate approach while the gate is closed, and the
+     break-off to the landing floor. Offline: build and battleground, siege,
+     keep and guard tests green (the 2 `UT_PhysicalSiegeRally` failures are older).
+     Verification pending: live runs in both modes (raid capture and defence).
+
 170. **Raid healers cure the wrong member or not at all.** Found 2026-10-17 while
      tracing bug 168. `BotGroupSupport.ReserveHeal` treated every spell with
      `IsHealing`, a realm target, a cast time and no duration as a heal, and

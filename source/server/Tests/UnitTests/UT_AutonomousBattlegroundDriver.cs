@@ -232,6 +232,12 @@ namespace DOL.GS.Tests
                 Assert.That(AutonomousBattlegroundDriver.StepAtKeep(atKeep, 4), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Siege));
                 Assert.That(AutonomousBattlegroundDriver.StepAtKeep(oldSkirmish, 9), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Siege));
                 Assert.That(AutonomousBattlegroundDriver.StepAtKeep(defend, 9), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Defend));
+                // A small unit at the gate sieges after the wait; nobody at the gate never does.
+                Assert.That(AutonomousBattlegroundDriver.StepAtKeep(atKeep, 2, AutonomousBattlegroundDriver.GateWaitMilliseconds - 1),
+                    Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.MarchGate));
+                Assert.That(AutonomousBattlegroundDriver.StepAtKeep(atKeep, 2, AutonomousBattlegroundDriver.GateWaitMilliseconds),
+                    Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.Siege));
+                Assert.That(AutonomousBattlegroundDriver.StepAtKeep(atKeep, 0, 600_000), Is.EqualTo(AutonomousBattlegroundDriver.KeepOrderStep.MarchGate));
                 Assert.That(AutonomousBattlegroundDriver.SiegeGatherRange, Is.EqualTo(1_500));
                 // The siege counts assaulting allies (the raid's battlegroup, group, guild), alive, whatever their unit or
                 // realm; a same-realm bot outside the raid is not an ally and does not count.

@@ -60,16 +60,25 @@ namespace DOL.AI.Brain
             }
         }
 
+        /// <summary>Open BG wall archers and casters shoot at bow range (owner decision 2026-10-17).</summary>
+        public const int OpenBgShooterRange = 1500;
+
+        private bool IsOpenBgShooter => Body is GuardArcher or GuardCaster && !(_keepGuardBody?.IsPortalKeepGuard ?? true) &&
+            Body.CurrentRegionID == OpenBattlegroundMode.OpenBgRegion;
+
+        private int BotAggroRange => IsOpenBgShooter ? System.Math.Max(AggroRange, OpenBgShooterRange) : AggroRange;
+
         protected override void CheckNpcAggro()
         {
-            foreach (GameNPC npc in Body.GetNPCsInRadius((ushort)AggroRange))
+            foreach (GameNPC npc in Body.GetNPCsInRadius((ushort)BotAggroRange))
             {
                 GameBot autonomous = npc as GameBot ?? (npc.Brain as IControlledBrain)?.GetLivingOwner() as GameBot;
                 if (autonomous != null)
                 {
-                    if (!npc.IsAlive || npc.IsStealthed || !CanAggroTarget(npc) ||
-                        !PathfindingProvider.Instance.HasLineOfSight(Body.CurrentZone, new(Body.X, Body.Y, Body.Z),
-                            new(npc.X, npc.Y, npc.Z), PathfindingProvider.Instance.DefaultFilters)) continue;
+                    // The navmesh ray is a walkability test: a guard up on the wall also takes a bot standing below it
+                    // (owner report 2026-10-17: bots stood right in front of the open BG keep unharmed).
+                    if (!npc.IsAlive || npc.IsStealthed || !CanAggroTarget(npc) || !npc.IsWithinRadius(Body, AggroRange) &&
+                            !IsOpenBgShooter || !BotSiegeRuntime.Visible(npc, Body) && !BotSiegeRuntime.ShootsUpAt(npc, Body)) continue;
                     AddToAggroList(npc);
                     continue;
                 }
