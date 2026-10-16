@@ -74,6 +74,10 @@ namespace DOL.GS
 
         public static string FilePath => Path.Combine(AppContext.BaseDirectory, FileName);
 
+        /// <summary>The unit leader shown in the status: the group's living leader (a bot leader is not a GamePlayer, so <c>Group.Leader</c> is null for it), a solo or leaderless group is its own leader.</summary>
+        public static string UnitLeaderName(string livingLeaderName, string botName) =>
+            string.IsNullOrWhiteSpace(livingLeaderName) ? botName : livingLeaderName;
+
         /// <summary>The kind a unit of this size has when the roster no longer tracks it.</summary>
         public static string KindFromSize(int size) => size <= 1 ? "solo" : size >= OpenBattlegroundRoster.Group8Minimum ? "group8" : "small";
 
@@ -158,7 +162,7 @@ namespace DOL.GS
                 GameBot bot = member.Bot;
                 string kind = OpenBattlegroundRoster.TryGetUnitKind(member.Unit, out OpenBgUnitKind known)
                     ? OpenBattlegroundRoster.KindName(known) : KindFromSize(unitSizes[member.Unit]);
-                string leader = bot.Group?.Leader?.Name;
+                string leader = UnitLeaderName(bot.Group?.LivingLeader?.Name, bot.Name);
                 string role = OpenBattlegroundDirector.TryGetUnitRole(member.Unit, out OpenBgRole unitRole) ? OpenBattlegroundRoles.Describe(unitRole) : null;
                 string archetype = ArchetypeOf(OpenBattlegroundRoster.TryGetUnitArchetype(member.Unit, out string unitArchetype), unitArchetype);
                 int insideSeconds = member.Entered ? (int)Math.Clamp((now - member.EnteredTick) / 1000, 0, int.MaxValue) : 0;

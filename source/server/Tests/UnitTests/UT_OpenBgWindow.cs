@@ -464,4 +464,12 @@ public sealed class UT_OpenBgWindow
         Assert.That(OpenBgSetupParser.Find(OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.SetEnabled, On: false), Values()).RowKey).Name,
             Is.EqualTo("enabled"));
     }
+
+    [Test]
+    public void UnitLeaderName_UsesTheLivingLeader_AndASoloIsItsOwnLeader()
+    {
+        Assert.That(OpenBattlegroundStatus.UnitLeaderName("Leadbot", "Follower"), Is.EqualTo("Leadbot"), "bot leader of a group");
+        Assert.That(OpenBattlegroundStatus.UnitLeaderName(null, "Solobot"), Is.EqualTo("Solobot"), "no group");
+        Assert.That(OpenBattlegroundStatus.UnitLeaderName("", "Solobot"), Is.EqualTo("Solobot"), "group without a leader name");
+    }
 }
