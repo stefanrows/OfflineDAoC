@@ -720,6 +720,11 @@ with this stage.
 
 ## OPEN BG window (Custom5), 0.282.0
 
+> Superseded in layout and texts by the redesign "Kriegstafel" of 0.283.0
+> (next section). Operations, tokens, control values, the fallback and the
+> no-GM-lock rule below still hold; the 760x648 window, the pages Lage and
+> Steuern and the 22-row paging do not.
+
 The open BG manager (`/bgsetup`) is its own client window, next to the
 Companion Manager, the COMPANIONS window and the gear window. Until 0.281.0
 it shared the manager's Custom8 window. Spec
@@ -828,3 +833,123 @@ starting point.
 
 Known limit (BUGS 162): the stock close X hides the window without telling the
 server, which counts it as open for up to 30 min.
+
+## OPEN BG window redesign "Kriegstafel" (Custom5), 0.283.0
+
+Redesign of the OPEN BG window from the analysis
+`docs/superpowers/specs/2026-10-16-open-bg-window-redesign-analysis.md`
+(concept A) and the plan
+`docs/superpowers/plans/2026-10-16-open-bg-window-redesign.md`. **Offline
+checks only**: the new `custom5_window.xml` and the new texts have only run in
+the offline emulation and the mock renderer, never in the real client.
+`game.dll` is byte-identical to 0.282.0 (no native change); only
+`custom5_window.xml` (both skins) and the server texts change.
+
+### What changed
+
+- Window 760x640 (was 760x648), title bar OPEN BG with the status line. Below
+  it a crest band: per realm the stock 64 px crest, the realm name with its
+  crew count, a detail line (units, plan), a bar of the crew inside and a
+  count. Clicking a crest jumps to that realm on the Overview.
+- A leather banner with the keep line (`Thidranki Faste: <owner> holds it`) in
+  the gold `title` font, and a phase line (phase, next push, field figures,
+  world speed, raid summary). Tabs `Overview` and `Setup` (the active one in
+  gold capitals), a page indicator, `[Open all]` / `[Fold all]` (Overview
+  only) and the scroll links.
+- 18 rows (was 22) with zebra bands. Overview: a realm row, then its units as
+  blocks. A unit is folded to one header (`+`/`-`, unit name, bots, role or
+  state, strength bar, raid mark, `[Relieve]`); opened, it lists the leader
+  first (`*`) and every member (name in the member's realm colour, level,
+  class, state, time inside). Solo hunters are one block. Players inside and
+  guest squads are their own blocks. All units start folded; the opened set is
+  kept while the window is open and pruned when a unit disappears. A click on
+  a row selects it and the hint line shows its explanation.
+- Setup: sections (Battleground, Crew, Level band, Group presets, Timing, Units
+  per realm), switches (`[Turn off]`, `[Use PvP]`, `[Next: All]`), steppers
+  `[-]` `[+]` with a bar and the range, and the reply line. English texts
+  throughout.
+- Relieve takes two clicks: the first on a unit header's `[Relieve]` asks
+  (`Relieve std8 #71? Click again within 10 s.`, the link turns into
+  `[Yes, relieve]`), the second within 10 s relieves; after 10 s the question is
+  dropped and the next click asks again. Solo hunters cannot be relieved from the window (one block
+  covers several units); `/bgsetup relieve <unit>` still does.
+- `[Refresh]` and `[Close]` sit at the bottom right. No hover buttons: tabs,
+  arrows and links are invisible click areas (a decimal-event hover button is
+  unproven in this client).
+- Bug fix in the status: bot unit leaders were always empty; the status now
+  carries the leader (a solo is its own leader), which the leader star needs.
+
+Technology: 357 of 365 labels (620-984; free: 632, 978-984), 103 click areas
+`0xA00 + control` (row bands `0x00`-`0x11` link, `0x20` minus, `0x40` plus,
+`0x60` fold, `0x80` select; `0xE0`/`0xE1` tabs, `0xE8`-`0xEB` scroll/page by 18,
+`0xEC`/`0xED` open/fold all, `0xF0`-`0xF2` crests, `0xFD` close, `0xFE`
+refresh), all stock textures and fonts, own file-level templates `obg_banner`
+and `obg_zebra` (HorizontalResizeImageTemplate on `frames_win` / `page1`),
+crest templates of the stock realmwar files, the stock `title` font.
+
+### Build, hashes, install, upgrade, rollback
+
+```bash
+python3 source/server/tools/build_companion_manager_client.py \
+  --client <raid baseline client dir: game.dll and ui/uimain.xml> --output <new stage dir>
+python3 source/server/tools/test_companion_manager_client.py --stage <stage dir>
+python3 source/server/tools/test_render_open_bg_mock.py     # offline preview, see docs/open-bg-redesign/README.md
+```
+
+| Output | SHA-256 |
+| --- | --- |
+| game.dll (unchanged from 0.282.0) | `7d1f52af90de1dc5a6eb608fd6fd8a69273bec91bb8dcd24c6b7701973b96a48` |
+| custom5_window.xml (both skins; 0.282.0: `38739f7d407de64e83d361848a688883de9161b6f56b36970f5e2ecdc8273401`) | `a80c0296311a58e284c0e801643f60c9f2ae305b5557de40f38072df09d5edc6` |
+| uimain.xml (unchanged) | `78e1e4a42c43ae99bc8f76242837b49456cd19b1a95f273f8cda213a87c8aa73` |
+| custom6 / custom7 / custom8 (unchanged) | `dfc5bbdb...` / `5b820574...` / `9cd3b8a5...` |
+| manifest.json | `7c0c5d96943fd009058a218a2a64f63f15764e0c12f94ef5cf5dc1d2794c72ff` |
+
+The dev stage is `playable-dev/stage-companion-manager-0.283.0` (outside git,
+outside the install); two builds into separate directories are byte-identical.
+
+Install with the game, server and launcher closed, the same commands as for
+0.282.0 (dry run first, then `-Apply`). From an installed **0.282.0** only
+`custom5_window.xml` is replaced (backup first, hashes verified; the 0.282.0
+file is a known earlier window). Any other `custom5_window.xml`, or a 0.282.0
+set with another file changed, is refused with nothing changed. The 0.276.0 and
+0.169.0 upgrade paths and the fresh install work as before. Roll back with
+`-InstallRoot <install root> -RestoreBackup <backup folder it printed>`: the
+0.282.0 `custom5_window.xml` files come back byte-identical. The release pack
+(`build_fork_release.py`, default stage `stage-companion-manager-0.283.0`)
+accepts the 0.282.0 window as an old state.
+
+`tools/dev/Test-InstallCompanionManager.ps1` (new parameter `-Client282`, the
+app folder of a 0.282.0 install) adds: 0.282.0 -> 0.283.0 apply, second run,
+restore byte-identical, backup content, one skin already new, an unknown
+`custom5_window.xml` in either skin refused, a changed custom8 refused.
+
+### Real-client checklist (owner)
+
+1. Install the stage (dry run first). Start the game and the server; `/bgsetup`
+   opens OPEN BG.
+2. The crests render (three, one per realm) and the banner shows the keep
+   line in the gold title font, not clipped and not overlapping its ends.
+3. Fold and open one unit (`+`/`-` or a click on the name): the members
+   appear below it. `[Open all]` opens every unit, `[Fold all]` folds them.
+4. The leader of an opened unit carries the `*` and stands first; member rows
+   show level, class and state in the right colours.
+5. Setup: sections, switches, steppers `[-]`/`[+]` with their bars, the reply
+   line and the hint line (click a setting).
+6. Relieve with two clicks: the first click asks, the second within 10 s
+   relieves; after 10 s it asks again.
+7. Selecting a row shows its hint; the tab look (active in capitals and gold);
+   paging by 18 and the crest jump.
+8. Both skins: Atlantis and Isles (the Isles textures are the unproven part).
+9. The window sits next to the other windows without covering them, and a click
+   in one window never acts in another.
+10. Nothing from the old window broke: edits by chat redraw the open window,
+    `[Refresh]` and `[Close]` work, `/bgsetup text` works, an old client still
+    gets the text page after 3 s, and the Companion Manager, COMPANIONS and gear
+    windows and `/raid 40` still work.
+
+What the offline mock cannot show: real glyph placement and spacing (the
+banner clip assumes a title-font space of 7 px), label alpha, whether labels
+with leading spaces (member indent) keep them, whether the tab capitals read as
+active, hover and click-area positions, how the client tiles the banner and
+zebra pieces, the Isles skin textures, and the crests as drawn by a second
+`ImageAreaDef` user outside the stock realmwar windows.

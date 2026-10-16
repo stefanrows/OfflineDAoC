@@ -12,6 +12,43 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.283.0] - 2026-10-17
+
+### Added
+
+- A preview tool for the OPEN BG window, `source/server/tools/render_open_bg_mock.py`
+  (Pillow only): it draws the generated window file with the stock client
+  textures and the texts the server sends into a PNG, so the window can be
+  looked at before it is installed (`docs/open-bg-redesign/README.md`), with
+  sample texts and a self-test.
+
+### Changed
+
+- **The OPEN BG window is redesigned ("Kriegstafel").** Realm crests with
+  crew counts, a banner with the keep line, a phase line, the tabs Overview
+  and Setup, 18 rows. The Overview lists each realm with its units as folded
+  blocks that open to the leader (star) and every member; Open all and Fold all
+  switch every unit. The Setup tab has sections, switches, steppers with bars
+  and a hint line. All texts are English. Relieve now takes two clicks within
+  10 seconds. Solo hunters cannot be relieved from the window (use
+  `/bgsetup relieve <unit>`). It is a new client window file only
+  (`custom5_window.xml`); `game.dll` is unchanged. Install it with
+  `Install-CompanionManager.ps1`, which upgrades the 0.282.0 window in place
+  (backup, restore); the release pack accepts the 0.282.0 window.
+- This has only run in the offline mock and emulation, not in the real client;
+  the real-client check (crests, banner font, folding, Setup, Isles skin) is
+  pending (docs/COMPANION_MANAGER_INTEGRATION.md).
+
+### Fixed
+
+- The leader of a bot unit was always empty in the open BG status, so no
+  leader could be shown in the window; the status now names it (a solo hunter
+  is its own leader).
+
+### Removed
+
+- The 0.282.0 window layout (pages Lage and Steuern, 22 rows, German texts).
+
 ## [0.282.0] - 2026-10-16
 
 ### Added

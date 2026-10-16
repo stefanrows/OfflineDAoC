@@ -1,6 +1,6 @@
 # OPEN BG window redesign: what the client UI allows, concepts, plan (advisor, 2026-10-16)
 
-Read-only analysis (opus advisor). Mock renderer and PNGs: `docs/open-bg-redesign/` (`current_lage.png` = today, `concept_lage.png` and `concept_setup.png` = concept A; `render.py`, `concept.py`, `concept_labels.py` are the scratch tools, they read the client's TGA fonts/textures and need Pillow). Owner request: high-end look, fun, simple and understandable, show group members individually, always tidy, spacing is ugly now. Hand-off: `docs/superpowers/plans/HANDOFF-open-bg-window-design.md`.
+Read-only analysis (opus advisor). Mock renderer and PNGs: `docs/open-bg-redesign/` (`current_lage.png` = today, `concept_lage.png` and `concept_setup.png` = concept A; `concept.py`, `concept_labels.py` are the scratch tools of the concept (the renderer is now `source/server/tools/render_open_bg_mock.py`), they read the client's TGA fonts/textures and need Pillow). Owner request: high-end look, fun, simple and understandable, show group members individually, always tidy, spacing is ugly now. Hand-off: `docs/superpowers/plans/HANDOFF-open-bg-window-design.md`.
 
 ## 1. What the technology allows
 
@@ -75,3 +75,15 @@ Risks: no real render (the mock knows no hover, no `StatusBarDef`, no `IconDef`;
 
 ## Not verified
 Hover and clicks of `HorizontalResizeButtonDef` with decimal event; label alpha; own `Font`/`TTFFont` registration in a window file; cp1252 bytes via adapters; origin of `ToolTipID` texts; `FrameAnimDef`; textures larger than 512x512; texture registration in the Isles skin; real spacing of the `|`/`=` bars.
+
+## Built (0.283.0)
+
+Concept A was built as "Kriegstafel" (see `docs/COMPANION_MANAGER_INTEGRATION.md`, section OPEN BG window redesign). Offline only; the real-client check is pending. Deviations from the concept:
+- Steppers `[-]` `[+]` sit at x 502 and 546 right after the bar (not at 650/700: their click areas would overlap the link column). Name slots start at the title x (28, width 128); members get two leading spaces for the indent (unproven in the client; fallback names at x 28).
+- `[Refresh]` and `[Close]` are at the bottom right (the tab line had no room; the title bar must stay free of click areas).
+- No hover buttons: tabs, arrows and links are invisible click areas (decimal-event hover buttons are unproven). Both tab plates are the same image; only the label (gold capitals vs Ash) shows the active tab.
+- The per-realm mode link reads `[Use PvP]` (`[Use Server PvP]` does not fit the 108 px link slot). `[Open all]` and `[Fold all]` are server labels (Overview only). Budget 357 of 365 labels, not 355.
+- The live crew needs two pages: a folded Overview of the live roster has 26 rows (15 group units), more than the 16 of the concept; Setup is two pages as well.
+- Solo hunters are one block and cannot be relieved from the window (a block covers several units); `/bgsetup relieve <unit>` still can.
+- Unit titles use the Ink slot, not gold (gold only for banner, section titles, marks and the active tab).
+- Banner clip: the keep line is cut by the C# `TitleAdvances` table (measured from `title_24.tga`) to 468 px; the space advance of 7 px is an estimate.
