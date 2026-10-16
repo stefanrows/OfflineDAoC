@@ -85,7 +85,7 @@ namespace DOL.GS.Commands
         public const int RefreshWallMilliseconds = OpenBattlegroundStatus.PublishWallMilliseconds;
         public const string ClientMissingHint =
             "This client has no OPEN BG window; update the client files (UPDATE OFFLINE DAOC.cmd / Install-CompanionManager.ps1)";
-        public const string StaleMessage = "The window changed before that click, so nothing was done. Please choose again.";
+        public const string StaleMessage = "The view changed; nothing was done. Try again.";
         public const string ReopenedMessage = "The OPEN BG window was reopened; nothing was changed. Please choose again.";
 
         private sealed class Runtime
@@ -150,6 +150,11 @@ namespace DOL.GS.Commands
                 case OpenBgWindowIntentKind.Tab:
                 case OpenBgWindowIntentKind.Scroll:
                 case OpenBgWindowIntentKind.Refresh:
+                case OpenBgWindowIntentKind.Fold:
+                case OpenBgWindowIntentKind.Select:
+                case OpenBgWindowIntentKind.OpenAll:
+                case OpenBgWindowIntentKind.FoldAll:
+                case OpenBgWindowIntentKind.Jump:
                     return new OpenBgWindowAction(OpenBgWindowActionKind.Navigate, Intent: intent);
                 case OpenBgWindowIntentKind.Close:
                     return new OpenBgWindowAction(OpenBgWindowActionKind.Close, Intent: intent);
@@ -162,10 +167,7 @@ namespace DOL.GS.Commands
                 : new OpenBgWindowAction(OpenBgWindowActionKind.Refused, message ?? string.Empty, Intent: intent);
         }
 
-        public static bool IsRowControl(int control) =>
-            control is >= BgControlLinkBase and < BgControlLinkBase + BgRowCount
-                or >= BgControlMinusBase and < BgControlMinusBase + BgRowCount
-                or >= BgControlPlusBase and < BgControlPlusBase + BgRowCount;
+        public static bool IsRowControl(int control) => OpenBgWindowSession.IsRowControl(control);
 
         /// <summary>
         /// Whether the server treats the window as open: shown and used within <see cref="OpenBgWindowSession.IdleLimit"/>.
@@ -272,7 +274,9 @@ namespace DOL.GS.Commands
                     Close(player);
                     return;
                 case OpenBgWindowActionKind.Navigate:
-                    runtime.Window.Message = string.Empty;
+                    // Folding, selecting and paging keep a pending Relieve question on the reply line.
+                    if (runtime.Window.PendingRelieve == 0)
+                        runtime.Window.Message = string.Empty;
                     runtime.Window.Navigate(action.Intent);
                     if (action.Intent.Kind == OpenBgWindowIntentKind.Refresh)
                         Array.Clear(runtime.SentLabels);
@@ -288,9 +292,16 @@ namespace DOL.GS.Commands
                 }
                 case OpenBgWindowActionKind.Relieve:
                 {
-                    OpenBgSetupStore.Relieve(action.Unit, player.Name, out string reply);
-                    runtime.Window.Message = reply;
-                    CompanionWindowTransport.Tell(player, reply);
+                    // Two clicks within 10 s: the first asks, the confirming second relieves.
+                    (bool relieve, string reply) = runtime.Window.RelieveClick(action.Intent, now);
+                    if (relieve)
+                    {
+                        reply = OpenBgSetupStore.Relieve(action.Unit, player.Name, out string error)
+                            ? OpenBgWindowScreen.RelievedMessage(action.Intent.Key)
+                            : error;
+                        CompanionWindowTransport.Tell(player, reply);
+                    }
+                    runtime.Window.Message = reply ?? string.Empty;
                     break;
                 }
                 default:
