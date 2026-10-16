@@ -591,6 +591,8 @@ namespace DOL.GS
         {
             public int Id;
             public eRealm Realm;
+            // The portal keep the unit lands at in Server PvP (balanced at forming); None until assigned.
+            public eRealm Side;
             public OpenBgUnitKind Kind;
             public Group Group;
             // The medallion porter the group musters and boards at, and the size it formed with (its refill target).
@@ -979,15 +981,18 @@ namespace DOL.GS
         private static bool Register(OpenBgAdmit admit, GameBot[] members, Group group, string label, long now, OFTeleporter porter = null, string archetype = null)
         {
             int id;
+            eRealm side;
             lock (Sync) id = ++_nextUnit;
             if (!AutonomousBattlegroundParticipation.AssignOpenUnit(id, label, members, group, now)) return false;
             lock (Sync)
             {
-                Units[id] = new UnitInfo { Id = id, Realm = admit.Realm, Kind = admit.Kind, Group = group, Porter = porter,
+                var info = new UnitInfo { Id = id, Realm = admit.Realm, Kind = admit.Kind, Group = group, Porter = porter,
                     FormedSize = members.Length, Archetype = archetype ?? "" };
+                Units[id] = info;
+                side = AssignSide(info);
             }
             ClearFormFailure(admit.Realm, admit.Kind);
-            Log.Info($"OPEN_BG_UNIT_ASSIGNED realm={RealmName(admit.Realm)} unit={id} kind={Describe(admit.Kind)} group=\"{label}\" size={members.Length} " +
+            Log.Info($"OPEN_BG_UNIT_ASSIGNED realm={RealmName(admit.Realm)} unit={id} kind={Describe(admit.Kind)} side={RealmName(side)} group=\"{label}\" size={members.Length} " +
                 $"leader=\"{members[0].Name}\" members=\"{string.Join(",", members.Select(member => member.Name))}\"");
             return true;
         }
@@ -1282,6 +1287,48 @@ namespace DOL.GS
                 }
             archetype = "";
             return false;
+        }
+
+        /// <summary>
+        /// The realm whose portal keep a roster unit lands at. Server PvP has no realm sides, so each unit gets the keep
+        /// with the fewest units of its sort (groups, solos), assigned once at forming (owner report 2026-10-17: every
+        /// group came out of the Albion keep next to the central keep). Per realm, or a unit the roster does not track,
+        /// keeps <paramref name="realm"/>.
+        /// </summary>
+        public static eRealm LandingSideOf(int unit, eRealm realm)
+        {
+            if (OpenBattlegroundMode.Current != OpenBgMode.ServerPvp) return realm;
+            lock (Sync)
+                return Units.TryGetValue(unit, out UnitInfo info) ? info.Side != eRealm.None ? info.Side : AssignSide(info) : realm;
+        }
+
+        /// <summary>
+        /// Pure side choice: the realm keep with the fewest units of the same sort, then the fewest seats, then the
+        /// unit's own realm, then <paramref name="rng"/>.
+        /// </summary>
+        public static eRealm BalancedSide(eRealm own, IReadOnlyDictionary<eRealm, (int Units, int Seats)> load, Random rng)
+        {
+            rng ??= Random.Shared;
+            (int Units, int Seats) Load(eRealm realm) => load != null && load.TryGetValue(realm, out var value) ? value : (0, 0);
+            return new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia }
+                .Select(realm => (realm, load: Load(realm), tie: rng.Next()))
+                .OrderBy(entry => entry.load.Units).ThenBy(entry => entry.load.Seats).ThenBy(entry => entry.realm == own ? 0 : 1)
+                .ThenBy(entry => entry.tie).First().realm;
+        }
+
+        // Callers hold Sync. Groups balance against groups and solos against solos, so the 8-man and the small groups spread too.
+        private static eRealm AssignSide(UnitInfo info)
+        {
+            bool solo = info.Kind == OpenBgUnitKind.Solo;
+            var load = new Dictionary<eRealm, (int Units, int Seats)>();
+            foreach (UnitInfo other in Units.Values)
+            {
+                if (other == info || other.Side == eRealm.None || (other.Kind == OpenBgUnitKind.Solo) != solo) continue;
+                load.TryGetValue(other.Side, out var value);
+                load[other.Side] = (value.Units + 1, value.Seats + Math.Max(1, other.FormedSize));
+            }
+            info.Side = BalancedSide(info.Realm, load, Rng);
+            return info.Side;
         }
 
         public static bool TryGetUnitKind(int unit, out OpenBgUnitKind kind)

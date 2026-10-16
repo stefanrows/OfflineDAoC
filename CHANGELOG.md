@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.288.0] - 2026-10-17
+
+### Changed
+
+- **Server PvP open BG: the bot units land at all three portal keeps.** A
+  unit landed at its leader's realm keep, so the Albion keep next to the
+  central keep sent out most of the groups. Each unit now gets the portal keep
+  with the fewest units of its sort (groups and solos apart) when it forms,
+  whatever its realm, and musters, rests and releases there. Per realm mode
+  keeps the own realm's keep; players keep their camp.
+
+### Fixed
+
+- **Server PvP landing peace also holds for two bots of one realm at another
+  realm's landing**, so a crew sent to a foreign keep does not fight itself
+  there.
+
 ## [0.287.0] - 2026-10-17
 
 ### Changed

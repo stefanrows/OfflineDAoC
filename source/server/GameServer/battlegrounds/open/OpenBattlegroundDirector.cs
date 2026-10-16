@@ -568,7 +568,7 @@ namespace DOL.GS
                 foreach (AutonomousBattlegroundParticipation.OpenCrewMember member in unit.Members)
                 {
                     GameBot bot = member.Bot;
-                    if (!AutonomousHubDeparture.NearOwnLanding(bot.CurrentRegionID, bot.X, bot.Y, bot.Realm,
+                    if (!AutonomousHubDeparture.NearOwnLanding(bot.CurrentRegionID, bot.X, bot.Y, OpenBattlegroundRoster.LandingSideOf(unit.Id, bot.Realm),
                             AutonomousHubDeparture.OpenBgLandingPeaceRadius, landings)) outCount++;
                 }
                 if (outCount == 0) continue;
@@ -704,7 +704,8 @@ namespace DOL.GS
             foreach (InsideUnit unit in units)
             {
                 GameBot leader = unit.Leader;
-                eRealm realm = leader.Realm;
+                // Server PvP: the realm of the keep the unit landed at, so it musters and lurks on that side.
+                eRealm realm = OpenBattlegroundRoster.LandingSideOf(unit.Id, leader.Realm);
                 int index = 0;
                 if (unit.Grouped)
                 {

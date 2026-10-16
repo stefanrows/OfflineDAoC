@@ -463,13 +463,17 @@ public static class AutonomousHubDeparture
         if (second == first || !IsWorldBot(second))
             return false;
         bool sameRealm = first.Realm == second.Realm;
-        // Peace is read only for a cross-realm pair; the landing list is read only when the peace is "all".
-        bool crossRealmLandingPeace = !sameRealm && first.CurrentRegionID == second.CurrentRegionID &&
+        // The landing list is read only when the peace is "all". A same-realm pair counts too: Server PvP spreads the
+        // units over all three landings, so a crew often lands at another realm's keep.
+        bool landingPeaceAll = first.CurrentRegionID == second.CurrentRegionID &&
             IsOpenBgLandingRegion(first.CurrentRegionID) &&
             OpenBattlegroundMode.Peace == OpenBgLandingPeace.All &&
-            OpenBgCrossRealmPeace(OpenBgLandingPeace.All, true, first.Realm, second.Realm, first.CurrentRegionID,
-                (int)first.X, (int)first.Y, (int)second.X, (int)second.Y, OpenBgLandings());
-        if (!sameRealm && !crossRealmLandingPeace)
+            (sameRealm
+                ? OpenBgPeaceInCircle(OpenBgLandingPeace.All, first.CurrentRegionID, (int)first.X, (int)first.Y, first.Realm, OpenBgLandings()) ||
+                  OpenBgPeaceInCircle(OpenBgLandingPeace.All, second.CurrentRegionID, (int)second.X, (int)second.Y, second.Realm, OpenBgLandings())
+                : OpenBgCrossRealmPeace(OpenBgLandingPeace.All, true, first.Realm, second.Realm, first.CurrentRegionID,
+                    (int)first.X, (int)first.Y, (int)second.X, (int)second.Y, OpenBgLandings()));
+        if (!sameRealm && !landingPeaceAll)
             return false;
         realm = first.Realm;
         // Crew bots in the open BG run the battleground driver, not the world controller's frontier pulse that
@@ -479,7 +483,7 @@ public static class AutonomousHubDeparture
             Observe((GameBot)first, nowUtc);
             Observe((GameBot)second, nowUtc);
         }
-        if (crossRealmLandingPeace)
+        if (landingPeaceAll)
         {
             rule = HubPeaceRule.Band;
             return true;

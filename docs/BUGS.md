@@ -148,6 +148,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+167. **Server PvP open BG: the bot groups all come out of the keep next to
+     the central keep.** Owner report 2026-10-17. A bot leader landed at its
+     own realm's portal keep (`BattlegroundCampaignPolicy.GetLanding`), so in
+     Server PvP, where realms do not matter, the spread followed the realm mix
+     and the Albion keep (14,600 from the central keep, the others about
+     24,900) sent out most units. Fixed in 0.288.0: in Server PvP each roster
+     unit gets a side at forming, the portal keep with the fewest units of its
+     sort (`OpenBattlegroundRoster.LandingSideOf` / `BalancedSide`, logged as
+     `side=` on `OPEN_BG_UNIT_ASSIGNED`); landing, rest, release, relief walk
+     and the director's bridge and lurk side use it. Same-realm bots now also
+     keep landing peace at any landing when the peace is "all". Offline: new
+     `UT_OpenBattlegroundLandingSide`, open BG and hub peace tests green.
+     Verification pending: in Server PvP the units leave from all three
+     portal keeps.
+
 166. **Open BG keep: every guard and the lord con gray to level 50, and the
      gates stay broken and open after a claim.** Owner report 2026-10-17 after
      a raid on Thidranki Faste (keep 11, region 252). (a) The adopted keep row

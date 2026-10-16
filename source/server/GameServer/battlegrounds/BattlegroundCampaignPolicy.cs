@@ -88,8 +88,16 @@ namespace DOL.GS
             uint hash = 2166136261;
             foreach (char c in identity) hash = (hash ^ c) * 16777619;
             int hashed = (int)(hash % (uint)landings.Length);
-            // A player leader keeps its hash camp; a bot leader (or a solo bot) lands at its realm's own portal keep.
-            int index = ChooseLanding(leader.Realm, leader is GamePlayer ? hashed : null,
+            // A player leader keeps its hash camp; a bot leader (or a solo bot) lands at its realm's own portal keep,
+            // in the Server PvP open BG at the keep its roster unit was balanced to.
+            eRealm realm = leader.Realm;
+            if (definition.Kind == BattlegroundDefinitionKind.Open && leader is GameBot leaderBot)
+            {
+                int unit = AutonomousBattlegroundParticipation.OpenUnitOf(leaderBot);
+                if (unit == 0 && actor is GameBot actorBot) unit = AutonomousBattlegroundParticipation.OpenUnitOf(actorBot);
+                if (unit != 0) realm = OpenBattlegroundRoster.LandingSideOf(unit, realm);
+            }
+            int index = ChooseLanding(realm, leader is GamePlayer ? hashed : null,
                 BattlegroundCampaignCatalog.GetLandingRealms(definition, landings.Length), hashed);
             if (index < 0 || index >= landings.Length) index = hashed;
             actor.TempProperties.SetProperty(CampKey, index);
