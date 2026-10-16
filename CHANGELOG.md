@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.283.1] - 2026-10-17
+
+### Fixed
+
+- **The open BG stayed closed on the installed server** (`OPEN_BG_UNAVAILABLE
+  reason=no_navmesh region=252` at every start, no crew, no porter line).
+  `zone252.nav` (Thidranki) was never installed: the battleground meshes only
+  reach the install through `deploy.sh -NavmeshBuild`, the documented shipping
+  deploy omitted it, and the last deploy that carried meshes (2026-10-10)
+  predates zone 252. `deploy.sh` now adds the staged set
+  (`<install>-dev/battleground-nav/meshes`) by itself when a battleground mesh
+  is missing from the install, and warns when none is staged. The release
+  builder falls back to the same staged set when the install does not hold all
+  eleven meshes, so `--navmesh-dir` is no longer needed for that case.
+
+### Changed
+
+- `docs/DEVELOPMENT.md` and `AGENTS.md` name eleven battleground navmeshes
+  (the open BG zone 252 was added to the ten campaign meshes in 0.241.0).
+
 ## [0.283.0] - 2026-10-17
 
 ### Added

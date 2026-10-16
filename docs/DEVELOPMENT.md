@@ -365,8 +365,11 @@ tools/dev/deploy.sh -InstallRoot /mnt/d/Games/OfflineDAoC \
   -NavmeshBuild /mnt/d/Games/OfflineDAoC-dev/battleground-nav/meshes -Apply
 ```
 
-The optional `-NavmeshBuild` parameter accepts only the ten validated campaign
-meshes; other navigation files are untouched. A source checkout without the
+The optional `-NavmeshBuild` parameter accepts only the eleven validated
+battleground meshes (the ten campaign zones plus the open BG zone 252); other
+navigation files are untouched. When one of the eleven is missing from the
+install, `deploy.sh` adds the staged set by itself; without `zone252.nav` the
+open BG stays closed (`OPEN_BG_UNAVAILABLE reason=no_navmesh`). A source checkout without the
 compatible runtime/client cannot generate those binary assets. Entry stays
 closed until native meshes and safe portal landing geometry are ready.
 

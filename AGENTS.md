@@ -100,7 +100,7 @@ until the owner replaces it. Leave the shared skill unchanged.
   use `-IncludeThirdParty` without a separate request. Leave the game stopped.
 - After a successful build and push, package that same build and publish it
   with `tools/release/publish-fork-release.sh`. It builds the update pack (server
-  and launcher Release outputs, the ten battleground navmeshes, Companion
+  and launcher Release outputs, the eleven battleground navmeshes, Companion
   Manager / raid click-fix client files, `UPDATE OFFLINE DAOC.cmd`) and runs
   `gh release create v<version> --repo stefanrows/OfflineDAoC` with the
   version's changelog section as notes. Never publish to upstream and never use

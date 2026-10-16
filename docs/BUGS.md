@@ -148,6 +148,23 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+163. **The open BG never opened on the installed server: `zone252.nav` was
+     not installed.** Owner report 2026-10-16 ("I started the server in Open BG
+     mode, but somehow no bots go there"). Every start since the feature
+     logged `OPEN_BG_UNAVAILABLE reason=no_navmesh region=252`, so no crew and
+     no porter line. Cause: the battleground meshes reach the install only via
+     `deploy.sh -NavmeshBuild`; the install's `runtime/server/pathing` holds the
+     ten meshes of the 2026-10-10 deploy, zone 252 was added to the lists on
+     2026-10-11 (0.241.0), and the shipping deploy in `AGENTS.md` never passed
+     `-NavmeshBuild` (no `deploy-*` backup since holds a navigation entry).
+     The release builder demanded eleven meshes from the same ten-file folder.
+     Fixed in 0.283.1: `deploy.sh` adds the staged set when an install mesh is
+     missing, the release builder falls back to it, and the copy of
+     `zone252.nav` from `OfflineDAoC-dev/battleground-nav/meshes` was placed
+     in the live `runtime/server/pathing` (byte-identical to the staged one).
+     Verification pending: restart the server and check that
+     `OPEN_BG_UNAVAILABLE` is gone and `/gothpvp` shows a reserve above 0.
+
 159. **Too few automatic sieges open for the number of ready warbands.**
      Live 0.255.0, 2026-10-12 20:34–21:00: 43 distinct siege-ready warbands
      logged `RVR_ASSAULT_GATE` but only one frontier siege opened. Gates in

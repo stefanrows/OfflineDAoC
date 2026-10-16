@@ -71,6 +71,29 @@ if [[ -z "$install_root" || -z "$server_build" ]]; then
   exit 1
 fi
 
+# The battleground meshes (zones 165, 234-238, 240, 241, 251, 252, 254) only reach the install through
+# -NavmeshBuild. Deploys without it left zone252.nav (open BG) uninstalled and the open BG closed with
+# OPEN_BG_UNAVAILABLE reason=no_navmesh. When one is missing and the staged set is complete, add it.
+if [[ -z "$navmesh_build" ]]; then
+  install_wsl="$(wslpath -u "$install_root")"
+  staged_meshes="${OFFLINE_DAOC_DEV:-${install_wsl}-dev}/battleground-nav/meshes"
+  missing_mesh=0
+  staged_complete=1
+  for zone in 165 234 235 236 237 238 240 241 251 252 254; do
+    mesh="zone${zone}.nav"
+    if [[ ! -f "$install_wsl/runtime/server/pathing/$mesh" && ! -f "$install_wsl/runtime/server/navmesh/$mesh" ]]; then
+      missing_mesh=1
+    fi
+    [[ -f "$staged_meshes/$mesh" ]] || staged_complete=0
+  done
+  if [[ $missing_mesh -eq 1 && $staged_complete -eq 1 ]]; then
+    echo "deploy.sh: a battleground navmesh is missing from the install; adding -NavmeshBuild $staged_meshes" >&2
+    navmesh_build="$(to_windows "$staged_meshes")"
+  elif [[ $missing_mesh -eq 1 ]]; then
+    echo "deploy.sh: warning: a battleground navmesh is missing from the install and no complete staged set exists in $staged_meshes (tools/dev/build-battleground-nav.sh); the open BG stays closed." >&2
+  fi
+fi
+
 args=(-NoProfile -ExecutionPolicy Bypass -File "$PS1" -InstallRoot "$install_root" -ServerBuild "$server_build")
 if [[ -n "$launcher_build" ]]; then
   args+=(-LauncherBuild "$launcher_build")

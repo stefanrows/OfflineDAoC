@@ -63,7 +63,7 @@ def main():
     p.add_argument('--install-root', default='/mnt/d/Games/OfflineDAoC', help='v0.3-based install (read only)')
     p.add_argument('--server-build', default=str(REPO / 'source/server/Release'))
     p.add_argument('--launcher-build', default=str(REPO / 'source/tools/OfflineDaoc.Launcher/bin/Release/net10.0-windows'))
-    p.add_argument('--navmesh-dir', help='default: <install-root>/runtime/server/pathing')
+    p.add_argument('--navmesh-dir', help='default: <install-root>/runtime/server/pathing, or <install-root>-dev/battleground-nav/meshes when the install lacks one')
     p.add_argument('--companion-stage', help=f'default: <install-root>-dev/{COMPANION_STAGE}')
     p.add_argument('--raid-stage', help='default: <install-root>-dev/raid-click-fix-stage-0.33.0')
     p.add_argument('--output', required=True, help='new folder outside the installation')
@@ -84,6 +84,10 @@ def main():
     server = pathlib.Path(a.server_build)
     launcher = pathlib.Path(a.launcher_build)
     navmesh = pathlib.Path(a.navmesh_dir) if a.navmesh_dir else install / 'runtime/server/pathing'
+    if not a.navmesh_dir and len(list(navmesh.glob('zone*.nav'))) != 11:
+        staged = dev / 'battleground-nav/meshes'
+        if len(list(staged.glob('zone*.nav'))) == 11:
+            navmesh = staged
     companion = pathlib.Path(a.companion_stage) if a.companion_stage else dev / COMPANION_STAGE
     raid = pathlib.Path(a.raid_stage) if a.raid_stage else dev / 'raid-click-fix-stage-0.33.0'
 
