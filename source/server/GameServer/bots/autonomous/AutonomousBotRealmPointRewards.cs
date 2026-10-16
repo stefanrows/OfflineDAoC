@@ -86,7 +86,9 @@ public static class AutonomousBotRealmPointRewards
         long previousDeath = killedBot.TempProperties.GetProperty<long>(
             LastRealmPointDeathTickProperty, -1);
         long worthInterval = Math.Max(0, Properties.RP_WORTH_SECONDS) * 1000L;
-        bool isWorthRealmPoints = previousDeath < 0 || now - previousDeath >= worthInterval;
+        bool isWorthLoot = previousDeath < 0 || now - previousDeath >= worthInterval;
+        // The Gothwaite arena lifts the repeat-kill timer for realm points and experience; the loot drop keeps it.
+        bool isWorthRealmPoints = isWorthLoot || GothwaitePvpRules.LiftsRepeatKillTimer(killedBot);
 
         // Every death resets the same repeat-kill window used for a real player,
         // including a death caused by an NPC or by somebody who receives no RP.
@@ -169,7 +171,7 @@ public static class AutonomousBotRealmPointRewards
         GameLiving creditedKiller = ResolveRootRewardOwner(killer as GameLiving);
         // Use the same generated gear drop as human PvP victims, after the
         // existing contributor and repeat-kill eligibility checks.
-        if (isWorthRealmPoints)
+        if (isWorthLoot)
             AbstractServerRules.DropPlayerKillLoot(killedBot, creditedKiller, playerContributions, botContributions);
 
         int victimValue = GetPlayerEquivalentRealmPointValue(killedBot.Level, killedBot.RealmLevel);
@@ -280,7 +282,8 @@ public static class AutonomousBotRealmPointRewards
                 BotPvpKillStats.IsSoloKill(damagePercent, contributorCount));
         }
 
-        return isWorthRealmPoints;
+        // The caller pays party gear on this: it keeps the repeat-kill timer the Gothwaite arena lifts for RP and XP.
+        return isWorthLoot;
     }
 
     public static GameLiving ResolveRootRewardOwner(GameLiving source)

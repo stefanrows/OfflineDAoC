@@ -1277,6 +1277,51 @@ namespace DOL.AI.Brain
         }
 
         /// <summary>
+        /// A tank in assist mode sprints behind its called target until the target is in melee range
+        /// (<see cref="CompanionSprint.ShouldChaseSprint"/>). Refreshing the stick-run tick keeps
+        /// <see cref="EndStickSprint"/> from cancelling it; once the chase ends the sprint is dropped.
+        /// Autonomous world bots keep their own sprint rules.
+        /// </summary>
+        private void UpdateChaseSprint()
+        {
+            if (BotBody == null || BotBody.IsAutonomousWorldBot)
+                return;
+
+            bool chase = Body.TargetObject is GameLiving target && BotBody.IsAlive &&
+                CompanionSprint.ShouldChaseSprint(IsTankClass, CompanionAssistTrain.Active(BotBody),
+                    GameServer.ServerRules.IsAllowedToAttack(Body, target, true), Body.GetDistanceTo(target),
+                    Body.MeleeAttackRange, BotBody.EndurancePercent,
+                    EffectListService.GetEffectOnTarget(Body, eEffect.Charge) != null, BotBody.IsSprinting);
+
+            if (!chase)
+            {
+                if (BotBody.ChaseSprintUntil != 0 && BotBody.IsSprinting)
+                    BotBody.Sprint(false);
+                return;
+            }
+
+            long now = GameLoop.GameLoopTime;
+            _stickSprintTick = now;
+            BotBody.ChaseSprintUntil = now + ThinkInterval * 2 + 500;
+            if (!BotBody.IsSprinting && BotBody.Sprint(true))
+                BotBody.OnMaxSpeedChange();
+        }
+
+        /// <summary>Charge is only worth its 15 minute reuse against a distant enemy player or bot.</summary>
+        private const int ChargeMinimumDistance = 500;
+
+        private void TryCharge(ChargeAbility charge)
+        {
+            if (BotBody == null || BotBody.IsAutonomousWorldBot || BotBody.Endurance <= 10 || !IsTankClass || !CompanionAssistTrain.Active(BotBody) ||
+                Body.TargetObject is not (GamePlayer or GameBot) || Body.TargetObject is not GameLiving target ||
+                Body.GetDistanceTo(target) <= ChargeMinimumDistance ||
+                !GameServer.ServerRules.IsAllowedToAttack(Body, target, true))
+                return;
+
+            charge.Execute(Body);
+        }
+
+        /// <summary>
         /// /petpull with /stay: a Mentalist trails its owner while he is out
         /// pulling, so the pet's heal-over-time stays in range, and keeps clear
         /// of every monster that would aggro it. False when it should hold its
@@ -3504,6 +3549,7 @@ namespace DOL.AI.Brain
                     }
 
                     CheckOffensiveAbilities();
+                    UpdateChaseSprint();
 
                     if (Body.ControlledBrain != null && !UsesDefensiveOnlyPet)
                         Body.ControlledBrain.Attack(Body.TargetObject);
@@ -4069,6 +4115,12 @@ namespace DOL.AI.Brain
             {
                 if (Body.GetSkillDisabledDuration(ab) == 0)
                 {
+                    if (ab is ChargeAbility charge)
+                    {
+                        TryCharge(charge);
+                        continue;
+                    }
+
                     switch (ab.KeyName)
                     {
                         case Abilities.Berserk:

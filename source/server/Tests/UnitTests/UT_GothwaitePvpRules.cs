@@ -38,6 +38,15 @@ namespace DOL.GS.Tests
         private static void TurnOn() => GothwaitePvpMode.Apply(GothwaitePvpSettings.Defaults with { Enabled = true });
 
         [Test]
+        public void TheRepeatKillTimerIsLiftedOnlyInTheArenaWithTheModeOn()
+        {
+            Assert.That(GothwaitePvpRules.LiftsRepeatKillTimer(false, Isle, Isle), Is.False, "mode off");
+            Assert.That(GothwaitePvpRules.LiftsRepeatKillTimer(true, 252, Isle), Is.False, "other region");
+            Assert.That(GothwaitePvpRules.LiftsRepeatKillTimer(true, Isle, Isle), Is.True, "arena region");
+            Assert.That(GothwaitePvpRules.LiftsRepeatKillTimer(null), Is.False, "no victim");
+        }
+
+        [Test]
         public void TheCastleCentreIsSafeWhileTheModeIsOn()
         {
             TurnOn();

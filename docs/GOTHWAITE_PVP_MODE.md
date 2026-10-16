@@ -52,6 +52,7 @@ the server starts. Switching needs a restart.
 | G10 (O4) | Mode bots **may attack the owner's character and companions**, under the same con rule. The castle stays safe for everyone. |
 | G11 (O5) | **Gothwaite Harbor is not a safe area.** The castle is the only safe hub. |
 | G12 | **The open BG runs with a reserved set** (0.279.0, section 14). With the mode on, a fixed set of world bots of the open BG level band is kept out of the mode and serves only as open BG crew; every other world bot stays a mode bot. |
+| G13 | **No repeat-kill timer for realm points and experience in the arena** (0.280.0). While the mode is on, a victim that dies in the arena region always pays RP and XP, whatever `RP_WORTH_SECONDS` says (`GothwaitePvpRules.LiftsRepeatKillTimer`). Loot drops and companion party gear keep the timer; the open BG and the rest of the world are unchanged. |
 
 All open questions are decided (section 9).
 
