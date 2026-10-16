@@ -744,7 +744,7 @@ Custom5 and the 985 label adapters have never run in a real client.
 - Own sender and own token: operations `10` show, `11` hide, `12` token;
   clicks use `OnClickEvent` `0xA00 + control` (`0x00-0x15` row link,
   `0x20-0x35` `[-]`, `0x40-0x55` `[+]`, `0xE0`/`0xE1` tabs, `0xE8-0xEB` scroll
-  and page, `0xFD` close, `0xFE` refresh, `0xFD`/`0xFE` as above; `0xFF` is the ready control, sent by op 10, not a click area) and send
+  and page, `0xFD` close, `0xFE` refresh; `0xFF` is the ready control sent by op 10, not a click area) and send
   `&bgsetup ui <token> <control>`. The shared `&companions ui` sender and its
   token are untouched, so click collisions with the three other windows are
   excluded by construction. Labels 620-984 (365) on the existing text
