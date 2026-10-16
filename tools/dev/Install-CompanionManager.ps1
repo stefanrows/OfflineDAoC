@@ -15,7 +15,8 @@ $ErrorActionPreference = 'Stop'
 # source/server/tools/build_companion_manager_client.py. Dry run by default.
 # An installation that already has an earlier manager build (0.32.1, 0.33.0 through 0.169.0, 0.251.0, 0.272.0,
 # the 0.273.0 / 0.275.0 companion paperdoll probe, or 0.276.0) is upgraded in place: game.dll, uimain.xml and the window
-# files are backed up and replaced, and -RestoreBackup puts the previous files back.
+# files are backed up and replaced, and -RestoreBackup puts the previous files back. An installation with the same
+# game.dll and uimain.xml but the 0.282.0 OPEN BG window (0.283.0 redesign) only gets custom5_window.xml replaced.
 # Every file is hash checked; the game, server, and launcher must be closed.
 # Nothing is stopped by this script. Saves and server files are not touched.
 
@@ -61,6 +62,11 @@ $KnownGearMain = 'cef698f354bd3d1c2e7c40f794dac38d0f172a5889d7b8996f1d41c131a132
 $KnownGearWindows = @(
     '60d41e0817463f6a17a1e2a053e960ae4d8f4f4b75b4aaf5e3f740d3dd626cd5', # 0.273.0 four-slot probe
     '9a47faa82bd3daaec0c99d26cbd6db12170a01f14af0805c3a384d295e1755ee'  # 0.275.0 full-window probe
+)
+
+# OPEN BG windows (custom5_window.xml) of earlier builds that an upgrade replaces after backing them up.
+$KnownBgWindows = @(
+    '38739f7d407de64e83d361848a688883de9161b6f56b36970f5e2ecdc8273401'  # 0.282.0 (first OPEN BG window; same game.dll and uimain.xml as 0.283.0)
 )
 
 function CopyVerified([string]$Source, [string]$Destination, [string]$Expected) {
@@ -216,22 +222,30 @@ $stageIslesGear = Join-Path $stageRoot 'isles\custom6_window.xml'
 $stageAtlantisBg = Join-Path $stageRoot 'atlantis\custom5_window.xml'
 $stageIslesBg = Join-Path $stageRoot 'isles\custom5_window.xml'
 
-# The stage's own game.dll is already installed: nothing to do, or refuse a half-installed set.
+# The stage's own game.dll is already installed: nothing to do, refresh an earlier OPEN BG window, or refuse a half-installed set.
 $installedGame = Hash $game
+$upgrade = $KnownManagerBuilds -contains $installedGame
 if ($installedGame -eq $manifest.outputSha256) {
-    $complete = (Hash $main) -eq $manifest.uimainOutputSha256 -and
+    $restComplete = (Hash $main) -eq $manifest.uimainOutputSha256 -and
         (Hash $atlantis) -eq $manifest.windowSha256 -and (Hash $isles) -eq $manifest.windowSha256 -and
         (Hash $atlantisBar) -eq $manifest.barWindowSha256 -and (Hash $islesBar) -eq $manifest.barWindowSha256 -and
-        (Hash $atlantisGear) -eq $manifest.gearWindowSha256 -and (Hash $islesGear) -eq $manifest.gearWindowSha256 -and
+        (Hash $atlantisGear) -eq $manifest.gearWindowSha256 -and (Hash $islesGear) -eq $manifest.gearWindowSha256
+    $complete = $restComplete -and
         (Hash $atlantisBg) -eq $manifest.bgWindowSha256 -and (Hash $islesBg) -eq $manifest.bgWindowSha256
     if ($complete) {
         Write-Host "Already installed: the manager build $($manifest.outputSha256) and its UI files match this stage. Nothing to do."
         return
     }
-    throw 'game.dll already matches this stage, but the UI files do not. Nothing was changed; inspect the installation.'
+    # The same game.dll and uimain.xml with an earlier OPEN BG window (0.282.0): only custom5_window.xml is replaced.
+    $bgAllowed = @($manifest.bgWindowSha256) + $KnownBgWindows
+    if ($restComplete -and $bgAllowed -contains (Hash $atlantisBg) -and $bgAllowed -contains (Hash $islesBg)) {
+        $upgrade = $true
+    }
+    else {
+        throw 'game.dll already matches this stage, but the UI files do not. Nothing was changed; inspect the installation.'
+    }
 }
 
-$upgrade = $KnownManagerBuilds -contains $installedGame
 if ($upgrade) {
     $installedMain = Hash $main
     if (@($manifest.uimainOutputSha256, $manifest.uimainManagerOnlySha256, $manifest.uimainBarSha256, $manifest.uimainGearSha256, $KnownGearMain, $KnownBarMain) -notcontains $installedMain) {
@@ -256,11 +270,11 @@ if ($upgrade) {
             throw "A custom6_window.xml differs from this stage and from the known probe windows: $path ($existing). Refused."
         }
     }
-    # Only this stage's own OPEN BG window may already exist; any other custom5 file is refused.
+    # This stage's own OPEN BG window or an earlier one (backed up and replaced) may already exist; any other custom5 file is refused.
     foreach ($path in @($atlantisBg, $islesBg)) {
         $existing = Hash $path
-        if ($existing -and $existing -ne $manifest.bgWindowSha256) {
-            throw "A custom5_window.xml differs from this stage: $path ($existing). Refused."
+        if ($existing -and $existing -ne $manifest.bgWindowSha256 -and $KnownBgWindows -notcontains $existing) {
+            throw "A custom5_window.xml differs from this stage and from the known earlier OPEN BG window: $path ($existing). Refused."
         }
     }
 }

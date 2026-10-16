@@ -15,11 +15,13 @@ RELEASE_TOOLS = pathlib.Path(__file__).resolve().parent
 UPSTREAM_GAME_DLL = '67dcf68a37b95a93946a943b99d5e19b4a03e08cd6469275e25c7b909de21e99'
 # The Companion Manager client stage packaged by default, and the COMPANIONS window files (custom7_window.xml)
 # and companion paperdoll probe windows (custom6_window.xml) of earlier builds that the update pack may replace.
-# The OPEN BG window (custom5_window.xml) is new in this stage, so it may only be added.
-COMPANION_STAGE = 'stage-companion-manager-0.282.0'
+# The OPEN BG window (custom5_window.xml) was added in 0.282.0 and redesigned in 0.283.0 (same game.dll and
+# uimain.xml), so the update pack may add it or replace the 0.282.0 window.
+COMPANION_STAGE = 'stage-companion-manager-0.283.0'
 KNOWN_BAR_WINDOWS = ['7920bcd32909a0e6b5ad2e625902f9f8807fe04ea4370f2ace2b301a8ee59aba']  # 0.251.0
 KNOWN_GEAR_WINDOWS = ['60d41e0817463f6a17a1e2a053e960ae4d8f4f4b75b4aaf5e3f740d3dd626cd5',  # 0.273.0 probe
                       '9a47faa82bd3daaec0c99d26cbd6db12170a01f14af0805c3a384d295e1755ee']  # 0.275.0 probe
+KNOWN_BG_WINDOWS = ['38739f7d407de64e83d361848a688883de9161b6f56b36970f5e2ecdc8273401']  # 0.282.0
 SERVER_ASSEMBLIES = ['GameServer', 'CoreBase', 'CoreDatabase', 'CoreServer']
 LAUNCHER_FILES = ['OfflineDAoC.dll', 'OfflineDAoC.exe', 'OfflineDAoC.pdb', 'OfflineDAoC.deps.json',
                   'OfflineDAoC.runtimeconfig.json', 'Join Friend.cmd']
@@ -140,7 +142,8 @@ def main():
         add(client + f'ui/{skin}/custom6_window.xml', companion / skin / 'custom6_window.xml', 'native',
             ['absent'] + KNOWN_GEAR_WINDOWS)
     for skin in ('atlantis', 'isles'):
-        add(client + f'ui/{skin}/custom5_window.xml', companion / skin / 'custom5_window.xml', 'native', ['absent'])
+        add(client + f'ui/{skin}/custom5_window.xml', companion / skin / 'custom5_window.xml', 'native',
+            ['absent'] + KNOWN_BG_WINDOWS)
     rm = json.loads((raid / 'manifest.json').read_text(encoding='utf-8'))
     for window, info in rm['windows'].items():
         for skin in ('atlantis', 'isles'):
