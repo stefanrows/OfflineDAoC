@@ -102,11 +102,30 @@ namespace DOL.GS
     /// </summary>
     public sealed record OpenBgOrder(int Unit, OpenBgRole Role, Point3D Point, bool Muster, bool AtKeep, long Cycle);
 
+    /// <summary>The figures of the last OPEN_BG_FIELD line: units and bots outside their landing peace, of those inside.</summary>
+    public sealed record OpenBgFieldFigures(int UnitsOut, int Units, int BotsOut, int Bots, int Pct);
+
     /// <summary>Metric log lines of the open BG (concept section 4).</summary>
     public static class OpenBgMetrics
     {
+        private static OpenBgFieldFigures _lastField;
+
+        public static int PercentOut(int botsOut, int bots) => bots == 0 ? 0 : (int)Math.Round(100.0 * botsOut / bots);
+
         public static string FieldLine(int unitsOut, int units, int botsOut, int bots) =>
-            $"OPEN_BG_FIELD units_out={unitsOut}/{units} bots_out={botsOut}/{bots} pct={(bots == 0 ? 0 : (int)Math.Round(100.0 * botsOut / bots))}";
+            $"OPEN_BG_FIELD units_out={unitsOut}/{units} bots_out={botsOut}/{bots} pct={PercentOut(botsOut, bots)}";
+
+        /// <summary>Remembers the figures of the OPEN_BG_FIELD line just logged (read by the status snapshot).</summary>
+        public static void PublishField(int unitsOut, int units, int botsOut, int bots) =>
+            Volatile.Write(ref _lastField, new OpenBgFieldFigures(unitsOut, units, botsOut, bots, PercentOut(botsOut, bots)));
+
+        public static bool TryGetLastField(out OpenBgFieldFigures field)
+        {
+            field = Volatile.Read(ref _lastField);
+            return field != null;
+        }
+
+        public static void ResetLastField() => Volatile.Write(ref _lastField, null);
     }
 
     /// <summary>
@@ -557,6 +576,7 @@ namespace DOL.GS
                 botsOut += outCount;
             }
             Log.Info(OpenBgMetrics.FieldLine(unitsOut, inside.Length, botsOut, bots));
+            OpenBgMetrics.PublishField(unitsOut, inside.Length, botsOut, bots);
         }
 
         /// <summary>Forgets the cycle, the map and every order (open BG switched off or the server stopped).</summary>

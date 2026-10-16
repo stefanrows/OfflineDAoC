@@ -596,6 +596,8 @@ namespace DOL.GS
             // The medallion porter the group musters and boards at, and the size it formed with (its refill target).
             public OFTeleporter Porter;
             public int FormedSize;
+            // The preset archetype key the unit was formed from; empty when it has none (solo, no preset).
+            public string Archetype = "";
         }
 
         private sealed class ReliefClock
@@ -830,7 +832,7 @@ namespace DOL.GS
                 GameBot[] members = group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
                 int crew = Math.Max(0, setup.MaxBots) - free;
                 if (!AutonomousBattlegroundParticipation.AdmitsOpenUnit(members.Length, crew, setup.MaxBots) ||
-                    !Register(admit, members, group, groupId, now, porter))
+                    !Register(admit, members, group, groupId, now, porter, PresetFor(size)?.Key))
                 {
                     // Cannot happen with the checks above; never leave a muster without a roster unit.
                     group.DisbandGroup();
@@ -974,7 +976,7 @@ namespace DOL.GS
             }
         }
 
-        private static bool Register(OpenBgAdmit admit, GameBot[] members, Group group, string label, long now, OFTeleporter porter = null)
+        private static bool Register(OpenBgAdmit admit, GameBot[] members, Group group, string label, long now, OFTeleporter porter = null, string archetype = null)
         {
             int id;
             lock (Sync) id = ++_nextUnit;
@@ -982,7 +984,7 @@ namespace DOL.GS
             lock (Sync)
             {
                 Units[id] = new UnitInfo { Id = id, Realm = admit.Realm, Kind = admit.Kind, Group = group, Porter = porter,
-                    FormedSize = members.Length };
+                    FormedSize = members.Length, Archetype = archetype ?? "" };
             }
             ClearFormFailure(admit.Realm, admit.Kind);
             Log.Info($"OPEN_BG_UNIT_ASSIGNED realm={RealmName(admit.Realm)} unit={id} kind={Describe(admit.Kind)} group=\"{label}\" size={members.Length} " +
@@ -1269,6 +1271,19 @@ namespace DOL.GS
         }
 
         /// <summary>The kind of a roster unit, read by the /bgsetup status page. False for a unit the roster no longer tracks.</summary>
+        /// <summary>The preset archetype key the unit was formed from; false (and empty) when the unit is not tracked.</summary>
+        public static bool TryGetUnitArchetype(int unit, out string archetype)
+        {
+            lock (Sync)
+                if (Units.TryGetValue(unit, out UnitInfo info))
+                {
+                    archetype = info.Archetype ?? "";
+                    return true;
+                }
+            archetype = "";
+            return false;
+        }
+
         public static bool TryGetUnitKind(int unit, out OpenBgUnitKind kind)
         {
             lock (Sync)

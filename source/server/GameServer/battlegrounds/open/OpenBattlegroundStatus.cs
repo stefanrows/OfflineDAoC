@@ -20,7 +20,8 @@ namespace DOL.GS
     /// <param name="InRaid">The unit belongs to this cycle's keep raid.</param>
     /// <param name="InsideSeconds">Game seconds since the bot entered the open BG; 0 while it has not.</param>
     public sealed record OpenBgBotStatus(string Realm, string Name, int Level, string ClassName, int Unit, string Kind,
-        string Leader, string State, bool Alive, string Role = null, bool InRaid = false, int InsideSeconds = 0);
+        string Leader, string State, bool Alive, string Role = null, bool InRaid = false, int InsideSeconds = 0,
+        string Archetype = "");
 
     /// <summary>The last reason a unit of a realm and kind (group8, small, solo) could not form, and how long ago (game seconds).</summary>
     public sealed record OpenBgFormFailureStatus(string Kind, string Text, int AgeSeconds);
@@ -44,7 +45,7 @@ namespace DOL.GS
     public sealed record OpenBgStatusSnapshot(DateTime UpdatedUtc, bool Running, bool CampaignEnabled, bool OpenEnabled,
         bool Ready, string NotReadyReason, string Phase, string Attacker, int PhaseSecondsLeft, string KeepOwner,
         double AchievedSpeed, int SelectedSpeed, int Cap, OpenBgPlayerStatus[] Players, OpenBgBotStatus[] Bots,
-        OpenBgGuestStatus[] Guests = null, OpenBgRealmStatus[] Realms = null)
+        OpenBgGuestStatus[] Guests = null, OpenBgRealmStatus[] Realms = null, OpenBgFieldFigures LastField = null)
     {
         public const string PhaseNotAvailable = "n/a (stage 2)";
     }
@@ -75,6 +76,9 @@ namespace DOL.GS
 
         /// <summary>The kind a unit of this size has when the roster no longer tracks it.</summary>
         public static string KindFromSize(int size) => size <= 1 ? "solo" : size >= OpenBattlegroundRoster.Group8Minimum ? "group8" : "small";
+
+        /// <summary>The unit's preset archetype for the bot status: empty when the unit has none or is no longer tracked.</summary>
+        public static string ArchetypeOf(bool found, string archetype) => found && archetype != null ? archetype : "";
 
         /// <summary>A crew member's state: leaving wins, then travelling, then inside or outside region 252.</summary>
         public static string StateOf(bool entered, bool leaving, bool inRegion) =>
@@ -156,11 +160,12 @@ namespace DOL.GS
                     ? OpenBattlegroundRoster.KindName(known) : KindFromSize(unitSizes[member.Unit]);
                 string leader = bot.Group?.Leader?.Name;
                 string role = OpenBattlegroundDirector.TryGetUnitRole(member.Unit, out OpenBgRole unitRole) ? OpenBattlegroundRoles.Describe(unitRole) : null;
+                string archetype = ArchetypeOf(OpenBattlegroundRoster.TryGetUnitArchetype(member.Unit, out string unitArchetype), unitArchetype);
                 int insideSeconds = member.Entered ? (int)Math.Clamp((now - member.EnteredTick) / 1000, 0, int.MaxValue) : 0;
                 return new OpenBgBotStatus(GlobalConstants.RealmToName(bot.Realm), bot.Name, bot.Level,
                     bot.CharacterClass?.Name ?? "unknown", member.Unit, kind, leader,
                     StateOf(member.Entered, member.Leaving, open != null && bot.CurrentRegionID == open.RegionId), bot.IsAlive,
-                    role, raid?.Contains(member.Unit) == true, insideSeconds);
+                    role, raid?.Contains(member.Unit) == true, insideSeconds, archetype);
             }).ToArray();
             OpenBgRealmStatus[] realms = RealmStatuses(OpenBgSetup.FromProperties(), bots,
                 (realm, kind) => OpenBattlegroundRoster.TryGetLastFormFailure(realm, kind, out string text, out long tick) ? (text, tick) : null, now);
@@ -168,7 +173,8 @@ namespace DOL.GS
             return new OpenBgStatusSnapshot(DateTime.UtcNow, running, BattlegroundCampaignPolicy.IsEnabled,
                 OpenBattlegroundProperties.OPEN_BG_ENABLED, ready, ready ? null : reason, phase, attacker, secondsLeft, owner,
                 Math.Round(OfflineWorldSpeedControl.AchievedMultiplier, 2), OfflineWorldSpeedControl.EffectiveMultiplier,
-                OpenBattlegroundProperties.MaxBots, players, bots, OpenBattlegroundGuestSquads.Status(), realms);
+                OpenBattlegroundProperties.MaxBots, players, bots, OpenBattlegroundGuestSquads.Status(), realms,
+                OpenBgMetrics.TryGetLastField(out OpenBgFieldFigures field) ? field : null);
         }
 
         [GameServerStartedEvent]
