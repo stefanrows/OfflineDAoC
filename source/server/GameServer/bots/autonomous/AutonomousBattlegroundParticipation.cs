@@ -268,6 +268,35 @@ public static class AutonomousBattlegroundParticipation
                 .ToArray();
     }
 
+    /// <summary>
+    /// Sends every open-BG crew member out now (open BG mode switch): bots inside leave straight from where they
+    /// stand, bots still travelling are released. A bot whose exit fails stays marked and the next pass retries it.
+    /// Returns the number of bots let go.
+    /// </summary>
+    public static int SendOutOpenCrew()
+    {
+        Entry[] crew;
+        lock (Sync) crew = Entries.Values.Where(entry => IsOpenUnit(entry.Definition, entry.Unit)).ToArray();
+        int sent = 0;
+        foreach (Entry entry in crew)
+        {
+            if (!entry.Entered)
+            {
+                lock (Sync) Entries.Remove(entry.Bot);
+                Log.Info($"AUTONOMOUS_BG_LEFT region={entry.Definition.RegionId} bot=\"{entry.Bot.Name}\" reason={Describe(LeaveReason.Unassigned)}");
+                sent++;
+                continue;
+            }
+            lock (Sync)
+            {
+                entry.Leaving = LeaveReason.Unassigned;
+                entry.ReliefHome = null;
+            }
+            if (TryFinishLeaving(entry.Bot)) sent++;
+        }
+        return sent;
+    }
+
     /// <summary>The open-BG roster unit of a crew member, or 0 for a bracket participant or any other bot.</summary>
     public static int OpenUnitOf(GameBot bot)
     {

@@ -43,4 +43,16 @@ public sealed class UT_OpenBattlegroundLandingSide
         }
         Assert.That(load.Values, Has.All.Matches<(int Units, int Seats)>(value => value.Units == 3));
     }
+
+    [Test]
+    public void OnlyARealModeChangeWipesTheCrew()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundRoster.ModeSwitched(null, OpenBgMode.PerRealm), Is.False, "first tick after a start");
+            Assert.That(OpenBattlegroundRoster.ModeSwitched(OpenBgMode.ServerPvp, OpenBgMode.ServerPvp), Is.False);
+            Assert.That(OpenBattlegroundRoster.ModeSwitched(OpenBgMode.ServerPvp, OpenBgMode.PerRealm), Is.True);
+            Assert.That(OpenBattlegroundRoster.ModeSwitched(OpenBgMode.PerRealm, OpenBgMode.ServerPvp), Is.True);
+        });
+    }
 }

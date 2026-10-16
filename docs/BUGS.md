@@ -161,7 +161,12 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      keep landing peace at any landing when the peace is "all". Offline: new
      `UT_OpenBattlegroundLandingSide`, open BG and hub peace tests green.
      Verification pending: in Server PvP the units leave from all three
-     portal keeps.
+     portal keeps. Follow-up 0.289.0 (owner report: after switching to Per
+     realm the old units could not be attacked): a mode switch now sends the
+     whole crew out at once and forms new units (`OPEN_BG_MODE_WIPE`,
+     `AutonomousBattlegroundParticipation.SendOutOpenCrew`). Verification
+     pending: after a switch the field empties within a game minute and the
+     new units fight by the new mode's rules.
 
 166. **Open BG keep: every guard and the lord con gray to level 50, and the
      gates stay broken and open after a claim.** Owner report 2026-10-17 after

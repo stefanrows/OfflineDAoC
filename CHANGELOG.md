@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.289.0] - 2026-10-17
+
+### Changed
+
+- **Switching the open BG mode clears the field.** Units formed under the old
+  rules (mixed crews, keeps spread for Server PvP) stayed after a switch to
+  Per realm, and a player could not fight them properly. On the next roster
+  tick after a mode change (at most one game minute) every crew bot leaves at
+  once, without the walk home or the rest, the raid and cycle start over, and
+  new units form under the new mode. Logged as `OPEN_BG_MODE_WIPE`.
+
 ## [0.288.0] - 2026-10-17
 
 ### Changed

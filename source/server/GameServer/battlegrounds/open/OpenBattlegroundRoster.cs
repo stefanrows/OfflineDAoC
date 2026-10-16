@@ -620,6 +620,8 @@ namespace DOL.GS
         // Units the player relieved by hand in the open BG window or with /bgsetup relieve; the next tick relieves them first.
         private static readonly HashSet<int> PendingRelief = new();
         private static readonly Random Rng = new();
+        // The mode of the last tick; kept through Reset so a switch while the open BG is off still counts.
+        private static OpenBgMode? _lastMode;
         private static int _nextUnit;
         private static long _nextLogTick;
         // Medallion porters per region. They are static spawns and the merchant scan walks every NPC of the
@@ -644,6 +646,9 @@ namespace DOL.GS
                 return;
             }
             Stopwatch watch = Stopwatch.StartNew();
+            OpenBgMode mode = OpenBattlegroundMode.Current;
+            if (ModeSwitched(_lastMode, mode)) WipeForMode(_lastMode.Value, mode);
+            _lastMode = mode;
             OpenBgSetup setup = OpenBgSetup.FromProperties();
             AutonomousBattlegroundParticipation.OpenCrewMember[] crew = AutonomousBattlegroundParticipation.OpenCrew();
             GuildIds keepOwner = KeepOwnerOf(definition);
@@ -722,6 +727,22 @@ namespace DOL.GS
             }
             if (watch.ElapsedMilliseconds > SlowTickMilliseconds)
                 Log.Warn($"OPEN_BG_TICK_SLOW part=roster ms={watch.ElapsedMilliseconds} crew={crew.Length} admits={plan.Admits.Count} formed={formed}");
+        }
+
+        /// <summary>A /bgsetup mode change since the last tick (the first tick after a start is no change).</summary>
+        public static bool ModeSwitched(OpenBgMode? last, OpenBgMode current) => last.HasValue && last.Value != current;
+
+        /// <summary>
+        /// Owner request 2026-10-17: a mode switch sends the whole crew out at once (no walk home, no rest) and forgets
+        /// every unit, the raid and the cycle, so this tick forms new units under the new mode's rules: Server PvP
+        /// units are mixed and spread over the three keeps, Per realm units of one realm at their own keep.
+        /// </summary>
+        private static void WipeForMode(OpenBgMode from, OpenBgMode to)
+        {
+            int sent = AutonomousBattlegroundParticipation.SendOutOpenCrew();
+            Reset();
+            OpenBattlegroundDirector.Reset();
+            Log.Info($"OPEN_BG_MODE_WIPE from={from} to={to} sent_out={sent}");
         }
 
         /// <summary>The kind a roster unit was formed as, or null for a unit the roster does not know (yet).</summary>
