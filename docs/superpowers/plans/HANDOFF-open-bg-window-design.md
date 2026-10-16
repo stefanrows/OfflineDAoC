@@ -1,0 +1,13 @@
+# Hand-off: OPEN BG window visual redesign (started 2026-10-16)
+
+State: the OPEN BG window (Custom5, version 0.282.0) is built, installed on the owner's PC and **works in the real client** (owner confirmed). Everything is on `main` (pushed). Server on the owner's PC runs 0.282.0, Gothwaite mode ON, `open_bg_presets` empty.
+
+## Owner request (verbatim intent)
+"UI looks only visually not very appealing, spacing is ugly. Make it a really high-end looking UI, everything the technology allows. Should be fun to use, simple and understandable. Also show individually who is in a group etc., but always clear. Use your skills." (skill: frontend-design: distinct identity for the subject (a DAoC 2003 realm-war battleground command board), compact token system (4-6 named hex colours, type roles, layout with ASCII wireframes), spend boldness in ONE memorable element, structural devices must carry information, copy is design: plain active verbs, consistent action names, empty/error states give direction.)
+
+## What is open
+1. An advisor (opus, read-only) was started to inventory what the client XML UI engine allows visually (stock templates/textures/icons/bars/fonts/colours/hover/highlight, no hide/show by data, label budget 985, window 760 x 648) and to propose 2-3 visual concepts with ASCII wireframes of Lage and Steuern, the grouped crew view (unit blocks with leader, members: class, level, state; collapsible by server-side state), a Steuern redesign (panels, clear on/off colours, steppers, help line), copy, a recommendation, a task plan (builder XML, native if any, server screen, tests, docs, new stage 0.283.0 + reinstall by the owner) and an offline preview idea (render XML + sample texts to an image so the owner can SEE it before installing). If its report is lost, re-run that analysis (inputs: `docs/CLIENT_UI_XML_REFERENCE.md`, `docs/COMPANION_*`, `source/server/tools/build_companion_manager_client.py` `open_bg_window()`/`open_bg_row_slots()`, `OpenBgWindowScreen.cs`).
+2. Then: owner picks a concept, implement with the subagent-driven-development skill (plan under `docs/superpowers/plans/`), build the new stage `playable-dev/stage-companion-manager-0.283.0`, owner installs with `tools/dev/Install-CompanionManager.ps1` (dry run, then `-Apply`, game/server/launcher closed).
+
+## Known small items (not blocking)
+Text length limit 115 vs 120 (`CompanionManagerProtocol.MaximumTextLength` vs `OpenBgWindowScreen` clip); game-time fallback timers of gear/Custom8 (BUGS 162); stock close X leaves the window "open" server-side up to 30 min; release publish needs `--companion-stage` (default fixed); Stefan's server: check log line `GOTH_PVP_OPENBG_RESERVE reserve=` (0 means no open BG: set `/bgsetup band_min|band_max`, restart).
