@@ -16,7 +16,7 @@
 - Window files custom6, custom7, custom8 (hashes `dfc5bbdb...`, `5b820574...`, `9cd3b8a5...`) and their control/event ranges (manager `0x700-0x7DF`, gear `0x900-0x93A`, raid `0x600-0x64F`) must not change byte for byte or number.
 - Python: run the builder and its tests with a scratch venv that has `pefile capstone keystone-engine unicorn` (create one under the scratchpad / `/tmp`; the repo has no requirement file): `python3 -m venv <dir>; <dir>/bin/pip install pefile capstone keystone-engine unicorn`.
 - Preserve each file's line endings; check `git diff --stat` for whole-file churn. New files LF. `ALL SERVER COMMANDS.txt` is CRLF (binary-safe edits).
-- Version: one MINOR bump when finished (0.279.0 -> 0.280.0): CHANGELOG heading, `source/tools/OfflineDaoc.Launcher/MainForm.cs` (`DisplayVersion`), `source/tools/OfflineDaoc.Launcher.Tests/LauncherPresentationTests.cs`, `ALL SERVER COMMANDS.txt` header.
+- Version: one MINOR bump when finished (0.281.0 -> 0.282.0): CHANGELOG heading, `source/tools/OfflineDaoc.Launcher/MainForm.cs` (`DisplayVersion`), `source/tools/OfflineDaoc.Launcher.Tests/LauncherPresentationTests.cs`, `ALL SERVER COMMANDS.txt` header.
 - Offline emulation only: say so in docs and report that the real-client check is the owner's. The owner's install already has the 0.276.0 stage (`game.dll` `bfefe97d...`), the installer must accept 0.169.0 and 0.276.0 as starting state.
 - Build only into default output trees; never into the install. Run tests with filters named per task.
 - Commands from `C:\OfflineDAoC-wt-obgwindow`, `export OFFLINE_DAOC_ROOT=/mnt/c/OfflineDAoC/playable`. C# build: `tools/dev/winnet.sh build source/server/Tests/Tests.csproj -c Release --no-restore 2>&1 | grep -E ' error |Fehler$'`; C# test: `tools/dev/winnet.sh test source/server/Tests/Tests.csproj -c Release --no-build --no-restore --filter "<filter>" 2>&1 | grep -E 'Fehler|Bestanden'`.
@@ -178,9 +178,9 @@ Paths under `source/server/GameServer/` unless given.
 ### Task 8: Final build, docs, changelog, version
 
 **Files:**
-- Modify: `docs/COMPANION_MANAGER_INTEGRATION.md` (new section for the OPEN BG window: build, hashes, install, checklist), `docs/CAMLANN.md`, `docs/TASKS.md` (item 116 and the window item: done offline, real-client check pending), `ALL SERVER COMMANDS.txt`, `CHANGELOG.md` (`## [0.280.0] - 2026-10-16`; Added: OPEN BG window, GM lock, new client stage; Changed: `/bgsetup` opens the window, the Custom8 variant removed; Fixed/Removed as built), version pins
+- Modify: `docs/COMPANION_MANAGER_INTEGRATION.md` (new section for the OPEN BG window: build, hashes, install, checklist), `docs/CAMLANN.md`, `docs/TASKS.md` (item 116 and the window item: done offline, real-client check pending), `ALL SERVER COMMANDS.txt`, `CHANGELOG.md` (`## [0.282.0] - 2026-10-16`; Added: OPEN BG window, GM lock, new client stage; Changed: `/bgsetup` opens the window, the Custom8 variant removed; Fixed/Removed as built), version pins
 
-- [ ] **Step 1:** Build the stage twice from the raid baseline copy into `playable-dev/stage-companion-manager-0.280.0` (second build in scratch to compare); record `game.dll`, `custom5_window.xml`, `uimain.xml` hashes in the docs table (the format of the 0.276.0 section).
+- [ ] **Step 1:** Build the stage twice from the raid baseline copy into `playable-dev/stage-companion-manager-0.282.0` (second build in scratch to compare); record `game.dll`, `custom5_window.xml`, `uimain.xml` hashes in the docs table (the format of the 0.276.0 section).
 - [ ] **Step 2:** Write the real-client checklist for the owner (install steps, `/bgsetup` opens the window with the title OPEN BG, both pages, +/- on a GM account, fallback on an old client, window next to Manager/COMPANIONS/gear, the three windows still work).
 - [ ] **Step 3:** Changelog, version pins (four places), TASKS, docs.
 - [ ] **Step 4: Run** the server filter `UT_OpenBg|UT_OpenBattleground|UT_Companion|UT_Gothwaite|UT_Rvr`, launcher `OpenBg|Presentation`, the Python suite, and Release builds of CoreServer and the Launcher. All green.
