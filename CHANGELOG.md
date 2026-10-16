@@ -12,6 +12,37 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.282.0] - 2026-10-16
+
+### Added
+
+- **The OPEN BG window.** `/bgsetup` (alias `/openbg`) opens its own client
+  window next to the Companion Manager, with the pages Lage (phase, raid, keep
+  11 owner, world speed, field figures, players, every crew bot by realm and
+  unit with its archetype) and Steuern (the setup with [-] and [+] steps and a
+  [Relieve] link per unit). It is a new Companion Manager client stage
+  (Custom5, its own sender and token, new `game.dll`, `custom5_window.xml` and
+  `uimain.xml`); install it with `Install-CompanionManager.ps1`. The status
+  now carries the archetype per unit and the field figures of the last cycle.
+  Every player may change settings and relieve units, in the window and by chat.
+
+### Changed
+
+- `/bgsetup text` and the chat keys stay as before; a client without the new
+  stage gets the text page and one hint line after three seconds.
+- The open BG manager no longer shares the Companion Manager's window (the
+  Custom8 variant is gone).
+- The installer and the release pack know the new stage and accept the
+  0.276.0 stage as a starting point.
+
+### Fixed
+
+- None.
+
+### Removed
+
+- The open BG manager variant of the Custom8 window.
+
 ## [0.281.0] - 2026-10-16
 
 ### Added
