@@ -2007,7 +2007,7 @@ namespace DOL.AI.Brain
                 if (npc == bot || !npc.IsAlive || npc.ObjectState != GameObject.eObjectState.Active ||
                     npc is GameTaxi or GameTrainingDummy || npc.Brain is not StandardMobBrain brain ||
                     brain.AggroLevel <= 0 || brain.AggroRange <= 0 ||
-                    !npc.IsWithinRadius(bot, brain.AggroRange) || !brain.CanAggroTarget(bot))
+                    !npc.IsWithinRadius(bot, brain is KeepGuardBrain guard ? guard.BotAggroRange : brain.AggroRange) || !brain.CanAggroTarget(bot))
                     continue;
 
                 npc.OnAutonomousBotNearby();

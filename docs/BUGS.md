@@ -169,6 +169,12 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      break-off to the landing floor. Offline: build and battleground, siege,
      keep and guard tests green (the 2 `UT_PhysicalSiegeRally` failures are older).
      Verification pending: live runs in both modes (raid capture and defence).
+     Follow-up 0.296.0: the live runs (2026-10-17) showed no guard ever
+     thinking with only bots near: `ABrain.IsActive` needs a client or a bot
+     wake (`GameNPC.OnAutonomousBotNearby`), and
+     `BotBrain.ThinkAutonomousBattleground` skipped
+     `WakeNearbyNaturalAggroBrains`. It now wakes them first; diagnostics
+     `OPEN_BG_KEEP_ACTION`, `OPEN_BG_GUARD_AGGRO/SCAN/STATE` stay in the log.
 
 170. **Raid healers cure the wrong member or not at all.** Found 2026-10-17 while
      tracing bug 168. `BotGroupSupport.ReserveHeal` treated every spell with

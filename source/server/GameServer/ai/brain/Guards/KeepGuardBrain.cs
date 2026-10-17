@@ -66,7 +66,8 @@ namespace DOL.AI.Brain
         private bool IsOpenBgShooter => Body is GuardArcher or GuardCaster && !(_keepGuardBody?.IsPortalKeepGuard ?? true) &&
             Body.CurrentRegionID == OpenBattlegroundMode.OpenBgRegion;
 
-        private int BotAggroRange => IsOpenBgShooter ? System.Math.Max(AggroRange, OpenBgShooterRange) : AggroRange;
+        /// <summary>The range at which this guard takes an autonomous bot (and a bot wakes it).</summary>
+        public int BotAggroRange => IsOpenBgShooter ? System.Math.Max(AggroRange, OpenBgShooterRange) : AggroRange;
 
         private static readonly DOL.Logging.Logger OpenBgLog = DOL.Logging.LoggerManager.Create(typeof(KeepGuardBrain));
         private long _nextOpenBgAggroLog;

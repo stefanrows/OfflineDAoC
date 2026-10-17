@@ -16,6 +16,9 @@ namespace DOL.AI.Brain
             // The driver owns movement here, as the world controller does outside: a release
             // walk left running would re-path every tick against the driver's route (bug 127).
             bot.HandOverReleaseReturnToGroup();
+            // Keep guards and other vicinity brains only think near a client or a bot that wakes them; the battleground
+            // turn skipped the wake, so in a bots-only open BG the central keep's guards never fought (live run 2026-10-17).
+            WakeNearbyNaturalAggroBrains();
             if (!AutonomousBattlegroundDriver.Turn(this, bot))
                 return;
             AutonomousRealmAbilityActives.UseActives(bot);

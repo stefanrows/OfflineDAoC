@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.296.0] - 2026-10-17
+
+### Fixed
+
+- **Open BG keep guards fight bots also when no player is near.** Keep guards
+  (like every vicinity NPC) only think near a client or a bot that wakes them;
+  the battleground bots' turn never woke them, so with no player at the
+  keep its guards stood idle and the keep changed hands almost every cycle
+  (8 captures in 40 minutes in the Per realm run). Battleground bots now wake
+  hostile guards within their aggro range (1,500 for the open BG wall archers
+  and casters).
+
 ## [0.295.3] - 2026-10-17
 
 ### Added
