@@ -12,6 +12,21 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.293.1] - 2026-10-17
+
+### Added
+
+- `OPEN_BG_KEEP_ACTION` log line: what a group head under an open BG assault
+  or defend order does at the keep (action, distance, attackers at the gate,
+  wait, target), on every change and every 30 game seconds.
+
+### Fixed
+
+- `UT_PhysicalSiegeRally.EveryRealmConvergesWithoutRequiringPhysicalStaging`
+  expected the four-hour "defended" end; since the forty-five-minute absence
+  rule (2026-10-09) an unattended battle ends with "no attacker reached the
+  keep". The test now expects that.
+
 ## [0.293.0] - 2026-10-17
 
 ### Changed

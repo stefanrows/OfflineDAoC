@@ -56,7 +56,9 @@ public class UT_PhysicalSiegeRally
         AutonomousRvrEventLayer.ReportAttendance(target.Id, forces[0].GroupId, eRealm.Albion, 1000, false, ready + 4);
         Assert.That(AutonomousRvrEventLayer.IsBattleForce(forces[0].GroupId, now + AutonomousRvrEventLayer.BattleLifetimeMilliseconds - 1), Is.True);
         Assert.That(AutonomousRvrEventLayer.TryConsumeRelease(forces[0].GroupId, ready + 1 + AutonomousRvrEventLayer.BattleLifetimeMilliseconds, out string reason), Is.True);
-        Assert.That(reason, Does.Contain("defended"));
+        // Since 3121c4d (2026-10-09) a battle no attacker ever stood near (attendance carries no position here) closes
+        // by the forty-five-minute absence rule before the four-hour cap: the force is still released, with that reason.
+        Assert.That(reason, Does.Contain("no attacker reached the keep"));
     }
 
     [TestCase(false)] [TestCase(true)]

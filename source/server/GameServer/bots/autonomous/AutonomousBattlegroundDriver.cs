@@ -140,6 +140,9 @@ public static class AutonomousBattlegroundDriver
         public long NextSiegeCount;
         // open BG siege: when this bot first stood at the gate without the quorum (0 = not waiting).
         public long GateWaitSince;
+        // OPEN_BG_KEEP_ACTION: the last logged keep action of a group head and when it may log again.
+        public string LoggedKeepAction;
+        public long NextKeepActionLog;
         // open BG break-off: the group leader's retreat to its own landing runs until this game time; followers read the leader's.
         public long BreakOffUntil;
         public Point3D BreakOffPoint;
@@ -458,6 +461,23 @@ public static class AutonomousBattlegroundDriver
         return false;
     }
 
+    /// <summary>
+    /// What a group head under an assault or defend order does at the keep: on every change, else every 30 game seconds
+    /// (live check 2026-10-17: the raid's actions at the gate were invisible in the log).
+    /// </summary>
+    private static void LogKeepAction(GameBot bot, AbstractGameKeep keep, OpenBgOrder order, State state, bool led, long now)
+    {
+        if (keep == null || order.Role is not (OpenBgRole.Assault or OpenBgRole.Defend) || !IsGroupHead(bot)) return;
+        if (state.Action == state.LoggedKeepAction && now < state.NextKeepActionLog) return;
+        state.LoggedKeepAction = state.Action;
+        state.NextKeepActionLog = now + 30_000;
+        GameLiving target = bot.TargetObject as GameLiving;
+        Log.Info($"OPEN_BG_KEEP_ACTION bot=\"{bot.Name}\" unit={order.Unit} role={order.Role} muster={order.Muster} action={state.Action} led={led} " +
+            $"keep_dist={(int)bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z))} siege_present={state.SiegePresent} " +
+            $"wait_s={(state.GateWaitSince == 0 ? 0 : (now - state.GateWaitSince) / 1000)} assault_target=\"{state.AssaultTarget?.Name}\" " +
+            $"target=\"{target?.Name}\" attacking={bot.IsAttacking} group={bot.Group?.MemberCount ?? 1}");
+    }
+
     private static State CreateState(GameBot bot) => new() { Camp = (int)(bot.DatabaseID & int.MaxValue) };
 
     private static void Lead(BotBrain brain, GameBot bot, BattlegroundDefinition definition, State state, long now)
@@ -467,7 +487,9 @@ public static class AutonomousBattlegroundDriver
         OpenBgRole? held = null;
         if (definition.Kind == BattlegroundDefinitionKind.Open && OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order))
         {
-            if (LeadOpen(brain, bot, keep, camps, order, state, now)) return;
+            bool led = LeadOpen(brain, bot, keep, camps, order, state, now);
+            LogKeepAction(bot, keep, order, state, led, now);
+            if (led) return;
             held = order.Role;
         }
         if (keep != null && FallbackAllows(held, LeadBranch.Defend) && bot.Guild != null && keep.Guild == bot.Guild)
