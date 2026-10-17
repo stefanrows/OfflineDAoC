@@ -37,8 +37,11 @@ namespace DOL.GS.PropertyCalc
             else
                 livingToCheck = living;
 
+            // Mastery of the Arcane is inherited by an Animist's shroom.
+            int abilityBonus = livingToCheck.AbilityBonus[property] + TurretPet.GetInheritedAbilityBonus(living, property);
+
             // Hardcap at 25%
-            return Math.Min(25, livingToCheck.ItemBonus[property] + livingToCheck.AbilityBonus[property] - living.DebuffCategory[property]);
+            return Math.Min(25, livingToCheck.ItemBonus[property] + abilityBonus - living.DebuffCategory[property]);
         }
     }
 
@@ -70,7 +73,7 @@ namespace DOL.GS.PropertyCalc
 
         public override int CalcValue(GameLiving living, eProperty property)
         {
-            int percent = living.AbilityBonus[property];
+            int percent = living.AbilityBonus[property] + TurretPet.GetInheritedAbilityBonus(living, property); // Wild Healing for an Animist's shroom.
 
             // Hardcap at 50%
             return Math.Min(50, percent);
@@ -92,7 +95,7 @@ namespace DOL.GS.PropertyCalc
                 livingToCheck = living;
 
             // Only custom server settings should have both ability and item bonuses. But this allows both despite the different cap values.
-            int abilityBonus = livingToCheck.AbilityBonus[property]; // Mastery of the Art (OF), capped at 15%.
+            int abilityBonus = livingToCheck.AbilityBonus[property] + TurretPet.GetInheritedAbilityBonus(living, property); // Mastery of the Art (OF), capped at 15%. Inherited by an Animist's shroom.
             int abilityBonusOverCap = Math.Max(0, abilityBonus - 15);
             int itemBonus = livingToCheck.ItemBonus[property]; // ToA item bonus, capped at 10%.
             int itemBonusOverCap = Math.Max(0, itemBonus - 10);
@@ -127,7 +130,7 @@ namespace DOL.GS.PropertyCalc
             else
                 livingToCheck = living;
 
-            int abilityBonus = livingToCheck.AbilityBonus[property];
+            int abilityBonus = livingToCheck.AbilityBonus[property] + TurretPet.GetInheritedAbilityBonus(living, property); // Mastery of Magery; inherited by an Animist's shroom.
             int itemBonus = Math.Min(10, livingToCheck.ItemBonus[property]);
             int buffBonus = living.BaseBuffBonusCategory[property] + living.SpecBuffBonusCategory[property];
             int debuffMalus = Math.Abs(livingToCheck.DebuffCategory[property]);

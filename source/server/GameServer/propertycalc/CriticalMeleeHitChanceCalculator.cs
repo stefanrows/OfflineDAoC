@@ -31,6 +31,11 @@ namespace DOL.GS.PropertyCalc
                 chance += 10;
                 chance += botOwner.GetAbility<RealmAbilities.AtlasOF_WildMinionAbility>()?.Amount ?? 0;
             }
+            else if (TurretPet.GetRealmAbilityOwner(living) is GameLiving shroomOwner)
+            {
+                // A shroom's owner is its direct owner, also for a companion (GetPlayerOwner would be the bot's human owner).
+                chance += shroomOwner.GetAbility<RealmAbilities.AtlasOF_WildMinionAbility>()?.Amount ?? 0;
+            }
             else if (living is GameNPC npc &&
                 npc.Brain is IControlledBrain petBrain &&
                 petBrain.GetPlayerOwner() is GamePlayer playerOwner)

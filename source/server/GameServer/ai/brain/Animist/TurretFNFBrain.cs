@@ -12,6 +12,9 @@ namespace DOL.AI.Brain
 
         protected override bool CheckLosBeforeCastingOffensiveSpells => Properties.CHECK_LOS_BEFORE_AGGRO_FNF;
 
+        // IsMainPet is only cleared after the summon spell added the turret to the world and started this brain.
+        protected override bool IsMobile => false;
+
         public override void Think()
         {
             CheckProximityAggro();

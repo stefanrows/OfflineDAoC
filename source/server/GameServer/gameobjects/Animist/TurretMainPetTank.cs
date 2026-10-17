@@ -2,6 +2,6 @@
 {
     public class TurretMainPetTank : TurretPet
     {
-        public TurretMainPetTank(INpcTemplate template) : base(template) { }
+        public TurretMainPetTank(INpcTemplate template) : base(template) => MakeMobile();
     }
 }

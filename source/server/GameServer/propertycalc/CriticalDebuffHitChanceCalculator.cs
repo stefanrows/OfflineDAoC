@@ -20,7 +20,7 @@ namespace DOL.GS.PropertyCalc
 
         public override int CalcValue(GameLiving living, eProperty property)
         {
-            int chance = living.AbilityBonus[property];
+            int chance = living.AbilityBonus[property] + TurretPet.GetInheritedAbilityBonus(living, property); // Wild Arcana for an Animist's shroom.
 
             if (living is NecromancerPet necroPet && necroPet.Owner is GamePlayer or IGamePlayer)
                 chance += necroPet.Owner.GetAbility<RealmAbilities.AtlasOF_WildArcanaAbility>()?.Amount ?? 0;

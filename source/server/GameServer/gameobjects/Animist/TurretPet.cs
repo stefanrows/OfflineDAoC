@@ -12,7 +12,28 @@ namespace DOL.GS
 
         public Spell TurretSpell;
 
+        // The Animist shroom templates have no speed. Only the main shroom moves (it follows its owner),
+        // using the speed of a typical summoned pet; field turrets stay where they were planted.
+        public const short MainPetMaxSpeedBase = 200;
+
         public TurretPet(INpcTemplate template) : base(template) { }
+
+        protected void MakeMobile()
+        {
+            if (MaxSpeedBase <= 0)
+                MaxSpeedBase = MainPetMaxSpeedBase;
+        }
+
+        /// <summary>
+        /// The Animist whose realm abilities a shroom inherits: its direct owner when that is a player or a companion bot.
+        /// Not <see cref="ControlledMobBrain.GetPlayerOwner"/>, which hands a companion's shroom the bot's human owner.
+        /// </summary>
+        public static GameLiving GetRealmAbilityOwner(GameLiving living) =>
+            living is TurretPet { Owner: GamePlayer or GameBot } turret ? turret.Owner : null;
+
+        /// <summary>The owner's realm ability bonus (Wild Power, Mastery of Magery, ...) for a shroom, 0 for anything else.</summary>
+        public static int GetInheritedAbilityBonus(GameLiving living, eProperty property) =>
+            GetRealmAbilityOwner(living)?.AbilityBonus[property] ?? 0;
 
         protected override void BuildAmbientTexts()
         {
@@ -53,7 +74,11 @@ namespace DOL.GS
 
         public override void OnCastSpellLosCheckFail(GameObject target)
         {
-            base.OnCastSpellLosCheckFail(target);
+            // GameNPC would walk up to a target it cannot see. The main shroom stays with its owner instead.
+            if (this is TurretFnfPet)
+                base.OnCastSpellLosCheckFail(target);
+            else if (castingComponent.QueuedSpellHandler?.Target == target)
+                castingComponent.ClearUpQueuedSpellHandler();
 
             // This is where FnF turrets with LoS check on aggro enabled clear their list of hidden targets.
             // This can create a delay between attacks in some cases because turrets only ask one target at a time.

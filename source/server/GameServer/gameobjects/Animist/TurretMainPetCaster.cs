@@ -4,6 +4,6 @@
     {
         public override double MaxHealthScalingFactor => 0.8 * HealthMultiplier;
 
-        public TurretMainPetCaster(INpcTemplate template) : base(template) { }
+        public TurretMainPetCaster(INpcTemplate template) : base(template) => MakeMobile();
     }
 }

@@ -2200,13 +2200,13 @@ namespace DOL.GS.ServerProperties
 		/// <summary>
 		/// Sets the Cap for Player Turrets
 		/// </summary>
-		[ServerProperty("classes", "turret_player_cap_count", "Sets the cap of turrets for a Player", 12)]
+		[ServerProperty("classes", "turret_player_cap_count", "Sets the cap of turrets for a Player", 100)]
 		public static int TURRET_PLAYER_CAP_COUNT;
 
 		/// <summary>
 		/// Sets the Area Cap for Turrets
 		/// </summary>
-		[ServerProperty("classes", "turret_area_cap_count", "Sets the cap of the Area for turrets", 10)]
+		[ServerProperty("classes", "turret_area_cap_count", "Sets the cap of the Area for turrets", 100)]
 		public static int TURRET_AREA_CAP_COUNT;
 
 		/// <summary>

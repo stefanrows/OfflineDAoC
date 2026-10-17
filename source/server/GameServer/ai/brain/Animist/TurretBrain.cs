@@ -10,6 +10,13 @@ namespace DOL.AI.Brain
         protected virtual bool CheckLosBeforeCastingDefensiveSpells => false;
         protected virtual bool CheckLosBeforeCastingOffensiveSpells => true;
 
+        // Only the main shroom moves; field turrets (FnF) stay where they were planted.
+        protected virtual bool IsMobile => IsMainPet;
+
+        // A companion Animist holding camp with /stay keeps its main shroom where it was summoned (the grove in front of the camp).
+        private bool HoldsCamp => Owner is GameBot bot && CompanionPetPull.StaysFor(bot);
+        private bool FollowsOwner => IsMobile && !HoldsCamp;
+
         public TurretBrain(GameLiving owner) : base(owner)
         {
             _defensiveSpellTargets = new();
@@ -62,7 +69,15 @@ namespace DOL.AI.Brain
                     GameLiving target = CalculateNextAttackTarget();
 
                     if (target != null)
+                    {
+                        // Casting at a target out of range makes an NPC walk up to it. A main shroom does that while it follows
+                        // its owner, but not when it was told to stay (or go somewhere) or while its Animist holds camp.
+                        if (IsMobile && (WalkState is not eWalkState.Follow || HoldsCamp) &&
+                            !Body.IsWithinRadius(target, spell.CalculateEffectiveRange(Body)))
+                            return false;
+
                         return TrustCast(spell, eCheckSpellType.Offensive, target, CheckLosBeforeCastingOffensiveSpells);
+                    }
 
                     break;
                 }
@@ -152,15 +167,42 @@ namespace DOL.AI.Brain
 
         #region AI
 
-        public override void FollowOwner() { }
+        // The base brain never lets an Animist player's pet follow, which is right for field turrets but not for the
+        // main shroom. Field turrets keep these as no-ops.
+        public override void FollowOwner()
+        {
+            if (!FollowsOwner)
+                return;
 
-        public override void Follow(GameObject target) { }
+            if (Body.IsAttacking)
+                Disengage();
 
-        public override void Goto(GameObject target) { }
+            Body.Follow(Owner, MIN_OWNER_FOLLOW_DIST, MAX_OWNER_FOLLOW_DIST);
+        }
 
-        public override void ComeHere() { }
+        public override void Follow(GameObject target)
+        {
+            if (FollowsOwner)
+                base.Follow(target);
+        }
 
-        public override void Stay() { }
+        public override void Goto(GameObject target)
+        {
+            if (IsMobile)
+                base.Goto(target);
+        }
+
+        public override void ComeHere()
+        {
+            if (IsMobile)
+                base.ComeHere();
+        }
+
+        public override void Stay()
+        {
+            if (IsMobile)
+                base.Stay();
+        }
 
         #endregion
     }

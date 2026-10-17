@@ -33,6 +33,13 @@ namespace DOL.GS.PropertyCalc
                 chance += necroPet.Owner.AbilityBonus[property];
             }
 
+            // Animist shrooms are casters: they inherit the owner's Wild Power and Wild Minion, whatever EXPAND_WILD_MINION says.
+            else if (TurretPet.GetRealmAbilityOwner(living) is GameLiving shroomOwner)
+            {
+                chance += shroomOwner.AbilityBonus[property];
+                chance += shroomOwner.GetAbility<RealmAbilities.AtlasOF_WildMinionAbility>()?.Amount ?? 0;
+            }
+
             // Summoned or Charmed pet.
             else if (living is GameNPC npc && ServerProperties.Properties.EXPAND_WILD_MINION)
             {

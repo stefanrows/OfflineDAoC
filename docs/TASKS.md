@@ -365,6 +365,19 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+133. **Animist main shroom follows; shrooms inherit the Animist's RAs.**
+     Owner, 2026-10-17: "make the main animist shroom follow the animist
+     around" and "ALL shrooms receive the animists realm abilities perks like
+     wild power, wild minion and mastery of magery, mastery of the art".
+     Implemented in source **0.295.0**: the main turret gets speed 200 and
+     follows (pet window and `/pet` orders work; FnF mushrooms stay put), and
+     every `TurretPet` adds its direct owner's (player or companion) Wild
+     Power, Wild Minion, Wild Arcana, Mastery of Magery / the Art / the Arcane
+     and Wild Healing (`TurretPet.GetInheritedAbilityBonus`). Real-client
+     check: the main shroom walks after you and keeps casting in fights, stays
+     on `/pet stay`; shroom damage, crits and cast speed rise with those RAs;
+     a companion Animist's shroom follows it and holds the grove on `/stay`.
+
 132. **No "killed recently" timer in the Thidranki open BG.** Owner,
      2026-10-17: remove the "no realm points and experience after death"
      timer in the Thidranki open BG mode as in Gothwaite. Implemented in

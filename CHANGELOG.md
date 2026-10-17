@@ -12,6 +12,35 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.295.0] - 2026-10-17
+
+### Changed
+
+- **The Animist's main shroom follows its Animist.** The main turret (caster
+  or tank) now has a normal pet speed and follows its owner like other pets.
+  The pet window and `/pet` follow, stay, come here and go to commands work
+  for it, and it walks up to a target out of spell range only while it
+  follows. Damage mushrooms (fire-and-forget) stay where they are planted. A
+  companion Animist's main shroom follows the companion, and holds the grove
+  while the group's `/stay` is on.
+- **All shrooms inherit the Animist's realm abilities.** The main shroom and
+  every damage mushroom add their owner's Wild Power, Wild Minion (spell and
+  melee crit, whatever `expand_wild_minion` says), Wild Arcana, Mastery of
+  Magery, Mastery of the Art, Mastery of the Arcane and Wild Healing to their
+  own values, within the existing caps. Only realm abilities carry over; the
+  owner's items, buffs and stats do not. A companion's shrooms use that
+  companion's realm abilities, not the human's.
+
+## [0.294.0] - 2026-10-17
+
+### Changed
+
+- **Animist shroom caps raised to 100.** `turret_player_cap_count` (per
+  Animist, was 12) and `turret_area_cap_count` (all Animists within the cap
+  radius, was 10) now default to 100. A database that already holds the old
+  rows keeps them until they are set to 100 (the loader never rewrites a stored
+  value), so an existing install needs both rows changed once.
+
 ## [0.293.1] - 2026-10-17
 
 ### Added
