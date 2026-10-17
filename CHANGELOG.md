@@ -12,6 +12,14 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.296.1] - 2026-10-17
+
+### Added
+
+- `docs/OPEN_BG_KEEP_TEST_2026-10-17.md`: the live keep-fight runs in both
+  modes (captures, defences, guard kills), the problems found with their place
+  in the code, and proposed fixes.
+
 ## [0.296.0] - 2026-10-17
 
 ### Fixed
