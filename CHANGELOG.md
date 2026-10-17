@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.295.2] - 2026-10-17
+
+### Added
+
+- `OPEN_BG_GUARD_SCAN` log line: once a game minute per central open BG keep
+  guard with bots near, how many of them its aggro check dropped as friendly,
+  out of range or unseen, and how many it took. The guard aggro line never
+  fired in the first Per realm run.
+
 ## [0.295.1] - 2026-10-17
 
 ### Added

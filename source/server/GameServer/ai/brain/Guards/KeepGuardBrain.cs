@@ -80,17 +80,34 @@ namespace DOL.AI.Brain
                 $"dist={(int)Body.GetDistanceTo(npc)} rise={Body.Z - npc.Z} range={AggroRange}");
         }
 
+        private long _nextOpenBgScanLog;
+
+        // OPEN_BG_GUARD_SCAN: once a game minute per central-keep guard with bots near, where the bots fell out of its aggro check.
+        private void LogOpenBgScan(int near, int friendly, int outOfRange, int unseen, int taken)
+        {
+            if (near == 0 || Body.CurrentRegionID != OpenBattlegroundMode.OpenBgRegion || (_keepGuardBody?.IsPortalKeepGuard ?? true) ||
+                GameLoop.GameLoopTime < _nextOpenBgScanLog) return;
+            _nextOpenBgScanLog = GameLoop.GameLoopTime + 60_000;
+            OpenBgLog.Info($"OPEN_BG_GUARD_SCAN guard=\"{Body.Name}\" type={Body.GetType().Name} z={Body.Z} range={AggroRange}/{BotAggroRange} " +
+                $"near={near} friendly={friendly} out_of_range={outOfRange} unseen={unseen} taken={taken}");
+        }
+
         protected override void CheckNpcAggro()
         {
+            int near = 0, friendly = 0, outOfRange = 0, unseen = 0, taken = 0;
             foreach (GameNPC npc in Body.GetNPCsInRadius((ushort)BotAggroRange))
             {
                 GameBot autonomous = npc as GameBot ?? (npc.Brain as IControlledBrain)?.GetLivingOwner() as GameBot;
                 if (autonomous != null)
                 {
+                    if (!npc.IsAlive || npc.IsStealthed) continue;
+                    near++;
+                    if (!CanAggroTarget(npc)) { friendly++; continue; }
+                    if (!npc.IsWithinRadius(Body, AggroRange) && !IsOpenBgShooter) { outOfRange++; continue; }
                     // The navmesh ray is a walkability test: a guard up on the wall also takes a bot standing below it
                     // (owner report 2026-10-17: bots stood right in front of the open BG keep unharmed).
-                    if (!npc.IsAlive || npc.IsStealthed || !CanAggroTarget(npc) || !npc.IsWithinRadius(Body, AggroRange) &&
-                            !IsOpenBgShooter || !BotSiegeRuntime.Visible(npc, Body) && !BotSiegeRuntime.ShootsUpAt(npc, Body)) continue;
+                    if (!BotSiegeRuntime.Visible(npc, Body) && !BotSiegeRuntime.ShootsUpAt(npc, Body)) { unseen++; continue; }
+                    taken++;
                     AddToAggroList(npc);
                     LogOpenBgAggro(npc);
                     continue;
@@ -111,6 +128,7 @@ namespace DOL.AI.Brain
                 SendAggroLosCheck(player, npc);
                 // We don't know if the LoS check will be positive, so we have to ask other players.
             }
+            LogOpenBgScan(near, friendly, outOfRange, unseen, taken);
         }
 
         public override bool CanAggroTarget(GameLiving target)
