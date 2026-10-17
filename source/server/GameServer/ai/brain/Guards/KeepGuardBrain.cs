@@ -68,6 +68,18 @@ namespace DOL.AI.Brain
 
         private int BotAggroRange => IsOpenBgShooter ? System.Math.Max(AggroRange, OpenBgShooterRange) : AggroRange;
 
+        private static readonly DOL.Logging.Logger OpenBgLog = DOL.Logging.LoggerManager.Create(typeof(KeepGuardBrain));
+        private long _nextOpenBgAggroLog;
+
+        // OPEN_BG_GUARD_AGGRO: an open BG keep guard took a bot, at most every 30 game seconds per guard (live check 2026-10-17).
+        private void LogOpenBgAggro(GameNPC npc)
+        {
+            if (Body.CurrentRegionID != OpenBattlegroundMode.OpenBgRegion || GameLoop.GameLoopTime < _nextOpenBgAggroLog) return;
+            _nextOpenBgAggroLog = GameLoop.GameLoopTime + 30_000;
+            OpenBgLog.Info($"OPEN_BG_GUARD_AGGRO guard=\"{Body.Name}\" type={Body.GetType().Name} target=\"{npc.Name}\" " +
+                $"dist={(int)Body.GetDistanceTo(npc)} rise={Body.Z - npc.Z} range={AggroRange}");
+        }
+
         protected override void CheckNpcAggro()
         {
             foreach (GameNPC npc in Body.GetNPCsInRadius((ushort)BotAggroRange))
@@ -80,6 +92,7 @@ namespace DOL.AI.Brain
                     if (!npc.IsAlive || npc.IsStealthed || !CanAggroTarget(npc) || !npc.IsWithinRadius(Body, AggroRange) &&
                             !IsOpenBgShooter || !BotSiegeRuntime.Visible(npc, Body) && !BotSiegeRuntime.ShootsUpAt(npc, Body)) continue;
                     AddToAggroList(npc);
+                    LogOpenBgAggro(npc);
                     continue;
                 }
                 // Non-pet NPCs are ignored.

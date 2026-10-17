@@ -12,6 +12,14 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.295.1] - 2026-10-17
+
+### Added
+
+- `OPEN_BG_GUARD_AGGRO` log line: an open BG keep guard took a bot as its
+  target (guard type, distance, height above it), at most every 30 game seconds
+  per guard. The 0.293.0 live run had no bot killed by a guard.
+
 ## [0.295.0] - 2026-10-17
 
 ### Changed
