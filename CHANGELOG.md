@@ -12,6 +12,15 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.295.3] - 2026-10-17
+
+### Added
+
+- `OPEN_BG_GUARD_STATE` log line: once a game minute per central open BG keep
+  guard, its fight state (state, aggro list, target and distance, attack and
+  cast state, live bots within 1,500). The guard scan line never fired in the
+  second Per realm run.
+
 ## [0.295.2] - 2026-10-17
 
 ### Added

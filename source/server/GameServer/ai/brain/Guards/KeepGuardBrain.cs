@@ -81,6 +81,30 @@ namespace DOL.AI.Brain
         }
 
         private long _nextOpenBgScanLog;
+        private long _nextOpenBgStateLog;
+
+        public override void Think()
+        {
+            base.Think();
+            LogOpenBgState();
+        }
+
+        // OPEN_BG_GUARD_STATE: once a game minute per central open BG keep guard, its fight state (live check 2026-10-17: no
+        // guard ever reached its aggro scan with a bot near, and none killed a bot).
+        private void LogOpenBgState()
+        {
+            if (Body.CurrentRegionID != OpenBattlegroundMode.OpenBgRegion || (_keepGuardBody?.IsPortalKeepGuard ?? true) ||
+                GameLoop.GameLoopTime < _nextOpenBgStateLog) return;
+            _nextOpenBgStateLog = GameLoop.GameLoopTime + 60_000;
+            int bots = 0;
+            foreach (GameNPC npc in Body.GetNPCsInRadius(OpenBgShooterRange))
+                if (npc is GameBot && npc.IsAlive) bots++;
+            GameObject target = Body.TargetObject;
+            OpenBgLog.Info($"OPEN_BG_GUARD_STATE guard=\"{Body.Name}\" type={Body.GetType().Name} alive={Body.IsAlive} " +
+                $"state={FSM.GetCurrentState()?.StateType} aggro={AggroList.Count} target=\"{target?.Name}\" " +
+                $"target_dist={(target == null ? -1 : (int)Body.GetDistanceTo(target))} attack_state={Body.attackComponent?.AttackState} " +
+                $"casting={Body.IsCasting} in_combat={Body.InCombat} near_spawn={Body.IsNearSpawn} bots_1500={bots} z={Body.Z}");
+        }
 
         // OPEN_BG_GUARD_SCAN: once a game minute per central-keep guard with bots near, where the bots fell out of its aggro check.
         private void LogOpenBgScan(int near, int friendly, int outOfRange, int unseen, int taken)
