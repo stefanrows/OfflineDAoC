@@ -13,7 +13,10 @@ namespace DOL.GS
     public enum OpenBgPhase { Quiet, Push, KeepFight, Retreat }
 
     /// <summary>One open BG cycle in game milliseconds (<see cref="GameLoop.GameLoopTime"/>) and its keep raid.</summary>
-    public sealed record OpenBgCycle(long StartTick, int QuietMs, int PushMs, int FightMs, int RetreatMs, OpenBgRaid Raid)
+    /// <param name="RaidShare">The share of the crew inside this cycle's raid wants (a probe, a usual raid, or a big muster).</param>
+    /// <param name="DefendShare">Per realm: the share of the keep's friend units that answer this cycle's raid.</param>
+    public sealed record OpenBgCycle(long StartTick, int QuietMs, int PushMs, int FightMs, int RetreatMs, OpenBgRaid Raid,
+        double RaidShare = 1.0 / OpenBattlegroundDirector.RaidCrewDivisor, double DefendShare = 1.0)
     {
         public long TotalMs => (long)QuietMs + PushMs + FightMs + RetreatMs;
         public long EndTick => StartTick + TotalMs;
@@ -190,8 +193,29 @@ namespace DOL.GS
             int push = (int)Math.Round(total * shares[1] / sum);
             int fight = (int)Math.Round(total * shares[2] / sum);
             int retreat = (int)(total - quiet - push - fight);
-            return new OpenBgCycle(0, quiet, push, fight, retreat, OpenBgRaid.None);
+            return new OpenBgCycle(0, quiet, push, fight, retreat, OpenBgRaid.None, DrawRaidShare(rng), DrawDefendShare(rng));
         }
+
+        /// <summary>
+        /// Raids differ from cycle to cycle (owner request 2026-10-18): 30 % a probe of one or two groups, 40 % the usual
+        /// third of the crew, 30 % a big muster of most of a realm.
+        /// </summary>
+        public static double DrawRaidShare(Random rng)
+        {
+            double roll = (rng ?? Random.Shared).NextDouble();
+            return roll < 0.3 ? ProbeRaidShare : roll < 0.7 ? 1.0 / RaidCrewDivisor : MusterRaidShare;
+        }
+
+        /// <summary>Per realm: between 35 % and all of the owner's units answer a raid; the rest stay in the field.</summary>
+        public static double DrawDefendShare(Random rng) => 0.35 + (rng ?? Random.Shared).NextDouble() * 0.65;
+
+        public const double ProbeRaidShare = 0.1, MusterRaidShare = 0.6;
+        /// <summary>A probe raid wants at least this many bots (one or two groups).</summary>
+        public const int ProbeMinimumBots = 3;
+
+        /// <summary>Whether a keep friend unit answers this cycle's raid: a stable draw per unit and cycle.</summary>
+        public static bool AnswersRaid(int unit, long cycle, double defendShare) =>
+            defendShare >= 1 || (uint)HashCode.Combine(unit, cycle) % 1000 < defendShare * 1000;
 
         /// <summary>
         /// The raid for this tick. Quiet: none (quiet has no raid roles). Push: formed at its start from the units inside,
@@ -205,7 +229,12 @@ namespace DOL.GS
 
         /// <summary>As above; <paramref name="oneRealm"/> (per realm mode) draws the whole raid from one realm.</summary>
         public static OpenBgRaid RaidForTick(Random rng, OpenBgPhase phase, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside,
-            IReadOnlyDictionary<string, int> recentWins, bool oneRealm, out string reason)
+            IReadOnlyDictionary<string, int> recentWins, bool oneRealm, out string reason) =>
+            RaidForTick(rng, phase, raid, inside, recentWins, oneRealm, 1.0 / RaidCrewDivisor, out reason);
+
+        /// <summary>As above for a cycle's raid <paramref name="share"/> of the crew.</summary>
+        public static OpenBgRaid RaidForTick(Random rng, OpenBgPhase phase, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside,
+            IReadOnlyDictionary<string, int> recentWins, bool oneRealm, double share, out string reason)
         {
             reason = null;
             raid ??= OpenBgRaid.None;
@@ -218,9 +247,9 @@ namespace DOL.GS
             if (RaidNeedsRepick(raid, inside))
             {
                 reason = "keep_changed";
-                return ExtendRaid(rng, OpenBgRaid.None, inside, recentWins, oneRealm);
+                return ExtendRaid(rng, OpenBgRaid.None, inside, recentWins, oneRealm, share);
             }
-            OpenBgRaid next = ExtendRaid(rng, raid, inside, recentWins, oneRealm);
+            OpenBgRaid next = ExtendRaid(rng, raid, inside, recentWins, oneRealm, share);
             if (!ReferenceEquals(next, raid))
                 reason = raid.IsEmpty ? "push" : RaidBotsInside(raid, inside) == 0 ? "no_raid_inside" : "top_up";
             return next;
@@ -232,6 +261,11 @@ namespace DOL.GS
         /// </summary>
         public static int RaidTargetBots(int crewInside, int eligibleBots) =>
             Math.Max(0, Math.Min(eligibleBots, Math.Max((crewInside + RaidCrewDivisor - 1) / RaidCrewDivisor, RaidMinimumBots)));
+
+        /// <summary>As above for a cycle's <paramref name="share"/> of the crew; a probe needs only <see cref="ProbeMinimumBots"/>.</summary>
+        public static int RaidTargetBots(int crewInside, int eligibleBots, double share) =>
+            Math.Max(0, Math.Min(eligibleBots, Math.Max((int)Math.Ceiling(crewInside * share),
+                share < 1.0 / RaidCrewDivisor ? ProbeMinimumBots : RaidMinimumBots)));
 
         /// <summary>
         /// A new raid: units inside that are not friends of the keep, of every realm (the realm plays no part), drawn one
@@ -256,7 +290,7 @@ namespace DOL.GS
         /// has units, else the realm (not a friend of the keep) with the most bots inside.
         /// </summary>
         public static OpenBgRaid ExtendRaid(Random rng, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside, IReadOnlyDictionary<string, int> recentWins,
-            bool oneRealm)
+            bool oneRealm, double share = 1.0 / RaidCrewDivisor)
         {
             rng ??= Random.Shared;
             raid ??= OpenBgRaid.None;
@@ -269,7 +303,7 @@ namespace DOL.GS
                 eligible = eligible.Where(unit => unit.Realm == realm).ToArray();
             }
             List<OpenBgRaidCandidate> staying = eligible.Where(unit => raid.Contains(unit.Unit)).ToList();
-            int target = RaidTargetBots(present.Sum(unit => unit.Bots), eligible.Sum(unit => unit.Bots));
+            int target = RaidTargetBots(present.Sum(unit => unit.Bots), eligible.Sum(unit => unit.Bots), share);
             int have = staying.Sum(unit => unit.Bots);
             List<OpenBgRaidCandidate> pool = eligible.Where(unit => !raid.Contains(unit.Unit)).ToList();
             if (have >= target || pool.Count == 0) return raid;
@@ -679,7 +713,7 @@ namespace DOL.GS
             }
             // The raid forms when the push starts and is topped up through the push (late entries, reliefs).
             OpenBgRaid raid = RaidForTick(Rng, phase, _cycle.Raid, candidates, RecentWins(),
-                OpenBattlegroundMode.Current == OpenBgMode.PerRealm, out string reason);
+                OpenBattlegroundMode.Current == OpenBgMode.PerRealm, _cycle.RaidShare, out string reason);
             if (reason != null)
             {
                 // A raid formed anew starts a new battlegroup; a top-up only adds members on the next sync.
@@ -706,7 +740,7 @@ namespace DOL.GS
                 .Select(group => $"{group.Key}:{group.Count()}"));
             Log.Info($"OPEN_BG_RAID cycle={_cycleIndex} units={(raid.IsEmpty ? "none" : string.Join(",", raid.Units))} bots={raid.Bots} " +
                 $"lead=\"{(raid.IsEmpty ? "none" : raid.LeadGuild ?? "unguilded")}\" lead_unit={raid.LeadUnit} " +
-                $"realms={(realms.Length == 0 ? "none" : realms)} reason={reason}");
+                $"realms={(realms.Length == 0 ? "none" : realms)} reason={reason} share={_cycle.RaidShare:0.00} defend_share={_cycle.DefendShare:0.00}");
         }
 
         private static Dictionary<string, int> RecentWins() =>
@@ -723,6 +757,7 @@ namespace DOL.GS
             bool raidTookKeep = RaidTookKeep(phase, raid, units.Select(unit => unit.Candidate).ToArray()) ||
                 phase is OpenBgPhase.KeepFight or OpenBgPhase.Retreat && _raidTookKeepCycle == _cycleIndex && raid != null && !raid.IsEmpty;
             var orders = new Dictionary<int, OpenBgOrder>();
+            bool perRealm = OpenBattlegroundMode.Current == OpenBgMode.PerRealm;
             Point3D[] humans = null;
             var groupIndex = new Dictionary<eRealm, int>();
             // Without a field point far from the keep a bystander keeps its point instead of re-picking every tick.
@@ -739,7 +774,9 @@ namespace DOL.GS
                     groupIndex[realm] = index + 1;
                 }
                 bool inRaid = !raidTookKeep && raid.Contains(unit.Id);
-                bool friend = OpenBattlegroundRoles.ActsAsKeepFriend(unit.Candidate.KeepFriend, inRaid, lordDown, phase);
+                // Per realm: only this cycle's share of the owner's units answers the raid; the others keep to the field.
+                bool answers = !perRealm || AnswersRaid(unit.Id, _cycleIndex, _cycle.DefendShare);
+                bool friend = OpenBattlegroundRoles.ActsAsKeepFriend(unit.Candidate.KeepFriend && answers, inRaid, lordDown, phase);
                 var ctx = new OpenBgContext(phase, inRaid, friend, realm, unit.Grouped ? Math.Max(2, unit.Members.Length) : 1, true, !raid.IsEmpty);
                 OpenBgRole role = OpenBattlegroundRoles.Assign(ctx, index);
                 // Camlann: keep friendship is the claiming guild's (group check included). A raid unit the keep does not count

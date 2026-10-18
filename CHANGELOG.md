@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.298.0] - 2026-10-18
+
+### Changed
+
+- **Open BG raids differ from cycle to cycle** (owner request 2026-10-18): 30 %
+  a probe of one or two groups, 40 % the usual third of the crew, 30 % a big
+  muster of most of a realm (`share=` on `OPEN_BG_RAID`).
+- **Per realm: only part of the owning realm answers a raid**, between 35 %
+  and all of its units, drawn per cycle (`defend_share=`); the rest stay in
+  the field. In the 0.297.0 run the whole realm defended and no raid of four
+  took the keep.
+
 ## [0.297.0] - 2026-10-18
 
 ### Changed
