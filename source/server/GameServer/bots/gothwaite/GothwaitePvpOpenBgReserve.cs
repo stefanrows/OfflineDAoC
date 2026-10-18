@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,6 +23,14 @@ public static class GothwaitePvpOpenBgReserve
     public static void Install(IReadOnlySet<long> set) => Volatile.Write(ref _set, set == null || set.Count == 0 ? Empty : set.ToFrozenSet());
 
     public static bool IsReserved(long botId) => Set.Contains(botId);
+
+    private static readonly ConcurrentDictionary<long, int> Realms = new();
+
+    /// <summary>Remembers a reserved bot's realm, so the live reserve can count it while it is offline.</summary>
+    public static void NoteRealm(long botId, int realm) => Realms[botId] = realm;
+
+    /// <summary>The realm noted for a bot id; 0 when unknown.</summary>
+    public static int RealmOf(long botId) => Realms.TryGetValue(botId, out int realm) ? realm : 0;
 
     /// <summary>True for a mode-on autonomous world bot whose database id is reserved.</summary>
     public static bool IsOpenBgReserved(GameLiving living) =>

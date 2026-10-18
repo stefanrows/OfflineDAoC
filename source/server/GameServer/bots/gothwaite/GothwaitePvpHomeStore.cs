@@ -172,6 +172,8 @@ public static class GothwaitePvpHomeStore
         var set = GothwaitePvpOpenBgReserve.Choose(active, OpenBattlegroundPolicy.IsEnabled, min, max, Seats,
             OpenBattlegroundProperties.MaxBots, SpeedWanted,
             bots.Select(b => (b.BotId, b.Realm, b.Level, b.IsRetired, AutonomousRvrSpeed.SpeedRank((eCharacterClass)b.ClassId))));
+        foreach (var row in rows.Where(row => set.Contains(row.BotId)))
+            GothwaitePvpOpenBgReserve.NoteRealm(row.BotId, row.Realm);
         GothwaitePvpOpenBgReserve.Install(set);
         if (active)
             Log.Info($"GOTH_PVP_OPENBG_RESERVE reserve={set.Count} per_realm={GothwaitePvpOpenBgReserve.PerRealm(set, rows)} band={min}-{max}");

@@ -399,10 +399,10 @@ namespace DOL.GS.Commands
 
         /// <summary>With the Gothwaite mode on the open BG reserve is fixed at server start; empty when the mode is off.</summary>
         public static string GothwaiteReserveNote(bool modeActive, int reserveCount) => modeActive
-            ? $"Gothwaite mode: the open BG reserve is fixed at server start (reserve {reserveCount}); restart the server to apply."
+            ? $"Gothwaite mode: the open BG reserve ({reserveCount}) follows within half a game minute, no restart needed."
             : string.Empty;
 
-        /// <summary>The settings whose change the Gothwaite reserve only takes at the next server start.</summary>
+        /// <summary>The settings whose change moves the Gothwaite reserve (live since 0.308.0).</summary>
         public static bool AffectsGothwaiteReserve(string name) => name is "band_min" or "band_max" or "enabled" or "max_bots";
 
         /// <summary>

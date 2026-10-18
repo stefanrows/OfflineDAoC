@@ -224,7 +224,11 @@ public sealed class UT_OpenBgWindow
         // gold is only in the marks: no row uses the gold title slot on the Overview
         for (int row = 0; row < 18; row++)
             Assert.That(Slot(labels, row, CompanionManagerProtocol.BgSlotTitle), Is.Empty, $"row {row}");
-        Assert.That(view.Rows.All(row => row.Minus == null && row.Plus == null), Is.True);
+        Assert.That(view.Rows.Where(row => !row.Key.StartsWith("r:")).All(row => row.Minus == null && row.Plus == null), Is.True);
+        // realm rows: one 8-man less/more for that realm (live reserve, owner request 2026-10-18) and the attack order
+        OpenBgWindowRow albion = view.Rows.Single(row => row.Key == "r:Albion");
+        Assert.That((albion.Minus?.Key, albion.Minus?.Amount, albion.Plus?.Amount, albion.Link?.Kind),
+            Is.EqualTo(("units:Albion:" + OpenBattlegroundRoster.KindName(OpenBgUnitKind.Group8), -1, 1, OpenBgWindowIntentKind.Attack)));
     }
 
     [Test]

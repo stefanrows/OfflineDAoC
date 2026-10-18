@@ -519,8 +519,10 @@ namespace DOL.GS.Commands
                 Key = key, Realm = realm, Name = name.ToUpperInvariant(), Ash = $"{Count(units, "unit", "units")}, {crew.Length} crew",
                 State = inside > 0 ? $"{inside} inside" : "none inside", Tone = inside > 0 ? OpenBgTone.Field : OpenBgTone.Ash,
                 Note = values.ValueOf("mode") == "perrealm" && summary?.OwnSetup == true ? "own setup" : null, Select = SelectOf(key),
-                Help = $"{name}: {Count(units, "unit", "units")} of {plan} planned, {crew.Length} crew, {inside} inside. Crest: jump here. {AttackLink}: raid now.",
+                Help = $"{name}: {Count(units, "unit", "units")} of {plan}, {crew.Length} crew, {inside} in. [-]/[+]: one 8-man less/more. {AttackLink}: raid now.",
                 LinkText = AttackLink, Link = new OpenBgWindowIntent(OpenBgWindowIntentKind.Attack, name),
+                MinusText = "[-]", Minus = new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, $"units:{name}:{OpenBattlegroundRoster.KindName(OpenBgUnitKind.Group8)}", -1),
+                PlusText = "[+]", Plus = new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, $"units:{name}:{OpenBattlegroundRoster.KindName(OpenBgUnitKind.Group8)}", 1),
             });
             foreach (IGrouping<int, OpenBgBotStatus> unit in OrderedUnits(listed.Where(bot => bot.Kind != "solo")))
             {

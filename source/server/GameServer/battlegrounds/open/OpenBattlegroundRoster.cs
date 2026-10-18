@@ -639,6 +639,8 @@ namespace DOL.GS
                 Reset();
                 return;
             }
+            // Gothwaite PvP mode: the reserve follows the setup live (owner request 2026-10-18), before the crew is checked.
+            GothwaitePvpOpenBgLiveReserve.Tick(now);
             // Gothwaite PvP mode: no bot crew is formed while no bot is reserved, so the roster keeps no units (as when the open BG is off).
             if (GothwaitePvpRules.SuppressesOpenBattlegroundCrew(GothwaitePvpMode.IsActive, GothwaitePvpOpenBgReserve.Set.Count))
             {

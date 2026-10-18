@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.308.0] - 2026-10-18
+
+### Changed
+
+- **The open BG reserve of the Gothwaite PvP mode follows the setup live.**
+  Every 30 game seconds each realm's reserve is brought to 1.6 bots per seat
+  (at most 60 % of the realm's band): free online mode bots join it and park
+  at their border hub, spare standby bots return to the arena; at most 40
+  moves per realm and pass; bots in a fight or a battleground never move.
+  Before, the reserve was fixed at server start (2.5 per seat, 30 % cap) and a
+  bigger setup needed a restart. Log `GOTH_PVP_OPENBG_RESERVE_LIVE`.
+
+### Added
+
+- **[-] and [+] on each realm row of the OPEN BG window.** One 8-man group less
+  or more for that realm (its own setup); with the live reserve the bots come
+  or go within a minute or two.
+
 ## [0.307.0] - 2026-10-18
 
 ### Added

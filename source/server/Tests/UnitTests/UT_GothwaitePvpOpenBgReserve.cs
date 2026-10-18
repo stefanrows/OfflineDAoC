@@ -175,5 +175,49 @@ namespace DOL.GS.Tests
                 Assert.That(fewPrimary.Count(id => id % 5 == 0), Is.GreaterThanOrEqualTo(3), "secondaries fill the rest");
             });
         }
+
+        private static GothwaitePvpOpenBgLiveReserve.Bot B(long id, int realm, int level = 50, int speed = 0, bool free = true, bool online = true,
+            bool grouped = false) => new(id, realm, level, false, speed, online, free, grouped);
+
+        [Test]
+        public void TheLiveReserveGrowsWithFreeOnlineBandBots()
+        {
+            var bots = Enumerable.Range(1, 30).Select(i => B(i, 1, free: i != 3, online: i != 4, level: i == 5 ? 30 : 50)).ToList();
+            var next = GothwaitePvpOpenBgLiveReserve.Rebalance(new HashSet<long>(), bots, 40, 50, _ => 10, _ => 0, out int added, out int removed);
+            Assert.Multiple(() =>
+            {
+                Assert.That((added, removed, next.Count), Is.EqualTo((10, 0, 10)));
+                Assert.That(next, Does.Not.Contain(3L), "in combat or in a battleground");
+                Assert.That(next, Does.Not.Contain(4L), "offline");
+                Assert.That(next, Does.Not.Contain(5L), "out of band");
+            });
+        }
+
+        [Test]
+        public void TheLiveReserveShrinksOnlyFreeBotsAndKeepsSpeed()
+        {
+            var bots = Enumerable.Range(1, 10).Select(i => B(i, 2, speed: i == 1 ? 2 : 0, free: i > 5)).ToList();
+            var current = new HashSet<long>(Enumerable.Range(1, 10).Select(i => (long)i));
+            var next = GothwaitePvpOpenBgLiveReserve.Rebalance(current, bots, 40, 50, _ => 4, _ => 0, out _, out int removed);
+            Assert.Multiple(() =>
+            {
+                Assert.That(removed, Is.EqualTo(5), "only the five free bots may leave");
+                Assert.That(next.Count(id => id <= 5), Is.EqualTo(5), "bots in the BG never leave");
+            });
+        }
+
+        [Test]
+        public void TheLiveReserveTakesSpeedFirstAndMovesAtMostFortyAPass()
+        {
+            var bots = Enumerable.Range(1, 200).Select(i => B(i, 3, speed: i % 50 == 0 ? 2 : 0)).ToList();
+            var next = GothwaitePvpOpenBgLiveReserve.Rebalance(new HashSet<long>(), bots, 40, 50, _ => 100, _ => 4, out int added, out _);
+            Assert.Multiple(() =>
+            {
+                Assert.That(added, Is.EqualTo(GothwaitePvpOpenBgLiveReserve.MaxMovesPerPass));
+                Assert.That(next.Count(id => id % 50 == 0), Is.EqualTo(4), "all four speed classes first");
+                Assert.That(GothwaitePvpOpenBgLiveReserve.Target(100, 300, 600), Is.EqualTo(160));
+                Assert.That(GothwaitePvpOpenBgLiveReserve.Target(100, 300, 200), Is.EqualTo(120), "60 % of the band at most");
+            });
+        }
     }
 }

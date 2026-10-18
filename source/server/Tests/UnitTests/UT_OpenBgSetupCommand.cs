@@ -341,13 +341,13 @@ namespace DOL.GS.Tests
         }
 
         [Test]
-        public void GothwaiteReserveNoteNamesTheCountAndTheRestart()
+        public void GothwaiteReserveNoteNamesTheCountAndThatItIsLive()
         {
             string note = OpenBgSetupPages.GothwaiteReserveNote(true, 37);
             Assert.Multiple(() =>
             {
                 Assert.That(note, Does.Contain("37"));
-                Assert.That(note, Does.Contain("restart"));
+                Assert.That(note, Does.Contain("no restart"));
                 Assert.That(note.Length, Is.LessThan(200));
             });
         }
