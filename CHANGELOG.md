@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.299.0] - 2026-10-18
+
+### Fixed
+
+- **Open BG groups move smoothly behind their leader.** A member stopped dead
+  inside 300 of its moving leader and re-planned its route on every turn
+  outside it, so at equal speed it stopped and started all the time (owner
+  report: bots "jerk" along, never run as a group). While the leader moves the
+  member now keeps walking at the leader's pace (full speed only when it fell
+  behind) and re-plans only when the leader got 250 away from its route goal.
+
 ## [0.298.0] - 2026-10-18
 
 ### Changed

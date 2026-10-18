@@ -900,10 +900,18 @@ public static class AutonomousBattlegroundDriver
             return;
         }
         Point3D follow = new(leader.X, leader.Y, leader.Z);
-        if (bot.GetDistanceTo(follow) > FollowDistance)
+        int distance = bot.GetDistanceTo(follow);
+        // Owner report 2026-10-18: groups moved in jerks. A member stopped dead inside 300 of its moving leader and
+        // re-pathed on every turn outside it, so at equal speed it stopped and started all the time. While the leader
+        // moves the member keeps walking at the leader's pace (faster only when it fell behind) and re-paths only when
+        // the leader got 250 away from the member's route goal.
+        bool leaderMoving = leader.IsMoving;
+        if (distance > FollowDistance || leaderMoving && (distance > ArrivalDistance || bot.IsMovingOnPath))
         {
             state.Action = "follow-leader";
-            GoTo(bot, state, follow, now);
+            short pace = distance > FollowDistance || !leaderMoving ? bot.MaxSpeed
+                : (short)Math.Clamp((int)leader.CurrentSpeed, 50, (int)bot.MaxSpeed);
+            GoTo(bot, state, follow, now, FollowGoalTolerance, pace, keepMoving: leaderMoving);
         }
         else
         {
@@ -962,17 +970,22 @@ public static class AutonomousBattlegroundDriver
         points.OrderBy(point => (long)(point.X - origin.X) * (point.X - origin.X) + (long)(point.Y - origin.Y) * (point.Y - origin.Y)).First();
 
     /// <summary>Walks toward a goal along a proven route. False when no route exists.</summary>
-    private static bool GoTo(GameBot bot, State state, Point3D goal, long now)
+    /// <summary>A following member re-paths only once its leader got this far from the member's route goal.</summary>
+    public const int FollowGoalTolerance = 250;
+
+    private static bool GoTo(GameBot bot, State state, Point3D goal, long now, int goalTolerance = 0, short speed = 0, bool keepMoving = false)
     {
         state.Goal = goal;
-        if (bot.GetDistanceTo(goal) <= ArrivalDistance)
+        if (!keepMoving && bot.GetDistanceTo(goal) <= ArrivalDistance)
         {
             Stand(bot);
             return true;
         }
         (int, int, int) key = (goal.X, goal.Y, goal.Z);
         Point3D previous = state.RouteGoal;
-        bool sameGoal = previous != null && previous.X == goal.X && previous.Y == goal.Y && previous.Z == goal.Z;
+        bool sameGoal = previous != null && (previous.X == goal.X && previous.Y == goal.Y && previous.Z == goal.Z ||
+            goalTolerance > 0 && previous.GetDistance(goal) <= goalTolerance);
+        if (sameGoal && speed > 0 && bot.IsMovingOnPath && bot.CurrentSpeed != speed) bot.CurrentSpeed = speed;
         if (state.UnreachableUntil != null && state.UnreachableUntil.TryGetValue(key, out long retry) && now < retry)
         {
             // A goal proven unreachable within the retry window: refuse it without
@@ -987,7 +1000,7 @@ public static class AutonomousBattlegroundDriver
             state.RouteGoal = goal;
             state.RouteUntil = now + RouteIntervalMilliseconds;
             state.RouteOk = PathExists(bot, goal, out state.RoutePosition, out string reason);
-            if (state.RouteOk && !bot.IsCasting) bot.PathTo(state.RoutePosition, bot.MaxSpeed);
+            if (state.RouteOk && !bot.IsCasting) bot.PathTo(state.RoutePosition, speed > 0 ? speed : bot.MaxSpeed);
             state.NoRouteStreak = NextNoRouteStreak(state.NoRouteStreak, state.RouteOk, reason);
             if (!state.RouteOk)
             {
