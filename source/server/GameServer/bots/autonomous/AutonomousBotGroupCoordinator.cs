@@ -3235,7 +3235,7 @@ public static partial class AutonomousBotGroupCoordinator
 
     /// <summary>
     /// The speed an RvR group of three or more takes first (P6): a Bard,
-    /// Skald or Minstrel, else a Healer who knows the group speed; null when
+    /// Skald or Minstrel, else a secondary speed class with its spell; null when
     /// the leader already brings speed, the group is small or nobody fits.
     /// </summary>
     private static GameBot RvrSpeedPick(GameBot leader, GameBot[] pool, int plannedSize)

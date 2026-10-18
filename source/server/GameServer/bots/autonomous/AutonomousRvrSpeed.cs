@@ -10,8 +10,8 @@ namespace DOL.GS;
 /// <summary>
 /// P6, "a retreat or a trip is a speed-class decision": every 2003 8-man had
 /// its essential speed class (Bard, Skald, Minstrel) who kept speed up by song
-/// twisting while the group travelled; a Mid Healer's augmentation speed was
-/// the weaker fallback; groups without speed stayed near keeps and milegates.
+/// twisting while the group travelled; a secondary group speed (Sorcerer,
+/// Theurgist, Healer, Runemaster, Enchanter, Warden) was the weaker fallback; groups without speed stayed near keeps and milegates.
 /// The group moved as one body: the leader waited for a straggler, members
 /// sprinted to close a gap and nobody ran past the leader.
 /// Autonomous RvR world bots only; companions and player-led groups are unchanged.
@@ -52,9 +52,22 @@ public static class AutonomousRvrSpeed
     public static bool IsSpeedClass(eCharacterClass characterClass) =>
         AutonomousRvrDoctrine.TraitsOf(characterClass).HasFlag(RvrClassTraits.Speed);
 
-    /// <summary>A Healer (Midgard) with the augmentation group speed is the fallback speed.</summary>
+    /// <summary>
+    /// The realm's secondary ("small") group speed: Sorcerer and Theurgist (Albion), Healer and Runemaster (Midgard),
+    /// Enchanter and Warden (Hibernia), each from a spec line (owner request 2026-10-18: all realms, not only the
+    /// performers).
+    /// </summary>
+    public static bool IsSecondarySpeedClass(eCharacterClass characterClass) => characterClass is
+        eCharacterClass.Sorcerer or eCharacterClass.Theurgist or eCharacterClass.Healer or eCharacterClass.Runemaster or
+        eCharacterClass.Enchanter or eCharacterClass.Warden;
+
+    /// <summary>2 for a primary speed class, 1 for a secondary one, 0 otherwise (by class only, before the bot is loaded).</summary>
+    public static int SpeedRank(eCharacterClass characterClass) =>
+        IsSpeedClass(characterClass) ? 2 : IsSecondarySpeedClass(characterClass) ? 1 : 0;
+
+    /// <summary>A secondary speed class that knows its group speed is the fallback speed.</summary>
     public static bool IsFallbackSpeed(eCharacterClass characterClass, bool knowsGroupSpeed) =>
-        characterClass == eCharacterClass.Healer && knowsGroupSpeed;
+        IsSecondarySpeedClass(characterClass) && knowsGroupSpeed;
 
     public static bool ProvidesSpeed(eCharacterClass characterClass, bool knowsGroupSpeed) =>
         IsSpeedClass(characterClass) || IsFallbackSpeed(characterClass, knowsGroupSpeed);
@@ -261,9 +274,9 @@ public static class AutonomousRvrSpeed
 
     public static bool ProvidesSpeed(GameBot bot) => bot?.CharacterClass != null &&
         (IsSpeedClass((eCharacterClass)bot.CharacterClass.ID) ||
-         (eCharacterClass)bot.CharacterClass.ID == eCharacterClass.Healer && KnowsGroupSpeed(bot));
+         IsSecondarySpeedClass((eCharacterClass)bot.CharacterClass.ID) && KnowsGroupSpeed(bot));
 
-    /// <summary>The group's speed: a speed class first, else a Healer with speed, else null.</summary>
+    /// <summary>The group's speed: a speed class first, else a secondary speed class with its spell, else null.</summary>
     public static GameBot SpeedProvider(IEnumerable<GameBot> members)
     {
         GameBot fallback = null;
@@ -273,7 +286,7 @@ public static class AutonomousRvrSpeed
                 continue;
             if (IsSpeedClass((eCharacterClass)member.CharacterClass.ID))
                 return member;
-            if (fallback == null && (eCharacterClass)member.CharacterClass.ID == eCharacterClass.Healer &&
+            if (fallback == null && IsSecondarySpeedClass((eCharacterClass)member.CharacterClass.ID) &&
                 KnowsGroupSpeed(member))
                 fallback = member;
         }

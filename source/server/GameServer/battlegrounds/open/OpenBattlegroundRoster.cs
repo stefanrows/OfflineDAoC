@@ -1257,7 +1257,7 @@ namespace DOL.GS
             var candidateClass = (eCharacterClass)candidate.CharacterClass.ID;
             int healers = members.Count(IsHealer);
             bool heals = IsHealer(candidate);
-            bool knowsSpeed = candidateClass == eCharacterClass.Healer && AutonomousRvrSpeed.KnowsGroupSpeed(candidate);
+            bool knowsSpeed = AutonomousRvrSpeed.IsSecondarySpeedClass(candidateClass) && AutonomousRvrSpeed.KnowsGroupSpeed(candidate);
             int weight = AutonomousRvrSpeed.RvrRecruitmentWeight(heals, healers == 0,
                 BotPartyRoles.For(candidateClass) == BotPartyRole.Tank,
                 !members.Any(member => member.CharacterClass != null && BotPartyRoles.For((eCharacterClass)member.CharacterClass.ID) == BotPartyRole.Tank),

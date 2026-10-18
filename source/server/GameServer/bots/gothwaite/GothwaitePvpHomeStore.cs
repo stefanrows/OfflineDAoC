@@ -171,7 +171,7 @@ public static class GothwaitePvpHomeStore
         int SpeedWanted(int realm) => GothwaitePvpOpenBgReserve.SpeedWanted(setup.Groups8For((eRealm)realm), setup.SmallFor((eRealm)realm));
         var set = GothwaitePvpOpenBgReserve.Choose(active, OpenBattlegroundPolicy.IsEnabled, min, max, Seats,
             OpenBattlegroundProperties.MaxBots, SpeedWanted,
-            bots.Select(b => (b.BotId, b.Realm, b.Level, b.IsRetired, AutonomousRvrSpeed.IsSpeedClass((eCharacterClass)b.ClassId))));
+            bots.Select(b => (b.BotId, b.Realm, b.Level, b.IsRetired, AutonomousRvrSpeed.SpeedRank((eCharacterClass)b.ClassId))));
         GothwaitePvpOpenBgReserve.Install(set);
         if (active)
             Log.Info($"GOTH_PVP_OPENBG_RESERVE reserve={set.Count} per_realm={GothwaitePvpOpenBgReserve.PerRealm(set, rows)} band={min}-{max}");

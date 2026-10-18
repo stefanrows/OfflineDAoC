@@ -148,7 +148,7 @@ namespace DOL.GS.Tests
         public void TheReserveKeepsSpeedClassesForTheGroups()
         {
             // 100 bots in realm 1, every tenth a speed class; seats 20 -> reserve 50.
-            var bots = Enumerable.Range(1, 100).Select(i => ((long)i, 1, 45, false, i % 10 == 0)).ToArray();
+            var bots = Enumerable.Range(1, 100).Select(i => ((long)i, 1, 45, false, i % 10 == 0 ? 2 : 0)).ToArray();
             var withSpeed = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, _ => 6, bots);
             int speed = withSpeed.Count(id => id % 10 == 0);
             Assert.Multiple(() =>
@@ -157,6 +157,22 @@ namespace DOL.GS.Tests
                 Assert.That(withSpeed.Count, Is.EqualTo(GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72,
                     bots.Select(b => (b.Item1, b.Item2, b.Item3, b.Item4))).Count), "same reserve size");
                 Assert.That(GothwaitePvpOpenBgReserve.SpeedWanted(1, 3), Is.EqualTo(6));
+            });
+        }
+
+        [Test]
+        public void TheReserveTakesPrimarySpeedBeforeSecondary()
+        {
+            // 100 bots: every tenth a primary speed class, every fifth (not tenth) a secondary one; six wanted.
+            var bots = Enumerable.Range(1, 100).Select(i => ((long)i, 1, 45, false, i % 10 == 0 ? 2 : i % 5 == 0 ? 1 : 0)).ToArray();
+            var three = Enumerable.Range(1, 100).Select(i => ((long)i, 1, 45, false, i <= 3 ? 2 : i % 5 == 0 ? 1 : 0)).ToArray();
+            var set = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, _ => 6, bots);
+            var fewPrimary = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, _ => 6, three);
+            Assert.Multiple(() =>
+            {
+                Assert.That(set.Count(id => id % 10 == 0), Is.GreaterThanOrEqualTo(6), "primaries first");
+                Assert.That(fewPrimary.Count(id => id <= 3), Is.EqualTo(3), "all three primaries");
+                Assert.That(fewPrimary.Count(id => id % 5 == 0), Is.GreaterThanOrEqualTo(3), "secondaries fill the rest");
             });
         }
     }

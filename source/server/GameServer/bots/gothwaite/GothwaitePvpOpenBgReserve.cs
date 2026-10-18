@@ -68,12 +68,13 @@ public static class GothwaitePvpOpenBgReserve
     }
 
     /// <summary>
-    /// As above, and per realm the first <paramref name="speedWanted"/> speed classes (Bard, Skald, Minstrel) are taken
-    /// before the rest (owner request 2026-10-18: groups of four and more need speed; only 7-10 % of the band are speed
+    /// As above, and per realm the first <paramref name="speedWanted"/> speed classes are taken before the rest, primary
+    /// ones (rank 2: Bard, Skald, Minstrel) before secondary ones (rank 1, <see cref="AutonomousRvrSpeed.SpeedRank"/>)
+    /// (owner request 2026-10-18: groups of four and more need speed; only 7-10 % of the band are primary speed
     /// classes, so the hash order left the small groups without one). The size and the 30 % cap stay.
     /// </summary>
     public static IReadOnlySet<long> Choose(bool modeActive, bool openBgEnabled, int bandMin, int bandMax, Func<int, int> seatsFor,
-        int maxBots, Func<int, int> speedWanted, IEnumerable<(long BotId, int Realm, int Level, bool Retired, bool Speed)> bots)
+        int maxBots, Func<int, int> speedWanted, IEnumerable<(long BotId, int Realm, int Level, bool Retired, int Speed)> bots)
     {
         var result = new HashSet<long>();
         if (!modeActive || !openBgEnabled || bots == null)
@@ -84,7 +85,7 @@ public static class GothwaitePvpOpenBgReserve
             int size = ReserveSize(seatsFor(realm.Key), maxBots);
             var ordered = realm.OrderBy(b => Order(b.BotId)).ThenBy(b => b.BotId).ToArray();
             int take = Math.Max(0, Math.Min(size, (int)Math.Ceiling(ordered.Length * 0.3)));
-            var picked = ordered.Where(b => b.Speed).Take(Math.Min(take, Math.Max(0, speedWanted?.Invoke(realm.Key) ?? 0))).Select(b => b.BotId).ToList();
+            var picked = ordered.Where(b => b.Speed > 0).OrderByDescending(b => b.Speed).Take(Math.Min(take, Math.Max(0, speedWanted?.Invoke(realm.Key) ?? 0))).Select(b => b.BotId).ToList();
             picked.AddRange(ordered.Select(b => b.BotId).Where(id => !picked.Contains(id)).Take(take - picked.Count));
             foreach (long id in picked)
                 result.Add(id);

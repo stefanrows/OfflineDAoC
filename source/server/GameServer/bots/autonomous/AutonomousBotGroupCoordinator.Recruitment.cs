@@ -96,15 +96,15 @@ namespace DOL.GS
         /// <summary>
         /// RvR recruitment order (lower first): a missing healer first (4),
         /// then a speed class when a group of three or more has none (3, P6),
-        /// then a missing tank (1). A Healer with the augmentation speed counts
-        /// as the fallback speed. A weight only: the group still leaves without one.
+        /// then a missing tank (1). A secondary speed class with its group speed
+        /// counts as the fallback speed. A weight only: the group still leaves without one.
         /// </summary>
         private static int RvrRecruitmentPriority(IReadOnlyCollection<GameBot> members, GameBot candidate, int plannedSize)
         {
             if (candidate?.CharacterClass == null)
                 return 0;
             eCharacterClass candidateClass = (eCharacterClass)candidate.CharacterClass.ID;
-            bool candidateKnowsSpeed = candidateClass == eCharacterClass.Healer && AutonomousRvrSpeed.KnowsGroupSpeed(candidate);
+            bool candidateKnowsSpeed = AutonomousRvrSpeed.IsSecondarySpeedClass(candidateClass) && AutonomousRvrSpeed.KnowsGroupSpeed(candidate);
             return -AutonomousRvrSpeed.RvrRecruitmentWeight(
                 BotPartyRoles.IsHealingClass(candidateClass),
                 !members.Any(member => member.CharacterClass != null && BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID)),

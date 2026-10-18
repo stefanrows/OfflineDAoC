@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.305.0] - 2026-10-18
+
+### Changed
+
+- **The secondary ("small") group speed counts in every realm.** Sorcerer and
+  Theurgist (Albion), Healer and Runemaster (Midgard), Enchanter and Warden
+  (Hibernia) now count as a group's speed when they know their group speed
+  spell; before only the Midgard Healer did. RvR and open BG recruitment, the
+  open BG leader choice and the speed wait use it. The open BG reserve keeps
+  primary speed classes first and fills a shortfall with secondary ones.
+
 ## [0.304.0] - 2026-10-18
 
 ### Changed

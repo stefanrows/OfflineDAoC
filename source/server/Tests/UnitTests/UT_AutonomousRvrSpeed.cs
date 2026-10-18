@@ -46,6 +46,19 @@ public sealed class UT_AutonomousRvrSpeed
         Assert.That(AutonomousRvrSpeed.ProvidesSpeed(eCharacterClass.Cleric, true), Is.False);
     }
 
+    [TestCase(eCharacterClass.Sorcerer)]
+    [TestCase(eCharacterClass.Theurgist)]
+    [TestCase(eCharacterClass.Healer)]
+    [TestCase(eCharacterClass.Runemaster)]
+    [TestCase(eCharacterClass.Enchanter)]
+    [TestCase(eCharacterClass.Warden)]
+    public void SecondarySpeedClassesOfEveryRealmCountWithTheirSpell(eCharacterClass characterClass)
+    {
+        Assert.That(AutonomousRvrSpeed.SpeedRank(characterClass), Is.EqualTo(1));
+        Assert.That(AutonomousRvrSpeed.ProvidesSpeed(characterClass, true), Is.True);
+        Assert.That(AutonomousRvrSpeed.ProvidesSpeed(characterClass, false), Is.False);
+    }
+
     [Test]
     public void RecruitmentStronglyPrefersSpeedWhenTheGroupHasNone()
     {
