@@ -605,7 +605,21 @@ public static class AutonomousBattlegroundDriver
         state.NextPaceLog = now + 60_000;
         Log.Info($"OPEN_BG_PACE bot=\"{bot.Name}\" class={bot.CharacterClass?.Name} group={bot.Group?.MemberCount ?? 1} " +
             $"group_speed={AutonomousRvrSpeed.GroupHasSpeed(bot.Group)} max_speed={bot.MaxSpeed} current={bot.CurrentSpeed} " +
-            $"speed_buff={bot.BuffBonusMultCategory1.Get((int)eProperty.MaxSpeed):0.00} sprint={bot.IsSprinting} combat={bot.InCombat} action={state.Action}");
+            $"speed_buff={bot.BuffBonusMultCategory1.Get((int)eProperty.MaxSpeed):0.00} sprint={bot.IsSprinting} combat={bot.InCombat} action={state.Action}" +
+            SpeedProviderText(bot));
+    }
+
+    // The group's speed class as the pace line sees it: where it is, whether it fights or casts, and its running pulses.
+    private static string SpeedProviderText(GameBot head)
+    {
+        GameBot provider = head.Group == null ? null
+            : AutonomousRvrSpeed.SpeedProvider(head.Group.GetMembersInTheGroup().OfType<GameBot>().Where(member => member.IsAlive));
+        if (provider == null) return " provider=none";
+        string pulses = string.Join("+", provider.effectListComponent.GetPulseEffects()
+            .Where(effect => !effect.IsEnding && !effect.IsEnded).Select(effect => effect.SpellHandler?.Spell?.SpellType.ToString()));
+        return $" provider=\"{provider.Name}\" provider_class={provider.CharacterClass?.Name} provider_dist={(int)provider.GetDistanceTo(head)} " +
+            $"provider_combat={provider.InCombat} provider_aggro={(provider.Brain as BotBrain)?.HasAggro} provider_casting={provider.IsCasting} " +
+            $"provider_mana={provider.ManaPercent} provider_pulses={(pulses.Length == 0 ? "none" : pulses)}";
     }
 
     private static State CreateState(GameBot bot) => new() { Camp = (int)(bot.DatabaseID & int.MaxValue) };

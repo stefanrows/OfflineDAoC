@@ -12,6 +12,14 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.301.1] - 2026-10-18
+
+### Added
+
+- `OPEN_BG_PACE` names the group's speed class: its distance to the leader,
+  combat, aggro, casting, power and running pulses. In the 0.301.0 run only 14 %
+  of moving leaders had speed although about half the groups had a speed class.
+
 ## [0.301.0] - 2026-10-18
 
 ### Changed
