@@ -427,7 +427,7 @@ public sealed class UT_OpenBgWindow
         DateTime now = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
         session.Touch(now);
         OpenBgWindowView view = session.Render(ThreeRealms(), Values(), now);
-        Assert.That(view.Rows.Any(row => row.Link != null), Is.False, "no Relieve while folded");
+        Assert.That(view.Rows.Any(row => row.Link != null && !row.Key.StartsWith("r:")), Is.False, "no Relieve while folded");
         session.Navigate(new OpenBgWindowIntent(OpenBgWindowIntentKind.Fold, "u:1"));
         view = session.Render(ThreeRealms(), Values(), now);
         int header = RowOf(view, "u:1");
@@ -476,11 +476,11 @@ public sealed class UT_OpenBgWindow
         OpenBgWindowRow peace = rows.Single(row => row.Key == "k:peace");
         Assert.That((peace.State, peace.LinkText, peace.Link.Kind), Is.EqualTo(("Auto", "[Next: All]", OpenBgWindowIntentKind.CyclePeace)));
         OpenBgWindowRow cap = rows.Single(row => row.Key == "k:max_bots");
-        Assert.That((cap.Text, cap.Ash, cap.State, cap.Tone, cap.MinusText, cap.PlusText), Is.EqualTo(("Bot cap", "8-120, step 4", "72", OpenBgTone.Field, "[-]", "[+]")));
+        Assert.That((cap.Text, cap.Ash, cap.State, cap.Tone, cap.MinusText, cap.PlusText), Is.EqualTo(("Bot cap", "8-500, step 20", "72", OpenBgTone.Field, "[-]", "[+]")));
         Assert.That(cap.BarDim, Is.EqualTo(new string('|', 40)));
-        Assert.That(cap.BarField, Is.EqualTo(new string('|', 23)), "(72 - 8) / 112 of 40");
+        Assert.That(cap.BarField, Is.EqualTo(new string('|', 5)), "(72 - 8) / 492 of 40");
         Assert.That(rows.Single(row => row.Key == "k:cycle_min").Ash, Is.EqualTo("5-120, step 5"));
-        Assert.That(rows.Single(row => row.Key == "k:groups8").Ash, Is.EqualTo("0-4"));
+        Assert.That(rows.Single(row => row.Key == "k:groups8").Ash, Is.EqualTo("0-16"));
         Assert.That(rows.Single(row => row.Key == "k:drift").LinkText, Is.EqualTo("[Turn off]"));
         foreach (string key in new[] { "band_min", "band_max", "max_bots", "groups8", "small", "solos", "cycle_min", "cycle_max" })
         {
@@ -513,14 +513,14 @@ public sealed class UT_OpenBgWindow
         Assert.That(rows.Last(row => row.Title != null).Title, Is.EqualTo("Units per realm"));
         OpenBgWindowRow albion = rows.Single(row => row.Key == "units:Albion:group8");
         Assert.That((albion.Realm, albion.Name, albion.Ash, albion.State, albion.Tone, albion.LinkText),
-            Is.EqualTo((eRealm.Albion, "Albion 8-man", "0-4", "1", OpenBgTone.Field, "[Use global]")));
+            Is.EqualTo((eRealm.Albion, "Albion 8-man", "0-16", "1", OpenBgTone.Field, "[Use global]")));
         Assert.That(albion.Link, Is.EqualTo(new OpenBgWindowIntent(OpenBgWindowIntentKind.ResetUnits, "Albion")));
         OpenBgWindowRow midgard = rows.Single(row => row.Key == "units:Midgard:group8");
-        Assert.That((midgard.Ash, midgard.Tone, midgard.Link), Is.EqualTo(("0-4, global", OpenBgTone.Ash, (OpenBgWindowIntent)null)));
+        Assert.That((midgard.Ash, midgard.Tone, midgard.Link), Is.EqualTo(("0-16, global", OpenBgTone.Ash, (OpenBgWindowIntent)null)));
         var write = OpenBgWindowScreen.ToWrite(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "units:Midgard:solo", 1), values);
         Assert.That((write.Ok, write.Value, write.Message), Is.EqualTo((true, "1/2/5", "Midgard solos: 4 -> 5.")));
-        var top = OpenBgWindowScreen.ToWrite(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "units:Albion:group8", 1), values with { AlbionUnits = "4/2/4" });
-        Assert.That((top.Ok, top.Message), Is.EqualTo((false, "Albion 8-man is at its maximum (4).")));
+        var top = OpenBgWindowScreen.ToWrite(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "units:Albion:group8", 1), values with { AlbionUnits = "16/2/4" });
+        Assert.That((top.Ok, top.Message), Is.EqualTo((false, "Albion 8-man is at its maximum (16).")));
         Assert.That(OpenBgWindowScreen.ToWrite(new OpenBgWindowIntent(OpenBgWindowIntentKind.ResetUnits, "Albion"), values).Message,
             Is.EqualTo("Albion uses the global counts again."));
     }
@@ -528,17 +528,17 @@ public sealed class UT_OpenBgWindow
     [Test]
     public void Setup_StepsAndLimits_ExplainTheLimitInTheReply()
     {
-        Assert.That(OpenBgWindowScreen.StepOf("max_bots"), Is.EqualTo(4));
+        Assert.That(OpenBgWindowScreen.StepOf("max_bots"), Is.EqualTo(20));
         Assert.That(OpenBgWindowScreen.StepOf("cycle_min"), Is.EqualTo(5));
         Assert.That(OpenBgWindowScreen.StepOf("cycle_max"), Is.EqualTo(5));
         Assert.That(OpenBgWindowScreen.StepOf("groups8"), Is.EqualTo(1));
         var plus = OpenBgWindowScreen.ToWrite(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "max_bots", 1), Values() with { MaxBots = 68 });
-        Assert.That(plus, Is.EqualTo((true, "open_bg_max_bots", "72", "Bot cap: 68 -> 72.")));
+        Assert.That(plus, Is.EqualTo((true, "open_bg_max_bots", "88", "Bot cap: 68 -> 88.")));
         // at the maximum the [+] label is empty, the click still lands and the reply explains why nothing happens
-        OpenBgWindowRow top = OpenBgWindowScreen.AllRows(ThreeRealms(), Values() with { MaxBots = 120 }, OpenBgWindowPage.Setup).Single(row => row.Key == "k:max_bots");
+        OpenBgWindowRow top = OpenBgWindowScreen.AllRows(ThreeRealms(), Values() with { MaxBots = 500 }, OpenBgWindowPage.Setup).Single(row => row.Key == "k:max_bots");
         Assert.That((top.PlusText, top.MinusText, top.Tone, top.BarField), Is.EqualTo(((string)null, "[-]", OpenBgTone.Blood, new string('|', 40))));
-        OpenBgWindowAction refused = OpenBgWindow.PlanIntent(top.Plus, Values() with { MaxBots = 120 });
-        Assert.That((refused.Kind, refused.Message), Is.EqualTo((OpenBgWindowActionKind.Refused, "Bot cap is at its maximum (120).")));
+        OpenBgWindowAction refused = OpenBgWindow.PlanIntent(top.Plus, Values() with { MaxBots = 500 });
+        Assert.That((refused.Kind, refused.Message), Is.EqualTo((OpenBgWindowActionKind.Refused, "Bot cap is at its maximum (500).")));
         Assert.That(OpenBgWindowScreen.ToWrite(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "groups8", -1), Values() with { Groups8 = 0 }).Message,
             Is.EqualTo("8-man per realm is at its minimum (0)."));
         Assert.That(OpenBgWindowScreen.ToWrite(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "band_min", 1), Values() with { BandMin = 45, BandMax = 45 }).Message,
@@ -830,9 +830,9 @@ public sealed class UT_OpenBgWindow
         Assert.That(write.Message, Does.Contain("1 -> 2"));
         OpenBgWindowAction relieve = OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Relieve, Unit: 5), Values());
         Assert.That((relieve.Kind, relieve.Unit), Is.EqualTo((OpenBgWindowActionKind.Relieve, 5)));
-        OpenBgWindowAction refused = OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "groups8", 1), Values() with { Groups8 = 4 });
+        OpenBgWindowAction refused = OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Adjust, "groups8", 1), Values() with { Groups8 = 16 });
         Assert.That(refused.Kind, Is.EqualTo(OpenBgWindowActionKind.Refused));
-        Assert.That(refused.Message, Is.EqualTo("8-man per realm is at its maximum (4)."));
+        Assert.That(refused.Message, Is.EqualTo("8-man per realm is at its maximum (16)."));
         Assert.That(OpenBgWindow.PlanIntent(new OpenBgWindowIntent(OpenBgWindowIntentKind.Scroll, Amount: 1), Values()).Kind, Is.EqualTo(OpenBgWindowActionKind.Navigate));
         Assert.That(OpenBgWindow.PlanIntent(null, Values()).Kind, Is.EqualTo(OpenBgWindowActionKind.Ignore));
         Assert.That(typeof(OpenBgWindow).GetMethod(nameof(OpenBgWindow.PlanIntent)).GetParameters().Select(p => p.ParameterType),

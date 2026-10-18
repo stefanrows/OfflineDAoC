@@ -7,7 +7,7 @@ using static DOL.GS.CompanionManagerProtocol;
 namespace DOL.GS.Commands
 {
     /// <summary>How /bgsetup routes its arguments (<see cref="OpenBgWindow.RouteBgsetup"/>).</summary>
-    public enum OpenBgSetupRoute { Open, Ui, Text, Page, Help, Relieve, Write }
+    public enum OpenBgSetupRoute { Open, Ui, Text, Page, Help, Relieve, Write, Attack }
 
     /// <summary>What the server knows about the client's OPEN BG window (Custom5).</summary>
     public enum OpenBgClientState { Unknown, Waiting, Confirmed, Missing }
@@ -67,7 +67,7 @@ namespace DOL.GS.Commands
         }
     }
 
-    public enum OpenBgWindowActionKind { Ignore, Ready, Stale, Navigate, Close, Write, Relieve, Refused }
+    public enum OpenBgWindowActionKind { Ignore, Ready, Stale, Navigate, Close, Write, Relieve, Refused, Attack }
 
     /// <summary>What one OPEN BG window click does, decided without packets or database (<see cref="OpenBgWindow.PlanClick"/>).</summary>
     public sealed record OpenBgWindowAction(OpenBgWindowActionKind Kind, string Message = "", string RowKey = null, string Value = null,
@@ -122,6 +122,8 @@ namespace DOL.GS.Commands
                 return OpenBgSetupRoute.Help;
             if (first.Equals("relieve", StringComparison.OrdinalIgnoreCase))
                 return OpenBgSetupRoute.Relieve;
+            if (first.Equals("attack", StringComparison.OrdinalIgnoreCase))
+                return OpenBgSetupRoute.Attack;
             return OpenBgSetupRoute.Write;
         }
 
@@ -160,6 +162,8 @@ namespace DOL.GS.Commands
                     return new OpenBgWindowAction(OpenBgWindowActionKind.Close, Intent: intent);
                 case OpenBgWindowIntentKind.Relieve:
                     return new OpenBgWindowAction(OpenBgWindowActionKind.Relieve, Unit: intent.Unit, Intent: intent);
+                case OpenBgWindowIntentKind.Attack:
+                    return new OpenBgWindowAction(OpenBgWindowActionKind.Attack, Intent: intent);
             }
             (bool ok, string rowKey, string value, string message) = OpenBgWindowScreen.ToWrite(intent, values);
             return ok
@@ -302,6 +306,14 @@ namespace DOL.GS.Commands
                         CompanionWindowTransport.Tell(player, reply);
                     }
                     runtime.Window.Message = reply ?? string.Empty;
+                    break;
+                }
+                case OpenBgWindowActionKind.Attack:
+                {
+                    OpenBattlegroundDirector.OrderAttack(OpenBattlegroundRoster.RealmOf(action.Intent.Key),
+                        1.0 / OpenBattlegroundDirector.RaidCrewDivisor, player.Name, out string reply);
+                    runtime.Window.Message = reply;
+                    CompanionWindowTransport.Tell(player, reply);
                     break;
                 }
                 default:

@@ -1433,6 +1433,15 @@ namespace DOL.GS
             _ => realm.ToString(),
         };
 
+        /// <summary>The realm of a name, any case (albion, Midgard, HIBERNIA); None for anything else.</summary>
+        public static eRealm RealmOf(string name) => (name ?? string.Empty).ToLowerInvariant() switch
+        {
+            "albion" => eRealm.Albion,
+            "midgard" => eRealm.Midgard,
+            "hibernia" => eRealm.Hibernia,
+            _ => eRealm.None,
+        };
+
         private static void LogRoster(OpenBgSetup setup, IReadOnlyList<RealmCount> counts, OpenBgPlan plan)
         {
             foreach (RealmCount realm in counts)

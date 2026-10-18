@@ -12,6 +12,21 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.307.0] - 2026-10-18
+
+### Added
+
+- **Attack order for the open BG keep.** `/bgsetup attack albion|midgard|hibernia
+  [small|normal|big]` or `[Attack keep]` on a realm row of the OPEN BG window
+  starts a new cycle in its push; the raid is drawn from that realm's units
+  inside only (small 10 %, normal a third, big 60 % of the crew). Per realm the
+  realm that holds the keep is refused. Log `OPEN_BG_ATTACK_ORDER`.
+
+### Changed
+
+- **Bigger open BG.** Bot cap 8-500 (was 8-120, window step 20), per realm up
+  to 16 eight-man groups, 16 small groups and 30 solos (was 4/6/12).
+
 ## [0.306.0] - 2026-10-18
 
 ### Fixed

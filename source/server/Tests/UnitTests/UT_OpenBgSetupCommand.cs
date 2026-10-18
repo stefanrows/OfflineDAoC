@@ -50,12 +50,12 @@ namespace DOL.GS.Tests
             Assert.That(OpenBgSetupParser.Keys.Select(key => key.RowKey).OrderBy(key => key), Is.EqualTo(rows));
         }
 
-        [TestCase("groups8", "5")]
+        [TestCase("groups8", "17")]
         [TestCase("groups8", "-1")]
-        [TestCase("small", "7")]
-        [TestCase("solos", "13")]
+        [TestCase("small", "17")]
+        [TestCase("solos", "31")]
         [TestCase("max_bots", "7")]
-        [TestCase("max_bots", "121")]
+        [TestCase("max_bots", "501")]
         [TestCase("cycle_min", "4")]
         [TestCase("cycle_max", "121")]
         [TestCase("band_min", "51")]
@@ -101,9 +101,9 @@ namespace DOL.GS.Tests
             });
         }
 
-        [TestCase("albion", "5/0/0")]
-        [TestCase("albion", "0/7/0")]
-        [TestCase("midgard", "0/0/13")]
+        [TestCase("albion", "17/0/0")]
+        [TestCase("albion", "0/17/0")]
+        [TestCase("midgard", "0/0/31")]
         [TestCase("hibernia", "-1/0/0")]
         [TestCase("hibernia", "1/2")]
         [TestCase("albion", "lots")]
@@ -266,7 +266,7 @@ namespace DOL.GS.Tests
                 Assert.That(live, Does.Contain("#7 group8, leader Hrolf [leaving]: Hrolf 50 Healer"));
                 Assert.That(live, Does.Contain("#9 solo: Aine 48 Ranger"));
                 Assert.That(live.IndexOf("Albion:", StringComparison.Ordinal), Is.LessThan(live.IndexOf("Midgard:", StringComparison.Ordinal)));
-                Assert.That(string.Join("\n", pages[1]), Does.Contain("groups8 = 1 (0-4)"));
+                Assert.That(string.Join("\n", pages[1]), Does.Contain("groups8 = 1 (0-16)"));
                 Assert.That(string.Join("\n", pages[1]), Does.Contain("cycle_max = 45 (5-120)"));
                 Assert.That(string.Join("\n", pages[1]), Does.Contain("enabled = True (on|off)"));
             });
@@ -305,8 +305,8 @@ namespace DOL.GS.Tests
         [Test]
         public void SetupPageShowsTheClampedValueInUse()
         {
-            string setup = string.Join("\n", OpenBgSetupPages.SetupLines(Defaults with { MaxBots = 500 }));
-            Assert.That(setup, Does.Contain("max_bots = 500 (8-120): most bots inside, all realms together. In use: 120."));
+            string setup = string.Join("\n", OpenBgSetupPages.SetupLines(Defaults with { MaxBots = 900 }));
+            Assert.That(setup, Does.Contain("max_bots = 900 (8-500): most bots inside, all realms together. In use: 500."));
         }
 
         [Test]

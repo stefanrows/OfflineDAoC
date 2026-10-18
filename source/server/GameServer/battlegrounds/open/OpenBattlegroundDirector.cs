@@ -15,8 +15,9 @@ namespace DOL.GS
     /// <summary>One open BG cycle in game milliseconds (<see cref="GameLoop.GameLoopTime"/>) and its keep raid.</summary>
     /// <param name="RaidShare">The share of the crew inside this cycle's raid wants (a probe, a usual raid, or a big muster).</param>
     /// <param name="DefendShare">Per realm: the share of the keep's friend units that answer this cycle's raid.</param>
+    /// <param name="RaidRealm">A realm ordered to attack (/bgsetup attack): the raid is drawn from it only; None: any.</param>
     public sealed record OpenBgCycle(long StartTick, int QuietMs, int PushMs, int FightMs, int RetreatMs, OpenBgRaid Raid,
-        double RaidShare = 1.0 / OpenBattlegroundDirector.RaidCrewDivisor, double DefendShare = 1.0)
+        double RaidShare = 1.0 / OpenBattlegroundDirector.RaidCrewDivisor, double DefendShare = 1.0, eRealm RaidRealm = eRealm.None)
     {
         public long TotalMs => (long)QuietMs + PushMs + FightMs + RetreatMs;
         public long EndTick => StartTick + TotalMs;
@@ -234,7 +235,12 @@ namespace DOL.GS
 
         /// <summary>As above for a cycle's raid <paramref name="share"/> of the crew.</summary>
         public static OpenBgRaid RaidForTick(Random rng, OpenBgPhase phase, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside,
-            IReadOnlyDictionary<string, int> recentWins, bool oneRealm, double share, out string reason)
+            IReadOnlyDictionary<string, int> recentWins, bool oneRealm, double share, out string reason) =>
+            RaidForTick(rng, phase, raid, inside, recentWins, oneRealm, share, eRealm.None, out reason);
+
+        /// <summary>As above; <paramref name="onlyRealm"/> (an attack order) draws the raid from that realm only.</summary>
+        public static OpenBgRaid RaidForTick(Random rng, OpenBgPhase phase, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside,
+            IReadOnlyDictionary<string, int> recentWins, bool oneRealm, double share, eRealm onlyRealm, out string reason)
         {
             reason = null;
             raid ??= OpenBgRaid.None;
@@ -247,9 +253,9 @@ namespace DOL.GS
             if (RaidNeedsRepick(raid, inside))
             {
                 reason = "keep_changed";
-                return ExtendRaid(rng, OpenBgRaid.None, inside, recentWins, oneRealm, share);
+                return ExtendRaid(rng, OpenBgRaid.None, inside, recentWins, oneRealm, share, onlyRealm);
             }
-            OpenBgRaid next = ExtendRaid(rng, raid, inside, recentWins, oneRealm, share);
+            OpenBgRaid next = ExtendRaid(rng, raid, inside, recentWins, oneRealm, share, onlyRealm);
             if (!ReferenceEquals(next, raid))
                 reason = raid.IsEmpty ? "push" : RaidBotsInside(raid, inside) == 0 ? "no_raid_inside" : "top_up";
             return next;
@@ -290,13 +296,15 @@ namespace DOL.GS
         /// has units, else the realm (not a friend of the keep) with the most bots inside.
         /// </summary>
         public static OpenBgRaid ExtendRaid(Random rng, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside, IReadOnlyDictionary<string, int> recentWins,
-            bool oneRealm, double share = 1.0 / RaidCrewDivisor)
+            bool oneRealm, double share = 1.0 / RaidCrewDivisor, eRealm onlyRealm = eRealm.None)
         {
             rng ??= Random.Shared;
             raid ??= OpenBgRaid.None;
             OpenBgRaidCandidate[] present = Present(inside);
             OpenBgRaidCandidate[] eligible = present.Where(unit => !unit.KeepFriend).ToArray();
-            if (oneRealm && eligible.Length > 0)
+            if (onlyRealm != eRealm.None)
+                eligible = eligible.Where(unit => unit.Realm == onlyRealm).ToArray();
+            else if (oneRealm && eligible.Length > 0)
             {
                 eRealm realm = !raid.IsEmpty && raid.LeadRealm != eRealm.None ? raid.LeadRealm
                     : eligible.GroupBy(unit => unit.Realm).OrderByDescending(group => group.Sum(unit => unit.Bots)).ThenBy(_ => rng.Next()).First().Key;
@@ -510,6 +518,8 @@ namespace DOL.GS
         private static MapData _map;
         private static OpenBgCycle _cycle;
         private static long _cycleIndex;
+        // An attack order from /bgsetup attack or the window, taken by the next director tick.
+        private static (eRealm Realm, double Share, string By)? _attackOrder;
         // The cycle in which a raid unit took the keep; the raid keeps holding it although the roster splits the claiming
         // guild off its units (log 2026-10-17: the partners left the approaches 10-50 s after each claim).
         private static long _raidTookKeepCycle = -1;
@@ -563,6 +573,58 @@ namespace DOL.GS
             OpenBgCycle cycle = Volatile.Read(ref _cycle);
             long left = cycle == null ? 0 : Math.Max(0, (cycle.EndTick - GameLoop.GameLoopTime) / 1000);
             return new OpenBgPhaseStatus(Phase.ToString(), Raid.Summary, (int)left);
+        }
+
+        /// <summary>The raid share of an attack order's size word: small (a probe), normal (a third of the crew), big (a muster).</summary>
+        public static bool TryAttackShare(string size, out double share)
+        {
+            share = (size ?? string.Empty).ToLowerInvariant() switch
+            {
+                "" or "normal" => 1.0 / RaidCrewDivisor,
+                "small" or "klein" => ProbeRaidShare,
+                "big" or "gross" or "groß" => MusterRaidShare,
+                _ => -1,
+            };
+            return share > 0;
+        }
+
+        /// <summary>
+        /// Whether a realm may be ordered to attack now: the open BG runs and, per realm, the realm does not hold the keep
+        /// (it would attack itself). The reason when not.
+        /// </summary>
+        public static bool CanOrderAttack(eRealm realm, bool enabled, OpenBgMode mode, eRealm keepOwnerRealm, out string reason)
+        {
+            reason = null;
+            if (!IsPlayerRealm(realm)) reason = "Name a realm: albion, midgard or hibernia.";
+            else if (!enabled) reason = "The open BG is off.";
+            else if (mode == OpenBgMode.PerRealm && keepOwnerRealm == realm)
+                reason = $"{OpenBattlegroundRoster.RealmName(realm)} holds the keep; order another realm to attack it.";
+            return reason == null;
+        }
+
+        /// <summary>
+        /// Orders a realm's units to attack the central keep now (owner request 2026-10-18): the next director tick starts a
+        /// new cycle in its push with a raid drawn from that realm only, of <paramref name="share"/> of the crew.
+        /// </summary>
+        public static bool OrderAttack(eRealm realm, double share, string by, out string reply)
+        {
+            if (!CanOrderAttack(realm, OpenBattlegroundPolicy.IsEnabled, OpenBattlegroundMode.Current, KeepOwnerRealm, out reply))
+                return false;
+            lock (Sync)
+                _attackOrder = (realm, share, by);
+            string size = share <= ProbeRaidShare ? "small" : share >= MusterRaidShare ? "big" : "normal";
+            reply = $"{OpenBattlegroundRoster.RealmName(realm)} attacks the keep ({size} raid); the push starts within a game minute.";
+            return true;
+        }
+
+        /// <summary>
+        /// The cycle an attack order starts at <paramref name="now"/>: a fresh cycle already in its push (its quiet phase
+        /// lies behind it), the raid drawn anew from <paramref name="realm"/> at <paramref name="share"/> of the crew.
+        /// </summary>
+        public static OpenBgCycle AttackCycle(Random rng, int minMinutes, int maxMinutes, long now, eRealm realm, double share)
+        {
+            OpenBgCycle fresh = NewCycle(rng, minMinutes, maxMinutes);
+            return fresh with { StartTick = now - fresh.QuietMs, RaidShare = share, RaidRealm = realm };
         }
 
         /// <summary>Called by the campaign manager every <see cref="TickMilliseconds"/> of game time for the Open definition only.</summary>
@@ -689,7 +751,18 @@ namespace DOL.GS
         private static void AdvanceCycle(long now, eRealm owner, string ownerGuild, bool lordDown, InsideUnit[] inside)
         {
             OpenBgRaidCandidate[] candidates = inside.Select(unit => unit.Candidate).ToArray();
-            if (_cycle == null || now >= _cycle.EndTick)
+            if (_attackOrder is { } order)
+            {
+                _attackOrder = null;
+                DetachRaid();
+                _cycle = AttackCycle(Rng, OpenBattlegroundProperties.CycleMinMinutes, OpenBattlegroundProperties.CycleMaxMinutes, now,
+                    order.Realm, order.Share);
+                _cycleIndex++;
+                DeadLurkSpots.Clear();
+                Log.Info($"OPEN_BG_ATTACK_ORDER cycle={_cycleIndex} realm={order.Realm} share={order.Share:0.00} by=\"{order.By}\" " +
+                    $"units_inside={candidates.Count(unit => unit.Realm == order.Realm && !unit.KeepFriend)}");
+            }
+            else if (_cycle == null || now >= _cycle.EndTick)
             {
                 if (_cycle != null)
                 {
@@ -713,7 +786,7 @@ namespace DOL.GS
             }
             // The raid forms when the push starts and is topped up through the push (late entries, reliefs).
             OpenBgRaid raid = RaidForTick(Rng, phase, _cycle.Raid, candidates, RecentWins(),
-                OpenBattlegroundMode.Current == OpenBgMode.PerRealm, _cycle.RaidShare, out string reason);
+                OpenBattlegroundMode.Current == OpenBgMode.PerRealm, _cycle.RaidShare, _cycle.RaidRealm, out string reason);
             if (reason != null)
             {
                 // A raid formed anew starts a new battlegroup; a top-up only adds members on the next sync.

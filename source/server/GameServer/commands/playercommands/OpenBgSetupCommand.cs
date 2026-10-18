@@ -21,12 +21,13 @@ namespace DOL.GS.Commands
         "Open BG (Thidranki 252) manager: live crew, units per realm and setup",
         "/bgsetup - opens the OPEN BG window (every player): page Lage (live crew, raid, field) and page Steuern (setup, + and - steps, units, relieve)",
         "/bgsetup text [page] - the same as text pages (page 1 live, page 2 setup, 3+ more crew)",
-        "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, max_bots 8-120, cycle_min 5-120, cycle_max 5-120, band_min 1-50, band_max 1-50, drift on|off",
+        "/bgsetup <key> <value> - keys: enabled on|off, groups8 0-16, small 0-16, solos 0-30, max_bots 8-500, cycle_min 5-120, cycle_max 5-120, band_min 1-50, band_max 1-50, drift on|off",
         "/bgsetup mode serverpvp|perrealm - the friend rule: Server PvP (Camlann rule, mixed crews) or Per realm (same realm is a friend in region 252)",
         "/bgsetup peace all|realm|auto - whose landing peace holds at a landing circle (auto = by mode)",
         "/bgsetup presets <list>|off - group presets, e.g. std8:2,caster8:1,small:2; matched by unit size, same-size units cycle through the listed archetypes by count, the group counts still decide how many units exist (off = the group counts as before)",
         "/bgsetup albion|midgard|hibernia <8-man/small/solos> - a realm's own crew, e.g. 1/2/4; global = the groups8/small/solos values",
-        "/bgsetup relieve <unit> - that unit leaves within a game minute; the roster forms a replacement if the setup still wants one")]
+        "/bgsetup relieve <unit> - that unit leaves within a game minute; the roster forms a replacement if the setup still wants one",
+        "/bgsetup attack albion|midgard|hibernia [small|normal|big] - that realm's units inside attack the central keep now (a new cycle starts in its push)")]
     public sealed class OpenBgSetupCommandHandler : AbstractCommandHandler, ICommandHandler
     {
         public void OnCommand(GameClient client, string[] args)
@@ -78,6 +79,20 @@ namespace DOL.GS.Commands
                 OpenBgSetupStore.Relieve(unit, player.Name, out string relieveMessage);
                 DisplayMessage(client, relieveMessage);
                 OpenBgWindow.RefreshIfOpen(player, relieveMessage);
+                return;
+            }
+
+            if (route == OpenBgSetupRoute.Attack)
+            {
+                eRealm realm = args.Length >= 3 ? OpenBattlegroundRoster.RealmOf(args[2]) : eRealm.None;
+                if (args.Length is < 3 or > 4 || !OpenBattlegroundDirector.TryAttackShare(args.Length == 4 ? args[3] : "normal", out double share))
+                {
+                    DisplayMessage(client, "Use /bgsetup attack albion|midgard|hibernia [small|normal|big], e.g. /bgsetup attack hibernia big.");
+                    return;
+                }
+                OpenBattlegroundDirector.OrderAttack(realm, share, player.Name, out string attackReply);
+                DisplayMessage(client, attackReply);
+                OpenBgWindow.RefreshIfOpen(player, attackReply);
                 return;
             }
 
@@ -269,8 +284,8 @@ namespace DOL.GS.Commands
             new("presets", "open_bg_presets", false, 0, 0, "group presets as name:count, e.g. std8:2,caster8:1,small:2 (std8 caster8 raid8 stealth4 small duo); matched by unit size, same-size units cycle through the listed archetypes by count, the unit targets still decide how many units exist; off = the group counts as before", Choices: "list|off"),
         };
 
-        public const string Usage = "Use /bgsetup <key> <value>. Keys: enabled on|off, groups8 0-4, small 0-6, solos 0-12, " +
-            "max_bots 8-120, cycle_min 5-120, cycle_max 5-120 (min not above max), band_min 1-50, band_max 1-50 (min not above max), drift on|off, " +
+        public const string Usage = "Use /bgsetup <key> <value>. Keys: enabled on|off, groups8 0-16, small 0-16, solos 0-30, " +
+            "max_bots 8-500, cycle_min 5-120, cycle_max 5-120 (min not above max), band_min 1-50, band_max 1-50 (min not above max), drift on|off, " +
             "albion|midgard|hibernia 8-man/small/solos (e.g. 1/2/4) or global, mode serverpvp|perrealm, peace all|realm|auto, " +
             "presets name:count list (e.g. std8:2,caster8:1; same-size units cycle through the archetypes by count) or off.";
 

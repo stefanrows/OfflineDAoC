@@ -33,7 +33,7 @@ namespace DOL.GS.Tests
 
         [TestCase("1/2/4", 1, 2, 4)]
         [TestCase(" 0 / 6 / 12 ", 0, 6, 12)]
-        [TestCase("9/-1/40", 4, 0, 12)]
+        [TestCase("19/-1/40", 16, 0, 30)]
         [TestCase("+2/3/0", 2, 3, 0)]
         public void UnitsTextParsesAndClampsLikeTheGlobals(string text, int groups8, int small, int solos)
         {
@@ -62,7 +62,7 @@ namespace DOL.GS.Tests
             {
                 Assert.That(targets.Format(), Is.EqualTo("1/2/4"));
                 Assert.That(targets.With(OpenBgUnitKind.Group8, 2), Is.EqualTo(new OpenBgRealmTargets(2, 2, 4)));
-                Assert.That(targets.With(OpenBgUnitKind.Small, 9), Is.EqualTo(new OpenBgRealmTargets(1, 6, 4)), "clamped");
+                Assert.That(targets.With(OpenBgUnitKind.Small, 19), Is.EqualTo(new OpenBgRealmTargets(1, 16, 4)), "clamped");
                 Assert.That(targets.With(OpenBgUnitKind.Solo, -1), Is.EqualTo(new OpenBgRealmTargets(1, 2, 0)), "clamped");
                 Assert.That(targets.PlannedBots, Is.EqualTo(8 + 2 * 2 + 4));
                 Assert.That(targets.Count(OpenBgUnitKind.Small), Is.EqualTo(2));

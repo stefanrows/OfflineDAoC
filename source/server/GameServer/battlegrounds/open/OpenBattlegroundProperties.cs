@@ -16,16 +16,16 @@ namespace DOL.GS
         [ServerProperty("pvp", "open_bg_enabled", "Open the permanently open battleground (Thidranki 252, levels 1-50) through the porters' [open BG] line; it also needs the battleground campaign and zone 252's navmesh", false)]
         public static bool OPEN_BG_ENABLED = false;
 
-        [ServerProperty("pvp", "open_bg_max_bots", "Most autonomous bots in the open BG at once, all realms together (8-120)", 72)]
+        [ServerProperty("pvp", "open_bg_max_bots", "Most autonomous bots in the open BG at once, all realms together (8-500)", 72)]
         public static int OPEN_BG_MAX_BOTS = 72;
 
-        [ServerProperty("pvp", "open_bg_groups8", "Full 8-man bot groups per realm in the open BG (0-4)", 1)]
+        [ServerProperty("pvp", "open_bg_groups8", "Full 8-man bot groups per realm in the open BG (0-16)", 1)]
         public static int OPEN_BG_GROUPS8 = 1;
 
-        [ServerProperty("pvp", "open_bg_groups_small", "Small bot groups (2-4 members) per realm in the open BG (0-6)", 2)]
+        [ServerProperty("pvp", "open_bg_groups_small", "Small bot groups (2-4 members) per realm in the open BG (0-16)", 2)]
         public static int OPEN_BG_GROUPS_SMALL = 2;
 
-        [ServerProperty("pvp", "open_bg_solos", "Solo bots (roamers and stealthers) per realm in the open BG (0-12)", 4)]
+        [ServerProperty("pvp", "open_bg_solos", "Solo bots (roamers and stealthers) per realm in the open BG (0-30)", 4)]
         public static int OPEN_BG_SOLOS = 4;
 
         [ServerProperty("pvp", "open_bg_cycle_min_minutes", "Shortest open BG cycle quiet - push - keep fight - retreat, in minutes (5-120, not above the maximum)", 15)]
@@ -62,8 +62,8 @@ namespace DOL.GS
         public static int OPEN_BG_BAND_MAX = 50;
 
         public const int BandLevelMin = 1, BandLevelMax = 50, DefaultBandMin = 40, DefaultBandMax = 50;
-        public const int MaxBotsMin = 8, MaxBotsMax = 120;
-        public const int Groups8Max = 4, GroupsSmallMax = 6, SolosMax = 12;
+        public const int MaxBotsMin = 8, MaxBotsMax = 500;
+        public const int Groups8Max = 16, GroupsSmallMax = 16, SolosMax = 30;
         public const int CycleMinutesMin = 5, CycleMinutesMax = 120;
 
         private static readonly Logger Log = LoggerManager.Create(typeof(OpenBattlegroundProperties));

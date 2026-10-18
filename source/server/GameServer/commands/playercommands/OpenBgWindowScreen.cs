@@ -11,7 +11,7 @@ namespace DOL.GS.Commands
 
     public enum OpenBgWindowIntentKind
     {
-        None, SetEnabled, SetMode, CyclePeace, Adjust, ResetUnits, Relieve, Tab, Scroll, Refresh, Close, Fold, Select, OpenAll, FoldAll, Jump,
+        None, SetEnabled, SetMode, CyclePeace, Adjust, ResetUnits, Relieve, Tab, Scroll, Refresh, Close, Fold, Select, OpenAll, FoldAll, Jump, Attack,
     }
 
     /// <summary>
@@ -21,6 +21,7 @@ namespace DOL.GS.Commands
     /// <see cref="Unit"/>, <see cref="Key"/> the unit's title, <see cref="On"/> the confirming second click. Tab:
     /// <see cref="Key"/> is Overview or Setup. Scroll: <see cref="Amount"/> rows. Fold: <see cref="Key"/> is the block
     /// (unit "u:31", solo block "s:Albion"). Select: <see cref="Key"/> is the row key. Jump: <see cref="Key"/> is the realm.
+    /// Attack: <see cref="Key"/> is the realm ordered to attack the keep (a normal raid).
     /// </summary>
     public sealed record OpenBgWindowIntent(OpenBgWindowIntentKind Kind, string Key = "", int Amount = 0, bool On = false, int Unit = 0)
     {
@@ -179,7 +180,7 @@ namespace DOL.GS.Commands
         public const string OverviewHint = "+ opens a unit, - folds it. * marks the leader. Click a crest to jump.";
         public const string SetupHint = "Click a setting's name for help. [-] and [+] step a value; the link on the right switches it.";
         public const string RegionName = "Thidranki";
-        public const string RelieveLink = "[Relieve]", RelieveConfirmLink = "[Yes, relieve]";
+        public const string RelieveLink = "[Relieve]", RelieveConfirmLink = "[Yes, relieve]", AttackLink = "[Attack keep]";
         public const int RelieveConfirmSeconds = 10;
         private const int CrestBarGlyphs = 52, SetupBarGlyphs = 40, PipLimit = 10;
         private static readonly eRealm[] RealmOrder = { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia };
@@ -210,7 +211,7 @@ namespace DOL.GS.Commands
         public static string ActiveTab(string tab) => tab.ToUpperInvariant();
 
         /// <summary>Owner defaults: bot cap 4, cycle 5, everything else 1.</summary>
-        public static int StepOf(string key) => key switch { "max_bots" => 4, "cycle_min" or "cycle_max" => 5, _ => 1 };
+        public static int StepOf(string key) => key switch { "max_bots" => 20, "cycle_min" or "cycle_max" => 5, _ => 1 };
 
         public static OpenBgWindowView Build(OpenBgStatusSnapshot status, OpenBgSetupValues values, OpenBgWindowPage page, int offset, string reply,
             OpenBgWindowState state = null)
@@ -518,7 +519,8 @@ namespace DOL.GS.Commands
                 Key = key, Realm = realm, Name = name.ToUpperInvariant(), Ash = $"{Count(units, "unit", "units")}, {crew.Length} crew",
                 State = inside > 0 ? $"{inside} inside" : "none inside", Tone = inside > 0 ? OpenBgTone.Field : OpenBgTone.Ash,
                 Note = values.ValueOf("mode") == "perrealm" && summary?.OwnSetup == true ? "own setup" : null, Select = SelectOf(key),
-                Help = $"{name}: {Count(units, "unit", "units")} of a plan of {plan}, {crew.Length} crew, {inside} inside. Click a crest to jump here.",
+                Help = $"{name}: {Count(units, "unit", "units")} of {plan} planned, {crew.Length} crew, {inside} inside. Crest: jump here. {AttackLink}: raid now.",
+                LinkText = AttackLink, Link = new OpenBgWindowIntent(OpenBgWindowIntentKind.Attack, name),
             });
             foreach (IGrouping<int, OpenBgBotStatus> unit in OrderedUnits(listed.Where(bot => bot.Kind != "solo")))
             {

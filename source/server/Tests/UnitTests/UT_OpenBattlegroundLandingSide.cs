@@ -132,4 +132,42 @@ public sealed class UT_OpenBattlegroundLandingSide
             Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(true, 3000, false, false, 0, true), Is.False, "once per separation");
         });
     }
+
+    [Test]
+    public void AnAttackOrderStartsInThePushWithARaidOfThatRealmOnly()
+    {
+        OpenBgCycle cycle = OpenBattlegroundDirector.AttackCycle(new Random(3), 15, 45, 1_000_000, eRealm.Hibernia, 0.6);
+        var inside = new[]
+        {
+            new OpenBgRaidCandidate(1, 8, true, "A", eRealm.Albion, false),
+            new OpenBgRaidCandidate(2, 8, true, "H", eRealm.Hibernia, false),
+            new OpenBgRaidCandidate(3, 4, false, "H2", eRealm.Hibernia, false),
+            new OpenBgRaidCandidate(4, 8, true, "M", eRealm.Midgard, false),
+        };
+        OpenBgRaid raid = OpenBattlegroundDirector.RaidForTick(new Random(1), OpenBattlegroundDirector.PhaseAt(cycle, 1_000_000), OpenBgRaid.None,
+            inside, new Dictionary<string, int>(), false, cycle.RaidShare, cycle.RaidRealm, out string reason);
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundDirector.PhaseAt(cycle, 1_000_000), Is.EqualTo(OpenBgPhase.Push));
+            Assert.That(raid.Units, Is.EquivalentTo(new[] { 2, 3 }), "Hibernia only, a big raid takes both");
+            Assert.That(raid.LeadRealm, Is.EqualTo(eRealm.Hibernia));
+            Assert.That(reason, Is.EqualTo("push"));
+        });
+    }
+
+    [Test]
+    public void AnAttackOrderNeedsARealmThatDoesNotHoldTheKeep()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(OpenBattlegroundDirector.CanOrderAttack(eRealm.Albion, true, OpenBgMode.PerRealm, eRealm.Midgard, out _), Is.True);
+            Assert.That(OpenBattlegroundDirector.CanOrderAttack(eRealm.Midgard, true, OpenBgMode.PerRealm, eRealm.Midgard, out _), Is.False);
+            Assert.That(OpenBattlegroundDirector.CanOrderAttack(eRealm.Midgard, true, OpenBgMode.ServerPvp, eRealm.Midgard, out _), Is.True);
+            Assert.That(OpenBattlegroundDirector.CanOrderAttack(eRealm.None, true, OpenBgMode.PerRealm, eRealm.Midgard, out _), Is.False);
+            Assert.That(OpenBattlegroundDirector.CanOrderAttack(eRealm.Albion, false, OpenBgMode.PerRealm, eRealm.Midgard, out _), Is.False);
+            Assert.That(OpenBattlegroundDirector.TryAttackShare("big", out double big) && big > 0.5, Is.True);
+            Assert.That(OpenBattlegroundDirector.TryAttackShare("huge", out _), Is.False);
+            Assert.That(OpenBattlegroundRoster.RealmOf("HIBERNIA"), Is.EqualTo(eRealm.Hibernia));
+        });
+    }
 }
