@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.304.0] - 2026-10-18
+
+### Changed
+
+- **An open BG group of three or more is formed around a leader with a speed
+  class in reach.** Up to eight possible leaders are tried in turn; the first
+  whose group gets a Bard, Skald, Minstrel or speed Healer wins, else the first
+  complete group forms as before. In the 0.303.0 run a group of four still
+  formed with three healers and no speed while speed classes waited at another
+  porter.
+
 ## [0.303.0] - 2026-10-18
 
 ### Changed

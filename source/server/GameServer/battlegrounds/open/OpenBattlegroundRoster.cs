@@ -1178,7 +1178,11 @@ namespace DOL.GS
             GameBot[] rvr = pool.Where(bot => AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) && bot.Group == null).ToArray();
             if (rvr.Length < minimum) return false;
             int bestNear = -1;
-            foreach (GameBot seed in rvr.Where(bot => OpenBattlegroundMuster.SeedAllowed(merged, bot.Realm, admitRealm)).OrderBy(bot => bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true ? 0 : 1).Take(4))
+            // A group of three or more wants a speed class (owner request 2026-10-18): the seeds are tried in turn and the
+            // first whose group has speed wins; without one anywhere the first complete group is taken.
+            bool wantsSpeed = size >= AutonomousRvrSpeed.MinimumSpeedGroupSize;
+            (GameBot Leader, GameBot[] Others, OFTeleporter Porter)? fallback = null;
+            foreach (GameBot seed in rvr.Where(bot => OpenBattlegroundMuster.SeedAllowed(merged, bot.Realm, admitRealm)).OrderBy(bot => bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true ? 0 : 1).Take(wantsSpeed ? 8 : 4))
             {
                 OFTeleporter nearest = PortersIn(seed.CurrentRegionID, now).OrderBy(candidate => seed.GetDistanceTo(candidate)).FirstOrDefault();
                 if (nearest == null) continue;
@@ -1213,12 +1217,19 @@ namespace DOL.GS
                 }
                 if (picked == null)
                     picked = PickMates(seed, near, size);
+                if (wantsSpeed && !AutonomousRvrSpeed.HasSpeed(picked.Append(seed)))
+                {
+                    fallback ??= (seed, picked, nearest);
+                    continue;
+                }
                 leader = seed;
                 others = picked;
                 porter = nearest;
                 return true;
             }
-            return false;
+            if (fallback is not { } first) return false;
+            (leader, others, porter) = first;
+            return true;
         }
 
         /// <summary>
