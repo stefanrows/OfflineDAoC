@@ -1212,17 +1212,47 @@ namespace DOL.GS
                         Log.Info($"OPEN_BG_ARCHETYPE_MISS archetype={archetype.Key} missed={string.Join(",", fill.MissedMinimums)}");
                 }
                 if (picked == null)
-                {
-                    int healersWanted = (size >= 6 ? 2 : 1) - (IsHealer(seed) ? 1 : 0);
-                    GameBot[] healers = near.Where(IsHealer).Take(Math.Max(0, healersWanted)).ToArray();
-                    picked = healers.Concat(near.Where(bot => !healers.Contains(bot)).Take(size - 1 - healers.Length)).ToArray();
-                }
+                    picked = PickMates(seed, near, size);
                 leader = seed;
                 others = picked;
                 porter = nearest;
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// The mates of a unit without a preset, as the RvR world recruits (owner request 2026-10-18): one by one the
+        /// candidate the group needs most (a healer while it has none, a second healer for six or more, a speed class
+        /// for three or more, a tank), nearest first among equals.
+        /// </summary>
+        private static GameBot[] PickMates(GameBot seed, GameBot[] near, int size)
+        {
+            var members = new List<GameBot> { seed };
+            var pool = near.ToList();
+            while (members.Count < size && pool.Count > 0)
+            {
+                GameBot best = pool.OrderByDescending(bot => MateWeight(members, bot, size)).First();
+                members.Add(best);
+                pool.Remove(best);
+            }
+            return members.Skip(1).ToArray();
+        }
+
+        // The RvR recruitment weight, plus a second healer for a group of six or more.
+        private static int MateWeight(List<GameBot> members, GameBot candidate, int size)
+        {
+            if (candidate.CharacterClass == null) return 0;
+            var candidateClass = (eCharacterClass)candidate.CharacterClass.ID;
+            int healers = members.Count(IsHealer);
+            bool heals = IsHealer(candidate);
+            bool knowsSpeed = candidateClass == eCharacterClass.Healer && AutonomousRvrSpeed.KnowsGroupSpeed(candidate);
+            int weight = AutonomousRvrSpeed.RvrRecruitmentWeight(heals, healers == 0,
+                BotPartyRoles.For(candidateClass) == BotPartyRole.Tank,
+                !members.Any(member => member.CharacterClass != null && BotPartyRoles.For((eCharacterClass)member.CharacterClass.ID) == BotPartyRole.Tank),
+                AutonomousRvrSpeed.RecruitmentSpeedBonus(candidateClass, knowsSpeed, AutonomousRvrSpeed.HasSpeed(members), size));
+            if (heals && healers == 1 && size >= 6) weight += AutonomousRvrSpeed.MissingHealerWeight - 1;
+            return weight;
         }
 
         private static Dictionary<OpenBgReject, int> MateRejections(GameBot seed, GameBot[] rvr, OFTeleporter porter, GuildIds keepOwner, bool merged)

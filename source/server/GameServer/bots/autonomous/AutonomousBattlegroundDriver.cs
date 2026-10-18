@@ -142,6 +142,7 @@ public static class AutonomousBattlegroundDriver
         public long GateWaitSince;
         // open BG siege: this bot itself stood within SiegeGatherRange of the gate at the last count.
         public bool AtGate;
+        public long NextPaceLog;
         // OPEN_BG_KEEP_ACTION: the last logged keep action of a group head and when it may log again.
         public string LoggedKeepAction;
         public long NextKeepActionLog;
@@ -480,6 +481,19 @@ public static class AutonomousBattlegroundDriver
             $"target=\"{target?.Name}\" attacking={bot.IsAttacking} group={bot.Group?.MemberCount ?? 1}");
     }
 
+    /// <summary>
+    /// OPEN_BG_PACE: a moving group head's real pace, every 60 game seconds (owner report 2026-10-18: groups never
+    /// seemed to run at a player's speed). speed_buff is the speed multiplier from buffs and songs.
+    /// </summary>
+    private static void LogPace(GameBot bot, State state, long now)
+    {
+        if (!bot.IsMoving || now < state.NextPaceLog) return;
+        state.NextPaceLog = now + 60_000;
+        Log.Info($"OPEN_BG_PACE bot=\"{bot.Name}\" class={bot.CharacterClass?.Name} group={bot.Group?.MemberCount ?? 1} " +
+            $"group_speed={AutonomousRvrSpeed.GroupHasSpeed(bot.Group)} max_speed={bot.MaxSpeed} current={bot.CurrentSpeed} " +
+            $"speed_buff={bot.BuffBonusMultCategory1.Get((int)eProperty.MaxSpeed):0.00} sprint={bot.IsSprinting} combat={bot.InCombat} action={state.Action}");
+    }
+
     private static State CreateState(GameBot bot) => new() { Camp = (int)(bot.DatabaseID & int.MaxValue) };
 
     private static void Lead(BotBrain brain, GameBot bot, BattlegroundDefinition definition, State state, long now)
@@ -487,6 +501,18 @@ public static class AutonomousBattlegroundDriver
         AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
         Point3D[] camps = BattlegroundCampaignManager.CampPositions(definition.RegionId);
         OpenBgRole? held = null;
+        if (definition.Kind == BattlegroundDefinitionKind.Open && IsGroupHead(bot) && bot.Group != null)
+        {
+            LogPace(bot, state, now);
+            // The RvR world's travel rule (owner request 2026-10-18): out of combat the leader waits for a member that
+            // fell far behind, as a 2003 group moved as one body.
+            if (AutonomousRvrSpeed.ShouldLeaderHold(bot))
+            {
+                state.Action = "hold-group";
+                Stand(bot);
+                return;
+            }
+        }
         if (definition.Kind == BattlegroundDefinitionKind.Open && OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order))
         {
             bool led = LeadOpen(brain, bot, keep, camps, order, state, now);
@@ -909,6 +935,8 @@ public static class AutonomousBattlegroundDriver
         if (distance > FollowDistance || leaderMoving && (distance > ArrivalDistance || bot.IsMovingOnPath))
         {
             state.Action = "follow-leader";
+            // The RvR world's rule: a member that fell behind sprints to close the gap.
+            AutonomousRvrSpeed.UpdateFollowerSprint(bot, distance);
             short pace = distance > FollowDistance || !leaderMoving ? bot.MaxSpeed
                 : (short)Math.Clamp((int)leader.CurrentSpeed, 50, (int)bot.MaxSpeed);
             GoTo(bot, state, follow, now, FollowGoalTolerance, pace, keepMoving: leaderMoving);

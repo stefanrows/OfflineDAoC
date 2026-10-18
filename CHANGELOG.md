@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.300.0] - 2026-10-18
+
+### Changed
+
+- **Open BG groups follow the RvR world's speed and recruitment rules** (owner
+  request 2026-10-18). A unit without a preset picks its mates one by one by
+  need, as RvR groups recruit: a healer while it has none (a second one for six
+  or more), a speed class (Bard, Skald, Minstrel) for three or more, a tank,
+  nearest first among equals. Before, after the healers it took the nearest
+  bots, and 10 of the last 15 small groups had no speed. Members that fell
+  behind sprint to close the gap, and out of combat a leader waits for a member
+  far behind.
+
+### Added
+
+- `OPEN_BG_PACE` log line: a moving group head's real pace every 60 game
+  seconds (speed, buff multiplier, sprint, group speed).
+
 ## [0.299.0] - 2026-10-18
 
 ### Fixed
