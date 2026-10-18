@@ -86,4 +86,34 @@ public sealed class UT_OpenBattlegroundLandingSide
             Assert.That(Enumerable.Range(1, 100).All(unit => OpenBattlegroundDirector.AnswersRaid(unit, 7, 1.0)), Is.True);
         });
     }
+
+    [Test]
+    public void AGroupFormsUpAtItsLandingBeforeItLeaves()
+    {
+        long max = AutonomousBattlegroundDriver.LandingMusterMaxMilliseconds;
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBattlegroundDriver.LandingMusterHolds(true, false, 2, 0), Is.True, "members missing");
+            Assert.That(AutonomousBattlegroundDriver.LandingMusterHolds(true, false, 0, 0), Is.False, "all here");
+            Assert.That(AutonomousBattlegroundDriver.LandingMusterHolds(true, true, 2, 0), Is.False, "a fight first");
+            Assert.That(AutonomousBattlegroundDriver.LandingMusterHolds(false, false, 2, 0), Is.False, "away from the landing");
+            Assert.That(AutonomousBattlegroundDriver.LandingMusterHolds(true, false, 2, max), Is.False, "never longer than two minutes");
+        });
+    }
+
+    [Test]
+    public void AGroupRestsAfterAFightUntilEveryoneIsFull()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBattlegroundDriver.GroupRestHolds(false, false, false, 60, 100, 0), Is.True, "a member is low");
+            Assert.That(AutonomousBattlegroundDriver.GroupRestHolds(false, false, false, 90, 80, 0), Is.False, "nobody low enough to sit");
+            Assert.That(AutonomousBattlegroundDriver.GroupRestHolds(true, false, false, 90, 95, 10_000), Is.True, "sits until full");
+            Assert.That(AutonomousBattlegroundDriver.GroupRestHolds(true, false, false, 96, 95, 10_000), Is.False, "full: walks on");
+            Assert.That(AutonomousBattlegroundDriver.GroupRestHolds(true, true, false, 50, 50, 10_000), Is.False, "a fight ends it");
+            Assert.That(AutonomousBattlegroundDriver.GroupRestHolds(false, false, true, 50, 50, 0), Is.False, "never at the keep");
+            Assert.That(AutonomousBattlegroundDriver.GroupRestHolds(true, false, false, 50, 50, AutonomousBattlegroundDriver.GroupRestMaxMilliseconds),
+                Is.False, "the longest rest");
+        });
+    }
 }

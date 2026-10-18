@@ -12,6 +12,20 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.301.0] - 2026-10-18
+
+### Changed
+
+- **Open BG groups form up at their landing before they leave** (owner request
+  2026-10-18). The members came through the porter one by one and ran after
+  the leader alone across the map. The leader now waits at the landing until
+  every living member is inside, within 600 of it and done resting, for at
+  most two game minutes; also after a wipe (`OPEN_BG_LANDING_MUSTER`).
+- **Groups rest together after a fight.** Out of combat, when a member near the
+  leader is below 80 % health or 60 % power, the group sits down until everyone
+  near is at 95 % health and 90 % power (at most 90 game seconds), then walks on
+  together. Not while storming or defending the keep (`OPEN_BG_GROUP_REST`).
+
 ## [0.300.0] - 2026-10-18
 
 ### Changed

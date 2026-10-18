@@ -143,6 +143,11 @@ public static class AutonomousBattlegroundDriver
         // open BG siege: this bot itself stood within SiegeGatherRange of the gate at the last count.
         public bool AtGate;
         public long NextPaceLog;
+        // open BG landing muster: when this group head began to wait at its landing (0 = not waiting).
+        public long LandingMusterSince;
+        // open BG group rest after a fight: when the head sat the group down (0 = not resting).
+        public long GroupRestSince;
+        public bool LandingMusterLogged;
         // OPEN_BG_KEEP_ACTION: the last logged keep action of a group head and when it may log again.
         public string LoggedKeepAction;
         public long NextKeepActionLog;
@@ -481,6 +486,115 @@ public static class AutonomousBattlegroundDriver
             $"target=\"{target?.Name}\" attacking={bot.IsAttacking} group={bot.Group?.MemberCount ?? 1}");
     }
 
+    /// <summary>A group sits down after a fight when a member near the head is below these (health, power) percentages.</summary>
+    public const int GroupRestStartHealth = 80, GroupRestStartPower = 60;
+    /// <summary>The rest ends once every member near the head is at least this full, or after the longest rest.</summary>
+    public const int GroupRestEndHealth = 95, GroupRestEndPower = 90;
+    public const long GroupRestMaxMilliseconds = 90_000;
+    /// <summary>Members this close to the head rest with it; members farther away come in first.</summary>
+    public const int GroupRestGap = 1_500;
+
+    /// <summary>
+    /// Pure rule of the rest after a fight (owner request 2026-10-18): a group out of combat sits down when a member is
+    /// low, and gets up when everyone is full again or the rest ran its longest. Never while it storms or defends the keep.
+    /// </summary>
+    public static bool GroupRestHolds(bool resting, bool combat, bool keepOrder, int lowestHealth, int lowestPower, long restedMs)
+    {
+        if (combat || keepOrder) return false;
+        if (resting) return restedMs < GroupRestMaxMilliseconds && (lowestHealth < GroupRestEndHealth || lowestPower < GroupRestEndPower);
+        return lowestHealth < GroupRestStartHealth || lowestPower < GroupRestStartPower;
+    }
+
+    // The group head's side of the rest: it sits, the members near it sit with it (Assist), then all walk on together.
+    private static bool GroupRest(GameBot bot, State state, long now)
+    {
+        bool keepOrder = OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) &&
+            (order.Role == OpenBgRole.Assault && !order.Muster || order.Role == OpenBgRole.Defend);
+        bool combat = bot.InCombat || bot.IsAttacking;
+        int health = bot.HealthPercent, power = bot.MaxMana > 0 ? bot.ManaPercent : 100;
+        foreach (GameLiving living in bot.Group.GetMembersInTheGroup())
+        {
+            if (living == bot || living is not GameBot member || !member.IsAlive || member.CurrentRegionID != bot.CurrentRegionID ||
+                !member.IsWithinRadius(bot, GroupRestGap)) continue;
+            if (member.InCombat || member.IsAttacking) combat = true;
+            health = Math.Min(health, member.HealthPercent);
+            if (member.MaxMana > 0) power = Math.Min(power, member.ManaPercent);
+        }
+        bool resting = state.GroupRestSince != 0;
+        if (!GroupRestHolds(resting, combat, keepOrder, health, power, resting ? now - state.GroupRestSince : 0))
+        {
+            if (resting)
+            {
+                Log.Info($"OPEN_BG_GROUP_REST bot=\"{bot.Name}\" result={(combat ? "fight" : keepOrder ? "keep_order" : "rested")} " +
+                    $"rested_s={(now - state.GroupRestSince) / 1000} health={health} power={power}");
+                state.GroupRestSince = 0;
+                if (bot.IsRecoveryResting) bot.WakeRecoveryRest();
+            }
+            return false;
+        }
+        if (!resting) state.GroupRestSince = now;
+        state.Action = "group-rest";
+        Stand(bot);
+        if (!bot.IsRecoveryResting) bot.BeginRecoveryRest();
+        return true;
+    }
+
+    /// <summary>A group head waits at its landing for its members at most this long (game time).</summary>
+    public const long LandingMusterMaxMilliseconds = 120_000;
+    /// <summary>A group head within this distance of its landing musters there.</summary>
+    public const int LandingMusterRadius = 1_500;
+    /// <summary>A member this close to the head (and not resting) counts as mustered.</summary>
+    public const int LandingMusterGap = 600;
+
+    /// <summary>
+    /// Pure rule of the landing muster: a group head at its landing, out of combat, waits while members are missing
+    /// (not inside yet, far away or still resting), for at most <see cref="LandingMusterMaxMilliseconds"/>.
+    /// </summary>
+    public static bool LandingMusterHolds(bool atLanding, bool combat, int missing, long waitedMs) =>
+        atLanding && !combat && missing > 0 && waitedMs < LandingMusterMaxMilliseconds;
+
+    /// <summary>
+    /// Owner request 2026-10-18: a group leaves its landing together, as 2003 groups formed up at the portal keep
+    /// before they rode out (the members came through the porter one by one and ran after the leader alone). Also
+    /// after a wipe, when everyone released to the landing.
+    /// </summary>
+    private static bool MusterAtLanding(GameBot bot, BattlegroundDefinition definition, State state, long now)
+    {
+        GameLocation landing = BattlegroundCampaignPolicy.GetLanding(bot, definition);
+        bool atLanding = landing != null && landing.RegionID == bot.CurrentRegionID &&
+            bot.IsWithinRadius(new Point3D(landing.X, landing.Y, landing.Z), LandingMusterRadius);
+        int missing = 0, living = 0;
+        if (atLanding)
+            foreach (GameLiving living_ in bot.Group.GetMembersInTheGroup())
+            {
+                if (living_ == bot || living_ is not GameBot member || !member.IsAlive) continue;
+                living++;
+                if (member.CurrentRegionID != bot.CurrentRegionID || !member.IsWithinRadius(bot, LandingMusterGap) || member.IsRecoveryResting)
+                    missing++;
+            }
+        bool combat = bot.InCombat || bot.IsAttacking;
+        if (!atLanding || combat || missing == 0)
+        {
+            if (state.LandingMusterSince != 0 && atLanding && missing == 0)
+                Log.Info($"OPEN_BG_LANDING_MUSTER bot=\"{bot.Name}\" result=formed group={living + 1} waited_s={(now - state.LandingMusterSince) / 1000}");
+            if (!atLanding) state.LandingMusterSince = 0;
+            if (missing == 0) state.LandingMusterSince = 0;
+            state.LandingMusterLogged = false;
+            return false;
+        }
+        if (state.LandingMusterSince == 0) state.LandingMusterSince = now;
+        if (!LandingMusterHolds(true, false, missing, now - state.LandingMusterSince))
+        {
+            if (!state.LandingMusterLogged)
+                Log.Info($"OPEN_BG_LANDING_MUSTER bot=\"{bot.Name}\" result=timeout group={living + 1} missing={missing}");
+            state.LandingMusterLogged = true;
+            return false;
+        }
+        state.Action = "muster-landing";
+        Stand(bot);
+        return true;
+    }
+
     /// <summary>
     /// OPEN_BG_PACE: a moving group head's real pace, every 60 game seconds (owner report 2026-10-18: groups never
     /// seemed to run at a player's speed). speed_buff is the speed multiplier from buffs and songs.
@@ -504,6 +618,8 @@ public static class AutonomousBattlegroundDriver
         if (definition.Kind == BattlegroundDefinitionKind.Open && IsGroupHead(bot) && bot.Group != null)
         {
             LogPace(bot, state, now);
+            if (MusterAtLanding(bot, definition, state, now)) return;
+            if (GroupRest(bot, state, now)) return;
             // The RvR world's travel rule (owner request 2026-10-18): out of combat the leader waits for a member that
             // fell far behind, as a 2003 group moved as one body.
             if (AutonomousRvrSpeed.ShouldLeaderHold(bot))
@@ -916,6 +1032,15 @@ public static class AutonomousBattlegroundDriver
 
     private static void Assist(BotBrain brain, GameBot bot, GameBot leader, State state, long now)
     {
+        // The group rests after a fight: a member near its sitting leader sits too; one farther away comes in first.
+        if (States.TryGetValue(leader, out State head) && head.GroupRestSince != 0 && !bot.InCombat && !bot.IsAttacking &&
+            bot.IsWithinRadius(leader, LandingMusterGap))
+        {
+            state.Action = "group-rest";
+            Stand(bot);
+            if (!bot.IsRecoveryResting) bot.BeginRecoveryRest();
+            return;
+        }
         GameLiving target = leader.TargetObject as GameLiving;
         if (target != null && BattlegroundCombatTargets.IsLegal(bot, target, bot.CurrentZone) &&
             bot.IsWithinRadius(target, OpponentRange) && !BotPvpCrowdControl.Protected(bot, target) &&
