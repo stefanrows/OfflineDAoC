@@ -116,4 +116,20 @@ public sealed class UT_OpenBattlegroundLandingSide
                 Is.False, "the longest rest");
         });
     }
+
+    [Test]
+    public void AHeadWaitsForItsSpeedClass()
+    {
+        long max = AutonomousBattlegroundDriver.SpeedWaitMaxMilliseconds;
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(true, 3000, false, false, 0, false), Is.True);
+            Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(true, 800, false, false, 0, false), Is.False, "in song reach");
+            Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(false, 3000, false, false, 0, false), Is.False, "no speed class");
+            Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(true, 3000, true, false, 0, false), Is.False, "a fight");
+            Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(true, 3000, false, true, 0, false), Is.False, "at the keep");
+            Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(true, 3000, false, false, max, false), Is.False, "a minute at most");
+            Assert.That(AutonomousBattlegroundDriver.SpeedWaitHolds(true, 3000, false, false, 0, true), Is.False, "once per separation");
+        });
+    }
 }

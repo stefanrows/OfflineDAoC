@@ -147,6 +147,9 @@ public static class AutonomousBattlegroundDriver
         public long LandingMusterSince;
         // open BG group rest after a fight: when the head sat the group down (0 = not resting).
         public long GroupRestSince;
+        // open BG: when the head began to wait for its speed class (0 = not waiting); the wait is spent until it is back.
+        public long SpeedWaitSince;
+        public bool SpeedWaitSpent;
         public bool LandingMusterLogged;
         // OPEN_BG_KEEP_ACTION: the last logged keep action of a group head and when it may log again.
         public string LoggedKeepAction;
@@ -539,6 +542,50 @@ public static class AutonomousBattlegroundDriver
         return true;
     }
 
+    /// <summary>A head waits for its speed class when it is farther than this (about the reach of a speed song).</summary>
+    public const int SpeedWaitGap = 1_500;
+    public const long SpeedWaitMaxMilliseconds = 60_000;
+
+    /// <summary>
+    /// Pure rule (owner decision 2026-10-18): out of combat and away from the keep, a head waits for its group's speed
+    /// class when it fell out of song reach, for at most <see cref="SpeedWaitMaxMilliseconds"/> per separation.
+    /// </summary>
+    public static bool SpeedWaitHolds(bool hasProvider, float providerGap, bool combat, bool keepOrder, long waitedMs, bool spent) =>
+        hasProvider && providerGap > SpeedWaitGap && !combat && !keepOrder && !spent && waitedMs < SpeedWaitMaxMilliseconds;
+
+    private static bool WaitForSpeed(GameBot bot, State state, long now)
+    {
+        GameBot provider = AutonomousRvrSpeed.SpeedProvider(bot.Group.GetMembersInTheGroup().OfType<GameBot>().Where(member => member.IsAlive));
+        bool hasProvider = provider != null && provider != bot && provider.CurrentRegionID == bot.CurrentRegionID;
+        float gap = hasProvider ? bot.GetDistanceTo(provider) : 0;
+        if (!hasProvider || gap <= SpeedWaitGap)
+        {
+            if (state.SpeedWaitSince != 0)
+                Log.Info($"OPEN_BG_SPEED_WAIT bot=\"{bot.Name}\" result={(hasProvider ? "back" : "gone")} waited_s={(now - state.SpeedWaitSince) / 1000}");
+            state.SpeedWaitSince = 0;
+            state.SpeedWaitSpent = false;
+            return false;
+        }
+        bool keepOrder = OpenBattlegroundDirector.TryGetOrder(bot, out OpenBgOrder order) &&
+            (order.Role == OpenBgRole.Assault && !order.Muster || order.Role == OpenBgRole.Defend);
+        bool combat = bot.InCombat || bot.IsAttacking || provider.InCombat || provider.IsAttacking;
+        long waited = state.SpeedWaitSince == 0 ? 0 : now - state.SpeedWaitSince;
+        if (!SpeedWaitHolds(true, gap, combat, keepOrder, waited, state.SpeedWaitSpent))
+        {
+            if (state.SpeedWaitSince != 0 && waited >= SpeedWaitMaxMilliseconds)
+            {
+                Log.Info($"OPEN_BG_SPEED_WAIT bot=\"{bot.Name}\" result=timeout gap={(int)gap}");
+                state.SpeedWaitSpent = true;
+            }
+            state.SpeedWaitSince = 0;
+            return false;
+        }
+        if (state.SpeedWaitSince == 0) state.SpeedWaitSince = now;
+        state.Action = "wait-speed";
+        Stand(bot);
+        return true;
+    }
+
     /// <summary>A group head waits at its landing for its members at most this long (game time).</summary>
     public const long LandingMusterMaxMilliseconds = 120_000;
     /// <summary>A group head within this distance of its landing musters there.</summary>
@@ -634,6 +681,7 @@ public static class AutonomousBattlegroundDriver
             LogPace(bot, state, now);
             if (MusterAtLanding(bot, definition, state, now)) return;
             if (GroupRest(bot, state, now)) return;
+            if (WaitForSpeed(bot, state, now)) return;
             // The RvR world's travel rule (owner request 2026-10-18): out of combat the leader waits for a member that
             // fell far behind, as a 2003 group moved as one body.
             if (AutonomousRvrSpeed.ShouldLeaderHold(bot))

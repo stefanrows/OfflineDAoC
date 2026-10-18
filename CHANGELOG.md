@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.302.0] - 2026-10-18
+
+### Changed
+
+- **An open BG group leader waits for its speed class** (owner decision
+  2026-10-18). When the group's Bard, Skald, Minstrel or speed Healer is more
+  than 1,500 away (out of song reach), the leader waits out of combat and away
+  from the keep, for at most one game minute per separation
+  (`OPEN_BG_SPEED_WAIT`). In the 0.301.1 run a leader with its speed class near
+  ran with speed in 58 % of samples, with it far away in 20 %.
+
 ## [0.301.1] - 2026-10-18
 
 ### Added
