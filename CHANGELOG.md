@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.306.0] - 2026-10-18
+
+### Fixed
+
+- **A leftover GM run speed is reset at login.** A GM `/speed` is saved with
+  the character; a player account that is no longer a GM now gets the normal
+  speed (191) back when it logs in. One local character still ran at 500.
+
+### Added
+
+- **`OPEN_BG_GUARD_PLAYER` log line.** A central open BG keep guard or lord
+  logs a real player in its aggro range and the outcome (friendly, stealthed,
+  sight check sent), at most every 30 game seconds; `OPEN_BG_GUARD_STATE`
+  also shows pending sight checks. The owner saw the lord not attack him in
+  its room; the cause is still open.
+
 ## [0.305.0] - 2026-10-18
 
 ### Changed

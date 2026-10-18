@@ -46,14 +46,21 @@ namespace DOL.AI.Brain
             foreach (GamePlayer player in Body.GetPlayersInRadius((ushort) AggroRange))
             {
                 if (!CanAggroTarget(player))
+                {
+                    LogOpenBgPlayer(player, "friendly");
                     continue;
+                }
 
                 if (Body is not GuardStealther && player.IsStealthed)
+                {
+                    LogOpenBgPlayer(player, "stealthed");
                     continue;
+                }
 
                 if (player.effectListComponent.ContainsEffectForEffectType(eEffect.Shade))
                     continue;
 
+                LogOpenBgPlayer(player, "los_check");
                 WarMapMgr.AddGroup((byte) player.CurrentZone.ID, player.X, player.Y, player.Name, (byte) player.Realm);
                 SendAggroLosCheck(player, player);
                 // We don't know if the LoS check will be positive, so we have to ask other players
@@ -81,6 +88,21 @@ namespace DOL.AI.Brain
                 $"dist={(int)Body.GetDistanceTo(npc)} rise={Body.Z - npc.Z} range={AggroRange}");
         }
 
+        private long _nextOpenBgPlayerLog;
+
+        // OPEN_BG_GUARD_PLAYER: at most every 30 game seconds per central open BG keep guard, a real player in its aggro
+        // range and why it is or is not taken (owner report 2026-10-18: the lord did not attack him in its room).
+        private void LogOpenBgPlayer(GamePlayer player, string outcome)
+        {
+            if (Body.CurrentRegionID != OpenBattlegroundMode.OpenBgRegion || (_keepGuardBody?.IsPortalKeepGuard ?? true) ||
+                GameLoop.GameLoopTime < _nextOpenBgPlayerLog) return;
+            _nextOpenBgPlayerLog = GameLoop.GameLoopTime + 30_000;
+            AbstractGameKeep keep = _keepGuardBody.Component?.Keep;
+            OpenBgLog.Info($"OPEN_BG_GUARD_PLAYER guard=\"{Body.Name}\" type={Body.GetType().Name} player=\"{player.Name}\" " +
+                $"player_realm={player.Realm} plvl={player.Client?.Account?.PrivLevel} keep_realm={keep?.Realm} " +
+                $"keep_guild=\"{keep?.Guild?.Name}\" dist={(int)Body.GetDistanceTo(player)} outcome={outcome}");
+        }
+
         private long _nextOpenBgScanLog;
         private long _nextOpenBgStateLog;
 
@@ -104,7 +126,8 @@ namespace DOL.AI.Brain
             OpenBgLog.Info($"OPEN_BG_GUARD_STATE guard=\"{Body.Name}\" type={Body.GetType().Name} alive={Body.IsAlive} " +
                 $"state={FSM.GetCurrentState()?.StateType} aggro={AggroList.Count} target=\"{target?.Name}\" " +
                 $"target_dist={(target == null ? -1 : (int)Body.GetDistanceTo(target))} attack_state={Body.attackComponent?.AttackState} " +
-                $"casting={Body.IsCasting} in_combat={Body.InCombat} near_spawn={Body.IsNearSpawn} bots_1500={bots} z={Body.Z}");
+                $"casting={Body.IsCasting} in_combat={Body.InCombat} near_spawn={Body.IsNearSpawn} bots_1500={bots} z={Body.Z} " +
+                $"pending_los={PendingAggroLosCheckCount}");
         }
 
         // OPEN_BG_GUARD_SCAN: once a game minute per central-keep guard with bots near, where the bots fell out of its aggro check.

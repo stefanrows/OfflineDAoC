@@ -10459,7 +10459,9 @@ namespace DOL.GS
                 m_charStat[eStat.EMP - eStat._First] = (short) DBCharacter.Empathy;
                 m_charStat[eStat.CHR - eStat._First] = (short) DBCharacter.Charisma;
 
-                if (MaxSpeedBase == 0)
+                // A GM /speed is saved with the character; a player account that is no longer a GM gets the normal
+                // speed back at login (owner report 2026-10-18: still running fast days after the GM option was off).
+                if (MaxSpeedBase == 0 || MaxSpeedBase > PLAYER_BASE_SPEED && Client?.Account?.PrivLevel == (uint)ePrivLevel.Player)
                     MaxSpeedBase = PLAYER_BASE_SPEED;
 
                 if (DBCharacter.PlayedTime < 1)
