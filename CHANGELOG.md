@@ -12,6 +12,20 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.309.0] - 2026-10-18
+
+### Changed
+
+- **Open BG attacks vary per realm and every realm takes its turn.** The raid
+  realm is no longer the realm with the most bots inside but the one that
+  raided longest ago. Each cycle also draws a plan: 40 % one realm raids,
+  30 % both realms that do not hold the keep raid at once (the second with its
+  own probe, usual or big raid), 30 % a third realm joins once the keep fight
+  is on (a probe or a usual raid). A second raid that takes the keep ends the
+  fight like the first. Owner report: a constant stream from the keep owner's
+  side, from the other sides mostly single bots. Logs `OPEN_BG_SECOND_RAID`,
+  `OPEN_BG_PHASE ... plan=`.
+
 ## [0.308.0] - 2026-10-18
 
 ### Changed

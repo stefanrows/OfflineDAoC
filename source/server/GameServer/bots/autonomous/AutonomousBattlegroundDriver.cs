@@ -1137,12 +1137,14 @@ public static class AutonomousBattlegroundDriver
         }
     }
 
-    /// <summary>Whether the bot's guild is the guild of the current open BG raid's lead unit; a guildless bot never is.</summary>
+    /// <summary>Whether the bot's guild is the guild of a current open BG raid's lead unit (either raid); a guildless bot never is.</summary>
     private static bool IsRaidLeadGuild(GameBot bot)
     {
-        string lead = OpenBattlegroundDirector.Raid?.LeadGuild?.Trim();
         string own = bot.Guild?.Name?.Trim();
-        return !string.IsNullOrEmpty(lead) && !string.IsNullOrEmpty(own) && string.Equals(lead, own, StringComparison.Ordinal);
+        if (string.IsNullOrEmpty(own)) return false;
+        string lead = OpenBattlegroundDirector.Raid?.LeadGuild?.Trim();
+        string second = OpenBattlegroundDirector.SecondRaid?.LeadGuild?.Trim();
+        return string.Equals(lead, own, StringComparison.Ordinal) || string.Equals(second, own, StringComparison.Ordinal);
     }
 
     /// <summary>Milliseconds since the lord was first seen defeated; the stamp is reset when he stands again.</summary>

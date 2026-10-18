@@ -157,6 +157,7 @@ namespace DOL.GS
             var unitSizes = crew.GroupBy(member => member.Unit).ToDictionary(unit => unit.Key, unit => unit.Count());
             long now = GameLoop.GameLoopTime;
             OpenBgRaid raid = OpenBattlegroundDirector.Raid;
+            OpenBgRaid second = OpenBattlegroundDirector.SecondRaid;
             OpenBgBotStatus[] bots = crew.Where(member => member.Bot != null).Select(member =>
             {
                 GameBot bot = member.Bot;
@@ -169,7 +170,7 @@ namespace DOL.GS
                 return new OpenBgBotStatus(GlobalConstants.RealmToName(bot.Realm), bot.Name, bot.Level,
                     bot.CharacterClass?.Name ?? "unknown", member.Unit, kind, leader,
                     StateOf(member.Entered, member.Leaving, open != null && bot.CurrentRegionID == open.RegionId), bot.IsAlive,
-                    role, raid?.Contains(member.Unit) == true, insideSeconds, archetype);
+                    role, raid?.Contains(member.Unit) == true || second.Contains(member.Unit), insideSeconds, archetype);
             }).ToArray();
             OpenBgRealmStatus[] realms = RealmStatuses(OpenBgSetup.FromProperties(), bots,
                 (realm, kind) => OpenBattlegroundRoster.TryGetLastFormFailure(realm, kind, out string text, out long tick) ? (text, tick) : null, now);

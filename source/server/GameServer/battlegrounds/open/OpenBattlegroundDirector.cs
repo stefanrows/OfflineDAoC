@@ -12,15 +12,28 @@ namespace DOL.GS
 {
     public enum OpenBgPhase { Quiet, Push, KeepFight, Retreat }
 
+    /// <summary>
+    /// How a cycle's attack runs per realm (owner request 2026-10-18: vary the attacks). Single: one realm raids. Double: a
+    /// second realm raids the keep from the push on as well. Opportunist: a second realm joins once the keep fight is on.
+    /// </summary>
+    public enum OpenBgAttackPlan { Single, Double, Opportunist }
+
     /// <summary>One open BG cycle in game milliseconds (<see cref="GameLoop.GameLoopTime"/>) and its keep raid.</summary>
     /// <param name="RaidShare">The share of the crew inside this cycle's raid wants (a probe, a usual raid, or a big muster).</param>
     /// <param name="DefendShare">Per realm: the share of the keep's friend units that answer this cycle's raid.</param>
-    /// <param name="RaidRealm">A realm ordered to attack (/bgsetup attack): the raid is drawn from it only; None: any.</param>
+    /// <param name="RaidRealm">The realm the raid is drawn from (an attack order, or per realm the rotation); None: any.</param>
+    /// <param name="Plan">Per realm: whether and when a second realm raids too (<see cref="Second"/>).</param>
+    /// <param name="Second">Per realm: the second realm's raid of a double or opportunist plan; null: none.</param>
+    /// <param name="SecondShare">The share of the crew inside the second raid wants.</param>
+    /// <param name="SecondRealm">The realm the second raid is drawn from; None until it is picked.</param>
     public sealed record OpenBgCycle(long StartTick, int QuietMs, int PushMs, int FightMs, int RetreatMs, OpenBgRaid Raid,
-        double RaidShare = 1.0 / OpenBattlegroundDirector.RaidCrewDivisor, double DefendShare = 1.0, eRealm RaidRealm = eRealm.None)
+        double RaidShare = 1.0 / OpenBattlegroundDirector.RaidCrewDivisor, double DefendShare = 1.0, eRealm RaidRealm = eRealm.None,
+        OpenBgAttackPlan Plan = OpenBgAttackPlan.Single, OpenBgRaid Second = null,
+        double SecondShare = 1.0 / OpenBattlegroundDirector.RaidCrewDivisor, eRealm SecondRealm = eRealm.None)
     {
         public long TotalMs => (long)QuietMs + PushMs + FightMs + RetreatMs;
         public long EndTick => StartTick + TotalMs;
+        public OpenBgRaid SecondRaid => Second ?? OpenBgRaid.None;
     }
 
     /// <summary>
@@ -194,7 +207,74 @@ namespace DOL.GS
             int push = (int)Math.Round(total * shares[1] / sum);
             int fight = (int)Math.Round(total * shares[2] / sum);
             int retreat = (int)(total - quiet - push - fight);
-            return new OpenBgCycle(0, quiet, push, fight, retreat, OpenBgRaid.None, DrawRaidShare(rng), DrawDefendShare(rng));
+            OpenBgCycle cycle = new(0, quiet, push, fight, retreat, OpenBgRaid.None, DrawRaidShare(rng), DrawDefendShare(rng));
+            OpenBgAttackPlan plan = DrawPlan(rng);
+            return cycle with { Plan = plan, SecondShare = DrawSecondShare(rng, plan) };
+        }
+
+        /// <summary>Per realm (owner request 2026-10-18): 40 % one realm raids, 30 % two at once, 30 % a third joins the keep fight.</summary>
+        public static OpenBgAttackPlan DrawPlan(Random rng)
+        {
+            double roll = (rng ?? Random.Shared).NextDouble();
+            return roll < 0.4 ? OpenBgAttackPlan.Single : roll < 0.7 ? OpenBgAttackPlan.Double : OpenBgAttackPlan.Opportunist;
+        }
+
+        /// <summary>A second raid of a double plan varies like the first; an opportunist comes as a probe or a usual raid.</summary>
+        public static double DrawSecondShare(Random rng, OpenBgAttackPlan plan)
+        {
+            rng ??= Random.Shared;
+            return plan == OpenBgAttackPlan.Opportunist ? rng.NextDouble() < 0.5 ? ProbeRaidShare : 1.0 / RaidCrewDivisor : DrawRaidShare(rng);
+        }
+
+        /// <summary>Whether the second raid forms and is topped up in this phase: a double plan in the push, an opportunist in the keep fight.</summary>
+        public static bool SecondRaidJoins(OpenBgAttackPlan plan, OpenBgPhase phase) => plan switch
+        {
+            OpenBgAttackPlan.Double => phase == OpenBgPhase.Push,
+            OpenBgAttackPlan.Opportunist => phase == OpenBgPhase.KeepFight,
+            _ => false,
+        };
+
+        /// <summary>
+        /// The realm to raid next (per realm, owner request 2026-10-18: every realm takes its turn): of the realms with units
+        /// inside that are not friends of the keep, other than <paramref name="exclude"/>, the one that raided longest ago
+        /// (never first), then the one with the most bots inside, then <paramref name="rng"/>. None when no realm may raid.
+        /// </summary>
+        public static eRealm PickRaidRealm(IReadOnlyList<OpenBgRaidCandidate> inside, IReadOnlyDictionary<eRealm, long> lastRaided,
+            eRealm exclude, Random rng)
+        {
+            rng ??= Random.Shared;
+            return Present(inside).Where(unit => !unit.KeepFriend && IsPlayerRealm(unit.Realm) && unit.Realm != exclude)
+                .GroupBy(unit => unit.Realm)
+                .Select(group => (Realm: group.Key, Last: lastRaided != null && lastRaided.TryGetValue(group.Key, out long last) ? last : long.MinValue,
+                    Bots: group.Sum(unit => unit.Bots), Tie: rng.Next()))
+                .OrderBy(entry => entry.Last).ThenByDescending(entry => entry.Bots).ThenBy(entry => entry.Tie)
+                .Select(entry => entry.Realm).DefaultIfEmpty(eRealm.None).First();
+        }
+
+        /// <summary>
+        /// The second raid for this tick: none in the quiet, under a single plan or without a realm; formed and topped up
+        /// from <paramref name="realm"/> while <see cref="SecondRaidJoins"/>; else as it stands. Dropped when its realm now
+        /// holds the keep. <paramref name="reason"/> as in <see cref="RaidForTick(Random, OpenBgPhase, OpenBgRaid, IReadOnlyList{OpenBgRaidCandidate}, IReadOnlyDictionary{string, int}, out string)"/>, "join" for its forming.
+        /// </summary>
+        public static OpenBgRaid SecondRaidForTick(Random rng, OpenBgPhase phase, OpenBgAttackPlan plan, OpenBgRaid second, eRealm realm,
+            IReadOnlyList<OpenBgRaidCandidate> inside, IReadOnlyDictionary<string, int> recentWins, double share, out string reason)
+        {
+            reason = null;
+            second ??= OpenBgRaid.None;
+            if (phase == OpenBgPhase.Quiet || plan == OpenBgAttackPlan.Single || realm == eRealm.None)
+            {
+                if (!second.IsEmpty) reason = "quiet";
+                return OpenBgRaid.None;
+            }
+            if (RaidNeedsRepick(second, inside))
+            {
+                reason = "keep_changed";
+                return OpenBgRaid.None;
+            }
+            if (!SecondRaidJoins(plan, phase)) return second;
+            OpenBgRaid next = ExtendRaid(rng, second, inside, recentWins, true, share, realm);
+            if (!ReferenceEquals(next, second)) reason = second.IsEmpty ? "join" : "top_up";
+            return next;
         }
 
         /// <summary>
@@ -489,6 +569,7 @@ namespace DOL.GS
             public static readonly Snapshot Empty = new();
             public OpenBgPhase Phase = OpenBgPhase.Quiet;
             public OpenBgRaid Raid = OpenBgRaid.None;
+            public OpenBgRaid Second = OpenBgRaid.None;
             public eRealm Owner = eRealm.None;
             public long Cycle;
             public Dictionary<int, OpenBgOrder> Orders = new();
@@ -515,6 +596,10 @@ namespace DOL.GS
         private static readonly List<Point3D> DeadLurkSpots = new();
         // The raid's battlegroup, from the push to the cycle's end.
         private static readonly OpenBgRaidBattleGroup RaidBattleGroup = new();
+        // The second raid's battlegroup (per realm, a double or opportunist plan).
+        private static readonly OpenBgRaidBattleGroup SecondBattleGroup = new();
+        // Per realm: the cycle in which each realm last raided, so every realm takes its turn.
+        private static readonly Dictionary<eRealm, long> LastRaided = new();
         private static MapData _map;
         private static OpenBgCycle _cycle;
         private static long _cycleIndex;
@@ -526,6 +611,7 @@ namespace DOL.GS
         private static OpenBgPhase _loggedPhase;
         private static string _loggedOwner;
         private static OpenBgRaid _loggedRaid;
+        private static OpenBgRaid _loggedSecond;
         private static bool _logged;
         private static Snapshot _snapshot = Snapshot.Empty;
         private static long _fieldLoggedAt;
@@ -534,6 +620,8 @@ namespace DOL.GS
         public static OpenBgPhase Phase => Volatile.Read(ref _snapshot).Phase;
         /// <summary>This cycle's keep raid (empty before the first tick or when no unit may raid).</summary>
         public static OpenBgRaid Raid => Volatile.Read(ref _snapshot).Raid;
+        /// <summary>This cycle's second raid per realm (a double or opportunist plan); empty otherwise.</summary>
+        public static OpenBgRaid SecondRaid => Volatile.Read(ref _snapshot).Second ?? OpenBgRaid.None;
         public static eRealm KeepOwnerRealm => Volatile.Read(ref _snapshot).Owner;
         /// <summary>Counts cycles since the start; 0 before the first tick.</summary>
         public static long CycleNumber => Volatile.Read(ref _snapshot).Cycle;
@@ -572,7 +660,16 @@ namespace DOL.GS
         {
             OpenBgCycle cycle = Volatile.Read(ref _cycle);
             long left = cycle == null ? 0 : Math.Max(0, (cycle.EndTick - GameLoop.GameLoopTime) / 1000);
-            return new OpenBgPhaseStatus(Phase.ToString(), Raid.Summary, (int)left);
+            return new OpenBgPhaseStatus(Phase.ToString(), AttackerSummary(Raid, SecondRaid), (int)left);
+        }
+
+        /// <summary>The status and log text of both raids, e.g. "raid 3 units/18 bots, lead X + Hibernia raid 2 units/9 bots, lead Y".</summary>
+        public static string AttackerSummary(OpenBgRaid raid, OpenBgRaid second)
+        {
+            raid ??= OpenBgRaid.None;
+            if (second == null || second.IsEmpty) return raid.Summary;
+            string first = raid.IsEmpty ? "" : $"{OpenBattlegroundRoster.RealmName(raid.LeadRealm)} {raid.Summary} + ";
+            return $"{first}{OpenBattlegroundRoster.RealmName(second.LeadRealm)} {second.Summary}";
         }
 
         /// <summary>The raid share of an attack order's size word: small (a probe), normal (a third of the crew), big (a muster).</summary>
@@ -704,6 +801,7 @@ namespace DOL.GS
                 DetachRaid();
                 UnitStates.Clear();
                 RecentWinners.Clear();
+                LastRaided.Clear();
                 UnresolvedLogged.Clear();
                 DeadLurkSpots.Clear();
                 _map = null;
@@ -711,6 +809,7 @@ namespace DOL.GS
                 _cycleIndex = 0;
                 _raidTookKeepCycle = -1;
                 _logged = false;
+                _loggedSecond = null;
                 Volatile.Write(ref _snapshot, Snapshot.Empty);
             }
         }
@@ -775,32 +874,60 @@ namespace DOL.GS
                 DeadLurkSpots.Clear();
             }
             OpenBgPhase phase = PhaseAt(_cycle, now);
-            // A keep that changed hands to a raid unit ends the fight: no new raid, the cycle goes on in the retreat (its
-            // orders: the raid's claiming guild defends, the rest hold the approaches or leave as in any retreat).
-            if (PhaseAfterKeepChange(phase, RaidNeedsRepick(_cycle.Raid, candidates)) != phase)
+            // A keep that changed hands to a unit of either raid ends the fight: no new raid, the cycle goes on in the retreat
+            // (its orders: the raid's claiming guild defends, the rest hold the approaches or leave as in any retreat).
+            bool secondTook = RaidNeedsRepick(_cycle.SecondRaid, candidates);
+            if (PhaseAfterKeepChange(phase, RaidNeedsRepick(_cycle.Raid, candidates) || secondTook) != phase)
             {
                 _raidTookKeepCycle = _cycleIndex;
-                Log.Info($"OPEN_BG_KEEP_CHANGED cycle={_cycleIndex} from={Describe(phase)} owner_guild=\"{ownerGuild ?? "none"}\" lead=\"{_cycle.Raid.LeadGuild ?? "unguilded"}\"");
+                OpenBgRaid taker = secondTook ? _cycle.SecondRaid : _cycle.Raid;
+                Log.Info($"OPEN_BG_KEEP_CHANGED cycle={_cycleIndex} from={Describe(phase)} owner_guild=\"{ownerGuild ?? "none"}\" lead=\"{taker.LeadGuild ?? "unguilded"}\"" +
+                    $"{(secondTook ? " by=second" : "")}");
                 _cycle = CycleRetreatingAt(_cycle, now);
                 phase = PhaseAt(_cycle, now);
             }
+            bool perRealm = OpenBattlegroundMode.Current == OpenBgMode.PerRealm;
+            // Per realm the realms take turns: the push draws its raid from the realm that raided longest ago.
+            if (perRealm && phase == OpenBgPhase.Push && _cycle.Raid.IsEmpty && (_cycle.RaidRealm == eRealm.None || _cycle.RaidRealm == owner))
+            {
+                eRealm next = PickRaidRealm(candidates, LastRaided, eRealm.None, Rng);
+                if (next != eRealm.None) _cycle = _cycle with { RaidRealm = next };
+            }
             // The raid forms when the push starts and is topped up through the push (late entries, reliefs).
-            OpenBgRaid raid = RaidForTick(Rng, phase, _cycle.Raid, candidates, RecentWins(),
-                OpenBattlegroundMode.Current == OpenBgMode.PerRealm, _cycle.RaidShare, _cycle.RaidRealm, out string reason);
+            OpenBgRaid raid = RaidForTick(Rng, phase, _cycle.Raid, candidates, RecentWins(), perRealm, _cycle.RaidShare, _cycle.RaidRealm, out string reason);
             if (reason != null)
             {
                 // A raid formed anew starts a new battlegroup; a top-up only adds members on the next sync.
                 if (reason is "keep_changed" or "quiet") DetachRaid();
                 _cycle = _cycle with { Raid = raid };
+                if (!raid.IsEmpty && IsPlayerRealm(raid.LeadRealm)) LastRaided[raid.LeadRealm] = _cycleIndex;
                 LogRaid(reason, candidates);
             }
+            // Per realm a double plan sends a second realm from the push on, an opportunist one into the keep fight.
+            OpenBgAttackPlan plan = perRealm ? _cycle.Plan : OpenBgAttackPlan.Single;
+            if (plan != OpenBgAttackPlan.Single && SecondRaidJoins(plan, phase) && _cycle.SecondRaid.IsEmpty)
+            {
+                eRealm first = _cycle.Raid.IsEmpty ? _cycle.RaidRealm : _cycle.Raid.LeadRealm;
+                if (_cycle.SecondRealm == eRealm.None || _cycle.SecondRealm == owner || _cycle.SecondRealm == first)
+                    _cycle = _cycle with { SecondRealm = PickRaidRealm(candidates, LastRaided, first, Rng) };
+            }
+            OpenBgRaid second = SecondRaidForTick(Rng, phase, plan, _cycle.SecondRaid, _cycle.SecondRealm, candidates, RecentWins(),
+                _cycle.SecondShare, out string secondReason);
+            if (secondReason != null)
+            {
+                if (secondReason is "keep_changed" or "quiet") SecondBattleGroup.DetachAll();
+                _cycle = _cycle with { Second = second };
+                if (!second.IsEmpty && IsPlayerRealm(second.LeadRealm)) LastRaided[second.LeadRealm] = _cycleIndex;
+                LogSecondRaid(secondReason, plan);
+            }
             if (_logged && phase == _loggedPhase && string.Equals(ownerGuild, _loggedOwner, StringComparison.Ordinal) &&
-                ReferenceEquals(_cycle.Raid, _loggedRaid)) return;
+                ReferenceEquals(_cycle.Raid, _loggedRaid) && ReferenceEquals(_cycle.SecondRaid, _loggedSecond)) return;
             _logged = true;
             _loggedPhase = phase;
             _loggedOwner = ownerGuild;
             _loggedRaid = _cycle.Raid;
-            Log.Info($"OPEN_BG_PHASE phase={Describe(phase)} attacker=\"{_cycle.Raid.Summary}\" cycle_s={_cycle.TotalMs / 1000} owner={owner} " +
+            _loggedSecond = _cycle.SecondRaid;
+            Log.Info($"OPEN_BG_PHASE phase={Describe(phase)} attacker=\"{AttackerSummary(_cycle.Raid, _cycle.SecondRaid)}\" plan={Describe(plan)} cycle_s={_cycle.TotalMs / 1000} owner={owner} " +
                 $"owner_guild=\"{ownerGuild ?? "none"}\" cycle={_cycleIndex} lord_down={lordDown} speed={OfflineWorldSpeedControl.AchievedMultiplier:0.0}");
         }
 
@@ -816,6 +943,22 @@ namespace DOL.GS
                 $"realms={(realms.Length == 0 ? "none" : realms)} reason={reason} share={_cycle.RaidShare:0.00} defend_share={_cycle.DefendShare:0.00}");
         }
 
+        // Callers hold Sync. One line per change of the second raid.
+        private static void LogSecondRaid(string reason, OpenBgAttackPlan plan)
+        {
+            OpenBgRaid second = _cycle.SecondRaid;
+            Log.Info($"OPEN_BG_SECOND_RAID cycle={_cycleIndex} plan={Describe(plan)} realm={OpenBattlegroundRoster.RealmName(_cycle.SecondRealm)} " +
+                $"units={(second.IsEmpty ? "none" : string.Join(",", second.Units))} bots={second.Bots} lead=\"{(second.IsEmpty ? "none" : second.LeadGuild ?? "unguilded")}\" " +
+                $"reason={reason} share={_cycle.SecondShare:0.00}");
+        }
+
+        public static string Describe(OpenBgAttackPlan plan) => plan switch
+        {
+            OpenBgAttackPlan.Double => "double",
+            OpenBgAttackPlan.Opportunist => "opportunist",
+            _ => "single",
+        };
+
         private static Dictionary<string, int> RecentWins() =>
             RecentWinners.Where(guild => guild != null).GroupBy(guild => guild, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
@@ -826,8 +969,12 @@ namespace DOL.GS
         {
             OpenBgPhase phase = PhaseAt(_cycle, now);
             OpenBgRaid raid = _cycle.Raid;
+            OpenBgRaid second = _cycle.SecondRaid;
+            OpenBgRaidCandidate[] candidates = units.Select(unit => unit.Candidate).ToArray();
             // A raid that took the keep stops assaulting it: its claiming guild defends it, its partners hold the approaches.
-            bool raidTookKeep = RaidTookKeep(phase, raid, units.Select(unit => unit.Candidate).ToArray()) ||
+            // With two raids it is the raid whose unit holds the keep; the other raid goes on as before.
+            OpenBgRaid taker = RaidTookKeep(phase, second, candidates) ? second : raid;
+            bool raidTookKeep = RaidTookKeep(phase, taker, candidates) ||
                 phase is OpenBgPhase.KeepFight or OpenBgPhase.Retreat && _raidTookKeepCycle == _cycleIndex && raid != null && !raid.IsEmpty;
             var orders = new Dictionary<int, OpenBgOrder>();
             bool perRealm = OpenBattlegroundMode.Current == OpenBgMode.PerRealm;
@@ -846,11 +993,12 @@ namespace DOL.GS
                     groupIndex.TryGetValue(realm, out index);
                     groupIndex[realm] = index + 1;
                 }
-                bool inRaid = !raidTookKeep && raid.Contains(unit.Id);
+                bool inRaid = raid.Contains(unit.Id) || second.Contains(unit.Id);
+                if (raidTookKeep && taker.Contains(unit.Id)) inRaid = false;
                 // Per realm: only this cycle's share of the owner's units answers the raid; the others keep to the field.
                 bool answers = !perRealm || AnswersRaid(unit.Id, _cycleIndex, _cycle.DefendShare);
                 bool friend = OpenBattlegroundRoles.ActsAsKeepFriend(unit.Candidate.KeepFriend && answers, inRaid, lordDown, phase);
-                var ctx = new OpenBgContext(phase, inRaid, friend, realm, unit.Grouped ? Math.Max(2, unit.Members.Length) : 1, true, !raid.IsEmpty);
+                var ctx = new OpenBgContext(phase, inRaid, friend, realm, unit.Grouped ? Math.Max(2, unit.Members.Length) : 1, true, !raid.IsEmpty || !second.IsEmpty);
                 OpenBgRole role = OpenBattlegroundRoles.Assign(ctx, index);
                 // Camlann: keep friendship is the claiming guild's (group check included). A raid unit the keep does not count
                 // as an enemy (the lord lies defeated and nobody claimed it yet) goes to the keep to claim it instead.
@@ -859,7 +1007,7 @@ namespace DOL.GS
                 bool keepFriend = friend || role != assigned;
                 // The raid's other units once a raid guild claimed the keep: the keep's guards still count them as enemies,
                 // so they hold the approaches outside guard reach instead of walking off as bystanders.
-                bool partner = OpenBattlegroundRoles.RaidPartnerHolds(raidTookKeep, raid.Contains(unit.Id), friend);
+                bool partner = OpenBattlegroundRoles.RaidPartnerHolds(raidTookKeep, taker.Contains(unit.Id), friend);
                 if (partner) role = OpenBgRole.Defend;
                 bool bystander = !partner && OpenBattlegroundRoles.IsBystanderInFight(phase, inRaid, friend);
 
@@ -892,12 +1040,20 @@ namespace DOL.GS
             if (added > 0)
                 Log.Info($"OPEN_BG_RAID_BATTLEGROUP cycle={_cycleIndex} added={added} members={RaidBattleGroup.Count} " +
                     $"lead=\"{raid.LeadGuild ?? "unguilded"}\" left={removed}");
-            Volatile.Write(ref _snapshot, new Snapshot { Phase = phase, Raid = raid, Owner = owner, Cycle = _cycleIndex, Orders = orders });
+            (int secondAdded, int secondRemoved) = SecondBattleGroup.Sync(phase, second, crew);
+            if (secondAdded > 0)
+                Log.Info($"OPEN_BG_RAID_BATTLEGROUP cycle={_cycleIndex} raid=second added={secondAdded} members={SecondBattleGroup.Count} " +
+                    $"lead=\"{second.LeadGuild ?? "unguilded"}\" left={secondRemoved}");
+            Volatile.Write(ref _snapshot, new Snapshot { Phase = phase, Raid = raid, Second = second, Owner = owner, Cycle = _cycleIndex, Orders = orders });
             return orders.Count;
         }
 
         // Callers hold Sync. Ends the raid's battlegroup (cycle end, a raid formed anew, open BG off, server stop).
-        private static void DetachRaid() => RaidBattleGroup.DetachAll();
+        private static void DetachRaid()
+        {
+            RaidBattleGroup.DetachAll();
+            SecondBattleGroup.DetachAll();
+        }
 
         // The unit's group leader when it is inside, else its longest-serving member.
         private static GameBot LeaderOf(AutonomousBattlegroundParticipation.OpenCrewMember[] members)
