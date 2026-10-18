@@ -586,6 +586,10 @@ namespace DOL.GS.Keeps
 					return false;
 
                 if (PvpKeepCampaign.Applies(keep) && keep.DBKeep.LordDefeated) return false;
+                // Open BG per realm mode (owner decision 2026-10-17): the central keep belongs to its realm, not only
+                // to its claiming guild, so the realm defends it together and only other realms attack it.
+                if (OpenBattlegroundMode.KeepIsRealmOwned(OpenBattlegroundMode.Current, keep.Region))
+                    return keep.Realm is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia) || keep.Realm != target.Realm;
                 if (PvpKeepCampaign.IsGarrison(keep.Guild)) return true;
 				if (keep.Guild == null)
 					return ServerProperties.Properties.PVP_UNCLAIMED_KEEPS_ENEMY;

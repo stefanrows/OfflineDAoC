@@ -201,7 +201,11 @@ namespace DOL.GS
         /// whose battlegroup starts empty.
         /// </summary>
         public static OpenBgRaid RaidForTick(Random rng, OpenBgPhase phase, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside,
-            IReadOnlyDictionary<string, int> recentWins, out string reason)
+            IReadOnlyDictionary<string, int> recentWins, out string reason) => RaidForTick(rng, phase, raid, inside, recentWins, false, out reason);
+
+        /// <summary>As above; <paramref name="oneRealm"/> (per realm mode) draws the whole raid from one realm.</summary>
+        public static OpenBgRaid RaidForTick(Random rng, OpenBgPhase phase, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside,
+            IReadOnlyDictionary<string, int> recentWins, bool oneRealm, out string reason)
         {
             reason = null;
             raid ??= OpenBgRaid.None;
@@ -214,9 +218,9 @@ namespace DOL.GS
             if (RaidNeedsRepick(raid, inside))
             {
                 reason = "keep_changed";
-                return PickRaid(rng, inside, recentWins);
+                return ExtendRaid(rng, OpenBgRaid.None, inside, recentWins, oneRealm);
             }
-            OpenBgRaid next = ExtendRaid(rng, raid, inside, recentWins);
+            OpenBgRaid next = ExtendRaid(rng, raid, inside, recentWins, oneRealm);
             if (!ReferenceEquals(next, raid))
                 reason = raid.IsEmpty ? "push" : RaidBotsInside(raid, inside) == 0 ? "no_raid_inside" : "top_up";
             return next;
@@ -244,12 +248,26 @@ namespace DOL.GS
         /// keep, drawn as in <see cref="PickRaid"/> (an eligible 8-man first when the raid has none). Raid units no longer
         /// inside are dropped from it; the lead stays while its unit is inside. The same instance when nothing changes.
         /// </summary>
-        public static OpenBgRaid ExtendRaid(Random rng, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside, IReadOnlyDictionary<string, int> recentWins)
+        public static OpenBgRaid ExtendRaid(Random rng, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside, IReadOnlyDictionary<string, int> recentWins) =>
+            ExtendRaid(rng, raid, inside, recentWins, false);
+
+        /// <summary>
+        /// As above; <paramref name="oneRealm"/> (per realm mode) keeps the raid to one realm: the raid's realm once it
+        /// has units, else the realm (not a friend of the keep) with the most bots inside.
+        /// </summary>
+        public static OpenBgRaid ExtendRaid(Random rng, OpenBgRaid raid, IReadOnlyList<OpenBgRaidCandidate> inside, IReadOnlyDictionary<string, int> recentWins,
+            bool oneRealm)
         {
             rng ??= Random.Shared;
             raid ??= OpenBgRaid.None;
             OpenBgRaidCandidate[] present = Present(inside);
             OpenBgRaidCandidate[] eligible = present.Where(unit => !unit.KeepFriend).ToArray();
+            if (oneRealm && eligible.Length > 0)
+            {
+                eRealm realm = !raid.IsEmpty && raid.LeadRealm != eRealm.None ? raid.LeadRealm
+                    : eligible.GroupBy(unit => unit.Realm).OrderByDescending(group => group.Sum(unit => unit.Bots)).ThenBy(_ => rng.Next()).First().Key;
+                eligible = eligible.Where(unit => unit.Realm == realm).ToArray();
+            }
             List<OpenBgRaidCandidate> staying = eligible.Where(unit => raid.Contains(unit.Unit)).ToList();
             int target = RaidTargetBots(present.Sum(unit => unit.Bots), eligible.Sum(unit => unit.Bots));
             int have = staying.Sum(unit => unit.Bots);
@@ -626,7 +644,8 @@ namespace DOL.GS
                     KeepEnemy = keepEnemy,
                     Candidate = new OpenBgRaidCandidate(group.Key, members.Length,
                         kind is OpenBgUnitKind size ? size == OpenBgUnitKind.Group8 : members.Length >= OpenBattlegroundRoster.Group8Minimum,
-                        leader.Guild?.Name, leader.Realm, keep != null && ownerGuild != null && !keepEnemy),
+                        leader.Guild?.Name, leader.Realm,
+                        keep != null && !keepEnemy && (ownerGuild != null || OpenBattlegroundMode.KeepIsRealmOwned(OpenBattlegroundMode.Current, keep.Region))),
                 });
             }
             return units.ToArray();
@@ -659,7 +678,8 @@ namespace DOL.GS
                 phase = PhaseAt(_cycle, now);
             }
             // The raid forms when the push starts and is topped up through the push (late entries, reliefs).
-            OpenBgRaid raid = RaidForTick(Rng, phase, _cycle.Raid, candidates, RecentWins(), out string reason);
+            OpenBgRaid raid = RaidForTick(Rng, phase, _cycle.Raid, candidates, RecentWins(),
+                OpenBattlegroundMode.Current == OpenBgMode.PerRealm, out string reason);
             if (reason != null)
             {
                 // A raid formed anew starts a new battlegroup; a top-up only adds members on the next sync.
@@ -720,7 +740,7 @@ namespace DOL.GS
                 }
                 bool inRaid = !raidTookKeep && raid.Contains(unit.Id);
                 bool friend = OpenBattlegroundRoles.ActsAsKeepFriend(unit.Candidate.KeepFriend, inRaid, lordDown, phase);
-                var ctx = new OpenBgContext(phase, inRaid, friend, realm, unit.Grouped ? Math.Max(2, unit.Members.Length) : 1, true);
+                var ctx = new OpenBgContext(phase, inRaid, friend, realm, unit.Grouped ? Math.Max(2, unit.Members.Length) : 1, true, !raid.IsEmpty);
                 OpenBgRole role = OpenBattlegroundRoles.Assign(ctx, index);
                 // Camlann: keep friendship is the claiming guild's (group check included). A raid unit the keep does not count
                 // as an enemy (the lord lies defeated and nobody claimed it yet) goes to the keep to claim it instead.

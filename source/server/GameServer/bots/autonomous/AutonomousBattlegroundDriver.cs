@@ -140,6 +140,8 @@ public static class AutonomousBattlegroundDriver
         public long NextSiegeCount;
         // open BG siege: when this bot first stood at the gate without the quorum (0 = not waiting).
         public long GateWaitSince;
+        // open BG siege: this bot itself stood within SiegeGatherRange of the gate at the last count.
+        public bool AtGate;
         // OPEN_BG_KEEP_ACTION: the last logged keep action of a group head and when it may log again.
         public string LoggedKeepAction;
         public long NextKeepActionLog;
@@ -529,8 +531,9 @@ public static class AutonomousBattlegroundDriver
         if (keep != null && GoesToKeep(order))
         {
             int present = order.Role == OpenBgRole.Defend ? 0 : SiegePresent(bot, keep, state, now);
-            // The bot itself counts once it stands at the gate; from then on the wait for the quorum is timed.
-            if (present == 0) state.GateWaitSince = 0;
+            // The wait for the quorum is timed only while this bot itself stands at the gate (the count includes allies
+            // there while the bot is still on its way or back at its landing after a death).
+            if (present == 0 || !state.AtGate) state.GateWaitSince = 0;
             else if (state.GateWaitSince == 0) state.GateWaitSince = now;
             KeepOrderStep step = StepAtKeep(order, present, state.GateWaitSince == 0 ? 0 : now - state.GateWaitSince);
             if (step == KeepOrderStep.Defend)
@@ -603,6 +606,7 @@ public static class AutonomousBattlegroundDriver
         GameKeepDoor gate = GateApproaches.GetValue(keep, BuildGateApproaches).Select(approach => approach.Door)
             .OrderBy(door => bot.GetDistanceTo(door)).FirstOrDefault();
         Point3D anchor = gate != null ? new Point3D(gate.X, gate.Y, gate.Z) : new Point3D(keep.X, keep.Y, keep.Z);
+        state.AtGate = bot.IsWithinRadius(anchor, SiegeGatherRange);
         var near = new List<GameNPC>();
         bot.CurrentRegion?.GetInRadius(anchor, eGameObjectType.NPC, SiegeGatherRange, near);
         int count = 0;

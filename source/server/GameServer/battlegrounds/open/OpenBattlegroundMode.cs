@@ -45,6 +45,9 @@ namespace DOL.GS
 
         public static OpenBgLandingPeace Peace => ParsePeace(OpenBattlegroundProperties.OPEN_BG_LANDING_PEACE, Current);
 
+        /// <summary>Per realm only: the open BG's central keep is a friend of every bot and player of its realm.</summary>
+        public static bool KeepIsRealmOwned(OpenBgMode mode, ushort keepRegion) => mode == OpenBgMode.PerRealm && keepRegion == OpenBgRegion;
+
         /// <summary>Per realm only, inside the open BG region, for two real realms that are equal.</summary>
         public static bool RealmsAreFriends(OpenBgMode mode, ushort region, eRealm first, eRealm second) =>
             mode == OpenBgMode.PerRealm && region == OpenBgRegion && first == second && (int)first is >= 1 and <= 3;

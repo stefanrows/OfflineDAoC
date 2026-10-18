@@ -12,6 +12,26 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.297.0] - 2026-10-18
+
+### Changed
+
+- **Per realm open BG: the central keep belongs to its realm** (owner decision
+  2026-10-17). Its guards and the keep rules treat every bot and player of the
+  owning realm as a friend, not only the claiming guild; a raid is drawn from
+  one realm that does not own the keep (the realm with the most bots inside),
+  so no realm assaults its own keep. Server PvP is unchanged.
+- **The keep's friends defend it as soon as a raid marches** (push phase), in
+  both modes; before they were only called in the keep fight, and the raid
+  often took the keep in the push.
+
+### Fixed
+
+- The open BG gate wait is timed only while the bot itself stands at the gate.
+  Allies at the gate kept the clock running while the bot was on its way or
+  back at its landing, so `OPEN_BG_KEEP_ACTION` showed waits of up to three
+  minutes that never happened.
+
 ## [0.296.1] - 2026-10-17
 
 ### Added

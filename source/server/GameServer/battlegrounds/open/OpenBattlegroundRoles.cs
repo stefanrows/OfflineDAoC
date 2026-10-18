@@ -12,7 +12,8 @@ namespace DOL.GS
     /// size of the group it plays as. <paramref name="Realm"/> is geography only (its own bridge and landing); no role
     /// depends on a realm (owner decision 2026-10-11: alliances in the open BG are group, guild and battlegroup).
     /// </summary>
-    public readonly record struct OpenBgContext(OpenBgPhase Phase, bool IsRaid, bool IsKeepFriend, eRealm Realm, int GroupSize, bool IsLeaderOfGroup);
+    public readonly record struct OpenBgContext(OpenBgPhase Phase, bool IsRaid, bool IsKeepFriend, eRealm Realm, int GroupSize, bool IsLeaderOfGroup,
+        bool RaidMarching = false);
 
     /// <summary>A bridge of the open BG map: its log name, the realm whose side it faces, and its deck floor.</summary>
     public readonly record struct BridgePoint(string Name, eRealm Realm, Point3D Point);
@@ -75,7 +76,9 @@ namespace DOL.GS
             return ctx.Phase switch
             {
                 OpenBgPhase.Quiet => quiet,
-                OpenBgPhase.Push => raid ? OpenBgRole.Assault : quiet,
+                // The keep's friends gather at it as soon as a raid marches (owner report 2026-10-17: the raid often took the
+                // keep in the push, before the defenders were called in the keep fight).
+                OpenBgPhase.Push => friend && ctx.RaidMarching ? OpenBgRole.Defend : raid ? OpenBgRole.Assault : quiet,
                 OpenBgPhase.KeepFight => friend ? OpenBgRole.Defend : raid ? OpenBgRole.Assault : OpenBgRole.Roam,
                 _ => friend ? OpenBgRole.Defend : raid ? OpenBgRole.Retreat : OpenBgRole.Roam,
             };
