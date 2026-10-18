@@ -143,5 +143,21 @@ namespace DOL.GS.Tests
             GothwaitePvpMode.Reset();
             Assert.That(GothwaitePvpOpenBgReserve.Set, Is.Empty);
         }
+
+        [Test]
+        public void TheReserveKeepsSpeedClassesForTheGroups()
+        {
+            // 100 bots in realm 1, every tenth a speed class; seats 20 -> reserve 50.
+            var bots = Enumerable.Range(1, 100).Select(i => ((long)i, 1, 45, false, i % 10 == 0)).ToArray();
+            var withSpeed = GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72, _ => 6, bots);
+            int speed = withSpeed.Count(id => id % 10 == 0);
+            Assert.Multiple(() =>
+            {
+                Assert.That(speed, Is.GreaterThanOrEqualTo(6), "six speed classes kept");
+                Assert.That(withSpeed.Count, Is.EqualTo(GothwaitePvpOpenBgReserve.Choose(true, true, 40, 50, _ => 20, 72,
+                    bots.Select(b => (b.Item1, b.Item2, b.Item3, b.Item4))).Count), "same reserve size");
+                Assert.That(GothwaitePvpOpenBgReserve.SpeedWanted(1, 3), Is.EqualTo(6));
+            });
+        }
     }
 }

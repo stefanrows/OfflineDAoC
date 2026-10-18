@@ -67,6 +67,34 @@ public static class GothwaitePvpOpenBgReserve
         return result;
     }
 
+    /// <summary>
+    /// As above, and per realm the first <paramref name="speedWanted"/> speed classes (Bard, Skald, Minstrel) are taken
+    /// before the rest (owner request 2026-10-18: groups of four and more need speed; only 7-10 % of the band are speed
+    /// classes, so the hash order left the small groups without one). The size and the 30 % cap stay.
+    /// </summary>
+    public static IReadOnlySet<long> Choose(bool modeActive, bool openBgEnabled, int bandMin, int bandMax, Func<int, int> seatsFor,
+        int maxBots, Func<int, int> speedWanted, IEnumerable<(long BotId, int Realm, int Level, bool Retired, bool Speed)> bots)
+    {
+        var result = new HashSet<long>();
+        if (!modeActive || !openBgEnabled || bots == null)
+            return result;
+        foreach (var realm in bots.Where(b => b.Realm is >= 1 and <= 3 && !b.Retired && b.Level >= bandMin && b.Level <= bandMax)
+                     .GroupBy(b => b.Realm))
+        {
+            int size = ReserveSize(seatsFor(realm.Key), maxBots);
+            var ordered = realm.OrderBy(b => Order(b.BotId)).ThenBy(b => b.BotId).ToArray();
+            int take = Math.Max(0, Math.Min(size, (int)Math.Ceiling(ordered.Length * 0.3)));
+            var picked = ordered.Where(b => b.Speed).Take(Math.Min(take, Math.Max(0, speedWanted?.Invoke(realm.Key) ?? 0))).Select(b => b.BotId).ToList();
+            picked.AddRange(ordered.Select(b => b.BotId).Where(id => !picked.Contains(id)).Take(take - picked.Count));
+            foreach (long id in picked)
+                result.Add(id);
+        }
+        return result;
+    }
+
+    /// <summary>Speed classes the reserve keeps per realm: one and a half per planned group of three or more bots.</summary>
+    public static int SpeedWanted(int groups8, int smallGroups) => (int)Math.Ceiling(1.5 * (Math.Max(0, groups8) + Math.Max(0, smallGroups)));
+
     /// <summary>Per-realm counts for the startup log line.</summary>
     public static string PerRealm(IReadOnlySet<long> set, IEnumerable<(long BotId, int Realm, int Level, bool Retired)> bots) =>
         string.Join("/", Enumerable.Range(1, 3).Select(r => bots.Count(b => b.Realm == r && set.Contains(b.BotId))));

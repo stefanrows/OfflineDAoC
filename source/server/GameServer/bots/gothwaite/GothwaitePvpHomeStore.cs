@@ -168,8 +168,10 @@ public static class GothwaitePvpHomeStore
         int Seats(int realm) => 8 * setup.Groups8For((eRealm)realm) + 4 * setup.SmallFor((eRealm)realm) + setup.SolosFor((eRealm)realm);
         int min = OpenBattlegroundRoster.MinLevel, max = OpenBattlegroundRoster.MaxLevel;
         var rows = bots.Select(b => (b.BotId, b.Realm, b.Level, b.IsRetired)).ToArray();
+        int SpeedWanted(int realm) => GothwaitePvpOpenBgReserve.SpeedWanted(setup.Groups8For((eRealm)realm), setup.SmallFor((eRealm)realm));
         var set = GothwaitePvpOpenBgReserve.Choose(active, OpenBattlegroundPolicy.IsEnabled, min, max, Seats,
-            OpenBattlegroundProperties.MaxBots, rows);
+            OpenBattlegroundProperties.MaxBots, SpeedWanted,
+            bots.Select(b => (b.BotId, b.Realm, b.Level, b.IsRetired, AutonomousRvrSpeed.IsSpeedClass((eCharacterClass)b.ClassId))));
         GothwaitePvpOpenBgReserve.Install(set);
         if (active)
             Log.Info($"GOTH_PVP_OPENBG_RESERVE reserve={set.Count} per_realm={GothwaitePvpOpenBgReserve.PerRealm(set, rows)} band={min}-{max}");

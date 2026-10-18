@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.303.0] - 2026-10-18
+
+### Changed
+
+- **The open BG bot reserve (Gothwaite PvP mode) keeps speed classes for the
+  groups.** Only 7-10 % of the level band are Bards, Skalds and Minstrels, and the
+  reserve was drawn by a hash order, so the 8-mans took the few speed classes
+  and no group of three or four had one. Per realm the reserve now takes one
+  and a half speed classes per planned group first (six for one 8-man and three
+  small groups), then fills up as before; its size and the 30 % cap stay.
+
 ## [0.302.0] - 2026-10-18
 
 ### Changed
