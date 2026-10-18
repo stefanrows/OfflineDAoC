@@ -1416,6 +1416,7 @@ skipped. Tasks 100–106 remain here for their outstanding real-client checks.
     moves, a straggler catches up at a sprint, the leader briefly stops for
     one far behind; companions and player-led groups behave as before.
     Live log 0.157.1 (2026-09-29 18:41–20:04): speed class in 14 of 23 groups of 5+ (20 of 45 overall); travel_under_speed_pct averages about 30 (0–58), up from 6–12 but below the 50+ target. Stays pending.
+    0.305.0 (2026-10-18, owner: the "small" speed counts in every realm): Sorcerer, Theurgist, Healer, Runemaster, Enchanter and Warden count as the fallback speed when they know their group speed spell (before: only the Healer); the open BG reserve keeps primary speed classes first. Live 10x run: Wardens now named as a group's speed; a Warden's travel chant on the march not yet seen in the log.
 
 68. **PvE wave 7: camp play.** Aaron, 2026-09-29 (P12 "the camp, not the
     mob, is the unit of PvE", P13 "pull size follows control capacity";
