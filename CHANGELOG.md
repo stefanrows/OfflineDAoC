@@ -12,6 +12,16 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.309.1] - 2026-10-20
+
+### Added
+
+- **Trials of Atlantis research notes** (`docs/TOA_RESEARCH.md`, task 134):
+  what the client, our server code and our database already contain, what
+  the DOL public database and DOLSharp can supply (about 40,000 Atlantis
+  mobs, the full artifact code), the gaps with a simple fill for each, and a
+  suggested order. Research only; no gameplay change.
+
 ## [0.309.0] - 2026-10-18
 
 ### Changed

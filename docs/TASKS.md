@@ -363,6 +363,14 @@ Agent sessions on items 45–48: take the role and context from
      live checks pending (hub login point, medallion porter reach at the
      hubs, reserved bots filling the crew).
 
+134. **Research Trials of Atlantis for gameplay (items, overcaps, artifacts
+     with levelling, realm abilities, Master Levels).** Owner (Aaron),
+     2026-10-20: document first, build later; Stefan continues from the
+     research. Bots are not required in ToA; invent as little as possible and
+     prefer simple mechanisms for missing pieces. Findings, sources, gaps and
+     a suggested order in [TOA_RESEARCH.md](TOA_RESEARCH.md). Blocked on an
+     owner decision: CAMLANN.md decision 1 sets the era to pre-ToA.
+
 ## Implemented in source; installation verification pending
 
 133. **Animist main shroom follows; shrooms inherit the Animist's RAs.**
