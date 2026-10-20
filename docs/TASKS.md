@@ -358,8 +358,8 @@ Agent sessions on items 45–48: take the role and context from
      check, and the stage 6 live check (section 13.4).
      0.279.0: the open BG now runs with the mode through a reserved set of
      world bots (plan section 14, decision G12); `/gothpvp` shows
-     `open BG reserve N, standby a, crew b`. Open: the reserve is frozen at
-     server start; an empty reserve (bots below the band) means no open BG;
+     `open BG reserve N, standby a, crew b`. The reserve follows the setup
+     live since 0.308.0 (no restart needed); an empty reserve (bots below the band) means no open BG;
      live checks pending (hub login point, medallion porter reach at the
      hubs, reserved bots filling the crew).
 
@@ -709,6 +709,19 @@ Agent sessions on items 45–48: take the role and context from
      crew alliance default on, portal-keep guards, drift strength, death
      rate, keep change frequency: six claims per 24 minutes at 5.4× is about
      one per 20 game-minutes).
+     0.306.0–0.309.0 (2026-10-18, deployed 2026-10-20, offline tests
+     green): limits up to 500 bots and 16 groups per kind; attack order
+     `/bgsetup attack <realm> [small|normal|big]` and `[Attack keep]` per
+     realm row; realm rows step 8-man groups with [-]/[+]; the Gothwaite
+     reserve follows the setup live (10x run: 470 → 720 reserved, 42 units
+     per realm formed, director ticks up to 0.3 s at 450 bots, 6x of 10x
+     reached); per realm the raid realm rotates and each cycle draws a plan
+     (single 40 %, double 30 %, opportunist 30 %, `OPEN_BG_SECOND_RAID`).
+     The "vulture rule and a second raid" above are now built. Real-client
+     check pending: attack order, [-]/[+], a double and an opportunist
+     cycle, server load with two raids, the lord in an enemy lord room
+     (`OPEN_BG_GUARD_PLAYER`; the one logged case was the player's own
+     keep, guards correctly friendly).
 
 113. **Eden-style battlegrounds: server-built keeps, keep-aware navmeshes and
      autonomous gamebot participation.** Owner, 2026-10-10, after bug 125
