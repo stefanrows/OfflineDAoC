@@ -3904,7 +3904,7 @@ namespace DOL.AI.Brain
             if (TryAutonomousRvrSupportTurn())
                 return;
             bool bombStun = BotBody.IsPlayerLedGroup && BombGroupReadyForStun() && TryHealerAreaStun();
-            if (!bombStun && !CheckHeals() && !TryHealerAreaStun() && !TryPvpCrowdControl() && !TryPveAddControl())
+            if (!bombStun && !CheckHeals() && !TryHealerAreaStun() && !TryPvpCrowdControl() && !TryPveAddControl() && !TryMaintainGroupCelerity())
                 CheckSpells(eCheckSpellType.Defensive);
             if (BotBody.IsPlayerLedGroup)
             {

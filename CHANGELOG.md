@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.310.0] - 2026-10-23
+
+### Changed
+
+- **Companion buffers keep group Celerity up while a tank is in the group.**
+  A grouped Healer (or other group Celerity caster) now refreshes its best
+  group Celerity on every member, in or out of combat, a few seconds before it
+  ends, instead of letting the short buff lapse. Heals and crowd control still
+  go first; another caster's equal or stronger Celerity is left alone. Real
+  client check pending.
+
 ## [0.309.1] - 2026-10-20
 
 ### Added
