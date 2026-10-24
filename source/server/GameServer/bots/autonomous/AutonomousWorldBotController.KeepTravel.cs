@@ -299,7 +299,8 @@ public sealed partial class AutonomousWorldBotController
             random.Next(3) switch { 0 => RvrRouteVariant.Road, 1 => RvrRouteVariant.Flank, _ => RvrRouteVariant.Cover };
         var choice = AutonomousRvrRoutePolicy.ChooseRoute(origin, steps[local], variant,
             AutonomousRvrTravel.Probe(nav, bot.CurrentRegion, bot.CurrentZone, steps[local]), random,
-            heat: danger?.Centre, hubCentre: hub, hubSafeRadius: atHub ? anchor.Radius : AutonomousRvrRoutePolicy.KeepSafeRadius);
+            heat: danger?.Centre, hubCentre: hub, hubSafeRadius: atHub ? anchor.Radius : AutonomousRvrRoutePolicy.KeepSafeRadius,
+            maximumFlankOffset: AutonomousRvrRoutePolicy.MaximumFlankOffset(AutonomousRvrDoctrineRuntime.For(bot)?.Kind));
         // Both sides of the inserted waypoint must connect to the retained first road point.
         bool insert = bot.CurrentRegion.GetZone((int)steps[0].X, (int)steps[0].Y) == bot.CurrentZone && !choice.Fallback && Vector3.DistanceSquared(origin, choice.Waypoint) > 200 * 200 &&
             AutonomousZoneItinerary.HasCompleteCorridor(nav, bot.CurrentZone, choice.Waypoint, steps[0]);

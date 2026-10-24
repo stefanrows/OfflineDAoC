@@ -396,6 +396,11 @@ Agent sessions on items 45–48: take the role and context from
      replacement. Step 2 awaits the owner: road fallback as planned, or the
      cheaper goal fixes first (snap goals, skip gated goals, no re-pick after
      a give-up).
+     Design question answered (owner left it to the agent, 2026-10-24):
+     **0.313.0** caps Flank/Cover side points at 1,200 units for open
+     doctrines (`AutonomousRvrRoutePolicy.MaximumFlankOffset`); stealth
+     doctrines keep 2,000; mob bends unchanged. Real-client check: warbands no
+     longer seem to wander off the road.
 
 ## Implemented in source; installation verification pending
 
@@ -422,7 +427,10 @@ Agent sessions on items 45–48: take the role and context from
      cast-time buffs still stop the follower (BotBrain/SpellHandler stops);
      followers of a leader starting from rest join on their own next turn; the
      rear slot can drift slightly ahead with a faster follower. PvE group pace
-     (upstream `AutonomousGroupPace`) not included.
+     (upstream `AutonomousGroupPace`): owner approved if sensible; deferred
+     until one live run of 0.312.0, because tighter followers should already
+     cut `AUTONOMOUS_GROUP_TRAVEL_HOLD` (5,602 in 3 h on 2026-10-23) and both
+     at once could not be told apart.
 
 137. **Followers trail the leader when their formation slot is unreachable or
      across a zone border.** Owner, 2026-10-24 (upstream RvR movement batch).

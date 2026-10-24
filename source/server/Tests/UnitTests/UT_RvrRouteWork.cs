@@ -226,6 +226,24 @@ public class UT_RvrRouteWork
     }
 
     [Test]
+    public void OpenDoctrinesBendAtMostTwelveHundredToTheSide()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRvrRoutePolicy.MaximumFlankOffset(RvrDoctrineKind.StealthPack), Is.EqualTo(2_000f));
+            Assert.That(AutonomousRvrRoutePolicy.MaximumFlankOffset(RvrDoctrineKind.MeleeTrain), Is.EqualTo(1_200f));
+            Assert.That(AutonomousRvrRoutePolicy.MaximumFlankOffset(null), Is.EqualTo(1_200f));
+        });
+        for (int seed = 0; seed < 20; seed++)
+        {
+            RvrRouteChoice flank = AutonomousRvrRoutePolicy.ChooseRoute(Vector3.Zero, new(10_000, 0, 0), RvrRouteVariant.Flank,
+                OpenGround(), new Random(seed), maximumFlankOffset: AutonomousRvrRoutePolicy.OpenFlankMaximumOffset);
+            Assert.That(flank.Variant, Is.EqualTo(RvrRouteVariant.Flank));
+            Assert.That(Math.Abs(flank.Waypoint.Y), Is.EqualTo(1_200f).Within(0.5f));
+        }
+    }
+
+    [Test]
     public void CoverViaLiesOnTheSideAwayFromTheLatestFight()
     {
         Vector3 heatLeft = new(5_000, 3_000, 0); // left of an eastward leg (+Y)

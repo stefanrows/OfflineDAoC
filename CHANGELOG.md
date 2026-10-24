@@ -12,6 +12,18 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.313.0] - 2026-10-24
+
+### Changed
+
+- **Open RvR groups bend less far off their road (task 139 design
+  question).** A roaming warband that takes a flank or cover route now puts
+  its side point at most 1,200 units off the straight line instead of up to
+  2,000, so a 3,500-8,000-unit leg no longer reads as the group wandering
+  off. Stealth groups (solo assassins, stealth packs, gank squads) keep the
+  full 2,000 to go over the hills. Monster bends around named mobs and dense
+  camps are unchanged. Real client check pending.
+
 ## [0.312.1] - 2026-10-24
 
 ### Added

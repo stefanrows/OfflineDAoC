@@ -149,7 +149,8 @@ public static class AutonomousRvrTravel
     {
         Vector3 start = new(bot.X, bot.Y, bot.Z);
         return AutonomousRvrRoutePolicy.ChooseRoute(start, destination, variant, Probe(bot, destination),
-            random ?? Random.Shared, heat, hubCentre, hubSafeRadius);
+            random ?? Random.Shared, heat, hubCentre, hubSafeRadius,
+            AutonomousRvrRoutePolicy.MaximumFlankOffset(AutonomousRvrDoctrineRuntime.For(bot)?.Kind));
     }
 
     /// <summary>The bot's own zone and navmesh as route checks; null without navigation.</summary>

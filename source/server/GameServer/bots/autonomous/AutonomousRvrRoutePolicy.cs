@@ -53,6 +53,12 @@ public static class AutonomousRvrRoutePolicy
     public const float FlankMinimumOffset = 600;
     public const float FlankMaximumOffset = 2_000;
     /// <summary>
+    /// Road, train and mixed doctrines bend at most this far to the side: a
+    /// 2,000-unit side point on a 3,500-8,000-unit leg read as a group
+    /// wandering off. Stealth doctrines keep the full 2,000 ("over the hill").
+    /// </summary>
+    public const float OpenFlankMaximumOffset = 1_200;
+    /// <summary>
     /// The bend is placed within this much of the leg. Most roaming legs are
     /// 30-200 km long and cross zones; 40-60 % of the whole leg lies in
     /// another zone, where no via-point can be checked.
@@ -99,6 +105,10 @@ public static class AutonomousRvrRoutePolicy
     public static bool IsStealthDoctrine(RvrDoctrineKind kind) =>
         kind is RvrDoctrineKind.SoloAssassin or RvrDoctrineKind.StealthPack or RvrDoctrineKind.GankSquad;
 
+    /// <summary>The widest Flank/Cover side offset for a doctrine (no doctrine: the open-group cap).</summary>
+    public static float MaximumFlankOffset(RvrDoctrineKind? kind) =>
+        kind is { } known && IsStealthDoctrine(known) ? FlankMaximumOffset : OpenFlankMaximumOffset;
+
     public static bool IsRoadDoctrine(RvrDoctrineKind kind) =>
         kind is RvrDoctrineKind.AssistTrain or RvrDoctrineKind.MeleeTrain or RvrDoctrineKind.KeepRaid;
 
@@ -142,7 +152,7 @@ public static class AutonomousRvrRoutePolicy
     /// <summary>
     /// The next waypoint toward <paramref name="destination"/>. Road is a
     /// straight-ahead point 2,400 out; Flank and Cover add one via-point 600-
-    /// 2,000 to the side at 40-60 % of the next 8,000 units; HubFan leaves a
+    /// 2,000 (up to <paramref name="maximumFlankOffset"/>) to the side at 40-60 % of the next 8,000 units; HubFan leaves a
     /// hub on a random bearing beyond its safe circle. A candidate must lie in
     /// the actor's zone, have a floor and a path from the start. A rejected
     /// Flank/Cover falls back to Road, Road to the destination itself; a
@@ -151,7 +161,7 @@ public static class AutonomousRvrRoutePolicy
     /// </summary>
     public static RvrRouteChoice ChooseRoute(Vector3 start, Vector3 destination, RvrRouteVariant variant,
         RvrRouteProbe probe, Random random, Vector3? heat = null, Vector3? hubCentre = null,
-        float hubSafeRadius = KeepSafeRadius)
+        float hubSafeRadius = KeepSafeRadius, float maximumFlankOffset = FlankMaximumOffset)
     {
         Vector2 delta = new(destination.X - start.X, destination.Y - start.Y);
         float leg = delta.Length();
@@ -206,6 +216,7 @@ public static class AutonomousRvrRoutePolicy
                 float z = start.Z + (destination.Z - start.Z) * (float)(local * fraction / leg);
                 foreach (float offset in FlankOffsets)
                 {
+                    if (offset > maximumFlankOffset) continue;
                     // A bend costs about what Road costs; try it only if Road stays affordable.
                     if (check.Budget < 2 * roadCost) break;
                     Vector2 point = anchor + perpendicular * side * offset;
