@@ -28,11 +28,11 @@ defaults in code, keep/relic start state from the reset.
   realm-only group/trade/speech/guild join, dummy-guild trick off; realm-only
   invites for bots, battlegroups, guild alliances. Camlann unchanged.
   **RvR not playable yet:** the alliance core is R1b.
-- [~] **R1b Alliance core, client, GST_PvP audit.** Agent rvr-r1b (2026-10-25 01:25). Same realm = friend
+- [~] **R1b Alliance core, client, GST_PvP audit.** Implemented (worktree rvr-r1b, 45 tests, audit in docs/RVR_RULES_AUDIT.md), in review (01:50). Same realm = friend
   everywhere; guild/battlegroup only within a realm; companions = owner's
   realm; the 35 GST_PvP sites and 8 `is PvPServerRules` checks audited;
   UT_CamlannPvpCombatant gets RvR twins. 1 session.
-- [ ] **R2 Travel + population rules.** Realm-bound porters, capitals, `/tc`,
+- [~] **R2 Travel + population rules.** Agent rvr-r2 (2026-10-25 01:50, parallel to the R1b review). Realm-bound porters, capitals, `/tc`,
   Realm Exchange, Atlantis havens, BG porters; `/spawn` own realm; open BG
   perrealm default; Gothwaite excluded. 1 session.
 - [ ] **R3a Keeps.** Neutral Warden start, capture by realm sticks, claims by
@@ -83,3 +83,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-25 01:20: R1a reviewed (ACCEPT) and merged as 0.332.0. R1b started with
   the reviewer's complete gap list (alliance core, battlegroups, enemy names
   hidden, GST_PvP audit); R5a running.
+- 2026-10-25 01:50: R1b implemented and in review; R2 started in parallel; R5a running.
