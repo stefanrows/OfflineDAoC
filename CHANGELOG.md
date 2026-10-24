@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.318.0] - 2026-10-24
+
+### Added
+- Master Level progression (ToA plan WP2.2, `docs/TOA_MASTER_LEVELS.md`):
+  the Arbiter enrols a player and their group (level 40+, within 2,000 units)
+  at Master Level 1 and offers the eight disciplines; the choice is exclusive
+  until the Star of Destiny resets it. Every kill of a reward-eligible NPC of
+  level 45 or higher pays mob level x `ml_xp_per_level` (default 10) Master
+  Level experience to every earner; 32,000 per level, granted in the field.
+  Demyphon redeems Master Level credits and the Star of Destiny for bounty
+  points. New player command `/ml`. GM `/player startml`, `mlxp`, `setml`,
+  `setmlline` use the same path. The ML title follows the chosen discipline.
+  Unit tests UT_MasterLevelProgression (14).
+- NPC classes `DOL.GS.MasterLevelArbiter` (alias `DOL.GS.Scripts.GaherisArbiter`)
+  and `DOL.GS.Scripts.MasterLevelsMerchant`.
+
+### Changed
+- Master Level spell lines load only for the chosen discipline of an
+  enrolled player and are removed at once when the discipline changes.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.317.0] - 2026-10-24
 
 ### Added

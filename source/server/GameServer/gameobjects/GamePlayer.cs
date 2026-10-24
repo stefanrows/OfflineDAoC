@@ -9898,25 +9898,23 @@ namespace DOL.GS
                     RemoveSpecialization(spec.KeyName);
             }
 
-            // sort ML Spec depending on ML Line
-            byte mlindex = 0;
+            // Master Level lines: only the chosen discipline, once on the path at ML 1+.
+            // MLLine is the position in MasterLevelProgression.Paths, not in this career
+            // (the career is built from database row order). A spec named like one of the
+            // eight lines counts even with a wrong Implementation, so it never becomes trainable.
             foreach (KeyValuePair<Specialization, int> constraint in careers)
             {
-                if (constraint.Key is IMasterLevelsSpecialization)
+                if (MasterLevelProgression.IsMasterLevelSpec(constraint.Key))
                 {
-                    if (mlindex != MLLine)
+                    if (!MasterLevelProgression.IsActiveLine(this, constraint.Key.KeyName))
                     {
                         if (HasSpecialization(constraint.Key.KeyName))
                             RemoveSpecialization(constraint.Key.KeyName);
 
-                        mlindex++;
-                        continue;
-                    }
-
-                    mlindex++;
-
-                    if (!MLGranted || MLLevel < 1)
-                    {
+                        // RefreshSpecDependantSkills only adds lines; a respecced or changed
+                        // discipline would keep its line (Perfecter concentration, Spymaster
+                        // poison saver read it by name) until the next login.
+                        RemoveMasterLevelSpellLines(constraint.Key.KeyName);
                         continue;
                     }
                 }
@@ -9933,6 +9931,24 @@ namespace DOL.GS
                         RemoveSpecialization(constraint.Key.KeyName);
                 }
             }
+        }
+
+        /// <summary>
+        /// Removes the spell lines of a Master Level line the player no longer holds.
+        /// </summary>
+        protected void RemoveMasterLevelSpellLines(string specKey)
+        {
+            List<SpellLine> stale;
+
+            lock (_spellLinesListLock)
+            {
+                stale = m_spellLines.Where(line => line != null &&
+                    (string.Equals(line.KeyName, specKey, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(line.Spec, specKey, StringComparison.OrdinalIgnoreCase))).ToList();
+            }
+
+            foreach (SpellLine line in stale)
+                RemoveSpellLine(line);
         }
 
         /// <summary>

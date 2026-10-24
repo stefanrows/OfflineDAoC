@@ -45,6 +45,7 @@ namespace DOL.GS.Commands
 		"/player saddlebags <0 - 15> - Set what horse saddlebags are active on this player",
 		"/player startml - Start this players Master Level training.",
 		"/player setml <level> - Set this players current Master Level.",
+		"/player setmlline <discipline|0-7|none> - Set this players Master Level discipline.",
 		"/player setmlstep <level> <step> [false] - Sets a step for an ML level to finished. 0 to set as unfinished.",
         "/player allchars <PlayerName>", 
         "/player class <list|classID|className> - view a list of classes, or change the targets class.",
@@ -361,10 +362,8 @@ namespace DOL.GS.Commands
 						if (player == null)
 							player = client.Player;
 
-						if (player.MLGranted == false)
+						if (MasterLevelProgression.Enrol(player, ignoreLevel: true))
 						{
-							player.MLGranted = true;
-							player.SaveIntoDatabase();
 							client.Out.SendMessage(player.Name + " is now ready to start Master Level training!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 							player.Out.SendMessage(client.Player.Name + "(PrivLevel: " + client.Account.PrivLevel + ") has started your Master Level training!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 						}
@@ -395,8 +394,7 @@ namespace DOL.GS.Commands
 						player.MLLevel = level;
 						player.MLExperience = 0;
 						player.SaveIntoDatabase();
-						player.Out.SendUpdatePlayer();
-						player.Out.SendMasterLevelWindow((byte)player.MLLevel);
+						MasterLevelProgression.Announce(player);
 						client.Out.SendMessage(player.Name + " Master Level is set to " + level + "!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 						player.Out.SendMessage(client.Player.Name + "(PrivLevel: " + client.Account.PrivLevel + ") has set your Master Level to " + level + "!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 					}
@@ -415,16 +413,16 @@ namespace DOL.GS.Commands
 						if (player == null)
 							player = client.Player;
 
-						byte line = Convert.ToByte(args[2]);
+						int index = MasterLevelProgression.PathIndex(args[2]);
+						byte line = index >= 0 ? (byte)index
+							: args[2].Equals("none", StringComparison.OrdinalIgnoreCase) ? MasterLevelProgression.NO_PATH
+							: Convert.ToByte(args[2]);
 
-						if (line > 1) line = 1;
+						if (line >= MasterLevelProgression.Paths.Length) line = MasterLevelProgression.NO_PATH;
 
 						player.MLLine = line;
 						player.SaveIntoDatabase();
-						player.RefreshSpecDependantSkills(true);
-						player.Out.SendUpdatePlayerSkills(true);
-						player.Out.SendUpdatePlayer();
-						player.Out.SendMasterLevelWindow((byte)player.MLLevel);
+						MasterLevelProgression.Announce(player);
 						client.Out.SendMessage(player.Name + " Master Line is set to " + line + "!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 						player.Out.SendMessage(client.Player.Name + "(PrivLevel: " + client.Account.PrivLevel + ") has set your Master Line to " + line + "!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 					}
@@ -851,27 +849,24 @@ namespace DOL.GS.Commands
 							if (player == null)
 								player = client.Player;
 
-							// WIP, For the moment it simply sets MLExperience - Tolakram
-
 							long amount = long.Parse(args[2]);
 
-							player.MLExperience += amount;
+							if (!player.MLGranted)
+							{
+								client.Out.SendMessage(player.Name + " has not started Master Level training (/player startml).", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
+								return;
+							}
+
 							client.Out.SendMessage("You gave " + player.Name + " " + amount + " ML experience succesfully!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 							player.Out.SendMessage(client.Player.Name + "(PrivLevel: " + client.Account.PrivLevel + ") has given you " + amount + " ML experience!", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 
-							if (player.MLExperience > player.GetMLExperienceForLevel(player.MLLevel + 1))
+							// Same path as kill experience: a full bar grants the Master Level.
+							if (MasterLevelProgression.AddExperience(player, amount) == 0)
 							{
-								player.MLExperience = player.GetMLExperienceForLevel(player.MLLevel + 1);
+								player.SaveIntoDatabase();
+								player.Out.SendUpdatePlayer();
+								player.Out.SendMasterLevelWindow((byte)player.MLLevel);
 							}
-
-							if (player.MLExperience < 0)
-							{
-								player.MLExperience = 0;
-							}
-
-							player.SaveIntoDatabase();
-							player.Out.SendUpdatePlayer();
-							player.Out.SendMasterLevelWindow((byte)player.MLLevel);
 						}
 						catch (Exception)
 						{

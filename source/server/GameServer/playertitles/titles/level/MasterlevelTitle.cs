@@ -37,11 +37,14 @@ namespace DOL.GS.PlayerTitles
 		/// <returns></returns>
 		private int GetPlayerMLLine(GamePlayer player)
 		{
-			var mlspec = player.GetSpecList().FirstOrDefault(spec => spec is IMasterLevelsSpecialization);
+			// The chosen discipline, not the spec list: the line enters the spec list only at
+			// level 50, and an enrolled player without a discipline has none (Titles.ML.Line0
+			// does not exist).
+			string path = MasterLevelProgression.PathOf(player);
 			
-			if(mlspec != null)
+			if(path != null)
 			{
-				switch(mlspec.KeyName)
+				switch(path)
 				{
 					case "Banelord":
 						return 1;
@@ -85,7 +88,7 @@ namespace DOL.GS.PlayerTitles
 		/// <returns>The title value.</returns>
 		public override string GetValue(GamePlayer source, GamePlayer player)
 		{
-			if (player.MLGranted && player.MLLevel > 0)
+			if (IsSuitable(player))
 			{
 				// try get player ML Number
 				int mlline = GetPlayerMLLine(player);
@@ -110,7 +113,7 @@ namespace DOL.GS.PlayerTitles
 		/// <returns>true if the player is suitable for this title.</returns>
 		public override bool IsSuitable(GamePlayer player)
 		{
-			return player.MLGranted && player.MLLevel > 0;
+			return MasterLevelProgression.PathOf(player) != null;
 		}
 		
 		/// <summary>
@@ -122,7 +125,7 @@ namespace DOL.GS.PlayerTitles
 		protected override void EventCallback(DOLEvent e, object sender, EventArgs arguments)
 		{
 			GamePlayer p = sender as GamePlayer;
-			if (p != null && p.Titles.Contains(this))
+			if (p != null && p.Titles.Contains(this) && IsSuitable(p))
 			{
 				p.UpdateCurrentTitle();
 				return;

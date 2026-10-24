@@ -386,6 +386,11 @@ Agent sessions on items 45–48: take the role and context from
      ML paths, 73 artifact spells and the Atlantis mobs, travel, zone points
      and scroll binders into every save once at server start (backup
      first); ML paths stay hidden until the Arbiter grants ML.
+     WP2.2, Master Level progression (Arbiter enrols the group at level 40+,
+     discipline choice, ML experience from every level 45+ NPC kill for every
+     earner, Demyphon's credits and Star of Destiny, `/ml`): implemented in
+     source, real-client check pending
+     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md)).
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

@@ -43,6 +43,9 @@ namespace DOL.GS
             if (!base.Interact(player)) 
                 return false;
 
+            if (!SpeaksWelcome(player))
+                return true;
+
 			String realm = GlobalConstants.RealmToName((eRealm)Realm);
 
 			SayTo(player, eChatLoc.CL_PopupWindow, LanguageMgr.GetTranslation(player.Client.Account.Language, 
@@ -54,6 +57,15 @@ namespace DOL.GS
 
 			SayTo(player, eChatLoc.CL_PopupWindow, LanguageMgr.GetTranslation(player.Client.Account.Language, 
 				String.Format("{0}.Arbiter.Interact.BeginTrials", realm), player.Name));
+            return true;
+        }
+
+        /// <summary>
+        /// True if Interact sends the two welcome popups. MasterLevelArbiter folds them into
+        /// its own single popup, because the client shows only one popup per tick.
+        /// </summary>
+        protected virtual bool SpeaksWelcome(GamePlayer player)
+        {
             return true;
         }
 

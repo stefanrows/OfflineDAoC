@@ -84,16 +84,18 @@ agent or session that finishes a package updates its row and the log below.
   12+42+43) and 011 (class paths, 39) and 012 (artifact spells). `/train`
   needs no guard: ML specs are career specs, loaded only with MLGranted and
   the chosen line. 7 ML ranks still missing everywhere (Battlemaster mostly).
-- [~] **WP2.2 ML progression.** Implemented in source (worktree toa-mlprog,
-  11 tests, `docs/TOA_MASTER_LEVELS.md`), in review: Arbiter enrols the group
-  (level 40+, 2000 units) at ML1 without discipline; exclusive discipline by
-  fixed MLLine index; ML XP = mob level x `ml_xp_per_level` for every earner
-  on level 45+ NPC kills, level granted in the field; Demyphon redeems the
-  next credit, Star of Destiny resets the line; `/ml`; GM
-  startml/mlxp/setml/setmlline rewired. Visible only with WP2.1 data. gaheris Arbiter (group enrolment, discipline
-  choice, respec via Demyphon) and `MasterLevelExperience` (level 45+ kills,
-  `ml_xp_per_level`) adapted to our server; owner rule: no Atlantis
-  restriction. Depends on WP0.2.
+- [x] **WP2.2 ML progression.** (0.318.0, real-client check pending;
+  `docs/TOA_MASTER_LEVELS.md`) Arbiter enrols the group (level 40+, 2000
+  units) at ML1 without discipline; exclusive discipline by fixed MLLine
+  index, Star of Destiny resets it and drops the old spell line at once;
+  ML XP = mob level x `ml_xp_per_level` for every earner on level 45+ NPC
+  kills that are reward-eligible, level granted in the field; Demyphon
+  redeems the next credit; `/ml`; title follows the discipline; GM
+  startml/mlxp/setml/setmlline rewired. **Data follow-up:** pack 020 still
+  places the Arbiters as lore-only `DOL.GS.Arbiter`; a small pack (gaheris
+  35 subset: Arbiter → `DOL.GS.MasterLevelArbiter`, region 72 Demyphon) is
+  needed before anyone can enrol without a GM; goes into the next pack set
+  with 050 and the dungeon packs.
 - [x] **WP2.3 ML ability fixes.** (0.315.0, real-client check pending with
   WP2.1 data) `MovementWatch` in gameutils; Lookout (partner same realm,
   sitting, within 200 units; ends when either moves or the sitter stands),
@@ -141,7 +143,9 @@ agent or session that finishes a package updates its row and the log below.
   Will, Gem of Lost Memories, Cloudsong/Crown of Zahur auras and endu proc,
   Bracer of Zo'arkat/Phoebus' Harp aura) from Allakhazam/KB delve text; the
   4 spell IDs that exist nowhere (Spear of Kings, Malice's Axe, Shield of
-  Khaos, Scepter of the Meritious) get rows written from delve text. ~1 session.
+  Khaos, Scepter of the Meritious) get rows written from delve text; the
+  stock DexterityConstitutionDebuff maps to no eEffect and conflicts with
+  every artifact effect (needs its own effect type). ~1 session.
 - [ ] **WP3.1b Earning artifacts, data-driven.** Our Artifact rows use
   numeric placeholders (ScholarID 1001, EncounterID = template name, Version
   0-15), so DOL's type-name quest lookup cannot work: Scholar + ArtifactQuest
@@ -179,6 +183,8 @@ agent or session that finishes a package updates its row and the log below.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24: WP2.2 reviewed (reward gate, spell-line removal, title fixed)
+  and merged as 0.318.0.
 - 2026-10-24: WP1.1a + WP2.1 reviewed (save safety verified; failed-pack
   handling, journal-mode guard and /datapacks hardening added) and merged as
   0.317.0.

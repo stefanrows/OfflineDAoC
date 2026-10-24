@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.317.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.318.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 Command reference maintained from server registrations and fork source.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -588,6 +588,11 @@ NORMAL PLAYER COMMANDS
   A military salute
   /military
   Handler: DOL.GS.Commands.EmoteCommandHandler
+
+/ml
+  Show your Master Level, Master Level experience and discipline
+  /ml
+  Handler: DOL.GS.Commands.MasterLevelCommandHandler
 
 /mobs
   Lists accessible monsters and their zones at an exact level
@@ -1732,6 +1737,7 @@ GM ONLY COMMANDS
   /player saddlebags <0 - 15> - Set what horse saddlebags are active on this player
   /player startml - Start this players Master Level training.
   /player setml <level> - Set this players current Master Level.
+  /player setmlline <discipline|0-7|none> - Set this players Master Level discipline.
   /player setmlstep <level> <step> [false] - Sets a step for an ML level to finished. 0 to set as unfinished.
   /player allchars <PlayerName>
   /player class <list|classID|className> - view a list of classes, or change the targets class.
