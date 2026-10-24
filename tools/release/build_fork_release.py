@@ -114,6 +114,12 @@ def main():
         sys.exit(f'Expected the eleven battleground navmeshes in {navmesh}, found {len(navs)}.')
     for nav in navs:
         add(f'runtime/server/pathing/{nav.name}', nav)
+    # World data packs (docs/TOA_DATA_PACKS.md): the server applies them to the save at its next start.
+    packs = server / 'data-packs'
+    if packs.is_dir():
+        for pack in sorted(packs.iterdir()):
+            if pack.is_file() and (pack.name == 'manifest.json' or pack.name.endswith(('.sql', '.sql.gz'))):
+                add(f'runtime/server/data-packs/{pack.name}', pack)
 
     cm = json.loads((companion / 'manifest.json').read_text(encoding='utf-8'))
     if cm['baselineSha256'] != UPSTREAM_GAME_DLL or cm.get('protocolVersion') != 3:

@@ -377,6 +377,11 @@ namespace DOL.GS
 					return false;
 
 				//---------------------------------------------------------------
+				// Apply pending world data packs (data-packs folder) once per save, before any
+				// world data is read. A failed pack is rolled back; the server keeps booting.
+				InitComponent(DataPacks.WorldDataPacks.ApplyPending, "World data packs");
+
+				//---------------------------------------------------------------
 				// Initialize gameplay UTC before loading world actors and deadlines.
 				if (!InitComponent(() => WorldSimulationClock.Initialize(Database), "World Simulation Clock"))
 					return false;

@@ -1,4 +1,4 @@
-OFFLINE DAOC 0.316.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
+OFFLINE DAOC 0.317.0 - CAMLANN FULL-PVP SERVER COMMAND REFERENCE
 
 Command reference maintained from server registrations and fork source.
 This installation runs one Camlann full-PvP world. Realm remains character identity,
@@ -1201,6 +1201,12 @@ GM ONLY COMMANDS
   /crafting salvageinfo <SalvageYieldID>
   '/crafting list' To have the list of all crafting skill with their id
   Handler: DOL.GS.Commands.CraftCommandHandler
+
+/datapacks
+  World data packs: which shipped packs this save has, and apply a pending one
+  /datapacks list - every shipped pack with its state (applied, pending, failed) and whether its file is present
+  /datapacks apply <name> - apply or retry one pack now, only while no other client is online (backup first); restart the server to load it
+  Handler: DOL.GS.Commands.DataPacksCommandHandler
 
 /debug
   Activate or deactivate debug

@@ -49,15 +49,23 @@ agent or session that finishes a package updates its row and the log below.
 
 ### Phase 1: Atlantis exists
 
-- [~] **WP1.1 Atlantis population.** Split 2026-10-24: WP1.1a data-pack
-  mechanism + gaheris packs (agent toa-datapack, with WP2.1); WP1.1b
-  db-public dungeon mobs as a pack (agent toa-dungeons). Ship a DB migration that loads files
-  13, 14, 29, 36 (mobs, travel, zone points, scroll binders) into the player's
-  save at deploy/first start; files 28/35 follow with their NPC classes. Add
-  the db-public ToA dungeon mobs (Cetus' Pit, Sobekite Eternal, Temple of
-  Twilight, Halls of Ma'ati, Deep Volcanus, Great Pyramid, Celestius), which
-  gaheris does not carry. Check region load/memory with 41.7k extra mobs
-  (`region_max_objects` 30,000, largest region 14.6k). Depends on WP0.3.
+- [x] **WP1.1a Data-pack mechanism + gaheris packs.** (0.317.0, real-client
+  and first-boot check pending; `docs/TOA_DATA_PACKS.md`) Generic
+  `WorldDataPacks` applied at server start before world load: sha-checked
+  manifest, one transaction per pack with marker row, online backup before
+  the first pack (newest 3 kept), failed packs recorded and not retried until
+  `/datapacks apply` or a new file, refused on journal_mode off/memory,
+  SQLite only; deploy and release pack carry `runtime/server/data-packs`.
+  Packs: 010 ML spells (73 of 80 ranks), 011 ML paths, 012 artifact spells
+  (73 rows), 020 Atlantis mobs (41,727), 021 travel, 022 zone points, 023
+  scroll binders. Not shipped: gaheris 28/35 (portals, Arbiter/NPC rows)
+  until the NPC classes land (WP2.2/3.1b); 35 NPCs in pack 020 load as plain
+  GameNPC until then. Follow-up: pack 050 artifact ClassType (from WP3.1),
+  WP1.1b dungeon packs.
+- [~] **WP1.1b db-public dungeon mobs + ToA loot.** Agent toa-dungeons
+  (2026-10-24): Cetus' Pit, Sobekite Eternal, Temple of Twilight, Halls of
+  Ma'ati, Deep Volcanus, Great Pyramid, Celestius plus the 1,876 db-public
+  loot rows as packs 030/031/040.
 - [ ] **WP1.2 Travel.** Open Atlantis to players (`atlantis_teleport_plvl` 1),
   Djinn/boat/teleport rows working from each realm's hub; add an
   `[Atlantis]` line to our porter menu. Depends on WP1.1.
@@ -72,10 +80,17 @@ agent or session that finishes a package updates its row and the log below.
 - [x] **WP2.0 Core hooks.** (0.315.0) Dying carries all player attackers;
   `GainExperience` raises `GainedExperience` with the pre-rate arguments (fires
   for every positive gain incl. quests/praying: listeners filter on XPSource).
-- [~] **WP2.1 ML data.** The 73 ML spells gaheris has, eight lines, class
-  paths (gaheris 12/39/42/43) as a data pack; `/train` shows the paths; the 7
-  missing ranks listed for a follow-up. Agent toa-datapack (2026-10-24).
-- [ ] **WP2.2 ML progression.** gaheris Arbiter (group enrolment, discipline
+- [x] **WP2.1 ML data.** (0.317.0) Packs 010 (73 ML spells, gaheris
+  12+42+43) and 011 (class paths, 39) and 012 (artifact spells). `/train`
+  needs no guard: ML specs are career specs, loaded only with MLGranted and
+  the chosen line. 7 ML ranks still missing everywhere (Battlemaster mostly).
+- [~] **WP2.2 ML progression.** Implemented in source (worktree toa-mlprog,
+  11 tests, `docs/TOA_MASTER_LEVELS.md`), in review: Arbiter enrols the group
+  (level 40+, 2000 units) at ML1 without discipline; exclusive discipline by
+  fixed MLLine index; ML XP = mob level x `ml_xp_per_level` for every earner
+  on level 45+ NPC kills, level granted in the field; Demyphon redeems the
+  next credit, Star of Destiny resets the line; `/ml`; GM
+  startml/mlxp/setml/setmlline rewired. Visible only with WP2.1 data. gaheris Arbiter (group enrolment, discipline
   choice, respec via Demyphon) and `MasterLevelExperience` (level 45+ kills,
   `ml_xp_per_level`) adapted to our server; owner rule: no Atlantis
   restriction. Depends on WP0.2.
@@ -102,16 +117,31 @@ agent or session that finishes a package updates its row and the log below.
   stock sign rule and conflict only with their own type; `docs/TOA_ARTIFACT_SPELLS.md`.
   Follow-ups: pack gaheris `90-spells.sql` (68 of the 73 missing artifact
   spell IDs, in WP2.1); 5 spell IDs exist nowhere (7206, 13135, 30115, 30125,
-  32223) and 7 item spell types have no handler anywhere (ZoAura, ZahurAura,
+  32223, after the packs only 4: 7206 resolves to the ML spell Purify Vision)
+  and 7 pack-012 spell types have no handler anywhere (ZoAura, ZahurAura,
   ZahurEnduProc, CrocodileTearsProc, UnyeldingProc, YouthIllness,
-  EternalPlant); two core one-liners (Ceremonial Bracer mez intercept,
+  PowerHealthEnduranceRegenBuff; EternalPlant has no row), to be written new
+  as **WP3.0b**; two core one-liners (Ceremonial Bracer mez intercept,
   Cloudsong fall damage) and the stock DexterityConstitutionDebuff's
   always-on conflict go to WP3.1; GM accounts can log back in morphed.
-- [ ] **WP3.1 Artifact core.** gaheris `ArtifactMgr` (+ an `Init` caller),
+- [~] **WP3.1 Artifact core.** Implemented in source (worktree toa-artcore,
+  15 tests, `docs/TOA_ARTIFACTS.md`), in review: ArtifactMgr/InventoryArtifact
+  under gameutils/Atlantis, bonus gating in the item getters (no template
+  clone), level from item Experience, XP from GainedExperience (NPC/Player
+  sources only, DOL formula, 10 levels at 50 M), generic encounter credit per
+  artifact, Ceremonial Bracer + Cloudsong one-liners, ClassType SQL
+  `tools/toa/sql/050-artifact-item-classtype.sql` (197 templates; to become a
+  pack). 3 ArtifactXItem rows have no template. gaheris `ArtifactMgr` (+ an `Init` caller),
   `InventoryArtifact` (+ stat refresh), `ArtifactCompat` adapted; artifact
   item templates get `ClassType` InventoryArtifact by SQL, otherwise they
   reload as plain items with every bonus active; artifacts level on kills
   (`ArtifactExperience`), unlock bonuses per level. Depends on WP2.0.
+- [ ] **WP3.0b Missing artifact handlers.** Write the 7 handlers no project
+  has (Crocodile Tear Ring, Kalare's Necklace regen buff, Ring of Unyielding
+  Will, Gem of Lost Memories, Cloudsong/Crown of Zahur auras and endu proc,
+  Bracer of Zo'arkat/Phoebus' Harp aura) from Allakhazam/KB delve text; the
+  4 spell IDs that exist nowhere (Spear of Kings, Malice's Axe, Shield of
+  Khaos, Scepter of the Meritious) get rows written from delve text. ~1 session.
 - [ ] **WP3.1b Earning artifacts, data-driven.** Our Artifact rows use
   numeric placeholders (ScholarID 1001, EncounterID = template name, Version
   0-15), so DOL's type-name quest lookup cannot work: Scholar + ArtifactQuest
@@ -149,6 +179,15 @@ agent or session that finishes a package updates its row and the log below.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24: WP1.1a + WP2.1 reviewed (save safety verified; failed-pack
+  handling, journal-mode guard and /datapacks hardening added) and merged as
+  0.317.0.
+- 2026-10-24: WP2.2 (toa-mlprog, 11 tests) and WP3.1 (toa-artcore, 15 tests)
+  implemented; reviews running.
+- 2026-10-24: WP1.1a + WP2.1 implemented by toa-datapack (20 tests); pack
+  012 artifact spells added on request, review next.
+- 2026-10-24: WP2.2 (ML progression) and WP3.1 (artifact core) started as
+  agents on 0.316.0.
 - 2026-10-24: WP3.0 reviewed (two stacking defects fixed) and merged as
   0.316.0.
 - 2026-10-24: WP2.0 + WP2.3 reviewed (one Battlewarder respawn defect fixed)

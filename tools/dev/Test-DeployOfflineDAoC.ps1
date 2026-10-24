@@ -87,6 +87,9 @@ New-FakeFile (Join-Path $build 'lib\Newtonsoft.Json.dll') 'built-json'
 New-FakeFile (Join-Path $install 'runtime\server\lib\SQLite.Interop.dll') 'installed-sqlite-native'
 New-FakeFile (Join-Path $build 'lib\SQLite.Interop.dll') 'built-sqlite-native'
 New-FakeFile (Join-Path $build 'lib\Extra.Dependency.dll') 'built-only-dependency'
+New-FakeFile (Join-Path $build 'data-packs\manifest.json') '{"format":1,"packs":[]}'
+New-FakeFile (Join-Path $build 'data-packs\010-test.sql') 'SELECT 1;'
+New-FakeFile (Join-Path $build 'data-packs\readme.txt') 'not a pack'
 
 New-FakeFile (Join-Path $install 'runtime\account.txt') 'account-secret'
 New-FakeFile (Join-Path $install 'runtime\data\opendaoc.sqlite3.db') 'save-db'
@@ -98,6 +101,7 @@ New-FakeFile (Join-Path $install 'runtime\OfflineDAoC.dll') 'installed-launcher'
 New-FakeFile (Join-Path $install 'runtime\OfflineDAoC.exe') 'installed-launcher-exe'
 New-FakeFile (Join-Path $launcherBuild 'OfflineDAoC.dll') 'built-launcher'
 New-FakeFile (Join-Path $launcherBuild 'OfflineDAoC.exe') 'built-launcher-exe'
+New-FakeFile (Join-Path $launcherBuild 'Join Friend.cmd') 'built-join-friend'
 
 $accountBefore = Get-OfflineDaocFileHash (Join-Path $install 'runtime\account.txt')
 $dbBefore = Get-OfflineDaocFileHash (Join-Path $install 'runtime\data\opendaoc.sqlite3.db')
@@ -183,6 +187,9 @@ Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\data\opendaoc
 Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\config\serverconfig.xml')) -eq $configBefore) 'apply leaves serverconfig.xml untouched'
 Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\OfflineDAoC.dll')) -eq $launcherBuilt) 'apply deploys the optional launcher when asked'
 Write-Check (-not (Test-Path -LiteralPath (Join-Path $install 'runtime\server\lib\Extra.Dependency.dll'))) 'apply does not add build-only DLLs'
+Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\data-packs\010-test.sql')) -eq (Get-OfflineDaocFileHash (Join-Path $build 'data-packs\010-test.sql'))) 'apply adds new world data packs'
+Write-Check (Test-Path -LiteralPath (Join-Path $install 'runtime\server\data-packs\manifest.json')) 'apply adds the data pack manifest'
+Write-Check (-not (Test-Path -LiteralPath (Join-Path $install 'runtime\server\data-packs\readme.txt'))) 'apply copies only pack files'
 
 $backupParent = $install + '-backups'
 $backupRoot = Get-ChildItem -LiteralPath $backupParent -Directory | Sort-Object Name -Descending | Select-Object -First 1
@@ -192,6 +199,7 @@ if ($backupRoot) {
     Invoke-OfflineDaocRestore -InstallRoot $install -Backup $backupRoot.FullName | Out-Null
     Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\server\lib\GameServer.dll')) -eq $gsLibBefore) 'restore returns original GameServer.dll hash'
     Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\OfflineDAoC.dll')) -eq $launcherInstalled) 'restore returns original launcher hash'
+    Write-Check (-not (Test-Path -LiteralPath (Join-Path $install 'runtime\server\data-packs\010-test.sql'))) 'restore removes data packs the deploy added'
     Write-Check ((Get-OfflineDaocFileHash (Join-Path $install 'runtime\account.txt')) -eq $accountBefore) 'restore leaves protected files untouched'
 
     $again = $true

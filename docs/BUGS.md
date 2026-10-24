@@ -6,6 +6,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+172. **Deploy self-check: "a second restore of the same backup is a safe no-op"
+     fails on `runtime\Join Friend.cmd`.** Found 2026-10-24 by the data-pack
+     review once the fixture gained the missing `Join Friend.cmd` (before that
+     `Test-DeployOfflineDAoC.ps1` aborted with "Launcher build is missing Join
+     Friend.cmd" and tested nothing). Message: "Installed hash for
+     runtime\Join Friend.cmd is neither the deployed nor the backed-up hash;
+     restore refused." Pre-existing launcher restore defect in
+     `tools/dev/OfflineDAoC.Deploy.psm1`, unrelated to data packs (37 of 38
+     checks pass). Not fixed yet.
+
 162. **The Custom8 and gear window fallback timers run in game time; a
      patched client can get the "unpatched" line; the OPEN BG window counts as
      open after the stock close X.** Found 2026-10-16 while building the OPEN

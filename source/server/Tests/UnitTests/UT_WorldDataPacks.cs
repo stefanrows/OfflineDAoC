@@ -1,0 +1,559 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using DOL.Database;
+using DOL.Database.Handlers;
+using DOL.GS;
+using DOL.GS.DataPacks;
+using NUnit.Framework;
+
+namespace DOL.UnitTests
+{
+    /// <summary>World data packs (docs/TOA_DATA_PACKS.md): the applier on temporary SQLite files, and the shipped packs.</summary>
+    [TestFixture, NonParallelizable]
+    public class UT_WorldDataPacks
+    {
+        private string _root;
+        private string _db;
+        private string _packs;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _root = Path.Combine(Path.GetTempPath(), "offline-daoc-datapacks-" + Guid.NewGuid().ToString("N"));
+            _packs = Path.Combine(_root, "data-packs");
+            Directory.CreateDirectory(_packs);
+            _db = Path.Combine(_root, "save.sqlite3.db");
+            Exec("CREATE TABLE thing (Id TEXT PRIMARY KEY, Value INTEGER NOT NULL)");
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            SQLiteConnection.ClearAllPools();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            try
+            {
+                Directory.Delete(_root, true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        #region Applier
+
+        [Test]
+        public void ApplyPending_AppliesEachPackOnce_AndRecordsIt()
+        {
+            WriteManifest(Pack("010-first", "INSERT INTO thing VALUES ('a', 1);\nINSERT INTO thing VALUES ('b', 2);"));
+
+            WorldDataPackRun first = Applier().ApplyPending();
+            Assert.That(first.Results.Single().State, Is.EqualTo(WorldDataPackState.Applied));
+            Assert.That(first.Results.Single().AppliedNow, Is.True);
+            Assert.That(first.Results.Single().Rows, Is.EqualTo(2));
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.EqualTo(2));
+            Assert.That(Scalar($"SELECT Rows FROM {WorldDataPackApplier.MarkerTable} WHERE Name = '010-first'"), Is.EqualTo(2));
+
+            WorldDataPackRun second = Applier().ApplyPending();
+            Assert.That(second.AppliedCount, Is.Zero);
+            Assert.That(second.Results.Single().State, Is.EqualTo(WorldDataPackState.Applied));
+            Assert.That(second.BackupPath, Is.Null, "no backup when nothing is pending");
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.EqualTo(2), "a pack runs once per save");
+        }
+
+        [Test]
+        public void ApplyPending_ShaMismatch_RefusesAndLeavesDatabaseUntouched()
+        {
+            WorldDataPackManifestEntry entry = Pack("010-tampered", "INSERT INTO thing VALUES ('a', 1);");
+            File.AppendAllText(Path.Combine(_packs, entry.File), "INSERT INTO thing VALUES ('evil', 666);\n");
+            WriteManifest(entry);
+
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            Assert.That(run.Results.Single().State, Is.EqualTo(WorldDataPackState.HashMismatch));
+            Assert.That(run.BackupPath, Is.Null, "a refused pack needs no backup");
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.Zero);
+            Assert.That(Scalar($"SELECT COUNT(*) FROM {WorldDataPackApplier.MarkerTable}"), Is.Zero);
+        }
+
+        [Test]
+        public void ApplyPending_FailingStatement_RollsBackWholePack_AndLaterPacksStillApply()
+        {
+            WriteManifest(
+                Pack("010-broken", "INSERT INTO thing VALUES ('a', 1);\nUPDATE thing SET Value = 5;\nINSERT INTO missing_table VALUES (1);"),
+                Pack("020-good", "INSERT INTO thing VALUES ('z', 26);"));
+
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            WorldDataPackResult broken = run.Results.Single(r => r.Name == "010-broken");
+            Assert.That(broken.State, Is.EqualTo(WorldDataPackState.Failed));
+            Assert.That(broken.Message, Does.Contain("statement 3 of 3").And.Contain("missing_table"));
+            Assert.That(run.Results.Single(r => r.Name == "020-good").State, Is.EqualTo(WorldDataPackState.Applied));
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing WHERE Id = 'a'"), Is.Zero, "the failed pack left no row behind");
+            Assert.That(Scalar("SELECT Value FROM thing WHERE Id = 'z'"), Is.EqualTo(26));
+            Assert.That(Scalar($"SELECT COUNT(*) FROM {WorldDataPackApplier.MarkerTable} WHERE Name = '010-broken'"), Is.Zero);
+
+            // The failure is recorded: the next start skips the pack (no retry, no backup); the good one is not re-run.
+            WorldDataPackRun rerun = Applier().ApplyPending();
+            Assert.That(rerun.Results.Single(r => r.Name == "010-broken").State, Is.EqualTo(WorldDataPackState.Failed));
+            Assert.That(rerun.Results.Single(r => r.Name == "010-broken").SkippedAfterFailure, Is.True);
+            Assert.That(rerun.Results.Single(r => r.Name == "020-good").AppliedNow, Is.False);
+        }
+
+        [Test]
+        public void FailedPack_IsNotRetriedAtTheNextStart_AndTakesNoSecondBackup()
+        {
+            WriteManifest(Pack("010-broken", "INSERT INTO thing VALUES ('a', 1);\nINSERT INTO missing_table VALUES (1);"));
+
+            WorldDataPackRun first = Applier().ApplyPending();
+            Assert.That(first.Results.Single().State, Is.EqualTo(WorldDataPackState.Failed));
+            Assert.That(first.BackupPath, Is.Not.Null);
+            Assert.That(Scalar($"SELECT COUNT(*) FROM {WorldDataPackApplier.FailureTable} WHERE Name = '010-broken'"), Is.EqualTo(1));
+
+            WorldDataPackRun second = Applier().ApplyPending();
+            Assert.That(second.Results.Single().SkippedAfterFailure, Is.True);
+            Assert.That(second.Results.Single().Message, Does.Contain("/datapacks apply 010-broken"));
+            Assert.That(second.BackupPath, Is.Null, "a known failure triggers no backup");
+            Assert.That(Backups(), Has.Length.EqualTo(1));
+            Assert.That(Applier().GetQuickStatus().Single().SkippedAfterFailure, Is.True);
+
+            // An explicit apply retries it.
+            WorldDataPackRun retry = Applier().Apply("010-broken");
+            Assert.That(retry.Results.Single().State, Is.EqualTo(WorldDataPackState.Failed));
+            Assert.That(retry.Results.Single().SkippedAfterFailure, Is.False);
+            Assert.That(retry.BackupPath, Is.Not.Null);
+
+            // A new pack file (new sha) is tried again at the next start, and success clears the failure.
+            WriteManifest(Pack("010-broken", "INSERT INTO thing VALUES ('a', 1);"));
+            WorldDataPackRun fixedRun = Applier().ApplyPending();
+            Assert.That(fixedRun.Results.Single().AppliedNow, Is.True);
+            Assert.That(Scalar($"SELECT COUNT(*) FROM {WorldDataPackApplier.FailureTable}"), Is.Zero);
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.EqualTo(1));
+        }
+
+        [TestCase("Off")]
+        [TestCase("Memory")]
+        public void JournalModeWithoutSafeRollback_RefusesToApply(string journalMode)
+        {
+            WriteManifest(Pack("010-a", "INSERT INTO thing VALUES ('a', 1);"));
+
+            WorldDataPackRun run = new WorldDataPackApplier($"Data Source={_db};Version=3;Journal Mode={journalMode}", _packs).ApplyPending();
+
+            Assert.That(run.RefusedJournalMode, Is.True);
+            Assert.That(run.JournalMode, Is.EqualTo(journalMode.ToLowerInvariant()));
+            Assert.That(run.Warnings.Single(), Does.Contain("journal mode"));
+            Assert.That(run.Results, Is.Empty);
+            Assert.That(run.BackupPath, Is.Null);
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.Zero);
+            Assert.That(Scalar($"SELECT COUNT(*) FROM sqlite_master WHERE name = '{WorldDataPackApplier.MarkerTable}'"), Is.Zero);
+        }
+
+        [Test]
+        public void Backups_KeepOnlyTheNewestThree()
+        {
+            string prefix = _db + WorldDataPackApplier.BackupInfix;
+            for (int i = 0; i < 4; i++)
+            {
+                string old = prefix + "2026010" + i + "-000000";
+                File.WriteAllText(old, "old backup " + i);
+                File.SetLastWriteTimeUtc(old, new DateTime(2026, 1, 1 + i, 0, 0, 0, DateTimeKind.Utc));
+            }
+
+            WriteManifest(Pack("010-a", "INSERT INTO thing VALUES ('a', 1);"));
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            string[] left = Backups();
+            Assert.That(left, Has.Length.EqualTo(WorldDataPackApplier.BackupsKept));
+            Assert.That(left, Does.Contain(run.BackupPath));
+            Assert.That(left, Does.Contain(prefix + "20260103-000000").And.Contain(prefix + "20260102-000000"));
+            Assert.That(run.PrunedBackups, Has.Count.EqualTo(2));
+        }
+
+        [Test]
+        public void QuickStatus_ReadsNoPackFiles()
+        {
+            WorldDataPackManifestEntry tampered = Pack("010-tampered", "INSERT INTO thing VALUES ('a', 1);");
+            File.AppendAllText(Path.Combine(_packs, tampered.File), "-- changed\n");
+            WorldDataPackManifestEntry missing = Pack("020-missing", "INSERT INTO thing VALUES ('b', 1);");
+            File.Delete(Path.Combine(_packs, missing.File));
+            WriteManifest(tampered, missing);
+
+            IReadOnlyList<WorldDataPackResult> quick = Applier().GetQuickStatus();
+            Assert.That(quick.Single(s => s.Name == "010-tampered").State, Is.EqualTo(WorldDataPackState.Pending), "not hashed");
+            Assert.That(quick.Single(s => s.Name == "010-tampered").FilePresent, Is.True);
+            Assert.That(quick.Single(s => s.Name == "020-missing").State, Is.EqualTo(WorldDataPackState.MissingFile));
+            Assert.That(quick.Single(s => s.Name == "020-missing").FilePresent, Is.False);
+            Assert.That(Applier().GetStatus().Single(s => s.Name == "010-tampered").State, Is.EqualTo(WorldDataPackState.HashMismatch));
+        }
+
+        [Test]
+        public void ApplyPending_TakesOneBackupBeforeTheFirstPack_HoldingThePreviousState()
+        {
+            Exec("INSERT INTO thing VALUES ('old', 1)");
+            WriteManifest(Pack("010-a", "INSERT INTO thing VALUES ('a', 1);"), Pack("011-b", "INSERT INTO thing VALUES ('b', 1);"));
+
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            Assert.That(run.AppliedCount, Is.EqualTo(2));
+            Assert.That(run.BackupPath, Is.Not.Null);
+            Assert.That(Path.GetDirectoryName(run.BackupPath), Is.EqualTo(Path.GetDirectoryName(_db)));
+            Assert.That(Path.GetFileName(run.BackupPath), Does.StartWith(Path.GetFileName(_db) + WorldDataPackApplier.BackupInfix));
+            string[] backups = Directory.GetFiles(_root, Path.GetFileName(_db) + WorldDataPackApplier.BackupInfix + "*");
+            Assert.That(backups, Has.Length.EqualTo(1), "one backup per run, not per pack");
+            using var backup = new SQLiteConnection($"Data Source={run.BackupPath};Pooling=False;FailIfMissing=True");
+            backup.Open();
+            using SQLiteCommand count = backup.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM thing";
+            Assert.That(Convert.ToInt64(count.ExecuteScalar()), Is.EqualTo(1), "the backup holds the state before any pack");
+        }
+
+        [Test]
+        public void GzipPack_Applies_AndItsHashIsTheUncompressedText()
+        {
+            string sql = "INSERT INTO thing VALUES ('gz', 7);\n";
+            byte[] bytes = Encoding.UTF8.GetBytes(sql);
+            using (FileStream file = File.Create(Path.Combine(_packs, "010-zipped.sql.gz")))
+            using (var gzip = new GZipStream(file, CompressionLevel.Optimal))
+                gzip.Write(bytes);
+            WriteManifest(new WorldDataPackManifestEntry { Name = "010-zipped", File = "010-zipped.sql.gz", Sha256 = Sha(bytes) });
+
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            Assert.That(run.Results.Single().State, Is.EqualTo(WorldDataPackState.Applied));
+            Assert.That(Scalar("SELECT Value FROM thing WHERE Id = 'gz'"), Is.EqualTo(7));
+        }
+
+        [TestCase("INSERT INTO thing VALUES ('a', 1);\nCOMMIT;")]
+        [TestCase("BEGIN TRANSACTION;\nINSERT INTO thing VALUES ('a', 1);")]
+        [TestCase("PRAGMA foreign_keys = OFF;")]
+        [TestCase("CREATE TRIGGER t AFTER INSERT ON thing BEGIN SELECT 1; END;")]
+        [TestCase("DELETE FROM offline_data_packs;")]
+        [TestCase("DELETE FROM offline_data_pack_failures;")]
+        public void ForbiddenStatement_RefusesThePack(string sql)
+        {
+            WriteManifest(Pack("010-forbidden", sql));
+
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            Assert.That(run.Results.Single().State, Is.EqualTo(WorldDataPackState.Invalid));
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.Zero);
+        }
+
+        [Test]
+        public void AppliedPackWhoseFileChanged_IsNotRerun()
+        {
+            WriteManifest(Pack("010-once", "INSERT INTO thing VALUES ('a', 1);"));
+            Applier().ApplyPending();
+            WriteManifest(Pack("010-once", "INSERT INTO thing VALUES ('b', 2);"));
+
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            Assert.That(run.Results.Single().State, Is.EqualTo(WorldDataPackState.AppliedDifferentHash));
+            Assert.That(run.AppliedCount, Is.Zero);
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing WHERE Id = 'b'"), Is.Zero);
+        }
+
+        [Test]
+        public void ApplyByName_AppliesOnlyThatPack_AndStatusShowsBoth()
+        {
+            WriteManifest(Pack("010-a", "INSERT INTO thing VALUES ('a', 1);"), Pack("020-b", "INSERT INTO thing VALUES ('b', 2);"));
+
+            Assert.That(Applier().GetStatus().Select(s => s.State), Is.All.EqualTo(WorldDataPackState.Pending));
+            WorldDataPackRun run = Applier().Apply("020-b");
+            Assert.That(run.Results.Select(r => r.Name), Is.EqualTo(new[] { "020-b" }));
+
+            IReadOnlyList<WorldDataPackResult> status = Applier().GetStatus();
+            Assert.That(status.Single(s => s.Name == "010-a").State, Is.EqualTo(WorldDataPackState.Pending));
+            Assert.That(status.Single(s => s.Name == "020-b").State, Is.EqualTo(WorldDataPackState.Applied));
+            Assert.That(Applier().Apply("999-none").Warnings.Single(), Does.Contain("No pack named"));
+        }
+
+        [Test]
+        public void UnlistedPackFile_IsIgnoredWithAWarning()
+        {
+            WriteManifest(Pack("010-a", "INSERT INTO thing VALUES ('a', 1);"));
+            File.WriteAllText(Path.Combine(_packs, "099-stray.sql"), "INSERT INTO thing VALUES ('stray', 1);");
+
+            WorldDataPackRun run = Applier().ApplyPending();
+
+            Assert.That(run.Warnings.Single(), Does.Contain("099-stray.sql"));
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing WHERE Id = 'stray'"), Is.Zero);
+        }
+
+        [Test]
+        public void CacheWatch_ReportsInsertedUpdatedAndDeletedKeys()
+        {
+            Exec("INSERT INTO thing VALUES ('keep', 1), ('change', 1), ('drop', 1)");
+            WriteManifest(Pack("010-cache",
+                "INSERT INTO thing VALUES ('new', 1);\nUPDATE thing SET Value = 2 WHERE Id = 'change';\nDELETE FROM thing WHERE Id = 'drop';"));
+
+            WorldDataPackRun run = Applier(new WorldDataPackCacheWatch("thing", "Id"), new WorldDataPackCacheWatch("absent", "Id"))
+                .ApplyPending();
+
+            Assert.That(run.Results.Single().State, Is.EqualTo(WorldDataPackState.Applied));
+            Assert.That(run.ChangedKeys["thing"], Is.EquivalentTo(new[] { "new", "change", "drop" }));
+        }
+
+        [Test]
+        public void SplitStatements_RespectsQuotesAndComments()
+        {
+            const string sql = "-- leading; comment\n" +
+                               "INSERT INTO t VALUES ('Typhon''s; Reach', \"a;b\", `c;d`, [e;f]);\n" +
+                               "/* block ; comment */ UPDATE t SET x = 1;\n" +
+                               "-- trailing comment only;\n";
+
+            List<string> statements = WorldDataPackApplier.SplitStatements(sql).ToList();
+
+            Assert.That(statements, Has.Count.EqualTo(2));
+            Assert.That(statements[0], Does.Contain("'Typhon''s; Reach'").And.Contain("[e;f]"));
+            Assert.That(statements[1], Does.EndWith("UPDATE t SET x = 1"));
+            Assert.Throws<FormatException>(() => WorldDataPackApplier.SplitStatements("INSERT INTO t VALUES ('open").ToList());
+        }
+
+        [Test]
+        public void RuntimeSqlite_SupportsUpsertWithoutConflictTarget()
+        {
+            // The converted gaheris files use ON CONFLICT DO UPDATE/NOTHING without a target (SQLite 3.35+).
+            string version = (string)ScalarObject("SELECT sqlite_version()");
+            TestContext.Out.WriteLine($"System.Data.SQLite runtime SQLite {version}");
+            Version parsed = Version.Parse(version);
+            Assert.That(parsed, Is.GreaterThanOrEqualTo(new Version(3, 35, 0)));
+
+            Exec("INSERT INTO thing VALUES ('u', 1) ON CONFLICT DO UPDATE SET Value = excluded.Value");
+            Exec("INSERT INTO thing VALUES ('u', 2) ON CONFLICT DO UPDATE SET Value = excluded.Value");
+            Exec("INSERT INTO thing VALUES ('u', 3) ON CONFLICT DO NOTHING");
+            Assert.That(Scalar("SELECT Value FROM thing WHERE Id = 'u'"), Is.EqualTo(2));
+        }
+
+        #endregion
+
+        #region Master Level specs
+
+        [Test]
+        public void MasterLevelSpecs_AreUntrainableCareerSpecs()
+        {
+            // Pack 011 puts the eight ML paths into every class career at level 50. GamePlayer.LoadClassSpecializations
+            // only adds them when MLGranted and MLLevel >= 1, GameBot skips them, and /train and the trainer window list
+            // only Trainable specs; this pins the type facts those paths rely on.
+            var spec = new LiveMasterLevelsSpecialization("Banelord", "Banelord", 0, 150);
+            Assert.That(spec, Is.InstanceOf<IMasterLevelsSpecialization>());
+            Assert.That(spec.Trainable, Is.False);
+        }
+
+        #endregion
+
+        #region Shipped packs
+
+        [Test]
+        public void ShippedPacks_ManifestHashesMatch_AndNoForbiddenStatements()
+        {
+            string directory = ShippedPackDirectory();
+            var applier = new WorldDataPackApplier($"Data Source={_db}", directory);
+            IReadOnlyList<WorldDataPackManifestEntry> manifest = applier.ReadManifest();
+
+            Assert.That(manifest.Select(e => e.Name), Is.EqualTo(new[]
+            {
+                "010-toa-ml-spells", "011-toa-ml-paths", "012-toa-artifact-spells", "020-atlantis-mobs", "021-atlantis-travel",
+                "022-atlantis-zonepoints", "023-artifact-scroll-binders",
+            }));
+            Assert.That(applier.UnlistedFiles(manifest), Is.Empty);
+            Assert.That(applier.GetStatus().Select(s => s.State), Is.All.EqualTo(WorldDataPackState.Pending),
+                "every shipped pack reads, matches its manifest hash and has only allowed statements");
+            Assert.That(manifest.Single(e => e.Name == "020-atlantis-mobs").File, Does.EndWith(".sql.gz"));
+        }
+
+        [Test]
+        public void ShippedPacks_ApplyOnTheServerSchema()
+        {
+            // The schema the server itself creates from the DataObject definitions, empty.
+            var database = new SqliteObjectDatabase($"Data Source={_db};Version=3;Pooling=False;Journal Mode=WAL;");
+            foreach (Type table in new[]
+                     {
+                         typeof(DbSpell), typeof(DbLineXSpell), typeof(DbClassXSpecialization), typeof(DbMob), typeof(DbTeleport),
+                         typeof(DbZonePoint), typeof(DbItemTemplate), typeof(DbMerchantItem),
+                     })
+                database.RegisterDataObject(table);
+
+            WorldDataPackRun run = new WorldDataPackApplier($"Data Source={_db};Journal Mode=WAL", ShippedPackDirectory(),
+                WorldDataPacks.CacheWatches).ApplyPending();
+
+            foreach (WorldDataPackResult result in run.Results)
+                TestContext.Out.WriteLine($"{result.Name}: {result.State}, {result.Rows} rows, {result.Elapsed.TotalSeconds:0.0} s - {result.Message}");
+            Assert.That(run.Results.Select(r => r.State), Is.All.EqualTo(WorldDataPackState.Applied));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'gaheris-atlantis'"), Is.EqualTo(41727));
+            Assert.That(Scalar("SELECT COUNT(*) FROM LineXSpell"), Is.EqualTo(73));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Teleport WHERE Type = 'gaheris'"), Is.EqualTo(13));
+            Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint"), Is.EqualTo(100));
+            Assert.That(Scalar("SELECT COUNT(*) FROM MerchantItem"), Is.EqualTo(162));
+
+            WorldDataPackRun again = new WorldDataPackApplier($"Data Source={_db}", ShippedPackDirectory()).ApplyPending();
+            Assert.That(again.AppliedCount, Is.Zero);
+        }
+
+        [Test]
+        public void ShippedPacks_ApplyOnTheDevSnapshot()
+        {
+            string snapshot = FindSnapshot();
+            if (snapshot == null)
+                Assert.Ignore("No repaired dev snapshot (.toa-probe/snapshot.clean.db or OFFLINE_DAOC_TOA_SNAPSHOT); see docs/TOA_DATA_PACKS.md.");
+
+            File.Delete(_db);
+            File.Copy(snapshot, _db);
+            long mobs = Scalar("SELECT COUNT(*) FROM Mob");
+            long classSpecs = Scalar("SELECT COUNT(*) FROM ClassXSpecialization");
+            long zonePoints = Scalar("SELECT COUNT(*) FROM ZonePoint");
+            string spell15001 = (string)ScalarObject("SELECT Name FROM Spell WHERE SpellID = 15001");
+            long spells = Scalar("SELECT COUNT(*) FROM Spell");
+            var stopwatch = Stopwatch.StartNew();
+
+            // The live install's connection options (serverconfig.xml), so WAL and foreign keys match the real save.
+            WorldDataPackRun run = new WorldDataPackApplier(
+                    $"Data Source={_db};Version=3;Pooling=False;Journal Mode=WAL;Synchronous=Normal;Foreign Keys=True;Default Timeout=60",
+                    ShippedPackDirectory(), WorldDataPacks.CacheWatches)
+                .ApplyPending();
+
+            TestContext.Out.WriteLine($"Snapshot {snapshot}, total {stopwatch.Elapsed.TotalSeconds:0.0} s, backup {run.BackupPath}");
+            foreach (WorldDataPackResult result in run.Results)
+                TestContext.Out.WriteLine($"{result.Name}: {result.State}, {result.Statements} statements, {result.Rows} rows, " +
+                                          $"{result.Elapsed.TotalSeconds:0.0} s - {result.Message}");
+            foreach ((string table, HashSet<string> keys) in run.ChangedKeys)
+                TestContext.Out.WriteLine($"cache refresh: {keys.Count} {table} keys");
+
+            Assert.That(run.Results.Select(r => r.State), Is.All.EqualTo(WorldDataPackState.Applied));
+            Assert.That(run.BackupPath, Is.Not.Null);
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob") - mobs, Is.EqualTo(41727));
+            Assert.That(Scalar("SELECT COUNT(*) FROM ClassXSpecialization") - classSpecs, Is.EqualTo(496));
+            Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint") - zonePoints, Is.EqualTo(100));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Spell") - spells, Is.EqualTo(73 + 73), "73 ML and 73 artifact spells");
+            Assert.That(Scalar("SELECT COUNT(*) FROM LineXSpell WHERE LineName IN ('Banelord','Battlemaster','Convoker','Perfecter'," +
+                               "'Sojourner','Spymaster','Stormlord','Warlord')"), Is.EqualTo(73));
+            Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE Price = 300 AND Id_nb LIKE '%of_3'"), Is.GreaterThanOrEqualTo(150));
+            Assert.That(run.ChangedKeys.ContainsKey("ItemTemplate"), Is.True, "the scroll price update is reported for the cache refresh");
+
+            // Pack 012 (with 7206 "Purify Vision" from pack 010, the Erinys Charm use spell): every spell our artifact
+            // items reference resolves, except four that exist nowhere.
+            const string artifactSpellIds =
+                "SELECT DISTINCT v FROM (" +
+                "SELECT i.SpellID v FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb UNION ALL " +
+                "SELECT i.SpellID1 FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb UNION ALL " +
+                "SELECT i.ProcSpellID FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb UNION ALL " +
+                "SELECT i.ProcSpellID1 FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb UNION ALL " +
+                "SELECT i.PoisonSpellID FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb) WHERE v > 0";
+            Assert.That(Scalar($"SELECT COUNT(*) FROM ({artifactSpellIds})"), Is.EqualTo(85));
+            Assert.That(Ids($"SELECT v FROM ({artifactSpellIds}) WHERE v NOT IN (SELECT SpellID FROM Spell) ORDER BY v"),
+                Is.EqualTo(new long[] { 13135, 30115, 30125, 32223 }));
+            Assert.That((string)ScalarObject("SELECT Type FROM Spell WHERE SpellID = 7206"), Is.EqualTo("CureNearsight"));
+            Assert.That((string)ScalarObject("SELECT Name FROM Spell WHERE SpellID = 15001"), Is.EqualTo(spell15001),
+                "pack 012 ships only artifact rows; gaheris' replacement of 15001 does not ship");
+            Assert.That(ScalarObject("PRAGMA quick_check"), Is.EqualTo("ok"));
+        }
+
+        #endregion
+
+        #region Helpers
+
+        private WorldDataPackApplier Applier(params WorldDataPackCacheWatch[] watches) =>
+            new($"Data Source={_db};Version=3;Journal Mode=WAL", _packs, watches);
+
+        private WorldDataPackManifestEntry Pack(string name, string sql)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(sql + "\n");
+            File.WriteAllBytes(Path.Combine(_packs, name + ".sql"), bytes);
+            return new WorldDataPackManifestEntry { Name = name, File = name + ".sql", Sha256 = Sha(bytes), Description = "test pack" };
+        }
+
+        private void WriteManifest(params WorldDataPackManifestEntry[] entries)
+        {
+            var manifest = new
+            {
+                format = 1,
+                packs = entries.Select(e => new { name = e.Name, file = e.File, sha256 = e.Sha256, description = e.Description ?? string.Empty }),
+            };
+            File.WriteAllText(Path.Combine(_packs, WorldDataPackApplier.ManifestFileName), JsonSerializer.Serialize(manifest));
+        }
+
+        private static string Sha(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+        private void Exec(string sql)
+        {
+            using var connection = new SQLiteConnection($"Data Source={_db};Version=3;Pooling=False");
+            connection.Open();
+            using SQLiteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.ExecuteNonQuery();
+        }
+
+        private long Scalar(string sql) => Convert.ToInt64(ScalarObject(sql));
+
+        private string[] Backups() =>
+            Directory.GetFiles(_root, Path.GetFileName(_db) + WorldDataPackApplier.BackupInfix + "*").OrderBy(f => f, StringComparer.Ordinal).ToArray();
+
+        private long[] Ids(string sql)
+        {
+            using var connection = new SQLiteConnection($"Data Source={_db};Version=3;Pooling=False");
+            connection.Open();
+            using SQLiteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            var ids = new List<long>();
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+                ids.Add(reader.GetInt64(0));
+            return ids.ToArray();
+        }
+
+        private object ScalarObject(string sql)
+        {
+            using var connection = new SQLiteConnection($"Data Source={_db};Version=3;Pooling=False");
+            connection.Open();
+            using SQLiteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            return command.ExecuteScalar();
+        }
+
+        private static string ShippedPackDirectory()
+        {
+            for (DirectoryInfo directory = new(TestContext.CurrentContext.TestDirectory); directory != null; directory = directory.Parent)
+            {
+                string candidate = Path.Combine(directory.FullName, "CoreServer", WorldDataPacks.FolderName);
+                if (File.Exists(Path.Combine(candidate, WorldDataPackApplier.ManifestFileName)))
+                    return candidate;
+                candidate = Path.Combine(directory.FullName, "source", "server", "CoreServer", WorldDataPacks.FolderName);
+                if (File.Exists(Path.Combine(candidate, WorldDataPackApplier.ManifestFileName)))
+                    return candidate;
+            }
+
+            Assert.Fail("source/server/CoreServer/data-packs/manifest.json not found above the test directory.");
+            return null;
+        }
+
+        private static string FindSnapshot()
+        {
+            string configured = Environment.GetEnvironmentVariable("OFFLINE_DAOC_TOA_SNAPSHOT");
+            if (!string.IsNullOrEmpty(configured) && File.Exists(configured))
+                return configured;
+
+            for (DirectoryInfo directory = new(TestContext.CurrentContext.TestDirectory); directory != null; directory = directory.Parent)
+            {
+                string candidate = Path.Combine(directory.FullName, ".toa-probe", "snapshot.clean.db");
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+
+            return null;
+        }
+
+        #endregion
+    }
+}

@@ -12,6 +12,38 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.317.0] - 2026-10-24
+
+### Added
+- World data packs: SQL packs shipped with the server under
+  `server/data-packs` are applied once per save at server start, before the
+  world loads, each in one transaction with a marker row, after an online
+  backup of the database (`opendaoc.sqlite3.db.bak-datapacks-*`, newest three
+  kept). Failed packs are recorded and skipped until `/datapacks apply` or a
+  new file; packs are refused when the journal mode is off or memory. Server
+  property `world_data_packs_enabled`, GM command `/datapacks list|apply`.
+  SQLite only. `docs/TOA_DATA_PACKS.md` (ToA plan WP1.1a).
+- The first seven packs bring Trials of Atlantis data into every save: 73
+  Master Level spells and the eight ML paths for every class (WP2.1), 73
+  artifact spells, 41,727 Atlantis mobs and NPCs, Atlantis travel rows, 100
+  zone points, and the artifact scroll binders. Atlantis entry itself stays
+  GM-only until WP1.2; Arbiter and scholars become functional with WP2.2 and
+  WP3.1b.
+- Deploy (`tools/dev/OfflineDAoC.Deploy.psm1`) and the fork release pack copy
+  `runtime/server/data-packs` with the usual backup, hash and rollback.
+- `tools/toa/build_data_packs.py` builds the packs reproducibly and refuses
+  to change a shipped pack. Unit tests UT_WorldDataPacks (26).
+
+### Changed
+- `Test-DeployOfflineDAoC.ps1` fixture gains `Join Friend.cmd`; it exposed a
+  pre-existing restore defect, recorded as bug 172.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.316.0] - 2026-10-24
 
 ### Added

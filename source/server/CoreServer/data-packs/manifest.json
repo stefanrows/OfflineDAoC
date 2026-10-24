@@ -1,0 +1,98 @@
+{
+  "format": 1,
+  "note": "World data packs, applied once per save at server start. See docs/TOA_DATA_PACKS.md.",
+  "packs": [
+    {
+      "name": "010-toa-ml-spells",
+      "file": "010-toa-ml-spells.sql",
+      "sha256": "55323fac1407e7ae284171f50c9416774dc2cd811635905daf4811f9329428da",
+      "description": "Master Level spells and their eight spell lines (gaheris 12, 42, 43): 73 of 80 ranks.",
+      "sources": [
+        {
+          "file": "12-master-levels.sql",
+          "gaherisSha256": "7f76cfeaaf73734d7218d6bbf362fe2f97de3b56c3302e1bd9869c3a91db5cc5"
+        },
+        {
+          "file": "42-master-levels-gaps.sql",
+          "gaherisSha256": "7dc6fefbe26a20e6452c155ab868d5601b20e14c1bcf2da67a7b90f6b0bdc35a"
+        },
+        {
+          "file": "43-master-levels-corrected.sql",
+          "gaherisSha256": "e344250f807ff68b31677a2370ee8087ec21b9c180d5b3f1cdf3430a122996e5"
+        }
+      ]
+    },
+    {
+      "name": "011-toa-ml-paths",
+      "file": "011-toa-ml-paths.sql",
+      "sha256": "e1b1bccd8757f1e2b590eeeaa2b75aa71665834bda235fcbe2176224e6c3a154",
+      "description": "The eight Master Level paths in every class career at level 50 (gaheris 39). They stay hidden until the Arbiter grants Master Levels.",
+      "sources": [
+        {
+          "file": "39-master-level-paths.sql",
+          "gaherisSha256": "21f611baa37eb2658aac4e1c1ea87d21c5cf6b6d98a0fd4696f22a79d4ef1da6"
+        }
+      ]
+    },
+    {
+      "name": "012-toa-artifact-spells",
+      "file": "012-toa-artifact-spells.sql",
+      "sha256": "0fdbfdaa2275b7d1e7da29cf7ac2f6efd3204b542047c7b0f218c9792898a23e",
+      "description": "Artifact spells from gaheris 90, filtered: the 68 spell IDs our artifact items reference and lack, plus the 5 spells they chain to. 5 referenced IDs exist nowhere.",
+      "sources": [
+        {
+          "file": "90-spells.sql",
+          "gaherisSha256": "fb23628ac5729934275ac41cb70bc8469336c954697ddf04d0b94501f12ca075"
+        }
+      ]
+    },
+    {
+      "name": "020-atlantis-mobs",
+      "file": "020-atlantis-mobs.sql.gz",
+      "sha256": "a3745ffc10510a33e75965010f24e90c44791fbd2233f84e9cfda40a640074a8",
+      "description": "Atlantis population from db-public via gaheris 13: 41,727 mobs tagged PackageID 'gaheris-atlantis' (overworld, Haven cities, Aerus, pyramid entrance).",
+      "sources": [
+        {
+          "file": "13-atlantis-mobs.sql",
+          "gaherisSha256": "7dab1dc619d19c003bd38722a0157efccd23706604515f8e2c997db971b968e7"
+        }
+      ]
+    },
+    {
+      "name": "021-atlantis-travel",
+      "file": "021-atlantis-travel.sql",
+      "sha256": "99fe728d4d9f0af5e661dee4457fc77e434c648b09a095df74e2205a5664eaa1",
+      "description": "Atlantis teleport destinations (gaheris 14): 13 rows of type gaheris.",
+      "sources": [
+        {
+          "file": "14-atlantis-travel.sql",
+          "gaherisSha256": "00205e09e74136bd89bbf7cc64e989c67bbc7c4f3cd94398661170ee87db47eb"
+        }
+      ]
+    },
+    {
+      "name": "022-atlantis-zonepoints",
+      "file": "022-atlantis-zonepoints.sql",
+      "sha256": "63c3e3ff4077c7cfbfd548e4bc984c98f63a181330b4490b8b9deb5eac759007",
+      "description": "Atlantis zone points (gaheris 29): 100 rows, existing ones kept.",
+      "sources": [
+        {
+          "file": "29-atlantis-zonepoints.sql",
+          "gaherisSha256": "1b124d3c8bf7b4b30723efffa8b1b8233661036ceff740337a2e8e9ff600e805"
+        }
+      ]
+    },
+    {
+      "name": "023-artifact-scroll-binders",
+      "file": "023-artifact-scroll-binders.sql",
+      "sha256": "dbaeaa22df71580ebb928bded22870e7304f286071c54622447438b7a5d8b3ca",
+      "description": "Artifact scroll binder merchants (gaheris 36): 162 merchant rows, scroll prices, Zosyne and Mnosus.",
+      "sources": [
+        {
+          "file": "36-artifact-scrolls.sql",
+          "gaherisSha256": "9b81a9dd4eb804edf35c1c761f33cafe6ab881ea372a1f55759b73d4b8aebbf8"
+        }
+      ]
+    }
+  ]
+}

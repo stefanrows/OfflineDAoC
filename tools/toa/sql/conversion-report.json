@@ -160,5 +160,20 @@
     "upserts_update": 0,
     "uuid_literals": 9,
     "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 1886,
+    "inserts": 1,
+    "session_dropped": 0,
+    "source": "90-spells.sql",
+    "statements": 2,
+    "tables": {
+      "spell": 2
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 1886,
+    "warnings": []
   }
 ]

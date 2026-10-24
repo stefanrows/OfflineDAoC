@@ -619,6 +619,12 @@ namespace DOL.GS.ServerProperties
 		[ServerProperty("world", "disable_tutorial", "should the server disable the tutorial zone", false)]
 		public static bool DISABLE_TUTORIAL;
 
+		/// <summary>
+		/// Apply pending world data packs (server folder data-packs, docs/TOA_DATA_PACKS.md) to the save at startup.
+		/// </summary>
+		[ServerProperty("world", "world_data_packs_enabled", "Apply pending world data packs from the server's data-packs folder to the database at startup. Each pack runs once per save, in one transaction, after a database backup.", true)]
+		public static bool WORLD_DATA_PACKS_ENABLED;
+
 		[ServerProperty("world", "world_item_decay_time", "How long (milliseconds) will an item dropped on the ground stay in the world.", (uint) 180000)]
 		public static uint WORLD_ITEM_DECAY_TIME;
 

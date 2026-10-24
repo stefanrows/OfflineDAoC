@@ -10,13 +10,29 @@ into our SQLite schema. Measured results: docs/TOA_IMPORT_PROBE.md.
   reports statements, rows, column diffs and referential checks. It refuses
   any database under `playable/` or `db-snapshot/`.
 - `test_convert_mysql_to_sqlite.py`: unit tests for the converter.
-- `sql/`: converted files. `13-atlantis-mobs.sql` (11.6 MB) is not tracked;
-  regenerate it from a gaheris clone:
+- `sql/`: converted files. `13-atlantis-mobs.sql` (13 MB) is not tracked
+  (the shipped pack 020 carries it gzipped); regenerate it from a gaheris clone:
 
 ```
 git clone --depth 1 https://github.com/Pactor/gaheris.git /mnt/c/OfflineDAoC-ext/gaheris
-python3 -I tools/toa/convert_mysql_to_sqlite.py /mnt/c/OfflineDAoC-ext/gaheris/sql/13-atlantis-mobs.sql
+# Converts all files; the tracked ones come out byte-identical, and
+# conversion-report.json keeps every file (a single-file run would shrink it).
+python3 -I tools/toa/convert_mysql_to_sqlite.py --src /mnt/c/OfflineDAoC-ext/gaheris/sql --out tools/toa/sql
 ```
 
-Nothing here writes to the live install. Loading into a playable database is
-WP1.1 in docs/TOA_PLAN.md.
+- `build_data_packs.py`: assembles the shipped world data packs from `sql/`
+  into `source/server/CoreServer/data-packs/` and writes `manifest.json`
+  (docs/TOA_DATA_PACKS.md). Pack 020 is the gzipped file 13; pack 012 keeps
+  only the 73 artifact rows of file 90 (`ARTIFACT_SPELL_IDS`). Shipped packs
+  are immutable; the builder refuses to change one.
+- `test_build_data_packs.py`: unit tests for the pack builder.
+
+Pack build step, after converting (13 must be regenerated first, see above):
+
+```
+python3 -I tools/toa/build_data_packs.py
+python3 -I -m unittest discover -s tools/toa -p 'test_*.py'
+```
+
+Nothing here writes to the live install. The server applies the packs to a
+save at its next start (docs/TOA_DATA_PACKS.md).

@@ -46,7 +46,7 @@ from pathlib import Path
 
 CONVERTER_VERSION = "1"
 
-# The gaheris migrations WP0.3 converts, in apply order.
+# The gaheris migrations WP0.3 converts, in apply order (90 added for WP3.0).
 DEFAULT_FILES = [
     "12-master-levels.sql",
     "13-atlantis-mobs.sql",
@@ -58,6 +58,8 @@ DEFAULT_FILES = [
     "39-master-level-paths.sql",
     "42-master-levels-gaps.sql",
     "43-master-levels-corrected.sql",
+    # WP3.0: artifact spells. Only a filtered subset ships (tools/toa/build_data_packs.py).
+    "90-spells.sql",
 ]
 
 UUID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "offlinedaoc:toa-import:gaheris")

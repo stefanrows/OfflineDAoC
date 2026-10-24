@@ -381,6 +381,11 @@ Agent sessions on items 45–48: take the role and context from
      WP3.0, the 43 artifact spell handlers from OpenDAoC-Core bridged into our
      ECS: implemented in source, real-client check pending
      ([TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md)).
+     WP1.1a + WP2.1 implemented in source, real-client check pending: world
+     data packs ([TOA_DATA_PACKS.md](TOA_DATA_PACKS.md)) bring the ML spells,
+     ML paths, 73 artifact spells and the Atlantis mobs, travel, zone points
+     and scroll binders into every save once at server start (backup
+     first); ML paths stay hidden until the Arbiter grants ML.
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

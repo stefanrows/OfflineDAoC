@@ -54,6 +54,10 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
             <TargetPath>config\serverconfig.xml</TargetPath>
         </Content>
+        <!-- World data packs (docs/TOA_DATA_PACKS.md), applied once per save at server start. -->
+        <Content Include="data-packs\*.json;data-packs\*.sql;data-packs\*.sql.gz">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
     <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>

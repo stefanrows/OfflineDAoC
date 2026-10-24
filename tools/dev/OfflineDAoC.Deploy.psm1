@@ -315,6 +315,21 @@ function Get-OfflineDaocDeployPlan {
         }
     }
 
+    # World data packs (docs/TOA_DATA_PACKS.md) ship beside CoreServer; the server applies
+    # them to the save at its next start. New packs are added, nothing is removed.
+    $packRoot = Join-Path $buildRoot 'data-packs'
+    if (Test-Path -LiteralPath $packRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $packRoot -File | Where-Object {
+            $_.Name -eq 'manifest.json' -or $_.Name -like '*.sql' -or $_.Name -like '*.sql.gz'
+        } | Sort-Object Name | ForEach-Object {
+            $relative = Join-Path 'runtime\server\data-packs' $_.Name
+            $target = Join-Path $root $relative
+            Assert-OfflineDaocPathUnderRoot -InstallRoot $root -Path $target | Out-Null
+            $entries += New-OfflineDaocDeployEntry -Relative $relative -Target $target -Source $_.FullName `
+                -Kind 'data-pack' -InstalledHash (Get-OfflineDaocFileHash $target) -NewHash (Get-OfflineDaocFileHash $_.FullName)
+        }
+    }
+
     if ($entries.Count -eq 0) {
         throw "No matching install files found under $root for this build."
     }
