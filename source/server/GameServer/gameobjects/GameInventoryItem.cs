@@ -175,6 +175,24 @@ namespace DOL.GS
             return new GameInventoryItem(item);
         }
 
+        /// <summary>
+        /// Wraps a raw inventory row loaded outside GamePlayerInventory (house and account
+        /// vaults, companion inventories) the way a login does, so an item whose template
+        /// names a ClassType (an artifact: DOL.GS.InventoryArtifact) keeps its class when it
+        /// moves into a player's inventory. ObjectId, owner and IsPersisted are kept and a
+        /// fresh save snapshot is taken (GamePlayerInventory.LoadInventory). Rows without a
+        /// ClassType and items that are already game items are returned unchanged.
+        /// </summary>
+        public static DbInventoryItem WrapLoaded(DbInventoryItem item)
+        {
+            if (item == null || item is GameInventoryItem || string.IsNullOrEmpty(item.Template?.ClassType))
+                return item;
+
+            GameInventoryItem wrapped = Create(item);
+            wrapped.TakeSnapshot();
+            return wrapped;
+        }
+
         #endregion
 
         /// <summary>

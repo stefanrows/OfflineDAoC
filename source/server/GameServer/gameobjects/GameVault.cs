@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using DOL.Database;
 using DOL.GS.PacketHandler;
@@ -149,7 +150,9 @@ namespace DOL.GS
         public virtual IEnumerable<DbInventoryItem> GetDbItems(GamePlayer player)
         {
             WhereClause filterBySlot = DB.Column("SlotPosition").IsGreaterOrEqualTo(FirstDbSlot).And(DB.Column("SlotPosition").IsLessOrEqualTo(LastDbSlot));
-            return DOLDB<DbInventoryItem>.SelectObjects(DB.Column("OwnerID").IsEqualTo(GetOwner(player)).And(filterBySlot));
+            // Wrapped like a login, so a withdrawn artifact keeps its level gates (TOA_ARTIFACTS.md).
+            return DOLDB<DbInventoryItem>.SelectObjects(DB.Column("OwnerID").IsEqualTo(GetOwner(player)).And(filterBySlot))
+                .Select(GameInventoryItem.WrapLoaded).ToList();
         }
 
         /// <summary>

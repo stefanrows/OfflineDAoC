@@ -177,11 +177,14 @@ namespace DOL.GS.Spells
                 isImmune = true;
             }
 
-            GameSpellEffect mezblock = FindEffectOnTarget(target, "CeremonialBracerMezz");
+            // The bracer's charge is an ECS effect (spells/Artifacts); the legacy lookup never found it.
+            // It is used up only by a mez that would otherwise land, not by one the target is
+            // immune to or that an enraged NPC resists anyway.
+            ECSGameSpellEffect mezblock = isImmune ? null : ArtifactSpells.FindEffect(target, eSpellType.CeremonialBracerMezz);
 
             if (mezblock != null)
             {
-                mezblock.Cancel(false);
+                mezblock.End();
                 (target as GamePlayer)?.Out.SendMessage("Your item effect intercepts the mesmerization spell and fades!", eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
                 message = "Ceremonial Bracer intercept your mez!";
                 isImmune = true;

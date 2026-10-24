@@ -126,26 +126,18 @@ agent or session that finishes a package updates its row and the log below.
   as **WP3.0b**; two core one-liners (Ceremonial Bracer mez intercept,
   Cloudsong fall damage) and the stock DexterityConstitutionDebuff's
   always-on conflict go to WP3.1; GM accounts can log back in morphed.
-- [~] **WP3.1 Artifact core.** Implemented in source (worktree toa-artcore,
-  15 tests, `docs/TOA_ARTIFACTS.md`), in review: ArtifactMgr/InventoryArtifact
-  under gameutils/Atlantis, bonus gating in the item getters (no template
-  clone), level from item Experience, XP from GainedExperience (NPC/Player
-  sources only, DOL formula, 10 levels at 50 M), generic encounter credit per
-  artifact, Ceremonial Bracer + Cloudsong one-liners, ClassType SQL
-  `tools/toa/sql/050-artifact-item-classtype.sql` (197 templates; to become a
-  pack). 3 ArtifactXItem rows have no template. gaheris `ArtifactMgr` (+ an `Init` caller),
-  `InventoryArtifact` (+ stat refresh), `ArtifactCompat` adapted; artifact
-  item templates get `ClassType` InventoryArtifact by SQL, otherwise they
-  reload as plain items with every bonus active; artifacts level on kills
-  (`ArtifactExperience`), unlock bonuses per level. Depends on WP2.0.
-- [ ] **WP3.0b Missing artifact handlers.** Write the 7 handlers no project
-  has (Crocodile Tear Ring, Kalare's Necklace regen buff, Ring of Unyielding
-  Will, Gem of Lost Memories, Cloudsong/Crown of Zahur auras and endu proc,
-  Bracer of Zo'arkat/Phoebus' Harp aura) from Allakhazam/KB delve text; the
-  4 spell IDs that exist nowhere (Spear of Kings, Malice's Axe, Shield of
-  Khaos, Scepter of the Meritious) get rows written from delve text; the
-  stock DexterityConstitutionDebuff maps to no eEffect and conflicts with
-  every artifact effect (needs its own effect type). ~1 session.
+- [x] **WP3.1 Artifact core.** (0.319.0, real-client check pending;
+  `docs/TOA_ARTIFACTS.md`) ArtifactMgr/InventoryArtifact under
+  gameutils/Atlantis; bonus gating in the item getters (no template clone);
+  level from item Experience, 10 levels at 50 M; XP from GainedExperience
+  (NPC/Player sources only, DOL formula, `artifact_xp_rate`); generic
+  encounter credit per artifact; Ceremonial Bracer and Cloudsong effects;
+  vault, account vault and companion inventories wrap artifacts like a
+  login; dye/reskin NPCs refuse artifacts; bots never roll artifact
+  templates; ArtifactMgr starts right after the data packs. **Data
+  follow-up:** `tools/toa/sql/050-artifact-item-classtype.sql` (197
+  templates) must ship as a pack before any artifact is handed out. 3
+  ArtifactXItem rows name no template.
 - [ ] **WP3.1b Earning artifacts, data-driven.** Our Artifact rows use
   numeric placeholders (ScholarID 1001, EncounterID = template name, Version
   0-15), so DOL's type-name quest lookup cannot work: Scholar + ArtifactQuest
@@ -183,6 +175,8 @@ agent or session that finishes a package updates its row and the log below.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24: WP3.1 reviewed (vault/companion wrap, dye refusal, bot pools,
+  init order fixed) and merged as 0.319.0.
 - 2026-10-24: WP2.2 reviewed (reward gate, spell-line removal, title fixed)
   and merged as 0.318.0.
 - 2026-10-24: WP1.1a + WP2.1 reviewed (save safety verified; failed-pack

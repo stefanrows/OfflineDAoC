@@ -6050,6 +6050,14 @@ namespace DOL.GS
             if (t == null || item == null)
                 return false;
 
+            // A reskinned copy is rebuilt as a new unique item: an artifact would lose its
+            // identity, its level and its level gates (TOA_ARTIFACTS.md).
+            if (ArtifactMgr.IsArtifact(item))
+            {
+                SendReply(t, ArtifactMgr.REWORK_REFUSAL);
+                return false;
+            }
+
             if (GetDistanceTo(t) > WorldMgr.INTERACT_DISTANCE)
             {
                 t.Out.SendMessage("You are too far away to give anything to " + GetName(0, false) + ".", eChatType.CT_System, eChatLoc.CL_SystemWindow);

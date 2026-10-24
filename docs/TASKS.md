@@ -391,6 +391,11 @@ Agent sessions on items 45–48: take the role and context from
      earner, Demyphon's credits and Star of Destiny, `/ml`): implemented in
      source, real-client check pending
      ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md)).
+     WP3.1, the artifact core (artifacts activate as `InventoryArtifact`, level
+     from kill experience, unlock bonuses per level; ClassType SQL for the 197
+     artifact templates; Ceremonial Bracer and Cloudsong core lookups):
+     implemented in source, real-client check pending
+     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md)).
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

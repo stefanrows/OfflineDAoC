@@ -51,7 +51,8 @@ namespace DOL.GS
                     eInventorySlot slot = (eInventorySlot)item.SlotPosition;
                     if (GetValidInventorySlot(slot) == eInventorySlot.Invalid || m_items.ContainsKey(slot))
                         continue;
-                    m_items.Add(slot, item);
+                    // An artifact (ClassType InventoryArtifact) must keep its level gates here too.
+                    m_items.Add(slot, GameInventoryItem.WrapLoaded(item));
                 }
             }
             return true;

@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.319.0] - 2026-10-24
+
+### Added
+- Artifact core (ToA plan WP3.1, `docs/TOA_ARTIFACTS.md`): artifact items
+  activate as `InventoryArtifact`, gain experience from kill experience of the
+  wearer (`artifact_xp_rate`, ten levels of 50 M), and unlock their bonuses,
+  spells and procs per artifact level; the delve shows level, progress and
+  locked abilities. Encounter credit is stored per artifact. The Ceremonial
+  Bracer negates a mez and the Cloudsong softens falls through the new
+  artifact effects. The SQL that marks the 197 artifact item templates
+  (`tools/toa/sql/050-artifact-item-classtype.sql`) ships as a data pack next.
+- Unit tests UT_ArtifactCore (20).
+
+### Changed
+- House and account vaults and companion inventories wrap loaded items like a
+  login does, so artifacts keep their level gates when withdrawn. Dye, effect
+  and reskin NPCs refuse artifacts. Bot equipment rolls never pick artifact
+  templates. The Artifact Manager starts right after the world data packs.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.318.0] - 2026-10-24
 
 ### Added

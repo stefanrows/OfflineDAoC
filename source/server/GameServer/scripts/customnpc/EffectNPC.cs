@@ -61,6 +61,14 @@ namespace DOL.GS
 
             if (source is GamePlayer p)
             {
+                // A dyed or enchanted copy is rebuilt as a new unique item: an artifact would
+                // lose its identity, its level and its level gates (TOA_ARTIFACTS.md).
+                if (ArtifactMgr.IsArtifact(item))
+                {
+                    SendReply(p, ArtifactMgr.REWORK_REFUSAL);
+                    return false;
+                }
+
                 SendReply(p, "What service do you want to use ?\n" +
                              "I can add an [effect] to it or change its color with a [dye].\n\n" +
                              "Alternatively, I can [remove all effects] or [remove dye] from your weapon. "

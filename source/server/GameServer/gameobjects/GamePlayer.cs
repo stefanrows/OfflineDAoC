@@ -2513,9 +2513,11 @@ namespace DOL.GS
             double damage = (0.01 * fallDamagePercent * (MaxHealth - 1));
 
             // [Freya] Nidel: CloudSong falling damage reduction
-            GameSpellEffect cloudSongFall = SpellHandler.FindEffectOnTarget(this, "CloudsongFall");
+            // Wings Dive is an ECS effect (spells/Artifacts); the legacy lookup never found it.
+            // It reduces every fall for its duration and is not used up.
+            ECSGameSpellEffect cloudSongFall = ArtifactSpells.FindEffect(this, eSpellType.CloudsongFall);
             if (cloudSongFall != null)
-                damage -= (damage * cloudSongFall.Spell.Value) * 0.01;
+                damage -= (damage * cloudSongFall.SpellHandler.Spell.Value) * 0.01;
 
             //Mattress: SafeFall property for Mythirians, the value of the MythicalSafeFall property represents the percent damage taken in a fall.
             if (mythSafeFall != 0 && damage > mythSafeFall)
@@ -9361,6 +9363,15 @@ namespace DOL.GS
         }
 
         /// <summary>
+        /// Applies a change of a worn item's bonus (for example an artifact unlocking a
+        /// bonus on level-up, TOA_PLAN WP3.1) and refreshes the stat windows.
+        /// </summary>
+        public void ApplyItemBonusChange(eProperty bonusType, int bonusAmount)
+        {
+            OnItemBonusChanged(bonusType, bonusAmount);
+        }
+
+        /// <summary>
         /// Handles a bonus change on an item.
         /// </summary>
         protected virtual void OnItemBonusChanged(eProperty bonusType, int bonusAmount)
@@ -11260,7 +11271,9 @@ namespace DOL.GS
                 {
                     AbstractQuest quest = _questListFinished[i];
 
-                    if (quest is not DataQuest && quest.GetType().Equals(questType) && quest.Step == -1)
+                    // DOL marked finished quests -1, our AbstractQuest.FinishQuest writes -2;
+                    // encounter credits (ArtifactEncounter) use -1. Accept both.
+                    if (quest is not DataQuest && quest.GetType().Equals(questType) && quest.Step < 0)
                     {
                         _questListFinished.SwapRemoveAt(i);
                         quest.DeleteFromDatabase();

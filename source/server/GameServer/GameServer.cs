@@ -382,6 +382,14 @@ namespace DOL.GS
 				InitComponent(DataPacks.WorldDataPacks.ApplyPending, "World data packs");
 
 				//---------------------------------------------------------------
+				//Load the artifact manager (ToA) right after the data packs, before the market
+				//cache, vaults, bots or a login build an InventoryArtifact (an empty catalog
+				//would leave it ungated). Never fails the boot; an unreadable table leaves
+				//artifacts as plain items.
+				if (!InitComponent(ArtifactMgr.Init(), "Artifact Manager"))
+					return false;
+
+				//---------------------------------------------------------------
 				// Initialize gameplay UTC before loading world actors and deadlines.
 				if (!InitComponent(() => WorldSimulationClock.Initialize(Database), "World Simulation Clock"))
 					return false;

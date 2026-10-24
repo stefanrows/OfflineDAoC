@@ -65,6 +65,17 @@ namespace DOL.GS
             return item;
         }
 
+        /// <summary>
+        /// Item templates a bot may roll. Artifact templates (ArtifactXItem) are left out: a
+        /// bot never gains artifact experience, so the item would stay at level 0 with its
+        /// higher abilities locked for good (TOA_ARTIFACTS.md).
+        /// </summary>
+        private static IList<DbItemTemplate> SelectBotTemplates(WhereClause where)
+        {
+            return GameServer.Database.SelectObjects<DbItemTemplate>(where)
+                .Where(template => !ArtifactMgr.IsArtifactTemplate(template)).ToList();
+        }
+
         public static DbItemTemplate SelectCompanionWeapon(IEnumerable<DbItemTemplate> candidates, byte level,
             eRealm realm, eCharacterClass characterClass, eObjectType type, eInventorySlot slot,
             eWeaponDamageType damage = 0, int shieldSize = 0)
@@ -75,6 +86,7 @@ namespace DOL.GS
                 BotWeaponStats.IsNormalCompanionWeapon(item) &&
                 item.Level >= Math.Max(1, level - 2) && item.Level <= level &&
                 item.Realm == (int)realm && item.Object_Type == (int)type && item.IsPickable &&
+                !ArtifactMgr.IsArtifactTemplate(item) &&
                 (!BotRangedCombat.IsRangedWeaponType(type) || BotRangedCombat.IsUsableTemplate(item)) &&
                 item.LevelRequirement <= level &&
                 (string.IsNullOrWhiteSpace(item.AllowedClasses) ||
@@ -106,7 +118,7 @@ namespace DOL.GS
             if (bot.Inventory.GetItem(slot) != null)
                 return; // Repeated spec requests cannot overwrite dual-wield gear or fail an occupied slot.
             var candidates = bot.IsEndgameCompanion ? Array.Empty<DbItemTemplate>() :
-                GameServer.Database.SelectObjects<DbItemTemplate>(DB.Column("Level").IsGreaterOrEqualTo(Math.Max(1, bot.Level - 2))
+                SelectBotTemplates(DB.Column("Level").IsGreaterOrEqualTo(Math.Max(1, bot.Level - 2))
                     .And(DB.Column("Level").IsLessOrEqualTo(bot.Level))
                     .And(DB.Column("Realm").IsEqualTo((int)bot.Realm))
                     .And(DB.Column("Object_Type").IsEqualTo((int)type))).ToArray();
@@ -195,7 +207,7 @@ namespace DOL.GS
             int max = MaximumEquipmentLevel(player, Math.Min(51, player.Level + 4));
 
             IList<DbItemTemplate> itemList;
-            itemList = GameServer.Database.SelectObjects<DbItemTemplate>(DB.Column("Level").IsGreaterOrEqualTo(min).And(
+            itemList = SelectBotTemplates(DB.Column("Level").IsGreaterOrEqualTo(min).And(
                                                                        DB.Column("Level").IsLessOrEqualTo(max).And(
                                                                        DB.Column("Object_Type").IsEqualTo((int)weapType).And(
                                                                        DB.Column("Realm").IsEqualTo((int)player.Realm)).And(
@@ -250,7 +262,7 @@ namespace DOL.GS
             int max = MaximumEquipmentLevel(player, Math.Min(51, player.Level + 3));
 
             IList<DbItemTemplate> itemList;
-            itemList = GameServer.Database.SelectObjects<DbItemTemplate>(DB.Column("Level").IsGreaterOrEqualTo(min).And(
+            itemList = SelectBotTemplates(DB.Column("Level").IsGreaterOrEqualTo(min).And(
                                                                        DB.Column("Level").IsLessOrEqualTo(max).And(
                                                                        DB.Column("Object_Type").IsEqualTo((int)weapType).And(
                                                                        DB.Column("Item_Type").IsEqualTo(13).And(
@@ -282,7 +294,7 @@ namespace DOL.GS
             int max = MaximumEquipmentLevel(player, Math.Min(51, player.Level + 3));
 
             IList<DbItemTemplate> itemList;
-            itemList = GameServer.Database.SelectObjects<DbItemTemplate>(DB.Column("Level").IsGreaterOrEqualTo(min).And(
+            itemList = SelectBotTemplates(DB.Column("Level").IsGreaterOrEqualTo(min).And(
                                                                        DB.Column("Level").IsLessOrEqualTo(max).And(
                                                                        DB.Column("Object_Type").IsEqualTo((int)eObjectType.Shield).And(
                                                                        DB.Column("Realm").IsEqualTo((int)player.Realm)).And(
@@ -312,7 +324,7 @@ namespace DOL.GS
             int max = MaximumEquipmentLevel(player, Math.Min(51, player.Level + 3));
 
             IList<DbItemTemplate> itemList;
-            itemList = GameServer.Database.SelectObjects<DbItemTemplate>(DB.Column("Level").IsGreaterOrEqualTo(min).And(
+            itemList = SelectBotTemplates(DB.Column("Level").IsGreaterOrEqualTo(min).And(
                                                                        DB.Column("Level").IsLessOrEqualTo(max).And(
                                                                        DB.Column("Object_Type").IsEqualTo((int)armorType).And(
                                                                        DB.Column("Realm").IsEqualTo((int)player.Realm)).And(
@@ -374,7 +386,7 @@ namespace DOL.GS
             int max = MaximumEquipmentLevel(player, Math.Min(51, player.Level + 3));
 
             IList<DbItemTemplate> itemList;
-            itemList = GameServer.Database.SelectObjects<DbItemTemplate>(DB.Column("Level").IsGreaterOrEqualTo(min).And(
+            itemList = SelectBotTemplates(DB.Column("Level").IsGreaterOrEqualTo(min).And(
                                                                        DB.Column("Level").IsLessOrEqualTo(max).And(
                                                                        DB.Column("Object_Type").IsEqualTo((int)weapType).And(
                                                                        DB.Column("DPS_AF").IsEqualTo((int)instrumentType).And(
@@ -404,7 +416,7 @@ namespace DOL.GS
             List<DbItemTemplate> neckList = new List<DbItemTemplate>();
             List<DbItemTemplate> waistList = new List<DbItemTemplate>();
 
-            itemList = GameServer.Database.SelectObjects<DbItemTemplate>(DB.Column("Level").IsGreaterOrEqualTo(min).And(
+            itemList = SelectBotTemplates(DB.Column("Level").IsGreaterOrEqualTo(min).And(
                                                                        DB.Column("Level").IsLessOrEqualTo(max).And(
                                                                        DB.Column("Object_Type").IsEqualTo((int)eObjectType.Magical).And(
                                                                        DB.Column("Realm").IsEqualTo((int)player.Realm)).And(
