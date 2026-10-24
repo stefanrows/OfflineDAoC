@@ -37,7 +37,9 @@ python3 -I tools/toa/convert_mysql_to_sqlite.py --src /mnt/c/OfflineDAoC-ext/gah
 - Hand-written pack sources in `sql/` (edit them only before their pack was
   ever released): `024-toa-arbiter-npcs.sql` (the Arbiter and Demyphon part of
   gaheris 35), `025-toa-atlantis-arena-fix.sql` (removes the three Atlantis
-  fight-club Mordreds), `041-toa-loot-caps.sql` (The Phoenix's loot cap) and
+  fight-club Mordreds), `026-toa-travel-realms.sql` (Atlantis travel rows and
+  haven porters, docs/TOA_TRAVEL.md), `027-toa-open-atlantis.sql` (opens
+  Atlantis, ToA loot bonus chance), `041-toa-loot-caps.sql` (The Phoenix's loot cap) and
   `050-artifact-item-classtype.sql` (artifact templates load as
   `InventoryArtifact`).
 - `test_build_data_packs.py`: unit tests for the pack builder.

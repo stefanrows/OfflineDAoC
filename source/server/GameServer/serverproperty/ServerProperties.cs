@@ -1929,8 +1929,9 @@ namespace DOL.GS.ServerProperties
 
 		/// <summary>
 		/// Minimum privilege level to be able to enter Atlantis through teleporters.
+		/// Offline DAoC opens Atlantis to every player (docs/TOA_TRAVEL.md); data pack 027 lowers older saves to 1.
 		/// </summary>
-		[ServerProperty("pve", "atlantis_teleport_plvl", "Set the minimum privilege level required to enter Atlantis zones.", 2)]
+		[ServerProperty("pve", "atlantis_teleport_plvl", "Minimum account privilege level for the porters' Atlantis lines (1 = every player, 4 = nobody).", 1)]
 		public static int ATLANTIS_TELEPORT_PLVL;
 		
 		/// <summary>
@@ -2541,8 +2542,16 @@ namespace DOL.GS.ServerProperties
 
 		#region RANDOM OBJECT GENERATION
 
-		[ServerProperty("atlas_rog", "rog_toa_item_chance", "chance of generating an object with TOA stats (in %)", 0)]
+		// Only Trials of Atlantis items roll it; random loot is a ToA item only for kills inside Atlantis (toa_loot_in_atlantis).
+		[ServerProperty("atlas_rog", "rog_toa_item_chance", "Chance in % that a bonus of a Trials of Atlantis random item (loot from kills inside Atlantis) is a ToA cap bonus", 25)]
 		public static int ROG_TOA_ITEM_CHANCE;
+
+		/// <summary>
+		/// Random loot from kills inside the Atlantis regions is generated as Trials of Atlantis items
+		/// (docs/TOA_TRAVEL.md). Outside Atlantis random loot is unchanged.
+		/// </summary>
+		[ServerProperty("atlas_rog", "toa_loot_in_atlantis", "Random loot from kills inside Atlantis is a Trials of Atlantis item: 15 % stronger bonuses, each bonus a ToA cap bonus with the chance rog_toa_item_chance. Outside Atlantis nothing changes.", true)]
+		public static bool TOA_LOOT_IN_ATLANTIS;
 		
 		[ServerProperty("atlas_rog", "rog_armor_weight", "chance of armor being included in the roll (in %)", 50)]
 		public static int ROG_ARMOR_WEIGHT;

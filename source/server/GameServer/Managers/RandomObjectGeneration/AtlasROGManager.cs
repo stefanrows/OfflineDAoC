@@ -150,13 +150,17 @@ namespace DOL.GS
         }
 
         public static GeneratedUniqueItem GenerateMonsterLootROG(eRealm realm, eCharacterClass charClass, byte level, bool isFrontierKill)
+            => GenerateMonsterLootROG(realm, charClass, level, isFrontierKill, false);
+
+        /// <param name="toa">Generate a Trials of Atlantis item (kills inside Atlantis, see AtlantisRegions.UsesToaLoot).</param>
+        public static GeneratedUniqueItem GenerateMonsterLootROG(eRealm realm, eCharacterClass charClass, byte level, bool isFrontierKill, bool toa)
         {
             GeneratedUniqueItem item = null;
             
             if(isFrontierKill)
-                item = new GeneratedUniqueItem(realm, charClass, level, level - Util.Random(-5,10));
+                item = GeneratedUniqueItem.Create(toa, realm, charClass, level, level - Util.Random(-5,10));
             else
-                item = new GeneratedUniqueItem(realm, charClass, level, level - Util.Random(15,20));
+                item = GeneratedUniqueItem.Create(toa, realm, charClass, level, level - Util.Random(15,20));
             
             item.AllowAdd = true;
             item.IsTradable = true;

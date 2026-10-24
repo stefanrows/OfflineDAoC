@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.322.0] - 2026-10-24
+
+### Added
+- Travel into Atlantis for players (ToA plan WP1.2, `docs/TOA_TRAVEL.md`):
+  the capital porters reached via `/tc` offer `[Atlantis]`, which takes the
+  character to its own realm's ruins city next to the Arbiter, plus
+  `[Atlantis Havens]` (Oceanus, Stygia, Volcanus, Aerus) and `[Atlantis
+  Dungeons]` (six entrances). Porters with the same menu stand in every haven
+  and ruins city; `/tc` works inside Atlantis. Data packs 026 (destinations
+  and porters) and 027 (opens Atlantis to players, `atlantis_teleport_plvl`
+  1; `rog_toa_item_chance` 25). Packs that change a server property now
+  refresh the properties after applying.
+- Random loot from mob kills inside Atlantis regions is ToA gear (new property
+  `toa_loot_in_atlantis`, default on); `rog_toa_item_chance` is the per-bonus
+  chance of a cap bonus and finally does something. Loot outside Atlantis is
+  unchanged (WP1.3).
+- Unit tests UT_AtlantisTravel (31).
+
+### Changed
+- Two Hibernian Oceanus channelers and Albion's Khol become realm porters.
+
+### Fixed
+- `GeneratedUniqueItem` could index an empty cap-bonus list; guarded.
+
+### Removed
+- None.
+
 ## [0.321.2] - 2026-10-24
 
 ### Added

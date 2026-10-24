@@ -32,7 +32,11 @@ namespace DOL.GS
 		public static String BuildTravelMenu() => BuildTravelMenu(false);
 
 		/// <param name="openBattleground">Show the [open BG] line; true only when the asking player may enter it now.</param>
-		public static String BuildTravelMenu(bool openBattleground)
+		public static String BuildTravelMenu(bool openBattleground) => BuildTravelMenu(openBattleground, false);
+
+		/// <param name="openBattleground">Show the [open BG] line; true only when the asking player may enter it now.</param>
+		/// <param name="atlantis">Show the Atlantis line (<see cref="AtlantisTravel"/>); true when the account may enter Atlantis.</param>
+		public static String BuildTravelMenu(bool openBattleground, bool atlantis)
 		{
 			// Camlann travel is deliberately realm-open. Keep every capital and
 			// every realm's leveling-town menu visible to every player; the town
@@ -48,6 +52,7 @@ namespace DOL.GS
 				"[Albion Dungeons] [Midgard Dungeons] [Hibernia Dungeons]\n" +
 				"[Albion Shrouded Isles] [Midgard Shrouded Isles] [Hibernia Shrouded Isles]\n" +
 				"[Albion Oceanus] [Midgard Oceanus] [Hibernia Oceanus]\n" +
+				(atlantis ? AtlantisTravel.MenuLine + "\n" : "") +
 				"[Housing]";
 		}
 
@@ -61,7 +66,7 @@ namespace DOL.GS
 			if (!base.Interact(player))
 				return false;
 
-			SayTo(player, BuildTravelMenu(OpenBattlegroundPolicy.IsOpenFor(player)));
+			SayTo(player, BuildTravelMenu(OpenBattlegroundPolicy.IsOpenFor(player), AtlantisTravel.CanTravel(player)));
 
 			return true;
 		}
@@ -84,6 +89,10 @@ namespace DOL.GS
 			StringBuilder sRet = new StringBuilder();
 
 			text = text.Trim();
+			// Atlantis lines resolve in the player's own realm copy (docs/TOA_TRAVEL.md).
+			if (TryAtlantisTravel(player, text))
+				return true;
+
 			switch (text.ToUpperInvariant())
 			{
 				// New Frontiers is outside the Camlann 1.65 world.
@@ -488,6 +497,43 @@ namespace DOL.GS
 			else
 				SayTo(player, "This destination is not yet supported.");
 
+			return true;
+		}
+
+		/// <summary>
+		/// [Atlantis], [Atlantis Havens], [Atlantis Dungeons] and the destinations they list. The destination is
+		/// always the asking player's own realm copy, whatever realm this porter serves. False when the text is
+		/// not an Atlantis line.
+		/// </summary>
+		private bool TryAtlantisTravel(GamePlayer player, string text)
+		{
+			bool havens = text.Equals(AtlantisTravel.HavensMenuKey, StringComparison.OrdinalIgnoreCase);
+			bool dungeons = text.Equals(AtlantisTravel.DungeonsMenuKey, StringComparison.OrdinalIgnoreCase);
+			string destination = null;
+			if (!havens && !dungeons && !AtlantisTravel.TryGetDestination(text, out destination))
+				return false;
+
+			if (!AtlantisTravel.CanTravel(player))
+			{
+				SayTo(player, AtlantisTravel.NotAuthorized);
+				return true;
+			}
+
+			if (havens || dungeons)
+			{
+				SayTo(player, havens ? AtlantisTravel.HavensMenu : AtlantisTravel.DungeonsMenu);
+				return true;
+			}
+
+			DbTeleport port = AtlantisTravel.Find(player.Realm, destination);
+			if (port == null)
+			{
+				SayTo(player, "This destination is not yet supported.");
+				return true;
+			}
+
+			SayTo(player, AtlantisTravel.ArrivalMessage(destination));
+			OnTeleportSpell(player, port);
 			return true;
 		}
 

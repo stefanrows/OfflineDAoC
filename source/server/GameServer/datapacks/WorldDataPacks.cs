@@ -21,12 +21,16 @@ namespace DOL.GS.DataPacks
 
         private static readonly Logger log = LoggerManager.Create(typeof(WorldDataPacks));
 
-        /// <summary>Pre-cached tables (DataTable PreCache = true) whose rows a pack may change.</summary>
+        /// <summary>
+        /// Tables read before the packs run whose rows a pack may change: the pre-cached tables (DataTable
+        /// PreCache = true) and ServerProperty, which the server loads into static fields first.
+        /// </summary>
         public static readonly IReadOnlyList<WorldDataPackCacheWatch> CacheWatches = new[]
         {
             new WorldDataPackCacheWatch("ItemTemplate", "Id_nb"),
             new WorldDataPackCacheWatch("MobXAmbientBehaviour", "MobXAmbientBehaviour_ID"),
             new WorldDataPackCacheWatch("Minotaurrelic", "RelicID"),
+            new WorldDataPackCacheWatch("ServerProperty", "Key"),
         };
 
         public static string PackDirectory => Path.Combine(GameServer.Instance.Configuration.RootDirectory, FolderName);
@@ -142,6 +146,8 @@ namespace DOL.GS.DataPacks
                         "mobxambientbehaviour" => GameServer.Database.UpdateObjsInCache<DbMobXAmbientBehavior>(keys),
                         "minotaurrelic" => GameServer.Database.UpdateObjsInCache<DbMinotaurRelic>(
                             keys.Select(k => (object)int.Parse(k, CultureInfo.InvariantCulture))),
+                        // A pack that changes a property value (027 opens Atlantis) takes effect on this boot.
+                        "serverproperty" => RefreshServerProperties(),
                         _ => true,
                     };
                     log.Info($"World data packs: refreshed {keys.Count} cached {table} rows" +
@@ -152,6 +158,12 @@ namespace DOL.GS.DataPacks
                     log.Warn($"World data packs: could not refresh cached {table} rows; restart the server to reload them.", e);
                 }
             }
+        }
+
+        private static bool RefreshServerProperties()
+        {
+            ServerProperties.Properties.Refresh();
+            return true;
         }
     }
 }

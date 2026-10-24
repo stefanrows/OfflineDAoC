@@ -1153,8 +1153,9 @@ internal static class Program
             ("server", "enable_pve_speed", "false", "Disable later custom out-of-combat speed boost."),
             ("pve", "currency_exchange_allow", "false", "Disable post-SI currencies and exchanges."),
             ("pve", "bp_exchange_allow", "false", "Disable post-SI currencies and exchanges."),
-            ("pve", "atlantis_teleport_plvl", "4", "No player account can enter Atlantis."),
-            ("atlas_rog", "rog_toa_item_chance", "0", "Never generate Trials of Atlantis item bonuses."),
+            // Trials of Atlantis is open (docs/TOA_TRAVEL.md); only loot from kills inside Atlantis rolls ToA bonuses.
+            ("pve", "atlantis_teleport_plvl", "1", "Minimum account privilege level for the porters' Atlantis lines (1 = every player, 4 = nobody)."),
+            ("atlas_rog", "rog_toa_item_chance", "25", "Chance in % that a bonus of a Trials of Atlantis random item (loot from kills inside Atlantis) is a ToA cap bonus"),
         };
 
         using var command = connection.CreateCommand();

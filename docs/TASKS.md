@@ -412,6 +412,12 @@ Agent sessions on items 45–48: take the role and context from
      tool, e.g. a second install) no longer boots without the packs; the
      data pack connections use TRUNCATE for that run and a failed pack still
      rolls back fully. Implemented in source, real-client check pending.
+     WP1.2 travel and the WP1.3 random-loot remainder: every porter with the
+     full menu offers `[Atlantis]` (own realm's ruins city), `[Atlantis
+     Havens]` and `[Atlantis Dungeons]` in the player's own realm copy, with
+     porters in every haven (packs 026/027, Atlantis open to players);
+     random loot from kills inside Atlantis carries ToA bonuses. Implemented
+     in source, real-client check pending ([TOA_TRAVEL.md](TOA_TRAVEL.md)).
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

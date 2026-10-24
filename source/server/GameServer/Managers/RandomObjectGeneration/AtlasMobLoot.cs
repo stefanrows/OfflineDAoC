@@ -41,6 +41,8 @@ namespace DOL.GS {
                 }
 
                 int killedcon = owner.GetConLevel(mob);
+                // Kills inside Atlantis drop Trials of Atlantis items (toa_loot_in_atlantis, docs/TOA_TRAVEL.md).
+                bool toa = AtlantisRegions.UsesToaLoot(mob.CurrentRegionID);
 
                 //grey con dont drop loot
                 if (killedcon <= -3)
@@ -77,7 +79,7 @@ namespace DOL.GS {
                         if (RollDropChance(chance) && numDrops < maxDropCap)
                         {
                             classForLoot = GetRandomClassFromBattlegroup(bg);
-                            var item = GenerateItemTemplate(owner, classForLoot, (byte)(mob.Level + 1), killedcon);
+                            var item = GenerateItemTemplate(owner, classForLoot, (byte)(mob.Level + 1), killedcon, true, toa);
                             loot.AddFixed(item, 1);
                             numDrops++;
                         }
@@ -109,7 +111,7 @@ namespace DOL.GS {
                         if (RollDropChance(chance) && numDrops < MaxDropCap)
                         {
                             GameLiving recipient = GetRandomLootParticipantFromGroup(owner.Group, owner) ?? owner;
-                            var item = GenerateItemTemplate(recipient, GetLootClass(recipient), (byte)(mob.Level + 1), killedcon);
+                            var item = GenerateItemTemplate(recipient, GetLootClass(recipient), (byte)(mob.Level + 1), killedcon, true, toa);
                             loot.AddFixed(item, 1);
                             numDrops++;
                         }
@@ -119,7 +121,7 @@ namespace DOL.GS {
                     if (numDrops < MaxDropCap && guaranteedDrop > 0)
                     {
                         GameLiving recipient = GetRandomLootParticipantFromGroup(owner.Group, owner) ?? owner;
-                        var item = GenerateItemTemplate(recipient, GetLootClass(recipient), (byte)(mob.Level + 1), killedcon);
+                        var item = GenerateItemTemplate(recipient, GetLootClass(recipient), (byte)(mob.Level + 1), killedcon, true, toa);
                         loot.AddFixed(item, 1);
                     }
 
@@ -138,7 +140,7 @@ namespace DOL.GS {
                     
                     if (RollDropChance(chance))
                     {
-                        DbItemTemplate item = GenerateItemTemplate(owner, classForLoot, (byte)(mob.Level + 1), killedcon, false);
+                        DbItemTemplate item = GenerateItemTemplate(owner, classForLoot, (byte)(mob.Level + 1), killedcon, false, toa);
                         loot.AddFixed(item, 1);
                     }
                     //tmp.GenerateItemQuality(killedcon);
@@ -210,12 +212,12 @@ namespace DOL.GS {
                 ? player.CharacterClass.ID : ((GameBot)participant).CharacterClass.ID);
         }
 
-        protected virtual DbItemTemplate GenerateItemTemplate(GameLiving owner, eCharacterClass classForLoot, byte lootLevel, int killedcon, bool adjustQuality = true)
+        protected virtual DbItemTemplate GenerateItemTemplate(GameLiving owner, eCharacterClass classForLoot, byte lootLevel, int killedcon, bool adjustQuality = true, bool toa = false)
         {
             DbItemTemplate item = null;
                 
                 
-            GeneratedUniqueItem tmp = AtlasROGManager.GenerateMonsterLootROG(owner.Realm, classForLoot, lootLevel, owner.CurrentZone?.IsOF ?? false);
+            GeneratedUniqueItem tmp = AtlasROGManager.GenerateMonsterLootROG(owner.Realm, classForLoot, lootLevel, owner.CurrentZone?.IsOF ?? false, toa);
             if (adjustQuality)
                 tmp.GenerateItemQuality(killedcon);
             //tmp.CapUtility(mob.Level + 1);

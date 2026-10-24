@@ -71,13 +71,21 @@ agent or session that finishes a package updates its row and the log below.
   rows + 364 links. 0 duplicates with gaheris, 0 broken references. Deep
   Volcanus and Celestius have no source anywhere; Pyramid/Aerus come from
   gaheris 13. Shipped as packs 030/031/040 in 0.321.0.
-- [~] **WP1.2 Travel.** Agent toa-travel (2026-10-24 17:25). Open Atlantis to players (`atlantis_teleport_plvl` 1),
-  Djinn/boat/teleport rows working from each realm's hub; add an
-  `[Atlantis]` line to our porter menu. Depends on WP1.1.
-- [~] **WP1.3 Loot.** Loot data shipped as pack 040 (0.321.0; the "7 missing
-  items" were case-only Id_nb differences); Phoenix cap pinned in pack 041
-  (the generator already gave one drop per kill). Remaining:
-  `rog_toa_item_chance` > 0 inside Atlantis as filler (with WP1.2).
+- [x] **WP1.2 Travel.** (0.322.0, real-client check pending; `docs/TOA_TRAVEL.md`)
+  `/tc` → capital porter → `[Atlantis]` ports the character to its realm's
+  ruins city (70/71/72, next to the Arbiter); `[Atlantis Havens]` (4) and
+  `[Atlantis Dungeons]` (6) per realm copy; porters in every haven and ruins
+  city with the full menu; `/tc` works inside. Pack 026 (33 Teleport rows, 10
+  porters, 3 channelers), pack 027 opens Atlantis (`atlantis_teleport_plvl` 1)
+  and sets `rog_toa_item_chance` 25; packs that change a property trigger
+  `Properties.Refresh()`. The 13 gaheris travel rows stay unused (9 land on
+  monster spawns). Client check: ruins-city porter floor, Halls of Ma'ati
+  landing near a level-65 anubite.
+- [x] **WP1.3 Loot.** (0.322.0) Loot data shipped as pack 040 (0.321.0),
+  Phoenix cap 041; random drops from mob kills inside Atlantis are ToA items
+  (`toa_loot_in_atlantis`, default on; `rog_toa_item_chance` = per-bonus cap
+  chance, 25). Loot outside Atlantis is unchanged. Test gap: no end-to-end
+  ROG test with a mob in an Atlantis region.
 - [ ] **WP1.4 Launcher.** Atlantis on/off switch and ML/artifact XP rates on
   the launcher settings page (server properties). Independent.
 
@@ -204,7 +212,7 @@ server yet.
    copy), then `playable-dev/server.sh update` (build + deploy + start),
    watch the log for "World data packs" lines, startup time and memory with
    +44k mobs, then stop. Record in TOA_PLAN log.
-3. **WP1.2 Travel**: `atlantis_teleport_plvl` to 1, `[Atlantis]` line in the
+3. ~~WP1.2 Travel~~ DONE 0.322.0. Original text: **WP1.2 Travel**: `atlantis_teleport_plvl` to 1, `[Atlantis]` line in the
    porter menu, verify the gaheris travel rows (14) and zone points (29).
 4. **WP3.1b** scholars/quests data-driven, **WP3.3** encounters (DOLSharp
    mapping, 6 missing spawns), **WP3.0b** 7 handlers + 4 spell rows,
@@ -226,6 +234,8 @@ a real defect in every package; keep the review step.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 18:15: WP1.2 + WP1.3 reviewed (no blocking finding) and merged as
+  0.322.0 (16 packs). Deploy to Aaron's PC next, then client checks.
 - 2026-10-24 17:45: journal-mode fallback reviewed (rollback proven through
   the file; journal Off really corrupts on rollback once pages spill) and
   merged as 0.321.2. WP1.2 travel agent running.

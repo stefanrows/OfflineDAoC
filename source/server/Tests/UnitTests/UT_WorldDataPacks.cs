@@ -479,7 +479,8 @@ namespace DOL.UnitTests
             {
                 "010-toa-ml-spells", "011-toa-ml-paths", "012-toa-artifact-spells", "020-atlantis-mobs", "021-atlantis-travel",
                 "022-atlantis-zonepoints", "023-artifact-scroll-binders", "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix",
-                "030-toa-dungeon-mobs", "031-toa-dungeon-templates", "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
+                "026-toa-travel-realms", "027-toa-open-atlantis", "030-toa-dungeon-mobs", "031-toa-dungeon-templates", "040-toa-loot",
+                "041-toa-loot-caps", "050-artifact-item-classtype",
             }));
             Assert.That(applier.UnlistedFiles(manifest), Is.Empty);
             Assert.That(applier.GetStatus().Select(s => s.State), Is.All.EqualTo(WorldDataPackState.Pending),
@@ -496,7 +497,7 @@ namespace DOL.UnitTests
                      {
                          typeof(DbSpell), typeof(DbLineXSpell), typeof(DbClassXSpecialization), typeof(DbMob), typeof(DbTeleport),
                          typeof(DbZonePoint), typeof(DbItemTemplate), typeof(DbMerchantItem), typeof(DbNpcTemplate), typeof(DbNpcEquipment),
-                         typeof(DbLootTemplate), typeof(DbMobXLootTemplate), typeof(DbArtifactXItem),
+                         typeof(DbLootTemplate), typeof(DbMobXLootTemplate), typeof(DbArtifactXItem), typeof(DbServerProperty),
                      })
                 database.RegisterDataObject(table);
 
@@ -517,6 +518,8 @@ namespace DOL.UnitTests
             Assert.That(Scalar("SELECT COUNT(*) FROM NPCEquipment"), Is.EqualTo(827));
             Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate"), Is.EqualTo(2106));
             Assert.That(Scalar("SELECT COUNT(*) FROM MobXLootTemplate"), Is.EqualTo(364 + 1), "the 040 links and the Phoenix cap");
+            AssertAtlantisTravelRows();
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'toa-travel'"), Is.EqualTo(10), "026: the haven porters");
 
             WorldDataPackRun again = new WorldDataPackApplier($"Data Source={_db}", ShippedPackDirectory()).ApplyPending();
             Assert.That(again.AppliedCount, Is.Zero);
@@ -554,7 +557,8 @@ namespace DOL.UnitTests
 
             Assert.That(run.Results.Select(r => r.State), Is.All.EqualTo(WorldDataPackState.Applied));
             Assert.That(run.BackupPath, Is.Not.Null);
-            Assert.That(Scalar("SELECT COUNT(*) FROM Mob") - mobs, Is.EqualTo(41727 + 2135 - 3), "020 and 030 add, 025 removes three");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob") - mobs, Is.EqualTo(41727 + 2135 - 3 + 10),
+                "020 and 030 add, 025 removes three, 026 adds ten porters");
             Assert.That(Scalar("SELECT COUNT(*) FROM ClassXSpecialization") - classSpecs, Is.EqualTo(496));
             Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint") - zonePoints, Is.EqualTo(100));
             Assert.That(Scalar("SELECT COUNT(*) FROM Spell") - spells, Is.EqualTo(73 + 73), "73 ML and 73 artifact spells");
@@ -600,11 +604,37 @@ namespace DOL.UnitTests
             Assert.That(artifactTemplates.Where(id => !run.ChangedKeys["ItemTemplate"].Contains(id)), Is.Empty,
                 "050 is reported for the ItemTemplate cache refresh");
 
-            // The pack set 2 files are idempotent: a second run of their statements changes nothing.
+            // Packs 026 and 027 (WP1.2/1.3, docs/TOA_TRAVEL.md).
+            AssertAtlantisTravelRows();
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'toa-travel' AND Flags & 16 = 16 AND AggroLevel = 0"),
+                Is.EqualTo(10), "026: ten peaceful porters");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'toa-travel' AND Region IN (70, 71, 72)"), Is.EqualTo(3),
+                "026: one porter per ruins city");
+            Assert.That(Strings("SELECT Region || ':' || ClassType FROM Mob WHERE Name LIKE 'Channeler %' AND Region IN (73, 130) " +
+                                "AND PackageID = 'gaheris-atlantis' ORDER BY Region, Name"),
+                Is.EqualTo(new[]
+                {
+                    "73:DOL.GS.AlbionTeleporter", "73:DOL.GS.AlbionTeleporter",
+                    "130:DOL.GS.HiberniaTeleporter", "130:DOL.GS.HiberniaTeleporter",
+                }), "026: Khol, Raifaol, Hialysam and Lana are porters");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE Region = 130 AND Name IN ('Channeler Hialysam', 'Channeler Lana') " +
+                               "AND NPCTemplateID = -1 AND Flags & 16 = 16"), Is.EqualTo(2), "026: their template no longer drops the peace flag");
+            Assert.That((string)ScalarObject("SELECT Value FROM ServerProperty WHERE \"Key\" = 'atlantis_teleport_plvl'"), Is.EqualTo("1"),
+                "027 opens Atlantis (the snapshot has the setup value 4)");
+            Assert.That((string)ScalarObject("SELECT Value FROM ServerProperty WHERE \"Key\" = 'rog_toa_item_chance'"), Is.EqualTo("25"));
+            Assert.That(run.ChangedKeys["ServerProperty"], Is.EquivalentTo(new[] { "atlantis_teleport_plvl", "rog_toa_item_chance" }),
+                "027 is reported, so the server reloads the properties on this boot");
+            long teleports = Scalar("SELECT COUNT(*) FROM Teleport");
+            long allMobs = Scalar("SELECT COUNT(*) FROM Mob");
+            ExecuteCountingChanges(File.ReadAllText(Path.Combine(ShippedPackDirectory(), "026-toa-travel-realms.sql")));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Teleport"), Is.EqualTo(teleports), "026 applied a second time keeps its rows");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob"), Is.EqualTo(allMobs));
+
+            // The pack set 2 files and 027 are idempotent: a second run of their statements changes nothing.
             foreach (string name in new[]
                      {
-                         "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix", "030-toa-dungeon-mobs", "031-toa-dungeon-templates",
-                         "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
+                         "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix", "027-toa-open-atlantis", "030-toa-dungeon-mobs",
+                         "031-toa-dungeon-templates", "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
                      })
                 Assert.That(ExecuteCountingChanges(File.ReadAllText(Path.Combine(ShippedPackDirectory(), name + ".sql"))), Is.Zero,
                     name + " applied a second time");
@@ -615,6 +645,20 @@ namespace DOL.UnitTests
         #endregion
 
         #region Helpers
+
+        // Pack 026: every Atlantis destination exactly once per realm, in that realm's copy (DOL.GS.Tests.UT_AtlantisTravel.ExpectedRegion).
+        private void AssertAtlantisTravelRows()
+        {
+            Assert.That(Scalar("SELECT COUNT(*) FROM Teleport WHERE Type = 'atlantis'"), Is.EqualTo(33));
+            foreach (eRealm realm in new[] { eRealm.Albion, eRealm.Midgard, eRealm.Hibernia })
+            foreach (string destination in AtlantisTravel.Destinations)
+            {
+                string where = $"Type = 'atlantis' AND Realm = {(int)realm} AND TeleportID = '{destination.Replace("'", "''")}'";
+                Assert.That(Scalar($"SELECT COUNT(*) FROM Teleport WHERE {where}"), Is.EqualTo(1), $"{realm} {destination}");
+                Assert.That(Scalar($"SELECT RegionID FROM Teleport WHERE {where}"),
+                    Is.EqualTo(DOL.GS.Tests.UT_AtlantisTravel.ExpectedRegion(realm, destination)), $"{realm} {destination}");
+            }
+        }
 
         private WorldDataPackApplier Applier(params WorldDataPackCacheWatch[] watches) =>
             new($"Data Source={_db};Version=3;Journal Mode=WAL", _packs, watches);

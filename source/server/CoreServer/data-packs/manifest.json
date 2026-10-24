@@ -119,6 +119,30 @@
       ]
     },
     {
+      "name": "026-toa-travel-realms",
+      "file": "026-toa-travel-realms.sql",
+      "sha256": "ee7e1b409ee54f0349ddd9f8021745bb35c63d99d482d0cb1d3a7c6f1c3861e7",
+      "description": "Atlantis travel per realm: 33 Teleport rows of type atlantis (ruins city, four havens, six dungeon entrances in each realm copy), ten haven porters, and the Oceanus channelers that were plain NPCs become porters.",
+      "sources": [
+        {
+          "file": "026-toa-travel-realms.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "027-toa-open-atlantis",
+      "file": "027-toa-open-atlantis.sql",
+      "sha256": "a5e004cffca1eea5e7a617b8c4cb84b40c0ee498ca8541710093636762a46fbc",
+      "description": "Opens Atlantis to players (atlantis_teleport_plvl 4 or 2 -> 1) and sets rog_toa_item_chance 0 -> 25, the ToA bonus chance of random loot inside Atlantis.",
+      "sources": [
+        {
+          "file": "027-toa-open-atlantis.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
       "name": "030-toa-dungeon-mobs",
       "file": "030-toa-dungeon-mobs.sql",
       "sha256": "fe75a2326c5efcdd94f2b0b5aae48907f2e577d14429065a6b8655f3d78130f9",

@@ -16,7 +16,8 @@ namespace DOL.GS
         //The following properties are weights for each roll
         //It is *not* a direct chance to receive the item. It is instead
         //a chance for that item type to be randomly selected as a valid generation type
-        private static int ToaItemChance = Properties.ROG_TOA_ITEM_CHANCE;
+        // Read live: data pack 027 and /serverproperty may change it after this class loaded.
+        private static int ToaItemChance => Properties.ROG_TOA_ITEM_CHANCE;
         private static int ArmorWeight = Properties.ROG_ARMOR_WEIGHT;
         private static int JewelryWeight = Properties.ROG_MAGICAL_WEIGHT;
         private static int WeaponWeight = Properties.ROG_WEAPON_WEIGHT;
@@ -83,6 +84,18 @@ namespace DOL.GS
             : this(toa, (eRealm)Util.Random(1, 3), (eCharacterClass)Util.Random(1, 32), (byte)Util.Random(1, 50))
         {
 
+        }
+
+        /// <summary>
+        /// A random item of any type for the class, like <c>new GeneratedUniqueItem(realm, charClass, level, minUtility)</c>,
+        /// but with the Trials of Atlantis flag: stronger bonuses, and each bonus may be a ToA cap bonus
+        /// (rog_toa_item_chance). Monster loot inside Atlantis uses it (docs/TOA_TRAVEL.md).
+        /// </summary>
+        public static GeneratedUniqueItem Create(bool toa, eRealm realm, eCharacterClass charClass, byte level, int minUtility)
+        {
+            eObjectType type = GenerateObjectType(realm, charClass, level);
+            eInventorySlot slot = GenerateItemType(type);
+            return new GeneratedUniqueItem(toa, realm, charClass, level, type, slot, GenerateDamageType(type, charClass), minUtility);
         }
 
         public GeneratedUniqueItem(bool toa, eRealm realm, eCharacterClass charClass, byte level)
@@ -771,14 +784,22 @@ namespace DOL.GS
             return (eProperty)property;
         }
 
+        private bool HasFreeAdvancedStat()
+        {
+            foreach (eProperty property in AdvancedStats)
+                if (!BonusExists(property) && StatIsValidForObjectType(property) && StatIsValidForRealm(property))
+                    return true;
+            return false;
+        }
+
         private eBonusType GetPropertyType(bool toa)
         {
             //allfocus
             if (CanAddFocus())
                 return eBonusType.Focus;
             
-			// ToA allows stat cap bonuses
-			if (toa && Util.Chance(ToaItemChance))
+			// ToA allows stat cap bonuses (only while one is still free: an empty pick would throw)
+			if (toa && Util.Chance(ToaItemChance) && HasFreeAdvancedStat())
 			{
 				return eBonusType.AdvancedStat;
 			}

@@ -25,6 +25,8 @@ The row counts were measured on a repaired copy of the dev snapshot. The
 | `023-artifact-scroll-binders` | 162 scroll merchant rows, scroll prices, Zosyne and Mnosus (36) | 328 |
 | `024-toa-arbiter-npcs` | The three Arbiters become `DOL.GS.MasterLevelArbiter`; Demyphon in region 72 becomes a Master Level credit merchant (subset of 35) | 4 |
 | `025-toa-atlantis-arena-fix` | Deletes the three Atlas fight-club Mordreds (`DOL.GS.LordOfBattle`) in regions 73 and 80 | 3 |
+| `026-toa-travel-realms` | Atlantis travel per realm: 33 Teleport rows of type `atlantis`, 10 haven porters (`PackageID = 'toa-travel'`), 3 Oceanus channelers become porters | 46 |
+| `027-toa-open-atlantis` | `atlantis_teleport_plvl` 4 → 1 and `rog_toa_item_chance` 0 → 25, only where the setup values stand | 2 |
 | `030-toa-dungeon-mobs` | 2,135 ToA dungeon mobs from db-public, tagged `PackageID = 'dbpublic-toa-dungeons'` | 2,135 |
 | `031-toa-dungeon-templates` | 119 NPC templates and 827 equipment rows of those mobs, only where missing | 0 |
 | `040-toa-loot` | 2,106 ToA loot rows in 363 templates and 364 loot links from db-public, only where missing | 2,106 |
@@ -37,11 +39,15 @@ are described in [TOA_DUNGEON_IMPORT.md](TOA_DUNGEON_IMPORT.md), pack 050 in
 because every template is already there; on an empty server schema it
 inserts 946 rows, and 040 inserts 2,470.
 
-After all 14 packs the dev snapshot has 43,859 more mobs: 41,727 from 020,
-2,135 from 030, minus the three Mordreds of 025.
+Packs 026 and 027 are described in [TOA_TRAVEL.md](TOA_TRAVEL.md).
+
+After all 16 packs the dev snapshot has 43,869 more mobs: 41,727 from 020,
+2,135 from 030 and the ten porters of 026, minus the three Mordreds of 025.
 
 File 28 is not shipped: it points the portal NPCs at the gaheris portal
-teleporter, which this server lacks (WP1.2). File 35 ships only in part, as
+teleporter, which this server lacks. WP1.2 uses pack 026 and our own porter
+class instead; the 13 gaheris travel rows of pack 021 stay unused
+([TOA_TRAVEL.md](TOA_TRAVEL.md) says why). File 35 ships only in part, as
 pack 024. Its sections for Aphaestia (`DOL.GS.ArtifactCreditMerchant`) and
 for Zosyne and Mnosus are left out. The credit merchant class does not exist
 yet (WP3.1b), and pack 023 already makes Zosyne and Mnosus scroll merchants.
@@ -214,8 +220,10 @@ are `ItemTemplate`, `MobXAmbientBehaviour` and `Minotaurrelic`. The applier
 records which of their rows a pack changed, and the server reloads exactly
 those rows into the cache. The scroll prices of pack 023 and the artifact
 class type of pack 050 are therefore live on the first boot (359 item
-templates on the dev snapshot). All other tables are read after the packs, so nothing
-else needs a reload.
+templates on the dev snapshot). The server properties are read before the
+packs as well. When a pack changes a `ServerProperty` row, the server reloads
+all properties after the packs (pack 027, 2 rows on the dev snapshot). All
+other tables are read after the packs, so nothing else needs a reload.
 
 ## Backup and rollback
 

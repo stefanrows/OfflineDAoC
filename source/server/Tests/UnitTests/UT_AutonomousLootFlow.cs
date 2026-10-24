@@ -89,7 +89,7 @@ namespace DOL.UnitTests
             public readonly List<eCharacterClass> Classes = new();
             protected override bool RollDropChance(int chance) { Rolls++; return Drop; }
             protected override DbItemTemplate GenerateItemTemplate(GameLiving owner, eCharacterClass characterClass,
-                byte level, int con, bool adjustQuality = true)
+                byte level, int con, bool adjustQuality = true, bool toa = false)
             {
                 Classes.Add(characterClass);
                 return Pants(level);

@@ -81,6 +81,17 @@ PACKS = [
      False,
      'Removes the three Atlas fight-club Mordreds (DOL.GS.LordOfBattle) from Albion Atlantis, '
      'regions 73 and 80; the ones in 334 and 339 stay.'),
+    # WP1.2/1.3 travel and loot (docs/TOA_TRAVEL.md), hand-written.
+    ('026-toa-travel-realms',
+     ['026-toa-travel-realms.sql'],
+     False,
+     'Atlantis travel per realm: 33 Teleport rows of type atlantis (ruins city, four havens, six dungeon '
+     'entrances in each realm copy), ten haven porters, and the Oceanus channelers that were plain NPCs become porters.'),
+    ('027-toa-open-atlantis',
+     ['027-toa-open-atlantis.sql'],
+     False,
+     'Opens Atlantis to players (atlantis_teleport_plvl 4 or 2 -> 1) and sets rog_toa_item_chance 0 -> 25, '
+     'the ToA bonus chance of random loot inside Atlantis.'),
     ('030-toa-dungeon-mobs',
      ['030-toa-dungeon-mobs.sql'],
      False,
