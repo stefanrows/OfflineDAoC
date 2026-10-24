@@ -144,3 +144,26 @@ relics, keeps and GameBot.
 - The guild grudge table (snapshot reported "malformed").
 - The exact name of the Gothwaite mode switch.
 - How many bot checks still compare realm directly outside the Tier 3 seams.
+
+## 5. Owner decisions (Aaron, 2026-10-24 23:45)
+
+1. **Default world = classic RvR; Camlann PvP becomes a pure button** (a
+   second world the launcher can start), not the other way round.
+2. **Clean start:** fresh save, new characters, new companions; nothing from
+   the Camlann save is migrated. Backups of today's save are kept, nothing is
+   deleted without a separate request.
+3. **Target behaviour = the upstream original's current RvR** (shadowofze
+   0.37b as tested on 2026-10-23/24: realm armies, border staging, keep
+   sieges per realm), as close as the fork can get, while keeping the fork's
+   features (ToA, companions, bots, open BG, launcher).
+4. **Realm rules apply everywhere:** frontiers, Atlantis, the normal
+   battlegrounds (Thidranki etc. per level band) and the open BG; same realm
+   is a friend, other realms are enemies, as on 1.65.
+5. Consequences accepted by the orchestrator from these: companions of
+   another realm are not created in the RvR world (companions come from the
+   owner's realm); bot guilds are single-realm; keeps start with their 1.65
+   realm; relics on realm pads; enemy capitals and porters closed as on 1.65
+   (Atlantis havens per realm as already built).
+6. Coordination: Stefan ports upstream RvR movement into the fork (tasks
+   135-139, 0.311-0.328); the RvR mode work must build on his branch work,
+   not around it. Phases 1 and 3 touch the same files.
