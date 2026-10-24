@@ -298,7 +298,7 @@ Excalibur DF portal ring, 89 → 129 give-ups.
 
 | # | Item | Give-ups / game-h | Kind | Task |
 | --- | --- | --- | --- | --- |
-| 1 | Castle Excalibur DF portal (zone point 79); failed-goal memory for DF/PvE camps | ~56 | code, cheap; implemented 0.320.0 | 140 |
+| 1 | Castle Excalibur DF portal (zone point 79); failed-goal memory for DF/PvE camps | ~56 | code, cheap; done 0.320.0 ([measured](#0320-live-measurement-2026-10-24)) | 140 |
 | 2 | Off-mesh start snap | ~33 | code, medium | 141 |
 | 3 | Remaining off-mesh goals + height guard on goal snap | ~18 | code, cheap | 142 |
 | 4 | Dead-end detour road fallback ([Step 2 plan](#step-2-plan-port-the-road-fallback); zones 214, 115) | ~18 | code, bigger | 143 |
@@ -311,6 +311,54 @@ Mesh replacement still needs per-hotspot proof and owner approval. PvE group
 pacing (upstream 1,500/900 hysteresis, about 340 holds per game-hour) is not
 worth porting now. Oddities: bugs 173 (leader re-elections) and 174 (HubFan
 insertion rate).
+
+## 0.320.0 live measurement (2026-10-24)
+
+Offline log analysis only; no real-client check. Report and data:
+`D:\Games\OfflineDAoC-dev\analysis\rvr-0320-2026-10-24\` (`REPORT.md`,
+`classify/`, `logmetrics/`, `tools/`).
+
+**Data.** Same log, three frozen slices: 0.310.x lines 1–321,662 (3.59
+game-hours); 0.314.0 lines 321,663–638,813 (13:10–15:43, 4.03 game-hours; the
+section above used only the first 2.39); 0.320.0 lines 638,814–865,623
+(18:52–20:07, 2.43 game-hours, set 5x, reached about 2x). The 0.314.0 column
+below is the whole slice, so it differs from the table above.
+
+| Metric (per game-hour) | 0.310.x | 0.314.0 | 0.320.0 |
+| --- | --- | --- | --- |
+| Route give-ups | 364 | 157 | **122** |
+| RvR-goal give-ups | 220 | 69 | 75 |
+| Give-ups per 1,000 goal attempts | 69.8 | 29.9 | **21.7** |
+| Longest same bot + spot loop | 50 | 14 | **3** |
+| `GROUP_TRAVEL_HOLD` | 1,558 | 952 | 880 |
+| AbandonCamp after a route failure | 147 | 121 | 87 |
+
+Static classes (give-ups per game-hour, 0.314.0 → 0.320.0): behind keep gate
+48 → 6, goal off-mesh 12 → 16, one-way seam 3 → 8, dead-end detour 17 → 19,
+start off-mesh 30 → 26, cut-off start 24 → 25, cross-zone 5 → 5.
+
+**Task 140 works.** No give-up within 1,500 units of the Castle Excalibur DF
+portal (zone point 79), against 184 in the whole 0.314.0 slice, and no
+DF-grind give-up anywhere. `AUTONOMOUS_DF_ENTRANCE_KEEP` reads
+`keep=57 … outerGateRing=1049 gateIntact=True`. Counters: `crossingRepickBlocked`
+766 (749 in one 60 s window at 19:41 with no matching give-ups),
+`crossingGiveUpFallback` 15, `campRepickBlocked` 7. Capital relocations
+(228 per game-hour against 194–220) show no rise tied to the crossing filter.
+Zone point 81 against 79 use is not logged.
+
+**Remaining work, ranked by gain** (of 122 give-ups per game-hour):
+
+| # | Item | Give-ups / game-h | Kind | Task |
+| --- | --- | --- | --- | --- |
+| 1 | Off-mesh start snap (56 of 62 connect once snapped) | ~23 | code, medium | 141 |
+| 2 | Goal snap leftovers and height guard (26 of 38 connect; wrong-floor re-fails 2 → 0) | ~10 | code, cheap; same snap code as 141 | 142 |
+| 3 | Dead-end detour road fallback; zone 214 is now hotspot 1 | ~13–18 | code, bigger | 143 |
+| 4 | Cut-off starts: six fixed spots | ~25 | probe first | 145 |
+| 5 | Region 181 stable approach (Dun Ailinne) | ~4.5 | probe, cheap | 144 |
+| 6 | One-way seams | ~8 | watch | — |
+
+**New:** `SelectCamp` costs 33.7 ms per call against 23.8, and every tick p95
+spike of 80 ms or more falls in its slow windows. Cause unproven (task 146).
 
 ## How to rerun
 

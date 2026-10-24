@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.325.1] - 2026-10-24
+
+### Added
+- `docs/NAVMESH_HOTSPOTS.md`: 0.320.0 live measurement (offline log
+  analysis, 2.43 game-hours against the 0.314.0 and 0.310.x slices). Route
+  give-ups fell from 157 to 122 per game-hour, give-ups per 1,000 goal
+  attempts from 29.9 to 21.7, and the longest same-spot loop from 14 to 3.
+  The Castle Excalibur DF portal had no give-ups (184 in the 0.314.0 slice).
+  The remaining work is re-ranked: off-mesh start snap first.
+
+### Changed
+- Task 140 is done after the live log check. Tasks 141–146 and bugs 173–174
+  carry the new numbers. Region 181 (task 144) repeats and comes from the
+  horse-stable approach, not the zone border. Bug 173 looks like two leaders
+  dying in one fight. `SelectCamp` got slower per call (task 146).
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.325.0] - 2026-10-24
 
 ### Added

@@ -13,13 +13,24 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      0.310.x to 78% at 0.314.0; most of the drop is at `rvr-keep-106` (10) and
      `rvr-keep-100` (8). Possibly the 0.313.0 1,200-unit flank/cover cap or
      the 0.314.0 goal filters; unchecked. Impact unknown; check the cause
-     before changing code.
+     before changing code. **0.320.0 measurement** (2026-10-24,
+     [NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0320-live-measurement-2026-10-24)):
+     80.4% (176 of 219), still well below 92%; misses about 18 per game-hour
+     (3 at 0.310.x). `rvr-keep-106` (Dun Ailinne) holds 17 of the misses
+     (40%); `rvr-keep-100` had only 3 departures, all inserted. The log does
+     not say which insert condition fails.
 
 173. **Autonomous RvR groups re-elect their leader within 5 seconds.** Found
      2026-10-24 in the 0.314.0 live measurement: 28 cases where the same
      group logged a second `AUTONOMOUS_RVR_LEADER_MAIN_BODY` within 5 s
      (task 136 succession, 0.311.0). Expected: one election per leader death.
      Cause and gameplay impact (a march that turns twice) unchecked.
+     **0.320.0 measurement** (2026-10-24): 24 cases in 19 groups (about 10
+     per game-hour, 8.8% of elections; 0.314.0 had 12%). In 22 of 24 the
+     second election has fewer candidates than the first, and the 0.314.0
+     same-leader, same-second repeats are gone: this fits two leaders dying
+     in one fight, not a double election. Unproven, since member deaths are
+     not logged; possibly not a bug.
 
 172. **Deploy self-check: "a second restore of the same backup is a safe no-op"
      fails on `runtime\Join Friend.cmd`.** Found 2026-10-24 by the data-pack
