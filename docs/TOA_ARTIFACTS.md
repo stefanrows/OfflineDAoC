@@ -138,7 +138,7 @@ tolerates all of it:
 
 | Need | Use | Notes |
 |---|---|---|
-| Grant credit after an encounter (WP3.3) | `ArtifactMgr.GrantArtifactCredit(player, artifactID)` | refuses an unknown artifact, a class/realm without a version, an existing credit, or a finished DOL-style quest in `QuestID`. Encounter mobs call it for each player in `DyingEventArgs.PlayerKillers` |
+| Grant credit after an encounter (WP3.3) | `ArtifactMgr.GrantArtifactCredit(player, artifactID)` | refuses an unknown artifact, a class/realm without a version, an existing credit, or a finished DOL-style quest in `QuestID`. `ArtifactEncounterCredit` calls it for each earner of a mapped kill (see "Encounter credit") |
 | Credit from a credit item or bounty merchant (WP3.1b) | `ArtifactMgr.GrantArtifactBountyCredit(player, creditOrItemId)` | matches `Credit` or `<credit>_credit` |
 | "Has the player done the encounter?" (scholar) | `ArtifactMgr.HasEncounterCredit(player, artifactID)` | per artifact ID, not per type |
 | Scholar hands the artifact over | `ArtifactMgr.ConsumeEncounterCredit(player, artifactID)`, then `GetArtifactVersions(artifactID, class, realm)` and `GameInventoryItem.Create(template)` | `Create` returns an `InventoryArtifact` once the ClassType SQL ran |
@@ -211,7 +211,8 @@ record), `gameobjects/Atlantis/Scholar.cs`, `ArtifactScholar.cs` and
 
 ### The player's way to an artifact
 
-1. **Encounter credit.** Until the encounters of WP3.3 grant it, the credit is
+1. **Encounter credit.** Killing the artifact's guardian grants it (WP3.3, see
+   "Encounter credit" below). It can also be
    bought: Aphaestia (Albion 70, Midgard 71, Hibernia 72) sells one credit token
    per artifact for bounty points (289 to 1,040 BP, the template prices). Hand
    the token to her or to any scholar: the credit is recorded and the token is
@@ -292,8 +293,155 @@ version of an artifact the player carries, losing its experience). It relied on
 DOL's `dmg;wep;stat` Version keys; ours are `0`..`15`. Add it later on top of
 `GetChoices` if the owner wants it.
 
+## Encounter credit (WP3.3)
+
+Implemented in source, real-client check pending. Code:
+`gameutils/Atlantis/ArtifactEncounterCredit.cs`, table
+`CoreDatabase/Tables/DbArtifactEncounterTarget.cs`; data: packs 070 and 071
+([TOA_DATA_PACKS.md](TOA_DATA_PACKS.md)). Tests:
+`Tests/UnitTests/UT_ArtifactEncounterCredit.cs`, `UT_WorldDataPacks`.
+
+### How a kill earns credit
+
+- **The table.** `ArtifactEncounterTarget` has one row per artifact and creature:
+  `ArtifactID`, `MobName` (compared without case), `Region` (0 = any) and
+  `CreditMode` (`group` or `battlegroup`) and `Zone` (where the creature
+  stands, measured from its spawns; text only). The server creates the table at boot
+  from the DataObject; pack 070 fills it. `ArtifactMgr.Init` loads it after the
+  artifact catalog and registers a global `Dying` listener. A load error
+  leaves an empty map; Aphaestia's tokens still work.
+- **The kill.** A mapped creature dies a death that pays experience: not a
+  GameBot, not a pet, not recently charmed (the gate of `OnNpcKilled`). The
+  name and region pick the rows.
+- **Who earns it.** `group`: every player in `DyingEventArgs.PlayerKillers`
+  (the attackers, pet owners and their group members within experience range,
+  as `GameLiving.ProcessDeath` builds it; the killer alone if the list is
+  missing). `battlegroup`: those players plus every member of their
+  battlegroups. Each earner must be alive, in the world, in the region and
+  within experience range of the body (`WorldMgr.MAX_EXPFORKILL_DISTANCE`).
+  A persistent companion's kill counts for its owner, as for experience; a
+  companion or world bot never earns credit itself (they are GameNPCs, never
+  in the list and never battlegroup keys).
+- **The grant.** `ArtifactMgr.GrantArtifactCredit` per earner and artifact:
+  nothing for a player who already holds the credit, has awakened the artifact
+  (also after the scholar used the credit up) or has no version of it for the
+  class and realm. The player reads "With Minkhat defeated in Mesothalassa, you
+  have earned the encounter credit for Alvarus's Leggings. Bring its story to a
+  scholar to awaken it." A common name takes the article ("With the protector
+  of light defeated in Oceanus Boreal"); the zone is the world's zone at the
+  body, else the table's. For the three bookless artifacts the line points to
+  an Artifact Scholar. There is no level gate at the kill; the scholar asks for 45.
+- **The scholar's hint.** Without credit a scholar names the guardians and
+  their zone: "Its secret is guarded: defeat Hallea, Kosma or Zoea in
+  Mesothalassa, or trade tales of your battles with Aphaestia ...". Guardians
+  of several zones read "Landrine in Stygian Delta or Kertom in Arbor Glen".
+
+### How the mapping was made
+
+Sources, in order of preference (the owner's rule: invent as little as possible):
+
+1. **DOLSharp** artifact quests, step 1 ("Defeat Minkhat."): 29 artifacts.
+   21 of the 27 named targets stand in the gaheris spawns (some under a longer
+   name: "Behrooz the Jinni", "High Priest Akil"; "the protectors" are the
+   protectors of light and dark). The six missing ones spawn with pack 071.
+   DOLSharp's Belt of Oglidarsh step says "Defeat Snatcher.", a copy of the
+   Snatcher quest; it is not used for the belt.
+2. **Camelot Herald** patch notes and Q&A in the DAoC knowledge base that name
+   an encounter's creature: 12 artifacts (Golden Spear's three bosses,
+   Phoebus' Harp's three holders, Kertom, Karise, Itet, Ferenc, ...).
+3. **Chosen**: 16 artifacts whose quest is a stub or not a kill (a chest, the
+   flask, the gladiator rounds, the cloak). Each gets a named creature of the
+   region the Herald's scholar table gives the artifact (Oceanus, Stygia,
+   Volcanus or Aerus Haven), not used by another artifact, standing in all
+   three realm copies.
+
+**Credit mode** follows the Herald's 1.75 Q&A list of single-group encounters
+(20 artifacts, from Eternal Plant to Cloudsong); every other encounter is a
+battlegroup encounter, as the Herald says. A Flask gave credit by range; here
+it is a battlegroup encounter.
+
+**Live mechanics not reproduced.** Every encounter is a kill. The scripted
+parts of live (Aten's chest, the flask past the taurs, Linos' key, the
+gladiator rounds, the cloak and statue of Shades of Mist, Sobekhotep's spawn
+conditions, Battler levelling on kills) are not built. Credit is the only
+thing the kill gives; the creatures keep their own loot (the six new ones have
+no loot table). The gaheris encounter mob classes (`GaherisDoppleganger`,
+`GaherisSplitter`, `GaherisSeedsman`, `GaherisRewardMob`) are not ported: no
+mob row uses them, placing them would be invention, and `GaherisRewardMob`'s
+flat realm point payout would clash with our Old Frontiers rules.
+
+### Artifact to creature
+
+Every artifact of our 57 has at least one credit kill; none is without. "(071)"
+marks the six creatures spawned by pack 071. The zone column is the `Zone`
+value of the rows, with the Herald region of the artifact in brackets.
+
+| ID | Artifact | Creature | Zone | Credit | Source and reason |
+|---|---|---|---|---|---|
+| 1001 | Alvarus's Leggings | Minkhat | Mesothalassa (Oceanus) | battlegroup | DOLSharp: "Defeat Minkhat." |
+| 1002 | Arms of the Winds | Raging Tornado | Oceanus Notos (Oceanus) | battlegroup | DOLSharp: "Defeat Raging Tornado." |
+| 1003 | Aten's Shield | Aidoios | Oceanus Hesperos or Oceanus Anatole (Oceanus) | battlegroup | chosen: DOLSharp: "Find the right chest." A named guardian of Oceanus Hesperos instead |
+| 1004 | A Flask | Taur Scribe | Typhon's Reach (Volcanus) | battlegroup | chosen: live: carry the flask past the taurs (credit by range); the named taur of Typhon's Reach |
+| 1005 | Band of Stars | Chisisi | Stygian Delta (Stygia) | group | DOLSharp: "Defeat Chisisi." |
+| 1006 | Battler | Battler (071) | Typhon's Reach (Volcanus) | battlegroup | DOLSharp: "Defeat Battler."; Herald: "the Battler monster"; spawned by pack 071 |
+| 1007 | Belt of the Moon | protector of dark | Oceanus Boreal (Oceanus) | group | DOLSharp: "Defeat the protectors."; the dark ones for the moon (Oceanus Boreal) |
+| 1008 | Belt of the Sun | protector of light | Oceanus Boreal (Oceanus) | group | DOLSharp: "Defeat the protectors."; the light ones for the sun, by the belt of the sun barrier |
+| 1009 | Bracer of Zo'arkat | Krojer | Oceanus Anatole (Oceanus) | battlegroup | chosen: DOLSharp: "Defeat the champion." Herald: a sea encounter tested with two groups; Krojer, master of the champions of Oceanus Anatole |
+| 1010 | Braggart's Bow | Karise | Green Glades (Aerus) | battlegroup | Herald: "Karise, the Braggart's Bow mob" |
+| 1011 | Bruiser | taur warlord | Typhon's Reach (Volcanus) | battlegroup | DOLSharp: "Kill Taur Warlord." |
+| 1012 | Ceremonial Bracers | wavelord (071) | Mesothalassa (Oceanus) | battlegroup | DOLSharp: "Defeat a wavelord."; spawned by pack 071 |
+| 1013 | Cloudsong | Eramai | Green Glades (Aerus) | group | DOLSharp: "Defeat Eramai." |
+| 1014 | Crocodile Tear Ring | Cynere | Oceanus Boreal (Oceanus) | group | DOLSharp: "Defeat Cynere." |
+| 1015 | Crocodile's Tooth Dagger | Itet | Stygian Delta (Stygia) | battlegroup | Herald: "the Crocodile's Tooth Dagger encounter ... did Itet drop" |
+| 1016 | Crown of Zahur | Zahur | Oceanus Boreal (Oceanus) | battlegroup | Herald: "Zahur and his minions" (patch notes) |
+| 1017 | Cyclops Eye Shield | Kertom | Arbor Glen (Aerus) | battlegroup | Herald: "Cyclops' Eye ... Kertom would not spawn" |
+| 1018 | Dream Sphere | Torih | Stygian Delta (Stygia) | battlegroup | DOLSharp: "Defeat the attackers and end Torih's dream." |
+| 1019 | Eerie Darkness Stone | Runihura | Oceanus Boreal (Oceanus) | group | chosen: no source names a creature; Runihura of Oceanus Boreal, whose temple holds a djinn stone |
+| 1020 | Egg of Youth | Sililia | Oceanus Notos (Oceanus) | battlegroup | DOLSharp: "Defeat Sililia." |
+| 1021 | Eirene's Hauberk | Linos (071) | Mesothalassa (Oceanus) | battlegroup | DOLSharp: "Defeat Linos."; Herald: Linos and Khonorn's half of the key; spawned by pack 071 near Khonorn |
+| 1022 | Enyalios Boots | Behrooz the Jinni | Arbor Glen (Aerus) | battlegroup | DOLSharp: "Defeat Behrooz." |
+| 1023 | Erinys Charm | Samut | Typhon's Reach (Volcanus) | battlegroup | DOLSharp: "Defeat Samut." |
+| 1024 | Eternal Plant | Sobekhotep (071) | Oceanus Boreal (Oceanus) | group | DOLSharp: "Defeat Sobekhotep."; Herald: Sobekhotep among swimming sobekites; spawned by pack 071 |
+| 1025 | Fool's Bow | Kirkleis | Oceanus Anatole (Oceanus) | group | chosen: no source names a creature; Kirkleis of Oceanus Anatole |
+| 1026 | Foppish Sleeves | Gaspara | Green Glades (Aerus) | battlegroup | chosen: live: the Blood Soaked Kibisis and its snake guardians; Gaspara of Green Glades |
+| 1028 | Golden Spear | Landrine, Hounthro, Jomnaer | Stygian Delta (Stygia) | battlegroup | Herald: "The Golden Spear story encounter bosses Landrine, Hounthro and Jomnaer" |
+| 1029 | Guard of Valor | Danos | Green Glades (Aerus) | battlegroup | DOLSharp: "Defeat Danos." |
+| 1030 | Golden Scarab Vest | Tey | Stygian Delta (Stygia) | group | Herald: the maubastet Tey of the encounter (patch notes) |
+| 1031 | Harpy Feather Cloak | frustrated harpy | Oceanus Notos (Oceanus) | group | DOLSharp: "Defeat the Harpies."; the one named harpy of Oceanus Notos |
+| 1032 | Healer's Embrace | Mesedsubastet | Stygian Delta (Stygia) | group | DOLSharp: "Defeat Mesedsubastet." |
+| 1033 | Jacina's Sash | Cyrek | Arbor Glen (Aerus) | battlegroup | DOLSharp: "Defeat Cyrek." |
+| 1034 | Kalare's Necklace | Warrior of Stone | Oceanus Notos (Oceanus) | battlegroup | DOLSharp: "Defeat the Warrior of Stone and escape with the necklace." |
+| 1035 | Gem of Lost Memories | Night Terror | Oceanus Hesperos (Oceanus) | group | Herald: "How often does the Night Terror mob spawn for The Gem Of Lost Memories" |
+| 1036 | Maddening Scalars | Ylyssan | Typhon's Reach (Volcanus) | battlegroup | DOLSharp: "Defeat Ylyssan." |
+| 1037 | Malice's Axe | Malamis (071) | Typhon's Reach (Volcanus) | battlegroup | DOLSharp: "Defeat Malamis."; Herald: Malamis credits a group as well as a battlegroup; spawned by pack 071 |
+| 1038 | Nailah's Robes | Deshrentan | Stygian Delta (Stygia) | group | chosen: no source names a creature; Deshrentan of Stygian Delta |
+| 1039 | Night's Shroud Bracelet | Kythera | Oceanus Anatole (Oceanus) | battlegroup | DOLSharp: "Defeat Kythera." |
+| 1040 | Oglidarsh's Belt | tame shark | Mesothalassa, Oceanus Hesperos or Oceanus Boreal (Oceanus) | battlegroup | chosen: DOLSharp names Snatcher (a copy of the Snatcher quest); Herald: the encounter's sharks. The three lone tame sharks |
+| 1041 | Orion's Belt | Peridas | Oceanus Hesperos (Oceanus) | group | chosen: Herald pairs it with the Gem of Lost Memories; Peridas of the same Hesperos island |
+| 1042 | Phoebus' Harp | Hallea, Kosma, Zoea | Mesothalassa (Oceanus) | battlegroup | Herald: "Kosma, Hallea, and that other one that starts with a Z"; credit for slaying the holder of the harp |
+| 1043 | Ring of Fire | Siraadi | Typhon's Reach (Volcanus) | group | chosen: DOLSharp: "Win three consecutive rounds of battle with the gladiators."; Siraadi of Typhon's Reach |
+| 1044 | Ring of Unyielding Will | Mordom | Oceanus Notos (Oceanus) | group | DOLSharp: "Defeat Mordom." |
+| 1045 | Scepter of the Meritorious | Ferenc | Oceanus Boreal (Oceanus) | battlegroup | Herald: "sceptor of meritorious ... before ferenc decides to join the frey" |
+| 1046 | Scorpion's Tail Ring | Terkari | Stygian Delta (Stygia) | group | DOLSharp: "Defeat Terkari." |
+| 1047 | Shades of Mist | Vazul | Ashen Isles (Volcanus) | battlegroup | chosen: DOLSharp: "Find the Shades of Mist." Herald: the Long Black Cloak, criosphinxes; Vazul of Ashen Isles |
+| 1048 | Mariasha's Sharkskin Gloves | Deep-Chasm Matriarch | Oceanus Hesperos (Oceanus) | group | chosen: Herald: a treasure chest step; the Deep-Chasm Matriarch among the sharks of Oceanus Hesperos |
+| 1049 | Shield of Khaos | Chief Creon | Green Glades (Aerus) | battlegroup | DOLSharp: "Defeat Chief Creon." |
+| 1050 | Snakecharmer's Weapon | Maedion | Land of Atum (Stygia) | group | Herald: "In the Snake Charmer's Weapon encounter, Maedion will move" |
+| 1051 | Snatcher | Snatcher (071) | Ashen Isles (Volcanus) | battlegroup | DOLSharp: "Defeat Snatcher."; spawned by pack 071 |
+| 1052 | Staff of the Gods | Naxos Tidal Lord | Mesothalassa (Oceanus) | battlegroup | chosen: DOLSharp: "Obtain the staff ..."; Herald: the jagger sharks of Mesothalassa; the Naxos Tidal Lord there |
+| 1053 | Spear of Kings | Seviach | Oceanus Notos (Oceanus) | battlegroup | chosen: Herald: the creature with the spear stands in Oceanus Notos; Seviach |
+| 1055 | Tartaros' Gift | High Priest Akil | Typhon's Reach (Volcanus) | battlegroup | DOLSharp: "Defeat Akil." |
+| 1056 | Traitor's Dagger | Sadri the Traitor | Oceanus Boreal (Oceanus) | group | chosen: no source names a creature; Sadri the Traitor of Oceanus Boreal |
+| 1057 | Traldor's Oracle | Traldor | Oceanus Boreal (Oceanus) | battlegroup | chosen: no source names a creature; Traldor of Oceanus Boreal |
+| 1058 | Winged Helm | Hermes | Oceanus Notos (Oceanus) | battlegroup | Herald: "Winged Helm: Reduced the odds of Hermes healing himself" |
+| 1059 | Wings Dive | Keres | Arbor Glen (Aerus) | battlegroup | Herald: "Keres now drops the Wings Dive artifact" |
+
 ## Not checked
 
+- Encounter credit: no server start and no real client. The kill message, the
+  battlegroup reach and the six new spawns (place, depth, difficulty) are
+  unverified in game; the chosen creatures of 16 artifacts are a judgement,
+  not a source.
 - No server start and no real client: messages, the stat window refresh on
   level-up, the delve layout and the mez intercept are unverified in game.
 - Artifact pacing on our rates is a calculation, not a measurement.

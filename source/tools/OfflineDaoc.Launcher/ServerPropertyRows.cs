@@ -61,6 +61,14 @@ public static class ServerPropertyRows
         using var connection = new SQLiteConnection(new SQLiteConnectionStringBuilder
             { DataSource = database, Pooling = false, FailIfMissing = true, ReadOnly = true, DefaultTimeout = 5 }.ConnectionString);
         connection.Open();
+        return Read(connection, wanted);
+    }
+
+    /// <summary>The saved values of these keys through an open connection (the launcher snapshot's). A missing table gives no rows.</summary>
+    public static IReadOnlyList<(string key, string value)> Read(SQLiteConnection connection, IEnumerable<string> keys)
+    {
+        string[] wanted = keys.ToArray();
+        if (wanted.Length == 0) return [];
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='ServerProperty'";
         if (Convert.ToInt64(command.ExecuteScalar()) == 0) return [];

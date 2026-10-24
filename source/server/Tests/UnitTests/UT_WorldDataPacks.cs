@@ -482,7 +482,7 @@ namespace DOL.UnitTests
                 "022-atlantis-zonepoints", "023-artifact-scroll-binders", "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix",
                 "026-toa-travel-realms", "027-toa-open-atlantis", "030-toa-dungeon-mobs", "031-toa-dungeon-templates", "040-toa-loot",
                 "041-toa-loot-caps", "050-artifact-item-classtype", "051-artifact-scroll-wiring", "052-artifact-version-fixes",
-                "061-toa-scholar-classes",
+                "061-toa-scholar-classes", "070-toa-encounter-targets", "071-toa-encounter-spawns",
             }));
             Assert.That(applier.UnlistedFiles(manifest), Is.Empty);
             Assert.That(applier.GetStatus().Select(s => s.State), Is.All.EqualTo(WorldDataPackState.Pending),
@@ -500,7 +500,7 @@ namespace DOL.UnitTests
                          typeof(DbSpell), typeof(DbLineXSpell), typeof(DbClassXSpecialization), typeof(DbMob), typeof(DbTeleport),
                          typeof(DbZonePoint), typeof(DbItemTemplate), typeof(DbMerchantItem), typeof(DbNpcTemplate), typeof(DbNpcEquipment),
                          typeof(DbLootTemplate), typeof(DbMobXLootTemplate), typeof(DbArtifactXItem), typeof(DbServerProperty),
-                         typeof(DbArtifact),
+                         typeof(DbArtifact), typeof(DbArtifactEncounterTarget),
                      })
                 database.RegisterDataObject(table);
 
@@ -524,6 +524,8 @@ namespace DOL.UnitTests
             AssertAtlantisTravelRows();
             Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'toa-travel'"), Is.EqualTo(10), "026: the haven porters");
             AssertMissingArtifactSpellRows();
+            Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget"), Is.EqualTo(61), "070: the encounter targets");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'toa-encounters'"), Is.EqualTo(18), "071: six spawns in three copies");
 
             WorldDataPackRun again = new WorldDataPackApplier($"Data Source={_db}", ShippedPackDirectory()).ApplyPending();
             Assert.That(again.AppliedCount, Is.Zero);
@@ -538,6 +540,26 @@ namespace DOL.UnitTests
 
             File.Delete(_db);
             File.Copy(snapshot, _db);
+
+            // The boot registers every DataObject table before the packs run (GameServer.InitDB); the
+            // snapshot predates ArtifactEncounterTarget (pack 070).
+            new SqliteObjectDatabase($"Data Source={_db};Version=3;Pooling=False;Journal Mode=WAL;")
+                .RegisterDataObject(typeof(DbArtifactEncounterTarget));
+
+            // A refreshed snapshot may already carry some packs; the deltas count only the pending ones.
+            HashSet<string> applied = Scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'offline_data_packs'") > 0
+                ? Strings("SELECT Name FROM offline_data_packs").ToHashSet()
+                : [];
+            long If(string pack, long rows) => applied.Contains(pack) ? 0 : rows;
+            if (applied.Count > 0)
+            {
+                // Visible in the console run (Progress) and in the test's output: the pack set's deltas are
+                // checked only for the packs that were still pending on this snapshot.
+                string partial = $"PARTIAL COVERAGE: {applied.Count} packs already on the snapshot, their row deltas are not checked: " +
+                                 string.Join(", ", applied.OrderBy(n => n));
+                TestContext.Progress.WriteLine(partial);
+                TestContext.Out.WriteLine(partial);
+            }
             long mobs = Scalar("SELECT COUNT(*) FROM Mob");
             long lootRows = Scalar("SELECT COUNT(*) FROM LootTemplate");
             long classSpecs = Scalar("SELECT COUNT(*) FROM ClassXSpecialization");
@@ -561,15 +583,20 @@ namespace DOL.UnitTests
 
             Assert.That(run.Results.Select(r => r.State), Is.All.EqualTo(WorldDataPackState.Applied));
             Assert.That(run.BackupPath, Is.Not.Null);
-            Assert.That(Scalar("SELECT COUNT(*) FROM Mob") - mobs, Is.EqualTo(41727 + 2135 - 3 + 10),
-                "020 and 030 add, 025 removes three, 026 adds ten porters");
-            Assert.That(Scalar("SELECT COUNT(*) FROM ClassXSpecialization") - classSpecs, Is.EqualTo(496));
-            Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint") - zonePoints, Is.EqualTo(100));
-            Assert.That(Scalar("SELECT COUNT(*) FROM Spell") - spells, Is.EqualTo(73 + 73 + 4), "73 ML, 73 artifact spells and the 4 of 013");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob") - mobs,
+                Is.EqualTo(If("020-atlantis-mobs", 41727) + If("030-toa-dungeon-mobs", 2135) - If("025-toa-atlantis-arena-fix", 3) +
+                           If("026-toa-travel-realms", 10) + If("071-toa-encounter-spawns", 18)),
+                "020 and 030 add, 025 removes three, 026 adds ten porters, 071 eighteen encounter creatures");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ClassXSpecialization") - classSpecs, Is.EqualTo(If("011-toa-ml-paths", 496)));
+            Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint") - zonePoints, Is.EqualTo(If("022-atlantis-zonepoints", 100)));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Spell") - spells,
+                Is.EqualTo(If("010-toa-ml-spells", 73) + If("012-toa-artifact-spells", 73) + If("013-toa-artifact-spells-missing", 4)),
+                "73 ML, 73 artifact spells and the 4 of 013");
             Assert.That(Scalar("SELECT COUNT(*) FROM LineXSpell WHERE LineName IN ('Banelord','Battlemaster','Convoker','Perfecter'," +
                                "'Sojourner','Spymaster','Stormlord','Warlord')"), Is.EqualTo(73));
             Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE Price = 300 AND Id_nb LIKE '%of_3'"), Is.GreaterThanOrEqualTo(150));
-            Assert.That(run.ChangedKeys.ContainsKey("ItemTemplate"), Is.True, "the scroll price update is reported for the cache refresh");
+            if (!applied.Contains("023-artifact-scroll-binders"))
+                Assert.That(run.ChangedKeys.ContainsKey("ItemTemplate"), Is.True, "the scroll price update is reported for the cache refresh");
 
             // Packs 012 and 013 (with 7206 "Purify Vision" from pack 010, the Erinys Charm use spell): every spell our
             // artifact items reference resolves; 013 writes the four that exist nowhere.
@@ -598,7 +625,7 @@ namespace DOL.UnitTests
                 "025: no fight-club Mordred in Albion Atlantis");
             Assert.That(Ids("SELECT Region FROM Mob WHERE ClassType = 'DOL.GS.LordOfBattle' ORDER BY Region"), Is.EqualTo(new long[] { 334, 339 }));
             Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'dbpublic-toa-dungeons'"), Is.EqualTo(2135), "030");
-            Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate") - lootRows, Is.EqualTo(2106), "040");
+            Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate") - lootRows, Is.EqualTo(If("040-toa-loot", 2106)), "040");
             Assert.That(Scalar("SELECT COUNT(*) FROM MobXLootTemplate WHERE MobName = 'the phoenix' AND LootTemplateName = 'the phoenix' " +
                                "AND DropCount = 1"), Is.EqualTo(1), "041: the Phoenix cap");
             Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate WHERE TemplateName = 'the phoenix'"), Is.EqualTo(23));
@@ -607,8 +634,9 @@ namespace DOL.UnitTests
             Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact' " +
                                "AND Id_nb NOT IN (SELECT ItemID FROM ArtifactXItem)"), Is.Zero);
             List<string> artifactTemplates = Strings("SELECT Id_nb FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact'");
-            Assert.That(artifactTemplates.Where(id => !run.ChangedKeys["ItemTemplate"].Contains(id)), Is.Empty,
-                "050 is reported for the ItemTemplate cache refresh");
+            if (!applied.Contains("050-artifact-item-classtype"))
+                Assert.That(artifactTemplates.Where(id => !run.ChangedKeys["ItemTemplate"].Contains(id)), Is.Empty,
+                    "050 is reported for the ItemTemplate cache refresh");
 
             // Packs 026 and 027 (WP1.2/1.3, docs/TOA_TRAVEL.md).
             AssertAtlantisTravelRows();
@@ -663,6 +691,26 @@ namespace DOL.UnitTests
                                                  "('DOL.GS.Scholar', 'DOL.GS.ArtifactScholar', 'DOL.GS.ArtifactCreditMerchant')"))
                 Assert.That(typeof(GameServer).Assembly.GetType(classType), Is.Not.Null, classType + " resolves");
 
+            // Packs 070 and 071 (WP3.3, docs/TOA_ARTIFACTS.md "Encounter credit"): every artifact has a kill credit,
+            // and every creature named stands in all three realm copies of Atlantis (Albion 73, Midgard 30, Hibernia 130).
+            Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget"), Is.EqualTo(61));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Artifact WHERE ArtifactID NOT IN (SELECT ArtifactID FROM ArtifactEncounterTarget)"), Is.Zero,
+                "070: all 57 artifacts can be earned by a kill");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget WHERE ArtifactID NOT IN (SELECT ArtifactID FROM Artifact)"), Is.Zero);
+            Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget WHERE CreditMode NOT IN ('group', 'battlegroup')"), Is.Zero);
+            Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget WHERE Zone = ''"), Is.Zero, "070: every row says where its creature stands");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget WHERE CreditMode = 'group'"), Is.EqualTo(20),
+                "the Herald's single-group encounters");
+            Assert.That(Strings("SELECT t.MobName || ':' || r.Region FROM ArtifactEncounterTarget t CROSS JOIN " +
+                                "(SELECT 30 Region UNION SELECT 73 UNION SELECT 130) r WHERE NOT EXISTS " +
+                                "(SELECT 1 FROM Mob m WHERE m.Region = r.Region AND lower(m.Name) = lower(t.MobName) AND m.Realm = 0)"),
+                Is.Empty, "every encounter creature stands in every realm copy");
+            Assert.That(Strings("SELECT Name || ':' || Region || ':' || Level FROM Mob WHERE PackageID = 'toa-encounters' ORDER BY Name, Region"),
+                Is.EqualTo(new[] { "Battler", "Linos", "Malamis", "Snatcher", "Sobekhotep", "wavelord" }
+                    .SelectMany(n => new[] { $"{n}:30:65", $"{n}:73:65", $"{n}:130:65" })
+                    .OrderBy(x => x.Split(':')[0], StringComparer.Ordinal).ThenBy(x => int.Parse(x.Split(':')[1])).ToArray()),
+                "071: the six missing creatures, level 65, once per realm copy");
+
             // Scroll drops come from 040 (db-public, 15 %): every page of every set but one drops in all three realm
             // copies of Atlantis (30, 73, 130). "Ring of Fire, Scroll 3 of 3" drops nowhere; the binders sell it.
             // Name sets first: a join on lower() over Mob and LootTemplate without them runs for hours.
@@ -688,6 +736,7 @@ namespace DOL.UnitTests
                          "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix", "027-toa-open-atlantis", "030-toa-dungeon-mobs",
                          "031-toa-dungeon-templates", "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
                          "051-artifact-scroll-wiring", "052-artifact-version-fixes", "061-toa-scholar-classes",
+                         "070-toa-encounter-targets", "071-toa-encounter-spawns",
                      })
                 Assert.That(ExecuteCountingChanges(File.ReadAllText(Path.Combine(ShippedPackDirectory(), name + ".sql"))), Is.Zero,
                     name + " applied a second time");

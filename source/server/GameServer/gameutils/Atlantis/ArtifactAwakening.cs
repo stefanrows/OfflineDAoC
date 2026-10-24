@@ -514,6 +514,8 @@ namespace DOL.GS
 					$"{name} would not answer to a {player.Salutation()}. Its power is meant for other hands; there are artifacts in Atlantis better suited to you.",
 				ArtifactRefusal.TooLow =>
 					$"You are not ready to bear {name} yet. Return when you have seen your {MIN_LEVEL}th season.",
+				ArtifactRefusal.NoCredit when ArtifactEncounterCredit.DescribeGuardians(artifactID) is { } guardians =>
+					$"You have not yet earned the right to {name}. Its secret is guarded: defeat {guardians}, or trade tales of your battles with Aphaestia for that knowledge, then come back to me.",
 				ArtifactRefusal.NoCredit =>
 					$"You have not yet earned the right to {name}. Face the encounter that guards its secret in Atlantis, or trade tales of your battles with Aphaestia for that knowledge, then come back to me.",
 				ArtifactRefusal.NoBook =>

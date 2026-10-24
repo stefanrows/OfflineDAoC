@@ -137,7 +137,9 @@ so pack 027 takes effect on the first boot that applies it.
 The setup tool seeds new installs with 1 and 25. An owner's own value stays:
 pack 027 changes `atlantis_teleport_plvl` only when it is above 1, and
 `rog_toa_item_chance` only when it is 0. To close Atlantis again, set
-`atlantis_teleport_plvl` to 4 with `/serverproperty` or the database.
+`atlantis_teleport_plvl` to 4 with `/serverproperty`, the database, or the
+launcher's XP Settings tab (block TRIALS OF ATLANTIS, `docs/TOA_LAUNCHER.md`),
+which also edits `toa_loot_in_atlantis` and `rog_toa_item_chance`.
 
 ## Random loot inside Atlantis
 

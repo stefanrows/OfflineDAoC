@@ -249,6 +249,30 @@
           "gaherisSha256": null
         }
       ]
+    },
+    {
+      "name": "070-toa-encounter-targets",
+      "file": "070-toa-encounter-targets.sql",
+      "sha256": "da3236add7495d18c3eed98ea56b85a846c5ab22e85a25788076688d9f561cde",
+      "description": "Encounter credit from kills: 61 creature rows for the 57 artifacts (DOLSharp quest targets, Herald names, a named creature of the region for the rest), group or battlegroup credit.",
+      "sources": [
+        {
+          "file": "070-toa-encounter-targets.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "071-toa-encounter-spawns",
+      "file": "071-toa-encounter-spawns.sql",
+      "sha256": "183337b1693b474f9ba5f1e893738f3b4bcfe9e5aa5d5e939305556dae3368a6",
+      "description": "The six encounter creatures no source spawns (Battler, Snatcher, Linos, Sobekhotep, Malamis, a wavelord), one in each realm copy of Atlantis.",
+      "sources": [
+        {
+          "file": "071-toa-encounter-spawns.sql",
+          "gaherisSha256": null
+        }
+      ]
     }
   ]
 }

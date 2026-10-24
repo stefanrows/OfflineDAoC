@@ -43,7 +43,9 @@ python3 -I tools/toa/convert_mysql_to_sqlite.py --src /mnt/c/OfflineDAoC-ext/gah
   haven porters, docs/TOA_TRAVEL.md), `027-toa-open-atlantis.sql` (opens
   Atlantis, ToA loot bonus chance), `041-toa-loot-caps.sql` (The Phoenix's loot cap) and
   `050-artifact-item-classtype.sql` (artifact templates load as
-  `InventoryArtifact`).
+  `InventoryArtifact`), `070-toa-encounter-targets.sql` (artifact encounter
+  credit targets) and `071-toa-encounter-spawns.sql` (the six missing
+  encounter creatures; both docs/TOA_ARTIFACTS.md "Encounter credit").
 - `test_build_data_packs.py`: unit tests for the pack builder.
 
 Pack build step, after converting (13 must be regenerated first, see above):

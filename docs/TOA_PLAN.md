@@ -86,11 +86,13 @@ agent or session that finishes a package updates its row and the log below.
   (`toa_loot_in_atlantis`, default on; `rog_toa_item_chance` = per-bonus cap
   chance, 25). Loot outside Atlantis is unchanged. Test gap: no end-to-end
   ROG test with a mob in an Atlantis region.
-- [ ] **WP1.4 Launcher.** Atlantis on/off switch and ML/artifact XP rates on
-  the launcher settings page (server properties). Independent.
-
-### Phase 2: Master Levels
-
+- [x] **WP1.4 Launcher.** (0.327.0, real launcher check pending;
+  `docs/TOA_LAUNCHER.md`) TRIALS OF ATLANTIS block on the XP Settings tab:
+  Atlantis open to players (`atlantis_teleport_plvl` 1/4), ToA loot in
+  Atlantis, ToA cap-bonus chance, ML XP per mob level, artifact XP rate,
+  world data packs on/off. Writes only while the server is fully stopped,
+  applies at the next start; pending numbers are saved when the launcher
+  closes.
 - [x] **WP2.0 Core hooks.** (0.315.0) Dying carries all player attackers;
   `GainExperience` raises `GainedExperience` with the pre-rate arguments (fires
   for every positive gain incl. quests/praying: listeners filter on XPSource).
@@ -118,6 +120,18 @@ agent or session that finishes a package updates its row and the log below.
   reward), Focusing Winds as ECS effects that end on move/attack/cast.
   Forceful Zephyr / Phaseshift untouched. Open for WP2.4: Blanket hides
   only players, companions stay visible.
+- [ ] **WP2.6 Bots use Convoker, Stormlord and Spymaster abilities.** Owner
+  2026-10-24 20:35: build it. Ground-target logic for bot casters (own
+  position for Battlewarder/fonts/storms used defensively, target position
+  offensively), fix GameFont/mines/storms to accept an NPC owner, Spymaster
+  traps/Siege Bolt where a target exists; Lookout/Blanket stay player-cast.
+  Brain step as in WP2.4 with reaction chances; tests per ability. ~1 session.
+  Depends on WP2.4 (0.325.0). **Owner rule 2026-10-24 20:40: must look human
+  and work cleanly: human reaction delays (1-3 s before pressing), at most
+  one ML ability per think, cooldowns respected, no spam, no instant
+  chain-casting; place ground targets where a player would (own feet for
+  defence, enemy cluster for offence), and skip the ability when it would be
+  pointless.**
 - [ ] **WP2.5 ML trial texts (optional, later).** Our tree holds 90 ML step
   texts (ML1-9 x 10 steps); DOLSharp has one scripted step (Ianetor ML1.1,
   980 lines, no credit wiring). Only if the owner wants named steps on top of
@@ -187,10 +201,18 @@ agent or session that finishes a package updates its row and the log below.
   ported: version swap (ArtifactTurnInQuest). Goddess Necklace has no
   Artifact row and stays unreachable.
 - [x] **WP3.2 Scrolls and turn-in.** folded into WP3.1b (0.324.0); turn-in/version swap not ported.
-- [ ] **WP3.3 Encounters.** Credit per artifact from DOLSharp's per-artifact
-  quests (38 of 62 name the target, 27 named mobs; 21 already stand in the
-  gaheris spawns, 6 need spawns: Battler, Snatcher, Linos, Sobekhotep,
-  Malamis, wavelord); gaheris encounter mobs for the rest. Depends on WP3.2.
+- [x] **WP3.3 Encounters.** (0.326.0, real-client check pending;
+  `docs/TOA_ARTIFACTS.md` "Encounter credit") Every one of the 57 artifacts
+  has a guardian kill: table ArtifactEncounterTarget (artifact → creature,
+  zone, group|battlegroup credit; pack 070, 61 rows: 29 DOLSharp, 12
+  Herald/KB, 16 chosen by region), 6 missing guardians spawned in all three
+  realm copies (pack 071: Battler, Snatcher, Linos, Sobekhotep, Malamis,
+  wavelord, level 65, 30 min respawn). Reward-eligible kill → credit to the
+  group (or battlegroup) earners alive and in XP range, once per character;
+  bots never earn. The scholar names guardian and zone when credit is
+  missing; chat line on credit. Not built: live set-piece mechanics (chest,
+  flask run, gladiator rounds), every encounter is a kill; the 6 spawns
+  stand at camp midpoints (floor/underwater placement needs the client).
 - [x] **WP3.4 Texts.** scholar texts done in WP3.1b (0.324.0); remaining placeholders only in unused columns.
 - [ ] **WP4.1 Real-client check** of travel, Arbiter, one artifact end to end,
   one ML gained. Owner.
@@ -231,12 +253,14 @@ server yet.
    copy), then `playable-dev/server.sh update` (build + deploy + start),
    watch the log for "World data packs" lines, startup time and memory with
    +44k mobs, then stop. Record in TOA_PLAN log.
-3. ~~WP1.2 Travel~~ DONE 0.322.0. Original text: **WP1.2 Travel**: `atlantis_teleport_plvl` to 1, `[Atlantis]` line in the
+3. ~~WP1.2 Travel~~ DONE 0.322.0. Items 4 (WP3.1b, WP3.3, WP3.0b, WP2.4, WP1.4) DONE 0.323.0-0.327.0, deployed 22:13. Original text: **WP1.2 Travel**: `atlantis_teleport_plvl` to 1, `[Atlantis]` line in the
    porter menu, verify the gaheris travel rows (14) and zone points (29).
 4. **WP3.1b** scholars/quests data-driven, **WP3.3** encounters (DOLSharp
    mapping, 6 missing spawns), **WP3.0b** 7 handlers + 4 spell rows,
    **WP2.3 follow-up** Blanket for companions (WP2.4), **WP1.4** launcher.
 5. Bug 160 (7 old test failures) and bug 172 (deploy restore) stay open.
+6. **WP2.6** (bots cast Convoker/Stormlord/Spymaster abilities) after WP3.3 and
+   the deploy.
 
 Agent rhythm that worked today: developer (opus/high) in its own worktree
 → reviewer (opus/medium-high) → fix → re-check → orchestrator commits with
@@ -252,12 +276,28 @@ a real defect in every package; keep the review step.
 
 ## Log
 
+- 2026-10-24: WP3.3 implemented by toa-encounters (worktree `toa-encounters`):
+  table ArtifactEncounterTarget, kill credit for group or battlegroup, packs
+  070 (61 targets, all 57 artifacts) and 071 (Battler, Snatcher, Linos,
+  Sobekhotep, Malamis, wavelord in 30/73/130); gaheris encounter mob classes
+  not ported (no row uses them); suite on 0.325.0 4,443 passed, 7 failed (bug 160), 3 skipped.
 - 2026-10-24: WP3.1b implemented by toa-scholars (worktree `toa-scholars`):
   scholars, Artifact Scholars, Aphaestia, scroll combining, packs 051/052/061;
   review fixes (book rebuilt from a page template on abort, one token at a time,
   no unusable version offered); on main 0.323.0 the full suite has 4,394 passed,
   7 failed (bug 160), 3 skipped.
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 22:13: **0.327.0 deployed on Aaron's PC** (quick_check ok before
+  the stop; packs 013/051/052/061/070/071 applied, 22 in total; Artifact
+  Manager loads 57 artifacts / 198 items, 61 encounter targets; Scholar,
+  Artifact Scholar and Aphaestia classes resolve; 18 guardian spawns). Startup
+  errors unchanged baseline (191, base-world rows). Server running. Everything
+  built today is now live locally; real-client checks (WP4.1) are the owner's.
+  Bug 175 records 14 bot-brain crashes seen on 0.322.0 (not ToA code).
+- 2026-10-24 21:30: WP1.4 reviewed (close-flush fixed) and merged as 0.327.0;
+  WP2.6 planned with the owner's human-behaviour rule. Deploy next.
+- 2026-10-24 21:10: WP3.3 reviewed (zone in hints, articles, battlegroup
+  lock, partial-coverage notice added) and merged as 0.326.0 (22 packs).
 - 2026-10-24 20:30: WP2.4 reviewed (Blanket stealth hold, companion earner
   rule, Martyr cost fixed) and merged as 0.325.0.
 - 2026-10-24 20:10: WP3.1b reviewed (book-loss on abort, token sales, class
@@ -270,6 +310,8 @@ a real defect in every package; keep the review step.
   (`bot_ml_distribution`), both earn from the same kills, ML columns on both bot
   tables, chosen line loaded at 50, Warlord/Battlemaster/Perfecter abilities
   used by the AI, Blanket hides companions; full suite 7 failures = bug 160.
+- 2026-10-24 19:41: WP1.4 launcher block TRIALS OF ATLANTIS implemented on branch
+  `toa-launcher` (six properties, 9 launcher tests); review next.
 - 2026-10-24 19:30: WP3.0b reviewed (sub-spell cast and AfHits refcount fixed)
   and merged as 0.323.0 (17 packs).
 - 2026-10-24 18:20: 0.322.0 deployed on Aaron's PC (packs 026/027 applied, 2

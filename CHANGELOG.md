@@ -19,28 +19,6 @@ package, not this fork's version.
   the keep, then each doubling), `RVR_SIEGE_FIRST_DOOR` and
   `RVR_SIEGE_FIRST_LORD` (once per event), so a server log shows whether bot
   attackers reach the walls, the doors and the lord.
-
-### Changed
-- Autonomous keep sieges give a marching force time to arrive (bug 176).
-  Every muster departure, guild-army launch, reinforcement and re-gather after
-  a lost wave restarts the idle and absence clocks and the force's
-  march-progress baselines. The 15-minute idle rule waits for a march
-  allowance (estimated walk at 190 units/s plus 10 minutes, 15 to 40 minutes).
-  A member that died or was ported 4,000+ units back earns progress again on
-  its new walk. A force that never came within reach of the keep is called
-  off 90 minutes after its first departure.
-- Guild armies count their 30-minute travel allowance from the latest
-  departure instead of from creation during the muster, and keep the relaxed
-  strength requirement when they re-gather after a lost wave.
-
-### Fixed
-- Bot keep sieges were idle-closed as "Ended (unconfirmed)" while the
-  attacking force was still marching (live 0.320.0: 1 capture in 12 sieges
-  over 25 hours).
-
-## [0.326.0] - 2026-10-24
-
-### Added
 - Start snap for autonomous world bots (task 141): after "no path found", a
   bot standing off the navmesh moves to the nearest floor that leads on
   (boxes 96/96/512, then 256/256/1024), instead of failing three times and
@@ -54,16 +32,89 @@ package, not this fork's version.
   `UT_Task139HotspotProbe.EstimateRuntimeSnaps`.
 
 ### Changed
+- Autonomous keep sieges give a marching force time to arrive (bug 176).
+  Every muster departure, guild-army launch, reinforcement and re-gather after
+  a lost wave restarts the idle and absence clocks and the force's
+  march-progress baselines. The 15-minute idle rule waits for a march
+  allowance (estimated walk at 190 units/s plus 10 minutes, 15 to 40 minutes).
+  A member that died or was ported 4,000+ units back earns progress again on
+  its new walk. A force that never came within reach of the keep is called
+  off 90 minutes after its first departure.
+- Guild armies count their 30-minute travel allowance from the latest
+  departure instead of from creation during the muster, and keep the relaxed
+  strength requirement when they re-gather after a lost wave.
 - Goal snap height guard (task 142): a snap that moves the goal more than 256
   units in height within 3,000 units of the bot must be reachable from the
   bot's floor; a snapped goal that fails again goes to the ordinary recovery
   and is not snapped again.
 
 ### Fixed
+- Bot keep sieges were idle-closed as "Ended (unconfirmed)" while the
+  attacking force was still marching (live 0.320.0: 1 capture in 12 sieges
+  over 25 hours).
 - Stealth breaks, retreats, observe-leave and mob disengage points for world
   bots now stay on the ground; on slopes they hung up to about 1,000 units
   off the mesh. A failed path to such a point no longer ends the bot's own
   route or puts its real destination into the give-up memory (task 142).
+
+### Removed
+- None.
+
+## [0.327.1] - 2026-10-24
+
+### Added
+- ToA plan log: 0.327.0 deployed on the owner's install with all 22 data
+  packs; bug 175 records the bot-brain crashes seen on 0.322.0.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
+## [0.327.0] - 2026-10-24
+
+### Added
+- Launcher: a TRIALS OF ATLANTIS block on the XP Settings tab (ToA plan
+  WP1.4, `docs/TOA_LAUNCHER.md`): Atlantis open to players, ToA loot in
+  Atlantis, ToA cap-bonus chance, Master Level XP per mob level, artifact XP
+  rate, world data packs on/off. Changes are written while the server is
+  fully stopped and apply at the next start; a number still waiting for its
+  delayed save is written when the launcher closes. Launcher tests
+  ToaSettingsTests (10).
+- `docs/TOA_PLAN.md`: WP2.6 (bots cast Convoker, Stormlord and Spymaster
+  abilities) planned with the owner's rule for human-looking bot behaviour.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
+## [0.326.0] - 2026-10-24
+
+### Added
+- Artifact encounter credit from kills (ToA plan WP3.3): each of the 57
+  artifacts has one or more guardian creatures in Atlantis; killing one
+  (reward-eligible) grants the encounter credit to the group or, for raid
+  encounters, the battlegroup members alive and in experience range, once per
+  character. Six guardians that had no spawn (Battler, Snatcher, Linos,
+  Sobekhotep, Malamis, a wavelord) now stand in all three realm copies. The
+  scholar names guardian and zone when the credit is missing. Data packs 070
+  (mapping) and 071 (spawns); table `ArtifactEncounterTarget`. Unit tests
+  UT_ArtifactEncounterCredit (9). Aphaestia's tokens remain as the alternative.
+
+### Changed
+- None.
+
+### Fixed
+- None.
 
 ### Removed
 - None.

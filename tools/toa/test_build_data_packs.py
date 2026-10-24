@@ -128,6 +128,20 @@ class BuildDataPacksTest(unittest.TestCase):
             self.assertIn(f'WHERE NOT EXISTS (SELECT 1 FROM "spell" WHERE "SpellID" = {spell_id})', code)
         self.assertEqual(code.count('INSERT INTO "spell"'), 4)
 
+    def test_encounter_packs_insert_only_with_fixed_ids(self):
+        for name, table, rows in (('070-toa-encounter-targets.sql', 'ArtifactEncounterTarget', 61),
+                                  ('071-toa-encounter-spawns.sql', 'Mob', 18)):
+            text = (bdp.DEFAULT_SQL / name).read_text(encoding='utf-8')
+            self.assertNotIn('\r', text)
+            code = '\n'.join(line for line in text.splitlines() if not line.startswith('--'))
+            self.assertIsNone(re.search(r'\b(DELETE|UPDATE|REPLACE INTO)\b', code, re.I), name + ': insert only')
+            statements = [s for s in code.split(';\n') if s.strip()]
+            self.assertEqual(len(statements), rows, name)
+            for statement in statements:
+                self.assertTrue(statement.strip().startswith(f'INSERT OR IGNORE INTO "{table}"'), statement[:80])
+            ids = re.findall(r"VALUES \('([^']+)'", code)
+            self.assertEqual(len(ids), len(set(ids)), name + ': row IDs are unique')
+
     def test_shipped_packs_match_the_converted_files(self):
         shipped = bdp.DEFAULT_OUT / 'manifest.json'
         if not shipped.is_file() or not (bdp.DEFAULT_SQL / '13-atlantis-mobs.sql').is_file():

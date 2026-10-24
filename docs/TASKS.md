@@ -440,6 +440,11 @@ Agent sessions on items 45–48: take the role and context from
      used by the AI, Blanket of Camouflage hides companions): implemented in
      source, real-client check pending
      ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
+     WP3.3, encounter credit from kills: killing an artifact's guardian (61
+     named creatures for all 57 artifacts, packs 070/071 with six new spawns)
+     gives the group or battlegroup its encounter credit, once per character;
+     implemented in source, real-client check pending
+     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Encounter credit").
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;
@@ -552,7 +557,7 @@ Agent sessions on items 45–48: take the role and context from
      the 0.314.0 clusters (zone 15 651000,297000; zone 11 582–594k,465000)
      are gone. Gain about 23
      ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0320-live-measurement-2026-10-24)).
-     Implemented in source **0.326.0** together with task 142. Cause: on
+     Implemented in source **0.328.0** together with task 142. Cause: on
      NoPathFound the movement component's floor repair accepts only 128 units
      up or 32 down, and the local recovery then probed from the off-mesh bot
      with the 32/32/64 pick box, so three failures sent the bot to its
@@ -584,7 +589,7 @@ Agent sessions on items 45–48: take the role and context from
      607604,298904: 3). 38 off-mesh goals (about 16 per game-hour), 26
      connect once snapped; new spots zone 211 366000,396000 (11 bots) and
      zone 111 756000,663000 (6 bots). Gain now about 10; same snap code as
-     task 141. Implemented in source **0.326.0**. Cause: 33 of the
+     task 141. Implemented in source **0.328.0**. Cause: 33 of the
      38 off-mesh goals were not the route's goal but points that stealth
      breaks, retreats and mob disengages built with Detour's surface move,
      which keeps the start height (140–1,037 units off the mesh on slopes).

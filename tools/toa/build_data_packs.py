@@ -139,6 +139,17 @@ PACKS = [
      False,
      'Artifact NPCs: Aphaestia in region 72 sells credit, 22 Credit values match their tokens, '
      'five tokens of absent artifacts leave her list.'),
+    # WP3.3 encounter credit (docs/TOA_ARTIFACTS.md "Encounter credit"), hand-written.
+    ('070-toa-encounter-targets',
+     ['070-toa-encounter-targets.sql'],
+     False,
+     'Encounter credit from kills: 61 creature rows for the 57 artifacts (DOLSharp quest targets, '
+     'Herald names, a named creature of the region for the rest), group or battlegroup credit.'),
+    ('071-toa-encounter-spawns',
+     ['071-toa-encounter-spawns.sql'],
+     False,
+     'The six encounter creatures no source spawns (Battler, Snatcher, Linos, Sobekhotep, Malamis, '
+     'a wavelord), one in each realm copy of Atlantis.'),
 ]
 
 SOURCE_SHA = re.compile(r'^-- Source sha256: ([0-9a-f]{64})$', re.M)
