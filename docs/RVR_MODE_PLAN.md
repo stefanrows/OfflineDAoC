@@ -49,6 +49,17 @@ defaults in code, keep/relic start state from the reset.
 - [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
   client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
 
+**Owner rule (2026-10-25 00:25): every bot extension the fork built carries
+over into the RvR world, realm-based.** That means: companions (roster, squads,
+gear, stages, companion ML), world bots (PvE grind, towns, economy, pickup
+groups now same-realm, danger memory, attributes, equipment, bot ML), the
+autonomous RvR layer (raids as battlegroups, keep sieges, attack plans, live
+reserve, danger memory, grudges/banter) rebuilt per realm instead of per
+guild, the open BG with its presets, attack orders and the OPEN BG window in
+`perrealm` mode, siege operators, raid groups. Nothing is dropped; only the
+friend/enemy key changes from guild/crew to realm. R4a-R4c are measured
+against this list.
+
 Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R5b
 (wipe, boot) → R4a → R4b → R4c → R6.
 
