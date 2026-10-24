@@ -350,8 +350,8 @@ Zone point 81 against 79 use is not logged.
 
 | # | Item | Give-ups / game-h | Kind | Task |
 | --- | --- | --- | --- | --- |
-| 1 | Off-mesh start snap (56 of 62 connect once snapped) | ~23 | code, medium | 141 |
-| 2 | Goal snap leftovers and height guard (26 of 38 connect; wrong-floor re-fails 2 → 0) | ~10 | code, cheap; same snap code as 141 | 142 |
+| 1 | Off-mesh start snap (56 of 62 connect once snapped) | ~23 | code, medium; implemented 0.326.0 | 141 |
+| 2 | Goal snap leftovers and height guard (26 of 38 connect; wrong-floor re-fails 2 → 0) | ~10 | code, cheap; implemented 0.326.0 with 141 | 142 |
 | 3 | Dead-end detour road fallback; zone 214 is now hotspot 1 | ~13–18 | code, bigger | 143 |
 | 4 | Cut-off starts: six fixed spots | ~25 | probe first | 145 |
 | 5 | Region 181 stable approach (Dun Ailinne) | ~4.5 | probe, cheap | 144 |

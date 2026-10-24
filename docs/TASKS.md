@@ -493,32 +493,6 @@ Agent sessions on items 45–48: take the role and context from
      Castle Excalibur DF portal got worse. Follow-ups are tasks 140–146
      ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0314-live-measurement-2026-10-24)).
 
-141. **Snap off-mesh route starts onto the mesh.** Owner, 2026-10-24, from the
-     0.314.0 live measurement. Gain about 33 give-ups per game-hour (27 → 33
-     since the baseline); statically 72 of 80 starts connect once snapped.
-     Code, medium. Details in the analysis `REPORT.md` (see
-     NAVMESH_HOTSPOTS.md). **0.320.0 measurement:** 62 give-ups, about 26
-     per game-hour, 56 connect once snapped. Spread out (no spot above 4);
-     the 0.314.0 clusters (zone 15 651000,297000; zone 11 582–594k,465000)
-     are gone. Gain about 23
-     ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0320-live-measurement-2026-10-24)).
-
-142. **Remaining off-mesh goals and a height guard on goal snap.** Owner,
-     2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
-     game-hour. 75 snaps (61 vertical only; |dz| over 200: 45, over 500: 9,
-     range −956..+574). Two snapped to the wrong floor on Hadrian's Wall
-     (Caorira 13:25:26, dz −838; Orlaelorrin 13:32:17, dz −325) and failed
-     again within seconds. 44 off-mesh goals remain (39 connect once snapped
-     statically): the XP camp goal 587344,473811 (14 give-ups, 11 bots),
-     Cruachan Gorge 376226,415197; Hadrian's Wall 607604,298904 has no floor.
-     Code, cheap. **0.320.0 measurement:** 71 snaps (57 vertical only; |dz|
-     over 200: 40, over 500: 3, one +1,177), no wrong-floor re-fail. The old
-     goals nearly vanished (587344,473811: 2 give-ups; 376226,415197: 0;
-     607604,298904: 3). 38 off-mesh goals (about 16 per game-hour), 26
-     connect once snapped; new spots zone 211 366000,396000 (11 bots) and
-     zone 111 756000,663000 (6 bots). Gain now about 10; same snap code as
-     task 141.
-
 143. **Road fallback for dead-end detours (task 139 Step 2).** Owner,
      2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
      game-hour: zone 214 (25 give-ups, 11 bots, starts 445–473k,302–318k to
@@ -568,6 +542,65 @@ Agent sessions on items 45–48: take the role and context from
      `SelectCamp` in this run too.
 
 ## Implemented in source; installation verification pending
+
+141. **Snap off-mesh route starts onto the mesh.** Owner, 2026-10-24, from the
+     0.314.0 live measurement. Gain about 33 give-ups per game-hour (27 → 33
+     since the baseline); statically 72 of 80 starts connect once snapped.
+     Code, medium. Details in the analysis `REPORT.md` (see
+     NAVMESH_HOTSPOTS.md). **0.320.0 measurement:** 62 give-ups, about 26
+     per game-hour, 56 connect once snapped. Spread out (no spot above 4);
+     the 0.314.0 clusters (zone 15 651000,297000; zone 11 582–594k,465000)
+     are gone. Gain about 23
+     ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0320-live-measurement-2026-10-24)).
+     Implemented in source **0.326.0** together with task 142. Cause: on
+     NoPathFound the movement component's floor repair accepts only 128 units
+     up or 32 down, and the local recovery then probed from the off-mesh bot
+     with the 32/32/64 pick box, so three failures sent the bot to its
+     capital. Now `TryAdoptStartSnap` (`AutonomousStartSnap`, goal snap boxes
+     96/96/512 then 256/256/1024) moves an idle world bot to the nearest floor
+     that leads on (a complete corridor toward the failed point, else a local
+     exit). Not in dungeons, combat, aggro, casting, attacking or on a stable
+     route; never into a keep whose gate blocks the bot; one snap per 45 s and
+     two per destination; a miss is remembered. Offline: the probe routes 56
+     of the 62 measured start give-ups; Release build green;
+     `UT_AutonomousRouteGoalFix` 51/51, `~Autonomous` 1,157 of 1,158, full
+     suite 4,463 of 4,474 (the seven bug 160 failures); daoc-reviewer
+     accepted after fixes. Live check: `startSnapped` and `startSnapFailed`
+     on `AUTONOMOUS_ROUTE_GOAL_FIX`, `AUTONOMOUS_START_SNAP` lines, start
+     off-mesh give-ups fall from about 26 per game-hour, no snaps in combat
+     or into keeps.
+
+142. **Remaining off-mesh goals and a height guard on goal snap.** Owner,
+     2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
+     game-hour. 75 snaps (61 vertical only; |dz| over 200: 45, over 500: 9,
+     range −956..+574). Two snapped to the wrong floor on Hadrian's Wall
+     (Caorira 13:25:26, dz −838; Orlaelorrin 13:32:17, dz −325) and failed
+     again within seconds. 44 off-mesh goals remain (39 connect once snapped
+     statically): the XP camp goal 587344,473811 (14 give-ups, 11 bots),
+     Cruachan Gorge 376226,415197; Hadrian's Wall 607604,298904 has no floor.
+     Code, cheap. **0.320.0 measurement:** 71 snaps (57 vertical only; |dz|
+     over 200: 40, over 500: 3, one +1,177), no wrong-floor re-fail. The old
+     goals nearly vanished (587344,473811: 2 give-ups; 376226,415197: 0;
+     607604,298904: 3). 38 off-mesh goals (about 16 per game-hour), 26
+     connect once snapped; new spots zone 211 366000,396000 (11 bots) and
+     zone 111 756000,663000 (6 bots). Gain now about 10; same snap code as
+     task 141. Implemented in source **0.326.0**. Cause: 33 of the
+     38 off-mesh goals were not the route's goal but points that stealth
+     breaks, retreats and mob disengages built with Detour's surface move,
+     which keeps the start height (140–1,037 units off the mesh on slopes).
+     Their failure was consumed by the bot's own route, which gave up and
+     wrote the real destination into the give-up memory. Now those five
+     world-bot sites use `MoveAlongGroundOrSurface`, and a NoPathFound more
+     than 96 units from the goal and continuation at an off-mesh point is set
+     aside once (`foreignFailureSkipped`). Height guard: a goal snap that
+     moves more than 256 units in height within 3,000 units of the bot must be
+     reachable from the bot's floor, else `snapDzRejected`; a snapped goal
+     that fails again goes to the ordinary recovery (`snapRefailed`) and is
+     not snapped again. Offline: all 33 set aside, 17 same-zone destinations
+     route (16 cross-zone not probed); the guard rejects none of the measured
+     snaps. Live check: `foreignFailureSkipped`, `snapDzRejected`,
+     `snapRefailed`, no wrong-floor re-fails, goal off-mesh give-ups fall
+     from about 16 per game-hour.
 
 138. **Full formation follow inside the movement tick (follow-up to 137).**
      Owner, 2026-10-24. Implemented in source **0.312.0**

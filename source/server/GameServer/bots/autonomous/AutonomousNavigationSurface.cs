@@ -19,6 +19,16 @@ public static class AutonomousNavigationSurface
         // No guessed height/nearest island for unsupported remote providers.
         return null;
     }
+
+    // Task 142: Detour's moveAlongSurface is a 2D query, so its result keeps
+    // the start's height. A retreat, disengage or stealth break point drawn
+    // that way down a slope hung 140-500 units off the mesh, its path failed,
+    // and the bot's next route consumed that failure and gave up (at least 13
+    // of the 38 off-mesh-goal give-ups of the 0.320.0 run). Ground the point
+    // where the provider can; otherwise keep the former surface point.
+    public static Vector3? MoveAlongGroundOrSurface(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 end) =>
+        zone == null ? null :
+        MoveAlongGround(nav, zone, start, end) ?? nav.GetMoveAlongSurface(zone, start, end, nav.DefaultFilters);
     // Repair stale imported/interpolated Z, not horizontal path obstruction.
     // A wide nearest-poly search can select a table, another floor, or the far
     // side of a wall. Keep XY effectively fixed and retain bounded vertical range.

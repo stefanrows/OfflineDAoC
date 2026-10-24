@@ -142,8 +142,8 @@ public sealed partial class AutonomousWorldBotController
         if (spot.HasValue)
             return spot.Value;
         if (back.HasValue && bot.CurrentZone != null)
-            return PathfindingProvider.Instance.GetMoveAlongSurface(bot.CurrentZone, here, back.Value,
-                PathfindingProvider.Instance.DefaultFilters) ?? here;
+            return AutonomousNavigationSurface.MoveAlongGroundOrSurface(PathfindingProvider.Instance,
+                bot.CurrentZone, here, back.Value) ?? here;
         return here;
     }
 }

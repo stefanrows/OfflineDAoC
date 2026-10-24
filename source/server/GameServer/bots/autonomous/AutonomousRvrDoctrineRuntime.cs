@@ -454,8 +454,8 @@ public static class AutonomousRvrDoctrineRuntime
             waypoint = state.LastWaypointRegion == leader.CurrentRegionID ? state.LastWaypoint : null;
         (Vector3 target, string anchor) = AutonomousRvrDoctrineGeometry.ChooseRetreatTarget(here, threat,
             RetreatAnchors(leader), waypoint);
-        Vector3 point = PathfindingProvider.Instance.GetMoveAlongSurface(leader.CurrentZone, here, target,
-            PathfindingProvider.Instance.DefaultFilters) ?? target;
+        Vector3 point = AutonomousNavigationSurface.MoveAlongGroundOrSurface(PathfindingProvider.Instance,
+            leader.CurrentZone, here, target) ?? target;
         lock (state)
         {
             state.RetreatPoint = point;
@@ -588,8 +588,8 @@ public static class AutonomousRvrDoctrineRuntime
         Vector3 here = new(bot.X, bot.Y, bot.Z);
         Vector3 threat = AutonomousRvrDoctrineGeometry.Centroid(attackers.Select(npc => new Vector3(npc.X, npc.Y, npc.Z)));
         Vector3 away = AutonomousRvrDoctrineGeometry.AwayFrom(here, threat, MobDisengageDistance);
-        Vector3 point = PathfindingProvider.Instance.GetMoveAlongSurface(bot.CurrentZone, here, away,
-            PathfindingProvider.Instance.DefaultFilters) ?? away;
+        Vector3 point = AutonomousNavigationSurface.MoveAlongGroundOrSurface(PathfindingProvider.Instance,
+            bot.CurrentZone, here, away) ?? away;
         lock (state)
         {
             state.RetreatPoint = point;

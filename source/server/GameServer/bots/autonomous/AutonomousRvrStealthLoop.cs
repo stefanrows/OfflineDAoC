@@ -519,8 +519,8 @@ public static class AutonomousRvrStealthLoop
         Vector3 threat = threats.Count == 0 ? here : AutonomousRvrDoctrineGeometry.Centroid(threats);
         Vector3 raw = BreakPoint(here, threat, Random.Shared.NextDouble(), Random.Shared.NextDouble());
         Vector3 point = bot.CurrentZone == null ? raw :
-            PathfindingProvider.Instance.GetMoveAlongSurface(bot.CurrentZone, here, raw,
-                PathfindingProvider.Instance.DefaultFilters) ?? raw;
+            AutonomousNavigationSurface.MoveAlongGroundOrSurface(PathfindingProvider.Instance, bot.CurrentZone,
+                here, raw) ?? raw;
 
         if (Log.IsInfoEnabled)
             Log.Info($"RVR_STEALTH_BREAK bot={bot.Name} reason={Label(reason)} seconds={(now - state.EngagedAt) / 1000}");

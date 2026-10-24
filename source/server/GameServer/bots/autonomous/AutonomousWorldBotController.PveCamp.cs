@@ -211,8 +211,8 @@ public sealed partial class AutonomousWorldBotController
         away = Vector2.Normalize(away) * AutonomousPveCampWatch.ShiftDistance(bot.ObjectID);
         Vector3 target = new(from.X + away.X, from.Y + away.Y, from.Z);
         Vector3? walkable = bot.CurrentZone == null ? null :
-            PathfindingProvider.Instance.GetMoveAlongSurface(bot.CurrentZone, from, target,
-                PathfindingProvider.Instance.DefaultFilters);
+            AutonomousNavigationSurface.MoveAlongGroundOrSurface(PathfindingProvider.Instance, bot.CurrentZone,
+                from, target);
         return walkable ?? from;
     }
 

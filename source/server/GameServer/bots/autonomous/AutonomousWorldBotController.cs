@@ -96,6 +96,20 @@ namespace DOL.GS
         private Vector3 _goalSnapTo;
         private bool _goalSnapMissActive;
         private Vector3 _goalSnapMiss;
+        // Task 142: an original goal whose snapped floor failed again; its own slot, so a later NoFloor or
+        // WrongFloor miss of another goal cannot overwrite it (and it cannot overwrite theirs).
+        private bool _goalSnapRefailActive;
+        private Vector3 _goalSnapRefail;
+        // Task 141: the off-mesh spot where the bot found no connected floor (no second wide query from there),
+        // and the start snap budget: one per StartSnapCooldown, at most two for one destination.
+        private bool _startSnapMissActive;
+        private Vector3 _startSnapMiss;
+        private long _nextStartSnapTick;
+        private Vector3 _startSnapDestination;
+        private int _startSnapsForDestination;
+        // Task 142: the last off-mesh failure of another mover that was set aside (once per point).
+        private bool _foreignFailureActive;
+        private Vector3 _foreignFailure;
         // A give-up on an RvR roam destination ends that destination at the next RvR turn (the picker then
         // skips the spot, AutonomousFailedGoalMemory).
         private bool _dropRvrDestinationAfterGiveUp;
@@ -4716,11 +4730,16 @@ namespace DOL.GS
             bool routeFailed = bot.TryConsumeAutonomousPathFailure(out PathfindingStatus failureStatus,
                                    out Vector3 failedDestination) &&
                                AutonomousRouteRecoveryPolicy.AppliesToCurrentDestination(destinationChanged, failedDestination, destination);
-            // NoPathFound has two common causes the recovery below cannot fix: the goal hangs outside the Detour
-            // pick box, or the bot does. Only an off-mesh goal with a floor in reach is repaired here; the route
-            // is then planned again to that floor instead of counting a failed recovery attempt.
-            if (routeFailed && !preciseArrival && failureStatus == PathfindingStatus.NoPathFound &&
-                bot.IsAutonomousWorldBot && TryAdoptGoalSnap(bot, failedDestination, ref destination, ref validatedContinuation))
+            // NoPathFound has three common causes the recovery below cannot fix: the bot stands outside the Detour
+            // pick box (task 141), the goal does, or the failure belongs to another mover's off-mesh point (task
+            // 142). Each is repaired here once: the bot is put on its nearest connected floor, the goal moves to its
+            // floor, or the foreign failure is set aside, and the route is planned again instead of counting a
+            // failed recovery attempt. Only these failures spend the wider floor queries.
+            if (routeFailed && bot.IsAutonomousWorldBot && failureStatus == PathfindingStatus.NoPathFound &&
+                (TryAdoptStartSnap(bot, ref current, destination, failedDestination) ||
+                 !preciseArrival &&
+                 TryAdoptGoalSnap(bot, current, failedDestination, ref destination, ref validatedContinuation) ||
+                 TrySetAsideForeignFailure(bot, failedDestination, destination, validatedContinuation)))
                 routeFailed = false;
             if (routeFailed)
             {
@@ -4737,6 +4756,10 @@ namespace DOL.GS
                     _nextMoveOrderTick = now + 1_500;
                     return true;
                 }
+                // Task 142: the snapped goal itself failed for good (not a partial path that goes on).
+                if (bot.IsAutonomousWorldBot && _goalSnapActive &&
+                    Vector3.DistanceSquared(failedDestination, _goalSnapTo) <= 16 * 16)
+                    NoteSnappedGoalFailedAgain();
                 if (!TryBeginLocalRouteRecovery(bot, current, destination, failureStatus, failedDestination))
                     return false;
                 return true;
@@ -4918,11 +4941,14 @@ namespace DOL.GS
         /// Task 139 step 2 (A). Reached only after a path failed: the failed end point is tested against the normal
         /// pick box and, if it lies outside, moved to the nearest floor of its own zone (AutonomousGoalSnap boxes).
         /// A dungeon keeps its audited coordinates (a wide vertical box there finds another floor). On success the
-        /// route state follows the snapped goal, so the next turn sees an unchanged destination.
+        /// route state follows the snapped goal, so the next turn sees an unchanged destination. Task 142: a snap far
+        /// above or below a nearby goal must be walkable from the bot's floor (AutonomousGoalSnap.TrySnapGuarded).
         /// </summary>
-        private bool TryAdoptGoalSnap(GameBot bot, Vector3 failed, ref Vector3 destination, ref Vector3? continuation)
+        private bool TryAdoptGoalSnap(GameBot bot, Vector3 current, Vector3 failed, ref Vector3 destination,
+            ref Vector3? continuation)
         {
-            if (_goalSnapMissActive && Vector3.DistanceSquared(failed, _goalSnapMiss) <= 16 * 16)
+            if (_goalSnapMissActive && Vector3.DistanceSquared(failed, _goalSnapMiss) <= 16 * 16 ||
+                _goalSnapRefailActive && Vector3.DistanceSquared(failed, _goalSnapRefail) <= 16 * 16)
                 return false;
             IPathfindingMgr nav = PathfindingProvider.Instance;
             Region region = bot.CurrentRegion;
@@ -4931,17 +4957,23 @@ namespace DOL.GS
                 return false;
             // Only the goal itself or its continuation is snapped; any other failed point (a seam, a step) is left
             // to the recovery without spending the wide floor queries.
-            bool isGoal = Vector3.DistanceSquared(destination, failed) <= 16 * 16 ||
-                          continuation.HasValue && Vector3.DistanceSquared(continuation.Value, failed) <= 16 * 16;
-            if (!isGoal)
+            if (!AutonomousForeignRouteFailure.IsRoutePoint(failed, destination, continuation))
                 return false;
-            AutonomousGoalSnap.Outcome outcome = AutonomousGoalSnap.TrySnap(nav, zone, failed,
-                point => region.GetZone((int)point.X, (int)point.Y) == zone, out Vector3 snapped);
-            if (outcome == AutonomousGoalSnap.Outcome.NoFloor)
+            AutonomousGoalSnap.Outcome outcome = AutonomousGoalSnap.TrySnapGuarded(nav, zone, failed,
+                point => region.GetZone((int)point.X, (int)point.Y) == zone, current,
+                floor => AutonomousGoalSnap.IsReachableFrom(nav, bot.CurrentZone == zone ? zone : null, current, floor),
+                out Vector3 snapped);
+            if (outcome is AutonomousGoalSnap.Outcome.NoFloor or AutonomousGoalSnap.Outcome.WrongFloor)
             {
                 _goalSnapMissActive = true;
                 _goalSnapMiss = failed;
-                AutonomousRouteGoalFixMetrics.SnapFailed();
+                if (outcome == AutonomousGoalSnap.Outcome.NoFloor)
+                    AutonomousRouteGoalFixMetrics.SnapFailed();
+                else
+                {
+                    AutonomousRouteGoalFixMetrics.SnapDzRejected();
+                    AutonomousRouteGoalFixMetrics.LogSnapRejected(bot, failed, snapped);
+                }
                 return false;
             }
             if (outcome != AutonomousGoalSnap.Outcome.Snapped)
@@ -4959,6 +4991,128 @@ namespace DOL.GS
             bot.ForcePathReplot();
             AutonomousRouteGoalFixMetrics.Snapped();
             AutonomousRouteGoalFixMetrics.LogSnap(bot, failed, snapped);
+            return true;
+        }
+
+        /// <summary>
+        /// Task 142: a route to a snapped goal failed again for good (0.314.0: two wrong floors on Hadrian's Wall).
+        /// The failed point is the snapped floor, which lies on the mesh, so the goal snap leaves it alone and the
+        /// ordinary recovery takes over (ApplyGoalSnap keeps the floor as the route's goal). The original goal is
+        /// remembered in its own slot so that, once another snap replaced this one, it is never snapped again.
+        /// </summary>
+        private void NoteSnappedGoalFailedAgain()
+        {
+            if (_goalSnapRefailActive && Vector3.DistanceSquared(_goalSnapRefail, _goalSnapFrom) <= 16 * 16)
+                return;
+            _goalSnapRefailActive = true;
+            _goalSnapRefail = _goalSnapFrom;
+            AutonomousRouteGoalFixMetrics.SnapRefailed();
+        }
+
+        /// <summary>
+        /// Task 141. Reached only after NoPathFound: a bot outside the normal pick box (on a ledge, wall top or slope
+        /// the mesh does not carry, or under the terrain) is put on the nearest floor of its own zone, the same boxes
+        /// as the goal snap, provided that floor leads on: a complete corridor to the failed point's (or the goal's)
+        /// floor, else a local exit, as the task 139 probe's "snap-connects". Like a player using /stuck, the bot
+        /// then walks on from real ground; the pocket escape no longer sends it to its capital for this. A dungeon
+        /// keeps its own floors; a bot that is fighting, casting or riding is not moved, a floor inside a keep the
+        /// bot is gated out of is refused, and the budget allows one snap per 45 s and two per destination.
+        /// </summary>
+        private bool TryAdoptStartSnap(GameBot bot, ref Vector3 current, Vector3 destination, Vector3 failed)
+        {
+            Vector3 start = current;
+            long now = GameLoop.GameLoopTime;
+            int snapsHere = AutonomousStartSnap.SnapsFor(destination, _startSnapDestination, _startSnapsForDestination);
+            if (!AutonomousStartSnap.MayMove(bot.IsCasting, bot.IsAttacking, bot.InCombat,
+                    (bot.Brain as BotBrain)?.HasAggro == true, bot.IsOnStableMasterRoute) ||
+                !AutonomousStartSnap.BudgetAllows(now, _nextStartSnapTick, snapsHere) ||
+                _startSnapMissActive && Vector3.DistanceSquared(start, _startSnapMiss) <= 16 * 16)
+                return false;
+            IPathfindingMgr nav = PathfindingProvider.Instance;
+            Region region = bot.CurrentRegion;
+            Zone zone = bot.CurrentZone;
+            if (region == null || zone == null || zone.IsDungeon || !nav.IsAvailable || !nav.HasNavmesh(zone))
+                return false;
+            Vector3? target = region.GetZone((int)failed.X, (int)failed.Y) == zone ? failed :
+                region.GetZone((int)destination.X, (int)destination.Y) == zone ? destination : null;
+            AutonomousStartSnap.Outcome outcome = AutonomousStartSnap.TrySnap(nav, zone, start,
+                point => region.GetZone((int)point.X, (int)point.Y) == zone,
+                floor => !StartSnapEntersGatedKeep(bot, start, floor) &&
+                         AutonomousStartSnap.LeadsOn(nav, zone, floor, target), out Vector3 snapped);
+            if (outcome == AutonomousStartSnap.Outcome.OnMesh)
+                return false;
+            if (outcome == AutonomousStartSnap.Outcome.Snapped)
+            {
+                bot.StopMovingOnPath();
+                bot.StopMoving();
+                if (bot.MoveInRegion(bot.CurrentRegionID, (int)Math.Round(snapped.X), (int)Math.Round(snapped.Y),
+                        (int)Math.Round(snapped.Z), bot.Heading, true))
+                {
+                    current = new(bot.X, bot.Y, bot.Z);
+                    _nextStartSnapTick = now + AutonomousStartSnap.CooldownMilliseconds;
+                    _startSnapDestination = destination;
+                    _startSnapsForDestination = snapsHere + 1;
+                    // The move is no walked progress: a partial path must not count it toward its 240 units.
+                    _pathSegmentOrigin = current;
+                    _lastRoutePosition = current;
+                    _lastRouteProgressTick = now;
+                    _nextMoveOrderTick = 0;
+                    bot.ForcePathReplot();
+                    AutonomousRouteGoalFixMetrics.StartSnapped();
+                    AutonomousRouteGoalFixMetrics.LogStartSnap(bot, start, current);
+                    return true;
+                }
+            }
+            _startSnapMissActive = true;
+            _startSnapMiss = start;
+            AutonomousRouteGoalFixMetrics.StartSnapFailed();
+            return false;
+        }
+
+        /// <summary>
+        /// Task 141: a floor inside a keep whose closed gates the bot may not pass, when the bot itself stands outside
+        /// such a keep (a bot under a keep wall must not come up in the courtyard). No siege exemption: a sieging bot
+        /// goes in through the gate it breaks, not through the floor.
+        /// </summary>
+        private static bool StartSnapEntersGatedKeep(GameBot bot, Vector3 start, Vector3 floor)
+        {
+            if (GameServer.KeepManager == null)
+                return false;
+            ICollection<AbstractGameKeep> keeps = GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID);
+            if (keeps == null || keeps.Count == 0)
+                return false;
+            bool floorGated = AutonomousKeepGateGoals.FindBlockingKeep(bot, keeps, floor.X, floor.Y) != null;
+            bool startGated = floorGated &&
+                AutonomousKeepGateGoals.FindBlockingKeep(bot, keeps, start.X, start.Y) != null;
+            return AutonomousStartSnap.EntersGatedKeep(startGated, floorGated);
+        }
+
+        /// <summary>
+        /// Task 142: a NoPathFound more than 96 units from this route's goal and continuation (the radius within which
+        /// a failure counts for the route at all), at a point that hangs off the mesh, was another mover's order
+        /// (AutonomousForeignRouteFailure). The route is planned again; the same point failing again takes the
+        /// ordinary recovery, so nothing can loop on it.
+        /// </summary>
+        private bool TrySetAsideForeignFailure(GameBot bot, Vector3 failed, Vector3 destination, Vector3? continuation)
+        {
+            bool foreign = AutonomousForeignRouteFailure.IsForeign(failed, destination, continuation);
+            bool alreadySetAside = _foreignFailureActive && Vector3.DistanceSquared(failed, _foreignFailure) <=
+                AutonomousForeignRouteFailure.SamePoint * AutonomousForeignRouteFailure.SamePoint;
+            if (!foreign || alreadySetAside)
+                return false;
+            IPathfindingMgr nav = PathfindingProvider.Instance;
+            Zone zone = bot.CurrentRegion?.GetZone((int)failed.X, (int)failed.Y);
+            if (zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone))
+                return false;
+            bool offMesh = !nav.GetClosestPoint(zone, failed, AutonomousGoalSnap.NormalHorizontal,
+                AutonomousGoalSnap.NormalHorizontal, AutonomousGoalSnap.NormalVertical, nav.DefaultFilters).HasValue;
+            if (!AutonomousForeignRouteFailure.SetAside(true, foreign, offMesh, alreadySetAside))
+                return false;
+            _foreignFailureActive = true;
+            _foreignFailure = failed;
+            _nextMoveOrderTick = 0;
+            bot.ForcePathReplot();
+            AutonomousRouteGoalFixMetrics.ForeignFailureSkipped();
             return true;
         }
 

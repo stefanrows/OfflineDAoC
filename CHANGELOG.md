@@ -12,6 +12,36 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.326.0] - 2026-10-24
+
+### Added
+- Start snap for autonomous world bots (task 141): after "no path found", a
+  bot standing off the navmesh moves to the nearest floor that leads on
+  (boxes 96/96/512, then 256/256/1024), instead of failing three times and
+  going home to its capital. Never in dungeons, combat, aggro, casting,
+  attacking or on a stable route, never into a keep whose gate blocks the
+  bot, at most one snap per 45 s and two per destination.
+- `AUTONOMOUS_ROUTE_GOAL_FIX` gains `startSnapped`, `startSnapFailed`,
+  `snapDzRejected`, `snapRefailed` and `foreignFailureSkipped`; new lines
+  `AUTONOMOUS_START_SNAP` and `AUTONOMOUS_GOAL_SNAP_REJECTED`.
+- Unit tests UT_AutonomousRouteGoalFix (+28); explicit probe
+  `UT_Task139HotspotProbe.EstimateRuntimeSnaps`.
+
+### Changed
+- Goal snap height guard (task 142): a snap that moves the goal more than 256
+  units in height within 3,000 units of the bot must be reachable from the
+  bot's floor; a snapped goal that fails again goes to the ordinary recovery
+  and is not snapped again.
+
+### Fixed
+- Stealth breaks, retreats, observe-leave and mob disengage points for world
+  bots now stay on the ground; on slopes they hung up to about 1,000 units
+  off the mesh. A failed path to such a point no longer ends the bot's own
+  route or puts its real destination into the give-up memory (task 142).
+
+### Removed
+- None.
+
 ## [0.325.1] - 2026-10-24
 
 ### Added

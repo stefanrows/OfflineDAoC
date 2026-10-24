@@ -214,6 +214,96 @@ namespace DOL.UnitTests
                 Out($"TOTAL {key} pairs={value.Rows} giveUps={value.GiveUps}");
         }
 
+        /// <summary>
+        /// Tasks 141/142: runs the server's own start snap (AutonomousStartSnap with LeadsOn) and guarded goal snap
+        /// (AutonomousGoalSnap.TrySnapGuarded with IsReachableFrom) on every logged give-up pair, then walks the chained
+        /// corridor from the repaired start to the repaired goal. Same input as <see cref="ClassifyLoggedGiveUps"/>.
+        /// Output: one RUNTIME line per pair and RUNTIME_TOTAL lines (pairs, give-ups) per outcome.
+        /// </summary>
+        [Test]
+        public void EstimateRuntimeSnaps()
+        {
+            string root = Environment.GetEnvironmentVariable("OFFLINE_DAOC_NAV_ROOT");
+            string input = Environment.GetEnvironmentVariable("OFFLINE_DAOC_TASK139_GIVEUPS");
+            Assume.That(!string.IsNullOrEmpty(root) && File.Exists(input), "OFFLINE_DAOC_NAV_ROOT and OFFLINE_DAOC_TASK139_GIVEUPS are required");
+            try
+            {
+                NativeLibrary.SetDllImportResolver(typeof(LocalPathfindingMgr).Assembly,
+                    (name, assembly, search) => name == "lib/Detour" ? NativeLibrary.Load(Path.Combine(root, "lib", "Detour.dll")) : IntPtr.Zero);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            string previous = Environment.CurrentDirectory;
+            Environment.CurrentDirectory = root;
+            using var db = new SQLiteConnection($"Data Source={Path.GetFullPath(Path.Combine(root, "..", "data", "opendaoc.sqlite3.db"))};Read Only=True;Pooling=False;");
+            db.Open();
+            var nav = PathfindingProvider.LocalPathfindingMgr;
+            var regions = new Dictionary<int, Region>();
+            var loaded = new List<Zone>();
+            var totals = new SortedDictionary<string, (int Rows, int GiveUps)>(StringComparer.Ordinal);
+            try
+            {
+                foreach (string line in File.ReadLines(input))
+                {
+                    string[] f = line.Split('\t');
+                    if (f.Length < 11)
+                        continue;
+                    int regionId = int.Parse(f[0]);
+                    Vector3 start = new(float.Parse(f[1]), float.Parse(f[2]), float.Parse(f[3]));
+                    Vector3 goal = new(float.Parse(f[4]), float.Parse(f[5]), float.Parse(f[6]));
+                    int count = int.Parse(f[9]);
+                    if (!regions.TryGetValue(regionId, out Region region))
+                        regions[regionId] = region = BuildRegion(db, regionId);
+                    Zone zone = region.GetZone((int)start.X, (int)start.Y);
+                    Zone goalZone = region.GetZone((int)goal.X, (int)goal.Y);
+                    string key;
+                    string detail = "";
+                    if (zone == null)
+                        key = "no-zone";
+                    else
+                    {
+                        if (!loaded.Contains(zone))
+                        {
+                            LocalPathfindingMgr.LoadNavMesh(zone);
+                            loaded.Add(zone);
+                        }
+                        bool InZone(Vector3 p) => region.GetZone((int)p.X, (int)p.Y) == zone;
+                        Vector3? target = goalZone == zone ? goal : null;
+                        var startOutcome = AutonomousStartSnap.TrySnap(nav, zone, start, InZone,
+                            floor => AutonomousStartSnap.LeadsOn(nav, zone, floor, target), out Vector3 from);
+                        key = $"start:{startOutcome}";
+                        detail = $"startTo={Fmt(from)}(dz={from.Z - start.Z:F0})";
+                        if (startOutcome is AutonomousStartSnap.Outcome.OnMesh or AutonomousStartSnap.Outcome.Snapped)
+                        {
+                            if (goalZone != zone)
+                                key += " goal:other-zone";
+                            else
+                            {
+                                var goalOutcome = AutonomousGoalSnap.TrySnapGuarded(nav, zone, goal, InZone, from,
+                                    floor => AutonomousGoalSnap.IsReachableFrom(nav, zone, from, floor), out Vector3 to);
+                                Vector3 end = goalOutcome == AutonomousGoalSnap.Outcome.Snapped ? to : goal;
+                                Walk walk = Chain(nav, zone, from, end, nav.DefaultFilters);
+                                key += $" goal:{goalOutcome} {(walk.Complete ? "routes" : "no-route")}";
+                                detail += $" goalTo={Fmt(to)}(dz={to.Z - goal.Z:F0}) walk={walk.Why}";
+                            }
+                        }
+                    }
+                    totals[key] = totals.TryGetValue(key, out var t) ? (t.Rows + 1, t.GiveUps + count) : (1, count);
+                    Out($"RUNTIME {key} r{regionId} z{zone?.ID} logged={f[7]} count={count} start={Fmt(start)} goal={Fmt(goal)} {detail}");
+                }
+            }
+            finally
+            {
+                foreach (Zone zone in loaded)
+                    LocalPathfindingMgr.UnloadNavMesh(zone);
+                ForgetThreadQueries();
+                Environment.CurrentDirectory = previous;
+            }
+            foreach (var (key, value) in totals)
+                Out($"RUNTIME_TOTAL {key} pairs={value.Rows} giveUps={value.GiveUps}");
+        }
+
         private static string Classify(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 goal, List<Vector3> refs,
             EDtPolyFlags[] gatesClosed, WrappedPathfindingNode[] nodes, out string detail)
         {

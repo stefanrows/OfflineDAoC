@@ -8,7 +8,8 @@ using NUnit.Framework;
 
 namespace DOL.GS.Tests;
 
-/// <summary>Task 139 step 2: goal snap boxes, gate decision, re-pick cooldown, pocket-escape rule.</summary>
+/// <summary>Task 139 step 2: goal snap boxes, gate decision, re-pick cooldown, pocket-escape rule; tasks 141/142: start
+/// snap, height guard, foreign failures.</summary>
 [TestFixture]
 public sealed class UT_AutonomousRouteGoalFix
 {
@@ -98,6 +99,233 @@ public sealed class UT_AutonomousRouteGoalFix
         Assert.That(nav.Boxes, Is.Empty);
         Assert.That(AutonomousGoalSnap.TrySnap(new FloorNavigation(Vector3.Zero), null, Vector3.One, null, out _),
             Is.EqualTo(AutonomousGoalSnap.Outcome.NoFloor));
+    }
+
+    // Task 141: the start snap uses the goal snap's boxes and moves a bot only onto a floor that leads on.
+
+    [Test]
+    public void ABotOnTheMeshIsNotMovedAndItsWayOnIsNotEvenAsked()
+    {
+        var start = new Vector3(457013, 299435, 3940);
+        var nav = new FloorNavigation(new(457013, 299435, 3915));
+        bool asked = false;
+        var outcome = AutonomousStartSnap.TrySnap(nav, AZone(), start, null, _ => asked = true, out Vector3 snapped);
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome, Is.EqualTo(AutonomousStartSnap.Outcome.OnMesh));
+            Assert.That(snapped, Is.EqualTo(start));
+            Assert.That(asked, Is.False);
+            Assert.That(nav.Boxes, Is.EqualTo(new[] { (32f, 32f, 64f) }));
+        });
+    }
+
+    [Test]
+    public void ABotHangingAboveAConnectedFloorIsPutOnIt()
+    {
+        // Logged give-up (0.320.0, zone 214): the bot stood 250 units above the floor; the probe connected it.
+        var start = new Vector3(457013, 299435, 4165);
+        var floor = new Vector3(457013, 299435, 3915);
+        var nav = new FloorNavigation(floor);
+        Vector3? checkedFloor = null;
+        var outcome = AutonomousStartSnap.TrySnap(nav, AZone(), start, null, p => { checkedFloor = p; return true; },
+            out Vector3 snapped);
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome, Is.EqualTo(AutonomousStartSnap.Outcome.Snapped));
+            Assert.That(snapped, Is.EqualTo(floor));
+            Assert.That(checkedFloor, Is.EqualTo(floor), "the way on is checked from the floor, not from the bot");
+            Assert.That(nav.Boxes, Is.EqualTo(new[] { (32f, 32f, 64f), (96f, 96f, 512f) }));
+        });
+    }
+
+    [Test]
+    public void AFloorThatLeadsNowhereLeavesTheBotWhereItIs()
+    {
+        var start = new Vector3(603985, 628594, 5402);
+        var nav = new FloorNavigation(new(603985, 628429, 6400)); // an isolated patch 1,000 units up
+        var outcome = AutonomousStartSnap.TrySnap(nav, AZone(), start, null, _ => false, out Vector3 snapped);
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome, Is.EqualTo(AutonomousStartSnap.Outcome.Unconnected));
+            Assert.That(snapped, Is.EqualTo(start));
+        });
+        var none = new FloorNavigation(new(0, 0, 0));
+        Assert.That(AutonomousStartSnap.TrySnap(none, AZone(), start, null, _ => true, out Vector3 same),
+            Is.EqualTo(AutonomousStartSnap.Outcome.NoFloor));
+        Assert.That(same, Is.EqualTo(start));
+        foreach (var box in none.Boxes)
+            Assert.That(box.X <= 256f && box.Y <= 256f && box.Z <= 1024f, Is.True,
+                "the start snap never widens the boxes");
+        Assert.That(AutonomousStartSnap.TrySnap(new FloorNavigation(start) { Available = false }, AZone(), start, null,
+            _ => true, out _), Is.EqualTo(AutonomousStartSnap.Outcome.NoFloor));
+    }
+
+    [Test]
+    public void AStartFloorInAnotherZoneIsNotUsed()
+    {
+        var start = new Vector3(0, 0, 5000);
+        var nav = new FloorNavigation(new(0, 0, 4800));
+        Assert.That(AutonomousStartSnap.TrySnap(nav, AZone(), start, _ => false, _ => true, out _),
+            Is.EqualTo(AutonomousStartSnap.Outcome.NoFloor));
+    }
+
+    // Task 142: the height guard on the goal snap.
+
+    [TestCase(-838f, 400f, true, TestName = "Hadrian's Wall dz -838 next to the bot is checked")]
+    [TestCase(-325f, 400f, true, TestName = "Hadrian's Wall dz -325 next to the bot is checked")]
+    [TestCase(256f, 400f, false, TestName = "up to 256 units no check")]
+    [TestCase(-221f, 100f, false, TestName = "the common 0.320.0 snap is not checked")]
+    [TestCase(1177f, 2_999f, true, TestName = "a large snap within 3,000 units is checked")]
+    [TestCase(1177f, 3_001f, false, TestName = "a far goal keeps its snap")]
+    public void TheHeightGuardChecksOnlyLargeSnapsNearTheBot(float dz, float botDistance, bool check)
+    {
+        var goal = new Vector3(607604, 298904, 5000);
+        var snapped = goal with { Z = goal.Z + dz };
+        var bot = new Vector3(goal.X + botDistance, goal.Y, 5000);
+        Assert.That(AutonomousGoalSnap.NeedsConnectionCheck(goal, snapped, bot), Is.EqualTo(check));
+    }
+
+    [Test]
+    public void AWrongFloorNextToTheBotIsRefusedAndAReachableOneKept()
+    {
+        var goal = new Vector3(607604, 298904, 5200);
+        var lower = new Vector3(607604, 298904, 4362); // dz -838
+        var bot = new Vector3(607900, 298904, 5200);
+        var nav = new FloorNavigation(lower);
+        var refused = AutonomousGoalSnap.TrySnapGuarded(nav, AZone(), goal, null, bot, _ => false, out Vector3 floor);
+        var kept = AutonomousGoalSnap.TrySnapGuarded(nav, AZone(), goal, null, bot, _ => true, out Vector3 snapped);
+        Assert.Multiple(() =>
+        {
+            Assert.That(refused, Is.EqualTo(AutonomousGoalSnap.Outcome.WrongFloor));
+            Assert.That(floor, Is.EqualTo(lower), "the refused floor is reported for the log line");
+            Assert.That(kept, Is.EqualTo(AutonomousGoalSnap.Outcome.Snapped));
+            Assert.That(snapped, Is.EqualTo(lower));
+        });
+    }
+
+    [Test]
+    public void ASmallSnapNeverPaysForTheWalkCheck()
+    {
+        var goal = new Vector3(335449, 421910, 5401);
+        var nav = new FloorNavigation(new(335449, 421910, 5191)); // Druim Ligen, dz -210
+        bool asked = false;
+        var outcome = AutonomousGoalSnap.TrySnapGuarded(nav, AZone(), goal, null, goal, _ => asked = true, out _);
+        Assert.Multiple(() =>
+        {
+            Assert.That(outcome, Is.EqualTo(AutonomousGoalSnap.Outcome.Snapped));
+            Assert.That(asked, Is.False);
+        });
+        var onMesh = new FloorNavigation(goal);
+        Assert.That(AutonomousGoalSnap.TrySnapGuarded(onMesh, AZone(), goal, null, goal, _ => false, out Vector3 same),
+            Is.EqualTo(AutonomousGoalSnap.Outcome.OnMesh));
+        Assert.That(same, Is.EqualTo(goal));
+    }
+
+    // Task 142: another mover's off-mesh failure.
+
+    [Test]
+    public void TheGoalSnapTakesOnlyTheGoalOrTheContinuationItself()
+    {
+        var destination = new Vector3(333134, 420684, 5187);
+        var continuation = new Vector3(335995, 412488, 6593);
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousForeignRouteFailure.IsRoutePoint(destination + new Vector3(10, 0, 0),
+                destination, null), Is.True);
+            Assert.That(AutonomousForeignRouteFailure.IsRoutePoint(continuation, destination, continuation), Is.True);
+            Assert.That(AutonomousForeignRouteFailure.IsRoutePoint(destination + new Vector3(17, 0, 0),
+                destination, null), Is.False);
+        });
+    }
+
+    [Test]
+    public void OnlyAFailureWellAwayFromTheRouteIsForeign()
+    {
+        var destination = new Vector3(333134, 420684, 5187);
+        var continuation = new Vector3(335995, 412488, 6593);
+        Assert.Multiple(() =>
+        {
+            // Fiariaedra 19:41:19: a stealth break point 600 units away at the bot's own height.
+            Assert.That(AutonomousForeignRouteFailure.IsForeign(new(337753, 412697, 6276), destination, continuation),
+                Is.True);
+            // A drifting formation slot or moving target within 96 units still belongs to the route.
+            Assert.That(AutonomousForeignRouteFailure.IsForeign(destination + new Vector3(90, 0, 0), destination, null),
+                Is.False);
+            Assert.That(AutonomousForeignRouteFailure.IsForeign(destination + new Vector3(97, 0, 0), destination, null),
+                Is.True);
+            Assert.That(AutonomousForeignRouteFailure.IsForeign(continuation + new Vector3(0, 60, 0), destination,
+                continuation), Is.False, "near the continuation");
+        });
+    }
+
+    [TestCase(true, true, true, false, true, TestName = "a foreign off-mesh NoPathFound is set aside")]
+    [TestCase(true, true, true, true, false, TestName = "the same point again goes to the recovery")]
+    [TestCase(true, false, true, false, false, TestName = "a point of the route is not set aside")]
+    [TestCase(true, true, false, false, false, TestName = "a foreign point on the mesh is a real route failure")]
+    [TestCase(false, true, true, false, false, TestName = "a partial path is not set aside")]
+    public void ForeignFailureDecision(bool noPath, bool foreign, bool offMesh, bool already, bool setAside) =>
+        Assert.That(AutonomousForeignRouteFailure.SetAside(noPath, foreign, offMesh, already), Is.EqualTo(setAside));
+
+    // Task 141: who may be moved, how often, and where not.
+
+    [TestCase(false, false, false, false, false, true, TestName = "an idle traveller may be moved")]
+    [TestCase(true, false, false, false, false, false, TestName = "not while casting")]
+    [TestCase(false, true, false, false, false, false, TestName = "not while attacking")]
+    [TestCase(false, false, true, false, false, false, TestName = "not in combat (siege hold, rest after a fight)")]
+    [TestCase(false, false, false, true, false, false, TestName = "not with aggro")]
+    [TestCase(false, false, false, false, true, false, TestName = "not on a stable route")]
+    public void TheStartSnapMovesOnlyAnIdleTraveller(bool casting, bool attacking, bool inCombat, bool aggro,
+        bool riding, bool mayMove) =>
+        Assert.That(AutonomousStartSnap.MayMove(casting, attacking, inCombat, aggro, riding), Is.EqualTo(mayMove));
+
+    [Test]
+    public void OneStartSnapPerFortyFiveSecondsAndTwoPerDestination()
+    {
+        var destination = new Vector3(613276, 303964, 2964);
+        long cooldown = AutonomousStartSnap.CooldownMilliseconds;
+        Assert.Multiple(() =>
+        {
+            Assert.That(cooldown, Is.EqualTo(45_000));
+            Assert.That(AutonomousStartSnap.BudgetAllows(0, 0, 0), Is.True, "the first snap");
+            Assert.That(AutonomousStartSnap.BudgetAllows(10_000 + cooldown - 1, 10_000 + cooldown, 1), Is.False,
+                "inside the cooldown");
+            Assert.That(AutonomousStartSnap.BudgetAllows(10_000 + cooldown, 10_000 + cooldown, 1), Is.True);
+            Assert.That(AutonomousStartSnap.BudgetAllows(1_000_000, 0, 2), Is.False, "two for one destination");
+            // The count follows the destination: a drift within 96 units is the same one, a new goal starts at zero.
+            Assert.That(AutonomousStartSnap.SnapsFor(destination + new Vector3(90, 0, 0), destination, 2),
+                Is.EqualTo(2));
+            Assert.That(AutonomousStartSnap.SnapsFor(destination + new Vector3(500, 0, 0), destination, 2),
+                Is.EqualTo(0));
+        });
+    }
+
+    [TestCase(false, true, true, TestName = "a floor in a gated keep is refused from outside")]
+    [TestCase(true, true, false, TestName = "a bot already inside such a keep may be put on its floor")]
+    [TestCase(false, false, false, TestName = "an open floor is fine")]
+    public void TheStartSnapNeverPutsABotBehindAGateItMayNotPass(bool startGated, bool floorGated, bool refused) =>
+        Assert.That(AutonomousStartSnap.EntersGatedKeep(startGated, floorGated), Is.EqualTo(refused));
+
+    private sealed class SurfaceNavigation : PathfindingMgrBase
+    {
+        public int SurfaceCalls;
+        public override bool IsAvailable => true;
+        public override bool HasNavmesh(Zone zone) => true;
+        public override Vector3? GetMoveAlongSurface(Zone zone, Vector3 start, Vector3 end, EDtPolyFlags[] filters)
+        {
+            SurfaceCalls++;
+            return end;
+        }
+    }
+
+    [Test]
+    public void AProviderWithoutTheGroundedQueryKeepsTheFormerSurfacePoint()
+    {
+        var nav = new SurfaceNavigation();
+        var end = new Vector3(10, 20, 30);
+        Assert.That(AutonomousNavigationSurface.MoveAlongGroundOrSurface(nav, AZone(), Vector3.Zero, end),
+            Is.EqualTo(end));
+        Assert.That(nav.SurfaceCalls, Is.EqualTo(1));
+        Assert.That(AutonomousNavigationSurface.MoveAlongGroundOrSurface(nav, null, Vector3.Zero, end), Is.Null);
     }
 
     [TestCase(false, true, false, true, TestName = "closed enemy gate blocks")]
