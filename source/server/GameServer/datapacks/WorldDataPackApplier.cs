@@ -67,8 +67,13 @@ namespace DOL.GS.DataPacks
         public List<string> PrunedBackups { get; } = new();
         /// <summary>SQLite journal mode of the save, read before anything is applied.</summary>
         public string JournalMode { get; set; }
-        /// <summary>True when the journal mode does not allow a safe rollback; nothing was applied.</summary>
+        /// <summary>True when the journal mode does not allow a safe rollback and could not be raised; nothing was applied.</summary>
         public bool RefusedJournalMode { get; set; }
+        /// <summary>
+        /// Journal mode the applier's own connections used for this run because the save's mode (<see cref="JournalMode"/>)
+        /// was OFF or MEMORY; null when the save's mode was used unchanged.
+        /// </summary>
+        public string RaisedJournalMode { get; set; }
         /// <summary>Keys changed in the watched (pre-cached) tables, per table name.</summary>
         public Dictionary<string, HashSet<string>> ChangedKeys { get; } = new(StringComparer.OrdinalIgnoreCase);
         public int AppliedCount => Results.Count(r => r.AppliedNow);
@@ -93,6 +98,9 @@ namespace DOL.GS.DataPacks
         public const string BackupInfix = ".bak-datapacks-";
         public const string FailureTable = "offline_data_pack_failures";
         public const int BackupsKept = 3;
+        /// <summary>Rollback journal mode the applier's own connections switch to when the save's mode is OFF or MEMORY.</summary>
+        public const string RollbackJournalMode = "truncate";
+        private const string WriteProbeTable = "offline_data_pack_write_probe";
 
         private static readonly Regex NamePattern = new("^[0-9]{3}-[a-z0-9][a-z0-9-]*$", RegexOptions.CultureInvariant);
         private static readonly Regex ShaPattern = new("^[0-9a-f]{64}$", RegexOptions.CultureInvariant);
@@ -104,6 +112,8 @@ namespace DOL.GS.DataPacks
         private readonly string _connectionString;
         private readonly IReadOnlyList<WorldDataPackCacheWatch> _cacheWatches;
         private readonly Func<DateTime> _utcNow;
+        /// <summary>Set for one run when the save's journal mode had to be raised; every connection <see cref="Open"/> makes then uses it.</summary>
+        private string _runJournalMode;
 
         public WorldDataPackApplier(string sqliteConnectionString, string packDirectory,
             IEnumerable<WorldDataPackCacheWatch> cacheWatches = null, Func<DateTime> utcNow = null)
@@ -288,6 +298,19 @@ namespace DOL.GS.DataPacks
 
         private WorldDataPackRun Run(string onlyName)
         {
+            try
+            {
+                return RunPacks(onlyName);
+            }
+            finally
+            {
+                // A raised journal mode is for one run only; status calls use the connection string as given.
+                _runJournalMode = null;
+            }
+        }
+
+        private WorldDataPackRun RunPacks(string onlyName)
+        {
             var run = new WorldDataPackRun();
             IReadOnlyList<WorldDataPackManifestEntry> manifest = ReadManifest();
             foreach (string unlisted in UnlistedFiles(manifest))
@@ -306,16 +329,35 @@ namespace DOL.GS.DataPacks
 
             Dictionary<string, AppliedRecord> applied;
             Dictionary<string, FailureRecord> failures;
+            _runJournalMode = null;
             using (SQLiteConnection connection = Open())
             {
                 // Rollback and crash recovery are undefined without a rollback journal or WAL.
                 run.JournalMode = Convert.ToString(Scalar(connection, "PRAGMA journal_mode"), CultureInfo.InvariantCulture)?.ToLowerInvariant();
                 if (run.JournalMode is "off" or "memory")
                 {
-                    run.RefusedJournalMode = true;
-                    run.Warnings.Add($"journal mode is {run.JournalMode.ToUpperInvariant()}; no data pack is applied because a failed pack " +
-                                     "could not be rolled back safely. Use Journal Mode=WAL (or Delete) in the DB connection string.");
-                    return run;
+                    // The OpenDAoC default and the setup tool connect with Journal Mode=Off. For a database that is not in
+                    // WAL mode the journal mode is a setting of the connection, not of the file: "PRAGMA journal_mode ...
+                    // sets the journal mode for databases associated with the current database connection", and "if a
+                    // process sets PRAGMA journal_mode=TRUNCATE and then closes and reopens the database will come back up
+                    // in the default rollback mode of DELETE" (sqlite.org/pragma.html#pragma_journal_mode,
+                    // sqlite.org/wal.html#persistence_of_wal_mode). So the applier's own connections can use a rollback
+                    // journal while the server's connections stay OFF. If the process dies mid-pack, the -journal file is
+                    // hot and "before reading from a database file, SQLite always checks to see if that database file has
+                    // a hot journal ... then the journal is rolled back before the file is read" (sqlite.org/lockingv3.html,
+                    // section 4.1), whatever journal mode the next connection uses. WAL is never used here: it is
+                    // persistent and would change the mode of the server's own connections.
+                    if (!TryRaiseJournalMode(connection, out string reason))
+                    {
+                        run.RefusedJournalMode = true;
+                        run.Warnings.Add($"journal mode is {run.JournalMode.ToUpperInvariant()} and could not be raised to " +
+                                         $"{RollbackJournalMode.ToUpperInvariant()} ({reason}); no data pack is applied because a failed " +
+                                         "pack could not be rolled back safely. Use Journal Mode=WAL (or Delete) in the DB connection string.");
+                        return run;
+                    }
+
+                    run.RaisedJournalMode = RollbackJournalMode;
+                    _runJournalMode = RollbackJournalMode;
                 }
 
                 EnsureMarkerTable(connection);
@@ -890,8 +932,67 @@ namespace DOL.GS.DataPacks
         {
             var connection = new SQLiteConnection(_connectionString);
             connection.Open();
-            return connection;
+            if (_runJournalMode == null)
+                return connection;
+
+            try
+            {
+                string mode = SetJournalMode(connection, _runJournalMode);
+                if (mode != _runJournalMode)
+                    throw new InvalidOperationException($"SQLite kept journal mode {mode} instead of {_runJournalMode} for the data pack run.");
+                return connection;
+            }
+            catch
+            {
+                connection.Dispose();
+                throw;
+            }
         }
+
+        /// <summary>
+        /// Switches this connection to <see cref="RollbackJournalMode"/> and checks that it can write. False (with a reason)
+        /// when SQLite keeps the old mode (it returns the mode in effect) or the database is read-only.
+        /// </summary>
+        private static bool TryRaiseJournalMode(SQLiteConnection connection, out string reason)
+        {
+            string mode;
+            try
+            {
+                mode = SetJournalMode(connection, RollbackJournalMode);
+            }
+            catch (SQLiteException e)
+            {
+                reason = e.Message;
+                return false;
+            }
+
+            if (mode != RollbackJournalMode)
+            {
+                reason = $"SQLite kept {mode?.ToUpperInvariant() ?? "no mode"}";
+                return false;
+            }
+
+            // A read-only file accepts the pragma (nothing is written for it), and SQLite turns BEGIN IMMEDIATE on a
+            // read-only database into a read transaction. So write for real and roll it back: this fails when the file is
+            // read-only or the rollback journal cannot be created next to it, and leaves nothing behind otherwise.
+            try
+            {
+                using SQLiteTransaction probe = connection.BeginTransaction();
+                Execute(connection, probe, $"CREATE TABLE \"{WriteProbeTable}\" (Id INTEGER)");
+                probe.Rollback();
+            }
+            catch (SQLiteException e)
+            {
+                reason = $"the database is not writable: {e.Message}";
+                return false;
+            }
+
+            reason = null;
+            return true;
+        }
+
+        private static string SetJournalMode(SQLiteConnection connection, string mode) =>
+            Convert.ToString(Scalar(connection, "PRAGMA journal_mode=" + mode.ToUpperInvariant()), CultureInfo.InvariantCulture)?.ToLowerInvariant();
 
         private static void EnsureMarkerTable(SQLiteConnection connection)
         {

@@ -54,8 +54,8 @@ agent or session that finishes a package updates its row and the log below.
   `WorldDataPacks` applied at server start before world load: sha-checked
   manifest, one transaction per pack with marker row, online backup before
   the first pack (newest 3 kept), failed packs recorded and not retried until
-  `/datapacks apply` or a new file, refused on journal_mode off/memory,
-  SQLite only; deploy and release pack carry `runtime/server/data-packs`.
+  `/datapacks apply` or a new file, journal_mode off/memory raised to
+  TRUNCATE for the run (0.321.2), SQLite only; deploy and release pack carry `runtime/server/data-packs`.
   Packs: 010 ML spells (73 of 80 ranks), 011 ML paths, 012 artifact spells
   (73 rows), 020 Atlantis mobs (41,727), 021 travel, 022 zone points, 023
   scroll binders. Not shipped: gaheris 28/35 (portals, Arbiter/NPC rows)
@@ -167,8 +167,13 @@ agent or session that finishes a package updates its row and the log below.
 
 - [ ] **WP4.1 Real-client check** of travel, Arbiter, one artifact end to end,
   one ML gained. Owner.
-- [ ] **WP4.2 Stefan's server.** Properties and DB migration notes for his
-  install; release pack includes the ToA SQL.
+- [~] **WP4.2 Stefan's server.** Journal-mode risk closed in 0.321.2: the
+  applier raises its own connections to TRUNCATE when a save runs with
+  `Journal Mode=Off` (code and Setup default) instead of refusing, so his
+  install gets the packs at the next start; MySQL stays skipped (log line).
+  Still to do: tell Stefan to check the server log for "World data packs: 14
+  applied" after pulling; release pack carries the packs since 0.317.0;
+  property notes.
 - [ ] **WP4.3 Docs.** CAMLANN.md era note, PLAY.md section, TASKS 134 closed.
 
 ## Next steps (handoff 2026-10-24 13:30, session limit)
@@ -221,6 +226,9 @@ a real defect in every package; keep the review step.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 17:45: journal-mode fallback reviewed (rollback proven through
+  the file; journal Off really corrupts on rollback once pages spill) and
+  merged as 0.321.2. WP1.2 travel agent running.
 - 2026-10-24 17:18: **first boot with the packs on Aaron's PC** (0.321.0 via
   `server.sh update`, deploy backup `playable-backups/deploy-20261024-171744`):
   all 14 packs applied in one run, 0 refused, DB backup

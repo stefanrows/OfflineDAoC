@@ -407,6 +407,11 @@ Agent sessions on items 45–48: take the role and context from
      2026-10-24 17:18: first server boot with all 14 data packs on Aaron's
      install succeeded (0.321.0); Atlantis, havens and dungeons loaded; real
      client check still pending.
+     Journal-mode fallback: a save whose connection string says
+     `Journal Mode=Off` or `Memory` (the OpenDAoC default and the setup
+     tool, e.g. a second install) no longer boots without the packs; the
+     data pack connections use TRUNCATE for that run and a failed pack still
+     rolls back fully. Implemented in source, real-client check pending.
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

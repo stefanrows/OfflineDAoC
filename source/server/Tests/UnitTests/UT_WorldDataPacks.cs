@@ -145,19 +145,131 @@ namespace DOL.UnitTests
 
         [TestCase("Off")]
         [TestCase("Memory")]
-        public void JournalModeWithoutSafeRollback_RefusesToApply(string journalMode)
+        public void JournalModeWithoutSafeRollback_IsRaisedForTheRun_AndPacksApply(string journalMode)
         {
             WriteManifest(Pack("010-a", "INSERT INTO thing VALUES ('a', 1);"));
 
             WorldDataPackRun run = new WorldDataPackApplier($"Data Source={_db};Version=3;Journal Mode={journalMode}", _packs).ApplyPending();
 
-            Assert.That(run.RefusedJournalMode, Is.True);
+            Assert.That(run.RefusedJournalMode, Is.False);
             Assert.That(run.JournalMode, Is.EqualTo(journalMode.ToLowerInvariant()));
-            Assert.That(run.Warnings.Single(), Does.Contain("journal mode"));
+            Assert.That(run.RaisedJournalMode, Is.EqualTo(WorldDataPackApplier.RollbackJournalMode));
+            Assert.That(run.Warnings, Is.Empty);
+            Assert.That(run.Results.Single().AppliedNow, Is.True);
+            Assert.That(run.BackupPath, Is.Not.Null);
+            Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.EqualTo(1));
+            Assert.That(Scalar($"SELECT COUNT(*) FROM {WorldDataPackApplier.MarkerTable} WHERE Name = '010-a'"), Is.EqualTo(1));
+
+            // The raised mode is not persistent: the file is not WAL, and a server connection still gets its own mode.
+            Assert.That(ScalarObject("PRAGMA journal_mode"), Is.EqualTo("delete"));
+            Assert.That(JournalModeOf($"Data Source={_db};Version=3;Pooling=False;Journal Mode={journalMode}"),
+                Is.EqualTo(journalMode.ToLowerInvariant()));
+
+            WorldDataPackRun second = new WorldDataPackApplier($"Data Source={_db};Version=3;Journal Mode={journalMode}", _packs).ApplyPending();
+            Assert.That(second.AppliedCount, Is.Zero);
+            Assert.That(second.BackupPath, Is.Null);
+        }
+
+        [Test]
+        public void JournalModeOff_ReadOnlySave_CannotBeRaised_AndStillRefuses()
+        {
+            WriteManifest(Pack("010-a", "INSERT INTO thing VALUES ('a', 1);"));
+            File.SetAttributes(_db, File.GetAttributes(_db) | FileAttributes.ReadOnly);
+            WorldDataPackRun run;
+            try
+            {
+                run = new WorldDataPackApplier($"Data Source={_db};Version=3;Journal Mode=Off", _packs).ApplyPending();
+            }
+            finally
+            {
+                SQLiteConnection.ClearAllPools();
+                File.SetAttributes(_db, File.GetAttributes(_db) & ~FileAttributes.ReadOnly);
+            }
+
+            Assert.That(run.RefusedJournalMode, Is.True);
+            Assert.That(run.JournalMode, Is.EqualTo("off"));
+            Assert.That(run.RaisedJournalMode, Is.Null);
+            Assert.That(run.Warnings.Single(), Does.Contain("journal mode").And.Contain("could not be raised").And.Contain("not writable"));
             Assert.That(run.Results, Is.Empty);
             Assert.That(run.BackupPath, Is.Null);
+            Assert.That(Backups(), Is.Empty);
             Assert.That(Scalar("SELECT COUNT(*) FROM thing"), Is.Zero);
             Assert.That(Scalar($"SELECT COUNT(*) FROM sqlite_master WHERE name = '{WorldDataPackApplier.MarkerTable}'"), Is.Zero);
+        }
+
+        [Test]
+        public void JournalModeOff_RaisedForTheRun_FailingLargePackRollsBackFully()
+        {
+            Exec("INSERT INTO thing VALUES ('keep', 7)");
+            // Far more than the 2 MB page cache, so SQLite writes pages into the database file before the failure;
+            // only a real rollback journal can undo those (with Journal Mode=Off the rollback is undefined).
+            const string bulk = "INSERT INTO thing SELECT 'r' || x, x FROM " +
+                                "(WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 200000) SELECT x FROM c);";
+            WriteManifest(
+                Pack("010-broken", bulk + "\nUPDATE thing SET Value = -1;\nINSERT INTO missing_table VALUES (1);"),
+                Pack("020-good", "INSERT INTO thing VALUES ('z', 26);"));
+
+            WorldDataPackRun run = new WorldDataPackApplier($"Data Source={_db};Version=3;Journal Mode=Off", _packs).ApplyPending();
+
+            Assert.That(run.RaisedJournalMode, Is.EqualTo(WorldDataPackApplier.RollbackJournalMode));
+            WorldDataPackResult broken = run.Results.Single(r => r.Name == "010-broken");
+            Assert.That(broken.State, Is.EqualTo(WorldDataPackState.Failed));
+            Assert.That(broken.Message, Does.Contain("statement 3 of 3").And.Contain("missing_table"));
+            Assert.That(run.Results.Single(r => r.Name == "020-good").AppliedNow, Is.True);
+
+            Assert.That(Strings("SELECT Id || '=' || Value FROM thing ORDER BY Id"), Is.EqualTo(new[] { "keep=7", "z=26" }));
+            Assert.That(ScalarObject("PRAGMA integrity_check"), Is.EqualTo("ok"));
+            Assert.That(Scalar($"SELECT COUNT(*) FROM {WorldDataPackApplier.MarkerTable} WHERE Name = '010-broken'"), Is.Zero);
+            Assert.That(Scalar($"SELECT COUNT(*) FROM {WorldDataPackApplier.FailureTable} WHERE Name = '010-broken'"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RaisedJournal_HotJournalOfAnInterruptedPack_IsRolledBackByAJournalOffConnection()
+        {
+            // The safety argument for raising only the applier's connections: if the process dies mid-pack, the server's
+            // next connection (Journal Mode=Off) still rolls the hot journal back before it reads.
+            Exec("INSERT INTO thing VALUES ('keep', 7)");
+            string crashDb = Path.Combine(_root, "crashed.sqlite3.db");
+            using (var connection = new SQLiteConnection($"Data Source={_db};Version=3;Pooling=False;Journal Mode=Off"))
+            {
+                connection.Open();
+                using (SQLiteCommand pragma = connection.CreateCommand())
+                {
+                    pragma.CommandText = "PRAGMA journal_mode=TRUNCATE";
+                    Assert.That(pragma.ExecuteScalar(), Is.EqualTo("truncate"));
+                    pragma.CommandText = "PRAGMA cache_size=10";
+                    pragma.ExecuteNonQuery();
+                }
+
+                using SQLiteTransaction transaction = connection.BeginTransaction();
+                using (SQLiteCommand insert = connection.CreateCommand())
+                {
+                    insert.Transaction = transaction;
+                    insert.CommandText = "INSERT INTO thing SELECT 'r' || x, x FROM " +
+                                         "(WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 20000) SELECT x FROM c)";
+                    insert.ExecuteNonQuery();
+                    insert.CommandText = "UPDATE thing SET Value = -1 WHERE Id = 'keep'";
+                    insert.ExecuteNonQuery();
+                }
+
+                // "Crash": copy the database and its journal as they are on disk in the middle of the transaction.
+                CopyShared(_db, crashDb);
+                CopyShared(_db + "-journal", crashDb + "-journal");
+                transaction.Rollback();
+            }
+
+            Assert.That(new FileInfo(crashDb + "-journal").Length, Is.GreaterThan(512), "the copied journal is hot");
+            Assert.That(new FileInfo(crashDb).Length, Is.GreaterThan(new FileInfo(_db).Length), "spilled pages reached the copied file");
+
+            using var reader = new SQLiteConnection($"Data Source={crashDb};Version=3;Pooling=False;Journal Mode=Off");
+            reader.Open();
+            using SQLiteCommand query = reader.CreateCommand();
+            query.CommandText = "SELECT Id || '=' || Value FROM thing";
+            Assert.That(query.ExecuteScalar(), Is.EqualTo("keep=7"));
+            query.CommandText = "SELECT COUNT(*) FROM thing";
+            Assert.That(query.ExecuteScalar(), Is.EqualTo(1L));
+            query.CommandText = "PRAGMA integrity_check";
+            Assert.That(query.ExecuteScalar(), Is.EqualTo("ok"));
         }
 
         [Test]
@@ -536,6 +648,23 @@ namespace DOL.UnitTests
         }
 
         private long Scalar(string sql) => Convert.ToInt64(ScalarObject(sql));
+
+        private static string JournalModeOf(string connectionString)
+        {
+            using var connection = new SQLiteConnection(connectionString);
+            connection.Open();
+            using SQLiteCommand command = connection.CreateCommand();
+            command.CommandText = "PRAGMA journal_mode";
+            return Convert.ToString(command.ExecuteScalar())?.ToLowerInvariant();
+        }
+
+        /// <summary>Copies a file that SQLite holds open (it shares read and write).</summary>
+        private static void CopyShared(string source, string destination)
+        {
+            using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write);
+            input.CopyTo(output);
+        }
 
         private string[] Backups() =>
             Directory.GetFiles(_root, Path.GetFileName(_db) + WorldDataPackApplier.BackupInfix + "*").OrderBy(f => f, StringComparer.Ordinal).ToArray();

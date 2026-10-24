@@ -182,11 +182,29 @@ These data quirks are noted here and not fixed:
 
 7. Before anything else, the server reads the save's journal mode. With
    `Journal Mode=Off` or `Memory`, a failed pack could not be rolled back
-   safely and a crash could corrupt the save. The server then applies no
-   pack and logs one warning at that start. The live install uses WAL. The
-   server's built-in default and the setup tool's connection string use
-   `Journal Mode=Off`, so such a save gets no packs until its connection
-   string says WAL or Delete.
+   safely and a crash could corrupt the save. The server's built-in default
+   and the setup tool's connection string use `Journal Mode=Off`; Aaron's
+   live install uses WAL. For such a save the data pack connections switch
+   themselves to `TRUNCATE` for that run and log one INFO line saying so.
+   Each of them checks that SQLite really took the mode. Then the normal
+   backup and per-pack transactions follow, so a failed pack rolls back
+   fully.
+
+   This leaves the server's own connections alone. For a database that is
+   not in WAL mode, the journal mode belongs to the connection, not to the
+   file. A connection that sets `TRUNCATE` and reopens comes back as
+   `DELETE` (sqlite.org/wal.html, "Persistence of WAL mode"). If the server
+   dies in the middle of a pack, the `-journal` file is hot. The next
+   connection rolls it back before reading, whatever its own journal mode
+   (sqlite.org/lockingv3.html, section 4.1). A unit test checks this with a
+   `Journal Mode=Off` reader. WAL is never used for the switch: it would
+   persist in the file and change the server's connections too. After a run
+   an empty `<save>-journal` file may stay next to the save; it is harmless.
+
+   The switch can fail: SQLite keeps `OFF`/`MEMORY`, or a rolled-back test
+   write fails because the save file is read-only or no journal can be
+   created next to it. Then the server applies no pack and logs one warning
+   at that start, as before.
 
 A launcher world reset creates a new database. That database has no marker
 table yet, so the next start applies all packs again.

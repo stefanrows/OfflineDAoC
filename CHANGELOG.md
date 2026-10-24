@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.321.2] - 2026-10-24
+
+### Added
+- None.
+
+### Changed
+- World data packs on a save that runs with `Journal Mode=Off` or `Memory`
+  (the code and Setup defaults) are no longer refused: the applier raises its
+  own connections to TRUNCATE for the run, proves the save is writable with a
+  rolled-back probe, and applies the packs with full rollback safety; a
+  read-only save still refuses. Installs other than the owner's therefore get
+  the ToA data at their next start. One INFO log line reports the raised mode.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.321.1] - 2026-10-24
 
 ### Added

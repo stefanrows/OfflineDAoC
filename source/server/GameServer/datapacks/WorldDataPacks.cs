@@ -88,6 +88,9 @@ namespace DOL.GS.DataPacks
         {
             foreach (string warning in run.Warnings)
                 log.Warn("World data packs: " + warning);
+            if (run.RaisedJournalMode != null)
+                log.Info($"World data packs: the save's journal mode is {run.JournalMode.ToUpperInvariant()}; the data pack connections " +
+                         $"use {run.RaisedJournalMode.ToUpperInvariant()} for this run so a failed pack rolls back. The server's own connections are unchanged.");
 
             if (run.BackupPath != null)
                 log.Info($"World data packs: database backup before applying: {run.BackupPath}");
