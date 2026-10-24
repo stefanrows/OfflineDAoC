@@ -12,6 +12,21 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.327.1] - 2026-10-24
+
+### Added
+- ToA plan log: 0.327.0 deployed on the owner's install with all 22 data
+  packs; bug 175 records the bot-brain crashes seen on 0.322.0.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.327.0] - 2026-10-24
 
 ### Added

@@ -253,7 +253,7 @@ server yet.
    copy), then `playable-dev/server.sh update` (build + deploy + start),
    watch the log for "World data packs" lines, startup time and memory with
    +44k mobs, then stop. Record in TOA_PLAN log.
-3. ~~WP1.2 Travel~~ DONE 0.322.0. Original text: **WP1.2 Travel**: `atlantis_teleport_plvl` to 1, `[Atlantis]` line in the
+3. ~~WP1.2 Travel~~ DONE 0.322.0. Items 4 (WP3.1b, WP3.3, WP3.0b, WP2.4, WP1.4) DONE 0.323.0-0.327.0, deployed 22:13. Original text: **WP1.2 Travel**: `atlantis_teleport_plvl` to 1, `[Atlantis]` line in the
    porter menu, verify the gaheris travel rows (14) and zone points (29).
 4. **WP3.1b** scholars/quests data-driven, **WP3.3** encounters (DOLSharp
    mapping, 6 missing spawns), **WP3.0b** 7 handlers + 4 spell rows,
@@ -287,6 +287,13 @@ a real defect in every package; keep the review step.
   no unusable version offered); on main 0.323.0 the full suite has 4,394 passed,
   7 failed (bug 160), 3 skipped.
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 22:13: **0.327.0 deployed on Aaron's PC** (quick_check ok before
+  the stop; packs 013/051/052/061/070/071 applied, 22 in total; Artifact
+  Manager loads 57 artifacts / 198 items, 61 encounter targets; Scholar,
+  Artifact Scholar and Aphaestia classes resolve; 18 guardian spawns). Startup
+  errors unchanged baseline (191, base-world rows). Server running. Everything
+  built today is now live locally; real-client checks (WP4.1) are the owner's.
+  Bug 175 records 14 bot-brain crashes seen on 0.322.0 (not ToA code).
 - 2026-10-24 21:30: WP1.4 reviewed (close-flush fixed) and merged as 0.327.0;
   WP2.6 planned with the owner's human-behaviour rule. Deploy next.
 - 2026-10-24 21:10: WP3.3 reviewed (zone in hints, articles, battlegroup
