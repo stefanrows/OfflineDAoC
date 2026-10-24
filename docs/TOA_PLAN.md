@@ -71,7 +71,7 @@ agent or session that finishes a package updates its row and the log below.
   rows + 364 links. 0 duplicates with gaheris, 0 broken references. Deep
   Volcanus and Celestius have no source anywhere; Pyramid/Aerus come from
   gaheris 13. Shipped as packs 030/031/040 in 0.321.0.
-- [ ] **WP1.2 Travel.** Open Atlantis to players (`atlantis_teleport_plvl` 1),
+- [~] **WP1.2 Travel.** Agent toa-travel (2026-10-24 17:25). Open Atlantis to players (`atlantis_teleport_plvl` 1),
   Djinn/boat/teleport rows working from each realm's hub; add an
   `[Atlantis]` line to our porter menu. Depends on WP1.1.
 - [~] **WP1.3 Loot.** Loot data shipped as pack 040 (0.321.0; the "7 missing
@@ -193,7 +193,7 @@ server yet.
      capping the Phoenix loot.
    - 050-artifact-item-classtype from WP3.1 (file exists).
    Verify with the UT_WorldDataPacks snapshot test, review, merge (MINOR).
-2. **First boot + deploy on Aaron's PC** (he authorised stopping the fork
+2. ~~First boot + deploy~~ DONE 2026-10-24 17:18 (0.321.0 deployed, see Log). Original text: **First boot + deploy on Aaron's PC** (he authorised stopping the fork
    server for ToA tests): run `quick_check` on the live save with the
    server stopped (`playable/runtime/data/opendaoc.sqlite3.db`, read-only
    copy), then `playable-dev/server.sh update` (build + deploy + start),
@@ -221,6 +221,16 @@ a real defect in every package; keep the review step.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 17:18: **first boot with the packs on Aaron's PC** (0.321.0 via
+  `server.sh update`, deploy backup `playable-backups/deploy-20261024-171744`):
+  all 14 packs applied in one run, 0 refused, DB backup
+  `opendaoc.sqlite3.db.bak-datapacks-20261024-171800`; Mob 60,505 → 104,364;
+  Atlantis 130/73/30 loaded 14,536 / 11,132 / 11,098 mobs, havens ~1,300 each,
+  dungeons as planned; startup ~29 s to world init, memory 1.96 GB used after
+  start (was ~2.2 GB on long runs before). Startup errors are pre-existing
+  base-world rows (missing npctemplates for Public_DB mobs, Weno'iak/Apocalypse
+  loot items), none from the packs; 3 Arbiters carry MasterLevelArbiter.
+  Server left running for the owner's tests. Not yet checked in a client.
 - 2026-10-24 15:15: pack set 2 reviewed and merged as 0.321.0 (14 packs).
   Live save quick_check ok (WAL, 60,505 mobs, no packs yet). Next: first boot.
 - 2026-10-24 13:30: WP1.1b files merged (0.319.1); session limit handoff

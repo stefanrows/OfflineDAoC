@@ -404,6 +404,9 @@ Agent sessions on items 45–48: take the role and context from
      Atlas fight-club Mordreds leave Albion Atlantis, the dungeon spawns and
      ToA loot ship, The Phoenix's loot is capped, artifact templates load as
      artifacts): implemented in source, real-client check pending.
+     2026-10-24 17:18: first server boot with all 14 data packs on Aaron's
+     install succeeded (0.321.0); Atlantis, havens and dungeons loaded; real
+     client check still pending.
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

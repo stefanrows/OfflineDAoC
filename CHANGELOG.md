@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.321.1] - 2026-10-24
+
+### Added
+- ToA plan log: the first server boot with all 14 data packs on the owner's
+  install (mob table 60,505 → 104,364, Atlantis and dungeon regions loaded,
+  startup about 29 s, no pack-related errors). Next steps updated.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.321.0] - 2026-10-24
 
 ### Added
