@@ -387,6 +387,15 @@ Agent sessions on items 45–48: take the role and context from
      Also an owner design question: our flank/cover route variety and mob
      bends (`AutonomousRvrRoutePolicy`, `AutonomousRvrMobAvoidance`) add
      600-2,000-unit dog-legs that may read as wandering.
+     Step 1 done in **0.312.1**: [NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md).
+     Of 1,307 give-ups, 521 are off-mesh goals or starts (goal snap completes
+     416, all of Druim Ligen), 440 are goals behind keep gates the bot may not
+     pass (DF portals in Frontier Warden keeps, PvP targets on keeps), 87 are
+     dead-end detours that a road fallback would fix; upstream 0.35b meshes are
+     no better (16 equal, 5 worse, 0 better of 21 pairs), so no mesh
+     replacement. Step 2 awaits the owner: road fallback as planned, or the
+     cheaper goal fixes first (snap goals, skip gated goals, no re-pick after
+     a give-up).
 
 ## Implemented in source; installation verification pending
 

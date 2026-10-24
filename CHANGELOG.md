@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.312.1] - 2026-10-24
+
+### Added
+
+- **Route give-up hotspot evidence (task 139, step 1).**
+  [docs/NAVMESH_HOTSPOTS.md](docs/NAVMESH_HOTSPOTS.md) classifies all 1,307
+  route give-ups of the 2026-10-23 log on our own meshes. Most are not mesh
+  defects: 521 goals or starts lie off the mesh (snapping the goal completes
+  416 of them, including all of Connacht's Druim Ligen hotspot), and 440
+  goals lie behind keep gates the bot may not pass (Forest Sauvage's Castle
+  Excalibur and Caer Renaris, Mount Collory's Dun Dagda). Upstream's road
+  fallback would fix only the 87 dead-end detours (mostly Odin's Gate and
+  Emain Macha); upstream's 0.35b meshes are no better at any probed point.
+  An explicit, read-only probe fixture (`UT_Task139HotspotProbe`) reruns the
+  check. Evidence only; no gameplay change.
+
 ## [0.312.0] - 2026-10-24
 
 ### Changed
