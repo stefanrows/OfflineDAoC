@@ -6,6 +6,22 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+175. **Bot brains crash and the bot is removed from the world (14 "Critical
+     error" removals in one evening).** Seen 2026-10-24 18:20-22:02 on the
+     owner's install at 0.322.0 (`server.log`), none of them in ToA code. Each
+     error ends with "Calling RemoveFromWorld", so the bot vanishes:
+     (a) `AutonomousBattlegroundDriver.Assist` (BotBrain.AutonomousBattleground
+     path, region 252): `ArgumentException: '50' cannot be greater than 2`
+     (also "than 39"), a `Math.Clamp` with min > max, 8 times;
+     (b) `BPMob.Die` (scripts/mobs/custom/BPMob.cs:64): `InvalidCastException`
+     GameBot → GamePlayer when a bot kills a BP mob, 3 times, through
+     AttackService/CastingService/EffectService;
+     (c) `BotGroupSupport.ReserveResurrection` (BotGroupSupport.cs:72):
+     `ArgumentNullException` key null, 1 time, and `BotBrain.TryResurrectGroupMember`
+     (BotBrain.cs:6266) `NullReferenceException`, 2 times, both from the
+     Gothwaite PvP idle think. Not fixed; the ToA work did not touch these
+     files.
+
 174. **RvR keep departures insert HubFan points less often.** Found
      2026-10-24 in the 0.314.0 live measurement
      ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0314-live-measurement-2026-10-24)).
