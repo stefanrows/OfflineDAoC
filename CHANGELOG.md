@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.314.1] - 2026-10-24
+
+### Added
+- ToA phase 0 results: supplementary sources (db-public ToA loot, DOLSharp
+  per-artifact quests, ML step texts) in `docs/TOA_RESEARCH.md`; the gaheris
+  code-fit report `docs/TOA_GAHERIS_FIT.md`; the SQL import probe
+  `docs/TOA_IMPORT_PROBE.md` with the MySQL-to-SQLite converter and probe
+  under `tools/toa/` (converted gaheris SQL except the 11.6 MB mob file).
+
+### Changed
+- `docs/TOA_PLAN.md`: phase 0 closed, WP1.1/WP3.x scopes refined, WP2.0,
+  WP2.3 and WP3.0 in progress.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.314.0] - 2026-10-24
 
 ### Fixed

@@ -183,3 +183,52 @@ remain unbuilt anywhere and would be our own design if wanted.
 - [djsniperwolf/SWDB](https://github.com/djsniperwolf/SWDB)
 - [SWDB forum release (Atlantis spawns)](https://dolserver.sourceforge.net/viewtopic.php?p=156639)
 - [DOL forum: artifact files and levelling](https://dolserver.sourceforge.net/viewtopic.php?p=140510)
+
+## Supplementary sources (WP0.1, 2026-10-24)
+
+Question: which open ToA content gaheris does not carry, and where to get it.
+Counts measured 2026-10-24 from the GitHub API and raw downloads (scratch
+copies only), compared against gaheris, our dev DB snapshot and the stock
+`OpenDAoC/OpenDAoC-Database` dump. Atlantis region set used for every count:
+30-44, 73-87, 130-144, 70-72, 91.
+
+### Ranked: what adds something
+
+| # | Source | Adds beyond gaheris | Measured | Fetch path | Effort |
+|---|---|---|---|---|---|
+| 1 | db-public `LootTemplate` + `MobXLootTemplate` | **ToA mob loot.** Our DB and the stock OpenDAoC DB both hold the 341 mob-to-template links for ToA mobs but **0** of the loot rows behind them (both have 1,792 `LootTemplate` rows in total). gaheris carries no loot rows either | 341 of 1,437 distinct ToA mob names have loot; 341 templates, 1,876 rows, 1,423 items (765 at level 50+, 429 at 40-49); 7 items missing from our `ItemTemplate`, all others resolve | `raw.githubusercontent.com/Eve-of-Darkness/db-public/master/data/LootTemplate.json` and `MobXLootTemplate.json` | small: JSON to SQLite insert, filter to the 341 templates, skip 7 unresolved items |
+| 2 | db-public artifact **scroll drops** (subset of #1) | Live-style scroll drops instead of gaheris's two scroll binders (`36-artifact-scrolls.sql` sells 162 scrolls for bounty points) | 100 scroll items ("N of 3") in 37 scroll sets, dropped by 179 mob names, chance 15 % each; all 100 items already in our DB | as #1; mapping is item name → loot template → mob name | small, comes with #1; owner decides binder, drops or both |
+| 3 | DOLSharp `GameServer/quests/Atlantis/Artifacts/*.cs` | **Artifact → encounter mapping** and per-artifact scholar texts. gaheris replaced these with one generic `ArtifactQuest`/`ArtifactTurnInQuest` and does not carry the names | 62 files: 38 name step 1 (e.g. "Defeat Minkhat", "Defeat Eramai", "Win three consecutive rounds of battle with the gladiators"), 24 are stubs with no step text. 27 distinct named targets; 21 stand in gaheris's Atlantis spawns, 6 do not (Battler, Snatcher, Linos, Sobekhotep, Malamis, "a wavelord"). Level gate 45 for most, 30/35/40 for four. 133 scholar `SayTo` lines | `gh api 'repos/Dawn-of-Light/DOLSharp/git/trees/HEAD?recursive=1'`, then raw files from `master/GameServer/quests/Atlantis/Artifacts/` | small: a text-extraction script gives the mapping table for WP3.3; the dialogue can feed WP3.4. The 24 stubs need the Herald/KB sources below |
+| 4 | Our own tree: `GameServer/language/EN/Expansions/MasterLevel.txt` | **ML trial skeleton**: the in-game text of every ML step, already shown by `GamePlayer`'s ML window | 90 step texts (ML1-ML9, 10 steps each; no ML10 steps): 47 battlegroup, 30 group, 2 solo, 11 unlabelled; complete and incomplete wording; FR copy in `language/FR/Quests/ML.txt` | already local | none to fetch; it names the encounter, zone and group size per step, so a trial design can follow it |
+| 5 | DOLSharp `GameServerScripts/quests/Examples and  Tutorials/MasterLevel encounter/ML1FireIsland.cs` (+ `EncounterMgr.cs`) | **The one ML trial step scripted anywhere** (ML1.1, Ianetor's fire game in Oceanus Anatole): spawn coordinates, Sunkaio/Zopureo/Aithos, wall of fire, purros, five brains, 15-minute despawn. Corrects "trials implemented nowhere": one step exists, without ML step credit | 980 + 170 lines; `Artifact encounter/BasicEncounterMob.cs` (300) and `TetheredEncounterMob.cs` are generic artifact encounter bases | raw files from `Dawn-of-Light/DOLSharp/master/GameServerScripts/quests/Examples%20and%20%20Tutorials/` (two spaces) | medium: port to OpenDAoC timers/brains plus a credit call; template for further steps |
+| 6 | OpenDAoC-Core `GameServer/spells/Artifacts/*.cs` | **Artifact spell handlers** (Alvarus morph, Dream Sphere morph, Shades of Mist, Atens Shield, Band of Stars, Traitor's Dagger, ...). gaheris does not carry them because stock OpenDAoC-Core has them; **our tree has the `eSpellType` values but none of the handler files** | 30 files | `gh api 'repos/OpenDAoC/OpenDAoC-Core/git/trees/HEAD?recursive=1'`, raw files under `GameServer/spells/Artifacts/` | medium: port with WP0.2/WP1.1; without them artifact use-abilities do nothing |
+| 7 | DAoC knowledge base (`/home/aaron/daoc-knowledge-db/knowledge.sqlite`, read-only FTS) | Patch-note and forum evidence for the 24 stub artifacts and for ML step contents | Herald: 361 `article.php` docs, 69 mention ToA terms (patch notes 156, 157, 400, 405, 499-502 are the dense ones). FTS chunk hits: Mesedsubastet 26, Ianetor 15, Sobekhotep 15, "ML1" step 162, "artifact encounter" 721. Only 4 Allakhazam docs in the KB. `ask.py` on `E:\daoc-knowledge` not used | `sqlite3` FTS5 on `chunks_fts` joined to `documents` | medium: good for spot answers per artifact or step; a full scripted mapping from patch notes is not realistic (names are scattered, no tables) |
+
+### Already covered (no action)
+
+| Source | Finding |
+|---|---|
+| db-public `MerchantItem` | 73 item lists used by Atlantis NPCs, 4,230 rows; 72 lists and all 4,230 rows already in our DB |
+| db-public `Teleport` / `ZonePoint` | 3 teleports (all "Oceanus"), 28 Atlantis zone points; ours have 0, but gaheris `14-atlantis-travel.sql` (13 teleports) and `29-atlantis-zonepoints.sql` (100) cover more |
+| db-public `ArtifactXItem` / `ItemTemplate` | 200 artifact versions, 197 resolve; identical to our DB |
+| db-public `Mob` | 42,943 rows in the region set (1,437 names; 70-72 hold 3,945 sea mobs; 91 Celestius holds 0); gaheris imported 41,727 of them |
+
+### Nothing found
+
+- **SWDB** (`djsniperwolf/SWDB`, `mob.sql` + `mob2.sql`, 121,600 rows): 37,769 Atlantis-region mobs, 969 names; the 6 names not in db-public are placeholders and NPCs ("new mob", "scholar", "albion teleporter", ...). 327 ToA names with loot, all already in db-public. `artifact.sql` has 64 rows with the same `1001`-style placeholders and `Zone` = 0. Adds nothing.
+- **db-public quests in Atlantis:** `DataQuest` 0 of 25, `RewardQuest` 0 of 32 start in the region set. No Atlantis paths (`Path` 0, 20 mobs reference a `PathID`).
+- **OpenDAoC-Core commits:** `spells/Masterlevel` and `gameobjects/Atlantis` only receive engine-wide refactors (latest 2026-08-11 and 2025-01-17); `quests/Atlantis` last changed 2021-10-06 ("Removed a bunch of Cata/ToA quests/teleporters"). No `Arbiter.cs` history beyond the move. No new ToA content.
+- **OpenDAoC/OpenDAoC-Database** (pushed 2026-09-29): same 341 links, 0 ToA loot rows; same 1,792 loot rows as our snapshot.
+- **DOL-Avalonia** `Avaloniaserver`, `GondwanaServer`, `DOLSharp`: stock DOL Atlantis/artifact/ML code only (confirmed).
+- **Other GitHub forks** found by code search (`ArtifactEncounter`, `GrantArtifactCredit`, `CharacterXMasterLevel`): `tobz/dawnoflight` (2014 SVN mirror), `Bootz/Dawn-of-Light-core` (2012), `wicurcyn/TestEra` (2025): older DOL copies with 38 artifact quests and the same 62 encounter stubs, a subset of DOLSharp. Searches for ML trial terms ("Master Level" trial, MLStep) returned nothing.
+- **Web:** no public page with a tabular artifact → encounter → scroll-drop list turned up in search; the DOL forum "Artifact FAQ" thread (https://dolserver.sourceforge.net/viewtopic.php?p=116475) and the Camelot Herald fandom wiki (https://camelotherald.fandom.com/wiki/Hall_of_Heroes) are the remaining leads, not read in full.
+
+Consequence for the plan: WP3.3 gets its mapping from #3 (38 artifacts) and #2
+(scroll drops); WP1.x should import #1 and port #6; Master Level trials have a
+text skeleton (#4) and one worked example (#5) but no other data anywhere.
+
+Web pages checked by the fetch helper on 2026-10-24: the DOL forum "Artifact
+FAQ" thread has no artifact table (scrolls drop by region, not per mob); the
+Camelot Herald fandom wiki refuses automated fetches (HTTP 402); the Wayback
+Machine is not reachable from this tooling. None of the three is a usable
+mapping source.

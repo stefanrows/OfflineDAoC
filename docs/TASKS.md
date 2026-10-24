@@ -375,6 +375,9 @@ Agent sessions on items 45–48: take the role and context from
      kill-XP Arbiter already wired; ML trials exist nowhere. Licence is not a
      concern (owner: private only). **Decision 2026-10-24: build all of ToA we
      can, ML XP from any level 45+ mob.** Work list: [TOA_PLAN.md](TOA_PLAN.md).
+     Phase 0 done 2026-10-24 (sources, code fit, import probe: the converted
+     gaheris SQL loads completely into a copy of our DB, nothing touched the
+     live install).
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

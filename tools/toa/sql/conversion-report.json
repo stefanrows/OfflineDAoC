@@ -1,0 +1,164 @@
+[
+  {
+    "columns_dropped": {
+      "linexspell.PackageID": 64
+    },
+    "insert_rows": 128,
+    "inserts": 128,
+    "session_dropped": 2,
+    "source": "12-master-levels.sql",
+    "statements": 134,
+    "tables": {
+      "linexspell": 65,
+      "spell": 65
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 64,
+    "uuid_literals": 64,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 41727,
+    "inserts": 84,
+    "session_dropped": 5,
+    "source": "13-atlantis-mobs.sql",
+    "statements": 92,
+    "tables": {
+      "mob": 85
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 41727,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 13,
+    "inserts": 13,
+    "session_dropped": 2,
+    "source": "14-atlantis-travel.sql",
+    "statements": 17,
+    "tables": {
+      "teleport": 14
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 13,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 0,
+    "inserts": 0,
+    "session_dropped": 0,
+    "source": "28-atlantis-portals.sql",
+    "statements": 1,
+    "tables": {
+      "mob": 1
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 0,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 100,
+    "inserts": 100,
+    "session_dropped": 0,
+    "source": "29-atlantis-zonepoints.sql",
+    "statements": 100,
+    "tables": {
+      "zonepoint": 100
+    },
+    "upserts_nothing": 100,
+    "upserts_update": 0,
+    "uuid_literals": 100,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 12,
+    "inserts": 1,
+    "session_dropped": 0,
+    "source": "35-atlantis-npcs.sql",
+    "statements": 6,
+    "tables": {
+      "merchantitem": 2,
+      "mob": 4
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 12,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 162,
+    "inserts": 1,
+    "session_dropped": 0,
+    "source": "36-artifact-scrolls.sql",
+    "statements": 5,
+    "tables": {
+      "itemtemplate": 1,
+      "merchantitem": 2,
+      "mob": 2
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 162,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {},
+    "insert_rows": 0,
+    "inserts": 1,
+    "session_dropped": 0,
+    "source": "39-master-level-paths.sql",
+    "statements": 2,
+    "tables": {
+      "classxspecialization": 2
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 0,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {
+      "linexspell.PackageID": 9
+    },
+    "insert_rows": 18,
+    "inserts": 18,
+    "session_dropped": 2,
+    "source": "42-master-levels-gaps.sql",
+    "statements": 29,
+    "tables": {
+      "linexspell": 18,
+      "spell": 9
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 9,
+    "uuid_literals": 9,
+    "warnings": []
+  },
+  {
+    "columns_dropped": {
+      "linexspell.PackageID": 1
+    },
+    "insert_rows": 9,
+    "inserts": 1,
+    "session_dropped": 2,
+    "source": "43-master-levels-corrected.sql",
+    "statements": 12,
+    "tables": {
+      "linexspell": 2,
+      "spell": 8
+    },
+    "upserts_nothing": 0,
+    "upserts_update": 0,
+    "uuid_literals": 9,
+    "warnings": []
+  }
+]
