@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.332.0] - 2026-10-25
+
+### Added
+- RvR mode, package R1a (plan `docs/RVR_MODE_PLAN.md`, spec
+  `docs/superpowers/specs/2026-10-24-rvr-mode-design.md`): a save now declares
+  its world with the marker `Camlann-1` (today's world) or `Realm-1` (classic
+  realm-vs-realm); both run as GameType PvP; a `Realm-1` save selects the new
+  `RvrServerRules` (realm colours, true realm shown, grouping, trade, speech
+  and guild joins only within the realm, no dummy guild). Unknown markers are
+  still refused. The RvR world is not playable before R1b (alliance core).
+  Unit tests UT_WorldMode, UT_RvrServerRules, UT_CamlannWorldModel extended;
+  a both-worlds test helper for later packages.
+
+### Changed
+- None for the Camlann world (all new checks are no-ops there).
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.331.0] - 2026-10-25
 
 ### Added

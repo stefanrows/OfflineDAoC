@@ -303,8 +303,9 @@ namespace DOL.GS.PacketHandler
 			}
 
 			// Hack to make NPCs untargetable with TAB on a PvP server. There might be a better way to do it.
+			// Off in the RvR world (colour handling 0 and the real realm byte do the job there).
 			// Relies on 'SendObjectGuildID' not to be called after this.
-			if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+			if (WorldMode.UsesGuildIdMask(GameServer.Instance.Configuration.ServerType))
 			{
 				if (npc is GameBot bot)
 				{

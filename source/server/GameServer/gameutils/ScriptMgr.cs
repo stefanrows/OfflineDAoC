@@ -957,6 +957,24 @@ namespace DOL.GS
         /// </summary>
         /// <param name="serverType">server type used to look for rules handler</param>
         /// <returns>server rules handler or normal server type handler if errors</returns>
+        /// <summary>
+        /// Creates the rules for the server type and the save's world. Both worlds
+        /// run GameType=PvP; the Realm-1 world gets <see cref="RvrServerRules"/>,
+        /// everything else the attribute lookup below, exactly as before.
+        /// </summary>
+        public static IServerRules CreateServerRules(EGameServerType serverType, WorldModelKind world)
+        {
+            if (serverType == EGameServerType.GST_PvP && world == WorldModelKind.Realm)
+            {
+                IServerRules rvr = new RvrServerRules();
+                if (log.IsInfoEnabled)
+                    log.Info("Found server rules for " + serverType + " server type in the " + world + " world (" + rvr.RulesDescription() + ").");
+                return rvr;
+            }
+
+            return CreateServerRules(serverType);
+        }
+
         public static IServerRules CreateServerRules(EGameServerType serverType)
         {
             Type rules = null;

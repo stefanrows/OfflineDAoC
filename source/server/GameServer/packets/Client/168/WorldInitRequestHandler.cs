@@ -141,7 +141,7 @@ namespace DOL.GS.PacketHandler.Client.v168
             // viewer to "no guild" here (login, every zone change) made its own
             // /spawn helpers that arrived first count as enemies, so TAB picked them.
             Guild ownGuild = player.Guild;
-            if (ownGuild == null && GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+            if (ownGuild == null && WorldMode.UsesGuildIdMask(GameServer.Instance.Configuration.ServerType))
                 ownGuild = Guild.DummyGuild;
             player.Out.SendObjectGuildID(player, ownGuild);
             player.Out.SendDebugMode(player.TempProperties.GetProperty<bool>(GamePlayer.DEBUG_MODE_PROPERTY));

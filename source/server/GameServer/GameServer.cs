@@ -164,7 +164,7 @@ namespace DOL.GS
 			{
 				if (Instance.m_serverRules == null)
 				{
-					Instance.m_serverRules = ScriptMgr.CreateServerRules(Instance.Configuration.ServerType);
+					Instance.m_serverRules = ScriptMgr.CreateServerRules(Instance.Configuration.ServerType, WorldMode.Current);
 					if (Instance.m_serverRules != null)
 					{
 						Instance.m_serverRules.Initialize();
@@ -367,7 +367,8 @@ namespace DOL.GS
 
 				//---------------------------------------------------------------
 				// This fork does not load a Normal save. The launcher writes the
-				// marker only after the one-time Camlann world reset completes.
+				// marker (Camlann-1 or Realm-1) only after a world reset completes;
+				// the marker fixes the world before the server rules are created.
 				if (!ValidateWorldModel())
 					return false;
 
@@ -807,7 +808,8 @@ namespace DOL.GS
 			{
 				//---------------------------------------------------------------
 				//Create the server rules
-				m_serverRules = ScriptMgr.CreateServerRules(Configuration.ServerType);
+				// The world was fixed by ValidateWorldModel from the save's marker.
+				m_serverRules = ScriptMgr.CreateServerRules(Configuration.ServerType, WorldMode.Current);
 				m_serverRules.Initialize();
 
 				if (log.IsInfoEnabled)
@@ -1003,8 +1005,14 @@ namespace DOL.GS
 		private bool ValidateWorldModel()
 		{
 			DbOfflineLocalOption marker = Database.FindObjectByKey<DbOfflineLocalOption>(CamlannWorldModel.MarkerKey);
-			if (CamlannWorldModel.IsSupported(Configuration.ServerType, marker))
+			WorldModelKind world = CamlannWorldModel.Parse(Configuration.ServerType, marker);
+			if (world != WorldModelKind.Unsupported)
+			{
+				WorldMode.Initialize(world);
+				if (log.IsInfoEnabled)
+					log.Info($"World model: {marker.Value} ({world} world).");
 				return true;
+			}
 
 			if (Configuration.ServerType != EGameServerType.GST_PvP)
 			{
@@ -1013,7 +1021,7 @@ namespace DOL.GS
 			else
 			{
 				string markerValue = marker?.Value ?? "missing";
-				log.Error($"Refusing to start: database WorldModel marker must be {CamlannWorldModel.MarkerValue}, found {markerValue}. Run the launcher world reset first.");
+				log.Error($"Refusing to start: database WorldModel marker must be {CamlannWorldModel.CamlannMarkerValue} or {CamlannWorldModel.RealmMarkerValue}, found {markerValue}. Run the launcher world reset first.");
 			}
 
 			return false;

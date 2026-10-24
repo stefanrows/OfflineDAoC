@@ -21,9 +21,13 @@ defaults in code, keep/relic start state from the reset.
 
 - [x] **R0 Spec.** `docs/superpowers/specs/2026-10-24-rvr-mode-design.md`
   (2026-10-25 00:15).
-- [~] **R1a World marker + rules class.** Implemented (worktree rvr-r1a, 74 focused tests), in review (2026-10-25 01:05). `Realm-1` marker, startup accepts
-  both, `RvrServerRules` selected at GameServer.cs:810, colour handling 0,
-  dummy-guild trick off in RvR. 1 session.
+- [x] **R1a World marker + rules class.** (0.332.0) Saves declare their world
+  (`Camlann-1` / `Realm-1`, GameType stays PvP for both, unknown markers
+  refused); `WorldMode` helper with a startup latch; `RvrServerRules :
+  PvPServerRules` selected for Realm-1: colour handling 0, true realm byte,
+  realm-only group/trade/speech/guild join, dummy-guild trick off; realm-only
+  invites for bots, battlegroups, guild alliances. Camlann unchanged.
+  **RvR not playable yet:** the alliance core is R1b.
 - [ ] **R1b Alliance core, client, GST_PvP audit.** Same realm = friend
   everywhere; guild/battlegroup only within a realm; companions = owner's
   realm; the 35 GST_PvP sites and 8 `is PvPServerRules` checks audited;
@@ -71,3 +75,11 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   RvrServerRules subclass); packages refined; R1a started.
 - 2026-10-25 01:05: R1a implemented and in review; R5a started in parallel so the
   PvP button lands early; R1b follows the R1a merge.
+- 2026-10-24 23:55 (local clock): R1a in source on branch rvr-r1a, real-client
+  check pending: `Realm-1` marker accepted next to `Camlann-1` (no marker
+  still refused), `WorldMode` helper, `RvrServerRules` selected by the marker
+  (colour handling 0, true realm byte, realm-only group/guild/alliance/
+  battlegroup/trade/speech), dummy-guild trick off in RvR; Camlann unchanged.
+- 2026-10-25 01:20: R1a reviewed (ACCEPT) and merged as 0.332.0. R1b started with
+  the reviewer's complete gap list (alliance core, battlegroups, enemy names
+  hidden, GST_PvP audit); R5a running.

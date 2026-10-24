@@ -146,7 +146,7 @@ namespace DOL.GS
 
                 // Part of the hack to make friendly pets untargetable (or targetable again) with TAB on a PvP server.
                 // We could also check for non controlled pets (turrets for example) around the player, but it isn't very important.
-                if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+                if (WorldMode.UsesGuildIdMask(GameServer.Instance.Configuration.ServerType))
                 {
                     IControlledBrain controlledBrain = player.ControlledBrain;
                     Guild playerGuild = player.Guild;
@@ -192,7 +192,7 @@ namespace DOL.GS
             // GameBots are NPC-backed player-shaped actors. Refresh their
             // guild IDs for each human viewer when grouping makes them
             // allied, including the bot's controlled pets.
-            if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+            if (WorldMode.UsesGuildIdMask(GameServer.Instance.Configuration.ServerType))
             {
                 foreach (GamePlayer viewer in GetPlayersInTheGroup())
                 {
@@ -241,14 +241,14 @@ namespace DOL.GS
                 if (removedBot.Brain is DOL.AI.Brain.BotBrain removedBrain)
                     removedBrain.FSM.SetCurrentState(eFSMStateType.IDLE);
 
-                if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+                if (WorldMode.UsesGuildIdMask(GameServer.Instance.Configuration.ServerType))
                 {
                     foreach (GamePlayer viewer in GetPlayersInTheGroup())
                         viewer.Out.SendObjectGuildID(removedBot, removedBot.Guild);
                 }
             }
 
-            if (!disbandEmptyGroup && GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+            if (!disbandEmptyGroup && WorldMode.UsesGuildIdMask(GameServer.Instance.Configuration.ServerType))
                 foreach (GamePlayer viewer in GetPlayersInTheGroup())
                     foreach (GameBot bot in GetMembersInTheGroup().OfType<GameBot>())
                         if (PvpCombatant.AreAllied(viewer, bot))
@@ -304,7 +304,7 @@ namespace DOL.GS
 
                 // Part of the hack to make friendly pets untargetable (or targetable again) with TAB on a PvP server.
                 // We could also check for non controlled pets (turrets for example) around the player, but it isn't very important.
-                if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP)
+                if (WorldMode.UsesGuildIdMask(GameServer.Instance.Configuration.ServerType))
                 {
                     IControlledBrain controlledBrain = player.ControlledBrain;
                     Guild playerGuild = player.Guild;

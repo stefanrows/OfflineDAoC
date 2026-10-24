@@ -11,6 +11,13 @@ public static class BotGroupInvite
             return false;
         }
 
+        // RvR world: groups stay within one realm, bots included.
+        if (!WorldMode.AllowsRealmPair(player, bot))
+        {
+            ChatUtil.SendSystemMessage(player, "You can't group with a player from another realm!");
+            return false;
+        }
+
         if (player.Group != null && player.Group.Leader != player)
         {
             ChatUtil.SendSystemMessage(player, "You are not the leader of your group.");

@@ -382,7 +382,8 @@ namespace DOL.GS.Commands
 
 						if (bot != null)
 						{
-							if (!AutonomousCrewManager.TryAcceptGuildInvite(client.Player, bot))
+							// RvR world: a guild takes bots of its own realm only.
+							if (!WorldMode.AllowsRealmPair(client.Player, bot) || !AutonomousCrewManager.TryAcceptGuildInvite(client.Player, bot))
 							{
 								client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.InviteNotThis"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
 								return;
@@ -1848,6 +1849,12 @@ namespace DOL.GS.Commands
 						}
 						if (obj.Guild == client.Player.Guild)
 							return;
+						// RvR world: guild alliances stay within one realm.
+						if (!WorldMode.AllowsRealmPair(client.Player, obj))
+						{
+							client.Out.SendMessage("You can't form an alliance with a guild from another realm.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+							return;
+						}
 						if (obj.Guild.alliance != null)
 						{
 							client.Out.SendMessage(LanguageMgr.GetTranslation(client.Account.Language, "Scripts.Player.Guild.AllianceAlreadyOther"), eChatType.CT_System, eChatLoc.CL_SystemWindow);
