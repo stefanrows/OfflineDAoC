@@ -10,37 +10,51 @@ world becomes a working launcher button with its own fresh save.
 Status legend: `[ ]` open · `[~]` running (agent) · `[x]` done (version) ·
 `[!]` blocked
 
-## Packages (refine from the spec; one developer + one reviewer per package)
+## Packages (from the spec; one developer + one reviewer per package)
 
-- [~] **R0 Spec.** Agent rvr-spec writes the design; orchestrator refines
-  this list from it (2026-10-24 23:55).
-- [ ] **R1 World marker and rules core.** Save declares its world
-  (`Realm-1` / `Camlann-1`); startup accepts both; friend/enemy per world in
-  the one alliance seam (same realm = friend everywhere, guild/battlegroup
-  only within a realm, companions = owner's realm); safe areas and hub peace
-  per realm; client colour handling and realm byte per world; Tier 3 test
-  allows the RvR branch. Both worlds covered by tests.
-- [ ] **R2 Travel and population rules.** Porters, capitals, `/tc`, Realm
-  Exchange, Atlantis havens, BG porters realm-bound in RvR; `/spawn` own realm
-  only; open BG perrealm default in RvR; Gothwaite mode excluded in RvR.
-- [ ] **R3 Keeps and relics.** Neutral start (Frontier Wardens), capture by a
-  realm sticks; claims by the keep's realm (solo player guild allowed, bot
-  guilds of that realm); guards by owner realm; relics on realm pads with a
-  realm-wide bonus; Camlann keep campaign code mode-aware.
-- [ ] **R4 Bots per realm.** Single-realm bot guilds (~600 bots per realm),
-  realm login balance, autonomous RvR layer per realm (muster at the realm's
-  border keep, staging, sieges, retreat; raids as battlegroups within a realm,
-  as close to upstream 0.37b as the fork allows), grudges/banter per realm.
-  Builds on Stefan's movement work (tasks 135-139).
-- [ ] **R5 World reset and launcher.** Reset routine/data packs for a fresh
-  RvR world (keeps neutral, bot guilds per realm, properties) and for a fresh
-  Camlann world; launcher world picker (RvR default, "PvP" button), reset per
-  world, import guard; both worlds start and stop from the launcher.
-- [ ] **R6 Verification.** Both-worlds regression suite, load test with ~1,800
-  bots, server log review, owner's real-client checklist, docs (CAMLANN.md
-  contract amended, PLAY.md), TASKS entry closed.
+Spec decision: both worlds run GameType=PvP; a `Realm-1` marker selects a new
+`RvrServerRules` (subclass of PvPServerRules) with colour handling 0 and
+realm-only group/guild/trade/battlegroup/speech. RvR save at the existing DB
+path, Camlann at `opendaoc-camlann.sqlite3.db` plus per-world side files; the
+launcher writes the connection string and resets per world. No RvR data pack:
+defaults in code, keep/relic start state from the reset.
+
+- [x] **R0 Spec.** `docs/superpowers/specs/2026-10-24-rvr-mode-design.md`
+  (2026-10-25 00:15).
+- [ ] **R1a World marker + rules class.** `Realm-1` marker, startup accepts
+  both, `RvrServerRules` selected at GameServer.cs:810, colour handling 0,
+  dummy-guild trick off in RvR. 1 session.
+- [ ] **R1b Alliance core, client, GST_PvP audit.** Same realm = friend
+  everywhere; guild/battlegroup only within a realm; companions = owner's
+  realm; the 35 GST_PvP sites and 8 `is PvPServerRules` checks audited;
+  UT_CamlannPvpCombatant gets RvR twins. 1 session.
+- [ ] **R2 Travel + population rules.** Realm-bound porters, capitals, `/tc`,
+  Realm Exchange, Atlantis havens, BG porters; `/spawn` own realm; open BG
+  perrealm default; Gothwaite excluded. 1 session.
+- [ ] **R3a Keeps.** Neutral Warden start, capture by realm sticks, claims by
+  the keep's realm (solo guild ok), guards by owner realm. 1 session.
+- [ ] **R3b Relics.** Realm pads, realm-wide bonus, relic sieges. 1 session.
+- [ ] **R5a World reset + files.** Fresh RvR and fresh Camlann world routines,
+  per-world DB and side files, properties (today's rates). 1 session.
+- [ ] **R5b Launcher world picker.** RvR default, "PvP" button, reset per
+  world, import guard, both worlds start/stop. 1 session. **Wipe + first RvR
+  boot on the owner's PC right after R5b.**
+- [ ] **R4a Bot guilds + login per realm.** ~600 bots per realm in
+  single-realm guilds, realm login balance. 1 session.
+- [ ] **R4b Realm armies.** Event layer armies per realm instead of per guild,
+  muster at the realm's portal outpost, grudges/banter per realm. 2 sessions.
+- [ ] **R4c Upstream siege-flow port.** Retake, 108/170 march threshold, siege
+  scheduling, ArmyPush/Detour, siege resurrection from upstream 0.33-0.37.
+  2 sessions. After a fetch of Stefan's branch.
+- [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
+  client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
+
+Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R5b
+(wipe, boot) → R4a → R4b → R4c → R6.
 
 ## Log
 
 - 2026-10-24 23:55: plan created from the analysis and the owner's decisions;
   spec agent running; Majestic Will 1.68 started as a side package.
+- 2026-10-25 00:15: R0 spec done (12 sessions, GameType stays PvP with an
+  RvrServerRules subclass); packages refined; R1a started.
