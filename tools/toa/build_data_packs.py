@@ -69,6 +69,41 @@ PACKS = [
      ['36-artifact-scrolls.sql'],
      False,
      'Artifact scroll binder merchants (gaheris 36): 162 merchant rows, scroll prices, Zosyne and Mnosus.'),
+    # Pack set 2. 024, 025, 041 and 050 are hand-written; 030, 031 and 040 come from
+    # build_dbpublic_packs.py (db-public, docs/TOA_DUNGEON_IMPORT.md).
+    ('024-toa-arbiter-npcs',
+     ['024-toa-arbiter-npcs.sql'],
+     False,
+     'The Master Level NPCs of gaheris 35: the three Arbiters become DOL.GS.MasterLevelArbiter, '
+     'Demyphon in region 72 a Master Level credit merchant.'),
+    ('025-toa-atlantis-arena-fix',
+     ['025-toa-atlantis-arena-fix.sql'],
+     False,
+     'Removes the three Atlas fight-club Mordreds (DOL.GS.LordOfBattle) from Albion Atlantis, '
+     'regions 73 and 80; the ones in 334 and 339 stay.'),
+    ('030-toa-dungeon-mobs',
+     ['030-toa-dungeon-mobs.sql'],
+     False,
+     'ToA dungeon spawns from db-public: 2,135 mobs tagged PackageID dbpublic-toa-dungeons '
+     "(Cetus' Pit, Sobekite Eternal, Temple of Twilight, Halls of Ma'ati)."),
+    ('031-toa-dungeon-templates',
+     ['031-toa-dungeon-templates.sql'],
+     False,
+     'NPC and equipment templates of the dungeon spawns (db-public), inserted only where missing.'),
+    ('040-toa-loot',
+     ['040-toa-loot.sql'],
+     False,
+     'ToA loot from db-public: 2,106 LootTemplate rows in 363 templates and 364 MobXLootTemplate '
+     'links, inserted only where missing.'),
+    ('041-toa-loot-caps',
+     ['041-toa-loot-caps.sql'],
+     False,
+     'Caps the by-name loot template of The Phoenix at one random item per kill.'),
+    ('050-artifact-item-classtype',
+     ['050-artifact-item-classtype.sql'],
+     False,
+     'Artifact item templates load as DOL.GS.InventoryArtifact: the 197 templates named by '
+     'ArtifactXItem that have no class type.'),
 ]
 
 SOURCE_SHA = re.compile(r'^-- Source sha256: ([0-9a-f]{64})$', re.M)

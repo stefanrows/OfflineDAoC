@@ -60,8 +60,9 @@ agent or session that finishes a package updates its row and the log below.
   (73 rows), 020 Atlantis mobs (41,727), 021 travel, 022 zone points, 023
   scroll binders. Not shipped: gaheris 28/35 (portals, Arbiter/NPC rows)
   until the NPC classes land (WP2.2/3.1b); 35 NPCs in pack 020 load as plain
-  GameNPC until then. Follow-up: pack 050 artifact ClassType (from WP3.1),
-  WP1.1b dungeon packs.
+  GameNPC until then (pack set 2, 0.321.0, made the Arbiters and Demyphon
+  functional and shipped 030/031/040/041/050; scholars, Elmer and Aphaestia
+  stay plain until WP3.1b).
 - [x] **WP1.1b db-public dungeon mobs + ToA loot, as SQL.** (0.319.1,
   `docs/TOA_DUNGEON_IMPORT.md`, generator `tools/toa/build_dbpublic_packs.py`)
   `tools/toa/sql/030-toa-dungeon-mobs.sql` 2,135 mobs (Sobekite Eternal 167,
@@ -69,14 +70,14 @@ agent or session that finishes a package updates its row and the log below.
   templates/equipment (safety net, 0 new on our DB), 040 ToA loot 2,106
   rows + 364 links. 0 duplicates with gaheris, 0 broken references. Deep
   Volcanus and Celestius have no source anywhere; Pyramid/Aerus come from
-  gaheris 13. NOT yet shipped as packs: see Next steps.
+  gaheris 13. Shipped as packs 030/031/040 in 0.321.0.
 - [ ] **WP1.2 Travel.** Open Atlantis to players (`atlantis_teleport_plvl` 1),
   Djinn/boat/teleport rows working from each realm's hub; add an
   `[Atlantis]` line to our porter menu. Depends on WP1.1.
-- [ ] **WP1.3 Loot.** Loot data is done as file 040 (WP1.1b; the "7 missing
-  items" were case-only Id_nb differences). Remaining: ship 040 as a pack,
-  cap the Phoenix drop (23 items at 15 % uncapped: one MobXLootTemplate row
-  with DropCount), `rog_toa_item_chance` > 0 inside Atlantis as filler.
+- [~] **WP1.3 Loot.** Loot data shipped as pack 040 (0.321.0; the "7 missing
+  items" were case-only Id_nb differences); Phoenix cap pinned in pack 041
+  (the generator already gave one drop per kill). Remaining:
+  `rog_toa_item_chance` > 0 inside Atlantis as filler (with WP1.2).
 - [ ] **WP1.4 Launcher.** Atlantis on/off switch and ML/artifact XP rates on
   the launcher settings page (server properties). Independent.
 
@@ -177,7 +178,7 @@ Local server: stopped since the upstream comparison; upstream 0.37b install
 at `C:\OfflineDAoC-upstream` is stopped too. Nothing of ToA has run on a
 server yet.
 
-1. **Pack set 2** (one developer agent, worktree from main): add to
+1. ~~Pack set 2~~ DONE 0.321.0 (packs 024, 025, 030, 031, 040, 041, 050). Original text: add to
    `tools/toa/build_data_packs.py` and ship as packs
    - 024-toa-arbiter-npcs: gaheris sql/35 subset or `UPDATE Mob SET
      ClassType='DOL.GS.MasterLevelArbiter' WHERE Name='Arbiter' AND
@@ -220,6 +221,8 @@ a real defect in every package; keep the review step.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 15:15: pack set 2 reviewed and merged as 0.321.0 (14 packs).
+  Live save quick_check ok (WAL, 60,505 mobs, no packs yet). Next: first boot.
 - 2026-10-24 13:30: WP1.1b files merged (0.319.1); session limit handoff
   written (Next steps). Pack set 2 and the first boot are the next actions.
 - 2026-10-24: WP3.1 reviewed (vault/companion wrap, dye refusal, bot pools,
@@ -252,3 +255,6 @@ a real defect in every package; keep the review step.
   agents (independent of the SQL probe).
 - 2026-10-24: WP0.1 done (toa-sources). Loot moves to db-public, scrolls get
   live-style drops, encounters get the DOLSharp mapping, WP3.0 added.
+- 2026-10-24: pack set 2 built by toa-packs2 (packs 024, 025, 030, 031, 040,
+  041, 050; 14 packs apply on the dev snapshot copy, quick_check ok); review
+  next.

@@ -23,28 +23,55 @@ The row counts were measured on a repaired copy of the dev snapshot. The
 | `021-atlantis-travel` | 13 Atlantis teleport destinations of type `gaheris` (14) | 13 |
 | `022-atlantis-zonepoints` | 100 Atlantis zone points. Existing ones are kept (29) | 100 |
 | `023-artifact-scroll-binders` | 162 scroll merchant rows, scroll prices, Zosyne and Mnosus (36) | 328 |
+| `024-toa-arbiter-npcs` | The three Arbiters become `DOL.GS.MasterLevelArbiter`; Demyphon in region 72 becomes a Master Level credit merchant (subset of 35) | 4 |
+| `025-toa-atlantis-arena-fix` | Deletes the three Atlas fight-club Mordreds (`DOL.GS.LordOfBattle`) in regions 73 and 80 | 3 |
+| `030-toa-dungeon-mobs` | 2,135 ToA dungeon mobs from db-public, tagged `PackageID = 'dbpublic-toa-dungeons'` | 2,135 |
+| `031-toa-dungeon-templates` | 119 NPC templates and 827 equipment rows of those mobs, only where missing | 0 |
+| `040-toa-loot` | 2,106 ToA loot rows in 363 templates and 364 loot links from db-public, only where missing | 2,106 |
+| `041-toa-loot-caps` | One loot link that caps The Phoenix at one random item per kill | 1 |
+| `050-artifact-item-classtype` | The 197 artifact item templates load as `DOL.GS.InventoryArtifact` | 197 |
 
-"Rows" counts inserted, updated and deleted rows together.
+"Rows" counts inserted, updated and deleted rows together. Packs 030 to 041
+are described in [TOA_DUNGEON_IMPORT.md](TOA_DUNGEON_IMPORT.md), pack 050 in
+[TOA_ARTIFACTS.md](TOA_ARTIFACTS.md). 031 inserts nothing on the dev snapshot
+because every template is already there; on an empty server schema it
+inserts 946 rows, and 040 inserts 2,470.
 
-Files 28 and 35 are not shipped. They point NPCs at classes this server does
-not have yet: the gaheris portal teleporter, the Arbiter and the ML and
-credit merchants. They follow with WP2.2 and WP3.1.
+After all 14 packs the dev snapshot has 43,859 more mobs: 41,727 from 020,
+2,135 from 030, minus the three Mordreds of 025.
 
-Pack 020 itself already contains 35 NPCs whose class this server lacks
-(checked on main 0.316.0):
+File 28 is not shipped: it points the portal NPCs at the gaheris portal
+teleporter, which this server lacks (WP1.2). File 35 ships only in part, as
+pack 024. Its sections for Aphaestia (`DOL.GS.ArtifactCreditMerchant`) and
+for Zosyne and Mnosus are left out. The credit merchant class does not exist
+yet (WP3.1b), and pack 023 already makes Zosyne and Mnosus scroll merchants.
+
+### NPC classes after the packs
+
+The Master Level NPCs work. The three Arbiters (regions 70, 71, 72) are
+`DOL.GS.MasterLevelArbiter` and enrol on click. Demyphon is a
+`DOL.GS.Scripts.MasterLevelsMerchant` with the list "Master Level Credits"
+in all three regions. Both classes came with WP2.2; pack 024 points the rows
+of region 72 and the Arbiters at them.
+
+Pack 020 still contains 33 NPCs whose class this server lacks (checked on
+main 0.320.0):
 
 | NPC | ClassType | Count | Regions |
 |---|---|---|---|
 | Aphaestia | `DOL.GS.ArtifactCreditMerchant` | 2 | 70, 71 |
-| Demyphon | `DOL.GS.Scripts.MasterLevelsMerchant` | 2 | 70, 71 |
 | Scholars (Ashton, Ailigean, Daelin, Brivela, Loremaster Sverrir) | `DOL.GS.Scholar` | 26 | 70, 71, 73 |
-| Artifact Scholar Elmer | `DOL.GS.ArtifactScholar` | 5 | 72 |
+| Artifact Scholar Elmer | `DOL.GS.ArtifactScholar` | 5 | 70, 71, 72 |
 
 They load as plain `GameNPC`, which does nothing on click. Each region logs
 one line, "Error loading the following NPC ClassType(s), GameNPC used
-instead", that names the missing classes. This lasts until WP2.2 and WP3.1
-or WP3.1b bring the classes. The 13 rows of `DOL.GS.Scripts.Recharger` are
-not affected: their guild `Recharger` resolves through the NPC guild script.
+instead", that names the missing classes. `Scholar.cs` and
+`ArtifactScholar.cs` under `gameobjects/Atlantis/` are commented out. This
+lasts until WP3.1b brings the scholar and credit merchant classes. Aphaestia
+in region 72 stays a `GameBountyMerchant` without a list, so her window is
+empty (gaheris 35 section 2, also WP3.1b). The 13 rows of
+`DOL.GS.Scripts.Recharger` are not affected: their guild `Recharger`
+resolves through the NPC guild script.
 
 The 7 missing ML ranks are listed in
 [TOA_IMPORT_PROBE.md](TOA_IMPORT_PROBE.md): Battlemaster 10, Perfecter 4,
@@ -167,8 +194,9 @@ table yet, so the next start applies all packs again.
 Some tables the server pre-caches at startup, before the packs run. These
 are `ItemTemplate`, `MobXAmbientBehaviour` and `Minotaurrelic`. The applier
 records which of their rows a pack changed, and the server reloads exactly
-those rows into the cache. The scroll prices of pack 023 are therefore live
-on the first boot. All other tables are read after the packs, so nothing
+those rows into the cache. The scroll prices of pack 023 and the artifact
+class type of pack 050 are therefore live on the first boot (359 item
+templates on the dev snapshot). All other tables are read after the packs, so nothing
 else needs a reload.
 
 ## Backup and rollback
@@ -198,12 +226,16 @@ To return to the state before the packs:
 4. Set `world_data_packs_enabled` to false, or the next start applies the
    packs again.
 
-Undoing one pack without a restore is possible for pack 020:
+Undoing one pack without a restore is possible for packs 020 and 030:
 
 ```sql
 DELETE FROM Mob WHERE PackageID = 'gaheris-atlantis';
 DELETE FROM offline_data_packs WHERE Name = '020-atlantis-mobs';  -- only if it should apply again
+DELETE FROM Mob WHERE PackageID = 'dbpublic-toa-dungeons';
+DELETE FROM offline_data_packs WHERE Name = '030-toa-dungeon-mobs';  -- only if it should apply again
 ```
+
+Pack 025 deletes rows; only the backup brings the Mordreds back.
 
 ## Controls
 
@@ -270,11 +302,12 @@ Rules for pack content:
 
 ## Not checked
 
-- No server has started with the packs. The boot time with 41,727 more mobs,
+- No server has started with the packs. The boot time with 43,859 more mobs,
   the memory use, and the load of Hibernia's Atlantis copy are unmeasured.
   Hibernia's copy grows to 14,563 mobs; the cap `region_max_objects` is
   30,000.
 - Nothing has been checked in the game: travel, zone points, scroll
-  merchants and ML spells.
+  merchants, ML spells, the Arbiter and Demyphon, the dungeon spawns, loot and
+  artifacts.
 - The `/datapacks` command was not run. The applier behind it is unit
   tested on temporary databases.

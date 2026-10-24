@@ -93,6 +93,90 @@
           "gaherisSha256": "9b81a9dd4eb804edf35c1c761f33cafe6ab881ea372a1f55759b73d4b8aebbf8"
         }
       ]
+    },
+    {
+      "name": "024-toa-arbiter-npcs",
+      "file": "024-toa-arbiter-npcs.sql",
+      "sha256": "92ab4c44c02ea189f2c3b04a5e111b077d8071caf1bac3ff96480be7d57e256d",
+      "description": "The Master Level NPCs of gaheris 35: the three Arbiters become DOL.GS.MasterLevelArbiter, Demyphon in region 72 a Master Level credit merchant.",
+      "sources": [
+        {
+          "file": "024-toa-arbiter-npcs.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "025-toa-atlantis-arena-fix",
+      "file": "025-toa-atlantis-arena-fix.sql",
+      "sha256": "06ec336946436ff5107b1c23b057c9c9d3533ab785f4e4d6121103540e4fc2e3",
+      "description": "Removes the three Atlas fight-club Mordreds (DOL.GS.LordOfBattle) from Albion Atlantis, regions 73 and 80; the ones in 334 and 339 stay.",
+      "sources": [
+        {
+          "file": "025-toa-atlantis-arena-fix.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "030-toa-dungeon-mobs",
+      "file": "030-toa-dungeon-mobs.sql",
+      "sha256": "fe75a2326c5efcdd94f2b0b5aae48907f2e577d14429065a6b8655f3d78130f9",
+      "description": "ToA dungeon spawns from db-public: 2,135 mobs tagged PackageID dbpublic-toa-dungeons (Cetus' Pit, Sobekite Eternal, Temple of Twilight, Halls of Ma'ati).",
+      "sources": [
+        {
+          "file": "030-toa-dungeon-mobs.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "031-toa-dungeon-templates",
+      "file": "031-toa-dungeon-templates.sql",
+      "sha256": "1e4d5713b9d9dddacd1c7abca16cc0564904688f22cde6879133377303bba23c",
+      "description": "NPC and equipment templates of the dungeon spawns (db-public), inserted only where missing.",
+      "sources": [
+        {
+          "file": "031-toa-dungeon-templates.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "040-toa-loot",
+      "file": "040-toa-loot.sql",
+      "sha256": "d81d9ecd5afe294d594da1194bba8052a1531b38cbc24fe18f50c0a9a9b856ea",
+      "description": "ToA loot from db-public: 2,106 LootTemplate rows in 363 templates and 364 MobXLootTemplate links, inserted only where missing.",
+      "sources": [
+        {
+          "file": "040-toa-loot.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "041-toa-loot-caps",
+      "file": "041-toa-loot-caps.sql",
+      "sha256": "e0d74d6386ee60f3c4c6415b909ad9d73e1234fa4ab27aae52ae3eda5cb56b1c",
+      "description": "Caps the by-name loot template of The Phoenix at one random item per kill.",
+      "sources": [
+        {
+          "file": "041-toa-loot-caps.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "050-artifact-item-classtype",
+      "file": "050-artifact-item-classtype.sql",
+      "sha256": "7f18b4826343a0cac055784864df298af3b18574c2d1623874e28d952c2dbd26",
+      "description": "Artifact item templates load as DOL.GS.InventoryArtifact: the 197 templates named by ArtifactXItem that have no class type.",
+      "sources": [
+        {
+          "file": "050-artifact-item-classtype.sql",
+          "gaherisSha256": null
+        }
+      ]
     }
   ]
 }

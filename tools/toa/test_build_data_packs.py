@@ -86,6 +86,38 @@ class BuildDataPacksTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bdp.build(self.sql, self.out)
 
+    def test_pack_names_are_unique_and_apply_in_list_order(self):
+        names = [p[0] for p in bdp.PACKS]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(names, sorted(names), 'the server applies packs in name order')
+        for name in names:
+            self.assertRegex(name, r'^\d{3}-[a-z0-9-]+$')
+
+    def test_hand_written_pack_set_2_files_are_guarded(self):
+        arena = (bdp.DEFAULT_SQL / '025-toa-atlantis-arena-fix.sql').read_text(encoding='utf-8')
+        code = '\n'.join(line for line in arena.splitlines() if not line.startswith('--'))
+        statements = [s for s in code.split(';') if s.strip()]
+        self.assertEqual(len(statements), 1)
+        delete = statements[0]
+        self.assertIn('DELETE FROM Mob', delete)
+        self.assertIn("ClassType = 'DOL.GS.LordOfBattle'", delete)
+        for mob_id in ('9fe77411-16e8-483a-8378-4ff2b9269b7c', 'b7b1994d-cf79-4dcf-b2bd-947e0c3a0036',
+                       '824cd725-fe7e-4b64-b88a-e14c934a9b06'):
+            self.assertIn(f"'{mob_id}'", delete)
+        # The Mordreds of regions 334 and 339 stay.
+        for kept in ('ff978634-5315-4648-86ba-242d524839c5', '33cde987-4244-45f8-a7c8-f0ce391fbd1a'):
+            self.assertNotIn(kept, arena)
+
+        arbiter = (bdp.DEFAULT_SQL / '024-toa-arbiter-npcs.sql').read_text(encoding='utf-8')
+        arbiter_code = '\n'.join(line for line in arbiter.splitlines() if not line.startswith('--'))
+        self.assertIn("SET ClassType = 'DOL.GS.MasterLevelArbiter'", arbiter_code)
+        for missing_class in ('ArtifactCreditMerchant', 'ArtifactScholar', 'DOL.GS.Scholar'):
+            self.assertNotIn(missing_class, arbiter_code, 'no class switch to a class the server lacks')
+        cap = (bdp.DEFAULT_SQL / '041-toa-loot-caps.sql').read_text(encoding='utf-8')
+        self.assertIn('WHERE NOT EXISTS', cap)
+        for text in (arena, arbiter, cap):
+            self.assertNotIn('\r', text)
+
     def test_shipped_packs_match_the_converted_files(self):
         shipped = bdp.DEFAULT_OUT / 'manifest.json'
         if not shipped.is_file() or not (bdp.DEFAULT_SQL / '13-atlantis-mobs.sql').is_file():

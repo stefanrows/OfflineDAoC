@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.321.0] - 2026-10-24
+
+### Added
+- Seven more world data packs (ToA plan, pack set 2): the three Atlantis
+  Arbiters and Demyphon in all three havens now carry the Master Level
+  classes, so players can enrol and buy credits without a GM; 2,135
+  db-public mobs populate Sobekite Eternal, Temple of Twilight, Halls of
+  Ma'ati and Cetus' Pit, with their templates and 2,106 ToA loot rows; the
+  197 artifact item templates become `InventoryArtifact`; a loot cap row for
+  The Phoenix. 14 packs in total.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- The three Atlas "fight club" Mordred NPCs that stood in Albion's Atlantis
+  (regions 73 and 80) and pulled every player within 7,000 units. The ones in
+  the real arenas (regions 334, 339) stay.
+
 ## [0.320.0] - 2026-10-24
 
 ### Added

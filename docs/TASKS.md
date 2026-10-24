@@ -399,6 +399,11 @@ Agent sessions on items 45–48: take the role and context from
      WP1.1b (db-public ToA dungeon spawns and ToA loot as SQL packs
      030/031/040, [TOA_DUNGEON_IMPORT.md](TOA_DUNGEON_IMPORT.md)): built in
      source and verified on a DB copy, real-client check pending.
+     Pack set 2 (world data packs 024, 025, 030, 031, 040, 041, 050: the
+     Arbiters enrol and Demyphon sells in all three Atlantis regions, the
+     Atlas fight-club Mordreds leave Albion Atlantis, the dungeon spawns and
+     ToA loot ship, The Phoenix's loot is capped, artifact templates load as
+     artifacts): implemented in source, real-client check pending.
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

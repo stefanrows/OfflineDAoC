@@ -209,7 +209,7 @@ unlocked). GMs see artifact ID, level and experience before the technical block.
 - Companions wearing an artifact a player gave them: they never gain artifact
   experience (the event is a player event) and see only the slots unlocked by
   the experience the item already has. WP2.4 decides.
-- `tools/toa/build_data_packs.py` does not list `050-artifact-item-classtype.sql`
+Pack 050-artifact-item-classtype ships the ClassType SQL (pack set 2, 0.321.0).
   yet; the data-pack owner adds it.
 - Cloudsong fall damage is guarded by a source test only (`CalcFallDamage` needs
   a live client and region).

@@ -366,7 +366,8 @@ namespace DOL.UnitTests
             Assert.That(manifest.Select(e => e.Name), Is.EqualTo(new[]
             {
                 "010-toa-ml-spells", "011-toa-ml-paths", "012-toa-artifact-spells", "020-atlantis-mobs", "021-atlantis-travel",
-                "022-atlantis-zonepoints", "023-artifact-scroll-binders",
+                "022-atlantis-zonepoints", "023-artifact-scroll-binders", "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix",
+                "030-toa-dungeon-mobs", "031-toa-dungeon-templates", "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
             }));
             Assert.That(applier.UnlistedFiles(manifest), Is.Empty);
             Assert.That(applier.GetStatus().Select(s => s.State), Is.All.EqualTo(WorldDataPackState.Pending),
@@ -382,7 +383,8 @@ namespace DOL.UnitTests
             foreach (Type table in new[]
                      {
                          typeof(DbSpell), typeof(DbLineXSpell), typeof(DbClassXSpecialization), typeof(DbMob), typeof(DbTeleport),
-                         typeof(DbZonePoint), typeof(DbItemTemplate), typeof(DbMerchantItem),
+                         typeof(DbZonePoint), typeof(DbItemTemplate), typeof(DbMerchantItem), typeof(DbNpcTemplate), typeof(DbNpcEquipment),
+                         typeof(DbLootTemplate), typeof(DbMobXLootTemplate), typeof(DbArtifactXItem),
                      })
                 database.RegisterDataObject(table);
 
@@ -397,6 +399,12 @@ namespace DOL.UnitTests
             Assert.That(Scalar("SELECT COUNT(*) FROM Teleport WHERE Type = 'gaheris'"), Is.EqualTo(13));
             Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint"), Is.EqualTo(100));
             Assert.That(Scalar("SELECT COUNT(*) FROM MerchantItem"), Is.EqualTo(162));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE Name = 'Arbiter' AND ClassType = 'DOL.GS.MasterLevelArbiter'"), Is.EqualTo(3));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'dbpublic-toa-dungeons'"), Is.EqualTo(2135));
+            Assert.That(Scalar("SELECT COUNT(*) FROM NpcTemplate"), Is.EqualTo(119));
+            Assert.That(Scalar("SELECT COUNT(*) FROM NPCEquipment"), Is.EqualTo(827));
+            Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate"), Is.EqualTo(2106));
+            Assert.That(Scalar("SELECT COUNT(*) FROM MobXLootTemplate"), Is.EqualTo(364 + 1), "the 040 links and the Phoenix cap");
 
             WorldDataPackRun again = new WorldDataPackApplier($"Data Source={_db}", ShippedPackDirectory()).ApplyPending();
             Assert.That(again.AppliedCount, Is.Zero);
@@ -412,6 +420,7 @@ namespace DOL.UnitTests
             File.Delete(_db);
             File.Copy(snapshot, _db);
             long mobs = Scalar("SELECT COUNT(*) FROM Mob");
+            long lootRows = Scalar("SELECT COUNT(*) FROM LootTemplate");
             long classSpecs = Scalar("SELECT COUNT(*) FROM ClassXSpecialization");
             long zonePoints = Scalar("SELECT COUNT(*) FROM ZonePoint");
             string spell15001 = (string)ScalarObject("SELECT Name FROM Spell WHERE SpellID = 15001");
@@ -433,7 +442,7 @@ namespace DOL.UnitTests
 
             Assert.That(run.Results.Select(r => r.State), Is.All.EqualTo(WorldDataPackState.Applied));
             Assert.That(run.BackupPath, Is.Not.Null);
-            Assert.That(Scalar("SELECT COUNT(*) FROM Mob") - mobs, Is.EqualTo(41727));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob") - mobs, Is.EqualTo(41727 + 2135 - 3), "020 and 030 add, 025 removes three");
             Assert.That(Scalar("SELECT COUNT(*) FROM ClassXSpecialization") - classSpecs, Is.EqualTo(496));
             Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint") - zonePoints, Is.EqualTo(100));
             Assert.That(Scalar("SELECT COUNT(*) FROM Spell") - spells, Is.EqualTo(73 + 73), "73 ML and 73 artifact spells");
@@ -457,6 +466,37 @@ namespace DOL.UnitTests
             Assert.That((string)ScalarObject("SELECT Type FROM Spell WHERE SpellID = 7206"), Is.EqualTo("CureNearsight"));
             Assert.That((string)ScalarObject("SELECT Name FROM Spell WHERE SpellID = 15001"), Is.EqualTo(spell15001),
                 "pack 012 ships only artifact rows; gaheris' replacement of 15001 does not ship");
+
+            // Pack set 2.
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE Name = 'Arbiter' AND ClassType = 'DOL.GS.MasterLevelArbiter'"), Is.EqualTo(3),
+                "024: the three Atlantis Arbiters enrol");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE Name = 'Arbiter' AND ClassType <> 'DOL.GS.MasterLevelArbiter'"), Is.Zero);
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE Name = 'Demyphon' AND ClassType = 'DOL.GS.Scripts.MasterLevelsMerchant' " +
+                               "AND ItemsListTemplateID = 'Master Level Credits'"), Is.EqualTo(3), "024: Demyphon sells in 70, 71 and 72");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE ClassType = 'DOL.GS.LordOfBattle' AND Region IN (73, 80)"), Is.Zero,
+                "025: no fight-club Mordred in Albion Atlantis");
+            Assert.That(Ids("SELECT Region FROM Mob WHERE ClassType = 'DOL.GS.LordOfBattle' ORDER BY Region"), Is.EqualTo(new long[] { 334, 339 }));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'dbpublic-toa-dungeons'"), Is.EqualTo(2135), "030");
+            Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate") - lootRows, Is.EqualTo(2106), "040");
+            Assert.That(Scalar("SELECT COUNT(*) FROM MobXLootTemplate WHERE MobName = 'the phoenix' AND LootTemplateName = 'the phoenix' " +
+                               "AND DropCount = 1"), Is.EqualTo(1), "041: the Phoenix cap");
+            Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate WHERE TemplateName = 'the phoenix'"), Is.EqualTo(23));
+            Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact'"), Is.EqualTo(197), "050");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact' " +
+                               "AND Id_nb NOT IN (SELECT ItemID FROM ArtifactXItem)"), Is.Zero);
+            List<string> artifactTemplates = Strings("SELECT Id_nb FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact'");
+            Assert.That(artifactTemplates.Where(id => !run.ChangedKeys["ItemTemplate"].Contains(id)), Is.Empty,
+                "050 is reported for the ItemTemplate cache refresh");
+
+            // The pack set 2 files are idempotent: a second run of their statements changes nothing.
+            foreach (string name in new[]
+                     {
+                         "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix", "030-toa-dungeon-mobs", "031-toa-dungeon-templates",
+                         "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
+                     })
+                Assert.That(ExecuteCountingChanges(File.ReadAllText(Path.Combine(ShippedPackDirectory(), name + ".sql"))), Is.Zero,
+                    name + " applied a second time");
+
             Assert.That(ScalarObject("PRAGMA quick_check"), Is.EqualTo("ok"));
         }
 
@@ -511,6 +551,38 @@ namespace DOL.UnitTests
             while (reader.Read())
                 ids.Add(reader.GetInt64(0));
             return ids.ToArray();
+        }
+
+        private List<string> Strings(string sql)
+        {
+            using var connection = new SQLiteConnection($"Data Source={_db};Version=3;Pooling=False");
+            connection.Open();
+            using SQLiteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            var values = new List<string>();
+            using SQLiteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+                values.Add(reader.GetString(0));
+            return values;
+        }
+
+        /// <summary>Runs a pack's statements in one transaction that is rolled back, and returns the rows they changed.</summary>
+        private long ExecuteCountingChanges(string sql)
+        {
+            using var connection = new SQLiteConnection($"Data Source={_db};Version=3;Pooling=False");
+            connection.Open();
+            using SQLiteTransaction transaction = connection.BeginTransaction();
+            long changed = 0;
+            foreach (string statement in WorldDataPackApplier.SplitStatements(sql))
+            {
+                using SQLiteCommand command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = statement;
+                changed += Math.Max(0, command.ExecuteNonQuery());
+            }
+
+            transaction.Rollback();
+            return changed;
         }
 
         private object ScalarObject(string sql)

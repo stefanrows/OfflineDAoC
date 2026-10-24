@@ -31,8 +31,15 @@ python3 -I tools/toa/convert_mysql_to_sqlite.py --src /mnt/c/OfflineDAoC-ext/gah
 - `build_data_packs.py`: assembles the shipped world data packs from `sql/`
   into `source/server/CoreServer/data-packs/` and writes `manifest.json`
   (docs/TOA_DATA_PACKS.md). Pack 020 is the gzipped file 13; pack 012 keeps
-  only the 73 artifact rows of file 90 (`ARTIFACT_SPELL_IDS`). Shipped packs
-  are immutable; the builder refuses to change one.
+  only the 73 artifact rows of file 90 (`ARTIFACT_SPELL_IDS`). Packs 030, 031
+  and 040 are the db-public files of the same names. Shipped packs are
+  immutable; the builder refuses to change one.
+- Hand-written pack sources in `sql/` (edit them only before their pack was
+  ever released): `024-toa-arbiter-npcs.sql` (the Arbiter and Demyphon part of
+  gaheris 35), `025-toa-atlantis-arena-fix.sql` (removes the three Atlantis
+  fight-club Mordreds), `041-toa-loot-caps.sql` (The Phoenix's loot cap) and
+  `050-artifact-item-classtype.sql` (artifact templates load as
+  `InventoryArtifact`).
 - `test_build_data_packs.py`: unit tests for the pack builder.
 
 Pack build step, after converting (13 must be regenerated first, see above):
