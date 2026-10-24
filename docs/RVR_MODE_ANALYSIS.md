@@ -190,3 +190,6 @@ relics, keeps and GameBot.
     the keep's realm may claim too.
 14. **Majestic Will:** raise to the 1.68 version (5 levels, 1/3/6/10/14,
     10 min reuse, up to 25 %). Done as a separate small package.
+15. **Wipe without asking:** the night session wipes the current save and
+    creates the RvR world as soon as R5 is ready; no further confirmation
+    (owner, 2026-10-25 00:05). Backups stay under playable-backups.
