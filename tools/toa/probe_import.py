@@ -413,6 +413,122 @@ def regions(con: sqlite3.Connection) -> dict:
     return out
 
 
+DBPUBLIC_PACKAGE_ID = "dbpublic-toa-dungeons"
+# ToA dungeon copies per realm (realm from the gaheris zone points: realm 1 jumps
+# from 73 into 78-90, realm 2 from 30 into 35-47, realm 3 from 130 into 135-147).
+TOA_DUNGEON_REGIONS = OrderedDict([
+    (35, "Cetus' Pit (Mid)"), (78, "Cetus' Pit (Alb)"), (135, "Cetus' Pit (Hib)"),
+    (36, "Sobekite Eternal (Mid)"), (79, "Sobekite Eternal (Alb)"), (136, "Sobekite Eternal (Hib)"),
+    (37, "Temple of Twilight (Mid)"), (80, "Temple of Twilight (Alb)"), (137, "Temple of Twilight (Hib)"),
+    (40, "Halls of Ma'ati (Mid)"), (83, "Halls of Ma'ati (Alb)"), (140, "Halls of Ma'ati (Hib)"),
+    (46, "Deep Volcanus (Mid)"), (89, "Deep Volcanus (Alb)"), (146, "Deep Volcanus (Hib)"),
+    (45, "Great Pyramid (Mid)"), (88, "Great Pyramid (Alb)"), (145, "Great Pyramid (Hib)"),
+    (47, "Aerus City (Mid)"), (90, "Aerus City (Alb)"), (147, "Aerus City (Hib)"),
+    (91, "Celestius"),
+])
+ATLANTIS_ALL_REGIONS = sorted(set(range(30, 48)) | set(range(70, 91)) | {91} | set(range(130, 148)))
+
+
+def dungeon_regions(con: sqlite3.Connection, package: str = DBPUBLIC_PACKAGE_ID) -> dict:
+    """Mobs per ToA dungeon region, split by origin (this pack, gaheris, everything else)."""
+    out = OrderedDict()
+    for region, label in TOA_DUNGEON_REGIONS.items():
+        row = con.execute(
+            "SELECT COUNT(*), SUM(PackageID=?), SUM(PackageID=?) FROM Mob WHERE Region=?",
+            (package, PACKAGE_ID, region)).fetchone()
+        total, pack, gaheris = row[0], row[1] or 0, row[2] or 0
+        out[f"{region} {label}"] = {"total": total, "dbpublic": pack, "gaheris": gaheris,
+                                    "other": total - pack - gaheris}
+    return out
+
+
+def pack_sanity(con: sqlite3.Connection, source_root: Path, package: str = DBPUBLIC_PACKAGE_ID,
+                radius: int = 50) -> dict:
+    """Referential and duplicate checks for the db-public dungeon and loot packs (030/031/040)."""
+    q = lambda sql, *a: con.execute(sql, a).fetchall()  # noqa: E731
+    out: dict = {}
+    classes, _, _ = source_types(source_root)
+    classes_lower = {c.lower() for c in classes}
+    out["mobs_loaded"] = q("SELECT COUNT(*) FROM Mob WHERE PackageID=?", package)[0][0]
+    out["mobs_per_region"] = [list(r) for r in q(
+        "SELECT Region, COUNT(*) FROM Mob WHERE PackageID=? GROUP BY 1 ORDER BY 1", package)]
+    out["duplicates_same_name_within_radius"] = [list(r) for r in q(
+        "SELECT o.PackageID, COUNT(*) FROM Mob m JOIN Mob o ON o.Region=m.Region AND o.Name=m.Name "
+        "AND o.Mob_ID<>m.Mob_ID AND o.PackageID IS NOT m.PackageID "
+        "AND (o.X-m.X)*(o.X-m.X)+(o.Y-m.Y)*(o.Y-m.Y)+(o.Z-m.Z)*(o.Z-m.Z) <= ? "
+        "WHERE m.PackageID=? GROUP BY 1", radius * radius, package)]
+    out["gaheris_mobs_in_pack_regions"] = q(
+        "SELECT COUNT(*) FROM Mob WHERE PackageID=? AND Region IN (SELECT DISTINCT Region FROM Mob WHERE PackageID=?)",
+        PACKAGE_ID, package)[0][0]
+    out["npctemplate_missing"] = [list(r) for r in q(
+        "SELECT m.NPCTemplateID, COUNT(*) FROM Mob m WHERE m.PackageID=? AND m.NPCTemplateID NOT IN (0,-1) "
+        "AND NOT EXISTS (SELECT 1 FROM NpcTemplate t WHERE t.TemplateId=m.NPCTemplateID) GROUP BY 1", package)]
+    out["npctemplate_pack_rows"] = q("SELECT COUNT(*) FROM NpcTemplate WHERE PackageID=?", package)[0][0]
+    out["npctemplate_duplicate_templateid"] = q(
+        "SELECT COUNT(*) FROM (SELECT TemplateId FROM NpcTemplate GROUP BY TemplateId HAVING COUNT(*)>1 "
+        "AND SUM(PackageID=?)>0)", package)[0][0]
+    out["mob_equipment_missing"] = [list(r) for r in q(
+        "SELECT m.EquipmentTemplateID, COUNT(*) FROM Mob m WHERE m.PackageID=? AND COALESCE(m.EquipmentTemplateID,'')<>'' "
+        "AND NOT EXISTS (SELECT 1 FROM NPCEquipment e WHERE e.TemplateID=m.EquipmentTemplateID) GROUP BY 1", package)]
+    tpl_equipment = set()
+    for (value,) in q("SELECT DISTINCT t.EquipmentTemplateID FROM NpcTemplate t WHERE t.TemplateId IN "
+                      "(SELECT NPCTemplateID FROM Mob WHERE PackageID=?) AND COALESCE(t.EquipmentTemplateID,'')<>''",
+                      package):
+        tpl_equipment |= {p.strip() for p in value.split(";") if p.strip() and ":" not in p}
+    out["template_equipment_ids"] = len(tpl_equipment)
+    out["template_equipment_missing"] = sorted(
+        e for e in tpl_equipment if not q("SELECT 1 FROM NPCEquipment WHERE TemplateID=? LIMIT 1", e))
+    out["faction_missing"] = q(
+        "SELECT COUNT(*) FROM Mob m WHERE m.PackageID=? AND m.FactionID<>0 "
+        "AND NOT EXISTS (SELECT 1 FROM Faction f WHERE f.ID=m.FactionID)", package)[0][0]
+    out["path_missing"] = q(
+        "SELECT COUNT(*) FROM Mob m WHERE m.PackageID=? AND COALESCE(m.PathID,'')<>'' "
+        "AND NOT EXISTS (SELECT 1 FROM Path p WHERE p.PathID=m.PathID)", package)[0][0]
+    out["itemslist_missing"] = q(
+        "SELECT COUNT(*) FROM Mob m WHERE m.PackageID=? AND COALESCE(m.ItemsListTemplateID,'')<>'' "
+        "AND NOT EXISTS (SELECT 1 FROM MerchantItem i WHERE i.ItemListID=m.ItemsListTemplateID)", package)[0][0]
+    ctypes = q("SELECT COALESCE(ClassType,''), COUNT(*) FROM Mob WHERE PackageID=? GROUP BY 1 ORDER BY 2 DESC", package)
+    out["classtypes"] = [[c, n, (c == "" or c.lower() in classes_lower)] for c, n in ctypes]
+    brains = q("SELECT COALESCE(Brain,''), COUNT(*) FROM Mob WHERE PackageID=? GROUP BY 1 ORDER BY 2 DESC", package)
+    out["brains"] = [[b, n, (b == "" or b.lower() in classes_lower)] for b, n in brains]
+    # Loot (040): names of every mob standing in an Atlantis region after the import.
+    regs = ",".join(str(r) for r in ATLANTIS_ALL_REGIONS)
+    con.execute("DROP TABLE IF EXISTS temp.toa_names")
+    con.execute(f"CREATE TEMP TABLE toa_names AS SELECT DISTINCT lower(Name) AS n FROM Mob WHERE Region IN ({regs})")
+    out["toa_mob_names"] = q("SELECT COUNT(*) FROM temp.toa_names")[0][0]
+    out["toa_names_with_link"] = q(
+        "SELECT COUNT(DISTINCT lower(x.MobName)) FROM MobXLootTemplate x WHERE lower(x.MobName) IN (SELECT n FROM temp.toa_names)")[0][0]
+    out["toa_linked_templates_with_loot_rows"] = q(
+        "SELECT COUNT(DISTINCT lower(x.LootTemplateName)) FROM MobXLootTemplate x WHERE lower(x.MobName) IN "
+        "(SELECT n FROM temp.toa_names) AND EXISTS (SELECT 1 FROM LootTemplate t WHERE t.TemplateName=x.LootTemplateName)")[0][0]
+    out["toa_linked_templates_without_loot_rows"] = [r[0] for r in q(
+        "SELECT DISTINCT lower(x.LootTemplateName) FROM MobXLootTemplate x WHERE lower(x.MobName) IN "
+        "(SELECT n FROM temp.toa_names) AND NOT EXISTS (SELECT 1 FROM LootTemplate t WHERE t.TemplateName=x.LootTemplateName) "
+        "ORDER BY 1")]
+    out["toa_loot_rows"] = q(
+        "SELECT COUNT(*) FROM LootTemplate t WHERE lower(t.TemplateName) IN (SELECT n FROM temp.toa_names) OR "
+        "lower(t.TemplateName) IN (SELECT lower(x.LootTemplateName) FROM MobXLootTemplate x WHERE lower(x.MobName) IN "
+        "(SELECT n FROM temp.toa_names))")[0][0]
+    out["toa_loot_items_unresolved"] = [r[0] for r in q(
+        "SELECT DISTINCT t.ItemTemplateID FROM LootTemplate t WHERE (lower(t.TemplateName) IN (SELECT n FROM temp.toa_names) "
+        "OR lower(t.TemplateName) IN (SELECT lower(x.LootTemplateName) FROM MobXLootTemplate x WHERE lower(x.MobName) IN "
+        "(SELECT n FROM temp.toa_names))) AND NOT EXISTS (SELECT 1 FROM ItemTemplate i WHERE i.Id_nb=t.ItemTemplateID) "
+        "ORDER BY 1")]
+    out["toa_loot_items_case_only"] = q(
+        "SELECT COUNT(DISTINCT t.ItemTemplateID) FROM LootTemplate t JOIN ItemTemplate i ON i.Id_nb=t.ItemTemplateID "
+        "WHERE i.Id_nb<>t.ItemTemplateID COLLATE BINARY AND lower(t.TemplateName) IN (SELECT lower(x.LootTemplateName) "
+        "FROM MobXLootTemplate x WHERE lower(x.MobName) IN (SELECT n FROM temp.toa_names))")[0][0]
+    # Mobs outside Atlantis that share a name with a ToA mob that has loot rows (they drop it too).
+    out["loot_names_also_outside_atlantis"] = [list(r) for r in q(
+        f"SELECT Name, Region, COUNT(*) FROM Mob WHERE Region NOT IN ({regs}) AND lower(Name) IN "
+        "(SELECT lower(x.MobName) FROM MobXLootTemplate x WHERE lower(x.MobName) IN (SELECT n FROM temp.toa_names) "
+        "AND EXISTS (SELECT 1 FROM LootTemplate t WHERE t.TemplateName=x.LootTemplateName) "
+        "UNION SELECT lower(t.TemplateName) FROM LootTemplate t WHERE lower(t.TemplateName) IN (SELECT n FROM temp.toa_names)) "
+        "GROUP BY 1, 2 ORDER BY 1")]
+    con.execute("DROP TABLE temp.toa_names")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", required=True, type=Path, help="disposable probe database (overwritten with --fresh-from)")
@@ -421,7 +537,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[2] / "source" / "server")
     ap.add_argument("--json", type=Path, help="write the full report here")
     ap.add_argument("--no-row-fallback", action="store_true", help="do not retry failed multi-row INSERTs row by row")
-    ap.add_argument("files", nargs="*", help="file names in --sql-dir (default: every *.sql, sorted)")
+    ap.add_argument("--dbpublic-package", default=DBPUBLIC_PACKAGE_ID,
+                    help="PackageID of the db-public dungeon pack (030/031/040) for the dungeon checks")
+    ap.add_argument("files", nargs="*", help="file names in --sql-dir, applied in the order given; a name may "
+                    "repeat (re-application check). Default: every *.sql, sorted")
     args = ap.parse_args(argv)
     refuse_unsafe(args.db)
     if args.fresh_from:
@@ -433,7 +552,8 @@ def main(argv: list[str] | None = None) -> int:
     con = sqlite3.connect(str(args.db), isolation_level=None)
     con.execute("PRAGMA foreign_keys=OFF")
     files = [args.sql_dir / f for f in args.files] if args.files else sorted(args.sql_dir.glob("*.sql"))
-    report = {"sqlite_version": sqlite3.sqlite_version, "regions_before": regions(con), "files": []}
+    report = {"sqlite_version": sqlite3.sqlite_version, "regions_before": regions(con),
+              "dungeon_regions_before": dungeon_regions(con, args.dbpublic_package), "files": []}
     for path in files:
         res = probe_file(con, path, not args.no_row_fallback)
         report["files"].append(res)
@@ -444,6 +564,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    #{e['statement']}: {e['error']}")
     report["regions_after"] = regions(con)
     report["sanity"] = sanity(con, args.source_root)
+    report["dungeon_regions_after"] = dungeon_regions(con, args.dbpublic_package)
+    report["dbpublic_sanity"] = pack_sanity(con, args.source_root, args.dbpublic_package)
     con.close()
     if args.json:
         args.json.parent.mkdir(parents=True, exist_ok=True)
@@ -451,7 +573,9 @@ def main(argv: list[str] | None = None) -> int:
             json.dump(report, fh, indent=2, default=list)
             fh.write("\n")
     print(json.dumps({"regions_after": report["regions_after"], "sanity": {k: v for k, v in report["sanity"].items()
-                                                                           if k not in ("classtypes", "brains")}},
+                                                                           if k not in ("classtypes", "brains")},
+                      "dungeon_regions_after": report["dungeon_regions_after"],
+                      "dbpublic_sanity": report["dbpublic_sanity"]},
                      indent=1, default=list))
     return 0
 

@@ -62,16 +62,21 @@ agent or session that finishes a package updates its row and the log below.
   until the NPC classes land (WP2.2/3.1b); 35 NPCs in pack 020 load as plain
   GameNPC until then. Follow-up: pack 050 artifact ClassType (from WP3.1),
   WP1.1b dungeon packs.
-- [~] **WP1.1b db-public dungeon mobs + ToA loot.** Agent toa-dungeons
-  (2026-10-24): Cetus' Pit, Sobekite Eternal, Temple of Twilight, Halls of
-  Ma'ati, Deep Volcanus, Great Pyramid, Celestius plus the 1,876 db-public
-  loot rows as packs 030/031/040.
+- [x] **WP1.1b db-public dungeon mobs + ToA loot, as SQL.** (0.319.1,
+  `docs/TOA_DUNGEON_IMPORT.md`, generator `tools/toa/build_dbpublic_packs.py`)
+  `tools/toa/sql/030-toa-dungeon-mobs.sql` 2,135 mobs (Sobekite Eternal 167,
+  Temple of Twilight 299, Halls of Ma'ati 244-246 per realm, Cetus), 031
+  templates/equipment (safety net, 0 new on our DB), 040 ToA loot 2,106
+  rows + 364 links. 0 duplicates with gaheris, 0 broken references. Deep
+  Volcanus and Celestius have no source anywhere; Pyramid/Aerus come from
+  gaheris 13. NOT yet shipped as packs: see Next steps.
 - [ ] **WP1.2 Travel.** Open Atlantis to players (`atlantis_teleport_plvl` 1),
   Djinn/boat/teleport rows working from each realm's hub; add an
   `[Atlantis]` line to our porter menu. Depends on WP1.1.
-- [ ] **WP1.3 Loot.** Import db-public's ToA loot (1,876 LootTemplate rows,
-  1,423 items; 7 items missing from our ItemTemplate to add); then
-  `rog_toa_item_chance` > 0 inside Atlantis regions as filler. Depends on WP1.1.
+- [ ] **WP1.3 Loot.** Loot data is done as file 040 (WP1.1b; the "7 missing
+  items" were case-only Id_nb differences). Remaining: ship 040 as a pack,
+  cap the Phoenix drop (23 items at 15 % uncapped: one MobXLootTemplate row
+  with DropCount), `rog_toa_item_chance` > 0 inside Atlantis as filler.
 - [ ] **WP1.4 Launcher.** Atlantis on/off switch and ML/artifact XP rates on
   the launcher settings page (server properties). Independent.
 
@@ -165,6 +170,46 @@ agent or session that finishes a package updates its row and the log below.
   install; release pack includes the ToA SQL.
 - [ ] **WP4.3 Docs.** CAMLANN.md era note, PLAY.md section, TASKS 134 closed.
 
+## Next steps (handoff 2026-10-24 13:30, session limit)
+
+Resume here. Everything below is on main 0.319.1; no worktree is pending.
+Local server: stopped since the upstream comparison; upstream 0.37b install
+at `C:\OfflineDAoC-upstream` is stopped too. Nothing of ToA has run on a
+server yet.
+
+1. **Pack set 2** (one developer agent, worktree from main): add to
+   `tools/toa/build_data_packs.py` and ship as packs
+   - 024-toa-arbiter-npcs: gaheris sql/35 subset or `UPDATE Mob SET
+     ClassType='DOL.GS.MasterLevelArbiter' WHERE Name='Arbiter' AND
+     ClassType='DOL.GS.Arbiter'` plus the region 72 Demyphon row
+     (`DOL.GS.Scripts.MasterLevelsMerchant`); without it nobody can enrol.
+   - 025-toa-atlantis-arena-fix: the three `LordOfBattle` (Atlas fight club)
+     rows in Albion Atlantis regions 73 (Arbor Glen, Typhon's Reach) and 80
+     (Temple of Twilight) pull every player within 7,000 units; disable or
+     delete them (decision taken by the orchestrator 2026-10-24: remove, they
+     are Atlas leftovers in zones that were unreachable).
+   - 030/031/040 from WP1.1b (files exist), plus one MobXLootTemplate row
+     capping the Phoenix loot.
+   - 050-artifact-item-classtype from WP3.1 (file exists).
+   Verify with the UT_WorldDataPacks snapshot test, review, merge (MINOR).
+2. **First boot + deploy on Aaron's PC** (he authorised stopping the fork
+   server for ToA tests): run `quick_check` on the live save with the
+   server stopped (`playable/runtime/data/opendaoc.sqlite3.db`, read-only
+   copy), then `playable-dev/server.sh update` (build + deploy + start),
+   watch the log for "World data packs" lines, startup time and memory with
+   +44k mobs, then stop. Record in TOA_PLAN log.
+3. **WP1.2 Travel**: `atlantis_teleport_plvl` to 1, `[Atlantis]` line in the
+   porter menu, verify the gaheris travel rows (14) and zone points (29).
+4. **WP3.1b** scholars/quests data-driven, **WP3.3** encounters (DOLSharp
+   mapping, 6 missing spawns), **WP3.0b** 7 handlers + 4 spell rows,
+   **WP2.3 follow-up** Blanket for companions (WP2.4), **WP1.4** launcher.
+5. Bug 160 (7 old test failures) and bug 172 (deploy restore) stay open.
+
+Agent rhythm that worked today: developer (opus/high) in its own worktree
+→ reviewer (opus/medium-high) → fix → re-check → orchestrator commits with
+version bump on the worktree branch and fast-forwards main. Reviewers found
+a real defect in every package; keep the review step.
+
 ## Out of scope (owner or client limits)
 
 - Labyrinth of the Minotaur (not in the client).
@@ -175,6 +220,8 @@ agent or session that finishes a package updates its row and the log below.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 13:30: WP1.1b files merged (0.319.1); session limit handoff
+  written (Next steps). Pack set 2 and the first boot are the next actions.
 - 2026-10-24: WP3.1 reviewed (vault/companion wrap, dye refusal, bot pools,
   init order fixed) and merged as 0.319.0.
 - 2026-10-24: WP2.2 reviewed (reward gate, spell-line removal, title fixed)

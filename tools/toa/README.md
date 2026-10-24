@@ -1,7 +1,8 @@
 # tools/toa: Trials of Atlantis data tooling
 
 Converter and import probe for the gaheris SQL migrations (MySQL dialect)
-into our SQLite schema. Measured results: docs/TOA_IMPORT_PROBE.md.
+into our SQLite schema, and the db-public dungeon/loot pack generator.
+Measured results: docs/TOA_IMPORT_PROBE.md, docs/TOA_DUNGEON_IMPORT.md.
 
 - `convert_mysql_to_sqlite.py`: converts one or more gaheris `sql/*.sql`
   files; output goes to `tools/toa/sql/`. Deterministic (uuid5), so re-runs
@@ -12,6 +13,13 @@ into our SQLite schema. Measured results: docs/TOA_IMPORT_PROBE.md.
 - `test_convert_mysql_to_sqlite.py`: unit tests for the converter.
 - `sql/`: converted files. `13-atlantis-mobs.sql` (13 MB) is not tracked
   (the shipped pack 020 carries it gzipped); regenerate it from a gaheris clone:
+- `build_dbpublic_packs.py`: builds `sql/030-toa-dungeon-mobs.sql`,
+  `031-toa-dungeon-templates.sql` and `040-toa-loot.sql` from the
+  Eve-of-Darkness/db-public JSON (ToA dungeon spawns gaheris lacks, and the
+  ToA loot rows). Guarded inserts, re-application changes nothing. Numbers and
+  commands: docs/TOA_DUNGEON_IMPORT.md. Tests: `test_build_dbpublic_packs.py`.
+- `sql/`: converted files. `13-atlantis-mobs.sql` (11.6 MB) is not tracked;
+  regenerate it from a gaheris clone:
 
 ```
 git clone --depth 1 https://github.com/Pactor/gaheris.git /mnt/c/OfflineDAoC-ext/gaheris

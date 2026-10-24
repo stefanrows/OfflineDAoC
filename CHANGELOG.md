@@ -12,6 +12,24 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.319.1] - 2026-10-24
+
+### Added
+- ToA dungeon and loot data as SQL (plan WP1.1b, `docs/TOA_DUNGEON_IMPORT.md`):
+  2,135 db-public mobs for Sobekite Eternal, Temple of Twilight, Halls of
+  Ma'ati and Cetus' Pit, their templates, and 2,106 ToA loot rows, with the
+  generator `tools/toa/build_dbpublic_packs.py`. Not yet shipped as data
+  packs; `docs/TOA_PLAN.md` "Next steps" is the handoff.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.319.0] - 2026-10-24
 
 ### Added
