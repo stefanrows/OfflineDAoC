@@ -12,6 +12,35 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.314.0] - 2026-10-24
+
+### Fixed
+
+- **Autonomous bots no longer give up on goals that hang off the walkable
+  ground (task 139).** When a path to a route goal fails and the goal lies
+  outside the normal navmesh search box (Connacht's Druim Ligen goal hung 210
+  units above the floor), the goal moves to the nearest floor in its own
+  zone and the route is planned again. Precise points (portals, doors, zone
+  seams, stable masters, keep roads) and dungeons are never moved. Each move
+  is logged as `AUTONOMOUS_GOAL_SNAP` (from, to, height change). Real client
+  check pending.
+- **Bots no longer run at keep gates they cannot pass.** RvR bots skip enemy
+  and grudge targets standing inside the courtyard of a keep they may not
+  enter while its outer gate stands, and Darkness Falls entrances inside such
+  keeps (Castle Excalibur and Dun Dagda while the Frontier Wardens hold them)
+  are left out of route and camp searches. Albion uses its Portal Keep
+  entrance instead; Hibernian bots get no Darkness Falls goals while the
+  Wardens hold both Hibernian DF keeps. The keep a force is sieging keeps its
+  targets; sieges, keep raids and keep defence are unchanged; fighters
+  outside the walls stay valid targets. Real client check pending.
+- **A bot that gave up on a destination does not pick it again for 6
+  minutes**, and a warband leader's give-up blocks the spot for its whole
+  warband. A bot that stands on connected ground is no longer sent to its
+  capital when the goal itself is off the mesh (six bots shuttled between
+  Connacht and Tir na Nog on one such goal every 22 seconds). A once-a-minute
+  `AUTONOMOUS_ROUTE_GOAL_FIX` line counts snaps, skipped gated goals, blocked
+  re-picks and skipped pocket escapes. Real client check pending.
+
 ## [0.313.0] - 2026-10-24
 
 ### Changed

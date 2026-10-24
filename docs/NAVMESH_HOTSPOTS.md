@@ -237,7 +237,7 @@ meshes is ignored with one warning.
 | Forest Sauvage keeps and both DF portals (440) | No, needs a goal fix |
 | One-way seam goals (62), off-mesh starts (100) | No |
 
-**Cheaper fixes for the rest** (separate tasks, owner's call):
+**Cheaper fixes for the rest** (1-3 implemented in 0.314.0; 4 open):
 
 1. Snap route destinations onto the mesh (96/512, then 256/1024) when a goal
    is created. The probe shows complete walks for 416 of 421 off-mesh goals,

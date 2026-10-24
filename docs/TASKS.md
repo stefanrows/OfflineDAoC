@@ -395,7 +395,24 @@ Agent sessions on items 45–48: take the role and context from
      no better (16 equal, 5 worse, 0 better of 21 pairs), so no mesh
      replacement. Step 2 awaits the owner: road fallback as planned, or the
      cheaper goal fixes first (snap goals, skip gated goals, no re-pick after
-     a give-up).
+     a give-up). Owner chose the goal fixes (agent's recommendation).
+     Goal fixes implemented in source **0.314.0**
+     (`AutonomousRouteGoalFix.cs`, `AutonomousKeepGateGoals.cs`, controller
+     `IssuePath`/`TryAdoptGoalSnap`, pickers, `NoteRouteGiveUp`): an
+     off-mesh goal of a failed path snaps to floor (96/96/512, then
+     256/256/1024; own zone; never precise or dungeon points); goals in the
+     courtyard of an impassable keep with an outer gate standing, and DF
+     entrances inside such keeps, are not picked (sieged keep exempt;
+     Hibernia gets no DF goals while the Wardens hold both its DF keeps); a
+     give-up blocks that destination for 6 min / 200 units (leader writes the
+     warband memory); the capital pocket escape is skipped when the goal, not
+     the bot, is off-mesh. Logs `AUTONOMOUS_GOAL_SNAP`,
+     `AUTONOMOUS_ROUTE_GOAL_FIX`. Real-client check: route give-ups at Druim
+     Ligen, Forest Sauvage and Mount Collory fall well below the 2026-10-23
+     counts; snapped goals are on the right level; third-party fights at a
+     keep wall still happen. Not addressed: off-mesh starts (100), dead-end
+     detours (87, road fallback), one-way seam goals (62), cut-off starts
+     (127).
      Design question answered (owner left it to the agent, 2026-10-24):
      **0.313.0** caps Flank/Cover side points at 1,200 units for open
      doctrines (`AutonomousRvrRoutePolicy.MaximumFlankOffset`); stealth
