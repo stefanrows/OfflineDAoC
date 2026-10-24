@@ -167,3 +167,26 @@ relics, keeps and GameBot.
 6. Coordination: Stefan ports upstream RvR movement into the fork (tasks
    135-139, 0.311-0.328); the RvR mode work must build on his branch work,
    not around it. Phases 1 and 3 touch the same files.
+
+### Further owner decisions (2026-10-24 23:55, for the night session)
+7. **Companions:** own realm only, as on live. `/spawn` offers only the
+   owner's realm.
+8. **Travel:** everything realm-bound regardless of patch state: own capital,
+   own portal keeps, own Atlantis haven, own Realm Exchange; enemy capitals
+   and porters closed.
+9. **World bots:** about 600 per realm (today's 1,810 total, single-realm
+   guilds).
+10. **Night authorisation:** everything on Aaron's PC: build, merge, push,
+    stop/start the server, wipe the current save ("only ballast that causes
+    problems"), create the RvR world as the default, run load tests.
+11. **PvP button:** must be built this night and must work: the launcher
+    offers the Camlann PvP world as a second, fresh world; the old Camlann
+    save is not kept (backups stay in playable-backups).
+12. **Keeps at RvR start:** neutral (Frontier Wardens garrison) until a realm
+    captures them; the capture then stays in the save. Patch 1.65 is only a
+    reference, mainly for the PvP world; the RvR behaviour may be newer
+    (upstream 0.37b style).
+13. **Guild claims:** a solo player guild may claim as today; bot guilds of
+    the keep's realm may claim too.
+14. **Majestic Will:** raise to the 1.68 version (5 levels, 1/3/6/10/14,
+    10 min reuse, up to 25 %). Done as a separate small package.

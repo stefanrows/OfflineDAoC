@@ -6,6 +6,16 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+147. **RvR mode: classic realm-vs-realm as the default world, Camlann PvP as a
+     launcher button.** Owner (Aaron), 2026-10-24: get as close as the fork
+     allows to the upstream 0.37b RvR we compared against, with all fork
+     features (ToA, companions, bots, open BG); realm rules everywhere;
+     fresh RvR world, current save may be wiped; night session authorised.
+     Analysis and decisions: [RVR_MODE_ANALYSIS.md](RVR_MODE_ANALYSIS.md);
+     work list: [RVR_MODE_PLAN.md](RVR_MODE_PLAN.md). Touches the files
+     Stefan works on for the upstream movement port (tasks 135-139): build on
+     his branch work, not around it.
+
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed
      0.234.0/0.236.0): 568 `Could not instantiate Ability

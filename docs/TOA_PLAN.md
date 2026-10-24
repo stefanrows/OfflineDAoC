@@ -277,6 +277,13 @@ Agent rhythm that worked today: developer (opus/high) in its own worktree
 version bump on the worktree branch and fast-forwards main. Reviewers found
 a real defect in every package; keep the review step.
 
+## Continuation after ToA (2026-10-24 23:55)
+
+The ToA "Next steps" are done except WP4.1 (owner's client check) and WP4.3
+(docs close). The work continues with the **RvR mode** in
+[RVR_MODE_PLAN.md](RVR_MODE_PLAN.md); any continuation job that reads this
+file should take the first open package there.
+
 ## Out of scope (owner or client limits)
 
 - Labyrinth of the Minotaur (not in the client).
