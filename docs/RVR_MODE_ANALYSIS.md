@@ -198,3 +198,10 @@ relics, keeps and GameBot.
     fresh worlds keep today's rates (XP 10x players and bots, ML XP 10 per
     mob level, artifact rate 350, ToA loot on); the owner's account stays a
     normal player (no GM flag); Windows Update is paused by the owner.
+17. **Spec section 10 answers (00:20):** several realms per account allowed
+    (as the fork today); relic sieges by bot armies ON (relics travel, bonus
+    realm-wide); death penalty as upstream (RvR deaths cost no XP, PvE as
+    configured); a realm-held keep without a guild claim stays level 1, a
+    claim raises it, bot guilds of that realm claim automatically after a
+    capture; the siege-flow port (R4c) is done by the night session; open BG
+    portal-keep guards are hostile to other realms under RvR.

@@ -21,7 +21,7 @@ defaults in code, keep/relic start state from the reset.
 
 - [x] **R0 Spec.** `docs/superpowers/specs/2026-10-24-rvr-mode-design.md`
   (2026-10-25 00:15).
-- [ ] **R1a World marker + rules class.** `Realm-1` marker, startup accepts
+- [~] **R1a World marker + rules class.** Agent rvr-r1a (2026-10-25 00:20). `Realm-1` marker, startup accepts
   both, `RvrServerRules` selected at GameServer.cs:810, colour handling 0,
   dummy-guild trick off in RvR. 1 session.
 - [ ] **R1b Alliance core, client, GST_PvP audit.** Same realm = friend
