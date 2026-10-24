@@ -12,6 +12,23 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.310.1] - 2026-10-24
+
+### Added
+- Trials of Atlantis research: the gaheris OpenDAoC overlay (artifact system,
+  complete Master Level spell set, kill-XP Arbiter, Atlantis population SQL)
+  as a source that needs no DOL port; confirmation that ML trials are
+  implemented nowhere. Task 134 note updated.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.310.0] - 2026-10-23
 
 ### Changed

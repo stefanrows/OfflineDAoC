@@ -369,7 +369,11 @@ Agent sessions on items 45–48: take the role and context from
      research. Bots are not required in ToA; invent as little as possible and
      prefer simple mechanisms for missing pieces. Findings, sources, gaps and
      a suggested order in [TOA_RESEARCH.md](TOA_RESEARCH.md). Blocked on an
-     owner decision: CAMLANN.md decision 1 sets the era to pre-ToA.
+     owner decision: CAMLANN.md decision 1 sets the era to pre-ToA. 2026-10-24:
+     found [Pactor/gaheris](https://github.com/Pactor/gaheris), an OpenDAoC
+     overlay with the artifact system, all 80 Master Level abilities and a
+     kill-XP Arbiter already wired; ML trials exist nowhere. Licence is not a
+     concern (owner: private only).
 
 ## Implemented in source; installation verification pending
 
