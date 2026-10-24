@@ -254,47 +254,131 @@ namespace DOL.GS.Spells
     [SpellHandler(eSpellType.Loockout)]
     public class LoockoutSpellHandler : SpellHandler
     {
-        private GameLiving m_target;
+        /// <summary>How close the seated partner must be: beside the Spymaster.</summary>
+        public const int PartnerRange = 200;
+
+        /// <summary>The seated player chosen when the cast began.</summary>
+        public GamePlayer Partner { get; private set; }
+
+        /// <summary>Why <paramref name="partner"/> cannot be the seated partner, or null.</summary>
+        public static string PartnerProblem(GameLiving scout, GameLiving partner)
+        {
+            if (partner is not GamePlayer || partner == scout || scout == null)
+                return "You must target a seated member of your realm!";
+            if (!partner.IsAlive || partner.ObjectState != GameObject.eObjectState.Active)
+                return "Your target is dead!";
+            if (partner.Realm != scout.Realm)
+                return "You must target a seated member of your realm!";
+            if (!partner.IsSitting)
+                return "Target must be sitting!";
+            if (partner.CurrentRegionID != scout.CurrentRegionID || !scout.IsWithinRadius(partner, PartnerRange))
+                return "Your target must be sitting beside you!";
+            return null;
+        }
 
         public override bool CheckBeginCast(GameLiving selectedTarget)
         {
-            if (!(selectedTarget is GamePlayer)) return false;
-            if (!selectedTarget.IsSitting) { MessageToCaster("Target must be sitting!", eChatType.CT_System); return false; }
+            string problem = PartnerProblem(Caster, selectedTarget);
+            if (problem != null) { MessageToCaster(problem, eChatType.CT_System); return false; }
+            Partner = (GamePlayer)selectedTarget;
             return base.CheckBeginCast(selectedTarget);
         }
 
-        public override void OnEffectStart(GameSpellEffect effect)
+        // The legacy OnEffectStart(GameSpellEffect) is never reached: SpellHandler
+        // builds an ECS effect. The work and both watches live in LoockoutECSEffect.
+        public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams)
         {
-            m_target = effect.Owner as GamePlayer;
-            if (m_target == null) return;
-            if (!m_target.IsAlive || m_target.ObjectState != GameLiving.eObjectState.Active || !m_target.IsSitting) return;
-            Caster.BaseBuffBonusCategory[eProperty.Skill_Stealth] += 100;
-            GameEventMgr.AddHandler(m_target, GamePlayerEvent.Moving, new DOLEventHandler(PlayerAction));
-            GameEventMgr.AddHandler(Caster, GamePlayerEvent.Moving, new DOLEventHandler(PlayerAction));
-            new LoockoutOwner().Start(Caster);
-            base.OnEffectStart(effect);
+            return ECSGameEffectFactory.Create(initParams, static (in i) => new LoockoutECSEffect(i));
         }
 
-        public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
-        {
-            Caster.BaseBuffBonusCategory[eProperty.Skill_Stealth] -= 100;
-            GameEventMgr.RemoveHandler(Caster, GamePlayerEvent.Moving, new DOLEventHandler(PlayerAction));
-            GameEventMgr.RemoveHandler(m_target, GamePlayerEvent.Moving, new DOLEventHandler(PlayerAction));
-            return base.OnEffectExpires(effect, noMessages);
-        }
-
-        private void PlayerAction(DOLEvent e, object sender, EventArgs args)
-        {
-            GamePlayer player = (GamePlayer)sender;
-            if (player == null) return;
-            MessageToLiving((GameLiving)player, "You are moving. Your concentration fades!", eChatType.CT_SpellResisted);
-            GameSpellEffect effect = SpellHandler.FindEffectOnTarget(m_target, "Loockout");
-            if (effect != null) effect.Cancel(false);
-            IGameEffect effect2 = SpellHandler.FindStaticEffectOnTarget(Caster, typeof(LoockoutOwner));
-            if (effect2 != null) effect2.Cancel(false);
-            OnEffectExpires(effect, true);
-        }
         public LoockoutSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
+    }
+
+    /// <summary>
+    /// Lookout: the Spymaster keeps watch beside a seated player and gains 100
+    /// stealth skill. Either of the two moving ends it. Moving was announced
+    /// through an event nothing raises, so both are sampled by a MovementWatch.
+    /// </summary>
+    public class LoockoutECSEffect : ECSGameSpellEffect
+    {
+        public const int StealthBonus = 100;
+
+        private MovementWatch _sitterWatch;
+        private MovementWatch _scoutWatch;
+        private GameLiving _scout;
+        private bool _bonusGiven;
+
+        public LoockoutECSEffect(in ECSGameEffectInitParams initParams) : base(initParams) { }
+
+        public GamePlayer Sitter { get; private set; }
+        public MovementWatch SitterWatch => _sitterWatch;
+        public MovementWatch ScoutWatch => _scoutWatch;
+        public bool BonusGiven => _bonusGiven;
+
+        /// <summary>Why the hold asked to end (a MovementWatch reason), null while held.</summary>
+        public string EndReason { get; private set; }
+
+        public override void OnStartEffect()
+        {
+            base.OnStartEffect();
+
+            if (SpellHandler?.Caster is not GamePlayer scout)
+                return;
+
+            // The sitter is the effect owner; a self-targeted row falls back to the
+            // seated partner picked at cast start.
+            GamePlayer sitter = Owner as GamePlayer;
+
+            if (sitter == null || sitter == scout)
+                sitter = (SpellHandler as LoockoutSpellHandler)?.Partner ?? sitter;
+
+            if (LoockoutSpellHandler.PartnerProblem(scout, sitter) != null)
+            {
+                EndReason = MovementWatch.Gone;
+                End();
+                return;
+            }
+
+            Sitter = sitter;
+            _scout = scout;
+            scout.BaseBuffBonusCategory[eProperty.Skill_Stealth] += StealthBonus;
+            _bonusGiven = true;
+            new LoockoutOwner().Start(scout);
+
+            // The partner standing up ends the watch as surely as walking away.
+            _sitterWatch = new MovementWatch(sitter, why => Broken(sitter, why), onStand: true);
+            _sitterWatch.Start();
+            _scoutWatch = new MovementWatch(scout, why => Broken(scout, why));
+            _scoutWatch.Start();
+        }
+
+        public override void OnStopEffect()
+        {
+            base.OnStopEffect();
+
+            _sitterWatch?.Stop();
+            _scoutWatch?.Stop();
+            _sitterWatch = null;
+            _scoutWatch = null;
+
+            if (_bonusGiven && _scout != null)
+            {
+                _scout.BaseBuffBonusCategory[eProperty.Skill_Stealth] -= StealthBonus;
+                _bonusGiven = false;
+                DOL.GS.Spells.SpellHandler.FindStaticEffectOnTarget(_scout, typeof(LoockoutOwner))?.Cancel(false);
+            }
+        }
+
+        private void Broken(GameLiving who, string why)
+        {
+            if (why == MovementWatch.Moving && who is GamePlayer mover)
+                mover.Out.SendMessage("You are moving. Your concentration fades!", eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+            else if (why == MovementWatch.Standing && _scout is GamePlayer scout)
+                scout.Out.SendMessage(who.Name + " stands up. Your concentration fades!", eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+
+            EndReason ??= why;
+            End();
+        }
     }
     #endregion
 
@@ -403,82 +487,108 @@ namespace DOL.GS.Spells
         {
             public GroupstealthHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
 
-            private GameSpellEffect m_effect;
+            /// <summary>
+            /// Group stealth is a benefit for the group. MasterlevelHandling marks every
+            /// ML spell harmful, which made each cast "attack" every member it hid
+            /// (combat timers, speed buff cancels, companion assist).
+            /// </summary>
+            public override bool HasPositiveEffect => true;
 
             public override bool CheckBeginCast(GameLiving selectedTarget)
             {
                 if (selectedTarget == Caster) return false;
                 return base.CheckBeginCast(selectedTarget);
             }
-            public override void OnEffectStart(GameSpellEffect effect)
+
+            // The legacy OnEffectStart(GameSpellEffect) is never reached: SpellHandler
+            // builds one ECS effect per group member. Each member's effect carries its
+            // own watch, which also ends the old shared-m_effect bug where any member
+            // breaking stealth expired the effect of whoever was processed last.
+            public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams)
             {
-                base.OnEffectStart(effect);
-                m_effect = effect;
-                if (effect.Owner is GamePlayer)
-                {
-                    GamePlayer playerTarget = effect.Owner as GamePlayer;
-                    playerTarget.Stealth(true);
-                    if (effect.Owner != Caster)
-                    {
-                        //effect.Owner.BuffBonusCategory1[eProperty.Skill_Stealth] += 80;
-                        GameEventMgr.AddHandler(playerTarget, GamePlayerEvent.Moving, new DOLEventHandler(PlayerAction));
-                        GameEventMgr.AddHandler(playerTarget, GamePlayerEvent.AttackFinished, new DOLEventHandler(PlayerAction));
-                        GameEventMgr.AddHandler(playerTarget, GamePlayerEvent.CastStarting, new DOLEventHandler(PlayerAction));
-                        GameEventMgr.AddHandler(playerTarget, GamePlayerEvent.Dying, new DOLEventHandler(PlayerAction));
-                    }
-                }
+                return ECSGameEffectFactory.Create(initParams, static (in i) => new GroupstealthECSEffect(i));
+            }
+        }
+
+        /// <summary>
+        /// Blanket of Camouflage on one group member. A member without the Stealth
+        /// ability loses it on moving, attacking or casting; a stealther follows the
+        /// normal stealth rules ("unless they are a stealther", spell description).
+        /// </summary>
+        public class GroupstealthECSEffect : ECSGameSpellEffect
+        {
+            private MovementWatch _watch;
+            private GamePlayer _hidden;
+
+            public GroupstealthECSEffect(in ECSGameEffectInitParams initParams) : base(initParams) { }
+
+            /// <summary>The member is held by the Blanket's rules (not a stealther).</summary>
+            public bool Held => _hidden != null;
+            public MovementWatch Watch => _watch;
+
+            /// <summary>Why the hold asked to end (a MovementWatch reason), null while held.</summary>
+            public string EndReason { get; private set; }
+
+            public static bool FollowsNormalStealthRules(GamePlayer member)
+            {
+                return (member.GetSpecializationByName(Specs.Stealth)?.Level ?? 0) > 0;
             }
 
-            /// <summary>
-            /// When an applied effect expires.
-            /// Duration spells only.
-            /// </summary>
-            /// <param name="effect">The expired effect</param>
-            /// <param name="noMessages">true, when no messages should be sent to player and surrounding</param>
-            /// <returns>immunity duration in milliseconds</returns>
-            public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
+            public override void OnStartEffect()
             {
-                if (effect.Owner != Caster && effect.Owner is GamePlayer)
-                {
-                    //effect.Owner.BuffBonusCategory1[eProperty.Skill_Stealth] -= 80;
-                    GamePlayer playerTarget = effect.Owner as GamePlayer;
-                    GameEventMgr.RemoveHandler(playerTarget, GamePlayerEvent.AttackFinished, new DOLEventHandler(PlayerAction));
-                    GameEventMgr.RemoveHandler(playerTarget, GamePlayerEvent.CastStarting, new DOLEventHandler(PlayerAction));
-                    GameEventMgr.RemoveHandler(playerTarget, GamePlayerEvent.Moving, new DOLEventHandler(PlayerAction));
-                    GameEventMgr.RemoveHandler(playerTarget, GamePlayerEvent.Dying, new DOLEventHandler(PlayerAction));
-                    playerTarget.Stealth(false);
-                }
-                return base.OnEffectExpires(effect, noMessages);
+                base.OnStartEffect();
+
+                if (Owner is not GamePlayer member)
+                    return;
+
+                member.Stealth(true);
+
+                if (FollowsNormalStealthRules(member))
+                    return;
+
+                _hidden = member;
+                _watch = new MovementWatch(member, Broken,
+                    () =>
+                    {
+                        // Stealth lost some other way (refused, revealed, hit): end quietly.
+                        if (member.IsStealthed)
+                            return true;
+
+                        End();
+                        return false;
+                    },
+                    onMove: true, onAttack: true, onCast: true, ownCast: SpellHandler);
+                _watch.Start();
             }
-            private void PlayerAction(DOLEvent e, object sender, EventArgs args)
+
+            public override void OnStopEffect()
             {
-                GamePlayer player = (GamePlayer)sender;
-                if (player == null) return;
-                if (args is AttackFinishedEventArgs)
+                base.OnStopEffect();
+
+                _watch?.Stop();
+                _watch = null;
+
+                if (_hidden != null && _hidden.IsStealthed)
+                    _hidden.Stealth(false);
+
+                _hidden = null;
+            }
+
+            private void Broken(string why)
+            {
+                string text = why switch
                 {
-                    MessageToLiving((GameLiving)player, "You are attacking. Your camouflage fades!", eChatType.CT_SpellResisted);
-                    OnEffectExpires(m_effect, true);
-                    return;
-                }
-                if (args is DyingEventArgs)
-                {
-                    OnEffectExpires(m_effect, false);
-                    return;
-                }
-                if (args is CastingEventArgs)
-                {
-                    if ((args as CastingEventArgs).SpellHandler.Caster != Caster)
-                        return;
-                    MessageToLiving((GameLiving)player, "You are casting a spell. Your camouflage fades!", eChatType.CT_SpellResisted);
-                    OnEffectExpires(m_effect, true);
-                    return;
-                }
-                if (e == GamePlayerEvent.Moving)
-                {
-                    MessageToLiving((GameLiving)player, "You are moving. Your camouflage fades!", eChatType.CT_SpellResisted);
-                    OnEffectExpires(m_effect, true);
-                    return;
-                }
+                    MovementWatch.Moving => "You are moving. Your camouflage fades!",
+                    MovementWatch.Attacking => "You are attacking. Your camouflage fades!",
+                    MovementWatch.Casting => "You are casting a spell. Your camouflage fades!",
+                    _ => null
+                };
+
+                if (text != null)
+                    _hidden?.Out.SendMessage(text, eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+
+                EndReason ??= why;
+                End();
             }
         }
         #endregion

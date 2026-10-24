@@ -417,47 +417,66 @@ namespace DOL.GS.Spells
     [SpellHandler(eSpellType.FocusingWinds)]
     public class FocusingWindsSpellHandler : SpellHandler
     {
-        private GameSpellEffect m_effect;
         public override double CalculateSpellResistChance(GameLiving target)
         {
             return 0;
         }
-        public override void OnEffectStart(GameSpellEffect effect)
+
+        // The legacy OnEffectStart(GameSpellEffect) never ran, so no storm was ever
+        // locked: SpellHandler builds an ECS effect. FocusingWindsECSEffect locks the
+        // storm and releases it when the caster moves.
+        public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams)
         {
-            base.OnEffectStart(effect);
-            m_effect = effect;
-            if (effect.Owner is GameStorm)
-            {
-                GameStorm targetStorm = effect.Owner as GameStorm;
-                targetStorm.Movable = false;
-                MessageToCaster("Now the vortex of this storm is locked!", eChatType.CT_YouWereHit);
-                GameEventMgr.AddHandler(m_caster, GameLivingEvent.Moving, new DOLEventHandler(LivingMoves));
-            }
+            return ECSGameEffectFactory.Create(initParams, static (in i) => new FocusingWindsECSEffect(i));
         }
 
-        public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
-        {
-            if (effect.Owner is GameStorm)
-            {
-                GameStorm targetStorm = effect.Owner as GameStorm;
-                targetStorm.Movable = true;
-                GameEventMgr.RemoveHandler(m_caster, GameLivingEvent.Moving, new DOLEventHandler(LivingMoves));
-            }
-            return base.OnEffectExpires(effect, noMessages);
-        }
-
-        public void LivingMoves(DOLEvent e, object sender, EventArgs args)
-        {
-            GameLiving player = sender as GameLiving;
-            if (player == null) return;
-            if (e == GameLivingEvent.Moving)
-            {
-                MessageToCaster("You are moving. Your concentration fades", eChatType.CT_SpellExpires);
-                OnEffectExpires(m_effect, true);
-                return;
-            }
-        }
         public FocusingWindsSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
+    }
+
+    /// <summary>
+    /// Focusing Winds on a storm: the vortex stays where it is while the caster
+    /// stands still.
+    /// </summary>
+    public class FocusingWindsECSEffect : ECSGameSpellEffect
+    {
+        private MovementWatch _watch;
+
+        public FocusingWindsECSEffect(in ECSGameEffectInitParams initParams) : base(initParams) { }
+
+        public override void OnStartEffect()
+        {
+            base.OnStartEffect();
+
+            GameLiving caster = SpellHandler?.Caster;
+
+            if (Owner is not GameStorm storm || caster == null)
+                return;
+
+            storm.Movable = false;
+
+            if (caster is GamePlayer player)
+                player.Out.SendMessage("Now the vortex of this storm is locked!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
+
+            _watch = new MovementWatch(caster, why =>
+            {
+                if (why == MovementWatch.Moving && caster is GamePlayer mover)
+                    mover.Out.SendMessage("You are moving. Your concentration fades", eChatType.CT_SpellExpires, eChatLoc.CL_SystemWindow);
+
+                End();
+            });
+            _watch.Start();
+        }
+
+        public override void OnStopEffect()
+        {
+            base.OnStopEffect();
+
+            _watch?.Stop();
+            _watch = null;
+
+            if (Owner is GameStorm storm)
+                storm.Movable = true;
+        }
     }
     #endregion
 

@@ -2088,8 +2088,10 @@ namespace DOL.GS
 			LastAttackedByEnemyTickPvE = 0;
 			LastAttackedByEnemyTickPvP = 0;
 
-			//Let's send the notification at the end
-			Notify(GameLivingEvent.Dying, this, new DyingEventArgs(killer));
+			//Let's send the notification at the end. Global listeners (Master Level
+			//and artifact experience, encounter credit) need every player who earned
+			//the kill, the same set that got EnemyKilled above.
+			Notify(GameLivingEvent.Dying, this, new DyingEventArgs(killer, playerAttackers));
 		}
 
 		public void GainExperience(eXPSource xpSource, long exp, bool allowMultiply = false)

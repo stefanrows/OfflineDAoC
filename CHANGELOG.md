@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.315.0] - 2026-10-24
+
+### Added
+- Core hooks for Trials of Atlantis progression: the global Dying event now
+  carries every player who earned the kill (companion and pet owners
+  included), and `GainedExperience` is raised once per experience gain with
+  the pre-rate amounts (ToA plan WP2.0).
+- `MovementWatch`: a sampled move/attack/cast watch for held abilities.
+- Unit tests: UT_ToaCoreHooks, UT_MovementWatch, UT_MasterLevelHolds.
+
+### Changed
+- None.
+
+### Fixed
+- Four Master Level holds never worked on the ECS server and now do (ToA plan
+  WP2.3): Lookout (+100 stealth beside a seated same-realm partner within
+  200 units, ends when either moves or the sitter stands), Blanket of
+  Camouflage (one effect per member, counts as a beneficial spell so it no
+  longer sets combat timers on the own group; stealthers follow normal
+  stealth rules), Battlewarder (the warder is now actually planted at the
+  ground target; it never respawns and pays no XP or loot), Focusing Winds
+  (locks the storm until the caster moves). Castable once the ML spell rows
+  arrive with WP2.1; no real-client check yet.
+
+### Removed
+- None.
+
 ## [0.314.1] - 2026-10-24
 
 ### Added

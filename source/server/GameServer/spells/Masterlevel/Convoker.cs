@@ -275,8 +275,6 @@ namespace DOL.GS.Spells
 	[SpellHandler(eSpellType.Battlewarder)]
 	public class BattlewarderSpellHandler : SpellHandler
 	{
-		private GameNPC warder;
-		private GameSpellEffect m_effect;
 		/// <summary>
 		/// Execute battle warder summon spell
 		/// </summary>
@@ -290,80 +288,15 @@ namespace DOL.GS.Spells
 		{
 			return false;
 		}
-		public override void OnEffectStart(GameSpellEffect effect)
-		{
-			base.OnEffectStart(effect);
-			m_effect = effect;
-			if (effect.Owner == null || !effect.Owner.IsAlive)
-				return;
 
-			if ((effect.Owner is GamePlayer))
-			{
-				GamePlayer casterPlayer = effect.Owner as GamePlayer;
-				if (casterPlayer.GroundTarget.IsValid && casterPlayer.GroundTargetInView)
-				{
-					GameEventMgr.AddHandler(casterPlayer, GamePlayerEvent.Moving, new DOLEventHandler(PlayerMoves));
-					GameEventMgr.AddHandler(warder, GameLivingEvent.Dying, new DOLEventHandler(BattleWarderDie));
-					GameEventMgr.AddHandler(casterPlayer, GamePlayerEvent.CastStarting, new DOLEventHandler(PlayerMoves));
-					GameEventMgr.AddHandler(casterPlayer, GamePlayerEvent.AttackFinished, new DOLEventHandler(PlayerMoves));
-					warder.X = casterPlayer.GroundTarget.X;
-					warder.Y = casterPlayer.GroundTarget.Y;
-					warder.Z = casterPlayer.GroundTarget.Z;
-					warder.AddBrain(new MLBrain());
-					warder.AddToWorld();
-				}
-				else
-				{
-					MessageToCaster("Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted);
-					effect.Cancel(false);
-				}
-			}
-		}
-		public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
+		// The legacy OnEffectStart(GameSpellEffect) never ran, so no warder was ever
+		// planted: SpellHandler builds an ECS effect. BattlewarderECSEffect plants the
+		// warder and dismisses it when the caster moves, attacks or casts.
+		public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams)
 		{
-			if (warder != null)
-			{
-				GameEventMgr.RemoveHandler(warder, GameLivingEvent.Dying, new DOLEventHandler(BattleWarderDie));
-				warder.RemoveBrain(warder.Brain);
-				warder.Health = 0;
-				warder.Delete();
-			}
-			if ((effect.Owner is GamePlayer))
-			{
-				GamePlayer casterPlayer = effect.Owner as GamePlayer;
-				GameEventMgr.RemoveHandler(casterPlayer, GamePlayerEvent.Moving, new DOLEventHandler(PlayerMoves));
-				GameEventMgr.RemoveHandler(casterPlayer, GamePlayerEvent.CastStarting, new DOLEventHandler(PlayerMoves));
-				GameEventMgr.RemoveHandler(casterPlayer, GamePlayerEvent.AttackFinished, new DOLEventHandler(PlayerMoves));
-			}
-			effect.Owner.EffectList.Remove(effect);
-			return base.OnEffectExpires(effect, noMessages);
+			return ECSGameEffectFactory.Create(initParams, static (in i) => new BattlewarderECSEffect(i));
 		}
 
-		// Event : player moves, lose focus
-		public void PlayerMoves(DOLEvent e, object sender, EventArgs args)
-		{
-			GameLiving player = sender as GameLiving;
-			if (player == null) return;
-			if (e == GamePlayerEvent.Moving)
-			{
-				MessageToCaster("Your concentration fades", eChatType.CT_SpellExpires);
-				OnEffectExpires(m_effect, true);
-				return;
-			}
-		}
-
-		// Event : Battle warder has died
-		private void BattleWarderDie(DOLEvent e, object sender, EventArgs args)
-		{
-			GameNPC kWarder = sender as GameNPC;
-			if (kWarder == null) return;
-			if (e == GameLivingEvent.Dying)
-			{
-				MessageToCaster("Your Battle Warder has fallen!", eChatType.CT_SpellExpires);
-				OnEffectExpires(m_effect, true);
-				return;
-			}
-		}
 		public override bool CheckBeginCast(GameLiving selectedTarget)
 		{
 			if (!base.CheckBeginCast(selectedTarget)) return false;
@@ -376,20 +309,134 @@ namespace DOL.GS.Spells
 
 		}
 		public BattlewarderSpellHandler(GameLiving caster, Spell spell, SpellLine line)
-			: base(caster, spell, line)
+			: base(caster, spell, line) { }
+	}
+
+	/// <summary>
+	/// Battlewarder: a warder at the caster's ground target that cannot move and
+	/// fights for the caster while the caster holds still.
+	/// </summary>
+	public class BattlewarderECSEffect : ECSGameSpellEffect
+	{
+		public const string WarderFallen = "fallen";
+
+		private GameNPC _warder;
+		private MovementWatch _watch;
+
+		public BattlewarderECSEffect(in ECSGameEffectInitParams initParams) : base(initParams) { }
+
+		public GameNPC Warder => _warder;
+		public MovementWatch Watch => _watch;
+
+		/// <summary>Why the hold asked to end (a MovementWatch reason or "fallen"), null while held.</summary>
+		public string EndReason { get; private set; }
+
+		/// <summary>Puts the warder into the world; tests replace it.</summary>
+		protected virtual bool PlantWarder(GameNPC warder)
 		{
-			warder = new GameNPC();
-			//Fill the object variables
-			warder.CurrentRegion = caster.CurrentRegion;
-			warder.Heading = (ushort)((caster.Heading + 2048) % 4096);
-			warder.Level = 70;
-			warder.Realm = caster.Realm;
-			warder.Name = "Battle Warder";
-			warder.Model = 993;
-			warder.MaxSpeedBase = 0;
-			warder.GuildName = string.Empty;
-			warder.Size = 50;
+			return warder.AddToWorld();
 		}
+
+		public override void OnStartEffect()
+		{
+			base.OnStartEffect();
+
+			if (SpellHandler?.Caster is not GamePlayer caster || !caster.IsAlive)
+				return;
+
+			if (!caster.GroundTarget.IsValid || !caster.GroundTargetInView)
+			{
+				caster.Out.SendMessage("Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+				End();
+				return;
+			}
+
+			_warder = new BattleWarderNpc
+			{
+				CurrentRegion = caster.CurrentRegion,
+				Heading = (ushort)((caster.Heading + 2048) % 4096),
+				Level = 70,
+				Realm = caster.Realm,
+				Name = "Battle Warder",
+				Model = 993,
+				MaxSpeedBase = 0,
+				GuildName = string.Empty,
+				Size = 50,
+				X = caster.GroundTarget.X,
+				Y = caster.GroundTarget.Y,
+				Z = caster.GroundTarget.Z,
+			};
+			_warder.AddBrain(new MLBrain());
+
+			if (!PlantWarder(_warder))
+			{
+				_warder = null;
+				caster.Out.SendMessage("Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+				End();
+				return;
+			}
+
+			GameEventMgr.AddHandler(_warder, GameLivingEvent.Dying, new DOLEventHandler(WarderFell));
+
+			_watch = new MovementWatch(caster, why =>
+			{
+				if (why != MovementWatch.Gone)
+					caster.Out.SendMessage("Your concentration fades", eChatType.CT_SpellExpires, eChatLoc.CL_SystemWindow);
+
+				EndReason ??= why;
+				End();
+			},
+			onMove: true, onAttack: true, onCast: true, ownCast: SpellHandler);
+			_watch.Start();
+		}
+
+		public override void OnStopEffect()
+		{
+			base.OnStopEffect();
+
+			_watch?.Stop();
+			_watch = null;
+
+			GameNPC warder = _warder;
+			_warder = null;
+
+			if (warder != null)
+			{
+				GameEventMgr.RemoveHandler(warder, GameLivingEvent.Dying, new DOLEventHandler(WarderFell));
+				warder.Delete();
+			}
+		}
+
+		// Dying is still raised, so the warder's death can be listened for.
+		private void WarderFell(DOLEvent e, object sender, EventArgs args)
+		{
+			if (SpellHandler?.Caster is GamePlayer caster)
+				caster.Out.SendMessage("Your Battle Warder has fallen!", eChatType.CT_SpellExpires, eChatLoc.CL_SystemWindow);
+
+			EndReason ??= WarderFallen;
+			End();
+		}
+	}
+
+	/// <summary>
+	/// The Battle Warder body. It exists only while its effect holds: it never
+	/// respawns (a plain realm GameNPC would come back ownerless after 5-10
+	/// minutes, aggressive and without an effect to remove it), and killing it
+	/// pays no experience, realm points or loot.
+	/// </summary>
+	public class BattleWarderNpc : GameNPC
+	{
+		public override int RespawnInterval
+		{
+			get => -1;
+			set { }
+		}
+
+		public override RewardEligibility RewardStatus => RewardEligibility.DeniedInvalid;
+
+		public override bool CanDropLoot => false;
+
+		public override void StartRespawn() { }
 	}
 	#endregion
 

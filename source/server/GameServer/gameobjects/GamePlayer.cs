@@ -4382,6 +4382,12 @@ namespace DOL.GS
             }
 
             Out.SendUpdatePoints();
+
+            // Listeners (artifact experience) get the arguments as passed in, before
+            // server XP rates and zone bonuses, so their own rates stay independent.
+            // The zone bonus re-entry above passes notify=false and is not reported twice.
+            if (notify && expTotal > 0)
+                Notify(GamePlayerEvent.GainedExperience, this, arguments);
         }
 
         /// <summary>

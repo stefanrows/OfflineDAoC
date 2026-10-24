@@ -93,6 +93,12 @@ namespace DOL.Events
 		public static readonly GameLivingEvent GainedRealmPoints = new GameLivingEvent("GameLiving.GainedRealmPoints");
 		public static readonly GameLivingEvent GainedBountyPoints = new GameLivingEvent("GameLiving.GainedBountyPoints");
 		/// <summary>
+		/// The GainedExperience event is fired after a player gained experience.
+		/// The arguments are the GainedExperienceEventArgs passed in, before
+		/// server XP rates and zone bonuses.
+		/// </summary>
+		public static readonly GameLivingEvent GainedExperience = new GameLivingEvent("GameLiving.GainedExperience");
+		/// <summary>
 		/// The Dying event is fired just before the living died
 		/// </summary>
 		public static readonly GameLivingEvent Dying = new GameLivingEvent("GameLiving.Dying");

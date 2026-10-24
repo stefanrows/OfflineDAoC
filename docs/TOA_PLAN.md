@@ -49,7 +49,9 @@ agent or session that finishes a package updates its row and the log below.
 
 ### Phase 1: Atlantis exists
 
-- [ ] **WP1.1 Atlantis population.** Ship a DB migration that loads files
+- [~] **WP1.1 Atlantis population.** Split 2026-10-24: WP1.1a data-pack
+  mechanism + gaheris packs (agent toa-datapack, with WP2.1); WP1.1b
+  db-public dungeon mobs as a pack (agent toa-dungeons). Ship a DB migration that loads files
   13, 14, 29, 36 (mobs, travel, zone points, scroll binders) into the player's
   save at deploy/first start; files 28/35 follow with their NPC classes. Add
   the db-public ToA dungeon mobs (Cetus' Pit, Sobekite Eternal, Temple of
@@ -67,21 +69,24 @@ agent or session that finishes a package updates its row and the log below.
 
 ### Phase 2: Master Levels
 
-- [~] **WP2.0 Core hooks.** Implemented in source (worktree toa-core,
-  2026-10-24, 4 tests): Dying carries all player attackers; `GainExperience`
-  raises `GainedExperience` with the pre-rate arguments. In review, then merge.
-- [ ] **WP2.1 ML data.** The 80 ML spells, eight lines, class paths
-  (gaheris 12/39/42/43) in our DB; `/train` shows the paths. Depends on WP0.3.
+- [x] **WP2.0 Core hooks.** (0.315.0) Dying carries all player attackers;
+  `GainExperience` raises `GainedExperience` with the pre-rate arguments (fires
+  for every positive gain incl. quests/praying: listeners filter on XPSource).
+- [~] **WP2.1 ML data.** The 73 ML spells gaheris has, eight lines, class
+  paths (gaheris 12/39/42/43) as a data pack; `/train` shows the paths; the 7
+  missing ranks listed for a follow-up. Agent toa-datapack (2026-10-24).
 - [ ] **WP2.2 ML progression.** gaheris Arbiter (group enrolment, discipline
   choice, respec via Demyphon) and `MasterLevelExperience` (level 45+ kills,
   `ml_xp_per_level`) adapted to our server; owner rule: no Atlantis
   restriction. Depends on WP0.2.
-- [~] **WP2.3 ML ability fixes.** Implemented in source (worktree toa-core,
-  2026-10-24, 15 tests): `MovementWatch` in gameutils; Lookout, Blanket of
-  Camouflage (own effect per member, now a positive spell, stealthers follow
-  normal rules), Battlewarder (warder now actually planted), Focusing Winds
-  as ECS effects that end on move/attack/cast. Forceful Zephyr / Phaseshift
-  untouched. In review, then merge; castable only after WP2.1 data.
+- [x] **WP2.3 ML ability fixes.** (0.315.0, real-client check pending with
+  WP2.1 data) `MovementWatch` in gameutils; Lookout (partner same realm,
+  sitting, within 200 units; ends when either moves or the sitter stands),
+  Blanket of Camouflage (own effect per member, positive spell, stealthers
+  follow normal rules), Battlewarder (`BattleWarderNpc`, no respawn, no
+  reward), Focusing Winds as ECS effects that end on move/attack/cast.
+  Forceful Zephyr / Phaseshift untouched. Open for WP2.4: Blanket hides
+  only players, companions stay visible.
 - [ ] **WP2.5 ML trial texts (optional, later).** Our tree holds 90 ML step
   texts (ML1-9 x 10 steps); DOLSharp has one scripted step (Ianetor ML1.1,
   980 lines, no credit wiring). Only if the owner wants named steps on top of
@@ -91,9 +96,16 @@ agent or session that finishes a package updates its row and the log below.
 
 ### Phase 3: Artifacts
 
-- [~] **WP3.0 Artifact spell handlers.** Port the 30 handlers in
-  OpenDAoC-Core `GameServer/spells/Artifacts` (our tree has only the
-  eSpellType values). Agent toa-artispells (2026-10-24).
+- [~] **WP3.0 Artifact spell handlers.** Implemented in source (worktree
+  toa-artifact-spells, 2026-10-24, 8 tests): all 43 artifact spell types have
+  one handler, bridged into our ECS (upstream's were legacy-hook dead code);
+  `docs/TOA_ARTIFACT_SPELLS.md`. Awaiting rebase + review. Follow-ups: pack
+  gaheris `90-spells.sql` (68 of the 73 missing artifact spell IDs, moved to
+  WP2.1); 5 spell IDs exist nowhere (7206, 13135, 30115, 30125, 32223) and 7
+  item spell types have no handler anywhere (ZoAura, ZahurAura, ZahurEnduProc,
+  CrocodileTearsProc, UnyeldingProc, YouthIllness, EternalPlant); two core
+  one-liners (Ceremonial Bracer mez intercept, Cloudsong fall damage) go to
+  WP3.1.
 - [ ] **WP3.1 Artifact core.** gaheris `ArtifactMgr` (+ an `Init` caller),
   `InventoryArtifact` (+ stat refresh), `ArtifactCompat` adapted; artifact
   item templates get `ClassType` InventoryArtifact by SQL, otherwise they
@@ -136,6 +148,12 @@ agent or session that finishes a package updates its row and the log below.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24: WP2.0 + WP2.3 reviewed (one Battlewarder respawn defect fixed)
+  and merged as 0.315.0.
+- 2026-10-24: WP3.0 built and tested by toa-artispells; WP2.0/2.3 review
+  found a Battlewarder respawn defect, fix in progress.
+- 2026-10-24: WP1.1a/WP2.1 (data-pack mechanism, gaheris packs) and WP1.1b
+  (db-public dungeon mobs) started as agents.
 - 2026-10-24: WP0.3 done (toa-import): converter + probe under `tools/toa/`,
   everything loads; WP1.1 scope widened to the dungeon import and a shipped
   migration.
