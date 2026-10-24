@@ -136,7 +136,9 @@ fit with this codebase.
 
 These are settled. Do not reopen them without the owner.
 
-1. **Era:** 1.65 Old Frontiers, pre-ToA (above).
+1. **Era:** 1.65 Old Frontiers for RvR rules (above). Amended 2026-10-24: ToA
+   content (Atlantis zones, artifacts, Master Levels, ToA items) is added on top;
+   plan in [TOA_PLAN.md](TOA_PLAN.md).
 2. **Player guild:** the player founds their own guild. No 8-player founding
    requirement. As of 2026-09-29, Camlann keep claims have no group-size
    requirement either; a ranked guild member can claim alone after defeating
@@ -474,7 +476,7 @@ portal-keep guards stay passive, the measured pace stays.
 - Public multiplayer or internet exposure of the local server
 - Native client patches beyond the existing raid/bot-map builders
 - Replacing texture atlases, meshes, or skeletons
-- New Frontiers, ToA zones/items/Master Levels, `/level` shortcuts
+- New Frontiers, `/level` shortcuts (ToA moved to goals on 2026-10-24, see TOA_PLAN.md)
 - Recreating GOA infrastructure, language clusters, or live Camlann population
 - Executing historical scripts in `source/server/tools` just because they exist
 

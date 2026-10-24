@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.310.2] - 2026-10-24
+
+### Added
+- `docs/TOA_PLAN.md`: the Trials of Atlantis to-do list (phases 0-4) after the
+  owner decided to build all ToA content we can on top of the 1.65 world.
+
+### Changed
+- CAMLANN.md era decision amended: ToA content is a goal, RvR rules stay
+  Old Frontiers. Task 134 points to the plan.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.310.1] - 2026-10-24
 
 ### Added

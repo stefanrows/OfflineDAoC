@@ -373,7 +373,8 @@ Agent sessions on items 45–48: take the role and context from
      found [Pactor/gaheris](https://github.com/Pactor/gaheris), an OpenDAoC
      overlay with the artifact system, all 80 Master Level abilities and a
      kill-XP Arbiter already wired; ML trials exist nowhere. Licence is not a
-     concern (owner: private only).
+     concern (owner: private only). **Decision 2026-10-24: build all of ToA we
+     can, ML XP from any level 45+ mob.** Work list: [TOA_PLAN.md](TOA_PLAN.md).
 
 ## Implemented in source; installation verification pending
 
