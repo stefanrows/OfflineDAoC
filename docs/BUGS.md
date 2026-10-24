@@ -6,6 +6,16 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+177. **Player gets stuck in Atlantis zones.** Owner report 2026-10-25 ~00:50 on
+     0.327.0, Midgard copy (region 30): while walking through several ToA
+     zones the character repeatedly stuck in place, could still move a little
+     left/right but not away. Checked: Zones rows (WaterLevel, DivingFlag,
+     IsLava) identical to upstream 0.37b; no position, speed or zone warnings
+     in server.log; no arena pull NPC in region 30. Suspected client-side
+     terrain collision at sea-floor slopes / water edges (ToA geometry). Needs
+     zone name and `/loc` of a spot and a cross-check on the upstream install
+     at the same spot. Open.
+
 175. **Bot brains crash and the bot is removed from the world (14 "Critical
      error" removals in one evening).** Seen 2026-10-24 18:20-22:02 on the
      owner's install at 0.322.0 (`server.log`), none of them in ToA code. Each
