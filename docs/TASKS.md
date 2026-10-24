@@ -440,6 +440,11 @@ Agent sessions on items 45–48: take the role and context from
      used by the AI, Blanket of Camouflage hides companions): implemented in
      source, real-client check pending
      ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
+     WP3.3, encounter credit from kills: killing an artifact's guardian (61
+     named creatures for all 57 artifacts, packs 070/071 with six new spawns)
+     gives the group or battlegroup its encounter credit, once per character;
+     implemented in source, real-client check pending
+     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Encounter credit").
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

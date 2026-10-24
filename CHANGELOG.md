@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.326.0] - 2026-10-24
+
+### Added
+- Artifact encounter credit from kills (ToA plan WP3.3): each of the 57
+  artifacts has one or more guardian creatures in Atlantis; killing one
+  (reward-eligible) grants the encounter credit to the group or, for raid
+  encounters, the battlegroup members alive and in experience range, once per
+  character. Six guardians that had no spawn (Battler, Snatcher, Linos,
+  Sobekhotep, Malamis, a wavelord) now stand in all three realm copies. The
+  scholar names guardian and zone when the credit is missing. Data packs 070
+  (mapping) and 071 (spawns); table `ArtifactEncounterTarget`. Unit tests
+  UT_ArtifactEncounterCredit (9). Aphaestia's tokens remain as the alternative.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.325.0] - 2026-10-24
 
 ### Added

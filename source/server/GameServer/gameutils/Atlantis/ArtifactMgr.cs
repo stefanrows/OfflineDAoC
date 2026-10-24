@@ -139,6 +139,9 @@ namespace DOL.GS
 
 			GameEventMgr.RemoveHandler(GamePlayerEvent.GainedExperience, new DOLEventHandler(PlayerGainedExperience));
 			GameEventMgr.AddHandler(GamePlayerEvent.GainedExperience, new DOLEventHandler(PlayerGainedExperience));
+
+			// Encounter credit from kills (WP3.3): needs the catalog above for its warnings.
+			ArtifactEncounterCredit.Init();
 			return true;
 		}
 

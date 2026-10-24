@@ -187,10 +187,18 @@ agent or session that finishes a package updates its row and the log below.
   ported: version swap (ArtifactTurnInQuest). Goddess Necklace has no
   Artifact row and stays unreachable.
 - [x] **WP3.2 Scrolls and turn-in.** folded into WP3.1b (0.324.0); turn-in/version swap not ported.
-- [ ] **WP3.3 Encounters.** Credit per artifact from DOLSharp's per-artifact
-  quests (38 of 62 name the target, 27 named mobs; 21 already stand in the
-  gaheris spawns, 6 need spawns: Battler, Snatcher, Linos, Sobekhotep,
-  Malamis, wavelord); gaheris encounter mobs for the rest. Depends on WP3.2.
+- [x] **WP3.3 Encounters.** (0.326.0, real-client check pending;
+  `docs/TOA_ARTIFACTS.md` "Encounter credit") Every one of the 57 artifacts
+  has a guardian kill: table ArtifactEncounterTarget (artifact → creature,
+  zone, group|battlegroup credit; pack 070, 61 rows: 29 DOLSharp, 12
+  Herald/KB, 16 chosen by region), 6 missing guardians spawned in all three
+  realm copies (pack 071: Battler, Snatcher, Linos, Sobekhotep, Malamis,
+  wavelord, level 65, 30 min respawn). Reward-eligible kill → credit to the
+  group (or battlegroup) earners alive and in XP range, once per character;
+  bots never earn. The scholar names guardian and zone when credit is
+  missing; chat line on credit. Not built: live set-piece mechanics (chest,
+  flask run, gladiator rounds), every encounter is a kill; the 6 spawns
+  stand at camp midpoints (floor/underwater placement needs the client).
 - [x] **WP3.4 Texts.** scholar texts done in WP3.1b (0.324.0); remaining placeholders only in unused columns.
 - [ ] **WP4.1 Real-client check** of travel, Arbiter, one artifact end to end,
   one ML gained. Owner.
@@ -252,12 +260,19 @@ a real defect in every package; keep the review step.
 
 ## Log
 
+- 2026-10-24: WP3.3 implemented by toa-encounters (worktree `toa-encounters`):
+  table ArtifactEncounterTarget, kill credit for group or battlegroup, packs
+  070 (61 targets, all 57 artifacts) and 071 (Battler, Snatcher, Linos,
+  Sobekhotep, Malamis, wavelord in 30/73/130); gaheris encounter mob classes
+  not ported (no row uses them); suite on 0.325.0 4,443 passed, 7 failed (bug 160), 3 skipped.
 - 2026-10-24: WP3.1b implemented by toa-scholars (worktree `toa-scholars`):
   scholars, Artifact Scholars, Aphaestia, scroll combining, packs 051/052/061;
   review fixes (book rebuilt from a page template on abort, one token at a time,
   no unusable version offered); on main 0.323.0 the full suite has 4,394 passed,
   7 failed (bug 160), 3 skipped.
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 21:10: WP3.3 reviewed (zone in hints, articles, battlegroup
+  lock, partial-coverage notice added) and merged as 0.326.0 (22 packs).
 - 2026-10-24 20:30: WP2.4 reviewed (Blanket stealth hold, companion earner
   rule, Martyr cost fixed) and merged as 0.325.0.
 - 2026-10-24 20:10: WP3.1b reviewed (book-loss on abort, token sales, class

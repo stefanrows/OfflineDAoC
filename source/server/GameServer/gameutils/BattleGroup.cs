@@ -128,6 +128,15 @@ namespace DOL.GS
             }
         }
 
+        /// <summary>A copy of the player members, taken under the members lock (companions are not members).</summary>
+        public List<GamePlayer> GetPlayerMembers()
+        {
+            lock (_battlegroupMembersLock)
+            {
+                return m_battlegroupMembers.Keys.OfType<GamePlayer>().ToList();
+            }
+        }
+
         public bool GetBGLootType()
         {
             return battlegroupLootType;
