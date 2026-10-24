@@ -21,7 +21,7 @@ defaults in code, keep/relic start state from the reset.
 
 - [x] **R0 Spec.** `docs/superpowers/specs/2026-10-24-rvr-mode-design.md`
   (2026-10-25 00:15).
-- [~] **R1a World marker + rules class.** Agent rvr-r1a (2026-10-25 00:20). `Realm-1` marker, startup accepts
+- [~] **R1a World marker + rules class.** Implemented (worktree rvr-r1a, 74 focused tests), in review (2026-10-25 01:05). `Realm-1` marker, startup accepts
   both, `RvrServerRules` selected at GameServer.cs:810, colour handling 0,
   dummy-guild trick off in RvR. 1 session.
 - [ ] **R1b Alliance core, client, GST_PvP audit.** Same realm = friend
@@ -34,7 +34,7 @@ defaults in code, keep/relic start state from the reset.
 - [ ] **R3a Keeps.** Neutral Warden start, capture by realm sticks, claims by
   the keep's realm (solo guild ok), guards by owner realm. 1 session.
 - [ ] **R3b Relics.** Realm pads, realm-wide bonus, relic sieges. 1 session.
-- [ ] **R5a World reset + files.** Fresh RvR and fresh Camlann world routines,
+- [~] **R5a World reset + files.** Agent rvr-r5a (2026-10-25 01:05, in parallel to the R1a review). Fresh RvR and fresh Camlann world routines,
   per-world DB and side files, properties (today's rates). 1 session.
 - [ ] **R5b Launcher world picker.** RvR default, "PvP" button, reset per
   world, import guard, both worlds start/stop. 1 session. **Wipe + first RvR
@@ -69,3 +69,5 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   spec agent running; Majestic Will 1.68 started as a side package.
 - 2026-10-25 00:15: R0 spec done (12 sessions, GameType stays PvP with an
   RvrServerRules subclass); packages refined; R1a started.
+- 2026-10-25 01:05: R1a implemented and in review; R5a started in parallel so the
+  PvP button lands early; R1b follows the R1a merge.
