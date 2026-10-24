@@ -482,7 +482,7 @@ namespace DOL.UnitTests
                 "022-atlantis-zonepoints", "023-artifact-scroll-binders", "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix",
                 "026-toa-travel-realms", "027-toa-open-atlantis", "030-toa-dungeon-mobs", "031-toa-dungeon-templates", "040-toa-loot",
                 "041-toa-loot-caps", "050-artifact-item-classtype", "051-artifact-scroll-wiring", "052-artifact-version-fixes",
-                "061-toa-scholar-classes", "070-toa-encounter-targets", "071-toa-encounter-spawns",
+                "061-toa-scholar-classes", "070-toa-encounter-targets", "071-toa-encounter-spawns", "080-toa-era-ra-rows",
             }));
             Assert.That(applier.UnlistedFiles(manifest), Is.Empty);
             Assert.That(applier.GetStatus().Select(s => s.State), Is.All.EqualTo(WorldDataPackState.Pending),
@@ -500,7 +500,7 @@ namespace DOL.UnitTests
                          typeof(DbSpell), typeof(DbLineXSpell), typeof(DbClassXSpecialization), typeof(DbMob), typeof(DbTeleport),
                          typeof(DbZonePoint), typeof(DbItemTemplate), typeof(DbMerchantItem), typeof(DbNpcTemplate), typeof(DbNpcEquipment),
                          typeof(DbLootTemplate), typeof(DbMobXLootTemplate), typeof(DbArtifactXItem), typeof(DbServerProperty),
-                         typeof(DbArtifact), typeof(DbArtifactEncounterTarget),
+                         typeof(DbArtifact), typeof(DbArtifactEncounterTarget), typeof(DbClassXRealmAbility),
                      })
                 database.RegisterDataObject(table);
 
@@ -526,6 +526,8 @@ namespace DOL.UnitTests
             AssertMissingArtifactSpellRows();
             Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget"), Is.EqualTo(61), "070: the encounter targets");
             Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'toa-encounters'"), Is.EqualTo(18), "071: six spawns in three copies");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ClassXRealmAbility_Atlas"), Is.EqualTo(4), "080: the four ToA-era realm ability rows");
+            AssertToaEraRealmAbilityRows();
 
             WorldDataPackRun again = new WorldDataPackApplier($"Data Source={_db}", ShippedPackDirectory()).ApplyPending();
             Assert.That(again.AppliedCount, Is.Zero);
@@ -566,6 +568,8 @@ namespace DOL.UnitTests
             long zonePoints = Scalar("SELECT COUNT(*) FROM ZonePoint");
             string spell15001 = (string)ScalarObject("SELECT Name FROM Spell WHERE SpellID = 15001");
             long spells = Scalar("SELECT COUNT(*) FROM Spell");
+            long classRealmAbilities = Scalar("SELECT COUNT(*) FROM ClassXRealmAbility_Atlas");
+            long majesticWill = Scalar("SELECT COUNT(*) FROM ClassXRealmAbility_Atlas WHERE AbilityKey = 'AtlasOF_MajesticWill'");
             var stopwatch = Stopwatch.StartNew();
 
             // The live install's connection options (serverconfig.xml), so WAL and foreign keys match the real save.
@@ -691,6 +695,13 @@ namespace DOL.UnitTests
                                                  "('DOL.GS.Scholar', 'DOL.GS.ArtifactScholar', 'DOL.GS.ArtifactCreditMerchant')"))
                 Assert.That(typeof(GameServer).Assembly.GetType(classType), Is.Not.Null, classType + " resolves");
 
+            // Pack 080 (WP2.7, docs/TOA_RESEARCH.md "ToA-era realm abilities"): Bard Mastery of Concentration, Cleric Wild
+            // Power, Thane Mastery of Magery and Wild Power, and nothing else in the table.
+            Assert.That(Scalar("SELECT COUNT(*) FROM ClassXRealmAbility_Atlas") - classRealmAbilities, Is.EqualTo(If("080-toa-era-ra-rows", 4)));
+            AssertToaEraRealmAbilityRows();
+            Assert.That(Scalar("SELECT COUNT(*) FROM ClassXRealmAbility_Atlas WHERE AbilityKey = 'AtlasOF_MajesticWill'"),
+                Is.EqualTo(majesticWill), "080 leaves Majestic Will alone (owner decision pending)");
+
             // Packs 070 and 071 (WP3.3, docs/TOA_ARTIFACTS.md "Encounter credit"): every artifact has a kill credit,
             // and every creature named stands in all three realm copies of Atlantis (Albion 73, Midgard 30, Hibernia 130).
             Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactEncounterTarget"), Is.EqualTo(61));
@@ -736,7 +747,7 @@ namespace DOL.UnitTests
                          "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix", "027-toa-open-atlantis", "030-toa-dungeon-mobs",
                          "031-toa-dungeon-templates", "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
                          "051-artifact-scroll-wiring", "052-artifact-version-fixes", "061-toa-scholar-classes",
-                         "070-toa-encounter-targets", "071-toa-encounter-spawns",
+                         "070-toa-encounter-targets", "071-toa-encounter-spawns", "080-toa-era-ra-rows",
                      })
                 Assert.That(ExecuteCountingChanges(File.ReadAllText(Path.Combine(ShippedPackDirectory(), name + ".sql"))), Is.Zero,
                     name + " applied a second time");
@@ -747,6 +758,34 @@ namespace DOL.UnitTests
         #endregion
 
         #region Helpers
+
+        // Pack 080 (WP2.7): the four rows, and the abilities they name resolve to a handler class when the Ability rows
+        // exist (the empty server schema has none). SkillBase.LoadClassRealmAbilities reads the table at every boot.
+        private void AssertToaEraRealmAbilityRows()
+        {
+            Assert.That(Strings("SELECT CharClass || ':' || AbilityKey FROM ClassXRealmAbility_Atlas WHERE ClassXRealmAbility_Atlas_ID IN " +
+                                "('Bard1-toa-MasteryOfConcentration', 'Cleric1-toa-WildPower', 'Thane1-toa-MasteryOfMagery', 'Thane1-toa-WildPower') " +
+                                "ORDER BY CharClass, AbilityKey"),
+                Is.EqualTo(new[]
+                {
+                    $"{(int)eCharacterClass.Cleric}:AtlasOF_WildPower",
+                    $"{(int)eCharacterClass.Thane}:AtlasOF_MasteryOfMagery",
+                    $"{(int)eCharacterClass.Thane}:AtlasOF_WildPower",
+                    $"{(int)eCharacterClass.Bard}:AtlasOF_MasteryOfConcentration",
+                }));
+            Assert.That(Scalar("SELECT COUNT(*) FROM (SELECT CharClass, AbilityKey FROM ClassXRealmAbility_Atlas GROUP BY 1, 2 HAVING COUNT(*) > 1)"),
+                Is.Zero, "no class owns an ability twice");
+
+            if (Scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Ability'") == 0)
+                return;
+            foreach (string implementation in Strings("SELECT DISTINCT Implementation FROM Ability WHERE KeyName IN " +
+                                                      "('AtlasOF_MasteryOfConcentration', 'AtlasOF_WildPower', 'AtlasOF_MasteryOfMagery')"))
+                Assert.That(typeof(GameServer).Assembly.GetType(implementation, false, true), Is.Not.Null,
+                    implementation + " resolves (SkillBase.ResolveType ignores case; the Mastery of Concentration class is spelled ...Masteryof...)");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ClassXRealmAbility_Atlas c WHERE c.ClassXRealmAbility_Atlas_ID LIKE '%-toa-%' AND " +
+                               "NOT EXISTS (SELECT 1 FROM Ability a WHERE a.KeyName = c.AbilityKey)"),
+                Is.Zero, "every new row names an Ability row");
+        }
 
         // Pack 013 (WP3.0b, docs/TOA_ARTIFACT_SPELLS.md): the four artifact spells that exist nowhere, each with a
         // spell type that has a handler.

@@ -45,7 +45,9 @@ python3 -I tools/toa/convert_mysql_to_sqlite.py --src /mnt/c/OfflineDAoC-ext/gah
   `050-artifact-item-classtype.sql` (artifact templates load as
   `InventoryArtifact`), `070-toa-encounter-targets.sql` (artifact encounter
   credit targets) and `071-toa-encounter-spawns.sql` (the six missing
-  encounter creatures; both docs/TOA_ARTIFACTS.md "Encounter credit").
+  encounter creatures; both docs/TOA_ARTIFACTS.md "Encounter credit") and
+  `080-toa-era-ra-rows.sql` (four realm ability class rows of patch 1.68,
+  docs/TOA_RESEARCH.md "ToA-era realm abilities").
 - `test_build_data_packs.py`: unit tests for the pack builder.
 
 Pack build step, after converting (13 must be regenerated first, see above):

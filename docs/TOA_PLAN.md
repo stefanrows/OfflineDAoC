@@ -135,6 +135,13 @@ agent or session that finishes a package updates its row and the log below.
   they now pulse, expire and clean up; fonts reach every ally per pulse;
   hostile fonts hit enemies. Held for bots: Perfecter fonts, Brittle Guard,
   Decoy, Lookout, Blanket.
+- [x] **WP2.7 ToA-era realm abilities.** (0.330.0) Research: 1.65-1.69 added
+  no new RA wave; our Atlas OF set (101 keys, 69 handlers) is the ToA-era set
+  (TOA_RESEARCH.md "ToA-era realm abilities"). Shipped as pack 080: Bard
+  Mastery of Concentration, Cleric Wild Power, Thane Mastery of Magery and
+  Wild Power (class rows). Open: Majestic Will 1.68 rework (owner decision),
+  6 "check" items (RA resists as second tier, Brilliant Aura, Volcanic Pillar
+  radius, Soldier's Barricade, Vanish, Thornweed).
 - [ ] **WP2.5 ML trial texts (optional, later).** Our tree holds 90 ML step
   texts (ML1-9 x 10 steps); DOLSharp has one scripted step (Ianetor ML1.1,
   980 lines, no credit wiring). Only if the owner wants named steps on top of
@@ -279,6 +286,11 @@ a real defect in every package; keep the review step.
 
 ## Log
 
+- 2026-10-24: WP2.7 data rows built by toa-rarows (worktree `toa-ra-rows`, not
+  merged): pack 080 inserts 4 ClassXRealmAbility_Atlas rows (Bard Mastery of
+  Concentration, Cleric Wild Power, Thane Mastery of Magery and Wild Power);
+  4 rows on a repaired snapshot copy, second run 0; pack tests green; suite 7
+  failed as on main (bug 160). Majestic Will untouched.
 - 2026-10-24: WP2.6 implemented by toa-botcast (worktree `toa-botcast`, not
   merged): Convoker, Stormlord and Spymaster bots cast Battlewarder, Crystal
   Titan, traps, storms and Vacuum Vortex with a 1-3 s reaction delay, one
@@ -296,6 +308,8 @@ a real defect in every package; keep the review step.
   no unusable version offered); on main 0.323.0 the full suite has 4,394 passed,
   7 failed (bug 160), 3 skipped.
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 23:40: pack 080 (ToA-era RA class rows) merged as 0.330.0;
+  WP2.7 closed except the Majestic Will decision. RvR mode analysis committed.
 - 2026-10-24 23:15: WP2.6 reviewed (two font defects fixed) and merged as
   0.329.0 (Stefan shipped 0.328.0 at the same time). WP2.7 RA research done (our set = ToA-era set; 3 class rows as
   pack 080 in progress; Majestic Will 1.68 decision open). RvR-mode analysis

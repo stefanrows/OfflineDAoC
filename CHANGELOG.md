@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.330.0] - 2026-10-24
+
+### Added
+- Data pack 080: ToA-era realm ability rows (Bard Mastery of Concentration,
+  Cleric Wild Power, Thane Mastery of Magery and Wild Power), the only class
+  additions patches 1.65-1.69 made to the realm abilities we already run
+  (`docs/TOA_RESEARCH.md`, section "ToA-era realm abilities").
+- `docs/RVR_MODE_ANALYSIS.md`: options and a phased plan for a classic
+  realm-vs-realm mode in the fork (owner question of 2026-10-24).
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.329.0] - 2026-10-24
 
 ### Added

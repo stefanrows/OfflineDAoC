@@ -150,6 +150,12 @@ PACKS = [
      False,
      'The six encounter creatures no source spawns (Battler, Snatcher, Linos, Sobekhotep, Malamis, '
      'a wavelord), one in each realm copy of Atlantis.'),
+    # WP2.7 ToA-era realm abilities (docs/TOA_RESEARCH.md), hand-written.
+    ('080-toa-era-ra-rows',
+     ['080-toa-era-ra-rows.sql'],
+     False,
+     'Four ClassXRealmAbility_Atlas rows from patch 1.68: Bard Mastery of Concentration, Cleric Wild Power, '
+     'Thane Mastery of Magery and Wild Power.'),
 ]
 
 SOURCE_SHA = re.compile(r'^-- Source sha256: ([0-9a-f]{64})$', re.M)

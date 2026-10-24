@@ -6,6 +6,7 @@ import hashlib
 import json
 import pathlib
 import re
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -141,6 +142,36 @@ class BuildDataPacksTest(unittest.TestCase):
                 self.assertTrue(statement.strip().startswith(f'INSERT OR IGNORE INTO "{table}"'), statement[:80])
             ids = re.findall(r"VALUES \('([^']+)'", code)
             self.assertEqual(len(ids), len(set(ids)), name + ': row IDs are unique')
+
+    def test_toa_era_ra_rows_pack_is_guarded_and_idempotent(self):
+        text = (bdp.DEFAULT_SQL / '080-toa-era-ra-rows.sql').read_text(encoding='utf-8')
+        self.assertNotIn('\r', text)
+        code = '\n'.join(line for line in text.splitlines() if not line.startswith('--'))
+        self.assertIsNone(re.search(r'\b(DELETE|UPDATE|REPLACE)\b', code, re.I), 'insert only')
+        self.assertEqual(code.count('INSERT INTO ClassXRealmAbility_Atlas'), 4)
+        self.assertEqual(code.count('WHERE NOT EXISTS'), 4)
+        self.assertNotIn('MajesticWill', code, 'Majestic Will waits for the owner decision')
+        # Bard 48, Cleric 6, Thane 21 (eCharacterClass).
+        expected = {(48, 'AtlasOF_MasteryOfConcentration'), (6, 'AtlasOF_WildPower'),
+                    (21, 'AtlasOF_MasteryOfMagery'), (21, 'AtlasOF_WildPower')}
+
+        db = sqlite3.connect(':memory:')
+        db.execute('CREATE TABLE ClassXRealmAbility_Atlas (CharClass INT NOT NULL DEFAULT 0, '
+                   "AbilityKey TEXT NOT NULL DEFAULT '' COLLATE NOCASE, "
+                   "LastTimeRowUpdated DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00', "
+                   "ClassXRealmAbility_Atlas_ID VARCHAR(255) NOT NULL DEFAULT '' COLLATE NOCASE, "
+                   'PRIMARY KEY (ClassXRealmAbility_Atlas_ID))')
+        # A neighbour that must stay, and one of the four already present under another ID.
+        db.execute("INSERT INTO ClassXRealmAbility_Atlas VALUES (6, 'AtlasOF_MasteryOfConcentration', '2000-01-01 00:00:00', 'Cleric1-1-7')")
+        db.execute("INSERT INTO ClassXRealmAbility_Atlas VALUES (21, 'AtlasOF_WildPower', '2000-01-01 00:00:00', 'Thane-old-1')")
+        db.executescript(text)
+        rows = set(db.execute('SELECT CharClass, AbilityKey FROM ClassXRealmAbility_Atlas'))
+        self.assertEqual(rows - {(6, 'AtlasOF_MasteryOfConcentration')}, expected)
+        self.assertEqual(db.execute('SELECT COUNT(*) FROM ClassXRealmAbility_Atlas').fetchone()[0], 5,
+                         'an existing (class, ability) pair is not inserted twice')
+        before = db.total_changes
+        db.executescript(text)
+        self.assertEqual(db.total_changes, before, 'a second run changes nothing')
 
     def test_shipped_packs_match_the_converted_files(self):
         shipped = bdp.DEFAULT_OUT / 'manifest.json'

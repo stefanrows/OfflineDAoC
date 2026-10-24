@@ -273,6 +273,18 @@
           "gaherisSha256": null
         }
       ]
+    },
+    {
+      "name": "080-toa-era-ra-rows",
+      "file": "080-toa-era-ra-rows.sql",
+      "sha256": "febd104fb44e0d9704e0749163201387e880d0d24b22bd8bc056452ba161df83",
+      "description": "Four ClassXRealmAbility_Atlas rows from patch 1.68: Bard Mastery of Concentration, Cleric Wild Power, Thane Mastery of Magery and Wild Power.",
+      "sources": [
+        {
+          "file": "080-toa-era-ra-rows.sql",
+          "gaherisSha256": null
+        }
+      ]
     }
   ]
 }
