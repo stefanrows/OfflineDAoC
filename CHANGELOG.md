@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.333.0] - 2026-10-25
+
+### Added
+- None.
+
+### Changed
+- None.
+
+### Fixed
+- The launcher's TRIALS OF ATLANTIS settings block (0.327.0) was dropped from
+  MainForm.cs by the 0.328.0 branch merge while its model and tests stayed;
+  restored. Launcher tests 276/276 again.
+
+### Removed
+- None.
+
 ## [0.332.0] - 2026-10-25
 
 ### Added

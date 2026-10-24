@@ -84,3 +84,6 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   the reviewer's complete gap list (alliance core, battlegroups, enemy names
   hidden, GST_PvP audit); R5a running.
 - 2026-10-25 01:50: R1b implemented and in review; R2 started in parallel; R5a running.
+- 2026-10-25 02:00: usage limit reached mid-night. R1b in review, R2 and R5a
+  implemented/running. Launcher ToA block restored (0.333.0). The hourly
+  fallback job continues the package list after the reset.
