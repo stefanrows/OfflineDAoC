@@ -434,6 +434,12 @@ Agent sessions on items 45–48: take the role and context from
      Flask, Bruiser and Shield of Khaos on credit alone (packs 051, 052, 061).
      Implemented in source, real-client check pending
      ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Earning an artifact").
+     WP2.4, bots and Master Levels (companions enrol with their owner at the
+     Arbiter and earn from the same kills, world bots of level 40+ roll a
+     Master Level once, a few Warlord, Battlemaster and Perfecter abilities
+     used by the AI, Blanket of Camouflage hides companions): implemented in
+     source, real-client check pending
+     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

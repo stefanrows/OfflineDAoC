@@ -37,8 +37,9 @@ namespace DOL.GS
     /// order, so a career index could point at another discipline after a data reload.
     /// <see cref="NO_PATH"/> means "none chosen".</para>
     ///
-    /// Companions (GameBot) never earn Master Levels: the Dying event's PlayerKillers holds real
-    /// players only, and GameBot.LoadClassSpecializations skips every Master Level line.
+    /// Companions and autonomous world bots follow the same rules through BotMasterLevels
+    /// (WP2.4): the Arbiter enrols the companions in the group with their owner, world bots of
+    /// level 40+ roll a Master Level on load, and both are paid from the same kills.
     /// </summary>
     public static class MasterLevelProgression
     {
@@ -171,7 +172,8 @@ namespace DOL.GS
 
         /// <summary>
         /// Enrols the speaker and every group member within <see cref="ENROL_RADIUS"/> of the
-        /// Arbiter. Returns the players this changed. Companions are not players and are skipped.
+        /// Arbiter. Returns the players this changed. Companions in the group whose owner is now
+        /// enrolled join the trials too (BotMasterLevels.EnrolCompanions), with a discipline by role.
         /// </summary>
         public static List<GamePlayer> EnrolCompany(GamePlayer speaker, GameObject arbiter)
         {
@@ -198,6 +200,7 @@ namespace DOL.GS
                     enrolled.Add(mate);
             }
 
+            BotMasterLevels.EnrolCompanions(speaker, arbiter);
             return enrolled;
         }
 
@@ -404,6 +407,8 @@ namespace DOL.GS
                 paid.Add(player);
             }
 
+            // Companions of these players and the world bots that fought it, same amount.
+            BotMasterLevels.AwardKill(dead, death, earned);
             return paid;
         }
 

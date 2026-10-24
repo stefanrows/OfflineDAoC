@@ -514,11 +514,13 @@ namespace DOL.GS.Spells
         /// Blanket of Camouflage on one group member. A member without the Stealth
         /// ability loses it on moving, attacking or casting; a stealther follows the
         /// normal stealth rules ("unless they are a stealther", spell description).
+        /// Companions and other bots in the group are hidden exactly like players
+        /// (TOA_PLAN WP2.4); pets stay visible, as on live.
         /// </summary>
         public class GroupstealthECSEffect : ECSGameSpellEffect
         {
             private MovementWatch _watch;
-            private GamePlayer _hidden;
+            private GameLiving _hidden;
 
             public GroupstealthECSEffect(in ECSGameEffectInitParams initParams) : base(initParams) { }
 
@@ -529,17 +531,51 @@ namespace DOL.GS.Spells
             /// <summary>Why the hold asked to end (a MovementWatch reason), null while held.</summary>
             public string EndReason { get; private set; }
 
-            public static bool FollowsNormalStealthRules(GamePlayer member)
+            /// <summary>The members a Blanket hides: players and bots (companions, world bots), not pets.</summary>
+            public static bool CanHide(GameLiving member) => member is GamePlayer or GameBot;
+
+            public static bool FollowsNormalStealthRules(GameLiving member)
             {
-                return (member.GetSpecializationByName(Specs.Stealth)?.Level ?? 0) > 0;
+                Specialization stealth = member switch
+                {
+                    GamePlayer player => player.GetSpecializationByName(Specs.Stealth),
+                    GameBot bot => bot.GetSpecializationByName(Specs.Stealth),
+                    _ => null
+                };
+
+                return (stealth?.Level ?? 0) > 0;
+            }
+
+            /// <summary>
+            /// True while a stealthed living carries a Blanket, held or not. The bot brain asks
+            /// before it drops an idle bot's stealth, so a hidden companion stays hidden like a
+            /// player: a non-stealther until it moves or acts, a stealther under its own rules.
+            /// </summary>
+            public static bool Hides(GameLiving living) =>
+                living?.effectListComponent != null && Hides(living.IsStealthed, living.effectListComponent.GetSpellEffects());
+
+            public static bool Hides(bool stealthed, IEnumerable<ECSGameSpellEffect> effects)
+            {
+                if (!stealthed || effects == null)
+                    return false;
+
+                foreach (ECSGameSpellEffect effect in effects)
+                {
+                    if (effect is GroupstealthECSEffect)
+                        return true;
+                }
+
+                return false;
             }
 
             public override void OnStartEffect()
             {
                 base.OnStartEffect();
 
-                if (Owner is not GamePlayer member)
+                if (!CanHide(Owner))
                     return;
+
+                GameLiving member = Owner;
 
                 member.Stealth(true);
 
@@ -585,7 +621,7 @@ namespace DOL.GS.Spells
                 };
 
                 if (text != null)
-                    _hidden?.Out.SendMessage(text, eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+                    (_hidden as GamePlayer)?.Out?.SendMessage(text, eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
 
                 EndReason ??= why;
                 End();

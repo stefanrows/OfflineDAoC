@@ -56,6 +56,12 @@ namespace DOL.GS.Spells
                             if (GameServer.ServerRules.IsAllowedToAttack(caster, player, true))
                                 list.Add(player);
                         }
+
+                        foreach (GameNPC npc in WorldMgr.GetNPCsCloseToSpot(caster.CurrentRegionID, caster.GroundTarget, (ushort) spell.Radius))
+                        {
+                            if (npc is GameBot bot && GameServer.ServerRules.IsAllowedToAttack(caster, bot, true))
+                                list.Add(bot);
+                        }
                     }
 
                     break;
@@ -77,7 +83,7 @@ namespace DOL.GS.Spells
                     if (spell.Radius > 0)
                     {
                         target = caster;
-                        foreach (GamePlayer player in target.GetPlayersInRadius((ushort) spell.Radius))
+                        foreach (GameLiving player in PlayersAndBotsAround(target, (ushort) spell.Radius))
                         {
                             if (GameServer.ServerRules.IsAllowedToAttack(caster, player, true))
                                 list.Add(player);
@@ -98,7 +104,7 @@ namespace DOL.GS.Spells
                         if (target == null || spell.Range == 0)
                             target = caster;
 
-                        foreach (GamePlayer player in target.GetPlayersInRadius((ushort) spell.Radius))
+                        foreach (GameLiving player in PlayersAndBotsAround(target, (ushort) spell.Radius))
                         {
                             if (GameServer.ServerRules.IsAllowedToAttack(caster, player, true) == false)
                                 list.Add(player);
@@ -119,7 +125,7 @@ namespace DOL.GS.Spells
                         if (target == null || spell.Range == 0)
                             target = caster;
 
-                        foreach (GamePlayer player in target.GetPlayersInRadius((ushort) spell.Radius))
+                        foreach (GameLiving player in PlayersAndBotsAround(target, (ushort) spell.Radius))
                         {
                             if (GameServer.ServerRules.IsAllowedToAttack(caster, player, true) == false)
                                 list.Add(player);
@@ -172,6 +178,25 @@ namespace DOL.GS.Spells
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// Players and bots (companions, autonomous world bots) around a point. Bots stand in
+        /// for players everywhere else in this fork (realm points, kill credit, Blanket of
+        /// Camouflage), so Master Level areas take them too (TOA_PLAN WP2.4): a Warlord's battle
+        /// cry reaches the companions beside him, a Banelord's pulse the enemy realm's bots.
+        /// Pets and ordinary NPCs stay out, as before.
+        /// </summary>
+        public static IEnumerable<GameLiving> PlayersAndBotsAround(GameObject center, ushort radius)
+        {
+            foreach (GamePlayer player in center.GetPlayersInRadius(radius))
+                yield return player;
+
+            foreach (GameNPC npc in center.GetNPCsInRadius(radius))
+            {
+                if (npc is GameBot bot)
+                    yield return bot;
+            }
         }
 
         /// <summary>

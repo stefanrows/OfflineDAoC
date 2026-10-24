@@ -1015,4 +1015,11 @@ public sealed class OfflineWorldBotRecord : DataObject
     [DataElement(AllowDbNull = false)] public int KillsMidgardSolo { get; set; }
     [DataElement(AllowDbNull = false)] public int KillsHiberniaSolo { get; set; }
     [DataElement(AllowDbNull = false)] public int DeathsPvP { get; set; }
+    // Additive Master Level progression (TOA_PLAN WP2.4), added by the schema reconciler like
+    // the columns above. A bot of level 40 or higher with no discipline rolls its Master Level
+    // once on load (bot_ml_distribution). MLLine is the discipline name, not the 0-7 index (a
+    // new integer column defaults to 0, which is Banelord); null or empty means "not on the path".
+    [DataElement(AllowDbNull = false)] public int MLLevel { get; set; }
+    [DataElement(AllowDbNull = false)] public long MLExperience { get; set; }
+    [DataElement(AllowDbNull = true, Varchar = 16)] public string MLLine { get; set; } = string.Empty;
 }

@@ -178,5 +178,19 @@ namespace DOL.GS
 
         [DataElement(AllowDbNull = false)]
         public int DeathsPvP { get; set; }
+
+        // Additive Master Level progression (TOA_PLAN WP2.4). Existing companions start off
+        // the path: MLLevel 0, no experience, no discipline. MLLine holds the discipline by
+        // name (Warlord, Perfecter, ...), not by the 0-7 index, because the schema reconciler
+        // fills a new integer column with 0 and 0 is Banelord. Nullable so the reconciler can
+        // add it to an existing table; null or empty means "not on the path".
+        [DataElement(AllowDbNull = false)]
+        public int MLLevel { get; set; }
+
+        [DataElement(AllowDbNull = false)]
+        public long MLExperience { get; set; }
+
+        [DataElement(AllowDbNull = true, Varchar = 16)]
+        public string MLLine { get; set; } = string.Empty;
     }
 }

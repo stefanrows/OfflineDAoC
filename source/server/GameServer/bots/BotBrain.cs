@@ -3499,6 +3499,10 @@ namespace DOL.AI.Brain
                     return;
                 }
 
+                // A Master Level button is this think's action; the swing keeps going.
+                if (TryMasterLevelAbility())
+                    return;
+
                 bool bowCycleOwnsAction = Body.attackComponent != null &&
                     Body.rangeAttackComponent != null &&
                     BotRangedCombat.BowCycleOwnsAction(
@@ -3645,7 +3649,10 @@ namespace DOL.AI.Brain
         {
             // Idle is not a reason to hide (and slow travel). Stealth belongs to
             // the approach to a legal enemy player/bot, not random PvE pauses.
-            if (Body.IsStealthed && !AutonomousRvrStealthLoop.KeepsStealth(BotBody) && !GothwaitePvpStealth.KeepsStealth(BotBody)) Body.Stealth(false);
+            // A bot under a Blanket of Camouflage stays hidden like a player (WP2.4): a stealther
+            // under its own rules, a non-stealther until it moves or acts.
+            if (Body.IsStealthed && !AutonomousRvrStealthLoop.KeepsStealth(BotBody) && !GothwaitePvpStealth.KeepsStealth(BotBody) &&
+                !DOL.GS.Spells.GroupstealthECSEffect.Hides(Body)) Body.Stealth(false);
         }
 
         private bool TryStartStealthOpener(GameLiving target)
@@ -3907,7 +3914,9 @@ namespace DOL.AI.Brain
             if (TryAutonomousRvrSupportTurn())
                 return;
             bool bombStun = BotBody.IsPlayerLedGroup && BombGroupReadyForStun() && TryHealerAreaStun();
-            if (!bombStun && !CheckHeals() && !TryHealerAreaStun() && !TryPvpCrowdControl() && !TryPveAddControl() && !TryMaintainGroupCelerity())
+            // Master Level cures and the battle cry come right after the heals (WP2.4).
+            if (!bombStun && !CheckHeals() && !TryMasterLevelAbility() && !TryHealerAreaStun() && !TryPvpCrowdControl() &&
+                !TryPveAddControl() && !TryMaintainGroupCelerity())
                 CheckSpells(eCheckSpellType.Defensive);
             if (BotBody.IsPlayerLedGroup)
             {

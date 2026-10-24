@@ -73,6 +73,39 @@ namespace DOL.UnitTests
                     : null;
         }
 
+        /// <summary>A persistent companion (GameBot with an owner) in the caster's group.</summary>
+        private sealed class Companion : GameBot
+        {
+            private Companion() : base((OfflineWorldBotRecord)null) { }
+            public string TestName;
+            public bool Moving, Attacking, Stealthed;
+            public int StealthSpec;
+            public int PosX;
+            public override string Name { get => TestName; set => TestName = value; }
+            public override bool IsAlive => true;
+            public override bool IsMoving => Moving;
+            public override bool IsAttacking => Attacking;
+            public override bool IsCasting => false;
+            public override int X => PosX;
+            public override int Y => 0;
+            public override int Z => 0;
+            public override ushort CurrentRegionID { get => 1; set { } }
+            public override bool IsStealthed => Stealthed;
+            public override void Stealth(bool goStealth) => Stealthed = goStealth;
+            public override Specialization GetSpecializationByName(string name) =>
+                name == Specs.Stealth && StealthSpec > 0
+                    ? new Specialization(Specs.Stealth, "Stealth", 0) { Level = StealthSpec }
+                    : null;
+        }
+
+        /// <summary>A pet in the group: an ordinary NPC that records any stealth request.</summary>
+        private sealed class Pet : GameNPC
+        {
+            public bool Stealthed;
+            public override bool IsStealthed => Stealthed;
+            public override void Stealth(bool goStealth) => Stealthed = goStealth;
+        }
+
         /// <summary>Battlewarder effect whose warder is "planted" without a region.</summary>
         private sealed class TestBattlewarderEffect : BattlewarderECSEffect
         {
@@ -104,6 +137,20 @@ namespace DOL.UnitTests
             Set(typeof(GameLiving), member, "<GroundTarget>k__BackingField", new GroundTarget());
             Set(typeof(GameLiving), member, "m_effects", new GameEffectList(member));
             return member;
+        }
+
+        private static Companion NewCompanion(string name, Member owner, int x = 0)
+        {
+            var companion = (Companion)RuntimeHelpers.GetUninitializedObject(typeof(Companion));
+            companion.TestName = name;
+            companion.PosX = x;
+            Set(typeof(GameLiving), companion, "<TempProperties>k__BackingField", new PropertyCollection());
+            Set(typeof(GameNPC), companion, "m_brains", new System.Collections.ArrayList());
+            typeof(GameBot).GetProperty(nameof(GameBot.Owner))!.SetValue(companion, owner);
+            Set(typeof(GameBot), companion, "<PlayerCompanionRecord>k__BackingField",
+                new PlayerCompanionRecord { CompanionId = Guid.NewGuid().ToString() });
+            companion.ObjectState = GameObject.eObjectState.Active;
+            return companion;
         }
 
         private static List<string> MessagesOf(Member member) => ((Packets)(object)member.Packets).Messages;
@@ -276,6 +323,78 @@ namespace DOL.UnitTests
             Assert.That(two.Watch.Check(), Is.True);
             Assert.That(one.EndReason, Is.EqualTo(MovementWatch.Moving));
             Assert.That(two.EndReason, Is.Null, "one handler, one effect per member: no shared field");
+        }
+
+        [Test]
+        public void BlanketHidesACompanionLikeAPlayerAndRevealsItWhenItMoves()
+        {
+            Member caster = NewMember("Spymaster");
+            Companion companion = NewCompanion("Companion", caster, x: 60);
+            var handler = new GroupstealthHandler(caster, NewSpell("BlanketOfCamouflage", "Group"), Line);
+            var effect = Begin(new GroupstealthECSEffect(new ECSGameEffectInitParams(companion, 600000, 1, handler)));
+
+            Assert.That(GroupstealthECSEffect.CanHide(companion), Is.True);
+            Assert.That(companion.Stealthed, Is.True, "a companion is hidden like any player in the group");
+            Assert.That(effect.Held, Is.True, "and held by the Blanket's rules");
+            Assert.That(effect.Watch.Watched, Is.SameAs(companion));
+            Assert.That(effect.Watch.Check(), Is.True, "standing still keeps it hidden");
+
+            companion.Moving = true;
+            Assert.That(effect.Watch.Check(), Is.False);
+            Assert.That(effect.EndReason, Is.EqualTo(MovementWatch.Moving));
+
+            effect.OnStopEffect();
+            _started.Clear();
+            Assert.That(companion.Stealthed, Is.False, "a held companion is revealed when the blanket ends");
+        }
+
+        [Test]
+        public void BlanketEndsForACompanionThatAttacks()
+        {
+            Member caster = NewMember("Spymaster");
+            Companion companion = NewCompanion("Companion", caster, x: 60);
+            var handler = new GroupstealthHandler(caster, NewSpell("BlanketOfCamouflage", "Group"), Line);
+            var effect = Begin(new GroupstealthECSEffect(new ECSGameEffectInitParams(companion, 600000, 1, handler)));
+
+            companion.Attacking = true;
+            Assert.That(effect.Watch.Check(), Is.False);
+            Assert.That(effect.EndReason, Is.EqualTo(MovementWatch.Attacking));
+        }
+
+        [Test]
+        public void BlanketLeavesAStealtherCompanionToTheNormalStealthRules()
+        {
+            Member caster = NewMember("Spymaster");
+            Companion shadowblade = NewCompanion("Shadowblade", caster, x: 60);
+            shadowblade.StealthSpec = 35;
+            var handler = new GroupstealthHandler(caster, NewSpell("BlanketOfCamouflage", "Group"), Line);
+            var effect = Begin(new GroupstealthECSEffect(new ECSGameEffectInitParams(shadowblade, 600000, 1, handler)));
+
+            Assert.That(shadowblade.Stealthed, Is.True);
+            Assert.That(effect.Held, Is.False, "a companion with the Stealth spec follows its own stealth");
+            Assert.That(effect.Watch, Is.Null);
+            Assert.That(GroupstealthECSEffect.Hides(shadowblade.Stealthed, new ECSGameSpellEffect[] { effect }), Is.True,
+                "the brain keeps a stealther companion under a Blanket hidden, as a player stealther stays hidden");
+            Assert.That(GroupstealthECSEffect.Hides(false, new ECSGameSpellEffect[] { effect }), Is.False, "once revealed, nothing to keep");
+            Assert.That(GroupstealthECSEffect.Hides(true, Array.Empty<ECSGameSpellEffect>()), Is.False,
+                "without a Blanket the usual idle rules apply");
+
+            effect.OnStopEffect();
+            _started.Clear();
+            Assert.That(shadowblade.Stealthed, Is.True, "a stealther keeps its own stealth");
+        }
+
+        [Test]
+        public void BlanketLeavesPetsVisible()
+        {
+            Member caster = NewMember("Spymaster");
+            var pet = (Pet)RuntimeHelpers.GetUninitializedObject(typeof(Pet));
+            var handler = new GroupstealthHandler(caster, NewSpell("BlanketOfCamouflage", "Group"), Line);
+            var effect = Begin(new GroupstealthECSEffect(new ECSGameEffectInitParams(pet, 600000, 1, handler)));
+
+            Assert.That(GroupstealthECSEffect.CanHide(pet), Is.False);
+            Assert.That(pet.Stealthed, Is.False, "pets stay visible, as on live");
+            Assert.That(effect.Held, Is.False);
         }
 
         // ---------------------------------------------------------------- Battlewarder

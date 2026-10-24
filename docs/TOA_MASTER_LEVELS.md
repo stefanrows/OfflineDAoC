@@ -16,7 +16,8 @@ together. Demyphon sells credits and the respec token for bounty points.
 1. **Get on the path.** Speak to the Arbiter at level 40 or higher (live: the
    trials began at 40). He enrols the speaker and every group member within
    2,000 units who is level 40 or higher. Enrolment sets Master Level 1 and no
-   discipline. Companions are not players and are never enrolled.
+   discipline. Companions in the group whose owner is enrolled join the trials
+   with him (see [Bots](#bots)).
 2. **Choose a discipline.** While none is chosen, the Arbiter lists the
    disciplines of the player's class career as clickable words. Clicking or
    whispering one, for example `Convoker`, takes it up. A discipline is
@@ -153,9 +154,124 @@ may drop it from the list.
 | `Tests/UnitTests/UT_MasterLevelProgression.cs` | 14 tests with a synthetic career and synthetic spells, one through the real `ProcessDeath` and Dying notify |
 
 Dropped from gaheris: every mercenary reference (`GameMercenary`,
-`MercenaryManager`, `GaherisLoot`). Companions and bots and Master Levels are
-WP2.4. `GameBot.LoadClassSpecializations` already skips every Master Level
-line.
+`MercenaryManager`, `GaherisLoot`). Companions and world bots: next section.
+
+## Bots
+
+Package WP2.4 (owner decision 2026-10-24 19:10). Implemented in source,
+real-client check pending. Three kinds of bot, three answers:
+
+| Kind | Master Levels |
+|---|---|
+| Persistent companion (`GameBot` with an owner, `player_companions`) | enrolled with the owner at the Arbiter, earns from the owner's kills, saved on its record |
+| Autonomous world bot (`GameBot` without an owner, `offline_world_bots`) | rolls a Master Level once on load at level 40+, earns from its own kills, saved on its record |
+| Temporary `/spawn` helper, battleground encounter bot | never |
+
+**Companions.** When the Arbiter enrols a group, every companion in the
+speaker's group within 2,000 units, level 40 or higher, whose owner is now
+enrolled, starts at Master Level 1 with a discipline chosen by its role. The
+owner reads "Your companions begin the trials with you: Name (Warlord), ...".
+A companion recruited later joins on the owner's next word with the Arbiter.
+Companions earn the same Master Level experience as their owner from every
+kill the owner earned by the player rule (the owner is in the kill's earner
+list whenever his companion fought): the owner alive and within experience
+range, the companion too, the companion below Master Level 10. An owner at
+Master Level 10 earns nothing more, but his companions keep earning.
+The owner reads "Name has reached Master Level N!" on each level; there is no
+message per kill.
+
+**World bots.** A world bot of level 40 or higher that has never been on the
+path rolls a Master Level when it loads, from the weights in
+`bot_ml_distribution`, and takes the discipline of its class. The roll is
+saved with its next state snapshot and never repeated. Level 40-49 bots are
+capped at (level - 40) / 3, so Master Level 0-3. A world bot earns from every
+kill it damaged (directly or through its pet) and from the kills of world bots
+in its group, by the same kill rule as players. A world bot in a player's
+group earns only from its own damage or its world-bot mates', not from the
+players' kills.
+
+**Discipline by role.** One table in `BotMasterLevels`:
+
+| Discipline | Classes |
+|---|---|
+| Warlord (tank) | Armsman, Paladin, Reaver, Warrior, Thane, Valkyrie, Hero, Champion |
+| Battlemaster (melee) | Mercenary, Heretic, Mauler, Berserker, Savage, Skald, Blademaster, Valewalker, Vampiir |
+| Perfecter (healer) | Cleric, Friar, Healer, Shaman, Druid, Warden, Bard |
+| Spymaster (stealther) | Infiltrator, Scout, Minstrel, Shadowblade, Hunter, Nightshade, Ranger |
+| Convoker (pet caster) | Theurgist, Cabalist, Necromancer, Spiritmaster, Bonedancer, Enchanter, Animist |
+| Stormlord (nuker) | Wizard, Sorcerer, Runemaster, Warlock, Eldritch, Mentalist, Bainshee |
+
+A companion's chosen role goes first: a healing class set to Healer walks
+Perfecter (a Paladin played as healer), a tank class set to Tank walks
+Warlord. A bot's discipline is not changed later; there is no Star of Destiny
+for bots.
+
+**Abilities.** The chosen line enters the bot's specs like a player's: only
+at character level 50, only ranks up to its Master Level, and the old line
+and its spell line go when the discipline changes. Master Level spells stay
+out of the class spell lists (the class spell choice selects by spell type
+and knows none of them); the brain has one small step of its own in the
+combat think, after the priority taunt (for healers in the support role,
+right after their heals), and presses at most one ability per think with a
+reaction chance, never on every frame:
+
+| Ability | Discipline, rank | When a bot presses it | Chance per think |
+|---|---|---|---|
+| Guided Strike, Energizing Aura, Warguard | Warlord 5, 6, 10 | in reach of its target and the buff is not running | 25% |
+| Bolstering Battlecry | Warlord 2 | a group member within 750 is below 60% health | 50% |
+| Sapping Strike, Power Leak | Battlemaster 1, 3 | the target is a player or bot in range with 30%+ endurance / power | 20% |
+| Purging Wave, Purify Vision | Perfecter 1, 2 | a group member in range is diseased / nearsighted | 60% |
+
+Every other ability is held but never pressed by the AI: Defending Martyr
+(costs the caster 90% of its health), Cowering Bellow, Resilient Will,
+Cleansing Aura, Leadership, the rest of Battlemaster (Grapple refuses NPC
+targets, Throw Weapon needs a player caster, the essence debuffs are legacy
+effects), Perfecter's fonts (`GameFont` takes a player owner), every
+Convoker summon and trap, every Stormlord storm, every Spymaster trap and the
+Blanket. Convoker, Stormlord and Spymaster bots therefore hold their line but
+use none of it yet.
+
+**Changes for players.** Master Level areas now take bots like players:
+`MasterlevelHandling.SelectTargets` adds companions and world bots (not pets,
+not ordinary NPCs) to every radius and ground-target selection, so a player
+Warlord's battle cry also heals the companions beside him and a Banelord's
+pulse also hits the enemy realm's bots. Bolstering Battlecry heals bots;
+Sapping Strike no longer fails for a caster without a client. Defending
+Martyr takes its 90% of the caster's health once per cast; it used to be
+taken once and again for every healed target, so with companions in range a
+player Warlord ended near 1 health.
+
+**Blanket of Camouflage.** Companions and other bots in the caster's group are
+hidden exactly like players: each has its own effect, is watched for moving,
+attacking and casting, and is revealed when the Blanket ends. A bot with the
+Stealth spec follows its normal stealth rules. The bot brain no longer drops
+the stealth of an idle bot that carries a Blanket, stealther or not, so a
+stealther companion stays hidden like a player stealther. Pets stay visible, as on
+live.
+
+**Saves.** New columns, added by the schema reconciler at startup:
+
+| Table | Column | Old rows |
+|---|---|---|
+| `player_companions`, `offline_world_bots` | `MLLevel` (int) | 0 |
+| | `MLExperience` (long) | 0 |
+| | `MLLine` (text, nullable) | null: off the path |
+
+`MLLine` holds the discipline name, not the 0-7 index: a new integer column
+defaults to 0, which is Banelord.
+
+**Server property.**
+
+| Key | Category | Default | Meaning |
+|---|---|---|---|
+| `bot_ml_distribution` | `autonomous` | `28,16,13,11,9,7,5,4,3,2,2` | Weights for Master Level 0-10 of a level 50 world bot's one roll: about two thirds 0-3, about one in nine 7-10. An invalid list uses the default |
+
+**Source.** `bots/BotMasterLevels.cs` (table, enrolment, roll, experience,
+which abilities), `bots/GameBot.MasterLevels.cs` (state, save, line),
+`bots/BotBrain.MasterLevels.cs` (the combat step), plus hooks in
+`MasterLevelProgression`, `GameBot.LoadClassSpecializations`,
+`LiveMasterLevelsSpecialization` and `Spymaster.cs`. Tests:
+`UT_BotMasterLevels.cs` and four Blanket tests in `UT_MasterLevelHolds.cs`.
 
 ## Not checked
 
@@ -166,3 +282,9 @@ line.
   is what gaheris sends; whether the client opens the window or only updates
   the bar is unmeasured.
 - Pacing at our rates is unmeasured in play.
+- Bots (WP2.4): no bot was seen enrolling, levelling, casting a Master Level
+  ability or hiding under a Blanket in a running server. The Warlord buffs as
+  stat effects on bots, the drains on bot targets and the Perfecter cures are
+  unit-tested only as far as the choice; their handlers ran for players only
+  before. CPU cost of the combat step is unmeasured (it returns at once for
+  bots without a usable ability).

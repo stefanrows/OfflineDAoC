@@ -122,17 +122,21 @@ agent or session that finishes a package updates its row and the log below.
   texts (ML1-9 x 10 steps); DOLSharp has one scripted step (Ianetor ML1.1,
   980 lines, no credit wiring). Only if the owner wants named steps on top of
   kill-XP. Not before Phase 3.
-- [~] **WP2.4 Bots and ML.** Owner decision 2026-10-24 19:10: build it.
-  (a) Blanket of Camouflage treats companions exactly like players (hidden,
-  watched, revealed); pets stay visible as on live. (b) Companions are
-  enrolled with their owner at the Arbiter, earn ML XP from the same kills,
-  keep ML level/line in their persistent record, get a discipline by role
-  (tank Warlord, melee Battlemaster, healer Perfecter, caster
-  Convoker/Stormlord, stealther Spymaster) and use ML spells through the
-  existing ability choice. (c) World bots 40-50 spawn with an ML level from a
-  distribution (like realm ranks today), discipline by archetype, and progress
-  by the same kill rule credited like realm points. Agent toa-botml
-  (2026-10-24 19:10).
+- [x] **WP2.4 Bots and ML.** (0.325.0, real-client check pending;
+  `docs/TOA_MASTER_LEVELS.md` section Bots) Blanket of Camouflage treats
+  companions like players (hidden, held, revealed; stealther companions keep
+  their stealth; pets visible). Companions in the speaker's group are
+  enrolled with their owner (level 40+, 2,000 units), earn ML XP from the
+  kills their owner earned (owner alive, in range; ML10 owners still count),
+  discipline by role (tank Warlord, melee Battlemaster, healer Perfecter,
+  stealther Spymaster, pet caster Convoker, nuker Stormlord), ML state in 3
+  new columns on player_companions and offline_world_bots (additive). World
+  bots 40+ roll an ML once at load (`bot_ml_distribution`, 40-49 capped ML
+  0-3) and progress from kills they or their world-bot mates land. Bots use:
+  Warlord buffs/Battlecry, Battlemaster Sapping Strike/Power Leak, Perfecter
+  Purging Wave/Purify Vision. Player ML areas now reach bots (not pets/mobs).
+  Open: Convoker/Stormlord/Spymaster bots hold their line but cast nothing;
+  Defending Martyr now costs once per cast.
 - [x] **WP3.0 Artifact spell handlers.** (0.316.0, real-client check pending)
   All 43 artifact spell types have one handler under `spells/Artifacts`,
   bridged into our ECS (upstream's were legacy-hook dead code); debuffs use the
@@ -254,9 +258,18 @@ a real defect in every package; keep the review step.
   no unusable version offered); on main 0.323.0 the full suite has 4,394 passed,
   7 failed (bug 160), 3 skipped.
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 20:30: WP2.4 reviewed (Blanket stealth hold, companion earner
+  rule, Martyr cost fixed) and merged as 0.325.0.
 - 2026-10-24 20:10: WP3.1b reviewed (book-loss on abort, token sales, class
   fallback fixed) and merged as 0.324.0 (20 packs). Artifacts are obtainable
   end to end via Aphaestia's tokens; encounter credit (WP3.3) still open.
+- 2026-10-24 20:15: WP2.4 built by toa-botml in worktree `toa-botml` (not merged),
+  review fixes in (Blanket keeps stealther bots hidden, companions earn only
+  when the owner earned, Defending Martyr costs once per cast):
+  companions enrolled with their owner, world bots 40+ roll an ML once
+  (`bot_ml_distribution`), both earn from the same kills, ML columns on both bot
+  tables, chosen line loaded at 50, Warlord/Battlemaster/Perfecter abilities
+  used by the AI, Blanket hides companions; full suite 7 failures = bug 160.
 - 2026-10-24 19:30: WP3.0b reviewed (sub-spell cast and AfHits refcount fixed)
   and merged as 0.323.0 (17 packs).
 - 2026-10-24 18:20: 0.322.0 deployed on Aaron's PC (packs 026/027 applied, 2

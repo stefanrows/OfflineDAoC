@@ -12,6 +12,34 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.325.0] - 2026-10-24
+
+### Added
+- Bots and Master Levels (ToA plan WP2.4): companions in the group are
+  enrolled with their owner at the Arbiter, earn Master Level experience from
+  the kills their owner earned, pick a discipline by role (tank Warlord, melee
+  Battlemaster, healer Perfecter, stealther Spymaster, pet caster Convoker,
+  caster Stormlord) and use Warlord buffs and Battlecry, Battlemaster Sapping
+  Strike and Power Leak, Perfecter Purging Wave and Purify Vision. Autonomous
+  world bots of level 40+ start with a Master Level drawn from
+  `bot_ml_distribution` and progress from their kills. Three additive columns
+  on the companion and world-bot tables keep the state.
+- Unit tests UT_BotMasterLevels (34), UT_MasterLevelHolds (+4).
+
+### Changed
+- Blanket of Camouflage treats companions exactly like players: hidden, held
+  and revealed with the group; stealther companions keep their stealth; pets
+  stay visible. Player Master Level area spells now also reach companions and
+  world bots (not pets or monsters).
+
+### Fixed
+- Defending Martyr charged the caster once per target; it now costs once per
+  cast. Sapping Strike and Bolstering Battlecry work for bot casters and bot
+  targets.
+
+### Removed
+- None.
+
 ## [0.324.0] - 2026-10-24
 
 ### Added

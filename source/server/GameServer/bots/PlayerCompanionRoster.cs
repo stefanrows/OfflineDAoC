@@ -2103,6 +2103,7 @@ namespace DOL.GS
             record.Experience = Math.Max(0, companion.Experience);
             record.RealmPoints = Math.Max(0, companion.CompanionRealmPoints);
             companion.CopyPvpKillStatsTo(record);
+            companion.CopyMasterLevelStateTo(record);
             record.SerializedSpecs = string.Join(';', companion.GetSpecList()
                 .Where(spec => spec.Trainable).Select(spec => $"{spec.KeyName}|{spec.Level}"));
             record.SerializedBuildPlan = companion.BotSpec == null ? string.Empty : BotLifetimeBuild.Encode(companion.BotSpec);

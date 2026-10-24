@@ -61,15 +61,23 @@ namespace DOL.GS
 		/// <returns></returns>
 		public override List<SpellLine> GetSpellLinesForLiving(GameLiving living)
 		{
-			var player = living as GamePlayer;
-			return player != null ? GetSpellLinesForLiving(living, player.MLLevel) : new List<SpellLine>();
+			return HoldsMasterLevels(living) ? GetSpellLinesForLiving(living, MasterLevelOf(living)) : new List<SpellLine>();
 		}
 
 		public override IDictionary<SpellLine, List<Skill>> GetLinesSpellsForLiving(GameLiving living)
 		{
-			var player = living as GamePlayer;
-			return player != null ? GetLinesSpellsForLiving(living, player.MLLevel) : new Dictionary<SpellLine, List<Skill>>();
+			return HoldsMasterLevels(living) ? GetLinesSpellsForLiving(living, MasterLevelOf(living)) : new Dictionary<SpellLine, List<Skill>>();
 		}
+
+		/// <summary>Players, and companions or world bots on the Master Level path (TOA_PLAN WP2.4).</summary>
+		private static bool HoldsMasterLevels(GameLiving living) => living is GamePlayer or GameBot;
+
+		private static int MasterLevelOf(GameLiving living) => living switch
+		{
+			GamePlayer player => player.MLLevel,
+			GameBot bot => bot.MLLevel,
+			_ => 0
+		};
 		
 		/// <summary>
 		/// Return all enabled spells in a single line
@@ -79,26 +87,25 @@ namespace DOL.GS
 		/// <returns></returns>
 		protected override IDictionary<SpellLine, List<Skill>> GetLinesSpellsForLiving(GameLiving living, int level)
 		{
-			var player = living as GamePlayer;
-			if (player != null)
+			if (HoldsMasterLevels(living))
 			{
 				if (level < 1)
 					return new Dictionary<SpellLine, List<Skill>>();
 				
-				var spells = base.GetLinesSpellsForLiving(player, level);
+				var spells = base.GetLinesSpellsForLiving(living, level);
 				
 				// For Master Level : Ability and Styles are in List Spell Line
 				if (spells.Keys.Count > 0)
 				{
 					var list = spells.First();
 					
-					foreach (Styles.Style st in base.GetStylesForLiving(player, level))
+					foreach (Styles.Style st in base.GetStylesForLiving(living, level))
 						list.Value.Add(st);
 					
-					foreach (Ability ab in base.GetAbilitiesForLiving(player, level))
+					foreach (Ability ab in base.GetAbilitiesForLiving(living, level))
 						list.Value.Add(ab);
 					
-					list.Key.Level = player.Level;
+					list.Key.Level = living.Level;
 				}
 				
 				return spells;
@@ -125,8 +132,7 @@ namespace DOL.GS
 		/// <returns></returns>
 		public override int GetSpecLevelForLiving(GameLiving living)
 		{
-			var player = living as GamePlayer;
-			return player != null ? player.MLLevel : 0;
+			return MasterLevelOf(living);
 		}
 	}
 }

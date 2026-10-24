@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using DOL.AI.Brain;
 using DOL.GS.Effects;
@@ -15,21 +16,34 @@ namespace DOL.GS.Spells
     [SpellHandler(eSpellType.PBAEHeal)]
     public class PBAEHealHandler : MasterlevelHandling
     {
+        /// <summary>Defending Martyr costs the caster this share of its health.</summary>
+        public const int MARTYR_HEALTH_COST_PERCENT = 90;
+
         public override void FinishSpellCast(GameLiving target)
         {
-            switch (Spell.DamageType)
-            {
-                case (eDamageType)((byte)1):
-                    {
-                        int value = (int)Spell.Value;
-                        int life;
-                        life = (m_caster.Health * value) / 100;
-                        m_caster.Health -= life;
-                    }
-                    break;
-            }
+            PayMartyrCost();
             m_caster.Mana -= PowerCost(target);
             base.FinishSpellCast(target);
+        }
+
+        /// <summary>
+        /// Defending Martyr's price: 90% of the caster's health, once per cast, however many it
+        /// heals. It used to be taken once here and again for every target, which the old
+        /// player-only selection hid; with companions and bots in range (WP2.4) a Warlord with
+        /// four companions ended near 1 health. Returns the health lost; 0 for Bolstering Battlecry.
+        /// </summary>
+        public int PayMartyrCost()
+        {
+            if (Spell.DamageType != (eDamageType)((byte)1) || m_caster == null || m_caster.Health <= 1)
+                return 0;
+
+            int lost = Math.Abs(m_caster.ChangeHealth(Caster, eHealthChangeType.Spell,
+                -(m_caster.Health * MARTYR_HEALTH_COST_PERCENT / 100)));
+
+            if (lost != 0)
+                MessageToCaster("You lose " + lost + " hit point" + (lost == 1 ? "." : "s."), eChatType.CT_Spell);
+
+            return lost;
         }
 
         public override void OnDirectEffect(GameLiving target)
@@ -39,7 +53,8 @@ namespace DOL.GS.Spells
 
             GamePlayer player = target as GamePlayer;
 
-            if (target is GamePlayer)
+            // Companions and world bots are healed like players (TOA_PLAN WP2.4).
+            if (target is GamePlayer or GameBot)
             {
                 switch (Spell.DamageType)
                 {
@@ -77,13 +92,12 @@ namespace DOL.GS.Spells
                         {
                             int healvalue = (int)m_spell.Value;
                             int heal;
-                                if (target.IsAlive && !GameServer.ServerRules.IsAllowedToAttack(Caster, player, true))
+                                if (target.IsAlive && !GameServer.ServerRules.IsAllowedToAttack(Caster, target, true))
                                 {
                                     heal = target.ChangeHealth(target, eHealthChangeType.Spell, healvalue);
-                                    if (heal != 0) player.Out.SendMessage(m_caster.Name + " heal you for " + heal + " hit point!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
+                                    if (heal != 0) player?.Out.SendMessage(m_caster.Name + " heal you for " + heal + " hit point!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
                                 }
-                            heal = m_caster.ChangeHealth(Caster, eHealthChangeType.Spell, (int)(-m_caster.Health * 90 / 100));
-                            if (heal != 0) MessageToCaster("You lose " + heal + " hit point" + (heal == 1 ? "." : "s."), eChatType.CT_Spell);
+                            // The caster's price is paid once per cast (PayMartyrCost), not per target.
 
                             SendEffectAnimation(target, 0, false, 1);
                         }

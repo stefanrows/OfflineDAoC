@@ -30,7 +30,7 @@ namespace DOL.GS
         Passive = 3
     }
 
-    public class GameBot : GameNPC, IGamePlayer, IGameStaticItemOwner
+    public partial class GameBot : GameNPC, IGamePlayer, IGameStaticItemOwner
     {
         private static new readonly Logger log = LoggerManager.Create(typeof(GameBot));
 
@@ -3297,6 +3297,7 @@ namespace DOL.GS
             BotSpec = temporaryClass == eCharacterClass.Bonedancer
                 ? new BonedancerBotSpec(initialSpec, companionSeed, PlayerCompanionRecord != null)
                 : BotSpec.GetSpec(temporaryClass, initialSpec);
+            RestoreMasterLevelState(PlayerCompanionRecord);
             LoadClassSpecializations(false);
             if (PlayerCompanionRecord == null)
             {
@@ -3446,6 +3447,7 @@ namespace DOL.GS
                 _ => BotSpec.GetSpec(persistentClass,
                     BotSpec.ChoosePersistentSpecialization(persistentClass, record.BotId)),
             };
+            RestoreMasterLevelState(record);
             LoadClassSpecializations(false);
             LoadPersistedSpecs(record.SerializedSpecs);
             bool buildLocked = BotLifetimeBuild.RestoreOrAlignWithInvestedWeapons(BotSpec,
@@ -4270,6 +4272,7 @@ namespace DOL.GS
                         record.SerializedAbilities, _lastAutonomousTrainedLevel);
             }
             CopyPvpKillStatsTo(record);
+            CopyMasterLevelStateTo(record);
             record.RegionId = CurrentRegionID;
             record.ZoneId = CurrentZone?.ID ?? 0;
             record.ZoneName = CurrentZone?.Description;
@@ -4412,8 +4415,17 @@ namespace DOL.GS
 
             foreach (var constraint in careers)
             {
-                if (constraint.Key is IMasterLevelsSpecialization)
+                // Master Level lines: only the chosen discipline, from Master Level 1, like
+                // GamePlayer. A spec named like one of the eight lines counts whatever its
+                // Implementation, so it never becomes a trainable bot spec.
+                if (MasterLevelProgression.IsMasterLevelSpec(constraint.Key) &&
+                    !HoldsActiveMasterLevelLine(constraint.Key.KeyName))
+                {
+                    if (HasSpecialization(constraint.Key.KeyName))
+                        RemoveSpecialization(constraint.Key.KeyName);
+                    RemoveMasterLevelSpellLines(constraint.Key.KeyName);
                     continue;
+                }
 
                 if (Level >= constraint.Value)
                 {
@@ -4782,6 +4794,10 @@ namespace DOL.GS
 
             if (IsEndgameCompanion)
                 Spells = TemporaryCompanionBalance.HighestRanks(Spells, Level, SkillBase.GetSpellByID);
+
+            // Master Level spells stay out of Spells and its categories: the class spell
+            // choice does not know their types. The brain uses them through its own step.
+            RefreshMasterLevelSpellList();
         }
 
         private void SetCasterSpells()
@@ -4794,7 +4810,7 @@ namespace DOL.GS
             {
                 foreach (var tuple in dict)
                 {
-                    if (tuple.Item2.Count > 0)
+                    if (tuple.Item2.Count > 0 && !IsMasterLevelLine(tuple.Item1))
                     {
                         foreach (Skill skill in tuple.Item2)
                         {
