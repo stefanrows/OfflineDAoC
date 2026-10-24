@@ -266,6 +266,52 @@ meshes is ignored with one warning.
   23:47 save, and the classifier tested only the 6 nearest references. Some
   "cut off" pairs may still be dead ends through farther ground.
 
+## 0.314.0 live measurement (2026-10-24)
+
+Offline log analysis only; no real-client check. Full report, scripts and
+intermediate data: `D:\Games\OfflineDAoC-dev\analysis\rvr-0314-2026-10-24\`
+(`REPORT.md`, `tools/`, `v0314-classify/`).
+
+**Data.** `runtime/logs/server-console.log`: baseline 0.310.x is lines
+1–321,662 (2026-10-23 20:40–23:47), 0.314.0 starts at line 321,663
+(2026-10-24 13:10–14:25). About 3,300 bots in both. The server was set to
+10x but reached only about 2x (StatPrint `World speed (S/E/A)`, column A;
+baseline about 1.17x). All rates below are per **game-hour** (sum of A × dt):
+baseline 3.5–3.6, 0.314.0 2.4.
+
+| Metric (per game-hour) | 0.310.x | 0.314.0 |
+| --- | --- | --- |
+| Route give-ups | 359 | 185 (−49%) |
+| RvR-goal give-ups | 218 | 80 (−63%) |
+| Give-ups per 1,000 goal attempts | 69.8 | 31.9 |
+| Longest same bot + spot loop | 50 | 9 |
+| `GROUP_TRAVEL_HOLD` | 1,610 | 942 (−41%) |
+
+Static classes (give-ups per game-hour): behind keep gate 121 → 56, goal
+off-mesh 116 → 18, one-way seam 17 → 1, dead-end detour 24 → 18, start
+off-mesh 27 → 33, cut-off start 35 → 37, cross-zone 0.8 → 8. Caer Renaris,
+Dun Dagda, Mount Collory and the Odin's Gate field and north seam dropped to
+zero; Druim Ligen was not visited in this run. **Worse:** the Castle
+Excalibur DF portal ring, 89 → 129 give-ups.
+
+**Remaining work, ranked by gain** (tasks 140–146):
+
+| # | Item | Give-ups / game-h | Kind | Task |
+| --- | --- | --- | --- | --- |
+| 1 | Castle Excalibur DF portal (zone point 79); failed-goal memory for DF/PvE camps | ~56 | code, cheap; implemented 0.320.0 | 140 |
+| 2 | Off-mesh start snap | ~33 | code, medium | 141 |
+| 3 | Remaining off-mesh goals + height guard on goal snap | ~18 | code, cheap | 142 |
+| 4 | Dead-end detour road fallback ([Step 2 plan](#step-2-plan-port-the-road-fallback); zones 214, 115) | ~18 | code, bigger | 143 |
+| 5 | Region 181 cross-zone burst at x=393280 | ~8 | watch first | 144 |
+| 6 | Cut-off starts | ~37 | unknown, probe first | 145 |
+| 7 | One-way seams | ~3 | skipped | — |
+| — | 10-minute 1x profiling run (not a fix) | — | measurement | 146 |
+
+Mesh replacement still needs per-hotspot proof and owner approval. PvE group
+pacing (upstream 1,500/900 hysteresis, about 340 holds per game-hour) is not
+worth porting now. Oddities: bugs 173 (leader re-elections) and 174 (HubFan
+insertion rate).
+
 ## How to rerun
 
 ```bash

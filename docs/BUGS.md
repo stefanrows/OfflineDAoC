@@ -6,6 +6,21 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+174. **RvR keep departures insert HubFan points less often.** Found
+     2026-10-24 in the 0.314.0 live measurement
+     ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0314-live-measurement-2026-10-24)).
+     The share of HubFan departures logged with `inserted=` fell from 92% at
+     0.310.x to 78% at 0.314.0; most of the drop is at `rvr-keep-106` (10) and
+     `rvr-keep-100` (8). Possibly the 0.313.0 1,200-unit flank/cover cap or
+     the 0.314.0 goal filters; unchecked. Impact unknown; check the cause
+     before changing code.
+
+173. **Autonomous RvR groups re-elect their leader within 5 seconds.** Found
+     2026-10-24 in the 0.314.0 live measurement: 28 cases where the same
+     group logged a second `AUTONOMOUS_RVR_LEADER_MAIN_BODY` within 5 s
+     (task 136 succession, 0.311.0). Expected: one election per leader death.
+     Cause and gameplay impact (a march that turns twice) unchecked.
+
 172. **Deploy self-check: "a second restore of the same backup is a safe no-op"
      fails on `runtime\Join Friend.cmd`.** Found 2026-10-24 by the data-pack
      review once the fixture gained the missing `Join Friend.cmd` (before that

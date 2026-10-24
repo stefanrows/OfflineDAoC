@@ -447,8 +447,87 @@ Agent sessions on items 45–48: take the role and context from
      doctrines (`AutonomousRvrRoutePolicy.MaximumFlankOffset`); stealth
      doctrines keep 2,000; mob bends unchanged. Real-client check: warbands no
      longer seem to wander off the road.
+     Live measurement 2026-10-24 (0.319.2): give-ups 359 → 185 per
+     game-hour (−49%), RvR goals 218 → 80, longest loop 50 → 9; the
+     Castle Excalibur DF portal got worse. Follow-ups are tasks 140–146
+     ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0314-live-measurement-2026-10-24)).
+
+141. **Snap off-mesh route starts onto the mesh.** Owner, 2026-10-24, from the
+     0.314.0 live measurement. Gain about 33 give-ups per game-hour (27 → 33
+     since the baseline); statically 72 of 80 starts connect once snapped.
+     Code, medium. Details in the analysis `REPORT.md` (see
+     NAVMESH_HOTSPOTS.md).
+
+142. **Remaining off-mesh goals and a height guard on goal snap.** Owner,
+     2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
+     game-hour. 75 snaps (61 vertical only; |dz| over 200: 45, over 500: 9,
+     range −956..+574). Two snapped to the wrong floor on Hadrian's Wall
+     (Caorira 13:25:26, dz −838; Orlaelorrin 13:32:17, dz −325) and failed
+     again within seconds. 44 off-mesh goals remain (39 connect once snapped
+     statically): the XP camp goal 587344,473811 (14 give-ups, 11 bots),
+     Cruachan Gorge 376226,415197; Hadrian's Wall 607604,298904 has no floor.
+     Code, cheap.
+
+143. **Road fallback for dead-end detours (task 139 Step 2).** Owner,
+     2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
+     game-hour: zone 214 (25 give-ups, 11 bots, starts 445–473k,302–318k to
+     goals 330–352k) and zone 115 (18, 13 bots, y about 601k to 626–632k). The
+     direct search stalls; start → reference → goal completes. Plan:
+     [NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#step-2-plan-port-the-road-fallback).
+     Code, bigger; deploy and release must carry `roads.json`.
+
+144. **Watch the region 181 cross-zone burst.** Owner, 2026-10-24, from the
+     0.314.0 live measurement. About 8 give-ups per game-hour: 19 PvE bots
+     between 13:37 and 13:59, all starting at x=393280 (a zone border), goals
+     379165,422150 and 428182,318477. Possibly a one-off; check the next live
+     log before changing code.
+
+145. **Probe the cut-off starts.** Owner, 2026-10-24, from the 0.314.0 live
+     measurement. About 37 give-ups per game-hour (35 at the baseline); cause
+     unknown. Probe first. Mesh replacement only with per-hotspot proof and
+     owner approval.
+
+146. **Ten-minute 1x profiling run with the full roster.** Owner, 2026-10-24,
+     from the 0.314.0 live measurement. Not a fix. The formation follow budget
+     (one Detour query per walking follower per about 0.8 s) is at or slightly
+     over target (one per 0.5–0.8 s, at most about 7% of a core), and
+     `NavPathQuery` cost per call rose 2.8x, probably from the saturated
+     loop at a requested 10x. `FormationFollowTick` falls outside the
+     `BOT_THINK_PROFILE` top 16. Owner starts the run.
 
 ## Implemented in source; installation verification pending
+
+140. **Castle Excalibur DF portal give-ups; failed-goal memory for DF and PvE
+     camps.** Owner, 2026-10-24, from the 0.314.0 live measurement
+     ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0314-live-measurement-2026-10-24)).
+     Gain about 56 of 185 give-ups per game-hour. The Castle Excalibur DF
+     portal (zone point 79 at 601798,430727, 713 units from the keep centre
+     601562,430054) got worse: 89 → 129 give-ups, 63 bots (103 DF grind, 26
+     RvR roam); with gates closed they stall 749–865 units short. The 0.314.0
+     keep-gate filter apparently answers "not blocked" here; cause unproven.
+     Candidates: the courtyard radius max(600, farthest door − 300) leaves the
+     portal outside, `AnyGateIntact` is false (Warden keeps, SkinType 99, have
+     no KeepComponent rows), or the door state. Also check the changelog claim
+     that Albion uses its second entrance (zone point 81, 599716,536189).
+     Separately, the failed-goal memory (`IsRecentGiveUpGoal`, 6 min /
+     200 units) is used only by the RvR pickers; DF and PvE camp and crossing
+     choice ignore it. Plan: a diagnostic first, then the fix. Code, cheap.
+     Implemented in source **0.320.0**. Cause: `AnyGateIntact`
+     (`AutonomousKeepGateGoals.cs`) took the outer gate ring from the
+     farthest door; at Excalibur (keep 57) that is a postern at 1,268 units,
+     never attackable in a relic keep, so the main gate at 1,049 fell outside
+     the 150-unit band and the keep read as breached. Dun Dagda's main gate
+     lay 141 units inside its postern and passed. Castle Myrddin had the same
+     flaw. The ring is now the farthest attackable door (cached; courtyard
+     radius unchanged). The give-up memory now steers zone crossings
+     (`FindFirstCrossingAvoidingGiveUps`: another crossing if one exists,
+     else the same one), DF/PvE camp cells and pickup-group dungeon
+     entrances. Zone point 81 is in Camelot Hills, not in a keep, and is
+     never filtered. Offline: Release build green; `~Autonomous` 1,127 of
+     1,128 (the known bug 160 null-lock test); daoc-reviewer accepted.
+     Live check: `AUTONOMOUS_DF_ENTRANCE_KEEP zonepoint=79 … keep=57 …
+     outerGateRing=1049 gateIntact=True`, give-ups near 601798,430727 drop,
+     `crossingGiveUpFallback` stays rare, no capital relocations from it.
 
 138. **Full formation follow inside the movement tick (follow-up to 137).**
      Owner, 2026-10-24. Implemented in source **0.312.0**

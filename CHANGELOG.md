@@ -12,6 +12,61 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.320.0] - 2026-10-24
+
+### Added
+- `AUTONOMOUS_DF_ENTRANCE_KEEP` log line, once per Darkness Falls entrance:
+  the keep around it, its courtyard and outer gate ring, and whether a gate
+  stands. `AUTONOMOUS_ROUTE_GOAL_FIX` gains `crossingRepickBlocked`,
+  `crossingGiveUpFallback` and `campRepickBlocked`; `repickBlocked` again
+  counts only the RvR pickers.
+
+### Changed
+- **A bot that just gave up reaching a zone crossing, a camp or a dungeon
+  entrance does not pick it again for 6 minutes (task 140).** This now holds
+  for Darkness Falls and PvE camps, pickup-group dungeon entrances and the
+  choice of zone crossing, not only for RvR goals. Albion bots that failed at
+  the Castle Excalibur portal use the second Albion entrance (zone point 81,
+  Camelot Hills). When the given-up crossing is the only way out, it is still
+  used, so no bot is stranded. Real client check pending.
+- Correction to 0.314.0: Albion's second Darkness Falls entrance (zone point
+  81) is in Camelot Hills, not at the Portal Keep.
+
+### Fixed
+- **Bots no longer run at Castle Excalibur's closed gate to reach the
+  Darkness Falls portal (task 140).** The 0.314.0 gate check measured the
+  outer gate ring from the farthest door, which at Castle Excalibur and
+  Castle Myrddin is a postern; it found no gate there and called the keep
+  open (163 give-ups near the portal in the 0.314.0 live session). The ring
+  now comes from the farthest gate. Excalibur and Myrddin courtyards hold
+  while their main gate stands; every other keep reads as before. Real
+  client check pending.
+
+### Removed
+- None.
+
+## [0.319.2] - 2026-10-24
+
+### Added
+- `docs/NAVMESH_HOTSPOTS.md`: the 0.314.0 live measurement. Route give-ups
+  fell from 359 to 185 per game-hour (−49%), RvR-goal give-ups from 218 to
+  80, the longest same-spot loop from 50 to 9; the Castle Excalibur Darkness
+  Falls portal got worse (89 → 129). Offline log analysis only.
+- Tasks 140–146 for the remaining give-ups, ranked by gain (Excalibur DF
+  portal and DF/PvE failed-goal memory, off-mesh starts, off-mesh goals and a
+  height guard on goal snap, road fallback, region 181 cross-zone, cut-off
+  starts) and a 1x profiling run; bugs 173 (leader re-elections within 5 s)
+  and 174 (fewer HubFan insertions).
+
+### Changed
+- Task 139 points to the measurement and its follow-ups.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.319.1] - 2026-10-24
 
 ### Added

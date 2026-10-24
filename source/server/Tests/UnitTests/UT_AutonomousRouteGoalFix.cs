@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using DOL.Database;
 using NUnit.Framework;
 
 namespace DOL.GS.Tests;
@@ -124,6 +126,131 @@ public sealed class UT_AutonomousRouteGoalFix
             // Only doors in the outer ring hold the keep shut; an inner keep door does not.
             Assert.That(AutonomousKeepGateGoals.IsOuterGate(1_415f, 1_415f), Is.True);
             Assert.That(AutonomousKeepGateGoals.IsOuterGate(500f, 1_415f), Is.False);
+        });
+    }
+
+    // Task 140: doors of the saved relic castles (distance to the keep centre, gate = attackable, i.e. not a postern).
+    private static readonly (float Distance, bool IsGate)[] ExcaliburDoors =
+    [
+        (156, true), (230, true), (685, true), (738, true), (739, false), (769, true), (826, true), (975, false),
+        (1_049, true), (1_116, false), (1_268, false),
+    ];
+    private static readonly (float Distance, bool IsGate)[] DagdaDoors =
+    [
+        (194, true), (229, true), (614, true), (720, true), (781, false), (794, true), (833, true), (1_027, false),
+        (1_088, false), (1_100, true), (1_241, false),
+    ];
+
+    private static (float, bool, bool)[] Closed((float Distance, bool IsGate)[] doors) =>
+        doors.Select(door => (door.Distance, door.IsGate, true)).ToArray();
+
+    [Test]
+    public void ExcalibursMainGateHoldsItsCourtyardThoughAPosternStandsFartherOut()
+    {
+        float farthestDoor = ExcaliburDoors.Max(door => door.Distance);
+        float ring = AutonomousKeepGateGoals.OuterGateRing(ExcaliburDoors);
+        Assert.Multiple(() =>
+        {
+            Assert.That(farthestDoor, Is.EqualTo(1_268f), "a postern is the farthest door");
+            Assert.That(ring, Is.EqualTo(1_049f), "the main gate is the outer gate");
+            Assert.That(AutonomousKeepGateGoals.AnyOuterGateIntact(Closed(ExcaliburDoors), ring), Is.True);
+            // 0.314.0 read the ring at the farthest door and found only posterns there: "open", 129 give-ups.
+            Assert.That(AutonomousKeepGateGoals.AnyOuterGateIntact(Closed(ExcaliburDoors), farthestDoor), Is.False);
+            // The DF portal (zone point 79, 713 units out) stays inside the courtyard, which still uses the farthest door.
+            Assert.That(AutonomousKeepGateGoals.IsInsideFootprint(601798 - 601562, 430727 - 430054,
+                AutonomousKeepGateGoals.CourtyardRadius(farthestDoor)), Is.True);
+        });
+    }
+
+    [Test]
+    public void DunDagdaReadsTheSameAsBefore()
+    {
+        float ring = AutonomousKeepGateGoals.OuterGateRing(DagdaDoors);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ring, Is.EqualTo(1_100f));
+            Assert.That(AutonomousKeepGateGoals.AnyOuterGateIntact(Closed(DagdaDoors), ring), Is.True);
+            Assert.That(AutonomousKeepGateGoals.AnyOuterGateIntact(Closed(DagdaDoors), 1_241f), Is.True,
+                "the main gate lies within the band of the farthest postern, which is why 0.314.0 held Dagda");
+        });
+    }
+
+    [Test]
+    public void ABrokenOuterGateOpensTheCourtyardAndInnerDoorsDoNotHoldIt()
+    {
+        float ring = AutonomousKeepGateGoals.OuterGateRing(ExcaliburDoors);
+        (float, bool, bool)[] mainGateDown = ExcaliburDoors
+            .Select(door => (door.Distance, door.IsGate, door.Distance != 1_049f)).ToArray();
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousKeepGateGoals.AnyOuterGateIntact(mainGateDown, ring), Is.False);
+            Assert.That(AutonomousKeepGateGoals.OuterGateRing([(1_268f, false), (1_116f, false)]), Is.EqualTo(0f));
+            Assert.That(AutonomousKeepGateGoals.AnyOuterGateIntact([(1_268f, false, true)], 0f), Is.False,
+                "a keep with posterns only has no gate to hold");
+        });
+    }
+
+    private static DbZonePoint DfEntrance(ushort id, int sourceX, int sourceY, int targetX, int targetY) => new()
+    {
+        Id = id,
+        SourceRegion = 1,
+        SourceX = sourceX,
+        SourceY = sourceY,
+        TargetRegion = AutonomousDarknessFallsPolicy.RegionId,
+        TargetX = targetX,
+        TargetY = targetY,
+    };
+
+    private static DbZonePoint SearchAvoidingGiveUps(DbZonePoint[] edges, long owner, long now,
+        out AutonomousZoneCrossingSearch.GiveUpSteer steer) =>
+        AutonomousZoneCrossingSearch.FindFirstCrossingAvoidingGiveUps(edges, 1, AutonomousDarknessFallsPolicy.RegionId,
+            30600, 27900, null, null, null, point => AutonomousFailedGoalMemory.IsBlockedCrossing(owner, point, now),
+            out steer);
+
+    [Test]
+    public void ACrossingTheBotJustGaveUpReachingYieldsToTheOtherEntranceUntilTheCooldownEnds()
+    {
+        AutonomousFailedGoalMemory.Clear();
+        const long owner = 25_316;
+        DbZonePoint excalibur = DfEntrance(79, 601798, 430727, 30550, 27898);
+        DbZonePoint secondEntrance = DfEntrance(81, 599716, 536189, 31211, 27924);
+        DbZonePoint[] edges = [excalibur, secondEntrance];
+        DbZonePoint beforeGiveUp = SearchAvoidingGiveUps(edges, owner, 500, out var beforeSteer);
+        // The logged give-up stopped at 601843,430860, 140 units from the portal's source point.
+        AutonomousFailedGoalMemory.Note(owner, 1, 601843, 430860, 1_000);
+        DbZonePoint afterGiveUp = SearchAvoidingGiveUps(edges, owner, 2_000, out var afterSteer);
+        DbZonePoint afterCooldown = SearchAvoidingGiveUps(edges, owner,
+            1_000 + AutonomousFailedGoalMemory.CooldownMilliseconds, out var cooldownSteer);
+        Assert.Multiple(() =>
+        {
+            Assert.That(beforeGiveUp, Is.SameAs(excalibur), "before the give-up the nearer landing wins");
+            Assert.That(beforeSteer, Is.EqualTo(AutonomousZoneCrossingSearch.GiveUpSteer.Unchanged));
+            Assert.That(afterGiveUp, Is.SameAs(secondEntrance), "after it the other entrance is taken");
+            Assert.That(afterSteer, Is.EqualTo(AutonomousZoneCrossingSearch.GiveUpSteer.Steered));
+            Assert.That(afterCooldown, Is.SameAs(excalibur));
+            Assert.That(cooldownSteer, Is.EqualTo(AutonomousZoneCrossingSearch.GiveUpSteer.Unchanged));
+            Assert.That(AutonomousFailedGoalMemory.IsBlockedCrossing(owner + 1, excalibur, 2_000), Is.False, "other bot");
+            Assert.That(AutonomousFailedGoalMemory.IsBlockedCrossing(owner, null, 2_000), Is.False);
+        });
+    }
+
+    [Test]
+    public void TheOnlyRouteIsKeptEvenWhenTheBotJustGaveUpReachingIt()
+    {
+        AutonomousFailedGoalMemory.Clear();
+        const long owner = 25_317;
+        DbZonePoint onlyExit = DfEntrance(79, 601798, 430727, 30550, 27898);
+        AutonomousFailedGoalMemory.Note(owner, 1, 601843, 430860, 1_000);
+        DbZonePoint crossing = SearchAvoidingGiveUps([onlyExit], owner, 2_000, out var steer);
+        Assert.Multiple(() =>
+        {
+            Assert.That(crossing, Is.SameAs(onlyExit), "the memory steers among routes, it never strands the bot");
+            Assert.That(steer, Is.EqualTo(AutonomousZoneCrossingSearch.GiveUpSteer.Fallback));
+            // An entrance the caller rules out (a gated DF portal) stays out: no fallback past canUseEntrance.
+            Assert.That(AutonomousZoneCrossingSearch.FindFirstCrossingAvoidingGiveUps([onlyExit], 1,
+                AutonomousDarknessFallsPolicy.RegionId, 30600, 27900, _ => false, null, null, _ => true, out var gated),
+                Is.Null);
+            Assert.That(gated, Is.EqualTo(AutonomousZoneCrossingSearch.GiveUpSteer.Unchanged));
         });
     }
 

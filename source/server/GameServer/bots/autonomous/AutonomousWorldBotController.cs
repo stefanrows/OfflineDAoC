@@ -3490,12 +3490,21 @@ namespace DOL.GS
             // dungeons, where their bosses killed passing levellers.
             HashSet<ushort> reachableRegions = ReachableRegions(bot.Realm, bot.CurrentRegionID,
                 !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(bot.CurrentRegionID));
+            // Task 140: camp choice leaves out spots the bot (or its warband) just gave up on; counted once a pass.
+            bool campGiveUpSkipped = false;
+            bool CampGiveUp(ushort region, float x, float y)
+            {
+                bool blocked = IsRecentGiveUpGoal(bot, region, x, y, countRepick: false);
+                campGiveUpSkipped |= blocked;
+                return blocked;
+            }
             DbZonePoint[] directDungeonEntrances = localPickupGroup
                 ? ZonePoints().Where(edge => edge.SourceRegion == _groupDirective.RendezvousRegion &&
                     IsAuthoritativeZonePointEdge(edge) &&
                     WorldMgr.GetRegion(edge.TargetRegion)?.IsDungeon == true &&
                     IsRegionEdgeAccessible(bot.Realm, edge.SourceRegion, edge.TargetRegion) &&
-                    !AutonomousKeepGateGoals.BlocksEntrance(bot, edge)).ToArray()
+                    !AutonomousKeepGateGoals.BlocksEntrance(bot, edge) &&
+                    !CampGiveUp(edge.SourceRegion, edge.SourceX, edge.SourceY)).ToArray()
                 : [];
             HashSet<string> rejectedDungeons = AutonomousBotGroupCoordinator.RejectedDungeonCamps(bot);
             foreach (string id in _rejectedDungeonCamps.Where(pair => pair.Value <= GameLoop.GameLoopTime).Select(pair => pair.Key).ToArray())
@@ -3522,6 +3531,10 @@ namespace DOL.GS
             // realm/level/death filtering a cheap in-memory operation.
             foreach (CampCatalogCell cell in CampCatalogSnapshot()
                          .Where(cell => !AvoidRepeatedPvpPlace(cell.RegionId, cell.X, cell.Y) && !rejectedDungeons.Contains(cell.Id) && reachableRegions.Contains(cell.RegionId) &&
+                                        // Task 140: a spot the bot (or its warband) just gave up on is not offered
+                                        // again under another camp id. A camp behind a crossing it gave up reaching
+                                        // is estimated over another crossing when one exists (FindNextCrossing).
+                                        !CampGiveUp(cell.RegionId, cell.X, cell.Y) &&
                                         !AutonomousPveBossDanger.IsNear(cell.RegionId, cell.X, cell.Y, bossCheckUtc) &&
                                         (!localPickupGroup ||
                                             (cell.RegionId == _groupDirective.RendezvousRegion ||
@@ -3600,6 +3613,8 @@ namespace DOL.GS
                     AutonomousBotDecisionEngine.HighestConOf(cell.Levels, bot.EffectiveLevel)));
             }
 
+            if (campGiveUpSkipped)
+                AutonomousRouteGoalFixMetrics.CampRepickBlocked();
             // Keep all level-valid locations eligible. Crowd and recent spawn
             // depletion only soften the final outdoor draw.
             IEnumerable<AutonomousBotDecisionEngine.Camp> legal = camps.Where(camp =>
@@ -5287,14 +5302,14 @@ namespace DOL.GS
             }
         }
 
-        private bool IsRecentGiveUpGoal(GameBot bot, ushort region, float x, float y)
+        private bool IsRecentGiveUpGoal(GameBot bot, ushort region, float x, float y, bool countRepick = true)
         {
             long now = GameLoop.GameLoopTime;
             bool blocked = AutonomousFailedGoalMemory.IsBlocked(FailedGoalOwnerKey(bot), region, x, y, now) ||
                            _groupDirective?.IsDynamic == true &&
                            AutonomousFailedGoalMemory.IsBlocked(
                                AutonomousFailedGoalMemory.ForceKey(_groupDirective.GroupId), region, x, y, now);
-            if (blocked)
+            if (blocked && countRepick)
                 AutonomousRouteGoalFixMetrics.RepickBlocked();
             return blocked;
         }
@@ -5607,13 +5622,27 @@ namespace DOL.GS
                 .ToArray();
 
         private static DbZonePoint FindNextCrossing(DbZonePoint[] edges, ushort currentRegion, ushort targetRegion,
-            int targetX, int targetY, GameBot quarantineBot) =>
-            AutonomousZoneCrossingSearch.FindFirstCrossing(edges, currentRegion, targetRegion, targetX, targetY,
-                // Task 139 (B): a Darkness Falls portal inside a keep this bot may not pass is no entrance for it.
-                point => AutonomousDungeonGoalCatalog.CanUseEntrance(point, targetRegion, targetX, targetY) &&
-                         (quarantineBot == null || !AutonomousKeepGateGoals.BlocksEntrance(quarantineBot, point)),
-                quarantineBot == null ? null : point => IsZonePointQuarantined(quarantineBot, point),
-                quarantineBot == null ? null : (quarantineBot.X, quarantineBot.Y));
+            int targetX, int targetY, GameBot quarantineBot)
+        {
+            // Task 139 (B): a Darkness Falls portal inside a keep this bot may not pass is no entrance for it.
+            Func<DbZonePoint, bool> canUse = point => AutonomousDungeonGoalCatalog.CanUseEntrance(point, targetRegion, targetX, targetY) &&
+                                                     (quarantineBot == null || !AutonomousKeepGateGoals.BlocksEntrance(quarantineBot, point));
+            if (quarantineBot == null)
+                return AutonomousZoneCrossingSearch.FindFirstCrossing(edges, currentRegion, targetRegion, targetX, targetY,
+                    canUse);
+            // Task 140: a crossing this bot just gave up reaching yields to another route, but stays its last one.
+            long owner = FailedGoalOwnerKey(quarantineBot), now = GameLoop.GameLoopTime;
+            DbZonePoint crossing = AutonomousZoneCrossingSearch.FindFirstCrossingAvoidingGiveUps(edges, currentRegion,
+                targetRegion, targetX, targetY, canUse, point => IsZonePointQuarantined(quarantineBot, point),
+                (quarantineBot.X, quarantineBot.Y),
+                point => AutonomousFailedGoalMemory.IsBlockedCrossing(owner, point, now),
+                out AutonomousZoneCrossingSearch.GiveUpSteer steer);
+            if (steer == AutonomousZoneCrossingSearch.GiveUpSteer.Steered)
+                AutonomousRouteGoalFixMetrics.CrossingRepickBlocked();
+            else if (steer == AutonomousZoneCrossingSearch.GiveUpSteer.Fallback)
+                AutonomousRouteGoalFixMetrics.CrossingGiveUpFallback();
+            return crossing;
+        }
 
         internal static IReadOnlyList<DbZonePoint> RealmEventCrossings() => ZonePoints();
 

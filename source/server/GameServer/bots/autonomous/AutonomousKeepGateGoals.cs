@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using DOL.Database;
 using DOL.GS.Keeps;
+using DOL.Logging;
 
 namespace DOL.GS;
 
@@ -16,24 +17,35 @@ namespace DOL.GS;
 /// is open to every walker, and a keep the bot's own force is sieging keeps its targets. Only the courtyard counts
 /// (inside the outer gate's ring, less the wall), so fighters outside the walls, such as a warband at the back wall
 /// of another guild's keep, stay valid targets.
+/// Task 140: the outer gate ring is the farthest keep gate, not the farthest door. In the relic castles (Castle
+/// Excalibur, Castle Myrddin) a postern stands farther out than the main gate (Excalibur 1,268 against 1,049), so
+/// 0.314.0 looked for a gate in the postern's ring, found none and called the keep open: the 0.314.0 session had 163
+/// give-ups within 1,500 units of the Excalibur DF portal (zone point 79; 137 DF grind, 26 RvR roam) while Dun Dagda,
+/// whose main gate lies 141 units inside its farthest postern, was held.
 /// </summary>
 public static class AutonomousKeepGateGoals
 {
+    private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousKeepGateGoals));
+
     /// <summary>
-    /// Used for a keep that has no door yet. The farthest door of the saved keeps lies 1,270-1,790 units from the
+    /// Used for a keep that has no door yet. The farthest door of the saved keeps lies 1,240-1,790 units from the
     /// keep centre; the DF portals (350-740 units) and the Caer Renaris targets (up to 975) lie well inside.
     /// </summary>
     public const float FallbackFootprintRadius = 1_300f;
     /// <summary>
-    /// The outer gate stands in the wall, the farthest door from the centre; on every other side the wall is closer.
-    /// The courtyard is that ring less this margin, so the ground just outside the walls is not "behind a gate".
+    /// Gates and posterns stand in the outer wall; the farthest door marks the wall's reach. The courtyard is that
+    /// ring less this margin, so the ground just outside the walls is not "behind a gate".
     /// </summary>
     public const float WallMargin = 300f;
     public const float MinimumCourtyardRadius = 600f;
-    /// <summary>Doors this close to the outer gate's ring are outer gates; inner keep doors do not hold a breached keep.</summary>
+    /// <summary>
+    /// Gates this close to the farthest gate's ring are outer gates; inner keep doors do not hold a breached keep.
+    /// Posterns are never gates: they cannot be broken and do not open the courtyard to a siege.
+    /// </summary>
     public const float OuterGateBand = 150f;
 
     private static readonly ConcurrentDictionary<int, float> FootprintByKeep = new();
+    private static readonly ConcurrentDictionary<int, float> OuterGateRingByKeep = new();
     private static readonly ConcurrentDictionary<(ushort Region, int X, int Y), AbstractGameKeep> KeepByEntrance = new();
 
     /// <summary>The goal is held back: a keep the bot may not pass, its gates intact, and not the keep it is sieging.</summary>
@@ -54,20 +66,64 @@ public static class AutonomousKeepGateGoals
             return known;
         float farthest = 0;
         foreach (GameKeepDoor door in keep.Doors.Values)
-            farthest = Math.Max(farthest, Vector2.Distance(new(door.X, door.Y), new(keep.X, keep.Y)));
+            farthest = Math.Max(farthest, DoorDistance(keep, door));
         if (farthest <= 0)
             return FallbackFootprintRadius;
         FootprintByKeep[keep.KeepID] = farthest;
         return farthest;
     }
 
+    /// <summary>One door's share of the outer gate ring: its distance if it is a gate (never a postern), else 0.</summary>
+    public static float GateRingContribution(float distance, bool isGate) => isGate ? distance : 0f;
+
+    /// <summary>One door holds the courtyard: a closed, standing gate in the outer gate ring.</summary>
+    public static bool HoldsCourtyard(float distance, bool isGate, bool closedAndStanding, float outerGateRing) =>
+        outerGateRing > 0 && isGate && closedAndStanding && IsOuterGate(distance, outerGateRing);
+
+    /// <summary>The ring of the outer gates: the farthest gate (an attackable door, never a postern), or 0.</summary>
+    public static float OuterGateRing(IEnumerable<(float Distance, bool IsGate)> doors)
+    {
+        float ring = 0;
+        foreach ((float distance, bool isGate) in doors)
+            ring = Math.Max(ring, GateRingContribution(distance, isGate));
+        return ring;
+    }
+
     /// <summary>An outer gate still stands closed (a breached outer gate opens the courtyard).</summary>
+    public static bool AnyOuterGateIntact(IEnumerable<(float Distance, bool IsGate, bool ClosedAndStanding)> doors,
+        float outerGateRing)
+    {
+        foreach ((float distance, bool isGate, bool closed) in doors)
+            if (HoldsCourtyard(distance, isGate, closed, outerGateRing))
+                return true;
+        return false;
+    }
+
+    /// <summary>The keep's outer gate ring (cached; doors never move and a postern never becomes a gate).</summary>
+    private static float OuterGateRing(AbstractGameKeep keep)
+    {
+        if (OuterGateRingByKeep.TryGetValue(keep.KeepID, out float known))
+            return known;
+        float ring = 0;
+        foreach (GameKeepDoor door in keep.Doors.Values)
+            ring = Math.Max(ring, GateRingContribution(DoorDistance(keep, door), door.IsAttackableDoor));
+        if (ring > 0)
+            OuterGateRingByKeep[keep.KeepID] = ring;
+        return ring;
+    }
+
+    private static float DoorDistance(AbstractGameKeep keep, GameKeepDoor door) =>
+        Vector2.Distance(new(door.X, door.Y), new(keep.X, keep.Y));
+
+    /// <summary>Called for every gated goal check (thousands a minute): iterates the doors, allocates nothing.</summary>
     private static bool AnyGateIntact(AbstractGameKeep keep)
     {
-        float outer = FootprintRadius(keep);
+        float ring = OuterGateRing(keep);
+        if (ring <= 0)
+            return false;
         foreach (GameKeepDoor door in keep.Doors.Values)
-            if (door.IsAlive && door.IsAttackableDoor && door.State == eDoorState.Closed &&
-                IsOuterGate(Vector2.Distance(new(door.X, door.Y), new(keep.X, keep.Y)), outer))
+            if (HoldsCourtyard(DoorDistance(keep, door), door.IsAttackableDoor,
+                    door.IsAlive && door.State == eDoorState.Closed, ring))
                 return true;
         return false;
     }
@@ -124,6 +180,14 @@ public static class AutonomousKeepGateGoals
                 }
             }
             KeepByEntrance[key] = keep;
+            // Once per entrance: which keep holds it and how its gates are read (task 140 live check).
+            if (Log.IsInfoEnabled)
+                Log.Info(keep == null
+                    ? $"AUTONOMOUS_DF_ENTRANCE_KEEP zonepoint={point.Id} source={point.SourceRegion}:{point.SourceX},{point.SourceY} keep=none"
+                    : $"AUTONOMOUS_DF_ENTRANCE_KEEP zonepoint={point.Id} source={point.SourceRegion}:{point.SourceX},{point.SourceY} " +
+                      $"keep={keep.KeepID} name=\"{keep.Name}\" distance={Math.Sqrt(best):0} doors={keep.Doors.Count} " +
+                      $"courtyard={CourtyardRadius(FootprintRadius(keep)):0} outerGateRing={OuterGateRing(keep):0} " +
+                      $"gateIntact={AnyGateIntact(keep)}");
         }
         if (keep == null || AutonomousRvrTravel.CanPassKeep(bot, keep, manager) || !AnyGateIntact(keep))
             return false;

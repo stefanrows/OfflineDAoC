@@ -69,6 +69,46 @@ namespace DOL.GS
             return null;
         }
 
+        /// <summary>How the give-up memory changed a crossing search.</summary>
+        public enum GiveUpSteer
+        {
+            /// <summary>The chosen crossing was not one the bot gave up reaching (or there was none).</summary>
+            Unchanged,
+            /// <summary>The chosen crossing was a give-up spot; another route was taken instead.</summary>
+            Steered,
+            /// <summary>The give-up spot was the only route left, so it was kept.</summary>
+            Fallback,
+        }
+
+        /// <summary>
+        /// Task 140: <see cref="FindFirstCrossing"/>, but a first crossing the bot just gave up reaching
+        /// (<paramref name="isGivenUp"/>) is swapped for another route when one exists. The memory only steers the
+        /// choice: when the given-up crossing is the last route it is returned, so a bot is never stranded in a region
+        /// whose only exit it once failed to reach. The second search runs only when the first result is a give-up spot.
+        /// </summary>
+        public static DbZonePoint FindFirstCrossingAvoidingGiveUps(
+            IReadOnlyList<DbZonePoint> edges,
+            ushort currentRegion,
+            ushort targetRegion,
+            int targetX,
+            int targetY,
+            Func<DbZonePoint, bool> canUseEntrance,
+            Func<DbZonePoint, bool> isQuarantined,
+            (int X, int Y)? origin,
+            Func<DbZonePoint, bool> isGivenUp,
+            out GiveUpSteer steer)
+        {
+            steer = GiveUpSteer.Unchanged;
+            DbZonePoint first = FindFirstCrossing(edges, currentRegion, targetRegion, targetX, targetY,
+                canUseEntrance, isQuarantined, origin);
+            if (first == null || isGivenUp == null || !isGivenUp(first))
+                return first;
+            DbZonePoint other = FindFirstCrossing(edges, currentRegion, targetRegion, targetX, targetY,
+                canUseEntrance, point => isQuarantined?.Invoke(point) == true || isGivenUp(point), origin);
+            steer = other == null ? GiveUpSteer.Fallback : GiveUpSteer.Steered;
+            return other ?? first;
+        }
+
         /// <summary>
         /// The edges a PvE route really uses (bug 78): outside the shared
         /// frontier dungeons, and for a goal outside them, a route never enters

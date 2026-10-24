@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Threading;
+using DOL.Database;
 using DOL.Logging;
 
 namespace DOL.GS;
@@ -124,6 +125,14 @@ public static class AutonomousFailedGoalMemory
         return false;
     }
 
+    /// <summary>
+    /// Task 140: a zone point whose approach the owner just gave up on. A give-up on the way to a crossing notes the
+    /// crossing's approach (the Excalibur DF portal give-ups ended 140-155 units from its source point), so the crossing
+    /// search prefers another route until the cooldown ends; it keeps the edge when no other route exists.
+    /// </summary>
+    public static bool IsBlockedCrossing(long ownerKey, DbZonePoint point, long now) =>
+        point != null && IsBlocked(ownerKey, point.SourceRegion, point.SourceX, point.SourceY, now);
+
     private static bool Near(float ax, float ay, float bx, float by) =>
         (ax - bx) * (ax - bx) + (ay - by) * (ay - by) <= Radius * Radius;
 
@@ -163,7 +172,8 @@ public static class AutonomousRouteGoalFixMetrics
 {
     public const long ReportIntervalMilliseconds = 60_000;
     private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousRouteGoalFixMetrics));
-    private static long _snapped, _snapFailed, _gatedSkipped, _gatedDfSkipped, _repickBlocked, _pocketEscapeSkipped;
+    private static long _snapped, _snapFailed, _gatedSkipped, _gatedDfSkipped, _repickBlocked, _pocketEscapeSkipped,
+        _crossingRepickBlocked, _crossingGiveUpFallback, _campRepickBlocked;
     private static long _nextReportTick;
 
     public static void Snapped() => Interlocked.Increment(ref _snapped);
@@ -193,6 +203,12 @@ public static class AutonomousRouteGoalFixMetrics
     /// <summary>A Darkness Falls entrance inside such a keep was left out of a route or camp search.</summary>
     public static void GatedDfSkipped() => Interlocked.Increment(ref _gatedDfSkipped);
     public static void RepickBlocked() => Interlocked.Increment(ref _repickBlocked);
+    /// <summary>A crossing search took another route than the zone point the bot had just given up reaching (task 140).</summary>
+    public static void CrossingRepickBlocked() => Interlocked.Increment(ref _crossingRepickBlocked);
+    /// <summary>The given-up zone point was the only route, so the search kept it (task 140).</summary>
+    public static void CrossingGiveUpFallback() => Interlocked.Increment(ref _crossingGiveUpFallback);
+    /// <summary>A camp planning pass left out at least one spot the bot or its warband had just given up on (task 140).</summary>
+    public static void CampRepickBlocked() => Interlocked.Increment(ref _campRepickBlocked);
     public static void PocketEscapeSkipped() => Interlocked.Increment(ref _pocketEscapeSkipped);
 
     public static void ReportIfDue(long now)
@@ -208,11 +224,15 @@ public static class AutonomousRouteGoalFixMetrics
             return;
         long snapped = Interlocked.Exchange(ref _snapped, 0), snapFailed = Interlocked.Exchange(ref _snapFailed, 0),
              gated = Interlocked.Exchange(ref _gatedSkipped, 0), gatedDf = Interlocked.Exchange(ref _gatedDfSkipped, 0),
-             repick = Interlocked.Exchange(ref _repickBlocked, 0), pocket = Interlocked.Exchange(ref _pocketEscapeSkipped, 0);
-        if (snapped + snapFailed + gated + gatedDf + repick + pocket == 0)
+             repick = Interlocked.Exchange(ref _repickBlocked, 0), pocket = Interlocked.Exchange(ref _pocketEscapeSkipped, 0),
+             crossing = Interlocked.Exchange(ref _crossingRepickBlocked, 0),
+             fallback = Interlocked.Exchange(ref _crossingGiveUpFallback, 0),
+             camp = Interlocked.Exchange(ref _campRepickBlocked, 0);
+        if (snapped + snapFailed + gated + gatedDf + repick + pocket + crossing + fallback + camp == 0)
             return;
         Log.Info($"AUTONOMOUS_ROUTE_GOAL_FIX window_s={ReportIntervalMilliseconds / 1000} snapped={snapped} " +
                  $"snapFailed={snapFailed} gatedSkipped={gated} gatedDfSkipped={gatedDf} repickBlocked={repick} " +
-                 $"pocketEscapeSkipped={pocket}");
+                 $"pocketEscapeSkipped={pocket} crossingRepickBlocked={crossing} crossingGiveUpFallback={fallback} " +
+                 $"campRepickBlocked={camp}");
     }
 }
