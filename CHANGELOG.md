@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.327.0] - 2026-10-24
+
+### Added
+- Launcher: a TRIALS OF ATLANTIS block on the XP Settings tab (ToA plan
+  WP1.4, `docs/TOA_LAUNCHER.md`): Atlantis open to players, ToA loot in
+  Atlantis, ToA cap-bonus chance, Master Level XP per mob level, artifact XP
+  rate, world data packs on/off. Changes are written while the server is
+  fully stopped and apply at the next start; a number still waiting for its
+  delayed save is written when the launcher closes. Launcher tests
+  ToaSettingsTests (10).
+- `docs/TOA_PLAN.md`: WP2.6 (bots cast Convoker, Stormlord and Spymaster
+  abilities) planned with the owner's rule for human-looking bot behaviour.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.326.0] - 2026-10-24
 
 ### Added

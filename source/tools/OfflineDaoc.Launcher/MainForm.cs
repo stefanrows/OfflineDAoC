@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.326.0";
+    internal const string DisplayVersion = "0.327.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -133,6 +133,25 @@ internal sealed partial class MainForm : Form
         Font = new Font("Georgia", 9f, FontStyle.Bold),
     };
     private readonly Label _botRealmRankNameplatesNote = XpRateDescription("On by default. Adds RR xLy after autonomous bot names. Applies at the next server startup.");
+    // Trials of Atlantis block below the rates (ToaSettings): three switches and three numbers, one row each.
+    private readonly CheckBox _toaAtlantisOpen = ToaCheckBox("atlantis");
+    private readonly CheckBox _toaLoot = ToaCheckBox("loot");
+    private readonly CheckBox _toaDataPacks = ToaCheckBox("data_packs");
+    private readonly Dictionary<string, NumericUpDown> _toaNumbers = new();
+    private readonly Dictionary<string, Label> _toaNotes = new();
+    // A changed number is saved by the one-second display clock once it has rested 800 ms, so arrow clicks
+    // and typing write one row, not one per step (no extra timer).
+    private static readonly TimeSpan ToaNumberSaveDelay = TimeSpan.FromMilliseconds(800);
+    private readonly HashSet<string> _toaPendingNumbers = [];
+    private DateTime _toaLastNumberEditUtc;
+    private string? _toaNotice;
+    private readonly Label _toaStatus = new()
+    {
+        AutoSize = true,
+        ForeColor = DaocTheme.Muted,
+        Font = new Font("Georgia", 8.5f, FontStyle.Italic),
+        Text = "Trials of Atlantis settings are loaded from the saved server settings.",
+    };
     private readonly Label _xpSettingsStatus = new()
     {
         AutoSize = true,
@@ -281,6 +300,9 @@ internal sealed partial class MainForm : Form
         DaocTheme.StyleCheckBox(_makeMeGm);
         DaocTheme.StyleCheckBox(_realmRankNameplates);
         DaocTheme.StyleCheckBox(_botRealmRankNameplates);
+        DaocTheme.StyleCheckBox(_toaAtlantisOpen);
+        DaocTheme.StyleCheckBox(_toaLoot);
+        DaocTheme.StyleCheckBox(_toaDataPacks);
         DaocTheme.StyleCheckBox(_eventActiveOnly);
         _auctionSearch.TextChanged += (_, _) => ApplyAuctionFilter();
         _auctionRealmTabs.SelectedIndexChanged += (_, _) => ApplyAuctionFilter();
@@ -301,6 +323,7 @@ internal sealed partial class MainForm : Form
         };
 
         _displayClock.Tick += async (_, _) => await RefreshVisibleCountdownsAsync();
+        _displayClock.Tick += async (_, _) => await SaveToaNumbersAsync();
         _autoRefresh.Tick += async (_, _) =>
         {
             ScheduleNextAutoRefresh();
@@ -334,6 +357,7 @@ internal sealed partial class MainForm : Form
         };
         FormClosing += (_, _) =>
         {
+            FlushPendingToaNumbersOnClose();
             _serverReadinessPoll.Stop();
             _serverLog?.Dispose();
         };
@@ -672,7 +696,14 @@ internal sealed partial class MainForm : Form
         groups.Controls.Add(BuildActiveGroupsPanel());
         // Scrolls on short windows instead of clipping the bottom settings.
         var xpSettings = new TabPage("XP Settings") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text, AutoScroll = true };
-        xpSettings.Controls.Add(BuildXpSettingsPanel());
+        // Dock=Top lays the last added control out first (on top): rates, a gap, then Trials of Atlantis.
+        Control toaPanel = BuildToaSettingsPanel();
+        var toaGap = new Panel { Dock = DockStyle.Top, Height = 12, BackColor = Color.Transparent };
+        Control xpPanel = BuildXpSettingsPanel();
+        xpSettings.Controls.Add(toaPanel);
+        xpSettings.Controls.Add(toaGap);
+        xpSettings.Controls.Add(xpPanel);
+        xpSettings.AutoScrollMinSize = new Size(0, xpPanel.Height + toaGap.Height + toaPanel.Height);
         HeraldPalette.UseDarkScrollbars(xpSettings);
         var worldSpeed = new TabPage("World Speed") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         worldSpeed.Controls.Add(BuildWorldSpeedPanel());
@@ -785,6 +816,113 @@ internal sealed partial class MainForm : Form
         surface.Controls.Add(layout);
         return surface;
     }
+
+    private static CheckBox ToaCheckBox(string name) => new()
+    {
+        Text = ToaSettings.Field(name).Label,
+        AutoSize = true,
+        ForeColor = DaocTheme.Parchment,
+        Font = new Font("Georgia", 9f, FontStyle.Bold),
+        AccessibleName = ToaSettings.Field(name).Label,
+        // The code default until the first snapshot has read the save.
+        Checked = ToaSettings.Defaults.SwitchOf(name),
+    };
+
+    private Control BuildToaSettingsPanel()
+    {
+        var surface = new InsetPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 306,
+            Margin = new Padding(18),
+            Padding = new Padding(16, 12, 16, 12),
+            Accent = DaocTheme.Gold,
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 8,
+            BackColor = Color.Transparent,
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 135));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        foreach (ToaField field in ToaSettings.Fields)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, field.IsSwitch ? 32 : 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var titlePanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        titlePanel.Controls.Add(new Label
+        {
+            AutoSize = true,
+            UseMnemonic = false,
+            Text = "TRIALS OF ATLANTIS",
+            Font = new Font("Georgia", 13f, FontStyle.Bold),
+            ForeColor = DaocTheme.GoldLight,
+            Location = new Point(0, 6),
+        });
+        layout.Controls.Add(titlePanel, 0, 0);
+        layout.SetColumnSpan(titlePanel, 3);
+        int row = 1;
+        foreach (ToaField field in ToaSettings.Fields)
+        {
+            Label note = XpRateDescription(field.Note);
+            note.UseMnemonic = false;
+            _toaNotes[field.Name] = note;
+            string help = field.Help + " Applies at the next server startup.";
+            _helpTip.SetToolTip(note, help);
+            if (field.IsSwitch)
+            {
+                CheckBox box = ToaSwitch(field.Name);
+                _helpTip.SetToolTip(box, help);
+                layout.Controls.Add(box, 0, row);
+                layout.SetColumnSpan(box, 2);
+                string name = field.Name;
+                box.CheckedChanged += async (_, _) => await SaveToaSwitchAsync(name, box);
+            }
+            else
+            {
+                Label label = XpRateLabel(field.Label);
+                var number = new NumericUpDown
+                {
+                    Minimum = field.Min,
+                    Maximum = field.Max,
+                    Value = field.Default,
+                    Width = 108,
+                    Anchor = AnchorStyles.Left,
+                    Margin = new Padding(0, 7, 0, 6),
+                    AccessibleName = field.Label,
+                };
+                DaocTheme.StyleNumeric(number);
+                _toaNumbers[field.Name] = number;
+                _helpTip.SetToolTip(label, help);
+                _helpTip.SetToolTip(number, help);
+                layout.Controls.Add(label, 0, row);
+                layout.Controls.Add(number, 1, row);
+                string name = field.Name;
+                number.ValueChanged += (_, _) => ToaNumberEdited(name);
+            }
+            layout.Controls.Add(note, 2, row);
+            row++;
+        }
+        _toaStatus.Dock = DockStyle.Fill;
+        _toaStatus.TextAlign = ContentAlignment.MiddleLeft;
+        _toaStatus.Font = new Font("Georgia", 9f, FontStyle.Bold | FontStyle.Italic);
+        layout.Controls.Add(_toaStatus, 0, row);
+        layout.SetColumnSpan(_toaStatus, 3);
+        surface.Controls.Add(layout);
+        return surface;
+    }
+
+    private CheckBox ToaSwitch(string name) => name switch
+    {
+        "atlantis" => _toaAtlantisOpen,
+        "loot" => _toaLoot,
+        "data_packs" => _toaDataPacks,
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Not a ToA switch field."),
+    };
 
     private Control BuildWorldSpeedPanel()
     {
@@ -1937,6 +2075,7 @@ internal sealed partial class MainForm : Form
             _realmRankNameplates.Enabled = editable;
             _botRealmRankNameplates.Checked = snapshot.BotRealmRankNameplates;
             _botRealmRankNameplates.Enabled = editable;
+            UpdateToaControls(snapshot.Toa, editable);
             string nameplateHelp = editable
                 ? "Shows the realm rank after companion and player names on nameplates. Applies at the next server startup."
                 : "Stop the server before changing this setting.";
@@ -2017,6 +2156,7 @@ internal sealed partial class MainForm : Form
         }
         _savingXpRates = true;
         _makeMeGm.Enabled = _realmRankNameplates.Enabled = _botRealmRankNameplates.Enabled = _playerXpRate.Enabled = _botXpRate.Enabled = _playerRpRate.Enabled = _botRpRate.Enabled = _startButton.Enabled = false;
+        SetToaControlsEnabled(false);
         _xpSettingsStatus.Text = "APPLYING GM SETTING…";
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         try { await Task.Run(() => PersistGmSetting(enabled)); }
@@ -2061,6 +2201,7 @@ internal sealed partial class MainForm : Form
         _makeMeGm.Enabled = false;
         _realmRankNameplates.Enabled = false;
         _botRealmRankNameplates.Enabled = false;
+        SetToaControlsEnabled(false);
         _startButton.Enabled = false;
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         string target = key switch
@@ -2110,6 +2251,7 @@ internal sealed partial class MainForm : Form
         _savingXpRates = true;
         _realmRankNameplates.Enabled = false;
         _botRealmRankNameplates.Enabled = false;
+        SetToaControlsEnabled(false);
         _xpSettingsStatus.ForeColor = DaocTheme.Success;
         _xpSettingsStatus.Text = "APPLYING NAMEPLATE SETTING…";
         try
@@ -2136,6 +2278,138 @@ internal sealed partial class MainForm : Form
             throw new InvalidOperationException("The prepared world database is missing.");
         ServerPropertyRows.Upsert(_database, "pvp",
             [new ServerPropertyRow(key, description, defaultValue, enabled ? "true" : "false")]);
+    }
+
+    private void SetToaControlsEnabled(bool enabled)
+    {
+        _toaAtlantisOpen.Enabled = _toaLoot.Enabled = _toaDataPacks.Enabled = enabled;
+        foreach (NumericUpDown number in _toaNumbers.Values) number.Enabled = enabled;
+    }
+
+    // Called from UpdateXpRateControls with _loadingXpRates set, so setting the values saves nothing.
+    // A number with an edit not yet saved keeps the typed value.
+    private void UpdateToaControls(ToaSettings settings, bool editable)
+    {
+        _toaAtlantisOpen.Checked = settings.AtlantisOpen;
+        _toaLoot.Checked = settings.LootInAtlantis;
+        _toaDataPacks.Checked = settings.DataPacks;
+        foreach ((string name, NumericUpDown number) in _toaNumbers)
+            if (!_toaPendingNumbers.Contains(name))
+                number.Value = settings.NumberOf(name);
+        // Privilege level 2 or 3 (set with /serverproperty) is neither open nor closed: say so beside the switch.
+        _toaNotes["atlantis"].Text = settings.AtlantisOpen || settings.AtlantisPlvl >= ToaSettings.AtlantisClosedPlvl
+            ? ToaSettings.Field("atlantis").Note
+            : $"Now only for {(settings.AtlantisPlvl == 2 ? "GMs" : "admins")} (privilege level {settings.AtlantisPlvl}). Tick to open it to every player.";
+        SetToaControlsEnabled(editable && !_savingXpRates);
+        if (_savingXpRates) return;
+        if (!editable) _toaNotice = null;
+        _toaStatus.Text = editable
+            ? _toaNotice ?? "Server stopped — change a setting to save it for the next server startup."
+            : "TRIALS OF ATLANTIS LOCKED — stop the server before changing these settings.";
+        _toaStatus.ForeColor = editable ? DaocTheme.Success : DaocTheme.Muted;
+    }
+
+    private void ToaNumberEdited(string name)
+    {
+        if (_loadingXpRates) return;
+        _toaPendingNumbers.Add(name);
+        _toaLastNumberEditUtc = DateTime.UtcNow;
+    }
+
+    private async Task SaveToaSwitchAsync(string name, CheckBox box)
+    {
+        if (_loadingXpRates || _savingXpRates) return;
+        bool on = box.Checked;
+        await SaveToaRowsAsync([(name, ToaSettings.SwitchRow(name, on))], $"{ToaSettings.Field(name).Label}: {(on ? "on" : "off")}");
+    }
+
+    private async Task SaveToaNumbersAsync()
+    {
+        // Another setting being written, or an edit still in progress: the next tick tries again.
+        if (_toaPendingNumbers.Count == 0 || _savingXpRates || IsDisposed ||
+            DateTime.UtcNow - _toaLastNumberEditUtc < ToaNumberSaveDelay)
+            return;
+        (string name, ServerPropertyRow row)[] rows = TakePendingToaNumberRows();
+        await SaveToaRowsAsync(rows, string.Join(", ", rows.Select(row => $"{ToaSettings.Field(row.name).Label} {row.row.Value}")));
+    }
+
+    // The rows of the numbers still waiting for their delayed save; the pending set is emptied.
+    private (string name, ServerPropertyRow row)[] TakePendingToaNumberRows()
+    {
+        var rows = ToaSettings.Fields.Where(field => _toaPendingNumbers.Contains(field.Name))
+            .Select(field => (field.Name, ToaSettings.NumberRow(field.Name, (int)_toaNumbers[field.Name].Value))).ToArray();
+        _toaPendingNumbers.Clear();
+        return rows;
+    }
+
+    /// <summary>
+    /// On close: a number still being typed is committed, and numbers waiting for their delayed save are written now
+    /// (synchronously) while the server is stopped. With the server running they are discarded with the usual notice.
+    /// </summary>
+    private void FlushPendingToaNumbersOnClose()
+    {
+        // Reading Value commits text still being typed (NumericUpDown validates its edit text), which marks it pending.
+        foreach (NumericUpDown number in _toaNumbers.Values)
+            _ = number.Value;
+        if (_toaPendingNumbers.Count == 0) return;
+        (string name, ServerPropertyRow row)[] rows = TakePendingToaNumberRows();
+        if (_persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess()))
+        {
+            MessageBox.Show(this, "Trials of Atlantis settings can only be changed while the server is fully stopped.",
+                "Server is running", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            PersistToaSettings(rows);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "Unable to save Trials of Atlantis setting", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task SaveToaRowsAsync(IReadOnlyList<(string name, ServerPropertyRow row)> rows, string summary)
+    {
+        if (IsServerRunning() || HasExactServerProcess())
+        {
+            MessageBox.Show(this, "Trials of Atlantis settings can only be changed while the server is fully stopped.",
+                "Server is running", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            await RefreshDashboardAsync();
+            return;
+        }
+
+        _savingXpRates = true;
+        SetToaControlsEnabled(false);
+        _startButton.Enabled = false;
+        _toaStatus.ForeColor = DaocTheme.Success;
+        _toaStatus.Text = $"APPLYING {summary}…";
+        try
+        {
+            await Task.Run(() => PersistToaSettings(rows));
+            _toaNotice = $"APPLIED {summary}. It will be used on the next server startup.";
+        }
+        catch (Exception exception)
+        {
+            _toaNotice = null;
+            MessageBox.Show(this, exception.Message, "Unable to save Trials of Atlantis setting", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _savingXpRates = false;
+            await RefreshDashboardAsync();
+        }
+    }
+
+    private void PersistToaSettings(IReadOnlyList<(string name, ServerPropertyRow row)> rows)
+    {
+        bool ServerStopped() => !(_persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess()));
+        if (!ServerStopped())
+            throw new InvalidOperationException("The server started before the setting could be saved. Stop it and try again.");
+        if (!File.Exists(_database))
+            throw new InvalidOperationException("The prepared world database is missing.");
+        foreach ((string name, ServerPropertyRow row) in rows)
+            ToaSettings.Save(_database, name, row, ServerStopped);
     }
 
     private LiveBotSnapshot? RequestLiveBotSnapshot()
@@ -2407,6 +2681,7 @@ internal sealed partial class MainForm : Form
         {
             RealmRankNameplates = ReadServerFlag(connection, RealmRankNameplateKey),
             BotRealmRankNameplates = ReadServerFlag(connection, BotRealmRankNameplateKey, fallback: true),
+            Toa = ToaSettings.FromRows(ServerPropertyRows.Read(connection, ToaSettings.RowKeys)),
         };
     }
 
@@ -3371,6 +3646,12 @@ internal sealed partial class MainForm : Form
             MessageBox.Show(this, "Review and save or undo your open BG edits before starting the server.", "Unsaved open BG settings");
             return;
         }
+        if (_toaPendingNumbers.Count > 0)
+        {
+            // Saved by the display clock within about a second; starting first would leave the old value.
+            MessageBox.Show(this, "A Trials of Atlantis setting is still being saved. Start the server again in a moment.", "Saving settings");
+            return;
+        }
         try { OfflineDaoc.Configuration.BotGoalSettings.Load(Path.Combine(_serverDirectory, OfflineDaoc.Configuration.BotGoalSettings.FileName)); }
         catch (Exception ex)
         {
@@ -4016,6 +4297,7 @@ internal sealed partial class MainForm : Form
         // Set by the snapshot reader; not a constructor parameter, so the positional shape stays as it was.
         public bool RealmRankNameplates { get; init; }
         public bool BotRealmRankNameplates { get; init; } = true;
+        public ToaSettings Toa { get; init; } = ToaSettings.Defaults;
     }
 
     private sealed record LiveBotStatus(long BotId, int Level, string ZoneName, string Activity,
