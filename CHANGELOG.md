@@ -12,6 +12,19 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.310.1] - 2026-10-24
+
+### Changed
+
+- **Tasks 135-139 record what upstream's autonomous RvR movement does
+  better.** A comparison with upstream's current source and the 2026-10-23
+  server log found five candidates: marches that retarget while moving
+  instead of stopping at every waypoint, main-body leader succession,
+  followers that trail the leader past unreachable or cross-zone formation
+  slots, full formation follow in the movement tick, and a road-graph
+  fallback with a frontier navmesh hotspot check. Planning only; no
+  gameplay change.
+
 ## [0.310.0] - 2026-10-23
 
 ### Changed

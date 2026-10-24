@@ -371,6 +371,80 @@ Agent sessions on items 45–48: take the role and context from
      a suggested order in [TOA_RESEARCH.md](TOA_RESEARCH.md). Blocked on an
      owner decision: CAMLANN.md decision 1 sets the era to pre-ToA.
 
+135. **Autonomous RvR marches retarget while moving (no stop at every
+     waypoint).** Owner, 2026-10-24, after comparing upstream play: upstream's
+     autonomous RvR movement looked smoother. Our `IssuePath` keeps the old
+     order while the bot moves (`AutonomousWorldBotController.cs` ~4732,
+     `ShouldRetainMovementOrder`), and `FollowKeepTravel` issues each road
+     point with `preciseArrival: true` (`AutonomousWorldBotController.KeepTravel.cs`
+     ~482), so warband leaders walk into each waypoint, halt and continue only
+     after the arrival wake-up. Port upstream's `retargetWhileMoving` flag and
+     its far-retarget rule (destination change over 1,500 units) from
+     `upstream/main` `AutonomousWorldBotController.cs` ~4199/4355, advance the
+     keep-travel waypoint index early (upstream `KeepTravel.cs` ~144-147,
+     80 units) and use `preciseArrival` only on the final point. Keep the
+     retained-order rule for route recovery and threat/mob-bypass detours, and
+     keep upstream's 1.5 s order gate against churn. Acceptance: build;
+     focused policy test if feasible; owner real-client check that marches
+     flow through corners. Part of the upstream RvR movement batch (135-139).
+
+136. **Main-body leader succession for autonomous groups.** Owner,
+     2026-10-24. `ChooseLeader` (`AutonomousBotGroupCoordinator.cs` ~3467)
+     replaces a dead or returning leader with the first living member in list
+     order, wherever it stands; 355 death handovers in 3 hours of the
+     2026-10-23 log. Port the idea of upstream's `MainBodyLeader`
+     (`upstream/main` `AutonomousRvrEventLayer.cs` ~735-768): pick the member
+     with the most living comrades within 2,500 units, ties to the one nearest
+     the group's objective. Keep our `ReturningFromDeath` exclusion and the
+     `HandOverRvrLeadership` path. Acceptance: build; unit test of the choice
+     with a straggler first in the list; owner check that groups no longer turn
+     back after a leader dies.
+
+137. **Followers trail the leader when their formation slot is unreachable or
+     across a zone border.** Owner, 2026-10-24. Our
+     `AutonomousGroupMotion.FollowMovingLeader` paths to a slot once per AI
+     turn; an off-mesh, unreachable or other-zone slot leaves the follower
+     standing (`NpcMovementComponent.PathToInternal` pauses autonomous bots on
+     a failed target). Adapt upstream's fallbacks from
+     `AutonomousGroupFormationFollow.cs` (~78-164): on a failed/partial slot
+     path walk about 64 units behind the leader for 3 s, and when the slot is
+     in another zone aim at the leader and step over the border behind it.
+     Keep `CapFollowerSpeed`, sprint under speed songs and stealth behaviour.
+     Add a small counter/log for followers standing while the leader walks so
+     the effect is measurable. Acceptance: build; owner check at frontier zone
+     borders and keep gates/bridges.
+
+138. **Full formation follow inside the movement tick (follow-up to 137).**
+     Owner, 2026-10-24. Upstream steers each follower to its slot every
+     400 ms from `NpcMovementComponent.FollowTick` (upstream ~898-1052,
+     `AutonomousGroupFormationFollow.cs`, slot 1.5 s ahead, a cast pauses
+     rather than ends the follow, `Pathfinder.HasRecentFailure`). Ours
+     re-steers per AI turn (0.8 s lead). Merge with `AutonomousGroupMotion`
+     rather than running both. Risks: `FollowTick` also serves companions,
+     CPU at 1,500+ bots, interplay with sprint/stealth. Own task and own
+     version; do after 137 and measure first. Optional companion piece: PvE
+     group pace (upstream `AutonomousGroupPace`, `AutonomousGroupMemberStall`,
+     stop at 1,500/resume at 900 instead of our `IsCohesive` 700/400; 5,602
+     `AUTONOMOUS_GROUP_TRAVEL_HOLD` in 3 hours), tuned against
+     `AutonomousLeaderLoop`.
+
+139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
+     2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;
+     NoPathFound 977, PartialPathFound 295): Forest Sauvage 249, Odin's Gate
+     90, and 223 from six bots at Connacht 311960,470002 to 335449,421910.
+     Upstream falls back to a road graph when Detour dead-ends
+     (`Pathfinder.TryRoadPath`, `AutonomousZoneRoads.cs`, `navmesh/roads.json`
+     built by its `roadgraph.py`/`UT_ZoneRoadBuild`) and refuses a first leg
+     back through a door just exited. Upstream also rebuilt 63 outdoor meshes
+     in 0.35; ours are the 2026-09-18 v0.3 meshes. Step 1: probe the top
+     hotspots on our meshes (and upstream's, if obtained from its release)
+     with no mesh replacement. Step 2: port the road fallback with a road
+     graph generated from our own meshes; deploy and release must carry the
+     JSON. Mesh replacement only on per-hotspot proof and owner approval.
+     Also an owner design question: our flank/cover route variety and mob
+     bends (`AutonomousRvrRoutePolicy`, `AutonomousRvrMobAvoidance`) add
+     600-2,000-unit dog-legs that may read as wandering.
+
 ## Implemented in source; installation verification pending
 
 133. **Animist main shroom follows; shrooms inherit the Animist's RAs.**
