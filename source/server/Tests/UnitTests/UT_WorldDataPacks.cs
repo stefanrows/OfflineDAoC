@@ -477,7 +477,8 @@ namespace DOL.UnitTests
 
             Assert.That(manifest.Select(e => e.Name), Is.EqualTo(new[]
             {
-                "010-toa-ml-spells", "011-toa-ml-paths", "012-toa-artifact-spells", "020-atlantis-mobs", "021-atlantis-travel",
+                "010-toa-ml-spells", "011-toa-ml-paths", "012-toa-artifact-spells", "013-toa-artifact-spells-missing",
+                "020-atlantis-mobs", "021-atlantis-travel",
                 "022-atlantis-zonepoints", "023-artifact-scroll-binders", "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix",
                 "026-toa-travel-realms", "027-toa-open-atlantis", "030-toa-dungeon-mobs", "031-toa-dungeon-templates", "040-toa-loot",
                 "041-toa-loot-caps", "050-artifact-item-classtype",
@@ -520,6 +521,7 @@ namespace DOL.UnitTests
             Assert.That(Scalar("SELECT COUNT(*) FROM MobXLootTemplate"), Is.EqualTo(364 + 1), "the 040 links and the Phoenix cap");
             AssertAtlantisTravelRows();
             Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE PackageID = 'toa-travel'"), Is.EqualTo(10), "026: the haven porters");
+            AssertMissingArtifactSpellRows();
 
             WorldDataPackRun again = new WorldDataPackApplier($"Data Source={_db}", ShippedPackDirectory()).ApplyPending();
             Assert.That(again.AppliedCount, Is.Zero);
@@ -561,14 +563,14 @@ namespace DOL.UnitTests
                 "020 and 030 add, 025 removes three, 026 adds ten porters");
             Assert.That(Scalar("SELECT COUNT(*) FROM ClassXSpecialization") - classSpecs, Is.EqualTo(496));
             Assert.That(Scalar("SELECT COUNT(*) FROM ZonePoint") - zonePoints, Is.EqualTo(100));
-            Assert.That(Scalar("SELECT COUNT(*) FROM Spell") - spells, Is.EqualTo(73 + 73), "73 ML and 73 artifact spells");
+            Assert.That(Scalar("SELECT COUNT(*) FROM Spell") - spells, Is.EqualTo(73 + 73 + 4), "73 ML, 73 artifact spells and the 4 of 013");
             Assert.That(Scalar("SELECT COUNT(*) FROM LineXSpell WHERE LineName IN ('Banelord','Battlemaster','Convoker','Perfecter'," +
                                "'Sojourner','Spymaster','Stormlord','Warlord')"), Is.EqualTo(73));
             Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE Price = 300 AND Id_nb LIKE '%of_3'"), Is.GreaterThanOrEqualTo(150));
             Assert.That(run.ChangedKeys.ContainsKey("ItemTemplate"), Is.True, "the scroll price update is reported for the cache refresh");
 
-            // Pack 012 (with 7206 "Purify Vision" from pack 010, the Erinys Charm use spell): every spell our artifact
-            // items reference resolves, except four that exist nowhere.
+            // Packs 012 and 013 (with 7206 "Purify Vision" from pack 010, the Erinys Charm use spell): every spell our
+            // artifact items reference resolves; 013 writes the four that exist nowhere.
             const string artifactSpellIds =
                 "SELECT DISTINCT v FROM (" +
                 "SELECT i.SpellID v FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb UNION ALL " +
@@ -577,8 +579,9 @@ namespace DOL.UnitTests
                 "SELECT i.ProcSpellID1 FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb UNION ALL " +
                 "SELECT i.PoisonSpellID FROM ItemTemplate i JOIN ArtifactXItem a ON a.ItemID = i.Id_nb) WHERE v > 0";
             Assert.That(Scalar($"SELECT COUNT(*) FROM ({artifactSpellIds})"), Is.EqualTo(85));
-            Assert.That(Ids($"SELECT v FROM ({artifactSpellIds}) WHERE v NOT IN (SELECT SpellID FROM Spell) ORDER BY v"),
-                Is.EqualTo(new long[] { 13135, 30115, 30125, 32223 }));
+            Assert.That(Ids($"SELECT v FROM ({artifactSpellIds}) WHERE v NOT IN (SELECT SpellID FROM Spell) ORDER BY v"), Is.Empty,
+                "0 artifact spell IDs missing after the packs");
+            AssertMissingArtifactSpellRows();
             Assert.That((string)ScalarObject("SELECT Type FROM Spell WHERE SpellID = 7206"), Is.EqualTo("CureNearsight"));
             Assert.That((string)ScalarObject("SELECT Name FROM Spell WHERE SpellID = 15001"), Is.EqualTo(spell15001),
                 "pack 012 ships only artifact rows; gaheris' replacement of 15001 does not ship");
@@ -633,6 +636,7 @@ namespace DOL.UnitTests
             // The pack set 2 files and 027 are idempotent: a second run of their statements changes nothing.
             foreach (string name in new[]
                      {
+                         "013-toa-artifact-spells-missing",
                          "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix", "027-toa-open-atlantis", "030-toa-dungeon-mobs",
                          "031-toa-dungeon-templates", "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
                      })
@@ -645,6 +649,25 @@ namespace DOL.UnitTests
         #endregion
 
         #region Helpers
+
+        // Pack 013 (WP3.0b, docs/TOA_ARTIFACT_SPELLS.md): the four artifact spells that exist nowhere, each with a
+        // spell type that has a handler.
+        private void AssertMissingArtifactSpellRows()
+        {
+            Assert.That(Strings("SELECT SpellID || ':' || Type FROM Spell WHERE SpellID IN (13135, 30115, 30125, 32223) ORDER BY SpellID"),
+                Is.EqualTo(new[]
+                {
+                    "13135:StrengthConstitutionDrain", "30115:AFHitsBuff", "30125:HarpyFeatherCloak", "32223:AllStatsPercentDebuff",
+                }));
+            foreach (string type in Strings("SELECT DISTINCT Type FROM Spell WHERE SpellID IN (13135, 30115, 30125, 32223)"))
+                Assert.That(ScriptMgr.CacheSpellHandlerConstructor(Enum.Parse<eSpellType>(type, true)), Is.Not.Null, type);
+            Assert.That(Scalar("SELECT SubSpellID FROM Spell WHERE SpellID = 30125"), Is.EqualTo(30126), "Disoriented also casts the energy DoT");
+            // The core never casts a plain SubSpellID; the row's handler must do it itself
+            // (behaviour: UT_ArtifactSpellHandlers.DisorientedCastsItsSubSpellOnTheTarget).
+            Type disoriented = ScriptMgr.CacheSpellHandlerConstructor(eSpellType.HarpyFeatherCloak)(null,
+                new DOL.GS.Spell(new DbSpell { SpellID = 30125, Type = "HarpyFeatherCloak", Target = "Enemy" }, 50), null).GetType();
+            Assert.That(disoriented.GetMethod(nameof(DOL.GS.Spells.SpellHandler.CastSubSpells))?.DeclaringType, Is.EqualTo(typeof(DOL.GS.Spells.HarpyFeatherCloak)));
+        }
 
         // Pack 026: every Atlantis destination exactly once per realm, in that realm's copy (DOL.GS.Tests.UT_AtlantisTravel.ExpectedRegion).
         private void AssertAtlantisTravelRows()

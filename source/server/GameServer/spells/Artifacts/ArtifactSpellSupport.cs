@@ -108,6 +108,31 @@ namespace DOL.GS.Spells
     }
 
     /// <summary>
+    /// Defensive proc effect for artifact defensive procs (Ring of Unyielding Will).
+    /// Registers as eEffect.DefensiveProc so GameLiving.OnAttackedByEnemy fires the proc;
+    /// the core hard-casts the handler to DefensiveProcSpellHandler.
+    /// </summary>
+    public class ArtifactDefensiveProcEffect : ProcECSGameEffect
+    {
+        public ArtifactDefensiveProcEffect(in ECSGameEffectInitParams initParams) : base(initParams)
+        {
+            EffectType = eEffect.DefensiveProc;
+        }
+
+        public override void OnStartEffect()
+        {
+            base.OnStartEffect();
+            (SpellHandler as IArtifactEffectHandler)?.OnArtifactEffectStart(this);
+        }
+
+        public override void OnStopEffect()
+        {
+            (SpellHandler as IArtifactEffectHandler)?.OnArtifactEffectStop(this);
+            base.OnStopEffect();
+        }
+    }
+
+    /// <summary>
     /// Ablative effect for artifact ablatives; registers as eEffect.AblativeArmor so the
     /// melee absorb code in GameLiving finds it.
     /// </summary>
@@ -230,7 +255,17 @@ namespace DOL.GS.Spells
             if (spell.EffectGroup != 0 || other.EffectGroup != 0)
                 return spell.EffectGroup == other.EffectGroup;
 
-            return spell.SpellType == other.SpellType;
+            return Family(spell.SpellType) == Family(other.SpellType);
+        }
+
+        /// <summary>
+        /// Artifact spell types that apply the same bonuses under different names and so
+        /// must not stack: Zo'arkat's area Bedazzlement (ZoAura) is the Band of Stars
+        /// Bedazzlement on several targets. Every other type is its own family.
+        /// </summary>
+        public static eSpellType Family(eSpellType spellType)
+        {
+            return spellType is eSpellType.ZoAura ? eSpellType.Bedazzlement : spellType;
         }
 
         /// <summary>

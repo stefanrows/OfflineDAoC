@@ -19,6 +19,7 @@ The row counts were measured on a repaired copy of the dev snapshot. The
 | `010-toa-ml-spells` | Master Level spells and their eight spell lines (12, 42, 43): 73 of 80 ranks | 172 |
 | `011-toa-ml-paths` | The eight ML paths in every class career at level 50 (39) | 496 |
 | `012-toa-artifact-spells` | 73 artifact spells, filtered from gaheris 90 (see below) | 73 |
+| `013-toa-artifact-spells-missing` | The 4 artifact spells that exist nowhere, hand-written from the live delve texts (WP3.0b, see below) | 4 |
 | `020-atlantis-mobs` | 41,727 Atlantis mobs, tagged `PackageID = 'gaheris-atlantis'` (13). Gzipped | 41,727 |
 | `021-atlantis-travel` | 13 Atlantis teleport destinations of type `gaheris` (14) | 13 |
 | `022-atlantis-zonepoints` | 100 Atlantis zone points. Existing ones are kept (29) | 100 |
@@ -41,7 +42,7 @@ inserts 946 rows, and 040 inserts 2,470.
 
 Packs 026 and 027 are described in [TOA_TRAVEL.md](TOA_TRAVEL.md).
 
-After all 16 packs the dev snapshot has 43,869 more mobs: 41,727 from 020,
+After all 17 packs the dev snapshot has 43,869 more mobs: 41,727 from 020,
 2,135 from 030 and the ten porters of 026, minus the three Mordreds of 025.
 
 File 28 is not shipped: it points the portal NPCs at the gaheris portal
@@ -109,15 +110,31 @@ Pack 012 therefore ships only 73 rows. `ARTIFACT_SPELL_IDS` in
 Spell 24 is left out on purpose. StarsProc2 (30170) reads its `Value` of 24
 as a stat amount, not as a spell ID.
 
-After all packs, four artifact spell IDs still exist nowhere. gaheris does
-not have them, and neither does our save:
+Four artifact spell IDs exist nowhere: not in gaheris, not in our save, not
+in DOL or OpenDAoC. (gaheris' class sweep, file 46, uses 13135 for the
+Vampiir spell "Wither Defense" in the line Dementia, which we do not ship.)
+Pack 013 (WP3.0b) writes them from the live delve texts in the Camelot Herald
+item database and patch notes. Each row is inserted only where its SpellID is
+missing. After the packs, all 85 artifact spell IDs resolve.
 
-| SpellID | Used by |
-|---|---|
-| 13135 | Scepter of the Meritious (crush and hammer), second proc |
-| 30115 | Spear of Kings (17 templates) and Scepter of the Meritious (blunt), use spell |
-| 30125 | Shield of Khaos, use spell |
-| 32223 | Malice's Axe (13 templates) and Scepter of the Meritious (crush and hammer), first proc |
+| SpellID | Used by | Pack 013 row |
+|---|---|---|
+| 13135 | Scepter of the Meritious (crush and hammer), second proc | "Stat Drain", StrengthConstitutionDrain 25, 1000 range, 60 s: the Scepter's live proc, same as 30114 |
+| 30115 | Spear of Kings (17 templates) and Scepter of the Meritious (blunt), use spell | "Boon of Kings", AFHitsBuff -5 (armor and health +5 %), realm aura radius 1500, 5 s pulsing every 4.5 s: the Spear's live version |
+| 30125 | Shield of Khaos, use spell | "Disoriented", HarpyFeatherCloak 10 (melee to-hit -10 %), 1500 range, radius 700, 60 s, body; SubSpellID 30126 (the energy DoT live casts with it; the handler casts it, the core would not; 30126 has range 0, so it lands point-blank around the wearer) |
+| 32223 | Malice's Axe (13 templates) and Scepter of the Meritious (crush and hammer), first proc | "Vision of Malice", AllStatsPercentDebuff 25, 350 range, 60 s, body: the ToA-era value; patch 1.87 (2007) cut it to 10 % for 30 s |
+
+Data quirks around these rows, not changed (item templates are not pack 013's
+business):
+
+- The live Scepter of the Meritorious has one proc (Stat Drain) and one charge
+  (Boon of Kings, self, +4 %, 10 min). Our crush and hammer templates instead
+  name Malice's proc 32223 (level 6) and 13135 as `ProcSpellID1`, which has no
+  `ArtifactBonus` row and so is active from artifact level 0; they have no use
+  spell. The blunt template uses 30114 and 30115 like live, but 30115 is the
+  Spear's realm aura.
+- Shield of Khaos names the energy DoT 30126 as `ProcSpellID1` as well (no
+  `ArtifactBonus` row, active from level 0); live it came only with the charge.
 
 A fifth ID, 7206, is the Erinys Charm's use spell. It resolves through pack
 010: 7206 is the Perfecter ML 2 spell "Purify Vision" (CureNearsight, group).
@@ -133,11 +150,11 @@ These data quirks are noted here and not fixed:
 - **30131** chains to 49821, **30154** (CrocodileTearsProc) to `Value` 5, and
   **30152** (ZahurEnduProc) to `Value` 10. All three point at spells or
   values that already exist in our save, so the meaning is unverified.
-- **Seven of the 52 spell types in pack 012 have no `[SpellHandler]`** on
-  main 0.316.0. Their rows load, but the effects do nothing until a handler
-  exists. Six of them are also listed in
-  [TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md); the seventh,
-  PowerHealthEnduranceRegenBuff, is not.
+- **Seven of the 52 spell types in pack 012 had no `[SpellHandler]`** on
+  main 0.316.0, so their rows loaded but did nothing. WP3.0b wrote all seven
+  (behaviour and sources in
+  [TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md), "WP3.0b"); implemented in
+  source, real-client check pending.
 
   | Type | Spell | Artifact |
   |---|---|---|
@@ -149,8 +166,9 @@ These data quirks are noted here and not fixed:
   | ZahurEnduProc | 30152 | Crown of Zahur |
   | ZoAura | 30165 | Bracer of Zo'arkat, Phoebus' Harp |
 
-  The brains name PowerHealthEnduranceRegenBuff when they choose buffs, but
-  no spell handler is registered for it.
+  The brains name PowerHealthEnduranceRegenBuff when they choose buffs; it
+  now has a handler. The only artifact spell type still without one is
+  `EternalPlant` (30181, Eternal Plant).
 
 ## How a save gets them
 

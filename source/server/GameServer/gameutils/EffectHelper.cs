@@ -179,6 +179,8 @@ namespace DOL.GS
                     return eEffect.StrConDebuff;
                 case eSpellType.DexterityQuicknessDebuff:
                     return eEffect.DexQuiDebuff;
+                case eSpellType.DexterityConstitutionDebuff:
+                    return eEffect.DexConDebuff;
                 case eSpellType.WeaponSkillConstitutionDebuff:
                     return eEffect.WsConDebuff;
                 //case eSpellType.AcuityDebuff: // Not sure what this is yet.
@@ -337,6 +339,10 @@ namespace DOL.GS
                     list.Add(eProperty.WeaponSkill);
                     list.Add(eProperty.Constitution);
                     return list;
+                case eEffect.DexConDebuff:
+                    list.Add(eProperty.Dexterity);
+                    list.Add(eProperty.Constitution);
+                    return list;
                 case eEffect.DexQuickBuff:
                 case eEffect.DexQuiDebuff:
                     list.Add(eProperty.Dexterity);
@@ -477,6 +483,7 @@ namespace DOL.GS
                 case eEffect.ConstitutionBuff:
                 case eEffect.ConstitutionDebuff:
                 case eEffect.WsConDebuff:
+                case eEffect.DexConDebuff:
                 {
                     playerUpdate |= PlayerUpdate.Status;
                     playerUpdate |= PlayerUpdate.Stats;

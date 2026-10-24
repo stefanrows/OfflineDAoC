@@ -255,7 +255,8 @@ namespace DOL.GS.Spells
 
         protected override void EventHandler(DOLEvent e, object sender, EventArgs arguments) { }
 
-        public void EventHandler(AttackData ad)
+        // Virtual for artifact defensive procs that cast more than one spell (Ring of Unyielding Will).
+        public virtual void EventHandler(AttackData ad)
         {
             if (ad.AttackResult is not eAttackResult.HitUnstyled and not eAttackResult.HitStyle)
                 return;

@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import json
 import pathlib
+import re
 import sys
 import tempfile
 import unittest
@@ -117,6 +118,15 @@ class BuildDataPacksTest(unittest.TestCase):
         self.assertIn('WHERE NOT EXISTS', cap)
         for text in (arena, arbiter, cap):
             self.assertNotIn('\r', text)
+
+    def test_missing_artifact_spell_pack_is_guarded(self):
+        text = (bdp.DEFAULT_SQL / '013-toa-artifact-spells-missing.sql').read_text(encoding='utf-8')
+        self.assertNotIn('\r', text)
+        code = '\n'.join(line for line in text.splitlines() if not line.startswith('--'))
+        self.assertIsNone(re.search(r'\b(DELETE|UPDATE|REPLACE)\b', code, re.I), 'insert only')
+        for spell_id in (13135, 30115, 30125, 32223):
+            self.assertIn(f'WHERE NOT EXISTS (SELECT 1 FROM "spell" WHERE "SpellID" = {spell_id})', code)
+        self.assertEqual(code.count('INSERT INTO "spell"'), 4)
 
     def test_shipped_packs_match_the_converted_files(self):
         shipped = bdp.DEFAULT_OUT / 'manifest.json'

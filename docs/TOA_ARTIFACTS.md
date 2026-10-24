@@ -171,10 +171,11 @@ remove the first credit of that type, whatever its artifact.
 | Ceremonial Bracer mez intercept, `CCSpellHandler.cs` (Mesmerize `CheckSpellResist`) | legacy `FindEffectOnTarget(target, "CeremonialBracerMezz")`, never found the ECS effect | `ArtifactSpells.FindEffect(target, eSpellType.CeremonialBracerMezz)`, then `End()`: the charge is used up and the mez is negated. Only a mez that would land uses it; one the target is immune to (or already mezzed) leaves the charge |
 | Cloudsong (Wings Dive) fall damage, `GamePlayer.CalcFallDamage` | legacy `FindEffectOnTarget(this, "CloudsongFall")` | `ArtifactSpells.FindEffect(this, eSpellType.CloudsongFall)`; reduces each fall by `Spell.Value` % for the effect's duration and is not used up (DOL behaviour) |
 
-The stun intercept stays commented out as upstream. **Deferred:** the stock
+The stun intercept stays commented out as upstream. The stock
 `DexterityConstitutionDebuff`'s always-on conflict (TOA_PLAN WP3.0 follow-ups)
-moves to WP3.0b. `DexterityConstitutionDebuff` maps to no `eEffect`, so a fix
-needs a new effect type with its property mapping, not a one-liner.
+was fixed in WP3.0b with its own effect type `eEffect.DexConDebuff`
+([TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md), "WP3.0b"); implemented in
+source, real-client check pending.
 
 ## Items that must not be rebuilt
 

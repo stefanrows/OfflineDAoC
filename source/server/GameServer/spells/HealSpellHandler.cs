@@ -168,6 +168,9 @@ namespace DOL.GS.Spells
 
             int effectiveAmount = target.ChangeHealth(Caster, eHealthChangeType.Spell, (int) amount);
 
+            // Crown of Zahur, Efficient Endurance: part of every heal cast on the wearer restores endurance.
+            ZahurEnduProc.OnHealReceived(target, (int) amount);
+
             if (effectiveAmount <= 0)
             {
                 if (Spell.Pulse == 0)

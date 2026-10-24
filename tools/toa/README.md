@@ -35,7 +35,9 @@ python3 -I tools/toa/convert_mysql_to_sqlite.py --src /mnt/c/OfflineDAoC-ext/gah
   and 040 are the db-public files of the same names. Shipped packs are
   immutable; the builder refuses to change one.
 - Hand-written pack sources in `sql/` (edit them only before their pack was
-  ever released): `024-toa-arbiter-npcs.sql` (the Arbiter and Demyphon part of
+  ever released): `013-toa-artifact-spells-missing.sql` (the four artifact
+  spells that exist nowhere, docs/TOA_ARTIFACT_SPELLS.md "WP3.0b"),
+  `024-toa-arbiter-npcs.sql` (the Arbiter and Demyphon part of
   gaheris 35), `025-toa-atlantis-arena-fix.sql` (removes the three Atlantis
   fight-club Mordreds), `026-toa-travel-realms.sql` (Atlantis travel rows and
   haven porters, docs/TOA_TRAVEL.md), `027-toa-open-atlantis.sql` (opens

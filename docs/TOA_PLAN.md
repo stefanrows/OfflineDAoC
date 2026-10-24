@@ -122,11 +122,17 @@ agent or session that finishes a package updates its row and the log below.
   texts (ML1-9 x 10 steps); DOLSharp has one scripted step (Ianetor ML1.1,
   980 lines, no credit wiring). Only if the owner wants named steps on top of
   kill-XP. Not before Phase 3.
-- [ ] **WP2.4 Bots and ML.** Decide whether 50 bots train ML lines (companions
-  at least). Design note first; not before WP2.2.
-
-### Phase 3: Artifacts
-
+- [~] **WP2.4 Bots and ML.** Owner decision 2026-10-24 19:10: build it.
+  (a) Blanket of Camouflage treats companions exactly like players (hidden,
+  watched, revealed); pets stay visible as on live. (b) Companions are
+  enrolled with their owner at the Arbiter, earn ML XP from the same kills,
+  keep ML level/line in their persistent record, get a discipline by role
+  (tank Warlord, melee Battlemaster, healer Perfecter, caster
+  Convoker/Stormlord, stealther Spymaster) and use ML spells through the
+  existing ability choice. (c) World bots 40-50 spawn with an ML level from a
+  distribution (like realm ranks today), discipline by archetype, and progress
+  by the same kill rule credited like realm points. Agent toa-botml
+  (2026-10-24 19:10).
 - [x] **WP3.0 Artifact spell handlers.** (0.316.0, real-client check pending)
   All 43 artifact spell types have one handler under `spells/Artifacts`,
   bridged into our ECS (upstream's were legacy-hook dead code); debuffs use the
@@ -152,7 +158,7 @@ agent or session that finishes a package updates its row and the log below.
   follow-up:** `tools/toa/sql/050-artifact-item-classtype.sql` (197
   templates) must ship as a pack before any artifact is handed out. 3
   ArtifactXItem rows name no template.
-- [ ] **WP3.1b Earning artifacts, data-driven.** Our Artifact rows use
+- [~] **WP3.1b Earning artifacts, data-driven.** Agent toa-scholars (2026-10-24 18:20; folds in WP3.2 scroll drops and WP3.4 texts). Our Artifact rows use
   numeric placeholders (ScholarID 1001, EncounterID = template name, Version
   0-15), so DOL's type-name quest lookup cannot work: Scholar + ArtifactQuest
   rewritten data-driven, credit merchant matches `Id_nb` to
@@ -234,6 +240,9 @@ a real defect in every package; keep the review step.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 18:20: 0.322.0 deployed on Aaron's PC (packs 026/027 applied, 2
+  properties refreshed live, 33 Atlantis destinations, Atlantis open to
+  players, server running). WP3.0b and WP3.1b started as agents.
 - 2026-10-24 18:15: WP1.2 + WP1.3 reviewed (no blocking finding) and merged as
   0.322.0 (16 packs). Deploy to Aaron's PC next, then client checks.
 - 2026-10-24 17:45: journal-mode fallback reviewed (rollback proven through

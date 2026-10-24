@@ -155,6 +155,9 @@ namespace DOL.GS
         Volley,
         StrikingTheSoul,
         SpeedOfSound,
-        Ichor
+        Ichor,
+
+        // Offline DAoC: appended at the end so the values above keep their numbers.
+        DexConDebuff
     }
 }

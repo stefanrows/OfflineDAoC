@@ -56,6 +56,35 @@ namespace DOL.GS.Spells
         }
 
         /// <summary>
+        /// Offline DAoC: the core's CastSubSpells hands the parent spell to its single-cast
+        /// helper, whose "no chained sub spell" guard then returns at once, so a plain
+        /// SubSpellID never casts. Cast it here: Shield of Khaos "Disoriented" (30125) brings
+        /// the energy damage over time 30126. Like the core, a sub spell with its own sub spell
+        /// is not cast (no chains).
+        /// </summary>
+        public override void CastSubSpells(GameLiving target)
+        {
+            if (target == null || Spell.SubSpellID <= 0)
+                return;
+
+            Spell subSpell = SkillBase.GetSpellByID(Spell.SubSpellID);
+
+            if (subSpell == null || subSpell.SubSpellID != 0)
+                return;
+
+            if (Caster is GameNPC npc)
+                subSpell = npc.GetScaledSpell(subSpell);
+
+            CreateSubSpellHandler(subSpell)?.StartSpell(target);
+        }
+
+        /// <summary>The handler that casts the sub spell; the same spell line as the core uses.</summary>
+        protected virtual ISpellHandler CreateSubSpellHandler(Spell subSpell)
+        {
+            return ScriptMgr.CreateSpellHandler(Caster, subSpell, SkillBase.GetSpellLine(GlobalSpellsLines.Reserved_Spells));
+        }
+
+        /// <summary>
         /// This is melee to hit penalty
         /// </summary>
         public override eProperty Property1

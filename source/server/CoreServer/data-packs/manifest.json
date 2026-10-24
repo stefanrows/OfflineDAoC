@@ -47,6 +47,18 @@
       ]
     },
     {
+      "name": "013-toa-artifact-spells-missing",
+      "file": "013-toa-artifact-spells-missing.sql",
+      "sha256": "87f1a57cd876c3410ff284f29ebd9133cef027bd246e28f0c9b09dee73cb9289",
+      "description": "The four artifact spells that exist nowhere, written from the live delve texts: 13135 Stat Drain (Scepter of the Meritorious), 30115 Boon of Kings (Spear of Kings), 30125 Disoriented (Shield of Khaos), 32223 Vision of Malice (Malice's Axe). Inserted only where the SpellID is missing.",
+      "sources": [
+        {
+          "file": "013-toa-artifact-spells-missing.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
       "name": "020-atlantis-mobs",
       "file": "020-atlantis-mobs.sql.gz",
       "sha256": "a3745ffc10510a33e75965010f24e90c44791fbd2233f84e9cfda40a640074a8",

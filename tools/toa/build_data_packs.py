@@ -52,6 +52,13 @@ PACKS = [
      False,
      'Artifact spells from gaheris 90, filtered: the 68 spell IDs our artifact items reference '
      'and lack, plus the 5 spells they chain to. 5 referenced IDs exist nowhere.'),
+    # WP3.0b (docs/TOA_ARTIFACT_SPELLS.md), hand-written.
+    ('013-toa-artifact-spells-missing',
+     ['013-toa-artifact-spells-missing.sql'],
+     False,
+     'The four artifact spells that exist nowhere, written from the live delve texts: 13135 Stat Drain '
+     '(Scepter of the Meritorious), 30115 Boon of Kings (Spear of Kings), 30125 Disoriented (Shield of Khaos), '
+     "32223 Vision of Malice (Malice's Axe). Inserted only where the SpellID is missing."),
     ('020-atlantis-mobs',
      ['13-atlantis-mobs.sql'],
      True,
