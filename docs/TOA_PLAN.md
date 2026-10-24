@@ -158,6 +158,17 @@ agent or session that finishes a package updates its row and the log below.
   follow-up:** `tools/toa/sql/050-artifact-item-classtype.sql` (197
   templates) must ship as a pack before any artifact is handed out. 3
   ArtifactXItem rows name no template.
+- [x] **WP3.0b Missing artifact handlers.** (0.323.0, real-client check
+  pending; `docs/TOA_ARTIFACT_SPELLS.md` section WP3.0b) Handlers for
+  Crocodile Tear Ring, Kalare's Necklace (+ Eternal Plant row 30182), Ring of
+  Unyielding Will, Gem of Lost Memories, Zahur aura + Efficient Endurance,
+  Zo'arkat aura; pack 013 adds the 4 spell rows that existed nowhere (Stat
+  Drain, Boon of Kings, Disoriented + sub spell, Vision of Malice at ToA-era
+  values); stock AfHitsBuff and DexterityConstitutionDebuff made to work (own
+  eEffect; the inhibiting poisons now really debuff). Open: EternalPlant 30181
+  (Shatter Illusions does it), stock ToHitDebuff dead the same way (rows
+  30178, 30200), 30126 cast point-blank around the wearer. (Row was lost from
+  this file between 0.319.0 and 0.323.0 by an editing slip; restored.)
 - [~] **WP3.1b Earning artifacts, data-driven.** Agent toa-scholars (2026-10-24 18:20; folds in WP3.2 scroll drops and WP3.4 texts). Our Artifact rows use
   numeric placeholders (ScholarID 1001, EncounterID = template name, Version
   0-15), so DOL's type-name quest lookup cannot work: Scholar + ArtifactQuest
@@ -240,6 +251,8 @@ a real defect in every package; keep the review step.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 19:30: WP3.0b reviewed (sub-spell cast and AfHits refcount fixed)
+  and merged as 0.323.0 (17 packs).
 - 2026-10-24 18:20: 0.322.0 deployed on Aaron's PC (packs 026/027 applied, 2
   properties refreshed live, 33 Atlantis destinations, Atlantis open to
   players, server running). WP3.0b and WP3.1b started as agents.

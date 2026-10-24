@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.323.0] - 2026-10-24
+
+### Added
+- Handlers for the seven artifact effects no project had (ToA plan WP3.0b):
+  Crocodile Tear Ring (5 % of damage taken returned as power and endurance),
+  Kalare's Necklace (30 % health, power and endurance over 30 s), Ring of
+  Unyielding Will (defensive proc: DoT on the attacker, HoT on the wearer),
+  Gem of Lost Memories (cures resurrection illness), Crown of Zahur aura and
+  Efficient Endurance, Bracer of Zo'arkat area Bedazzlement. Data pack 013
+  adds the four spell rows that existed nowhere: Stat Drain (Scepter), Boon
+  of Kings (Spear of Kings), Disoriented (Shield of Khaos), Vision of Malice
+  (Malice's Axe, ToA-era 25 % / 60 s). Behaviour and guesses are listed in
+  `docs/TOA_ARTIFACT_SPELLS.md`.
+
+### Changed
+- None.
+
+### Fixed
+- The stock armour-and-health buff (`AFHitsBuff`) and the dexterity/constitution
+  debuff never worked on the ECS server; both do now. The inhibiting poisons
+  therefore really lower Dex and Con (50 to 108 for 60 s). The Dex/Con debuff
+  has its own effect type and no longer blocks artifact effects.
+
+### Removed
+- None.
+
 ## [0.322.0] - 2026-10-24
 
 ### Added
