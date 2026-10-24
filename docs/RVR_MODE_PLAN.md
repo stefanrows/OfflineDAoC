@@ -28,7 +28,7 @@ defaults in code, keep/relic start state from the reset.
   realm-only group/trade/speech/guild join, dummy-guild trick off; realm-only
   invites for bots, battlegroups, guild alliances. Camlann unchanged.
   **RvR not playable yet:** the alliance core is R1b.
-- [ ] **R1b Alliance core, client, GST_PvP audit.** Same realm = friend
+- [~] **R1b Alliance core, client, GST_PvP audit.** Agent rvr-r1b (2026-10-25 01:25). Same realm = friend
   everywhere; guild/battlegroup only within a realm; companions = owner's
   realm; the 35 GST_PvP sites and 8 `is PvPServerRules` checks audited;
   UT_CamlannPvpCombatant gets RvR twins. 1 session.
