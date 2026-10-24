@@ -378,6 +378,9 @@ Agent sessions on items 45–48: take the role and context from
      Phase 0 done 2026-10-24 (sources, code fit, import probe: the converted
      gaheris SQL loads completely into a copy of our DB, nothing touched the
      live install).
+     WP3.0, the 43 artifact spell handlers from OpenDAoC-Core bridged into our
+     ECS: implemented in source, real-client check pending
+     ([TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md)).
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

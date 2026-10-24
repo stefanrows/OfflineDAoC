@@ -96,16 +96,17 @@ agent or session that finishes a package updates its row and the log below.
 
 ### Phase 3: Artifacts
 
-- [~] **WP3.0 Artifact spell handlers.** Implemented in source (worktree
-  toa-artifact-spells, 2026-10-24, 8 tests): all 43 artifact spell types have
-  one handler, bridged into our ECS (upstream's were legacy-hook dead code);
-  `docs/TOA_ARTIFACT_SPELLS.md`. Awaiting rebase + review. Follow-ups: pack
-  gaheris `90-spells.sql` (68 of the 73 missing artifact spell IDs, moved to
-  WP2.1); 5 spell IDs exist nowhere (7206, 13135, 30115, 30125, 32223) and 7
-  item spell types have no handler anywhere (ZoAura, ZahurAura, ZahurEnduProc,
-  CrocodileTearsProc, UnyeldingProc, YouthIllness, EternalPlant); two core
-  one-liners (Ceremonial Bracer mez intercept, Cloudsong fall damage) go to
-  WP3.1.
+- [x] **WP3.0 Artifact spell handlers.** (0.316.0, real-client check pending)
+  All 43 artifact spell types have one handler under `spells/Artifacts`,
+  bridged into our ECS (upstream's were legacy-hook dead code); debuffs use the
+  stock sign rule and conflict only with their own type; `docs/TOA_ARTIFACT_SPELLS.md`.
+  Follow-ups: pack gaheris `90-spells.sql` (68 of the 73 missing artifact
+  spell IDs, in WP2.1); 5 spell IDs exist nowhere (7206, 13135, 30115, 30125,
+  32223) and 7 item spell types have no handler anywhere (ZoAura, ZahurAura,
+  ZahurEnduProc, CrocodileTearsProc, UnyeldingProc, YouthIllness,
+  EternalPlant); two core one-liners (Ceremonial Bracer mez intercept,
+  Cloudsong fall damage) and the stock DexterityConstitutionDebuff's
+  always-on conflict go to WP3.1; GM accounts can log back in morphed.
 - [ ] **WP3.1 Artifact core.** gaheris `ArtifactMgr` (+ an `Init` caller),
   `InventoryArtifact` (+ stat refresh), `ArtifactCompat` adapted; artifact
   item templates get `ClassType` InventoryArtifact by SQL, otherwise they
@@ -148,6 +149,8 @@ agent or session that finishes a package updates its row and the log below.
 ## Log
 
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24: WP3.0 reviewed (two stacking defects fixed) and merged as
+  0.316.0.
 - 2026-10-24: WP2.0 + WP2.3 reviewed (one Battlewarder respawn defect fixed)
   and merged as 0.315.0.
 - 2026-10-24: WP3.0 built and tested by toa-artispells; WP2.0/2.3 review

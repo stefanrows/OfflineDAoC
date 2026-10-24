@@ -39,7 +39,10 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      initialise it in the test double. Not fixed in 0.272.0.
      At 0.273.0 a sixth test fails the same way:
      `UT_AutonomousBotRealmPointRewards.GainRealmPointsCreditsAutonomousBotsAndPersistentCompanionsOnly`
-     (null lock in `GameBot.GainRealmPoints`).
+     (null lock in `GameBot.GainRealmPoints`). Still failing at 0.315.0
+     (2026-10-24, seen in every ToA worktree run), plus a seventh:
+     `UT_OfflineWorldSpeedControl.AchievedSpeedIsClampedDuringCatchUpBursts`
+     gets 20, expects 3 (the catch-up clamp changed with the 20x speed work).
 
 154. **Two Midgard world bots loop in capital egress recovery for over an
      hour.** Installed 0.244.0, 2026-10-11 08:40–10:25 (20×):

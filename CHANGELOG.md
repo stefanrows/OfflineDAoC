@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.316.0] - 2026-10-24
+
+### Added
+- Artifact spell handlers for all 43 Trials of Atlantis artifact spell types
+  (`spells/Artifacts`, ported from OpenDAoC-Core and bridged into the ECS:
+  stat and resist buffs/debuffs, procs, ablatives, morphs, pets, the Belt of
+  Sun/Moon day-night check). Debuffs follow the stock sign rule so they stack
+  with ordinary debuffs, and artifact effects conflict only with their own
+  type. No artifact spell rows are in the database yet; they arrive with the
+  ToA data packs. `docs/TOA_ARTIFACT_SPELLS.md` lists handler, type and
+  known gaps (ToA plan WP3.0).
+- Unit tests: UT_ArtifactSpellHandlers (11).
+
+### Changed
+- `source/server/.gitignore` no longer hides `GameServer/spells/Artifacts/`.
+- Bug 160 records the seventh pre-existing test failure
+  (`AchievedSpeedIsClampedDuringCatchUpBursts`).
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.315.0] - 2026-10-24
 
 ### Added
