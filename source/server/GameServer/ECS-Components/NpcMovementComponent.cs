@@ -43,6 +43,8 @@ namespace DOL.GS
         private PathfindingStatus _autonomousPathFailureStatus;
         private Vector3 _autonomousPathFailureDestination;
         private bool _autonomousTravelArrival;
+        // Task 138: the follow is steering an autonomous formation slot (ground travel kinematics apply).
+        private bool _formationSteering;
         private SeamContinuation _seamContinuation;
         private sealed record SeamContinuation(Vector3 At, Vector3 Next, Vector3? Final,
             ushort Region, Group Group, string Assignment, bool Walk);
@@ -232,6 +234,7 @@ namespace DOL.GS
         public void WalkTo(Vector3 destination, short speed)
         {
             _seamContinuation = null;
+            EndFormationFollowOnOrder();
             _movementRequest.Set(MovementRequestType.Walk, destination, speed);
             _fullSpeedRequest = Owner is GameBot && speed >= MaxSpeed;
             SetFlag(MovementState.Request);
@@ -241,10 +244,18 @@ namespace DOL.GS
         public void PathTo(Vector3 destination, short speed)
         {
             _seamContinuation = null;
+            EndFormationFollowOnOrder();
             _movementRequest.Set(MovementRequestType.Path, destination, speed);
             _fullSpeedRequest = Owner is GameBot && speed >= MaxSpeed;
             SetFlag(MovementState.Request);
             AddToServiceObjectStore();
+        }
+
+        /// <summary>A public move order ends a live formation follow (the movement tick uses the internal path methods).</summary>
+        private void EndFormationFollowOnOrder()
+        {
+            if (IsFlagSet(MovementState.Follow) && AutonomousGroupFormationFollow.EndOnMoveOrder(Owner, FollowTarget))
+                StopFollowing();
         }
 
         public void ForcePathReplot()
@@ -273,6 +284,7 @@ namespace DOL.GS
         public void StopMoving()
         {
             _seamContinuation = null;
+            AutonomousGroupFormationFollow.Forget(Owner);
             _movementState = MovementState.None;
             StopFollowing();
             StopMovingOnPath();
@@ -288,6 +300,7 @@ namespace DOL.GS
                 return;
 
             _seamContinuation = null;
+            _formationSteering = false;
 
             if (target != FollowTarget)
                 _nextFollowTick = 0;
@@ -303,6 +316,7 @@ namespace DOL.GS
         {
             UnsetFlag(MovementState.Follow);
             FollowTarget = null;
+            _formationSteering = false;
         }
 
         public void MoveOnPath(short speed)
@@ -593,7 +607,7 @@ namespace DOL.GS
             else
             {
                 Vector3 direction = _destination - _ownerPosition;
-                if (AutonomousGroundTravelMotion.Applies(Owner, FixedSpeed, FollowTarget) &&
+                if (AutonomousGroundTravelMotion.Applies(Owner, FixedSpeed, _formationSteering ? null : FollowTarget) &&
                     AutonomousGroundTravelMotion.TryCalculate(direction, CurrentSpeed, out var travel))
                 {
                     _velocity = travel.Velocity;
@@ -913,8 +927,14 @@ namespace DOL.GS
         {
             // A bot's mobile song is a cast, but must not freeze its follow
             // route. Ordinary NPC casts and ranged attacks keep their stop rule.
-            if (Owner.IsCasting && !BotSongTwistPolicy.HasMobileSongCast(Owner) ||
-                (Owner.IsAttacking && Owner.ActiveWeaponSlot is eActiveWeaponSlot.Distance))
+            bool castingOrRanged = Owner.IsCasting && !BotSongTwistPolicy.HasMobileSongCast(Owner) ||
+                (Owner.IsAttacking && Owner.ActiveWeaponSlot is eActiveWeaponSlot.Distance);
+            // Task 138: an autonomous party member's formation follow (only those have a state) steers to its slot.
+            AutonomousGroupFormationFollow.Gate formation = AutonomousGroupFormationFollow.Classify(Owner, FollowTarget,
+                castingOrRanged, out AutonomousGroupFormationFollow.State formationState);
+            if (formation is not AutonomousGroupFormationFollow.Gate.None)
+                return FormationFollowTick(formation, formationState, castingOrRanged);
+            if (castingOrRanged)
             {
                 StopMoving();
                 return Properties.GAMENPC_FOLLOWCHECK_TIME;
@@ -992,6 +1012,105 @@ namespace DOL.GS
 
             PathToInternal(destination, Math.Max((short) 20, speed));
             return Properties.GAMENPC_FOLLOWCHECK_TIME;
+        }
+
+        /// <summary>
+        /// Task 138: steers an autonomous party member to its formation slot every 400 ms while it follows its
+        /// leader (AutonomousGroupFormationFollow). Allocation-free; the path is issued through PathToInternal so the
+        /// public-order release does not end the follow it serves.
+        /// </summary>
+        private int FormationFollowTick(AutonomousGroupFormationFollow.Gate gate, AutonomousGroupFormationFollow.State follow,
+            bool castingOrRanged)
+        {
+            GameBot bot = (GameBot) Owner;
+            GameBot leader = follow.Leader;
+            if (gate is AutonomousGroupFormationFollow.Gate.Pause)
+            {
+                // A cast pauses the follow; the follower walks on at the first check after the cast.
+                AutonomousGroupFormationFollow.NoteHeldCheck(leader, true, true);
+                UnsetFlag(MovementState.WalkTo);
+                UnsetFlag(MovementState.Pathfinding);
+                if (IsMoving)
+                    UpdateMovement(0);
+                follow.IssuedTick = 0;
+                return AutonomousGroupFormationFollow.FollowCheckMilliseconds;
+            }
+            if (gate is AutonomousGroupFormationFollow.Gate.End)
+            {
+                if (bot.InCombat || bot.IsAttacking)
+                    AutonomousGroupFormationFollow.NoteHeldCheck(leader, true, false);
+                // A cast or bow shot in a fight keeps the ordinary stop rule; anything else lets the current leg finish.
+                if (castingOrRanged)
+                {
+                    StopMoving();
+                    return Properties.GAMENPC_FOLLOWCHECK_TIME;
+                }
+                AutonomousGroupFormationFollow.Release(bot);
+                return AutonomousGroupFormationFollow.FollowCheckMilliseconds;
+            }
+            if (!FollowTarget.IsAlive || FollowTarget.ObjectState is not eObjectState.Active || Owner.CurrentRegionID != FollowTarget.CurrentRegionID)
+            {
+                StopMoving();
+                return 0;
+            }
+
+            using var profile = BotThinkProfiler.Measure(BotThinkPhase.FormationFollowTick);
+            long now = GameLoop.GameLoopTime;
+            bool leaderWalking = leader.IsMoving && leader.CurrentSpeed > 0;
+            bool standing = !IsMoving;
+            AutonomousGroupMotion.FollowAim kind = AutonomousGroupFormationFollow.PlanTick(bot, follow, _ownerPosition,
+                leaderWalking, standing, _pathfinder.PathfindingStatus, now, out Vector3 aim);
+            if (kind is AutonomousGroupMotion.FollowAim.CrossZone)
+            {
+                // Never a straight walk over the border: keep the current movement; the AI turn routes the
+                // follower through the validated zone itinerary.
+                AutonomousGroupFormationFollow.NudgeController(bot, follow, now);
+                return AutonomousGroupFormationFollow.FollowCheckMilliseconds;
+            }
+
+            float distanceSquared = Vector3.DistanceSquared(aim, _ownerPosition);
+            if (distanceSquared > (float) MaxFollowDistance * MaxFollowDistance)
+            {
+                AutonomousGroupFormationFollow.Release(bot);
+                return AutonomousGroupFormationFollow.FollowCheckMilliseconds;
+            }
+            int arrived = leaderWalking ? AutonomousGroupFormationFollow.WalkingArrivedTolerance : AutonomousGroupFormationFollow.ArrivedTolerance;
+            if (distanceSquared <= arrived * arrived)
+            {
+                // Settled at the slot of a standing leader: face the way the leader faces.
+                if (!leaderWalking)
+                    TurnTo(leader.Heading);
+                if (IsMoving)
+                    UpdateMovement(0);
+                UnsetFlag(MovementState.Pathfinding);
+                follow.IssuedTick = 0;
+                return AutonomousGroupFormationFollow.FollowCheckMilliseconds;
+            }
+
+            float distance = MathF.Sqrt(distanceSquared);
+            short speed = leaderWalking
+                ? AutonomousGroupMotion.FollowerSpeed(bot, leader, aim, distance)
+                : AutonomousGroupFormationFollow.SettleSpeed(MaxSpeed, distance);
+            if (!AutonomousGroupFormationFollow.ShouldIssue(follow, !standing, aim, speed, now))
+                return AutonomousGroupFormationFollow.FollowCheckMilliseconds;
+
+            Vector3 destination = aim;
+            if (!TrySnapToMesh(ref destination))
+            {
+                destination = new(leader.X, leader.Y, leader.Z);
+                TrySnapToMesh(ref destination);
+                kind = AutonomousGroupMotion.FollowAim.Leader;
+            }
+            // The pathfinder re-plots only when the target moved 64 units, so a follower that reached the end of its
+            // last path stood until its slot had moved that far. Standing while the leader walks gets a fresh path,
+            // unless the last one to this spot just failed (a slot behind a closed keep door would replan every check).
+            if (leaderWalking && standing && !_pathfinder.HasRecentFailure(destination))
+                _pathfinder.ForceReplot = true;
+            _formationSteering = true;
+            _fullSpeedRequest = speed >= MaxSpeed;
+            PathToInternal(destination, Math.Max((short) 20, speed));
+            AutonomousGroupFormationFollow.NoteIssued(follow, aim, speed, kind is AutonomousGroupMotion.FollowAim.Slot, now);
+            return AutonomousGroupFormationFollow.FollowCheckMilliseconds;
         }
 
         public bool TrySnapToMesh(ref Vector3 destination)

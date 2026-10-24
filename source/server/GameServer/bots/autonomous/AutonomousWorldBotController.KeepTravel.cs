@@ -443,6 +443,18 @@ public sealed partial class AutonomousWorldBotController
         while (_keepTravelIndex < _keepTravelPoints.Length &&
             Vector3.DistanceSquared(current, _keepTravelPoints[_keepTravelIndex]) <= 80 * 80)
             _keepTravelIndex++;
+        // A moving bot that will pass its road point before its next turn moves on to the next one now.
+        if (bot.IsMoving && _keepTravelIndex < _keepTravelPoints.Length - 1)
+        {
+            Vector3 point = _keepTravelPoints[_keepTravelIndex], following = _keepTravelPoints[_keepTravelIndex + 1];
+            Zone ownZone = bot.CurrentZone;
+            bool ownZoneOnly = ownZone != null && bot.CurrentRegion?.GetZone((int)point.X, (int)point.Y) == ownZone &&
+                               bot.CurrentRegion.GetZone((int)following.X, (int)following.Y) == ownZone;
+            float reach = AutonomousRouteRecoveryPolicy.RoadLookaheadRadius(true, bot.CurrentSpeed, bot.Brain?.ThinkInterval ?? 0);
+            if (AutonomousRouteRecoveryPolicy.AdvancesRoadPointEarly(true, _keepTravelIndex, _keepTravelPoints.Length,
+                    Vector3.DistanceSquared(current, point), reach, ownZoneOnly))
+                _keepTravelIndex++;
+        }
         // A reached road segment is approach progress only when it brings this
         // member closer than before (the per-member best distance survives
         // replans, so the same segment is never credited twice).

@@ -20,7 +20,9 @@ public class UT_BotThinkProfilerGothwaitePhases
             Assert.That((int)BotThinkPhase.GothwaitePvpDriver, Is.EqualTo((int)BotThinkPhase.StableRouteSearchSlice + 1));
             Assert.That((int)BotThinkPhase.GothwaitePvpScan, Is.EqualTo((int)BotThinkPhase.StableRouteSearchSlice + 2));
             Assert.That((int)BotThinkPhase.GothwaitePvpFormer, Is.EqualTo((int)BotThinkPhase.StableRouteSearchSlice + 3));
-            Assert.That(Enum.GetValues<BotThinkPhase>().Last(), Is.EqualTo(BotThinkPhase.GothwaitePvpFormer));
+            // Task 138 appended the formation-follow tick after them.
+            Assert.That((int)BotThinkPhase.FormationFollowTick, Is.EqualTo((int)BotThinkPhase.GothwaitePvpFormer + 1));
+            Assert.That(Enum.GetValues<BotThinkPhase>().Last(), Is.EqualTo(BotThinkPhase.FormationFollowTick));
         });
     }
 

@@ -28,6 +28,9 @@ namespace DOL.GS
         private PathBuffer _calculationBuffer = new();
 
         private Vector3 _lastTarget = Vector3.Zero;
+        private long _lastNoPathTick;
+        /// <summary>A no-path result counts as recent for this long (task 138: no forced replot toward it).</summary>
+        public const int RecentFailureMilliseconds = 2_000;
         private PathVisualization _pathVisualization;
 
         public static EDtPolyFlags[] DefaultFilters => PathfindingProvider.Instance.DefaultFilters;
@@ -234,12 +237,15 @@ namespace DOL.GS
             }
 
             PathfindingStatus = PathfindingStatus.NoPathFound;
+            _lastNoPathTick = GameLoop.GameLoopTime;
             return false;
         }
 
         private void UpdatePathState(PathfindingStatus status, Vector3 target)
         {
             PathfindingStatus = status;
+            if (status == PathfindingStatus.NoPathFound)
+                _lastNoPathTick = GameLoop.GameLoopTime;
             _lastTarget = target;
             ForceReplot = false;
             _pathVisualization?.Visualize(_activePath.Nodes, Owner.CurrentRegion);
@@ -305,6 +311,15 @@ namespace DOL.GS
 
         public static bool RequiresExactClimbNode(bool bot, ushort zone, EDtPolyFlags current, EDtPolyFlags next) =>
             bot && zone is 160 or 249 && ((current | next) & EDtPolyFlags.Jump) != 0;
+
+        /// <summary>No path was found to about this target in the last <see cref="RecentFailureMilliseconds"/>.</summary>
+        public bool HasRecentFailure(Vector3 target) =>
+            IsRecentFailure(PathfindingStatus, _lastNoPathTick, GameLoop.GameLoopTime, _lastTarget, target);
+
+        public static bool IsRecentFailure(PathfindingStatus status, long lastNoPathTick, long now, Vector3 lastTarget,
+            Vector3 target) =>
+            status == PathfindingStatus.NoPathFound && lastNoPathTick > 0 && now - lastNoPathTick < RecentFailureMilliseconds &&
+            lastTarget.IsInRange(target, MIN_TARGET_DIFF_REPLOT_DISTANCE);
 
         public bool TryGetClosestReachableNode(Zone zone, Vector3 position, Vector3 target, out Vector3? node)
         {

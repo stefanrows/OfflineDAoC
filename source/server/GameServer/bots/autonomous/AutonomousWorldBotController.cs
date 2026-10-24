@@ -1572,8 +1572,9 @@ namespace DOL.GS
 
             bool tight = leader.CurrentRegion?.IsDungeon == true || leader.CurrentZone?.IsDungeon == true;
             // Aim around where the leader is about to be, not where it was.
-            Vector3 formation = AutonomousBotGroupCoordinator.FormationPoint(bot,
-                leader.IsMoving && !tight ? AutonomousGroupMotion.PredictLeader(leader) : new(leader.X, leader.Y, leader.Z), tight);
+            Vector3 formationCenter = leader.IsMoving && !tight
+                ? AutonomousGroupMotion.PredictLeader(leader) : new(leader.X, leader.Y, leader.Z);
+            Vector3 formation = AutonomousBotGroupCoordinator.FormationPoint(bot, formationCenter, tight);
             // An RvR member sprints to close a gap to its slot (P6).
             if (directive.ObjectiveKind == eAutonomousObjectiveKind.RvR && bot.CurrentRegionID == leader.CurrentRegionID)
                 AutonomousRvrSpeed.UpdateFollowerSprint(bot, Vector3.Distance(new(bot.X, bot.Y, bot.Z), formation));
@@ -1596,10 +1597,14 @@ namespace DOL.GS
             else if (leader.IsMoving && !tight &&
                      Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), formation) < 2_500 * 2_500)
             {
-                // Walk with the leader: steer smoothly, match its pace, never stop mid-march.
-                // A leader over a zone border is followed through the zone itinerary.
-                if (!AutonomousGroupMotion.FollowMovingLeader(bot, leader, formation, out Vector3 crossZoneTarget))
+                // Walk with the leader: the movement tick steers to the slot every 400 ms, matches its pace and
+                // never stops mid-march (AutonomousGroupFormationFollow). A leader over a zone border is followed
+                // through the zone itinerary instead (IssuePath ends the formation follow).
+                if (AutonomousGroupFormationFollow.RoutesAcrossZone(bot, leader, formationCenter, formation, tight,
+                        out Vector3 crossZoneTarget))
                     IssuePath(bot, crossZoneTarget, retargetWhileMoving: true);
+                else
+                    AutonomousGroupFormationFollow.Ensure(bot, leader, formationCenter, formation, tight);
             }
             else if (Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), formation) > 95 * 95)
             {
@@ -4535,6 +4540,8 @@ namespace DOL.GS
             bool preciseArrival = false, bool retargetWhileMoving = false)
         {
             using var profile = BotThinkProfiler.Measure(BotThinkPhase.IssuePath);
+            // A route order replaces the party formation follow (the next group-travel turn renews it).
+            AutonomousGroupFormationFollow.Release(bot);
             _routeThreatHandledCurrentPath = false;
             TryRepairNavigationFloor(bot);
             if (AutonomousRvrTravel.TraverseFriendlyDoor(bot, destination))

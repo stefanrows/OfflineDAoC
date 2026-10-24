@@ -371,20 +371,6 @@ Agent sessions on items 45–48: take the role and context from
      a suggested order in [TOA_RESEARCH.md](TOA_RESEARCH.md). Blocked on an
      owner decision: CAMLANN.md decision 1 sets the era to pre-ToA.
 
-138. **Full formation follow inside the movement tick (follow-up to 137).**
-     Owner, 2026-10-24. Upstream steers each follower to its slot every
-     400 ms from `NpcMovementComponent.FollowTick` (upstream ~898-1052,
-     `AutonomousGroupFormationFollow.cs`, slot 1.5 s ahead, a cast pauses
-     rather than ends the follow, `Pathfinder.HasRecentFailure`). Ours
-     re-steers per AI turn (0.8 s lead). Merge with `AutonomousGroupMotion`
-     rather than running both. Risks: `FollowTick` also serves companions,
-     CPU at 1,500+ bots, interplay with sprint/stealth. Own task and own
-     version; do after 137 and measure first. Optional companion piece: PvE
-     group pace (upstream `AutonomousGroupPace`, `AutonomousGroupMemberStall`,
-     stop at 1,500/resume at 900 instead of our `IsCohesive` 700/400; 5,602
-     `AUTONOMOUS_GROUP_TRAVEL_HOLD` in 3 hours), tuned against
-     `AutonomousLeaderLoop`.
-
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;
      NoPathFound 977, PartialPathFound 295): Forest Sauvage 249, Odin's Gate
@@ -404,6 +390,31 @@ Agent sessions on items 45–48: take the role and context from
 
 ## Implemented in source; installation verification pending
 
+138. **Full formation follow inside the movement tick (follow-up to 137).**
+     Owner, 2026-10-24. Implemented in source **0.312.0**
+     (`AutonomousGroupFormationFollow`, `NpcMovementComponent.FormationFollowTick`):
+     the follower's AI turn calls `Ensure` (native follow of the leader plus
+     slot offset) and the movement tick steers to the slot every 400 ms, 1.5 s
+     ahead of a walking leader, re-issuing a path only when the aim moved 96
+     units (Detour load). 137's trail/border rules and every speed rule are
+     shared (`AutonomousGroupMotion.FollowerSpeed`); a cast out of combat
+     pauses, `IssuePath`, public `PathTo`/`WalkTo`/`StopMoving`, an attack, a
+     rest, a stable ride or an AI turn that does not renew it ends it.
+     Companions, pets, helpers and player-led groups take the unchanged follow.
+     `Pathfinder.HasRecentFailure` stops replanning a failed slot. Also the
+     keep-travel road lookahead (135 caveat): a moving bot within one AI
+     interval (80-400 units) of its road point aims at the next, never past
+     the last point or across a seam. Measurement: `AUTONOMOUS_FORMATION_FOLLOW`
+     now per tick check (compare `standingPct` with 0.311.0) plus `casting`,
+     `combat`, `noPath`, `atSlot`, `partial`, `crossZoneRoutes`; profiler phase
+     `FormationFollowTick`. Real-client check: smooth marches without
+     rubber-banding, companions unchanged, `standingPct` down, CPU of
+     `FormationFollowTick` at full population. Known limits: brain-started
+     cast-time buffs still stop the follower (BotBrain/SpellHandler stops);
+     followers of a leader starting from rest join on their own next turn; the
+     rear slot can drift slightly ahead with a faster follower. PvE group pace
+     (upstream `AutonomousGroupPace`) not included.
+
 137. **Followers trail the leader when their formation slot is unreachable or
      across a zone border.** Owner, 2026-10-24 (upstream RvR movement batch).
      Implemented in source **0.311.0** (`AutonomousGroupMotion.FollowMovingLeader`,
@@ -416,8 +427,8 @@ Agent sessions on items 45–48: take the role and context from
      60 s (`checks`, `standing`, `standingPct`, `trail`, `trailStarts`,
      `border`, `crossZone`). Real-client check: followers keep moving at
      frontier zone borders, keep gates and bridges; compare `standingPct` in
-     the live log. Trail points are snapshots per AI turn; continuous steering
-     is task 138.
+     the live log. Since 0.312.0 the movement tick does this steering (task
+     138) and the log line counts tick checks.
 
 136. **Main-body leader succession for autonomous groups.** Owner,
      2026-10-24. Implemented in source **0.311.0**
@@ -439,7 +450,7 @@ Agent sessions on items 45–48: take the role and context from
      retained order; the 1.5 s gate stays. Real-client check: marches flow
      through corners without a halt at each waypoint. Reviewer caveat: the
      road index still advances only on an AI turn within 80 units, so some
-     legs may still halt briefly; measure before adding lookahead (see 138).
+     legs may still halt briefly; lookahead added in 0.312.0 (task 138).
 
 133. **Animist main shroom follows; shrooms inherit the Animist's RAs.**
      Owner, 2026-10-17: "make the main animist shroom follow the animist

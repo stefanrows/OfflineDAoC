@@ -69,6 +69,9 @@ public enum BotThinkPhase
     GothwaitePvpScan,
     /// <summary>One castle group former tick (service thread, every 2 s while the mode is on).</summary>
     GothwaitePvpFormer,
+    // Task 138 (appended). Runs on the movement service, outside a brain turn: it shows in the minute totals only.
+    /// <summary>One formation-follow steering check of an autonomous party member (NpcMovementComponent, every 400 ms).</summary>
+    FormationFollowTick,
 }
 
 /// <summary>

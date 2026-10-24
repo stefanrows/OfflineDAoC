@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.312.0] - 2026-10-24
+
+### Changed
+
+- **Autonomous group followers keep their formation slot continuously
+  (task 138).** A follower used to re-steer only on its own AI turn, every
+  2.6-4.2 seconds at a full population, so it reached its point and stood
+  until the next turn. Now its AI turn only renews a follow of the leader,
+  and the movement tick steers it to its slot every 400 ms while the leader
+  walks, aiming 1.5 seconds ahead. The pace, catch-up, sprint, stealth and
+  RvR speed caps are the same rules as before; a slot that cannot be reached
+  still sends the follower behind the leader, and a zone border is still
+  crossed only through the validated zone route. A cast out of combat pauses
+  the follow; a route, fight, hold, rest or stable ride ends it. Companions,
+  pets and player-led groups follow exactly as before. The
+  `AUTONOMOUS_FORMATION_FOLLOW` line now counts every tick check (compare
+  `standingPct`, not raw counts, with 0.311.0) and adds why followers stood
+  (`casting`, `combat`, `noPath`, `atSlot`, `partial`, `crossZoneRoutes`);
+  the bot think profile has a `FormationFollowTick` phase. Real client
+  check pending.
+- **Keep-travel marches move on to the next road point a little early.** A
+  moving bot within one AI interval of travel (80-400 units) of its current
+  road point aims at the next one, at most one point per turn, never past
+  the last (precise) point and never across a zone seam. Real client check
+  pending.
+
 ## [0.311.0] - 2026-10-24
 
 ### Changed

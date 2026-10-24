@@ -52,6 +52,26 @@ public static class AutonomousRouteRecoveryPolicy
     // A collision-stopped actor reports IsMoving=false. Route ownership is
     // established by the controller before this policy is called, so elapsed
     // position time—not the movement flag—is the reliable stall signal.
+    // Task 138 (the 135 caveat): the keep-travel road index advanced only on an
+    // AI turn within 80 units, so a marching bot that reached a road point
+    // between turns halted on it. A moving bot within one AI interval of travel
+    // (capped at 400 units) of its current point moves on to the next point one
+    // turn early: one point per turn, never onto the last point (it keeps its
+    // precise arrival), and only while both points lie in the bot's own zone
+    // (a proved seam pair keeps its own inside/outside rule).
+    public const float RoadPointReachedDistance = 80f;
+    public const float RoadLookaheadMaximum = 400f;
+
+    public static float RoadLookaheadRadius(bool moving, short speed, int thinkIntervalMilliseconds) =>
+        !moving || speed <= 0 || thinkIntervalMilliseconds <= 0
+            ? RoadPointReachedDistance
+            : System.Math.Clamp(speed * thinkIntervalMilliseconds / 1000f, RoadPointReachedDistance, RoadLookaheadMaximum);
+
+    public static bool AdvancesRoadPointEarly(bool moving, int index, int count, float distanceSquaredToPoint,
+        float lookaheadRadius, bool bothPointsInOwnZone) =>
+        moving && index >= 0 && index < count - 1 && bothPointsInOwnZone &&
+        distanceSquaredToPoint <= lookaheadRadius * lookaheadRadius;
+
     public static bool ShouldRecoverActiveRouteStall(long lastProgressTick, long nowTick, long threshold) =>
         lastProgressTick > 0 && nowTick - lastProgressTick >= threshold;
 

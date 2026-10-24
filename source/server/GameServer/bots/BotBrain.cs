@@ -1565,8 +1565,11 @@ namespace DOL.AI.Brain
 
         public override void Think()
         {
+            long turnTick = GameLoop.GameLoopTime;
             using (BotThinkProfiler.Turn(Body))
                 ThinkCore();
+            // Task 138: a turn that did not renew the party formation follow chose another order; it ends here.
+            AutonomousGroupFormationFollow.EndTurn(BotBody, turnTick);
         }
 
         private void ThinkCore()
