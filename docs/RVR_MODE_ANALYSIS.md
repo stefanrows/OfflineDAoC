@@ -205,3 +205,12 @@ relics, keeps and GameBot.
     claim raises it, bot guilds of that realm claim automatically after a
     capture; the siege-flow port (R4c) is done by the night session; open BG
     portal-keep guards are hostile to other realms under RvR.
+18. **Strict world separation (00:30):** with RvR selected there is no PvP
+    of any kind on the server (no Gothwaite arena, no Camlann FFA, no mixed
+    crews); with PvP selected everything is PvP as today (FFA, guild wars,
+    Gothwaite) and nothing RvR. Realm Exchange sells only the own realm's
+    market in RvR; bot pickup PvE groups are same-realm in RvR.
+19. **Every fork bot extension carries over into RvR realm-based** (owner,
+    00:25): companions, world bots, autonomous RvR layer, open BG with presets
+    and window, siege operators, raid groups, bot ML; only the friend/enemy
+    key changes from guild/crew to realm.
