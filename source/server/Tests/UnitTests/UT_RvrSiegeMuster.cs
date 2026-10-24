@@ -471,4 +471,124 @@ public sealed class UT_RvrSiegeMuster
         Assert.That(AutonomousRvrEventLayer.IsAbandoned("stale", target.Id, start + 13 * Minute), Is.False);
         Assert.That(AutonomousRvrEventLayer.MusterCounts(target.Id), Is.EqualTo((0, 0)));
     }
+
+    // ---- Marching forces are not idle (live log 2026-10-24: 5 of 12 sieges idle-closed on the march) ----
+
+    private static void Depart(string force, long tick)
+    {
+        AutonomousRvrEventLayer.ReportMuster(force, 8, 8, 8, true, tick - 11_000);
+        Assert.That(AutonomousRvrEventLayer.ReportMuster(force, 8, 8, 8, true, tick), Is.EqualTo(AutonomousRvrSiegeMuster.Phase.Marching));
+    }
+
+    [Test]
+    public void ARelaunchRestartsTheIdleClockButAForceThatStaysStuckStillCloses()
+    {
+        const long start = 320_000_000;
+        var target = OpenSiege("rvr-keep-9120", start);
+        Bucket(target.Id, "Attackers").Add("army", 8);
+        long departed = start + Minute;
+        Depart("army", departed);
+        AutonomousRvrEventLayer.ReportMarch(target.Id, "army", 1, 100, new Vector3(100_000, 120_000, 0), false, departed + 1_000);
+
+        // Fourteen minutes of no credited progress: the siege is still open (idle window is fifteen).
+        Sweep(departed + 14 * Minute);
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, departed + 14 * Minute), Is.True, "control: not yet idle");
+
+        // The guild army relaunches: the clock starts again. The old rule would have closed the siege a minute later.
+        Assert.That(AutonomousRvrEventLayer.RestartMarch("army", departed + 14 * Minute), Is.True);
+        AutonomousRvrEventLayer.ReportMarch(target.Id, "army", 1, 100, new Vector3(100_000, 120_000, 0), false, departed + 14 * Minute + 1_000);
+        Sweep(departed + 28 * Minute);
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, departed + 28 * Minute), Is.True, "fourteen minutes after the relaunch");
+
+        // Still stuck 20,000 units away: the allowance (walking time plus slack, at least the idle window) ends, the siege closes.
+        Sweep(departed + 30 * Minute);
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, departed + 30 * Minute), Is.False, "a truly stuck force still closes");
+    }
+
+    [Test]
+    public void AForceCrossingTheFrontierGetsTheWalkingTimeBeforeTheIdleRuleApplies()
+    {
+        const long start = 330_000_000;
+        var target = OpenSiege("rvr-keep-9121", start);
+        Bucket(target.Id, "Attackers").Add("crossing", 8);
+        long departed = start + Minute;
+        Depart("crossing", departed);
+        // Nobody is in the keep's region yet: no credit is possible for a long while.
+        AutonomousRvrEventLayer.ReportMarch(target.Id, "crossing", 1, 1, new Vector3(585_085, 477_504, 0), false, departed + 1_000);
+        Sweep(departed + 16 * Minute);
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, departed + 16 * Minute), Is.True, "still marching at sixteen minutes");
+        Sweep(departed + 28 * Minute);
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, departed + 28 * Minute), Is.False, "but not for ever");
+    }
+
+    [Test]
+    public void RelaunchesCannotKeepAForceThatNeverReachesTheKeepMarchingForever()
+    {
+        const long start = 340_000_000;
+        var target = OpenSiege("rvr-keep-9122", start);
+        Bucket(target.Id, "Attackers").Add("lost", 8);
+        long departed = start + Minute;
+        Depart("lost", departed);
+        for (int minute = 14; minute <= 84; minute += 14)
+        {
+            AutonomousRvrEventLayer.RestartMarch("lost", departed + minute * Minute);
+            AutonomousRvrEventLayer.ReportMarch(target.Id, "lost", 1, 1, new Vector3(585_085, 477_504, 0), false, departed + minute * Minute + 1_000);
+            Sweep(departed + minute * Minute + 5_000);
+            Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, departed + minute * Minute), Is.True, $"minute {minute}");
+        }
+        Sweep(departed + 91 * Minute);
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, departed + 91 * Minute), Is.False, "ceiling of ninety minutes");
+    }
+
+    [Test]
+    public void ProgressAfterARetreatIsCreditedAgainstTheNewReferenceNotTheOldBest()
+    {
+        const long start = 350_000_000;
+        var target = OpenSiege("rvr-keep-9123", start);
+        Bucket(target.Id, "Attackers").Add("wiped", 8);
+        AutonomousRvrEventLayer.ReportMarch(target.Id, "wiped", 1, 100, new Vector3(100_000, 120_000, 0), false, start);
+        AutonomousRvrEventLayer.ReportMarch(target.Id, "wiped", 1, 100, new Vector3(100_000, 119_000, 0), false, start + Minute); // credit, best 19,000
+        // Dies at the walls' approach and respawns far behind (30,000 units out), then walks back 1,000 units every two minutes.
+        AutonomousRvrEventLayer.ReportMarch(target.Id, "wiped", 1, 100, new Vector3(100_000, 130_000, 0), false, start + 2 * Minute);
+        for (int minute = 4; minute <= 20; minute += 2)
+        {
+            AutonomousRvrEventLayer.ReportMarch(target.Id, "wiped", 1, 100,
+                new Vector3(100_000, 130_000 - (minute - 2) / 2 * 1_000, 0), false, start + minute * Minute);
+            Sweep(start + minute * Minute);
+        }
+        Assert.That(AutonomousRvrEventLayer.IsTargetActive(target.Id, start + 20 * Minute), Is.True,
+            "the walk back was credited although it never beat the earlier best of 19,000");
+    }
+
+    [Test]
+    public void SmallBackAndForthStepsAreNotARetreat()
+    {
+        Assert.That(AutonomousRvrSiegeMuster.IsRetreat(19_000, 20_000), Is.False);
+        Assert.That(AutonomousRvrSiegeMuster.IsRetreat(19_000, 23_000), Is.True);
+        Assert.That(AutonomousRvrSiegeMuster.IsRetreat(double.PositiveInfinity, 23_000), Is.False, "no reference yet");
+    }
+
+    [Test]
+    public void MarchAllowanceIsWalkingTimePlusSlackBetweenTheIdleWindowAndTheCeiling()
+    {
+        long idle = AutonomousRvrEventLayer.IdleBattleMilliseconds;
+        Assert.That(AutonomousRvrSiegeMuster.MarchAllowanceMilliseconds(18_000, idle), Is.EqualTo(idle), "short walk: the idle window");
+        long far = AutonomousRvrSiegeMuster.MarchAllowanceMilliseconds(200_000, idle);
+        Assert.That(far, Is.GreaterThan(idle).And.LessThan(AutonomousRvrSiegeMuster.MaximumMarchAllowanceMilliseconds));
+        Assert.That(AutonomousRvrSiegeMuster.MarchAllowanceMilliseconds(10_000_000, idle),
+            Is.EqualTo(AutonomousRvrSiegeMuster.MaximumMarchAllowanceMilliseconds));
+    }
+
+    [Test]
+    public void TheArmyTravelAllowanceCountsFromDepartureNotFromTheMuster()
+    {
+        const long started = 1_000_000;
+        long musterEnd = started + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds + AutonomousRvrSiegeMuster.UnreportedGraceMilliseconds;
+        Assert.That(AutonomousGuildAssault.TravelDeadline(started, 0), Is.EqualTo(musterEnd + AutonomousGuildAssault.MaximumTravelMilliseconds),
+            "nobody left yet: the whole muster window is free");
+        long departure = started + 9 * Minute;
+        Assert.That(AutonomousGuildAssault.TravelDeadline(started, departure), Is.EqualTo(departure + AutonomousGuildAssault.MaximumTravelMilliseconds));
+        Assert.That(AutonomousGuildAssault.TravelDeadline(started, departure), Is.GreaterThan(started + AutonomousGuildAssault.MaximumTravelMilliseconds),
+            "a nine-minute muster no longer eats into the thirty-minute travel allowance");
+    }
 }

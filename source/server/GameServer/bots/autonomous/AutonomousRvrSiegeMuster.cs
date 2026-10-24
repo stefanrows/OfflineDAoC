@@ -84,6 +84,43 @@ public static class AutonomousRvrSiegeMuster
     /// <summary>The tick the idle and absence clocks count from.</summary>
     public static long ClockOrigin(long lastActivityTick, long departureTick) => Math.Max(lastActivityTick, departureTick);
 
+    /// <summary>
+    /// A member this much farther from the keep than its reference distance has
+    /// died and respawned or been ported back: its reference restarts there, so
+    /// the new walk earns progress again instead of having to beat the old best
+    /// (live log 2026-10-24: sieges idle-closed while a relaunched force
+    /// marched). Smaller back-and-forth steps never reset it, so pacing at a
+    /// hub or repeating one road segment still earns nothing.
+    /// </summary>
+    public const int RetreatResetUnits = 4_000;
+
+    public static bool IsRetreat(double referenceDistance, double distance) =>
+        double.IsFinite(referenceDistance) && double.IsFinite(distance) && distance >= referenceDistance + RetreatResetUnits;
+
+    /// <summary>Running speed used to estimate how long a march takes (units per second, unmounted).</summary>
+    public const double MarchRunSpeed = 190;
+    /// <summary>Distance assumed for a member not yet in the keep's region (a frontier crossing).</summary>
+    public const double UnknownMarchDistance = 200_000;
+    /// <summary>Slack on top of the estimated walking time (porters, mustering stragglers, detours).</summary>
+    public const long MarchSlackMilliseconds = 10 * 60_000L;
+    /// <summary>The longest a march may go without progress credit before the idle rule applies.</summary>
+    public const long MaximumMarchAllowanceMilliseconds = 40 * 60_000L;
+    /// <summary>A force that departed and still has not come within reach of the keep after this long is called off.</summary>
+    public const long MarchCeilingMilliseconds = 90 * 60_000L;
+
+    /// <summary>
+    /// How long after a launch, relaunch or redeploy a marching force may go
+    /// without credited progress before the 15-minute idle rule can close the
+    /// siege: the estimated walking time plus slack, never below the idle
+    /// window and never above <see cref="MaximumMarchAllowanceMilliseconds"/>.
+    /// </summary>
+    public static long MarchAllowanceMilliseconds(double distanceUnits, long idleWindowMilliseconds)
+    {
+        double walking = double.IsFinite(distanceUnits) ? Math.Max(0, distanceUnits) / MarchRunSpeed * 1000 : UnknownMarchDistance / MarchRunSpeed * 1000;
+        long allowance = (long)Math.Min(MaximumMarchAllowanceMilliseconds, walking + MarchSlackMilliseconds);
+        return Math.Max(idleWindowMilliseconds, allowance);
+    }
+
     /// <summary>How long a keep stays off the opener's list after its n-th consecutive route failure (1h, 2h, 4h, 8h).</summary>
     public static long RouteBlockMilliseconds(int consecutiveFailures) =>
         Math.Min(KeepRouteBlockMaximumMilliseconds,

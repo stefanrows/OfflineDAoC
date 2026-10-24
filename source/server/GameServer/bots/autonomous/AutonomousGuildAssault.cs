@@ -16,6 +16,18 @@ public static class AutonomousGuildAssault
     public const long ReportLifetime = 30_000;
     public const long ObservationLifetime = 90_000;
 
+    /// <summary>
+    /// The moment the army's travel allowance runs out. It counts from the
+    /// latest departure of an attacking force (the muster is bounded on its
+    /// own); the army used to count from its creation, so a long muster and a
+    /// cross-region march ate the budget and armies were called off with no
+    /// party ever at the camp.
+    /// </summary>
+    public static long TravelDeadline(long started, long lastDeparture) =>
+        (lastDeparture > started ? lastDeparture
+            : started + AutonomousRvrSiegeMuster.MaximumWaitMilliseconds + AutonomousRvrSiegeMuster.UnreportedGraceMilliseconds) +
+        MaximumTravelMilliseconds;
+
     // Choose once for a new assault, not every think: small guild sorties are
     // common, with larger planned expeditions too. Real opposition can always
     // raise this preference; a low roll never overrides the strength check.

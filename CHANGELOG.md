@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.328.0] - 2026-10-24
+
+### Added
+- Siege log lines `RVR_SIEGE_ARRIVED` (first member of a force within reach of
+  the keep, then each doubling), `RVR_SIEGE_FIRST_DOOR` and
+  `RVR_SIEGE_FIRST_LORD` (once per event), so a server log shows whether bot
+  attackers reach the walls, the doors and the lord.
+
+### Changed
+- Autonomous keep sieges give a marching force time to arrive (bug 176).
+  Every muster departure, guild-army launch, reinforcement and re-gather after
+  a lost wave restarts the idle and absence clocks and the force's
+  march-progress baselines. The 15-minute idle rule waits for a march
+  allowance (estimated walk at 190 units/s plus 10 minutes, 15 to 40 minutes).
+  A member that died or was ported 4,000+ units back earns progress again on
+  its new walk. A force that never came within reach of the keep is called
+  off 90 minutes after its first departure.
+- Guild armies count their 30-minute travel allowance from the latest
+  departure instead of from creation during the muster, and keep the relaxed
+  strength requirement when they re-gather after a lost wave.
+
+### Fixed
+- Bot keep sieges were idle-closed as "Ended (unconfirmed)" while the
+  attacking force was still marching (live 0.320.0: 1 capture in 12 sieges
+  over 25 hours).
+
 ## [0.326.0] - 2026-10-24
 
 ### Added

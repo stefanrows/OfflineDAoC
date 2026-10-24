@@ -104,6 +104,7 @@ public static partial class AutonomousRvrEventLayer
                 active.LastAttackerPresenceTick = Math.Max(active.LastAttackerPresenceTick, nowTick);
                 active.AttackerReachedKeep = true;
                 ClearKeepRouteBlockLocked(targetId);
+                NoteArrivalLocked(active, forceId, memberId, nowTick);
             }
             if (!active.Travel.TryGetValue(memberId, out var previous))
             {
@@ -112,20 +113,118 @@ public static partial class AutonomousRvrEventLayer
             }
             bool enteredTargetRegion = sameRegion && previous.Region != region && previous.Region != 0 &&
                 active.RegionEntryCredited.Add(memberId);
-            bool progress = enteredTargetRegion ||
-                sameRegion && distance <= previous.BestDistance - MarchProgressUnits;
+            // The reference distance is the member's best since its last launch
+            // or retreat. A member that died and respawned (or was ported back)
+            // is far behind it: the reference restarts there, so the new walk
+            // earns progress instead of having to beat the old best.
+            double reference = previous.BestDistance;
+            if (sameRegion && AutonomousRvrSiegeMuster.IsRetreat(reference, distance)) reference = distance;
+            bool progress = enteredTargetRegion || sameRegion && distance <= reference - MarchProgressUnits;
             if (!progress)
             {
                 // Remember the region so a later entry into the keep's region is
-                // recognized, without moving the best in-region distance.
-                if (previous.Region != region)
-                    active.Travel[memberId] = previous with { Position = position, Region = region };
+                // recognized, and a retreat's new reference, without crediting.
+                if (previous.Region != region || reference != previous.BestDistance)
+                    active.Travel[memberId] = previous with { Position = position, Region = region, BestDistance = reference };
                 return;
             }
-            active.Travel[memberId] = (forceId, nowTick, Math.Min(distance, previous.BestDistance), position, region);
+            active.Travel[memberId] = (forceId, nowTick, Math.Min(distance, reference), position, region);
             active.LastActivityTick = Math.Max(active.LastActivityTick, nowTick);
         }
     }
+
+    private static readonly DOL.Logging.Logger SiegeLog = DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrEventLayer));
+
+    /// <summary>One line when the first member, and then each doubling of the members, of a force reaches the keep area.</summary>
+    private static void NoteArrivalLocked(ActiveEvent active, string forceId, long memberId, long nowTick)
+    {
+        if (!active.Arrived.TryGetValue(forceId, out var arrived)) active.Arrived[forceId] = arrived = new();
+        if (!arrived.Add(memberId) || (arrived.Count & (arrived.Count - 1)) != 0) return;
+        if (SiegeLog.IsInfoEnabled) SiegeLog.Info($"RVR_SIEGE_ARRIVED target={active.TargetId} force={forceId} " +
+            $"arrived={arrived.Count}/{active.Attackers.GetValueOrDefault(forceId) + active.ThirdRealm.GetValueOrDefault(forceId)} " +
+            $"marchMs={nowTick - (active.MarchStartTick > 0 ? active.MarchStartTick : active.CreatedTick)} " +
+            $"radius={AttackerPresenceRadius}");
+    }
+
+    /// <summary>
+    /// First door damage and first lord engagement of an event, one line each.
+    /// <paramref name="what"/> is "door" or "lord"; called from the keep damage hooks.
+    /// </summary>
+    public static void NoteKeepHit(string targetId, string what, GameObject source, long nowTick)
+    {
+        if (string.IsNullOrWhiteSpace(targetId) || what == null) return;
+        using (EnterSync())
+        {
+            if (!Events.TryGetValue(targetId, out var active)) return;
+            bool isDoor = what == "door";
+            if (isDoor ? active.DoorDamageLogged : active.LordEngagedLogged) return;
+            if (isDoor) active.DoorDamageLogged = true; else active.LordEngagedLogged = true;
+            string force = (source is GameSiegeWeapon { Owner: GameBot operatorBot } ? operatorBot : source) is GameBot hitter
+                ? hitter.TempProperties.GetProperty<string>("RvrEventForce") ?? "-" : "-";
+            if (SiegeLog.IsInfoEnabled) SiegeLog.Info($"RVR_SIEGE_FIRST_{what.ToUpperInvariant()} target={targetId} " +
+                $"source=\"{source?.Name}\" force={force} sinceStartMs={nowTick - active.CreatedTick} " +
+                $"marchMs={nowTick - (active.MarchStartTick > 0 ? active.MarchStartTick : active.CreatedTick)}");
+        }
+    }
+
+    /// <summary>
+    /// A force (re)starts its march: it left its muster, the guild army launched or
+    /// relaunched, or the army re-gathers after a lost wave. The idle and absence
+    /// clocks restart, the force's per-member distance references and arrival
+    /// counts are forgotten (a relaunched member must not have to beat an old
+    /// best), and the march allowance counts from now. Call under <c>Sync</c>.
+    /// </summary>
+    private static void RestartMarchLocked(ActiveEvent active, IEnumerable<string> forces, long nowTick)
+    {
+        active.MarchStartTick = nowTick;
+        if (active.FirstMarchTick == 0) active.FirstMarchTick = nowTick;
+        active.LastActivityTick = Math.Max(active.LastActivityTick, nowTick);
+        active.LastAttackerPresenceTick = Math.Max(active.LastAttackerPresenceTick, nowTick);
+        var set = forces.ToHashSet(StringComparer.Ordinal);
+        foreach (long id in active.Travel.Where(pair => set.Contains(pair.Value.Force)).Select(pair => pair.Key).ToArray())
+        {
+            active.Travel.Remove(id);
+            active.RegionEntryCredited.Remove(id);
+        }
+        foreach (string force in set) active.Arrived.Remove(force);
+    }
+
+    /// <summary>A force relaunched outside the guild army flow (and tests): see <see cref="RestartMarchLocked"/>.</summary>
+    public static bool RestartMarch(string forceId, long nowTick)
+    {
+        if (string.IsNullOrWhiteSpace(forceId)) return false;
+        using (EnterSync())
+            foreach (var active in Events.Values)
+                if (active.BattleStarted && !active.DefenseReaction &&
+                    (active.Attackers.ContainsKey(forceId) || active.ThirdRealm.ContainsKey(forceId)))
+                {
+                    RestartMarchLocked(active, [forceId], nowTick);
+                    return true;
+                }
+        return false;
+    }
+
+    /// <summary>Estimated walking distance of the farthest attacking member, for the march allowance.</summary>
+    private static double MarchDistanceLocked(ActiveEvent active)
+    {
+        double farthest = 0;
+        bool any = false;
+        foreach (var entry in active.Travel.Values)
+        {
+            if (!(active.Attackers.ContainsKey(entry.Force) || active.ThirdRealm.ContainsKey(entry.Force))) continue;
+            any = true;
+            double distance = entry.Region == active.Target.RegionId
+                ? Vector2.Distance(new(entry.Position.X, entry.Position.Y), new(active.Target.X, active.Target.Y))
+                : AutonomousRvrSiegeMuster.UnknownMarchDistance;
+            farthest = Math.Max(farthest, distance);
+        }
+        return any ? farthest : 0;
+    }
+
+    /// <summary>A force that launched or relaunched recently is still walking: the idle rule waits for its allowance.</summary>
+    private static bool StillMarchingLocked(ActiveEvent active, long nowTick) =>
+        active.MarchStartTick > 0 && nowTick - active.MarchStartTick <
+        AutonomousRvrSiegeMuster.MarchAllowanceMilliseconds(MarchDistanceLocked(active), IdleBattleMilliseconds);
 
     public const long AbandonedTargetMilliseconds = 20 * 60_000L;
     private static readonly Dictionary<(string Force, string Target), long> AbandonedTargets = new();
@@ -229,6 +328,11 @@ public static partial class AutonomousRvrEventLayer
         /// <see cref="AttackerPresenceRadius"/> of the keep (or the battle start).</summary>
         public long LastAttackerPresenceTick;
         public bool AttackerReachedKeep;
+        /// <summary>Last launch, relaunch or redeploy of an attacking force (0 = never); the idle rule waits for the march allowance.</summary>
+        public long MarchStartTick, FirstMarchTick;
+        /// <summary>Members per force that came within <see cref="AttackerPresenceRadius"/> (for the arrival log).</summary>
+        public readonly Dictionary<string, HashSet<long>> Arrived = new(StringComparer.Ordinal);
+        public bool DoorDamageLogged, LordEngagedLogged;
         public readonly Dictionary<string, int> Attackers = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> Defenders = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> ThirdRealm = new(StringComparer.Ordinal);
@@ -914,8 +1018,22 @@ public static partial class AutonomousRvrEventLayer
                     : "Siege aborted: no attacker reached the keep within forty-five minutes");
                 continue;
             }
+            if (!active.AttackerReachedKeep && active.FirstMarchTick > 0 &&
+                nowTick - active.FirstMarchTick >= AutonomousRvrSiegeMuster.MarchCeilingMilliseconds)
+            {
+                // Absolute ceiling: relaunches restart the other clocks, but a force that
+                // never once came within reach of the walls does not march for ever.
+                if (SiegeLog.IsInfoEnabled) SiegeLog.Info($"RVR_SIEGE_IDLE_CLOSED target={active.TargetId} reason=march_ceiling " +
+                    $"marchMs={nowTick - active.FirstMarchTick} reachedKeep=False " +
+                    $"assigned={active.Attackers.Values.Sum()}/{active.Defenders.Values.Sum()}/{active.ThirdRealm.Values.Sum()}");
+                EndEvent(active, nowTick, "Siege aborted: no attacker reached the keep within ninety minutes of marching");
+                continue;
+            }
             if (active.LastPressureTick > active.LastActivityTick) active.LastActivityTick = active.LastPressureTick;
             if (!IsIdleBattle(true, false, !string.IsNullOrEmpty(active.PlayerAccount), active.LastActivityTick, nowTick)) continue;
+            // A force that (re)launched recently is still walking, possibly through a porter
+            // or around a detour where nothing earns credit. The allowance is bounded.
+            if (StillMarchingLocked(active, nowTick)) continue;
             if (Attendance(active, active.AttackerRealm, nowTick) + Attendance(active, active.DefenderRealm, nowTick) +
                 Attendance(active, OtherRealm(active), nowTick) > 0 || SafeInCombat(active.TargetId))
             {

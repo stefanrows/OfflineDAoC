@@ -229,7 +229,7 @@ namespace DOL.GS.Keeps
 		public override void OnAttackedByEnemy(AttackData ad)
 		{
             if (ad != null && ad.Damage + ad.CriticalDamage > 0)
-                AutonomousRvrEventLayer.ObserveKeepAttack(Component?.Keep, ad.Attacker);
+                AutonomousRvrEventLayer.ObserveKeepAttack(Component?.Keep, ad.Attacker, this is GuardLord ? "lord" : null);
 			//this is for static archers only
 			if (MaxSpeedBase == 0)
 			{

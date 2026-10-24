@@ -19,6 +19,10 @@ public static partial class AutonomousRvrEventLayer
         public int Present, ReadyParties, Healers, Operators, Required, Defenders;
         public int PlannedParties;
         public bool HoldColumn, Failed;
+        /// <summary>Latest departure of an attacking force from its muster; the travel allowance counts from it.</summary>
+        public long LastDeparture;
+        /// <summary>The army already waited out its relaxation; a re-gather after a lost wave keeps the relaxed numbers.</summary>
+        public bool WasRelaxed;
     }
 
     private sealed record ArmyParty(GameBot Leader, GameBot[] Members, long Tick, long Joined, long[] Operators);
@@ -74,10 +78,14 @@ public static partial class AutonomousRvrEventLayer
             Math.Max(0, ArmyDeadline(army) - now));
     }
 
-    private static long ArmyDeadline(GuildArmy army) => army.GatheredSince > 0
-        ? Math.Min(army.Started + AutonomousGuildAssault.MaximumTravelMilliseconds + AutonomousGuildAssault.MaximumGatherMilliseconds,
-            army.GatheredSince + AutonomousGuildAssault.MaximumGatherMilliseconds)
-        : army.Started + AutonomousGuildAssault.MaximumTravelMilliseconds;
+    private static long ArmyDeadline(GuildArmy army)
+    {
+        long travelEnds = AutonomousGuildAssault.TravelDeadline(army.Started, army.LastDeparture);
+        return army.GatheredSince > 0
+            ? Math.Min(travelEnds + AutonomousGuildAssault.MaximumGatherMilliseconds,
+                army.GatheredSince + AutonomousGuildAssault.MaximumGatherMilliseconds)
+            : travelEnds;
+    }
 
     private static double DistanceFromKeep(ActiveEvent active, GameBot bot) =>
         bot.CurrentRegionID == active.Target.RegionId
@@ -139,6 +147,11 @@ public static partial class AutonomousRvrEventLayer
                      now - army.Sightings[enemy] > AutonomousGuildAssault.ObservationLifetime).ToArray())
             army.Sightings.Remove(enemy);
         army.Defenders = army.Sightings.Count;
+        // The travel allowance runs from the force's departure, not from the army's
+        // creation during the muster (the muster has its own bounds).
+        army.LastDeparture = active.Musters.Where(pair => pair.Value.Departed &&
+                (active.Attackers.ContainsKey(pair.Key) || active.ThirdRealm.ContainsKey(pair.Key)))
+            .Select(pair => pair.Value.DepartedTick).DefaultIfEmpty(0).Max();
         var keep = int.TryParse(active.TargetId.AsSpan(9), out int keepId)
             ? GameServer.KeepManager.GetKeepByID(keepId) : null;
         int guards = keep?.Guards.Values.Count(g => g.IsAlive) ?? active.Target.GuardStrength;
@@ -146,8 +159,9 @@ public static partial class AutonomousRvrEventLayer
             ?? active.Target.ClosedDoors;
         army.Required = AutonomousGuildAssault.RequiredAttackers(army.Defenders, guards, doors, army.PlannedParties);
         int keepLevel = keep?.Level ?? 0;
-        bool relaxed = keep != null && AutonomousGuildAssault.Relaxes(AutonomousSiegeProperties.SIEGE_ARMY_KEEP_LEVEL_QUORUM,
-            army.GatheredSince == 0 ? 0 : now - army.GatheredSince);
+        bool relaxed = keep != null && (army.WasRelaxed || AutonomousGuildAssault.Relaxes(AutonomousSiegeProperties.SIEGE_ARMY_KEEP_LEVEL_QUORUM,
+            army.GatheredSince == 0 ? 0 : now - army.GatheredSince));
+        if (relaxed) army.WasRelaxed = true;
         if (relaxed) army.Required = AutonomousGuildAssault.RelaxedRequired(army.Required, keepLevel, army.Defenders);
 
         // A released party must not retain permission after its wipe/respawn.
@@ -182,6 +196,8 @@ public static partial class AutonomousRvrEventLayer
             // Fresh, bounded assembly after a defeated wave, never an automatic
             // solo retry with the old launch permission.
             army.Started = now; army.GatheredSince = army.Launched = army.SplitSince = 0;
+            // The members are walking back to the camp: that is a redeploy, not an idle siege.
+            RestartMarchLocked(active, army.Parties.Keys, now);
         }
 
         foreach (string force in army.Parties.Keys.Where(id => !army.Released.Contains(id) &&
@@ -227,6 +243,9 @@ public static partial class AutonomousRvrEventLayer
         {
             foreach (string force in ready) army.Released.Add(force);
             if (launch) army.Launched = now;
+            // Launch or relaunch: the idle and absence clocks restart and the launched
+            // members' old best distances are forgotten (see RestartMarchLocked).
+            RestartMarchLocked(active, ready, now);
             army.NextLog = 0;
         }
         else if (army.Released.Count == 0 && now >= ArmyDeadline(army))

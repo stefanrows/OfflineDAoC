@@ -136,8 +136,7 @@ public static partial class AutonomousRvrEventLayer
         muster.DepartedTick = nowTick;
         // The idle (15 min) and absence (45 min) clocks count from the march,
         // not from the opening, which the muster may have outlasted.
-        active.LastActivityTick = AutonomousRvrSiegeMuster.ClockOrigin(active.LastActivityTick, nowTick);
-        active.LastAttackerPresenceTick = AutonomousRvrSiegeMuster.ClockOrigin(active.LastAttackerPresenceTick, nowTick);
+        RestartMarchLocked(active, [forceId], nowTick);
         RealmEventRecords.Progress(active.TargetId, "Battle",
             $"A warband mustered ({muster.LastPresent} of {muster.LastAlive} living members) and marched on the keep together",
             active.Attackers.Values.Sum() + active.Defenders.Values.Sum() + active.ThirdRealm.Values.Sum(), muster.LastPresent);

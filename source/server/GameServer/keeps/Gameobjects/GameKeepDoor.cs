@@ -144,7 +144,7 @@ namespace DOL.GS.Keeps
             if (damageAmount > 0 && IsAlive)
             {
                 Component.Keep.LastAttackedByEnemyTick = CurrentRegion.Time;
-                AutonomousRvrEventLayer.ObserveKeepAttack(Component.Keep, source);
+                AutonomousRvrEventLayer.ObserveKeepAttack(Component.Keep, source, "door");
                 base.TakeDamage(source, damageType, damageAmount, criticalAmount);
 
                 //only on hp change

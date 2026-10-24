@@ -23,7 +23,7 @@ namespace DOL.GS
 
         // Damage callbacks only replace a bounded, per-keep alarm. Recruitment,
         // chat and all population work run in the coordinator service phase.
-        public static void ObserveKeepAttack(AbstractGameKeep keep, GameObject source)
+        public static void ObserveKeepAttack(AbstractGameKeep keep, GameObject source, string hit = null)
         {
             // Gothwaite PvP mode: keep attacks raise no world-bot defense or event (section 5.4).
             if (GothwaitePvpRules.SuppressesWorldRecruitment) return;
@@ -31,6 +31,7 @@ namespace DOL.GS
             AutonomousGuildKeepDefense.ObserveAttack(keep, source);
             string id = $"rvr-keep-{keep.KeepID}";
             long now = GameLoop.GameLoopTime;
+            if (hit != null) NoteKeepHit(id, hit, source, now);
             // A committed world-bot attacker (or its ram) damaging this keep is
             // siege progress and presence at the walls.
             if ((source is GameSiegeWeapon { Owner: GameBot operatorBot } ? operatorBot : source) is GameBot { IsAutonomousWorldBot: true } attackerBot &&

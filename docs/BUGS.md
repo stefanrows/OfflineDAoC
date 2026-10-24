@@ -187,6 +187,55 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Fixed in source; installation verification pending
 
+176. **Autonomous bot keep sieges almost never capture: forces are idle-closed
+     while marching, or the guild army is called off with nobody at the camp.**
+     Live log of the installed 0.320.0 (2026-10-23/24): 12 sieges in 25 hours,
+     one capture. Six closed with `assigned=0/0/0` after the guild army gathered
+     1,472 times and launched 7 times (`parties=0 present=0 required=12-24`,
+     "could not assemble sufficient physical strength"); five closed through
+     `RVR_SIEGE_IDLE_CLOSED idleMs=900000` while the force was still marching
+     (keep 75: eight left the hub 21:04:43, the army relaunched 21:12:54 with
+     `required=6 relaxed=True`, the ram bots were back at the hub 21:15, at 21:22
+     the force was still about 18,000 units out, closed 21:24:05 = 900 s after the
+     last credited progress). Causes found in source: (a) `ReportMarch` credited
+     progress only when a member beat its best-ever distance by 512 units, and
+     that best survived re-muster, relaunch and death, so a force walking again
+     from the hub earned nothing until it beat the earlier venture; (b) the idle
+     (15 min) and absence clocks were never restarted by a guild army launch,
+     relaunch or redeploy, and a cross-region or porter march earns no credit at
+     all, so any march longer than 15 minutes was closed; (c) the guild army's
+     30-minute travel allowance counted from the army's creation, which happens
+     during the muster, so muster time and a long march consumed it and the army
+     was called off before any party reached the camp; (d) after a lost wave the
+     re-gather restarted the 5-minute relaxation, repeating the long wait at the
+     full requirement. Source fix (0.328.0): every launch, relaunch, redeploy and muster
+     departure restarts the clocks and forgets that force's per-member distance
+     references (`RestartMarchLocked`); a member that is 4,000 or more units
+     behind its reference (death, respawn, port back) restarts the reference
+     there, so the new walk is credited, while small back-and-forth steps still
+     earn nothing; the idle rule waits for a march allowance of estimated
+     walking time (190 u/s, 200,000 units when a member is outside the keep's
+     region) plus 10 minutes, at least 15 and at most 40 minutes; a force that
+     never came within 3,000 units of the keep is closed 90 minutes after its
+     first departure however often it relaunches; the army's travel allowance
+     counts from the latest departure; the relaxed requirement survives a
+     re-gather. New logs: `RVR_SIEGE_ARRIVED` (first member and each doubling of
+     a force within reach of the keep), `RVR_SIEGE_FIRST_DOOR` and
+     `RVR_SIEGE_FIRST_LORD` (first door damage and first lord hit per event),
+     and `reason=march_ceiling` on `RVR_SIEGE_IDLE_CLOSED`. Not changed and not
+     proven: why `parties=0 present=0` persisted in the six abandoned armies
+     (candidates: no route-proved camp ever set because the leader's route to a
+     camp 9,000 units out failed; the party quorum of six within 1,400 units of
+     the camp with the leader among them; supplies not ready) and the release
+     rule that drops a launched party that is neither near the keep nor
+     recently left the camp after five minutes; the next run's `RVR_GUILD_ARMY`
+     and `RVR_SIEGE_ARRIVED` lines should show which. Offline: unit tests
+     `UT_RvrSiegeMuster` (relaunch restarts the idle clock, progress after a
+     retreat is credited, a stuck force and a force that never arrives still
+     close, travel allowance counts from departure). Real-client check pending:
+     capture rate of automatic keep sieges over a day, and the arrival and
+     first-door lines in `server-console.log`.
+
 171. **Open BG: bot groups stand in front of the keep gate; nobody fights the
      wall defenders, and bots stand unharmed right in front of the keep.**
      Owner report 2026-10-17 (0.292.0). Causes from the code and the 00:00-01:30
