@@ -193,3 +193,8 @@ relics, keeps and GameBot.
 15. **Wipe without asking:** the night session wipes the current save and
     creates the RvR world as soon as R5 is ready; no further confirmation
     (owner, 2026-10-25 00:05). Backups stay under playable-backups.
+16. **Night details (00:10):** the session may close the owner's game client
+    (verified by path under C:\OfflineDAoC\playable) when it blocks a deploy;
+    fresh worlds keep today's rates (XP 10x players and bots, ML XP 10 per
+    mob level, artifact rate 350, ToA loot on); the owner's account stays a
+    normal player (no GM flag); Windows Update is paused by the owner.
