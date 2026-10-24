@@ -212,8 +212,10 @@ and its spell line go when the discipline changes. Master Level spells stay
 out of the class spell lists (the class spell choice selects by spell type
 and knows none of them); the brain has one small step of its own in the
 combat think, after the priority taunt (for healers in the support role,
-right after their heals), and presses at most one ability per think with a
-reaction chance, never on every frame:
+right after their heals), and one out of combat while the bot stands (traps,
+storms before contact). It presses at most one ability per think, with a
+reaction chance and a reaction delay (WP2.6, "Pacing" below), never on every
+frame:
 
 | Ability | Discipline, rank | When a bot presses it | Chance per think |
 |---|---|---|---|
@@ -221,15 +223,80 @@ reaction chance, never on every frame:
 | Bolstering Battlecry | Warlord 2 | a group member within 750 is below 60% health | 50% |
 | Sapping Strike, Power Leak | Battlemaster 1, 3 | the target is a player or bot in range with 30%+ endurance / power | 20% |
 | Purging Wave, Purify Vision | Perfecter 1, 2 | a group member in range is diseased / nearsighted | 60% |
+| Battlewarder | Convoker 6 | in a fight: an enemy player or bot hits a group mate in melee within 2,200 while nobody hits the bot | 35% |
+| Crystal Titan | Convoker 10 | in a fight: 3 or more enemy players or bots within 1,500 and no titan of its own up | 25% |
+| Power Trap, Dissonance Trap | Convoker 3, 7 | out of combat: holding an RvR spot, no own trap within 500 | 25% |
+| Tanglesnare, Poison Spike | Spymaster 5, 6 | the same as the Convoker traps | 25% |
+| Siege Wrecker | Spymaster 8 | an enemy siege weapon within 300, no own Siege Wrecker beside it | 50% |
+| Dazzling Array | Stormlord 1 | in a fight: 2 or more group mates fighting within 300 and nobody hit the bot for 8 seconds; out of combat: holding an RvR spot with 2 or more mates within 300 and enemies in sight (3,000) but none within 800 | 30% |
+| Enervating Gas, Inebriating Fumes, Mental Siphon, Choking Vapors, Sense Dulling Cloud, Energy Tempest | Stormlord 3, 4, 5, 7, 8, 9 | out of combat: holding an RvR spot, 2 or more enemies in sight but none within 800; in a fight: 2 or more enemies clustered at the bot's feet and nobody hit it for 8 seconds. Never a second storm of the same kind or a third own storm within 700 | 30% |
+| Vacuum Vortex | Stormlord 2 | one of its own hostile storms is within 1,000 of 2 or more clustered enemies it does not cover yet | 35% |
 
 Every other ability is held but never pressed by the AI: Defending Martyr
 (costs the caster 90% of its health), Cowering Bellow, Resilient Will,
 Cleansing Aura, Leadership, the rest of Battlemaster (Grapple refuses NPC
 targets, Throw Weapon needs a player caster, the essence debuffs are legacy
-effects), Perfecter's fonts (`GameFont` takes a player owner), every
-Convoker summon and trap, every Stormlord storm, every Spymaster trap and the
-Blanket. Convoker, Stormlord and Spymaster bots therefore hold their line but
-use none of it yet.
+effects), Perfecter's fonts, Prescience Node and Speedwarp (their pulse
+spells have no effect in this core), the item summons (wood, warcrystal,
+Essence Flare), Brittle Guard and Summoning Mastery (player pets only),
+Focusing Winds, Arcing Power, Decoy, Lookout and the Blanket.
+
+**Pacing (WP2.6, owner rule 2026-10-24).** A bot looks like a player at the
+keys, not a machine:
+
+| Rule | Value |
+|---|---|
+| Noticing the moment | the chance per think in the table above, at most two abilities judged per think; an ability judged pointless rests 4-8 seconds before it is judged again |
+| Reaction delay between deciding and pressing | 1-3 seconds, random; the situation is judged again at the press and the idea is dropped if it has passed or the bot stayed busy 4 seconds past it |
+| Abilities per think | at most one, and one decision at a time |
+| Pause after a press | the cast time plus 8-16 seconds before the next decision (3 seconds after a dropped idea) |
+| Cooldowns | the spell's own recast timer, set by the spell handler as for players; never pressed while it runs or without the power |
+| Battle Warder | the warder stays only while its caster neither moves nor casts, so the bot stands and watches for 8-15 seconds unless it is hit or below half health |
+| Holding a spot | standing within 64 of one point for 6 seconds, the group leader not walking off; RvR regions and zones only |
+
+**Ground targets.** A bot sets its ground target as a player does, only for
+the two abilities that use one. Battlewarder goes at the feet of the
+defended group mate, one step (60) toward the attacker. Vacuum Vortex goes
+150 behind the bot's own storm on the side away from the enemy cluster, so
+the push carries the storm into them. In one press out of five the point
+lands 40-120 off, a player's aim. Every point is moved onto the walkable
+floor (navmesh closest point, as the movement code does), must be in sight
+of the bot (navmesh ray) and within the spell's range (2,300); otherwise the
+ability is skipped. Fonts, traps, storms and the titan have the target Self
+and range 0 in the data and appear at the caster's feet, for players as for
+bots, so the bot places them by where it stands: before contact at the spot
+it holds, in a fight only when the enemies are at its feet.
+
+**Fonts, traps and storms for every caster (WP2.6).** These handlers ran on
+the legacy `GameSpellEffect`, whose timers never start in this core: a font,
+trap or storm pulsed once when it appeared and then stood in the world,
+inert, until the server restarted, and the Crystal Titan never left. Now:
+
+- A placed object lives on its own ECS effect: it pulses every spell
+  frequency (3 seconds for storms and traps, 10 for Dazzling Array), ends
+  after the spell duration (10-20 minutes), is deleted then, pauses while its
+  caster is dead and ends when the caster leaves the world. A trap ends when
+  it goes off.
+- `GameFont` and `GameStorm` take any caster as owner, so companions and
+  world bots can cast them; messages reach players only.
+- Pulses hit players and bots alike. A friendly font helps only the caster's
+  side; it used to help every player in range, enemies included. The hostile
+  fonts (Dissonating Ward, Prescience Node) reach enemies only. Every living
+  in range gets its own pulse: one shared sub-spell used to keep its first
+  target for good.
+- The storm stat effects (Dazzling Array's miss chance, the Dex/Qui, Str/Con
+  and acuity debuffs) apply while a living stands in the storm and come off
+  4-11 seconds after it leaves; the legacy path applied them once and never
+  took them back. Endurance, power and damage storms count as attacks.
+- Vacuum Vortex pushes every storm near its ground target 300-750 directly
+  away from that point, as the Herald describes; it pushed only the caster's
+  own storms around the caster, in a random direction, once per storm found.
+- Battlewarder now checks the ground target's range (2,300). The warder and
+  the Crystal Titan attack enemy bots as well as players and pets. The titan
+  grows for 10 seconds, fights, and leaves after 5 minutes; its kills pay
+  its caster like any pet's.
+- Siege Wrecker reacts only to enemy siege within its own 350 radius (it
+  searched the whole visibility range) and goes away after firing.
 
 **Changes for players.** Master Level areas now take bots like players:
 `MasterlevelHandling.SelectTargets` adds companions and world bots (not pets,
@@ -268,10 +335,15 @@ defaults to 0, which is Banelord.
 
 **Source.** `bots/BotMasterLevels.cs` (table, enrolment, roll, experience,
 which abilities), `bots/GameBot.MasterLevels.cs` (state, save, line),
-`bots/BotBrain.MasterLevels.cs` (the combat step), plus hooks in
+`bots/BotBrain.MasterLevels.cs` (the combat and standing steps),
+`bots/BotMasterLevelCasting.cs` (pacing, placement and skip rules, the
+pending press, the decision loop `BotMasterLevelStep`), `spells/Masterlevel/MasterLevelPlacement.cs` (the placed
+object effect and the storm stat effect), plus hooks in
 `MasterLevelProgression`, `GameBot.LoadClassSpecializations`,
-`LiveMasterLevelsSpecialization` and `Spymaster.cs`. Tests:
-`UT_BotMasterLevels.cs` and four Blanket tests in `UT_MasterLevelHolds.cs`.
+`LiveMasterLevelsSpecialization`, `BotBrain.cs` (one call for the standing
+step), `MasterLevelBase.cs`, `Convoker.cs`, `Stormlord.cs`, `Spymaster.cs` and
+`Perfecter.cs`. Tests: `UT_BotMasterLevels.cs`, `UT_BotMasterLevelCasting.cs`
+(WP2.6) and four Blanket tests in `UT_MasterLevelHolds.cs`.
 
 ## Not checked
 
@@ -288,3 +360,10 @@ which abilities), `bots/GameBot.MasterLevels.cs` (state, save, line),
   unit-tested only as far as the choice; their handlers ran for players only
   before. CPU cost of the combat step is unmeasured (it returns at once for
   bots without a usable ability).
+- Bots (WP2.6): no Convoker, Stormlord or Spymaster bot was watched casting.
+  The placed-object effects, the storm stat effects, the Vortex push, the
+  titan's life and the Battle Warder hold are unit-tested and reasoned from
+  the effect service, not seen in a running server. Perfecter fonts now pulse
+  for players too; whether each font's own pulse spell does what its tooltip
+  says is unchecked. Storm cast times (20 seconds) make the bots cast them
+  mostly before contact; how often that happens in real RvR is unmeasured.

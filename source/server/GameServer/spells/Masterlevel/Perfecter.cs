@@ -34,10 +34,11 @@ namespace DOL.GS.Spells
             font.Z = caster.Z;
             font.CurrentRegionID = caster.CurrentRegionID;
             font.Heading = caster.Heading;
-            font.Owner = (GamePlayer)caster;
+            font.Owner = caster;
 
             // Construct the font spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID;
             dbs.Name = spell.Name;
             dbs.Icon = 7245;
             dbs.ClientEffect = 7245;
@@ -90,10 +91,11 @@ namespace DOL.GS.Spells
             font.Z = caster.Z;
             font.CurrentRegionID = caster.CurrentRegionID;
             font.Heading = caster.Heading;
-            font.Owner = (GamePlayer)caster;
+            font.Owner = caster;
 
             // Construct the font spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID;
             dbs.Name = spell.Name;
             dbs.Icon = 7212;
             dbs.ClientEffect = 7212;
@@ -145,10 +147,11 @@ namespace DOL.GS.Spells
             font.Z = caster.Z;
             font.CurrentRegionID = caster.CurrentRegionID;
             font.Heading = caster.Heading;
-            font.Owner = (GamePlayer)caster;
+            font.Owner = caster;
 
             // Construct the font spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID;
             dbs.Name = spell.Name;
             dbs.Icon = 7214;
             dbs.ClientEffect = 7214;
@@ -203,6 +206,7 @@ namespace DOL.GS.Spells
             : base(caster, spell, line)
         {
             ApplyOnCombat = true;
+            Friendly = false; // Dissonating Ward damages enemies
 
             //Construct a new font.
             font = new GameFont();
@@ -214,10 +218,11 @@ namespace DOL.GS.Spells
             font.Z = caster.Z;
             font.CurrentRegionID = caster.CurrentRegionID;
             font.Heading = caster.Heading;
-            font.Owner = (GamePlayer)caster;
+            font.Owner = caster;
 
             // Construct the font spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID;
             dbs.Name = spell.Name;
             dbs.Icon = 7310;
             dbs.ClientEffect = 7310;

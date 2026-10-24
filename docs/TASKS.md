@@ -445,6 +445,11 @@ Agent sessions on items 45–48: take the role and context from
      gives the group or battlegroup its encounter credit, once per character;
      implemented in source, real-client check pending
      ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Encounter credit").
+     WP2.6, bots cast Convoker, Stormlord and Spymaster abilities (Battle
+     Warder, Crystal Titan, traps, storms, Vacuum Vortex) with human reaction
+     delays, and fonts, traps, storms and the titan now pulse and expire for
+     every caster: implemented in source, real-client check pending
+     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

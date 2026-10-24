@@ -120,18 +120,21 @@ agent or session that finishes a package updates its row and the log below.
   reward), Focusing Winds as ECS effects that end on move/attack/cast.
   Forceful Zephyr / Phaseshift untouched. Open for WP2.4: Blanket hides
   only players, companions stay visible.
-- [ ] **WP2.6 Bots use Convoker, Stormlord and Spymaster abilities.** Owner
-  2026-10-24 20:35: build it. Ground-target logic for bot casters (own
-  position for Battlewarder/fonts/storms used defensively, target position
-  offensively), fix GameFont/mines/storms to accept an NPC owner, Spymaster
-  traps/Siege Bolt where a target exists; Lookout/Blanket stay player-cast.
-  Brain step as in WP2.4 with reaction chances; tests per ability. ~1 session.
-  Depends on WP2.4 (0.325.0). **Owner rule 2026-10-24 20:40: must look human
-  and work cleanly: human reaction delays (1-3 s before pressing), at most
-  one ML ability per think, cooldowns respected, no spam, no instant
-  chain-casting; place ground targets where a player would (own feet for
-  defence, enemy cluster for offence), and skip the ability when it would be
-  pointless.**
+- [x] **WP2.6 Bots use Convoker, Stormlord and Spymaster abilities.** (0.329.0,
+  real-client check pending; `docs/TOA_MASTER_LEVELS.md` Bots section) Bots
+  cast Battlewarder, Crystal Titan, traps, Dazzling Array, the six hostile
+  storms, Vacuum Vortex, Tanglesnare, Poison Spike and Siege Wrecker with the
+  owner's human rule: 1-3 s reaction delay with a second look before the
+  press, one press per think, cast time + 8-16 s pause, cooldown and power
+  checks, 4-8 s rest after a pointless judgement, 1 in 5 ground targets 40-120
+  units off, every ground target snapped to the navmesh floor with line of
+  sight. Storms/traps appear at the caster's feet by data (as for players),
+  so bots lay them while holding a spot and push them with Vacuum Vortex.
+  **Player-facing core fix:** fonts, traps, storms and the Crystal Titan ran
+  on legacy effects whose timers never started (pulsed once, stayed forever);
+  they now pulse, expire and clean up; fonts reach every ally per pulse;
+  hostile fonts hit enemies. Held for bots: Perfecter fonts, Brittle Guard,
+  Decoy, Lookout, Blanket.
 - [ ] **WP2.5 ML trial texts (optional, later).** Our tree holds 90 ML step
   texts (ML1-9 x 10 steps); DOLSharp has one scripted step (Ianetor ML1.1,
   980 lines, no credit wiring). Only if the owner wants named steps on top of
@@ -276,6 +279,12 @@ a real defect in every package; keep the review step.
 
 ## Log
 
+- 2026-10-24: WP2.6 implemented by toa-botcast (worktree `toa-botcast`, not
+  merged): Convoker, Stormlord and Spymaster bots cast Battlewarder, Crystal
+  Titan, traps, storms and Vacuum Vortex with a 1-3 s reaction delay, one
+  press at a time and an 8-16 s pause; fonts, traps, storms and the titan
+  moved off the dead legacy effect timers (they never expired, for players
+  too); Vortex pushes away from its ground point.
 - 2026-10-24: WP3.3 implemented by toa-encounters (worktree `toa-encounters`):
   table ArtifactEncounterTarget, kill credit for group or battlegroup, packs
   070 (61 targets, all 57 artifacts) and 071 (Battler, Snatcher, Linos,
@@ -287,6 +296,10 @@ a real defect in every package; keep the review step.
   no unusable version offered); on main 0.323.0 the full suite has 4,394 passed,
   7 failed (bug 160), 3 skipped.
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 23:15: WP2.6 reviewed (two font defects fixed) and merged as
+  0.329.0 (Stefan shipped 0.328.0 at the same time). WP2.7 RA research done (our set = ToA-era set; 3 class rows as
+  pack 080 in progress; Majestic Will 1.68 decision open). RvR-mode analysis
+  (docs/RVR_MODE_ANALYSIS.md) requested by the owner, advisor running.
 - 2026-10-24 22:13: **0.327.0 deployed on Aaron's PC** (quick_check ok before
   the stop; packs 013/051/052/061/070/071 applied, 22 in total; Artifact
   Manager loads 57 artifacts / 198 items, 61 encounter targets; Scholar,

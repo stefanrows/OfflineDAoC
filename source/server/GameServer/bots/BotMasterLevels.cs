@@ -25,6 +25,20 @@ namespace DOL.GS
         CureDisease,
         /// <summary>Perfecter's Purify Vision when a group member is nearsighted.</summary>
         CureNearsight,
+        /// <summary>Convoker's Battlewarder beside a group mate an enemy is hitting in melee (WP2.6).</summary>
+        Battlewarder,
+        /// <summary>Convoker's Crystal Titan when a whole enemy group is on the bot's group.</summary>
+        SummonTitan,
+        /// <summary>A trap at the bot's feet while it holds an RvR spot (Convoker, Spymaster).</summary>
+        HoldTrap,
+        /// <summary>Spymaster's Siege Wrecker beside an enemy siege weapon.</summary>
+        SiegeTrap,
+        /// <summary>Stormlord's Dazzling Array on the group around the bot.</summary>
+        DefensiveStorm,
+        /// <summary>A Stormlord storm that hurts enemies, laid where they come or stand.</summary>
+        OffensiveStorm,
+        /// <summary>Stormlord's Vacuum Vortex pushing the bot's own storm into an enemy cluster.</summary>
+        SteerStorm,
     }
 
     /// <summary>
@@ -433,9 +447,11 @@ namespace DOL.GS
         /// <summary>
         /// Which held Master Level abilities a bot casts on its own, and how. Only abilities whose
         /// handlers work with a bot as caster and whose use the brain can judge are listed; every
-        /// other ability of the line is held (skills, passive lookups) but never cast by the AI:
-        /// summons, traps, storms, fonts and ports need a ground target or are written for a
-        /// player caster (GameFont and GameStorm take a GamePlayer owner).
+        /// other ability of the line is held (skills, passive lookups) but never cast by the AI.
+        /// WP2.6 adds Convoker, Stormlord and Spymaster (fonts, traps and storms take any caster
+        /// now); held there: Prescience Node and Speedwarp (their pulses have no effect in this
+        /// core), the item summons, Brittle Guard and Summoning Mastery (player pets only),
+        /// Focusing Winds, Arcing Power, Decoy, Lookout and the Blanket (player-cast).
         /// </summary>
         public static BotMasterLevelUse UseOf(Spell spell)
         {
@@ -455,6 +471,18 @@ namespace DOL.GS
                 // Perfecter 1 Purging Wave, 2 Purify Vision.
                 eSpellType.CureDisease when spell.Target == eSpellTarget.GROUP => BotMasterLevelUse.CureDisease,
                 eSpellType.CureNearsight => BotMasterLevelUse.CureNearsight,
+                // Convoker 6 Battlewarder, 10 Crystal Titan, 3 Power Trap, 7 Dissonance Trap.
+                eSpellType.Battlewarder => BotMasterLevelUse.Battlewarder,
+                eSpellType.SummonTitan => BotMasterLevelUse.SummonTitan,
+                eSpellType.PowerTrap or eSpellType.DissonanceTrap => BotMasterLevelUse.HoldTrap,
+                // Spymaster 5 Tanglesnare, 6 Poison Spike, 8 Siege Wrecker.
+                eSpellType.TangleSnare or eSpellType.PoisonSpike => BotMasterLevelUse.HoldTrap,
+                eSpellType.SiegeWrecker => BotMasterLevelUse.SiegeTrap,
+                // Stormlord 1 Dazzling Array, 2 Vacuum Vortex, 3-5 and 7-9 the hostile storms.
+                eSpellType.DazzlingArray => BotMasterLevelUse.DefensiveStorm,
+                eSpellType.VacuumVortex => BotMasterLevelUse.SteerStorm,
+                eSpellType.EnervatingGas or eSpellType.InebriatingFumes or eSpellType.MentalSiphon or
+                    eSpellType.ChokingVapors or eSpellType.SenseDullingCloud or eSpellType.EnergyTempest => BotMasterLevelUse.OffensiveStorm,
                 _ => BotMasterLevelUse.None,
             };
         }
@@ -469,8 +497,28 @@ namespace DOL.GS
             BotMasterLevelUse.HealBurst => 50,
             BotMasterLevelUse.EnduranceDrain or BotMasterLevelUse.PowerDrain => 20,
             BotMasterLevelUse.CureDisease or BotMasterLevelUse.CureNearsight => 60,
+            BotMasterLevelUse.Battlewarder => 35,
+            BotMasterLevelUse.SummonTitan => 25,
+            BotMasterLevelUse.HoldTrap => 25,
+            BotMasterLevelUse.SiegeTrap => 50,
+            BotMasterLevelUse.DefensiveStorm => 30,
+            BotMasterLevelUse.OffensiveStorm => 30,
+            BotMasterLevelUse.SteerStorm => 35,
             _ => 0,
         };
+
+        /// <summary>
+        /// Uses judged out of combat, while the bot stands (traps, storms laid before contact,
+        /// Siege Wrecker, steering a storm already down). The rest belong to the fight.
+        /// </summary>
+        public static bool WorksOutOfCombat(BotMasterLevelUse use) => use is
+            BotMasterLevelUse.HoldTrap or BotMasterLevelUse.SiegeTrap or BotMasterLevelUse.DefensiveStorm or
+            BotMasterLevelUse.OffensiveStorm or BotMasterLevelUse.SteerStorm;
+
+        /// <summary>Uses judged in a fight. Traps are laid only out of combat.</summary>
+        public static bool WorksInCombat(BotMasterLevelUse use) => use is not (BotMasterLevelUse.None or BotMasterLevelUse.HoldTrap);
+
+        public static bool WorksIn(BotMasterLevelUse use, bool combat) => combat ? WorksInCombat(use) : WorksOutOfCombat(use);
 
         /// <summary>Health below which Bolstering Battlecry is worth it for a nearby group member.</summary>
         public const int HEAL_BURST_HEALTH_PERCENT = 60;

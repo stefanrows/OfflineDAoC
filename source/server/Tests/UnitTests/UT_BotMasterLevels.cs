@@ -786,7 +786,8 @@ namespace DOL.UnitTests
             Assert.That(BotMasterLevels.UseOf(Make("CureDisease", "Realm")), Is.EqualTo(BotMasterLevelUse.None), "only the group cure is Perfecter's");
             Assert.That(BotMasterLevels.UseOf(Make("CureNearsight", "Group")), Is.EqualTo(BotMasterLevelUse.CureNearsight));
 
-            foreach (string held in new[] { "SummonTitan", "Banespike", "FOH", "Groupport", "BlanketOfCamouflage", "DazzlingArray", "Grapple", "ThrowWeapon" })
+            // Crystal Titan and Dazzling Array are cast since WP2.6 (UT_BotMasterLevelCasting).
+            foreach (string held in new[] { "Banespike", "FOH", "Groupport", "BlanketOfCamouflage", "Grapple", "ThrowWeapon" })
                 Assert.That(BotMasterLevels.UseOf(Make(held)), Is.EqualTo(BotMasterLevelUse.None), held);
 
             Assert.That(BotMasterLevels.ReactionChance(BotMasterLevelUse.FightBuff), Is.InRange(1, 99), "not on every think");

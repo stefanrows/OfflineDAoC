@@ -13,6 +13,8 @@ namespace DOL.GS.Spells
     [SpellHandler(eSpellType.DazzlingArray)]
     public class DazzlingArraySpellHandler : StormSpellHandler
     {
+        public override bool Friendly => true;
+
         // constructor
         public DazzlingArraySpellHandler(GameLiving caster, Spell spell, SpellLine line)
             : base(caster, spell, line)
@@ -25,11 +27,12 @@ namespace DOL.GS.Spells
             storm.Z = caster.Z;
             storm.CurrentRegionID = caster.CurrentRegionID;
             storm.Heading = caster.Heading;
-            storm.Owner = (GamePlayer)caster;
+            storm.Owner = caster;
             storm.Movable = true;
 
             // Construct the storm spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID; // one identity per storm kind, so a pulse refreshes its own effect
             dbs.Name = spell.Name;
             dbs.Icon = 7210;
             dbs.ClientEffect = 7210;
@@ -60,15 +63,19 @@ namespace DOL.GS.Spells
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-            if (target == null) return;
-            if (!target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
-            neweffect.Start(target);
+            if (target == null || !target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
+            bool fresh = !StormPulse.Holds(target, this);
+            base.ApplyEffectOnTarget(target);
 
-            if (target is GamePlayer)
-                ((GamePlayer)target).Out.SendMessage("You're harder to hit!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
-
+            if (fresh)
+                (target as GamePlayer)?.Out?.SendMessage("You're harder to hit!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
         }
+
+        public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams) =>
+            ECSGameEffectFactory.Create(initParams, static (in ECSGameEffectInitParams i) => new MasterLevelStormStatECSEffect(i));
+
+        // A second longer than the storm's pulse: refreshed while inside, gone a few seconds after leaving.
+        protected override int CalculateEffectDuration(GameLiving target) => Spell.Duration + StormPulse.Overlap;
 
         public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
         {
@@ -92,6 +99,12 @@ namespace DOL.GS.Spells
     [SpellHandler(eSpellType.VacuumVortex)]
     public class VacuumVortexSpellHandler : SpellHandler
     {
+        /// <summary>How far a storm is pushed: a short drift, not a teleport.</summary>
+        public const int MinPush = 300;
+        public const int MaxPush = 750;
+
+        public override bool HasPositiveEffect => true;
+
         /// <summary>
         /// Execute direct damage spell
         /// </summary>
@@ -102,15 +115,37 @@ namespace DOL.GS.Spells
             base.FinishSpellCast(target);
         }
 
+        /// <summary>
+        /// Every storm near the ground target, friendly or not: "pushes any storms near the
+        /// ground target directly away from that point" (Herald). It used to take only the
+        /// caster's own realm's storms around the caster.
+        /// </summary>
         public override List<GameLiving> SelectTargets(GameObject CasterTarget)
         {
-            
             var list = GameLoop.GetListForTick<GameLiving>();
-            foreach (GameNPC storms in Caster.GetNPCsInRadius(350))
+
+            if (!Caster.GroundTarget.IsValid)
+                return list;
+
+            ushort radius = (ushort)(Spell.Radius > 0 ? Spell.Radius : 350);
+
+            foreach (GameNPC npc in WorldMgr.GetNPCsCloseToSpot(Caster.CurrentRegionID, Caster.GroundTarget, radius))
             {
-                if ((storms is GameStorm) && (GameServer.ServerRules.IsSameRealm(storms, Caster, true))) list.Add(storms);
+                if (npc is GameStorm)
+                    list.Add(npc);
             }
+
             return list;
+        }
+
+        /// <summary>Where a storm at <paramref name="storm"/> goes when pushed from <paramref name="from"/>.</summary>
+        public static Point3D PushedTo(Point3D storm, Point3D from, int distance, double fallbackAngle)
+        {
+            double dx = storm.X - from.X, dy = storm.Y - from.Y;
+            double length = Math.Sqrt(dx * dx + dy * dy);
+            double angle = length < 1 ? fallbackAngle : Math.Atan2(dy, dx);
+            return new Point3D(storm.X + (int)Math.Round(distance * Math.Cos(angle)),
+                               storm.Y + (int)Math.Round(distance * Math.Sin(angle)), storm.Z);
         }
 
         public override double CalculateSpellResistChance(GameLiving target)
@@ -118,22 +153,15 @@ namespace DOL.GS.Spells
             return 0;
         }
 
+        // Runs once per storm the spell selected; it used to push every storm once for each.
         public override void OnDirectEffect(GameLiving target)
         {
-            //base.OnDirectEffect(target, effectiveness);
-            var targets = SelectTargets(Caster);
+            if (target is not GameStorm targetStorm || !targetStorm.Movable || !Caster.GroundTarget.IsValid)
+                return;
 
-            if (targets == null) return;
-
-            foreach (GameStorm targetStorm in targets)
-            {
-                if (targetStorm.Movable)
-                {
-                    int range = Util.Random(0, 750);
-                    double angle = Util.RandomDouble() * 2 * Math.PI;
-                    targetStorm.WalkTo(new Point3D(targetStorm.X + (int) (range * Math.Cos(angle)), targetStorm.Y + (int) (range * Math.Sin(angle)), targetStorm.Z), targetStorm.MaxSpeed);
-                }
-            }
+            Point3D destination = PushedTo(new Point3D(targetStorm.X, targetStorm.Y, targetStorm.Z), Caster.GroundTarget,
+                Util.Random(MinPush, MaxPush), Util.RandomDouble() * 2 * Math.PI);
+            targetStorm.WalkTo(BotMasterLevelCasting.OnFloor(targetStorm, destination) ?? destination, targetStorm.MaxSpeed);
         }
 
         public VacuumVortexSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
@@ -157,13 +185,14 @@ namespace DOL.GS.Spells
             storm.Z = caster.Z;
             storm.CurrentRegionID = caster.CurrentRegionID;
             storm.Heading = caster.Heading;
-            storm.Owner = (GamePlayer)caster;
+            storm.Owner = caster;
             storm.Movable = true;
 
 
 
             // Construct the storm spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID; // one identity per storm kind, so a pulse refreshes its own effect
             dbs.Name = spell.Name;
             dbs.Icon = 7273;
             dbs.ClientEffect = 7273;
@@ -195,19 +224,15 @@ namespace DOL.GS.Spells
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-
-            neweffect.Start(target);
-
             if (target == null) return;
             if (!target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
             //spell damage should 25;
             int end = (int)(Spell.Damage);
             target.ChangeEndurance(target, eEnduranceChangeType.Spell, (-end));
 
-            if (target is GamePlayer)
-                ((GamePlayer)target).Out.SendMessage(" You lose " + end + " endurance!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
-            (m_caster as GamePlayer).Out.SendMessage("" + target.Name + " loses " + end + " endurance!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
+            (target as GamePlayer)?.Out?.SendMessage(" You lose " + end + " endurance!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
+            MasterLevelPlacement.TellCaster(m_caster, target.Name + " loses " + end + " endurance!", eChatType.CT_YouWereHit);
+            StormPulse.CountAsAttack(this, target);
         }
 
         public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
@@ -241,11 +266,12 @@ namespace DOL.GS.Spells
             storm.Z = caster.Z;
             storm.CurrentRegionID = caster.CurrentRegionID;
             storm.Heading = caster.Heading;
-            storm.Owner = (GamePlayer)caster;
+            storm.Owner = caster;
             storm.Movable = true;
 
             // Construct the storm spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID; // one identity per storm kind, so a pulse refreshes its own effect
             dbs.Name = spell.Name;
             dbs.Icon = 7258;
             dbs.ClientEffect = 7258;
@@ -280,15 +306,19 @@ namespace DOL.GS.Spells
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-            if (target == null) return;
-            if (!target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
-            neweffect.Start(target);
+            if (target == null || !target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
+            bool fresh = !StormPulse.Holds(target, this);
+            base.ApplyEffectOnTarget(target);
 
-            if (target is GamePlayer)
-                ((GamePlayer)target).Out.SendMessage("Your dexterity and quickness decreased!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
-
+            if (fresh)
+                (target as GamePlayer)?.Out?.SendMessage("Your dexterity and quickness decreased!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
         }
+
+        public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams) =>
+            ECSGameEffectFactory.Create(initParams, static (in ECSGameEffectInitParams i) => new MasterLevelStormStatECSEffect(i));
+
+        // A second longer than the storm's pulse: refreshed while inside, gone a few seconds after leaving.
+        protected override int CalculateEffectDuration(GameLiving target) => Spell.Duration + StormPulse.Overlap;
 
         public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
         {
@@ -324,11 +354,12 @@ namespace DOL.GS.Spells
             storm.Z = caster.Z;
             storm.CurrentRegionID = caster.CurrentRegionID;
             storm.Heading = caster.Heading;
-            storm.Owner = (GamePlayer)caster;
+            storm.Owner = caster;
             storm.Movable = true;
 
             // Construct the storm spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID; // one identity per storm kind, so a pulse refreshes its own effect
             dbs.Name = spell.Name;
             dbs.Icon = 7303;
             dbs.ClientEffect = 7303;
@@ -365,19 +396,15 @@ namespace DOL.GS.Spells
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
             if (target == null) return;
             if (!target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
-            neweffect.Start(target);
             int mana = (int)(Spell.Damage);
             target.ChangeMana(target, eManaChangeType.Spell, (-mana));
 
-            if (target is GamePlayer)
-            {
-                ((GamePlayer)target).Out.SendMessage(m_caster.Name + " steals you " + mana + " points of power!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
-            }
+            (target as GamePlayer)?.Out?.SendMessage(m_caster.Name + " steals you " + mana + " points of power!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
 
             StealMana(target, mana);
+            StormPulse.CountAsAttack(this, target);
             // target.StartInterruptTimer(SPELL_INTERRUPT_DURATION, AttackData.eAttackType.Spell, Caster);
         }
 
@@ -497,11 +524,12 @@ namespace DOL.GS.Spells
             storm.Z = caster.Z;
             storm.CurrentRegionID = caster.CurrentRegionID;
             storm.Heading = caster.Heading;
-            storm.Owner = (GamePlayer)caster;
+            storm.Owner = caster;
             storm.Movable = true;
 
             // Construct the storm spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID; // one identity per storm kind, so a pulse refreshes its own effect
             dbs.Name = spell.Name;
             dbs.Icon = 7223;
             dbs.ClientEffect = 7223;
@@ -536,15 +564,19 @@ namespace DOL.GS.Spells
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-            if (target == null) return;
-            if (!target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
-            neweffect.Start(target);
+            if (target == null || !target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
+            bool fresh = !StormPulse.Holds(target, this);
+            base.ApplyEffectOnTarget(target);
 
-            if (target is GamePlayer)
-                ((GamePlayer)target).Out.SendMessage("Your strenght and constitution decreased!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
-
+            if (fresh)
+                (target as GamePlayer)?.Out?.SendMessage("Your strenght and constitution decreased!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
         }
+
+        public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams) =>
+            ECSGameEffectFactory.Create(initParams, static (in ECSGameEffectInitParams i) => new MasterLevelStormStatECSEffect(i));
+
+        // A second longer than the storm's pulse: refreshed while inside, gone a few seconds after leaving.
+        protected override int CalculateEffectDuration(GameLiving target) => Spell.Duration + StormPulse.Overlap;
 
         public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
         {
@@ -580,11 +612,12 @@ namespace DOL.GS.Spells
             storm.Z = caster.Z;
             storm.CurrentRegionID = caster.CurrentRegionID;
             storm.Heading = caster.Heading;
-            storm.Owner = (GamePlayer)caster;
+            storm.Owner = caster;
             storm.Movable = true;
 
             // Construct the storm spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID; // one identity per storm kind, so a pulse refreshes its own effect
             dbs.Name = spell.Name;
             dbs.Icon = 7305;
             dbs.ClientEffect = 7305;
@@ -630,15 +663,19 @@ namespace DOL.GS.Spells
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-            if (target == null) return;
-            if (!target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
-            neweffect.Start(target);
+            if (target == null || !target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
+            bool fresh = !StormPulse.Holds(target, this);
+            base.ApplyEffectOnTarget(target);
 
-            if (target is GamePlayer)
-                ((GamePlayer)target).Out.SendMessage("Your acuity decreased!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
-
+            if (fresh)
+                (target as GamePlayer)?.Out?.SendMessage("Your acuity decreased!", eChatType.CT_YouWereHit, eChatLoc.CL_SystemWindow);
         }
+
+        public override ECSGameSpellEffect CreateECSEffect(in ECSGameEffectInitParams initParams) =>
+            ECSGameEffectFactory.Create(initParams, static (in ECSGameEffectInitParams i) => new MasterLevelStormStatECSEffect(i));
+
+        // A second longer than the storm's pulse: refreshed while inside, gone a few seconds after leaving.
+        protected override int CalculateEffectDuration(GameLiving target) => Spell.Duration + StormPulse.Overlap;
 
         public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
         {
@@ -674,11 +711,12 @@ namespace DOL.GS.Spells
             storm.Z = caster.Z;
             storm.CurrentRegionID = caster.CurrentRegionID;
             storm.Heading = caster.Heading;
-            storm.Owner = (GamePlayer)caster;
+            storm.Owner = caster;
             storm.Movable = true;
 
             // Construct the storm spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID; // one identity per storm kind, so a pulse refreshes its own effect
             dbs.Name = spell.Name;
             dbs.Icon = 7216;
             dbs.ClientEffect = 7216;
@@ -744,11 +782,8 @@ namespace DOL.GS.Spells
         }
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
             if (target == null) return;
             if (!target.IsAlive || target.ObjectState != GameLiving.eObjectState.Active) return;
-            neweffect.Start(target);
-
 
             // calc damage
             AttackData ad = CalculateDamageToTarget(target);
@@ -773,6 +808,46 @@ namespace DOL.GS.Spells
         public StormEnergyTempest(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
     }
     #endregion
+
+    /// <summary>Shared rules of the storm pulses (TOA_PLAN WP2.6).</summary>
+    public static class StormPulse
+    {
+        /// <summary>How much longer a storm's stat effect lasts than the pause between two pulses.</summary>
+        public const int Overlap = 1000;
+
+        /// <summary>True while <paramref name="target"/> carries this storm's effect: a refresh says nothing.</summary>
+        public static bool Holds(GameLiving target, ISpellHandler handler)
+        {
+            if (target?.effectListComponent == null)
+                return false;
+
+            foreach (ECSGameSpellEffect effect in target.effectListComponent.GetSpellEffects())
+            {
+                if (effect?.SpellHandler?.Spell?.ID == handler.Spell.ID && effect.SpellHandler.GetType() == handler.GetType())
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>A drain that skips the normal effect path still counts as an attack by the caster.</summary>
+        public static void CountAsAttack(SpellHandler handler, GameLiving target)
+        {
+            var ad = new AttackData
+            {
+                Attacker = handler.Caster,
+                Target = target,
+                AttackType = AttackData.eAttackType.Spell,
+                SpellHandler = handler,
+                AttackResult = eAttackResult.HitUnstyled,
+                Damage = 0,
+                DamageType = handler.Spell.DamageType,
+            };
+
+            handler.Caster.OnAttackEnemy(ad);
+            target.OnAttackedByEnemy(ad);
+        }
+    }
 
     //ML 10 Arcing Power - already handled in another area
 }

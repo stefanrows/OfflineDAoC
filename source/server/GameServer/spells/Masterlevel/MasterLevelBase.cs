@@ -463,7 +463,11 @@ namespace DOL.GS.Spells
     #endregion
 
     #region Fontbase
-    public class FontSpellHandler : DoTSpellHandler
+    /// <summary>
+    /// A font: an object at the caster's feet that pulses its spell on the livings around it,
+    /// friends for a friendly font, enemies otherwise (TOA_PLAN WP2.6: an ECS life, any caster).
+    /// </summary>
+    public class FontSpellHandler : DoTSpellHandler, IMasterLevelPlacement
     {
         protected GameFont font;
         protected DbSpell dbs;
@@ -475,6 +479,8 @@ namespace DOL.GS.Spells
         protected bool Friendly = true;
         protected ushort sRadius = 350;
 
+        public GameNPC PlacedObject => font;
+
         public override bool HasConflictingEffectWith(ISpellHandler compare)
         {
             return false;
@@ -482,62 +488,55 @@ namespace DOL.GS.Spells
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-            if(font != null)
-            {
-                font.AddToWorld();
-                neweffect.Start(font);
-            }
+            MasterLevelPlacement.Place(this, font, CasterEffectiveness);
         }
 
-        public override void OnEffectPulse(GameSpellEffect effect)
+        public virtual void PulsePlaced(MasterLevelPlacedECSEffect effect)
         {
-            if (font == null || font.ObjectState == GameObject.eObjectState.Deleted)
-            {
-                effect.Cancel(false);
+            if (heal == null || s == null)
                 return;
-            }
 
-            if (heal == null || s == null) return;
-            foreach (GamePlayer player in font.GetPlayersInRadius(sRadius))
+            foreach (GameLiving living in Around(font, sRadius, ApplyOnNPC))
             {
-                if (!Friendly
-                    && player.IsAlive
-                    && GameServer.ServerRules.IsAllowedToAttack(Caster, player, true)
-                    && (!player.InCombat
-                    || ApplyOnCombat))
-                        heal.StartSpell((GameLiving)player);
-                else if (Friendly && player.IsAlive && (!player.InCombat || ApplyOnCombat))
-                    heal.StartSpell((GameLiving)player);
-            }
-            if (!ApplyOnNPC) return;
-            foreach (GameNPC npc in font.GetNPCsInRadius(sRadius))
-            {
-                if (!Friendly && npc.IsAlive && GameServer.ServerRules.IsAllowedToAttack(Caster, npc, true) && (!npc.InCombat || ApplyOnCombat))
-                    heal.StartSpell((GameLiving)npc);
-                if (Friendly && npc.IsAlive && (!npc.InCombat || ApplyOnCombat))
-                    heal.StartSpell((GameLiving)npc);
+                if (!living.IsAlive || (living.InCombat && !ApplyOnCombat))
+                    continue;
+
+                // A friendly font helps the caster's side only, a hostile one hits its enemies.
+                if (IsEnemy(living) == Friendly)
+                    continue;
+
+                // A fresh sub-handler for every living: SpellHandler.StartSpell keeps the first
+                // target it was ever given, so one shared handler served the first living forever.
+                Apply(NewPulseHandler() ?? heal, living);
             }
         }
 
-        public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
-        {
-            if (font != null) font.Delete();
-            effect.Owner.EffectList.Remove(effect);
-            return base.OnEffectExpires(effect, noMessages);
-        }
+        /// <summary>The livings a pulse considers; tests replace the world lookup.</summary>
+        protected virtual IEnumerable<GameLiving> Around(GameObject center, ushort radius, bool withNpcs) =>
+            MasterLevelPlacement.LivingsAround(center, radius, withNpcs);
+
+        protected virtual bool IsEnemy(GameLiving living) => GameServer.ServerRules.IsAllowedToAttack(Caster, living, true);
+
+        protected virtual ISpellHandler NewPulseHandler() => ScriptMgr.CreateSpellHandler(m_caster, s, sl);
+
+        protected virtual void Apply(ISpellHandler handler, GameLiving living) => handler.StartSpell(living);
+
+        public virtual void RemovePlaced() => MasterLevelPlacement.Remove(font);
 
         // constructor
         public FontSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
-    }	
+    }
     #endregion
 
     #region Trapbase
-    public class MineSpellHandler : DoTSpellHandler
+    /// <summary>
+    /// A trap (mine): an object at the caster's feet, hidden from its enemies, that goes off on
+    /// the first enemy player or bot that comes within its radius.
+    /// </summary>
+    public class MineSpellHandler : DoTSpellHandler, IMasterLevelPlacement
     {
         protected GameMine mine;
         protected ISpellHandler trap;
-        protected GameSpellEffect m_effect;
         protected DbSpell dbs;
         protected Spell s;
         protected SpellLine sl;
@@ -545,66 +544,64 @@ namespace DOL.GS.Spells
         protected bool DestroyOnEffect = true;
         protected ushort sRadius = 350;
 
+        public GameNPC PlacedObject => mine;
+
         public override bool HasConflictingEffectWith(ISpellHandler compare)
         {
             return false;
         }
 
-        public override void OnEffectPulse(GameSpellEffect effect)
+        public virtual void PulsePlaced(MasterLevelPlacedECSEffect effect)
         {
-            if (mine == null || mine.ObjectState == GameObject.eObjectState.Deleted)
-            {
-                effect.Cancel(false);
-                return;
-            }
-
             if (trap == null || s == null)
                 return;
 
-            foreach (GamePlayer player in mine.GetPlayersInRadius(sRadius))
+            foreach (GameLiving living in MasterLevelPlacement.LivingsAround(mine, sRadius, false))
             {
-                if (player.IsAlive && GameServer.ServerRules.IsAllowedToAttack(Caster, player, true))
-                {
-                    trap.StartSpell(player);
+                if (!living.IsAlive || !GameServer.ServerRules.IsAllowedToAttack(Caster, living, true))
+                    continue;
 
-                    if (Unstealth)
-                        player.Stealth(false);
-
-                    if (DestroyOnEffect)
-                        OnEffectExpires(effect, true);
-
-                    return;
-                }
+                Spring(effect, living);
+                return;
             }
+        }
+
+        /// <summary>The trap goes off on <paramref name="living"/>.</summary>
+        protected void Spring(MasterLevelPlacedECSEffect effect, GameLiving living)
+        {
+            // A fresh sub-handler, as for fonts and storms: StartSpell keeps its first target.
+            (ScriptMgr.CreateSpellHandler(m_caster, s, sl) ?? trap).StartSpell(living);
+
+            if (Unstealth)
+                living.Stealth(false);
+
+            if (DestroyOnEffect)
+                effect.End();
         }
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-            mine.AddToWorld();
-            neweffect.Start(mine);
+            MasterLevelPlacement.Place(this, mine, CasterEffectiveness);
         }
 
-        public override void OnEffectStart(GameSpellEffect effect)
-        {
-            if (mine == null) return;
-            base.OnEffectStart(effect);
-        }
+        public virtual void RemovePlaced() => MasterLevelPlacement.Remove(mine);
 
-        public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
-        {
-            if (mine != null) mine.Delete();
-            effect.Owner.EffectList.Remove(effect);
-            return base.OnEffectExpires(effect, noMessages);
-        }
         // constructor
         public MineSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
     }
     #endregion
 
     #region Stormbase
-    public class StormSpellHandler : SpellHandler
+    /// <summary>
+    /// A storm: an object at the caster's feet that pulses its spell on everyone inside, allies
+    /// for Dazzling Array, enemies for the others, while the caster stays within 3,000 of it.
+    /// Vacuum Vortex moves it, Focusing Winds holds it.
+    /// </summary>
+    public class StormSpellHandler : SpellHandler, IMasterLevelPlacement
     {
+        /// <summary>Beyond this distance from its caster a storm pauses.</summary>
+        public const int CasterReach = 3000;
+
         protected GameStorm storm;
         protected DbSpell dbs;
         protected Spell s;
@@ -612,51 +609,42 @@ namespace DOL.GS.Spells
         protected ISpellHandler tempest;
         protected ushort sRadius = 350;
 
-        public override void OnEffectPulse(GameSpellEffect effect)
-        {
-            if (storm == null || storm.ObjectState == GameObject.eObjectState.Deleted)
-            {
-                effect.Cancel(false);
-                return;
-            }
-            if (tempest == null || s == null)
-            {
-                return;
-            }
-            int ranged = storm.GetDistanceTo(new Point3D((int)effect.Owner.X, (int)effect.Owner.Y, (int)effect.Owner.Z));
-            if (ranged > 3000) return;
+        public GameNPC PlacedObject => storm;
 
-            if (s.Name == "Dazzling Array")
+        /// <summary>Dazzling Array helps the caster's side; every other storm hurts its enemies.</summary>
+        public virtual bool Friendly => false;
+
+        public virtual void PulsePlaced(MasterLevelPlacedECSEffect effect)
+        {
+            if (tempest == null || s == null)
+                return;
+
+            if (!storm.IsWithinRadius(Caster, CasterReach))
+                return;
+
+            foreach (GameLiving living in MasterLevelPlacement.LivingsAround(storm, sRadius, false))
             {
-                foreach (GamePlayer player in storm.GetPlayersInRadius(sRadius))
-                {
-                    tempest = ScriptMgr.CreateSpellHandler(m_caster, s, sl);
-                    if ((player.IsAlive) && (GameServer.ServerRules.IsSameRealm(storm, player, true))) tempest.StartSpell((GameLiving)player);
-                }
-            }
-            else
-            {
-                foreach (GamePlayer player in storm.GetPlayersInRadius(sRadius))
-                {
-                    tempest = ScriptMgr.CreateSpellHandler(m_caster, s, sl);
-                    if ((player.IsAlive) && (GameServer.ServerRules.IsAllowedToAttack(storm, player, true))) tempest.StartSpell((GameLiving)player);
-                }
+                if (!living.IsAlive || GameServer.ServerRules.IsAllowedToAttack(Caster, living, true) == Friendly)
+                    continue;
+
+                tempest = ScriptMgr.CreateSpellHandler(m_caster, s, sl);
+                tempest.StartSpell(living);
             }
         }
 
         public override void ApplyEffectOnTarget(GameLiving target)
         {
-            GameSpellEffect neweffect = CreateSpellEffect(target, CasterEffectiveness);
-            storm.AddToWorld();
-            neweffect.Start(storm.Owner);
+            // The storm carries its spell's name (hidden in game), so a storm of each kind is told apart.
+            if (storm != null)
+            {
+                storm.Name = Spell.Name;
+                storm.Friendly = Friendly;
+            }
+
+            MasterLevelPlacement.Place(this, storm, CasterEffectiveness);
         }
 
-        public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
-        {
-            if (storm != null) storm.Delete();
-            effect.Owner.EffectList.Remove(effect);
-            return base.OnEffectExpires(effect, noMessages);
-        }
+        public virtual void RemovePlaced() => MasterLevelPlacement.Remove(storm);
 
         // constructor
         public StormSpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
@@ -780,8 +768,9 @@ namespace DOL.GS
             this.Health = this.MaxHealth;
         }
 
-        private GamePlayer m_owner;
-        public GamePlayer Owner
+        private GameLiving m_owner;
+        /// <summary>The caster: a player or a bot (TOA_PLAN WP2.6).</summary>
+        public GameLiving Owner
         {
             get { return m_owner; }
             set { m_owner = value; }
@@ -792,9 +781,8 @@ namespace DOL.GS
         }
         public virtual int CalculateToHitChance(GameLiving target)
         {
-            int spellLevel = m_owner.Level;
-            GameLiving caster = m_owner as GameLiving;
-            int spellbonus = m_owner.GetModified(eProperty.SpellLevel);
+            int spellLevel = m_owner?.Level ?? Level;
+            int spellbonus = m_owner?.GetModified(eProperty.SpellLevel) ?? 0;
             spellLevel += spellbonus;
             if (spellLevel > 50)
                 spellLevel = 50;
@@ -856,12 +844,16 @@ namespace DOL.GS
             this.Movable = true;
         }
 
-        private GamePlayer m_owner;
-        public GamePlayer Owner
+        private GameLiving m_owner;
+        /// <summary>The caster: a player or a bot (TOA_PLAN WP2.6).</summary>
+        public GameLiving Owner
         {
             get { return m_owner; }
             set { m_owner = value; }
         }
+
+        /// <summary>A storm that helps its caster's side (Dazzling Array) rather than hurting enemies.</summary>
+        public bool Friendly { get; set; }
 
         private bool m_movable;
         public bool Movable
@@ -882,9 +874,8 @@ namespace DOL.GS
         }
         public virtual int CalculateToHitChance(GameLiving target)
         {
-            int spellLevel = m_owner.Level;
-            GameLiving caster = m_owner as GameLiving;
-            int spellbonus = m_owner.GetModified(eProperty.SpellLevel);
+            int spellLevel = m_owner?.Level ?? Level;
+            int spellbonus = m_owner?.GetModified(eProperty.SpellLevel) ?? 0;
             spellLevel += spellbonus;
             if (spellLevel > 50)
                 spellLevel = 50;

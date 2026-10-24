@@ -12,6 +12,33 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.329.0] - 2026-10-24
+
+### Added
+- Convoker, Stormlord and Spymaster bots use their Master Level abilities
+  (ToA plan WP2.6): Battlewarder, Crystal Titan, Power and Dissonance traps,
+  Dazzling Array, the six hostile storms, Vacuum Vortex, Tanglesnare, Poison
+  Spike and Siege Wrecker, paced like a player (1-3 s reaction with a second
+  look, one press per think, a pause after each press, cooldowns, an
+  occasional misplaced ground target, every target on the navmesh floor with
+  line of sight). Unit tests UT_BotMasterLevelCasting (21+).
+
+### Changed
+- None.
+
+### Fixed
+- Perfecter fonts, Convoker and Spymaster traps, Stormlord storms and the
+  Crystal Titan ran on legacy effects whose timers never started on this
+  server: they pulsed once and then stood in the world until a restart, the
+  titan never left, storm debuffs were never removed. They now pulse at their
+  frequency, expire, and clean up; a font reaches every ally in range on each
+  pulse, hostile fonts (Dissonating Ward, Prescience Node) hit enemies, Vacuum
+  Vortex pushes storms away from its ground target, Battlewarder checks its
+  range, Siege Wrecker reacts only within its radius.
+
+### Removed
+- None.
+
 ## [0.328.0] - 2026-10-24
 
 ### Added

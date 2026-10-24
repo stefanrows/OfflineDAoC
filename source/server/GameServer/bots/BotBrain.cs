@@ -1863,6 +1863,11 @@ namespace DOL.AI.Brain
             if (!movementFirstPetClass && !deferCasterUpkeep && TryMaintainTravelAndClassBuffs())
                 return;
 
+            // Master Level traps and storms are laid by a bot that stands: an RvR spot it
+            // holds, its group waiting for the enemy (TOA_PLAN WP2.6, BotBrain.MasterLevels).
+            if (TryIdleMasterLevelAbility())
+                return;
+
             // Adopt a live target from our own pet before optional pet upkeep.
             // Previously this ran after Maintain(), so a pet heal/buff/summon
             // could consume every owner turn while a Hunter's pet fought alone.

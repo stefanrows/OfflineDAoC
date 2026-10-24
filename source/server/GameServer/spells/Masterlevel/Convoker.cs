@@ -47,6 +47,7 @@ namespace DOL.GS.Spells
 		{
 			ApplyOnNPC = false;
 			ApplyOnCombat = true;
+			Friendly = false; // Prescience reveals enemies; its sub-spell targets ENEMY
 
 			//Construct a new font.
 			font = new GameFont();
@@ -58,10 +59,11 @@ namespace DOL.GS.Spells
 			font.Z = caster.Z;
 			font.CurrentRegionID = caster.CurrentRegionID;
 			font.Heading = caster.Heading;
-			font.Owner = (GamePlayer)caster;
+			font.Owner = caster;
 
 			// Construct the font spell
 			dbs = new DbSpell();
+			dbs.SpellID = spell.ID;
 			dbs.Name = spell.Name;
 			dbs.Icon = 7312;
 			dbs.ClientEffect = 7312;
@@ -135,6 +137,7 @@ namespace DOL.GS.Spells
 
 			// Construct the mine spell
 			dbs = new DbSpell();
+			dbs.SpellID = spell.ID;
 			dbs.Name = spell.Name;
 			dbs.Icon = 7313;
 			dbs.ClientEffect = 7313;
@@ -182,10 +185,11 @@ namespace DOL.GS.Spells
 			font.Z = caster.Z;
 			font.CurrentRegionID = caster.CurrentRegionID;
 			font.Heading = caster.Heading;
-			font.Owner = (GamePlayer)caster;
+			font.Owner = caster;
 
 			// Construct the mine spell
 			dbs = new DbSpell();
+			dbs.SpellID = spell.ID;
 			dbs.Name = spell.Name;
 			dbs.Icon = 7237;
 			dbs.ClientEffect = 7237;
@@ -300,7 +304,7 @@ namespace DOL.GS.Spells
 		public override bool CheckBeginCast(GameLiving selectedTarget)
 		{
 			if (!base.CheckBeginCast(selectedTarget)) return false;
-			if (!(m_caster.GroundTarget.IsValid && m_caster.GroundTargetInView))
+			if (!InReach(m_caster, Spell))
 			{
 				MessageToCaster("Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted);
 				return false;
@@ -308,6 +312,14 @@ namespace DOL.GS.Spells
 			return true;
 
 		}
+		/// <summary>
+		/// A ground target is set, in view and within the spell's range (2,300). The range was
+		/// never checked, so a warder could be planted anywhere the client still saw.
+		/// </summary>
+		public static bool InReach(GameLiving caster, Spell spell) =>
+			caster.GroundTarget.IsValid && caster.GroundTargetInView &&
+			(spell.Range <= 0 || caster.IsWithinRadius(caster.GroundTarget, spell.Range));
+
 		public BattlewarderSpellHandler(GameLiving caster, Spell spell, SpellLine line)
 			: base(caster, spell, line) { }
 	}
@@ -341,12 +353,13 @@ namespace DOL.GS.Spells
 		{
 			base.OnStartEffect();
 
-			if (SpellHandler?.Caster is not GamePlayer caster || !caster.IsAlive)
+			// Players and bots alike (TOA_PLAN WP2.6); only players read the messages.
+			if (SpellHandler?.Caster is not GameLiving caster || !caster.IsAlive)
 				return;
 
 			if (!caster.GroundTarget.IsValid || !caster.GroundTargetInView)
 			{
-				caster.Out.SendMessage("Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+				MasterLevelPlacement.TellCaster(caster, "Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted);
 				End();
 				return;
 			}
@@ -371,7 +384,7 @@ namespace DOL.GS.Spells
 			if (!PlantWarder(_warder))
 			{
 				_warder = null;
-				caster.Out.SendMessage("Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted, eChatLoc.CL_SystemWindow);
+				MasterLevelPlacement.TellCaster(caster, "Your area target is out of range.  Set a closer ground position.", eChatType.CT_SpellResisted);
 				End();
 				return;
 			}
@@ -381,7 +394,7 @@ namespace DOL.GS.Spells
 			_watch = new MovementWatch(caster, why =>
 			{
 				if (why != MovementWatch.Gone)
-					caster.Out.SendMessage("Your concentration fades", eChatType.CT_SpellExpires, eChatLoc.CL_SystemWindow);
+					MasterLevelPlacement.TellCaster(caster, "Your concentration fades", eChatType.CT_SpellExpires);
 
 				EndReason ??= why;
 				End();
@@ -410,8 +423,7 @@ namespace DOL.GS.Spells
 		// Dying is still raised, so the warder's death can be listened for.
 		private void WarderFell(DOLEvent e, object sender, EventArgs args)
 		{
-			if (SpellHandler?.Caster is GamePlayer caster)
-				caster.Out.SendMessage("Your Battle Warder has fallen!", eChatType.CT_SpellExpires, eChatLoc.CL_SystemWindow);
+			MasterLevelPlacement.TellCaster(SpellHandler?.Caster, "Your Battle Warder has fallen!", eChatType.CT_SpellExpires);
 
 			EndReason ??= WarderFallen;
 			End();
@@ -463,6 +475,7 @@ namespace DOL.GS.Spells
 
 			// Construct the mine spell
 			dbs = new DbSpell();
+			dbs.SpellID = spell.ID;
 			dbs.Name = spell.Name;
 			dbs.Icon = 7255;
 			dbs.ClientEffect = 7255;
@@ -651,11 +664,10 @@ namespace DOL.GS.Spells
 		private static readonly Logging.Logger log = Logging.LoggerManager.Create(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
 		private int x, y, z;
-		GameNPC summoned = null;
-		ECSGameTimer m_growTimer;
-		private const int C_GROWTIMER = 2000;
-		
+
 		public Convoker10SpellHandler(GameLiving caster, Spell spell, SpellLine line) : base(caster, spell, line) { }
+
+		public override bool HasPositiveEffect => true;
 
 		public override bool CheckBeginCast(GameLiving selectedTarget)
 		{
@@ -673,13 +685,16 @@ namespace DOL.GS.Spells
 			base.FinishSpellCast(target);
 		}
 
+		/// <summary>
+		/// Summons the Crystal Titan for a player or a bot (TOA_PLAN WP2.6). It used to start a
+		/// legacy GameSpellEffect whose timer never ran, so the titan never left; it now lives
+		/// for the spell's duration (5 minutes) on a CrystalTitanECSEffect, which removes it.
+		/// The titan is the caster's pet (TitanBrain), so its kills pay the caster as any pet's.
+		/// </summary>
 		public override void ApplyEffectOnTarget(GameLiving target)
 		{
-			GamePlayer player = Caster as GamePlayer;
-			if (player == null)
-			{
+			if (Caster == null || !Caster.IsAlive)
 				return;
-			}
 
 			INpcTemplate template = NpcTemplateMgr.GetTemplate(Spell.LifeDrainReturn);
 			if (template == null)
@@ -689,11 +704,11 @@ namespace DOL.GS.Spells
 				MessageToCaster("NPC template " + Spell.LifeDrainReturn + " not found!", eChatType.CT_System);
 				return;
 			}
-			GameSpellEffect effect = CreateSpellEffect(target, CasterEffectiveness);
-			TitanBrain controlledBrain = new TitanBrain(player);
+
+			TitanBrain controlledBrain = new TitanBrain(Caster);
 			controlledBrain.IsMainPet = false;
 			controlledBrain.WalkState = eWalkState.Stay;
-			summoned = new GameNPC(template);
+			GameNPC summoned = new GameNPC(template);
 			summoned.SetOwnBrain(controlledBrain);
 			//Suncheck:
 			//	Is needed, else it can cause error (i.e. /cast-command)
@@ -702,35 +717,21 @@ namespace DOL.GS.Spells
 			summoned.X = x;
 			summoned.Y = y;
 			summoned.Z = z;
-			summoned.CurrentRegion = player.CurrentRegion;
-			summoned.Heading = (ushort)((player.Heading + 2048) % 4096);
-			summoned.Realm = player.Realm;
+			summoned.CurrentRegion = Caster.CurrentRegion;
+			summoned.Heading = (ushort)((Caster.Heading + 2048) % 4096);
+			summoned.Realm = Caster.Realm;
 			summoned.Size = 10;
 			summoned.Level = 100;
 			summoned.Flags |= GameNPC.eFlags.PEACE;
-			summoned.AddToWorld();
+
+			if (!summoned.AddToWorld())
+				return;
+
 			controlledBrain.AggressionState = eAggressionState.Aggressive;
-			effect.Start(summoned);
-			m_growTimer = new ECSGameTimer((GameObject)m_caster, new ECSGameTimer.ECSTimerCallback(TitanGrows), C_GROWTIMER);
+			ECSGameEffectFactory.Create(CrystalTitanECSEffect.ParamsFor(summoned, this, CasterEffectiveness),
+				static (in ECSGameEffectInitParams i) => new CrystalTitanECSEffect(i));
 		}
-		
-		// Make titan growing, and activate it on completition
-		private int TitanGrows(ECSGameTimer timer)
-		{
-			if(summoned != null && summoned.Size != 60)
-			{
-				summoned.Size +=10;
-				return C_GROWTIMER;
-			}
-			else
-			{
-				summoned.Flags = 0;
-				m_growTimer.Stop();
-				m_growTimer = null;
-			}
-			return 0;
-		}
-		
+
 		private bool CheckCastLocation()
 		{
 			x = Caster.X;
@@ -756,23 +757,70 @@ namespace DOL.GS.Spells
 			}
 			return true;
 		}
-		/// <summary>
-		/// When an applied effect expires.
-		/// Duration spells only.
-		/// </summary>
-		/// <param name="effect">The expired effect</param>
-		/// <param name="noMessages">true, when no messages should be sent to player and surrounding</param>
-		/// <returns>immunity duration in milliseconds</returns>
-		public override int OnEffectExpires(GameSpellEffect effect, bool noMessages)
-		{
-			effect.Owner.Health = 0; // to send proper remove packet
-			effect.Owner.Delete();
-			return 0;
-		}
 
 		public override double CalculateSpellResistChance(GameLiving target)
 		{
 			return 0;
+		}
+	}
+
+	/// <summary>
+	/// The Crystal Titan's life: it grows from size 10 to 60 in 2-second steps and stays
+	/// peaceful until fully grown, then fights; when the effect ends (duration, death) it goes.
+	/// </summary>
+	public class CrystalTitanECSEffect : ECSGameSpellEffect
+	{
+		public const int GrowInterval = 2000;
+		public const int FullSize = 60;
+
+		private ECSGameTimer _growTimer;
+
+		public CrystalTitanECSEffect(in ECSGameEffectInitParams initParams) : base(initParams)
+		{
+			EffectType = eEffect.Unknown;
+		}
+
+		/// <summary>The titan's effect lasts the summoning spell's duration (5 minutes in the data).</summary>
+		public static ECSGameEffectInitParams ParamsFor(GameNPC titan, ISpellHandler handler, double effectiveness) =>
+			new(titan, handler.Spell.Duration, effectiveness, handler);
+
+		public override void OnStartEffect()
+		{
+			base.OnStartEffect();
+			_growTimer = new ECSGameTimer(Owner, Grow, GrowInterval);
+		}
+
+		/// <summary>One growth step; false once the titan is fully grown and fighting.</summary>
+		public bool GrowStep()
+		{
+			if (Owner is not GameNPC titan || titan.ObjectState == GameObject.eObjectState.Deleted)
+				return false;
+
+			if (titan.Size < FullSize)
+			{
+				titan.Size = (byte)Math.Min(FullSize, titan.Size + 10);
+
+				if (titan.Size < FullSize)
+					return true;
+			}
+
+			titan.Flags &= ~GameNPC.eFlags.PEACE;
+			return false;
+		}
+
+		private int Grow(ECSGameTimer timer) => GrowStep() ? GrowInterval : 0;
+
+		public override void OnStopEffect()
+		{
+			base.OnStopEffect();
+			_growTimer?.Stop();
+			_growTimer = null;
+
+			if (Owner != null && Owner.ObjectState != GameObject.eObjectState.Deleted)
+			{
+				Owner.Health = 0; // to send proper remove packet
+				Owner.Delete();
+			}
 		}
 	}
 	#endregion
@@ -826,12 +874,11 @@ namespace DOL.AI.Brain
 		{
 			ArrayList list = new ArrayList();
 
-			foreach (GamePlayer o in Body.GetPlayersInRadius((ushort)Body.attackComponent.AttackRange))
+			// Players and bots (companions, world bots) alike.
+			foreach (GameLiving living in DOL.GS.Spells.MasterlevelHandling.PlayersAndBotsAround(Body, (ushort)Body.attackComponent.AttackRange))
 			{
-				GamePlayer p = o as GamePlayer;
-
-				if (GameServer.ServerRules.IsAllowedToAttack(Body, p, true))
-					list.Add(p);
+				if (living.IsAlive && GameServer.ServerRules.IsAllowedToAttack(Body, living, true))
+					list.Add(living);
 			}
 			return list;
 		}
@@ -914,7 +961,8 @@ public class MLBrain : GuardBrain
 			if (!npc.IsWithinRadius(Body, AggroRange))
 				continue;
 
-			if (!(npc.Brain is IControlledBrain || npc is GameGuard))
+			// Pets, guards and bots: a warder fights the enemy realm's companions and world bots too.
+			if (!(npc.Brain is IControlledBrain || npc is GameGuard || npc is GameBot))
 				continue;
 
 			AddToAggroList(npc);

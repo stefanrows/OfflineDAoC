@@ -162,6 +162,7 @@ namespace DOL.GS.Spells
 
             // Construct the mine spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID;
             dbs.Name = spell.Name;
             dbs.Icon = 7220;
             dbs.ClientEffect = 7220;
@@ -212,6 +213,7 @@ namespace DOL.GS.Spells
 
             // Construct the mine spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID;
             dbs.Name = spell.Name;
             dbs.Icon = 7281;
             dbs.ClientEffect = 7281;
@@ -387,26 +389,18 @@ namespace DOL.GS.Spells
     [SpellHandler(eSpellType.SiegeWrecker)]
     public class SiegeWreckerSpellHandler : MineSpellHandler
     {
-        public override void OnEffectPulse(GameSpellEffect effect)
+        // Only enemy siege weapons set it off, within the trap's own radius; it used to search the
+        // whole visibility distance (the sub-spell's range) and never went away after firing.
+        public override void PulsePlaced(MasterLevelPlacedECSEffect effect)
         {
-            if (mine == null || mine.ObjectState == GameObject.eObjectState.Deleted)
-            {
-                effect.Cancel(false);
-                return;
-            }
-
             if (trap == null)
                 return;
 
-            foreach (GameNPC npc in mine.GetNPCsInRadius((ushort)s.Range))
+            foreach (GameNPC npc in mine.GetNPCsInRadius(sRadius))
             {
                 if (npc is GameSiegeWeapon && npc.IsAlive && GameServer.ServerRules.IsAllowedToAttack(Caster, npc, true))
                 {
-                    trap.StartSpell(npc);
-
-                    if (Unstealth)
-                        npc.Stealth(false);
-
+                    Spring(effect, npc);
                     return;
                 }
             }
@@ -432,6 +426,7 @@ namespace DOL.GS.Spells
 
             // Construct the mine spell
             dbs = new DbSpell();
+            dbs.SpellID = spell.ID;
             dbs.Name = spell.Name;
             dbs.Icon = 7301;
             dbs.ClientEffect = 7301;
