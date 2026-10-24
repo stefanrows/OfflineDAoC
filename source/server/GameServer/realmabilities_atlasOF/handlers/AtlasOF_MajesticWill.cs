@@ -9,11 +9,23 @@ namespace DOL.GS.RealmAbilities
     {
         public AtlasOF_MajesticWill(DbAbility dba, int level) : base(dba, level) { }
         
-        int m_duration = 60000; // 30s
+        int m_duration = 60000; // 60s
 
-        public override int MaxLevel { get { return 3; } }
-        public override int CostForUpgrade(int currentLevel) { return AtlasRAHelpers.GetCommonUpgradeCostFor3LevelsRA(currentLevel); }
-        public override int GetReUseDelay(int level) { return 1800; } // 30 mins
+        // Patch 1.68 rework (24 Feb 2004 hot fix and follow-up): five levels at 1 / 3 / 6 / 10 / 14
+        // points, 5 % per level (25 % at level V), 10 minute recast instead of 30.
+        public const int Levels = 5;
+        public const int ReUseSeconds = 600;
+        public const int PercentPerLevel = 5;
+
+        public override int MaxLevel { get { return Levels; } }
+        public override int CostForUpgrade(int currentLevel) { return AtlasRAHelpers.GetCommonUpgradeCostFor5LevelsRA(currentLevel); }
+        public override int GetReUseDelay(int level) { return ReUseSeconds; } // 10 mins
+
+        /// <summary>
+        /// Percentage points added to the caster's spell hit chance (the target's resist chance falls by the same amount).
+        /// SpellHandler applies the same value through the effect's effectiveness (RA level times 5).
+        /// </summary>
+        public int GetAmountForLevel(int level) { return level < 1 ? 0 : AtlasRAHelpers.GetPropertyEnhancer5AmountForLevel(level); }
 
         public override void Execute(GameLiving living)
         {
@@ -44,7 +56,7 @@ namespace DOL.GS.RealmAbilities
             tmpSpell.CastTime = 0;
             tmpSpell.EffectGroup = 0; // stacks with other damage adds
             tmpSpell.Range = 0;
-            tmpSpell.Description = "Your targets chance of resisting your spells is reduced by 5% per level per level of this ability for 60 seconds.";
+            tmpSpell.Description = "Your targets chance of resisting your spells is reduced by 5% per level of this ability for 60 seconds.";
             SpellLine spellLine = GlobalSpellsLines.RealmSpellsSpellLine;
             return ScriptMgr.CreateSpellHandler(owner, new Spell(tmpSpell, 0) , spellLine) as SpellHandler;
         }
@@ -54,7 +66,7 @@ namespace DOL.GS.RealmAbilities
             get
             {
                 var delveInfoList = new List<string>();
-                delveInfoList.Add("Your targets chance of resisting your spells is reduced by 5% per level per level of this ability for 60 seconds.");
+                delveInfoList.Add("Your targets chance of resisting your spells is reduced by 5% per level of this ability for 60 seconds.");
                 delveInfoList.Add("Casting time: instant");
 
                 return delveInfoList;
@@ -63,7 +75,7 @@ namespace DOL.GS.RealmAbilities
         
         public override void AddEffectsInfo(IList<string> list)
         {
-            list.Add("Your targets chance of resisting your spells is reduced by 5% per level per level of this ability for 60 seconds.");
+            list.Add("Your targets chance of resisting your spells is reduced by 5% per level of this ability for 60 seconds.");
             list.Add("Casting time: instant");
         }
     }

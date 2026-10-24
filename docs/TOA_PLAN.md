@@ -139,7 +139,7 @@ agent or session that finishes a package updates its row and the log below.
   no new RA wave; our Atlas OF set (101 keys, 69 handlers) is the ToA-era set
   (TOA_RESEARCH.md "ToA-era realm abilities"). Shipped as pack 080: Bard
   Mastery of Concentration, Cleric Wild Power, Thane Mastery of Magery and
-  Wild Power (class rows). Open: Majestic Will 1.68 rework (owner decision),
+  Wild Power (class rows). Majestic Will raised to 1.68 (0.331.0: 5 levels, 1/3/6/10/14, 10 min, 5-25 %). Open:
   6 "check" items (RA resists as second tier, Brilliant Aura, Volcanic Pillar
   radius, Soldier's Barricade, Vanish, Thornweed).
 - [ ] **WP2.5 ML trial texts (optional, later).** Our tree holds 90 ML step
@@ -403,3 +403,4 @@ file should take the first open package there.
 - 2026-10-24: pack set 2 built by toa-packs2 (packs 024, 025, 030, 031, 040,
   041, 050; 14 packs apply on the dev snapshot copy, quick_check ok); review
   next.
+- 2026-10-25 00:50: Majestic Will 1.68 merged as 0.331.0 (owner decision 00:00).

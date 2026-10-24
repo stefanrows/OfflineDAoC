@@ -255,7 +255,7 @@ Research only; nothing was changed in code or database.
   additions (Bard Mastery of Concentration, Cleric Wild Power, Thane Mastery of
   Magery plus Wild Power). The three class-access additions shipped as pack 080
   (four rows, [TOA_DATA_PACKS.md](TOA_DATA_PACKS.md)); the Majestic Will rework
-  waits for the owner. Six more items need a code check (resist stages and
+  is implemented in the handler (2026-10-24, owner decision). Six more items need a code check (resist stages and
   1.69 bug fixes).
 - **Version labels are approximate.** The KB copies of Herald articles 495/500 carry
   no version header. Article 500 mentions 1.68 internally and sits before article
@@ -291,7 +291,7 @@ Thane 21).
 
 | Item | Ours | ToA era (1.65-1.69) | Recommendation |
 |---|---|---|---|
-| Majestic Will | 3 levels, cost 3 / 6 / 10 (3-level helper), 30 min recast, Aug Acuity III style prerequisite not checked in handler, 60 s effect, 13 casters | 5 levels, cost 1 / 3 / 6 / 10 / 14, 10 min recast, no Aug Acuity III prerequisite, 25 % at level V (1.68 hot fix and follow-up) | **Build** (small: one handler, one DB row set). Open: 15 % at level III vs 25 % at level V changes raid damage; owner decides whether the 1.65 baseline or 1.68 rework is wanted |
+| Majestic Will | 3 levels, cost 3 / 6 / 10 (3-level helper), 30 min recast, Aug Acuity III style prerequisite not checked in handler, 60 s effect, 13 casters | 5 levels, cost 1 / 3 / 6 / 10 / 14, 10 min recast, no Aug Acuity III prerequisite, 25 % at level V (1.68 hot fix and follow-up) | **Shipped in source** (2026-10-24, owner chose the 1.68 rework: handler only, no DB row change; 5 % per level, real-client check pending) |
 | Mastery of Concentration for Bard | Bard (48) not in the list (17 classes have it) | Added in 1.68 | **Shipped** (pack 080, one DB row) |
 | Wild Power for Cleric | Cleric (6) not in the list (13 classes have it) | Added in 1.68; Cleric/Thane get crit chance on direct damage spells | **Shipped** (pack 080, one DB row) |
 | Mastery of Magery and Wild Power for Thane | Thane (21) in neither list | Added in 1.68 | **Shipped** (pack 080, two DB rows) |

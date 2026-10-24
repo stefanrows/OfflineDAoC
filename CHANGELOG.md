@@ -12,6 +12,22 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.331.0] - 2026-10-25
+
+### Added
+- None.
+
+### Changed
+- Majestic Will follows patch 1.68 (owner decision): five levels at 1/3/6/10/14
+  points, 10 minute reuse, +5 % resist-pierce chance per level up to 25 %.
+  Existing ranks carry over; the cheaper costs free realm points automatically.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.330.0] - 2026-10-24
 
 ### Added
