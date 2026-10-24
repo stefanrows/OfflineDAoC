@@ -19,8 +19,10 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      (c) `BotGroupSupport.ReserveResurrection` (BotGroupSupport.cs:72):
      `ArgumentNullException` key null, 1 time, and `BotBrain.TryResurrectGroupMember`
      (BotBrain.cs:6266) `NullReferenceException`, 2 times, both from the
-     Gothwaite PvP idle think. Not fixed; the ToA work did not touch these
-     files.
+     Gothwaite PvP idle think. (d) 2026-10-24 23:19 on 0.327.0:
+     `BotBrain.ThinkOpenBgStandby` (BotBrain.GothwaitePvpOpenBgStandby.cs:36)
+     `NullReferenceException`, 1 time. Not fixed; the ToA work did not touch
+     these files.
 
 174. **RvR keep departures insert HubFan points less often.** Found
      2026-10-24 in the 0.314.0 live measurement
