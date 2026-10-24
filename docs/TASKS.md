@@ -426,6 +426,14 @@ Agent sessions on items 45–48: take the role and context from
      porters in every haven (packs 026/027, Atlantis open to players);
      random loot from kills inside Atlantis carries ToA bonuses. Implemented
      in source, real-client check pending ([TOA_TRAVEL.md](TOA_TRAVEL.md)).
+     WP3.1b, earning an artifact: Aphaestia (all three Atlantis cities) sells
+     encounter credit for bounty points; scroll pages (drops of pack 040 or
+     the binders) combine into the book in the backpack; every scholar takes
+     the book, asks for the version when more than one fits class and realm,
+     and hands the artifact over once per character; Artifact Scholars awaken
+     Flask, Bruiser and Shield of Khaos on credit alone (packs 051, 052, 061).
+     Implemented in source, real-client check pending
+     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Earning an artifact").
 
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;

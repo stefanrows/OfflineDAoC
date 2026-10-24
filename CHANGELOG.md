@@ -12,6 +12,31 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.324.0] - 2026-10-24
+
+### Added
+- Artifacts can be earned (ToA plan WP3.1b, `docs/TOA_ARTIFACTS.md`):
+  Aphaestia in each Atlantis ruins city sells one encounter-credit token per
+  artifact for bounty points; scroll pages drop from Atlantis mobs or come
+  from the binders and combine in the backpack into a pair and a book; every
+  Scholar awakens any artifact with a scroll set once the character has the
+  credit, the complete story, level 45 and a usable version, asking for the
+  class version when several fit (the choice is a journal quest; aborting
+  returns the book). Artifact Scholars also awaken Flask, Bruiser and Shield of
+  Khaos on credit alone. One artifact per character. Data packs 051 (scroll
+  wiring), 052 (artifact version fixes, 198 templates), 061 (scholar classes
+  and Aphaestia's credit list). Unit tests UT_ArtifactAwakening (24).
+
+### Changed
+- Scholar, Artifact Scholar and Artifact Credit Merchant NPC classes exist
+  again (data-driven, readable texts instead of the "1001" placeholders).
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.323.0] - 2026-10-24
 
 ### Added

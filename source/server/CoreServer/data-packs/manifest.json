@@ -213,6 +213,42 @@
           "gaherisSha256": null
         }
       ]
+    },
+    {
+      "name": "051-artifact-scroll-wiring",
+      "file": "051-artifact-scroll-wiring.sql",
+      "sha256": "2127be19139c80b3b0daf62780bb309bb0dea68e1938468b556a23526367b69c",
+      "description": "The 54 artifact scroll sets named on the Artifact rows (gaheris 37): real page names, readable pair and book names; the three artifacts without a set get an empty BookID.",
+      "sources": [
+        {
+          "file": "051-artifact-scroll-wiring.sql",
+          "gaherisSha256": "6f64fd4d5bef700b68bc276a48ae8d127a7d51d46cb4fbd438490912efd3ebf3"
+        }
+      ]
+    },
+    {
+      "name": "052-artifact-version-fixes",
+      "file": "052-artifact-version-fixes.sql",
+      "sha256": "0b993c3b5ddc84ac632c4dea737afb5bdc8ec11ba06174bc7d7bac08b1444774",
+      "description": "Three ArtifactXItem rows fixed: Gem of Lost Memories archer template, the studded Maddening Scalars under their own artifact, two rows without a template dropped.",
+      "sources": [
+        {
+          "file": "052-artifact-version-fixes.sql",
+          "gaherisSha256": null
+        }
+      ]
+    },
+    {
+      "name": "061-toa-scholar-classes",
+      "file": "061-toa-scholar-classes.sql",
+      "sha256": "2f51a90e46a3f96526fac5c3fa3fff7837fe2888b87f8baaa0de8e79e3b22e2d",
+      "description": "Artifact NPCs: Aphaestia in region 72 sells credit, 22 Credit values match their tokens, five tokens of absent artifacts leave her list.",
+      "sources": [
+        {
+          "file": "061-toa-scholar-classes.sql",
+          "gaherisSha256": null
+        }
+      ]
     }
   ]
 }

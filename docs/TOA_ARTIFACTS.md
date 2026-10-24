@@ -142,9 +142,9 @@ tolerates all of it:
 | Credit from a credit item or bounty merchant (WP3.1b) | `ArtifactMgr.GrantArtifactBountyCredit(player, creditOrItemId)` | matches `Credit` or `<credit>_credit` |
 | "Has the player done the encounter?" (scholar) | `ArtifactMgr.HasEncounterCredit(player, artifactID)` | per artifact ID, not per type |
 | Scholar hands the artifact over | `ArtifactMgr.ConsumeEncounterCredit(player, artifactID)`, then `GetArtifactVersions(artifactID, class, realm)` and `GameInventoryItem.Create(template)` | `Create` returns an `InventoryArtifact` once the ClassType SQL ran |
-| "Has the player already received it?" | `ArtifactMgr.HasFinishedArtifactQuest` | today only checks a DOL-style quest type named in `QuestID` (none of ours). The data-driven artifact quest of WP3.1b adds its own finished check here; it is the single place `GrantArtifactCredit` asks |
-| Readable artifact name for a scholar | first `ArtifactXItem` template name, or the credit item name | not in the core yet |
-| Scroll combine (WP3.2) | `ArtifactMgr.CanCombine` / `CombineScrolls` / `HasBook` | nothing calls them yet; needs the backpack drop hook and the `artifact_scroll` template (gaheris migration 37) |
+| "Has the player already received it?" | `ArtifactMgr.HasFinishedArtifactQuest` | a finished `ArtifactQuest` with the artifact ID (WP3.1b), or a DOL-style quest type named in `QuestID`; the single place `GrantArtifactCredit` asks |
+| Readable artifact name for a scholar | `ArtifactMgr.GetArtifactName` | first version's item name, else Credit with spaces (WP3.1b) |
+| Scroll combine | `ArtifactMgr.TryCombineScrolls` (backpack drop), `CanCombine` / `CombineScrolls` / `HasBook` | wired in WP3.1b, see "Earning an artifact"; `artifact_scroll` is optional |
 | Active quests list (port of Scholar, ArtifactScholar, ArtifactTurnInQuest) | `player.ActiveQuests()` | renamed from gaheris `QuestList()`, which collides with our `GamePlayer.QuestList` property. It is a snapshot: remove with `player.QuestList.TryRemove` as `AbstractQuest.FinishQuest` does |
 | Reload the catalog after a data pack | `ArtifactMgr.LoadArtifacts()` or `ArtifactMgr.Load(rows...)` | existing items keep the requirements they were built with until the next login |
 
@@ -197,6 +197,100 @@ next level, the next level that unlocks something, "(Earns exp: Slaying enemies
 and monsters found anywhere.)", then "Locked abilities:" with a `[Ln]` tag per
 locked stat, spell or proc, then the normal item delve (which shows only what is
 unlocked). GMs see artifact ID, level and experience before the technical block.
+
+## Earning an artifact (WP3.1b)
+
+Implemented in source, real-client check pending. Code:
+`gameutils/Atlantis/ArtifactAwakening.cs` (rules and every text),
+`gameutils/Atlantis/ArtifactQuest.cs` (version choice and the "awakened"
+record), `gameobjects/Atlantis/Scholar.cs`, `ArtifactScholar.cs` and
+`ArtifactCreditMerchant.cs` (thin NPC classes), the scroll hook in
+`GamePlayerInventory.CombineItems`. Data: packs 051, 052 and 061
+([TOA_DATA_PACKS.md](TOA_DATA_PACKS.md)). Tests:
+`Tests/UnitTests/UT_ArtifactAwakening.cs`.
+
+### The player's way to an artifact
+
+1. **Encounter credit.** Until the encounters of WP3.3 grant it, the credit is
+   bought: Aphaestia (Albion 70, Midgard 71, Hibernia 72) sells one credit token
+   per artifact for bounty points (289 to 1,040 BP, the template prices). Hand
+   the token to her or to any scholar: the credit is recorded and the token is
+   used up. She does not sell a token that would be useless (credit already
+   held, an unredeemed token of that artifact already carried, artifact already
+   awakened or carried, no version the class can use), and sells one at a
+   time. A useless token handed in stays with the player.
+2. **The story.** Each of the 54 artifacts with a scroll set has three pages.
+   They drop from Atlantis creatures (pack 040, db-public, 15 %; every page of
+   53 sets drops in all three realm copies, "Ring of Fire, Scroll 3 of 3"
+   drops nowhere) and are sold by the binders Zosyne and Mnosus (pack 023, 300
+   BP each). Dropping one page onto another in the backpack combines them:
+   two pages give "<story>, parts 1 and 2 of 3", the third gives the book
+   "<story>, complete". Combining is optional: a scholar also takes the three
+   pages (or a pair and a page) when one of them is handed over and the rest
+   is in the backpack.
+3. **The scholar.** Every Scholar (26 NPCs, Loremasters and Loremistresses in
+   Midgard) and every Artifact Scholar (5) awakens every artifact that has a
+   scroll set; our rows name no scholar per artifact (ScholarID is the
+   placeholder). Hibernia's city (72) has no plain Scholar in the gaheris
+   spawns; Artifact Scholar Elmer serves every artifact there. Hand over the
+   book or a page. The scholar checks, in this
+   order: not awakened before, not carried already, a version for the class
+   and realm, level 45 or more, encounter credit, the whole story. A refusal
+   names the artifact and what is missing (the missing page names, or where
+   credit comes from); nothing is taken.
+4. **The version.** The versions offered are the `ArtifactXItem` rows of the
+   player's realm (or realm 0) whose template allows the class, narrowed to
+   what the character can wear or wield. If that leaves none, the scholar
+   refuses as for a class without a version (logged); nothing is taken. One
+   version: the scholar hands it over at once. Several: the scholar keeps the
+   book and asks, for example "[Cloth], [Leather], [Plate]"; the player
+   whispers one (or clicks it). The open choice is a journal entry ("Awakening
+   Alvarus's Leggings") that survives a relog; abandoning it gives the book back.
+   Labels come from the template: armor class, shield size, weapon kind with
+   damage type where that varies ("Two-Handed (Crush)"), else the last word of
+   the item ID ("Caster", "Melee", "Constitution").
+5. **Hand-over.** The artifact goes into the backpack (`GameInventoryItem.Create`,
+   an `InventoryArtifact` at level 0). Then the book, the encounter credit and
+   the open choice are used up and a finished `ArtifactQuest` with the artifact
+   ID is stored. With a full backpack nothing changes and the scholar asks for
+   room.
+6. **Once per character.** The finished record makes
+   `ArtifactMgr.HasFinishedArtifactQuest` true for that artifact: no second
+   copy from a scholar, no new credit (encounter or token), even after the item
+   was destroyed, vaulted or traded.
+
+**The three artifacts without a scroll set** (A Flask, Bruiser, Shield of
+Khaos; BookID empty since pack 051) are awakened only by an Artifact Scholar
+(Jarron and Heiron in 70, Alaria and Erelacen in 71, Elmer in 72), on credit
+alone: the player names the artifact, the version choice works as above. A
+plain Scholar points to the Artifact Scholars. WP3.2's "generated sets" for
+them are not needed.
+
+**Conversation.** A click gives the greeting, an open version choice first, the
+bookless artifacts at an Artifact Scholar, and two keywords: `[artifacts]`
+(every artifact this scholar can awaken for the class) and `[progress]` (per
+artifact begun: awakened, credit, pages held). Whispering an artifact's name
+tells what is still missing. Artifact names are the item name of the first
+version ("Alvarus's Leggings", `ArtifactMgr.GetArtifactName`); the message
+columns of our rows hold the placeholder `1001` and are shown only if a pack
+ever puts readable text there (`ArtifactMgr.ReadableText`). This covers WP3.4
+for the scholars; the per-artifact live dialogue (DOLSharp's 133 `SayTo` lines)
+is not ported.
+
+### What changed in the core
+
+| Where | Change |
+|---|---|
+| `ArtifactMgr.HasFinishedArtifactQuest` | also true for a finished `ArtifactQuest` with the artifact ID (the single place `GrantArtifactCredit` and the scholars ask) |
+| `ArtifactMgr.GetPageNumbers`, `HasBook` | accept generic (Object_Type 0, our scroll templates) and magical (41, DOL) backpack items; artifacts without BookID never match |
+| `ArtifactMgr.CreatePages`, `CombineScrolls`, `FindPageTemplate` | build pairs and books from the generic `artifact_scroll` template if the save has one, else as a unique copy of a real page template (never of a pair: the template of a non-unique scroll, the template before `#` in a combined item's ID, or the template named like Scroll1-3), so an abandoned version choice can always rebuild the book (no new template ships) |
+| `ArtifactMgr.TryCombineScrolls` | the backpack drop: removes both scrolls, puts the combined item in the target slot, tells the player; anything else falls through to the normal move |
+| `ArtifactMgr.GetAllVersions`, `GetArtifactName`, `HasScrollSet`, `ReadableText` | new lookups |
+
+**Not ported:** DOLSharp's `ArtifactTurnInQuest` (an Artifact Scholar swaps the
+version of an artifact the player carries, losing its experience). It relied on
+DOL's `dmg;wep;stat` Version keys; ours are `0`..`15`. Add it later on top of
+`GetChoices` if the owner wants it.
 
 ## Not checked
 

@@ -17,6 +17,7 @@
  *
  */
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -69,6 +70,9 @@ namespace DOL.GS
 			public readonly Dictionary<string, List<DbArtifactXItem>> Versions = new(StringComparer.Ordinal);
 			public readonly Dictionary<string, string> ArtifactByItem = new(StringComparer.OrdinalIgnoreCase);
 			public readonly Dictionary<string, int[]> Requirements = new(StringComparer.Ordinal);
+
+			/// <summary>Readable artifact names, filled on first use (template lookups).</summary>
+			public readonly ConcurrentDictionary<string, string> Names = new(StringComparer.Ordinal);
 
 			public Catalog(IEnumerable<DbArtifact> artifacts, IEnumerable<DbArtifactXItem> versions, IEnumerable<DbArtifactBonus> bonuses)
 			{
@@ -245,6 +249,76 @@ namespace DOL.GS
 				return true;
 
 			return GetArtifactIDFromItemID(item.Id_nb) != null;
+		}
+
+		/// <summary>
+		/// Every ArtifactXItem row of the artifact (all realms), ordered by numeric Version.
+		/// Returns a fresh list.
+		/// </summary>
+		public static List<DbArtifactXItem> GetAllVersions(string artifactID)
+		{
+			if (string.IsNullOrEmpty(artifactID) || !m_catalog.Versions.TryGetValue(artifactID, out List<DbArtifactXItem> versions))
+				return [];
+
+			return versions.OrderBy(v => int.TryParse(v.Version, out int n) ? n : int.MaxValue)
+				.ThenBy(v => v.Version, StringComparer.Ordinal).ToList();
+		}
+
+		/// <summary>
+		/// The name players know the artifact by: the item name of its first version that has a
+		/// template ("Alvarus's Leggings"), else the Credit value with spaces, else the ID. Our
+		/// rows carry no readable name of their own (TOA_PLAN WP3.4).
+		/// </summary>
+		public static string GetArtifactName(string artifactID)
+		{
+			DbArtifact artifact = GetArtifact(artifactID);
+
+			if (artifact == null)
+				return artifactID ?? string.Empty;
+
+			Catalog catalog = m_catalog;
+			return catalog.Names.GetOrAdd(artifactID, id =>
+			{
+				foreach (DbArtifactXItem version in GetAllVersions(id))
+				{
+					try
+					{
+						string name = GameServer.Database?.FindObjectByKey<DbItemTemplate>(version.ItemID)?.Name;
+
+						if (!string.IsNullOrWhiteSpace(name))
+							return name;
+					}
+					catch (Exception)
+					{
+						// No database (tests, tools): fall through to the credit name.
+					}
+				}
+
+				return string.IsNullOrWhiteSpace(artifact.Credit) ? id : artifact.Credit.Replace('_', ' ');
+			});
+		}
+
+		/// <summary>
+		/// Whether the artifact is earned with a book of three scrolls. The scroll wiring pack
+		/// (051) clears BookID for the three artifacts without a scroll set (Flask, Bruiser,
+		/// Shield of Khaos); an Artifact Scholar hands those out on encounter credit alone.
+		/// </summary>
+		public static bool HasScrollSet(string artifactID)
+		{
+			return !string.IsNullOrWhiteSpace(GetArtifact(artifactID)?.BookID);
+		}
+
+		/// <summary>
+		/// A text column of the Artifact row if it holds readable text. Our rows carry the
+		/// numeric placeholder (the artifact ID, "1001") in every message column; those, and
+		/// empty values, give <paramref name="fallback"/>.
+		/// </summary>
+		public static string ReadableText(string stored, string fallback)
+		{
+			if (string.IsNullOrWhiteSpace(stored) || stored.Trim().All(char.IsDigit))
+				return fallback;
+
+			return stored;
 		}
 
 		#endregion
@@ -648,13 +722,23 @@ namespace DOL.GS
 		}
 
 		/// <summary>
-		/// DOL compatibility: true if QuestID names a quest type the player has finished.
-		/// The data-driven artifact quest of WP3.1b adds its own check here.
+		/// True once a scholar has awakened this artifact for the player: a finished
+		/// <see cref="ArtifactQuest"/> carrying the artifact ID (WP3.1b), or, for DOL
+		/// compatibility, a finished quest of the type named in QuestID.
 		/// </summary>
 		public static bool HasFinishedArtifactQuest(GamePlayer player, string artifactID)
 		{
+			if (player == null || string.IsNullOrEmpty(artifactID))
+				return false;
+
+			foreach (AbstractQuest quest in player.GetFinishedQuests())
+			{
+				if (quest is ArtifactQuest awakened && awakened.ArtifactID == artifactID)
+					return true;
+			}
+
 			Type questType = GetQuestType(GetArtifact(artifactID)?.QuestID);
-			return questType != null && player != null && player.HasFinishedQuest(questType) > 0;
+			return questType != null && !typeof(ArtifactQuest).IsAssignableFrom(questType) && player.HasFinishedQuest(questType) > 0;
 		}
 
 		#endregion
@@ -662,11 +746,23 @@ namespace DOL.GS
 		#region Scrolls & books
 
 		/// <summary>
+		/// Whether the item has the shape of an artifact scroll or book: a backpack item
+		/// (Item_Type 40), generic (our scroll templates, Object_Type 0) or magical (DOL and
+		/// gaheris migration 37 use 41). The name decides which page it is.
+		/// </summary>
+		private static bool IsPaper(DbInventoryItem item)
+		{
+			return item != null &&
+				item.Item_Type == (int) eInventorySlot.FirstBackpack &&
+				(item.Object_Type == (int) eObjectType.Magical || item.Object_Type == (int) eObjectType.GenericItem);
+		}
+
+		/// <summary>
 		/// Find the matching artifact for this book.
 		/// </summary>
 		public static string GetArtifactID(string bookID)
 		{
-			if (bookID == null)
+			if (string.IsNullOrEmpty(bookID))
 				return null;
 
 			return m_catalog.Artifacts.Values.FirstOrDefault(a => a.BookID == bookID)?.ArtifactID;
@@ -692,30 +788,36 @@ namespace DOL.GS
 
 		/// <summary>
 		/// Check which scroll pages are in this item. <paramref name="artifactID"/> is set
-		/// only on a match (upstream left it at the last artifact scanned).
+		/// only on a match (upstream left it at the last artifact scanned). Artifacts without
+		/// a scroll set never match.
 		/// </summary>
 		public static Book GetPageNumbers(DbInventoryItem item, ref string artifactID)
 		{
-			if (item == null || item.Object_Type != (int) eObjectType.Magical || item.Item_Type != (int) eInventorySlot.FirstBackpack)
+			if (!IsPaper(item) || string.IsNullOrEmpty(item.Name))
 				return Book.NoPage;
+
+			string name = item.Name;
 
 			foreach (DbArtifact artifact in m_catalog.Artifacts.Values)
 			{
+				if (string.IsNullOrWhiteSpace(artifact.BookID))
+					continue;
+
 				Book pages = Book.NoPage;
 
-				if (item.Name == artifact.Scroll1)
+				if (name == artifact.Scroll1)
 					pages = Book.Page1;
-				else if (item.Name == artifact.Scroll2)
+				else if (name == artifact.Scroll2)
 					pages = Book.Page2;
-				else if (item.Name == artifact.Scroll3)
+				else if (name == artifact.Scroll3)
 					pages = Book.Page3;
-				else if (item.Name == artifact.Scroll12)
+				else if (name == artifact.Scroll12)
 					pages = Book.Page1 | Book.Page2;
-				else if (item.Name == artifact.Scroll13)
+				else if (name == artifact.Scroll13)
 					pages = Book.Page1 | Book.Page3;
-				else if (item.Name == artifact.Scroll23)
+				else if (name == artifact.Scroll23)
 					pages = Book.Page2 | Book.Page3;
-				else if (item.Name == artifact.BookID)
+				else if (name == artifact.BookID)
 					pages = Book.AllPages;
 
 				if (pages != Book.NoPage)
@@ -765,14 +867,12 @@ namespace DOL.GS
 		{
 			string bookID = GetArtifact(artifactID)?.BookID;
 
-			if (player?.Inventory == null || string.IsNullOrEmpty(bookID))
+			if (player?.Inventory == null || string.IsNullOrWhiteSpace(bookID))
 				return false;
 
 			foreach (DbInventoryItem item in player.Inventory.GetItemRange(eInventorySlot.FirstBackpack, eInventorySlot.LastBackpack))
 			{
-				if (item.Object_Type == (int) eObjectType.Magical &&
-					item.Item_Type == (int) eInventorySlot.FirstBackpack &&
-					item.Name == bookID)
+				if (IsPaper(item) && item.Name == bookID)
 					return true;
 			}
 
@@ -790,7 +890,9 @@ namespace DOL.GS
 		}
 
 		/// <summary>
-		/// Combine 2 scrolls. Nothing calls this yet: the backpack drop hook is WP3.1b/3.2.
+		/// Combine 2 scrolls into the pair or the book. The new item is a unique copy of the
+		/// generic template "artifact_scroll" when the save has one (DOL, gaheris migration 37),
+		/// else of the first scroll's own template, renamed after the Artifact row.
 		/// </summary>
 		public static WorldInventoryItem CombineScrolls(DbInventoryItem scroll1, DbInventoryItem scroll2, ref bool combinesToBook)
 		{
@@ -801,21 +903,161 @@ namespace DOL.GS
 			Book combinedPages = GetPageNumbers(scroll1, ref artifactID) | GetPageNumbers(scroll2, ref artifactID);
 
 			combinesToBook = combinedPages == Book.AllPages;
-			return CreatePages(artifactID, combinedPages);
+			return CreatePages(artifactID, combinedPages, FindPageTemplate(artifactID, scroll1, scroll2));
 		}
 
 		/// <summary>
-		/// Create a scroll or book containing the given page numbers. Needs the generic
-		/// item template "artifact_scroll" (gaheris migration 37; not in our DB yet).
+		/// A real (non-unique) scroll template of the artifact to build pairs and books from,
+		/// so a book can always be rebuilt (a version choice that is abandoned gives it back):
+		/// the template of the first item that has one, else the page template a combined
+		/// unique was copied from ("page_template#id"), else the template named like Scroll1-3.
+		/// Null if none exists.
 		/// </summary>
-		private static WorldInventoryItem CreatePages(string artifactID, Book pageNumbers)
+		public static DbItemTemplate FindPageTemplate(string artifactID, params DbInventoryItem[] items)
+		{
+			foreach (DbInventoryItem item in items ?? [])
+			{
+				if (item?.Template != null && item.Template is not DbItemUnique)
+					return item.Template;
+			}
+
+			try
+			{
+				foreach (DbInventoryItem item in items ?? [])
+				{
+					string id = item?.Id_nb;
+					int separator = id?.IndexOf(DbItemUnique.UNIQUE_SEPARATOR, StringComparison.Ordinal) ?? -1;
+
+					if (separator > 0)
+					{
+						DbItemTemplate template = GameServer.Database?.FindObjectByKey<DbItemTemplate>(id[..separator]);
+
+						if (template != null && template is not DbItemUnique)
+							return template;
+					}
+				}
+
+				DbArtifact artifact = GetArtifact(artifactID);
+
+				if (artifact == null || string.IsNullOrWhiteSpace(artifact.BookID))
+					return null;
+
+				foreach (string name in new[] { artifact.Scroll1, artifact.Scroll2, artifact.Scroll3 })
+				{
+					if (string.IsNullOrWhiteSpace(name))
+						continue;
+
+					DbItemTemplate template = GameServer.Database?.SelectObjects<DbItemTemplate>(DB.Column("Name").IsEqualTo(name))?
+						.FirstOrDefault(t => t.Item_Type == (int) eInventorySlot.FirstBackpack && !t.IsStackable);
+
+					if (template != null)
+						return template;
+				}
+			}
+			catch (Exception ex)
+			{
+				if (log.IsWarnEnabled)
+					log.Warn($"Scroll template lookup for artifact {artifactID} failed", ex);
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Backpack drop of one scroll onto another (GamePlayerInventory.CombineItems): both
+		/// scrolls of one artifact, no page twice. Replaces them with the combined item in the
+		/// target slot and tells the player. Returns false, touching nothing, for anything
+		/// else, so the normal move/swap goes on.
+		/// </summary>
+		public static bool TryCombineScrolls(GamePlayer player, DbInventoryItem fromItem, DbInventoryItem toItem)
+		{
+			IGameInventory inventory = player?.Inventory;
+
+			if (inventory == null || fromItem == null || toItem == null || fromItem == toItem)
+				return false;
+
+			if (!IsBackpackSlot(fromItem.SlotPosition) || !IsBackpackSlot(toItem.SlotPosition) || !CanCombine(fromItem, toItem))
+				return false;
+
+			bool combinesToBook = false;
+			WorldInventoryItem combined = CombineScrolls(fromItem, toItem, ref combinesToBook);
+
+			if (combined?.Item == null)
+				return false;
+
+			var targetSlot = (eInventorySlot) toItem.SlotPosition;
+			var sourceSlot = (eInventorySlot) fromItem.SlotPosition;
+
+			lock (inventory.Lock)
+			{
+				if (!inventory.RemoveItem(fromItem))
+					return false;
+
+				if (!inventory.RemoveItem(toItem))
+				{
+					inventory.AddItem(sourceSlot, fromItem);
+					return false;
+				}
+
+				if (!inventory.AddItem(targetSlot, combined.Item))
+				{
+					// Should not happen: the target slot was just freed. Give both scrolls back.
+					inventory.AddItem(sourceSlot, fromItem);
+					inventory.AddItem(targetSlot, toItem);
+					return false;
+				}
+			}
+
+			InventoryLogging.LogInventoryAction(player, "(ARTIFACT;scrolls)", eInventoryActionType.Other, fromItem.Template, fromItem.Count);
+			InventoryLogging.LogInventoryAction(player, "(ARTIFACT;scrolls)", eInventoryActionType.Other, toItem.Template, toItem.Count);
+			InventoryLogging.LogInventoryAction("(ARTIFACT;scrolls)", player, eInventoryActionType.Other, combined.Item.Template, 1);
+
+			DbArtifact artifact = GetArtifact(combined.Item);
+			string artifactName = GetArtifactName(artifact?.ArtifactID);
+			string message = combinesToBook
+				? ReadableText(artifact?.MessageCombineBook,
+					$"The pages fall into place: you now hold {combined.Item.Name}. A scholar in Atlantis can awaken {artifactName} with it.")
+				: ReadableText(artifact?.MessageCombineScrolls,
+					$"You combine the pages into {combined.Item.Name}. One part of the story of {artifactName} is still missing.");
+
+			player.Out?.SendMessage(message, eChatType.CT_Important, eChatLoc.CL_SystemWindow);
+			return true;
+		}
+
+		private static bool IsBackpackSlot(int slot)
+		{
+			return slot >= (int) eInventorySlot.FirstBackpack && slot <= (int) eInventorySlot.LastBackpack;
+		}
+
+		/// <summary>
+		/// Create a scroll or book containing the given page numbers, from the generic template
+		/// "artifact_scroll" if the save has one, else from <paramref name="pageTemplate"/>
+		/// (a scroll page of the same artifact). Null if neither exists.
+		/// </summary>
+		public static WorldInventoryItem CreatePages(string artifactID, Book pageNumbers, DbItemTemplate pageTemplate = null)
 		{
 			DbArtifact artifact = GetArtifact(artifactID);
 
 			if (artifact == null || pageNumbers == Book.NoPage)
 				return null;
 
-			WorldInventoryItem scroll = WorldInventoryItem.CreateUniqueFromTemplate("artifact_scroll");
+			DbItemTemplate template = null;
+
+			try
+			{
+				template = GameServer.Database?.FindObjectByKey<DbItemTemplate>("artifact_scroll");
+			}
+			catch (Exception)
+			{
+				// No database: use the page template.
+			}
+
+			template ??= pageTemplate;
+
+			if (template == null || template.IsStackable)
+				return null;
+
+			WorldInventoryItem scroll = WorldInventoryItem.CreateUniqueFromTemplate(template);
 
 			if (scroll == null)
 				return null;
@@ -858,6 +1100,12 @@ namespace DOL.GS
 					gold = 5;
 					break;
 			}
+
+			if (string.IsNullOrWhiteSpace(scrollTitle))
+				return null;
+
+			if (scrollModel <= 0)
+				scrollModel = pageNumbers == Book.AllPages ? 500 : 499;
 
 			scroll.Name = scrollTitle;
 			scroll.Item.Name = scrollTitle;

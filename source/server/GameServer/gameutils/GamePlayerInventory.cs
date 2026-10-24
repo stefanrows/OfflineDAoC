@@ -933,6 +933,10 @@ namespace DOL.GS
                 fromItem.SlotPosition > (int) eInventorySlot.LastBackpack)
                 return false;
 
+            // Artifact scroll pages dropped onto each other become the pair or the book (TOA WP3.1b).
+            if (ArtifactMgr.TryCombineScrolls(m_player, fromItem, toItem))
+                return true;
+
             if (fromItem is IGameInventoryItem gameInventoryItem && gameInventoryItem.Combine(m_player, toItem))
                 return true;
 

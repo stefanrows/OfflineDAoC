@@ -481,7 +481,8 @@ namespace DOL.UnitTests
                 "020-atlantis-mobs", "021-atlantis-travel",
                 "022-atlantis-zonepoints", "023-artifact-scroll-binders", "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix",
                 "026-toa-travel-realms", "027-toa-open-atlantis", "030-toa-dungeon-mobs", "031-toa-dungeon-templates", "040-toa-loot",
-                "041-toa-loot-caps", "050-artifact-item-classtype",
+                "041-toa-loot-caps", "050-artifact-item-classtype", "051-artifact-scroll-wiring", "052-artifact-version-fixes",
+                "061-toa-scholar-classes",
             }));
             Assert.That(applier.UnlistedFiles(manifest), Is.Empty);
             Assert.That(applier.GetStatus().Select(s => s.State), Is.All.EqualTo(WorldDataPackState.Pending),
@@ -499,6 +500,7 @@ namespace DOL.UnitTests
                          typeof(DbSpell), typeof(DbLineXSpell), typeof(DbClassXSpecialization), typeof(DbMob), typeof(DbTeleport),
                          typeof(DbZonePoint), typeof(DbItemTemplate), typeof(DbMerchantItem), typeof(DbNpcTemplate), typeof(DbNpcEquipment),
                          typeof(DbLootTemplate), typeof(DbMobXLootTemplate), typeof(DbArtifactXItem), typeof(DbServerProperty),
+                         typeof(DbArtifact),
                      })
                 database.RegisterDataObject(table);
 
@@ -600,7 +602,8 @@ namespace DOL.UnitTests
             Assert.That(Scalar("SELECT COUNT(*) FROM MobXLootTemplate WHERE MobName = 'the phoenix' AND LootTemplateName = 'the phoenix' " +
                                "AND DropCount = 1"), Is.EqualTo(1), "041: the Phoenix cap");
             Assert.That(Scalar("SELECT COUNT(*) FROM LootTemplate WHERE TemplateName = 'the phoenix'"), Is.EqualTo(23));
-            Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact'"), Is.EqualTo(197), "050");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact'"), Is.EqualTo(197 + 1),
+                "050, and 052 for the Gem of Lost Memories archer template");
             Assert.That(Scalar("SELECT COUNT(*) FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact' " +
                                "AND Id_nb NOT IN (SELECT ItemID FROM ArtifactXItem)"), Is.Zero);
             List<string> artifactTemplates = Strings("SELECT Id_nb FROM ItemTemplate WHERE ClassType = 'DOL.GS.InventoryArtifact'");
@@ -627,6 +630,51 @@ namespace DOL.UnitTests
             Assert.That((string)ScalarObject("SELECT Value FROM ServerProperty WHERE \"Key\" = 'rog_toa_item_chance'"), Is.EqualTo("25"));
             Assert.That(run.ChangedKeys["ServerProperty"], Is.EquivalentTo(new[] { "atlantis_teleport_plvl", "rog_toa_item_chance" }),
                 "027 is reported, so the server reloads the properties on this boot");
+
+            // Packs 051, 052 and 061 (WP3.1b, docs/TOA_ARTIFACTS.md "Earning an artifact").
+            Assert.That(Scalar("SELECT COUNT(*) FROM Artifact a WHERE " +
+                               "EXISTS (SELECT 1 FROM ItemTemplate t WHERE t.Name = a.Scroll1 AND t.Item_Type = 40) AND " +
+                               "EXISTS (SELECT 1 FROM ItemTemplate t WHERE t.Name = a.Scroll2 AND t.Item_Type = 40) AND " +
+                               "EXISTS (SELECT 1 FROM ItemTemplate t WHERE t.Name = a.Scroll3 AND t.Item_Type = 40)"), Is.EqualTo(54),
+                "051: every scroll set names three real scroll items");
+            Assert.That(Ids("SELECT CAST(ArtifactID AS INTEGER) FROM Artifact WHERE BookID = '' ORDER BY 1"), Is.EqualTo(new long[] { 1004, 1011, 1049 }),
+                "051: Flask, Bruiser and Shield of Khaos have no book");
+            Assert.That(Scalar("SELECT COUNT(DISTINCT BookID) FROM Artifact WHERE BookID <> ''"), Is.EqualTo(54));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Artifact a JOIN ItemTemplate t ON t.Name IN (a.BookID, a.Scroll12, a.Scroll13, a.Scroll23)"),
+                Is.Zero, "pair and book names are new item names");
+            Assert.That(Scalar("SELECT COUNT(*) FROM ArtifactXItem x WHERE NOT EXISTS (SELECT 1 FROM ItemTemplate t WHERE t.Id_nb = x.ItemID)"),
+                Is.Zero, "052: every version names a template");
+            Assert.That((string)ScalarObject("SELECT ArtifactID FROM ArtifactXItem WHERE ItemID = 'Maddening_Scalars_Studded'"), Is.EqualTo("1036"));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Artifact a WHERE EXISTS (SELECT 1 FROM MerchantItem m " +
+                               "WHERE m.ItemListID = 'artifact_credits' AND lower(m.ItemTemplateID) = lower(a.Credit) || '_credit')"), Is.EqualTo(57),
+                "061: every artifact has its credit token on Aphaestia's list");
+            Assert.That(Scalar("SELECT COUNT(*) FROM MerchantItem m WHERE m.ItemListID = 'artifact_credits' AND NOT EXISTS " +
+                               "(SELECT 1 FROM Artifact a WHERE lower(a.Credit) || '_credit' = lower(m.ItemTemplateID))"), Is.Zero,
+                "061: no token for an artifact the save lacks");
+            Assert.That(Strings("SELECT Region || ':' || ClassType || ':' || ItemsListTemplateID FROM Mob WHERE Name = 'Aphaestia' ORDER BY Region"),
+                Is.EqualTo(new[]
+                {
+                    "70:DOL.GS.ArtifactCreditMerchant:artifact_credits", "71:DOL.GS.ArtifactCreditMerchant:artifact_credits",
+                    "72:DOL.GS.ArtifactCreditMerchant:artifact_credits",
+                }));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE ClassType = 'DOL.GS.Scholar'"), Is.EqualTo(26));
+            Assert.That(Scalar("SELECT COUNT(*) FROM Mob WHERE ClassType = 'DOL.GS.ArtifactScholar'"), Is.EqualTo(5));
+            foreach (string classType in Strings("SELECT DISTINCT ClassType FROM Mob WHERE ClassType IN " +
+                                                 "('DOL.GS.Scholar', 'DOL.GS.ArtifactScholar', 'DOL.GS.ArtifactCreditMerchant')"))
+                Assert.That(typeof(GameServer).Assembly.GetType(classType), Is.Not.Null, classType + " resolves");
+
+            // Scroll drops come from 040 (db-public, 15 %): every page of every set but one drops in all three realm
+            // copies of Atlantis (30, 73, 130). "Ring of Fire, Scroll 3 of 3" drops nowhere; the binders sell it.
+            // Name sets first: a join on lower() over Mob and LootTemplate without them runs for hours.
+            const string droppingPages =
+                "WITH pages AS (SELECT DISTINCT lower(t.Id_nb) item, p.Name FROM (SELECT Scroll1 Name FROM Artifact UNION " +
+                "SELECT Scroll2 FROM Artifact UNION SELECT Scroll3 FROM Artifact) p JOIN ItemTemplate t ON t.Name = p.Name), " +
+                "mobs AS MATERIALIZED (SELECT DISTINCT lower(Name) n FROM Mob WHERE Region IN (30, 73, 130)), " +
+                "linked AS MATERIALIZED (SELECT DISTINCT lower(LootTemplateName) tpl FROM MobXLootTemplate WHERE lower(MobName) IN (SELECT n FROM mobs)), " +
+                "drops AS MATERIALIZED (SELECT DISTINCT lower(ItemTemplateID) item, lower(TemplateName) tpl FROM LootTemplate) " +
+                "SELECT COUNT(DISTINCT pages.Name) FROM pages JOIN drops ON drops.item = pages.item " +
+                "WHERE drops.tpl IN (SELECT n FROM mobs) OR drops.tpl IN (SELECT tpl FROM linked)";
+            Assert.That(Scalar(droppingPages), Is.EqualTo(54 * 3 - 1));
             long teleports = Scalar("SELECT COUNT(*) FROM Teleport");
             long allMobs = Scalar("SELECT COUNT(*) FROM Mob");
             ExecuteCountingChanges(File.ReadAllText(Path.Combine(ShippedPackDirectory(), "026-toa-travel-realms.sql")));
@@ -639,6 +687,7 @@ namespace DOL.UnitTests
                          "013-toa-artifact-spells-missing",
                          "024-toa-arbiter-npcs", "025-toa-atlantis-arena-fix", "027-toa-open-atlantis", "030-toa-dungeon-mobs",
                          "031-toa-dungeon-templates", "040-toa-loot", "041-toa-loot-caps", "050-artifact-item-classtype",
+                         "051-artifact-scroll-wiring", "052-artifact-version-fixes", "061-toa-scholar-classes",
                      })
                 Assert.That(ExecuteCountingChanges(File.ReadAllText(Path.Combine(ShippedPackDirectory(), name + ".sql"))), Is.Zero,
                     name + " applied a second time");

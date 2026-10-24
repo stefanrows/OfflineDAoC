@@ -169,27 +169,25 @@ agent or session that finishes a package updates its row and the log below.
   (Shatter Illusions does it), stock ToHitDebuff dead the same way (rows
   30178, 30200), 30126 cast point-blank around the wearer. (Row was lost from
   this file between 0.319.0 and 0.323.0 by an editing slip; restored.)
-- [~] **WP3.1b Earning artifacts, data-driven.** Agent toa-scholars (2026-10-24 18:20; folds in WP3.2 scroll drops and WP3.4 texts). Our Artifact rows use
-  numeric placeholders (ScholarID 1001, EncounterID = template name, Version
-  0-15), so DOL's type-name quest lookup cannot work: Scholar + ArtifactQuest
-  rewritten data-driven, credit merchant matches `Id_nb` to
-  `lower(Credit)+"_credit"`, scroll-combine hook, `QuestList()` extension
-  renamed, `RemoveEncounterCredit` step -1/-2 mismatch fixed. 1.5-2 sessions.
-  Depends on WP3.1, WP1.1.
-- [ ] **WP3.2 Scrolls and turn-in.** Live style first: the db-public scroll
-  drops (100 scroll items, 37 sets, 179 mobs at 15 %); gaheris's binder
-  merchants as the fallback for the sets without drops; scholars,
-  `ArtifactTurnInQuest`; Flask, Shield of Khaos, Bruiser get generated sets.
-  Depends on WP3.1, WP1.1.
+- [x] **WP3.1b Earning artifacts, data-driven.** (0.324.0, real-client check
+  pending; `docs/TOA_ARTIFACTS.md` "Earning an artifact") Aphaestia (all
+  three ruins cities) sells one credit token per artifact for bounty points;
+  scroll pages drop in Atlantis (pack 040) or come from the binders; pages
+  combine in the backpack to a pair and a book; every Scholar awakens every
+  artifact with a scroll set after checking not-awakened, not carried, a
+  usable version, level 45+, credit, the full story; version choice as a
+  journal quest (abort returns the book); Artifact Scholars also Flask,
+  Bruiser, Shield of Khaos on credit alone; one artifact per character;
+  readable texts (WP3.4 for scholars). Packs 051 scroll wiring, 052 version
+  fixes (198 artifact templates), 061 scholar classes + credit list. Not
+  ported: version swap (ArtifactTurnInQuest). Goddess Necklace has no
+  Artifact row and stays unreachable.
+- [x] **WP3.2 Scrolls and turn-in.** folded into WP3.1b (0.324.0); turn-in/version swap not ported.
 - [ ] **WP3.3 Encounters.** Credit per artifact from DOLSharp's per-artifact
   quests (38 of 62 name the target, 27 named mobs; 21 already stand in the
   gaheris spawns, 6 need spawns: Battler, Snatcher, Linos, Sobekhotep,
   Malamis, wavelord); gaheris encounter mobs for the rest. Depends on WP3.2.
-- [ ] **WP3.4 Texts.** Replace the `1001` placeholders and generated scroll
-  titles with readable text (generic where live text is unknown). Depends on WP3.2.
-
-### Phase 4: polish and verification
-
+- [x] **WP3.4 Texts.** scholar texts done in WP3.1b (0.324.0); remaining placeholders only in unused columns.
 - [ ] **WP4.1 Real-client check** of travel, Arbiter, one artifact end to end,
   one ML gained. Owner.
 - [~] **WP4.2 Stefan's server.** Journal-mode risk closed in 0.321.2: the
@@ -250,7 +248,15 @@ a real defect in every package; keep the review step.
 
 ## Log
 
+- 2026-10-24: WP3.1b implemented by toa-scholars (worktree `toa-scholars`):
+  scholars, Artifact Scholars, Aphaestia, scroll combining, packs 051/052/061;
+  review fixes (book rebuilt from a page template on abort, one token at a time,
+  no unusable version offered); on main 0.323.0 the full suite has 4,394 passed,
+  7 failed (bug 160), 3 skipped.
 - 2026-10-24: plan created; WP0.1-0.3 started as agents.
+- 2026-10-24 20:10: WP3.1b reviewed (book-loss on abort, token sales, class
+  fallback fixed) and merged as 0.324.0 (20 packs). Artifacts are obtainable
+  end to end via Aphaestia's tokens; encounter credit (WP3.3) still open.
 - 2026-10-24 19:30: WP3.0b reviewed (sub-spell cast and AfHits refcount fixed)
   and merged as 0.323.0 (17 packs).
 - 2026-10-24 18:20: 0.322.0 deployed on Aaron's PC (packs 026/027 applied, 2

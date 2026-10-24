@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Build tools/toa/sql/051-artifact-scroll-wiring.sql (TOA_PLAN WP3.1b).
+
+ArtifactMgr.GetPageNumbers decides which page of which artifact a scroll is by
+comparing the item's name with Artifact.Scroll1/2/3 (pairs: Scroll12/13/23, the
+book: BookID). Our Artifact rows carry placeholders there (``Alvarus_Leggings1``,
+``Cloudsong_Book_Book``) that match no item, so no scroll would ever combine.
+
+gaheris sql/37-scroll-wiring.sql maps the 54 scroll sets to their artifacts
+(from the official artifact database, not by word matching) and names the real
+scroll items. This script takes the three page names per artifact from it and
+writes readable names for the rest:
+
+* pairs: ``<story>, parts 1 and 2 of 3`` (gaheris wrote ``Belt of, parts ...``
+  and ``Fool's, parts ...`` for two sets; the story name is taken from the
+  pages instead);
+* the book: ``<story>, complete``.
+
+The three artifacts without a scroll set (A Flask 1004, Bruiser 1011, Shield of
+Khaos 1049) get an empty BookID: ArtifactMgr.HasScrollSet is false for them, so
+an Artifact Scholar awakens them on encounter credit alone.
+
+gaheris 37 also turns every scroll template into Object_Type 41 and creates a
+generic ``artifact_scroll`` template. Neither ships: our ArtifactMgr accepts
+generic (0) and magical (41) backpack items, and builds pairs and books as
+unique copies of the page template when ``artifact_scroll`` is absent.
+
+Every UPDATE is guarded by "the new book name is not set yet", so the pack can
+run twice without changing anything. Output is LF and deterministic.
+
+    python3 -I tools/toa/build_artifact_scroll_pack.py \\
+        --gaheris-sql /mnt/c/OfflineDAoC-ext/gaheris/sql --out tools/toa/sql
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+GENERATOR_VERSION = 1
+SOURCE_FILE = "37-scroll-wiring.sql"
+BOOKLESS = ("1004", "1011", "1049")  # A Flask, Bruiser, Shield of Khaos: no scroll set anywhere
+
+BLOCK = re.compile(r"UPDATE artifact SET(.*?)WHERE ArtifactID = '(\d+)';", re.S)
+FIELD = re.compile(r"(Scroll\d+)\s*=\s*'((?:[^']|'')*)'")
+PAGE_SUFFIX = re.compile(
+    r",?\s*(?:part|page|piece|volume|scroll|pg\.|parchment)?\s*[123]\s+of\s+3\s*$", re.I)
+PAIR_SUFFIX = re.compile(r",\s*parts 1 and 2 of 3$")
+
+
+def story_name(pages: list[str], gaheris_pair: str) -> str:
+    """The name the three pages share, else gaheris's pair stem (sets whose pages differ)."""
+    stems = {PAGE_SUFFIX.sub("", page).strip() for page in pages}
+    if len(stems) == 1:
+        return stems.pop()
+    return PAIR_SUFFIX.sub("", gaheris_pair).strip()
+
+
+def sql(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def parse(path: Path) -> list[tuple[str, dict[str, str]]]:
+    text = path.read_text(encoding="utf-8")
+    rows = []
+    for body, artifact_id in BLOCK.findall(text):
+        fields = {k: v.replace("''", "'") for k, v in FIELD.findall(body)}
+        missing = {"Scroll1", "Scroll2", "Scroll3", "Scroll12"} - set(fields)
+        if missing:
+            raise SystemExit(f"artifact {artifact_id}: {sorted(missing)} missing in {path.name}")
+        rows.append((artifact_id, fields))
+    return rows
+
+
+def build(gaheris_sql: Path) -> tuple[str, int]:
+    source = gaheris_sql / SOURCE_FILE
+    rows = parse(source)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    books: dict[str, str] = {}
+    statements = []
+
+    for artifact_id, fields in rows:
+        pages = [fields["Scroll1"], fields["Scroll2"], fields["Scroll3"]]
+        story = story_name(pages, fields["Scroll12"])
+        book = f"{story}, complete"
+        if book in books.values():
+            raise SystemExit(f"book name {book!r} twice")
+        books[artifact_id] = book
+        statements.append(
+            "UPDATE \"Artifact\" SET\n"
+            f"  \"Scroll1\" = {sql(pages[0])},\n"
+            f"  \"Scroll2\" = {sql(pages[1])},\n"
+            f"  \"Scroll3\" = {sql(pages[2])},\n"
+            f"  \"Scroll12\" = {sql(story + ', parts 1 and 2 of 3')},\n"
+            f"  \"Scroll13\" = {sql(story + ', parts 1 and 3 of 3')},\n"
+            f"  \"Scroll23\" = {sql(story + ', parts 2 and 3 of 3')},\n"
+            f"  \"BookID\" = {sql(book)}\n"
+            f"WHERE \"ArtifactID\" = {sql(artifact_id)} AND \"BookID\" <> {sql(book)};")
+
+    overlap = set(BOOKLESS) & set(books)
+    if overlap:
+        raise SystemExit(f"bookless artifacts have a set in {SOURCE_FILE}: {sorted(overlap)}")
+
+    statements.append(
+        "-- No scroll set exists for these three; an Artifact Scholar awakens them on credit alone.\n"
+        "UPDATE \"Artifact\" SET \"BookID\" = ''\n"
+        f"WHERE \"ArtifactID\" IN ({', '.join(sql(a) for a in BOOKLESS)}) AND \"BookID\" <> '';")
+
+    head = "\n".join([
+        f"-- 051-artifact-scroll-wiring: the {len(rows)} artifact scroll sets named on the Artifact rows (WP3.1b).",
+        f"-- Generated by tools/toa/build_artifact_scroll_pack.py (v{GENERATOR_VERSION}) from gaheris sql/{SOURCE_FILE}",
+        "-- (Pactor/gaheris 10d0f84). Do not hand-edit; rerun the generator.",
+        f"-- Source sha256: {digest}",
+        "-- Scroll1-3 name the real scroll items (the binder stock of pack 023 and the db-public drops",
+        "-- of pack 040); Scroll12/13/23 and BookID name the pairs and the book ArtifactMgr builds.",
+        f"-- Artifacts {', '.join(BOOKLESS)} (A Flask, Bruiser, Shield of Khaos) have no set: BookID ''.",
+        "-- Guarded: a second run changes nothing. SQLite dialect, applied in one transaction.",
+    ])
+    return head + "\n\n" + "\n\n".join(statements) + "\n", len(rows)
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--gaheris-sql", required=True, type=Path, help="gaheris sql/ directory")
+    ap.add_argument("--out", required=True, type=Path, help="output directory (normally tools/toa/sql)")
+    args = ap.parse_args(argv)
+    text, sets = build(args.gaheris_sql)
+    target = args.out / "051-artifact-scroll-wiring.sql"
+    with open(target, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+    print(f"{target}: {sets} scroll sets")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

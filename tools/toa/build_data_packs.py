@@ -122,6 +122,23 @@ PACKS = [
      False,
      'Artifact item templates load as DOL.GS.InventoryArtifact: the 197 templates named by '
      'ArtifactXItem that have no class type.'),
+    # WP3.1b earning artifacts (docs/TOA_ARTIFACTS.md "Earning an artifact"). 051 comes from
+    # build_artifact_scroll_pack.py (gaheris 37), 052 and 061 are hand-written.
+    ('051-artifact-scroll-wiring',
+     ['051-artifact-scroll-wiring.sql'],
+     False,
+     'The 54 artifact scroll sets named on the Artifact rows (gaheris 37): real page names, readable '
+     'pair and book names; the three artifacts without a set get an empty BookID.'),
+    ('052-artifact-version-fixes',
+     ['052-artifact-version-fixes.sql'],
+     False,
+     'Three ArtifactXItem rows fixed: Gem of Lost Memories archer template, the studded Maddening Scalars '
+     'under their own artifact, two rows without a template dropped.'),
+    ('061-toa-scholar-classes',
+     ['061-toa-scholar-classes.sql'],
+     False,
+     'Artifact NPCs: Aphaestia in region 72 sells credit, 22 Credit values match their tokens, '
+     'five tokens of absent artifacts leave her list.'),
 ]
 
 SOURCE_SHA = re.compile(r'^-- Source sha256: ([0-9a-f]{64})$', re.M)
