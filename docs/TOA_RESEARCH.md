@@ -118,9 +118,60 @@ effects) are the main port cost.
 | 6. Full Atlantis import, travel, merchants | 1-2 sessions | Atlantis playable |
 | 7. Master Levels | open | Needs a design decision; least data available |
 
+## Found 2026-10-24: gaheris, an OpenDAoC overlay with ToA and Master Levels wired up
+
+[Pactor/gaheris](https://github.com/Pactor/gaheris) (GPL-3.0, last push
+2026-10-15) is a co-operative PvE conversion of **OpenDAoC**, our own base,
+not of DOL. It is an overlay: 46 scripts in OpenDAoC's custom-script folder
+plus 95 SQL migrations against the stock OpenDAoC database. For us that means
+no DOL-to-OpenDAoC port; the ECS and table-name shims are already written.
+
+| Piece | File(s) | What it gives us |
+|---|---|---|
+| Artifact system ported to OpenDAoC | `scripts/toa/ArtifactMgr.cs`, `InventoryArtifact.cs`, `ArtifactCompat.cs` (shim over everything OpenDAoC renamed) | the DOL artifact core, already compiling against OpenDAoC |
+| Earning an artifact | `ArtifactQuest.cs`, `ArtifactTurnInQuest.cs`, `ArtifactEncounter.cs`, `Encounters.cs` | encounter, book, turn-in; four reusable encounter mob classes (doppleganger, splitter, seedsman, reward mob) placed with `/mob create` and configured on the mob row |
+| Artifact levelling | `ArtifactExperience.cs` | hooks `GameLivingEvent.Dying`, because OpenDAoC never raises `GainedExperience` (our server shares this gap) |
+| Scholars, credit merchants | `Scholar.cs`, `ArtifactScholar.cs`, `ArtifactCreditMerchant.cs`, `MasterLevelsMerchant.cs` | the NPCs that hand artifacts and ML credits over |
+| Artifact scrolls | `sql/36-artifact-scrolls.sql` | 54 of 57 artifacts with complete scroll sets (162 scrolls) on two binders; Flask, Shield of Khaos and Bruiser have none |
+| Master Level spells | `sql/12-master-levels.sql` (64 from db-public) + `sql/42-master-levels-gaps.sql` and `43-…-corrected.sql` (the 16 missing ranks, written by hand) | the full 80-ability set, eight paths of ten ranks |
+| ML paths per class | `sql/39-master-level-paths.sql` | the `classxspecialization` rows OpenDAoC never had |
+| ML progression | `scripts/progression/MasterLevels.cs` (`GaherisArbiter`, `MasterLevelExperience`) | the Arbiter enrols a player (and group); ML XP comes from killing Atlantis-grade mobs (`ml_xp_per_level` property). **No trials.** |
+| ML hold fixes | `scripts/progression/MasterLevelHolds.cs`, `docs/master-levels.md` | four ML abilities that never ended on OpenDAoC (Lookout, Blanket of Camouflage, Battlewarder, Focusing Winds) are repaired |
+| Atlantis population and travel | `sql/13-atlantis-mobs.sql` (11.6 MB), `14-atlantis-travel.sql`, `28-…-portals.sql`, `29-…-zonepoints.sql`, `35-…-npcs.sql` | mobs, portals, zone points, Arbiter, Demyphon, scholars, already in OpenDAoC's schema |
+
+What gaheris confirms about the gap list above: **nobody has built the ML
+trials.** The gaheris author checked the same sources and wrote (in
+`MasterLevels.cs`): "the trials were never implemented" in OpenDAoC or DOL;
+the DOL community scripts only supply a few generic encounter mobs. gaheris
+answers that with kill-based ML experience, which is exactly the simple
+mechanism proposed above. The 2014 DOL forum thread
+["Master Level Overhaul"](https://dolserver.sourceforge.net/viewtopic.php?p=153086)
+reworked DOL's ML data handling, not the trials either.
+
+Fit for this fork (not verified by building):
+
+- gaheris targets stock OpenDAoC-Core on .NET 10 and loads its scripts from
+  the custom-script folder. Our server is an older, heavily changed OpenDAoC;
+  the scripts will need adjusting, but to the same code family, which is far
+  less than the DOL port estimated above.
+- gaheris is co-op PvE (one realm, mercenary companions). Its artifact and ML
+  pieces do not depend on that ruleset; the mercenary credit hook
+  (`GaherisLoot.Credit()`) does, and would be swapped for our bot/companion
+  credit.
+- The SQL migrations are MySQL/MariaDB flavoured for the OpenDAoC Docker DB;
+  our runtime uses SQLite. Expect a syntax pass, not a schema pass.
+- Licence GPL-3.0; irrelevant for a private server (owner, 2026-10-24).
+
+Revised order: step 4 above (port the DOL artifact core, 2-3 sessions) becomes
+"adopt the gaheris scripts", and step 7 (Master Levels) gets a concrete
+baseline: gaheris's kill-XP Arbiter plus the complete 80-spell set. Trials
+remain unbuilt anywhere and would be our own design if wanted.
+
 ## Not checked
 
 - Whether db-public mob rows load in our server unchanged.
+- Whether the gaheris scripts compile against our server tree, and how many
+  of its SQL statements SQLite accepts as written.
 - SWDB contents beyond the forum claims.
 - Whether a different, complete client build contains the Labyrinth.
 - db-public and SWDB licences (none stated in either repository).

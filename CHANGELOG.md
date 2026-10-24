@@ -126,7 +126,7 @@ package, not this fork's version.
   follow checks, followers standing, trailing, border slots and cross-zone
   follows. Real client check pending.
 
-## [0.310.1] - 2026-10-24
+## [0.310.3] - 2026-10-24
 
 ### Changed
 
@@ -137,7 +137,41 @@ package, not this fork's version.
   followers that trail the leader past unreachable or cross-zone formation
   slots, full formation follow in the movement tick, and a road-graph
   fallback with a frontier navmesh hotspot check. Planning only; no
-  gameplay change.
+  gameplay change. (Committed locally as 0.310.1 before the fork published
+  its own 0.310.1 and 0.310.2; renumbered on merge.)
+
+## [0.310.2] - 2026-10-24
+
+### Added
+- `docs/TOA_PLAN.md`: the Trials of Atlantis to-do list (phases 0-4) after the
+  owner decided to build all ToA content we can on top of the 1.65 world.
+
+### Changed
+- CAMLANN.md era decision amended: ToA content is a goal, RvR rules stay
+  Old Frontiers. Task 134 points to the plan.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
+## [0.310.1] - 2026-10-24
+
+### Added
+- Trials of Atlantis research: the gaheris OpenDAoC overlay (artifact system,
+  complete Master Level spell set, kill-XP Arbiter, Atlantis population SQL)
+  as a source that needs no DOL port; confirmation that ML trials are
+  implemented nowhere. Task 134 note updated.
+
+### Changed
+- None.
+
+### Fixed
+- None.
+
+### Removed
+- None.
 
 ## [0.310.0] - 2026-10-23
 
