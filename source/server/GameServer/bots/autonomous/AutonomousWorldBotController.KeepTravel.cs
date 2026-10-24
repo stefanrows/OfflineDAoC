@@ -479,7 +479,9 @@ public sealed partial class AutonomousWorldBotController
         // failed bend falls through to the road order and its failure path.
         else if (AutonomousRvrMobAvoidance.TryWalkBend(next, AvoidDangerousMobs(bot, next), bend => IssuePath(bot, bend), DropMobBypass))
         { }
-        else if (!IssuePath(bot, next, preciseArrival: true))
+        // The next road point starts at once (the index advanced at 80 units); only the last one is a precise stop.
+        else if (!IssuePath(bot, next, preciseArrival: _keepTravelIndex == _keepTravelPoints.Length - 1,
+                     retargetWhileMoving: true))
         {
             _keepTravelPoints = null; _keepPlanning = null;
             _keepTravelRetry = now + 30_000;

@@ -866,6 +866,11 @@ namespace DOL.GS
 			return movementComponent.TryConsumeAutonomousPathFailure(out status, out destination);
 		}
 
+		public bool PeekAutonomousPathFailure(out PathfindingStatus status, out Vector3 destination)
+		{
+			return movementComponent.PeekAutonomousPathFailure(out status, out destination);
+		}
+
 		public virtual void StopMoving()
 		{
 			movementComponent.StopMoving();

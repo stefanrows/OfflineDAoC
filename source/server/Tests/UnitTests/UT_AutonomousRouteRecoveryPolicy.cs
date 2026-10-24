@@ -81,4 +81,25 @@ public sealed class UT_AutonomousRouteRecoveryPolicy
                 "a height-only offset still moves the actor off its ledge");
         });
     }
+
+    [Test]
+    public void MovingOrderRetargetsOnlyForMarchLegsOrFarGoals()
+    {
+        var old = new System.Numerics.Vector3(1_000, 1_000, 0);
+        var nearby = new System.Numerics.Vector3(1_300, 1_000, 0);
+        var far = new System.Numerics.Vector3(1_000 + 1_600, 1_000, 0);
+        Assert.Multiple(() =>
+        {
+            Assert.That(AutonomousRouteRecoveryPolicy.ShouldRetargetMovingOrder(true, false, old, nearby), Is.False,
+                "a small shift keeps the walking order");
+            Assert.That(AutonomousRouteRecoveryPolicy.ShouldRetargetMovingOrder(true, true, old, nearby), Is.True,
+                "a march leg or formation slot turns the bot at once");
+            Assert.That(AutonomousRouteRecoveryPolicy.ShouldRetargetMovingOrder(true, false, old, far), Is.True,
+                "a goal more than 1,500 units away retargets without the flag");
+            Assert.That(AutonomousRouteRecoveryPolicy.ShouldRetargetMovingOrder(true, false, null, far), Is.False,
+                "no previous destination: the ordinary gate decides");
+            Assert.That(AutonomousRouteRecoveryPolicy.ShouldRetargetMovingOrder(false, true, old, far), Is.False,
+                "an unchanged destination never retargets");
+        });
+    }
 }

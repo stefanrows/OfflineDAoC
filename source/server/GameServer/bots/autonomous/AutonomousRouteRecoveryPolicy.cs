@@ -37,6 +37,18 @@ public static class AutonomousRouteRecoveryPolicy
     public static bool ShouldRetainMovementOrder(bool isMoving, long nowTick, long retryAfterTick) =>
         isMoving || nowTick < retryAfterTick;
 
+    // A moving bot keeps walking its order unless the destination really moved
+    // and the caller marked it a march leg/formation slot, or the new goal lies
+    // far (over 1,500 units) from the previous one. Unchanged destinations and
+    // small shifts stay retained so the AI does not pulse PathTo.
+    public const float FarRetargetDistance = 1_500f;
+
+    public static bool ShouldRetargetMovingOrder(bool destinationChanged, bool retargetWhileMoving,
+        Vector3? previous, Vector3 destination) =>
+        destinationChanged &&
+        (retargetWhileMoving ||
+         previous is { } old && Vector3.DistanceSquared(old, destination) > FarRetargetDistance * FarRetargetDistance);
+
     // A collision-stopped actor reports IsMoving=false. Route ownership is
     // established by the controller before this policy is called, so elapsed
     // position time—not the movement flag—is the reliable stall signal.

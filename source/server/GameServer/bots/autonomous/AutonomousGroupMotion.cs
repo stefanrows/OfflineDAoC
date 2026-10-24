@@ -1,6 +1,8 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using DOL.Logging;
 
 namespace DOL.GS;
 
@@ -11,6 +13,9 @@ namespace DOL.GS;
 /// toward a slot around where the leader is about to be, keeps walking while
 /// the leader walks, re-steers only when the slot has really moved, and
 /// matches the leader's speed with a little personal variance and catch-up.
+/// A slot that cannot be reached (off the mesh, behind a wall) or lies over a
+/// zone border sends the follower after the leader's own track instead of
+/// leaving it standing until the slot moves somewhere reachable.
 /// </summary>
 public static class AutonomousGroupMotion
 {
@@ -19,6 +24,22 @@ public static class AutonomousGroupMotion
         public Vector3 Target;
         public long IssuedTick;
         public short Speed;
+        /// <summary>The last order aimed at the formation slot (not a trail or border point).</summary>
+        public bool WasSlot;
+        public long TrailUntil;
+    }
+
+    /// <summary>What a follower aims at while its leader walks.</summary>
+    public enum FollowAim
+    {
+        /// <summary>The formation slot (the normal case).</summary>
+        Slot,
+        /// <summary>A point just behind the leader on its own track.</summary>
+        Trail,
+        /// <summary>The leader itself (the trail point lies over a zone border, the leader does not).</summary>
+        Leader,
+        /// <summary>The leader already crossed a zone border: the controller routes over it (validated zone itinerary).</summary>
+        CrossZone,
     }
 
     private sealed class GroupHeading
@@ -34,6 +55,17 @@ public static class AutonomousGroupMotion
     public const double LookaheadSeconds = 0.8;
     public const float ResteerDistance = 48;
     public const int TravelShapeGraceMilliseconds = 2_000;
+    /// <summary>A follower whose slot cannot be reached walks this far behind the leader instead...</summary>
+    public const int TrailLeaderDistance = 64;
+    /// <summary>...for this long, then tries its slot again.</summary>
+    public const long TrailLeaderMilliseconds = 3_000;
+    public const long ReportIntervalMilliseconds = 60_000;
+
+    private static readonly Logger Log = LoggerManager.Create(typeof(AutonomousGroupMotion));
+
+    // Measurement for the owner: follow checks while the leader walks, those that found the follower standing,
+    // checks spent trailing the leader, trail spells started, checks whose slot lay over a zone border, leaders followed over a border by route.
+    private static long _checks, _standing, _trail, _trailStarts, _border, _crossZone, _nextReportTick;
 
     /// <summary>The leader's position a moment ahead along its travel direction.</summary>
     public static Vector3 PredictLeader(GameLiving leader)
@@ -136,11 +168,50 @@ public static class AutonomousGroupMotion
 
     /// <summary>
     /// Walk with a moving leader: aim at the slot around its predicted spot,
-    /// never hard-stop while it walks, match its pace.
+    /// never hard-stop while it walks, match its pace. False when the leader is
+    /// over a zone border: the caller routes to <paramref name="crossZoneTarget"/>
+    /// (behind the leader) through its validated zone itinerary.
     /// </summary>
-    public static void FollowMovingLeader(GameBot bot, GameLiving leader, Vector3 slot)
+    public static bool FollowMovingLeader(GameBot bot, GameLiving leader, Vector3 slot, out Vector3 crossZoneTarget)
     {
-        float distance = Vector3.Distance(new Vector3(bot.X, bot.Y, bot.Z), slot);
+        long now = GameLoop.GameLoopTime;
+        Interlocked.Increment(ref _checks);
+        if (!bot.IsMoving) Interlocked.Increment(ref _standing);
+        Report(now);
+
+        // An unreachable slot, or one over a zone border, sends the follower after the leader's own track.
+        Order state = Orders.GetOrCreateValue(bot);
+        long trailUntil;
+        lock (state)
+        {
+            bool failed = SlotOrderFailed(bot, state);
+            long before = state.TrailUntil;
+            if (failed && !TrailActive(before, now)) Interlocked.Increment(ref _trailStarts);
+            trailUntil = state.TrailUntil = NextTrailUntil(before, failed, now);
+        }
+        Vector3 leaderPosition = new(leader.X, leader.Y, leader.Z);
+        Vector3 trailPoint = TrailPoint(leaderPosition, Forward(leader));
+        bool slotOtherZone = InOtherZone(bot, slot);
+        FollowAim aimKind = ChooseAim(TrailActive(trailUntil, now), slotOtherZone, InOtherZone(bot, trailPoint),
+            InOtherZone(bot, leaderPosition));
+        if (slotOtherZone) Interlocked.Increment(ref _border);
+        crossZoneTarget = trailPoint;
+        if (aimKind == FollowAim.CrossZone)
+        {
+            // A straight walk over the border could cut through a wall or gate; only proven crossings are used.
+            Interlocked.Increment(ref _crossZone);
+            MarkOrder(bot, false);
+            return false;
+        }
+        Vector3 aim = aimKind switch
+        {
+            FollowAim.Trail => trailPoint,
+            FollowAim.Leader => leaderPosition,
+            _ => slot,
+        };
+        if (aimKind != FollowAim.Slot) Interlocked.Increment(ref _trail);
+
+        float distance = Vector3.Distance(new Vector3(bot.X, bot.Y, bot.Z), aim);
         long key = bot.DatabaseID > 0 ? bot.DatabaseID : bot.ObjectID;
         bool autonomousGroup = bot.IsAutonomousWorldBot && !bot.IsPlayerLedGroup &&
             leader is GameBot { IsAutonomousWorldBot: true, IsPlayerLedGroup: false };
@@ -152,14 +223,95 @@ public static class AutonomousGroupMotion
         {
             // Run with the leader, but do not overrun it beyond what the formation needs.
             Vector2 forward = Forward(leader);
-            bool slotAhead = distance > 60 && Vector2.Dot(forward, new(slot.X - bot.X, slot.Y - bot.Y)) > 0;
+            bool slotAhead = distance > 60 && Vector2.Dot(forward, new(aim.X - bot.X, aim.Y - bot.Y)) > 0;
             speed = CapAheadOfLeader(speed, pace, IsAhead(bot, leader), slotAhead);
         }
         // An RvR member under a speed song never runs past its leader.
         else if (AutonomousRvrDoctrineRuntime.Applies(bot))
             speed = AutonomousRvrSpeed.CapFollowerSpeed(speed, leader.CurrentSpeed, IsAhead(bot, leader));
-        if (ShouldResteer(bot, slot, speed, GameLoop.GameLoopTime))
-            bot.PathTo(slot, speed);
+        if (ShouldResteer(bot, aim, speed, now))
+        {
+            MarkOrder(bot, aimKind == FollowAim.Slot);
+            bot.PathTo(aim, speed);
+        }
+        return true;
+    }
+
+    /// <summary>The trail point: a little behind the leader along its heading, on the track it just walked.</summary>
+    public static Vector3 TrailPoint(Vector3 leaderPosition, Vector2 forward)
+    {
+        if (forward.LengthSquared() < 1) return leaderPosition;
+        Vector2 back = Vector2.Normalize(forward) * TrailLeaderDistance;
+        return new Vector3(leaderPosition.X - back.X, leaderPosition.Y - back.Y, leaderPosition.Z);
+    }
+
+    /// <summary>A failed slot order starts (and renews) a <see cref="TrailLeaderMilliseconds"/> spell of trailing the leader.</summary>
+    public static long NextTrailUntil(long trailUntil, bool slotUnreachable, long now) =>
+        slotUnreachable ? now + TrailLeaderMilliseconds : trailUntil;
+
+    public static bool TrailActive(long trailUntil, long now) => now < trailUntil;
+
+    /// <summary>
+    /// Slot, trail point, leader or cross-zone route. The slot is kept unless a trail spell runs or the slot lies
+    /// in another zone than the follower (paths are planned inside one zone). Then the follower aims behind the
+    /// leader; if that point is over the border too, it aims at the leader when the leader is on its side, and
+    /// otherwise the controller routes it over the border behind the leader.
+    /// </summary>
+    public static FollowAim ChooseAim(bool trailActive, bool slotInOtherZone, bool trailPointInOtherZone,
+        bool leaderInOtherZone)
+    {
+        if (!trailActive && !slotInOtherZone) return FollowAim.Slot;
+        if (!trailPointInOtherZone) return FollowAim.Trail;
+        return leaderInOtherZone ? FollowAim.CrossZone : FollowAim.Leader;
+    }
+
+    /// <summary>
+    /// The follower's last slot order failed or came back partial: Detour found no node toward it. Read without
+    /// consuming, so the controller's IssuePath still sees a failure meant for its own route; a failure for another
+    /// destination (a route order, a trail point) is not the slot's.
+    /// </summary>
+    private static bool SlotOrderFailed(GameBot bot, Order order)
+    {
+        lock (order)
+        {
+            if (!order.WasSlot || order.IssuedTick == 0) return false;
+            return bot.PeekAutonomousPathFailure(out PathfindingStatus status, out Vector3 failed) &&
+                   status is PathfindingStatus.PartialPathFound or PathfindingStatus.NoPathFound &&
+                   Vector2.Distance(new(failed.X, failed.Y), new(order.Target.X, order.Target.Y)) <= ResteerDistance * 2;
+        }
+    }
+
+    private static void MarkOrder(GameBot bot, bool slot)
+    {
+        Order order = Orders.GetOrCreateValue(bot);
+        lock (order)
+            order.WasSlot = slot;
+    }
+
+    private static bool InOtherZone(GameBot bot, Vector3 point)
+    {
+        Zone here = bot.CurrentZone;
+        return here != null && bot.CurrentRegion?.GetZone((int)point.X, (int)point.Y) != here;
+    }
+
+    private static void Report(long now)
+    {
+        long next = Interlocked.Read(ref _nextReportTick);
+        if (next == 0)
+        {
+            // First call only arms the window so the line covers a full minute.
+            Interlocked.CompareExchange(ref _nextReportTick, now + ReportIntervalMilliseconds, 0);
+            return;
+        }
+        if (now < next || Interlocked.CompareExchange(ref _nextReportTick, now + ReportIntervalMilliseconds, next) != next)
+            return;
+        long checks = Interlocked.Exchange(ref _checks, 0), standing = Interlocked.Exchange(ref _standing, 0),
+             trail = Interlocked.Exchange(ref _trail, 0), starts = Interlocked.Exchange(ref _trailStarts, 0),
+             border = Interlocked.Exchange(ref _border, 0), crossZone = Interlocked.Exchange(ref _crossZone, 0);
+        if (checks == 0) return;
+        Log.Info($"AUTONOMOUS_FORMATION_FOLLOW window_s={ReportIntervalMilliseconds / 1000} checks={checks} " +
+                 $"standing={standing} standingPct={100.0 * standing / checks:0.0} trail={trail} trailStarts={starts} " +
+                 $"border={border} crossZone={crossZone}");
     }
 
     /// <summary>The bot stands in front of the leader along the leader's heading.</summary>

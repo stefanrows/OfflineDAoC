@@ -262,6 +262,14 @@ namespace DOL.GS
             return true;
         }
 
+        /// <summary>Reads the pending autonomous path failure without consuming it (the route controller still sees it).</summary>
+        public bool PeekAutonomousPathFailure(out PathfindingStatus status, out Vector3 destination)
+        {
+            status = _autonomousPathFailureStatus;
+            destination = _autonomousPathFailureDestination;
+            return _autonomousPathFailurePending;
+        }
+
         public void StopMoving()
         {
             _seamContinuation = null;

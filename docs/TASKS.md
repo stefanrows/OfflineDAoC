@@ -371,49 +371,6 @@ Agent sessions on items 45–48: take the role and context from
      a suggested order in [TOA_RESEARCH.md](TOA_RESEARCH.md). Blocked on an
      owner decision: CAMLANN.md decision 1 sets the era to pre-ToA.
 
-135. **Autonomous RvR marches retarget while moving (no stop at every
-     waypoint).** Owner, 2026-10-24, after comparing upstream play: upstream's
-     autonomous RvR movement looked smoother. Our `IssuePath` keeps the old
-     order while the bot moves (`AutonomousWorldBotController.cs` ~4732,
-     `ShouldRetainMovementOrder`), and `FollowKeepTravel` issues each road
-     point with `preciseArrival: true` (`AutonomousWorldBotController.KeepTravel.cs`
-     ~482), so warband leaders walk into each waypoint, halt and continue only
-     after the arrival wake-up. Port upstream's `retargetWhileMoving` flag and
-     its far-retarget rule (destination change over 1,500 units) from
-     `upstream/main` `AutonomousWorldBotController.cs` ~4199/4355, advance the
-     keep-travel waypoint index early (upstream `KeepTravel.cs` ~144-147,
-     80 units) and use `preciseArrival` only on the final point. Keep the
-     retained-order rule for route recovery and threat/mob-bypass detours, and
-     keep upstream's 1.5 s order gate against churn. Acceptance: build;
-     focused policy test if feasible; owner real-client check that marches
-     flow through corners. Part of the upstream RvR movement batch (135-139).
-
-136. **Main-body leader succession for autonomous groups.** Owner,
-     2026-10-24. `ChooseLeader` (`AutonomousBotGroupCoordinator.cs` ~3467)
-     replaces a dead or returning leader with the first living member in list
-     order, wherever it stands; 355 death handovers in 3 hours of the
-     2026-10-23 log. Port the idea of upstream's `MainBodyLeader`
-     (`upstream/main` `AutonomousRvrEventLayer.cs` ~735-768): pick the member
-     with the most living comrades within 2,500 units, ties to the one nearest
-     the group's objective. Keep our `ReturningFromDeath` exclusion and the
-     `HandOverRvrLeadership` path. Acceptance: build; unit test of the choice
-     with a straggler first in the list; owner check that groups no longer turn
-     back after a leader dies.
-
-137. **Followers trail the leader when their formation slot is unreachable or
-     across a zone border.** Owner, 2026-10-24. Our
-     `AutonomousGroupMotion.FollowMovingLeader` paths to a slot once per AI
-     turn; an off-mesh, unreachable or other-zone slot leaves the follower
-     standing (`NpcMovementComponent.PathToInternal` pauses autonomous bots on
-     a failed target). Adapt upstream's fallbacks from
-     `AutonomousGroupFormationFollow.cs` (~78-164): on a failed/partial slot
-     path walk about 64 units behind the leader for 3 s, and when the slot is
-     in another zone aim at the leader and step over the border behind it.
-     Keep `CapFollowerSpeed`, sprint under speed songs and stealth behaviour.
-     Add a small counter/log for followers standing while the leader walks so
-     the effect is measurable. Acceptance: build; owner check at frontier zone
-     borders and keep gates/bridges.
-
 138. **Full formation follow inside the movement tick (follow-up to 137).**
      Owner, 2026-10-24. Upstream steers each follower to its slot every
      400 ms from `NpcMovementComponent.FollowTick` (upstream ~898-1052,
@@ -446,6 +403,43 @@ Agent sessions on items 45–48: take the role and context from
      600-2,000-unit dog-legs that may read as wandering.
 
 ## Implemented in source; installation verification pending
+
+137. **Followers trail the leader when their formation slot is unreachable or
+     across a zone border.** Owner, 2026-10-24 (upstream RvR movement batch).
+     Implemented in source **0.311.0** (`AutonomousGroupMotion.FollowMovingLeader`,
+     `ChooseAim`): a failed or partial slot order (non-consuming
+     `PeekAutonomousPathFailure`) sends the follower to a point 64 units behind
+     the leader for 3 s; a slot over a zone border aims behind the leader or at
+     it, and a leader that already crossed is handed back to `IssuePath` (zone
+     itinerary, no unvalidated straight `WalkTo`). Speed caps, sprint and
+     stealth pace unchanged. Measurement: `AUTONOMOUS_FORMATION_FOLLOW` every
+     60 s (`checks`, `standing`, `standingPct`, `trail`, `trailStarts`,
+     `border`, `crossZone`). Real-client check: followers keep moving at
+     frontier zone borders, keep gates and bridges; compare `standingPct` in
+     the live log. Trail points are snapshots per AI turn; continuous steering
+     is task 138.
+
+136. **Main-body leader succession for autonomous groups.** Owner,
+     2026-10-24. Implemented in source **0.311.0**
+     (`AutonomousBotGroupCoordinator.ChooseMainBodyLeader`): when an RvR
+     session's leader is dead or returning from death, the eligible member
+     with most living comrades within 2,500 units in its region leads, ties to
+     the one nearest the force's `KeepPlan` objective, then lowest id. PvE
+     keeps first-living; `HandOverRvrLeadership` unchanged. Log
+     `AUTONOMOUS_RVR_LEADER_MAIN_BODY`. Unit tests `UT_AutonomousMainBodyLeader`.
+     Real-client check: groups no longer turn back after a leader dies.
+
+135. **Autonomous RvR marches retarget while moving.** Owner, 2026-10-24.
+     Implemented in source **0.311.0**: `IssuePath(retargetWhileMoving)` and
+     `AutonomousRouteRecoveryPolicy.ShouldRetargetMovingOrder` (changed
+     destination with the flag, or over 1,500 units from the previous one,
+     replaces a moving order); flagged callers are keep-travel road points
+     (`preciseArrival` only on the last point), the RvR travel leg and group
+     formation paths. Route recovery, threat detours and mob bends keep the
+     retained order; the 1.5 s gate stays. Real-client check: marches flow
+     through corners without a halt at each waypoint. Reviewer caveat: the
+     road index still advances only on an AI turn within 80 units, so some
+     legs may still halt briefly; measure before adding lookahead (see 138).
 
 133. **Animist main shroom follows; shrooms inherit the Animist's RAs.**
      Owner, 2026-10-17: "make the main animist shroom follow the animist

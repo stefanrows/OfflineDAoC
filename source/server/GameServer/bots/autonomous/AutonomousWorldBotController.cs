@@ -1597,11 +1597,13 @@ namespace DOL.GS
                      Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), formation) < 2_500 * 2_500)
             {
                 // Walk with the leader: steer smoothly, match its pace, never stop mid-march.
-                AutonomousGroupMotion.FollowMovingLeader(bot, leader, formation);
+                // A leader over a zone border is followed through the zone itinerary.
+                if (!AutonomousGroupMotion.FollowMovingLeader(bot, leader, formation, out Vector3 crossZoneTarget))
+                    IssuePath(bot, crossZoneTarget, retargetWhileMoving: true);
             }
             else if (Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), formation) > 95 * 95)
             {
-                IssuePath(bot, formation);
+                IssuePath(bot, formation, retargetWhileMoving: true);
             }
             else
             {
@@ -2402,7 +2404,7 @@ namespace DOL.GS
                 bot.CurrentRegion.GetZone((int)destination.X, (int)destination.Y) == bot.CurrentZone &&
                 bot.CurrentRegion.GetZone((int)_rvrTravelWaypoint.Value.X, (int)_rvrTravelWaypoint.Value.Y) == bot.CurrentZone
                     ? destination : null;
-            return IssuePath(bot, _rvrTravelWaypoint.Value, continuation);
+            return IssuePath(bot, _rvrTravelWaypoint.Value, continuation, retargetWhileMoving: true);
         }
 
         private Vector3 PlanRvrLeg(GameBot bot, Vector3 destination)
@@ -4530,7 +4532,7 @@ namespace DOL.GS
         }
 
         private bool IssuePath(GameBot bot, Vector3 destination, Vector3? validatedContinuation = null,
-            bool preciseArrival = false)
+            bool preciseArrival = false, bool retargetWhileMoving = false)
         {
             using var profile = BotThinkProfiler.Measure(BotThinkPhase.IssuePath);
             _routeThreatHandledCurrentPath = false;
@@ -4559,6 +4561,7 @@ namespace DOL.GS
             _restingCamp = null;
             bot.WakeRecoveryRest();
             long now = GameLoop.GameLoopTime;
+            Vector3? previousDestination = _issuedRouteDestination;
             bool destinationChanged = !_issuedRouteDestination.HasValue ||
                                       Vector3.DistanceSquared(_issuedRouteDestination.Value, destination) > 96 * 96;
             // Arrival is distinct from a failed/repeated movement order. Only a
@@ -4729,7 +4732,11 @@ namespace DOL.GS
 
             // A live path is continuous inside NpcMovementComponent. The AI is
             // not a metronome for walking and must not replace the same order.
-            if (AutonomousRouteRecoveryPolicy.ShouldRetainMovementOrder(bot.IsMoving, now, _nextMoveOrderTick))
+            // A march leg or formation slot that moved, or a far new goal, turns
+            // the walking bot at once instead of after it halts at the old point.
+            if (!AutonomousRouteRecoveryPolicy.ShouldRetargetMovingOrder(
+                    destinationChanged, retargetWhileMoving, previousDestination, destination) &&
+                AutonomousRouteRecoveryPolicy.ShouldRetainMovementOrder(bot.IsMoving, now, _nextMoveOrderTick))
                 return true;
             _nextMoveOrderTick = now + 1_500;
 

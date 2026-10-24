@@ -3470,12 +3470,81 @@ public static partial class AutonomousBotGroupCoordinator
             members.Contains(session.Leader) && !session.ReturningFromDeath.Contains(MemberKey(session.Leader)))
             return session.Leader;
 
-        GameBot replacement = members.FirstOrDefault(member => member.IsAlive &&
+        GameBot replacement = null;
+        // An RvR warband hands over to the main body, not to whoever is first in
+        // list order (a straggler turned the whole column back). PvE keeps the rule.
+        if (session?.ObjectiveKind == eAutonomousObjectiveKind.RvR)
+            replacement = ChooseRvrMainBodyLeader(session, members);
+        replacement ??= members.FirstOrDefault(member => member.IsAlive &&
             (session == null || !session.ReturningFromDeath.Contains(MemberKey(member)))) ??
             ChooseLeader(session?.Group, members);
         if (session != null)
             session.Leader = replacement;
         return replacement;
+    }
+
+    private static GameBot ChooseRvrMainBodyLeader(Session session, GameBot[] members)
+    {
+        GameBot[] eligible = members.Where(member => member.IsAlive &&
+            !session.ReturningFromDeath.Contains(MemberKey(member))).ToArray();
+        if (eligible.Length < 2) return null;
+        // The siege/assault target of this force, when it has one; otherwise the
+        // tie-break is skipped and the lowest id wins.
+        AutonomousRvrEventLayer.Plan plan = AutonomousRvrEventLayer.KeepPlan(session.Id, eligible[0].Realm, GameLoop.GameLoopTime);
+        MainBodyObjective? objective = plan == null ? null : new(plan.RegionId, plan.X, plan.Y);
+        int index = ChooseMainBodyLeader(
+            eligible.Select(member => new MainBodyCandidate(member.DatabaseID, member.CurrentRegionID, member.X, member.Y)).ToArray(),
+            objective, out int near);
+        if (index < 0) return null;
+        Log.Info($"AUTONOMOUS_RVR_LEADER_MAIN_BODY group={session.Id} leader=\"{eligible[index].Name}\" " +
+            $"near={near} candidates={eligible.Length}");
+        return eligible[index];
+    }
+
+    /// <summary>Radius around a leader candidate that counts as the main body.</summary>
+    public const int MainBodyRadius = 2_500;
+
+    public readonly record struct MainBodyCandidate(long Id, ushort Region, int X, int Y);
+
+    public readonly record struct MainBodyObjective(ushort Region, int X, int Y);
+
+    /// <summary>
+    /// Index of the candidate with the most other candidates in its region within
+    /// <see cref="MainBodyRadius"/>; ties go to the one nearest the objective (same
+    /// region only), then the lowest id. -1 for no candidates. Callers pass only
+    /// living members that are not returning from death.
+    /// </summary>
+    public static int ChooseMainBodyLeader(IReadOnlyList<MainBodyCandidate> candidates, MainBodyObjective? objective,
+        out int near)
+    {
+        int best = -1;
+        near = 0;
+        long bestDistance = long.MaxValue;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            MainBodyCandidate c = candidates[i];
+            int count = 0;
+            for (int j = 0; j < candidates.Count; j++)
+            {
+                if (j == i || candidates[j].Region != c.Region) continue;
+                long dx = candidates[j].X - c.X, dy = candidates[j].Y - c.Y;
+                if (dx * dx + dy * dy <= (long)MainBodyRadius * MainBodyRadius) count++;
+            }
+            long distance = long.MaxValue;
+            if (objective is { } o && o.Region == c.Region)
+            {
+                long ox = c.X - o.X, oy = c.Y - o.Y;
+                distance = ox * ox + oy * oy;
+            }
+            if (best < 0 || count > near || count == near &&
+                (distance < bestDistance || distance == bestDistance && c.Id < candidates[best].Id))
+            {
+                best = i;
+                near = count;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
     /// <summary>A marching leader cut off from its column this long hands over.</summary>

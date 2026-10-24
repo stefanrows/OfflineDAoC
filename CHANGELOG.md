@@ -12,6 +12,37 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.311.0] - 2026-10-24
+
+### Changed
+
+- **Autonomous RvR marches flow through their waypoints (task 135).** A
+  walking warband leader now turns to its next keep-travel road point, RvR
+  travel leg or formation slot at once instead of finishing the old order,
+  halting there and waiting for its next AI turn. Any bot whose new goal lies
+  over 1,500 units from the old one also turns at once. Only the last road
+  point is a precise stop. Route recovery, threat detours and mob bends keep
+  their own orders. Real client check pending.
+- **A new RvR group leader comes from the main body (task 136).** When an
+  autonomous RvR group's leader dies or releases, the member with most of the
+  living group around it (2,500 units, same region) takes over, ties to the
+  one nearest the force's objective, instead of the first member in the list
+  wherever it stands. PvE groups keep the old rule. The log line
+  `AUTONOMOUS_RVR_LEADER_MAIN_BODY` records each choice. Real client check
+  pending.
+
+### Fixed
+
+- **Followers no longer stand while their leader walks past an unreachable
+  slot or a zone border (task 137).** A follower whose formation slot cannot
+  be reached walks just behind the leader for 3 seconds before trying the
+  slot again; a slot over a zone border aims behind the leader, and a leader
+  that already crossed is followed over the border through the validated
+  zone route (no straight walk across). Speeds, sprint and stealth pace are
+  unchanged. A once-a-minute `AUTONOMOUS_FORMATION_FOLLOW` log line counts
+  follow checks, followers standing, trailing, border slots and cross-zone
+  follows. Real client check pending.
+
 ## [0.310.1] - 2026-10-24
 
 ### Changed
