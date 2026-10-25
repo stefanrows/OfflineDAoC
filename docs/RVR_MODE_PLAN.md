@@ -225,3 +225,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   (settings live per save; one save with a rule switch would rebuild guilds/companions/keeps on every switch).
   Decision open: keep two saves (built) or rework. Tools: playable-dev/world-ui.ps1 (dropdown, buttons),
   playable-dev/dlg.ps1 (message boxes). Next by cron: R4b, R4c, R6.
+- 2026-10-25 13:40: session limit. Agent rvr-r4b (daoc-developer) started in worktree /mnt/c/OfflineDAoC-wt-rvr-r4b, branch rvr-r4b; not reviewed, not committed. Next session: check the worktree, review (daoc-reviewer), merge as 0.341.0. R4c may go to Stefan (copy-paste brief given to the owner). Server running on the RvR world.
