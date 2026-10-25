@@ -33,16 +33,24 @@ public static class AutonomousRvrDefense
             !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) ||
             bot.IsWithinRadius(target, bot.MeleeAttackRange + 100)) return false;
         return GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).Any(keep =>
-            bot.Guild != null && keep.Guild == bot.Guild && bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z)) < 1800 &&
+            HoldsFor(bot, keep) && bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z)) < 1800 &&
             keep.Doors.Values.Any(door => door.IsAttackableDoor) &&
             keep.Doors.Values.Where(door => door.IsAttackableDoor).All(door => door.IsAlive && door.State == eDoorState.Closed) &&
             bot.Z > keep.Doors.Values.Min(door => door.Z) + 100);
     }
 
+    /// <summary>
+    /// Whose keep a defender holds. Camlann: its own guild's keep. RvR world (upstream 0.38c, port session S1): a keep
+    /// of its realm.
+    /// </summary>
+    public static bool HoldsFor(GameBot bot, AbstractGameKeep keep) => WorldMode.IsRvr
+        ? keep.Realm != eRealm.None && keep.Realm == bot.Realm
+        : bot.Guild != null && keep.Guild == bot.Guild;
+
     public static Vector3 Position(GameBot bot, AbstractGameKeep keep)
     {
         var nav = AutonomousKeepApproachNavigation.ForBot(PathfindingProvider.Instance,bot);
-        var guards = keep.Guards.Values.Where(guard => guard.IsAlive && bot.Guild != null && keep.Guild == bot.Guild)
+        var guards = keep.Guards.Values.Where(guard => guard.IsAlive && HoldsFor(bot, keep))
             .OrderBy(guard => IsRangedDefender(bot) ? guard is GuardArcher ? 0 : 1 : guard is GuardLord ? 0 : 1)
             .ThenBy(guard => (unchecked((ulong)(guard.ObjectID + bot.DatabaseID)) * 2654435761UL) % 100);
         foreach (var guard in guards.Take(12))

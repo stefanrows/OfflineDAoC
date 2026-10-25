@@ -34,7 +34,7 @@ public sealed class UT_RvrSiegeMuster
 
     private static System.Collections.Generic.Dictionary<string, int> Bucket(string targetId, string name)
     {
-        var events = (System.Collections.IDictionary)typeof(AutonomousRvrEventLayer)
+        var events = (System.Collections.IDictionary)typeof(CamlannRvrEventLayer)
             .GetField("Events", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
         object active = events[targetId];
         return (System.Collections.Generic.Dictionary<string, int>)active.GetType().GetField(name).GetValue(active);

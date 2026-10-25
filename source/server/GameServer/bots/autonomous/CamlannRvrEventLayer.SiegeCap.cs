@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static DOL.GS.AutonomousRvrEventLayer;
 
 namespace DOL.GS;
 
@@ -12,7 +13,7 @@ namespace DOL.GS;
 /// (realm-led) events count per realm.
 /// Relic-carrier events still pause new sieges (relic raids stay off).
 /// </summary>
-public static partial class AutonomousRvrEventLayer
+public static partial class CamlannRvrEventLayer
 {
     /// <summary>At most this many attacking sieges (not defense responses) run
     /// server-wide at once. A safety cap for load and for the 21 claimable

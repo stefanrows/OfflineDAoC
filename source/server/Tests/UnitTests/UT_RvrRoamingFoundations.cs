@@ -233,7 +233,7 @@ public sealed class UT_RvrRoamingFoundations
         var target = new AutonomousRvrEventLayer.LiveObjective("rvr-keep-9076", "Route Faste",
             AutonomousRvrEventLayer.Intent.AssaultKeep, eRealm.Midgard, 100, 0, 0, 0, false, 0, 0, 4, 2);
         Assert.That(AutonomousRvrEventLayer.ForceStart(target, eRealm.Hibernia, start, out _), Is.True);
-        var events = (System.Collections.IDictionary)typeof(AutonomousRvrEventLayer)
+        var events = (System.Collections.IDictionary)typeof(CamlannRvrEventLayer)
             .GetField("Events", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
         object active = events[target.Id];
         ((System.Collections.Generic.Dictionary<string, int>)active.GetType().GetField("Attackers").GetValue(active)).Add("stuck-force", 3);
@@ -246,7 +246,7 @@ public sealed class UT_RvrRoamingFoundations
 
     private static System.Collections.Generic.Dictionary<string, int> Bucket(string targetId, string name)
     {
-        var events = (System.Collections.IDictionary)typeof(AutonomousRvrEventLayer)
+        var events = (System.Collections.IDictionary)typeof(CamlannRvrEventLayer)
             .GetField("Events", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
         object active = events[targetId];
         return (System.Collections.Generic.Dictionary<string, int>)active.GetType().GetField(name).GetValue(active);

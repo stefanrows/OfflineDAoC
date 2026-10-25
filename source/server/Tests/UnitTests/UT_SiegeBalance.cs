@@ -214,7 +214,7 @@ public sealed class UT_SiegeBalance
 
     private static int ActiveSieges()
     {
-        var events = (IDictionary)typeof(AutonomousRvrEventLayer)
+        var events = (IDictionary)typeof(CamlannRvrEventLayer)
             .GetField("Events", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
         return events.Count;
     }

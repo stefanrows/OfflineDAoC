@@ -176,11 +176,11 @@ Mechanism:
 5. Files the fork never touched since base: take upstream verbatim (RealmEventPolicy/Notices, RealmRaid* small files,
    DungeonRoute, DefensivePull).
 
-| Session | Content | Upstream tests to carry | Size |
-|---|---|---|---|
-| S1 core | Keep-start reset (after owner yes), facade + rename, RealmRvrEventLayer + Defense, RealmEvent*, GameWideAnnouncements, KeepPolicy RvR branch, new properties | UT_AutonomousRvrEventLayer (159), UT_StagedSiegeOct6 (64), UT_SiegeSchedulingOct7 (22), UT_SiegeMusterAndRankOct6 (38), UT_RaidRallyTiming (34), UT_RaidRefillOct6 (20), UT_PlayerKeepDefense (138), UT_RealmEventPolicy (111), UT_RealmEventRecords (58), UT_RvrExpansion (416); RvrEventTestState split per world | ~2,000 copied, ~400 hand |
-| S2 march + siege floor | Rally column + march leader (reuse Stefan's `ChooseMainBodyLeader`), ArmyPush/Detour, Staging muster, Siege + SiegePlacement, SiegeResurrection + GameBot/BotBrain hooks, SiegeParties + coordinator hunks, KeepTravelStallPolicy, FrontierThreat, ForcedRaid, RP rewards; RvR guards on fork waves; friend/foe sites (4b) | UT_PhysicalSiegeRally (176), UT_SiegePlacement (82), UT_SiegeParties (41), UT_SiegeDoorNumber (18), UT_AutonomousArmyPush (36), UT_RvrLeaderStaging (53), UT_AutonomousSiegeEquipment (218), UT_EveningAuditFixes (detour/wave parts), Tier 3 audit extension | ~1,500 copied, ~800 hand |
-| S3 periphery | Relic pad 8 + companions, battleground goal (after 4f), town teleporters, realm raids (RealmRaid +421, NeutralEvents, DungeonRoute + DF proofs), route threat on in RvR, road fallback (task 143) | UT_BattlegroundGoalsOct7 (89), UT_NeutralRaidEventsOct6 (113), UT_RelicPadAttackers (40), UT_EventRouteAudit (160), UT_RealmRaidRecruitment (269), UT_EnemyBotNamesOct7 (parity) | ~1,800 copied (DF data excluded), may spill into a 4th session |
+| Session | Content | Upstream tests to carry | Size | Status |
+|---|---|---|---|---|
+| S1 core | Keep-start reset (after owner yes), facade + rename, RealmRvrEventLayer + Defense, RealmEvent*, GameWideAnnouncements, KeepPolicy RvR branch, new properties | UT_AutonomousRvrEventLayer (159), UT_StagedSiegeOct6 (64), UT_SiegeSchedulingOct7 (22), UT_SiegeMusterAndRankOct6 (38), UT_RaidRallyTiming (34), UT_RaidRefillOct6 (20), UT_PlayerKeepDefense (138), UT_RealmEventPolicy (111), UT_RealmEventRecords (58), UT_RvrExpansion (416); RvrEventTestState split per world | ~2,000 copied, ~400 hand | **Done in source**, real-client check pending (section 6) |
+| S2 march + siege floor | Rally column + march leader (reuse Stefan's `ChooseMainBodyLeader`), ArmyPush/Detour, Staging muster, Siege + SiegePlacement, SiegeResurrection + GameBot/BotBrain hooks, SiegeParties + coordinator hunks, KeepTravelStallPolicy, FrontierThreat, ForcedRaid, RP rewards; RvR guards on fork waves; friend/foe sites (4b) | UT_PhysicalSiegeRally (176), UT_SiegePlacement (82), UT_SiegeParties (41), UT_SiegeDoorNumber (18), UT_AutonomousArmyPush (36), UT_RvrLeaderStaging (53), UT_AutonomousSiegeEquipment (218), UT_EveningAuditFixes (detour/wave parts), Tier 3 audit extension | ~1,500 copied, ~800 hand | Open; S1 hand-over in section 6 |
+| S3 periphery | Relic pad 8 + companions, battleground goal (after 4f), town teleporters, realm raids (RealmRaid +421, NeutralEvents, DungeonRoute + DF proofs), route threat on in RvR, road fallback (task 143) | UT_BattlegroundGoalsOct7 (89), UT_NeutralRaidEventsOct6 (113), UT_RelicPadAttackers (40), UT_EventRouteAudit (160), UT_RealmRaidRecruitment (269), UT_EnemyBotNamesOct7 (parity) | ~1,800 copied (DF data excluded), may spill into a 4th session | Open; plus UT_RaidRallyTiming / UT_RaidRefillOct6 from S1 |
 
 Already covered by Stefan (do not redo): task 135 retarget while moving (= upstream "march without stopping at each
 waypoint" for keep-travel/group legs); 136 main-body leader for group sessions (upstream applies the same rule to the
@@ -189,9 +189,47 @@ AutonomousGroupFormationFollow/GroupMotion: 353/255 vs 230/77 lines); 139 hotspo
 Stage 6 route threats (ported, default off). Not covered: army column (Rally.cs), ArmyPush/Detour, 0.38 portal-keep door
 fixes, AutonomousZoneRoads/Seams/Pockets and ZoneItinerary +620 (task 143 still open), AutonomousGroupPace.
 
+## 6. S1 status (2026-10-25, port session S1; implemented in source, real-client check pending)
+
+Worktree branch `rvr-port-s1` (not merged, no version). Server suite 4,994 passed / 7 failed (the bug 160 set, unchanged) /
+6 skipped; launcher suite 328 passed / 2 environment-skipped. No live run.
+
+**Mechanism as planned.** `AutonomousRvrEventLayer` is now a facade: the shared records (Force, LiveObjective, Plan, Intent,
+BattleNotice with upstream's `MusterRemainingMilliseconds`, RallyOrder with the fork's `Side` and upstream's `HomeMuster`,
+GuildArmyOrder, DefenseScale, SoloSiegeRoster) plus one dispatch per public call on `WorldMode.IsRvr`. Shared constant
+names answer the Camlann value; RvR values are on `RealmRvrEventLayer` (relic cap 240, target cooldown 12 min).
+A call only one layer knows answers a neutral default in the other world (no muster, null, false, empty).
+
+| Part | S1 result |
+|---|---|
+| Fork 8-part layer | Renamed to `CamlannRvrEventLayer` (class name, `using static` of the facade, shared types moved out); code otherwise byte-for-byte. Tests that reflect on its private fields point at the new type. |
+| Upstream `AutonomousRvrEventLayer.cs` + `.Defense.cs` | **Verbatim** as `RealmRvrEventLayer` (+ `.Defense`), LF. Local changes marked `Fork:`: shared types removed, RallyOrder also carries the side, a keep hit by a pet/companion/helper counts for its owner's realm (`PvpCombatant.AllianceRealm`), upstream's battleground siege announcement (needs BattlegroundBrackets, S3) and `/raid` companion siege hooks (CompanionRaidSiege, fork companions stay) left out. |
+| RealmEventPolicy, RealmEventNotices, RealmEventRecordStore, RealmEventBanter, GameWideAnnouncements | **Upstream verbatim** (the fork never changed the first four since the base; additions only). New properties `rvr_siege_staged_assault`, `rvr_siege_defense_ratio`, `player_keep_defense_horn_sound`, `rvr_battleground_announcements`, `pve_realm_event_announcements`. RealmEventRecords and RealmEventControls stay fork (upstream's raid "stop" needs `AutonomousRealmRaid.Stop`, S3). |
+| AutonomousRvrStaging | MERGE: upstream `TryGetSiegeMuster`, both border keeps per realm, `TryGetBorderKeepNear`; fork helpers unchanged. |
+| AutonomousRvrKeepPolicy / TargetPolicy / Defense | BOTH: RvR world takes upstream (neutral keep a siege objective only in battlegrounds 250-253; no grey-target restraint; wall defenders hold their realm's keep, not their guild's). Camlann unchanged. |
+| Controller (hand) | RvR only: upstream `HandleSiegeMuster` / `TryGetDefenseMuster` verbatim in `AutonomousWorldBotController.RealmMuster.cs`, called by `HandleSiegeRally` while the order is a home muster; Force as upstream (siege-ready = 4 members, average 35, siege supply; fixed 30 % roaming reserve); keep objectives report `UnderAttack` as upstream; no revenge trips; no bot keep claims. Coordinator: upstream's `PulseDefense` and `RealmWarbandSupport.Pulse` (per realm) run again in the RvR world. |
+| Gated off in Realm-1 (code kept) | R4b realm armies (`AutonomousRealmArmyPolicy/State`, RealmArmy partial, home reserve, census), R4a/R4b grudge hunts and revenge trips, the fork's guild-army muster, siege cap, claim plans, guild keep defense (all reached only through the Camlann layer or gated in the controller). UT_RvrRealmArmies now calls `CamlannRvrEventLayer` directly so the kept R4b code stays tested. |
+| Kept in Realm-1 (deviation from the S1 brief, map section 3) | Realm login balancer (owner decision 9: 600 per realm; its selector is upstream's lowest-load rule) and the 2003-style realm guild names (cosmetic). |
+| Keep start | RvR world: the 21 frontier keeps stand for their original realm at upstream's release level (`RvrKeepStart`: Albion and Midgard 5; Hibernia Dun Crauchon 4, Crimthain/Bolg/Scathaig 5, nGed/Da Behnn/Ailinne 1; source: upstream `release-world-defaults.json`, "the original v0.32 world"). Written by the fresh RvR world (R5a `ResetKeeps`) and RESET KEEPS (`KeepRelicReset`); an existing Realm-1 save moves its Warden-held frontier keeps once at the next server start (`PvpKeepCampaign.FrontierKeepStart`, log `RVR_KEEP_ORIGINAL_START`). Portal, relic and battleground keeps unchanged. The R3a start rule then opens each unclaimed realm keep's steward for a claim. |
+| Bot levels of a fresh RvR world | Upstream ships an empty world (`build_release_037.py`: "a bot would ship" assertion; PLAY.md "A new install starts with an empty world"); players create gamebots with the realm cards' "+ Lv.1" / "+ Lv.50" buttons, and only level-50 bots take RvR objectives or open sieges. Sieges within a day on a fresh upstream install therefore mean "+ Lv.50" bots. The fresh RvR world (CREATE / RESET WORLD) now creates its roster at level 50 with the class loadout (`WorldReset.FreshLevels`); an explicit world shape still wins; Camlann unchanged. An existing save keeps its bots' levels. |
+| Tests carried | UT_AutonomousRvrEventLayer, UT_StagedSiegeOct6, UT_SiegeSchedulingOct7, UT_SiegeMusterAndRankOct6 (muster part; the pet-rank test is not RvR), UT_PlayerKeepDefense, UT_RvrExpansion as `UT_RealmRvr_*` against `RealmRvrEventLayer` (60 cases, one TargetPolicy test adapted to the fork's signature); UT_RealmEventRecords' DeleteAll test merged into the fork file. Not carried: UT_RealmEventPolicy (its upstream delta is raid-dungeon corner skipping), UT_RaidRallyTiming and UT_RaidRefillOct6 (need upstream's RealmRaidRecruitmentPolicy, S3). New: UT_RvrPortS1 (34 cases: dispatch, level-50 gate, one attack per realm, thresholds, response order, retake, repel, neutral defaults, keep start), three launcher tests. |
+
+**What S2 must do.** The march itself is still the fork's walk to the rally posts: after the march order the army walks
+warband by warband and the siege opens on the 60 % arrival quorum (upstream also opens it on the march leader's arrival,
+`ReportArmyArrived`, which no controller calls yet). Port upstream Rally.cs `TryMarchWithArmy` (march leader, column,
+regroup, ArmyPush, ArmyDetour), the siege floor (Siege.cs, SiegePlacement, door order, engines), SiegeResurrection and
+the GameBot/BotBrain hooks (`TrySiegeRelease` is in the facade, unused), `FormSiegeParties` with `SoloSiegeRosters` /
+`MergeSoloForces` (in the facade, unused), KeepTravel stall policy, FrontierThreat, the RvR guards on the livelier-RvR
+waves (observe, pause, stealth loop, speed, doctrine, LFG, hub muster, danger memory, mob avoidance) and the friend/foe
+sites of section 4b. Also check: the fork's ChooseRvrDestination still filters and orders the candidate objectives (upstream's
+frontier commit and `rvr-roam-` anchors are not ported); the fork's RvR objective may reach bots below level 50 (its
+controller has a low-level PvP planner for bots under 20; not measured), upstream gives RvR only at 50 (plus its battleground goal); the fork's `starting_keep_claim_level` 1 drops a claimed RvR keep
+from 5 to 1 (upstream 5); the R3a capture still flips a keep to level 1 awaiting a claim. S3 adds the dashboard's muster
+column (AutonomousRvrDashboard MERGE).
+
 ## Not verified
 - No compile of upstream files against the fork; type differences in Force/LiveObjective/GameBot APIs are estimated.
 - Hunk counts in the big shared files are keyword estimates (RvR hunks ~1,150 lines total).
-- No live comparison in Realm-1 (0 RvR events, bots <= 19). Upstream seed bot levels unknown.
+- No live comparison in Realm-1 (0 RvR events, bots <= 19). Upstream seed bot levels: answered in section 6 (upstream ships no bots).
 - Whether R1b masks enemy bot names in broadcast messages the way upstream `Masked()` does.
 - Whether the fork already pays gamebots RPs for player kills and drops no guard loot (AbstractServerRules merge).

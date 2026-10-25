@@ -23,7 +23,8 @@ public static class AutonomousRvrTargetPolicy
     /// </summary>
     public static bool ShouldEngageGrey(GameLiving actor, GameLiving target, bool targetAttackedCrew = false)
     {
-        if (actor is not GameBot { IsAutonomousWorldBot: true } bot || !PvpCombatant.IsPlayerShaped(target))
+        // RvR world (upstream 0.38c, port session S1): no grey restraint; an enemy of the realm is a target.
+        if (WorldMode.IsRvr || actor is not GameBot { IsAutonomousWorldBot: true } bot || !PvpCombatant.IsPlayerShaped(target))
             return true;
 
         // A grudge changes who is hunted first; it never overrides the grey

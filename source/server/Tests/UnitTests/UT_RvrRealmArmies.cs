@@ -15,6 +15,9 @@ namespace DOL.UnitTests;
 /// joins as its plan says, the army musters at the realm's portal outpost or border keep, the reserve hunts
 /// invaders at home and revenge trips are capped. Every event-layer rule is checked in both worlds; Camlann
 /// answers as before.
+/// Port session S1 (docs/RVR_PORT_MAP.md): the RvR world now runs the upstream layer (RealmRvrEventLayer) and these
+/// R4b rules are gated off there. The fixture calls the fork layer (CamlannRvrEventLayer) directly, so the kept R4b
+/// code stays covered under both world settings.
 /// </summary>
 [TestFixture, NonParallelizable]
 public sealed class UT_RvrRealmArmies
@@ -42,7 +45,7 @@ public sealed class UT_RvrRealmArmies
             OwningGuild: guild);
 
     private static AutonomousRvrEventLayer.BattleNotice Battle(string id) =>
-        AutonomousRvrEventLayer.Snapshot().Single(notice => notice.TargetId == id);
+        CamlannRvrEventLayer.Snapshot().Single(notice => notice.TargetId == id);
 
     // --- Army formation ----------------------------------------------------------------------------------
 
@@ -81,9 +84,9 @@ public sealed class UT_RvrRealmArmies
         using var _ = BothWorlds.Use(world);
         var keep = Keep("keep-n", eRealm.None);
 
-        var opened = AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb-1", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
-        var mate = AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb-2", eRealm.Albion, "Ye Olde Alehouse"), [keep], 2, 0);
-        var mid = AutonomousRvrEventLayer.ChooseOrJoin(Warband("mid-1", eRealm.Midgard, "Lions of Albion"), [keep], 3, 0);
+        var opened = CamlannRvrEventLayer.ChooseOrJoin(Warband("alb-1", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
+        var mate = CamlannRvrEventLayer.ChooseOrJoin(Warband("alb-2", eRealm.Albion, "Ye Olde Alehouse"), [keep], 2, 0);
+        var mid = CamlannRvrEventLayer.ChooseOrJoin(Warband("mid-1", eRealm.Midgard, "Lions of Albion"), [keep], 3, 0);
 
         Assert.Multiple(() =>
         {
@@ -93,7 +96,7 @@ public sealed class UT_RvrRealmArmies
             // RvR: the other Albion guild is part of the realm army, the Midgard warband never is.
             Assert.That(Battle("keep-n").Attackers, Is.EqualTo(16));
             Assert.That(Battle("keep-n").ThirdRealm, Is.EqualTo(BothWorlds.Expect(world, 8, 0)));
-            Assert.That(AutonomousRvrEventLayer.KeepPlan("mid-1", eRealm.Midgard, 3)?.Intent,
+            Assert.That(CamlannRvrEventLayer.KeepPlan("mid-1", eRealm.Midgard, 3)?.Intent,
                 world == WorldModelKind.Realm ? Is.Null : Is.EqualTo(AutonomousRvrEventLayer.Intent.AssaultKeep));
             Assert.That(mid?.IsSharedEvent == true, Is.EqualTo(world == WorldModelKind.Camlann));
         });
@@ -105,8 +108,8 @@ public sealed class UT_RvrRealmArmies
         using var _ = BothWorlds.Use(world);
         var mixed = Warband("mixed", eRealm.Hibernia, "Clan Cuchulain", singleGuild: false);
 
-        Assert.That(AutonomousRvrEventLayer.IsWholeGuildWarband(world, mixed), Is.EqualTo(world == WorldModelKind.Realm));
-        var plan = AutonomousRvrEventLayer.ChooseOrJoin(mixed, [Keep("keep-n", eRealm.None, 1)], 1, 0);
+        Assert.That(CamlannRvrEventLayer.IsWholeGuildWarband(world, mixed), Is.EqualTo(world == WorldModelKind.Realm));
+        var plan = CamlannRvrEventLayer.ChooseOrJoin(mixed, [Keep("keep-n", eRealm.None, 1)], 1, 0);
         Assert.That(plan?.Intent == AutonomousRvrEventLayer.Intent.AssaultKeep, Is.EqualTo(world == WorldModelKind.Realm));
     }
 
@@ -118,7 +121,7 @@ public sealed class UT_RvrRealmArmies
         using var _ = BothWorlds.Use(world);
         var claimed = Keep("keep-own", eRealm.Albion, 1, guild: "Wardens of Benowyc");
 
-        var plan = AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [claimed], 1, 0);
+        var plan = CamlannRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [claimed], 1, 0);
 
         Assert.That(plan?.Intent == AutonomousRvrEventLayer.Intent.AssaultKeep, Is.EqualTo(world == WorldModelKind.Camlann),
             "Camlann: another guild's keep is fair game; RvR: a keep of the own realm never is");
@@ -184,7 +187,7 @@ public sealed class UT_RvrRealmArmies
         for (int i = 0; i < 40; i++)
         {
             RvrEventTestState.Clear();
-            var plan = AutonomousRvrEventLayer.ChooseOrJoin(Warband($"alb-{i}", eRealm.Albion, "Lions of Albion"), keeps, 1, 0);
+            var plan = CamlannRvrEventLayer.ChooseOrJoin(Warband($"alb-{i}", eRealm.Albion, "Lions of Albion"), keeps, 1, 0);
             Assert.That(plan?.Intent, Is.EqualTo(AutonomousRvrEventLayer.Intent.AssaultKeep));
             Assert.That(plan.TargetId, Is.Not.EqualTo("own"));
         }
@@ -199,7 +202,7 @@ public sealed class UT_RvrRealmArmies
         {
             using var _ = BothWorlds.Use(world);
             RvrEventTestState.Clear();
-            var plan = AutonomousRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "Valhalla Bound"), [relic], 1, 0);
+            var plan = CamlannRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "Valhalla Bound"), [relic], 1, 0);
             Assert.That(plan?.Intent, Is.EqualTo(AutonomousRvrEventLayer.Intent.AssaultRelicKeep), world.ToString());
             Assert.That(Battle("relic").CapPerRealm, Is.EqualTo(BothWorlds.Expect(world, 192, 240)));
         }
@@ -210,9 +213,9 @@ public sealed class UT_RvrRealmArmies
     [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
     public void TheSiegeSideIsTheRealmInTheRvrWorld(WorldModelKind world)
     {
-        Assert.That(AutonomousRvrEventLayer.SiegeSideKey(world, "Lions of Albion", eRealm.Albion),
+        Assert.That(CamlannRvrEventLayer.SiegeSideKey(world, "Lions of Albion", eRealm.Albion),
             Is.EqualTo(BothWorlds.Expect(world, "guild:Lions of Albion", "realm:" + eRealm.Albion)));
-        Assert.That(AutonomousRvrEventLayer.SiegeSideKey(world, null, eRealm.Albion), Is.EqualTo("realm:" + eRealm.Albion));
+        Assert.That(CamlannRvrEventLayer.SiegeSideKey(world, null, eRealm.Albion), Is.EqualTo("realm:" + eRealm.Albion));
     }
 
     [Test]
@@ -238,9 +241,9 @@ public sealed class UT_RvrRealmArmies
     {
         using var _ = BothWorlds.Use(WorldModelKind.Realm);
         AutonomousRealmArmyPlans.SetForTests(eRealm.Albion, plan, Forever);
-        AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb-1", eRealm.Albion, "Lions of Albion"), [Keep("keep-1", eRealm.None)], 1, 0);
+        CamlannRvrEventLayer.ChooseOrJoin(Warband("alb-1", eRealm.Albion, "Lions of Albion"), [Keep("keep-1", eRealm.None)], 1, 0);
 
-        var second = AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb-2", eRealm.Albion, "Ye Olde Alehouse"),
+        var second = CamlannRvrEventLayer.ChooseOrJoin(Warband("alb-2", eRealm.Albion, "Ye Olde Alehouse"),
             [Keep("keep-2", eRealm.Midgard)], 2, 0);
 
         Assert.That(second?.Intent == AutonomousRvrEventLayer.Intent.AssaultKeep && second.TargetId == "keep-2", Is.EqualTo(secondOpens));
@@ -250,8 +253,8 @@ public sealed class UT_RvrRealmArmies
     public void CamlannStillSlotsSiegesPerGuild()
     {
         using var _ = BothWorlds.Use(WorldModelKind.Camlann);
-        AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb-1", eRealm.Albion, "Raiders"), [Keep("keep-1", eRealm.None)], 1, 0);
-        var other = AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb-2", eRealm.Albion, "Others"), [Keep("keep-2", eRealm.Midgard)], 2, 0);
+        CamlannRvrEventLayer.ChooseOrJoin(Warband("alb-1", eRealm.Albion, "Raiders"), [Keep("keep-1", eRealm.None)], 1, 0);
+        var other = CamlannRvrEventLayer.ChooseOrJoin(Warband("alb-2", eRealm.Albion, "Others"), [Keep("keep-2", eRealm.Midgard)], 2, 0);
         Assert.That(other?.TargetId, Is.EqualTo("keep-2"), "another guild has its own two siege slots");
     }
 
@@ -260,9 +263,9 @@ public sealed class UT_RvrRealmArmies
     {
         using var _ = BothWorlds.Use(WorldModelKind.Realm);
         AutonomousRealmArmyPlans.SetForTests(eRealm.Hibernia, OpenBgAttackPlan.Opportunist, Forever);
-        AutonomousRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "Valhalla Bound"), [Keep("keep-1", eRealm.None)], 1, 0);
+        CamlannRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "Valhalla Bound"), [Keep("keep-1", eRealm.None)], 1, 0);
 
-        var hib = AutonomousRvrEventLayer.ChooseOrJoin(Warband("hib", eRealm.Hibernia, "Clan Cuchulain"),
+        var hib = CamlannRvrEventLayer.ChooseOrJoin(Warband("hib", eRealm.Hibernia, "Clan Cuchulain"),
             [Keep("keep-2", eRealm.Albion, 1)], 2, 0);
 
         Assert.That(hib?.Intent, Is.Not.EqualTo(AutonomousRvrEventLayer.Intent.AssaultKeep));
@@ -295,10 +298,10 @@ public sealed class UT_RvrRealmArmies
     {
         using var _ = BothWorlds.Use(world);
         var keep = Keep("keep-mid", eRealm.Midgard, 100, guild: "Valhalla Bound");
-        AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
+        CamlannRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
 
         // A Midgard warband never sees its own realm's keep as an objective; the siege event finds it anyway.
-        var defender = AutonomousRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "the dwarf bar"), [], 2, 0);
+        var defender = CamlannRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "the dwarf bar"), [], 2, 0);
 
         Assert.That(defender?.Intent == AutonomousRvrEventLayer.Intent.DefendEvent && defender.TargetId == "keep-mid",
             Is.EqualTo(world == WorldModelKind.Realm), "Camlann: only the owning guild defends, through its recall");
@@ -309,20 +312,20 @@ public sealed class UT_RvrRealmArmies
     {
         using var _ = BothWorlds.Use(WorldModelKind.Realm);
         var keep = Keep("keep-mid", eRealm.Midgard, 100);
-        AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
+        CamlannRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
 
-        var early = AutonomousRvrEventLayer.ChooseOrJoin(Warband("hib-8", eRealm.Hibernia, "Clan Cuchulain"), [keep], 2, 0);
+        var early = CamlannRvrEventLayer.ChooseOrJoin(Warband("hib-8", eRealm.Hibernia, "Clan Cuchulain"), [keep], 2, 0);
         Assert.That(early?.TargetId == "keep-mid" && early.IsSharedEvent, Is.False, "no intervention before the fight");
 
-        AutonomousRvrEventLayer.ReportBattleActivity("keep-mid", 3, "alb");
-        var small = AutonomousRvrEventLayer.ChooseOrJoin(Warband("hib-4", eRealm.Hibernia, "Clan Cuchulain", members: 4), [keep], 4, 0);
-        var whole = AutonomousRvrEventLayer.ChooseOrJoin(Warband("hib-8b", eRealm.Hibernia, "Dun Bolg Defenders"), [keep], 5, 0);
+        CamlannRvrEventLayer.ReportBattleActivity("keep-mid", 3, "alb");
+        var small = CamlannRvrEventLayer.ChooseOrJoin(Warband("hib-4", eRealm.Hibernia, "Clan Cuchulain", members: 4), [keep], 4, 0);
+        var whole = CamlannRvrEventLayer.ChooseOrJoin(Warband("hib-8b", eRealm.Hibernia, "Dun Bolg Defenders"), [keep], 5, 0);
         Assert.That(small?.IsSharedEvent == true && small.TargetId == "keep-mid", Is.False, "a single plan sends whole warbands only");
         Assert.That(whole?.TargetId, Is.EqualTo("keep-mid"));
         Assert.That(Battle("keep-mid").ThirdRealm, Is.EqualTo(8));
 
         AutonomousRealmArmyPlans.SetForTests(eRealm.Hibernia, OpenBgAttackPlan.Opportunist, Forever);
-        var opportunist = AutonomousRvrEventLayer.ChooseOrJoin(Warband("hib-4b", eRealm.Hibernia, "Lurikeen Social Club", members: 4),
+        var opportunist = CamlannRvrEventLayer.ChooseOrJoin(Warband("hib-4b", eRealm.Hibernia, "Lurikeen Social Club", members: 4),
             [keep], 6, 0.99);
         Assert.That(opportunist?.TargetId, Is.EqualTo("keep-mid"), "an opportunist joins a running keep fight without a roll");
     }
@@ -347,11 +350,11 @@ public sealed class UT_RvrRealmArmies
     {
         using var _ = BothWorlds.Use(WorldModelKind.Realm);
         var keep = Keep("keep-n", eRealm.None, 1);
-        AutonomousRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
-        AutonomousRvrEventLayer.ReportBattleActivity("keep-n", 2, "alb");
+        CamlannRvrEventLayer.ChooseOrJoin(Warband("alb", eRealm.Albion, "Lions of Albion"), [keep], 1, 0);
+        CamlannRvrEventLayer.ReportBattleActivity("keep-n", 2, "alb");
 
-        var mid = AutonomousRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "Valhalla Bound"), [keep], 3, 0);
-        var hib = AutonomousRvrEventLayer.ChooseOrJoin(Warband("hib", eRealm.Hibernia, "Clan Cuchulain"), [keep], 4, 0);
+        var mid = CamlannRvrEventLayer.ChooseOrJoin(Warband("mid", eRealm.Midgard, "Valhalla Bound"), [keep], 3, 0);
+        var hib = CamlannRvrEventLayer.ChooseOrJoin(Warband("hib", eRealm.Hibernia, "Clan Cuchulain"), [keep], 4, 0);
 
         Assert.That(mid?.TargetId, Is.EqualTo("keep-n"));
         Assert.That(hib?.TargetId, Is.EqualTo("keep-n"));
@@ -414,7 +417,7 @@ public sealed class UT_RvrRealmArmies
     [Test]
     public void TheMusterCallSoundsLikeARaidLeader()
     {
-        string call = AutonomousRvrEventLayer.RealmArmyMusterCall("the Albion portal outpost", "Svasud Faste");
+        string call = CamlannRvrEventLayer.RealmArmyMusterCall("the Albion portal outpost", "Svasud Faste");
         Assert.That(call, Does.Contain("the Albion portal outpost").And.Contain("Svasud Faste"));
         Assert.That(call, Does.Not.Contain("guild").IgnoreCase);
     }
@@ -490,11 +493,11 @@ public sealed class UT_RvrRealmArmies
         AutonomousRealmArmyCensus.SetForTests(eRealm.Albion, 10, Forever);
 
         var lowLevel = new AutonomousRvrEventLayer.Force("low", eRealm.Albion, 8, 30, 2, MinimumMemberLevel: 30, GuildName: "Lions of Albion");
-        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(lowLevel, [HomeInvader, AbroadPatrol], 1, 0)?.TargetId,
+        Assert.That(CamlannRvrEventLayer.ChooseOrJoin(lowLevel, [HomeInvader, AbroadPatrol], 1, 0)?.TargetId,
             Is.EqualTo("rvr-camp-abroad"), "a low-level warband is no home reserve");
 
-        AutonomousRvrEventLayer.ChooseOrJoin(Warband("open", eRealm.Albion, "Lions of Albion"), [Keep("keep-1", eRealm.None)], 2, 0);
-        var capped = AutonomousRvrEventLayer.ChooseOrJoin(Warband("capped", eRealm.Albion, "Ye Olde Alehouse"),
+        CamlannRvrEventLayer.ChooseOrJoin(Warband("open", eRealm.Albion, "Lions of Albion"), [Keep("keep-1", eRealm.None)], 2, 0);
+        var capped = CamlannRvrEventLayer.ChooseOrJoin(Warband("capped", eRealm.Albion, "Ye Olde Alehouse"),
             [Keep("keep-2", eRealm.Midgard), HomeInvader, AbroadPatrol], 3, 0);
         Assert.That(capped?.TargetId, Is.EqualTo("rvr-camp-abroad"), "a warband without a free siege slot roams as before");
     }
@@ -506,11 +509,11 @@ public sealed class UT_RvrRealmArmies
         var reserve = Warband("res", eRealm.Albion, "Lions of Albion", reserve: true);
 
         AutonomousRealmArmyCensus.SetForTests(eRealm.Albion, 3, Forever);
-        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(reserve, [HomeInvader, AbroadPatrol], 1, 0)?.TargetId,
+        Assert.That(CamlannRvrEventLayer.ChooseOrJoin(reserve, [HomeInvader, AbroadPatrol], 1, 0)?.TargetId,
             Is.EqualTo("rvr-camp-abroad"), "three enemies are passers-by");
 
         AutonomousRealmArmyCensus.SetForTests(eRealm.Albion, 4, Forever);
-        Assert.That(AutonomousRvrEventLayer.ChooseOrJoin(reserve, [HomeInvader, AbroadPatrol], 2, 0)?.TargetId,
+        Assert.That(CamlannRvrEventLayer.ChooseOrJoin(reserve, [HomeInvader, AbroadPatrol], 2, 0)?.TargetId,
             Is.EqualTo("rvr-enemy-2"));
     }
 
@@ -524,7 +527,7 @@ public sealed class UT_RvrRealmArmies
         var invader = abroad with { Id = "rvr-enemy-2", Name = "invader", RegionId = 1 };
         for (int i = 0; i < 20; i++)
         {
-            var plan = AutonomousRvrEventLayer.ChooseOrJoin(Warband($"res-{i}", eRealm.Albion, "Lions of Albion", reserve: true),
+            var plan = CamlannRvrEventLayer.ChooseOrJoin(Warband($"res-{i}", eRealm.Albion, "Lions of Albion", reserve: true),
                 [abroad, invader], 1 + i, 0);
             Assert.That(plan?.TargetId, Is.EqualTo("rvr-enemy-2"));
             Assert.That(plan.Intent, Is.EqualTo(AutonomousRvrEventLayer.Intent.HuntEnemy));

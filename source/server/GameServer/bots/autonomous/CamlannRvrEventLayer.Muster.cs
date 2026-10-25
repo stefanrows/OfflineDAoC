@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static DOL.GS.AutonomousRvrEventLayer;
 
 namespace DOL.GS;
 
@@ -9,7 +10,7 @@ namespace DOL.GS;
 /// <see cref="AutonomousRvrSiegeMuster"/>), plus the keep-route memory that
 /// keeps the automatic opener off keeps its warbands could not reach.
 /// </summary>
-public static partial class AutonomousRvrEventLayer
+public static partial class CamlannRvrEventLayer
 {
     private sealed class ForceMuster
     {

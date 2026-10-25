@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using DOL.AI.Brain;
+using static DOL.GS.AutonomousRvrEventLayer;
 
 namespace DOL.GS;
 
-public static partial class AutonomousRvrEventLayer
+public static partial class CamlannRvrEventLayer
 {
     /// <summary>
     /// The army at one siege. Camlann: the warbands of one guild. RvR world (R4b): the warbands of one realm,
@@ -36,9 +37,6 @@ public static partial class AutonomousRvrEventLayer
     }
 
     private sealed record ArmyParty(GameBot Leader, GameBot[] Members, long Tick, long Joined, long[] Operators);
-
-    public sealed record GuildArmyOrder(string TargetId, long Generation, Vector3? Camp,
-        bool Released, bool HoldColumn, bool Failed, int Present, int Required, int Parties, long Remaining);
 
     private static GuildArmy ArmyLocked(ActiveEvent active, string forceId, GameBot bot, long now)
     {

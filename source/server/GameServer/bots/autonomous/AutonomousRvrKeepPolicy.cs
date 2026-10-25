@@ -7,10 +7,16 @@ namespace DOL.GS
     /// than the keep itself, is the capturable objective.</summary>
     public static class AutonomousRvrKeepPolicy
     {
-        public static bool IsSiegeObjective(AbstractGameKeep keep)
-        {
-            return keep != null && !keep.IsPortalKeep;
-        }
+        public static bool IsSiegeObjective(AbstractGameKeep keep) =>
+            keep != null && IsSiegeObjective(WorldMode.Current, keep.IsPortalKeep, keep.Realm, (ushort)keep.Region);
+
+        /// <summary>
+        /// Camlann: every keep but a portal keep (the Frontier Wardens hold the neutral ones). RvR world (upstream
+        /// 0.38c, port session S1): a neutral keep is a siege objective only in a battleground (regions 250-253, whose
+        /// central keeps start neutral); the frontier keeps start with their realm.
+        /// </summary>
+        public static bool IsSiegeObjective(WorldModelKind world, bool portalKeep, eRealm keepRealm, ushort region) =>
+            !portalKeep && (world != WorldModelKind.Realm || keepRealm != eRealm.None || region is >= 250 and <= 253);
 
         /// <summary>
         /// A keep of the open world (frontier or dungeon), never one inside a campaign

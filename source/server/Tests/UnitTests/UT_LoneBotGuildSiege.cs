@@ -133,7 +133,7 @@ public sealed class UT_LoneBotGuildSiege
 
     private static void MarkArmyLaunched(string targetId, string guildName, bool failed = false)
     {
-        var layer = typeof(AutonomousRvrEventLayer);
+        var layer = typeof(CamlannRvrEventLayer);
         var events = (IDictionary)layer.GetField("Events", Any).GetValue(null);
         object active = events[targetId];
         object army = Activator.CreateInstance(layer.GetNestedType("GuildArmy", Any), true);

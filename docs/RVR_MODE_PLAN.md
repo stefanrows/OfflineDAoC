@@ -114,7 +114,7 @@ defaults in code, keep/relic start state from the reset.
   longer split by keep guild; grudges against human killers resolve again
   (both worlds). Camlann unchanged otherwise. 44 tests. R4c keeps the
   upstream thresholds, timings, retake, push/detour.
-- [ ] **R4c Upstream siege-flow port.** Owner 2026-10-25 15:50: **port the
+- [~] **R4c Upstream siege-flow port.** Owner 2026-10-25 15:50: **port the
   upstream (shadowofze 0.37b+/0.38c) RvR army and siege behaviour, never
   worse than the original, invent nothing.** Source: fetch-only remote
   `upstream` (0.38c), Stefan's `docs/UPSTREAM_ADAPTATION_PLAN.md` "Deferred
@@ -125,6 +125,21 @@ defaults in code, keep/relic start state from the reset.
   task 139 step 2 (road-graph fallback). Where R4b invented a rule and
   upstream has one, upstream wins in RvR; Camlann keeps the fork flow. No
   reviewer per package (owner 2026-10-25 15:35), one review in R6. 2 sessions.
+  S1 (event-layer core; branch rvr-port-s1, implemented in source, real-client
+  check pending; details in [RVR_PORT_MAP.md](RVR_PORT_MAP.md) section 6): the
+  RvR world runs upstream's event layer verbatim behind an `AutonomousRvrEventLayer`
+  facade (fork layer renamed `CamlannRvrEventLayer`, Camlann unchanged): one
+  siege roll a minute, one attack per realm, level 50 for every siege, muster
+  at the realm's portal outpost (12+5 min, relic 25 + up to 6x10), march at
+  108/170 or 85 %, arrival quorum 60 %, repel after 10 min, one retake after a
+  player capture, the player-sized defense rally and caps 128/64/64 and
+  240/120/120; R4a/R4b armies, home reserve, grudge trips and bot keep claims
+  are gated off in RvR. The 21 frontier keeps start for their realm at
+  upstream's level (an existing save moves its Warden keeps once at the next
+  start); a fresh RvR world's bots start at level 50 (upstream ships no bots,
+  players add "+ Lv.50" ones). Server 4,994 passed / 7 bug-160, launcher 328
+  passed. Open for S2: the march column behind a march leader, siege floor,
+  siege resurrection, siege parties, livelier-RvR wave guards, friend/foe sites.
 - [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
   client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
 

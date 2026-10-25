@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace DOL.GS;
@@ -23,6 +24,54 @@ public static class AutonomousRvrStaging
             eRealm.Hibernia => new(200, new(333229, 419539, 5336), "Druim Ligen"),
             _ => default,
         };
+        return keep.RegionId != 0;
+    }
+
+    // RvR world (upstream 0.38c, port session S1): the siege army's muster and the defense rally's fallback.
+
+    /// <summary>
+    /// Where a realm's siege army musters for a target in another region: its own guarded portal
+    /// outpost inside that frontier (the frontier teleporter's arrival point), else its border keep.
+    /// Run 11: Midgard mustered at Svasud Faste, crossed, and walked 105k-145k units from the Hadrian's
+    /// Wall arrival to Castle Myrddin; most were still on the road at the rally deadline.
+    /// </summary>
+    public static bool TryGetSiegeMuster(eRealm realm, ushort targetRegion, out BorderKeep muster)
+    {
+        var passage = AutonomousFrontierTransport.Destination(realm, targetRegion);
+        if (passage != null && passage.Medallion != "home_necklace")
+        {
+            Zone zone = WorldMgr.GetRegion(passage.Region)?.GetZone(passage.Location.X, passage.Location.Y);
+            muster = new(passage.Region, new(passage.Location.X, passage.Location.Y, passage.Location.Z),
+                $"the portal outpost in {zone?.Description ?? "the frontier"}");
+            return true;
+        }
+        return TryGetBorderKeep(realm, out muster);
+    }
+
+    // Each realm's two classic border keeps (safe-area centres from the Area table). Owner 2026-10-07: bots only
+    // ever entered the frontier through the first one; the second was never offered.
+    private static readonly BorderKeep[] AlbionKeeps =
+        [new(1, new(585085, 477504, 2600), "Castle Sauvage"), new(1, new(528451, 358290, 8320), "Snowdonia Fortress")];
+    private static readonly BorderKeep[] MidgardKeeps =
+        [new(100, new(766235, 669173, 5736), "Svasud Faste"), new(100, new(704022, 738009, 5704), "Vindsaul Faste")];
+    private static readonly BorderKeep[] HiberniaKeeps =
+        [new(200, new(333229, 419539, 5336), "Druim Ligen"), new(200, new(421166, 484998, 1976), "Druim Cain")];
+
+    public static IReadOnlyList<BorderKeep> BorderKeeps(eRealm realm) => realm switch
+    {
+        eRealm.Albion => AlbionKeeps,
+        eRealm.Midgard => MidgardKeeps,
+        eRealm.Hibernia => HiberniaKeeps,
+        _ => [],
+    };
+
+    /// <summary>The border keep nearest a point in its region (shared by a whole army), else the first one.</summary>
+    public static bool TryGetBorderKeepNear(eRealm realm, ushort regionId, Vector2 point, out BorderKeep keep)
+    {
+        var keeps = BorderKeeps(realm);
+        keep = keeps.Where(k => k.RegionId == regionId).OrderBy(k => Vector2.DistanceSquared(new(k.Position.X, k.Position.Y), point))
+            .FirstOrDefault();
+        if (keep.RegionId == 0) keep = keeps.FirstOrDefault();
         return keep.RegionId != 0;
     }
 

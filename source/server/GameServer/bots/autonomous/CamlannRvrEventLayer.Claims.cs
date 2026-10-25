@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static DOL.GS.AutonomousRvrEventLayer;
 
 namespace DOL.GS;
 
-public static partial class AutonomousRvrEventLayer
+public static partial class CamlannRvrEventLayer
 {
     // Reservations direct one force to each free keep. They never grant
     // ownership: the bot still has to reach and use the native steward.

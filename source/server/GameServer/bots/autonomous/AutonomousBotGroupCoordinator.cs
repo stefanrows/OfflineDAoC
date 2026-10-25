@@ -205,6 +205,13 @@ public static partial class AutonomousBotGroupCoordinator
             AutonomousRealmRaid.Pulse(now);
             AutonomousRealmRaid.RecruitForcedParty(now);
             AutonomousRaidSchedule.Pulse(now);
+            // RvR world (upstream 0.38c, port session S1): the realm-wide keep defense (player attacks raise a sized
+            // defense, the defense rally) and the shared support rosters of a siege run every coordinator tick.
+            if (WorldMode.IsRvr)
+            {
+                AutonomousRvrEventLayer.PulseDefense(now);
+                RealmWarbandSupport.Pulse(now);
+            }
             // Tier 4 has no realm-wide keep defense or RvR rally pulse. PvE
             // expeditions remain owned by AutonomousRealmRaid.
             AutonomousObjectiveAssignments.ReconcileIfDue();

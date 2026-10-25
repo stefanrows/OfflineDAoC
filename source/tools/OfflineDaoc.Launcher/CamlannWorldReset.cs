@@ -307,7 +307,8 @@ public static class CamlannWorldReset
     /// <summary>
     /// The keep start of a fresh world; returns how many keeps start with a realm. Camlann: every keep realm 0, no guild.
     /// RvR (spec section 4.1): portal keeps (base level 100 or more, the server's IsPortalKeep) and relic keeps (skin 99,
-    /// the server's IsRelic) start with their original realm; every other keep starts neutral for the Frontier Wardens.
+    /// the server's IsRelic) start with their original realm; the 21 frontier keeps too, at the upstream release level
+    /// (port session S1, <see cref="SeedFrontierKeeps"/>); the battleground keeps start neutral for the Frontier Wardens.
     /// </summary>
     internal static int ResetKeeps(SQLiteConnection connection, SQLiteTransaction transaction, WorldSaveKind world = WorldSaveKind.Camlann)
     {
@@ -327,6 +328,7 @@ public static class CamlannWorldReset
                     throw new InvalidOperationException($"Keep data has no {column} column; the new RvR world was not created.");
             command.CommandText = "UPDATE [Keep] SET Realm=OriginalRealm WHERE OriginalRealm BETWEEN 1 AND 3 AND (BaseLevel>=100 OR SkinType=99)";
             realmKeeps = command.ExecuteNonQuery();
+            realmKeeps += SeedFrontierKeeps(connection, transaction);
         }
         if (ColumnExists(connection, transaction, "Keep", "LordDefeated"))
         {
@@ -339,6 +341,31 @@ public static class CamlannWorldReset
             command.ExecuteNonQuery();
         }
         return realmKeeps;
+    }
+
+    /// <summary>
+    /// RvR world (upstream 0.38c, port session S1, docs/RVR_PORT_MAP.md): the 21 frontier keeps start with their
+    /// original realm at the upstream release level (<see cref="RvrKeepStart"/>), never for the Frontier Wardens.
+    /// Portal, relic and battleground keeps are untouched. Returns the keeps set.
+    /// </summary>
+    internal static int SeedFrontierKeeps(SQLiteConnection connection, SQLiteTransaction transaction)
+    {
+        bool hasLevel = ColumnExists(connection, transaction, "Keep", "Level");
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = hasLevel
+            ? "UPDATE [Keep] SET Realm=OriginalRealm, Level=@level, ClaimedGuildName='' WHERE KeepID=@id AND OriginalRealm BETWEEN 1 AND 3 AND BaseLevel<100 AND SkinType<>99"
+            : "UPDATE [Keep] SET Realm=OriginalRealm, ClaimedGuildName='' WHERE KeepID=@id AND OriginalRealm BETWEEN 1 AND 3 AND BaseLevel<100 AND SkinType<>99";
+        var id = command.Parameters.Add("@id", System.Data.DbType.Int32);
+        var level = command.Parameters.Add("@level", System.Data.DbType.Int32);
+        int seeded = 0;
+        foreach (KeyValuePair<int, byte> keep in RvrKeepStart.FrontierKeepLevels)
+        {
+            id.Value = keep.Key;
+            level.Value = (int)keep.Value;
+            seeded += command.ExecuteNonQuery();
+        }
+        return seeded;
     }
 
     private static void ResetRelics(SQLiteConnection connection, SQLiteTransaction transaction)

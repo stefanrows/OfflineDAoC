@@ -1684,7 +1684,8 @@ namespace DOL.GS
                 if (TryBattlegroundTravel(bot)) return true;
                 if (HoldsOpenBattlegroundCrew(bot)) return HoldOpenBattlegroundCrew(brain, bot);
             }
-            KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
+            // RvR world (upstream 0.38c, port session S1): bots never claim keeps; a guild of players claims at the steward.
+            KeepClaimPoint claimPoint = WorldMode.IsRvr ? null : bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
                 .FirstOrDefault(point => AutonomousRvrKeepPolicy.IsClaimableKeep(point.Keep) &&
                     point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null &&
                     PvpKeepCampaign.MayClaimInWorld(point.Keep, bot) && !PvpKeepCampaign.ClaimBlockedByCombat(point.Keep) &&
@@ -2681,7 +2682,9 @@ namespace DOL.GS
             // (rvr_grudge_hunters_per_target warbands of the realm at once); a full target is skipped.
             string grudgeForce = _groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}";
             bool grudgeCap = WorldMode.IsRvr, grudgeFull = false;
-            GameLiving revengeTarget = AutonomousGuildGrudgeMemory.GetReachableTargets(bot, reachable, WorldSimulationClock.UtcNow)
+            // RvR world (upstream 0.38c, port session S1): no revenge trips; upstream answers a lost keep with its
+            // one retake and nothing else. The R4a/R4b grudge hunts stay in the code, gated off here.
+            GameLiving revengeTarget = WorldMode.IsRvr ? null : AutonomousGuildGrudgeMemory.GetReachableTargets(bot, reachable, WorldSimulationClock.UtcNow)
                 .Where(target => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(target.CurrentRegionID))
                 .Where(target => !IsRecentGiveUpGoal(bot, target.CurrentRegionID, target.X, target.Y) &&
                                  !IsBehindKeepGate(bot, target.CurrentRegionID, target.X, target.Y,
@@ -2806,6 +2809,11 @@ namespace DOL.GS
                     keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,
                     keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0,
                     keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed),
+                    // RvR world (upstream 0.38c): a keep hit by an enemy in the last two minutes, or with a guard in
+                    // combat, is under attack; the layer opens the defense and a marching army's strike with it.
+                    UnderAttack: WorldMode.IsRvr && (keep.LastAttackedByEnemyTick > 0 &&
+                        keep.CurrentRegion.Time - keep.LastAttackedByEnemyTick < 120_000 ||
+                        keep.Guards.Values.Any(guard => guard.IsAlive && guard.InCombat)),
                     OwningGuild: keep.Guild?.Name, Claimable: AutonomousRvrKeepPolicy.IsClaimableKeep(keep) || RelicMgr.IsRelicRaidTarget(keep, bot),
                     AwaitingClaim: PvpKeepCampaign.Applies(keep) && keep.Guild == null && keep.DBKeep.LordDefeated &&
                         PvpKeepCampaign.MayClaimInWorld(keep, bot) &&
@@ -2854,7 +2862,11 @@ namespace DOL.GS
             int averageLevel = (int)Math.Round(warband.Average(member => member.Level));
             int healers = warband.Count(member => member.CharacterClass != null &&
                 BotPartyRoles.IsHealingClass((eCharacterClass)member.CharacterClass.ID));
-            bool siegeReady = warband.Length >= 8 && averageLevel >= 35 && healers > 0 && CanSupplySiege(bot);
+            // RvR world (upstream 0.38c, port session S1): four members at average 35 that can supply a siege; the
+            // event layer itself opens sieges only for level 50. Camlann: a whole warband of eight with a healer.
+            bool siegeReady = WorldMode.IsRvr
+                ? warband.Length >= 4 && averageLevel >= 35 && CanSupplySiege(bot)
+                : warband.Length >= 8 && averageLevel >= 35 && healers > 0 && CanSupplySiege(bot);
             int minimumLevel = warband.Min(member => member.Level);
             int roamReservePercent = leaderType switch
             {
@@ -2863,13 +2875,10 @@ namespace DOL.GS
                 AutonomousPlayerType.KeepWarrior => 5,
                 _ => 15,
             };
-            // RvR world (R4b): the live reserve per realm. While enemies stand in the realm's home frontier, more
-            // of its warbands stay home and hunt them (census refreshed every thirty seconds).
+            // RvR world (upstream 0.38c, port session S1): a fixed 30 % of whole warbands stays a roaming reserve. The
+            // R4b live home reserve (AutonomousRealmArmyPolicy.ReservePercent) is off; the policy stays for its tests.
             if (WorldMode.IsRvr)
-                roamReservePercent = AutonomousRealmArmyPolicy.ReservePercent(roamReservePercent,
-                    AutonomousRealmArmyCensus.Invaders(bot.Realm, GameLoop.GameLoopTime),
-                    AutonomousRealmArmyProperties.RVR_ARMY_RESERVE_INVADER_PERCENT,
-                    AutonomousRealmArmyProperties.RVR_ARMY_INVADER_MIN);
+                roamReservePercent = 30;
             if (!AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(bot))
             {
                 // Open-BG crew and battleground participants roam alone; they never register a force in a world event.

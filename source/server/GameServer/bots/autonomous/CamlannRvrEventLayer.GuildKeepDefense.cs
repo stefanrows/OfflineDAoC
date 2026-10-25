@@ -1,8 +1,9 @@
 using System.Linq;
+using static DOL.GS.AutonomousRvrEventLayer;
 
 namespace DOL.GS;
 
-public static partial class AutonomousRvrEventLayer
+public static partial class CamlannRvrEventLayer
 {
     public static void WithdrawForKeepDefense(string forceId, long memberId, bool retireForce)
     {

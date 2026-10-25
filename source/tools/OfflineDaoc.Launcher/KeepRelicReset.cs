@@ -75,6 +75,8 @@ public static class KeepRelicReset
         {
             command.CommandText = "UPDATE [Keep] SET Realm=OriginalRealm WHERE OriginalRealm BETWEEN 1 AND 3 AND (BaseLevel>=100 OR SkinType=99)";
             command.ExecuteNonQuery();
+            // The frontier keeps too, at their upstream release level (port session S1, docs/RVR_PORT_MAP.md).
+            CamlannWorldReset.SeedFrontierKeeps(connection, transaction);
         }
         if (HasColumn("Keep", "LordDefeated"))
         {

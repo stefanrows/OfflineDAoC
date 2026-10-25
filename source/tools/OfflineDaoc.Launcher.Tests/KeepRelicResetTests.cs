@@ -51,13 +51,15 @@ public class KeepRelicResetTests
     {
         Sql("ALTER TABLE [Keep] ADD COLUMN BaseLevel INT NOT NULL DEFAULT 50; ALTER TABLE [Keep] ADD COLUMN SkinType INT NOT NULL DEFAULT 0;" +
             "INSERT INTO [Keep](KeepID,Realm,OriginalRealm,ClaimedGuildName,ClaimedAt,Level,BaseLevel,SkinType) VALUES" +
-            "(3,0,2,'','',1,255,0),(4,1,3,'Raiders','',1,60,99);" +
+            "(3,0,2,'','',1,255,0),(4,1,3,'Raiders','',1,60,99),(75,0,2,'Frontier Wardens','',1,50,0),(104,1,3,'Raiders','',3,50,0);" +
             "INSERT INTO offline_local_options VALUES('WorldModel','Realm-1');");
 
         Apply();
 
-        Assert.That(Sql("SELECT group_concat(KeepID || ':' || Realm, ',') FROM (SELECT * FROM [Keep] ORDER BY KeepID)"), Is.EqualTo("1:0,2:0,3:2,4:3"),
-            "ordinary keeps neutral, portal keep 3 Midgard, relic keep 4 Hibernia");
+        Assert.That(Sql("SELECT group_concat(KeepID || ':' || Realm, ',') FROM (SELECT * FROM [Keep] ORDER BY KeepID)"), Is.EqualTo("1:0,2:0,3:2,4:3,75:2,104:3"),
+            "ordinary keeps neutral, portal keep 3 Midgard, relic keep 4 Hibernia, frontier keeps 75 and 104 back to their realm");
+        Assert.That(Sql("SELECT group_concat(KeepID || ':' || Level, ',') FROM (SELECT * FROM [Keep] WHERE KeepID>=75 ORDER BY KeepID)"), Is.EqualTo("75:5,104:1"),
+            "at the upstream release level (port session S1)");
         Assert.That(Sql("SELECT count(*) FROM [Keep] WHERE ClaimedGuildName<>''"), Is.EqualTo(0L));
 
         Sql("UPDATE offline_local_options SET Value='Camlann-1' WHERE Key='WorldModel'");

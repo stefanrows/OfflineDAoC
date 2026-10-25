@@ -53,7 +53,7 @@ public class UT_FrontierTravelContracts
         // Recruitment is separately covered by the defense-response suite.
         // Install the exact commitment that PulseDefense assigns, not the
         // ordinary autonomous ChooseOrJoin path (which excludes player alarms).
-        var events=(System.Collections.IDictionary)typeof(AutonomousRvrEventLayer).GetField("Events",BindingFlags.NonPublic|BindingFlags.Static).GetValue(null);
+        var events=(System.Collections.IDictionary)typeof(CamlannRvrEventLayer).GetField("Events",BindingFlags.NonPublic|BindingFlags.Static).GetValue(null);
         object active=events[target.Id];
         var defenders=(Dictionary<string,int>)active.GetType().GetField("Defenders").GetValue(active);
         defenders.Add(force,8);
@@ -328,9 +328,9 @@ public class UT_FrontierTravelContracts
             AutonomousRvrEventLayer.ChooseOrJoin(new(force,eRealm.Albion,8,50,2),[target with { UnderAttack=true }],now,0);
             Assert.That(AutonomousRvrEventLayer.IsBattleForce(force,now),Is.True,"Keep assaults now begin without a formation rally");
             // Exercise battle protection separately from recruitment/attendance policy.
-            var events=(System.Collections.IDictionary)typeof(AutonomousRvrEventLayer)
+            var events=(System.Collections.IDictionary)typeof(CamlannRvrEventLayer)
                 .GetField("Events",BindingFlags.NonPublic|BindingFlags.Static).GetValue(null);
-            typeof(AutonomousRvrEventLayer).GetMethod("StartBattle",BindingFlags.NonPublic|BindingFlags.Static)
+            typeof(CamlannRvrEventLayer).GetMethod("StartBattle",BindingFlags.NonPublic|BindingFlags.Static)
                 .Invoke(null,new object[]{events[id],now,"test battle protection"});
             Assert.That(AutonomousRvrEventLayer.IsBattleForce(force,now),Is.True);
             Assert.That(AutonomousRvrEventLayer.ProtectsParticipantFromInactivity(bot,now),Is.False,"Idle en-route participant is not fighting");

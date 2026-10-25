@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static DOL.GS.AutonomousRvrEventLayer;
 
 namespace DOL.GS;
 
@@ -10,7 +11,7 @@ namespace DOL.GS;
 /// attack plan decides how many sieges it runs and whether it joins another realm's fight, and its reserve hunts
 /// invaders at home. Every helper here answers the Camlann rule unchanged outside the RvR world.
 /// </summary>
-public static partial class AutonomousRvrEventLayer
+public static partial class CamlannRvrEventLayer
 {
     private static readonly DOL.Logging.Logger RealmArmyLog = DOL.Logging.LoggerManager.Create(typeof(AutonomousRealmArmyPolicy));
 

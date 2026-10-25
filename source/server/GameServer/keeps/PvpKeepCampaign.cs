@@ -67,6 +67,25 @@ namespace DOL.GS.Keeps
                 log.Info($"RVR_PORTAL_KEEP_REALM keep={keep.KeepID} name={keep.Name} realm={portalRealm}");
             }
             if (!Applies(keep)) return;
+            // RvR world (upstream 0.38c, port session S1): a frontier keep stands for its original realm at its original
+            // level. A save made before then still has it neutral with the Frontier Wardens; it moves once, here.
+            if (keep.DBKeep != null && FrontierKeepStart(WorldMode.Current, keep.KeepID, keep.Realm, keep.OriginalRealm,
+                    keep.Guild == null || IsGarrison(keep.Guild), keep.IsPortalKeep, keep.IsRelic) is byte startLevel)
+            {
+                bool fromWardens = IsGarrison(keep.Guild);
+                if (fromWardens)
+                {
+                    keep.Guild.ClaimedKeeps.Remove(keep);
+                    keep.Guild = null;
+                }
+                keep.Realm = keep.OriginalRealm;
+                keep.StopChangeLevelTimer();
+                keep.ChangeLevel(startLevel);
+                keep.SaveIntoDatabase();
+                foreach (GameKeepGuard guard in keep.Guards.Values) guard.ChangeGuild();
+                RefreshGuardsForRealm(keep);
+                log.Info($"RVR_KEEP_ORIGINAL_START keep={keep.KeepID} name={keep.Name} realm={keep.Realm} level={keep.Level} fromWardens={fromWardens}");
+            }
             // A claim whose guild is not loaded (yet) must not be handed to the
             // garrison and saved over: that silently erased every bot claim
             // after a restart (2026-10-02). The crew reconcile rebinds it.
@@ -106,6 +125,17 @@ namespace DOL.GS.Keeps
             ApplyWardenStartLevel(keep);
             EnsureClaimPoint(keep);
         }
+
+        /// <summary>
+        /// RvR world (port session S1, docs/RVR_PORT_MAP.md): the level a neutral frontier keep starts at when it takes
+        /// its original realm (<see cref="OfflineDaoc.Configuration.RvrKeepStart"/>), or null to leave the keep as it is.
+        /// Only one of the 21 frontier keeps, realm-less, held by the Frontier Wardens or nobody, with a realm of origin.
+        /// Portal keeps, relic keeps and battleground keeps never; Camlann never.
+        /// </summary>
+        public static byte? FrontierKeepStart(WorldModelKind world, int keepId, eRealm realm, eRealm originalRealm,
+            bool unclaimedOrWardens, bool portalKeep, bool relicKeep) =>
+            world == WorldModelKind.Realm && !portalKeep && !relicKeep && unclaimedOrWardens && realm == eRealm.None &&
+            PvpCombatant.IsPlayableRealm(originalRealm) ? OfflineDaoc.Configuration.RvrKeepStart.StartLevel(keepId) : null;
 
         /// <summary>Whether an unheld keep goes to the Frontier Wardens at start. Camlann:
         /// every unheld keep whose lord stands. RvR world (R3a, owner decision 12): only a

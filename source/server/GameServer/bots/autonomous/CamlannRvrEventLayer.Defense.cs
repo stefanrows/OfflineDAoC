@@ -6,10 +6,11 @@ using System.Numerics;
 using DOL.AI.Brain;
 using DOL.GS.Keeps;
 using DOL.GS.PacketHandler;
+using static DOL.GS.AutonomousRvrEventLayer;
 
 namespace DOL.GS
 {
-    public static partial class AutonomousRvrEventLayer
+    public static partial class CamlannRvrEventLayer
     {
         public const long DefenseResponseMilliseconds = 4 * 60 * 60_000L;
         public const long DefenseQuietMilliseconds = 3 * 60_000L;

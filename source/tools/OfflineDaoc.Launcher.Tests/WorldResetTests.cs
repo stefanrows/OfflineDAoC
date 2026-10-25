@@ -146,6 +146,54 @@ public class WorldResetTests
     }
 
     [Test]
+    public void FreshRvrWorldStartsTheFrontierKeepsWithTheirRealmAtTheUpstreamLevel()
+    {
+        // Port session S1 (docs/RVR_PORT_MAP.md): upstream's release world, every frontier keep with its original owner and level.
+        Sql(_rvr.Database, """
+            ALTER TABLE Keep ADD COLUMN Level INTEGER NOT NULL DEFAULT 1;
+            INSERT INTO Keep(KeepID,Name,Realm,OriginalRealm,BaseLevel,SkinType,ClaimedGuildName,ClaimedAt,LordDefeated,LastCaptureRewardAt,Level) VALUES
+                (50,'Caer Benowyc',0,1,50,0,'Frontier Wardens','',0,'',1),
+                (100,'Dun Crauchon',2,3,50,0,'Camlann Crew Raiders','2026-10-01',1,'',1),
+                (106,'Dun Ailinne',0,3,50,2,'Frontier Wardens','',0,'',1);
+            """);
+
+        WorldReset.Result result = Create(WorldSaveKind.Realm, botsPerRealm: 0);
+
+        Assert.That(result.RealmKeeps, Is.EqualTo(6), "two portal keeps, one relic keep and three frontier keeps");
+        Assert.That(Rows(_rvr.Database, "SELECT KeepID || ':' || Realm || ':' || Level || ':' || ClaimedGuildName || ':' || LordDefeated FROM [Keep] WHERE KeepID>=50 ORDER BY KeepID"),
+            Is.EqualTo(new[] { "50:1:5::0", "100:3:4::0", "106:3:1::0" }));
+        Assert.That(Rows(_rvr.Database, "SELECT KeepID || ':' || Realm FROM [Keep] WHERE KeepID IN (2,4) ORDER BY KeepID"),
+            Is.EqualTo(new[] { "2:0", "4:0" }), "a keep outside the upstream frontier table and the battleground keep stay neutral");
+    }
+
+    [Test]
+    public void FreshCamlannWorldLeavesTheFrontierKeepsNeutral()
+    {
+        Sql(_rvr.Database, "INSERT INTO Keep VALUES (50,'Caer Benowyc',0,1,50,0,'Frontier Wardens','',0,'')");
+
+        Create(WorldSaveKind.Camlann, botsPerRealm: 0);
+
+        Assert.That(Scalar(_camlann.Database, "SELECT Realm FROM [Keep] WHERE KeepID=50"), Is.EqualTo(0L));
+    }
+
+    [Test]
+    public void FreshRvrRosterIsUpstreamsLevelFiftyRosterUnlessAShapeIsGiven()
+    {
+        int[] Levels(WorldSaveKind world, PopulationWorldShape? shape) => WorldReset.FreshLevels(
+            new WorldReset.Request(world, _runtime, "offline", () => true) { WorldShape = shape },
+            shape ?? PopulationWorldShape.FreshLaunch, 5);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Levels(WorldSaveKind.Realm, null), Is.All.EqualTo(WorldReset.RvrRosterLevel),
+                "upstream creates RvR bots with + Lv.50; only level 50 bots siege");
+            Assert.That(WorldReset.RvrRosterLevel, Is.EqualTo(50));
+            Assert.That(Levels(WorldSaveKind.Realm, PopulationWorldShape.FreshLaunch), Is.All.EqualTo(1), "an explicit shape wins");
+            Assert.That(Levels(WorldSaveKind.Camlann, null), Is.All.EqualTo(1), "Camlann keeps the bot-goals shape");
+        });
+    }
+
+    [Test]
     public void FreshWorldCreatesTheRosterPerRealmAndPointsThePopulationAtIt()
     {
         WorldReset.Result result = Create(WorldSaveKind.Realm, botsPerRealm: 7);

@@ -302,7 +302,7 @@ public static class WorldReset
                 for (int remaining = request.BotsPerRealm; remaining > 0; remaining -= LevelBatch)
                 {
                     int count = Math.Min(LevelBatch, remaining);
-                    int[] levels = AutonomousPopulationShape.NewLevels(shape, count);
+                    int[] levels = FreshLevels(request, shape, count);
                     BotRosterWriter.Add(connection, transaction, realm, levels, reserved);
                 }
                 created[realm] = request.BotsPerRealm;
@@ -314,6 +314,21 @@ public static class WorldReset
         transaction.Commit();
         return (counts, created);
     }
+
+    /// <summary>The level every bot of a fresh RvR world starts at (upstream's "+ Lv.50" roster).</summary>
+    public const int RvrRosterLevel = 50;
+
+    /// <summary>
+    /// The levels of a fresh world's roster. RvR world (port session S1, docs/RVR_PORT_MAP.md): upstream ships an empty
+    /// world and its players create gamebots with the realm cards' "+ Lv.1" and "+ Lv.50" buttons; only level 50
+    /// bots take RvR objectives there and every siege needs level 50 (average and minimum). A fresh RvR world is
+    /// therefore created as upstream's level-50 roster, with the class loadout. An explicit
+    /// <see cref="Request.WorldShape"/> still wins. Camlann: the bot-goals world shape, unchanged.
+    /// </summary>
+    public static int[] FreshLevels(Request request, PopulationWorldShape shape, int count) =>
+        request.World == WorldSaveKind.Realm && request.WorldShape is null
+            ? Enumerable.Repeat(RvrRosterLevel, count).ToArray()
+            : AutonomousPopulationShape.NewLevels(shape, count);
 
     /// <summary>The battleground campaign camps keep their rows; sponsors, tokens and timers belong to the old world.</summary>
     private static void ResetCampaignCamps(SQLiteConnection connection, SQLiteTransaction transaction)

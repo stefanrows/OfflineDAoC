@@ -38,6 +38,9 @@ public sealed partial class AutonomousWorldBotController
 
     private bool HandleSiegeRally(GameBot bot, string forceId, AutonomousRvrEventLayer.RallyOrder order)
     {
+        // RvR world (upstream 0.38c): attackers muster at their portal outpost; defenders gather as one quick rally at a
+        // nearby friendly keep (AutonomousWorldBotController.RealmMuster.cs).
+        if (WorldMode.IsRvr && order.HomeMuster && HandleSiegeMuster(bot, forceId, order)) return true;
         string waitKey = $"{forceId}:{order.TargetId}";
         if (_rallyWaitKey != waitKey)
         {
