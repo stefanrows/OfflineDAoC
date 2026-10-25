@@ -78,7 +78,7 @@ defaults in code, keep/relic start state from the reset.
   missing); active world shown in the status line; Gothwaite controls only in
   the PvP world; import guard accepts `Realm-1`. 1 session. **Wipe + first RvR
   boot on the owner's PC right after R5b.**
-- [~] **R4a Bot guilds + login per realm.** Agent rvr-r4a (2026-10-25 11:05). ~600 bots per realm in
+- [~] **R4a Bot guilds + login per realm.** Implemented (worktree rvr-r4a, 31 tests: 120 realm guild names, balanced charter mix per realm, no cross-realm membership, realm login balancer `rvr_realm_active_target` 600, grudges per realm), in review (11:55). ~600 bots per realm in
   single-realm guilds, realm login balance. 1 session.
 - [ ] **R4b Realm armies.** Event layer armies per realm instead of per guild,
   muster at the realm's portal outpost, grudges/banter per realm. 2 sessions.
@@ -159,3 +159,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   most keeps; bots claim and siege by realm; Camlann unchanged.
 - 2026-10-25 11:25: R3a reviewed (2 mediums + lows fixed) and merged as 0.337.0.
   R3b, R4a, R5b running.
+- 2026-10-25 11:55: R3b, R4a and R5b implemented and in review; wipe follows the R5b merge.
