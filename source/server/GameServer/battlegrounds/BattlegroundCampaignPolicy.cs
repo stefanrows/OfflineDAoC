@@ -78,6 +78,13 @@ namespace DOL.GS
             return fallback;
         }
 
+        /// <summary>
+        /// A player-led group keeps its hash camp in Camlann; in the RvR world every realm, players included,
+        /// lands at its own realm's portal keep (null lets <see cref="ChooseLanding"/> pick the realm's landing).
+        /// </summary>
+        public static int? LeaderLanding(WorldModelKind world, bool playerLeader, int hashed) =>
+            playerLeader && world != WorldModelKind.Realm ? hashed : null;
+
         public static GameLocation GetLanding(GameLiving actor, BattlegroundDefinition definition)
         {
             GameLocation[] landings = BattlegroundCampaignCatalog.GetLandings(definition);
@@ -97,7 +104,7 @@ namespace DOL.GS
                 if (unit == 0 && actor is GameBot actorBot) unit = AutonomousBattlegroundParticipation.OpenUnitOf(actorBot);
                 if (unit != 0) realm = OpenBattlegroundRoster.LandingSideOf(unit, realm);
             }
-            int index = ChooseLanding(realm, leader is GamePlayer ? hashed : null,
+            int index = ChooseLanding(realm, LeaderLanding(WorldMode.Current, leader is GamePlayer, hashed),
                 BattlegroundCampaignCatalog.GetLandingRealms(definition, landings.Length), hashed);
             if (index < 0 || index >= landings.Length) index = hashed;
             actor.TempProperties.SetProperty(CampKey, index);

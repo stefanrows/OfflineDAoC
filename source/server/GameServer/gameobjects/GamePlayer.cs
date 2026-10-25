@@ -8002,10 +8002,18 @@ namespace DOL.GS
         {
             Region region = WorldMgr.GetRegion((ushort) BindRegion);
 
-            if (region != null && GameServer.ServerRules.IsAllowedToZone(this, region) && region.GetZone(BindXpos, BindYpos) != null)
+            bool knownBind = region != null && GameServer.ServerRules.IsAllowedToZone(this, region) && region.GetZone(BindXpos, BindYpos) != null;
+            // RvR world: a bind in another realm's lands (homeland, portal keep, border hub) is reset to the
+            // realm's start, so a release always wakes in the own realm (RVR_TRAVEL_POPULATION.md). Camlann: any bind.
+            if (knownBind && RealmPlaces.IsOwnRealmPoint(Realm, (ushort) BindRegion, BindXpos, BindYpos, BindZpos))
                 return;
 
-            if (log.IsErrorEnabled)
+            if (knownBind)
+            {
+                if (log.IsWarnEnabled)
+                    log.Warn($"RVR_ENEMY_BIND_RESET (Bind: {BindXpos},{BindYpos} in {BindRegion}) (Player: {this}): another realm's lands");
+            }
+            else if (log.IsErrorEnabled)
                 log.Error($"Unknown bind point (Bind: {BindXpos},{BindYpos} in {BindRegion}) (Player: {this})");
 
             // This method wasn't meant to be used this way, but this is good enough for now.

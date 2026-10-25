@@ -57,6 +57,78 @@ namespace DOL.GS
 		}
 
 		/// <summary>
+		/// The menu for a character of <paramref name="realm"/> in <paramref name="world"/>. Camlann keeps the
+		/// realm-open menu above, unchanged. The RvR world (RVR_TRAVEL_POPULATION.md) lists only the own realm's
+		/// capital, frontier, Darkness Falls entrance, mainland, dungeons, Shrouded Isles and Oceanus lines.
+		/// </summary>
+		public static String BuildTravelMenu(WorldModelKind world, eRealm realm, bool openBattleground, bool atlantis)
+		{
+			if (world != WorldModelKind.Realm || !RealmTravel.IsPlayable(realm))
+				return BuildTravelMenu(openBattleground, atlantis);
+
+			string name = RealmTravel.RealmName(realm);
+			string battlegrounds = (BattlegroundCampaignPolicy.IsEnabled ? "[Battlegrounds] " : "") + (openBattleground ? "[open BG] " : "");
+			return "Would you like to teleport to?\n" +
+				(battlegrounds.Length == 0 ? "" : battlegrounds.TrimEnd() + "\n") +
+				$"[{RealmTravel.CapitalName(realm)}]\n" +
+				$"[{name} Frontiers]\n" +
+				$"[{name} Darkness Falls]\n" +
+				$"[{name} Mainland] [{name} Dungeons] [{name} Shrouded Isles]\n" +
+				$"[{name} Oceanus]\n" +
+				(atlantis ? AtlantisTravel.MenuLine + "\n" : "") +
+				"[Housing]";
+		}
+
+		/// <summary>The menu this porter shows the player: realm-open in Camlann, the player's realm in the RvR world.</summary>
+		private static String MenuFor(GamePlayer player) =>
+			BuildTravelMenu(WorldMode.Current, player.Realm, OpenBattlegroundPolicy.IsOpenFor(player), AtlantisTravel.CanTravel(player));
+
+		/// <summary>
+		/// The realm whose lands a whispered porter line leads to (menus and destinations alike), or false for a
+		/// line that belongs to no realm (battlegrounds, housing, Atlantis, unknown text). The RvR world refuses a
+		/// line of another realm before any arrival text is said.
+		/// </summary>
+		public static bool TryGetDestinationRealm(string text, out eRealm realm)
+		{
+			realm = eRealm.None;
+			return text != null && DestinationRealms.TryGetValue(text.Trim(), out realm);
+		}
+
+		private static readonly Dictionary<string, eRealm> DestinationRealms = BuildDestinationRealms();
+
+		private static Dictionary<string, eRealm> BuildDestinationRealms()
+		{
+			var map = new Dictionary<string, eRealm>(StringComparer.OrdinalIgnoreCase);
+			void Add(eRealm realm, params string[] names)
+			{
+				foreach (string name in names)
+					map[name] = realm;
+			}
+
+			Add(eRealm.Albion, "Albion", "Albion Frontiers", "Albion Mainland", "Albion Dungeons", "Albion Shrouded Isles",
+				"Albion Darkness Falls", "Albion Oceanus", "Camelot",
+				"Gothwaite", "Caer Gothwaite", "Diogel", "Caer Diogel", "Gwyntell", "Fort Gwyntell", "Wearyall", "Wearyall Village",
+				"Cotswold Village", "Prydwen Keep", "Caer Ulfwych", "Campacorentin Station", "Adribard's Retreat",
+				"Cornwall Station", "Swanton Keep", "Lyonesse", "Dartmoor", "Avalon Marsh",
+				"Tomb of Mithra", "Keltoi Fogou", "Tepok's Mine", "Catacombs of Cardova", "Stonehenge Barrows",
+				"Krondon", "Avalon City", "Caer Sidi", "Forest Sauvage", "Castle Sauvage", "Snowdonia Fortress",
+				"Inconnu Crypt", "Holtham");
+			Add(eRealm.Midgard, "Midgard", "Midgard Frontiers", "Midgard Mainland", "Midgard Dungeons", "Midgard Shrouded Isles",
+				"Midgard Darkness Falls", "Midgard Oceanus", "Jordheim",
+				"Aegirhamn", "Bjarken", "Hagall", "Knarr",
+				"Mularn", "Fort Veldon", "Audliten", "Huginfell", "Fort Atla", "Gna Faste", "Raumarik", "Malmohus", "Gotar",
+				"Nisse's Lair", "Cursed Tomb", "Vendo Caverns", "Varulvhamn", "Spindelhalla", "Iarnvidiur's Lair",
+				"Trollheim", "Tuscaren Glacier", "Kobold Undercity", "Uppland", "Svasud Faste", "Vindsaul Faste", "Hafheim");
+			Add(eRealm.Hibernia, "Hibernia", "Hibernia Frontiers", "Hibernia Mainland", "Hibernia Dungeons", "Hibernia Shrouded Isles",
+				"Hibernia Darkness Falls", "Hibernia Oceanus", "Tir na Nog",
+				"Domnann", "Necht", "Aalid Feie", "Droighaid",
+				"Mag Mell", "Tir na mBeo", "Ardagh", "Howth", "Connla", "Innis Carthaig", "Cursed Forest", "Sheeroe Hills",
+				"Shannon Estuary", "Muire Tomb", "Spraggon Den", "Koalinth Caverns", "Treibh Caillte", "Coruscating Mine",
+				"Tur Suil", "Fomor", "Galladoria", "Cruachan Gorge", "Druim Cain", "Druim Ligen", "Shar Labyrinth", "Fintain");
+			return map;
+		}
+
+		/// <summary>
 		/// Player right-clicked the teleporter.
 		/// </summary>
 		/// <param name="player"></param>
@@ -66,7 +138,14 @@ namespace DOL.GS
 			if (!base.Interact(player))
 				return false;
 
-			SayTo(player, BuildTravelMenu(OpenBattlegroundPolicy.IsOpenFor(player), AtlantisTravel.CanTravel(player)));
+			// RvR world: a porter serves only its own realm's people (Camlann: everyone).
+			if (WorldMode.IsRvr && !RealmTravel.Serves(player, Realm))
+			{
+				SayTo(player, RealmTravel.ServiceRefusal(Realm));
+				return true;
+			}
+
+			SayTo(player, MenuFor(player));
 
 			return true;
 		}
@@ -89,6 +168,17 @@ namespace DOL.GS
 			StringBuilder sRet = new StringBuilder();
 
 			text = text.Trim();
+			// RvR world: an enemy realm's porter refuses, and so does every line into another realm's lands.
+			if (WorldMode.IsRvr && !RealmTravel.Serves(player, Realm))
+			{
+				SayTo(player, RealmTravel.ServiceRefusal(Realm));
+				return true;
+			}
+			if (TryGetDestinationRealm(text, out eRealm destinationRealm) && !RealmTravel.Serves(player, destinationRealm))
+			{
+				SayTo(player, RealmTravel.DestinationRefusal(player.Realm, destinationRealm));
+				return true;
+			}
 			// Atlantis lines resolve in the player's own realm copy (docs/TOA_TRAVEL.md).
 			if (TryAtlantisTravel(player, text))
 				return true;
@@ -106,13 +196,13 @@ namespace DOL.GS
 
 				// Realm specific menus
 				case "ALBION":
-					SayTo(player, DisplayTeleportDestinations(eRealm.Albion));
+					SayTo(player, WorldMode.IsRvr ? MenuFor(player) : DisplayTeleportDestinations(eRealm.Albion));
 					return true;
 				case "MIDGARD":
-					SayTo(player, DisplayTeleportDestinations(eRealm.Midgard));
+					SayTo(player, WorldMode.IsRvr ? MenuFor(player) : DisplayTeleportDestinations(eRealm.Midgard));
 					return true;
 				case "HIBERNIA":
-					SayTo(player, DisplayTeleportDestinations(eRealm.Hibernia));
+					SayTo(player, WorldMode.IsRvr ? MenuFor(player) : DisplayTeleportDestinations(eRealm.Hibernia));
 					return true;
 
 				case "ALBION FRONTIERS":

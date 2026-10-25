@@ -435,7 +435,7 @@ public sealed class UT_CompanionManager
     private static IReadOnlyList<CompanionManagerEntry> RecruitEntries() =>
         (IReadOnlyList<CompanionManagerEntry>)typeof(CompanionManager)
             .GetMethod("RecruitEntries", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { new List<PlayerCompanionRecord>() });
+            .Invoke(null, new object[] { new List<PlayerCompanionRecord>(), eRealm.None }); // owner realm: Camlann lists every realm
 
     [Test]
     public void GearTabListsEveryWornSlotInSheetOrderAndMatchesPairedSlots()

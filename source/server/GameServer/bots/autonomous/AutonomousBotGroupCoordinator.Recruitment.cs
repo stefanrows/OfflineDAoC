@@ -148,6 +148,7 @@ namespace DOL.GS
                 foreach (long expired in session.RecruitmentRetryTicks.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
                     session.RecruitmentRetryTicks.Remove(expired);
                 var candidates = available.Where(candidate => candidate.Group == null &&
+                        RealmTravel.SharesParty(leader, candidate) && // RvR world: same-realm parties only
                         !session.RecruitmentRetryTicks.ContainsKey(MemberKey(candidate)) &&
                         AutonomousObjectiveAssignments.Is(candidate, session.ObjectiveKind) &&
                         members.All(member => LevelsCompatible(member.Level, candidate.Level)) &&

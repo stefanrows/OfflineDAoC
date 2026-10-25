@@ -26,6 +26,17 @@ namespace DOL.GS.Commands
             PlayableRealms.SelectMany(realm => ForRealm(realm)
                 .Select(entry => (realm, entry.CharacterClass, entry.Role)));
 
+        /// <summary>
+        /// The classes offered to an owner of <paramref name="ownerRealm"/>: every realm in Camlann, the owner's
+        /// realm only in the RvR world (owner decision 7, RVR_TRAVEL_POPULATION.md).
+        /// </summary>
+        public static IEnumerable<(eRealm Realm, eCharacterClass CharacterClass, string Role)> Offered(WorldModelKind world, eRealm ownerRealm) =>
+            RealmTravel.OfferedRealms(world, ownerRealm).SelectMany(realm => ForRealm(realm)
+                .Select(entry => (realm, entry.CharacterClass, entry.Role)));
+
+        public static IEnumerable<(eRealm Realm, eCharacterClass CharacterClass, string Role)> Offered(eRealm ownerRealm) =>
+            Offered(WorldMode.Current, ownerRealm);
+
         public static string RealmName(eRealm realm)
         {
             return realm switch
@@ -159,12 +170,13 @@ namespace DOL.GS.Commands
 
         public static string BuildMenuText(eRealm realm)
         {
-            string links = string.Join('\n', TemporaryGroupClassCatalog.All()
+            string links = string.Join('\n', TemporaryGroupClassCatalog.Offered(realm)
                 .GroupBy(entry => entry.Realm)
                 .SelectMany(group => new[] { $"{TemporaryGroupClassCatalog.RealmName(group.Key)}:" }
                     .Concat(group.Select(entry => $"[{TemporaryGroupClassCatalog.RealmName(entry.Realm)}: {entry.CharacterClass}]")
                         .Chunk(4).Select(chunk => string.Join("   ", chunk)))));
-            return $"Choose a companion from any realm to add to your group:\n\n{links}\n\nClick one class name.";
+            string from = WorldMode.IsRvr && RealmTravel.IsPlayable(realm) ? $"of {RealmTravel.RealmName(realm)}" : "from any realm";
+            return $"Choose a companion {from} to add to your group:\n\n{links}\n\nClick one class name.";
         }
 
         internal static bool Open(GamePlayer player)
@@ -249,7 +261,8 @@ namespace DOL.GS.Commands
         public void OnCommand(GameClient client, string[] args)
         {
             DisplayMessage(client, "Classic + SI classes by realm:");
-            foreach (var realmGroup in TemporaryGroupClassCatalog.All().GroupBy(entry => entry.Realm))
+            eRealm ownRealm = client.Player?.Realm ?? eRealm.None;
+            foreach (var realmGroup in TemporaryGroupClassCatalog.Offered(ownRealm).GroupBy(entry => entry.Realm))
             {
                 DisplayMessage(client, $"{TemporaryGroupClassCatalog.RealmName(realmGroup.Key)}:");
                 foreach (string line in realmGroup
@@ -258,6 +271,12 @@ namespace DOL.GS.Commands
                              .Chunk(4)
                              .Select(chunk => string.Join(", ", chunk)))
                     DisplayMessage(client, line);
+            }
+            if (WorldMode.IsRvr)
+            {
+                DisplayMessage(client, $"In the realm war companions come from {RealmTravel.RealmName(ownRealm)} only.");
+                DisplayMessage(client, "Use /companions recruit <class> for a persistent recruit, /spawn <class> for a temporary helper.");
+                return;
             }
             DisplayMessage(client, "Use /companions recruit <class> to add a persistent recruit from any realm.");
             DisplayMessage(client, "For temporary helpers, use /spawn <class> for your realm or /spawn <realm> <class>.");
@@ -290,6 +309,12 @@ namespace DOL.GS.Commands
                 return;
             }
 
+            if (WorldMode.IsRvr && !RealmTravel.Allows(player.Realm, realm))
+            {
+                DisplayMessage(client, RealmTravel.CompanionRefusal(player.Realm));
+                return;
+            }
+
             Spawn(client, realm, characterClass);
         }
 
@@ -305,6 +330,13 @@ namespace DOL.GS.Commands
             if (player == null || !TemporaryGroupClassCatalog.ForRealm(realm)
                     .Any(entry => entry.CharacterClass == characterClass))
                 return;
+
+            // RvR world: helpers of the owner's realm only (the menu and /spawn offer no other).
+            if (WorldMode.IsRvr && !RealmTravel.Allows(player.Realm, realm))
+            {
+                client.Out.SendMessage(RealmTravel.CompanionRefusal(player.Realm), eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                return;
+            }
 
             if (player.Group != null && player.Group.MemberCount >= player.Group.MaximumMemberCount)
             {

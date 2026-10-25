@@ -43,7 +43,25 @@ public static class GothwaitePvpMode
     {
         Settings = settings ?? GothwaitePvpSettings.Defaults;
         Arena = GothwaitePvpArena.Gothwaite with { SafeRadius = Settings.SafeRadius };
-        IsActive = Settings.Enabled;
+        IsActive = ActiveIn(WorldMode.Current, Settings.Enabled);
+    }
+
+    /// <summary>
+    /// Strict world separation (owner, 2026-10-25): the RvR world has no Gothwaite arena, whatever the switch
+    /// file says. Camlann follows the switch.
+    /// </summary>
+    public static bool ActiveIn(WorldModelKind world, bool enabled) => enabled && world != WorldModelKind.Realm;
+
+    /// <summary>
+    /// Called once the save's world is fixed (GameServer.ValidateWorldModel runs after <see cref="Initialize"/>).
+    /// In the RvR world an enabled switch is ignored with one log line.
+    /// </summary>
+    public static void EnforceWorld()
+    {
+        bool wasActive = IsActive;
+        Apply(Settings);
+        if (wasActive && !IsActive)
+            Log.Info("GOTH_PVP_MODE active=False reason=rvr-world");
     }
 
     /// <summary>Back to the default (mode off). Tests call it in their teardown.</summary>

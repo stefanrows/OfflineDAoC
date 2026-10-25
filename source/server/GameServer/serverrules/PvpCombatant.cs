@@ -194,22 +194,66 @@ namespace DOL.GS.ServerRules
 				return true;
 
 			// Portal keeps are safe even though they sit inside Old Frontiers
-			// zones.
+			// zones. RvR world (spec 3.2): only for the keep's own realm, so an
+			// intruder inside can be fought.
 			if (living.CurrentZone != null && living.CurrentAreas.OfType<KeepArea>()
-				.Any(area => area.Keep?.IsPortalKeep == true))
+				.Any(area => area.Keep?.IsPortalKeep == true &&
+					(!WorldMode.IsRvr || RealmPlaces.HubProtects(WorldModelKind.Realm, RealmPlaces.PortalKeepRealm(area.Keep), AllianceRealm(living)))))
 				return true;
 
 			// Camlann owner decision 7: the three border hubs are neutral safe
 			// hubs like the capitals, for humans and bots alike, together with
 			// the teleporter landings and bindstones outside their radius.
+			// RvR world: a hub and its landing protect only the hub's realm.
 			ushort regionId = living.CurrentRegionID;
 			if (IsBorderHubRegion(regionId) &&
-				(IsSafeBorderHub(regionId, living.X, living.Y) || IsSafeHubLanding(regionId, living.X, living.Y)))
+				(IsSafeBorderHub(regionId, living.X, living.Y) || IsSafeHubLanding(regionId, living.X, living.Y)) &&
+				(!WorldMode.IsRvr || RealmPlaces.HubProtects(WorldModelKind.Realm, RealmPlaces.HubRealmAt(regionId, living.X, living.Y), AllianceRealm(living))))
 				return true;
 
 			// A missing zone is not a safe area. All other safe locations are
 			// covered by the explicit region/portal-keep checks above.
 			return false;
+		}
+
+		/// <summary>
+		/// The attacker side of the safe-zone rule. Camlann: an attacker in any safe
+		/// area cannot attack. RvR world (spec 3.2): capitals, housing and newbie
+		/// dungeons disarm everyone; a portal keep, border hub or hub landing protects
+		/// its own realm, and a defender it protects may fight only an intruder inside
+		/// that same hub, never snipe from cover at someone outside it.
+		/// </summary>
+		public static bool BlocksAttackFromSafeArea(GameLiving attacker, GameLiving defender)
+		{
+			if (!WorldMode.IsRvr)
+				return IsSafeArea(attacker);
+			if (attacker == null)
+				return false;
+			if (IsSafeRegion(attacker.CurrentRegionID))
+				return true;
+			eRealm hub = HubRealmOf(attacker);
+			if (!PvpCombatant.IsPlayableRealm(hub) || hub != AllianceRealm(attacker))
+				return false; // not covered by an own hub: the open field rules apply
+			return defender == null || defender.CurrentRegionID != attacker.CurrentRegionID || HubRealmOf(defender) != hub;
+		}
+
+		/// <summary>The realm of the portal keep, border hub or hub landing a living stands in; None elsewhere.</summary>
+		public static eRealm HubRealmOf(GameLiving living)
+		{
+			if (living == null)
+				return eRealm.None;
+			if (living.CurrentZone != null)
+			{
+				AbstractGameKeep portal = living.CurrentAreas.OfType<KeepArea>().Select(area => area.Keep)
+					.FirstOrDefault(keep => keep?.IsPortalKeep == true);
+				if (portal != null)
+					return RealmPlaces.PortalKeepRealm(portal);
+			}
+			ushort regionId = living.CurrentRegionID;
+			return IsBorderHubRegion(regionId) &&
+				(IsSafeBorderHub(regionId, living.X, living.Y) || IsSafeHubLanding(regionId, living.X, living.Y))
+				? RealmPlaces.HubRealmAt(regionId, living.X, living.Y)
+				: eRealm.None;
 		}
 
         public static bool IsSafeReleasePoint(ushort regionId, Point3D point)

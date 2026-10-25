@@ -1011,6 +1011,9 @@ namespace DOL.GS
 				WorldMode.Initialize(world);
 				if (log.IsInfoEnabled)
 					log.Info($"World model: {marker.Value} ({world} world).");
+				// RvR world: Camlann-only modes stay off (RVR_TRAVEL_POPULATION.md); one line each when a stored switch is ignored.
+				GothwaitePvpMode.EnforceWorld();
+				OpenBattlegroundMode.LogWorldOverride(log);
 				return true;
 			}
 

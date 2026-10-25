@@ -12,6 +12,29 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.336.0] - 2026-10-25
+
+### Added
+- RvR mode, package R2 (`docs/RVR_TRAVEL_POPULATION.md`): in a `Realm-1`
+  world travel is realm-bound (porters, `/tc`, frontier porters, battleground
+  release and the Realm Exchange serve only the own realm; enemy capitals and
+  keeps are closed), companions and `/spawn` offer only the own realm, bot
+  parties form within a realm, world bots stay out of enemy homelands, the
+  open battleground always runs per realm and the Gothwaite arena is off;
+  a bind in enemy land is reset on release. Portal keeps and border hubs
+  protect only their own realm: an intruder can be attacked inside, nobody
+  can attack out of cover. Unit tests UT_RvrTravelPopulation, UT_RvrSafeHubs.
+
+### Changed
+- `/bgsetup` shows the effective open BG mode when a stored setting is
+  ignored. None for the Camlann world otherwise.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.335.0] - 2026-10-25
 
 ### Added

@@ -261,7 +261,7 @@ namespace DOL.GS.Commands
             bool loaded = PlayerCompanionRoster.TryGetRoster(player, out List<PlayerCompanionRecord> roster);
             bool rosterTab = session.ShowsCompanions;
             bool activeTab = session.Tab == CompanionManagerTab.Active;
-            IReadOnlyList<CompanionManagerEntry> all = !rosterTab ? RecruitEntries(roster)
+            IReadOnlyList<CompanionManagerEntry> all = !rosterTab ? RecruitEntries(roster, WorldMode.IsRvr ? player.Realm : eRealm.None)
                 : RosterEntries(player, activeTab ? roster.Where(record => InPlayerGroup(player, record)) : roster);
             IReadOnlyList<CompanionManagerEntry> filtered = session.Filter(all);
             // Displayed order, ignoring folded sections: default selection and "Invite all" follow it.
@@ -433,15 +433,17 @@ namespace DOL.GS.Commands
                     ? char.ToUpperInvariant(order.ToString()[0]) + order.ToString()[1..].ToLowerInvariant() : "Saved stances",
                 State: PlayerCompanionGrind.IsActive(player) ? "Grinding" : string.Empty, StateActive: true);
 
-        private static IReadOnlyList<CompanionManagerEntry> RecruitEntries(IEnumerable<PlayerCompanionRecord> roster)
+        /// <summary>Story and new recruits; the RvR world offers only the owner's realm (Camlann: every realm).</summary>
+        private static IReadOnlyList<CompanionManagerEntry> RecruitEntries(IEnumerable<PlayerCompanionRecord> roster, eRealm ownerRealm)
         {
             HashSet<string> owned = roster.Select(record => record.AuthoredRecruitKey)
                 .Where(key => !string.IsNullOrEmpty(key)).ToHashSet(StringComparer.Ordinal);
-            IEnumerable<CompanionManagerEntry> authored = CompanionCharacterCatalog.All.Select(entry =>
+            IEnumerable<CompanionManagerEntry> authored = CompanionCharacterCatalog.All
+                .Where(entry => RealmTravel.Allows(ownerRealm, entry.Realm)).Select(entry =>
                 new CompanionManagerEntry("a:" + entry.Key, entry.Realm, entry.Class, entry.Name, Origin: "Story",
                     State: owned.Contains(entry.Key) ? "Recruited" : "Available", StateActive: !owned.Contains(entry.Key),
                     Role: RoleOf(entry.Class, null)));
-            IEnumerable<CompanionManagerEntry> generated = TemporaryGroupClassCatalog.All().Select(entry =>
+            IEnumerable<CompanionManagerEntry> generated = TemporaryGroupClassCatalog.Offered(ownerRealm).Select(entry =>
                 new CompanionManagerEntry($"g:{(int)entry.Realm}:{(int)entry.CharacterClass}", entry.Realm,
                     entry.CharacterClass, $"New {entry.CharacterClass}", Origin: "New", State: "Create", StateActive: true,
                     Role: RoleOf(entry.CharacterClass, null)));

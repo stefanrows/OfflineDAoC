@@ -21,6 +21,10 @@ When a task is done and its required verification is complete, move it out of it
      R5a (fresh RvR and fresh Camlann world routines, per-world save and side
      files, single-realm bot guild seeding; [RVR_WORLDS.md](RVR_WORLDS.md)):
      implemented in source, real-client check pending.
+     R2 (realm-bound travel, companions and parties of the own realm, open
+     BG per realm, Gothwaite off, binds per realm; see
+     [RVR_TRAVEL_POPULATION.md](RVR_TRAVEL_POPULATION.md)) implemented in
+     source, real-client check pending; safe hubs protect only their realm.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed

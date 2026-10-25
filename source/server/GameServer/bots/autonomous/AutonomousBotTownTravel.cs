@@ -117,6 +117,7 @@ namespace DOL.GS
                 .OfType<AllRealmsTeleporter>()
                 .Where(candidate => !ReferenceEquals(candidate, excludedPorter) &&
                     candidate.ObjectState == GameObject.eObjectState.Active &&
+                    RealmTravel.AllowsNpc(bot.Realm, candidate) &&
                     candidate.CurrentRegionID == bot.CurrentRegionID)
                 .OrderBy(bot.GetDistanceTo).Take(4))
             {
@@ -224,7 +225,8 @@ namespace DOL.GS
             ushort rendezvousRegionID, Vector3 rendezvous, bool includeBorderHub = false)
         {
             if (!IsSafeToTeleport(bot) || !IsAtInteractionDistance(bot, teleporter) ||
-                !TryResolveTownDestination(rendezvousRegionID, rendezvous, out DbTeleport destination, includeBorderHub))
+                !TryResolveTownDestination(rendezvousRegionID, rendezvous, out DbTeleport destination, includeBorderHub) ||
+                !MayTakeRoute(bot, teleporter, destination))
                 return false;
             return bot.MoveTo((ushort)destination.RegionID, destination.X, destination.Y,
                 destination.Z, (ushort)destination.Heading);
@@ -250,7 +252,8 @@ namespace DOL.GS
             ushort rendezvousRegionID)
         {
             if (!IsSafeToTeleport(bot) || !IsAtInteractionDistance(bot, teleporter) ||
-                !TryResolveTownDestination(rendezvousRegionID, out DbTeleport destination))
+                !TryResolveTownDestination(rendezvousRegionID, out DbTeleport destination) ||
+                !MayTakeRoute(bot, teleporter, destination))
                 return false;
 
             return bot.MoveTo((ushort)destination.RegionID, destination.X, destination.Y,
@@ -272,6 +275,14 @@ namespace DOL.GS
             return destinationRegion != null && !destinationRegion.IsDisabled;
         }
 
+        /// <summary>
+        /// RvR world: a bot boards only its own realm's porter and never lands in another realm's
+        /// homeland (the planners already keep to the realm boundary; this is the last check). Camlann: always.
+        /// </summary>
+        private static bool MayTakeRoute(GameBot bot, AllRealmsTeleporter teleporter, DbTeleport destination) =>
+            RealmTravel.AllowsNpc(bot.Realm, teleporter) &&
+            AutonomousRealmBoundary.AllowsPoint(bot.Realm, (ushort)destination.RegionID, destination.X, destination.Y);
+
         private static bool IsActiveAutonomousBot(GameBot bot)
         {
             return bot?.IsAutonomousWorldBot == true && bot.ObjectState is GameObject.eObjectState.Active;
@@ -287,7 +298,8 @@ namespace DOL.GS
         {
             if (!IsActiveAutonomousBot(bot) || bot.CurrentRegionID == 0 || teleporter == null ||
                 teleporter.ObjectState is not GameObject.eObjectState.Active ||
-                teleporter.CurrentRegionID != bot.CurrentRegionID)
+                teleporter.CurrentRegionID != bot.CurrentRegionID ||
+                !RealmTravel.AllowsNpc(bot.Realm, teleporter))
                 return false;
 
             Region region = WorldMgr.GetRegion(bot.CurrentRegionID);

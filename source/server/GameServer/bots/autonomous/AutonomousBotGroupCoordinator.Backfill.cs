@@ -78,6 +78,7 @@ namespace DOL.GS
 
                 Vector3 leaderPosition = new(leader.X, leader.Y, leader.Z);
                 var candidates = available.Where(candidate => candidate.Group == null && candidate.IsAlive &&
+                        RealmTravel.SharesParty(leader, candidate) && // RvR world: same-realm parties only
                         AutonomousObjectiveAssignments.Is(candidate, eAutonomousObjectiveKind.RvR) &&
                         members.All(member => LevelsCompatible(member.Level, candidate.Level)))
                     .Select(candidate => (Bot: candidate,
@@ -130,6 +131,7 @@ namespace DOL.GS
                     otherLeader.CurrentRegionID == leader.CurrentRegionID &&
                     otherLeader.IsWithinRadius(leader, MergeRadius) &&
                     AutonomousCrewManager.AreInSameCrew(leader, otherLeader) &&
+                    RealmTravel.SharesParty(leader, otherLeader) && // RvR world: no cross-realm merge
                     !AutonomousRvrEventLayer.IsBattleForce(candidate.Id, GameLoop.GameLoopTime))
                 .FirstOrDefault(candidate =>
                 {

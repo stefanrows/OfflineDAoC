@@ -52,6 +52,12 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
 
         TurnTo(player, 5000);
         player.TargetObject = this;
+        // RvR world: only the own capital's broker trades (Camlann: any broker serves the player's realm market).
+        if (WorldMode.IsRvr && !RealmTravel.Serves(player, Realm))
+        {
+            player.Out.SendMessage(RealmTravel.ServiceRefusal(Realm), eChatType.CT_Say, eChatLoc.CL_PopupWindow);
+            return true;
+        }
         long pendingProceeds = GetPendingPlayerProceeds(player.InternalID, player.Realm);
         // DetailWindow text has no clickable NPC links. The native NPC speech
         // popup routes bracketed choices back through WhisperReceive.
@@ -519,6 +525,7 @@ public sealed partial class RealmExchangeBroker : GameNPC, IGameInventoryObject
     private bool IsThisRealmExchangeItem(DbInventoryItem item, eRealm realm) => item != null && item.OwnerLot == GetOwnerLot(realm);
 
     private bool CanUseExchange(GamePlayer player) => player != null && GetOwnerLot(player.Realm) != 0 &&
+        (!WorldMode.IsRvr || RealmTravel.Serves(player, Realm)) &&
         player.IsAlive && ObjectState == eObjectState.Active && player.IsWithinRadius(this, WorldMgr.INTERACT_DISTANCE);
 
     internal static bool IsExchangeOwnerLot(ushort ownerLot) => ownerLot is AlbionOwnerLot or MidgardOwnerLot or HiberniaOwnerLot;

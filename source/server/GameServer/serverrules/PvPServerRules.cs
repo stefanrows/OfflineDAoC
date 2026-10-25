@@ -162,7 +162,7 @@ namespace DOL.GS.ServerRules
 				if (!duel)
 				{
 					// Safe regions
-					if (PvpCombatant.IsSafeArea(attacker))
+					if (PvpCombatant.BlocksAttackFromSafeArea(attacker, defender))
 					{
 						if (quiet == false) MessageToLiving(attacker, "You're currently in a safe zone, you can't attack other players here.");
 						return false;

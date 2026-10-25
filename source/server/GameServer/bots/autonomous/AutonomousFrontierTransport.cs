@@ -49,9 +49,10 @@ public static class AutonomousFrontierTransport
     public static bool IsMixedRealm(System.Collections.Generic.IEnumerable<eRealm> realms) =>
         realms?.Distinct().Skip(1).Any() == true;
 
+    /// <summary>The nearest active porter here; in the RvR world the bot's own realm's porter first (only it boards the bot).</summary>
     public static OFTeleporter NearestPorter(GameBot bot) => Porters.Keys
         .Where(p => p.ObjectState == GameObject.eObjectState.Active && p.CurrentRegion == bot.CurrentRegion)
-        .OrderBy(bot.GetDistanceTo).FirstOrDefault();
+        .OrderBy(p => RealmTravel.AllowsNpc(bot.Realm, p) ? 0 : 1).ThenBy(bot.GetDistanceTo).FirstOrDefault();
 
     /// <summary>The active porters standing in a region, whatever the realm of their network.</summary>
     public static OFTeleporter[] PortersInRegion(ushort region) => Porters.Keys
@@ -430,6 +431,7 @@ public static class AutonomousFrontierTransport
 
     public static bool Ready(GameBot bot, OFTeleporter porter, Request request) =>
         bot is { IsAutonomousWorldBot: true, IsAlive: true } &&
+        RealmTravel.AllowsNpc(bot.Realm, porter) && // RvR world: the own realm's porter only (Camlann: every porter)
         !bot.IsPlayerLedGroup && !bot.IsTemporaryGroupHelper && !bot.IsStunned && !bot.IsMezzed &&
         bot.ObjectState == GameObject.eObjectState.Active && bot.CurrentRegion == porter.CurrentRegion &&
         bot.IsWithinRadius(porter, BoardingRadius) && !bot.InCombat && !bot.IsAttacking &&

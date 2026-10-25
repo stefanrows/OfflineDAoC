@@ -87,6 +87,11 @@ namespace DOL.GS.Scripts
         //Other medallions
         private const string DarknessFallsID = "df_necklace";
 
+        /// <summary>A medallion this porter acts on: frontier passages, battlegrounds, city, keep, bind, housing and DF.</summary>
+        public static bool IsPorterMedallion(string id) =>
+            id != null && (AutonomousFrontierTransport.IsFrontierMedallion(id) || id is BattlegroundsID or DarknessFallsID or
+                BindID or CityID or KeepID or AlbionHousingEntID or GuildHouseID or HearthBindID or PersonalHouseID);
+
         private IList<OFAssistant> m_ofAssistants;
 
         private IList<OFAssistant> Assistants
@@ -193,6 +198,13 @@ namespace DOL.GS.Scripts
             {
                 GameLocation PortLocation = null;
                 medallion = player.Inventory.GetItem(eInventorySlot.Mythical);
+
+                // RvR world: a frontier porter ports only its own realm's people (Camlann, bug 74: every realm).
+                if (WorldMode.IsRvr && IsPorterMedallion(medallion?.Id_nb) && !RealmTravel.Serves(player, Realm))
+                {
+                    SayTo(player, RealmTravel.ServiceRefusal(Realm));
+                    continue;
+                }
 
                 if (medallion?.Id_nb == BattlegroundsID)
                 {

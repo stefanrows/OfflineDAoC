@@ -187,7 +187,8 @@ namespace DOL.GS.Commands
                 DisplayMessage(client, "Use /companions cast [realm] [page].");
                 return;
             }
-            var cast = CompanionCharacterCatalog.All.Where(entry => realm == null || entry.Realm == realm).ToArray();
+            var cast = CompanionCharacterCatalog.All.Where(entry => (realm == null || entry.Realm == realm) &&
+                (!WorldMode.IsRvr || RealmTravel.Allows(player.Realm, entry.Realm))).ToArray(); // RvR world: own realm only
             int pageCount = Math.Max(1, (cast.Length + 7) / 8);
             page = Math.Clamp(page, 1, pageCount);
             DisplayMessage(client, $"Authored cast, page {page}/{pageCount}. Use /companions cast [realm] [page] to browse.");

@@ -37,9 +37,16 @@ defaults in code, keep/relic start state from the reset.
   1.65; bind and craft by realm; audit of 54 server-type sites in
   `docs/RVR_RULES_AUDIT.md` (19 + 4 gated, 1 + 3 deferred). Camlann unchanged.
   Open before the first RvR boot: R2 travel lock and per-realm safe areas.
-- [~] **R2 Travel + population rules.** Implemented (worktree rvr-r2, 53 tests incl. safe hubs), in review (10:20). Realm-bound porters, capitals, `/tc`,
-  Realm Exchange, Atlantis havens, BG porters; `/spawn` own realm; open BG
-  perrealm default; Gothwaite excluded. 1 session.
+- [x] **R2 Travel + population rules.** (0.336.0; `docs/RVR_TRAVEL_POPULATION.md`)
+  RvR world: porters, `/tc`, frontier porters, BG release and the Realm
+  Exchange serve only the own realm; `/spawn`, `/classes`, recruiting and
+  stored-companion invites own realm only; bot parties same-realm (4
+  coordinator gates + Group.AddMember backstop); world bots stay out of enemy
+  homelands (upstream rule; a bot already inside walks out, invalid login spot
+  sends it home); open BG forced perrealm with per-realm landing peace;
+  Gothwaite off; enemy-land binds reset on release; per-realm safe hubs: own
+  realm safe in its hub, an intruder attackable, no attacking out of cover;
+  capitals/housing/newbie dungeons still block attackers. 53 + 8 tests.
 - [~] **R3a Keeps.** Implemented (worktree rvr-r3a, 54 tests), in review (10:45). Neutral Warden start, capture by realm sticks, claims by
   the keep's realm (solo guild ok), guards by owner realm. 1 session.
 - [~] **R3b Relics.** Agent rvr-r3b (2026-10-25 10:45, parallel to the R3a review). Realm pads, realm-wide bonus, relic sieges. 1 session.
@@ -128,3 +135,11 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   sponsors and hook-point items cleared, Gothwaite refused in RvR saves.
 - 2026-10-25 10:25: R5a reviewed (PrivLevel reset and 4 lows fixed) and merged
   as 0.335.0. R5b (world dropdown) starts now; R2 and R3a in review/progress.
+- 2026-10-25 (R2 agent): R2 in source on branch rvr-r2, real-client check
+  pending: porters, frontier porters, Realm Exchange and battleground landings
+  per realm, `/spawn` and companion recruiting own realm only, parties and bot
+  pickup groups same realm, bots kept out of enemy homelands, open BG forced
+  per realm, Gothwaite off, enemy-realm binds reset (RVR_TRAVEL_POPULATION.md);
+  safe hubs (portal keeps, border hubs, landings) protect only their own realm.
+- 2026-10-25 11:00: R2 reviewed (hub sniping + 4 lows fixed) and merged as 0.336.0.
+  R3a in review, R3b and R5b running.

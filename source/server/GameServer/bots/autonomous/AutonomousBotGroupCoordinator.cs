@@ -1517,6 +1517,7 @@ public static partial class AutonomousBotGroupCoordinator
             var townRoutes = new Dictionary<GameBot, (AllRealmsTeleporter Porter, DOL.Database.DbTeleport Destination, double Minutes)>();
             GameBot[] eligibleCandidates = available
                 .Where(candidate => candidate != leader && !claimed.Contains(candidate) && candidate.Group == null &&
+                                     RealmTravel.SharesParty(leader, candidate) && // RvR world: same-realm parties only
                                      AutonomousObjectiveAssignments.Is(candidate, objectiveKind) &&
                                      (objectiveKind == eAutonomousObjectiveKind.GroupPve ||
                                       // Anyone content in a group of four or more fills an open slot.

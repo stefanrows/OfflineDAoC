@@ -127,6 +127,9 @@ namespace DOL.GS
             {
                 if (_groupMembers.Count >= MaximumMemberCount || living.Group != null)
                     return false;
+                // RvR world: humans and world bots never share a party across realms (every bot formation path ends here).
+                if (!RealmTravel.PartyAccepts(living, _groupMembers))
+                    return false;
                 if (IsCompanionRaid && living != CompanionRaidOwner &&
                     (living is not GameBot companion || !companion.IsTemporaryGroupHelper || companion.IsAutonomousWorldBot || companion.Owner != CompanionRaidOwner))
                     return false;

@@ -116,7 +116,7 @@ namespace DOL.GS.Commands
         private void ShowRecruit(int page)
         {
             StartPage();
-            var classes = TemporaryGroupClassCatalog.All().OrderBy(entry => entry.Realm)
+            var classes = TemporaryGroupClassCatalog.Offered(WorldMode.IsRvr ? _owner.Realm : eRealm.None).OrderBy(entry => entry.Realm)
                 .ThenBy(entry => entry.CharacterClass.ToString(), StringComparer.Ordinal).ToArray();
             int pageCount = Math.Max(1, (int)Math.Ceiling((double)classes.Length / PageSize));
             page = Math.Clamp(page, 0, pageCount - 1);
@@ -154,7 +154,8 @@ namespace DOL.GS.Commands
                 ShowHome();
                 return;
             }
-            CompanionCharacterCatalog.Character[] cast = CompanionCharacterCatalog.All.ToArray();
+            CompanionCharacterCatalog.Character[] cast = CompanionCharacterCatalog.All
+                .Where(entry => !WorldMode.IsRvr || RealmTravel.Allows(_owner.Realm, entry.Realm)).ToArray(); // RvR world: own realm only
             int pageCount = Math.Max(1, (int)Math.Ceiling((double)cast.Length / PageSize));
             page = Math.Clamp(page, 0, pageCount - 1);
             var lines = new List<string>

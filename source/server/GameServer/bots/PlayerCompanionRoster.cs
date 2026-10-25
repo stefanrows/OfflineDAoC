@@ -1334,6 +1334,12 @@ namespace DOL.GS
                 message = "Choose a supported Classic + SI class and realm.";
                 return false;
             }
+            // RvR world (owner decision 7): persistent companions come from the owner's realm only.
+            if (WorldMode.IsRvr && !RealmTravel.Allows(owner.Realm, realm))
+            {
+                message = RealmTravel.CompanionRefusal(owner.Realm) + " Nothing was recruited.";
+                return false;
+            }
 
             lock (owner)
             {
@@ -1528,6 +1534,12 @@ namespace DOL.GS
                 !Guid.TryParse(record.CompanionId, out _) || !validRace || !validGender)
             {
                 message = $"{record.Name}'s saved class identity is invalid; the roster record was kept.";
+                return false;
+            }
+            // RvR world: a companion of another realm (from an older roster) stays on the bench; the record is kept.
+            if (WorldMode.IsRvr && !RealmTravel.Allows(owner.Realm, realm))
+            {
+                message = $"{record.Name} is of {RealmTravel.RealmName(realm)} and will not join you in the realm war; the roster record was kept.";
                 return false;
             }
 

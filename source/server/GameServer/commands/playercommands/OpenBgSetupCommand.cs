@@ -252,8 +252,8 @@ namespace DOL.GS.Commands
             "albion" => UnitsShown(AlbionUnits),
             "midgard" => UnitsShown(MidgardUnits),
             "hibernia" => UnitsShown(HiberniaUnits),
-            "mode" => OpenBattlegroundMode.ParseMode(Mode) == OpenBgMode.PerRealm ? "perrealm" : "serverpvp",
-            "peace" => string.IsNullOrWhiteSpace(Peace) ? "auto" : Peace.Trim().ToLowerInvariant(),
+            "mode" => OpenBattlegroundMode.ShownMode(WorldMode.Current, Mode),
+            "peace" => OpenBattlegroundMode.ShownPeace(WorldMode.Current, Peace),
             "presets" => string.IsNullOrWhiteSpace(Presets) ? "off" : Presets.Trim(),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown open BG setup key."),
         };

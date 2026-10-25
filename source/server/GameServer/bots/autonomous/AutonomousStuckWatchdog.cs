@@ -562,6 +562,13 @@ public static class AutonomousStuckWatchdog
             return true;
         }
 
+        // RvR world: a saved spot in another realm's homeland or capital is not a valid place to wake up.
+        if (WorldMode.IsRvr && !AutonomousRealmBoundary.AllowsHomeland(bot.Realm, region.ID, zone.ID))
+        {
+            reason = $"region {region.ID} zone {zone.ID} is another realm's homeland";
+            return true;
+        }
+
         if (!PathfindingProvider.Instance.IsAvailable || !PathfindingProvider.Instance.HasNavmesh(zone))
             return false;
 
