@@ -35,8 +35,9 @@ fighter of realm X when all of these hold:
 3. **X holds its own relic of type T** (mounted on one of X's pads). A realm
    that wins back its own relic is exempt. This is the upstream rule ("You
    need to capture your realm's strength relic first").
-4. **The pad crowd** of the upstream pickup: at least `relic_players_required_on_pad`
-   (16 by default) living, visible enemies of R within 500 units of the pad,
+4. **The pad crowd** of the upstream pickup: at least `rvr_relic_players_required_on_pad`
+   (8 by default, upstream 0.38c's value; port S3. The Camlann world keeps
+   `relic_players_required_on_pad`, 16) living, visible enemies of R within 500 units of the pad,
    players and player-shaped bots alike. Staff accounts skip this check.
 
 A dropped relic on the ground is free for anyone, as upstream.

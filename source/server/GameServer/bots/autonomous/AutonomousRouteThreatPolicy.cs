@@ -17,7 +17,22 @@ namespace DOL.GS
     {
         [ServerProperty("autonomous", "bot_route_threat_awareness",
             "Enable bounded threat checks while autonomous PvE leaders travel to outdoor camps. Disabled until a controlled performance comparison is accepted.", false)]
-        public static bool Enabled;
+        public static bool CamlannEnabled;
+
+        /// <summary>
+        /// RvR world (Realm-1): upstream 0.38c ships route threat awareness on
+        /// (bot_route_threat_awareness, default true). The RvR world reads its own
+        /// key so the Camlann save's "off" row cannot switch it off, and the
+        /// Camlann world stays off until its performance comparison is accepted.
+        /// </summary>
+        [ServerProperty("autonomous", "rvr_bot_route_threat_awareness",
+            "RvR world (Realm-1): gamebots look ahead along their route in open zones and pull, avoid or route around aggressive monsters (upstream 0.38c default on). The Camlann world uses bot_route_threat_awareness.", true)]
+        public static bool RvrEnabled = true;
+
+        /// <summary>Route threat awareness in the running world.</summary>
+        public static bool Enabled => IsEnabled(WorldMode.Current);
+
+        public static bool IsEnabled(WorldModelKind world) => world == WorldModelKind.Realm ? RvrEnabled : CamlannEnabled;
 
         public const int ScanMilliseconds = 2_500;
         public const int ScanStaggerMilliseconds = 500;

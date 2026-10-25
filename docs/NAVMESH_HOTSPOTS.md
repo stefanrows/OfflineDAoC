@@ -170,6 +170,12 @@ hotspots.**
 
 ## Step 2 plan: port the road fallback
 
+Status: implemented in source in port S3 (task 143), real-client check pending.
+Deviation from the plan below: instead of a new deploy kind, the generated file is
+embedded in `GameServer.dll` (`bots/autonomous/data/zone_roads.json`), so deploy and
+release carry it with the server; `navmesh/roads.json` next to the server still wins.
+See `source/server/tools/navmesh_splice/README.md`.
+
 **Upstream design** (read with `git show upstream/main:…`):
 
 - `AutonomousZoneRoads` loads `navmesh/roads.json`: per zone, anchors

@@ -171,7 +171,7 @@ namespace DOL.GS
                     ? message
                     : LanguageMgr.GetTranslation(ServerProperties.Properties.SERV_LANGUAGE, "GameRelicPad.MountRelic.Captured", GlobalConstants.RealmToName(relic.CurrentCarrier.Realm), relic.Name);
 
-                foreach (GamePlayer otherPlayer in ClientService.Instance.GetPlayers())
+                foreach (GamePlayer otherPlayer in AnnouncementRecipients())
                 {
                     otherPlayer.Out.SendMessage(captureMessage, eChatType.CT_ScreenCenterSmaller, eChatLoc.CL_SystemWindow);
                     otherPlayer.Out.SendMessage($"{message}\n{message}\n{message}", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
@@ -195,7 +195,7 @@ namespace DOL.GS
             {
                 string message = $"The {relic.Name} has been returned to {Name}.";
 
-                foreach (GamePlayer otherPlayer in ClientService.Instance.GetPlayers())
+                foreach (GamePlayer otherPlayer in AnnouncementRecipients())
                     otherPlayer.Out.SendMessage($"{message}\n{message}\n{message}", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
             }
 
@@ -224,7 +224,7 @@ namespace DOL.GS
             {
                 string message = LanguageMgr.GetTranslation(ServerProperties.Properties.SERV_LANGUAGE, "GameRelicPad.RemoveRelic.Removed", relic.CurrentCarrier.Name, GlobalConstants.RealmToName((eRealm)relic.CurrentCarrier.Realm), relic.Name, Name);
 
-                foreach (GamePlayer otherPlayer in ClientService.Instance.GetPlayers())
+                foreach (GamePlayer otherPlayer in AnnouncementRecipients())
                     otherPlayer.Out.SendMessage($"{message}\n{message}\n{message}", eChatType.CT_Important, eChatLoc.CL_SystemWindow);
 
                 NewsMgr.CreateNews(message, relic.CurrentCarrier.Realm, eNewsType.RvRGlobal, false);
@@ -268,6 +268,15 @@ namespace DOL.GS
 
             return enemyNearby;
         }
+
+        /// <summary>
+        /// Who hears a relic capture, return or removal: everyone, as before; in the RvR world only while the
+        /// launcher's RvR and battleground announcements are on (upstream 0.38c GameWideAnnouncements).
+        /// </summary>
+        private static IEnumerable<GamePlayer> AnnouncementRecipients() =>
+            !WorldMode.IsRvr || GameWideAnnouncements.Enabled(AnnouncementKind.RvrBattleground)
+                ? ClientService.Instance.GetPlayers()
+                : [];
 
         public void RemoveRelics()
         {

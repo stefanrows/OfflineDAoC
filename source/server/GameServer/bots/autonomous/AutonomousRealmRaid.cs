@@ -43,6 +43,8 @@ namespace DOL.GS
             public long Created;
             public RealmRaidMuster.Hub Hub;
             public bool HubDeparted;
+            /// <summary>When the parties left the hub (upstream 0.38c staging deadline; RvR world).</summary>
+            public long HubDepartedTick;
             public long NextDefenseBroadcast;
             public readonly Dictionary<int, Vector3> HubPosts = new();
             public Vector3[] OutboundSeams = [];
@@ -78,6 +80,20 @@ namespace DOL.GS
         private static readonly Dictionary<Group, string> Released = new();
         private static readonly Dictionary<string, long> Cooldowns = new();
         private static readonly Dictionary<string, GameNPC> Bosses = new();
+        // Upstream 0.38c (RvR world): each realm's last automatic event; the next automatic start picks the other one.
+        private static readonly Dictionary<eRealm, string> LastAutomatic = new();
+        private static readonly Logging.Logger RaidLog = Logging.LoggerManager.Create(typeof(AutonomousRealmRaid));
+
+        /// <summary>A realm never runs the same automatic PvE event twice in a row (forced events are separate). Upstream 0.38c.</summary>
+        public static bool MayStartAutomatic(string id, string lastAutomaticId) =>
+            !string.Equals(id, lastAutomaticId, StringComparison.Ordinal);
+
+        /// <summary>
+        /// Port S3: the RvR world (Realm-1) runs upstream 0.38c's realm raids: every expedition belongs to one realm,
+        /// recruits only that realm's bots and opens only that realm's dragon or epic dungeon, one automatic
+        /// expedition per realm at a time. The Camlann world keeps the fork's mixed-realm PvE expeditions.
+        /// </summary>
+        public static bool RaidsByRealm(WorldModelKind world) => world == WorldModelKind.Realm;
         private sealed record FinishedLoot(GameBot[] Members, RealmRaidLootOwner.Ledger Ledger, long Expires);
         private static readonly Dictionary<GameNPC, FinishedLoot> CompletedLoot = new();
         private static long _nextPulse;
@@ -133,8 +149,11 @@ namespace DOL.GS
                     }
                     raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
                     int presentAtHub = raid.Parties.Values.Sum(p => PresentAtHub(raid, p));
-                    bool departing = !raid.HubDeparted && RealmRaidRecruitmentPolicy.DepartHub(false, presentAtHub, raid.MinimumPresent);
+                    bool departing = !raid.HubDeparted && (WorldMode.IsRvr
+                        ? RealmRaidRecruitmentPolicy.DepartHub(false, presentAtHub, raid.Forced ? 0L : GameLoop.GameLoopTime - raid.Created)
+                        : RealmRaidRecruitmentPolicy.DepartHub(false, presentAtHub, raid.MinimumPresent));
                     raid.HubDeparted |= departing;
+                    if (departing) raid.HubDepartedTick = GameLoop.GameLoopTime;
                     if (departing) RealmEventNotices.Queue(raid.Definition.Id, raid.Definition.Realm,
                         $"{presentAtHub} adventurers present at {raid.Hub.Name}; departing together for {raid.Definition.Name}. Late arrivals will join the expedition directly.");
                     if (raid.HubDeparted)
@@ -149,29 +168,37 @@ namespace DOL.GS
                     raid.DungeonRoute?.ObserveCompletion();
                     if (raid.DungeonRoute?.Complete == true)
                     { End(raid, now, "The final dungeon encounter has been defeated."); continue; }
-                    if (raid.Started && now >= raid.Deadline)
+                    if (raid.Started && (WorldMode.IsRvr ? RealmRaidRecruitmentPolicy.BattleExpired(raid.Forced, now, raid.Deadline) : now >= raid.Deadline))
                     { End(raid, now, "The four-hour expedition window ended."); continue; }
                     if (!raid.Started)
                     {
-                        long noticeDeadline = raid.Created + (raid.Forced ? RealmRaidRecruitmentPolicy.ForcedStagingMilliseconds : RealmRaidRecruitmentPolicy.AutonomousStagingLimitMilliseconds);
-                        if (RealmEventBanter.ReminderDue(raid.Started, raid.PreparationNoticeSent, noticeDeadline - now))
+                        long noticeDeadline = WorldMode.IsRvr
+                            ? RealmRaidRecruitmentPolicy.StagingDeadline(raid.Created, raid.HubDepartedTick)
+                            : raid.Created + (raid.Forced ? RealmRaidRecruitmentPolicy.ForcedStagingMilliseconds : RealmRaidRecruitmentPolicy.AutonomousStagingLimitMilliseconds);
+                        if ((!WorldMode.IsRvr || !raid.Forced) && RealmEventBanter.ReminderDue(raid.Started, raid.PreparationNoticeSent, noticeDeadline - now))
                         {
                             raid.PreparationNoticeSent = true;
                             RealmEventNotices.Queue(raid.Definition.Id, raid.Definition.Realm,
                                 RealmEventBanter.RaidReminder(raid.Definition.Name, raid.Forced));
                         }
                         int present = PresentAtStaging(raid);
-                        if (RealmRaidRecruitmentPolicy.Ready(raid.Forced, now - raid.Created, present, DragonLanded(raid),
-                                raid.MinimumPresent, raid.MinimumStaging))
+                        bool ready = WorldMode.IsRvr
+                            ? RealmRaidRecruitmentPolicy.UpstreamReady(raid.Forced, now - raid.Created, present, DragonLanded(raid))
+                            : RealmRaidRecruitmentPolicy.Ready(raid.Forced, now - raid.Created, present, DragonLanded(raid),
+                                raid.MinimumPresent, raid.MinimumStaging);
+                        if (ready)
                         {
                             raid.Started = true;
-                            raid.Deadline = now + RealmRaidRecruitmentPolicy.BattleMilliseconds;
+                            // Upstream 0.38c (RvR world): a forced raid runs until its encounter falls or the player stops it.
+                            raid.Deadline = WorldMode.IsRvr && raid.Forced ? long.MaxValue : now + RealmRaidRecruitmentPolicy.BattleMilliseconds;
                             RealmEventRecords.Progress(raid.Definition.Id, "Battle", "Expedition began advancing to the encounter.", raid.Support.Length, present);
                             RealmEventNotices.Queue(raid.Definition.Id, raid.Definition.Realm,
                                 $"The {raid.Definition.Name} expedition is advancing with {present} staged level-50 adventurers.");
                         }
-                        else if (RealmRaidRecruitmentPolicy.StagingExpired(raid.Forced, now - raid.Created, present, DragonLanded(raid),
-                                     raid.MinimumPresent))
+                        else if (WorldMode.IsRvr
+                                     ? RealmRaidRecruitmentPolicy.StagingExpired(raid.Forced, now, raid.Created, raid.HubDepartedTick, present, DragonLanded(raid))
+                                     : RealmRaidRecruitmentPolicy.StagingExpired(raid.Forced, now - raid.Created, present, DragonLanded(raid),
+                                         raid.MinimumPresent))
                         { End(raid, now, $"Staging failed: {present} adventurers arrived; no undersized or airborne assault was ordered."); continue; }
                     }
                     if (raid.Started && raid.DungeonRoute != null)
@@ -192,22 +219,27 @@ namespace DOL.GS
             if (!RealmRaidRecruitmentPolicy.AutonomousRaidsEnabled) return false;
             if (leader?.Group == null || leader.Group.LivingLeader != leader) return false;
             GameBot[] members = leader.Group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
-            if (members.Length != 8 || members.Any(b => !IsEligible(b) || IsReserved(b) ||
+            bool byRealm = RaidsByRealm(WorldMode.Current);
+            if (members.Length != 8 || members.Any(b => !IsEligible(b) || IsReserved(b) || byRealm && b.Realm != leader.Realm ||
                 !AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.GroupPve))) return false;
             lock (Sync)
             {
                 if (Membership.TryGetValue(leader.Group, out Raid joined)) { view = joined.Parties[leader.Group].View; return true; }
-                Raid raid = Raids.Values.FirstOrDefault(r => !r.Forced && r.Parties.Count < RealmRaidRecruitmentPolicy.MaximumParties);
-                if (raid == null && Raids.Values.Any(r => !r.Forced)) return false;
+                Raid raid = Raids.Values.FirstOrDefault(r => (!byRealm || r.Definition.Realm == leader.Realm) && !r.Forced &&
+                    r.Parties.Count < RealmRaidRecruitmentPolicy.MaximumParties);
+                if (raid == null && Raids.Values.Any(r => byRealm ? r.Definition.Realm == leader.Realm : !r.Forced)) return false;
                 if (raid == null)
                 {
                     // Decisions occur once when a party chooses a new task, not
                     // once per member or AI tick; keep ordinary PvE populated.
                     if (Random.Shared.NextDouble() >= RealmRaidRecruitmentPolicy.NewEventChance) return false;
-                    if (AutonomousBotRegistry.Snapshot().Count(b => IsEligible(b) &&
+                    if (AutonomousBotRegistry.Snapshot().Count(b => IsEligible(b) && (!byRealm || b.Realm == leader.Realm) &&
                         AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.GroupPve)) < RealmRaidRecruitmentPolicy.AutonomousMinimumPresent) return false;
-                    var definition = Definitions.Where(d => Available(d.Id)).OrderBy(_ => Random.Shared.Next()).FirstOrDefault();
+                    var definition = Definitions.Where(d => Available(d.Id) && (!byRealm || d.Realm == leader.Realm &&
+                            MayStartAutomatic(d.Id, LastAutomatic.GetValueOrDefault(leader.Realm))))
+                        .OrderBy(_ => Random.Shared.Next()).FirstOrDefault();
                     if (definition == null || !Start(definition.Id, definition.Realm, out _)) return false;
+                    if (byRealm) LastAutomatic[leader.Realm] = definition.Id;
                     raid = Raids[definition.Id];
                 }
                 else if (Random.Shared.NextDouble() >= RealmRaidRecruitmentPolicy.JoinExistingChance) return false;
@@ -290,9 +322,11 @@ namespace DOL.GS
             }
         }
 
-        public static bool Start(string id, eRealm _, out string reason, bool forced = false)
+        public static bool Start(string id, eRealm realm, out string reason, bool forced = false)
         {
-            GameBot[][] recruits = forced ? AutonomousBotGroupCoordinator.PlanForcedRaid() : [];
+            bool byRealm = RaidsByRealm(WorldMode.Current);
+            // RvR world (upstream 0.38c): the realm that raids is the one asked for, and only its bots are reserved.
+            GameBot[][] recruits = forced ? byRealm ? AutonomousBotGroupCoordinator.PlanForcedRaid(realm) : AutonomousBotGroupCoordinator.PlanForcedRaid() : [];
             if (forced && recruits.Sum(p => p.Length) < RealmRaidRecruitmentPolicy.MaximumBots)
             {
                 reason = $"Not started: only {recruits.Sum(p => p.Length)}/300 eligible level-50 bots could be reserved. No tasks were cancelled.";
@@ -303,15 +337,18 @@ namespace DOL.GS
                 // The realm remains the encounter's home-world identity for
                 // spawn, route, and client presentation. It is not a faction
                 // selector for a Camlann PvE expedition.
-                Definition definition = Definitions.FirstOrDefault(d => d.Id == id);
+                Definition definition = Definitions.FirstOrDefault(d => d.Id == id && (!byRealm || d.Realm == realm));
                 if (definition == null || !Available(id)) { reason = "The encounter is not alive/available, or this event is on cooldown."; return false; }
-                if (!RealmRaidRecruitmentPolicy.CanOpenEvent(forced, Raids.Values.Any(r => !r.Forced), Raids.ContainsKey(id)))
-                { reason = "An autonomous PvE expedition is already active, or this encounter is already assigned."; return false; }
+                if (!RealmRaidRecruitmentPolicy.CanOpenEvent(forced,
+                        byRealm ? Raids.Values.Any(r => r.Definition.Realm == realm) : Raids.Values.Any(r => !r.Forced), Raids.ContainsKey(id)))
+                { reason = byRealm ? "This realm already has an autonomous PvE expedition, or this encounter is already assigned."
+                    : "An autonomous PvE expedition is already active, or this encounter is already assigned."; return false; }
                 if (forced && recruits.SelectMany(p => p).Any(b => IsReserved(b) || GetView(b.Group) != null))
                 { reason = "A planned recruit joined another expedition. Nothing was reassigned; please retry."; return false; }
                 long now = GameLoop.GameLoopTime;
                 var raid = new Raid { Definition = definition, Boss = Bosses[id], Forced = forced, Created = now, Hub = RealmRaidMuster.Hubs.Single(h => h.Event == id),
-                    Deadline = now + (forced ? RealmRaidRecruitmentPolicy.ForcedStagingMilliseconds : RealmRaidRecruitmentPolicy.AutonomousStagingLimitMilliseconds) };
+                    Deadline = byRealm && forced ? long.MaxValue
+                        : now + (forced ? RealmRaidRecruitmentPolicy.ForcedStagingMilliseconds : RealmRaidRecruitmentPolicy.AutonomousStagingLimitMilliseconds) };
                 if (definition.IsDungeon)
                 {
                     if (!RealmRaidDungeonRoute.TryCreate(definition.Region, definition.Trigger, definition.FinalTypes, out var route))
@@ -327,6 +364,18 @@ namespace DOL.GS
                     GlobalConstants.RealmToName(definition.Realm), (forced ? "Forced" : "Automatic") + " rally via " + raid.Hub.Name);
                 raid.ForcedParties.AddRange(recruits);
                 foreach (GameBot bot in recruits.SelectMany(p => p)) Reservations[bot.DatabaseID] = id;
+                if (byRealm)
+                {
+                    // Upstream 0.38c wording: forced raids start as soon as 200 are staged and have no time limit.
+                    string startCondition = ForcedStartCondition(definition.IsDungeon);
+                    RealmEventNotices.QueueScreen(id, definition.Realm, $"A {definition.Name} raid is forming at {raid.Hub.Name}.", AnnouncementKind.PveRealmEvent);
+                    RealmEventNotices.Queue(id, definition.Realm, forced
+                        ? $"{definition.Name}: {recruits.Sum(p => p.Length)} level-50 adventurers reserved; gather at {raid.Hub.Name}. {startCondition}"
+                        : $"{definition.Name}: recruiting up to 300 level-50 adventurers via {raid.Hub.Name}; at least 200 must arrive before assault.");
+                    reason = forced ? $"Reserved {recruits.Sum(p => p.Length)} level-50 bots, closest to {raid.Hub.Name} first. The raid starts as soon as 200 are staged and runs until the encounter is defeated or you press Stop event. {startCondition}" :
+                        $"Recruiting up to 300 level-50 bots via {raid.Hub.Name}. At least 200 must arrive before assault; staging can last up to {RealmRaidRecruitmentPolicy.AutonomousStagingLimitMilliseconds / 60_000} minutes.";
+                    return true;
+                }
                 RealmEventNotices.Queue(id, definition.Realm, forced
                     ? $"{definition.Name}: {recruits.Sum(p => p.Length)} level-50 adventurers reserved; 45-minute preparation begins at {raid.Hub.Name}. At least 200 must arrive and the dragon must land."
                     : $"{definition.Name}: recruiting up to 300 level-50 adventurers via {raid.Hub.Name}; at least 200 must arrive before assault.");
@@ -335,6 +384,11 @@ namespace DOL.GS
                 return true;
             }
         }
+
+        // Epic dungeons have no landing to wait for; only dragon rallies mention it (upstream 0.38c).
+        public static string ForcedStartCondition(bool isDungeon) => isDungeon
+            ? "At least 200 must arrive before the dungeon assault."
+            : "At least 200 must arrive and the dragon must land.";
 
         private static bool DragonLanded(Raid raid) => raid.Definition.IsDungeon ||
             (raid.Boss.Flags & GameNPC.eFlags.FLYING) == 0 &&
@@ -423,7 +477,9 @@ namespace DOL.GS
                     if (!raid.Forced && raid.Support.Length < RealmRaidRecruitmentPolicy.MaximumBots && raid.ForcedParties.Count == 0)
                     {
                         int size = Math.Min(8, RealmRaidRecruitmentPolicy.MaximumBots - raid.Support.Length);
-                        var waiting = AutonomousBotGroupCoordinator.PlanWaitingRaidParty(size);
+                        var waiting = RaidsByRealm(WorldMode.Current)
+                            ? AutonomousBotGroupCoordinator.PlanWaitingRaidParty(raid.Definition.Realm, size)
+                            : AutonomousBotGroupCoordinator.PlanWaitingRaidParty(size);
                         if (waiting != null)
                         {
                             raid.ForcedParties.Add(waiting);
@@ -472,7 +528,7 @@ namespace DOL.GS
                     raid.Parties.Count >= RealmRaidRecruitmentPolicy.MaximumParties || Membership.ContainsKey(group)) return false;
                 var members = group.GetMembersInTheGroup().OfType<GameBot>().ToArray();
                 if (members.Length is not (4 or 8) || raid.Support.Length + members.Length > RealmRaidRecruitmentPolicy.MaximumBots ||
-                    members.Any(b => !IsEligible(b) ||
+                    members.Any(b => !IsEligible(b) || RaidsByRealm(WorldMode.Current) && b.Realm != raid.Definition.Realm ||
                     Reservations.GetValueOrDefault(b.DatabaseID) != id)) return false;
                 int slot = Enumerable.Range(0, RealmRaidRecruitmentPolicy.MaximumParties).First(i => raid.Parties.Values.All(p => p.FormationSlot != i));
                 if (!TryStaging(raid, slot, out var staging) || !TryHubPost(raid, slot, out var hubPost)) return false;
@@ -842,6 +898,17 @@ namespace DOL.GS
                 raid.Definition.IsDungeon ? raid.DungeonRoute?.Complete == true ? "Boss defeated" : "Ended (unconfirmed)" :
                 !raid.Boss.IsAlive ? "Boss defeated" : "Encounter unavailable";
             RealmEventRecords.Finish(raid.Definition.Id, outcome, reason, raid.Support.Length);
+            if (RaidsByRealm(WorldMode.Current))
+            {
+                RaidLog.Info($"REALM_RAID_ENDED event={raid.Definition.Id} outcome=\"{outcome}\" support={raid.Support.Length} reason=\"{reason}\"");
+                // Upstream 0.38c (RvR world): every realm hears when a raid brings down an epic dungeon's final boss.
+                if (outcome == "Boss defeated" && raid.Definition.IsDungeon)
+                {
+                    GameNPC finalBoss = (raid.DungeonRoute?.FinalBosses ?? [raid.Boss]).FirstOrDefault(n => n != null && !n.IsAlive);
+                    GameWideAnnouncements.Queue(AnnouncementKind.PveRealmEvent, GameWideAnnouncements.FinalBossDefeated(raid.Definition.Realm,
+                        finalBoss?.Name ?? raid.Definition.BossType, raid.Definition.Name));
+                }
+            }
             GameBot[] recipients = raid.Support.OfType<GameBot>().ToArray();
             foreach (GameNPC final in (raid.DungeonRoute?.FinalBosses ?? [raid.Boss]).Where(n => n != null && !n.IsAlive))
             {

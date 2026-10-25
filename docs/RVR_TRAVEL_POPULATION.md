@@ -41,11 +41,12 @@ capital, portal keep, border hub, hub landing). Tests:
 |---|---|---|
 | Homelands and capitals | Every realm may enter every homeland (Tier 2) | Upstream rule back: no bot enters another realm's homeland or capital (camp choice, town idling, merchants, trainers, Realm Exchange, release, movement); frontier zones, shared dungeons and Darkness Falls stay open; a bot that already stands in an enemy homeland may walk out, and a saved position there is sent to the own capital at login |
 | Town porters (`AutonomousBotTownTravel`) | Any porter | Own realm's porters only, and no landing in another realm's homeland |
+| Town teleporters as a travel shortcut (upstream 0.38c `AutonomousTownTeleporters`, port S3) | Off | Own realm's town teleporter when it saves a minute and 30% against walking or a horse (`bot_use_town_teleporters`, default on); destinations also pass the realm boundary above. Waits for the controller call sites (RVR_PORT_MAP.md "S3 handoff") |
 | Frontier porters | A warband may board its leader's realm's porter | Own realm's porter only (nearest own porter first) |
 | Pickup PvE groups, RvR pickup groups, warband backfill and merge | Mixed realms, preferred for PvE (0.59.0) | Same realm only (filters in the group coordinator) |
 | Any party (backstop) | Allowed | `Group.AddMember` refuses a member whose alliance realm differs from the party's (staff and neutral encounter bots never block) |
 | Atlantis | Off for bots | Off for bots |
-| Battlegrounds | Admitted participants only | Unchanged |
+| Battlegrounds | Admitted participants only | Open BG crew only: the fork's automatic level-bracket campaign is off, as upstream 0.38c sends no bot to a bracket battleground by default (port S3) |
 
 ## Modes
 

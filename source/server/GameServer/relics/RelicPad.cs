@@ -42,7 +42,7 @@ namespace DOL.GS.Relics
 
         private void CheckPadState()
         {
-            if (_playersOnPad >= ServerProperties.Properties.RELIC_PLAYERS_REQUIRED_ON_PAD && _relicPillar.State is eDoorState.Closed)
+            if (_playersOnPad >= RvrRelicRules.PlayersRequiredOnPad() && _relicPillar.State is eDoorState.Closed)
                 _relicPillar.Open();
             else if (_relicPillar.State is eDoorState.Open && _playersOnPad <= 0)
                 _relicPillar.Close();

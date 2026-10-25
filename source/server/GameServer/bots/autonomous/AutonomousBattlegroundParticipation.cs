@@ -131,6 +131,14 @@ public static class AutonomousBattlegroundParticipation
 
     public static bool IsFrontierRegion(ushort region) => region is 1 or 100 or 200;
 
+    /// <summary>
+    /// Whether the level-bracket campaign (Abermenai, Thidranki, Murdaigean, Caledonia) admits world bots. Port S3:
+    /// the RvR world follows upstream 0.38c, where no bot tours a bracket battleground unless the owner sets a
+    /// battleground share (upstream "Battlegrounds %", 0 by default); the fork's automatic bracket campaign runs in
+    /// Camlann only. The open BG crew is not affected in either world.
+    /// </summary>
+    public static bool BracketCampaignRuns(WorldModelKind world) => world != WorldModelKind.Realm;
+
     private static bool IsEligible(byte level, int realmLevel, bool rvrTour, bool playerLed, bool relic, BattlegroundDefinition definition) =>
         definition != null && rvrTour && !playerLed && !relic &&
         level >= definition.MinLevel && level <= definition.MaxLevel &&
@@ -840,6 +848,8 @@ public static class AutonomousBattlegroundParticipation
                         GameRelic.IsPlayerCarryingRelic(bot), entry.Definition);
                 if (!entry.Entered && now - entry.AssignedTick > AssignmentTimeoutFor(entry.Definition))
                     reason = LeaveReason.Unassigned;
+                if (reason == null && !IsOpenUnit(entry.Definition, entry.Unit) && !BracketCampaignRuns(WorldMode.Current))
+                    reason = LeaveReason.Unassigned;
                 if (entry.Entered && bot.CurrentRegionID != entry.Definition.RegionId)
                     reason = LeaveReason.Unassigned;
                 long wall = Environment.TickCount64;
@@ -878,7 +888,7 @@ public static class AutonomousBattlegroundParticipation
             if (inside == null) continue;
             // The open BG's crew lives in the roster's memory only: a bot found inside it without an entry
             // (after a restart) is sent out and the roster refills.
-            LeaveReason? reason = inside.Kind == BattlegroundDefinitionKind.Open
+            LeaveReason? reason = inside.Kind == BattlegroundDefinitionKind.Open || !BracketCampaignRuns(WorldMode.Current)
                 ? LeaveReason.Unassigned
                 : LeaveReasonFor(bot.Level, bot.RealmLevel,
                     AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR), bot.IsPlayerLedGroup,
@@ -893,7 +903,7 @@ public static class AutonomousBattlegroundParticipation
             Log.Info($"AUTONOMOUS_BG_ENTERED region={inside.RegionId} bot=\"{bot.Name}\" reregistered=true");
         }
 
-        if (enabled) Admit(roster, now);
+        if (enabled && BracketCampaignRuns(WorldMode.Current)) Admit(roster, now);
     }
 
     /// <summary>Per pass: whether a region has a porter with a medallion merchant in reach.</summary>

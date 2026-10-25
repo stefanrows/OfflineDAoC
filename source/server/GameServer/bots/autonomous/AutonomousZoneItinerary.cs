@@ -211,6 +211,16 @@ namespace DOL.GS
             // caller and the ordinary PvE corridor cache retain their behavior.
             if (nav is RvrPlanningNavigation work)
                 return work.CompleteCorridor(zone, start, end, () => CalculateCompleteCorridor(nav, zone, start, end));
+            return HasDirectCorridor(nav, zone, start, end);
+        }
+
+        /// <summary>
+        /// The corridor check through Detour alone, cached per mesh revision (the fork's HasCompleteCorridor body
+        /// outside keep planning). Upstream 0.38c name: the zone road graph proves its own legs with it
+        /// (AutonomousZoneRoads).
+        /// </summary>
+        public static bool HasDirectCorridor(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 end)
+        {
             // Only the installed provider supplies door/mesh revision tracking.
             // No quantization: even a one-unit position change gets a real query.
             if (nav is not LocalPathfindingMgr || zone == null)
@@ -224,8 +234,20 @@ namespace DOL.GS
             return answer;
         }
 
-        private static bool CalculateCompleteCorridor(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 end)
+        private static bool CalculateCompleteCorridor(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 end) =>
+            CalculateCompleteCorridorCore(nav, zone, start, end, out _);
+
+        /// <summary>
+        /// Tool (zone road weights, UT_ZoneRoadBuild, upstream 0.38c): how far a bot walks along the corridor
+        /// <see cref="HasDirectCorridor"/> proves, segment by segment as that check walks it; NaN when there is no
+        /// corridor. Not cached.
+        /// </summary>
+        public static float CorridorLength(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 end) =>
+            CalculateCompleteCorridorCore(nav, zone, start, end, out float length) ? length : float.NaN;
+
+        private static bool CalculateCompleteCorridorCore(IPathfindingMgr nav, Zone zone, Vector3 start, Vector3 end, out float length)
         {
+            length = 0;
             WrappedPathfindingNode[] nodes = ArrayPool<WrappedPathfindingNode>.Shared.Rent(512);
             try
             {
@@ -237,6 +259,12 @@ namespace DOL.GS
                     PathfindingResult result = nav.GetPathStraight(zone, start, end, nav.DefaultFilters, nodes);
                     if (result.NodeCount < 1 || result.NodeCount > nodes.Length) return false;
                     Vector3 last = nodes[result.NodeCount - 1].Position;
+                    Vector3 walked = start;
+                    for (int i = 0; i < result.NodeCount; i++)
+                    {
+                        length += Vector3.Distance(walked, nodes[i].Position);
+                        walked = nodes[i].Position;
+                    }
                     // Detour can report a partial path when the endpoint is on
                     // the final polygon edge.  A near-end partial is already a
                     // complete usable corridor; requiring 240 units of travel

@@ -46,6 +46,11 @@ When a task is done and its required verification is complete, move it out of it
      weights, attack plan per realm, whole-realm defence, home reserve against
      invaders, capped revenge trips; [RVR_ARMIES.md](RVR_ARMIES.md))
      implemented in source, real-client check pending.
+     Upstream port S3 (relic pad 8 enemies, route threat awareness on, realm
+     raids per realm with upstream rally timing, no bracket battleground tours
+     as upstream's 0% default, town teleporters ported but waiting for the S2
+     call sites, road fallback; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S3 done")
+     implemented in source, real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed
@@ -544,18 +549,6 @@ Agent sessions on items 45–48: take the role and context from
      Castle Excalibur DF portal got worse. Follow-ups are tasks 140–146
      ([NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#0314-live-measurement-2026-10-24)).
 
-143. **Road fallback for dead-end detours (task 139 Step 2).** Owner,
-     2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
-     game-hour: zone 214 (25 give-ups, 11 bots, starts 445–473k,302–318k to
-     goals 330–352k) and zone 115 (18, 13 bots, y about 601k to 626–632k). The
-     direct search stalls; start → reference → goal completes. Plan:
-     [NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#step-2-plan-port-the-road-fallback).
-     Code, bigger; deploy and release must carry `roads.json`. **0.320.0
-     measurement:** 45 give-ups, about 19 per game-hour. Zone 214 grew to 32
-     (15 bots, about 13 per game-hour) and is now the top hotspot (zone 214
-     474000,342000; corridor 480000,315000 → 480000,345000, 17 give-ups,
-     9 bots); zone 115 fell to 11.
-
 144. **Watch the region 181 cross-zone burst.** Owner, 2026-10-24, from the
      0.314.0 live measurement. About 8 give-ups per game-hour: 19 PvE bots
      between 13:37 and 13:59, all starting at x=393280 (a zone border), goals
@@ -593,6 +586,31 @@ Agent sessions on items 45–48: take the role and context from
      `SelectCamp` in this run too.
 
 ## Implemented in source; installation verification pending
+
+143. **Road fallback for dead-end detours (task 139 Step 2).** Owner,
+     2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
+     game-hour: zone 214 (25 give-ups, 11 bots, starts 445–473k,302–318k to
+     goals 330–352k) and zone 115 (18, 13 bots, y about 601k to 626–632k). The
+     direct search stalls; start → reference → goal completes. Plan:
+     [NAVMESH_HOTSPOTS.md](NAVMESH_HOTSPOTS.md#step-2-plan-port-the-road-fallback).
+     Code, bigger; deploy and release must carry `roads.json`. **0.320.0
+     measurement:** 45 give-ups, about 19 per game-hour. Zone 214 grew to 32
+     (15 bots, about 13 per game-hour) and is now the top hotspot (zone 214
+     474000,342000; corridor 480000,315000 → 480000,345000, 17 give-ups,
+     9 bots); zone 115 fell to 11.
+     **Implemented in source (port S3), real-client check pending:** upstream
+     0.38c road fallback ported (`AutonomousZoneRoads`, `Pathfinder.TryRoadPath`,
+     tools `navmesh_splice/{navdiff,navcomp,roadgraph}.py`, `UT_ZoneRoadBuild`).
+     The road graph is generated from our own installed meshes (63 zones of
+     regions 1, 100, 200, 51, 151, 181; 65,208 anchors; 98.3% of candidate legs
+     proven) and embedded in `GameServer.dll`, so deploy and release carry it
+     with the server; a zone whose installed mesh differs from the proven one is
+     ignored with one `ZONE_ROADS_MESH_MISMATCH` warning. Probe on the installed
+     meshes (`UT_ZoneRoadHotspotProbe`): the Odin's Gate field cluster and the
+     Emain Macha Albion portal keep approach now reach their goals over the
+     roads (the direct search stopped after 2 nodes). Both worlds. Real-client
+     check: `ZONE_ROADS_LOADED zones=63` at start; zone 214 and 115 dead-end
+     give-ups fall well below the 0.320.0 counts.
 
 141. **Snap off-mesh route starts onto the mesh.** Owner, 2026-10-24, from the
      0.314.0 live measurement. Gain about 33 give-ups per game-hour (27 → 33

@@ -46,7 +46,7 @@ public static class AutonomousRaidSchedule
 
     public static void Pulse(long now)
     {
-        if (!RealmRaidRecruitmentPolicy.AutonomousRaidsEnabled) return;
+        if (!RealmRaidRecruitmentPolicy.ScheduledRaidsEnabled) return;
         Planned start = null;
         lock (Sync)
         {

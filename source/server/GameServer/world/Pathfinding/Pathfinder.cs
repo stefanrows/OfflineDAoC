@@ -78,7 +78,8 @@ namespace DOL.GS
             return true;
         }
 
-        private PathfindingStatus CalculatePath(PathBuffer pathBuffer, Zone zone, Vector3 position, Vector3 target, EDtPolyFlags[] filters)
+        private PathfindingStatus CalculatePath(PathBuffer pathBuffer, Zone zone, Vector3 position, Vector3 target, EDtPolyFlags[] filters,
+            bool useRoads = false)
         {
             const int MAX_PATH_NODES = 512;
             WrappedPathfindingNode[] rentedNodeBuffer = ArrayPool<WrappedPathfindingNode>.Shared.Rent(MAX_PATH_NODES);
@@ -86,6 +87,12 @@ namespace DOL.GS
             try
             {
                 PathfindingResult pathfindingResult = PathfindingProvider.Instance.GetPathStraight(zone, position, target, filters, rentedNodeBuffer);
+                // Upstream 0.38c (port S3, task 143): a bot's partial path that stops far short of its goal follows
+                // the zone road graph instead (navmesh/roads.json; zones without it are unchanged).
+                if (useRoads && Owner is GameBot &&
+                    TryRoadPath(PathfindingProvider.Instance, zone, position, target, filters, pathfindingResult, rentedNodeBuffer, MAX_PATH_NODES,
+                        out PathfindingResult road))
+                    pathfindingResult = road;
 
                 pathBuffer.Clear();
                 pathBuffer.Origin = position;
@@ -129,13 +136,63 @@ namespace DOL.GS
             }
         }
 
+        /// <summary>
+        /// A bot's partial path that stops far short of its goal (Detour's search reached a dead end on
+        /// a long walk that first leads away from the goal) is replaced by the zone road route: the
+        /// Detour paths of its proven legs, joined, as far as the node buffer holds (then partial, and
+        /// the usual continuation replots from there). Short walks, DF and zones without roads are unchanged.
+        /// Upstream 0.38c verbatim (port S3, task 143).
+        /// </summary>
+        public static bool TryRoadPath(IPathfindingMgr nav, Zone zone, Vector3 position, Vector3 target, EDtPolyFlags[] filters,
+            PathfindingResult direct, WrappedPathfindingNode[] nodes, int capacity, out PathfindingResult result)
+        {
+            result = direct;
+            if (direct.Status != PathfindingStatus.PartialPathFound || direct.NodeCount < 1 || direct.NodeCount > capacity ||
+                zone.ZoneRegion?.ID == AutonomousDarknessFallsPolicy.RegionId ||
+                Vector3.DistanceSquared(nodes[direct.NodeCount - 1].Position, target) <= 256 * 256)
+                return false;
+            if (!AutonomousZoneRoads.TryRoute(nav, zone, position, target, out Vector3[] via))
+                return false;
+            WrappedPathfindingNode[] leg = ArrayPool<WrappedPathfindingNode>.Shared.Rent(capacity);
+            try
+            {
+                int count = 0;
+                Vector3 from = position;
+                for (int i = 0; i <= via.Length; i++)
+                {
+                    Vector3 to = i < via.Length ? via[i] : target;
+                    PathfindingResult part = nav.GetPathStraight(zone, from, to, filters, leg);
+                    if (part.NodeCount < 1 || part.NodeCount > capacity) break;
+                    // Each leg starts where the previous one ended; keep that node once.
+                    int skip = count == 0 ? 0 : 1;
+                    if (count + part.NodeCount - skip > capacity) break;
+                    for (int n = skip; n < part.NodeCount; n++) nodes[count++] = leg[n];
+                    bool complete = part.Status == PathfindingStatus.PathFound ||
+                        Vector3.DistanceSquared(leg[part.NodeCount - 1].Position, to) <= 48 * 48;
+                    if (!complete) break;
+                    if (i == via.Length)
+                    {
+                        result = new(PathfindingStatus.PathFound, count);
+                        return true;
+                    }
+                    from = to;
+                    // Enough for this order; the partial continuation replots from the last node.
+                    if (count >= capacity / 2) break;
+                }
+                if (count <= 1) return false;
+                result = new(PathfindingStatus.PartialPathFound, count);
+                return true;
+            }
+            finally { ArrayPool<WrappedPathfindingNode>.Shared.Return(leg); }
+        }
+
         public bool TryGetNextNode(Zone zone, Vector3 position, Vector3 target, out Vector3? nextNode,
             bool allowPartialContinuation = true)
         {
             // Check if we can reuse our path. We assume that we ourselves never "suddenly" warp to a completely different pos.
             if (ForceReplot || !_lastTarget.IsInRange(target, MIN_TARGET_DIFF_REPLOT_DISTANCE))
             {
-                PathfindingStatus status = CalculatePath(_activePath, zone, position, target, DefaultFilters);
+                PathfindingStatus status = CalculatePath(_activePath, zone, position, target, DefaultFilters, true);
                 UpdatePathState(status, target);
             }
 
@@ -153,7 +210,7 @@ namespace DOL.GS
             if (TryUsePathDoor())
             {
                 position = new(Owner.X, Owner.Y, Owner.Z);
-                UpdatePathState(CalculatePath(_activePath, zone, position, target, DefaultFilters), target);
+                UpdatePathState(CalculatePath(_activePath, zone, position, target, DefaultFilters, true), target);
             }
 
             // Dequeue the next node if we're close to it, and any subsequent node that might be close.

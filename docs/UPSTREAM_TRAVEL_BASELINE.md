@@ -5,7 +5,9 @@
 Stage 6 adapts the pinned upstream route-threat work at
 `c8b0dca0428666fbe2c6f68d0e4d0363b0d03caa`. The local implementation is
 independently gated by `autonomous.bot_route_threat_awareness`, which defaults
-to `false` until the owner accepts a controlled performance comparison.
+to `false` until the owner accepts a controlled performance comparison. The RvR
+world (`Realm-1`) reads `autonomous.rvr_bot_route_threat_awareness` instead,
+default `true` as upstream 0.38c (port S3, RVR_PORT_MAP.md).
 
 The fork uses one complete native navmesh corridor with blocking-door filters
 to find route threats. It caps the scan at 24 NPC candidates and six inline

@@ -22,6 +22,25 @@ namespace DOL.GS
     /// </summary>
     public static class RvrRelicRules
     {
+        /// <summary>
+        /// RvR world: the pad crowd of the upstream 0.38c pickup. Upstream lowered
+        /// relic_players_required_on_pad from 16 to 8 for the offline game (owner
+        /// there, 2026-10-15) and counts players, gamebots and a player's own
+        /// companion bots. The Camlann world keeps relic_players_required_on_pad
+        /// (16); the RvR world reads this key so the two saves cannot overwrite
+        /// each other's value.
+        /// </summary>
+        [ServerProperties.ServerProperty("pvp", "rvr_relic_players_required_on_pad",
+            "RvR world (Realm-1): enemy players, gamebots and companion bots needed within 500 units of a relic pad before a relic can be lifted (upstream 0.38c: 8). The Camlann world uses relic_players_required_on_pad.", 8)]
+        public static int RvrPlayersRequiredOnPad = 8;
+
+        /// <summary>The pad crowd needed to lift a mounted relic in <paramref name="world"/>.</summary>
+        public static int PlayersRequiredOnPad(WorldModelKind world) =>
+            world == WorldModelKind.Realm ? RvrPlayersRequiredOnPad : ServerProperties.Properties.RELIC_PLAYERS_REQUIRED_ON_PAD;
+
+        /// <summary>The pad crowd needed in the running world.</summary>
+        public static int PlayersRequiredOnPad() => PlayersRequiredOnPad(WorldMode.Current);
+
         /// <summary>The milegate chain that guards one relic temple.</summary>
         /// <param name="Realm">The temple's realm (the pad's realm).</param>
         /// <param name="Type">The relic type the temple pad takes.</param>

@@ -121,9 +121,10 @@ namespace DOL.GS
 
             if (player is not GamePlayer human || (ePrivLevel)human.Client.Account.PrivLevel == ePrivLevel.Player)
             {
-                if (IsMounted && CurrentRelicPad.GetEnemiesOnPad() < Properties.RELIC_PLAYERS_REQUIRED_ON_PAD)
+                int required = RvrRelicRules.PlayersRequiredOnPad();
+                if (IsMounted && CurrentRelicPad.GetEnemiesOnPad() < required)
                 {
-                    OutputOf(player).SendMessage($"You must have {Properties.RELIC_PLAYERS_REQUIRED_ON_PAD} players nearby the pad before taking a relic.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                    OutputOf(player).SendMessage($"You must have {required} players nearby the pad before taking a relic.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
                     return false;
                 }
             }

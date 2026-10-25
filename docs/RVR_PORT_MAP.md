@@ -233,3 +233,82 @@ column (AutonomousRvrDashboard MERGE).
 - No live comparison in Realm-1 (0 RvR events, bots <= 19). Upstream seed bot levels: answered in section 6 (upstream ships no bots).
 - Whether R1b masks enemy bot names in broadcast messages the way upstream `Masked()` does.
 - Whether the fork already pays gamebots RPs for player kills and drops no guard loot (AbstractServerRules merge).
+
+## S3 done (2026-10-25, port session S3; implemented in source, real-client check pending)
+
+Worktree branch `rvr-port-s3` (not merged, no version). No live run. Every switch below is RvR-world only
+(`WorldMode.IsRvr` / `WorldModelKind.Realm`) unless the row says "both worlds".
+
+| Item | Verbatim / branched | Player sees in Realm-1 | Camlann |
+|---|---|---|---|
+| Relic pad crowd | Branched. New key `rvr_relic_players_required_on_pad` (default 8, upstream's value) read by the relic pickup and the NF pillar pad through `RvrRelicRules.PlayersRequiredOnPad()`; the fork's pad count already counted players, gamebots, companions and `/spawn` helpers by alliance realm, so upstream's `CountsOnPad` rule needed no change. Relic capture/return/removal broadcasts follow the launcher's RvR announcement switch (upstream `GameWideAnnouncements`). | 8 enemies on the pad lift a relic (was 16); a player with seven companions is enough | `relic_players_required_on_pad` (16), broadcasts unchanged |
+| Route threat awareness | Branched. `AutonomousRouteThreatPolicy.Enabled` is now a world-aware property: `rvr_bot_route_threat_awareness` (default true, upstream default) in Realm-1, the old key `bot_route_threat_awareness` (false) in Camlann. Call sites unchanged. A separate key because the RvR save already stores the old key as False. | Travelling PvE leaders pull, avoid or detour aggressive monsters on the way | off, as before |
+| RealmRaidRecruitmentPolicy | Upstream functions added verbatim (`DepartHub(bool,int,long)`, `StagingDeadline`, 6-argument `StagingExpired`, `BattleExpired`, `NeedsReplacement`, late-start and hub-patience constants, `UpstreamReady`); the 4-argument `Ready` / `StagingExpired` answer upstream in Realm-1. Carried tests UT_RaidRallyTiming and UT_RaidRefillOct6 verbatim. | see next row | fork timing (45-minute forced preparation, 90-minute limit) |
+| Realm raids by realm | Branched in `AutonomousRealmRaid` (`RaidsByRealm`): every expedition belongs to one realm, recruits only that realm, opens only that realm's dragon/epic dungeon, one automatic expedition per realm, never the same automatic event twice in a row (`MayStartAutomatic`); upstream rally timing (hub leaves after 30 min with 120, staging 45 min after leaving, late start at 75 min with 180, forced raids start at 200 staged and have no time limit); "raid is forming" screen line; final-boss announcement; `REALM_RAID_ENDED` log. `RealmRaidRecruitmentPolicy.AutonomousRaidsEnabled` is true in Realm-1 (upstream: level-50 Group PvE parties open and join raids); the fork's raid calendar stays off in both worlds (`ScheduledRaidsEnabled`). | Each realm raids Golestandt / Gjalpinulva / Cuuldurach and Caer Sidi / Tuscaran / Galladoria with its own bots, on its own | mixed-realm expeditions, launcher-forced only, unchanged |
+| Battleground goal | Branched, default only. Upstream's "Battlegrounds %" goal is 0 % by default, so no upstream bot tours a bracket battleground unless the owner sets it. Realm-1 therefore stops the fork's automatic bracket campaign (`AutonomousBattlegroundParticipation.BracketCampaignRuns`): no new bracket assignments, bracket participants leave. The open BG crew (Thidranki 252, per realm) is untouched in both worlds. Collision 4f resolved: Thidranki stays the fork's open BG; upstream's Thidranki bracket goal is not active because its share is 0 %. | No bot in Abermenai/Thidranki/Murdaigean/Caledonia except the open BG crew | fork campaign unchanged |
+| Town teleporters | Upstream `AutonomousTownTeleporters` and the controller partial `AutonomousWorldBotController.TownTeleport.cs` copied verbatim; `WorldMgr.GetTeleportLocations` and `BotReleaseBindPoints.IsNearBindstone` added verbatim; `world/BattlegroundBrackets.cs` verbatim (porter destinations). Fork: `IsEnabled` only in Realm-1; destinations also pass the fork's realm boundary (`AutonomousRealmBoundary.AllowsPoint`, kept as approved added value). **Inert until the S2/merge hunks below are applied.** | (after merge) bots walk to their own realm's town teleporter when that saves a minute and 30 % | off |
+| Road fallback (task 143) | Both worlds (pure navigation). `AutonomousZoneRoads` verbatim plus fork safety: data embedded in `GameServer.dll` (`bots/autonomous/data/zone_roads.json`, so every deploy and release carries it; a `navmesh/roads.json` next to the server wins), a `meshes` sha256 map that drops a zone whose installed mesh differs (`ZONE_ROADS_MESH_MISMATCH`), `ZONE_ROADS_LOADED` at start, preload on the server-started event. `Pathfinder.TryRoadPath` + `CalculatePath(useRoads)` verbatim (any `GameBot`, partial path ending > 256 from a goal ≥ 1,024 away, never DF). `AutonomousZoneItinerary.HasDirectCorridor` / `CorridorLength` added; `HasCompleteCorridor` behaviour unchanged. `NavQueryProfile` verbatim (no NpcService hook). Tools `navdiff.py`, `navcomp.py`, `roadgraph.py` verbatim, UT_ZoneRoadBuild + mesh map. Data from **our** meshes: 63 zones of regions 1, 100, 200, 51, 151, 181; 65,208 anchors; 486,975 of 495,152 candidate legs proven (98.3 %); all 63 mesh hashes equal the installed `navmesh/zoneNNN.nav`. | Bots that dead-end on a long walk follow the proven road legs: probe on the installed meshes, Odin's Gate field (18,330 chord) and Emain Macha Albion portal keep approach (24,538 chord) now reach their goals in two path orders (walks 43,045 and 99,841), where the direct search stops after 2 nodes | same (both worlds) |
+
+Tests: UT_RvrPortS3 (6), UT_ZoneRoadFallback (7, fake navmesh), UT_RaidRallyTiming (2), UT_RaidRefillOct6 (7);
+explicit tools UT_ZoneRoadBuild and UT_ZoneRoadHotspotProbe (installed meshes, read-only). Server suite 5,016 passed /
+7 failed (the bug 160 set, unchanged) / 6 skipped; CoreServer Release build 0 errors. Launcher untouched, not run.
+
+**Known gap until hunk 5 below lands:** in Realm-1 the realm raid asks the coordinator for one realm's bots, but
+`PlanForcedRaid(eRealm)` / `PlanWaitingRaidParty(eRealm, int)` still ignore the realm (fork stubs), so a forced raid
+reserves mixed realms and its parties are refused by the realm party rule; automatic raids by 8-man same-realm
+Group PvE parties (`TryJoin`) already work.
+
+### Not done in S3 (for S4)
+
+| Item | Why | What it needs |
+|---|---|---|
+| Darkness Falls route (`RealmRaidDungeonRoute` +693, `AutonomousDarknessFallsNavigation` +422, GoalScope, RoutePlan, `AutonomousWorldBotDarknessFallsRoutes`, `DarknessFallsCharmPolicy`, Pathfinder DF certified-corridor gate) and the neutral raids (Summoner's Hall, DF expeditions per realm, `RealmRaidNeutralEvents`, multi-hub musters) | Upstream's 14.8 MB `darkness_falls_navigation_proofs.json` is bound to its DF mesh (`NavSha256` 41f1489c…); ours is `zone249.nav` d53d31cd… patched by the fork to e90e2f7a… (`darkness_falls_navigation_patch.json`). Upstream's own check would reject the proofs, so a verbatim copy does nothing. | Regenerate the certified DF proofs on our patched mesh with upstream's proof tooling, then port the route and the neutral events together. |
+| Remaining upstream raid fixes: refill of short parties (`TryRefillRaidParty`, `ReleasePartyMember`, `AddReplacement`), release at the raid hub (`TryRaidRelease`), dungeon regroup point, trash respawn slow-down while a raid is inside, pooled forced parties (`ComposeForcedParty`), failed-post retry and pet-list cache | Call sites in GameBot / BotBrain / coordinator / GameNPC respawn (S2 files) | Port after S2 merges, RvR-branched |
+| Upstream opt-in battleground goal (`ExecuteBattleground`, `AutonomousBattlegroundWave`, objective kind `Battleground`, launcher "Battlegrounds %") | The fork's bot goals are a type mix (Leveler … KeepWarrior), not upstream's per-level goal rows; there is nowhere to put a % without a new setting. Default upstream behaviour (0 %) is in. | Owner decision: is a battleground share wanted in Realm-1? If yes, one RvR-only setting (default 0) plus the upstream executor and the dispatch hunk. |
+| UT_BattlegroundGoalsOct7, UT_NeutralRaidEventsOct6, UT_EventRouteAudit, upstream UT_RealmRaidRecruitment (269), UT_RelicPadAttackers (40) | Their code is in the rows above (S4) or the fork's pad rule differs in shape (`CountsOnPad` is not a public helper here; covered by UT_RvrPortS3) | carry with the S4 items |
+| UT_EnemyBotNamesOct7 parity | R1b names are masked by `RvrServerRules`; broadcast parity not checked | separate check |
+
+### S3 handoff to S2/merge
+
+Apply after S2's controller work; all calls are no-ops outside the RvR world (`AutonomousTownTeleporters.IsEnabled`
+is false in Camlann). Anchors are today's `main` (90e523f3) lines of `AutonomousWorldBotController.cs`.
+
+1. `TravelAcrossRegions` (after the "No legal region route" `AbandonCamp` block, before the first
+   `if (TryRepairAuditedCrossingSource(bot, crossing))`, line 832):
+   ```csharp
+            if (TryTownTeleportAcross(bot, crossing, camp.RegionId, camp.X, camp.Y, camp.Z)) return true;
+   ```
+2. `TravelToTrainerRegion` (before its `if (TryRepairAuditedCrossingSource(bot, crossing))`, line 1143):
+   ```csharp
+            if (TryTownTeleportAcross(bot, crossing, trainer.CurrentRegionID, trainer.X, trainer.Y, trainer.Z)) return true;
+   ```
+3. Group rendezvous travel (after the "Replanning group rendezvous" `crossing == null` block, before
+   `if (TryRepairAuditedCrossingSource(bot, crossing))`, line 1471):
+   ```csharp
+            if (TryTownTeleportAcross(bot, crossing, targetRegion, targetX, targetY, bot.Z)) return true;
+   ```
+4. `TryBeginFasterStableRoute(GameBot bot, Vector3 waypoint, string destinationName)` first statement (line 4520):
+   ```csharp
+            // Town teleporters first (upstream 0.38c, RvR world): taken only when clearly faster than walking and any
+            // horse for the same goal (assembled parties, raid parties and warbands go together via their leader).
+            if (TryTownTeleport(bot, bot.CurrentRegionID, waypoint,
+                    Vector3.Distance(new(bot.X, bot.Y, bot.Z), waypoint) / Math.Max(150, (int)bot.MaxSpeed)))
+                return true;
+   ```
+5. `AutonomousBotGroupCoordinator.ForcedRaid.cs` (asked S2 whether it owns the file; no answer during S3). Make the two
+   existing realm overloads filter by realm in the RvR world; `AutonomousRealmRaid` already calls them there.
+   - Rename `PlanWaitingRaidParty(int size)` to `PlanWaitingRaidPartyCore(int size, eRealm realm)`, add
+     `(realm == eRealm.None || b.Realm == realm) &&` as the first condition after `AutonomousRealmRaid.IsEligible(b) &&`,
+     and add `public static GameBot[] PlanWaitingRaidParty(int size) => PlanWaitingRaidPartyCore(size, eRealm.None);`
+   - Rename `PlanForcedRaid()` to `PlanForcedRaidCore(eRealm realm)` with the same extra condition, and add
+     `public static GameBot[][] PlanForcedRaid() => PlanForcedRaidCore(eRealm.None);`
+   - Replace the two stubs with
+   ```csharp
+    // RvR world (upstream 0.38c): an expedition recruits only its own realm. Camlann: the realm is the
+    // encounter's identity, not a recruitment team.
+    public static GameBot[] PlanWaitingRaidParty(eRealm realm, int size) =>
+        PlanWaitingRaidPartyCore(size, AutonomousRealmRaid.RaidsByRealm(WorldMode.Current) ? realm : eRealm.None);
+
+    public static GameBot[][] PlanForcedRaid(eRealm realm) =>
+        PlanForcedRaidCore(AutonomousRealmRaid.RaidsByRealm(WorldMode.Current) ? realm : eRealm.None);
+   ```
