@@ -22,13 +22,14 @@ Line numbers are those of the R1b branch and drift.
 
 | Group | Sites | Unchanged | Gated | Deferred |
 |---|---|---|---|---|
-| `GST_PvP` branches (the spec's 35) | 35 | 15 | 19 | 1 |
+| `GST_PvP` branches (the spec's 35) | 35 | 15 | 20 | 0 |
 | Rules-type checks (`is PvPServerRules`) | 14 | 10 | 4 | 0 |
 | Other server-type branches with realm meaning (`GST_Normal`) | 5 | 0 | 5 | 0 |
 | PvE-only branches (`GST_PvE`) | 10 | 10 | 0 | 0 |
 
 R3a (keeps) gated the Darkness Falls site that R1b deferred; see
-[RVR_KEEPS.md](RVR_KEEPS.md).
+[RVR_KEEPS.md](RVR_KEEPS.md). R4b (realm armies) gated the open BG keep-owner site #6; see
+[RVR_ARMIES.md](RVR_ARMIES.md).
 
 The spec counted 8 rules-type checks; 14 exist. The six extra ones are
 GameBot immunity timers (`GameBot.cs:3724`, `:3752`, `:3768`), siege-weapon
@@ -40,7 +41,7 @@ access and the relic examine text.
 |---|---|---|---|
 | 1 | `GameServer.cs:1017` | Refuses GameType other than PvP | Unchanged: both worlds run PvP |
 | 2-5 | `GameServerConfiguration.cs:176, 182, 306, 382` | Config parse and default | Unchanged |
-| 6 | `battlegrounds/open/OpenBattlegroundRoster.cs:1294` | Guild that owns the open BG keep, for crew splits | Deferred to R4b (realm armies); in RvR the keep's friends are a realm |
+| 6 | `battlegrounds/open/OpenBattlegroundRoster.cs:1294` | Guild that owns the open BG keep, for crew splits | Gated (R4b, [RVR_ARMIES.md](RVR_ARMIES.md)): `WorldMode.RulesBranch`; in RvR the keep's friends are a realm, so no guild split |
 | 7 | `commands/playercommands/assist.cs:38` | `/assist` by name also finds bots | Unchanged: checks `IsSameRealm`, realm based in RvR |
 | 8-9 | `assist.cs:86, :160` | PvP assist path | Unchanged: `HandlePvpAssist` uses `IsSameRealm` |
 | 10 | `commands/playercommands/level.cs:12` | `/level` disabled | Unchanged: fork rule for both worlds; owner decision if RvR wants `/level` |

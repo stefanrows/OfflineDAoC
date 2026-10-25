@@ -1287,11 +1287,13 @@ namespace DOL.GS
         /// <summary>
         /// The guild that owns the open BG's keep by the keep's friend check (<c>KeepManager.IsEnemy</c>):
         /// a real guild on a PvP (Camlann) server, with its alliance. Empty for an unclaimed keep, the garrison, or a
-        /// realm server, where the keep's friends are not a guild.
+        /// realm server, where the keep's friends are not a guild. The RvR world (R4b) is a realm world: the keep's
+        /// friends are its realm, so no unit is split by guild there.
         /// </summary>
         private static GuildIds KeepOwnerOf(BattlegroundDefinition definition)
         {
-            if (GameServer.Instance?.Configuration?.ServerType != EGameServerType.GST_PvP) return default;
+            if (GameServer.Instance?.Configuration?.ServerType is not { } serverType ||
+                WorldMode.RulesBranch(serverType) != EGameServerType.GST_PvP) return default;
             AbstractGameKeep keep = BattlegroundCampaignCatalog.CentralKeep(definition);
             return keep?.Guild != null && PvpCombatant.IsRealGuild(keep.Guild) ? IdsOf(keep.Guild) : default;
         }

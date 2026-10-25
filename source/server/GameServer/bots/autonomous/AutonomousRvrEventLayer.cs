@@ -21,6 +21,8 @@ public static partial class AutonomousRvrEventLayer
     public const long TargetCooldownMilliseconds = CamlannPopulationTuning.TargetCooldownMilliseconds;
     public const int OrdinaryAssaultCap = 128;
     public const int RelicAssaultCap = 192;
+    /// <summary>RvR world: a relic siege takes up to 240 per side, as upstream (spec 5.3).</summary>
+    public const int RvrRelicAssaultCap = 240;
     public const int RelicCarrierRealmCap = 192;
     /// <summary>The gate matches the siegeReady average-35 rule (owner decision 2026-10-12; bug 133 noted the old 50 mismatch).</summary>
     public const int SiegeGateAverageLevel = 35;
@@ -294,9 +296,13 @@ public static partial class AutonomousRvrEventLayer
     /// has a group-size requirement. Smaller or mixed forces may
     /// reinforce an existing siege only on the opener's side (same guild); they
     /// do not contest a stranger's siege as a third party.
+    /// RvR world (R4b): armies are realm armies, so a whole warband of eight of
+    /// one realm counts, whatever guilds its members belong to.
     /// </summary>
-    public static bool IsWholeGuildWarband(Force force) =>
-        force != null && force.MemberCount >= 8 && force.SingleGuild;
+    public static bool IsWholeGuildWarband(Force force) => IsWholeGuildWarband(WorldMode.Current, force);
+
+    public static bool IsWholeGuildWarband(WorldModelKind world, Force force) =>
+        force != null && force.MemberCount >= 8 && (force.SingleGuild || world == WorldModelKind.Realm);
     public sealed record Plan(Intent Intent, string TargetId, string Name, ushort RegionId, int X, int Y, int Z,
         bool IsSharedEvent, string Reason);
 
@@ -364,7 +370,7 @@ public static partial class AutonomousRvrEventLayer
             { reason = "Choose an enemy capturable keep and an attacking realm."; return false; }
             if (Events.ContainsKey(target.Id) || OnCooldown(target.Id, now))
             { reason = "This objective already has an event or an active cooldown."; return false; }
-            if (!MayOpenSiegeLocked(null, attacker))
+            if (!MayOpenSiegeLocked(null, attacker, now, forced: true))
             { reason = "This realm already runs a forced siege, a relic event is active, or the server-wide siege cap is reached. Reinforce it before opening another."; return false; }
             Events[target.Id] = new ActiveEvent
             {
@@ -542,7 +548,8 @@ public static partial class AutonomousRvrEventLayer
                          .ThenByDescending(active => JoinPriority(active, force))
                          .ThenBy(active => active.TargetId, StringComparer.Ordinal))
             {
-                LiveObjective target = objectives.FirstOrDefault(objective => objective.Id == active.TargetId);
+                LiveObjective target = objectives.FirstOrDefault(objective => objective.Id == active.TargetId) ??
+                    RealmDefenseTargetLocked(force, active);
                 if (target == null)
                     continue;
                 if (!IsLatestDefenseFocus(active)) continue;
@@ -568,7 +575,7 @@ public static partial class AutonomousRvrEventLayer
                     if (!active.Attackers.ContainsKey(force.GroupId) && LoneBotMustWaitForArmyLocked(force, active))
                         continue;
                     // Reinforcements of any size, but all of the opener's guild.
-                    if (force.AverageLevel >= 35 && (force.SingleGuild || active.Attackers.ContainsKey(force.GroupId)) && (!active.BattleStarted || active.Attackers.ContainsKey(force.GroupId) ||
+                    if (force.AverageLevel >= 35 && (force.SingleGuild || WorldMode.IsRvr || active.Attackers.ContainsKey(force.GroupId)) && (!active.BattleStarted || active.Attackers.ContainsKey(force.GroupId) ||
                         ShouldJoinActiveEvent(force, active.Attackers.Values.Sum(), Capacity(active), active.RelicKeep, false, roll)) &&
                         TryJoin(active.Attackers, force, Capacity(active)))
                         return ToPlan(Intent: active.RelicKeep ? Intent.AssaultRelicKeep : Intent.AssaultKeep, target, true,
@@ -587,10 +594,14 @@ public static partial class AutonomousRvrEventLayer
                 // The third realm contests the same event under its own cap;
                 // it must never overwrite the first attacker's registration.
                 // Only a whole one-guild warband contests a stranger's siege.
-                if (!active.ThirdRealm.ContainsKey(force.GroupId) && !IsWholeGuildWarband(force)) continue;
+                // RvR world: the realm's attack plan decides (RealmMayContestLocked).
+                bool rvrContest = WorldMode.IsRvr;
+                if (!active.ThirdRealm.ContainsKey(force.GroupId) &&
+                    !(rvrContest ? RealmMayContestLocked(force, active, nowTick) : IsWholeGuildWarband(force))) continue;
                 if (force.AverageLevel >= 35 && (!active.BattleStarted || active.ThirdRealm.ContainsKey(force.GroupId) ||
-                    ShouldJoinActiveEvent(force, active.ThirdRealm.Values.Sum(), Capacity(active), active.RelicKeep, false, roll)) &&
-                    TryJoin(active.ThirdRealm, force, Capacity(active)))
+                    rvrContest && OpportunistJoinsLocked(force, active, nowTick) ||
+                    ShouldJoinActiveEvent(force, active.ThirdRealm.Values.Sum(), ThirdRealmCapacity(active), active.RelicKeep, false, roll)) &&
+                    TryJoin(active.ThirdRealm, force, ThirdRealmCapacity(active)))
                     return ToPlan(active.RelicKeep ? Intent.AssaultRelicKeep : Intent.AssaultKeep,
                         target, true, "Third-realm force contesting the siege under its own participation cap.");
             }
@@ -599,15 +610,15 @@ public static partial class AutonomousRvrEventLayer
             // from one on 2026-10-12): a guild already running two keeps its other
             // warbands roaming unless they joined above; other guilds open their own, up to the
             // server-wide safety cap (AutonomousRvrEventLayer.SiegeCap.cs).
-            if (!MayOpenSiegeLocked(force.GuildName, force.Realm))
+            if (!MayOpenSiegeLocked(force.GuildName, force.Realm, nowTick))
                 return ReservePlan(force, objectives);
 
             bool hasEnemy = objectives.Any(objective => objective.Kind == Intent.HuntEnemy && objective.EnemyCount > 0);
-            LiveObjective relic = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultRelicKeep && objective.IsRelicKeep && objective.Claimable &&
+            LiveObjective relic = ChooseKeepTarget(force, objectives.Where(objective => objective.Kind == Intent.AssaultRelicKeep && objective.IsRelicKeep && objective.Claimable &&
                                                                !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick) &&
                                                                !KeepRouteBlockedLocked(objective.Id, nowTick))
                 , SelectedRelics);
-            LiveObjective keep = ChooseVariedTarget(objectives.Where(objective => objective.Kind == Intent.AssaultKeep && !objective.IsRelicKeep && objective.Claimable && !objective.AwaitingClaim &&
+            LiveObjective keep = ChooseKeepTarget(force, objectives.Where(objective => objective.Kind == Intent.AssaultKeep && !objective.IsRelicKeep && objective.Claimable && !objective.AwaitingClaim &&
                                                               !OwnsObjective(force, objective) && !Events.ContainsKey(objective.Id) && !OnCooldown(objective.Id, nowTick) &&
                                                               !KeepRouteBlockedLocked(objective.Id, nowTick))
                 , SelectedKeeps);
@@ -617,7 +628,8 @@ public static partial class AutonomousRvrEventLayer
                 Intent.AssaultRelicKeep => relic,
                 Intent.AssaultKeep => keep,
                 Intent.HuntEnemy => objectives.Where(objective => objective.Kind == Intent.HuntEnemy && objective.EnemyCount > 0)
-                    .OrderBy(objective => Math.Abs(objective.EnemyCount - force.MemberCount)).FirstOrDefault(),
+                    .OrderBy(objective => InvaderRank(force, objective))
+                    .ThenBy(objective => Math.Abs(objective.EnemyCount - force.MemberCount)).FirstOrDefault(),
                 _ => objectives.Where(objective => objective.Kind == Intent.Roam).OrderBy(_ => Random.Shared.Next()).FirstOrDefault() ??
                      objectives.Where(objective => objective.Kind == Intent.HuntEnemy).OrderBy(_ => Random.Shared.Next()).FirstOrDefault(),
             };
@@ -632,7 +644,8 @@ public static partial class AutonomousRvrEventLayer
                     Target = selected,
                     AttackerRealm = force.Realm,
                     DefenderRealm = selected.OwningRealm,
-                    AttackerGuild = force.GuildName,
+                    // RvR world: the realm opens the siege; every warband of the realm is its army.
+                    AttackerGuild = WorldMode.IsRvr ? null : force.GuildName,
                     RelicKeep = selected.IsRelicKeep,
                     ExpiresTick = nowTick + RealmEventPolicy.RecruitmentMilliseconds(Random.Shared.NextDouble()),
                     CreatedTick = nowTick,
@@ -644,6 +657,7 @@ public static partial class AutonomousRvrEventLayer
                 RealmEventNotices.Queue(active.TargetId, force.Realm,
                     $"Warbands are marching on {selected.Name}. Reinforcements join the battle on arrival.");
                 (selected.IsRelicKeep ? SelectedRelics : SelectedKeeps).Add(selected.Id);
+                NoteRealmSiegeOpenedLocked(active, force);
                 return ToPlan(intent, selected, true,
                     $"Opening a time-limited {(selected.IsRelicKeep ? "relic-keep" : "keep")} assault; same-realm warbands may rally and defenders may answer.");
             }
@@ -655,7 +669,7 @@ public static partial class AutonomousRvrEventLayer
     }
 
     private static bool SameAttackingSide(Force force, ActiveEvent active) =>
-        string.IsNullOrEmpty(active.AttackerGuild)
+        WorldMode.IsRvr || string.IsNullOrEmpty(active.AttackerGuild)
             ? force.Realm == active.AttackerRealm
             : string.Equals(force.GuildName, active.AttackerGuild, StringComparison.Ordinal);
 
@@ -681,13 +695,18 @@ public static partial class AutonomousRvrEventLayer
     private static Plan ToPlan(Intent Intent, LiveObjective target, bool shared, string reason) =>
         new(Intent, target.Id, target.Name, target.RegionId, target.X, target.Y, target.Z, shared, reason);
 
+    /// <summary>Camlann: a guild keep is its guild's. RvR world: every keep of the force's realm is its own, claimed or not.</summary>
     private static bool OwnsObjective(Force force, LiveObjective objective) =>
-        objective != null && (string.IsNullOrEmpty(objective.OwningGuild)
+        objective != null && (WorldMode.IsRvr
+            ? RealmTravel.IsPlayable(objective.OwningRealm) && objective.OwningRealm == force.Realm
+            : string.IsNullOrEmpty(objective.OwningGuild)
             ? objective.OwningRealm != eRealm.None && objective.OwningRealm == force.Realm
             : string.Equals(objective.OwningGuild, force.GuildName, StringComparison.Ordinal));
 
     private static Plan ReservePlan(Force force, IReadOnlyCollection<LiveObjective> objectives)
     {
+        // RvR world: only the realm's roaming reserve stays home; every other caller roams as before.
+        if (WorldMode.IsRvr && force.RoamingReserve && HomeReservePlan(force, objectives) is { } home) return home;
         LiveObjective target = objectives.Where(objective => objective.Kind == Intent.Roam)
             .OrderBy(_ => Random.Shared.Next()).FirstOrDefault()
             ?? objectives.Where(objective => objective.Kind == Intent.HuntEnemy && !objective.IsRelicCarrier && objective.EnemyCount > 0)
@@ -696,7 +715,8 @@ public static partial class AutonomousRvrEventLayer
             "Keeping a deliberate roaming reserve instead of automatically joining the active event.");
     }
 
-    private static int Capacity(ActiveEvent active) => active.DefenseReaction ? 240 : active.RelicKeep ? RelicAssaultCap : OrdinaryAssaultCap;
+    private static int Capacity(ActiveEvent active) => active.DefenseReaction ? 240 :
+        active.RelicKeep ? (WorldMode.IsRvr ? RvrRelicAssaultCap : RelicAssaultCap) : OrdinaryAssaultCap;
 
     private static Plan CommittedPlan(Force force, IReadOnlyCollection<LiveObjective> objectives)
     {
@@ -980,8 +1000,10 @@ public static partial class AutonomousRvrEventLayer
             $"The assault on {active.Target.Name} is advancing. Reinforcements are welcome.");
         RealmEventNotices.Queue(active.TargetId, active.DefenderRealm,
             $"The assault on {active.Target.Name} has begun! Hold the walls and stand by your realm.");
-        if (active.ThirdRealm.Count > 0) RealmEventNotices.Queue(active.TargetId, OtherRealm(active),
-            $"The armies at {active.Target.Name} are committed to battle. Watch their flanks, warbands!");
+        if (active.ThirdRealm.Count > 0)
+            foreach (eRealm bystander in BystanderRealms(active))
+                RealmEventNotices.Queue(active.TargetId, bystander,
+                    $"The armies at {active.Target.Name} are committed to battle. Watch their flanks, warbands!");
         var log = DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrEventLayer));
         if (log.IsInfoEnabled) log.Info($"RVR_SIEGE_STARTED target={active.TargetId} reason=\"{reason}\" " +
             $"present={Attendance(active, active.AttackerRealm, nowTick)}/{Attendance(active, active.DefenderRealm, nowTick)}/{Attendance(active, OtherRealm(active), nowTick)}");
@@ -995,8 +1017,10 @@ public static partial class AutonomousRvrEventLayer
             active.PreparationNoticeSent = true;
             RealmEventNotices.Queue(active.TargetId, active.AttackerRealm, RealmEventBanter.SiegeReminder(active.Target.Name, false));
             RealmEventNotices.Queue(active.TargetId, active.DefenderRealm, RealmEventBanter.SiegeReminder(active.Target.Name, true));
-            if (active.ThirdRealm.Count > 0) RealmEventNotices.Queue(active.TargetId, OtherRealm(active),
-                $"The armies at {active.Target.Name} have about twenty minutes left to muster. Keep watch for an opening, scouts.");
+            if (active.ThirdRealm.Count > 0)
+                foreach (eRealm bystander in BystanderRealms(active))
+                    RealmEventNotices.Queue(active.TargetId, bystander,
+                        $"The armies at {active.Target.Name} have about twenty minutes left to muster. Keep watch for an opening, scouts.");
         }
         foreach (var active in Events.Values.Where(entry => entry.BattleStarted && !entry.DefenseReaction).ToArray())
         {
@@ -1096,7 +1120,7 @@ public static partial class AutonomousRvrEventLayer
 
     private static void EndEvent(ActiveEvent active, long nowTick, string reason, eRealm winner = eRealm.None)
     {
-        foreach (eRealm realm in new[] { active.AttackerRealm, active.DefenderRealm, OtherRealm(active) })
+        foreach (eRealm realm in new[] { active.AttackerRealm, active.DefenderRealm }.Concat(BystanderRealms(active)))
             RealmEventNotices.Queue(active.TargetId, realm, RealmEventBanter.SiegeOutcome(active.Target.Name,
                 realm == active.DefenderRealm, reason.StartsWith("Siege defended"), reason.StartsWith("Rally failed"), winner, realm));
         RealmEventRecords.Finish(active.TargetId, reason.StartsWith("Rally failed") ? "Failed rally" : reason.StartsWith("Keep captured") ? "Captured" :
@@ -1167,8 +1191,9 @@ public static partial class AutonomousRvrEventLayer
                     active.AttackObserved = true;
                     RealmEventNotices.Queue(active.TargetId, active.DefenderRealm,
                         $"{active.Target.Name} is under attack! Available warbands can reinforce the defenders.");
-                    RealmEventNotices.Queue(active.TargetId, OtherRealm(active),
-                        $"Fighting has broken out at {active.Target.Name}. There is an opportunity to intervene.");
+                    foreach (eRealm bystander in BystanderRealms(active))
+                        RealmEventNotices.Queue(active.TargetId, bystander,
+                            $"Fighting has broken out at {active.Target.Name}. There is an opportunity to intervene.");
                 }
                 // Incidental combat still recruits reinforcements and is fought
                 // normally, but cannot bypass the army attendance/start rules.

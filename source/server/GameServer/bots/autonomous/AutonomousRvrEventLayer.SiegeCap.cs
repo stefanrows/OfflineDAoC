@@ -25,24 +25,42 @@ public static partial class AutonomousRvrEventLayer
 
     /// <summary>The side an assault belongs to: the opener's guild, or its
     /// realm for guildless events.</summary>
-    public static string SiegeSideKey(string guildName, eRealm realm) =>
-        string.IsNullOrEmpty(guildName) ? "realm:" + realm : "guild:" + guildName;
+    public static string SiegeSideKey(string guildName, eRealm realm) => SiegeSideKey(WorldMode.Current, guildName, realm);
+
+    /// <summary>RvR world (R4b): the side is always the realm; a guild never holds a siege slot of its own.</summary>
+    public static string SiegeSideKey(WorldModelKind world, string guildName, eRealm realm) =>
+        world == WorldModelKind.Realm || string.IsNullOrEmpty(guildName) ? "realm:" + realm : "guild:" + guildName;
 
     /// <summary>Pure rule: a side may open a new siege while it runs fewer than
     /// <see cref="MaxSiegesPerSide"/> of its own and fewer than
     /// <see cref="MaxConcurrentSieges"/> run in total.</summary>
-    public static bool MayOpenSiege(string sideKey, IEnumerable<string> runningSiegeSides, bool carrierEventActive)
+    public static bool MayOpenSiege(string sideKey, IEnumerable<string> runningSiegeSides, bool carrierEventActive) =>
+        MayOpenSiege(sideKey, runningSiegeSides, carrierEventActive, MaxSiegesPerSide);
+
+    /// <summary>As above with the side's own limit (RvR world: the realm's attack plan).</summary>
+    public static bool MayOpenSiege(string sideKey, IEnumerable<string> runningSiegeSides, bool carrierEventActive, int maxPerSide)
     {
         if (carrierEventActive || sideKey == null) return false;
         var running = runningSiegeSides?.ToArray() ?? Array.Empty<string>();
         return running.Length < MaxConcurrentSieges &&
-            running.Count(side => string.Equals(side, sideKey, StringComparison.Ordinal)) < MaxSiegesPerSide;
+            running.Count(side => string.Equals(side, sideKey, StringComparison.Ordinal)) < maxPerSide;
     }
 
-    /// <summary>Call under <c>Sync</c>.</summary>
-    private static bool MayOpenSiegeLocked(string guildName, eRealm realm) =>
-        MayOpenSiege(SiegeSideKey(guildName, realm),
-            Events.Values.Where(active => !active.DefenseReaction)
-                .Select(active => SiegeSideKey(active.AttackerGuild, active.AttackerRealm)),
-            CarrierEvents.Count != 0);
+    /// <summary>
+    /// RvR world (R4b): a realm opens sieges as its attack plan allows (single 1, double 2, opportunist 1 and
+    /// only while no other realm runs one); a forced (GM) start keeps the per-side limit. Camlann: per guild, as
+    /// before. Call under <c>Sync</c>.
+    /// </summary>
+    private static bool MayOpenSiegeLocked(string guildName, eRealm realm, long nowTick, bool forced = false)
+    {
+        string[] running = Events.Values.Where(active => !active.DefenseReaction)
+            .Select(active => SiegeSideKey(active.AttackerGuild, active.AttackerRealm)).ToArray();
+        string side = SiegeSideKey(guildName, realm);
+        if (!WorldMode.IsRvr || forced)
+            return MayOpenSiege(side, running, CarrierEvents.Count != 0);
+        OpenBgAttackPlan plan = AutonomousRealmArmyPlans.PlanFor(realm, nowTick);
+        int own = running.Count(entry => string.Equals(entry, side, StringComparison.Ordinal));
+        return MayOpenSiege(side, running, CarrierEvents.Count != 0, AutonomousRealmArmyPolicy.MaximumOwnSieges(plan)) &&
+            AutonomousRealmArmyPolicy.MayOpenOwnSiege(plan, own, running.Length - own);
+    }
 }

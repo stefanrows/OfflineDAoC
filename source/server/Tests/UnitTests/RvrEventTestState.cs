@@ -16,5 +16,9 @@ internal static class RvrEventTestState
         }
         typeof(AutonomousRvrEventLayer).GetField("_nextStragglerSweep", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, 0L);
         typeof(AutonomousRvrEventLayer).GetField("_nextDefensePulse", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, 0L);
+        // Realm armies (R4b): per-realm plans, invader census and revenge leases.
+        AutonomousRealmArmyPlans.Clear();
+        AutonomousRealmArmyCensus.Clear();
+        AutonomousRealmGrudgeHunts.Clear();
     }
 }

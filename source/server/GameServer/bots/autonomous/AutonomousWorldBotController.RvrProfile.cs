@@ -11,7 +11,12 @@ public sealed partial class AutonomousWorldBotController
     private CampDestination ChooseRvrDestinationTimed(GameBot bot)
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.RvrChooseDestination);
-        return ChooseRvrDestination(bot);
+        CampDestination destination = ChooseRvrDestination(bot);
+        // RvR world (R4b): count revenge trips against all picks per realm (RVR_GRUDGE_SHARE lines).
+        if (WorldMode.IsRvr && destination != null)
+            AutonomousRealmGrudgeHunts.NotePick(bot.Realm,
+                destination.Id.StartsWith("guild-kos-", System.StringComparison.Ordinal), GameLoop.GameLoopTime);
+        return destination;
     }
 
     private GameLiving FindRvrTargetTimed(GameBot bot)

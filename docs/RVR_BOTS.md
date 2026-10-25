@@ -146,7 +146,11 @@ ramp per realm in the log), and the in-game KOS call.
 
 ## Realm armies (R4b)
 
-Not started.
+Implemented in source, real-client check pending: see
+[RVR_ARMIES.md](RVR_ARMIES.md). The R4a open points are closed there:
+armies, siege slots, muster and defence are keyed by realm, and revenge
+trips are capped (two warbands per target and realm) and counted per realm
+(`RVR_GRUDGE_SHARE`).
 
 ## Upstream siege flow (R4c)
 

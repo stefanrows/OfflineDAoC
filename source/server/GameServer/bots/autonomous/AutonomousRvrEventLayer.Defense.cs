@@ -38,14 +38,14 @@ namespace DOL.GS
                 attackerBot.TempProperties.GetProperty<string>("RvrEventForce") is { Length: > 0 } attackerForce)
                 ReportBattleActivity(id, now, attackerForce);
             GamePlayer player = PlayerInstigator(source);
-            if (source != null && player != null && keep.Guild != ServerRules.PvpCombatant.GuildOf(player))
+            if (source != null && player != null && IsForeignAttacker(keep, player))
             {
                 KeepCombatPressure[id] = now;
                 // A human (or a companion/ram of one) attacking the keep is a real
                 // siege at the walls too; do not call the event off as absent.
                 ReportBattleActivity(id, now);
             }
-            if (player == null || keep.Guild == ServerRules.PvpCombatant.GuildOf(player)) return;
+            if (player == null || !IsForeignAttacker(keep, player)) return;
             if (DefenseAlarms.TryGetValue(id, out var previous) && now - previous.Tick < 1000) return;
             DefenseAlarms[id] = new(keep, player, now);
         }
@@ -66,6 +66,14 @@ namespace DOL.GS
             return null;
         }
 
+        /// <summary>
+        /// Whether a player hitting the keep is an attacker of it. Camlann: anyone outside the owning guild. RvR
+        /// world (R4b): anyone of another realm; a realm keep belongs to the realm, claimed or not.
+        /// </summary>
+        private static bool IsForeignAttacker(AbstractGameKeep keep, GamePlayer player) => WorldMode.IsRvr
+            ? ServerRules.PvpCombatant.AllianceRealm(player) != keep.Realm
+            : keep.Guild != ServerRules.PvpCombatant.GuildOf(player);
+
         public static int ResponseCap(bool defending) => defending ? 240 : 96;
 
         /// <summary>
@@ -76,7 +84,9 @@ namespace DOL.GS
         /// </summary>
         private static Dictionary<string, int> ResponseBucket(ActiveEvent active, Force force)
         {
-            if (string.IsNullOrEmpty(active.Target.OwningGuild))
+            // RvR world (R4b): sides are realms. The whole keep realm defends, the attacker's realm
+            // reinforces its army, the remaining realm contests.
+            if (WorldMode.IsRvr || string.IsNullOrEmpty(active.Target.OwningGuild))
                 return Participants(active, force.Realm);
             if (string.Equals(force.GuildName, active.Target.OwningGuild, StringComparison.Ordinal))
                 return active.Defenders;
@@ -138,7 +148,7 @@ namespace DOL.GS
                         continue;
                     }
                     var alarm = pair.Value;
-                    if (alarm.Keep.Guild == alarm.Player.Guild) continue;
+                    if (WorldMode.IsRvr ? !IsForeignAttacker(alarm.Keep, alarm.Player) : alarm.Keep.Guild == alarm.Player.Guild) continue;
                     var keep = alarm.Keep;
                     var target = new LiveObjective(pair.Key, keep.Name, keep.IsRelic ? Intent.AssaultRelicKeep : Intent.AssaultKeep,
                         keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0, 0, 0, UnderAttack: true,
@@ -147,7 +157,7 @@ namespace DOL.GS
                         alarm.Player.Client?.Account?.Name ?? alarm.Player.Name, alarm.Tick);
                     var active = Events.GetValueOrDefault(pair.Key);
                     if (active == null) continue;
-                    active.AttackerGuild ??= alarm.Player.Guild?.Name;
+                    if (!WorldMode.IsRvr) active.AttackerGuild ??= alarm.Player.Guild?.Name;
                     if (firstAlarm)
                     {
                         string text = $"Your attack on {alarm.Keep.Name} has raised the alarm! {GlobalConstants.RealmToName(alarm.Keep.Realm)} is mustering its forces.";
@@ -210,7 +220,9 @@ namespace DOL.GS
                             CarrierEvents.Values.Any(c => c.Participants.Values.Any(r => r.ContainsKey(force.GroupId)))) continue;
                         // Keep a deterministic 30% reserve of whole warbands;
                         // incidental nearby combat remains handled by normal AI.
-                        if (ResponseReserve(candidate.Members.Min(b => b.DatabaseID))) continue;
+                        // RvR world: the realm's own keep is answered by everyone (the reserve is its home guard).
+                        bool homeDefense = WorldMode.IsRvr && force.Realm == active.DefenderRealm && RealmTravel.IsPlayable(force.Realm);
+                        if (!homeDefense && ResponseReserve(candidate.Members.Min(b => b.DatabaseID))) continue;
                         if (candidate.Members.Any(b => b.InCombat || b.IsAttacking || b.IsStunned || b.IsMezzed ||
                             (b.Brain as BotBrain)?.HasAggro == true || GameRelic.IsPlayerCarryingRelic(b))) continue;
                         // Missing/dead members may catch up. Only mixed-level,
@@ -224,7 +236,11 @@ namespace DOL.GS
                                 previous.PlayerAccount, active.PlayerAccount, previous.LastPressureTick, active.LastPressureTick))) continue;
                         if (IsAbandonedLocked(force.GroupId, active.TargetId, now)) continue;
                         Dictionary<string, int> side = ResponseBucket(active, force);
-                        int cap = active.DefenseReaction ? ResponseCap(ReferenceEquals(side, active.Defenders)) : Capacity(active);
+                        // RvR world: the third realm answers only as its attack plan says, with half the cap.
+                        if (WorldMode.IsRvr && ReferenceEquals(side, active.ThirdRealm) && !active.ThirdRealm.ContainsKey(force.GroupId) &&
+                            !RealmMayContestLocked(force, active, now)) continue;
+                        int cap = active.DefenseReaction ? ResponseCap(ReferenceEquals(side, active.Defenders)) :
+                            ReferenceEquals(side, active.ThirdRealm) ? ThirdRealmCapacity(active) : Capacity(active);
                         if (!TryJoin(side, force, cap)) continue;
                         if (previous != null)
                         {

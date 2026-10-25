@@ -8,9 +8,19 @@ namespace DOL.GS;
 
 public static partial class AutonomousRvrEventLayer
 {
+    /// <summary>
+    /// The army at one siege. Camlann: the warbands of one guild. RvR world (R4b): the warbands of one realm,
+    /// whatever their guilds (a realm army); <see cref="Guild"/> is then null and <see cref="Realm"/> decides.
+    /// </summary>
     private sealed class GuildArmy
     {
         public Guild Guild;
+        public eRealm Realm;
+        public bool RealmArmy;
+        /// <summary>RvR: the name of the realm muster (portal outpost or border keep), once chosen.</summary>
+        public string MusterName;
+        /// <summary>Log label: guild="name" (Camlann) or realm="Albion" (RvR).</summary>
+        public string Label => RealmArmy ? $"realm=\"{GlobalConstants.RealmToName(Realm)}\"" : $"guild=\"{Guild?.Name}\"";
         public long Started, GatheredSince, NextEvaluation, NextLog, Launched, SplitSince;
         public Vector3? Camp;
         public readonly Dictionary<string, ArmyParty> Parties = new(StringComparer.Ordinal);
@@ -32,14 +42,16 @@ public static partial class AutonomousRvrEventLayer
 
     private static GuildArmy ArmyLocked(ActiveEvent active, string forceId, GameBot bot, long now)
     {
-        if (!MustersLocked(active, forceId) || bot?.Guild == null || !AutonomousSiegeMarch.IsWorldActor(bot) ||
+        bool realmArmy = WorldMode.IsRvr;
+        if (!MustersLocked(active, forceId) || bot == null || !realmArmy && bot.Guild == null || !AutonomousSiegeMarch.IsWorldActor(bot) ||
             GameRelic.IsPlayerCarryingRelic(bot) || AutonomousGuildKeepDefense.IsRecalled(bot)) return null;
-        string key = bot.Guild.GuildID;
+        string key = AutonomousRealmArmyPolicy.ArmyKey(WorldMode.Current, bot.Guild?.GuildID, bot.Realm);
         if (string.IsNullOrEmpty(key)) return null;
         if (!active.GuildArmies.TryGetValue(key, out var army) ||
             army.Failed && now - army.Started >= AutonomousGuildAssault.MaximumTravelMilliseconds +
                 AutonomousGuildAssault.MaximumGatherMilliseconds + AbandonedTargetMilliseconds)
-            active.GuildArmies[key] = army = new GuildArmy { Guild = bot.Guild, Started = now,
+            active.GuildArmies[key] = army = new GuildArmy { Guild = realmArmy ? null : bot.Guild, Realm = bot.Realm,
+                RealmArmy = realmArmy, Started = now,
                 PlannedParties = AutonomousGuildAssault.PlannedParties(Random.Shared.NextDouble()) };
         return army;
     }
@@ -63,7 +75,8 @@ public static partial class AutonomousRvrEventLayer
     /// </summary>
     private static bool LoneBotMustWaitForArmyLocked(Force force, ActiveEvent active) =>
         force.MemberCount < 2 && GuildArmyGoverns(active) &&
-        !ArmyLaunched(active.GuildArmies.Values.FirstOrDefault(army => army.Guild?.Name == force.GuildName));
+        !ArmyLaunched(active.GuildArmies.Values.FirstOrDefault(army => army.RealmArmy
+            ? army.Realm == force.Realm : army.Guild?.Name == force.GuildName));
 
     private static bool ArmyLaunched(GuildArmy army) => army is { Failed: false, Launched: > 0 };
 
@@ -91,18 +104,31 @@ public static partial class AutonomousRvrEventLayer
         bot.CurrentRegionID == active.Target.RegionId
             ? Vector2.Distance(new(bot.X, bot.Y), new(active.Target.X, active.Target.Y)) : double.PositiveInfinity;
 
-    /// <summary>Only a route-proved exterior camp can become the shared destination.</summary>
-    public static Vector3? SetGuildArmyCamp(string forceId, GameBot bot, long generation, Vector3 point, long now)
+    /// <summary>Only a route-proved exterior camp can become the shared destination.
+    /// RvR world: <paramref name="musterName"/> names the realm muster; the first party to set it calls the realm to it.</summary>
+    public static Vector3? SetGuildArmyCamp(string forceId, GameBot bot, long generation, Vector3 point, long now,
+        string musterName = null)
     {
         using (EnterSync())
         {
             var active = Events.Values.FirstOrDefault(e => MustersLocked(e, forceId));
             var army = active == null ? null : ArmyLocked(active, forceId, bot, now);
             if (army == null || army.Started != generation || army.Failed) return null;
+            if (army.Camp == null && army.RealmArmy)
+            {
+                army.MusterName = musterName ?? "a forward camp";
+                RealmEventNotices.Queue(active.TargetId, army.Realm, RealmArmyMusterCall(army.MusterName, active.Target.Name));
+                MusterLog.Info($"RVR_REALM_ARMY_MUSTER target={active.TargetId} {army.Label} muster=\"{army.MusterName}\" " +
+                    $"camp={active.Target.RegionId}:{point} keepDistance={(int)Vector2.Distance(new(point.X, point.Y), new(active.Target.X, active.Target.Y))}");
+            }
             army.Camp ??= point;
             return army.Camp;
         }
     }
+
+    /// <summary>The realm's call to its army, in the words of a 2003 raid leader on /as.</summary>
+    public static string RealmArmyMusterCall(string musterName, string keepName) =>
+        $"Army forming at {musterName} for {keepName}. Get there, buff up, we move out together.";
 
     /// <summary>No database, region-wide roster or navigation work under the event lock.</summary>
     public static void ReportGuildArmy(string forceId, GameBot leader, GameBot[] members,
@@ -130,7 +156,8 @@ public static partial class AutonomousRvrEventLayer
     private static bool ArmyMember(ActiveEvent active, GuildArmy army, string force, ArmyParty party, GameBot bot) =>
         bot?.IsAlive == true && bot.ObjectState == GameObject.eObjectState.Active &&
         bot.IsAutonomousWorldBot && !bot.IsPlayerLedGroup && !bot.IsTemporaryGroupHelper &&
-        bot.Guild == army.Guild && bot.Group != null && bot.Group == party.Leader.Group &&
+        AutonomousRealmArmyPolicy.SameArmy(army.RealmArmy ? WorldModelKind.Realm : WorldModelKind.Camlann,
+            army.Guild, army.Realm, bot.Guild, bot.Realm) && bot.Group != null && bot.Group == party.Leader.Group &&
         bot.TempProperties.GetProperty<string>("RvrEventForce") == force &&
         !AutonomousGuildKeepDefense.IsRecalled(bot) && MustersLocked(active, force);
 
@@ -140,7 +167,8 @@ public static partial class AutonomousRvrEventLayer
     private static void EvaluateArmy(ActiveEvent active, GuildArmy army, long now)
     {
         foreach (var force in army.Parties.Keys.Where(id => !MustersLocked(active, id) ||
-                     army.Parties[id].Leader.Guild != army.Guild).ToArray())
+                     !AutonomousRealmArmyPolicy.SameArmy(army.RealmArmy ? WorldModelKind.Realm : WorldModelKind.Camlann,
+                         army.Guild, army.Realm, army.Parties[id].Leader.Guild, army.Parties[id].Leader.Realm)).ToArray())
         { army.Parties.Remove(force); army.Released.Remove(force); }
         foreach (var enemy in army.Sightings.Keys.Where(enemy => !enemy.IsAlive ||
                      enemy.ObjectState != GameObject.eObjectState.Active ||
@@ -166,13 +194,17 @@ public static partial class AutonomousRvrEventLayer
 
         // A released party must not retain permission after its wipe/respawn.
         // Keep living fighters' references even while combat suppresses reports.
+        // RvR world: the realm muster can stand a frontier away, so the walk window grows with its distance.
+        long releaseHold = AutonomousRealmArmyPolicy.ReleaseHoldMilliseconds(
+            army.RealmArmy ? WorldModelKind.Realm : WorldModelKind.Camlann,
+            army.Camp is Vector3 musterCamp ? Vector2.Distance(new(musterCamp.X, musterCamp.Y), new(active.Target.X, active.Target.Y)) : 0);
         foreach (string force in army.Released.ToArray())
         {
             var party = army.Parties[force];
             if (!party.Members.Any(bot => ArmyMember(active, army, force, party, bot) &&
                     bot.CurrentRegionID == active.Target.RegionId &&
                     (now - army.Launched < 90_000 || NearKeep(active, bot) ||
-                        now - army.Launched < 5 * 60_000 && army.Camp is Vector3 camp &&
+                        now - army.Launched < releaseHold && army.Camp is Vector3 camp &&
                         Vector3.DistanceSquared(new(bot.X, bot.Y, bot.Z), camp) >
                             AutonomousGuildAssault.RallyRadius * AutonomousGuildAssault.RallyRadius)))
                 army.Released.Remove(force);
@@ -253,7 +285,7 @@ public static partial class AutonomousRvrEventLayer
         if (now >= army.NextLog)
         {
             army.NextLog = now + 30_000;
-            MusterLog.Info($"RVR_GUILD_ARMY target={active.TargetId} guild=\"{army.Guild.Name}\" " +
+            MusterLog.Info($"RVR_GUILD_ARMY target={active.TargetId} {army.Label} " +
                 $"action={(launch ? "launch" : reinforce ? "reinforce" : army.HoldColumn ? "column-hold" : "gather")} " +
                 $"camp={active.Target.RegionId}:{army.Camp} plannedParties={army.PlannedParties} parties={ready.Count} present={army.Present} " +
                 $"healers={army.Healers} operators={army.Operators} sightedDefenders={army.Defenders} " +
@@ -272,7 +304,7 @@ public static partial class AutonomousRvrEventLayer
             ReleasedForces[force] = reason;
         }
         army.Released.Clear();
-        MusterLog.Warn($"RVR_GUILD_ARMY target={active.TargetId} guild=\"{army.Guild.Name}\" action=abandon " +
+        MusterLog.Warn($"RVR_GUILD_ARMY target={active.TargetId} {army.Label} action=abandon " +
             $"present={army.Present} required={army.Required} reason=\"{reason}\"");
     }
 }

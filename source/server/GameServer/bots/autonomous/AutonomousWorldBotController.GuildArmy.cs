@@ -46,7 +46,7 @@ public sealed partial class AutonomousWorldBotController
         if (order.Failed)
         {
             ClearKeepObjective(bot);
-            SetRvrStatus(bot, "Guild assault called off", destination.MonsterName,
+            SetRvrStatus(bot, WorldMode.IsRvr ? "Realm assault called off" : "Guild assault called off", destination.MonsterName,
                 "The army could not assemble enough ready troops; choosing another objective");
             return true;
         }
@@ -55,7 +55,7 @@ public sealed partial class AutonomousWorldBotController
             if (!order.HoldColumn || leader != bot) return false;
             bot.StopMovingOnPath(); bot.StopMoving();
             AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Objective);
-            SetRvrStatus(bot, "Regrouping the guild army", destination.MonsterName,
+            SetRvrStatus(bot, WorldMode.IsRvr ? "Regrouping the realm army" : "Regrouping the guild army", destination.MonsterName,
                 "The attacking parties are closing the gap before the final approach");
             return true;
         }
@@ -75,12 +75,41 @@ public sealed partial class AutonomousWorldBotController
         {
             bot.StopMovingOnPath(); bot.StopMoving();
             AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Objective);
-            SetRvrStatus(bot, "Gathering the guild army", destination.MonsterName,
+            SetRvrStatus(bot, WorldMode.IsRvr ? "Gathering the realm army" : "Gathering the guild army", destination.MonsterName,
                 $"{order.Parties} ready parties, {order.Present}/{order.Required} troops; waiting for healers and siege equipment ({order.Remaining/60000}m left)");
             return true;
         }
         FollowKeepTravel(bot, destination, order);
         return true;
+    }
+
+    /// <summary>
+    /// RvR world: a walkable spot inside the realm muster (portal outpost or border keep), connected to the actor.
+    /// The same probe ring as the border-hub staging; at most twelve candidates per attempt.
+    /// </summary>
+    private bool TryRealmArmyMuster(GameBot bot, CampDestination destination, IPathfindingMgr nav, Vector3 actor,
+        AutonomousRvrEventLayer.GuildArmyOrder order, out Vector3 point)
+    {
+        point = default;
+        if (!AutonomousRealmArmyPolicy.TryGetRealmMuster(bot.Realm, destination.RegionId, new(destination.X, destination.Y),
+                out AutonomousRvrStaging.BorderKeep muster) ||
+            !AutonomousRealmArmyPolicy.IsUsableMuster(muster, destination.RegionId, new(destination.X, destination.Y)) ||
+            bot.CurrentRegionID != muster.RegionId)
+            return false;
+        foreach (Vector3 raw in AutonomousRvrStaging.CandidateAnchors(muster, bot.DatabaseID).Take(12))
+        {
+            Zone zone = bot.CurrentRegion.GetZone((int)raw.X, (int)raw.Y);
+            if (zone == null || !AutonomousRealmBoundary.Allows(bot.Realm, bot.CurrentRegionID, zone.ID) || !nav.HasNavmesh(zone)) continue;
+            var floor = nav.GetClosestPoint(zone, raw, 72, 72, 512, nav.DefaultFilters);
+            if (!floor.HasValue || !AutonomousRendezvousNavigation.HasLocalExit(nav, zone, floor.Value) ||
+                !RvrKeepRoute.TryBuild(bot.CurrentRegion, nav, bot.Realm, actor, floor.Value, out _)) continue;
+            var shared = AutonomousRvrEventLayer.SetGuildArmyCamp(RvrForceOf(bot), bot, order.Generation,
+                floor.Value, GameLoop.GameLoopTime, muster.Name);
+            if (!shared.HasValue) return false;
+            point = shared.Value;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>Find one shared exterior camp through the existing sliced navigation budget.</summary>
@@ -89,6 +118,10 @@ public sealed partial class AutonomousWorldBotController
     {
         if (order.Camp is Vector3 existing) { point = existing; return true; }
         point = default;
+        // RvR world (R4b): the realm army musters at its own portal outpost in the keep's frontier, or at its
+        // nearer border keep in the home frontier. Only when no walkable, connected spot is found there does it
+        // fall back to the forward camp below.
+        if (WorldMode.IsRvr && TryRealmArmyMuster(bot, destination, nav, actor, order, out point)) return true;
         double bearing = Math.Atan2(actor.Y - destination.Y, actor.X - destination.X);
         for (int i = 0; i < 12; i++)
         {

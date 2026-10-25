@@ -2677,13 +2677,26 @@ namespace DOL.GS
             Dictionary<ushort, AbstractGameKeep[]> keepsByRegion = null;
             string siegedKeepId = null;
             bool siegeResolved = false;
+            // RvR world (R4b): a grudge is realm-wide, so revenge trips are capped per target
+            // (rvr_grudge_hunters_per_target warbands of the realm at once); a full target is skipped.
+            string grudgeForce = _groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}";
+            bool grudgeCap = WorldMode.IsRvr, grudgeFull = false;
             GameLiving revengeTarget = AutonomousGuildGrudgeMemory.GetReachableTargets(bot, reachable, WorldSimulationClock.UtcNow)
                 .Where(target => !AutonomousRvrMobAvoidance.IsForbiddenRvrRegion(target.CurrentRegionID))
                 .Where(target => !IsRecentGiveUpGoal(bot, target.CurrentRegionID, target.X, target.Y) &&
                                  !IsBehindKeepGate(bot, target.CurrentRegionID, target.X, target.Y,
                                      ref keepsByRegion, ref siegedKeepId, ref siegeResolved))
                 .OrderBy(target => EstimateTravelMinutes(bot, target.CurrentRegionID, target.X, target.Y))
-                .FirstOrDefault();
+                .FirstOrDefault(target =>
+                {
+                    if (!grudgeCap) return true;
+                    bool room = AutonomousRealmGrudgeHunts.HasRoom(bot.Realm, AutonomousGuildGrudgeMemory.StableTargetId(target),
+                        grudgeForce, GameLoop.GameLoopTime, AutonomousRealmArmyProperties.RVR_GRUDGE_HUNTERS_PER_TARGET);
+                    grudgeFull |= !room;
+                    return room;
+                });
+            // A full target turned this warband away (it may still take a later one): count it as capped.
+            if (grudgeFull) AutonomousRealmGrudgeHunts.NoteCapped(bot.Realm);
             if (revengeTarget != null)
             {
                 // P7: the loser comes back with more people. A revenge trip
@@ -2696,6 +2709,15 @@ namespace DOL.GS
                         Log.Info($"RVR_GRUDGE_GATE bot=\"{bot.Name}\" group_size={own} lost_size={lost} target=\"{revengeTarget.Name}\" result=roam");
                     revengeTarget = null;
                 }
+            }
+            if (revengeTarget != null && grudgeCap && !AutonomousRealmGrudgeHunts.TryClaim(bot.Realm,
+                    AutonomousGuildGrudgeMemory.StableTargetId(revengeTarget), grudgeForce, GameLoop.GameLoopTime,
+                    AutonomousRealmArmyProperties.RVR_GRUDGE_HUNTERS_PER_TARGET))
+            {
+                if (Log.IsInfoEnabled)
+                    Log.Info($"RVR_GRUDGE_GATE bot=\"{bot.Name}\" target=\"{revengeTarget.Name}\" result=capped " +
+                        $"cap={AutonomousRealmArmyProperties.RVR_GRUDGE_HUNTERS_PER_TARGET}");
+                revengeTarget = null;
             }
             if (revengeTarget != null)
             {
@@ -2841,6 +2863,13 @@ namespace DOL.GS
                 AutonomousPlayerType.KeepWarrior => 5,
                 _ => 15,
             };
+            // RvR world (R4b): the live reserve per realm. While enemies stand in the realm's home frontier, more
+            // of its warbands stay home and hunt them (census refreshed every thirty seconds).
+            if (WorldMode.IsRvr)
+                roamReservePercent = AutonomousRealmArmyPolicy.ReservePercent(roamReservePercent,
+                    AutonomousRealmArmyCensus.Invaders(bot.Realm, GameLoop.GameLoopTime),
+                    AutonomousRealmArmyProperties.RVR_ARMY_RESERVE_INVADER_PERCENT,
+                    AutonomousRealmArmyProperties.RVR_ARMY_INVADER_MIN);
             if (!AutonomousBattlegroundParticipation.MayEnlistInWorldRvrEvents(bot))
             {
                 // Open-BG crew and battleground participants roam alone; they never register a force in a world event.

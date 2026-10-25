@@ -42,6 +42,10 @@ When a task is done and its required verification is complete, move it out of it
      world, WORLD label in the status line, Gothwaite only in PvP, today's
      Camlann save moved to its own file, importer names the world and refuses
      cross-world imports): implemented in source, real-client check pending.
+     R4b (realm armies: sieges, muster at the own portal outpost, target
+     weights, attack plan per realm, whole-realm defence, home reserve against
+     invaders, capped revenge trips; [RVR_ARMIES.md](RVR_ARMIES.md))
+     implemented in source, real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed

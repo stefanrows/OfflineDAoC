@@ -97,8 +97,23 @@ defaults in code, keep/relic start state from the reset.
   ramp, lowest-load realm first, shortfall not filled by others); grudges per
   realm (48, 3 h); companions unchanged. Open for R4b: revenge trips must be
   capped and measured. 32 tests.
-- [ ] **R4b Realm armies.** Event layer armies per realm instead of per guild,
-  muster at the realm's portal outpost, grudges/banter per realm. 2 sessions.
+- [~] **R4b Realm armies.** (`docs/RVR_ARMIES.md`; implemented in source,
+  real-client check pending) RvR world: a whole warband of eight of one realm
+  opens a siege whatever its guilds, every warband of the realm joins one realm
+  army (keyed by realm, never a member of another realm); the army musters at
+  the realm's own portal outpost in the keep's frontier, at home at the nearer
+  border keep, with a realm chat call, and marches together (march window from
+  the muster distance); targets never an own-realm keep, neutral 1.0 / enemy
+  1.5 / home frontier x2; per-realm attack plan single / double / opportunist
+  (open BG odds, about an hour each) sets siege slots and the third-realm
+  response (after the keep fight starts, half cap); the whole realm defends
+  its keeps; the live home reserve grows and stays home during an invasion
+  (at least 4 enemies incl. players and companions) and hunts them, other
+  warbands roam as before; relic cap 240; revenge trips capped at 2 warbands
+  per target and realm with `RVR_GRUDGE_SHARE` counts; open BG units no
+  longer split by keep guild; grudges against human killers resolve again
+  (both worlds). Camlann unchanged otherwise. 44 tests. R4c keeps the
+  upstream thresholds, timings, retake, push/detour.
 - [ ] **R4c Upstream siege-flow port.** Retake, 108/170 march threshold, siege
   scheduling, ArmyPush/Detour, siege resurrection from upstream 0.33-0.37.
   2 sessions. After a fetch of Stefan's branch.

@@ -182,7 +182,8 @@ public static class AutonomousGuildGrudgeMemory
         if (entries.Length == 0)
             return [];
 
-        Dictionary<string, GamePlayer> players = GameLoop.GetListForTick<GamePlayer>()
+        // The playing clients; GameLoop.GetListForTick alone is an empty scratch list, so human killers never resolved.
+        Dictionary<string, GamePlayer> players = (ClientService.Instance?.GetPlayers() ?? new List<GamePlayer>())
             .Where(player => player?.ObjectState == GameObject.eObjectState.Active &&
                 !string.IsNullOrWhiteSpace(player.ObjectId))
             .GroupBy(player => player.ObjectId, StringComparer.Ordinal)
