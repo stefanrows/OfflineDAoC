@@ -40,8 +40,23 @@ namespace DOL.GS.Keeps
             log.Info($"FRONTIER_WARDEN_KEEP_LEVEL keep={keep.KeepID} name={keep.Name} from={previous} to={keep.Level}");
         }
 
+        /// <summary>RvR world (R3a): a portal keep always stands for its realm, as the 1.65
+        /// border keeps. The RvR reset writes it; a realm-less row (an older save, a
+        /// battleground portal keep) takes its original realm, so its guards and its
+        /// hostility agree. Null leaves the keep's realm as it is.</summary>
+        public static eRealm? PortalKeepStartRealm(WorldModelKind world, bool portalKeep, eRealm realm, eRealm originalRealm) =>
+            world == WorldModelKind.Realm && portalKeep && !PvpCombatant.IsPlayableRealm(realm) &&
+            PvpCombatant.IsPlayableRealm(originalRealm) ? originalRealm : null;
+
         public static void Initialize(AbstractGameKeep keep)
         {
+            if (keep?.DBKeep != null && PortalKeepStartRealm(WorldMode.Current, keep.IsPortalKeep, keep.Realm, keep.OriginalRealm) is eRealm portalRealm)
+            {
+                keep.Realm = portalRealm;
+                keep.SaveIntoDatabase();
+                RefreshGuardsForRealm(keep);
+                log.Info($"RVR_PORTAL_KEEP_REALM keep={keep.KeepID} name={keep.Name} realm={portalRealm}");
+            }
             if (!Applies(keep)) return;
             // A claim whose guild is not loaded (yet) must not be handed to the
             // garrison and saved over: that silently erased every bot claim
@@ -54,17 +69,70 @@ namespace DOL.GS.Keeps
                 EnsureClaimPoint(keep);
                 return;
             }
-            if (keep.Guild == null && !keep.DBKeep.LordDefeated)
+            if (keep.Guild == null && NeedsGarrison(WorldMode.Current, keep.DBKeep.LordDefeated, keep.Realm))
             {
                 keep.Guild = GuildMgr.GetGuildByName(GarrisonName) ?? GuildMgr.CreateGuild(eRealm.None, GarrisonName);
                 if (keep.Guild == null) throw new InvalidOperationException("Cannot initialize the frontier garrison guild.");
                 if (!keep.Guild.ClaimedKeeps.Contains(keep)) keep.Guild.ClaimedKeeps.Add(keep);
+                // RvR world: the Wardens are no realm, so their guards show and fight as neutrals.
+                bool realmChanged = WorldMode.IsRvr && keep.Realm != eRealm.None;
+                if (realmChanged) keep.Realm = eRealm.None;
                 keep.SaveIntoDatabase();
                 foreach (GameKeepGuard guard in keep.Guards.Values) guard.ChangeGuild();
+                if (realmChanged) RefreshGuardsForRealm(keep);
+            }
+            else if (WorldMode.IsRvr && IsGarrison(keep.Guild) && keep.Realm != eRealm.None)
+            {
+                keep.Realm = eRealm.None;
+                keep.SaveIntoDatabase();
+                RefreshGuardsForRealm(keep);
+            }
+            else if (WorldMode.IsRvr && keep.Guild == null && !keep.DBKeep.LordDefeated && !keep.IsRelic &&
+                PvpCombatant.IsPlayableRealm(keep.Realm))
+            {
+                // An unclaimed realm keep always waits at the steward for a claim of its realm.
+                keep.DBKeep.LordDefeated = true;
+                keep.SaveIntoDatabase();
             }
             ApplyWardenStartLevel(keep);
             EnsureClaimPoint(keep);
         }
+
+        /// <summary>Whether an unheld keep goes to the Frontier Wardens at start. Camlann:
+        /// every unheld keep whose lord stands. RvR world (R3a, owner decision 12): only a
+        /// realm-less one; a keep of a realm (portal, relic, or captured and not yet
+        /// claimed) stands for that realm without a garrison.</summary>
+        public static bool NeedsGarrison(WorldModelKind world, bool lordDefeated, eRealm keepRealm) =>
+            !lordDefeated && (world != WorldModelKind.Realm || !PvpCombatant.IsPlayableRealm(keepRealm));
+
+        /// <summary>Guards already in the world take a realm the startup changed (they
+        /// normally spawn after the keeps and read it then).</summary>
+        private static void RefreshGuardsForRealm(AbstractGameKeep keep)
+        {
+            foreach (GameKeepGuard guard in keep.Guards.Values)
+                if (guard.ObjectState == GameObject.eObjectState.Active && guard.Realm != keep.Realm)
+                    guard.RefreshTemplate();
+        }
+
+        /// <summary>Whether the keep's combat blocks a claim. Camlann: a defeated lord opens
+        /// the steward even while siege damage refreshes the combat timer. RvR world (R3a):
+        /// LordDefeated means "captured, awaiting a claim" with a standing lord, so a claim
+        /// waits until the keep is out of combat, as the upstream rule.</summary>
+        public static bool ClaimBlockedByCombat(WorldModelKind world, bool inCombat, bool campaign, bool lordDefeated) =>
+            inCombat && (world == WorldModelKind.Realm || !(campaign && lordDefeated));
+
+        public static bool ClaimBlockedByCombat(AbstractGameKeep keep) => keep != null &&
+            ClaimBlockedByCombat(WorldMode.Current, keep.InCombat, Applies(keep), keep.DBKeep?.LordDefeated == true);
+
+        /// <summary>Whether a lord of the keep stands in the world.</summary>
+        public static bool LordStands(AbstractGameKeep keep) => keep != null &&
+            keep.Guards.Values.OfType<GuardLord>().Any(lord => lord.IsAlive && lord.ObjectState == GameObject.eObjectState.Active);
+
+        /// <summary>The "lord down, nobody claimed yet" state the open BG director plays on.
+        /// Camlann: the saved LordDefeated flag (the lord stays down until a claim). RvR world:
+        /// the flag only means "awaiting a claim"; the lord must really be down.</summary>
+        public static bool LordDownUnclaimed(WorldModelKind world, bool claimed, bool lordDefeated, bool lordStands) =>
+            !claimed && lordDefeated && (world != WorldModelKind.Realm || !lordStands);
 
         public static void EnsureClaimPoint(AbstractGameKeep keep)
         {
@@ -128,6 +196,117 @@ namespace DOL.GS.Keeps
             LogSlowKeepStep(keep, "defeat_lord", "steward", mark);
         }
 
+        // ---- RvR world (R3a): keeps change hands by realm --------------------------------------------------------
+
+        /// <summary>The realm a lord kill captures for in the RvR world: the realm the killer fights for (pets,
+        /// companions and /spawn helpers count as their owner's, <see cref="PvpCombatant.AllianceRealm"/>), or
+        /// None for a realm-less killer (a mob, a neutral encounter bot, no killer).</summary>
+        public static eRealm CapturingRealm(GameObject killer)
+        {
+            GameLiving combatant = PvpCombatant.Resolve(killer as GameLiving);
+            eRealm realm = combatant == null ? eRealm.None : PvpCombatant.AllianceRealm(combatant);
+            return PvpCombatant.IsPlayableRealm(realm) ? realm : eRealm.None;
+        }
+
+        /// <summary>Whether a lord kill for <paramref name="captor"/> changes the owner: a playable realm takes a
+        /// Warden, realm-less or other realm's keep. A keep never changes to its own realm.</summary>
+        public static bool CaptureChangesOwner(eRealm keepRealm, bool heldByGarrison, eRealm captor) =>
+            PvpCombatant.IsPlayableRealm(captor) && (heldByGarrison || keepRealm != captor);
+
+        /// <summary>Only a guild of the keep's realm may claim it in the RvR world (owner decision 13): the claimer
+        /// fights for the keep's realm and the guild is of that realm (a realm-less guild, as the RvR rules allow,
+        /// counts through its member). A realm-less keep is first captured, never claimed.</summary>
+        public static bool RealmMayClaim(eRealm keepRealm, eRealm claimerRealm, eRealm guildRealm) =>
+            PvpCombatant.IsPlayableRealm(keepRealm) && claimerRealm == keepRealm &&
+            (guildRealm == eRealm.None || guildRealm == keepRealm);
+
+        /// <summary>The claim realm gate for the current world; Camlann claims by guild only.</summary>
+        public static bool MayClaimInWorld(AbstractGameKeep keep, GameLiving claimer) =>
+            MayClaimInWorld(WorldMode.Current, keep, claimer);
+
+        public static bool MayClaimInWorld(WorldModelKind world, AbstractGameKeep keep, GameLiving claimer)
+        {
+            if (world != WorldModelKind.Realm) return true;
+            if (keep == null || claimer == null) return false;
+            return RealmMayClaim(keep.Realm, PvpCombatant.AllianceRealm(claimer),
+                PvpCombatant.GuildOf(claimer)?.Realm ?? eRealm.None);
+        }
+
+        /// <summary>The refusal for a claimer of the wrong realm, or null when the realm may claim.</summary>
+        public static string RealmClaimRefusal(AbstractGameKeep keep, GameLiving claimer)
+        {
+            if (MayClaimInWorld(keep, claimer)) return null;
+            if (keep == null || !PvpCombatant.IsPlayableRealm(keep.Realm))
+                return $"Defeat the keep lord to win {keep?.Name ?? "this keep"} for your realm first.";
+            return $"{keep.Name} belongs to {GlobalConstants.RealmToName(keep.Realm)}; only a guild of that realm can claim it.";
+        }
+
+        /// <summary>The lord of a campaign keep fell in the RvR world (owner decisions 12 and 17, spec 4.1).</summary>
+        public static void CaptureForRealm(GuardLord lord, GameObject killer)
+        {
+            AbstractGameKeep keep = lord?.Component?.Keep;
+            if (keep == null) return;
+            CaptureForRealm(keep, CapturingRealm(killer), PvpCombatant.Resolve(killer as GameLiving));
+        }
+
+        /// <summary>
+        /// The keep flips to <paramref name="captor"/> at once, as the upstream Normal rules do
+        /// (<see cref="AbstractGameKeep.Reset"/>): the previous claim (a guild or the Wardens) is released, walls
+        /// are repaired, doors and banners take the realm, and the guards die and respawn as the realm's guards
+        /// (the lord a second later). The keep stands at level 1 without a claim and the Keep Claim Steward waits
+        /// for an optional claim by a guild of that realm (<see cref="AbstractGameKeep.DBKeep"/>.LordDefeated
+        /// marks "awaiting a claim" here; the lord still stands so another realm can retake it). Relic keeps
+        /// are never claimed and only change realm. The capture is saved and never returns to the Wardens.
+        /// Returns false, changing nothing, for a realm-less captor or the keep's own realm.
+        /// </summary>
+        public static bool CaptureForRealm(AbstractGameKeep keep, eRealm captor, GameLiving captorLiving)
+        {
+            eRealm previous = keep.Realm;
+            string previousOwner = keep.Guild?.Name ?? string.Empty;
+            if (!CaptureChangesOwner(previous, IsGarrison(keep.Guild), captor))
+            {
+                log.Info($"KEEP_REALM_CAPTURE_SKIPPED keep={keep.KeepID} name={keep.Name} realm={previous} captor={captor}");
+                return false;
+            }
+            using var batch = KeepSaveBatch.Begin("realm_capture", keep);
+            long mark = System.Diagnostics.Stopwatch.GetTimestamp();
+            keep.DBKeep.LordDefeated = !keep.IsRelic;
+            PayCaptureReward(keep, captor, captorLiving);
+            keep.Reset(captor);
+            mark = LogSlowKeepStep(keep, "realm_capture", "reset", mark);
+            if (!keep.IsRelic && keep.Level != WardenKeepLevel)
+            {
+                keep.ChangeLevel(WardenKeepLevel);
+                mark = LogSlowKeepStep(keep, "realm_capture", "change_level", mark);
+            }
+            batch.Dispose();
+            EnsureClaimPoint(keep);
+            LogSlowKeepStep(keep, "realm_capture", "steward", mark);
+            log.Info($"KEEP_REALM_CAPTURED keep={keep.KeepID} name={keep.Name} from={previous} previousOwner=\"{previousOwner}\" " +
+                $"to={captor} by=\"{captorLiving?.Name}\" bot={captorLiving is GameBot} level={keep.Level}");
+            return true;
+        }
+
+        /// <summary>RvR capture reward (spec 4.1): the living members of the captor's group and battlegroup who
+        /// fight for the capturing realm and stand in the keep area get the capture realm points, once per keep
+        /// in 30 minutes. Battleground campaign keeps keep their own bracket-scaled objective rewards.</summary>
+        private static void PayCaptureReward(AbstractGameKeep keep, eRealm captor, GameLiving captorLiving)
+        {
+            if (captorLiving == null || BattlegroundCampaignCatalog.Find((ushort)keep.Region) != null) return;
+            if (WorldSimulationClock.UtcNow - keep.DBKeep.LastCaptureRewardAt < TimeSpan.FromMinutes(30)) return;
+            keep.DBKeep.LastCaptureRewardAt = WorldSimulationClock.UtcNow;
+            var members = new System.Collections.Generic.HashSet<GameLiving> { captorLiving };
+            if (captorLiving.Group != null)
+                foreach (GameLiving member in captorLiving.Group.GetMembersInTheGroup()) members.Add(member);
+            BattleGroup battleGroup = PvpCombatant.BattleGroupOf(captorLiving);
+            if (battleGroup != null)
+                foreach (GamePlayer member in battleGroup.GetPlayerMembers()) members.Add(member);
+            foreach (GameLiving member in members)
+                if (member.IsAlive && PvpCombatant.AllianceRealm(member) == captor &&
+                    member.CurrentRegionID == keep.Region && keep.Area?.IsContaining(member, false) == true)
+                    member.GainRealmPoints(CaptureRealmPoints);
+        }
+
         /// <summary>A claimed campaign keep stands whole: every gate and wall is healed and the gates are closed and
         /// announced. The lord's death never goes through AbstractGameKeep.Reset, which is the only other place that
         /// does this, so a raided keep would otherwise keep its broken gates until the slow 30 minute repair ticks.</summary>
@@ -164,6 +343,8 @@ namespace DOL.GS.Keeps
                 if (lord.ObjectState != GameObject.eObjectState.Active) lord.AddToWorld();
             }
             RestoreDefences(keep);
+            // RvR world: the capture paid the realm when the lord fell (CaptureForRealm); the claim adds none.
+            if (WorldMode.IsRvr) return;
             // Campaign objectives own bracket-scaled capture rewards.
             if (BattlegroundCampaignCatalog.Find((ushort)keep.Region) != null) return;
             bool rewardReady = WorldSimulationClock.UtcNow - keep.DBKeep.LastCaptureRewardAt >= TimeSpan.FromMinutes(30);
@@ -182,6 +363,18 @@ namespace DOL.GS.Keeps
 
     public sealed class KeepClaimPoint : GameNPC
     {
+        /// <summary>RvR world: distance of the steward in front of the standing lord.</summary>
+        public const int StewardLordDistance = 200;
+
+        /// <summary>Where the steward stands: on the lord's spot in Camlann (the lord is down
+        /// there), <see cref="StewardLordDistance"/> in front of him in the RvR world.</summary>
+        public static (int X, int Y) StewardSpot(WorldModelKind world, int lordX, int lordY, ushort lordHeading)
+        {
+            if (world != WorldModelKind.Realm) return (lordX, lordY);
+            Point2D front = new Point2D(lordX, lordY).GetPointFromHeading(lordHeading, StewardLordDistance);
+            return (front.X, front.Y);
+        }
+
         public AbstractGameKeep Keep { get; }
         public KeepClaimPoint(AbstractGameKeep keep, GuardLord lord)
         {
@@ -195,6 +388,9 @@ namespace DOL.GS.Keeps
             Flags = eFlags.PEACE;
             CurrentRegionID = lord.CurrentRegionID;
             X = lord.X; Y = lord.Y; Z = lord.Z; Heading = lord.Heading;
+            // RvR world: the lord stands again beside a captured keep's steward, so the
+            // steward waits a few steps in front of him instead of inside him.
+            (X, Y) = StewardSpot(WorldMode.Current, lord.X, lord.Y, lord.Heading);
         }
         public override bool Interact(GamePlayer player)
         {

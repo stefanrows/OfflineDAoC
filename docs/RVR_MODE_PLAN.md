@@ -47,8 +47,15 @@ defaults in code, keep/relic start state from the reset.
   Gothwaite off; enemy-land binds reset on release; per-realm safe hubs: own
   realm safe in its hub, an intruder attackable, no attacking out of cover;
   capitals/housing/newbie dungeons still block attackers. 53 + 8 tests.
-- [~] **R3a Keeps.** Implemented (worktree rvr-r3a, 54 tests), in review (10:45). Neutral Warden start, capture by realm sticks, claims by
-  the keep's realm (solo guild ok), guards by owner realm. 1 session.
+- [x] **R3a Keeps.** (0.337.0; `docs/RVR_KEEPS.md`) RvR world: killing a
+  neutral or enemy keep's lord flips the keep to the killer's realm at once
+  (saved; guards respawn as that realm; level 1; awaiting claim; 1,500 RP to
+  the capturing group/battlegroup once per keep per 30 min); claims only by
+  guilds of the keep's realm (solo guild ok, bots claim automatically), never
+  while the keep is in combat; Wardens hostile to all, realm keeps friend/enemy
+  by realm incl. portal keeps; Darkness Falls by keep count (previous owner 15
+  min grace); bots never siege own-realm keeps; open BG roles read a real
+  lord state. Camlann unchanged. 72 tests.
 - [~] **R3b Relics.** Agent rvr-r3b (2026-10-25 10:45, parallel to the R3a review). Realm pads, realm-wide bonus, relic sieges. 1 session.
 - [x] **R5a World reset + files.** (0.335.0; `docs/RVR_WORLDS.md`) One
   reset routine creates a fresh RvR or Camlann world: seed copy, progress
@@ -143,3 +150,12 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   safe hubs (portal keeps, border hubs, landings) protect only their own realm.
 - 2026-10-25 11:00: R2 reviewed (hub sniping + 4 lows fixed) and merged as 0.336.0.
   R3a in review, R3b and R5b running.
+- 2026-10-25 (R3a agent): R3a in source on branch rvr-r3a, real-client check
+  pending ([RVR_KEEPS.md](RVR_KEEPS.md)): a lord kill flips the keep to the
+  killer's realm at once and the capture is saved (level 1, steward for an
+  optional claim, lord stands again); only a guild of the keep's realm claims;
+  guards show and fight as their keep's realm, portal keeps hostile to other
+  realms and never captured, Wardens neutral; Darkness Falls for the realm with
+  most keeps; bots claim and siege by realm; Camlann unchanged.
+- 2026-10-25 11:25: R3a reviewed (2 mediums + lows fixed) and merged as 0.337.0.
+  R3b, R4a, R5b running.

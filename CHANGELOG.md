@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.337.0] - 2026-10-25
+
+### Added
+- RvR mode, package R3a (`docs/RVR_KEEPS.md`): in a `Realm-1` world keeps
+  change hands by realm. Killing the lord of a neutral (Frontier Wardens) or
+  enemy keep flips it to the killer's realm at once; the capture is saved,
+  the guards respawn as that realm's, the keep waits at level 1 for a claim
+  by a guild of that realm (a solo guild may claim; bot guilds claim on their
+  own; no claim while the keep is in combat). Keeps are friends of their realm
+  and enemies of the others, portal keeps included; the Wardens are hostile
+  to all. Darkness Falls opens for the realm holding the most frontier keeps.
+  Bots never besiege their own realm's keeps. Unit tests UT_RvrKeeps (72).
+
+### Changed
+- None for the Camlann world.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.336.0] - 2026-10-25
 
 ### Added

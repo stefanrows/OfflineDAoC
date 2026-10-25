@@ -329,6 +329,9 @@ namespace DOL.GS.Commands
             string keep = owner[..colon], rest = owner[(colon + 2)..].Trim();
             if (rest.EndsWith(" - " + BattlegroundKeepOwnership.LordDefeatedUnclaimed, StringComparison.Ordinal))
                 return $"{keep}: lord down, unclaimed";
+            string captured = " - " + BattlegroundKeepOwnership.CapturedAwaitingClaim;
+            if (rest.EndsWith(captured, StringComparison.Ordinal))
+                return $"{keep}: {rest[..^captured.Length]} holds it, awaiting a claim";
             int paren = rest.IndexOf(" (", StringComparison.Ordinal);
             if (paren > 0 && rest.EndsWith(")", StringComparison.Ordinal))
                 return $"{keep}: {rest[(paren + 2)..^1]} holds it";

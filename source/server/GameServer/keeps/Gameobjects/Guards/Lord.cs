@@ -236,7 +236,10 @@ namespace DOL.GS.Keeps
                 // Keeps load before database mobs. Now the saved lord is in the
                 // guard roster, so its position can restore the claim steward.
                 PvpKeepCampaign.EnsureClaimPoint(Component.Keep);
-                return false;
+                // RvR world (R3a): a captured keep awaiting a guild claim keeps
+                // its new realm's lord, so another realm can take it back.
+                if (!WorldMode.IsRvr)
+                    return false;
             }
             if (base.AddToWorld())
             {

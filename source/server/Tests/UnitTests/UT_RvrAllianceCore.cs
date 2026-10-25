@@ -353,15 +353,14 @@ public sealed class UT_RvrAllianceCore
         });
     }
 
-    [TestCase(true, eRealm.Albion, false, eRealm.Albion, false, true, TestName = "Wardens are everyone's enemy")]
-    [TestCase(false, eRealm.Midgard, false, eRealm.Midgard, false, false, TestName = "Own realm keep is a friend")]
-    [TestCase(false, eRealm.Midgard, false, eRealm.Hibernia, false, true, TestName = "Other realm keep is an enemy")]
-    [TestCase(false, eRealm.None, true, eRealm.Albion, false, false, TestName = "Realm-less unheld keep follows the property (off)")]
-    [TestCase(false, eRealm.None, true, eRealm.Albion, true, true, TestName = "Realm-less unheld keep follows the property (on)")]
-    [TestCase(false, eRealm.None, false, eRealm.Albion, false, true, TestName = "Realm-less held keep is hostile")]
-    public void RvrKeepHostilityRule(bool garrison, eRealm keepRealm, bool unheld, eRealm targetRealm, bool property, bool enemy)
+    // R3a: pvp_unclaimed_keeps_enemy plays no part in the RvR world; a realm-less keep is neutral, so hostile.
+    [TestCase(true, eRealm.Albion, eRealm.Albion, true, TestName = "Wardens are everyone's enemy")]
+    [TestCase(false, eRealm.Midgard, eRealm.Midgard, false, TestName = "Own realm keep is a friend")]
+    [TestCase(false, eRealm.Midgard, eRealm.Hibernia, true, TestName = "Other realm keep is an enemy")]
+    [TestCase(false, eRealm.None, eRealm.Albion, true, TestName = "Realm-less keep is hostile")]
+    public void RvrKeepHostilityRule(bool garrison, eRealm keepRealm, eRealm targetRealm, bool enemy)
     {
-        Assert.That(DefaultKeepManager.IsRvrKeepEnemy(garrison, keepRealm, unheld, targetRealm, property), Is.EqualTo(enemy));
+        Assert.That(DefaultKeepManager.IsRvrKeepEnemy(garrison, keepRealm, targetRealm), Is.EqualTo(enemy));
     }
 
     [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]

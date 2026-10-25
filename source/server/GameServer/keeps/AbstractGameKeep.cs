@@ -629,6 +629,11 @@ namespace DOL.GS.Keeps
             if (campaign != null && (!BattlegroundCampaignPolicy.IsEnabled || !BattlegroundCampaignPolicy.IsEligible(player, campaign)))
                 return RejectClaim(output, "You are outside this battleground's level or Realm Rank bracket.", out refusal);
 
+			// RvR world (R3a): only a guild of the keep's realm claims it, once the realm holds it.
+			string realmRefusal = PvpKeepCampaign.RealmClaimRefusal(this, player);
+			if (realmRefusal != null)
+				return RejectClaim(output, realmRefusal, out refusal);
+
 			// Restore a defeated keep's steward if startup could not place it.
 			PvpKeepCampaign.EnsureClaimPoint(this);
 
@@ -638,8 +643,8 @@ namespace DOL.GS.Keeps
                 return RejectClaim(output, "Defeat the keep lord, then approach the Keep Claim Steward to claim this keep.", out refusal);
             }
 			// A defeated lord unlocks the PvP steward even if later siege damage
-			// refreshes the keep combat timer.
-			if (InCombat && !(PvpKeepCampaign.Applies(this) && DBKeep.LordDefeated))
+			// refreshes the keep combat timer (Camlann). RvR world: no claim in combat.
+			if (PvpKeepCampaign.ClaimBlockedByCombat(this))
 			{
 				log.DebugFormat("KEEPWARNING: {0} attempted to claim {1} while in combat.", player.Name, Name);
 				return RejectClaim(output, Name + " is under attack and can't be claimed.", out refusal);
@@ -880,7 +885,15 @@ namespace DOL.GS.Keeps
 				banner.ChangeGuild();
 			}
 
+			// RvR world (R3a): a released keep stays its realm's and waits at the steward for another claim.
+			bool awaitClaim = WorldMode.IsRvr && PvpKeepCampaign.Applies(this) && !IsRelic &&
+				ServerRules.PvpCombatant.IsPlayableRealm(Realm);
+			if (awaitClaim)
+				DBKeep.LordDefeated = true;
+
 			this.SaveIntoDatabase();
+			if (awaitClaim)
+				PvpKeepCampaign.EnsureClaimPoint(this);
 		}
 		#endregion
 

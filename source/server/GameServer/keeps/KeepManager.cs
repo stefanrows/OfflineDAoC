@@ -582,6 +582,13 @@ namespace DOL.GS.Keeps
 
 			if (IsPvpServer)
 			{
+                // RvR world (R1b, R3a): every keep belongs to a realm or to nobody, portal keeps included. The open
+                // BG per realm rule below, generalised to the whole world: the realm is the friend, every other
+                // realm the enemy, and a lord kill flips the keep to the killer's realm at once.
+                if (WorldMode.IsRvr)
+                    return IsRvrKeepEnemy(PvpKeepCampaign.IsGarrison(keep.Guild), keep.Realm,
+                        ServerRules.PvpCombatant.AllianceRealm(target));
+
 				if (keep.IsPortalKeep)
 					return false;
 
@@ -590,12 +597,6 @@ namespace DOL.GS.Keeps
                 // to its claiming guild, so the realm defends it together and only other realms attack it.
                 if (OpenBattlegroundMode.KeepIsRealmOwned(OpenBattlegroundMode.Current, keep.Region))
                     return keep.Realm is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia) || keep.Realm != target.Realm;
-                // RvR world: a captured keep belongs to its realm (the claim sets it), so the whole realm is its
-                // friend and every other realm its enemy; the Frontier Wardens stay hostile to all (R1b, realm
-                // flips and portal-keep guards follow in R3a).
-                if (WorldMode.IsRvr)
-                    return IsRvrKeepEnemy(PvpKeepCampaign.IsGarrison(keep.Guild), keep.Realm, keep.Guild == null,
-                        ServerRules.PvpCombatant.AllianceRealm(target), ServerProperties.Properties.PVP_UNCLAIMED_KEEPS_ENEMY);
                 if (PvpKeepCampaign.IsGarrison(keep.Guild)) return true;
 				if (keep.Guild == null)
 					return ServerProperties.Properties.PVP_UNCLAIMED_KEEPS_ENEMY;
@@ -625,18 +626,19 @@ namespace DOL.GS.Keeps
 		}
 
 		/// <summary>
-		/// Keep hostility in the RvR world: the garrison is everyone's enemy, a
-		/// keep of a realm is the enemy of every other realm, and a realm-less
-		/// keep without a holder follows pvp_unclaimed_keeps_enemy.
+		/// Keep hostility in the RvR world (spec 4.1): the Frontier Wardens are
+		/// everyone's enemy, a keep of a realm (portal keeps, captured keeps with
+		/// or without a guild claim) is the friend of its realm and the enemy of
+		/// every other, and a realm-less keep is neutral, so hostile to all.
+		/// pvp_unclaimed_keeps_enemy is a Camlann setting and plays no part.
 		/// </summary>
-		public static bool IsRvrKeepEnemy(bool heldByGarrison, eRealm keepRealm, bool unheld, eRealm targetRealm,
-			bool unclaimedKeepsEnemy)
+		public static bool IsRvrKeepEnemy(bool heldByGarrison, eRealm keepRealm, eRealm targetRealm)
 		{
 			if (heldByGarrison)
 				return true;
 			if (ServerRules.PvpCombatant.IsPlayableRealm(keepRealm))
 				return keepRealm != targetRealm;
-			return !unheld || unclaimedKeepsEnemy;
+			return true;
 		}
 
 		/// <summary>

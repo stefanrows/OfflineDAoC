@@ -748,7 +748,9 @@ namespace DOL.GS
             eRealm owner = keep == null ? eRealm.None :
                 OwnerRealm(realGuild, garrison, keep.Guild?.Realm ?? eRealm.None, keep.Realm);
             string ownerGuild = keep == null ? null : OwnerGuild(realGuild, garrison, keep.Guild?.Name);
-            bool lordDown = keep?.Guild == null && keep?.DBKeep?.LordDefeated == true;
+            // RvR world: LordDefeated means "captured, awaiting a claim" while the new lord stands (R3a).
+            bool lordDown = keep != null && PvpKeepCampaign.LordDownUnclaimed(WorldMode.Current, keep.Guild != null,
+                keep.DBKeep?.LordDefeated == true, PvpKeepCampaign.LordStands(keep));
             AutonomousBattlegroundParticipation.OpenCrewMember[] crew = AutonomousBattlegroundParticipation.OpenCrew();
             int units;
             lock (Sync)

@@ -243,6 +243,7 @@ public sealed partial class AutonomousWorldBotController
         var keep = int.TryParse(_rvrDestination.Id.AsSpan(9), out int keepId)
             ? GameServer.KeepManager.GetKeepByID(keepId) : null;
         if (!AutonomousRvrKeepPolicy.IsClaimableKeep(keep) || !PvpClaimAvailable(keep) ||
+            !DOL.GS.Keeps.PvpKeepCampaign.MayClaimInWorld(keep, bot) ||
             !AutonomousRvrEventLayer.RenewClaimPlan(forceId, _rvrDestination.Id, GameLoop.GameLoopTime))
         {
             AutonomousRvrEventLayer.ReleaseClaimPlan(forceId, _rvrDestination.Id);

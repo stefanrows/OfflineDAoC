@@ -40,9 +40,11 @@ namespace DOL.GS.ServerRules
 		/// <summary>
 		/// The true realm of every living, as upstream sends it. An ally of the
 		/// viewer (a companion of the viewer's realm whatever its class) shows the
-		/// viewer's realm. A hostile actor or keep guard that shares the viewer's
-		/// realm byte (a Frontier Wardens guard, a neutral battleground encounter
-		/// bot) gets another realm so the client lets the viewer attack it.
+		/// viewer's realm. A hostile player-shaped actor that shares the viewer's
+		/// realm byte (a neutral battleground encounter bot) gets another realm so
+		/// the client lets the viewer attack it. Keep guards need no such trick
+		/// since R3a: a guard takes its keep's realm, friendly to that realm and
+		/// hostile to the others, and Warden guards are realm-less.
 		/// </summary>
 		public override byte GetLivingRealm(GamePlayer player, GameLiving target)
 		{
@@ -51,10 +53,6 @@ namespace DOL.GS.ServerRules
 
 			if (target is GamePlayer playerTarget && playerTarget.Client?.Account?.PrivLevel > (uint)ePrivLevel.Player)
 				return (byte)player.Realm;
-
-			if (target is GameKeepGuard guard && guard.Realm == player.Realm && guard.Component?.Keep != null &&
-				GameServer.KeepManager.IsEnemy(guard, player))
-				return (byte)OtherRealm(player.Realm);
 
 			if (PvpCombatant.IsPlayerShaped(target))
 			{
@@ -69,6 +67,37 @@ namespace DOL.GS.ServerRules
 		}
 
 		private static eRealm OtherRealm(eRealm realm) => realm == eRealm.Albion ? eRealm.Midgard : eRealm.Albion;
+
+		/// <summary>
+		/// A keep lord fell (R3a, spec 4.1). Campaign keeps (Old Frontiers and the
+		/// battleground campaign) flip to the killer's realm at once and wait for
+		/// an optional claim by a guild of that realm
+		/// (<see cref="PvpKeepCampaign.CaptureForRealm(GuardLord, GameObject)"/>).
+		/// Portal keeps never change hands, as the 1.65 border keeps: they are
+		/// their realm's travel hub. Any other keep resets to the killer's realm
+		/// as in the upstream Normal rules; a realm-less killer takes nothing.
+		/// </summary>
+		public override void ResetKeep(GuardLord lord, GameObject killer)
+		{
+			AbstractGameKeep keep = lord?.Component?.Keep;
+			if (keep == null)
+				return;
+
+			PlayerMgr.UpdateStats(lord);
+
+			if (PvpKeepCampaign.Applies(keep))
+			{
+				PvpKeepCampaign.CaptureForRealm(lord, killer);
+				return;
+			}
+
+			if (keep.IsPortalKeep)
+				return;
+
+			eRealm realm = PvpKeepCampaign.CapturingRealm(killer);
+			if (PvpCombatant.IsPlayableRealm(realm))
+				keep.Reset(realm);
+		}
 
 		public override bool IsAllowedToGroup(GamePlayer source, GamePlayer target, bool quiet)
 		{

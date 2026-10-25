@@ -16,8 +16,9 @@ namespace DOL.GS.Keeps
 	{
 		private static new readonly Logging.Logger log = Logging.LoggerManager.Create(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
+        // RvR world (R3a): a captured keep awaiting a claim is its realm's and fully defended.
         public override int RealmPointsValue => PvpKeepCampaign.Applies(Component?.Keep)
-            ? (Component.Keep.DBKeep.LordDefeated ? 0 : PvpKeepCampaign.GuardRealmPoints)
+            ? (Component.Keep.DBKeep.LordDefeated && !WorldMode.IsRvr ? 0 : PvpKeepCampaign.GuardRealmPoints)
             : base.RealmPointsValue;
 
 		private Patrol m_Patrol = null;

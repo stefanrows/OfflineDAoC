@@ -24,8 +24,11 @@ Line numbers are those of the R1b branch and drift.
 |---|---|---|---|---|
 | `GST_PvP` branches (the spec's 35) | 35 | 15 | 19 | 1 |
 | Rules-type checks (`is PvPServerRules`) | 14 | 10 | 1 | 3 |
-| Other server-type branches with realm meaning (`GST_Normal`) | 5 | 0 | 4 | 1 |
+| Other server-type branches with realm meaning (`GST_Normal`) | 5 | 0 | 5 | 0 |
 | PvE-only branches (`GST_PvE`) | 10 | 10 | 0 | 0 |
+
+R3a (keeps) gated the Darkness Falls site that R1b deferred; see
+[RVR_KEEPS.md](RVR_KEEPS.md).
 
 The spec counted 8 rules-type checks; 14 exist. The six extra ones are
 GameBot immunity timers (`GameBot.cs:3724`, `:3752`, `:3768`), siege-weapon
@@ -49,7 +52,7 @@ access and the relic examine text.
 | 23 | `gameutils/Guild.cs:337` | Creates the dummy guild | Unchanged: harmless; the mask is off in RvR, so the dummy guild is never sent |
 | 24 | `gameutils/Guild.cs:702` | Cross-realm guild member add | Gated: a new RvR check above it refuses another realm (`RvrServerRules.GuildAcceptsRealm`), whatever `allow_cross_realm_guilds` says |
 | 25 | `housing/HouseTemplateMgr.cs:95` | Housing NPC shop list | Gated: own realm list, as Normal |
-| 26 | `keeps/KeepManager.cs:569` | Keep hostility on PvP | Gated: RvR branch inside `IsEnemy` (see below); portal keeps unchanged until R3a |
+| 26 | `keeps/KeepManager.cs:569` | Keep hostility on PvP | Gated: RvR branch first inside `IsEnemy` (see below), portal keeps included (R3a) |
 | 27 | `keeps/Gameobjects/Guards/Lord.cs:376` | Respawn of a lord without a keep component | Unchanged: no such lords in the frontiers |
 | 28 | `keeps/Gameobjects/Guards/MissionMaster.cs:287` | Respawn of a realm-less mission master | Unchanged |
 | 29 | `keeps/Managers/Player Manager.cs:57` | Capture broadcast | Unchanged: dead code inside a comment |
@@ -68,7 +71,7 @@ access and the relic examine text.
 | `gameobjects/GamePlayer.cs:4300` | Danger XP bonus in OF and DF | Unchanged: fork feature for both worlds |
 | `gameobjects/GamePlayer.cs:5737` | Who counts in the XP denominator | Unchanged: uses `AreAllied`, realm based in RvR |
 | `gameobjects/GameSiegeWeapon.cs:157` | Siege-weapon access | Gated inside `SiegeWeaponAccess.MayUse`: in RvR the founder-guild fallback is off, so only allies of the live anchors or the weapon's realm may use it |
-| `keeps/PvpKeepCampaign.cs:15` | Camlann keep campaign (Wardens, steward claims) | Unchanged: RvR keeps the campaign; realm ownership on top is R3a |
+| `keeps/PvpKeepCampaign.cs:15` | Camlann keep campaign (Wardens, steward claims) | Unchanged scope: RvR keeps the campaign with realm ownership on top (R3a, `RvrServerRules.ResetKeep` → `CaptureForRealm`) |
 | `keeps/Managers/RelicMgr.cs:234` | Relic pickup | Deferred to R3b |
 | `events/keep/RelicGuardsOnKeepTaken.cs:33` | Relic guards off | Deferred to R3b |
 | `keeps/Relics/GameRelic.cs:205` | Relic examine text | Deferred to R3b |
@@ -81,7 +84,7 @@ access and the relic examine text.
 | `scripts/gameevents/PlayerEnterExit.cs:58, 103` | Realm tag on login and logout lines | Gated |
 | `realmabilities_atlasOF/handlers/AtlasOF_Volley.cs:150` | No Volley inside enemy border keeps | Gated |
 | `serverrules/AbstractServerRules.cs:2557` | Realm outpost bonus on kills near an own keep | Gated |
-| `serverrules/DFEnterJumpPoint.cs:22` | Darkness Falls for the realm with most keeps | Deferred to R3a: needs realm keep ownership |
+| `serverrules/DFEnterJumpPoint.cs:22` | Darkness Falls for the realm with most keeps | Gated (R3a): `WorldMode.RulesBranch`; the RvR owner is recomputed from the three realms' keep counts (`NextOwner`) |
 | PvE-only: `ai/brain/Guards/Lord.cs:42`, `GamePlayer.cs:12102`, `GameKeepComponent.cs:217`, `GameKeepGuard.cs:916`, `MissionMaster.cs:286`, `Lord.cs:32, 58, 375`, `GatewayPersonalBind.cs:29`, `PvEServerRules.cs:9` | PvE server behaviour | Unchanged: no meaning on GameType=PvP |
 
 ## Alliance core (sites outside the server-type branches)
@@ -92,7 +95,7 @@ access and the relic examine text.
 | `PvpCombatant.AllianceRealm` (new) | Pets take the owner's realm. Companions and `/spawn` helpers take the owner's realm. A battleground encounter bot takes its sponsor's realm, else its real guild's realm, else none. |
 | `PvPServerRules.IsAllowedToAttack` | Realm NPCs (town guards, unflagged merchants) are friendly to their own realm only and attack enemy realms, as Normal. Allied refusal text: "You can't attack a member of your realm!" |
 | `PvPServerRules.IsSameRealm` | Player and realm NPC compare realms both ways, as Normal |
-| `KeepManager.IsEnemy` + `IsRvrKeepEnemy` (new) | Frontier Wardens hostile to all. A keep of a realm (the claim sets it) is friendly to that realm and hostile to others. A realm-less keep follows `pvp_unclaimed_keeps_enemy` when unheld. Portal keeps and a lord-defeated keep stay non-hostile until R3a. |
+| `KeepManager.IsEnemy` + `IsRvrKeepEnemy` (new) | Frontier Wardens hostile to all. A keep of a realm (portal keep, captured keep, claimed or not) is friendly to that realm and hostile to others. A realm-less keep is neutral, so hostile; `pvp_unclaimed_keeps_enemy` plays no part (R3a). |
 | `AutonomousHubDeparture.HubPeaceApplies` | Same-realm hub peace skipped (they are allies); the cross-realm open BG landing peace stays |
 | `WorldMode.AllowsRealmPair` | Compares `AllianceRealm`, so trade, group and guild checks treat a companion as its owner's realm |
 | `BattleGroup.AddBattlePlayer` + `AdmitsRealm` (new) | Every add path refuses a player of another realm |
@@ -104,7 +107,7 @@ access and the relic examine text.
 - **R2, before the first RvR boot:** R2's per-realm safe areas and travel lock must land before the first RvR boot. Until then an enemy inside a portal-keep hub is safe from players but can kill the hub's non-PEACE merchants, healer and teleporter; only plain guards respond.
 - **R2:** forced per-realm open BG rule and realm landing peace.
 - **R2:** realm boundary for bots. Town guards now attack enemy-realm bots, so bots that still cross enemy homelands will meet guards until then.
-- **R3a:** portal-keep guards hostile to other realms. Claims by the keep's realm, realm flip on lord kill, Darkness Falls owner.
+- **R3a (done in source, [RVR_KEEPS.md](RVR_KEEPS.md)):** portal-keep guards hostile to other realms. Claims by the keep's realm, realm flip on lord kill, Darkness Falls owner. The keep-guard realm spoof in `RvrServerRules.GetLivingRealm` is gone.
 - **R3b:** relics (pads, pickup, guards, examine).
 - **R4a, highest risk:** bot crew guilds are created realm-less and mixed, and autonomous bot groups form without a realm check (`AutonomousBotGroupCoordinator` is Stefan's file and was not touched). In the RvR world neither a guild nor a group allies across realms, so a mixed crew or group fights itself until R4a makes guilds and pickup groups single-realm. Patrols of such a guild become neutral opponents. The RvR world must not boot with bots before R4a, or R5a must create single-realm crews.
 - **R4b:** realm raid battlegroups and the open BG roster's keep owner.

@@ -1687,6 +1687,7 @@ namespace DOL.GS
             KeepClaimPoint claimPoint = bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
                 .FirstOrDefault(point => AutonomousRvrKeepPolicy.IsClaimableKeep(point.Keep) &&
                     point.Keep.DBKeep.LordDefeated && point.Keep.Guild == null &&
+                    PvpKeepCampaign.MayClaimInWorld(point.Keep, bot) && !PvpKeepCampaign.ClaimBlockedByCombat(point.Keep) &&
                     !AutonomousRvrEventLayer.IsAbandoned(_groupDirective?.GroupId ?? $"rvr-{bot.DatabaseID}",
                         $"rvr-keep-{point.Keep.KeepID}", GameLoop.GameLoopTime));
             if (claimPoint != null && bot.Guild?.HasRank(bot, Guild.eRank.Claim) == true && !bot.InCombat &&
@@ -2356,7 +2357,7 @@ namespace DOL.GS
             Vector3 center=new(destination.X,destination.Y,destination.Z);
             var keep=GameServer.KeepManager.GetKeepsOfRegion(bot.CurrentRegionID).FirstOrDefault(k=>$"rvr-keep-{k.KeepID}"==destination.Id);
             if (keep?.ClaimPoint is { ObjectState: GameObject.eObjectState.Active } steward &&
-                keep.DBKeep.LordDefeated && keep.Guild == null)
+                keep.DBKeep.LordDefeated && keep.Guild == null && PvpKeepCampaign.MayClaimInWorld(keep, bot))
             {
                 // The neutral interval permits native friendly-door travel.
                 // Finish upstairs at the steward rather than the courtyard.
@@ -2770,6 +2771,7 @@ namespace DOL.GS
                          .Where(AutonomousRvrKeepPolicy.IsSiegeObjective)
                          .Where(AutonomousRvrKeepPolicy.IsWorldKeep)
                          .Where(keep => reachable.Contains(keep.Region) && (keep.Guild == null || keep.Guild != bot.Guild))
+                         .Where(keep => AutonomousRvrKeepPolicy.IsRealmObjectiveFor(keep, bot))
                          .OrderByDescending(keep => keep.Guild == null && keep.DBKeep.LordDefeated)
                          .ThenBy(keep => keep.Region == bot.CurrentRegionID ? 0 : 1)
                          .ThenBy(keep => bot.GetDistanceTo(new Point3D(keep.X, keep.Y, keep.Z))).Take(24))
@@ -2784,6 +2786,7 @@ namespace DOL.GS
                     keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed),
                     OwningGuild: keep.Guild?.Name, Claimable: AutonomousRvrKeepPolicy.IsClaimableKeep(keep),
                     AwaitingClaim: PvpKeepCampaign.Applies(keep) && keep.Guild == null && keep.DBKeep.LordDefeated &&
+                        PvpKeepCampaign.MayClaimInWorld(keep, bot) &&
                         keep.ClaimPoint?.ObjectState == GameObject.eObjectState.Active));
             }
 

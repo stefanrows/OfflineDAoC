@@ -1162,6 +1162,7 @@ public static class AutonomousBattlegroundDriver
     private static bool TryClaim(GameBot bot, AbstractGameKeep keep, State state, long now)
     {
         if (keep.Guild != null || keep.DBKeep == null || !keep.DBKeep.LordDefeated || !AutonomousRvrKeepPolicy.IsClaimableKeep(keep)) return false;
+        if (!PvpKeepCampaign.MayClaimInWorld(keep, bot) || PvpKeepCampaign.ClaimBlockedByCombat(keep)) return false;
         if (bot.Guild?.HasRank(bot, Guild.eRank.Claim) != true || bot.InCombat || bot.Group != null && bot.Group.LivingLeader != bot) return false;
         PvpKeepCampaign.EnsureClaimPoint(keep);
         KeepClaimPoint steward = keep.ClaimPoint;

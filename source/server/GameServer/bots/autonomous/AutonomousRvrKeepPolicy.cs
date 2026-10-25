@@ -41,6 +41,20 @@ namespace DOL.GS
         public static bool IsClaimableKeep(bool portalKeep, bool relicKeep, int baseLevel, bool allowBattlegroundClaim, bool campaignBattleground) =>
             !portalKeep && !relicKeep && (baseLevel == 50 || allowBattlegroundClaim || campaignBattleground);
 
+        /// <summary>
+        /// RvR world (R3a): a world bot's keep objectives are the keeps hostile to
+        /// its realm (Warden, neutral and other realms' keeps), plus a keep of its
+        /// own realm that awaits a claim its guild may make. Its own realm's keeps
+        /// are never sieged. Camlann keeps every keep (the guild rules decide).
+        /// </summary>
+        public static bool IsRealmObjective(bool rvrWorld, bool hostileToBot, bool awaitingClaim, bool botMayClaim) =>
+            !rvrWorld || hostileToBot || awaitingClaim && botMayClaim;
+
+        public static bool IsRealmObjectiveFor(AbstractGameKeep keep, GameLiving bot) =>
+            !WorldMode.IsRvr || keep?.DBKeep != null && bot != null && IsRealmObjective(true,
+                GameServer.KeepManager.IsEnemy(keep, bot, false),
+                keep.Guild == null && keep.DBKeep.LordDefeated, PvpKeepCampaign.MayClaimInWorld(keep, bot));
+
         public static bool IsClaimableKeep(AbstractGameKeep keep) => keep?.DBKeep != null &&
             IsClaimableKeep(keep.IsPortalKeep, keep.IsRelic, keep.DBKeep.BaseLevel, ServerProperties.Properties.ALLOW_BG_CLAIM,
                 BattlegroundCampaignPolicy.IsEnabled && BattlegroundCampaignCatalog.Find(keep.Region) != null);

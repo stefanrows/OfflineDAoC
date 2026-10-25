@@ -25,6 +25,10 @@ When a task is done and its required verification is complete, move it out of it
      BG per realm, Gothwaite off, binds per realm; see
      [RVR_TRAVEL_POPULATION.md](RVR_TRAVEL_POPULATION.md)) implemented in
      source, real-client check pending; safe hubs protect only their realm.
+     R3a (keeps by realm: capture flips the realm and sticks, claims only by
+     the keep's realm, guards and portal keeps hostile to other realms,
+     Darkness Falls for the realm with most keeps; [RVR_KEEPS.md](RVR_KEEPS.md))
+     implemented in source, real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed
