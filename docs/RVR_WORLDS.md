@@ -13,6 +13,82 @@ One reset routine creates either world fresh.
 Both worlds run GameType PvP. The marker inside the save decides the rules.
 The server refuses a save without one of the two markers.
 
+## World contract (RvR mode, 0.332.0-0.345.0)
+
+The rules every change must keep. Task 147, plan
+[RVR_MODE_PLAN.md](RVR_MODE_PLAN.md), port details
+[RVR_PORT_MAP.md](RVR_PORT_MAP.md).
+
+1. **Two worlds, two saves.** RvR (Realm vs Realm, the default) lives in
+   `opendaoc.sqlite3.db`, PvP (Camlann) in `opendaoc-camlann.sqlite3.db`, each
+   with its own side files (below). There is no rule switch inside one save:
+   guilds, companions, keeps and settings belong to the save.
+2. **The marker decides.** `Realm-1` or `Camlann-1` in
+   `offline_local_options.WorldModel`; any other value or none is refused.
+   `GameServer.ValidateWorldModel` reads it once at startup into `WorldMode`,
+   which never changes at run time. Before startup (tools, unit tests) the
+   world is Camlann.
+3. **One dispatch.** Code that differs per world asks `WorldMode.IsRvr` (or
+   compares `WorldModelKind.Realm`). Realm-1 creates `RvrServerRules`, a
+   subclass of `PvPServerRules`. The RvR event layer is a facade:
+   `AutonomousRvrEventLayer` dispatches every public call to
+   `RealmRvrEventLayer` in Realm-1 (upstream 0.38c `AutonomousRvrEventLayer`
+   and `.Defense` verbatim, local changes marked `Fork:`) or to
+   `CamlannRvrEventLayer` in Camlann (the fork's layer, renamed, otherwise
+   byte-for-byte). A call only one layer knows answers a neutral default in the
+   other world. Controller entry points branch the same way (`ExecuteRvrRealm`,
+   `HandleSiegeRallyRealm`, `TryEngageFrontierThreatRealm`,
+   `ChooseRvrDestinationRealm`).
+4. **Camlann behaviour unchanged.** Every RvR branch answers the old value
+   outside Realm-1. A change meant for both worlds says "both worlds" in its
+   changelog line (so far: road-graph fallback, STOP EVENT, grudges against
+   human killers, open BG units not split by keep guild).
+5. **Test both worlds.** A rule that must hold in both worlds uses the
+   `BothWorlds` helper (`source/server/Tests/UnitTests/BothWorlds.cs`): the
+   test takes `[TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]`,
+   wraps its body in `using var _ = BothWorlds.Use(world);`, builds the rules
+   with `BothWorlds.Rules(world)` and picks the answer with
+   `BothWorlds.Expect(world, camlann, realm)`. Such fixtures are
+   `NonParallelizable` (the world is process-wide). An RvR-only test wraps its
+   body in `WorldMode.OverrideForTests(WorldModelKind.Realm)`; a test without
+   either runs as Camlann.
+6. **What the RvR world takes from upstream.** Realm rules (same realm allied,
+   other realms enemies, enemy names hidden, realm-only travel and parties)
+   and the upstream 0.38c RvR bot layer: one siege roll a minute, one attack
+   per realm, level 50 for every siege, muster at the own portal outpost,
+   march column with push and detour, siege engines and resurrection, defense
+   rally, retake, relic pad 8, realm raids per realm, town teleporters, route
+   threat awareness, keep level 4 after a capture and 5 after a claim.
+7. **Fork features that stay in the RvR world.** Companions (roster, squads,
+   gear, companion ML), Trials of Atlantis and Master Levels (bot ML too),
+   Realm Exchange (own realm), enemy name masking through `RvrServerRules`,
+   the realm boundary (bots walk out of enemy homelands), Stefan's movement
+   port (tasks 135-139), the road-graph fallback, the open BG in Thidranki
+   per realm, the realm login balancer (600 per realm) and the 2003-style
+   realm guild names (owner decision 9). Built for RvR but off in Realm-1
+   since 0.342.0: the R4a/R4b realm armies, home reserve, grudge and revenge
+   trips, bot keep claims, guild keep defense, the fork's march restraint and
+   the livelier-RvR waves; the full list with integration notes is
+   [RVR_FORK_EXTENSIONS.md](RVR_FORK_EXTENSIONS.md).
+8. **Keep start.** A fresh RvR world and RESET KEEPS set the 21 frontier keeps
+   to their original realm at upstream's release level (`RvrKeepStart`:
+   Albion and Midgard 5; Hibernia Dun Crauchon 4, Crimthain, Bolg and
+   Scathaig 5, nGed, Da Behnn and Ailinne 1). Portal keeps and relic keeps
+   keep their realm, battleground keeps their own start, as before. An older
+   Realm-1 save moved its Warden-held frontier keeps once at the next start
+   (log `RVR_KEEP_ORIGINAL_START`).
+9. **Level-50 fresh world.** CREATE WORLD and RESET WORLD in the RvR world
+   create the 600 bots per realm at level 50 with the class loadout
+   (`WorldReset.FreshLevels`), because every upstream siege needs level 50.
+   An explicit world shape in the request still wins. Camlann's fresh world
+   keeps the `bot-goals.json` levels. An existing save keeps its bots' levels.
+10. **STOP EVENT.** Forced realm raids in the RvR world have no time limit, as
+    upstream. The launcher's STOP EVENT… button on the realm events panel ends
+    a running forced dragon or epic dungeon raid at once ("Stopped by
+    player", no cooldown, the reserved bots go back to their goals). Keep
+    events cannot be stopped. The button works in both worlds; Camlann's
+    timed raids are otherwise unchanged.
+
 ## Files per world
 
 The server names every per-save side file after the save it opens, so each
@@ -176,11 +252,12 @@ back so it can be moved by hand.
 | Item | RvR world | Camlann world |
 |---|---|---|
 | Marker | `Realm-1` | `Camlann-1` |
-| Ordinary keeps and towers | Realm 0, no guild; the server hands them to the Frontier Wardens | Same |
+| The 21 frontier keeps | Original realm at upstream's release level, no guild (since 0.342.0; contract item 8) | Realm 0, no guild; the server hands them to the Frontier Wardens |
+| Other ordinary keeps and towers | Realm 0, no guild; the server hands them to the Frontier Wardens | Same |
 | Portal keeps (base level 100 or more) | Original realm | Realm 0, as today |
 | Relic keeps (skin 99) | Original realm | Realm 0, as today |
 | Relics | Home pads, realm = original realm | Same |
-| Bot roster | 600 per realm, level shape from `bot-goals.json` | 600 per realm |
+| Bot roster | 600 per realm at level 50 (since 0.342.0; contract item 9) | 600 per realm, level shape from `bot-goals.json` |
 | Bot guilds | None written. At first start the crew manager seeds 15 per realm, each with one realm | None written. At first start the crew manager seeds 15 mixed guilds, as today |
 | Gothwaite switch | None: the mode stays off | The old Camlann switch, if one existed |
 
@@ -215,8 +292,9 @@ description; only the value changes.
 - **Gothwaite switch.** In the RvR world the population tab hides the world
   mode row and refuses to save Gothwaite PvP (owner decision 18).
 - **"Reset all keeps & relics".** In a `Realm-1` save the button returns portal
-  and relic keeps to their original realm; every other keep goes neutral, as
-  in Camlann.
+  and relic keeps to their original realm and, since 0.342.0, the 21 frontier
+  keeps to their original realm at upstream's release level; every other keep
+  goes neutral, as in Camlann.
 - **Deploy and release.** `tools/dev/OfflineDAoC.Deploy.psm1` protects the
   Camlann save, its `-wal` and `-shm`, and `rvr-world-camlann.json` like the
   RvR files. The release builder refuses to package `rvr-world-camlann.json`.

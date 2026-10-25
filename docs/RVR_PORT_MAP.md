@@ -1,5 +1,17 @@
 # RVR_PORT_MAP: upstream RvR bot layer vs fork (for R4c)
 
+**Status 2026-10-25 21:45.** S1-S3 and the R6 review fixes are merged as 0.342.0-0.345.0 (S1 0.342.0, S2 0.343.0,
+S3 0.344.0, R6 fixes 0.345.0) and deployed on the owner's PC on a fresh level-50 RvR world; R4c is closed, R6 waits for
+the live observation of the first sieges and the owner's real-client check. Camlann keeps the fork flow. Not ported
+(S4 backlog, [RVR_MODE_PLAN.md](RVR_MODE_PLAN.md)): lord shield, no item loot from guards/gamebots/pets,
+AutonomousGroupPace, battleground siege announcements, dashboard muster column, DF route + neutral raids (needs DF proofs
+for our mesh), opt-in battleground goal (owner), the remaining raid refill/regroup fixes, `SupersedeAutomatic`, the
+`BotBrain.SupportOffense` MinValue overflow. Owner decisions 2026-10-25 22:20: upstream relic rules in Realm-1 (R3b to
+Camlann only, S4), fork frontier porters kept and adapted to RvR (S4), task mix / warband composition original by default,
+PvP release immunity kept. What the RvR world is missing compared with Camlann (the
+fork extensions gated off in Realm-1): [RVR_FORK_EXTENSIONS.md](RVR_FORK_EXTENSIONS.md). Sections 0-5 below are the read-only analysis of 0.341.0;
+sections 6, 7, "S3 done" and "R6 fixes" record what was built.
+
 Read-only analysis, 2026-10-25. Fork `main` 2b306524 (0.341.0). Upstream `upstream/main` 9da90910 (0.38c, 2026-10-20).
 Merge base of both = fad5a027 (2026-09-16, upstream 0.3). **The fork never merged upstream after 0.3**: every upstream
 RvR change of 0.31-0.38c (realm armies, staged sieges, retake, march column ...) is absent unless hand-ported.

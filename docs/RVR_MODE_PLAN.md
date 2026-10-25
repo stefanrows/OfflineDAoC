@@ -97,6 +97,8 @@ defaults in code, keep/relic start state from the reset.
   ramp, lowest-load realm first, shortfall not filled by others); grudges per
   realm (48, 3 h); companions unchanged. Open for R4b: revenge trips must be
   capped and measured. 32 tests.
+  Note: built as own logic; gated off in Realm-1 since 0.342.0 (R4a login
+  balancer + guild names stay on by owner decision 9).
 - [x] **R4b Realm armies.** (0.341.0; `docs/RVR_ARMIES.md`) (`docs/RVR_ARMIES.md`; implemented in source,
   real-client check pending) RvR world: a whole warband of eight of one realm
   opens a siege whatever its guilds, every warband of the realm joins one realm
@@ -114,7 +116,19 @@ defaults in code, keep/relic start state from the reset.
   longer split by keep guild; grudges against human killers resolve again
   (both worlds). Camlann unchanged otherwise. 44 tests. R4c keeps the
   upstream thresholds, timings, retake, push/detour.
-- [~] **R4c Upstream siege-flow port.** Owner 2026-10-25 15:50: **port the
+  Note: built as own logic; gated off in Realm-1 since 0.342.0 (R4a login
+  balancer + guild names stay on by owner decision 9).
+- [x] **R4c Upstream siege-flow port.** (0.342.0-0.345.0; upstream port
+  S1-S3 and R6 fixes; [RVR_PORT_MAP.md](RVR_PORT_MAP.md)) The Realm-1 world runs the
+  upstream 0.38c RvR bot layer: event layer verbatim behind the facade (S1,
+  0.342.0), march column and siege floor (S2, 0.343.0), relic pad, realm raids,
+  town teleporters and road fallback (S3, 0.344.0), review fixes (0.345.0:
+  live-clock expiry, fork march restraint off, STOP EVENT for forced raids,
+  keep start level 4, guild keep defense off). Camlann keeps the fork flow.
+  Deployed on the owner's PC 2026-10-25 on a fresh level-50 RvR world;
+  implemented in source, real-client check pending. What upstream has and the
+  port left out is the S4 backlog below.
+  Scope: owner 2026-10-25 15:50: **port the
   upstream (shadowofze 0.37b+/0.38c) RvR army and siege behaviour, never
   worse than the original, invent nothing.** Source: fetch-only remote
   `upstream` (0.38c), Stefan's `docs/UPSTREAM_ADAPTATION_PLAN.md` "Deferred
@@ -159,8 +173,82 @@ defaults in code, keep/relic start state from the reset.
   Friend and foe of the ported code go through PvpCombatant and the keep rule.
   Server 5,059 passed / 7 bug-160 (65 new). Open for S3: realm raids,
   ForcedRaid, RP rewards, battlegrounds, relic pad, teleporters.
-- [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
+  S3 (periphery; 0.344.0, details in [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S3
+  done"): 8 enemies on the relic pad lift a relic (companions count; Camlann
+  16); route threat awareness on (`rvr_bot_route_threat_awareness`); realm
+  raids per realm with upstream rally timing (one automatic expedition per
+  realm, forced raids start at 200 staged and have no time limit); bracket
+  battleground tours off as upstream's 0 % default (the open BG crew in
+  Thidranki stays); town teleporters of the own realm; road-graph fallback
+  from our 63 meshes in both worlds (task 143). Server 5,016 passed / 7
+  bug-160. Open for S4: DF route and neutral raids, the remaining raid fixes,
+  the opt-in battleground goal.
+- [~] **R6 Verification + docs.** Both-worlds suite, load test, log review,
   client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
+  Done: one review over S1-S3 (REJECT 20:45: expiry never ran live, fork
+  march restraint ungated, forced raids never ended, keep start level 1,
+  stale texts, guild keep defense ungated): review REJECT, all blocking
+  defects fixed in 0.345.0, no re-check (owner: one review) (server 5,102
+  passed / 7 bug-160, launcher 338 passed / 2 skipped; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "R6 fixes").
+  Fidelity, Camlann isolation, realm separation and the fresh world (1,787
+  level-50 bots, keeps realm-owned) checked OK. Docs closed 2026-10-25: world
+  contract in [RVR_WORLDS.md](RVR_WORLDS.md) and [CAMLANN.md](CAMLANN.md),
+  player section in [PLAY.md](PLAY.md), task 147 moved to verification
+  pending. Open: live observation of the first sieges on 0.345.0 (muster
+  marches after 12 (+5) min, battle, repel after 10 min, retake; log lines
+  RVR_MARCH_PUSH, RVR_MARCH_DETOUR, RVR_KEEP_TRAVEL_STALL,
+  RVR_SIEGE_PARTY_FORMED, AUTONOMOUS_SIEGE_RESURRECTION) with the load and
+  log review of that run; the owner's real-client check; the S4 backlog
+  (incl. the owner decisions of 22:20 below); R5b low follow-up (REFRESH
+  greys out CREATE WORLD) not fixed.
+
+### S4 backlog (upstream 0.38c, not ported yet; RvR world only)
+
+- [ ] **Lord shield.** Upstream Lord.cs: the lord cannot be hurt while the
+  gate and keep door stand (merge against R3a).
+- [ ] **No item loot from guards, gamebots and their pets** (upstream
+  AbstractServerRules; check the fork's own rule first).
+- [ ] **AutonomousGroupPace** (upstream group travel pace).
+- [ ] **Battleground siege announcements** (left out of the S1 event layer;
+  needs BattlegroundBrackets, in since S3).
+- [ ] **Dashboard muster column** (AutonomousRvrDashboard MERGE: "marching in
+  6m", attack window).
+- [ ] **Darkness Falls route + neutral raids** (RealmRaidDungeonRoute, DF
+  navigation, RealmRaidNeutralEvents, multi-hub musters). Needs certified DF
+  proofs regenerated on our patched `zone249.nav`; upstream's proofs belong to
+  its mesh.
+- [ ] **Opt-in battleground goal** (upstream "Battlegrounds %", default 0 %).
+  Owner decision first: one RvR-only setting plus the upstream executor.
+- [ ] **Upstream raid refill/regroup fixes** (refill short parties, release at
+  the raid hub, dungeon regroup point, slower trash respawn while a raid is
+  inside, pooled forced parties, failed-post retry).
+- [ ] **SupersedeAutomatic for forced raids** (a forced expedition ends the
+  realm's unstarted automatic rallies).
+- [ ] **BotBrain.SupportOffense MinValue overflow.** `_supportLastTurn` starts
+  at `long.MinValue`, so a bot's first fight skips its per-fight roll. Camlann
+  wave (off in Realm-1); same pattern as the R6 expiry fix.
+- [ ] **Fork extensions.** Owner picks extensions from
+  [RVR_FORK_EXTENSIONS.md](RVR_FORK_EXTENSIONS.md) to integrate (what the RvR
+  world is missing compared with Camlann; built properly into the upstream
+  flow, one at a time with a live check).
+- [ ] **Upstream relic rules in Realm-1, retire R3b there** (owner decision 1
+  below): the relic itself is the objective as upstream; the R3b temple-pad
+  rule (milegate keeps, own relic of the type) stays for Camlann only.
+- [ ] **Frontier porters adapted to RvR** (owner decision 2 below): keep the
+  fork's porters and frontier transport, realm-bound, serving only the own
+  realm's frontier.
+
+### Owner decisions 2026-10-25 22:20
+
+1. **Relics in Realm-1: the original upstream rule.** The relic itself is the
+   objective; the R3b temple-pad rule goes to Camlann only. S4 item above.
+2. **Frontier porters: keep the fork's porters, adapted to RvR** (realm-bound,
+   the own realm's frontier only). S4 item above.
+3. **Bot task mix and warband composition: original by default.** Fork pieces
+   only where they sensibly extend the original in RvR, chosen by the owner
+   from [RVR_FORK_EXTENSIONS.md](RVR_FORK_EXTENSIONS.md).
+4. **PvP release immunity: keep the fork's protection in Realm-1** (approved
+   added value).
 
 **Owner decision (2026-10-25 16:10, supersedes the rule below): the RvR
 world runs the original upstream RvR bot behaviour (remote `upstream`,
@@ -286,3 +374,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-25 20:20: 0.344.0 deployed (backup deploy-20261025-180426), server running on the fresh level-50 RvR world (zone roads 63 loaded, world model Realm-1, only pre-existing ERR noise). R6 reviewer running over S1-S3. Owner may log in.
 - 2026-10-25 20:45: R6 review REJECT: (1) RealmRvrEventLayer Expire never runs live (_lastExpireTick MinValue overflow) so sieges open but never march; (2) fork march restraint (AutonomousSiegeMarch) ungated in Realm-1; (3) forced realm raids never end; (4) starting_keep_level 1 vs upstream 4; stale reset texts; guild keep defense ungated. Fidelity, Camlann isolation, realm separation, fresh world (1,787 level-50 bots, keeps realm-owned) all OK. Fix agent rvr-r6fix started; 0.345.0 + redeploy tonight. S4 list: lord shield, no item loot from guards/bots, GroupPace, BG siege announcements, dashboard muster column, DF route, opt-in BG goal; owner decisions: relic temples, frontier porters, task mix, release immunity.
 - 2026-10-25 21:30: R6 fixes merged as 0.345.0 (live-clock expire, march restraint off in Realm-1, forced-raid STOP EVENT as upstream, keep start level 4 in Realm-1, texts, guild keep defense off). Deploy + restart on the owner PC. Remaining: S4 list, owner decisions (relic temples, frontier porters, task mix, release immunity), R6 docs (CAMLANN.md contract, PLAY.md, task 147 close) and a live observation of the first sieges.
+- 2026-10-25 21:45: R4c closed (0.342.0-0.345.0). R6 docs done (world contract in RVR_WORLDS.md and CAMLANN.md, PLAY.md world section, task 147 and ToA task 134 to verification pending, TOA_PLAN WP4.3 done); S4 backlog and open owner decisions listed above. R6 stays open for the live siege observation and the owner's client check.

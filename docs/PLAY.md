@@ -38,9 +38,9 @@ functionality; the author's private launcher label is not the public version num
 
 ## Get this fork's latest version
 
-The v0.3 download above is the base game. This fork's Camlann/Mordred
-full-PvP world, companions, battlegrounds and later fixes are published as
-small update packs on the fork's
+The v0.3 download above is the base game. This fork's RvR world, its
+Camlann/Mordred full-PvP world, companions, battlegrounds and later fixes are
+published as small update packs on the fork's
 [Releases page](https://github.com/stefanrows/OfflineDAoC/releases/latest).
 
 1. Close the game, server and launcher.
@@ -58,6 +58,48 @@ Companion Manager and raid click-fix versions, but only over a known v0.3 or
 fork build. After updating a v0.3 game the launcher offers CREATE WORLD, as
 described under "Saves and old versions". The installer prints an undo command
 that restores the backed-up files.
+
+## World: RvR (default) or PvP (Camlann)
+
+The launcher has a **World** dropdown beside **START SERVER**:
+
+- **RvR (Realm vs Realm)**, the default: the classic three realms. Your realm
+  is your side. Players, bots and companions of your realm are allies; the
+  other two realms are enemies. Bot armies of each realm siege keeps and raid
+  relics as in the original Offline DAoC.
+- **PvP (Camlann)**: the full-PvP world described above, where realm is only
+  race, class and home.
+
+Switch only while the server is stopped. Each world keeps its own save,
+characters and bots, so switching loses nothing. The launcher remembers your
+choice.
+
+A world without a save shows **CREATE WORLD…** instead of **START SERVER**;
+**RESET WORLD…** starts the picked world over. A fresh RvR world contains:
+
+- no characters; your local account plays as a normal player;
+- 600 bots per realm, all level 50, in guilds of their own realm;
+- frontier keeps owned by their original realm, portal and relic keeps with
+  their realm, and all six relics at home.
+
+The replaced save is moved, not deleted, to
+`playable-backups\<date-time>-rvr-world-reset` beside the `playable` game
+folder (`-camlann-world-reset` for PvP). Armies muster at their portal keep
+for 12 to 17 minutes before they march, longer for a relic raid. A forced
+dragon or epic-dungeon raid in the RvR world has no time limit; **STOP
+EVENT…** on the realm events panel ends it.
+
+## Trials of Atlantis
+
+Both worlds include Trials of Atlantis. Porters with the full menu (use `/tc`
+to reach one) offer **[Atlantis]**, **[Atlantis Havens]** and **[Atlantis
+Dungeons]** in your realm's copy. The Arbiter in the ruins city enrols your
+group in Master Levels from level 40. Every kill of a level 45+ monster then
+gives Master Level experience; `/ml` shows your progress. Artifacts need
+encounter credit (kill the artifact's guardian, or buy it from Aphaestia) and
+the scroll pages combined into a book; a Scholar awakens it. The launcher's
+**XP Settings** tab has a **TRIALS OF ATLANTIS** block for the rates. These
+parts are new in this fork and not yet fully tried in a real client.
 
 ## First-time requirements
 

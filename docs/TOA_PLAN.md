@@ -233,7 +233,10 @@ agent or session that finishes a package updates its row and the log below.
   Still to do: tell Stefan to check the server log for "World data packs: 14
   applied" after pulling; release pack carries the packs since 0.317.0;
   property notes.
-- [ ] **WP4.3 Docs.** CAMLANN.md era note, PLAY.md section, TASKS 134 closed.
+- [x] **WP4.3 Docs.** (2026-10-25, docs closed) CAMLANN.md era note
+  (decision 1, amended 2026-10-24), PLAY.md "Trials of Atlantis" section,
+  TASKS 134 moved to "Implemented in source; installation verification
+  pending"; it moves to Finished after WP4.1.
 
 ## Next steps (handoff 2026-10-24 13:30, session limit)
 
@@ -404,3 +407,4 @@ file should take the first open package there.
   041, 050; 14 packs apply on the dev snapshot copy, quick_check ok); review
   next.
 - 2026-10-25 00:50: Majestic Will 1.68 merged as 0.331.0 (owner decision 00:00).
+- 2026-10-25 21:45: WP4.3 docs closed (PLAY.md section, TASKS 134 to verification pending). WP4.1 (owner's client check) and WP4.2 stay open.

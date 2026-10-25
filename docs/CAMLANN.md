@@ -5,6 +5,11 @@ world with a **single Camlann/Mordred-style full-PvP world**. The owner has
 authorized the tiered implementation; do not start the game server or deploy
 over a running install unless the owner asks.
 
+**Since 0.332.0 (task 147, RvR mode) the fork has two worlds:** the classic
+RvR world is the default and Camlann is the PvP world beside it, each in its
+own save. Camlann behaves as this file describes. The rules between the two
+worlds are in "Two-world contract" below.
+
 ## Current implementation status (2026-09-22)
 
 - Tier 0 world bootstrap/reset is complete in [PR #7](https://github.com/stefanrows/OfflineDAoC/pull/7), merged as `40476dc`.
@@ -197,7 +202,8 @@ These are settled. Do not reopen them without the owner.
 ## Contract
 
 - **One mode.** No `if (Normal)` leftover world. `GameType` is PvP for the
-  shipped server.
+  shipped server. Amended 2026-10-25 (task 147): the RvR world exists beside
+  Camlann as a second save, not as a Normal leftover; see "Two-world contract".
 - **New world.** Existing characters, inventories, coins, bot rosters, keep
   ownership, relic state, Realm Exchange listings, and realm-event records are
   discarded. The launcher performs this reset once, with a backup.
@@ -216,6 +222,55 @@ These are settled. Do not reopen them without the owner.
 - **Upstream download.** GitHub v0.3 remains the playable runtime package.
   Do not rewrite `Get-OfflineDAoC.ps1` or the `docs/PLAY.md` download steps
   when bumping this fork.
+
+## Two-world contract (RvR mode, 0.332.0-0.345.0)
+
+Owner 2026-10-24/25: RvR world as the default, Camlann as the PvP world; the
+RvR world runs the original upstream RvR (shadowofze 0.38c), "nothing new
+invented, never worse than the original". Full contract and reset details:
+[RVR_WORLDS.md](RVR_WORLDS.md); plan and open items:
+[RVR_MODE_PLAN.md](RVR_MODE_PLAN.md).
+
+| | RvR world (default) | PvP world (Camlann) |
+|---|---|---|
+| Save | `runtime/data/opendaoc.sqlite3.db` | `runtime/data/opendaoc-camlann.sqlite3.db` |
+| Marker (`offline_local_options.WorldModel`) | `Realm-1` | `Camlann-1` |
+| Rules class (GameType PvP for both) | `RvrServerRules` | `PvPServerRules` |
+| RvR event layer behind `AutonomousRvrEventLayer` | `RealmRvrEventLayer` (upstream 0.38c verbatim) | `CamlannRvrEventLayer` (fork, byte-for-byte) |
+
+- **Dispatch.** `GameServer.ValidateWorldModel` reads the marker once at
+  startup into `WorldMode`; a save with another marker or none is refused.
+  Code that differs asks `WorldMode.IsRvr`. The facade sends every call to the
+  world's layer; a call only one layer knows answers a neutral default in the
+  other world. This is the one sanctioned dual-world switch; the tier rule
+  "do not implement a dual-mode flag" still bans a playable Normal world.
+- **Camlann behaviour unchanged.** Every RvR branch answers the old value
+  outside `Realm-1`. Changes meant for both worlds are named "both worlds"
+  (road-graph fallback, STOP EVENT, grudges against human killers). Rules that
+  must hold in both worlds are tested with the `BothWorlds` helper
+  (`source/server/Tests/UnitTests/BothWorlds.cs`: `BothWorlds.All`,
+  `BothWorlds.Use(world)`, `BothWorlds.Rules(world)`,
+  `BothWorlds.Expect(world, camlann, realm)`); a test without it runs as
+  Camlann.
+- **RvR world takes from upstream:** realm alliance, hidden enemy names,
+  realm-only travel, the 0.38c bot layer (siege roll, muster, march column,
+  siege engines, resurrection, defense, retake, relic pad 8, realm raids, town
+  teleporters), keep level 4 after a capture.
+- **Fork features that stay in the RvR world:** companions, Trials of
+  Atlantis and Master Levels, Realm Exchange (own realm), name masking, the
+  realm boundary, Stefan's movement port (tasks 135-139), the open BG per
+  realm, the login balancer at 600 per realm and the realm guild names (owner
+  decision 9). The R4a/R4b armies, grudge trips, bot keep claims, guild keep
+  defense and livelier-RvR waves are off in `Realm-1`.
+- **Keep start (RvR world):** the 21 frontier keeps belong to their original
+  realm at their original level; portal, relic and battleground keeps are
+  unchanged.
+- **Fresh world:** CREATE WORLD / RESET WORLD per world in the launcher; the
+  old save moves to `<install>-backups\<date-time>-<rvr|camlann>-world-reset`.
+  A fresh RvR world has 600 bots per realm at level 50; Camlann keeps its
+  level shape.
+- **STOP EVENT:** forced realm raids in the RvR world have no time limit, as
+  upstream; the launcher's STOP EVENT… ends one at once.
 
 ## How to use the tiers
 

@@ -14,56 +14,6 @@ When a task is done and its required verification is complete, move it out of it
      (`/mnt/c/OfflineDAoC` -> `~/OfflineDAoC`), adjust `playable-dev/server.sh`
      and the memory paths. After R6, not during the port.
 
-147. **RvR mode: classic realm-vs-realm as the default world, Camlann PvP as a
-     launcher button.** Owner (Aaron), 2026-10-24: get as close as the fork
-     allows to the upstream 0.37b RvR we compared against, with all fork
-     features (ToA, companions, bots, open BG); realm rules everywhere;
-     fresh RvR world, current save may be wiped; night session authorised.
-     Analysis and decisions: [RVR_MODE_ANALYSIS.md](RVR_MODE_ANALYSIS.md);
-     work list: [RVR_MODE_PLAN.md](RVR_MODE_PLAN.md). Touches the files
-     Stefan works on for the upstream movement port (tasks 135-139): build on
-     his branch work, not around it.
-     R1b (alliance core, enemy names hidden, server-type audit in
-     [RVR_RULES_AUDIT.md](RVR_RULES_AUDIT.md)) implemented in source,
-     real-client check pending.
-     R5a (fresh RvR and fresh Camlann world routines, per-world save and side
-     files, single-realm bot guild seeding; [RVR_WORLDS.md](RVR_WORLDS.md)):
-     implemented in source, real-client check pending.
-     R2 (realm-bound travel, companions and parties of the own realm, open
-     BG per realm, Gothwaite off, binds per realm; see
-     [RVR_TRAVEL_POPULATION.md](RVR_TRAVEL_POPULATION.md)) implemented in
-     source, real-client check pending; safe hubs protect only their realm.
-     R3a (keeps by realm: capture flips the realm and sticks, claims only by
-     the keep's realm, guards and portal keeps hostile to other realms,
-     Darkness Falls for the realm with most keeps; [RVR_KEEPS.md](RVR_KEEPS.md))
-     implemented in source, real-client check pending.
-     R3b (relics on realm pads behind the 1.65 milegates, realm-wide upstream
-     bonus, relic-temple guards by realm, bot relic raids by realm;
-     [RVR_RELICS.md](RVR_RELICS.md)) implemented in source, real-client check
-     pending.
-     R4a (bot guilds with realm names and an even charter mix per realm, no
-     cross-realm recruitment, realm login balancer with
-     `rvr_realm_active_target` 600 per realm, grudges per realm; see
-     [RVR_BOTS.md](RVR_BOTS.md)) implemented in source, real-client check
-     pending.
-     R5b (launcher World dropdown RvR / PvP, CREATE WORLD and RESET WORLD per
-     world, WORLD label in the status line, Gothwaite only in PvP, today's
-     Camlann save moved to its own file, importer names the world and refuses
-     cross-world imports): implemented in source, real-client check pending.
-     R4b (realm armies: sieges, muster at the own portal outpost, target
-     weights, attack plan per realm, whole-realm defence, home reserve against
-     invaders, capped revenge trips; [RVR_ARMIES.md](RVR_ARMIES.md))
-     implemented in source, real-client check pending.
-     Upstream port S3 (relic pad 8 enemies, route threat awareness on, realm
-     raids per realm with upstream rally timing, no bracket battleground tours
-     as upstream's 0% default, town teleporters, road fallback; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S3 done")
-     implemented in source, real-client check pending.
-     R6 review fixes (siege deadlines fire on the live clock, march column
-     fights on the way, forced realm raids end by STOP EVENT, RvR keeps at
-     upstream's starting level 4, keep-start texts, no guild keep defense in
-     RvR; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "R6 fixes") implemented in
-     source, real-client check pending.
-
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed
      0.234.0/0.236.0): 568 `Could not instantiate Ability
@@ -421,94 +371,6 @@ Agent sessions on items 45–48: take the role and context from
      live checks pending (hub login point, medallion porter reach at the
      hubs, reserved bots filling the crew).
 
-134. **Research Trials of Atlantis for gameplay (items, overcaps, artifacts
-     with levelling, realm abilities, Master Levels).** Owner (Aaron),
-     2026-10-20: document first, build later; Stefan continues from the
-     research. Bots are not required in ToA; invent as little as possible and
-     prefer simple mechanisms for missing pieces. Findings, sources, gaps and
-     a suggested order in [TOA_RESEARCH.md](TOA_RESEARCH.md). Blocked on an
-     owner decision: CAMLANN.md decision 1 sets the era to pre-ToA. 2026-10-24:
-     found [Pactor/gaheris](https://github.com/Pactor/gaheris), an OpenDAoC
-     overlay with the artifact system, all 80 Master Level abilities and a
-     kill-XP Arbiter already wired; ML trials exist nowhere. Licence is not a
-     concern (owner: private only). **Decision 2026-10-24: build all of ToA we
-     can, ML XP from any level 45+ mob.** Work list: [TOA_PLAN.md](TOA_PLAN.md).
-     Phase 0 done 2026-10-24 (sources, code fit, import probe: the converted
-     gaheris SQL loads completely into a copy of our DB, nothing touched the
-     live install).
-     WP3.0, the 43 artifact spell handlers from OpenDAoC-Core bridged into our
-     ECS: implemented in source, real-client check pending
-     ([TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md)).
-     WP3.0b, the seven artifact spell types no project implemented (Crocodile
-     Tear Ring conversion, Kalare's regeneration, Ring of Unyielding Will
-     defensive proc, Gem of Lost Memories cure, Crown of Zahur aura and
-     Efficient Endurance, Zo'arkat's area Bedazzlement), pack 013 with the four
-     missing artifact spells (Stat Drain, Boon of Kings, Disoriented, Vision
-     of Malice), and inhibiting poisons (Dex/Con debuff) that now apply and no
-     longer block artifact effects: implemented in source, real-client check
-     pending ([TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md), "WP3.0b").
-     WP1.1a + WP2.1 implemented in source, real-client check pending: world
-     data packs ([TOA_DATA_PACKS.md](TOA_DATA_PACKS.md)) bring the ML spells,
-     ML paths, 73 artifact spells and the Atlantis mobs, travel, zone points
-     and scroll binders into every save once at server start (backup
-     first); ML paths stay hidden until the Arbiter grants ML.
-     WP2.2, Master Level progression (Arbiter enrols the group at level 40+,
-     discipline choice, ML experience from every level 45+ NPC kill for every
-     earner, Demyphon's credits and Star of Destiny, `/ml`): implemented in
-     source, real-client check pending
-     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md)).
-     WP3.1, the artifact core (artifacts activate as `InventoryArtifact`, level
-     from kill experience, unlock bonuses per level; ClassType SQL for the 197
-     artifact templates; Ceremonial Bracer and Cloudsong core lookups):
-     implemented in source, real-client check pending
-     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md)).
-     WP1.1b (db-public ToA dungeon spawns and ToA loot as SQL packs
-     030/031/040, [TOA_DUNGEON_IMPORT.md](TOA_DUNGEON_IMPORT.md)): built in
-     source and verified on a DB copy, real-client check pending.
-     Pack set 2 (world data packs 024, 025, 030, 031, 040, 041, 050: the
-     Arbiters enrol and Demyphon sells in all three Atlantis regions, the
-     Atlas fight-club Mordreds leave Albion Atlantis, the dungeon spawns and
-     ToA loot ship, The Phoenix's loot is capped, artifact templates load as
-     artifacts): implemented in source, real-client check pending.
-     2026-10-24 17:18: first server boot with all 14 data packs on Aaron's
-     install succeeded (0.321.0); Atlantis, havens and dungeons loaded; real
-     client check still pending.
-     Journal-mode fallback: a save whose connection string says
-     `Journal Mode=Off` or `Memory` (the OpenDAoC default and the setup
-     tool, e.g. a second install) no longer boots without the packs; the
-     data pack connections use TRUNCATE for that run and a failed pack still
-     rolls back fully. Implemented in source, real-client check pending.
-     WP1.2 travel and the WP1.3 random-loot remainder: every porter with the
-     full menu offers `[Atlantis]` (own realm's ruins city), `[Atlantis
-     Havens]` and `[Atlantis Dungeons]` in the player's own realm copy, with
-     porters in every haven (packs 026/027, Atlantis open to players);
-     random loot from kills inside Atlantis carries ToA bonuses. Implemented
-     in source, real-client check pending ([TOA_TRAVEL.md](TOA_TRAVEL.md)).
-     WP3.1b, earning an artifact: Aphaestia (all three Atlantis cities) sells
-     encounter credit for bounty points; scroll pages (drops of pack 040 or
-     the binders) combine into the book in the backpack; every scholar takes
-     the book, asks for the version when more than one fits class and realm,
-     and hands the artifact over once per character; Artifact Scholars awaken
-     Flask, Bruiser and Shield of Khaos on credit alone (packs 051, 052, 061).
-     Implemented in source, real-client check pending
-     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Earning an artifact").
-     WP2.4, bots and Master Levels (companions enrol with their owner at the
-     Arbiter and earn from the same kills, world bots of level 40+ roll a
-     Master Level once, a few Warlord, Battlemaster and Perfecter abilities
-     used by the AI, Blanket of Camouflage hides companions): implemented in
-     source, real-client check pending
-     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
-     WP3.3, encounter credit from kills: killing an artifact's guardian (61
-     named creatures for all 57 artifacts, packs 070/071 with six new spawns)
-     gives the group or battlegroup its encounter credit, once per character;
-     implemented in source, real-client check pending
-     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Encounter credit").
-     WP2.6, bots cast Convoker, Stormlord and Spymaster abilities (Battle
-     Warder, Crystal Titan, traps, storms, Vacuum Vortex) with human reaction
-     delays, and fonts, traps, storms and the titan now pulse and expire for
-     every caster: implemented in source, real-client check pending
-     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
-
 139. **Road-graph fallback and frontier navmesh hotspot evidence.** Owner,
      2026-10-24. The 2026-10-23 log has 1,307 route give-ups (792 RvR goals;
      NoPathFound 977, PartialPathFound 295): Forest Sauvage 249, Odin's Gate
@@ -598,6 +460,67 @@ Agent sessions on items 45–48: take the role and context from
      `SelectCamp` in this run too.
 
 ## Implemented in source; installation verification pending
+
+147. **RvR mode: classic realm-vs-realm as the default world, Camlann PvP as a
+     launcher button.** Owner (Aaron), 2026-10-24: get as close as the fork
+     allows to the upstream 0.37b RvR we compared against, with all fork
+     features (ToA, companions, bots, open BG); realm rules everywhere;
+     fresh RvR world, current save may be wiped; night session authorised.
+     Analysis and decisions: [RVR_MODE_ANALYSIS.md](RVR_MODE_ANALYSIS.md);
+     work list: [RVR_MODE_PLAN.md](RVR_MODE_PLAN.md). Touches the files
+     Stefan works on for the upstream movement port (tasks 135-139): build on
+     his branch work, not around it.
+     R1b (alliance core, enemy names hidden, server-type audit in
+     [RVR_RULES_AUDIT.md](RVR_RULES_AUDIT.md)) implemented in source,
+     real-client check pending.
+     R5a (fresh RvR and fresh Camlann world routines, per-world save and side
+     files, single-realm bot guild seeding; [RVR_WORLDS.md](RVR_WORLDS.md)):
+     implemented in source, real-client check pending.
+     R2 (realm-bound travel, companions and parties of the own realm, open
+     BG per realm, Gothwaite off, binds per realm; see
+     [RVR_TRAVEL_POPULATION.md](RVR_TRAVEL_POPULATION.md)) implemented in
+     source, real-client check pending; safe hubs protect only their realm.
+     R3a (keeps by realm: capture flips the realm and sticks, claims only by
+     the keep's realm, guards and portal keeps hostile to other realms,
+     Darkness Falls for the realm with most keeps; [RVR_KEEPS.md](RVR_KEEPS.md))
+     implemented in source, real-client check pending.
+     R3b (relics on realm pads behind the 1.65 milegates, realm-wide upstream
+     bonus, relic-temple guards by realm, bot relic raids by realm;
+     [RVR_RELICS.md](RVR_RELICS.md)) implemented in source, real-client check
+     pending.
+     R4a (bot guilds with realm names and an even charter mix per realm, no
+     cross-realm recruitment, realm login balancer with
+     `rvr_realm_active_target` 600 per realm, grudges per realm; see
+     [RVR_BOTS.md](RVR_BOTS.md)) implemented in source, real-client check
+     pending.
+     R5b (launcher World dropdown RvR / PvP, CREATE WORLD and RESET WORLD per
+     world, WORLD label in the status line, Gothwaite only in PvP, today's
+     Camlann save moved to its own file, importer names the world and refuses
+     cross-world imports): implemented in source, real-client check pending.
+     R4b (realm armies: sieges, muster at the own portal outpost, target
+     weights, attack plan per realm, whole-realm defence, home reserve against
+     invaders, capped revenge trips; [RVR_ARMIES.md](RVR_ARMIES.md))
+     implemented in source, real-client check pending.
+     Upstream port S3 (relic pad 8 enemies, route threat awareness on, realm
+     raids per realm with upstream rally timing, no bracket battleground tours
+     as upstream's 0% default, town teleporters, road fallback; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S3 done")
+     implemented in source, real-client check pending.
+     R6 review fixes (siege deadlines fire on the live clock, march column
+     fights on the way, forced realm raids end by STOP EVENT, RvR keeps at
+     upstream's starting level 4, keep-start texts, no guild keep defense in
+     RvR; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "R6 fixes") implemented in
+     source, real-client check pending.
+     **Result (0.332.0-0.345.0):** the RvR world (`Realm-1`) is the default
+     beside the Camlann PvP world, each in its own save, picked in the
+     launcher's World dropdown with CREATE WORLD / RESET WORLD; realm rules,
+     keeps, relics, travel and population by realm; the upstream 0.38c RvR bot
+     layer ported for Realm-1 (port S1-S3) with the R6 review fixes; R4a/R4b
+     own logic gated off in Realm-1 except the login balancer and guild names.
+     Deployed on the owner's PC 2026-10-25 on a fresh level-50 RvR world.
+     Real-client check pending: the first sieges observed live (muster
+     marches, battle, repel, retake) and the CAMLANN.md client checklist in
+     both worlds. World contract: [RVR_WORLDS.md](RVR_WORLDS.md); S4 backlog
+     and owner decisions 2026-10-25 22:20: [RVR_MODE_PLAN.md](RVR_MODE_PLAN.md).
 
 143. **Road fallback for dead-end detours (task 139 Step 2).** Owner,
      2026-10-24, from the 0.314.0 live measurement. Gain about 18 give-ups per
@@ -747,6 +670,102 @@ Agent sessions on items 45–48: take the role and context from
      through corners without a halt at each waypoint. Reviewer caveat: the
      road index still advances only on an AI turn within 80 units, so some
      legs may still halt briefly; lookahead added in 0.312.0 (task 138).
+
+134. **Research Trials of Atlantis for gameplay (items, overcaps, artifacts
+     with levelling, realm abilities, Master Levels).** Owner (Aaron),
+     2026-10-20: document first, build later; Stefan continues from the
+     research. Bots are not required in ToA; invent as little as possible and
+     prefer simple mechanisms for missing pieces. Findings, sources, gaps and
+     a suggested order in [TOA_RESEARCH.md](TOA_RESEARCH.md). Blocked on an
+     owner decision: CAMLANN.md decision 1 sets the era to pre-ToA. 2026-10-24:
+     found [Pactor/gaheris](https://github.com/Pactor/gaheris), an OpenDAoC
+     overlay with the artifact system, all 80 Master Level abilities and a
+     kill-XP Arbiter already wired; ML trials exist nowhere. Licence is not a
+     concern (owner: private only). **Decision 2026-10-24: build all of ToA we
+     can, ML XP from any level 45+ mob.** Work list: [TOA_PLAN.md](TOA_PLAN.md).
+     Phase 0 done 2026-10-24 (sources, code fit, import probe: the converted
+     gaheris SQL loads completely into a copy of our DB, nothing touched the
+     live install).
+     WP3.0, the 43 artifact spell handlers from OpenDAoC-Core bridged into our
+     ECS: implemented in source, real-client check pending
+     ([TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md)).
+     WP3.0b, the seven artifact spell types no project implemented (Crocodile
+     Tear Ring conversion, Kalare's regeneration, Ring of Unyielding Will
+     defensive proc, Gem of Lost Memories cure, Crown of Zahur aura and
+     Efficient Endurance, Zo'arkat's area Bedazzlement), pack 013 with the four
+     missing artifact spells (Stat Drain, Boon of Kings, Disoriented, Vision
+     of Malice), and inhibiting poisons (Dex/Con debuff) that now apply and no
+     longer block artifact effects: implemented in source, real-client check
+     pending ([TOA_ARTIFACT_SPELLS.md](TOA_ARTIFACT_SPELLS.md), "WP3.0b").
+     WP1.1a + WP2.1 implemented in source, real-client check pending: world
+     data packs ([TOA_DATA_PACKS.md](TOA_DATA_PACKS.md)) bring the ML spells,
+     ML paths, 73 artifact spells and the Atlantis mobs, travel, zone points
+     and scroll binders into every save once at server start (backup
+     first); ML paths stay hidden until the Arbiter grants ML.
+     WP2.2, Master Level progression (Arbiter enrols the group at level 40+,
+     discipline choice, ML experience from every level 45+ NPC kill for every
+     earner, Demyphon's credits and Star of Destiny, `/ml`): implemented in
+     source, real-client check pending
+     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md)).
+     WP3.1, the artifact core (artifacts activate as `InventoryArtifact`, level
+     from kill experience, unlock bonuses per level; ClassType SQL for the 197
+     artifact templates; Ceremonial Bracer and Cloudsong core lookups):
+     implemented in source, real-client check pending
+     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md)).
+     WP1.1b (db-public ToA dungeon spawns and ToA loot as SQL packs
+     030/031/040, [TOA_DUNGEON_IMPORT.md](TOA_DUNGEON_IMPORT.md)): built in
+     source and verified on a DB copy, real-client check pending.
+     Pack set 2 (world data packs 024, 025, 030, 031, 040, 041, 050: the
+     Arbiters enrol and Demyphon sells in all three Atlantis regions, the
+     Atlas fight-club Mordreds leave Albion Atlantis, the dungeon spawns and
+     ToA loot ship, The Phoenix's loot is capped, artifact templates load as
+     artifacts): implemented in source, real-client check pending.
+     2026-10-24 17:18: first server boot with all 14 data packs on Aaron's
+     install succeeded (0.321.0); Atlantis, havens and dungeons loaded; real
+     client check still pending.
+     Journal-mode fallback: a save whose connection string says
+     `Journal Mode=Off` or `Memory` (the OpenDAoC default and the setup
+     tool, e.g. a second install) no longer boots without the packs; the
+     data pack connections use TRUNCATE for that run and a failed pack still
+     rolls back fully. Implemented in source, real-client check pending.
+     WP1.2 travel and the WP1.3 random-loot remainder: every porter with the
+     full menu offers `[Atlantis]` (own realm's ruins city), `[Atlantis
+     Havens]` and `[Atlantis Dungeons]` in the player's own realm copy, with
+     porters in every haven (packs 026/027, Atlantis open to players);
+     random loot from kills inside Atlantis carries ToA bonuses. Implemented
+     in source, real-client check pending ([TOA_TRAVEL.md](TOA_TRAVEL.md)).
+     WP3.1b, earning an artifact: Aphaestia (all three Atlantis cities) sells
+     encounter credit for bounty points; scroll pages (drops of pack 040 or
+     the binders) combine into the book in the backpack; every scholar takes
+     the book, asks for the version when more than one fits class and realm,
+     and hands the artifact over once per character; Artifact Scholars awaken
+     Flask, Bruiser and Shield of Khaos on credit alone (packs 051, 052, 061).
+     Implemented in source, real-client check pending
+     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Earning an artifact").
+     WP2.4, bots and Master Levels (companions enrol with their owner at the
+     Arbiter and earn from the same kills, world bots of level 40+ roll a
+     Master Level once, a few Warlord, Battlemaster and Perfecter abilities
+     used by the AI, Blanket of Camouflage hides companions): implemented in
+     source, real-client check pending
+     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
+     WP3.3, encounter credit from kills: killing an artifact's guardian (61
+     named creatures for all 57 artifacts, packs 070/071 with six new spawns)
+     gives the group or battlegroup its encounter credit, once per character;
+     implemented in source, real-client check pending
+     ([TOA_ARTIFACTS.md](TOA_ARTIFACTS.md) "Encounter credit").
+     WP2.6, bots cast Convoker, Stormlord and Spymaster abilities (Battle
+     Warder, Crystal Titan, traps, storms, Vacuum Vortex) with human reaction
+     delays, and fonts, traps, storms and the titan now pulse and expire for
+     every caster: implemented in source, real-client check pending
+     ([TOA_MASTER_LEVELS.md](TOA_MASTER_LEVELS.md#bots)).
+     **Result (0.315.0-0.330.0, docs closed 2026-10-25):** ToA built per
+     [TOA_PLAN.md](TOA_PLAN.md): Atlantis travel and data packs, ToA loot,
+     Master Levels (bots too), artifacts with earning, encounter credit and
+     their spells, ToA-era realm abilities, the launcher's TRIALS OF ATLANTIS
+     block; first boot with all 14 data packs on the owner's install
+     2026-10-24. Real-client check pending (WP4.1: travel, Arbiter, one
+     artifact end to end, one Master Level gained); WP4.2 (Stefan's server)
+     still open.
 
 133. **Animist main shroom follows; shrooms inherit the Animist's RAs.**
      Owner, 2026-10-17: "make the main animist shroom follow the animist
