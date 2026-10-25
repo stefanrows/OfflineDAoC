@@ -29,6 +29,15 @@ When a task is done and its required verification is complete, move it out of it
      the keep's realm, guards and portal keeps hostile to other realms,
      Darkness Falls for the realm with most keeps; [RVR_KEEPS.md](RVR_KEEPS.md))
      implemented in source, real-client check pending.
+     R3b (relics on realm pads behind the 1.65 milegates, realm-wide upstream
+     bonus, relic-temple guards by realm, bot relic raids by realm;
+     [RVR_RELICS.md](RVR_RELICS.md)) implemented in source, real-client check
+     pending.
+     R4a (bot guilds with realm names and an even charter mix per realm, no
+     cross-realm recruitment, realm login balancer with
+     `rvr_realm_active_target` 600 per realm, grudges per realm; see
+     [RVR_BOTS.md](RVR_BOTS.md)) implemented in source, real-client check
+     pending.
      R5b (launcher World dropdown RvR / PvP, CREATE WORLD and RESET WORLD per
      world, WORLD label in the status line, Gothwaite only in PvP, today's
      Camlann save moved to its own file, importer names the world and refuses

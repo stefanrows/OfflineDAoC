@@ -56,7 +56,14 @@ defaults in code, keep/relic start state from the reset.
   by realm incl. portal keeps; Darkness Falls by keep count (previous owner 15
   min grace); bots never siege own-realm keeps; open BG roles read a real
   lord state. Camlann unchanged. 72 tests.
-- [~] **R3b Relics.** Agent rvr-r3b (2026-10-25 10:45, parallel to the R3a review). Realm pads, realm-wide bonus, relic sieges. 1 session.
+- [x] **R3b Relics.** (0.338.0; `docs/RVR_RELICS.md`) RvR world: relics on
+  realm temple pads; a relic can be lifted only when the temple's three
+  first-milegate keeps are in enemy hands, the taking realm holds its own
+  relic of that type and 16 enemies stand on the pad; delivery to the own
+  realm's pad of the same type; realm-wide bonus (+10 % per enemy relic while
+  the own one is held) for players, bots and their pets; temple guards by realm;
+  no guild pads; bots target open enemy temples (march logic R4b); relic
+  keeps are not capturable and return to their original realm at start. 50 tests.
 - [x] **R5a World reset + files.** (0.335.0; `docs/RVR_WORLDS.md`) One
   reset routine creates a fresh RvR or Camlann world: seed copy, progress
   cleared in one transaction (characters, inventories, bots, companions,
@@ -69,17 +76,27 @@ defaults in code, keep/relic start state from the reset.
   Camlann `opendaoc-camlann.sqlite3.db` + `-camlann` side files;
   `CamlannServerConfig.EnsureWorld` writes the connection string. Gothwaite
   switch locked for a Realm-1 save. Launcher tests 297, server fixtures 19.
-- [~] **R5b Launcher world picker.** Implemented (worktree rvr-r5b: dropdown, CREATE/RESET WORLD, per-world window, legacy Camlann save renamed to the -camlann file on first open; launcher 318 tests), fast-forward + review next (11:35). Owner 2026-10-25 10:05: a **dropdown**
-  "World: RvR (default) / PvP (Camlann)", switchable only while the server is
-  stopped, choice remembered; START SERVER starts the selected world (the
-  launcher writes that world's save path into the server config); each world
-  keeps its own save, switching loses nothing; "Reset world" per world (old
-  save moved to backups, fresh world created, offered when a world's save is
-  missing); active world shown in the status line; Gothwaite controls only in
-  the PvP world; import guard accepts `Realm-1`. 1 session. **Wipe + first RvR
-  boot on the owner's PC right after R5b.**
-- [~] **R4a Bot guilds + login per realm.** Agent rvr-r4a (2026-10-25 11:05). ~600 bots per realm in
-  single-realm guilds, realm login balance. 1 session.
+- [x] **R5b Launcher world picker.** (0.340.0; `docs/RVR_WORLDS.md`)
+  Dropdown "World: RvR (Realm vs Realm) / PvP (Camlann)" beside START SERVER,
+  switchable only while the server is stopped, choice remembered per Windows
+  user; one window per world, the server config gets the selected world's
+  save path on switch, open and start; CREATE WORLD / RESET WORLD per world
+  (old save moved to the backups, every settings writer locked meanwhile);
+  WORLD label in the status line; Gothwaite controls only in PvP; today's
+  Camlann save renamed to `opendaoc-camlann.sqlite3.db` (+ side files) on the
+  first stopped open; importer names the world and refuses cross-world
+  imports. Review ACCEPT after two fix rounds. Low follow-up for R6: REFRESH
+  in the CREATE WORLD / NEEDS ATTENTION state greys CREATE WORLD out until
+  the window is reopened. Launcher tests 325 passed / 2 env-skipped.
+  **Wipe + first RvR boot on the owner's PC right after R5b.**
+- [x] **R4a Bot guilds + login per realm.** (0.339.0; `docs/RVR_BOTS.md`)
+  RvR world: 120 realm guild names in 2003 style (8 per charter per realm),
+  the same charter mix in every realm (Leveling 5, RvR 4, Social 3, Hunting
+  2, Keep 1), no cross-realm membership on any path, legacy R5a guilds
+  renamed once; realm login balancer (`rvr_realm_active_target` 600, per-realm
+  ramp, lowest-load realm first, shortfall not filled by others); grudges per
+  realm (48, 3 h); companions unchanged. Open for R4b: revenge trips must be
+  capped and measured. 32 tests.
 - [ ] **R4b Realm armies.** Event layer armies per realm instead of per guild,
   muster at the realm's portal outpost, grudges/banter per realm. 2 sessions.
 - [ ] **R4c Upstream siege-flow port.** Retake, 108/170 march threshold, siege
@@ -159,6 +176,24 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   most keeps; bots claim and siege by realm; Camlann unchanged.
 - 2026-10-25 11:25: R3a reviewed (2 mediums + lows fixed) and merged as 0.337.0.
   R3b, R4a, R5b running.
+- 2026-10-25 11:55: R3b, R4a and R5b implemented and in review; wipe follows the R5b merge.
+- 2026-10-25 (R3b agent): R3b in source on branch rvr-r3b, real-client check
+  pending ([RVR_RELICS.md](RVR_RELICS.md)): relics on the realm temple pads; a
+  relic can be lifted only by an enemy realm once all three keeps of its
+  temple's first milegate are in enemy hands and that realm holds its own
+  relic of the type; carried strength to strength, magic to magic; realm-wide
+  upstream bonus for players and bots; relic-temple guards of the temple's
+  realm; no guild keep mounts; bot armies pick open enemy temples (march
+  logic stays R4b); Camlann unchanged.
+- 2026-10-25 12:15: R3b reviewed (ACCEPT, 2 lows fixed) and merged as 0.338.0.
+- 2026-10-25 (R4a agent): R4a in source on branch rvr-r4a, real-client check
+  pending: RvR bot guilds get realm names (8 per charter and realm) and the same
+  charter plan in every realm, R5a-era names are renamed once; recruitment,
+  alt trickle, guild mergers and login binding never cross realms; realm login
+  balancer keeps each realm near `rvr_realm_active_target` (600), a short realm
+  is not filled by the others; grudges keyed by realm, KOS call without "crew"
+  (RVR_BOTS.md). Camlann unchanged.
+- 2026-10-25 12:35: R4a reviewed (ACCEPT, 2 follow-ups) and merged as 0.339.0.
 - 2026-10-25 (R5b agent): R5b in source on branch rvr-r5b (worktree
   OfflineDAoC-wt-rvr-r5b), real-client check pending: World dropdown RvR / PvP
   beside START SERVER, one window per world, choice remembered per Windows
@@ -167,3 +202,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   Gothwaite only in PvP, today's Camlann save renamed to its own files on the
   first stopped start, importer names the world and refuses cross-world
   imports; launcher tests 318 passed / 2 env-skipped, importer 7 passed.
+- 2026-10-25 12:45: R5b re-check ACCEPT, merged as 0.340.0; deploy + RvR CREATE WORLD on the owner PC next.

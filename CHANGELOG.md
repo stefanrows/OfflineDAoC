@@ -12,6 +12,72 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.340.0] - 2026-10-25
+
+### Added
+- RvR mode, package R5b (`docs/RVR_WORLDS.md`): the launcher has a World
+  dropdown "RvR (Realm vs Realm) / PvP (Camlann)" beside START SERVER. Each
+  world keeps its own save (`opendaoc.sqlite3.db` for RvR,
+  `opendaoc-camlann.sqlite3.db` for PvP), the choice is remembered, START
+  SERVER starts the selected world, CREATE WORLD / RESET WORLD work per world
+  (the old save goes to the backups), the status line names the world and the
+  Gothwaite controls appear only in the PvP world. Launcher tests
+  (WorldPickerTests) and importer tests cover the flow.
+
+### Changed
+- On the first open with the server stopped, today's Camlann save and its
+  side files are renamed to the `-camlann` names (byte-identical, nothing is
+  deleted); the launcher then opens on the PvP world and offers CREATE WORLD
+  for RvR. The progress importer names the save's world and refuses imports
+  across worlds. `PLAY.md`, `Apply-OfflineDAoCFork.ps1` (protected paths) and
+  `playable-dev/dbquery.py` know both save files.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
+## [0.339.0] - 2026-10-25
+
+### Added
+- RvR mode, package R4a (`docs/RVR_BOTS.md`): world bots in a `Realm-1` world
+  belong to single-realm guilds with realm names (eight per guild type and
+  realm, in 2003 style), every realm gets the same mix of guild types, no
+  guild ever takes a bot of another realm, the online population is balanced
+  per realm (`rvr_realm_active_target`, default 600 each), and grudges are
+  held per realm. Unit tests UT_RvrBotGuildsAndLogin (32).
+
+### Changed
+- None for the Camlann world.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
+## [0.338.0] - 2026-10-25
+
+### Added
+- RvR mode, package R3b (`docs/RVR_RELICS.md`): in a `Realm-1` world relics
+  sit on realm temple pads. A realm can take an enemy relic only when the
+  temple's three milegate keeps are in enemy hands, it still holds its own
+  relic of that type and 16 of its fighters stand on the pad; the relic is
+  carried to the own temple pad of the same type. Each enemy relic held gives
+  the whole realm, bots and pets included, +10 % while the own relic is home.
+  Temple guards stand for their realm; relic keeps cannot be captured. Bot
+  armies pick open enemy temples as targets. Unit tests UT_RvrRelics (50).
+
+### Changed
+- None for the Camlann world (guild relic pads and rules unchanged there).
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.337.0] - 2026-10-25
 
 ### Added

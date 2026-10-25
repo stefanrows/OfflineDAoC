@@ -19,15 +19,29 @@ public static class AutonomousAltTrickle
         if (roster == null || roster.Count >= settings.AltRosterCap)
             throw new InvalidOperationException("The autonomous roster is at its alt cap.");
 
-        var guild = roster.Where(record => !record.IsRetired && !string.IsNullOrWhiteSpace(record.GuildId))
+        var guilds = roster.Where(record => !record.IsRetired && !string.IsNullOrWhiteSpace(record.GuildId))
             .GroupBy(record => record.GuildId, StringComparer.Ordinal)
-            .Where(group => AutonomousCrewManager.IsCrewGuild(GuildMgr.GetGuildByGuildID(group.Key)))
+            .Where(group => AutonomousCrewManager.IsCrewGuild(GuildMgr.GetGuildByGuildID(group.Key)));
+        // RvR world: the alt joins the realm with the fewest bots, and only a guild of that realm, so the
+        // trickle never mixes a guild and keeps the realms even. Camlann: any managed guild, as before.
+        eRealm? altRealm = null;
+        if (AutonomousGuildSeeding.SingleRealmGuilds(WorldMode.Current))
+        {
+            var realmGuilds = guilds.Select(group => (Group: group, Realm: GuildMgr.GetGuildByGuildID(group.Key)?.Realm ?? eRealm.None))
+                .Where(entry => entry.Group.All(record => (eRealm)record.Realm == entry.Realm))
+                .ToArray();
+            altRealm = AutonomousGuildSeeding.AltRealm(
+                roster.Where(record => !record.IsRetired).Select(record => (eRealm)record.Realm),
+                realmGuilds.Select(entry => entry.Realm));
+            guilds = realmGuilds.Where(entry => entry.Realm == altRealm).Select(entry => entry.Group);
+        }
+        var guild = guilds
             .OrderBy(group => group.Count(record => record.Level < 10))
             .ThenBy(group => group.Count())
             .ThenBy(group => group.Key, StringComparer.Ordinal)
             .FirstOrDefault() ?? throw new InvalidOperationException("No managed guild is available for a new alt.");
         OfflineWorldBotRecord exemplar = guild.ElementAt(Random.Shared.Next(guild.Count()));
-        int realm = exemplar.Realm;
+        int realm = altRealm.HasValue ? (int)altRealm.Value : exemplar.Realm;
         var reserved = DOLDB<OfflineWorldBotRecord>.SelectAllObjects()
             .Select(record => record.Name)
             .Concat(DOLDB<DbCoreCharacter>.SelectAllObjects().Select(record => record.Name))

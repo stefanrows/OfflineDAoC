@@ -233,7 +233,9 @@ description; only the value changes.
   realm, and only bots of that realm join it. Charter ordinals are fixed per
   realm (Albion 0-14, Midgard 15-29, Hibernia 30-44), so names stay unique.
 
-The realm login balance and per-realm charter names follow in R4a.
+Since R4a the RvR guilds take realm names and a charter plan per realm, and a
+realm login balancer keeps each realm near its own online target: see
+[RVR_BOTS.md](RVR_BOTS.md).
 
 ## Verification without a server
 

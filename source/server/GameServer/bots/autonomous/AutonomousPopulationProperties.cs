@@ -17,6 +17,9 @@ namespace DOL.GS
         [ServerProperty("autonomous_population", "hard_active_cap", "Legacy compatibility value only. It does not limit the autonomous population.", 0)]
         public static int HARD_ACTIVE_CAP;
 
+        [ServerProperty("autonomous_population", "rvr_realm_active_target", "RvR world only: online bots per realm. The login balancer keeps each realm near this target (fewest online realm first); a realm with fewer bots logs in all it has and the others do not fill its gap. 0 = every bot of each realm. The Camlann world ignores it and targets the complete roster.", 600)]
+        public static int RVR_REALM_ACTIVE_TARGET;
+
         [ServerProperty("autonomous_population", "initial_cohort_size", "Recommended first observed cohort when population creation is explicitly enabled.", 3)]
         public static int INITIAL_COHORT_SIZE;
 

@@ -2699,7 +2699,9 @@ namespace DOL.GS
 
 		#region Combat
 
-		public override bool BenefitsFromRelics => Brain is ControlledMobBrain brain && brain.GetPlayerOwner() != null;
+		// RvR world (R3b): a pet of a world bot, companion or /spawn helper shares its owner's realm relic bonus.
+		public override bool BenefitsFromRelics => Brain is ControlledMobBrain brain && (brain.GetPlayerOwner() != null ||
+			WorldMode.IsRvr && brain.GetLivingOwner() is GameBot { BenefitsFromRelics: true });
 
 		/// <summary>
 		/// The property that holds charmed tick if any

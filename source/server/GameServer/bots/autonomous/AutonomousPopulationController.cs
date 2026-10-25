@@ -45,6 +45,10 @@ public static class AutonomousPopulationController
     private static volatile OfflineWorldBotRecord[] _cachedRoster = Array.Empty<OfflineWorldBotRecord>();
     private static bool _cachedEnabled;
     private static int _cachedRampMinutes = 15;
+    private static int _cachedRealmTarget = DefaultRealmActiveTarget;
+    private static string _lastRealmPopulationReport = string.Empty;
+    /// <summary>RvR world: the default online target per realm (owner decision 9, about 600 bots per realm).</summary>
+    public const int DefaultRealmActiveTarget = 600;
     private static int _polling;
     private static int _loginGeneration;
 
@@ -127,8 +131,28 @@ public static class AutonomousPopulationController
             OfflineWorldBotRecord[] roster = _cachedRoster;
             AutonomousBotTypeMixControl.Poll(roster, botId => PendingSpawns.ContainsKey(botId));
             TryRecordBenchmark(wallNowUtc);
-            int desired = AutonomousPopulationRamp.DesiredActiveCount(_cachedEnabled, roster.Length, _cachedRampMinutes, simulationNowUtc - _startedUtc);
-            int missing = desired - AutonomousBotRegistry.Count - PendingSpawns.Count;
+            // RvR world: the realm login balancer keeps every realm near its own target; the crew balancer
+            // below then picks within the chosen realm by guild load, cohort and role. Camlann: unchanged.
+            bool realmLogin = WorldMode.IsRvr;
+            Dictionary<eRealm, int> realmTargets = null;
+            Dictionary<eRealm, int> realmLoad = null;
+            int desired;
+            int missing;
+            if (realmLogin)
+            {
+                // Each realm ramps to its own target; a realm above its target never masks another's deficit.
+                realmTargets = AutonomousRealmLoginBalancer.RampedTargets(
+                    AutonomousRealmLoginBalancer.Targets(_cachedRealmTarget, roster.Select(record => (eRealm)record.Realm)),
+                    _cachedEnabled, _cachedRampMinutes, simulationNowUtc - _startedUtc);
+                realmLoad = RealmLoad(roster);
+                desired = realmTargets.Values.Sum();
+                missing = AutonomousRealmLoginBalancer.Missing(realmTargets, realmLoad);
+            }
+            else
+            {
+                desired = AutonomousPopulationRamp.DesiredActiveCount(_cachedEnabled, roster.Length, _cachedRampMinutes, simulationNowUtc - _startedUtc);
+                missing = desired - AutonomousBotRegistry.Count - PendingSpawns.Count;
+            }
             if (missing <= 0)
                 return;
 
@@ -161,8 +185,19 @@ public static class AutonomousPopulationController
             int enqueueCount = Math.Min(Math.Min(missing, available.Count), MaximumSpawnEnqueuePerPoll);
             for (int i = 0; i < enqueueCount; i++)
             {
+                IEnumerable<OfflineWorldBotRecord> pool = available;
+                eRealm loginRealm = eRealm.None;
+                if (realmLogin)
+                {
+                    eRealm? selectedRealm = AutonomousRealmLoginBalancer.SelectRealm(realmTargets, realmLoad,
+                        available.Select(record => (eRealm)record.Realm));
+                    if (!selectedRealm.HasValue)
+                        break;
+                    loginRealm = selectedRealm.Value;
+                    pool = available.Where(record => (eRealm)record.Realm == loginRealm);
+                }
                 long? nextId = AutonomousCrewLoginBalancer.SelectNext(
-                    available.Select(record => new AutonomousCrewLoginBalancer.Candidate(record.BotId, record.GuildId,
+                    pool.Select(record => new AutonomousCrewLoginBalancer.Candidate(record.BotId, record.GuildId,
                         record.Level, record.RegionId, (eCharacterClass)record.ClassId)),
                     crewLoad, activeCohorts);
                 OfflineWorldBotRecord next = nextId.HasValue
@@ -178,6 +213,8 @@ public static class AutonomousPopulationController
                 crewLoad[guildId] = crewLoad.TryGetValue(guildId, out int count) ? count + 1 : 1;
                 activeCohorts.Add(new AutonomousCrewLoginBalancer.Candidate(next.BotId, guildId,
                     next.Level, next.RegionId, (eCharacterClass)next.ClassId));
+                if (realmLogin)
+                    realmLoad[loginRealm] = realmLoad.GetValueOrDefault(loginRealm) + 1;
                 try
                 {
                     // Fetch the exact real inventory on this existing background
@@ -212,6 +249,43 @@ public static class AutonomousPopulationController
     }
 
     private sealed record PreparedSpawn(long BotId, System.Collections.IList Inventory, int Generation);
+
+    /// <summary>RvR world: online roster bots (companions and /spawn helpers excluded) plus pending logins, per realm.</summary>
+    private static Dictionary<eRealm, int> RealmLoad(OfflineWorldBotRecord[] roster)
+    {
+        Dictionary<eRealm, int> load = AutonomousRealmLoginBalancer.Realms.ToDictionary(realm => realm, _ => 0);
+        foreach (GameBot bot in AutonomousBotRegistry.Snapshot())
+        {
+            if (bot.IsTemporaryGroupHelper || bot.PersistentRecord == null)
+                continue;
+            eRealm realm = (eRealm)bot.PersistentRecord.Realm;
+            load[realm] = load.GetValueOrDefault(realm) + 1;
+        }
+        foreach (OfflineWorldBotRecord pending in roster.Where(record => PendingSpawns.ContainsKey(record.BotId)))
+            load[(eRealm)pending.Realm] = load.GetValueOrDefault((eRealm)pending.Realm) + 1;
+        return load;
+    }
+
+    /// <summary>RvR world: logs the realm targets, and any realm short of bots, whenever they change.</summary>
+    private static void ReportRealmPopulation(OfflineWorldBotRecord[] roster, int realmTarget)
+    {
+        if (!WorldMode.IsRvr)
+            return;
+        eRealm[] realms = roster.Select(record => (eRealm)record.Realm).ToArray();
+        Dictionary<eRealm, int> targets = AutonomousRealmLoginBalancer.Targets(realmTarget, realms);
+        Dictionary<eRealm, int> shortfalls = AutonomousRealmLoginBalancer.Shortfalls(realmTarget, realms);
+        string report = $"RVR_REALM_POPULATION target={realmTarget} " + string.Join(" ",
+            AutonomousRealmLoginBalancer.Realms.Select(realm => $"{realm.ToString().ToLowerInvariant()}={targets[realm]}"));
+        if (shortfalls.Count > 0)
+            report += " shortfall=" + string.Join(",", shortfalls.Select(pair => $"{pair.Key.ToString().ToLowerInvariant()}:{pair.Value}"));
+        if (string.Equals(report, _lastRealmPopulationReport, StringComparison.Ordinal))
+            return;
+        _lastRealmPopulationReport = report;
+        if (shortfalls.Count > 0)
+            Log.Warn(report);
+        else
+            Log.Info(report);
+    }
 
     private static void TryRecordBenchmark(DateTime nowUtc)
     {
@@ -453,6 +527,11 @@ public static class AutonomousPopulationController
                 .SelectObjects(DB.Column("IsRetired").IsEqualTo(false))
                 .OrderBy(record => record.BotId)
                 .ToArray();
+            if (WorldMode.IsRvr)
+            {
+                _cachedRealmTarget = ReadInt("rvr_realm_active_target", DefaultRealmActiveTarget);
+                ReportRealmPopulation(_cachedRoster, _cachedRealmTarget);
+            }
         }
         finally
         {

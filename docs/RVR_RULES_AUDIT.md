@@ -23,7 +23,7 @@ Line numbers are those of the R1b branch and drift.
 | Group | Sites | Unchanged | Gated | Deferred |
 |---|---|---|---|---|
 | `GST_PvP` branches (the spec's 35) | 35 | 15 | 19 | 1 |
-| Rules-type checks (`is PvPServerRules`) | 14 | 10 | 1 | 3 |
+| Rules-type checks (`is PvPServerRules`) | 14 | 10 | 4 | 0 |
 | Other server-type branches with realm meaning (`GST_Normal`) | 5 | 0 | 5 | 0 |
 | PvE-only branches (`GST_PvE`) | 10 | 10 | 0 | 0 |
 
@@ -72,9 +72,9 @@ access and the relic examine text.
 | `gameobjects/GamePlayer.cs:5737` | Who counts in the XP denominator | Unchanged: uses `AreAllied`, realm based in RvR |
 | `gameobjects/GameSiegeWeapon.cs:157` | Siege-weapon access | Gated inside `SiegeWeaponAccess.MayUse`: in RvR the founder-guild fallback is off, so only allies of the live anchors or the weapon's realm may use it |
 | `keeps/PvpKeepCampaign.cs:15` | Camlann keep campaign (Wardens, steward claims) | Unchanged scope: RvR keeps the campaign with realm ownership on top (R3a, `RvrServerRules.ResetKeep` → `CaptureForRealm`) |
-| `keeps/Managers/RelicMgr.cs:234` | Relic pickup | Deferred to R3b |
-| `events/keep/RelicGuardsOnKeepTaken.cs:33` | Relic guards off | Deferred to R3b |
-| `keeps/Relics/GameRelic.cs:205` | Relic examine text | Deferred to R3b |
+| `keeps/Managers/RelicMgr.cs:234` | Relic pickup | Gated (R3b, [RVR_RELICS.md](RVR_RELICS.md)): enemy realm behind a fallen milegate, own relic of the type held; bonus realm-wide; no guild keep mounts |
+| `events/keep/RelicGuardsOnKeepTaken.cs:33` | Relic guards off | Gated (R3b): on in RvR, of the temple's realm, never for a realm-less or captured temple |
+| `keeps/Relics/GameRelic.cs:205` | Relic examine text | Gated (R3b): owning realm, plus the milegate state for an enemy |
 | `serverrules/PvpDangerExperience.cs:6` | Danger XP multiplier | Unchanged |
 
 ## Other server-type branches
@@ -108,7 +108,7 @@ access and the relic examine text.
 - **R2:** forced per-realm open BG rule and realm landing peace.
 - **R2:** realm boundary for bots. Town guards now attack enemy-realm bots, so bots that still cross enemy homelands will meet guards until then.
 - **R3a (done in source, [RVR_KEEPS.md](RVR_KEEPS.md)):** portal-keep guards hostile to other realms. Claims by the keep's realm, realm flip on lord kill, Darkness Falls owner. The keep-guard realm spoof in `RvrServerRules.GetLivingRealm` is gone.
-- **R3b:** relics (pads, pickup, guards, examine).
+- **R3b (done in source, [RVR_RELICS.md](RVR_RELICS.md)):** relics (pads, pickup, guards, examine); also the relic pad crowd count (`GameRelicPad.GetEnemiesOnPad`), which counted every player as an enemy on PvP rules.
 - **R4a, highest risk:** bot crew guilds are created realm-less and mixed, and autonomous bot groups form without a realm check (`AutonomousBotGroupCoordinator` is Stefan's file and was not touched). In the RvR world neither a guild nor a group allies across realms, so a mixed crew or group fights itself until R4a makes guilds and pickup groups single-realm. Patrols of such a guild become neutral opponents. The RvR world must not boot with bots before R4a, or R5a must create single-realm crews.
 - **R4b:** realm raid battlegroups and the open BG roster's keep owner.
 - **Owner:** `/level` stays disabled in both worlds.
