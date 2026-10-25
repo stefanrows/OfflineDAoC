@@ -6,37 +6,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-179. **Open BG driver throws on level-50 bots in the Realm-1 world.** Live
-     0.345.0, 2026-10-25 19:32-19:41 server time, three `Critical error
-     encountered in NpcService: System.ArgumentException: '50' cannot be
-     greater than 41` (also 2 and 5) at
-     `AutonomousBattlegroundDriver.Assist` via
-     `BotBrain.ThinkAutonomousBattleground` (`Math.Clamp` with min 50 above
-     max). The fork's open BG (Thidranki 252) runs in the RvR world with the
-     level-50 roster; each hit aborts that bot's think tick. Open question for
-     the owner (bug 178 note): does the open BG belong in the Realm-1 world at
-     all (upstream has none)? Fix: clamp bounds, or gate the open BG off in
-     Realm-1 if the owner says so.
-
-178. **RvR port: the army does not advance after RVR_SIEGE_MARCH.** Live
-     0.345.0, fresh level-50 Realm-1 world, speed 20x (achieved ~6x),
-     2026-10-25 19:15 server time: Albion's siege on rvr-keep-79 marched with
-     72 attackers (`RVR_SIEGE_MARCH`, `RVR_MARCH_DETOUR leader=Leoferorwin
-     from=597548,631833 via=681779,645529`), but no `RVR_KEEP_ARRIVED` for the
-     target followed; from 19:23 every force logs `RVR_RALLY_DELAY ... made no
-     approach progress for eight minutes`. Members die in region 100 as
-     `branch=solo` / `group_size=3` (e.g. Harerorbert id 3850, three deaths
-     19:14-19:23), so the column is scattered instead of marching behind the
-     leader; 41 NoPathFound / 26 PartialPathFound in the same 10 min; the
-     fork's `RVR_MARCH_STATE marching=True` flags appear although the march
-     restraint should be off in Realm-1 (0.345.0). Open BG Thidranki (252) ran
-     738 `AUTONOMOUS_SIEGE_RESURRECTION` lines in 10 min with level-50 bots
-     (log spam, check whether the open BG belongs in the Realm-1 world at all).
-     Suspects: RealmRally/TryMarchWithArmy not driving the followers (S2 port),
-     or the fork controller re-tasking members (danger memory, solo RvR
-     branch) despite the army assignment. Evidence: scratchpad now.log,
-     march.log, speed20.log of session b910e783.
-
 177. **Player gets stuck in Atlantis zones.** Owner report 2026-10-25 ~00:50 on
      0.327.0, Midgard copy (region 30): while walking through several ToA
      zones the character repeatedly stuck in place, could still move a little
