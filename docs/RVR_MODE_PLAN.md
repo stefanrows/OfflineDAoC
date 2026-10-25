@@ -203,3 +203,10 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   first stopped start, importer names the world and refuses cross-world
   imports; launcher tests 318 passed / 2 env-skipped, importer 7 passed.
 - 2026-10-25 12:45: R5b re-check ACCEPT, merged as 0.340.0; deploy + RvR CREATE WORLD on the owner PC next.
+- 2026-10-25 13:20: 0.340.0 deployed on the owner PC. First open done as reviewed: Camlann save renamed to
+  opendaoc-camlann.sqlite3.db (PvP world, untouched), RvR world created (0 chars, 600 bots per realm, 51 portal
+  and relic keeps owned, 6 relics home), server started on RvR (World model Realm-1, RvR rules, 1 data pack
+  applied), ~900 bots in after 8 min, no crash. Owner asked why two saves instead of one rule switch; answered
+  (settings live per save; one save with a rule switch would rebuild guilds/companions/keeps on every switch).
+  Decision open: keep two saves (built) or rework. Tools: playable-dev/world-ui.ps1 (dropdown, buttons),
+  playable-dev/dlg.ps1 (message boxes). Next by cron: R4b, R4c, R6.
