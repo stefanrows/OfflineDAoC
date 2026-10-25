@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.344.0] - 2026-10-25
+
+### Added
+- RvR mode, port session S3 (`docs/RVR_PORT_MAP.md`): in the `Realm-1` world
+  the relic pad activates with 8 enemies (companions count), route threat
+  awareness is on, realm raids pick only bots of the raid's realm with
+  upstream timing (dragon and epic dungeon per realm, forced and refill raid
+  parties per realm), bots use their realm's town teleporters when clearly
+  faster, and bracket battleground tours are off as upstream's 0 % default.
+- Road-graph fallback for both worlds (task 139 step 2): when Detour dead-ends
+  on a long route, the bot follows a road graph generated from our own 63
+  outdoor meshes (98.3 % of legs proven, mesh hashes checked against the
+  installed meshes; embedded in GameServer.dll, a `navmesh/roads.json` beside
+  the server takes precedence). Hotspot probes at Odin's Gate and the Albion
+  portal keep in Emain Macha now reach their goal.
+
+### Changed
+- Camlann keeps 16 on the relic pad, route threat awareness off, mixed
+  expeditions and today's raid calendar.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.343.0] - 2026-10-25
 
 ### Added
