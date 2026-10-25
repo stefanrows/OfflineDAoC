@@ -250,6 +250,47 @@ defaults in code, keep/relic start state from the reset.
   fork's porters and frontier transport, realm-bound, serving only the own
   realm's frontier.
 
+### Open owner decision 2026-10-26: one bot layer instead of two parallel flows
+
+Owner 2026-10-26 10:50: "alles was offen ist - df usw haben wir aber im pvp
+modus schon sau viel gemacht. nimm bitte maximal viel davon rüber. können wir
+die pvp änderungen nicht als ergänzung oder erweiterung vom rvr content bauen?
+das wir beides jetzt so parallel haben, ist furchtbar." Undecided at close of
+day; the owner stopped for the day before choosing. Facts gathered for the
+decision (0.347.0):
+
+- Parallel today: two event layers (`CamlannRvrEventLayer` 8 files +
+  `RealmRvrEventLayer` 2 files, 4,214 lines together) behind the
+  `AutonomousRvrEventLayer` facade, two siege controllers (`.Siege.cs` vs
+  `.RealmSiege.cs`), **220 `WorldMode` branches in 80 files**.
+- Darkness Falls: the fork has the data (mesh patch
+  `darkness_falls_navigation_patch.json`, nav points, entrance rules of bug 78;
+  2,021 lines over 23 files vs base), upstream has the code
+  (`RealmRaidDungeonRoute` 805 lines, `AutonomousDarknessFallsNavigation` 500,
+  `AutonomousWorldBotDarknessFallsRoutes` 392, neutral events, charm policy;
+  the fork's own route code is 208 lines). Upstream's proofs are bound to its
+  DF mesh and upstream ships no proof generator; our proofs must be generated
+  on our patched `zone249.nav` (tool to build, or ask shadowofze). DF is a
+  both-worlds item either way (dungeon navigation is not world-specific).
+- Options named to the owner (recommendation: A):
+  A. **One base:** the upstream flow becomes the only bot layer in both worlds;
+     Camlann = upstream + PvP extensions with guild/alliance as the "side"
+     instead of the realm; the fork event layer (guild armies, bug-75 muster
+     rules, siege cap, attack plans, bot claims) retires. 4-6 sessions;
+     Camlann changes noticeably, regressions possible, live checks needed; the
+     fork extensions list becomes one list applied in both worlds with
+     per-world picks; every later fix lands once.
+  B. **Extensions first, rebuild later:** build the fork extensions as
+     extensions on the upstream flow now (both worlds), keep the Camlann layer
+     until they stand; the parallel structure stays a while.
+  C. **Untangle only:** the 220 branches become one rule object per world
+     (friend/foe, keep levels, relics); the logic stays twice. Cheap, does not
+     remove the parallelism.
+- Order of the open items, also open: DF first (both worlds, no new parallel
+  strand) vs defence combo + frontier porters first vs rebuild first.
+- Deploy of 0.347.0 to the owner PC: not done; the server runs the
+  2026-10-25 22:21 build.
+
 ### Owner decisions 2026-10-25 22:20
 
 1. **Relics in Realm-1: the original upstream rule.** The relic itself is the
@@ -392,3 +433,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-26 00:40: bugs 178/179 fixed and merged as 0.346.0 (two fork re-task rules off in Realm-1, open BG pace clamp, open BG off by default in Realm-1 per owner). Defense "mustered=0" verified as upstream rule; owner decision pending: keep original or add rally after battle start. Deploy + restart next.
 - 2026-10-26 00:45 owner decision on keep defence (approved fork addition on top of upstream): "eine Kombi aus beiden": (1) a freshly captured keep is secured for a while by part of the capturing force (not everyone stays, not forever); (2) when an own keep comes under attack, defenders go there deliberately (defence rally also after battle start, as the player-defence rule does). S4 item "Defence combo" - build in a later session, measure against upstream's capture rate (22 of 24 tonight).
 - 2026-10-26 10:30: Port S4 merged as 0.347.0 (lord shield, no item loot from guards/bots/pets, AutonomousGroupPace, BG siege announcements, dashboard muster column + realm owners, upstream raid refill/regroup fixes, SupersedeAutomatic, SupportOffense overflow, upstream relic rule in Realm-1 with R3b gated to Camlann/dormant). Server 5,167 passed / 7 bug-160. Not deployed yet. Open: DF route + neutral raids (DF proofs), opt-in BG goal (owner), defence combo + frontier porters (fork additions), small upstream leftovers in RVR_PORT_MAP "Not done in S4".
+- 2026-10-26 11:00: close of day. 0.347.0 (S4) on main and pushed, not deployed. Owner raised the one-bot-layer question (block above); facts and options recorded, decision open. Next session: get the owner's choice (A/B/C and item order), then deploy 0.347.0 or build.
