@@ -71,7 +71,7 @@ defaults in code, keep/relic start state from the reset.
   missing); active world shown in the status line; Gothwaite controls only in
   the PvP world; import guard accepts `Realm-1`. 1 session. **Wipe + first RvR
   boot on the owner's PC right after R5b.**
-- [ ] **R4a Bot guilds + login per realm.** ~600 bots per realm in
+- [~] **R4a Bot guilds + login per realm.** Agent rvr-r4a (2026-10-25 11:05). ~600 bots per realm in
   single-realm guilds, realm login balance. 1 session.
 - [ ] **R4b Realm armies.** Event layer armies per realm instead of per guild,
   muster at the realm's portal outpost, grudges/banter per realm. 2 sessions.
