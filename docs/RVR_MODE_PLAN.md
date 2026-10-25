@@ -128,6 +128,15 @@ defaults in code, keep/relic start state from the reset.
 - [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
   client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
 
+**Owner decision (2026-10-25 16:10, supersedes the rule below): the RvR
+world runs the original upstream RvR bot behaviour (remote `upstream`,
+0.38c). "RvR wie im Original, nichts Neues erfinden, nie schlechter als das
+Original. ToA als Ergänzung dazu, Fork-Code nur wo echter Mehrwert." R4a and
+R4b were built as own logic against this intent; they stay in Camlann-neutral
+code but are gated off in Realm-1 once the upstream flow is ported (R4c, now
+the port package). Fork features in RvR need the owner's explicit "Mehrwert"
+yes; default is upstream behaviour. Map: RVR_PORT_MAP.md (agent rvr-port-map).**
+
 **Owner rule (2026-10-25 00:25): every bot extension the fork built carries
 over into the RvR world, realm-based.** That means: companions (roster, squads,
 gear, stages, companion ML), world bots (PvE grind, towns, economy, pickup
@@ -235,3 +244,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   playable-dev/dlg.ps1 (message boxes). Next by cron: R4b, R4c, R6.
 - 2026-10-25 13:40: session limit. Agent rvr-r4b (daoc-developer) started in worktree /mnt/c/OfflineDAoC-wt-rvr-r4b, branch rvr-r4b; not reviewed, not committed. Next session: check the worktree, review (daoc-reviewer), merge as 0.341.0. R4c may go to Stefan (copy-paste brief given to the owner). Server running on the RvR world.
 - 2026-10-25 15:55: R4b merged as 0.341.0 after one fix round (no re-check, owner: build first, review once in R6). R4c rescoped to an upstream port. Server on the owner PC still runs 0.340.0 RvR.
+- 2026-10-25 16:15: owner: RvR must be the original code, not a rebuild ("warum wurde das ganze neu gebaut"). R4a/R4b count as misdirected work; R4c becomes the upstream port of the whole RvR bot layer for Realm-1. Analysis agent started; no code change yet. Lesson recorded.
