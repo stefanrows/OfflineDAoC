@@ -20,6 +20,10 @@ public sealed partial class AutonomousWorldBotController
         GameBot bot = brain?.BotBody;
         // Note when an RvR bot leaves its border hub (departure truce).
         AutonomousHubDeparture.Observe(bot, WorldSimulationClock.UtcNow);
+        // RvR world (upstream 0.38c, port session S2): the original scan (RealmFrontierThreat.cs); battleground
+        // participants keep the fork's crews.
+        if (WorldMode.IsRvr && !AutonomousRvrWaves.ActiveFor(bot))
+            return TryEngageFrontierThreatRealm(brain);
         // The one-second actor cadence owns force, area and candidate work.
         // It must precede keep-plan/coordination lookups even on rejected turns;
         // incoming attack events still enter the brain's normal defense path.

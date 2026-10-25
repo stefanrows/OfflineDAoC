@@ -61,6 +61,15 @@ namespace DOL.GS
                 GameServer.KeepManager.IsEnemy(keep, bot, false),
                 keep.Guild == null && keep.DBKeep.LordDefeated, PvpKeepCampaign.MayClaimInWorld(keep, bot));
 
+        /// <summary>
+        /// RvR world friend or foe of a keep and a realm (port session S2, docs/RVR_PORT_MAP.md section 4b): the keep side
+        /// of <see cref="DefaultKeepManager.IsEnemy(AbstractGameKeep, GameLiving)"/>. A keep of a realm is hostile to the other two,
+        /// a keep held by the Frontier Wardens or by nobody is hostile to every realm. The ported upstream code compared
+        /// the raw realms (<c>keep.Realm != realm</c>), which answers the same for every realm-owned keep.
+        /// </summary>
+        public static bool IsHostileTo(AbstractGameKeep keep, eRealm realm) =>
+            keep != null && DefaultKeepManager.IsRvrKeepEnemy(PvpKeepCampaign.IsGarrison(keep.Guild), keep.Realm, realm);
+
         public static bool IsClaimableKeep(AbstractGameKeep keep) => keep?.DBKeep != null &&
             IsClaimableKeep(keep.IsPortalKeep, keep.IsRelic, keep.DBKeep.BaseLevel, ServerProperties.Properties.ALLOW_BG_CLAIM,
                 BattlegroundCampaignPolicy.IsEnabled && BattlegroundCampaignCatalog.Find(keep.Region) != null);

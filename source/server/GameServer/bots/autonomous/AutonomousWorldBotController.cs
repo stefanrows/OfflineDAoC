@@ -254,6 +254,10 @@ namespace DOL.GS
                 {
                     AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.Reassigned, "Objective assignment changed");
                     ReleaseSiegeJob(bot);
+                    // RvR world (upstream 0.38c): a solo siege force leaves its event with its RvR task. It used to keep
+                    // the slot: run 10 counted 44 Hibernian "attackers" of Caer Erasleigh that were grinding PvE.
+                    if (WorldMode.IsRvr && !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR))
+                        AutonomousRvrEventLayer.RemoveForce($"rvr-{bot.DatabaseID}");
                     _observedObjectiveAssignmentId = assignmentId;
                     // A fresh task restores one step of confidence; its kill
                     // counter starts again from the new objective's count.
@@ -274,6 +278,7 @@ namespace DOL.GS
                     _nextPorterSearch = 0;
                     _soloRvrBorderStaged = false;
                     _soloRvrStagingPoint = null;
+                    _soloRvrBorderKeep = null;
                     _rvrLfgStartedTick = 0;
                     _rvrLfgGaveUp = false;
                     _campStartedTick = 0;
@@ -296,6 +301,9 @@ namespace DOL.GS
                     // once.  No stale solo destination survives matchmaking.
                     ReleaseSiegeJob(bot);
                     ResetRvrObjectiveForGroupChange(bot, _activeDynamicGroupId);
+                    // RvR world (upstream 0.38c): the party is the force now; a solo siege reservation must not outlive it.
+                    if (WorldMode.IsRvr)
+                        AutonomousRvrEventLayer.RemoveForce($"rvr-{bot.DatabaseID}");
                     _activeDynamicGroupId = _groupDirective.GroupId;
                     AutonomousGoalDiagnostics.End(bot, GoalAttemptEnd.GroupChanged, "Joined a new autonomous group");
                     _camp = null;
@@ -404,6 +412,9 @@ namespace DOL.GS
                     }
                     if (bot.TargetObject is GameLiving target)
                         SetStatus(bot, $"Fighting {target.Name}", GoalText(), $"Engaged level {target.EffectiveLevel} {target.Name}", target.Name);
+                    // RvR world (upstream 0.38c, port session S2): a siege participant fighting at the keep is present.
+                    if (WorldMode.IsRvr)
+                        ReportSiegeCombatAttendance(bot, nowTick);
                     return false;
                 }
 
@@ -487,7 +498,8 @@ namespace DOL.GS
                     string eventForce = _groupDirective?.IsDynamic == true ? _groupDirective.GroupId : $"rvr-{bot.DatabaseID}";
                     // A freshly formed warband finishes its own (bounded) assembly before
                     // it may open or join a siege, so it does not set out scattered (bug 75).
-                    bool assemblingWarband = _groupDirective?.IsDynamic == true &&
+                    // RvR world (upstream 0.38c): the event layer's muster gathers the army instead.
+                    bool assemblingWarband = !WorldMode.IsRvr && _groupDirective?.IsDynamic == true &&
                         AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase);
                     // An open-BG unit or an assigned battleground participant travels to its porter; it never
                     // reviews a world destination that could enlist it in a siege as a phantom force.
@@ -498,16 +510,16 @@ namespace DOL.GS
                         _rvrDestination = ChooseRvrDestinationTimed(bot);
                         _hunterPatrolArrivedTick = 0;
                     }
-                    if (AutonomousRvrEventLayer.IsBattleForce(eventForce, nowTick))
+                    if (IsSiegeEventForce(eventForce, nowTick))
                         return ExecuteRvr(brain, bot);
                 }
                 if (_groupDirective?.IsDynamic == true && _groupDirective.Phase == "Regrouping" &&
-                    !AutonomousRvrEventLayer.IsBattleForce(_groupDirective.GroupId, nowTick))
+                    !IsSiegeEventForce(_groupDirective.GroupId, nowTick))
                     return HandleRecoveryRegroup(brain, bot);
                 if (_groupDirective?.IsDynamic == true &&
                     AutonomousBotGroupCoordinator.IsAssemblyPhase(_groupDirective.Phase) &&
                     !(_groupDirective.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
-                      AutonomousRvrEventLayer.IsBattleForce(_groupDirective.GroupId, nowTick)))
+                      IsSiegeEventForce(_groupDirective.GroupId, nowTick)))
                 {
                     // A wipe/no-show resize invalidates the old shared
                     // camp even when the group ID itself has not changed.
@@ -1684,6 +1696,11 @@ namespace DOL.GS
                 if (TryBattlegroundTravel(bot)) return true;
                 if (HoldsOpenBattlegroundCrew(bot)) return HoldOpenBattlegroundCrew(brain, bot);
             }
+            // RvR world (upstream 0.38c, port session S2): the original RvR turn (AutonomousWorldBotController.RealmRvr.cs):
+            // no bot keep claims, no LFG wait, no observe/pause/stealth waves; muster, march column and siege floor as
+            // upstream. Battleground participants above keep the fork's crews.
+            if (WorldMode.IsRvr && !AutonomousRvrWaves.ActiveFor(bot))
+                return ExecuteRvrRealm(brain, bot);
             // RvR world (upstream 0.38c, port session S1): bots never claim keeps; a guild of players claims at the steward.
             KeepClaimPoint claimPoint = WorldMode.IsRvr ? null : bot.GetNPCsInRadius(TargetSearchRadius).OfType<KeepClaimPoint>()
                 .FirstOrDefault(point => AutonomousRvrKeepPolicy.IsClaimableKeep(point.Keep) &&
@@ -2232,7 +2249,9 @@ namespace DOL.GS
 
         private bool TryEngageOpenWorldPvpOpportunity(BotBrain brain, GameBot bot)
         {
-            if (brain == null || bot == null ||
+            // RvR world (port session S2): the fork's opportunity hunts are a livelier-RvR wave; the original bots engage
+            // through the frontier threat scan only (AutonomousRvrWaves).
+            if (brain == null || bot == null || !AutonomousRvrWaves.ActiveFor(bot) ||
                 !AutonomousPvpOpportunityPolicy.CanSeekOpportunity(AutonomousObjectiveAssignments.KindFor(bot),
                     bot.Group?.MemberCount ?? 1) ||
                 AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow) ||

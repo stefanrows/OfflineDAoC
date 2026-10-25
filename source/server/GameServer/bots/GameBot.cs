@@ -1117,7 +1117,9 @@ namespace DOL.GS
                 if (_lastDeathWasPvp)
                 {
                     AutonomousGuildEncounterMemory.RecordDeath(this, killer, WorldSimulationClock.UtcNow);
-                    AutonomousRvrDangerMemory.RecordDeath(this, WorldSimulationClock.UtcNow);
+                    // RvR world: no danger memory (a livelier-RvR wave; AutonomousRvrWaves).
+                    if (AutonomousRvrWaves.ActiveFor(this))
+                        AutonomousRvrDangerMemory.RecordDeath(this, WorldSimulationClock.UtcNow);
                 }
                 // Only PvP-minded actors hit the "losing" wall. A leveler who is
                 // ganked stays a leveler; its PvE task is not a PvP retreat.
@@ -1180,10 +1182,25 @@ namespace DOL.GS
                 AutonomousBotGroupCoordinator.PveCorpseRecovery(this);
             if (groupDisposition == AutonomousBotGroupCoordinator.PveCorpseDisposition.HoldForResurrection)
                 return 3000;
-            bool resurrectionPossible = HasViableResurrector();
-            // An RvR group finishes its fight before rezzing; its dead wait longer.
-            long releaseDelay = !resurrectionPossible ? 20_000 :
-                AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR) ? 180_000 : 90_000;
+            long releaseDelay;
+            if (WorldMode.IsRvr)
+            {
+                // RvR world (upstream 0.38c, port session S2): a siege attacker also waits for any healer of its army
+                // nearby (AutonomousSiegeResurrection), not only its party's. Its release is a long walk back from its
+                // realm's muster (run 18, 2026-10-17: Dun Dagda, 176,000 units), so with a resurrector near it waits
+                // longer for a raise, as players did.
+                bool siegeAttacker = IsAutonomousWorldBot && AutonomousSiegeResurrection.IsSiegeAttacker(this);
+                bool raisePossible = HasViableResurrector() ||
+                    siegeAttacker && AutonomousSiegeResurrection.HasArmyResurrectorNear(this);
+                releaseDelay = raisePossible ? siegeAttacker ? SiegeCorpseWaitMilliseconds : 90_000 : 20_000;
+            }
+            else
+            {
+                bool resurrectionPossible = HasViableResurrector();
+                // An RvR group finishes its fight before rezzing; its dead wait longer.
+                releaseDelay = !resurrectionPossible ? 20_000 :
+                    AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR) ? 180_000 : 90_000;
+            }
             if (groupDisposition is not (AutonomousBotGroupCoordinator.PveCorpseDisposition.ReleaseAndDisband or
                 AutonomousBotGroupCoordinator.PveCorpseDisposition.ReleaseAndRejoin) &&
                 deadFor < releaseDelay)
@@ -1216,6 +1233,9 @@ namespace DOL.GS
             _deathRecoveryTimer = null;
             return 0;
         }
+
+        /// <summary>RvR world (upstream 0.38c): how long a siege attacker with a resurrector near waits for a raise.</summary>
+        public const long SiegeCorpseWaitMilliseconds = 240_000;
 
         private bool HasViableResurrector()
         {
@@ -1300,7 +1320,17 @@ namespace DOL.GS
             eRealm groupHubRealm = Realm;
             bool groupHub = safeWorldRelease && rvrWorldActor &&
                 AutonomousBotGroupCoordinator.TryGetRvrReleaseRealm(this, out groupHubRealm) && groupHubRealm != Realm;
-            if (groupHub && AutonomousRvrStaging.TrySafeRvrRelease(groupHubRealm, true,
+            // RvR world (upstream 0.38c, port session S2): an attacker of a running siege releases at its army's muster
+            // (the realm's portal outpost in the target's frontier, else its border keep), not at the home hub.
+            if (WorldMode.IsRvr && safeWorldRelease && rvrWorldActor &&
+                AutonomousRvrEventLayer.TrySiegeRelease(AutonomousBotGroupCoordinator.RvrForceId(this), Realm,
+                    GameLoop.GameLoopTime, out ushort musterRegion, out Point3D muster) &&
+                PvpCombatant.IsSafeReleasePoint(musterRegion, muster))
+            {
+                (releaseRegion, release) = (musterRegion, muster);
+                releaseReason = "siege-muster";
+            }
+            else if (groupHub && AutonomousRvrStaging.TrySafeRvrRelease(groupHubRealm, true,
                     out ushort groupHubRegion, out Point3D groupHubRelease))
             {
                 (releaseRegion, release) = (groupHubRegion, groupHubRelease);

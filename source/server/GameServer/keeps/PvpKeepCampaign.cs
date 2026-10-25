@@ -23,6 +23,18 @@ namespace DOL.GS.Keeps
         /// multiplier). Only a claiming guild raises it (starting_keep_claim_level).</summary>
         public const byte WardenKeepLevel = 1;
 
+        /// <summary>RvR world (upstream 0.38c defaults, port session S2): a captured keep stands at
+        /// starting_keep_level 4 (<see cref="AbstractGameKeep.Reset"/>), a claimed one at starting_keep_claim_level 5.
+        /// The fork's save carries 1 for both (FrontierKeepBalanceUpdate, Camlann's 1.65 unclaimed keeps).</summary>
+        public const byte RvrCaptureLevel = 4, RvrClaimLevel = 5;
+
+        /// <summary>The level a keep stands at after a realm capture: Camlann the Warden level, RvR world upstream's 4.</summary>
+        public static byte CaptureLevel(WorldModelKind world) => world == WorldModelKind.Realm ? RvrCaptureLevel : WardenKeepLevel;
+
+        /// <summary>The level a guild claim sets: RvR world upstream's 5, Camlann starting_keep_claim_level.</summary>
+        public static byte ClaimLevel(WorldModelKind world, int claimLevelProperty) =>
+            world == WorldModelKind.Realm ? RvrClaimLevel : (byte)claimLevelProperty;
+
         /// <summary>The level a Warden-held keep is set to at server start, or null
         /// to leave it: only ordinary claimable keeps (base level 50, no relic
         /// keep) held by the garrison, never a guild-claimed or relic keep.</summary>
@@ -295,7 +307,8 @@ namespace DOL.GS.Keeps
         /// The keep flips to <paramref name="captor"/> at once, as the upstream Normal rules do
         /// (<see cref="AbstractGameKeep.Reset"/>): the previous claim (a guild or the Wardens) is released, walls
         /// are repaired, doors and banners take the realm, and the guards die and respawn as the realm's guards
-        /// (the lord a second later). The keep stands at level 1 without a claim and the Keep Claim Steward waits
+        /// (the lord a second later). The keep stands at <see cref="CaptureLevel"/> without a claim (Camlann 1,
+        /// RvR world 4 as upstream's starting_keep_level) and the Keep Claim Steward waits
         /// for an optional claim by a guild of that realm (<see cref="AbstractGameKeep.DBKeep"/>.LordDefeated
         /// marks "awaiting a claim" here; the lord still stands so another realm can retake it). The capture is
         /// saved and never returns to the Wardens. Returns false, changing nothing, for a realm-less captor, the
@@ -322,9 +335,10 @@ namespace DOL.GS.Keeps
             PayCaptureReward(keep, captor, captorLiving);
             keep.Reset(captor);
             mark = LogSlowKeepStep(keep, "realm_capture", "reset", mark);
-            if (!keep.IsRelic && keep.Level != WardenKeepLevel)
+            byte captureLevel = CaptureLevel(WorldMode.Current);
+            if (!keep.IsRelic && keep.Level != captureLevel)
             {
-                keep.ChangeLevel(WardenKeepLevel);
+                keep.ChangeLevel(captureLevel);
                 mark = LogSlowKeepStep(keep, "realm_capture", "change_level", mark);
             }
             batch.Dispose();

@@ -384,11 +384,13 @@ public sealed partial class AutonomousWorldBotController
                     : TryGuildArmyCamp(bot, destination, _keepPlanning, _keepPlanningOrigin, army, out endpoint);
                 if (resolved && RvrKeepRoute.TryBuild(bot.CurrentRegion, _keepPlanning, bot.Realm, _keepPlanningOrigin, endpoint, out var steps))
                 {
-                    try { steps = VaryKeepDeparture(bot, destination, steps, _keepPlanning, _keepPlanningOrigin); }
-                    catch (RvrPlanningNavigation.Limit)
-                    {
-                        Log.Info($"RVR_KEEP_DEPARTURE bot={bot.Name} target={destination.Id} fallback=optional_budget");
-                    }
+                    // RvR world (upstream 0.38c, port session S2): the proved road as built, no route variant.
+                    if (AutonomousRvrWaves.ActiveFor(bot))
+                        try { steps = VaryKeepDeparture(bot, destination, steps, _keepPlanning, _keepPlanningOrigin); }
+                        catch (RvrPlanningNavigation.Limit)
+                        {
+                            Log.Info($"RVR_KEEP_DEPARTURE bot={bot.Name} target={destination.Id} fallback=optional_budget");
+                        }
                     _keepTravelPoints = steps; _keepTravelIndex = 0;
                     _keepArrivedLogged = null;
                     _rvrApproachDestination = endpoint;
@@ -423,7 +425,8 @@ public sealed partial class AutonomousWorldBotController
                 Log.Warn($"RVR_KEEP_ROUTE_FAILED bot=\"{bot.Name}\" id={bot.DatabaseID} realm={bot.Realm} " +
                     $"target=\"{destination.Id}\" region={bot.CurrentRegionID} from={current} queries={queries} " +
                     $"reason=\"{failure}\" retryMs={_keepTravelRetry-now} failures={_keepTravelFailures}");
-                if (ShouldAbandonKeepRoute(_keepTravelFailures) && !AutonomousGuildKeepDefense.IsRecalled(bot) &&
+                // RvR world (upstream 0.38c): the siege is retained and the route retried, never abandoned.
+                if (!WorldMode.IsRvr && ShouldAbandonKeepRoute(_keepTravelFailures) && !AutonomousGuildKeepDefense.IsRecalled(bot) &&
                     (bot.Group == null || bot.Group.LivingLeader == bot))
                     AbandonKeepTarget(bot, destination, failure, now, routeFailure: army == null);
                 return true;
@@ -481,6 +484,12 @@ public sealed partial class AutonomousWorldBotController
             return false;
         }
         Vector3 next = _keepTravelPoints[_keepTravelIndex];
+        // RvR world (upstream 0.38c, port session S2): a stalled traveller replans in a shorter leg, three stalls at one
+        // spot release the siege job and back off; very long same-zone legs are walked in navmesh-proven chunks.
+        bool realmTravel = WorldMode.IsRvr && !AutonomousRvrWaves.ActiveFor(bot);
+        if (realmTravel && HandleKeepTravelStall(bot, destination, current, next, now))
+            return true;
+        Vector3 leg = realmTravel ? KeepTravelLeg(bot, current, next) : next;
         var zone = bot.CurrentRegion.GetZone((int)next.X, (int)next.Y);
         if (zone != bot.CurrentZone && _keepTravelIndex > 0 &&
             Vector3.DistanceSquared(current, next) <= 256 * 256)
@@ -491,18 +500,99 @@ public sealed partial class AutonomousWorldBotController
         }
         // Bend around a named/far-above monster, then resume the road; a
         // failed bend falls through to the road order and its failure path.
-        else if (AutonomousRvrMobAvoidance.TryWalkBend(next, AvoidDangerousMobs(bot, next), bend => IssuePath(bot, bend), DropMobBypass))
+        // Camlann only: the RvR world walks the original road (AutonomousRvrWaves).
+        else if (!realmTravel && AutonomousRvrMobAvoidance.TryWalkBend(next, AvoidDangerousMobs(bot, next), bend => IssuePath(bot, bend), DropMobBypass))
         { }
         // The next road point starts at once (the index advanced at 80 units); only the last one is a precise stop.
-        else if (!IssuePath(bot, next, preciseArrival: _keepTravelIndex == _keepTravelPoints.Length - 1,
+        else if (!IssuePath(bot, leg, preciseArrival: leg == next && _keepTravelIndex == _keepTravelPoints.Length - 1,
                      retargetWhileMoving: true))
         {
+            _keepHop = null;
             _keepTravelPoints = null; _keepPlanning = null;
             _keepTravelRetry = now + 30_000;
             return true;
         }
         SetRvrStatus(bot, "Traveling to keep", destination.MonsterName,
-            $"Following validated road segment {_keepTravelIndex+1}/{_keepTravelPoints.Length}");
+            $"Following validated road segment {_keepTravelIndex+1}/{_keepTravelPoints.Length}" +
+            (leg == next ? string.Empty : " in a shorter leg"));
         return true;
+    }
+
+    // RvR world (upstream 0.38c, AutonomousWorldBotController.KeepTravel.cs, port session S2): keep-travel stall handling,
+    // copied verbatim (AutonomousKeepTravelStallPolicy).
+    private Vector3? _keepHop;
+    private Vector3 _keepHopFor, _keepStallPosition, _keepStallAnchor;
+    private long _keepStallSince;
+    private int _keepTravelStalls;
+
+    /// <summary>Very long same-zone legs are walked in navmesh-proven chunks.</summary>
+    private Vector3 KeepTravelLeg(GameBot bot, Vector3 current, Vector3 next)
+    {
+        if (_keepHop.HasValue && (_keepHopFor != next || Vector3.DistanceSquared(current, _keepHop.Value) <= 300 * 300))
+            _keepHop = null;
+        if (_keepHop.HasValue)
+            return _keepHop.Value;
+        Zone zone = bot.CurrentZone;
+        if (!KeepTravelStallPolicy.NeedsShorterLeg(current, next) || zone == null ||
+            bot.CurrentRegion.GetZone((int)next.X, (int)next.Y) != zone ||
+            !KeepTravelStallPolicy.TryShorterLeg(PathfindingProvider.Instance, zone, current, next, out Vector3 hop))
+            return next;
+        _keepHop = hop;
+        _keepHopFor = next;
+        return hop;
+    }
+
+    /// <summary>
+    /// A keep traveller with no progress for a minute replans from where it stands
+    /// in a shorter leg; three stalls at one spot release the siege job and back off
+    /// instead of idling until the 15-minute watchdog sends the bot home.
+    /// </summary>
+    private bool HandleKeepTravelStall(GameBot bot, CampDestination destination, Vector3 current, Vector3 next, long now)
+    {
+        if (_keepStallSince == 0 || Vector3.DistanceSquared(current, _keepStallPosition) >
+                KeepTravelStallPolicy.StallRadius * KeepTravelStallPolicy.StallRadius)
+        {
+            _keepStallPosition = current;
+            _keepStallSince = now;
+            return false;
+        }
+        if (!KeepTravelStallPolicy.IsStalled(now - _keepStallSince, bot.InCombat || bot.IsAttacking || bot.IsCasting,
+                bot.IsOnStableMasterRoute))
+            return false;
+
+        _keepTravelStalls = _keepTravelStalls > 0 && KeepTravelStallPolicy.SameSpot(_keepStallAnchor, current)
+            ? _keepTravelStalls + 1 : 1;
+        if (_keepTravelStalls == 1)
+            _keepStallAnchor = current;
+        _keepStallSince = now;
+        _keepHop = null;
+        Log.Warn($"RVR_KEEP_TRAVEL_STALL bot=\"{bot.Name}\" id={bot.DatabaseID} realm={GlobalConstants.RealmToName(bot.Realm)} target=\"{destination.Id}\" " +
+                 $"region={bot.CurrentRegionID} from={(int)current.X},{(int)current.Y},{(int)current.Z} " +
+                 $"next={(int)next.X},{(int)next.Y},{(int)next.Z} segment={_keepTravelIndex + 1}/{_keepTravelPoints?.Length ?? 0} " +
+                 $"moving={bot.IsMoving} stalls={_keepTravelStalls}");
+        bot.StopMovingOnPath();
+        bot.StopMoving();
+        bot.ForcePathReplot();
+        ResetRouteOrderState();
+        if (_keepTravelStalls >= KeepTravelStallPolicy.StallsBeforeBackoff)
+        {
+            _keepTravelStalls = 0;
+            _keepTravelPoints = null;
+            _keepPlanning = null;
+            _keepTravelRetry = now + KeepTravelStallPolicy.BackoffMilliseconds;
+            if (_siegeJobKeep != null)
+                ReleaseSiegeJob(bot);
+            SetRvrStatus(bot, "Keep route stalled", destination.MonsterName,
+                "No progress at the same spot three times; replanning after a short back-off");
+            return true;
+        }
+        Zone zone = bot.CurrentZone;
+        if (zone != null && bot.CurrentRegion.GetZone((int)next.X, (int)next.Y) == zone &&
+            KeepTravelStallPolicy.TryShorterLeg(PathfindingProvider.Instance, zone, current, next, out Vector3 hop))
+        {
+            _keepHop = hop;
+            _keepHopFor = next;
+        }
+        return false;
     }
 }

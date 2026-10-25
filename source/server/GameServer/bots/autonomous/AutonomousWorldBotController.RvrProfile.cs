@@ -11,12 +11,11 @@ public sealed partial class AutonomousWorldBotController
     private CampDestination ChooseRvrDestinationTimed(GameBot bot)
     {
         using var profile = BotThinkProfiler.Measure(BotThinkPhase.RvrChooseDestination);
-        CampDestination destination = ChooseRvrDestination(bot);
-        // RvR world (R4b): count revenge trips against all picks per realm (RVR_GRUDGE_SHARE lines).
-        if (WorldMode.IsRvr && destination != null)
-            AutonomousRealmGrudgeHunts.NotePick(bot.Realm,
-                destination.Id.StartsWith("guild-kos-", System.StringComparison.Ordinal), GameLoop.GameLoopTime);
-        return destination;
+        // RvR world (upstream 0.38c, port session S2): the original planner (frontier commit, rvr-roam anchors, no
+        // revenge trips or roam tastes); Camlann keeps the fork's planner.
+        if (WorldMode.IsRvr)
+            return ChooseRvrDestinationRealm(bot);
+        return ChooseRvrDestination(bot);
     }
 
     private GameLiving FindRvrTargetTimed(GameBot bot)

@@ -140,6 +140,25 @@ defaults in code, keep/relic start state from the reset.
   players add "+ Lv.50" ones). Server 4,994 passed / 7 bug-160, launcher 328
   passed. Open for S2: the march column behind a march leader, siege floor,
   siege resurrection, siege parties, livelier-RvR wave guards, friend/foe sites.
+  S2 (march and siege floor; branch rvr-port-s2, implemented in source,
+  real-client check pending; details in [RVR_PORT_MAP.md](RVR_PORT_MAP.md)
+  section 7): the RvR world's RvR turn, siege rally, frontier threat scan and
+  planner are upstream's verbatim behind one world branch each: the army
+  marches as one column behind its march leader (regroup holds, push after 4
+  minutes stalled, detour around enemy keeps, the leader waits up to 12
+  minutes at the camp edge); siege crews set up synthetic engines on the spot
+  (two rams at the outer gate then the keep door, trebuchet, catapult; heavy
+  ram crewed by the bots at it, no 10x test multiplier; artillery arcs);
+  healers raise the army's fallen from behind the line, the dead wait 240 s
+  and release at the muster; solo recruits merge into parties; keep travel
+  re-plans when stalled; the frontier commit and roam anchors of the
+  original planner; capture level 4, claim level 5; no RvR task below level
+  20; the livelier-RvR waves (doctrine, observe, pause, stealth loop, speed,
+  opportunity hunts, LFG, hub muster, danger memory, route variants, mob
+  bends) are off for Realm-1 world bots, battleground crews keep the fork's.
+  Friend and foe of the ported code go through PvpCombatant and the keep rule.
+  Server 5,059 passed / 7 bug-160 (65 new). Open for S3: realm raids,
+  ForcedRaid, RP rewards, battlegrounds, relic pad, teleporters.
 - [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
   client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
 

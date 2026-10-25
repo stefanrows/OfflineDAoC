@@ -57,7 +57,9 @@ public static class AutonomousRvrDoctrineRuntime
     // An open-BG crew member travelling to its porter is out of the world RvR layer: no observe, retreat or stealth hunt.
     public static bool Applies(GameBot bot) => bot?.IsAutonomousWorldBot == true && !bot.IsPlayerLedGroup &&
         !bot.IsTemporaryGroupHelper && AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR) &&
-        !AutonomousBattlegroundParticipation.IsTravellingOpenCrew(bot);
+        !AutonomousBattlegroundParticipation.IsTravellingOpenCrew(bot) &&
+        // RvR world: the original upstream bots have no doctrine (port session S2, AutonomousRvrWaves).
+        AutonomousRvrWaves.ActiveFor(bot);
 
     public static RvrDoctrine For(GameBot bot)
     {

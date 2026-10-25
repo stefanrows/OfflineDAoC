@@ -752,7 +752,8 @@ namespace DOL.GS.Keeps
             StopChangeLevelTimer();
             DBKeep.ProgressionInitialized = true;
             DBKeep.NextLevelAt = DateTime.MinValue;
-			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_CLAIM_LEVEL);
+			// RvR world (upstream 0.38c, port session S2): a claim sets level 5; Camlann the property (1).
+			ChangeLevel(PvpKeepCampaign.ClaimLevel(WorldMode.Current, ServerProperties.Properties.STARTING_KEEP_CLAIM_LEVEL));
             mark = PvpKeepCampaign.LogSlowKeepStep(this, "claim", "change_level", mark);
 
 			PlayerMgr.BroadcastClaim(this);
