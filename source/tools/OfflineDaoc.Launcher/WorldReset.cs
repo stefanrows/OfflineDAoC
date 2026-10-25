@@ -74,14 +74,36 @@ public static class WorldReset
         IReadOnlyDictionary<int, int> BotsCreated,
         DateTime CreatedUtc);
 
-    /// <summary>The seed a reset of this world would use, or null when the installation has no save at all.</summary>
+    /// <summary>
+    /// The seed a reset of this world would use: the world's own save, else the other world's save, each only when it
+    /// holds world data (<see cref="IsSeedable"/>). Null when the installation has no such save.
+    /// </summary>
     public static string? DefaultSeed(string runtimeRoot, WorldSaveKind world)
     {
         string own = WorldFiles.For(runtimeRoot, world).Database;
-        if (File.Exists(own))
+        if (IsSeedable(own))
             return own;
         string other = WorldFiles.For(runtimeRoot, WorldSaveLayout.Other(world)).Database;
-        return File.Exists(other) ? other : null;
+        return IsSeedable(other) ? other : null;
+    }
+
+    /// <summary>
+    /// True for a save with world data: it exists and has the ServerProperty table. An empty file, such as one a
+    /// server started by hand against a missing save leaves behind, is never a seed.
+    /// </summary>
+    public static bool IsSeedable(string database)
+    {
+        if (!File.Exists(database))
+            return false;
+        try
+        {
+            using SQLiteConnection connection = CamlannWorldReset.Open(database, true);
+            return CamlannWorldReset.TableExists(connection, "ServerProperty");
+        }
+        catch (Exception exception) when (exception is SQLiteException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     public static Result CreateFresh(Request request)

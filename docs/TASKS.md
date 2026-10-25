@@ -29,6 +29,10 @@ When a task is done and its required verification is complete, move it out of it
      the keep's realm, guards and portal keeps hostile to other realms,
      Darkness Falls for the realm with most keeps; [RVR_KEEPS.md](RVR_KEEPS.md))
      implemented in source, real-client check pending.
+     R5b (launcher World dropdown RvR / PvP, CREATE WORLD and RESET WORLD per
+     world, WORLD label in the status line, Gothwaite only in PvP, today's
+     Camlann save moved to its own file, importer names the world and refuses
+     cross-world imports): implemented in source, real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed

@@ -15,9 +15,20 @@ internal static class Program
         Application.ThreadException += (_, e) => ReportUnhandled(e.Exception, interactive: true);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             ReportUnhandled(e.ExceptionObject as Exception ?? new Exception(e.ExceptionObject?.ToString()), interactive: false);
-        Application.Run(args.Length == 1 && args[0] == "--join"
-            ? new JoinFriendForm()
-            : new MainForm());
+        if (args.Length == 1 && args[0] == "--join")
+        {
+            Application.Run(new JoinFriendForm());
+            return;
+        }
+        // Switching worlds closes the launcher window and opens a new one on the other world (WorldPickerPanel.cs).
+        LauncherReopen? reopen = null;
+        do
+        {
+            using var form = new MainForm(reopen);
+            Application.Run(form);
+            reopen = form.Reopen;
+        }
+        while (reopen is not null);
     }
 
     // Bug 70: an unhandled launcher exception used to show only its message.

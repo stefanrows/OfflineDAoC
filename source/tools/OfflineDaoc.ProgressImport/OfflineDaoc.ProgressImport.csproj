@@ -6,4 +6,5 @@
   </PropertyGroup>
   <ItemGroup><PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" /></ItemGroup>
   <ItemGroup><None Include="progress-policy.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Compile Include="../../server/GameServer/world/WorldSaveLayout.cs" Link="Configuration/WorldSaveLayout.cs" /></ItemGroup>
 </Project>

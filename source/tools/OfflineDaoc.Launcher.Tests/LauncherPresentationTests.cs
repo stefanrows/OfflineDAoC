@@ -168,9 +168,12 @@ public sealed class LauncherPresentationTests
         using var form = (Form)Activator.CreateInstance(mainFormType)!;
         IReadOnlyList<Control> controls = Descendants(form).ToList();
 
-        Assert.That(form.Text, Is.EqualTo("Offline DAoC — PvP & Co-op"));
+        // The test runtime has no save, so the window opens on the default world, RvR (R5b world picker).
+        Assert.That(form.Text, Is.EqualTo("Offline DAoC — RvR world"));
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("OFFLINE DAoC — PVP & CO-OP", StringComparison.Ordinal)), Is.True);
-        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("PVP BOT POPULATION", StringComparison.Ordinal)), Is.True);
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("RVR BOT POPULATION", StringComparison.Ordinal)), Is.True);
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("REALM VS REALM", StringComparison.Ordinal)), Is.True);
+        Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains("FULL-PVP WORLD", StringComparison.Ordinal)), Is.False);
         string versionText = "VERSION " + mainFormType.GetField("DisplayVersion", HiddenStatic)!.GetRawConstantValue();
         Assert.That(controls.OfType<Label>().Any(label => label.Text.Contains(versionText, StringComparison.Ordinal)), Is.True);
         Label version = controls.OfType<Label>().Single(label => label.Text == versionText);

@@ -159,3 +159,11 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   most keeps; bots claim and siege by realm; Camlann unchanged.
 - 2026-10-25 11:25: R3a reviewed (2 mediums + lows fixed) and merged as 0.337.0.
   R3b, R4a, R5b running.
+- 2026-10-25 (R5b agent): R5b in source on branch rvr-r5b (worktree
+  OfflineDAoC-wt-rvr-r5b), real-client check pending: World dropdown RvR / PvP
+  beside START SERVER, one window per world, choice remembered per Windows
+  user, config written for a ready save on switch, open and every start,
+  CREATE WORLD / RESET WORLD per world, WORLD label in the status line,
+  Gothwaite only in PvP, today's Camlann save renamed to its own files on the
+  first stopped start, importer names the world and refuses cross-world
+  imports; launcher tests 318 passed / 2 env-skipped, importer 7 passed.

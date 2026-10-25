@@ -18,7 +18,8 @@ internal sealed partial class MainForm : Form
     private readonly string _root = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
     private readonly string _database;
     private readonly string _serverDirectory;
-    // The save's per-world side files (docs/RVR_WORLDS.md); R5b points _database at the chosen world.
+    // The save's per-world side files (docs/RVR_WORLDS.md). A window works on one world (WorldPickerPanel.cs):
+    // _database and _worldFiles are fixed per window, and switching worlds opens a new window.
     private readonly WorldFiles _worldFiles;
     private readonly string _worldSpeedRequestPath;
     private readonly string _worldSpeedStatusPath;
@@ -26,7 +27,7 @@ internal sealed partial class MainForm : Form
     private readonly string _clientDirectory;
     private readonly string _clientConnector;
     private readonly string _logsDirectory;
-    // Test-only seam: when set, PersistXpRate uses this instead of probing the
+    // Test-only seam: when set, PersistXpRate (and the GM and nameplate writers) use this instead of probing the
     // real server port/process, so its unit test does not depend on whether an
     // actual game server happens to be running on the machine. Production code
     // never assigns this field, so live behavior is unchanged.
@@ -229,14 +230,20 @@ internal sealed partial class MainForm : Form
     private ExchangeSalesForm? _salesLedger;
     private HeraldForm? _herald;
 
-    public MainForm()
+    public MainForm() : this(null) { }
+
+    internal MainForm(LauncherReopen? reopen)
     {
-        _database = Path.Combine(_root, "data", "opendaoc.sqlite3.db");
         _serverDirectory = Path.Combine(_root, "server");
+        _serverExecutable = Path.Combine(_serverDirectory, "CoreServer.exe");
+        _serverConfigPath = Path.Combine(_serverDirectory, "config", "serverconfig.xml");
+        // The picked world (R5b): the running server's save, else this user's choice, else the default world.
+        WorldSelection selection = ResolveLauncherWorld(reopen?.World);
+        _world = selection.World;
+        _database = selection.Database;
         _worldFiles = WorldFiles.ForDatabase(_serverDirectory, _database);
         _worldSpeedRequestPath = Path.Combine(_serverDirectory, WorldSpeedProtocol.RequestFileName);
         _worldSpeedStatusPath = Path.Combine(_serverDirectory, WorldSpeedProtocol.StatusFileName);
-        _serverExecutable = Path.Combine(_serverDirectory, "CoreServer.exe");
         string officialClientDirectory = Path.Combine(_root, "client-opendaoc", "app");
         _clientDirectory = File.Exists(Path.Combine(officialClientDirectory, "game.dll"))
             ? officialClientDirectory
@@ -244,7 +251,7 @@ internal sealed partial class MainForm : Form
         _clientConnector = Path.Combine(_clientDirectory, "connect.exe");
         _logsDirectory = Path.Combine(_root, "logs");
 
-        Text = "Offline DAoC — PvP & Co-op";
+        Text = WorldPicker.WindowTitle(_world);
         MinimumSize = new Size(960, 620);
         Size = new Size(1100, 700);
         StartPosition = FormStartPosition.CenterScreen;
@@ -277,7 +284,11 @@ internal sealed partial class MainForm : Form
         _startButton = ActionButton("START SERVER", Color.FromArgb(110, 128, 70));
         _stopButton = ActionButton("STOP SERVER", Color.FromArgb(151, 67, 57));
         _playButton = ActionButton("ENTER REALM", Color.FromArgb(65, 94, 145));
-        _startButton.Click += (_, _) => StartServer();
+        _startButton.Click += async (_, _) =>
+        {
+            if (StartCreatesWorld) await CreateOrResetWorldAsync();
+            else StartServer();
+        };
         _stopButton.Click += async (_, _) => await StopServerAsync();
         _playButton.Click += (_, _) => LaunchClient();
         _heraldButton = ActionButton("HERALD", DaocTheme.Gold);
@@ -289,6 +300,7 @@ internal sealed partial class MainForm : Form
             presets.ShowDialog(this);
         };
 
+        ConfigureWorldPicker();
         rootLayout.Controls.Add(BuildHeader(), 0, 0);
         rootLayout.Controls.Add(BuildCards(), 0, 1);
         rootLayout.Controls.Add(BuildTabs(), 0, 2);
@@ -335,20 +347,13 @@ internal sealed partial class MainForm : Form
         _serverReadinessPoll.Tick += async (_, _) => await RefreshWhenServerReadyAsync();
         Shown += async (_, _) =>
         {
-            if (!File.Exists(_database))
-            {
-                _worldReady = false;
-                _startButton.Enabled = false;
-                _playButton.Enabled = false;
-                _footer.Text = "The world database is missing; install the server data before starting.";
+            _worldReady = await PrepareSelectedWorldAsync();
+            if (Reopen is not null)
                 return;
-            }
-            _worldReady = await EnsureCamlannWorldAsync();
             if (!_worldReady)
             {
-                _startButton.Enabled = false;
-                _playButton.Enabled = false;
-                _footer.Text = "The one-time world reset must complete before the server can start.";
+                // No startable save for the picked world: START SERVER reads CREATE WORLD… (or stays off).
+                ShowWorldCreationState();
                 return;
             }
             await RefreshDashboardAsync();
@@ -358,8 +363,18 @@ internal sealed partial class MainForm : Form
             UpdateAutoRefreshCountdown();
             _autoRefresh.Start();
         };
-        FormClosing += (_, _) =>
+        if (reopen is not null)
+            ApplyReopenPlacement(reopen);
+        FormClosing += (_, e) =>
         {
+            // A world build or move must finish: ending the process mid-swap could leave files half moved.
+            if (_creatingWorld)
+            {
+                e.Cancel = true;
+                MessageBox.Show(this, "The world is still being prepared. Close the launcher when it has finished.", "World",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             FlushPendingToaNumbersOnClose();
             _serverReadinessPoll.Stop();
             _serverLog?.Dispose();
@@ -534,7 +549,9 @@ internal sealed partial class MainForm : Form
         {
             AutoSize = true,
             UseMnemonic = false,
-            Text = "OLD FRONTIERS 1.65  •  FULL-PVP WORLD  •  BOTS & CO-OP",
+            Text = _world == WorldSaveKind.Realm
+                ? "OLD FRONTIERS 1.65  •  REALM VS REALM  •  BOTS & CO-OP"
+                : "OLD FRONTIERS 1.65  •  FULL-PVP WORLD  •  BOTS & CO-OP",
             Font = new Font("Georgia", 9f),
             ForeColor = Color.FromArgb(196, 145, 70),
             Margin = new Padding(2, 0, 0, 0),
@@ -556,6 +573,8 @@ internal sealed partial class MainForm : Form
             button.Height = 26;
             button.Margin = new Padding(2, 2, 2, 2);
         }
+        // "World: RvR / PvP" sits right before START SERVER, which starts the world shown (R5b).
+        actions.Controls.Add(_worldPicker);
         actions.Controls.Add(_startButton);
         actions.Controls.Add(_stopButton);
         actions.Controls.Add(_playButton);
@@ -672,6 +691,7 @@ internal sealed partial class MainForm : Form
     private Control BuildTabs()
     {
         var tabs = new DaocTabControl { Dock = DockStyle.Fill };
+        _mainTabs = tabs;
         var population = new TabPage("Active Population") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         var populationLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
         populationLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -682,7 +702,9 @@ internal sealed partial class MainForm : Form
         populationLayout.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "PVP BOT POPULATION  •  autonomous crews and solo roamers  •  realms are identity, not teams",
+            Text = _world == WorldSaveKind.Realm
+                ? "RVR BOT POPULATION  •  autonomous crews and solo roamers  •  same realm is a friend, other realms are enemies"
+                : "PVP BOT POPULATION  •  autonomous crews and solo roamers  •  realms are identity, not teams",
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = DaocTheme.GoldLight,
             BackColor = DaocTheme.StoneDark,
@@ -734,8 +756,8 @@ internal sealed partial class MainForm : Form
             () => SaveDatabaseBackup.Create(_database, Path.Combine(Path.GetDirectoryName(_database)!, "gothwaite-pvp-backups"), "gothwaite-pvp"),
             _worldFiles.GothwaiteSwitch)
         {
-            // Owner decision 18: no Gothwaite PvP in the RvR world. Until R5b's picker, the current save's marker decides.
-            IsRvrWorld = () => string.Equals(CamlannWorldReset.ReadWorldModel(_database), WorldSaveLayout.RealmMarker, StringComparison.Ordinal),
+            // Owner decision 18: no Gothwaite PvP in the RvR world. The picked world decides (R5b).
+            IsRvrWorld = () => _world == WorldSaveKind.Realm,
         };
         botGoals.Controls.Add(_botGoalsSettings);
         tabs.TabPages.Add(botGoals);
@@ -1652,25 +1674,30 @@ internal sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = DaocTheme.StoneDark,
-            ColumnCount = 4,
+            ColumnCount = 6,
             RowCount = 1,
             Margin = new Padding(0),
             Padding = new Padding(0),
         };
+        // The status line starts with the active world (WORLD: RvR / WORLD: PvP (Camlann)).
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 168));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.Controls.Add(_footer, 0, 0);
-        panel.Controls.Add(_autoRefreshCountdownCaption, 1, 0);
-        panel.Controls.Add(_autoRefreshCountdownValue, 2, 0);
+        panel.Controls.Add(_worldStatusLabel, 0, 0);
+        panel.Controls.Add(_footer, 1, 0);
+        panel.Controls.Add(_autoRefreshCountdownCaption, 2, 0);
+        panel.Controls.Add(_autoRefreshCountdownValue, 3, 0);
+        panel.Controls.Add(BuildResetWorldButton(), 4, 0);
         _deleteAllBotsButton = ActionButton("DELETE ALL BOTS…", Color.FromArgb(151, 45, 40));
         _deleteAllBotsButton.Dock = DockStyle.Fill;
         _deleteAllBotsButton.Margin = new Padding(0);
         _deleteAllBotsButton.Enabled = false;
         _deleteAllBotsButton.Click += async (_, _) => await DeleteAllBotsAsync();
-        panel.Controls.Add(_deleteAllBotsButton, 3, 0);
+        panel.Controls.Add(_deleteAllBotsButton, 5, 0);
         return panel;
     }
 
@@ -1916,9 +1943,11 @@ internal sealed partial class MainForm : Form
             _midgardValue.Text = RealmRosterValue(snapshot.Bots, "Midgard");
             _hiberniaValue.Text = RealmRosterValue(snapshot.Bots, "Hibernia");
             _performanceValue.Text = $"{snapshot.TickP95Ms:0.0} ms";
-            _startButton.Enabled = _worldReady && !_resettingKeepsRelics && !_savingXpRates && !_stoppingServer && snapshot.ServerState == "Stopped" && File.Exists(_serverExecutable);
+            _startButton.Enabled = _worldReady && !_creatingWorld && !_resettingKeepsRelics && !_savingXpRates && !_stoppingServer && snapshot.ServerState == "Stopped" && File.Exists(_serverExecutable);
+            bool fullyStopped = !_resettingKeepsRelics && !_savingXpRates && !_stoppingServer && snapshot.ServerState == "Stopped" && BotGoalsServerStopped();
             if (_resetKeepsRelics is not null)
-                _resetKeepsRelics.Enabled = !_resettingKeepsRelics && !_savingXpRates && snapshot.ServerState == "Stopped" && BotGoalsServerStopped();
+                _resetKeepsRelics.Enabled = fullyStopped && !_creatingWorld;
+            UpdateWorldControls(fullyStopped);
             _stopButton.Enabled = !_stoppingServer && snapshot.ServerState is "Running" or "Starting";
             _playButton.Enabled = !_stoppingServer && snapshot.ServerState == "Running" && File.Exists(_clientConnector);
             UpdateXpRateControls(snapshot);
@@ -2174,10 +2203,13 @@ internal sealed partial class MainForm : Form
 
     private void PersistGmSetting(bool enabled)
     {
-        if (IsServerRunning() || HasExactServerProcess())
+        if (_persistXpRateServerRunningOverride ?? (IsServerRunning() || HasExactServerProcess()))
             throw new InvalidOperationException("The server must be fully stopped.");
+        // A world without a save (CREATE WORLD state) must not get an empty file from this writer.
+        if (!File.Exists(_database))
+            throw new InvalidOperationException("The prepared world database is missing.");
         string account = ReadCredentials().Account;
-        using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;Default Timeout=10");
+        using var connection = new SQLiteConnection($"Data Source={_database};Version=3;Pooling=False;FailIfMissing=True;Default Timeout=10");
         connection.Open();
         PersistGmSetting(connection, account, enabled);
     }
@@ -3397,84 +3429,11 @@ internal sealed partial class MainForm : Form
         return process is null;
     }
 
-    private async Task<bool> EnsureCamlannWorldAsync()
-    {
-        try
-        {
-            CamlannServerConfig.EnsureWorld(Path.Combine(_serverDirectory, "config", "serverconfig.xml"), Path.GetFileName(_database));
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "Cannot prepare server configuration", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-
-        string? worldModel;
-        try
-        {
-            worldModel = await Task.Run(() => CamlannWorldReset.ReadWorldModel(_database));
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "Cannot read world state", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-
-        // Either world's marker (Realm-1 or Camlann-1, docs/RVR_WORLDS.md) is ready to start.
-        if (WorldSaveLayout.FromMarker(worldModel) is not null)
-            return true;
-        if (!File.Exists(_database))
-        {
-            MessageBox.Show(this, "The world database is missing.", "World reset unavailable", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-        if (worldModel is not null && !string.Equals(worldModel, "Normal", StringComparison.OrdinalIgnoreCase))
-        {
-            MessageBox.Show(this, $"This installation has an unsupported world marker: {worldModel}.", "World reset unavailable", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-        if (!BotGoalsServerStopped())
-        {
-            MessageBox.Show(this, "Stop the server completely before creating the new world.", "Server must be stopped", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return false;
-        }
-
-        DialogResult confirmation = MessageBox.Show(this,
-            "This installation needs a one-time world reset before the server can start.\n\n" +
-            "The reset discards characters, inventories, coins, bot profiles, bot settings, guilds, keep claims, relic state, Realm Exchange listings and event history.\n" +
-            "World definitions, item templates, spawns and navigation meshes are kept.\n\n" +
-            "A complete database backup will be written beside the save before anything is changed. Continue?",
-            "Create the new world", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-        if (confirmation != DialogResult.Yes)
-            return false;
-
-        _startButton.Enabled = _playButton.Enabled = false;
-        try
-        {
-            var credentials = ReadCredentials();
-            var result = await Task.Run(() => CamlannWorldReset.Apply(
-                _database,
-                Path.Combine(Path.GetDirectoryName(_database)!, "camlann-world-reset-backups"),
-                credentials.Account,
-                _worldFiles.EventRecords,
-                BotGoalsServerStopped));
-            MessageBox.Show(this,
-                $"World reset complete.\n\nCharacters: {result.Characters}\nBots: {result.Bots}\nGuilds: {result.Guilds}\nKeeps returned to neutral: {result.Keeps}\nRelics homed: {result.Relics}\nEvent records cleared: {result.EventRecords}\n\nBackup: {result.Backup}",
-                "New world ready", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "World reset failed — no partial reset", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-    }
-
     private void StartServer()
     {
         if (!_worldReady)
         {
-            MessageBox.Show(this, "Complete the one-time world reset before starting the server.", "World reset required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, $"Create the {WorldPicker.Name(_world)} before starting the server.", "World required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -3510,6 +3469,9 @@ internal sealed partial class MainForm : Form
             MessageBox.Show(this, "The compiled server package is missing.", "Cannot start", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
+        // The server reads its save from serverconfig.xml: point it at the picked world right before every start.
+        if (!PrepareSelectedWorldForStart())
+            return;
 
         var availableGb = AvailableMemoryBytes() / 1024d / 1024d / 1024d;
         if (availableGb < 4 && MessageBox.Show(this,
@@ -3592,6 +3554,8 @@ internal sealed partial class MainForm : Form
         _serverState.Text = "STARTING…";
         _serverState.ForeColor = DaocTheme.Gold;
         _startButton.Enabled = false;
+        _worldPicker.Enabled = false;
+        if (_resetWorldButton is not null) _resetWorldButton.Enabled = false;
         _stopButton.Enabled = false;
         _playButton.Enabled = false;
         _footer.Text = "Server is starting — Enter Realm will unlock automatically when it is ready…";
@@ -3661,6 +3625,8 @@ internal sealed partial class MainForm : Form
         _serverState.Text = "STOPPING…";
         _serverState.ForeColor = DaocTheme.Danger;
         _startButton.Enabled = false;
+        _worldPicker.Enabled = false;
+        if (_resetWorldButton is not null) _resetWorldButton.Enabled = false;
         _stopButton.Enabled = false;
         _playButton.Enabled = false;
         _footer.Text = "Server is shutting down safely…";

@@ -51,9 +51,85 @@ server and the launcher.
    anything else is refused. The world data packs apply to whichever save
    boots, once per save.
 
-Until R5b, the launcher always selects the default save
-`opendaoc.sqlite3.db`. Its side-file paths already come from the same layout
-class, so R5b only has to switch the save.
+The launcher's World dropdown picks the world (next section).
+
+## World picker (launcher)
+
+Package R5b. The header has a dropdown left of START SERVER. Closed it reads
+"World: RvR" or "World: PvP"; open it lists "RvR (Realm vs Realm)" and
+"PvP (Camlann)".
+
+- **Switch only while stopped.** The dropdown is enabled only when the server
+  is fully stopped and no population, open BG or Trials of Atlantis edit is
+  waiting to be saved.
+- **One window, one world.** Every launcher read and write (dashboard, rates,
+  GM switch, Trials of Atlantis block, open BG tab, population tab, Realm
+  Records, Herald, Realm Exchange, keep reset) uses the picked world's save,
+  fixed when the window is built. Switching closes the window and opens a new
+  one on the other world, at the same place and tab. Nothing is lost: each
+  world keeps its own save and side files.
+- **Remembered per Windows user and installation** in
+  `%LOCALAPPDATA%\OfflineDAoC\world-choice.json`, beside the Join Friend
+  profile, keyed by the installation's runtime folder.
+- **Server configuration.** On a switch, when the window opens, and right
+  before every START SERVER, the launcher writes the picked world's save into
+  `serverconfig.xml` with `CamlannServerConfig.EnsureWorld`. It does so only
+  for a save that carries the world's marker. A world without a startable
+  save is never written there, because a server started by hand would create
+  an empty save in its place.
+- **While a server runs**, a new launcher window follows the save the
+  configuration names, so it never reads another world under a running
+  server.
+- **Status line and title.** The status line starts with `WORLD: RvR` or
+  `WORLD: PvP (Camlann)`; the window title and the header's subtitle name the
+  world too.
+- **Gothwaite** controls appear only in the PvP world. In the RvR world the
+  World mode row of the population tab is hidden and a save that turns
+  Gothwaite on is refused (owner decision 18).
+
+### CREATE WORLD and RESET WORLD
+
+| The picked world's save | START SERVER button | RESET WORLD… |
+|---|---|---|
+| Carries the world's marker | START SERVER | Starts the world over |
+| Missing | CREATE WORLD… | Off |
+| `Normal` or no marker (an old save) | CREATE WORLD…, built from that save | Same as CREATE WORLD |
+| The other world's marker | CREATE WORLD…, the old file goes to the backups | Same as CREATE WORLD |
+| Any other marker | Off; the status line names the marker | Off |
+
+Both buttons ask once. The confirmation names the world, the save the world
+data comes from, and the backup folder
+`<install>-backups\<date-time>-<rvr|camlann>-world-reset`. Both run
+`WorldReset.CreateFresh` for the picked world; the other world is not
+touched. The window then reopens on the fresh world. RESET WORLD… sits in the
+status line beside DELETE ALL BOTS….
+
+The earlier one-time in-place Camlann conversion of a `Normal` save
+(`CamlannWorldReset.Apply`) no longer runs from the launcher. CREATE WORLD
+replaces it and moves the old save to the backups instead.
+
+### First run
+
+- **Nothing picked yet:** RvR when the RvR save carries `Realm-1`, or when
+  neither world exists. PvP when only a Camlann world exists.
+- **Today's installs** keep their Camlann world in `opendaoc.sqlite3.db`. On
+  the first launcher start with the server stopped, the launcher renames that
+  save, its `-wal`/`-shm`/`-journal` and its side files to the Camlann names
+  (`opendaoc-camlann.sqlite3.db`, `realm-event-records-camlann.sqlite3`, and
+  so on). Nothing is copied, reset or deleted, and a failed rename puts every
+  file back. It refuses when a Camlann file already exists. The dropdown then
+  shows PvP. Picking RvR offers CREATE WORLD…, which builds the RvR world
+  from the Camlann save without changing it.
+- Tools that read `runtime/data/opendaoc.sqlite3.db` directly now read the
+  RvR world. Before the RvR world exists that file is absent.
+
+### Progress import
+
+`ImportEngine.IsCamlannRuntime` treats a runtime as a fork world when its
+configuration pins GameType PvP or a save carries `Realm-1` or `Camlann-1`,
+and it finds a runtime that has only the Camlann save. Import stays disabled
+for both worlds; the message names the world. A save of one world is refused
+for the other world first, with its own message.
 
 ## Reset steps
 
@@ -133,11 +209,11 @@ description; only the value changes.
 
 ## Other launcher pieces
 
-- **Start check.** The launcher starts a save with either marker. A save with
-  `Normal` still gets the one-time in-place Camlann conversion
-  (`CamlannWorldReset.Apply`), as before.
-- **Gothwaite switch.** In a `Realm-1` save the population tab locks the world
-  mode on Normal and refuses to save Gothwaite PvP (owner decision 18).
+- **Start check.** The launcher starts the picked world when its save carries
+  that world's marker. Every other save gets CREATE WORLD… (World picker
+  above).
+- **Gothwaite switch.** In the RvR world the population tab hides the world
+  mode row and refuses to save Gothwaite PvP (owner decision 18).
 - **"Reset all keeps & relics".** In a `Realm-1` save the button returns portal
   and relic keeps to their original realm; every other keep goes neutral, as
   in Camlann.

@@ -55,9 +55,9 @@ small update packs on the fork's
 
 The update replaces the client's `game.dll` and some UI files with the fork's
 Companion Manager and raid click-fix versions, but only over a known v0.3 or
-fork build. The first launch after updating a v0.3 game asks for the one-time
-Camlann world reset described under "Saves and old versions". The installer
-prints an undo command that restores the backed-up files.
+fork build. After updating a v0.3 game the launcher offers CREATE WORLD, as
+described under "Saves and old versions". The installer prints an undo command
+that restores the backed-up files.
 
 ## First-time requirements
 
@@ -89,14 +89,22 @@ Without either key, the button creates one. For companions, `/spawn` opens the i
 
 ## Saves and old versions
 
-Your account, characters, inventories and bot progress stay in your own
-`runtime/data/opendaoc.sqlite3.db`; your login credentials stay in
-`runtime/account.txt`. Back up both while the server and launcher are stopped.
-Never upload either file. On the first launch of a Camlann installation, the
-launcher requires a one-time world reset: it creates a complete backup, keeps
-the local account, and discards old characters, inventories, bot rosters, guilds,
-keep claims, relic state and Realm Exchange progress. Do not replace the new
-world database manually with an old database.
+The fork has two worlds, picked in the launcher's World dropdown: RvR (Realm vs
+Realm, the default) and PvP (Camlann). Each keeps its own save in
+`runtime/data`: `opendaoc.sqlite3.db` for RvR, `opendaoc-camlann.sqlite3.db`
+for PvP. Your login credentials stay in `runtime/account.txt`. Back up the
+saves and `account.txt` while the server and launcher are stopped. Never upload
+them.
+
+On the first launch after this update, a PvP save that still sits in
+`opendaoc.sqlite3.db` is renamed to `opendaoc-camlann.sqlite3.db` with its side
+files; nothing is reset or deleted. A world without a save shows CREATE WORLD…
+instead of START SERVER: it builds a fresh world, keeps the local account as a
+normal player, and moves any replaced save to the `-backups` folder beside the
+game folder. RESET WORLD… starts the picked world over the same way. Old
+characters, inventories, bot rosters, guilds, keep claims, relic state and
+Realm Exchange progress do not carry over. Do not replace a world database
+manually with an old database.
 
 ### Normal-save progress import is not supported
 

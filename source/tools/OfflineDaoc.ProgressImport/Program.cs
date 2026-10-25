@@ -51,8 +51,8 @@ public sealed class ImportForm : Form
             if (ImportEngine.IsCamlannRuntime(destination))
             {
                 browse.Enabled = false;
-                summary.Text = "This is the PvP & Co-op world. Progress import from Normal or legacy saves is disabled.";
-                status.Text = "Nothing has been changed. Start the launcher normally to perform the one-time fresh-world reset.";
+                summary.Text = $"This is the {ImportEngine.WorldName(ImportEngine.WorldOf(destination))}. Progress import from Normal or legacy saves is disabled.";
+                status.Text = "Nothing has been changed. Start the launcher and use CREATE WORLD… for a fresh world.";
             }
         }
         catch { }

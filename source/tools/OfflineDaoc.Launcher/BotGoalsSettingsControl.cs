@@ -44,6 +44,8 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(840, 0) };
     private readonly Label _worldModeHint = new() { AutoSize = true, MaximumSize = new Size(840, 0),
         Margin = new Padding(3, 0, 3, 6), Visible = false, Text = GothwaiteWorldModeHint };
+    // The "World mode" row (Normal / Gothwaite PvP): shown only in the PvP world (R5b, owner decision 18).
+    private Control? _worldModeRow;
     private readonly Label _openBgHint = new() { AutoSize = true, MaximumSize = new Size(840, 0),
         Margin = new Padding(3, 0, 3, 6), Visible = false, Text = OpenBgWorldModeHint };
     private readonly Button _save = DaocTheme.ToolButton("Save settings");
@@ -59,13 +61,25 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private DateTime _pendingMixRequestSinceUtc;
     private string _lastAppliedRequestId = string.Empty;
     /// <summary>
-    /// True when the current save is an RvR world (marker Realm-1). Gothwaite PvP belongs to the PvP world only (owner
-    /// decision 18): the switch is disabled and a save that turns it on is refused. MainForm reads the current save's
-    /// marker; R5b passes the picked world. Evaluated at most every few seconds.
+    /// True when the launcher shows the RvR world. Gothwaite PvP belongs to the PvP world only (owner decision 18): the
+    /// world-mode row is hidden and disabled, and a save that turns it on is refused. MainForm passes the world picked
+    /// in its World dropdown (R5b). Evaluated at most every few seconds.
     /// </summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Func<bool>? IsRvrWorld { get; set; }
+    public Func<bool>? IsRvrWorld
+    {
+        get => _isRvrWorld;
+        set
+        {
+            _isRvrWorld = value;
+            _rvrWorldCheckedUtc = DateTime.MinValue;
+            // Hide the Gothwaite row at once, not only at the next two-second poll.
+            if (_worldModeRow is not null) _worldModeRow.Visible = !RvrWorld;
+            if (RvrWorld) _worldModeHint.Visible = _openBgHint.Visible = false;
+        }
+    }
+    private Func<bool>? _isRvrWorld;
     private bool _rvrWorld;
     private DateTime _rvrWorldCheckedUtc = DateTime.MinValue;
     private bool RvrWorld
@@ -128,7 +142,8 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _preset.Items.AddRange(PresetNames);
         _danger.Items.AddRange(DangerNames);
         _worldShape.Items.AddRange(ShapeNames);
-        body.Controls.Add(ChoiceRow("World mode", _worldMode, WorldModeToolTip));
+        _worldModeRow = ChoiceRow("World mode", _worldMode, WorldModeToolTip);
+        body.Controls.Add(_worldModeRow);
         body.Controls.Add(_worldModeHint);
         body.Controls.Add(_openBgHint);
         body.Controls.Add(ChoiceRow("Preset", _preset,
@@ -471,7 +486,9 @@ internal sealed class BotGoalsSettingsControl : UserControl
         if (RvrWorld && WorldModeSelected)
             SetWorldMode(false);
         _worldMode.Enabled = stopped && !mixOperationPending && !RvrWorld;
-        _worldModeHint.Visible = _openBgHint.Visible = WorldModeSelected;
+        // Gothwaite belongs to the PvP world only: in the RvR world its controls are not shown at all.
+        if (_worldModeRow is not null) _worldModeRow.Visible = !RvrWorld;
+        _worldModeHint.Visible = _openBgHint.Visible = WorldModeSelected && !RvrWorld;
         _altHours.Enabled = _altCap.Enabled = stopped && !mixOperationPending;
         _save.Enabled = stopped && valid && !mixOperationPending;
         _undo.Enabled = _defaults.Enabled = stopped && !mixOperationPending;

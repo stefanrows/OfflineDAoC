@@ -20,9 +20,13 @@ $ProtectedPaths = @(
     'runtime/data/opendaoc.sqlite3.db',
     'runtime/data/opendaoc.sqlite3.db-wal',
     'runtime/data/opendaoc.sqlite3.db-shm',
+    'runtime/data/opendaoc-camlann.sqlite3.db',
+    'runtime/data/opendaoc-camlann.sqlite3.db-wal',
+    'runtime/data/opendaoc-camlann.sqlite3.db-shm',
     'runtime/server/config/serverconfig.xml',
     'runtime/server/bot-goals.json',
-    'runtime/server/rvr-world.json'
+    'runtime/server/rvr-world.json',
+    'runtime/server/rvr-world-camlann.json'
 )
 
 function Hash([string]$Path) {
@@ -124,13 +128,16 @@ if ($plan.Count -eq 0) {
     return
 }
 Write-Host "$($plan.Count) files will be replaced or added. Saves, account, server config and bot settings are not touched."
-$hasSave = Test-Path -LiteralPath (Join-Path $root 'runtime\data\opendaoc.sqlite3.db')
+$hasSave = (Test-Path -LiteralPath (Join-Path $root 'runtime\data\opendaoc.sqlite3.db')) -or
+    (Test-Path -LiteralPath (Join-Path $root 'runtime\data\opendaoc-camlann.sqlite3.db'))
 if ($hasSave -and -not $Yes) {
     Write-Host ''
-    Write-Host 'IMPORTANT: this fork is a Camlann/Mordred style full-PvP world. The first time the'
-    Write-Host 'launcher starts after this update it asks for a one-time world reset. It makes a full'
-    Write-Host 'backup first and keeps your local account, but old v0.3 characters, inventories, bots'
-    Write-Host 'and guilds do not carry over. Keep a copy of this folder if you want to go back.'
+    Write-Host 'IMPORTANT: this fork has two worlds, RvR (default) and PvP (Camlann), each with its own'
+    Write-Host 'save. The first launcher start moves a PvP save that still sits in opendaoc.sqlite3.db to'
+    Write-Host 'opendaoc-camlann.sqlite3.db (a rename; nothing is reset). A world without a save offers'
+    Write-Host 'CREATE WORLD: it backs up anything it replaces and keeps your local account, but old v0.3'
+    Write-Host 'characters, inventories, bots and guilds do not carry over. Keep a copy of this folder'
+    Write-Host 'if you want to go back.'
 }
 if (-not $Yes) {
     $answer = Read-Host 'Type YES to install'

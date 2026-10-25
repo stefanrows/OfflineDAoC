@@ -2,6 +2,7 @@ using System.Data.SQLite;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using OfflineDaoc.Configuration;
 
 namespace OfflineDaoc.ProgressImport;
 
@@ -17,8 +18,9 @@ public static class ImportEngine
     public static string LocateRuntime(string folder)
     {
         folder = Path.GetFullPath(folder);
+        // Either world's save marks a runtime (docs/RVR_WORLDS.md): the RvR save keeps the old name, the Camlann save has its own.
         foreach (string candidate in new[] {Path.Combine(folder,"runtime"),folder})
-            if (File.Exists(Path.Combine(candidate,"data","opendaoc.sqlite3.db"))) return candidate;
+            if (WorldSaveLayout.Worlds.Any(world=>File.Exists(Path.Combine(candidate,"data",WorldSaveLayout.DatabaseFileName(world))))) return candidate;
         throw new InvalidOperationException("Choose the old Offline DAoC folder (or its runtime folder). No data/opendaoc.sqlite3.db was found.");
     }
     static string Q(string value) => "\"" + value.Replace("\"","\"\"") + "\"";
@@ -74,21 +76,56 @@ public static class ImportEngine
         using var q=c.CreateCommand();q.CommandText="PRAGMA quick_check";
         if(!string.Equals(Convert.ToString(q.ExecuteScalar()),"ok",StringComparison.Ordinal))throw new InvalidDataException("Database integrity check failed.");
     }
+    /// <summary>
+    /// True for a runtime of this fork's fresh worlds, where progress import is disabled: the server configuration
+    /// pins GameType PvP (both worlds do), or a save carries the RvR marker Realm-1 or the Camlann marker Camlann-1.
+    /// </summary>
     public static bool IsCamlannRuntime(string folder)
     {
         string runtime=LocateRuntime(folder);
         string config=Path.Combine(runtime,"config","serverconfig.xml");
         if(File.Exists(config) && CamlannGameType.IsMatch(File.ReadAllText(config)))return true;
-
-        using var c=Open(Path.Combine(runtime,"data","opendaoc.sqlite3.db"),true);
-        if(!Tables(c).Contains("offline_local_options"))return false;
-        using var q=c.CreateCommand();q.CommandText="SELECT Value FROM offline_local_options WHERE Key='WorldModel'";
-        return string.Equals(Convert.ToString(q.ExecuteScalar()),"Camlann-1",StringComparison.OrdinalIgnoreCase);
+        return WorldOf(folder) is not null;
     }
+    /// <summary>
+    /// The fork world of a runtime: the marker of the save its server configuration names, else of the first save
+    /// with a world marker (RvR first). Null for a runtime without one (an old Normal save).
+    /// </summary>
+    public static WorldSaveKind? WorldOf(string folder)
+    {
+        string runtime=LocateRuntime(folder);
+        var saves=new List<string>();
+        string config=Path.Combine(runtime,"config","serverconfig.xml");
+        if(File.Exists(config))
+        {
+            Match named=Regex.Match(File.ReadAllText(config),"<DBConnectionString\\b[^>]*>(.*?)</DBConnectionString>",RegexOptions.IgnoreCase|RegexOptions.Singleline|RegexOptions.CultureInvariant);
+            string? source=named.Success?WorldSaveLayout.DataSource(named.Groups[1].Value):null;
+            if(!string.IsNullOrWhiteSpace(source))saves.Add(Path.Combine(runtime,"data",Path.GetFileName(source)));
+        }
+        foreach(WorldSaveKind world in WorldSaveLayout.Worlds)saves.Add(Path.Combine(runtime,"data",WorldSaveLayout.DatabaseFileName(world)));
+        foreach(string save in saves.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if(!File.Exists(save))continue;
+            using var c=Open(save,true);
+            if(!Tables(c).Contains("offline_local_options"))continue;
+            using var q=c.CreateCommand();q.CommandText="SELECT Value FROM offline_local_options WHERE Key='WorldModel'";
+            if(WorldSaveLayout.FromMarker(Convert.ToString(q.ExecuteScalar())) is WorldSaveKind world)return world;
+        }
+        return null;
+    }
+    /// <summary>The world's name in the importer's messages.</summary>
+    public static string WorldName(WorldSaveKind? world) => world switch
+    {
+        WorldSaveKind.Realm => "RvR world (Realm vs Realm)",
+        WorldSaveKind.Camlann => "PvP world (Camlann)",
+        _ => "PvP & Co-op world",
+    };
+    static string DisabledMessage(WorldSaveKind? world) =>
+        $"Progress import is disabled for the {WorldName(world)}. Each world starts from a fresh save that the launcher creates (CREATE WORLD… or RESET WORLD…); Normal saves and accounts cannot be imported.";
     public static ImportSummary Inspect(string folder)
     {
         if(IsCamlannRuntime(folder))
-            throw new InvalidOperationException("Progress import is disabled for the PvP & Co-op world. Start this installation normally so its one-time world reset can create a fresh save; Normal saves and accounts cannot be imported.");
+            throw new InvalidOperationException(DisabledMessage(WorldOf(folder)));
         using var c=Open(Path.Combine(LocateRuntime(folder),"data","opendaoc.sqlite3.db"),true);
         var tables=Tables(c);
         foreach(var t in new[]{"Account","DOLCharacters","offline_world_bots","Inventory","ItemUnique","ItemTemplate"})
@@ -100,8 +137,12 @@ public static class ImportEngine
     {
         string old=LocateRuntime(oldFolder),current=LocateRuntime(newFolder);
         if(string.Equals(old,current,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Old and new folders must be different.");
+        // Strict world separation (owner decision 18): a save of one world never goes into the other world.
+        WorldSaveKind? oldWorld=WorldOf(old),currentWorld=WorldOf(current);
+        if(oldWorld is not null && currentWorld is not null && oldWorld!=currentWorld)
+            throw new InvalidOperationException($"A save of the {WorldName(oldWorld)} cannot be imported into the {WorldName(currentWorld)}: each world keeps its own save.");
         if(IsCamlannRuntime(old) || IsCamlannRuntime(current))
-            throw new InvalidOperationException("Progress import is disabled for the PvP & Co-op world. Its one-time world reset creates a fresh save; Normal saves and accounts cannot be imported.");
+            throw new InvalidOperationException(DisabledMessage(currentWorld ?? oldWorld));
         CheckClosed(old,current);
         string oldDb=Path.Combine(old,"data","opendaoc.sqlite3.db"),newDb=Path.Combine(current,"data","opendaoc.sqlite3.db");
         string credentials=Path.Combine(old,"account.txt");
