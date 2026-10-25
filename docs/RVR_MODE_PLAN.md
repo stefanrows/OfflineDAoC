@@ -37,7 +37,7 @@ defaults in code, keep/relic start state from the reset.
   1.65; bind and craft by realm; audit of 54 server-type sites in
   `docs/RVR_RULES_AUDIT.md` (19 + 4 gated, 1 + 3 deferred). Camlann unchanged.
   Open before the first RvR boot: R2 travel lock and per-realm safe areas.
-- [~] **R2 Travel + population rules.** Agent rvr-r2 (2026-10-25 01:50, parallel to the R1b review). Realm-bound porters, capitals, `/tc`,
+- [~] **R2 Travel + population rules.** Implemented (worktree rvr-r2, 53 tests incl. safe hubs), in review (10:20). Realm-bound porters, capitals, `/tc`,
   Realm Exchange, Atlantis havens, BG porters; `/spawn` own realm; open BG
   perrealm default; Gothwaite excluded. 1 session.
 - [~] **R3a Keeps.** Agent rvr-r3a (2026-10-25 09:55). Neutral Warden start, capture by realm sticks, claims by
@@ -55,7 +55,7 @@ defaults in code, keep/relic start state from the reset.
   Camlann `opendaoc-camlann.sqlite3.db` + `-camlann` side files;
   `CamlannServerConfig.EnsureWorld` writes the connection string. Gothwaite
   switch locked for a Realm-1 save. Launcher tests 297, server fixtures 19.
-- [ ] **R5b Launcher world picker.** Owner 2026-10-25 10:05: a **dropdown**
+- [~] **R5b Launcher world picker.** Agent rvr-r5b (2026-10-25 10:30). Owner 2026-10-25 10:05: a **dropdown**
   "World: RvR (default) / PvP (Camlann)", switchable only while the server is
   stopped, choice remembered; START SERVER starts the selected world (the
   launcher writes that world's save path into the server config); each world
