@@ -6,6 +6,18 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
+179. **Open BG driver throws on level-50 bots in the Realm-1 world.** Live
+     0.345.0, 2026-10-25 19:32-19:41 server time, three `Critical error
+     encountered in NpcService: System.ArgumentException: '50' cannot be
+     greater than 41` (also 2 and 5) at
+     `AutonomousBattlegroundDriver.Assist` via
+     `BotBrain.ThinkAutonomousBattleground` (`Math.Clamp` with min 50 above
+     max). The fork's open BG (Thidranki 252) runs in the RvR world with the
+     level-50 roster; each hit aborts that bot's think tick. Open question for
+     the owner (bug 178 note): does the open BG belong in the Realm-1 world at
+     all (upstream has none)? Fix: clamp bounds, or gate the open BG off in
+     Realm-1 if the owner says so.
+
 178. **RvR port: the army does not advance after RVR_SIEGE_MARCH.** Live
      0.345.0, fresh level-50 Realm-1 world, speed 20x (achieved ~6x),
      2026-10-25 19:15 server time: Albion's siege on rvr-keep-79 marched with
