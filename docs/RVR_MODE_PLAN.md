@@ -40,9 +40,9 @@ defaults in code, keep/relic start state from the reset.
 - [~] **R2 Travel + population rules.** Implemented (worktree rvr-r2, 53 tests incl. safe hubs), in review (10:20). Realm-bound porters, capitals, `/tc`,
   Realm Exchange, Atlantis havens, BG porters; `/spawn` own realm; open BG
   perrealm default; Gothwaite excluded. 1 session.
-- [~] **R3a Keeps.** Agent rvr-r3a (2026-10-25 09:55). Neutral Warden start, capture by realm sticks, claims by
+- [~] **R3a Keeps.** Implemented (worktree rvr-r3a, 54 tests), in review (10:45). Neutral Warden start, capture by realm sticks, claims by
   the keep's realm (solo guild ok), guards by owner realm. 1 session.
-- [ ] **R3b Relics.** Realm pads, realm-wide bonus, relic sieges. 1 session.
+- [~] **R3b Relics.** Agent rvr-r3b (2026-10-25 10:45, parallel to the R3a review). Realm pads, realm-wide bonus, relic sieges. 1 session.
 - [x] **R5a World reset + files.** (0.335.0; `docs/RVR_WORLDS.md`) One
   reset routine creates a fresh RvR or Camlann world: seed copy, progress
   cleared in one transaction (characters, inventories, bots, companions,
