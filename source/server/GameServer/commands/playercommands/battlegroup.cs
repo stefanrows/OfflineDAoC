@@ -1001,6 +1001,10 @@ namespace DOL.GS.Commands
                     {
                         BattleGroup battlegroup = new BattleGroup();
 
+                        // RvR world: no cross-realm invite reaches this point, the invite command
+                        // refuses another realm (WorldMode.AllowsRealmPair) before it asks, and
+                        // realms never change, so the invitee cannot be refused here and leave
+                        // the leader alone in a one-member battlegroup.
                         lock (battlegroup.Lock)
                         {
                             battlegroup.SetBGLeader(leader);

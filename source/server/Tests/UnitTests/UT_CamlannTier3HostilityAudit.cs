@@ -5,7 +5,7 @@ using NUnit.Framework;
 
 namespace DOL.UnitTests;
 
-[TestFixture]
+[TestFixture, NonParallelizable]
 public sealed class UT_CamlannTier3HostilityAudit
 {
     [Test]
@@ -23,6 +23,46 @@ public sealed class UT_CamlannTier3HostilityAudit
 
         Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(false, 249, 249, true, true), Is.False);
         Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(true, 249, 249, true, true), Is.True);
+    }
+
+    /// <summary>
+    /// RvR mode spec section 9.3: each seam fed with the world's answer for a
+    /// same-realm stranger. Camlann calls the stranger an enemy, the RvR world
+    /// an ally; the realm rule lives in the alliance seam, never in a bot filter.
+    /// </summary>
+    [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
+    public void SeamsTakeTheWorldsAnswerForASameRealmStranger(WorldModelKind world)
+    {
+        using var _ = BothWorlds.Use(world);
+        GameBot first = StrangerBot(eRealm.Midgard);
+        GameBot second = StrangerBot(eRealm.Midgard);
+        bool enemy = !DOL.GS.ServerRules.PvpCombatant.AreAllied(first, second);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(enemy, Is.EqualTo(BothWorlds.Expect(world, true, false)));
+            Assert.That(AutonomousRvrTargetPolicy.IsEligible(enemy, true, true, true, false, true), Is.EqualTo(enemy));
+            Assert.That(AutonomousDungeonPolicy.CanEngageLocalOpponent(enemy, 246, 246, true, true), Is.EqualTo(enemy));
+            Assert.That(AutonomousDarknessFallsPolicy.CanEngageLocalOpponent(enemy, 249, 249, true, true), Is.EqualTo(enemy));
+        });
+    }
+
+    private sealed class StrangerTestBot : GameBot
+    {
+        public StrangerTestBot() : base((OfflineWorldBotRecord)null) { }
+
+        public override bool IsAlive => true;
+        public override eRealm Realm { get; set; }
+        public override ushort CurrentRegionID { get; set; } = 1;
+    }
+
+    private static GameBot StrangerBot(eRealm realm)
+    {
+        var bot = (StrangerTestBot)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(StrangerTestBot));
+        typeof(GameNPC).GetField("m_brains", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(bot, new System.Collections.ArrayList());
+        bot.Realm = realm;
+        return bot;
     }
 
     private static void AssertEnemyCombatantParameter(Type policyType, string methodName)

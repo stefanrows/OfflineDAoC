@@ -92,9 +92,9 @@ namespace DOL.GS.Housing
 
         public static MerchantTradeItems GetNpcShopItems(GamePlayer player)
         {
-            var allRealmsTypes = new[] { EGameServerType.GST_PvE, EGameServerType.GST_PvP };
+            var allRealmsTypes = new[] { EGameServerType.GST_PvE, EGameServerType.GST_PvP }; // RvR world: own realm shop, as Normal
 
-            if (allRealmsTypes.Contains(GameServer.Instance.Configuration.ServerType))
+            if (allRealmsTypes.Contains(WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType)))
             {
                 return _indoorNpcShopItemsAll;
             }

@@ -98,7 +98,7 @@ namespace DOL.GS.PacketHandler.Client.v168
                             return;
                         }
 
-                        if (GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP or EGameServerType.GST_PvE)
+                        if (WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) is EGameServerType.GST_PvP or EGameServerType.GST_PvE) // RvR world: realm doors, as Normal
                         {
                             if (door.Realm != 0)
                             {

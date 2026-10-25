@@ -255,7 +255,7 @@ namespace DOL.GS.Commands
 					log.Error("no character class spec in who commandhandler for player " + player.Name);
 			}
 
-			if (player.CurrentZone != null && GameServer.Instance.Configuration.ServerType != EGameServerType.GST_PvP)
+			if (player.CurrentZone != null && WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) != EGameServerType.GST_PvP)
 			{
 				// If '/who' source is a Player and target is plvl 3, do not return zone description (only return for Admins if Admin is source)
 				if (source.Account.PrivLevel == (uint)ePrivLevel.Player && player.Client.Account.PrivLevel == (uint)ePrivLevel.Player || source.Account.PrivLevel == (uint)ePrivLevel.Admin)
@@ -324,7 +324,7 @@ namespace DOL.GS.Commands
 		{
 			StringBuilder result = new StringBuilder(bot.Name, 100);
 			result.Append(" the Level ").Append(bot.Level).Append(' ').Append(bot.ClassName);
-			if (bot.CurrentZone != null && GameServer.Instance.Configuration.ServerType != EGameServerType.GST_PvP)
+			if (bot.CurrentZone != null && WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) != EGameServerType.GST_PvP)
 			{
 				result.Append(" in ");
 				if (source.Account.PrivLevel == (uint)ePrivLevel.Player && bot.CurrentZone.IsRvR && bot.CurrentRegionID is 1 or 100 or 200)
@@ -365,7 +365,7 @@ namespace DOL.GS.Commands
 		{
 			for (int i = skip; i < args.Length; i++)
 			{
-				if (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvP)
+				if (WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) == EGameServerType.GST_PvP)
 					filters.Add(new StringFilter(args[i]));
 				else
 				{
@@ -430,7 +430,7 @@ namespace DOL.GS.Commands
 					return true;
 				if (player.GuildName.ToLower().StartsWith(m_filterString))
 					return true;
-				if (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_PvP)
+				if (WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) == EGameServerType.GST_PvP)
 					return false;
 				if (player.CharacterClass.Name.ToLower().StartsWith(m_filterString))
 					return true;

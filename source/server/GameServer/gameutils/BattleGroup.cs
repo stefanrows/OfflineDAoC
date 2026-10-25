@@ -105,6 +105,12 @@ namespace DOL.GS
 			{
 				if (m_battlegroupMembers.Contains(player))
 					return false;
+				// RvR world: a battlegroup stays within one realm, whichever path adds the player.
+				if (!AdmitsRealm(WorldMode.Current, m_battlegroupMembers.Keys.OfType<GamePlayer>(), player))
+				{
+					player.Out.SendMessage("You can't join a battle group of another realm.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+					return false;
+				}
 				player.TempProperties.SetProperty(BATTLEGROUP_PROPERTY, this);
                 player.Out.SendMessage("You join the battle group.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
 				foreach(GamePlayer member in Members.Keys)
@@ -119,6 +125,21 @@ namespace DOL.GS
 			}
 			return true;
 		}
+
+        /// <summary>
+        /// Whether a battlegroup with these members takes the candidate in this
+        /// world: Camlann takes every realm; the RvR world only the members'
+        /// realm (staff exempt, as for groups).
+        /// </summary>
+        public static bool AdmitsRealm(WorldModelKind world, IEnumerable<GameLiving> members, GameLiving candidate)
+        {
+            if (candidate == null)
+                return false;
+            foreach (GameLiving member in members ?? Enumerable.Empty<GameLiving>())
+                if (member != null && member != candidate && !WorldMode.AllowsRealmPair(world, member, candidate))
+                    return false;
+            return true;
+        }
 
         public virtual bool IsInTheBattleGroup(GamePlayer player)
         {

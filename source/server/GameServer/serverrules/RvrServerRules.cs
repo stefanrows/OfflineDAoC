@@ -1,3 +1,4 @@
+using DOL.Database;
 using DOL.GS.Keeps;
 
 namespace DOL.GS.ServerRules
@@ -15,8 +16,10 @@ namespace DOL.GS.ServerRules
 	/// returning <see cref="PvPServerRules"/> for GST_PvP. This class is chosen
 	/// only by the world marker (<see cref="ScriptMgr.CreateServerRules(EGameServerType, WorldModelKind)"/>).
 	///
-	/// Friend and enemy (<see cref="PvpCombatant.AreAllied"/>) are still the
-	/// Camlann answer here; the same-realm alliance core is package R1b.
+	/// Friend and enemy come from <see cref="PvpCombatant.AreAllied"/>, which
+	/// answers "same realm" in this world (R1b), so the inherited attack, heal
+	/// and keep checks are realm based. Enemy players and bots show as in the
+	/// upstream Normal rules: race name, realm rank title, no guild or title.
 	/// </summary>
 	public class RvrServerRules : PvPServerRules
 	{
@@ -35,10 +38,11 @@ namespace DOL.GS.ServerRules
 		}
 
 		/// <summary>
-		/// The true realm of every living, as upstream sends it. Only a hostile
-		/// keep guard that shares the viewer's realm still gets another realm,
-		/// so the client lets the viewer attack it while keep hostility is
-		/// guild based (realm keeps follow in R3a).
+		/// The true realm of every living, as upstream sends it. An ally of the
+		/// viewer (a companion of the viewer's realm whatever its class) shows the
+		/// viewer's realm. A hostile actor or keep guard that shares the viewer's
+		/// realm byte (a Frontier Wardens guard, a neutral battleground encounter
+		/// bot) gets another realm so the client lets the viewer attack it.
 		/// </summary>
 		public override byte GetLivingRealm(GamePlayer player, GameLiving target)
 		{
@@ -50,10 +54,21 @@ namespace DOL.GS.ServerRules
 
 			if (target is GameKeepGuard guard && guard.Realm == player.Realm && guard.Component?.Keep != null &&
 				GameServer.KeepManager.IsEnemy(guard, player))
-				return (byte)(player.Realm == eRealm.Albion ? eRealm.Midgard : eRealm.Albion);
+				return (byte)OtherRealm(player.Realm);
+
+			if (PvpCombatant.IsPlayerShaped(target))
+			{
+				if (PvpCombatant.AreAllied(WorldModelKind.Realm, player, target))
+					return (byte)player.Realm;
+
+				if (target.Realm == player.Realm)
+					return (byte)OtherRealm(player.Realm);
+			}
 
 			return (byte)target.Realm;
 		}
+
+		private static eRealm OtherRealm(eRealm realm) => realm == eRealm.Albion ? eRealm.Midgard : eRealm.Albion;
 
 		public override bool IsAllowedToGroup(GamePlayer source, GamePlayer target, bool quiet)
 		{
@@ -128,7 +143,86 @@ namespace DOL.GS.ServerRules
 			if (source is GameNPC npc && (npc.Flags & GameNPC.eFlags.PEACE) != 0)
 				return true;
 
-			return source.Realm == eRealm.None || source.Realm == target.Realm;
+			if (source.Realm == eRealm.None)
+				return true;
+
+			// A companion or /spawn helper speaks its owner's tongue.
+			return PvpCombatant.AllianceRealm(source) == PvpCombatant.AllianceRealm(target);
+		}
+
+		/// <summary>Bind stones of another realm refuse, as in the upstream Normal rules.</summary>
+		public override bool IsAllowedToBind(GamePlayer player, DbBindPoint point)
+		{
+			if (player == null || point == null)
+				return false;
+			return point.Realm == 0 || player.Realm == (eRealm)point.Realm;
+		}
+
+		/// <summary>Only the own realm's recipes (and realm-less ones while the
+		/// allow_craft_norealm_items property is on), as in the upstream Normal rules.</summary>
+		public override bool IsAllowedToCraft(GamePlayer player, DbItemTemplate item)
+		{
+			if (player == null || item == null)
+				return false;
+			return player.Realm == (eRealm)item.Realm || (item.Realm == 0 && ServerProperties.Properties.ALLOW_CRAFT_NOREALM_ITEMS);
+		}
+
+		// ---- enemy presentation, as in the upstream Normal rules -------------
+
+		public override string GetPlayerName(GamePlayer source, GamePlayer target)
+		{
+			if (IsSameRealm(source, target, true))
+				return target.Name;
+
+			return source.RaceToTranslatedName(target.Race, target.Gender);
+		}
+
+		public override string GetPlayerLastName(GamePlayer source, GamePlayer target)
+		{
+			if (IsSameRealm(source, target, true))
+				return target.LastName;
+
+			return target.RealmRankTitle(source.Client.Account.Language);
+		}
+
+		public override string GetPlayerGuildName(GamePlayer source, GamePlayer target)
+		{
+			if (IsSameRealm(source, target, true))
+				return target.GuildName;
+
+			return string.Empty;
+		}
+
+		public override string GetPlayerTitle(GamePlayer source, GamePlayer target)
+		{
+			if (IsSameRealm(source, target, true))
+				return target.CurrentTitle.GetValue(source, target);
+
+			return string.Empty;
+		}
+
+		/// <summary>
+		/// A GameBot reaches the client as an NPC; an enemy one shows like an
+		/// enemy player of its realm: its race name instead of its name. Allied
+		/// bots and every other NPC keep their name.
+		/// </summary>
+		public override string GetNPCName(GamePlayer source, GameNPC target)
+		{
+			if (target is GameBot bot && source != null && PvpCombatant.IsPlayerShaped(bot) &&
+				!PvpCombatant.AreAllied(WorldModelKind.Realm, source, bot))
+				return source.RaceToTranslatedName(bot.Race, bot.Gender);
+
+			return target.Name;
+		}
+
+		/// <summary>An enemy bot shows no guild, like an enemy player.</summary>
+		public override string GetNPCGuildName(GamePlayer source, GameNPC target)
+		{
+			if (target is GameBot bot && source != null && PvpCombatant.IsPlayerShaped(bot) &&
+				!PvpCombatant.AreAllied(WorldModelKind.Realm, source, bot))
+				return string.Empty;
+
+			return target.GuildName;
 		}
 	}
 }

@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.334.0] - 2026-10-25
+
+### Added
+- RvR mode, package R1b: in a `Realm-1` world the same realm is a friend
+  everywhere and the other realms are enemies; guilds, groups and
+  battlegroups never bridge realms; companions, `/spawn` helpers and pets
+  fight as their owner's realm; town NPCs serve only their realm; keeps are
+  hostile by realm; enemy players and bots show race name and realm rank
+  only; bind stones and recipes follow the realm; doors, `/who`, death
+  penalty, bounty and money on kills behave as on a realm server. The audit
+  of every server-type branch is in `docs/RVR_RULES_AUDIT.md`. Unit tests
+  UT_RvrAllianceCore (46) plus both-worlds twins.
+
+### Changed
+- None for the Camlann world.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.333.0] - 2026-10-25
 
 ### Added

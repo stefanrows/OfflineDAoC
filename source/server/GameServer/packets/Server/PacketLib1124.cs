@@ -247,6 +247,13 @@ namespace DOL.GS.PacketHandler
 							guildName = ((DbLanguageGameNpc)translation).GuildName;
 					}
 
+					// RvR world: an enemy-realm bot shows like an enemy player (race name, no guild).
+					if (npc is GameBot && GameServer.ServerRules is RvrServerRules rvrRules)
+					{
+						name = rvrRules.GetNPCName(m_gameClient.Player, npc);
+						guildName = rvrRules.GetNPCGuildName(m_gameClient.Player, npc);
+					}
+
 					// Presentation only: autonomous bots and persistent companions show their realm rank after the name.
 					name = RealmRankNameplate.NpcName(npc, name);
 

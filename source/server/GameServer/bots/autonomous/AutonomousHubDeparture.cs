@@ -463,6 +463,10 @@ public static class AutonomousHubDeparture
         if (second == first || !IsWorldBot(second))
             return false;
         bool sameRealm = first.Realm == second.Realm;
+        // RvR world: same-realm bots are allies (PvpCombatant.AreAllied), so the
+        // hub peace between them has nothing to stop and is skipped there.
+        if (sameRealm && WorldMode.IsRvr)
+            return false;
         // The landing list is read only when the peace is "all". A same-realm pair counts too: Server PvP spreads the
         // units over all three landings, so a crew often lands at another realm's keep.
         bool landingPeaceAll = first.CurrentRegionID == second.CurrentRegionID &&

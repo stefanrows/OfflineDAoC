@@ -144,7 +144,7 @@ namespace DOL.GS.ServerRules
 				bool duel = attacker is GamePlayer playerAttacker && playerAttacker.IsDuelPartner(defender);
 				if (!duel && PvpCombatant.AreAllied(attacker, defender))
 				{
-					if (!quiet) MessageToLiving(attacker, "You can't attack an allied player.");
+					if (!quiet) MessageToLiving(attacker, WorldMode.IsRvr ? "You can't attack a member of your realm!" : "You can't attack an allied player.");
 					return false;
 				}
 
@@ -210,14 +210,17 @@ namespace DOL.GS.ServerRules
 			if (attacker is GameNPC && (attacker as GameNPC).IsConfused && attacker.Realm == defender.Realm)
 				return true;
 
-			// "friendly" NPCs can't attack "friendly" players
-			if (defender is GameNPC && !PvpCombatant.IsPlayerShaped(defender) && defender.Realm != 0 && attacker.Realm != 0 && defender is GameKeepGuard == false && defender is GameFont == false)
+			// "friendly" NPCs can't attack "friendly" players. In the RvR world a
+			// realm NPC is friendly to its own realm only, as in the Normal rules.
+			if (defender is GameNPC && !PvpCombatant.IsPlayerShaped(defender) && defender.Realm != 0 && attacker.Realm != 0 && defender is GameKeepGuard == false && defender is GameFont == false &&
+				(!WorldMode.IsRvr || defender.Realm == PvpCombatant.AllianceRealm(attacker)))
 			{
 				if (quiet == false) MessageToLiving(attacker, "You can't attack a friendly NPC!");
 				return false;
 			}
 			// "friendly" NPCs can't be attacked by "friendly" players
-			if (attacker is GameNPC && !PvpCombatant.IsPlayerShaped(attacker) && attacker.Realm != 0 && defender.Realm != 0 && attacker is GameKeepGuard == false)
+			if (attacker is GameNPC && !PvpCombatant.IsPlayerShaped(attacker) && attacker.Realm != 0 && defender.Realm != 0 && attacker is GameKeepGuard == false &&
+				(!WorldMode.IsRvr || attacker.Realm == PvpCombatant.AllianceRealm(defender)))
 			{
 				return false;
 			}
@@ -316,9 +319,25 @@ namespace DOL.GS.ServerRules
 				if ((((GameNPC)source).Flags & GameNPC.eFlags.PEACE) != 0)
 					return true;
 
-			if (source is GamePlayer && target is GameNPC && target.Realm != 0)
+			// Camlann: every realm NPC is friendly to a player. RvR world: only the
+			// player's own realm, both ways, as in the Normal rules.
+			if (WorldMode.IsRvr)
+			{
+				if (source is GamePlayer && target is GameNPC && target.Realm != 0)
+					return target.Realm == source.Realm || NotOfYourRealm(source, target, quiet);
+				// The target is already resolved: own-realm bots and companions count as their realm.
+				if (source is GameNPC && !PvpCombatant.IsPlayerShaped(source) && source.Realm != 0 && PvpCombatant.IsPlayerShaped(target))
+					return source.Realm == PvpCombatant.AllianceRealm(target) || NotOfYourRealm(source, target, quiet);
+			}
+			else if (source is GamePlayer && target is GameNPC && target.Realm != 0)
 				return true;
 
+			if (quiet == false) MessageToLiving(source, target.GetName(0, true) + " is not a member of your realm!");
+			return false;
+		}
+
+		private bool NotOfYourRealm(GameLiving source, GameLiving target, bool quiet)
+		{
 			if (quiet == false) MessageToLiving(source, target.GetName(0, true) + " is not a member of your realm!");
 			return false;
 		}

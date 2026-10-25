@@ -55,10 +55,25 @@ public static class WorldMode
         serverType == EGameServerType.GST_PvP && world != WorldModelKind.Realm;
 
     /// <summary>
+    /// The server type whose upstream code branch applies in this world. Both
+    /// worlds run GameType=PvP; the RvR world follows the realm (Normal)
+    /// branches of the upstream code wherever a site asks the server type for
+    /// realm behaviour (doors, /who, guild membership, death, examine, ...).
+    /// Every other world and server type answers its own type unchanged.
+    /// </summary>
+    public static EGameServerType RulesBranch(EGameServerType serverType) =>
+        RulesBranch(Current, serverType);
+
+    public static EGameServerType RulesBranch(WorldModelKind world, EGameServerType serverType) =>
+        serverType == EGameServerType.GST_PvP && world == WorldModelKind.Realm ? EGameServerType.GST_Normal : serverType;
+
+    /// <summary>
     /// Whether two livings may group, share a guild, guild alliance or
     /// battlegroup, or trade in the current world. Camlann allows every pair;
     /// the RvR world requires the same realm. Staff accounts (privilege above
-    /// player) are exempt, as the upstream commands allow.
+    /// player) are exempt, as the upstream commands allow. Companions and
+    /// /spawn helpers count as their owner's realm
+    /// (<see cref="DOL.GS.ServerRules.PvpCombatant.AllianceRealm"/>).
     /// </summary>
     public static bool AllowsRealmPair(GameLiving source, GameLiving target) =>
         AllowsRealmPair(Current, source, target);
@@ -71,7 +86,7 @@ public static class WorldMode
             return true;
         if (IsStaff(source) || IsStaff(target))
             return true;
-        return source.Realm == target.Realm;
+        return DOL.GS.ServerRules.PvpCombatant.AllianceRealm(source) == DOL.GS.ServerRules.PvpCombatant.AllianceRealm(target);
     }
 
     private static bool IsStaff(GameLiving living) =>

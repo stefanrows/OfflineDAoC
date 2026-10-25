@@ -47,12 +47,22 @@ namespace DOL.GS.ServerRules
 		public static bool IsPlayerShaped(GameLiving living) => Resolve(living) != null;
 
 		/// <summary>
+		/// The one alliance seam for player-shaped actors (humans, GameBots and
+		/// their pets) in the current world. See the world overload.
+		/// </summary>
+		public static bool AreAllied(GameLiving first, GameLiving second) =>
+			AreAllied(WorldMode.Current, first, second);
+
+		/// <summary>
 		/// Camlann allies are grouped, guilded, or in the same battlegroup. The
 		/// dummy guild used by the legacy client pet hack is never an alliance.
 		/// Temporary companions also remain loyal to their owner and the owner's
 		/// current group while they exist.
+		/// In the RvR world (Realm-1) the same realm is allied everywhere and
+		/// another realm never is: group, guild, battlegroup and companion ties
+		/// do not bridge realms (<see cref="AllianceRealm"/> decides).
 		/// </summary>
-		public static bool AreAllied(GameLiving first, GameLiving second)
+		public static bool AreAllied(WorldModelKind world, GameLiving first, GameLiving second)
 		{
 			GameLiving a = Resolve(first);
 			GameLiving b = Resolve(second);
@@ -62,13 +72,63 @@ namespace DOL.GS.ServerRules
 			if (a == b)
 				return true;
 
+			return world == WorldModelKind.Realm ? AreRealmAllies(a, b) : AreCamlannAllies(a, b);
+		}
+
+		/// <summary>
+		/// RvR world: allied when both fight for the same realm. Two realm-less
+		/// actors (unsponsored battleground encounter bots) are held together by
+		/// their own group, guild and battlegroup as in Camlann, never by a realm.
+		/// </summary>
+		private static bool AreRealmAllies(GameLiving a, GameLiving b)
+		{
+			eRealm first = AllianceRealm(a);
+			if (first != AllianceRealm(b))
+				return false;
+			return first != eRealm.None || AreCamlannAllies(a, b);
+		}
+
+		/// <summary>
+		/// The realm an actor fights for in the RvR world. Pets resolve to their
+		/// owner first. Persistent companions and /spawn helpers fight for their
+		/// owner's realm, even if one of another realm exists (R2 stops creating
+		/// them). A battleground encounter bot fights for its sponsor's realm, else
+		/// for its real guild's realm, else for none (a neutral opponent); its class
+		/// realm is only a model. Everyone else fights for their own realm.
+		/// </summary>
+		public static eRealm AllianceRealm(GameLiving living)
+		{
+			GameLiving actor = Resolve(living) ?? living;
+			if (actor is GameBot bot)
+			{
+				if (bot.IsBattlegroundEncounterBot)
+				{
+					GameLiving sponsor = EncounterSponsor(bot);
+					if (sponsor != null)
+						return AllianceRealm(sponsor);
+					Guild guild = bot.Guild;
+					return IsRealGuild(guild) && IsPlayableRealm(guild.Realm) ? guild.Realm : eRealm.None;
+				}
+
+				if (bot.Owner != null)
+					return bot.Owner.Realm;
+			}
+
+			return actor?.Realm ?? eRealm.None;
+		}
+
+		public static bool IsPlayableRealm(eRealm realm) =>
+			realm is eRealm.Albion or eRealm.Midgard or eRealm.Hibernia;
+
+		private static bool AreCamlannAllies(GameLiving a, GameLiving b)
+		{
 			// Camp escorts inherit the sponsor's current alliances without taking
 			// a slot in the player's group or becoming a persistent companion.
 			GameLiving sponsorA = EncounterSponsor(a);
 			GameLiving sponsorB = EncounterSponsor(b);
 			if (sponsorA != null || sponsorB != null)
 			{
-				if (AreAllied(sponsorA ?? a, sponsorB ?? b))
+				if (AreAllied(WorldModelKind.Camlann, sponsorA ?? a, sponsorB ?? b))
 					return true;
 			}
 

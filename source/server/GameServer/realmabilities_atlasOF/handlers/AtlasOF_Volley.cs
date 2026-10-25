@@ -147,7 +147,7 @@ namespace DOL.GS.RealmAbilities
             }
 
             // Can't use Volley inside portal and border keeps on a RvR server.
-            if (GameServer.Instance.Configuration.ServerType == EGameServerType.GST_Normal)
+            if (WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) == EGameServerType.GST_Normal)
             {
                 foreach (AbstractArea area in _player.CurrentRegion.GetAreasOfSpot(_player.GroundTarget).Where(x => x is AbstractArea))
                 {

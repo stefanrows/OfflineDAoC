@@ -2415,7 +2415,7 @@ namespace DOL.GS.ServerRules
 
                 RewardRealmPoints(out realmPointsEarned);
                 RewardExperience();
-                if (GameServer.Instance?.Configuration?.ServerType != EGameServerType.GST_PvP)
+                if (GameServer.Instance?.Configuration == null || WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) != EGameServerType.GST_PvP) // RvR world: bounty points and money as Normal
                 {
                     RewardBountyPoints();
                     RewardMoney();
@@ -2554,7 +2554,7 @@ namespace DOL.GS.ServerRules
             {
                 if (keep.Guild != null && keep.Guild == playerToAward.Guild)
                     outpostPercentBonus = GUILD_OUTPOST_PERCENT_BONUS;
-                else if (keep.Realm == playerToAward.Realm && GameServer.Instance.Configuration.ServerType is EGameServerType.GST_Normal)
+                else if (keep.Realm == playerToAward.Realm && WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) is EGameServerType.GST_Normal) // RvR world: realm outpost bonus, as Normal
                    outpostPercentBonus = REALM_OUTPOST_PERCENT_BONUS;
             }
 

@@ -11,7 +11,7 @@ using NUnit.Framework;
 
 namespace DOL.UnitTests;
 
-[TestFixture]
+[TestFixture, NonParallelizable]
 public sealed class UT_CamlannPvpCombatant
 {
     private EpicTestServerScope _server;
@@ -370,6 +370,106 @@ public sealed class UT_CamlannPvpCombatant
             Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(true, 5, false, false), Is.True);
             Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(true, 30, true, false), Is.False);
             Assert.That(AutonomousGuildGrudgePolicy.ShouldRemember(true, 30, false, true), Is.False);
+        });
+    }
+
+    // ---- RvR twins (R1b): the Camlann answers above stay; the Realm-1 world
+    // answers "same realm is a friend" and nothing bridges realms there.
+
+    [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
+    public void SameRealmStrangerPerWorld(WorldModelKind world)
+    {
+        using var _ = BothWorlds.Use(world);
+        IServerRules rules = BothWorlds.Rules(world);
+        var human = new TestPlayer { Realm = eRealm.Albion, CurrentRegionID = 1 };
+        var bot = Bot(eRealm.Albion);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.AreAllied(human, bot), Is.EqualTo(BothWorlds.Expect(world, false, true)));
+            Assert.That(rules.IsAllowedToAttack(human, bot, true), Is.EqualTo(BothWorlds.Expect(world, true, false)));
+            Assert.That(rules.IsSameRealm(human, bot, true), Is.EqualTo(BothWorlds.Expect(world, false, true)));
+        });
+    }
+
+    [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
+    public void MixedRealmGroupMemberPerWorld(WorldModelKind world)
+    {
+        using var _ = BothWorlds.Use(world);
+        IServerRules rules = BothWorlds.Rules(world);
+        var human = new TestPlayer { Realm = eRealm.Albion, CurrentRegionID = 1 };
+        var bot = Bot(eRealm.Hibernia);
+        PutInGroup(human, bot);
+
+        Assert.Multiple(() =>
+        {
+            // A cross-realm group cannot form in RvR (R1a), and a stale one is not allied.
+            Assert.That(PvpCombatant.AreAllied(human, bot), Is.EqualTo(BothWorlds.Expect(world, true, false)));
+            Assert.That(rules.IsAllowedToAttack(human, bot, true), Is.EqualTo(BothWorlds.Expect(world, false, true)));
+            Assert.That(rules.IsSameRealm(human, bot, true), Is.EqualTo(BothWorlds.Expect(world, true, false)));
+        });
+    }
+
+    [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
+    public void OpenBattlegroundAlliesPerWorld(WorldModelKind world)
+    {
+        using var _ = BothWorlds.Use(world);
+        const ushort openBattleground = 252;
+        var albionCrew = AutonomousBot(eRealm.Albion, 50);
+        var otherAlbionCrew = AutonomousBot(eRealm.Albion, 50);
+        var midgardRaider = AutonomousBot(eRealm.Midgard, 50);
+        albionCrew.CurrentRegionID = otherAlbionCrew.CurrentRegionID = midgardRaider.CurrentRegionID = openBattleground;
+        var raid = new BattleGroup();
+        RealmRaidBattleGroup.Attach(raid, [albionCrew, midgardRaider]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.AreAllied(albionCrew, otherAlbionCrew), Is.EqualTo(BothWorlds.Expect(world, false, true)));
+            Assert.That(PvpCombatant.AreAllied(albionCrew, midgardRaider), Is.EqualTo(BothWorlds.Expect(world, true, false)),
+                "a battlegroup never bridges realms in RvR");
+        });
+        RealmRaidBattleGroup.Detach(raid, [albionCrew, midgardRaider]);
+    }
+
+    [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
+    public void TemporaryCompanionPerWorld(WorldModelKind world)
+    {
+        using var _ = BothWorlds.Use(world);
+        IServerRules rules = BothWorlds.Rules(world);
+        var owner = new TestPlayer { Realm = eRealm.Albion, CurrentRegionID = 1 };
+        var companion = Bot(eRealm.Hibernia);
+        var albionWorldBot = Bot(eRealm.Albion);
+        var hiberniaWorldBot = Bot(eRealm.Hibernia);
+        SetGameBotProperty(companion, "Owner", owner);
+        SetGameBotProperty(companion, "IsTemporaryGroupHelper", true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.AreAllied(companion, owner), Is.True);
+            Assert.That(rules.IsAllowedToAttack(companion, owner, true), Is.False);
+            // The helper fights for its owner's realm, not for its Hibernian class.
+            Assert.That(rules.IsAllowedToAttack(companion, albionWorldBot, true), Is.EqualTo(BothWorlds.Expect(world, true, false)));
+            Assert.That(rules.IsAllowedToAttack(companion, hiberniaWorldBot, true), Is.True);
+        });
+    }
+
+    [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
+    public void BotOwnedPetPerWorld(WorldModelKind world)
+    {
+        using var _ = BothWorlds.Use(world);
+        var bot = Bot(eRealm.Midgard);
+        var midgardHuman = new TestPlayer { Realm = eRealm.Midgard, CurrentRegionID = 1 };
+        var pet = (TestPet)RuntimeHelpers.GetUninitializedObject(typeof(TestPet));
+        var brain = new PetBrain(bot) { Body = pet };
+        typeof(GameNPC).GetField("m_brains", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(pet, new ArrayList());
+        typeof(GameNPC).GetField("m_ownBrain", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(pet, brain);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpCombatant.AreAllied(bot, pet), Is.True);
+            Assert.That(PvpCombatant.AreAllied(midgardHuman, pet), Is.EqualTo(BothWorlds.Expect(world, false, true)));
         });
     }
 

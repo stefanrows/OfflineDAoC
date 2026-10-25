@@ -28,10 +28,15 @@ defaults in code, keep/relic start state from the reset.
   realm-only group/trade/speech/guild join, dummy-guild trick off; realm-only
   invites for bots, battlegroups, guild alliances. Camlann unchanged.
   **RvR not playable yet:** the alliance core is R1b.
-- [~] **R1b Alliance core, client, GST_PvP audit.** Implemented (worktree rvr-r1b, 45 tests, audit in docs/RVR_RULES_AUDIT.md), in review (01:50). Same realm = friend
-  everywhere; guild/battlegroup only within a realm; companions = owner's
-  realm; the 35 GST_PvP sites and 8 `is PvPServerRules` checks audited;
-  UT_CamlannPvpCombatant gets RvR twins. 1 session.
+- [x] **R1b Alliance core, client, GST_PvP audit.** (0.334.0) In the RvR
+  world the same realm is allied everywhere and other realms are enemies;
+  guild, group, battlegroup, open BG rule and companion memory never bridge
+  realms; pets, companions and `/spawn` helpers fight as their owner's realm;
+  realm NPCs are friendly only to their realm; keep hostility by realm
+  (Wardens hostile to all, portal keeps until R3a); enemy names hidden as on
+  1.65; bind and craft by realm; audit of 54 server-type sites in
+  `docs/RVR_RULES_AUDIT.md` (19 + 4 gated, 1 + 3 deferred). Camlann unchanged.
+  Open before the first RvR boot: R2 travel lock and per-realm safe areas.
 - [~] **R2 Travel + population rules.** Agent rvr-r2 (2026-10-25 01:50, parallel to the R1b review). Realm-bound porters, capitals, `/tc`,
   Realm Exchange, Atlantis havens, BG porters; `/spawn` own realm; open BG
   perrealm default; Gothwaite excluded. 1 session.
@@ -90,3 +95,12 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-25 09:35: the PC slept 01:13-09:32 (hibernate), the night produced only
   R1a/0.333.0. Standby disabled on mains. Owner: continue the night plan now,
   same authorisations (wipe after R5b without asking).
+- 2026-10-25 (R1b agent): R1b in source on branch rvr-r1b, real-client check
+  pending: same realm allied everywhere in the RvR world (players, bots,
+  companions and helpers as their owner's realm, pets, town guards, claimed
+  keeps; Wardens hostile to all); guild, group and battlegroup never bridge
+  realms; enemy names, guilds and titles hidden as on 1.65 (bots too); bind and
+  craft by realm; server-type audit 35 + 14 + 5 sites in RVR_RULES_AUDIT.md;
+  Camlann unchanged. Mixed bot crews and groups fight themselves until R4a.
+- 2026-10-25 09:50: R1b reviewed (ACCEPT, 3 lows fixed) and merged as 0.334.0.
+  R5a in review, R2 running.

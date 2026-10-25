@@ -590,6 +590,12 @@ namespace DOL.GS.Keeps
                 // to its claiming guild, so the realm defends it together and only other realms attack it.
                 if (OpenBattlegroundMode.KeepIsRealmOwned(OpenBattlegroundMode.Current, keep.Region))
                     return keep.Realm is not (eRealm.Albion or eRealm.Midgard or eRealm.Hibernia) || keep.Realm != target.Realm;
+                // RvR world: a captured keep belongs to its realm (the claim sets it), so the whole realm is its
+                // friend and every other realm its enemy; the Frontier Wardens stay hostile to all (R1b, realm
+                // flips and portal-keep guards follow in R3a).
+                if (WorldMode.IsRvr)
+                    return IsRvrKeepEnemy(PvpKeepCampaign.IsGarrison(keep.Guild), keep.Realm, keep.Guild == null,
+                        ServerRules.PvpCombatant.AllianceRealm(target), ServerProperties.Properties.PVP_UNCLAIMED_KEEPS_ENEMY);
                 if (PvpKeepCampaign.IsGarrison(keep.Guild)) return true;
 				if (keep.Guild == null)
 					return ServerProperties.Properties.PVP_UNCLAIMED_KEEPS_ENEMY;
@@ -616,6 +622,21 @@ namespace DOL.GS.Keeps
 			}
 			
 			return keep.Realm != target.Realm;
+		}
+
+		/// <summary>
+		/// Keep hostility in the RvR world: the garrison is everyone's enemy, a
+		/// keep of a realm is the enemy of every other realm, and a realm-less
+		/// keep without a holder follows pvp_unclaimed_keeps_enemy.
+		/// </summary>
+		public static bool IsRvrKeepEnemy(bool heldByGarrison, eRealm keepRealm, bool unheld, eRealm targetRealm,
+			bool unclaimedKeepsEnemy)
+		{
+			if (heldByGarrison)
+				return true;
+			if (ServerRules.PvpCombatant.IsPlayableRealm(keepRealm))
+				return keepRealm != targetRealm;
+			return !unheld || unclaimedKeepsEnemy;
 		}
 
 		/// <summary>

@@ -693,6 +693,11 @@ namespace DOL.GS
 			if (log.IsDebugEnabled)
 				log.Debug("Adding player to the guild, guild name=\"" + Name + "\"; player name=" + addPlayer.Name);
 
+			// RvR world: a guild of a realm takes that realm only, whatever
+			// allow_cross_realm_guilds says (the same rule as RvrServerRules).
+			if (WorldMode.IsRvr && !DOL.GS.ServerRules.RvrServerRules.GuildAcceptsRealm(Realm, addPlayer.Realm))
+				return false;
+
 			if (addPlayer.Realm != this.Realm &&
 				GameServer.Instance.Configuration.ServerType != EGameServerType.GST_PvP &&
 				!ServerProperties.Properties.ALLOW_CROSS_REALM_GUILDS)

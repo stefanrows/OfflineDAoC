@@ -42,9 +42,10 @@ namespace DOL.GS
 				return false;
 
 			// Nobody owns it any more (founder logged out or never recorded):
-			// the founder's guild, then the weapon's realm, may use it.
+			// the founder's guild, then the weapon's realm, may use it. In the
+			// RvR world a guild never bridges realms, so only the realm counts.
 			Guild guild = PvpCombatant.GuildOf(candidate);
-			if (PvpCombatant.AreGuildIdsAllied(anchorGuildId, anchorGuildName, guild?.GuildID, guild?.Name))
+			if (!WorldMode.IsRvr && PvpCombatant.AreGuildIdsAllied(anchorGuildId, anchorGuildName, guild?.GuildID, guild?.Name))
 				return true;
 
 			return candidate.Realm == weaponRealm;

@@ -38,7 +38,7 @@ namespace DOL.GS
             if (!base.Interact(player)) return false;
             if (!IsBorderKeepDoor()) return true;
             bool privileged = player.Client.Account.PrivLevel > 1;
-            bool realmAllowed = GameServer.Instance.Configuration.ServerType is EGameServerType.GST_PvP or EGameServerType.GST_PvE
+            bool realmAllowed = WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType) is EGameServerType.GST_PvP or EGameServerType.GST_PvE
                 ? Realm != eRealm.None : player.Realm == Realm || Realm == eRealm.Door;
             if (!privileged && (Locked || Health > 0 && !realmAllowed)) return false;
             Open(player);

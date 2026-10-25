@@ -357,6 +357,12 @@ namespace DOL.GS.PacketHandler
 				{
 					pak.WriteByte(0xFF);
 				}
+				else if (living is GameBot bot && GameServer.ServerRules is DOL.GS.ServerRules.RvrServerRules rvrRules)
+				{
+					// RvR world: an enemy-realm bot shows like an enemy player (race name, no guild).
+					pak.WritePascalString(rvrRules.GetNPCGuildName(m_gameClient.Player, bot));
+					pak.WritePascalString(RealmRankNameplate.NpcName(bot, rvrRules.GetNPCName(m_gameClient.Player, bot)));
+				}
 				else
 				{
 					pak.WritePascalString(living.GuildName);

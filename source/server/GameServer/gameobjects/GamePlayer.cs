@@ -5934,7 +5934,7 @@ namespace DOL.GS
                     LastDeathPvP = true;
                     int conPenalty = 0;
 
-                    switch (GameServer.Instance.Configuration.ServerType)
+                    switch (WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType)) // RvR world: RvR death as Normal, no PvP con loss
                     {
                         case EGameServerType.GST_Normal:
                         {
@@ -10738,7 +10738,7 @@ namespace DOL.GS
             IList list = base.GetExamineMessages(player);
 
             string message = string.Empty;
-            switch (GameServer.Instance.Configuration.ServerType)
+            switch (WorldMode.RulesBranch(GameServer.Instance.Configuration.ServerType)) // RvR world: realm examine text
             {//FIXME: Better extract this to a new function in ServerRules !!! (VaNaTiC)
                 case EGameServerType.GST_Normal:
                 {

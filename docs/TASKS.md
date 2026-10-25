@@ -15,6 +15,9 @@ When a task is done and its required verification is complete, move it out of it
      work list: [RVR_MODE_PLAN.md](RVR_MODE_PLAN.md). Touches the files
      Stefan works on for the upstream movement port (tasks 135-139): build on
      his branch work, not around it.
+     R1b (alliance core, enemy names hidden, server-type audit in
+     [RVR_RULES_AUDIT.md](RVR_RULES_AUDIT.md)) implemented in source,
+     real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed
